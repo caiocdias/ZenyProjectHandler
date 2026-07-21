@@ -334,6 +334,81 @@ namespace ModuloAnalise {
     }
 }
 
+namespace ModuloInterpretacao {
+    class RegistroRegrasInterpretacao {
+        +UUID id
+        +String versao
+        +Integer versaoSchema
+        +assinatura() String
+    }
+
+    class RegraReconhecimento {
+        +String id
+        +CategoriaElemento categoria
+        +TipoEvidencia[] tiposEvidencia
+        +String estrategia
+        +Decimal confiancaBase
+        +Decimal distanciaContextoMaxima
+        +Boolean ativa
+    }
+
+    class RegraRelacaoInterpretacao {
+        +String id
+        +CategoriaElemento categoriaOrigem
+        +CategoriaElemento categoriaDestino
+        +String tipoRelacao
+        +String estrategia
+        +Decimal distanciaMaxima
+        +Decimal confianca
+        +Boolean ativa
+    }
+
+    class ConfiguracaoInterpretacao {
+        +CategoriaElemento[] categoriasHabilitadas
+        +Decimal confiancaMinima
+        +Boolean gerarRelacoes
+        +Integer maximoPropostas
+        +assinatura() String
+    }
+
+    class AnalisadorCategoriaPort {
+        <<interface>>
+        +analisar(SolicitacaoInterpretacao, RegraReconhecimento)
+    }
+
+    class InterpretadorEvidenciasPort {
+        <<interface>>
+        +interpretar(SolicitacaoInterpretacao) ResultadoInterpretacao
+    }
+
+    class RepositorioRegrasInterpretacaoPort {
+        <<interface>>
+        +carregar() RegistroRegrasInterpretacao
+    }
+
+    class JsonRuleRegistry {
+        <<adapter>>
+    }
+
+    class AnalisadorPoste
+    class AnalisadorEstruturaMt
+    class AnalisadorEstruturaBt
+    class AnalisadorCabo
+    class AnalisadorEquipamento
+
+    class InterpretadorRegrasExplicitas {
+        <<adapter>>
+    }
+
+    class ExecutarPipelineInterpretacao {
+        +executar(UUID projetoId, UUID execucaoExtracaoId)
+    }
+
+    class InterpretadorRegrasAvaliacao {
+        <<adapter>>
+    }
+}
+
 namespace ModuloCatalogo {
     class CatalogoTecnico {
         +UUID id
@@ -574,6 +649,70 @@ namespace ModuloIngestaoPdf {
     class PdfGraphicsView
 }
 
+namespace ModuloAvaliacao {
+    class ManifestoAvaliacao {
+        +String conjuntoId
+        +String versao
+        +EstadoConjuntoAvaliacao estado
+        +Instant congeladoEm
+    }
+
+    class AmostraAvaliacao {
+        +String idAnonimo
+        +String sha256
+        +ParticaoAvaliacao particao
+        +String escala
+        +String formato
+        +String orientacao
+        +String qualidade
+        +String densidade
+        +Boolean duplaAnotacao
+    }
+
+    class AnotacaoAmostra {
+        +String id
+        +PapelAnotacao papel
+        +EstadoAnotacao estado
+        +String anotadorId
+        +String revisorId
+    }
+
+    class RotuloElementoAvaliacao {
+        +String id
+        +CategoriaElemento categoria
+        +SituacaoProjeto situacao
+        +String codigoCatalogo
+    }
+
+    class GeometriaAvaliacao {
+        +Integer paginaNumero
+        +TipoGeometria tipo
+    }
+
+    class RotuloRelacaoAvaliacao {
+        +String id
+        +String origemId
+        +String destinoId
+        +String tipoRelacao
+        +Boolean direcionada
+    }
+
+    class CriteriosRegressaoAvaliacao {
+        +String versao
+        +EstadoCriteriosAvaliacao estado
+        +Decimal taxaFalhasMaxima
+        +Decimal latenciaP95Maxima
+        +Integer memoriaPythonMaxima
+    }
+
+    class JsonEvaluationDataset
+    class RepositorioConjuntoAvaliacaoPort
+    class AuditarConjuntoAvaliacao
+    class ExecutarBenchmarkAvaliacao
+    class InterpretadorAvaliacaoPort
+    class RelatorioBenchmarkAvaliacao
+}
+
 namespace ModuloGrafo {
     class GrafoProjeto {
         <<derivado>>
@@ -721,6 +860,40 @@ PyMuPdfDocumentAnalyzer --> MotorOcrPort : usaCondicionalmente
 PyMuPdfDocumentAnalyzer ..> EvidenciaDocumento : materializa
 ExecutarAnaliseDocumento --> AnalisadorDocumentoPort : executa
 ExecutarAnaliseDocumento --> SqlAlchemyUnitOfWork : persisteAtomicamente
+
+RegistroRegrasInterpretacao "1" *-- "5" RegraReconhecimento : reconhecimento
+RegistroRegrasInterpretacao "1" *-- "0..*" RegraRelacaoInterpretacao : relacoes
+AnalisadorCategoriaPort <|.. AnalisadorPoste
+AnalisadorCategoriaPort <|.. AnalisadorEstruturaMt
+AnalisadorCategoriaPort <|.. AnalisadorEstruturaBt
+AnalisadorCategoriaPort <|.. AnalisadorCabo
+AnalisadorCategoriaPort <|.. AnalisadorEquipamento
+InterpretadorEvidenciasPort <|.. InterpretadorRegrasExplicitas
+RepositorioRegrasInterpretacaoPort <|.. JsonRuleRegistry
+JsonRuleRegistry ..> RegistroRegrasInterpretacao : carrega
+InterpretadorRegrasExplicitas *-- AnalisadorCategoriaPort : analisadores
+InterpretadorRegrasExplicitas --> RegistroRegrasInterpretacao : aplica
+InterpretadorRegrasExplicitas --> CatalogoTecnico : consulta
+InterpretadorRegrasExplicitas --> EvidenciaDocumento : combina
+InterpretadorRegrasExplicitas ..> PropostaElemento : produz
+InterpretadorRegrasExplicitas ..> PropostaRelacao : produz
+ExecutarPipelineInterpretacao --> InterpretadorEvidenciasPort : executa
+ExecutarPipelineInterpretacao --> ConfiguracaoInterpretacao : configura
+ExecutarPipelineInterpretacao --> SqlAlchemyUnitOfWork : persisteAtomicamente
+InterpretadorRegrasAvaliacao --> PyMuPdfDocumentAnalyzer : extrai
+InterpretadorRegrasAvaliacao --> InterpretadorRegrasExplicitas : interpreta
+InterpretadorRegrasAvaliacao ..> InterpretadorAvaliacaoPort : implementa
+
+ManifestoAvaliacao "1" *-- "2..*" AmostraAvaliacao : particiona
+AnotacaoAmostra "1" *-- "0..*" RotuloElementoAvaliacao : rotula
+AnotacaoAmostra "1" *-- "0..*" RotuloRelacaoAvaliacao : relaciona
+RotuloElementoAvaliacao "1" *-- "1" GeometriaAvaliacao : posiciona
+RepositorioConjuntoAvaliacaoPort <|.. JsonEvaluationDataset
+AuditarConjuntoAvaliacao --> RepositorioConjuntoAvaliacaoPort : verificaCongelamento
+ExecutarBenchmarkAvaliacao --> RepositorioConjuntoAvaliacaoPort : carregaReferencia
+ExecutarBenchmarkAvaliacao --> InterpretadorAvaliacaoPort : avalia
+ExecutarBenchmarkAvaliacao ..> RelatorioBenchmarkAvaliacao : produz
+ExecutarBenchmarkAvaliacao --> CriteriosRegressaoAvaliacao : aplicaLimites
 
 Projeto "0..*" --> "1" CatalogoTecnico : usaVersao
 ElementoProjeto "0..*" --> "1" ItemCatalogo : tipadoPor

@@ -21,11 +21,17 @@ Execute uma vez:
 
 O script cria `.venv`, instala todas as versões fixadas em `requirements.lock` e instala o aplicativo no ambiente virtual.
 
-Para abrir o aplicativo:
+Para abrir o aplicativo sem uma janela de console, dê dois cliques em `ZenyProjectHandler.vbs` ou
+execute:
 
 ```powershell
-.\ZenyProjectHandler.bat
+.\ZenyProjectHandler.vbs
 ```
+
+O inicializador usa diretamente `.venv\Scripts\pythonw.exe`, portanto não depende de compilação ou
+empacotamento em EXE. Erros de ambiente e de inicialização são apresentados em uma caixa de diálogo.
+Para diagnóstico pelo terminal, `ZenyProjectHandler.bat` continua disponível e preserva a saída do
+Python enquanto o aplicativo estiver aberto.
 
 Para executar todos os gates de qualidade:
 
@@ -82,7 +88,7 @@ A resolução padrão é 144 DPI. Ela pode ser alterada entre 36 e 600 DPI antes
 
 ```powershell
 $env:ZENY_PDF_RENDER_DPI = "200"
-.\ZenyProjectHandler.bat
+.\ZenyProjectHandler.vbs
 ```
 
 O inventário técnico distingue texto, caminhos vetoriais, imagens incorporadas, anotações e seus
@@ -99,11 +105,35 @@ OCR não é uma dependência do aplicativo. Há um contrato para motores locais 
 somente em páginas sem texto nativo suficiente. Nenhum serviço de rede ou mecanismo OCR é iniciado
 automaticamente.
 
+## Interpretação semântica por regras
+
+O registro inicial em `adapters/interpretation/data/regras_interpretacao_v1.json` é versionado,
+validado e possui assinatura de conteúdo. Cinco analisadores independentes reconhecem códigos ativos
+do catálogo em texto nativo ou OCR. Vetores e imagens próximos são vinculados como contexto para
+geometria, cor e proveniência; nada é confirmado automaticamente.
+
+O interpretador gera somente `PropostaElemento` e `PropostaRelacao`. Situação de obra usa as
+assinaturas de cor do catálogo; relações usam proximidade de centros, extremidades de cabos e as
+compatibilidades estrutura-cabo. Cada proposta mantém evidências, regra, versão, confiança e
+justificativa. Uma execução cancelada ou interrompida pode ser retomada com a mesma identidade sem
+duplicar resultados.
+
+O mesmo pipeline possui um adaptador para o benchmark. O teste final continua bloqueado enquanto o
+conjunto de avaliação não estiver congelado e os critérios não estiverem aprovados.
+
 ## Projetos reais para testes
 
 PDFs reais podem ser colocados em `examples/`, mas são ignorados pelo Git porque podem conter dados
 pessoais, coordenadas e fotografias. O repositório mantém somente
-`examples/manifesto-amostras.json`, com IDs anônimos, hashes e características técnicas. Consulte
-`examples/README.md` antes de adicionar ou substituir uma amostra.
+`evaluation/manifesto-amostras.json`, com IDs anônimos, hashes, partições e características
+técnicas. Consulte `examples/README.md` e `evaluation/POLITICA-ACESSO.md` antes de adicionar ou
+substituir uma amostra.
+
+O conjunto de avaliação separa desenvolvimento de teste final e possui formatos JSON explícitos
+para manifesto, critérios e anotações. O benchmark compara elementos e relações por geometria
+normalizada, calcula precisão e recall por classe, falhas de extração, latência p95 e pico de memória
+Python, e gera uma assinatura semântica que ignora variações de tempo de execução. O corpus atual
+ainda está em preparação: falta diversidade de escala, revisão humana e aprovação dos limites antes
+do congelamento.
 
 O `requirements.lock` foi gerado no Windows com Python 3.12 e deve ser validado também no Python 3.11 antes da primeira distribuição.

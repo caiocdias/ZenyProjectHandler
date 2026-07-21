@@ -27,10 +27,10 @@ Nenhum serviço externo ou modelo específico deve ser introduzido sem uma decis
 | 1. Revisão do domínio e catálogo | CONCLUÍDA | 0 |
 | 1.1 Calibração com projetos reais | CONCLUÍDA | 1 |
 | 2. Persistência local | CONCLUÍDA | 1.1 |
-| 3. Ingestão e visualização de PDF | PENDENTE | 1.1, 2 |
-| 4. Extração de evidências do PDF | PENDENTE | 3 |
-| 5. Conjunto de avaliação | PENDENTE | 3, 4 |
-| 6. Pipeline modular de interpretação | PENDENTE | 1, 4, 5 |
+| 3. Ingestão e visualização de PDF | CONCLUÍDA | 1.1, 2 |
+| 4. Extração de evidências do PDF | CONCLUÍDA | 3 |
+| 5. Conjunto de avaliação | EM ANDAMENTO | 3, 4 |
+| 6. Pipeline modular de interpretação | EM ANDAMENTO | 1, 4, 5 |
 | 7. Revisão humana na interface | PENDENTE | 3, 6 |
 | 8. Reconstrução e validação do grafo | PENDENTE | 1, 7 |
 | 9. Gestão do catálogo pela interface | PENDENTE | 2, 7 |
@@ -107,6 +107,8 @@ Estas revisões devem ser realizadas na etapa 1 e refletidas em `modelo-entidade
 - Criar ADR inicial documentando a decisão de começar sem um analisador proprietário obrigatório.
 - Criar `setup.bat` para preparar `.venv`, instalar o lockfile e deixar o pacote pronto para execução.
 - Criar `ZenyProjectHandler.bat` para ativar a `.venv` e abrir o aplicativo.
+- Criar `ZenyProjectHandler.vbs` para uso cotidiano com `pythonw.exe`, sem manter uma janela de
+  console junto à interface.
 - Criar `IniciarTestes.bat` para executar todas as verificações e salvar `relatorio-testes.txt` na raiz.
 - Exigir cobertura estritamente superior a 85% e registrar complexidade ciclomática, índice de manutenibilidade e métricas brutas do código.
 
@@ -118,6 +120,8 @@ Estas revisões devem ser realizadas na etapa 1 e refletidas em `modelo-entidade
 - Suíte padrão executada sem rede.
 - `setup.bat` funciona tanto na primeira instalação quanto quando a `.venv` já existe.
 - `ZenyProjectHandler.bat` inicia a aplicação usando o Python da `.venv`.
+- `ZenyProjectHandler.vbs` inicia a janela Qt sem criar console e informa graficamente a ausência da
+  `.venv`.
 - `IniciarTestes.bat` retorna erro quando qualquer gate falha e sempre deixa um relatório analisável na raiz.
 
 ### Critério de saída
@@ -127,7 +131,9 @@ Aplicativo vazio abre, ferramentas de qualidade passam e a separação entre mó
 ### Registro de conclusão
 
 - Data: 2026-07-21.
-- Resultado: janela PySide6, pacote instalável, configuração local, logging JSON, arquitetura por camadas, ADR inicial e os scripts `setup.bat`, `ZenyProjectHandler.bat` e `IniciarTestes.bat` implementados.
+- Resultado: janela PySide6, pacote instalável, configuração local, logging JSON, arquitetura por
+  camadas e os inicializadores `ZenyProjectHandler.vbs` (uso sem console) e
+  `ZenyProjectHandler.bat` (diagnóstico), além de `setup.bat` e `IniciarTestes.bat`.
 - Validações executadas: preparação completa por `setup.bat`, abertura pelo launcher em modo smoke e suíte completa por `IniciarTestes.bat`.
 - Testes: 12 aprovados; cobertura total de 89,63%; smoke test da janela executado com Qt em modo offscreen.
 - Qualidade: complexidade ciclomática média A (2,62), todos os blocos na classe A e relatório consolidado aprovado em `relatorio-testes.txt`.
@@ -377,6 +383,9 @@ O sistema produz evidências normalizadas e rastreáveis sem depender da interfa
 
 ## Etapa 5 - Conjunto de avaliação
 
+**Status: EM ANDAMENTO. Implementação concluída; congelamento aguarda revisão humana e ampliação de
+escala do corpus.**
+
 ### Desenvolver
 
 - Selecionar amostras representativas de projetos CEMIG, incluindo diferentes escalas, qualidades, simbologias e densidades.
@@ -395,7 +404,42 @@ O sistema produz evidências normalizadas e rastreáveis sem depender da interfa
 
 Conjunto de teste congelado e critérios numéricos registrados antes da otimização do pipeline.
 
+### Registro de desenvolvimento
+
+- Corpus: as nove amostras foram revisadas visualmente por miniaturas temporárias, classificadas por
+  formato, orientação, qualidade e densidade e divididas em cinco exemplos de desenvolvimento e
+  quatro de teste final. Os originais não foram alterados.
+- Lacuna objetiva: todas as amostras atuais declaram escala 1:1000. A auditoria emite
+  `ESCALAS_INSUFICIENTES`, impedindo o congelamento até existir outra escala autorizada.
+- Contratos: `ManifestoAvaliacao`, `AnotacaoAmostra`, `CriteriosRegressaoAvaliacao` e
+  `RepositorioConjuntoAvaliacaoPort` mantêm o formato independente da UI e do interpretador futuro.
+- Formato: schemas JSON v1 cobrem manifesto, anotações e critérios; o adaptador JSON faz validação de
+  domínio, caminhos seguros e gravação atômica das anotações.
+- Revisão: duas amostras densas da partição de teste estão marcadas para anotação independente. A
+  divergência mede correspondência geométrica, categoria, situação e relações antes do consenso.
+- Métricas propostas: precisão/recall mínimos de 0,80 a 0,90 por classe, 0,80 para relações, falha de
+  extração máxima de 5%, latência p95 máxima de 30 s, pico de memória Python de 512 MiB e divergência
+  humana máxima de 15%.
+- Benchmark: `ExecutarBenchmarkAvaliacao` valida hashes, isola as partições, mede recursos, agrega
+  métricas e produz assinatura semântica independente das oscilações de tempo e memória.
+- Privacidade: PDFs, miniaturas e anotações reais permanecem controlados; relatórios publicáveis usam
+  somente IDs anônimos, versões, contagens e métricas, conforme `evaluation/POLITICA-ACESSO.md`.
+- Decisão arquitetural: ADR 0005 documenta congelamento, partições, revisão humana e limites da
+  medição de memória.
+- Validação automatizada: 142 testes aprovados, cobertura total de 88,93%, complexidade média geral
+  A (3,11), tipagem, lint, formatação e integridade das dependências aprovados. Todos os módulos
+  novos têm índice de manutenibilidade A e nenhum bloco de complexidade D, E ou F.
+- Pendências para o critério de saída: obter ao menos uma amostra de escala diferente, concluir as
+  anotações primárias/secundárias e consensos humanos, aprovar os critérios propostos e então alterar
+  manifesto e anotações para `CONGELADO`.
+- A direção explícita do usuário autorizou iniciar a infraestrutura da Etapa 6 antes do congelamento.
+  A partição de teste não pode orientar regras e o critério de saída da Etapa 6 continua bloqueado até
+  a auditoria da Etapa 5 retornar `pronto_para_congelar = true`.
+
 ## Etapa 6 - Pipeline modular de interpretação
+
+**Status: EM ANDAMENTO. Implementação técnica inicial concluída; validação no baseline real aguarda
+o congelamento da Etapa 5.**
 
 ### Desenvolver
 
@@ -418,6 +462,33 @@ Conjunto de teste congelado e critérios numéricos registrados antes da otimiza
 ### Critério de saída
 
 O pipeline atinge os limites aprovados e toda proposta é rastreável até as evidências e regras que a originaram.
+
+### Registro de desenvolvimento
+
+- Registro: JSON schema v1, versão e assinatura canônica cobrem cinco regras de reconhecimento e
+  sete regras de relação. Um carregador externo permite substituir o registro sem alterar o motor.
+- Reconhecimento: analisadores separados por classe relacionam códigos delimitados em texto/OCR com
+  itens ativos do catálogo; vetores e imagens próximos entram como contexto e proveniência.
+- Situação: assinaturas configuráveis de cor do catálogo diferenciam existente, instalar e remover.
+- Relações: proximidade de centros associa estruturas/equipamentos a postes; extremidades associam
+  cabos; compatibilidades do catálogo restringem suporte por estruturas MT/BT.
+- Segurança: resultados são sempre propostas. Código ausente ou evidência visual isolada não produz
+  entidade confirmada.
+- Execução: UUID5 inclui projeto, extração, interpretador, regras e configuração. Cancelamento,
+  retomada e repetição não duplicam propostas; falhas ficam persistidas e auditáveis.
+- Persistência: extração e interpretação usam execuções distintas, com referências de evidência
+  permitidas somente dentro do mesmo projeto e publicação atômica dos resultados concluídos.
+- Avaliação: adaptador executa o pipeline real sem persistência e já é testado com PDF sintético. O
+  teste final permanece recusado até manifesto congelado, consensos humanos e critérios aprovados.
+- Normas: a ND 3.1 exige escala 1:1000 em regra geral, admite 1:500 em casos urbanos extraordinários
+  e remete à simbologia padronizada; as heurísticas gráficas permanecem configuráveis e revisáveis.
+- Decisão arquitetural: ADR 0006 registra o pipeline versionado, idempotência e fronteira entre
+  evidência, proposta e confirmação.
+- Validação automatizada: 155 testes aprovados, cobertura total de 89,06%, complexidade média geral
+  A (3,15), tipagem, lint, formatação e dependências aprovados. Todos os módulos do interpretador têm
+  índice de manutenibilidade A e nenhum bloco novo possui complexidade D, E ou F.
+- Pendência do critério de saída: executar o benchmark final sobre o conjunto congelado, ajustar
+  somente pela partição de desenvolvimento e demonstrar os limites aprovados.
 
 ## Etapa 7 - Revisão humana na interface
 

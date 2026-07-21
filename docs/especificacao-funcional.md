@@ -181,16 +181,65 @@ que os reconheça.
 - `ExecutarAnaliseDocumento` valida a referência do PDF, registra execução concluída ou falha fatal e
   persiste todas as evidências válidas em uma transação.
 
+## Pipeline modular de interpretação
+
+- `RegistroRegrasInterpretacao` versiona regras de reconhecimento e relação e produz uma assinatura
+  SHA-256 canônica. O schema atual é 1 e pode ser carregado do recurso embarcado ou de um JSON
+  externo validado.
+- Existem analisadores independentes para poste, estrutura MT, estrutura BT, cabo e equipamento. A
+  estratégia inicial exige correspondência delimitada com um código ativo do catálogo em texto ou
+  OCR, evitando reconhecer códigos como simples partes de outras palavras.
+- Evidências vetoriais e de imagem próximas são agregadas à proposta como contexto. Para cabos, uma
+  polilinha próxima substitui a caixa do texto como geometria sugerida. Imagens não são classificadas
+  isoladamente nesta versão.
+- `AssinaturaSimbologia` classifica `EXISTENTE`, `INSTALAR` e `REMOVER` por cor e tolerância. Sem uma
+  assinatura inequívoca, a proposta usa `EXISTENTE` com confiança conservadora e permanece sujeita à
+  revisão humana.
+- Relações `INSTALADA_EM`, `INSTALADO_EM`, `CONECTA` e `SUPORTADO_POR` são propostas por centro,
+  extremidade ou proximidade combinada com `CompatibilidadeEstruturaCabo`.
+- IDs UUID5 combinam projeto, extração, interpretador, registro e configuração. Repetir uma execução
+  concluída reutiliza o resultado; retomar uma cancelada usa a mesma identidade sem duplicação.
+- A extração e a interpretação são execuções auditáveis distintas. Propostas semânticas podem
+  referenciar evidências de uma extração anterior do mesmo projeto, mas nunca de outro projeto.
+- Início, fim, estado, configuração, versões, diagnósticos e falha fatal são persistidos. Propostas
+  somente são publicadas atomicamente após a conclusão.
+- `InterpretadorRegrasAvaliacao` executa leitura, extração e interpretação sem persistência para que o
+  benchmark meça exatamente o pipeline real.
+
 ## Amostras reais e privacidade
 
 Os nove PDFs locais em `examples/` são ignorados pelo Git. O arquivo
-`examples/manifesto-amostras.json` contém apenas IDs anônimos, hashes e características técnicas.
+`evaluation/manifesto-amostras.json` contém apenas IDs anônimos, hashes e características técnicas.
 Nomes de arquivos, nomes de clientes, telefones, coordenadas e fotografias não são versionados.
 
 O corpus cobre A3/A4, retrato/paisagem, iText, AutoCAD, Microsoft Print to PDF, texto, vetores,
 imagens, anotações `Stamp`, `Popup`, `FreeText`, `Square`, appearance streams e Optional Content
 Groups. Uma amostra possui texto de anotação malformado e outra contém imagens visíveis apenas em
 appearance streams. Esses casos serão obrigatórios nos testes das etapas de ingestão e extração.
+
+## Conjunto de avaliação semântica
+
+- `ManifestoAvaliacao` separa amostras de desenvolvimento e teste por hash, sem nomes de arquivo.
+- `AnotacaoAmostra` registra elementos, categoria, situação, geometria normalizada e relações. Os
+  papéis `PRIMARIA`, `SECUNDARIA` e `CONSENSO` distinguem rotulagem independente de adjudicação.
+- Uma anotação congelada deve ser de consenso, possuir revisor pseudônimo e referenciar somente
+  páginas e elementos existentes na amostra correspondente.
+- Amostras marcadas para dupla anotação medem divergência de contagem, categoria, situação,
+  geometria e relações antes da adjudicação.
+- O pareamento de pontos usa distância normalizada; caixas e polígonos usam IoU da caixa envolvente;
+  polilinhas usam distância simétrica aos segmentos. A associação é um-para-um e determinística.
+- O benchmark registra precisão, recall e F1 por classe, relações, falhas de extração, latência p95 e
+  pico de memória rastreada pelo Python. A medição não inclui toda memória nativa de bibliotecas C.
+- A assinatura semântica inclui conjunto, critérios, interpretador, regras, configuração e contagens,
+  mas exclui latência e memória para permanecer reproduzível entre execuções equivalentes.
+- O teste final é recusado enquanto manifesto ou critérios não estiverem congelados/aprovados.
+- A auditoria impede o congelamento sem consenso de todas as amostras, cobertura das cinco classes,
+  dupla anotação exigida e diversidade mínima de escala, formato, orientação, qualidade e densidade.
+
+O corpus atual satisfaz formato, orientação, qualidade e densidade, mas todas as amostras declaram a
+mesma escala. Ele permanece em preparação até a inclusão autorizada de outra escala e a conclusão da
+revisão humana. As regras iniciais foram construídas somente com catálogo, contratos e fixtures
+sintéticas; a partição de teste privada não foi usada para criá-las.
 
 ## Persistência local
 
@@ -229,10 +278,11 @@ Fontes públicas oficiais: [normas de redes de distribuição da CEMIG](https://
 
 ## Limites desta etapa
 
-Esta etapa não interpreta as evidências como postes, cabos ou equipamentos e não gera o grafo. OCR
-real não é distribuído; existe apenas a porta opcional e sua validação com adaptador falso. A
-interface abre e inspeciona um PDF avulso; a seleção do projeto de destino será
-integrada quando as telas de gestão de projeto existirem. O caso de uso transacional de importação e
-sua persistência, assim como o caso de uso de análise, já estão implementados fora da interface.
+O pipeline reconhece inicialmente apenas códigos explícitos do catálogo; ainda não identifica uma
+forma visual sem texto nem infere códigos ausentes. Os limiares não foram aprovados contra projetos
+reais porque a Etapa 5 permanece sem consenso humano e sem diversidade de escala. Nenhum grafo é
+gerado e nenhuma proposta vira elemento confirmado. OCR real não é distribuído. A interface continua
+restrita à inspeção de PDF avulso; importação, extração e interpretação estão implementadas fora da
+interface até existirem as telas de gestão e revisão.
 
 Como referência normativa geral, permanecem aplicáveis as [normas técnicas públicas de redes de distribuição da CEMIG](https://www.cemig.com.br/normas-tecnicas/normas-tecnicas-de-redes-de-distribuicao/), especialmente as famílias ND 2.x e ND 3.1 já levantadas para o projeto.
