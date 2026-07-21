@@ -59,7 +59,8 @@ if errorlevel 1 goto dependency_error
 
 echo.
 echo Ambiente preparado com sucesso.
-echo Execute ZenyProjectHandler.bat para abrir o aplicativo.
+echo Abra ZenyProjectHandler.vbs para iniciar sem uma janela de console.
+echo Use ZenyProjectHandler.bat somente quando quiser acompanhar a saida no terminal.
 echo Execute IniciarTestes.bat para gerar o relatório de qualidade.
 exit /b 0
 
