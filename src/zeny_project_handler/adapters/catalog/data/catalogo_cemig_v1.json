@@ -1,0 +1,5218 @@
+{
+  "schema_version": 2,
+  "catalog": {
+    "id": "224588ea-051b-56b4-9dda-b4abf0998f91",
+    "version": 1,
+    "status": "PUBLICADO",
+    "created_at": "2026-07-21T00:00:00+00:00",
+    "published_at": "2026-07-21T00:00:00+00:00"
+  },
+  "source": {
+    "file_name": "NOMENCLATURAS.xlsx",
+    "sha256": "4ba9bd5cb284f6d18c3ee000a6064061d0d814bd23ec29d8630c2b15e58f8867",
+    "sheet": "Planilha1",
+    "source_counts": {
+      "postes": 38,
+      "estruturas_mt": 50,
+      "estruturas_bt": 13,
+      "cabos": 72,
+      "equipamentos": 25
+    },
+    "imported_at": "2026-07-21T00:00:00+00:00"
+  },
+  "option_groups": [
+    {
+      "id": "f27339b3-35cd-528b-849a-9871d2418d5b",
+      "key": "formato_poste",
+      "name": "Formato de poste",
+      "order": 1,
+      "options": [
+        {
+          "id": "d7559e4c-f039-51ce-99fa-e5becdd8347a",
+          "code": "CIRCULAR",
+          "label": "CIRCULAR",
+          "active": true,
+          "order": 1
+        },
+        {
+          "id": "8111054d-d973-579c-88f6-a4c0a7bd9de7",
+          "code": "DUPLO_T",
+          "label": "DUPLO T",
+          "active": true,
+          "order": 2
+        },
+        {
+          "id": "0dfc2997-6ebd-5449-bad2-098c0070a8f9",
+          "code": "MADEIRA",
+          "label": "MADEIRA",
+          "active": true,
+          "order": 3
+        }
+      ]
+    },
+    {
+      "id": "6ad34485-00e5-53ca-aef9-c5d18d415788",
+      "key": "configuracao_fases",
+      "name": "Configuração de fases",
+      "order": 2,
+      "options": [
+        {
+          "id": "db1616e9-611e-5e4c-98d3-4b260f2a1587",
+          "code": "AMBAS",
+          "label": "AMBAS",
+          "active": true,
+          "order": 1
+        },
+        {
+          "id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+          "code": "MONOFASICA",
+          "label": "MONOFÁSICA",
+          "active": true,
+          "order": 2
+        },
+        {
+          "id": "0309cd26-5430-5036-bacb-f069e985d4d2",
+          "code": "MONOFASICA_TRIFASICA",
+          "label": "MONOFÁSICA/TRIFÁSICA",
+          "active": true,
+          "order": 3
+        },
+        {
+          "id": "2c34bdf0-256a-5952-9f70-66662442097d",
+          "code": "TRIFASICA",
+          "label": "TRIFÁSICA",
+          "active": true,
+          "order": 4
+        }
+      ]
+    },
+    {
+      "id": "6e781a7c-a8d3-5f9c-a929-5a5fc06ef22e",
+      "key": "tecnologia_rede",
+      "name": "Tecnologia de rede",
+      "order": 3,
+      "options": [
+        {
+          "id": "220ddabb-8980-516a-9277-88789261bb18",
+          "code": "CONVENCIONAL_CA",
+          "label": "CONVENCIONAL CA",
+          "active": true,
+          "order": 1
+        },
+        {
+          "id": "c9da5db0-4108-58e6-b9ba-a8f1c9ed09aa",
+          "code": "CONVENCIONAL_CA_CAA",
+          "label": "CONVENCIONAL CA/CAA",
+          "active": true,
+          "order": 2
+        },
+        {
+          "id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+          "code": "CONVENCIONAL_CAA",
+          "label": "CONVENCIONAL CAA",
+          "active": true,
+          "order": 3
+        },
+        {
+          "id": "e018c67b-06d9-54cc-a19f-aa3b8671139d",
+          "code": "ISOLADA",
+          "label": "ISOLADA",
+          "active": true,
+          "order": 4
+        },
+        {
+          "id": "874bb520-7c7b-501b-8955-e338afbaa260",
+          "code": "PROTEGIDA",
+          "label": "PROTEGIDA",
+          "active": true,
+          "order": 5
+        }
+      ]
+    },
+    {
+      "id": "e5cd7dc7-4f38-54fa-ab7b-aa59bd8dafd6",
+      "key": "nivel_tensao",
+      "name": "Nível de tensão",
+      "order": 4,
+      "options": [
+        {
+          "id": "cbc68813-b52e-5ee1-9044-2733c1ab67f2",
+          "code": "BT",
+          "label": "BT",
+          "active": true,
+          "order": 1
+        },
+        {
+          "id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+          "code": "MT",
+          "label": "MT",
+          "active": true,
+          "order": 2
+        }
+      ]
+    },
+    {
+      "id": "0458d71e-d162-55c0-8ddf-25a7fad8da3d",
+      "key": "classe_equipamento",
+      "name": "Classe de equipamento",
+      "order": 5,
+      "options": [
+        {
+          "id": "1f0d0fa3-73d4-5b23-a083-0811353be162",
+          "code": "CHAVE_FACA",
+          "label": "CHAVE FACA",
+          "active": true,
+          "order": 1
+        },
+        {
+          "id": "aa4eee2f-1bbf-501d-a092-adeda95d2f9b",
+          "code": "CHAVE_FUSIVEL",
+          "label": "CHAVE FUSÍVEL",
+          "active": true,
+          "order": 2
+        },
+        {
+          "id": "5749ab3a-5d4d-5dfb-be15-492edb075d58",
+          "code": "CHAVE_FUSIVEL_REPETIDORA",
+          "label": "CHAVE FUSÍVEL REPETIDORA",
+          "active": true,
+          "order": 3
+        },
+        {
+          "id": "4bb5daba-bed4-5019-9b0c-e1ad75780fe6",
+          "code": "TRANSFORMADOR",
+          "label": "TRANSFORMADOR",
+          "active": true,
+          "order": 4
+        }
+      ]
+    }
+  ],
+  "items": [
+    {
+      "kind": "poste",
+      "id": "655f1af2-1ae9-575f-ac49-1769860db50e",
+      "code": "P-9M-150DAN-CIRCULAR",
+      "description": "Poste 9 m, 150 daN, CIRCULAR",
+      "active": true,
+      "source_row": 3,
+      "extra_attributes": {},
+      "height_m": "9",
+      "resistance_dan": 150,
+      "format_option_id": "d7559e4c-f039-51ce-99fa-e5becdd8347a"
+    },
+    {
+      "kind": "poste",
+      "id": "13b700c3-eb45-56a5-9858-99d069d97c0d",
+      "code": "P-9M-300DAN-CIRCULAR",
+      "description": "Poste 9 m, 300 daN, CIRCULAR",
+      "active": true,
+      "source_row": 4,
+      "extra_attributes": {},
+      "height_m": "9",
+      "resistance_dan": 300,
+      "format_option_id": "d7559e4c-f039-51ce-99fa-e5becdd8347a"
+    },
+    {
+      "kind": "poste",
+      "id": "277c8b81-4609-5581-9aeb-7d2d9787326f",
+      "code": "P-10M-150DAN-CIRCULAR",
+      "description": "Poste 10 m, 150 daN, CIRCULAR",
+      "active": true,
+      "source_row": 5,
+      "extra_attributes": {},
+      "height_m": "10",
+      "resistance_dan": 150,
+      "format_option_id": "d7559e4c-f039-51ce-99fa-e5becdd8347a"
+    },
+    {
+      "kind": "poste",
+      "id": "ae96cf56-860a-5397-a4e2-169007a0167a",
+      "code": "P-10M-300DAN-CIRCULAR",
+      "description": "Poste 10 m, 300 daN, CIRCULAR",
+      "active": true,
+      "source_row": 6,
+      "extra_attributes": {},
+      "height_m": "10",
+      "resistance_dan": 300,
+      "format_option_id": "d7559e4c-f039-51ce-99fa-e5becdd8347a"
+    },
+    {
+      "kind": "poste",
+      "id": "7ffc4404-45cf-5f38-9cf9-74559676f4d3",
+      "code": "P-10M-600DAN-CIRCULAR",
+      "description": "Poste 10 m, 600 daN, CIRCULAR",
+      "active": true,
+      "source_row": 7,
+      "extra_attributes": {},
+      "height_m": "10",
+      "resistance_dan": 600,
+      "format_option_id": "d7559e4c-f039-51ce-99fa-e5becdd8347a"
+    },
+    {
+      "kind": "poste",
+      "id": "a6fc122b-a6de-5a40-bf11-8a7dc56a2023",
+      "code": "P-11M-1000DAN-CIRCULAR",
+      "description": "Poste 11 m, 1000 daN, CIRCULAR",
+      "active": true,
+      "source_row": 8,
+      "extra_attributes": {},
+      "height_m": "11",
+      "resistance_dan": 1000,
+      "format_option_id": "d7559e4c-f039-51ce-99fa-e5becdd8347a"
+    },
+    {
+      "kind": "poste",
+      "id": "d8956bc2-54e4-5eb5-8b65-86f7c0569a8c",
+      "code": "P-11M-300DAN-CIRCULAR",
+      "description": "Poste 11 m, 300 daN, CIRCULAR",
+      "active": true,
+      "source_row": 9,
+      "extra_attributes": {},
+      "height_m": "11",
+      "resistance_dan": 300,
+      "format_option_id": "d7559e4c-f039-51ce-99fa-e5becdd8347a"
+    },
+    {
+      "kind": "poste",
+      "id": "bba9a13a-2169-50d3-9c42-98be234006f8",
+      "code": "P-11M-600DAN-CIRCULAR",
+      "description": "Poste 11 m, 600 daN, CIRCULAR",
+      "active": true,
+      "source_row": 10,
+      "extra_attributes": {},
+      "height_m": "11",
+      "resistance_dan": 600,
+      "format_option_id": "d7559e4c-f039-51ce-99fa-e5becdd8347a"
+    },
+    {
+      "kind": "poste",
+      "id": "c8f594d3-b3c7-5db5-980c-d3c387d24e71",
+      "code": "P-12M-1000DAN-CIRCULAR",
+      "description": "Poste 12 m, 1000 daN, CIRCULAR",
+      "active": true,
+      "source_row": 11,
+      "extra_attributes": {},
+      "height_m": "12",
+      "resistance_dan": 1000,
+      "format_option_id": "d7559e4c-f039-51ce-99fa-e5becdd8347a"
+    },
+    {
+      "kind": "poste",
+      "id": "1e69ebfc-be18-54c0-ab79-7e994cfaf54e",
+      "code": "P-12M-300DAN-CIRCULAR",
+      "description": "Poste 12 m, 300 daN, CIRCULAR",
+      "active": true,
+      "source_row": 12,
+      "extra_attributes": {},
+      "height_m": "12",
+      "resistance_dan": 300,
+      "format_option_id": "d7559e4c-f039-51ce-99fa-e5becdd8347a"
+    },
+    {
+      "kind": "poste",
+      "id": "b4f14845-97ad-5091-bd41-467caac8e738",
+      "code": "P-12M-600DAN-CIRCULAR",
+      "description": "Poste 12 m, 600 daN, CIRCULAR",
+      "active": true,
+      "source_row": 13,
+      "extra_attributes": {},
+      "height_m": "12",
+      "resistance_dan": 600,
+      "format_option_id": "d7559e4c-f039-51ce-99fa-e5becdd8347a"
+    },
+    {
+      "kind": "poste",
+      "id": "0acc074e-5b12-5bf2-a18f-aa486768afad",
+      "code": "P-13M-1000DAN-CIRCULAR",
+      "description": "Poste 13 m, 1000 daN, CIRCULAR",
+      "active": true,
+      "source_row": 14,
+      "extra_attributes": {},
+      "height_m": "13",
+      "resistance_dan": 1000,
+      "format_option_id": "d7559e4c-f039-51ce-99fa-e5becdd8347a"
+    },
+    {
+      "kind": "poste",
+      "id": "3fa3d689-2a8b-524b-b4e0-7ccc98e99425",
+      "code": "P-13M-600DAN-CIRCULAR",
+      "description": "Poste 13 m, 600 daN, CIRCULAR",
+      "active": true,
+      "source_row": 15,
+      "extra_attributes": {},
+      "height_m": "13",
+      "resistance_dan": 600,
+      "format_option_id": "d7559e4c-f039-51ce-99fa-e5becdd8347a"
+    },
+    {
+      "kind": "poste",
+      "id": "87d052c5-2765-53e4-9943-21db22733f30",
+      "code": "P-10M-150DAN-DUPLO_T",
+      "description": "Poste 10 m, 150 daN, DUPLO T",
+      "active": true,
+      "source_row": 16,
+      "extra_attributes": {},
+      "height_m": "10",
+      "resistance_dan": 150,
+      "format_option_id": "8111054d-d973-579c-88f6-a4c0a7bd9de7"
+    },
+    {
+      "kind": "poste",
+      "id": "49904c99-522f-50b0-bf5e-ca06b55de349",
+      "code": "P-10M-300DAN-DUPLO_T",
+      "description": "Poste 10 m, 300 daN, DUPLO T",
+      "active": true,
+      "source_row": 17,
+      "extra_attributes": {},
+      "height_m": "10",
+      "resistance_dan": 300,
+      "format_option_id": "8111054d-d973-579c-88f6-a4c0a7bd9de7"
+    },
+    {
+      "kind": "poste",
+      "id": "340826d2-5aaa-56f3-94e3-f733b57f20e4",
+      "code": "P-10M-600DAN-DUPLO_T",
+      "description": "Poste 10 m, 600 daN, DUPLO T",
+      "active": true,
+      "source_row": 18,
+      "extra_attributes": {},
+      "height_m": "10",
+      "resistance_dan": 600,
+      "format_option_id": "8111054d-d973-579c-88f6-a4c0a7bd9de7"
+    },
+    {
+      "kind": "poste",
+      "id": "7645988b-7d22-5aee-b7e1-a78d304789d6",
+      "code": "P-11M-300DAN-DUPLO_T",
+      "description": "Poste 11 m, 300 daN, DUPLO T",
+      "active": true,
+      "source_row": 19,
+      "extra_attributes": {},
+      "height_m": "11",
+      "resistance_dan": 300,
+      "format_option_id": "8111054d-d973-579c-88f6-a4c0a7bd9de7"
+    },
+    {
+      "kind": "poste",
+      "id": "99897985-d978-5980-92e7-7a1767ea05dc",
+      "code": "P-11M-600DAN-DUPLO_T",
+      "description": "Poste 11 m, 600 daN, DUPLO T",
+      "active": true,
+      "source_row": 20,
+      "extra_attributes": {},
+      "height_m": "11",
+      "resistance_dan": 600,
+      "format_option_id": "8111054d-d973-579c-88f6-a4c0a7bd9de7"
+    },
+    {
+      "kind": "poste",
+      "id": "de6252a2-75da-5977-9eb9-776863543a67",
+      "code": "P-12M-300DAN-DUPLO_T",
+      "description": "Poste 12 m, 300 daN, DUPLO T",
+      "active": true,
+      "source_row": 21,
+      "extra_attributes": {},
+      "height_m": "12",
+      "resistance_dan": 300,
+      "format_option_id": "8111054d-d973-579c-88f6-a4c0a7bd9de7"
+    },
+    {
+      "kind": "poste",
+      "id": "c8064d19-cadd-5608-91d0-9c95d6bccbec",
+      "code": "P-12M-600DAN-DUPLO_T",
+      "description": "Poste 12 m, 600 daN, DUPLO T",
+      "active": true,
+      "source_row": 22,
+      "extra_attributes": {},
+      "height_m": "12",
+      "resistance_dan": 600,
+      "format_option_id": "8111054d-d973-579c-88f6-a4c0a7bd9de7"
+    },
+    {
+      "kind": "poste",
+      "id": "5443add9-be85-54de-aa23-7c46bb5a35a6",
+      "code": "P-13M-300DAN-DUPLO_T",
+      "description": "Poste 13 m, 300 daN, DUPLO T",
+      "active": true,
+      "source_row": 23,
+      "extra_attributes": {},
+      "height_m": "13",
+      "resistance_dan": 300,
+      "format_option_id": "8111054d-d973-579c-88f6-a4c0a7bd9de7"
+    },
+    {
+      "kind": "poste",
+      "id": "9fad366b-7257-5ba7-b7d4-c4fd713b7e3d",
+      "code": "P-13M-600DAN-DUPLO_T",
+      "description": "Poste 13 m, 600 daN, DUPLO T",
+      "active": true,
+      "source_row": 24,
+      "extra_attributes": {},
+      "height_m": "13",
+      "resistance_dan": 600,
+      "format_option_id": "8111054d-d973-579c-88f6-a4c0a7bd9de7"
+    },
+    {
+      "kind": "poste",
+      "id": "12585f91-ef27-52ff-9849-18632ed4fcf8",
+      "code": "P-15M-600DAN-DUPLO_T",
+      "description": "Poste 15 m, 600 daN, DUPLO T",
+      "active": true,
+      "source_row": 25,
+      "extra_attributes": {},
+      "height_m": "15",
+      "resistance_dan": 600,
+      "format_option_id": "8111054d-d973-579c-88f6-a4c0a7bd9de7"
+    },
+    {
+      "kind": "poste",
+      "id": "445bc9c6-0958-5af6-94a6-75020bc86059",
+      "code": "P-18M-600DAN-DUPLO_T",
+      "description": "Poste 18 m, 600 daN, DUPLO T",
+      "active": true,
+      "source_row": 26,
+      "extra_attributes": {},
+      "height_m": "18",
+      "resistance_dan": 600,
+      "format_option_id": "8111054d-d973-579c-88f6-a4c0a7bd9de7"
+    },
+    {
+      "kind": "poste",
+      "id": "f19dc966-65e4-50ce-9ace-488cede139bf",
+      "code": "P-9M-150DAN-DUPLO_T",
+      "description": "Poste 9 m, 150 daN, DUPLO T",
+      "active": true,
+      "source_row": 27,
+      "extra_attributes": {},
+      "height_m": "9",
+      "resistance_dan": 150,
+      "format_option_id": "8111054d-d973-579c-88f6-a4c0a7bd9de7"
+    },
+    {
+      "kind": "poste",
+      "id": "04d690f3-b59d-59d3-8a91-537c185eab56",
+      "code": "P-9M-300DAN-DUPLO_T",
+      "description": "Poste 9 m, 300 daN, DUPLO T",
+      "active": true,
+      "source_row": 28,
+      "extra_attributes": {},
+      "height_m": "9",
+      "resistance_dan": 300,
+      "format_option_id": "8111054d-d973-579c-88f6-a4c0a7bd9de7"
+    },
+    {
+      "kind": "poste",
+      "id": "de2b58f1-184a-52da-97e4-b50d2cb133e8",
+      "code": "P-9M-150DAN-MADEIRA",
+      "description": "Poste 9 m, 150 daN, MADEIRA",
+      "active": true,
+      "source_row": 29,
+      "extra_attributes": {},
+      "height_m": "9",
+      "resistance_dan": 150,
+      "format_option_id": "0dfc2997-6ebd-5449-bad2-098c0070a8f9"
+    },
+    {
+      "kind": "poste",
+      "id": "51aaf3f4-0db8-54be-9ec2-039b2657aa61",
+      "code": "P-10M-150DAN-MADEIRA",
+      "description": "Poste 10 m, 150 daN, MADEIRA",
+      "active": true,
+      "source_row": 30,
+      "extra_attributes": {},
+      "height_m": "10",
+      "resistance_dan": 150,
+      "format_option_id": "0dfc2997-6ebd-5449-bad2-098c0070a8f9"
+    },
+    {
+      "kind": "poste",
+      "id": "992d2685-64b5-5dfb-b393-c51984aea2ca",
+      "code": "P-10M-300DAN-MADEIRA",
+      "description": "Poste 10 m, 300 daN, MADEIRA",
+      "active": true,
+      "source_row": 31,
+      "extra_attributes": {},
+      "height_m": "10",
+      "resistance_dan": 300,
+      "format_option_id": "0dfc2997-6ebd-5449-bad2-098c0070a8f9"
+    },
+    {
+      "kind": "poste",
+      "id": "3930c32f-208c-5a87-9681-efdeb937b6f4",
+      "code": "P-10M-600DAN-MADEIRA",
+      "description": "Poste 10 m, 600 daN, MADEIRA",
+      "active": true,
+      "source_row": 32,
+      "extra_attributes": {},
+      "height_m": "10",
+      "resistance_dan": 600,
+      "format_option_id": "0dfc2997-6ebd-5449-bad2-098c0070a8f9"
+    },
+    {
+      "kind": "poste",
+      "id": "534ed929-42b4-5fe9-9198-226f51338861",
+      "code": "P-11M-300DAN-MADEIRA",
+      "description": "Poste 11 m, 300 daN, MADEIRA",
+      "active": true,
+      "source_row": 33,
+      "extra_attributes": {},
+      "height_m": "11",
+      "resistance_dan": 300,
+      "format_option_id": "0dfc2997-6ebd-5449-bad2-098c0070a8f9"
+    },
+    {
+      "kind": "poste",
+      "id": "ae8969ab-2114-5ebe-a248-0fb3849f6fc1",
+      "code": "P-11M-600DAN-MADEIRA",
+      "description": "Poste 11 m, 600 daN, MADEIRA",
+      "active": true,
+      "source_row": 34,
+      "extra_attributes": {},
+      "height_m": "11",
+      "resistance_dan": 600,
+      "format_option_id": "0dfc2997-6ebd-5449-bad2-098c0070a8f9"
+    },
+    {
+      "kind": "poste",
+      "id": "f3d62f0c-3518-5459-874d-3cc78a09dbaa",
+      "code": "P-12M-300DAN-MADEIRA",
+      "description": "Poste 12 m, 300 daN, MADEIRA",
+      "active": true,
+      "source_row": 35,
+      "extra_attributes": {},
+      "height_m": "12",
+      "resistance_dan": 300,
+      "format_option_id": "0dfc2997-6ebd-5449-bad2-098c0070a8f9"
+    },
+    {
+      "kind": "poste",
+      "id": "fb9b96e4-b969-5769-ac5e-76ba8f131de3",
+      "code": "P-12M-600DAN-MADEIRA",
+      "description": "Poste 12 m, 600 daN, MADEIRA",
+      "active": true,
+      "source_row": 36,
+      "extra_attributes": {},
+      "height_m": "12",
+      "resistance_dan": 600,
+      "format_option_id": "0dfc2997-6ebd-5449-bad2-098c0070a8f9"
+    },
+    {
+      "kind": "poste",
+      "id": "0e87f178-c4ab-57ba-9030-c30a483dc4ea",
+      "code": "P-13M-300DAN-MADEIRA",
+      "description": "Poste 13 m, 300 daN, MADEIRA",
+      "active": true,
+      "source_row": 37,
+      "extra_attributes": {},
+      "height_m": "13",
+      "resistance_dan": 300,
+      "format_option_id": "0dfc2997-6ebd-5449-bad2-098c0070a8f9"
+    },
+    {
+      "kind": "poste",
+      "id": "6b57fd6c-294c-5959-bbcb-bd1c30e97587",
+      "code": "P-13M-600DAN-MADEIRA",
+      "description": "Poste 13 m, 600 daN, MADEIRA",
+      "active": true,
+      "source_row": 38,
+      "extra_attributes": {},
+      "height_m": "13",
+      "resistance_dan": 600,
+      "format_option_id": "0dfc2997-6ebd-5449-bad2-098c0070a8f9"
+    },
+    {
+      "kind": "poste",
+      "id": "3806ca34-bccc-55f6-b32a-61cdc831af47",
+      "code": "P-15M-600DAN-MADEIRA",
+      "description": "Poste 15 m, 600 daN, MADEIRA",
+      "active": true,
+      "source_row": 39,
+      "extra_attributes": {},
+      "height_m": "15",
+      "resistance_dan": 600,
+      "format_option_id": "0dfc2997-6ebd-5449-bad2-098c0070a8f9"
+    },
+    {
+      "kind": "poste",
+      "id": "7de6c3c5-34c7-544c-9960-89727b998cf3",
+      "code": "P-18M-600DAN-MADEIRA",
+      "description": "Poste 18 m, 600 daN, MADEIRA",
+      "active": true,
+      "source_row": 40,
+      "extra_attributes": {},
+      "height_m": "18",
+      "resistance_dan": 600,
+      "format_option_id": "0dfc2997-6ebd-5449-bad2-098c0070a8f9"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "0c68cf91-55d6-5aa1-b4dc-bd51be88206c",
+      "code": "U1",
+      "description": "Estrutura MT U1",
+      "active": true,
+      "source_row": 3,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "c9da5db0-4108-58e6-b9ba-a8f1c9ed09aa",
+      "anchorage": false,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA/CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "c40341da-b622-57ae-a7d2-b1c08dbad125",
+      "code": "U2",
+      "description": "Estrutura MT U2",
+      "active": true,
+      "source_row": 4,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "c9da5db0-4108-58e6-b9ba-a8f1c9ed09aa",
+      "anchorage": false,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA/CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "94ab5394-907c-51f1-b0c7-726ec1026707",
+      "code": "U3",
+      "description": "Estrutura MT U3",
+      "active": true,
+      "source_row": 5,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "c9da5db0-4108-58e6-b9ba-a8f1c9ed09aa",
+      "anchorage": true,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA/CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "2db48492-7fe1-5b46-a916-86a2d4e05fb5",
+      "code": "U4",
+      "description": "Estrutura MT U4",
+      "active": true,
+      "source_row": 6,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "c9da5db0-4108-58e6-b9ba-a8f1c9ed09aa",
+      "anchorage": true,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA/CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "1599266f-6712-5493-96b8-6745179bd11f",
+      "code": "N1",
+      "description": "Estrutura MT N1",
+      "active": true,
+      "source_row": 7,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "c9da5db0-4108-58e6-b9ba-a8f1c9ed09aa",
+      "anchorage": false,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA/CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "05bc1f12-a975-59f3-9059-b0caeda04f1e",
+      "code": "N2",
+      "description": "Estrutura MT N2",
+      "active": true,
+      "source_row": 8,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "c9da5db0-4108-58e6-b9ba-a8f1c9ed09aa",
+      "anchorage": false,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA/CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "64af74d8-34ef-5bc7-9a9a-b9635416a212",
+      "code": "N3",
+      "description": "Estrutura MT N3",
+      "active": true,
+      "source_row": 9,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "c9da5db0-4108-58e6-b9ba-a8f1c9ed09aa",
+      "anchorage": true,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA/CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "1ffe3464-8bfa-5176-a8d3-f6ca2c1c5d82",
+      "code": "N4",
+      "description": "Estrutura MT N4",
+      "active": true,
+      "source_row": 10,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "c9da5db0-4108-58e6-b9ba-a8f1c9ed09aa",
+      "anchorage": true,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA/CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "4ef800c1-f7cf-5356-8e18-2b82eca4dd34",
+      "code": "TE",
+      "description": "Estrutura MT TE",
+      "active": true,
+      "source_row": 11,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "anchorage": true,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "c3566ae6-ad0e-54c4-b4bc-9d3c4e67d914",
+      "code": "HT",
+      "description": "Estrutura MT HT",
+      "active": true,
+      "source_row": 12,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "anchorage": true,
+      "original_cable_expression": "4/0",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "3fddd0a7-902a-522d-84b3-e926bf617392",
+      "code": "HTE",
+      "description": "Estrutura MT HTE",
+      "active": true,
+      "source_row": 13,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "anchorage": true,
+      "original_cable_expression": "336.6",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "7515ff23-e366-55b6-9d55-964a4d543e8a",
+      "code": "M1",
+      "description": "Estrutura MT M1",
+      "active": true,
+      "source_row": 14,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "anchorage": false,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "d9650676-d109-5e95-91fd-4b3baedd09ce",
+      "code": "M2",
+      "description": "Estrutura MT M2",
+      "active": true,
+      "source_row": 15,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "anchorage": false,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "4a09c6a4-439e-514f-944e-b75a58e144ac",
+      "code": "M3",
+      "description": "Estrutura MT M3",
+      "active": true,
+      "source_row": 16,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "anchorage": true,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "2ee2aae5-ffab-5c87-9fd8-cc94c73ee4aa",
+      "code": "M4",
+      "description": "Estrutura MT M4",
+      "active": true,
+      "source_row": 17,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "anchorage": true,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "7184070a-891a-5a7f-98cb-b5f9ccaefe94",
+      "code": "B1",
+      "description": "Estrutura MT B1",
+      "active": true,
+      "source_row": 18,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "anchorage": false,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "14520af1-e31c-5375-bed0-0570d7384999",
+      "code": "B2",
+      "description": "Estrutura MT B2",
+      "active": true,
+      "source_row": 19,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "anchorage": false,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "246d38bd-1e94-5f1b-a406-988ac301a76e",
+      "code": "B3",
+      "description": "Estrutura MT B3",
+      "active": true,
+      "source_row": 20,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "anchorage": true,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "7d896f96-fe47-5fd2-8907-174ca9aae24f",
+      "code": "B4",
+      "description": "Estrutura MT B4",
+      "active": true,
+      "source_row": 21,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "anchorage": true,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "3f9c9841-77f5-5c59-82a9-1d8ba14f71a4",
+      "code": "BE1",
+      "description": "Estrutura MT BE1",
+      "active": true,
+      "source_row": 22,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "anchorage": false,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "912b4158-f5ec-5daa-a6f5-3411c9a59545",
+      "code": "BE2",
+      "description": "Estrutura MT BE2",
+      "active": true,
+      "source_row": 23,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "anchorage": false,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "a3cf8a7a-0db3-5bad-9b32-0000f92c14db",
+      "code": "BE3",
+      "description": "Estrutura MT BE3",
+      "active": true,
+      "source_row": 24,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "anchorage": true,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "44b05c8f-612a-5d41-abef-e42045f172db",
+      "code": "BE4",
+      "description": "Estrutura MT BE4",
+      "active": true,
+      "source_row": 25,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "anchorage": true,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "428a5e20-0286-5df5-ba69-18e6a86a40f0",
+      "code": "BS1",
+      "description": "Estrutura MT BS1",
+      "active": true,
+      "source_row": 26,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "anchorage": false,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "f9ec2364-c660-5f47-ab37-a408e390def0",
+      "code": "BS2",
+      "description": "Estrutura MT BS2",
+      "active": true,
+      "source_row": 27,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "anchorage": false,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "1c0f03de-3429-5ca9-8bdb-1f152aed6e0d",
+      "code": "BS3",
+      "description": "Estrutura MT BS3",
+      "active": true,
+      "source_row": 28,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "anchorage": true,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "d861fcb2-7c9b-5776-bbc5-95dedef4ff67",
+      "code": "BS4",
+      "description": "Estrutura MT BS4",
+      "active": true,
+      "source_row": 29,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "anchorage": true,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "b1e8f57a-03a5-5fed-97cd-f796d21ef739",
+      "code": "CM1",
+      "description": "Estrutura MT CM1",
+      "active": true,
+      "source_row": 30,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "anchorage": false,
+      "original_cable_expression": "50, 150 E 240",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "920aff43-fed2-531a-a658-d3b63c464826",
+      "code": "CM2",
+      "description": "Estrutura MT CM2",
+      "active": true,
+      "source_row": 31,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "anchorage": false,
+      "original_cable_expression": "50, 150 E 240",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "ae1c45aa-f269-56c8-bd3a-74a257cfad29",
+      "code": "CM3",
+      "description": "Estrutura MT CM3",
+      "active": true,
+      "source_row": 32,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "anchorage": true,
+      "original_cable_expression": "50, 150 E 240",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "e53b6c48-59da-5e17-9c07-90e2bd523e87",
+      "code": "CM4",
+      "description": "Estrutura MT CM4",
+      "active": true,
+      "source_row": 33,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "anchorage": true,
+      "original_cable_expression": "50, 150 E 240",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "b676d320-2a56-5673-ac8d-5255f396060c",
+      "code": "CMJ1",
+      "description": "Estrutura MT CMJ1",
+      "active": true,
+      "source_row": 34,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "anchorage": false,
+      "original_cable_expression": "50, 150 E 240",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "9159cfe2-846c-5980-8a24-02ed457c7050",
+      "code": "CMJ2",
+      "description": "Estrutura MT CMJ2",
+      "active": true,
+      "source_row": 35,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "anchorage": false,
+      "original_cable_expression": "50, 150 E 240",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "468768bb-2a35-5d0a-aaad-c1ab243f2af7",
+      "code": "CE1",
+      "description": "Estrutura MT CE1",
+      "active": true,
+      "source_row": 36,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "anchorage": false,
+      "original_cable_expression": "50, 150 E 240",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "9e90a498-1fb6-527f-b0af-e763a3f9da40",
+      "code": "CE2",
+      "description": "Estrutura MT CE2",
+      "active": true,
+      "source_row": 37,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "anchorage": false,
+      "original_cable_expression": "50, 150 E 240",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "8942fed4-a8fb-5aab-a2a0-89bf262f6155",
+      "code": "CE3",
+      "description": "Estrutura MT CE3",
+      "active": true,
+      "source_row": 38,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "anchorage": true,
+      "original_cable_expression": "50, 150 E 240",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "9f11cdbd-3393-58ba-8b2a-15c5c3a0b884",
+      "code": "CE4",
+      "description": "Estrutura MT CE4",
+      "active": true,
+      "source_row": 39,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "anchorage": true,
+      "original_cable_expression": "50, 150 E 240",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "4624b085-efc4-50e6-a270-c99190bfde22",
+      "code": "CEM4",
+      "description": "Estrutura MT CEM4",
+      "active": true,
+      "source_row": 40,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "anchorage": true,
+      "original_cable_expression": "50, 150 E 240",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "e97f5c84-1853-5a0b-beef-7cf1691fc89b",
+      "code": "CEN3",
+      "description": "Estrutura MT CEN3",
+      "active": true,
+      "source_row": 41,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "anchorage": true,
+      "original_cable_expression": "50, 150 E 240",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "68f3270d-cc31-5bc3-8224-1a45c2008bca",
+      "code": "CEN4",
+      "description": "Estrutura MT CEN4",
+      "active": true,
+      "source_row": 42,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "anchorage": true,
+      "original_cable_expression": "50, 150 E 240",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "5a457690-4d75-56c8-ae3f-3c2302afa30c",
+      "code": "CEM1",
+      "description": "Estrutura MT CEM1",
+      "active": true,
+      "source_row": 43,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "anchorage": false,
+      "original_cable_expression": "50, 150 E 240",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "ac4aa28f-be0f-5bbd-9708-950d327f2a15",
+      "code": "CEM2",
+      "description": "Estrutura MT CEM2",
+      "active": true,
+      "source_row": 44,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "anchorage": false,
+      "original_cable_expression": "50, 150 E 240",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "aecc4dfb-fe27-5fa8-bffb-9ea69461133b",
+      "code": "CEM3",
+      "description": "Estrutura MT CEM3",
+      "active": true,
+      "source_row": 45,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "anchorage": true,
+      "original_cable_expression": "50, 150 E 240",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "169c7040-2e88-52bd-9b16-433fe130fb45",
+      "code": "CEM4",
+      "description": "Estrutura MT CEM4",
+      "active": false,
+      "source_row": 46,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "anchorage": true,
+      "original_cable_expression": "50, 150 E 240",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "dc451f99-0831-5752-90fc-b885558ff1e8",
+      "code": "CEBS1",
+      "description": "Estrutura MT CEBS1",
+      "active": true,
+      "source_row": 47,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "anchorage": false,
+      "original_cable_expression": "50, 150 E 240",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "fa3a077a-b471-5200-9fb7-25e4197a5c68",
+      "code": "CEBS2",
+      "description": "Estrutura MT CEBS2",
+      "active": true,
+      "source_row": 48,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "anchorage": false,
+      "original_cable_expression": "50, 150 E 240",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "cc641b64-b89d-5e5b-ab99-ef2962ae0586",
+      "code": "CEBS3",
+      "description": "Estrutura MT CEBS3",
+      "active": true,
+      "source_row": 49,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "anchorage": true,
+      "original_cable_expression": "50, 150 E 240",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "468f4e90-3e1d-5e4c-ac31-ec813f97da9a",
+      "code": "CEBS4",
+      "description": "Estrutura MT CEBS4",
+      "active": true,
+      "source_row": 50,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "anchorage": true,
+      "original_cable_expression": "50, 150 E 240",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "5f3cc578-6f2f-5ae0-942f-4f3eb02714d3",
+      "code": "CEJ1",
+      "description": "Estrutura MT CEJ1",
+      "active": true,
+      "source_row": 51,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "anchorage": false,
+      "original_cable_expression": "50, 150 E 240",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_mt",
+      "id": "cd7c0b83-dac7-5278-8d2d-e7c2239817cb",
+      "code": "CEJ2",
+      "description": "Estrutura MT CEJ2",
+      "active": true,
+      "source_row": 52,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "anchorage": false,
+      "original_cable_expression": "50, 150 E 240",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "estrutura_bt",
+      "id": "8e40ad62-edc5-5b0d-8375-0273d42382ae",
+      "code": "S1N",
+      "description": "Estrutura BT S1N",
+      "active": true,
+      "source_row": 3,
+      "extra_attributes": {},
+      "network_technology_option_id": "c9da5db0-4108-58e6-b9ba-a8f1c9ed09aa",
+      "anchorage": false,
+      "original_cable_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5",
+      "raw_network_technology": "CONVENCIONAL CA/CAA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "estrutura_bt",
+      "id": "fd4b8060-0b10-5d50-bc34-4c7b66ddb371",
+      "code": "S3R",
+      "description": "Estrutura BT S3R",
+      "active": true,
+      "source_row": 4,
+      "extra_attributes": {},
+      "network_technology_option_id": "c9da5db0-4108-58e6-b9ba-a8f1c9ed09aa",
+      "anchorage": true,
+      "original_cable_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5",
+      "raw_network_technology": "CONVENCIONAL CA/CAA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "estrutura_bt",
+      "id": "866be5f8-4c78-5e0a-beba-ccc9a8f0498f",
+      "code": "S4R",
+      "description": "Estrutura BT S4R",
+      "active": true,
+      "source_row": 5,
+      "extra_attributes": {},
+      "network_technology_option_id": "c9da5db0-4108-58e6-b9ba-a8f1c9ed09aa",
+      "anchorage": true,
+      "original_cable_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5",
+      "raw_network_technology": "CONVENCIONAL CA/CAA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "estrutura_bt",
+      "id": "cef93a19-4f6c-5f3d-8883-370af0e39011",
+      "code": "SI1R",
+      "description": "Estrutura BT SI1R",
+      "active": true,
+      "source_row": 6,
+      "extra_attributes": {},
+      "network_technology_option_id": "e018c67b-06d9-54cc-a19f-aa3b8671139d",
+      "anchorage": false,
+      "original_cable_expression": "35",
+      "raw_network_technology": "ISOLADA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "estrutura_bt",
+      "id": "d6a2a6ea-8896-5a7d-9266-21421e1901f5",
+      "code": "SI1QR",
+      "description": "Estrutura BT SI1QR",
+      "active": true,
+      "source_row": 7,
+      "extra_attributes": {},
+      "network_technology_option_id": "e018c67b-06d9-54cc-a19f-aa3b8671139d",
+      "anchorage": false,
+      "original_cable_expression": "70",
+      "raw_network_technology": "ISOLADA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "estrutura_bt",
+      "id": "a6b04426-210a-5fc3-90c4-760e2786d543",
+      "code": "SAI1",
+      "description": "Estrutura BT SAI1",
+      "active": true,
+      "source_row": 8,
+      "extra_attributes": {},
+      "network_technology_option_id": "e018c67b-06d9-54cc-a19f-aa3b8671139d",
+      "anchorage": false,
+      "original_cable_expression": "35",
+      "raw_network_technology": "ISOLADA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "estrutura_bt",
+      "id": "7cb16dc9-cfa4-52e4-a177-cdeb5484b09c",
+      "code": "SAI1Q",
+      "description": "Estrutura BT SAI1Q",
+      "active": true,
+      "source_row": 9,
+      "extra_attributes": {},
+      "network_technology_option_id": "e018c67b-06d9-54cc-a19f-aa3b8671139d",
+      "anchorage": false,
+      "original_cable_expression": "70",
+      "raw_network_technology": "ISOLADA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "estrutura_bt",
+      "id": "25a88e70-bd93-5277-b4a1-aa70564bd9af",
+      "code": "SI3R",
+      "description": "Estrutura BT SI3R",
+      "active": true,
+      "source_row": 10,
+      "extra_attributes": {},
+      "network_technology_option_id": "e018c67b-06d9-54cc-a19f-aa3b8671139d",
+      "anchorage": true,
+      "original_cable_expression": "35 E 70",
+      "raw_network_technology": "ISOLADA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "estrutura_bt",
+      "id": "3cdeabb5-11ce-5640-9a5d-a2e4de04dda3",
+      "code": "SI4R",
+      "description": "Estrutura BT SI4R",
+      "active": true,
+      "source_row": 11,
+      "extra_attributes": {},
+      "network_technology_option_id": "e018c67b-06d9-54cc-a19f-aa3b8671139d",
+      "anchorage": true,
+      "original_cable_expression": "35 E 70",
+      "raw_network_technology": "ISOLADA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "estrutura_bt",
+      "id": "0dbbd465-8417-5a2c-8143-0480c658fc16",
+      "code": "S13N",
+      "description": "Estrutura BT S13N",
+      "active": true,
+      "source_row": 12,
+      "extra_attributes": {},
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "anchorage": false,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "estrutura_bt",
+      "id": "9f927a5d-aa4b-5bde-b422-6ccce1199aae",
+      "code": "S23N",
+      "description": "Estrutura BT S23N",
+      "active": true,
+      "source_row": 13,
+      "extra_attributes": {},
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "anchorage": false,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "estrutura_bt",
+      "id": "0c3fad6f-c3a2-58da-9a9d-2ebabfcc19fd",
+      "code": "S33N",
+      "description": "Estrutura BT S33N",
+      "active": true,
+      "source_row": 14,
+      "extra_attributes": {},
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "anchorage": true,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "estrutura_bt",
+      "id": "fc7d742b-8a45-5446-ba33-37b33079695b",
+      "code": "S43N3N",
+      "description": "Estrutura BT S43N3N",
+      "active": true,
+      "source_row": 15,
+      "extra_attributes": {},
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "anchorage": true,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "cabo",
+      "id": "1a991b5c-d604-502f-93eb-b189c057e590",
+      "code": "A-4 CA",
+      "description": "Cabo A-4 CA",
+      "active": true,
+      "source_row": 3,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.7",
+      "reference_size": "4",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "c6f979ad-7798-5318-9188-4c2a048fc4f3",
+      "code": "B-4 CA",
+      "description": "Cabo B-4 CA",
+      "active": true,
+      "source_row": 4,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.7",
+      "reference_size": "4",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "8c56f0a4-0013-50ba-adb4-f883b0ff875f",
+      "code": "C-4 CA",
+      "description": "Cabo C-4 CA",
+      "active": true,
+      "source_row": 5,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.7",
+      "reference_size": "4",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "507fbb1f-cd6e-5bc6-95a9-2b44904f5180",
+      "code": "ABC-4 CA",
+      "description": "Cabo ABC-4 CA",
+      "active": true,
+      "source_row": 6,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.7",
+      "reference_size": "4",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "f99f6ab5-ce98-5c51-bf28-928c78c18613",
+      "code": "A-2 CA",
+      "description": "Cabo A-2 CA",
+      "active": true,
+      "source_row": 7,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.4",
+      "reference_size": "2",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "38acb576-99d3-58ee-a7af-64eb7073ebe9",
+      "code": "B-2 CA",
+      "description": "Cabo B-2 CA",
+      "active": true,
+      "source_row": 8,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.4",
+      "reference_size": "2",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "557b4e20-0f88-54e0-b893-c4e11b49f78d",
+      "code": "C-2 CA",
+      "description": "Cabo C-2 CA",
+      "active": true,
+      "source_row": 9,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.4",
+      "reference_size": "2",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "6a23aad4-2d71-58e0-871d-3fdaa00b8051",
+      "code": "ABC-2 CA",
+      "description": "Cabo ABC-2 CA",
+      "active": true,
+      "source_row": 10,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.4",
+      "reference_size": "2",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "5261dd49-cb75-5747-a42f-39f19ad7d0cc",
+      "code": "A-1/0 CA",
+      "description": "Cabo A-1/0 CA",
+      "active": true,
+      "source_row": 11,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.3",
+      "reference_size": "1/0",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "1df91f4f-fe34-5d18-9e41-48eb33f2d3f6",
+      "code": "B-1/0 CA",
+      "description": "Cabo B-1/0 CA",
+      "active": true,
+      "source_row": 12,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.3",
+      "reference_size": "1/0",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "29a6477a-24d2-50b5-8876-bd1e2d380040",
+      "code": "C-1/0 CA",
+      "description": "Cabo C-1/0 CA",
+      "active": true,
+      "source_row": 13,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.3",
+      "reference_size": "1/0",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "48adef88-bc3f-5e3e-8a01-8ccbf590dc9a",
+      "code": "ABC-1/0 CA",
+      "description": "Cabo ABC-1/0 CA",
+      "active": true,
+      "source_row": 14,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.3",
+      "reference_size": "1/0",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "3a3293c2-dd27-5d1a-ba01-3234d3a070df",
+      "code": "A-4/0 CA",
+      "description": "Cabo A-4/0 CA",
+      "active": true,
+      "source_row": 15,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.2",
+      "reference_size": "4/0",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "05bc2bcd-8995-5d52-8f27-eafb841d27b8",
+      "code": "B-4/0 CA",
+      "description": "Cabo B-4/0 CA",
+      "active": true,
+      "source_row": 16,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.2",
+      "reference_size": "4/0",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "f3451bfa-1dbc-56da-8db7-bd1e7ee5e158",
+      "code": "C-4/0 CA",
+      "description": "Cabo C-4/0 CA",
+      "active": true,
+      "source_row": 17,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.2",
+      "reference_size": "4/0",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "7d90c901-763f-5133-8251-6d2cb00d7002",
+      "code": "ABC-4/0 CA",
+      "description": "Cabo ABC-4/0 CA",
+      "active": true,
+      "source_row": 18,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.2",
+      "reference_size": "4/0",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "01b569a5-34e0-559e-85de-4a393304b215",
+      "code": "A-336,6 CA",
+      "description": "Cabo A-336,6 CA",
+      "active": true,
+      "source_row": 19,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.1",
+      "reference_size": "336,6",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "11a9a392-ffec-55d0-a633-1817752bbd4a",
+      "code": "B-336,6 CA",
+      "description": "Cabo B-336,6 CA",
+      "active": true,
+      "source_row": 20,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.1",
+      "reference_size": "336,6",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "15ee7d46-3989-51ad-b08f-275989432c51",
+      "code": "C-336,6 CA",
+      "description": "Cabo C-336,6 CA",
+      "active": true,
+      "source_row": 21,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.1",
+      "reference_size": "336,6",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "28a622e5-0e39-5fcc-80fa-18ffdbb4ef5c",
+      "code": "ABC-336,6 CA",
+      "description": "Cabo ABC-336,6 CA",
+      "active": true,
+      "source_row": 22,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.1",
+      "reference_size": "336,6",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "9aa2d19f-cca5-571a-93c7-793f3e715544",
+      "code": "A-4 CAA",
+      "description": "Cabo A-4 CAA",
+      "active": true,
+      "source_row": 23,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.7",
+      "reference_size": "4",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "b2bc6a65-906f-59c7-b3b3-e47d78ba1901",
+      "code": "B-4 CAA",
+      "description": "Cabo B-4 CAA",
+      "active": true,
+      "source_row": 24,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.7",
+      "reference_size": "4",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "d2161c66-2934-5748-8562-9ff40b63b9f6",
+      "code": "C-4 CAA",
+      "description": "Cabo C-4 CAA",
+      "active": true,
+      "source_row": 25,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.7",
+      "reference_size": "4",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "82b308a8-0731-542c-a774-9463ee6c0ccc",
+      "code": "ABC-4 CAA",
+      "description": "Cabo ABC-4 CAA",
+      "active": true,
+      "source_row": 26,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.7",
+      "reference_size": "4",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "e881f882-0d89-59ef-82d8-803215991229",
+      "code": "A-2 CAA",
+      "description": "Cabo A-2 CAA",
+      "active": true,
+      "source_row": 27,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.4",
+      "reference_size": "2",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "65a670ad-4d15-5922-9ee6-6059a2ac11d1",
+      "code": "B-2 CAA",
+      "description": "Cabo B-2 CAA",
+      "active": true,
+      "source_row": 28,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.4",
+      "reference_size": "2",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "1686b585-34f9-5097-9e1c-bb236a2070e6",
+      "code": "C-2 CAA",
+      "description": "Cabo C-2 CAA",
+      "active": true,
+      "source_row": 29,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.4",
+      "reference_size": "2",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "9db24051-075f-5d65-bee1-66ff353e766b",
+      "code": "ABC-2 CAA",
+      "description": "Cabo ABC-2 CAA",
+      "active": true,
+      "source_row": 30,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.4",
+      "reference_size": "2",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "8d0b2620-eac9-5d34-828e-d390c6b458c2",
+      "code": "A-1/0 CAA",
+      "description": "Cabo A-1/0 CAA",
+      "active": true,
+      "source_row": 31,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.3",
+      "reference_size": "1/0",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "bb034374-2c4e-5df2-a31b-13e26a2d6f30",
+      "code": "B-1/0 CAA",
+      "description": "Cabo B-1/0 CAA",
+      "active": true,
+      "source_row": 32,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.3",
+      "reference_size": "1/0",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "4e7e2294-470b-5ea1-b4d0-9ad18544f95e",
+      "code": "C-1/0 CAA",
+      "description": "Cabo C-1/0 CAA",
+      "active": true,
+      "source_row": 33,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.3",
+      "reference_size": "1/0",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "00d2a2dc-2bc1-50be-9d1e-64d014ed52df",
+      "code": "ABC-1/0 CAA",
+      "description": "Cabo ABC-1/0 CAA",
+      "active": true,
+      "source_row": 34,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.3",
+      "reference_size": "1/0",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "435400cd-abef-53ce-9064-216932d11e11",
+      "code": "A-4/0 CAA",
+      "description": "Cabo A-4/0 CAA",
+      "active": true,
+      "source_row": 35,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.2",
+      "reference_size": "4/0",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "ccb111c4-24f1-557b-b089-3fa23ab4d923",
+      "code": "B-4/0 CAA",
+      "description": "Cabo B-4/0 CAA",
+      "active": true,
+      "source_row": 36,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.2",
+      "reference_size": "4/0",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "ed32a6f8-7046-5b9c-a3c5-087bd32753f3",
+      "code": "C-4/0 CAA",
+      "description": "Cabo C-4/0 CAA",
+      "active": true,
+      "source_row": 37,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.2",
+      "reference_size": "4/0",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "0a3a9495-9284-531f-904c-081d10249e76",
+      "code": "ABC-4/0 CAA",
+      "description": "Cabo ABC-4/0 CAA",
+      "active": true,
+      "source_row": 38,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.2",
+      "reference_size": "4/0",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "3241d1c2-4f4b-5655-8419-625eab9b983a",
+      "code": "A-336,6 CAA",
+      "description": "Cabo A-336,6 CAA",
+      "active": true,
+      "source_row": 39,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.1",
+      "reference_size": "336,6",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "b38b83c3-61e4-5343-80c3-b803f8e7fb67",
+      "code": "B-336,6 CAA",
+      "description": "Cabo B-336,6 CAA",
+      "active": true,
+      "source_row": 40,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.1",
+      "reference_size": "336,6",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "4855398f-661e-58bd-902b-b27fc1d75e9a",
+      "code": "C-336,6 CAA",
+      "description": "Cabo C-336,6 CAA",
+      "active": true,
+      "source_row": 41,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.1",
+      "reference_size": "336,6",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "aa12ffd2-1747-5b61-83c2-bd0ca966f81d",
+      "code": "ABC-336,6 CAA",
+      "description": "Cabo ABC-336,6 CAA",
+      "active": true,
+      "source_row": 42,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": "1.1",
+      "reference_size": "336,6",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "eba32867-73e9-52d1-838a-b28b0e5d5ea0",
+      "code": "(N- 1N5)",
+      "description": "Cabo (N- 1N5)",
+      "active": true,
+      "source_row": 43,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "0309cd26-5430-5036-bacb-f069e985d4d2",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "cbc68813-b52e-5ee1-9044-2733c1ab67f2",
+      "condemnation_factor": null,
+      "reference_size": "1N5",
+      "raw_phase_configuration": "MONOFÁSICA/TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "cabo",
+      "id": "c0c27e43-d5d9-55ec-883f-b657899178bf",
+      "code": "(N- 3N5)",
+      "description": "Cabo (N- 3N5)",
+      "active": true,
+      "source_row": 44,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "0309cd26-5430-5036-bacb-f069e985d4d2",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "cbc68813-b52e-5ee1-9044-2733c1ab67f2",
+      "condemnation_factor": null,
+      "reference_size": "3N5",
+      "raw_phase_configuration": "MONOFÁSICA/TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "cabo",
+      "id": "4660a732-0ae9-5244-8198-5a3a29484a0b",
+      "code": "(N- 1N2)",
+      "description": "Cabo (N- 1N2)",
+      "active": true,
+      "source_row": 45,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "0309cd26-5430-5036-bacb-f069e985d4d2",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "cbc68813-b52e-5ee1-9044-2733c1ab67f2",
+      "condemnation_factor": null,
+      "reference_size": "1N2",
+      "raw_phase_configuration": "MONOFÁSICA/TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "cabo",
+      "id": "c7254046-7c5d-54dc-aa66-510707a0a90e",
+      "code": "(N-4 CA)",
+      "description": "Cabo (N-4 CA)",
+      "active": true,
+      "source_row": 46,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "0309cd26-5430-5036-bacb-f069e985d4d2",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "voltage_level_option_id": "cbc68813-b52e-5ee1-9044-2733c1ab67f2",
+      "condemnation_factor": null,
+      "reference_size": "4",
+      "raw_phase_configuration": "MONOFÁSICA/TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "cabo",
+      "id": "6fd3172d-e0eb-5810-b05a-eb168fdb8104",
+      "code": "(N-2 CA)",
+      "description": "Cabo (N-2 CA)",
+      "active": true,
+      "source_row": 47,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "0309cd26-5430-5036-bacb-f069e985d4d2",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "voltage_level_option_id": "cbc68813-b52e-5ee1-9044-2733c1ab67f2",
+      "condemnation_factor": null,
+      "reference_size": "2",
+      "raw_phase_configuration": "MONOFÁSICA/TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "cabo",
+      "id": "42d58e26-f660-5ba2-aad4-264301f7e26c",
+      "code": "(N-1/0 CA)",
+      "description": "Cabo (N-1/0 CA)",
+      "active": true,
+      "source_row": 48,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "0309cd26-5430-5036-bacb-f069e985d4d2",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "voltage_level_option_id": "cbc68813-b52e-5ee1-9044-2733c1ab67f2",
+      "condemnation_factor": null,
+      "reference_size": "1/0",
+      "raw_phase_configuration": "MONOFÁSICA/TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "cabo",
+      "id": "9d443db3-1f9b-5d9e-afd5-44f8ebdb05cb",
+      "code": "(N-4/0 CA)",
+      "description": "Cabo (N-4/0 CA)",
+      "active": true,
+      "source_row": 49,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "0309cd26-5430-5036-bacb-f069e985d4d2",
+      "network_technology_option_id": "220ddabb-8980-516a-9277-88789261bb18",
+      "voltage_level_option_id": "cbc68813-b52e-5ee1-9044-2733c1ab67f2",
+      "condemnation_factor": null,
+      "reference_size": "4/0",
+      "raw_phase_configuration": "MONOFÁSICA/TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "cabo",
+      "id": "70f7a0a5-ba12-5aa8-aa1d-f1f5f53d3679",
+      "code": "(N-4 CAA)",
+      "description": "Cabo (N-4 CAA)",
+      "active": true,
+      "source_row": 50,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "0309cd26-5430-5036-bacb-f069e985d4d2",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "cbc68813-b52e-5ee1-9044-2733c1ab67f2",
+      "condemnation_factor": null,
+      "reference_size": "4",
+      "raw_phase_configuration": "MONOFÁSICA/TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "cabo",
+      "id": "11754110-9a1d-5a5f-9122-516f484dacca",
+      "code": "(N-2 CAA)",
+      "description": "Cabo (N-2 CAA)",
+      "active": true,
+      "source_row": 51,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "0309cd26-5430-5036-bacb-f069e985d4d2",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "cbc68813-b52e-5ee1-9044-2733c1ab67f2",
+      "condemnation_factor": null,
+      "reference_size": "2",
+      "raw_phase_configuration": "MONOFÁSICA/TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "cabo",
+      "id": "ab250036-5c6c-5661-a721-db2fc9322b5b",
+      "code": "(N-1/0 CAA)",
+      "description": "Cabo (N-1/0 CAA)",
+      "active": true,
+      "source_row": 52,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "0309cd26-5430-5036-bacb-f069e985d4d2",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "cbc68813-b52e-5ee1-9044-2733c1ab67f2",
+      "condemnation_factor": null,
+      "reference_size": "1/0",
+      "raw_phase_configuration": "MONOFÁSICA/TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "cabo",
+      "id": "03a29e99-d54a-56ae-80eb-ae9a98c56c5c",
+      "code": "(N-4/0 CAA)",
+      "description": "Cabo (N-4/0 CAA)",
+      "active": true,
+      "source_row": 53,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "0309cd26-5430-5036-bacb-f069e985d4d2",
+      "network_technology_option_id": "6056b725-dd5e-5a5f-bef8-65e766cd2137",
+      "voltage_level_option_id": "cbc68813-b52e-5ee1-9044-2733c1ab67f2",
+      "condemnation_factor": null,
+      "reference_size": "4/0",
+      "raw_phase_configuration": "MONOFÁSICA/TRIFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CAA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "cabo",
+      "id": "3f7d9cf4-23fb-58f5-8df3-eb2ef7deefa3",
+      "code": "AM-50(3/8\")",
+      "description": "Cabo AM-50(3/8\")",
+      "active": true,
+      "source_row": 54,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": null,
+      "reference_size": "50",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "f2135a1b-f7dc-5f41-a3a0-adbcd9af750e",
+      "code": "BM-50(3/8\")",
+      "description": "Cabo BM-50(3/8\")",
+      "active": true,
+      "source_row": 55,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": null,
+      "reference_size": "50",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "210f780f-26cc-5611-a039-e4fc2338a99e",
+      "code": "CM-50(3/8\")",
+      "description": "Cabo CM-50(3/8\")",
+      "active": true,
+      "source_row": 56,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": null,
+      "reference_size": "50",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "17a29fef-68f8-5726-924b-07b68b10fefb",
+      "code": "ABCM-50(3/8\")",
+      "description": "Cabo ABCM-50(3/8\")",
+      "active": true,
+      "source_row": 57,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": null,
+      "reference_size": "50",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "93fc78f0-9946-53fa-97df-8e20b77dc890",
+      "code": "AM-150(3/8\")",
+      "description": "Cabo AM-150(3/8\")",
+      "active": true,
+      "source_row": 58,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": null,
+      "reference_size": "150",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "db404f69-5dbd-5ebe-bf7a-8563f4a4e119",
+      "code": "BM-150(3/8\")",
+      "description": "Cabo BM-150(3/8\")",
+      "active": true,
+      "source_row": 59,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": null,
+      "reference_size": "150",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "6da8e2a1-a7d3-5921-abce-719018287b65",
+      "code": "CM-150(3/8\")",
+      "description": "Cabo CM-150(3/8\")",
+      "active": true,
+      "source_row": 60,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": null,
+      "reference_size": "150",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "174ce6ec-a8cf-5f38-88dc-95efa498c0f4",
+      "code": "ABCM-150(3/8\")",
+      "description": "Cabo ABCM-150(3/8\")",
+      "active": true,
+      "source_row": 61,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": null,
+      "reference_size": "150",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "80b32cd3-6218-5b93-a1a6-01d48de33dbd",
+      "code": "AM-240(3/8\")",
+      "description": "Cabo AM-240(3/8\")",
+      "active": true,
+      "source_row": 62,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": null,
+      "reference_size": "240",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "eede0e2d-b94e-5656-9849-4cad881d8d7a",
+      "code": "BM-240(3/8\")",
+      "description": "Cabo BM-240(3/8\")",
+      "active": true,
+      "source_row": 63,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": null,
+      "reference_size": "240",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "22ccf80d-2b9f-5b1d-b11c-ada4182221f2",
+      "code": "CM-240(3/8\")",
+      "description": "Cabo CM-240(3/8\")",
+      "active": true,
+      "source_row": 64,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": null,
+      "reference_size": "240",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "324866be-66e3-5438-86be-27583279fbf5",
+      "code": "ABCM-240(3/8\")",
+      "description": "Cabo ABCM-240(3/8\")",
+      "active": true,
+      "source_row": 65,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "874bb520-7c7b-501b-8955-e338afbaa260",
+      "voltage_level_option_id": "eaf17e91-6d57-57e0-9d7a-408e2c87998f",
+      "condemnation_factor": null,
+      "reference_size": "240",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "PROTEGIDA",
+      "network_level": "MT"
+    },
+    {
+      "kind": "cabo",
+      "id": "a82af11d-df12-5043-b3c3-51ccd4cd5084",
+      "code": "AN-16(16)",
+      "description": "Cabo AN-16(16)",
+      "active": true,
+      "source_row": 66,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "e018c67b-06d9-54cc-a19f-aa3b8671139d",
+      "voltage_level_option_id": "cbc68813-b52e-5ee1-9044-2733c1ab67f2",
+      "condemnation_factor": null,
+      "reference_size": "16",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "ISOLADA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "cabo",
+      "id": "588a3e35-92c2-51aa-950b-1b319d20379e",
+      "code": "BN-16(16)",
+      "description": "Cabo BN-16(16)",
+      "active": true,
+      "source_row": 67,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "e018c67b-06d9-54cc-a19f-aa3b8671139d",
+      "voltage_level_option_id": "cbc68813-b52e-5ee1-9044-2733c1ab67f2",
+      "condemnation_factor": null,
+      "reference_size": "16",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "ISOLADA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "cabo",
+      "id": "9ffdb32d-960e-54c2-9edd-cebc71164d91",
+      "code": "ABN-16(16)",
+      "description": "Cabo ABN-16(16)",
+      "active": true,
+      "source_row": 68,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "e018c67b-06d9-54cc-a19f-aa3b8671139d",
+      "voltage_level_option_id": "cbc68813-b52e-5ee1-9044-2733c1ab67f2",
+      "condemnation_factor": null,
+      "reference_size": "16",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "ISOLADA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "cabo",
+      "id": "870b9737-68ad-5973-97b0-db02e082b91a",
+      "code": "AN-35(70)",
+      "description": "Cabo AN-35(70)",
+      "active": true,
+      "source_row": 69,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "e018c67b-06d9-54cc-a19f-aa3b8671139d",
+      "voltage_level_option_id": "cbc68813-b52e-5ee1-9044-2733c1ab67f2",
+      "condemnation_factor": null,
+      "reference_size": "35",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "ISOLADA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "cabo",
+      "id": "123f78e5-61b0-5384-9d68-6ea805dba135",
+      "code": "BN-35(70)",
+      "description": "Cabo BN-35(70)",
+      "active": true,
+      "source_row": 70,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "e018c67b-06d9-54cc-a19f-aa3b8671139d",
+      "voltage_level_option_id": "cbc68813-b52e-5ee1-9044-2733c1ab67f2",
+      "condemnation_factor": null,
+      "reference_size": "35",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "ISOLADA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "cabo",
+      "id": "dee3fda1-71bd-5937-9ae5-faa124f62dc9",
+      "code": "ABN-35(70)",
+      "description": "Cabo ABN-35(70)",
+      "active": true,
+      "source_row": 71,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "e018c67b-06d9-54cc-a19f-aa3b8671139d",
+      "voltage_level_option_id": "cbc68813-b52e-5ee1-9044-2733c1ab67f2",
+      "condemnation_factor": null,
+      "reference_size": "35",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "ISOLADA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "cabo",
+      "id": "81f63090-83d8-5e44-8752-dc9bb2450d91",
+      "code": "ABN-70(70)",
+      "description": "Cabo ABN-70(70)",
+      "active": true,
+      "source_row": 72,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "e018c67b-06d9-54cc-a19f-aa3b8671139d",
+      "voltage_level_option_id": "cbc68813-b52e-5ee1-9044-2733c1ab67f2",
+      "condemnation_factor": null,
+      "reference_size": "70",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "ISOLADA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "cabo",
+      "id": "9ba9616a-5ad9-5ff5-b4f1-faa471a6d338",
+      "code": "ABCN-35(70)",
+      "description": "Cabo ABCN-35(70)",
+      "active": true,
+      "source_row": 73,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "e018c67b-06d9-54cc-a19f-aa3b8671139d",
+      "voltage_level_option_id": "cbc68813-b52e-5ee1-9044-2733c1ab67f2",
+      "condemnation_factor": null,
+      "reference_size": "35",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "ISOLADA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "cabo",
+      "id": "21dc1205-9754-5ee7-8cb5-85b0ca86c46c",
+      "code": "ABCN-70(70)",
+      "description": "Cabo ABCN-70(70)",
+      "active": true,
+      "source_row": 74,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "network_technology_option_id": "e018c67b-06d9-54cc-a19f-aa3b8671139d",
+      "voltage_level_option_id": "cbc68813-b52e-5ee1-9044-2733c1ab67f2",
+      "condemnation_factor": null,
+      "reference_size": "70",
+      "raw_phase_configuration": "TRIFÁSICA",
+      "raw_network_technology": "ISOLADA",
+      "network_level": "BT"
+    },
+    {
+      "kind": "equipamento",
+      "id": "ccdf5749-818a-5208-a7e1-54682fbed094",
+      "code": "-1-5",
+      "description": "Equipamento -1-5",
+      "active": true,
+      "source_row": 3,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "equipment_class_option_id": "4bb5daba-bed4-5019-9b0c-e1ad75780fe6"
+    },
+    {
+      "kind": "equipamento",
+      "id": "9c59f2c4-f4d2-5acc-b556-00d70c5b0963",
+      "code": "-1-10",
+      "description": "Equipamento -1-10",
+      "active": true,
+      "source_row": 4,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "equipment_class_option_id": "4bb5daba-bed4-5019-9b0c-e1ad75780fe6"
+    },
+    {
+      "kind": "equipamento",
+      "id": "1a47e11f-3934-5e8d-997a-92ed69f5c6cb",
+      "code": "-1-15",
+      "description": "Equipamento -1-15",
+      "active": true,
+      "source_row": 5,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "equipment_class_option_id": "4bb5daba-bed4-5019-9b0c-e1ad75780fe6"
+    },
+    {
+      "kind": "equipamento",
+      "id": "d23a8979-8c43-5409-8ba1-f5c420da0349",
+      "code": "-1-25",
+      "description": "Equipamento -1-25",
+      "active": true,
+      "source_row": 6,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "equipment_class_option_id": "4bb5daba-bed4-5019-9b0c-e1ad75780fe6"
+    },
+    {
+      "kind": "equipamento",
+      "id": "d23e7bd4-2dee-5e6d-8012-2873dc3f8760",
+      "code": "-1-37,5",
+      "description": "Equipamento -1-37,5",
+      "active": true,
+      "source_row": 7,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "equipment_class_option_id": "4bb5daba-bed4-5019-9b0c-e1ad75780fe6"
+    },
+    {
+      "kind": "equipamento",
+      "id": "8d9bb3dd-c287-5cc3-a1cd-85a687f13359",
+      "code": "-3-15",
+      "description": "Equipamento -3-15",
+      "active": true,
+      "source_row": 8,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "equipment_class_option_id": "4bb5daba-bed4-5019-9b0c-e1ad75780fe6"
+    },
+    {
+      "kind": "equipamento",
+      "id": "f258b775-fff5-5a3d-aef5-15266dbffc51",
+      "code": "-3-30",
+      "description": "Equipamento -3-30",
+      "active": true,
+      "source_row": 9,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "equipment_class_option_id": "4bb5daba-bed4-5019-9b0c-e1ad75780fe6"
+    },
+    {
+      "kind": "equipamento",
+      "id": "9f9e0b04-b8c4-59c4-b556-f4d2bfd479f3",
+      "code": "-3-45",
+      "description": "Equipamento -3-45",
+      "active": true,
+      "source_row": 10,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "equipment_class_option_id": "4bb5daba-bed4-5019-9b0c-e1ad75780fe6"
+    },
+    {
+      "kind": "equipamento",
+      "id": "4ba1994a-fe70-5bec-8464-93c5070c7702",
+      "code": "-3-75",
+      "description": "Equipamento -3-75",
+      "active": true,
+      "source_row": 11,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "equipment_class_option_id": "4bb5daba-bed4-5019-9b0c-e1ad75780fe6"
+    },
+    {
+      "kind": "equipamento",
+      "id": "8c4abd22-da50-54f1-ae08-6bfd9ba5794a",
+      "code": "-3-150",
+      "description": "Equipamento -3-150",
+      "active": true,
+      "source_row": 12,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "equipment_class_option_id": "4bb5daba-bed4-5019-9b0c-e1ad75780fe6"
+    },
+    {
+      "kind": "equipamento",
+      "id": "42be25df-3669-5fcf-bc9d-f4e7a4f5234c",
+      "code": "-3-300",
+      "description": "Equipamento -3-300",
+      "active": true,
+      "source_row": 13,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "2c34bdf0-256a-5952-9f70-66662442097d",
+      "equipment_class_option_id": "4bb5daba-bed4-5019-9b0c-e1ad75780fe6"
+    },
+    {
+      "kind": "equipamento",
+      "id": "503564d0-6025-58d3-b82e-f45a5d51075b",
+      "code": "100A-10KA-1H",
+      "description": "Equipamento 100A-10KA-1H",
+      "active": true,
+      "source_row": 14,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "db1616e9-611e-5e4c-98d3-4b260f2a1587",
+      "equipment_class_option_id": "aa4eee2f-1bbf-501d-a092-adeda95d2f9b"
+    },
+    {
+      "kind": "equipamento",
+      "id": "6e036bd5-4630-56ce-b108-a063ac7b1864",
+      "code": "100A-10KA-2H",
+      "description": "Equipamento 100A-10KA-2H",
+      "active": true,
+      "source_row": 15,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "db1616e9-611e-5e4c-98d3-4b260f2a1587",
+      "equipment_class_option_id": "aa4eee2f-1bbf-501d-a092-adeda95d2f9b"
+    },
+    {
+      "kind": "equipamento",
+      "id": "cce21354-95c0-512e-a857-7d0e64ef0232",
+      "code": "100A-10KA-3H",
+      "description": "Equipamento 100A-10KA-3H",
+      "active": true,
+      "source_row": 16,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "db1616e9-611e-5e4c-98d3-4b260f2a1587",
+      "equipment_class_option_id": "aa4eee2f-1bbf-501d-a092-adeda95d2f9b"
+    },
+    {
+      "kind": "equipamento",
+      "id": "317ee1dd-e852-5943-97f1-30fc62cb5df7",
+      "code": "100A-10KA-5H",
+      "description": "Equipamento 100A-10KA-5H",
+      "active": true,
+      "source_row": 17,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "db1616e9-611e-5e4c-98d3-4b260f2a1587",
+      "equipment_class_option_id": "aa4eee2f-1bbf-501d-a092-adeda95d2f9b"
+    },
+    {
+      "kind": "equipamento",
+      "id": "f411f0f0-a544-59f4-a925-d3a303a75f9c",
+      "code": "100A-10KA-8K",
+      "description": "Equipamento 100A-10KA-8K",
+      "active": true,
+      "source_row": 18,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "db1616e9-611e-5e4c-98d3-4b260f2a1587",
+      "equipment_class_option_id": "aa4eee2f-1bbf-501d-a092-adeda95d2f9b"
+    },
+    {
+      "kind": "equipamento",
+      "id": "01e4e4bb-b0a2-5272-a6ba-d1b1902b906f",
+      "code": "-300A",
+      "description": "Equipamento -300A",
+      "active": true,
+      "source_row": 19,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "db1616e9-611e-5e4c-98d3-4b260f2a1587",
+      "equipment_class_option_id": "1f0d0fa3-73d4-5b23-a083-0811353be162"
+    },
+    {
+      "kind": "equipamento",
+      "id": "d273e6e6-7e23-528f-949f-02449491c77f",
+      "code": "-400A",
+      "description": "Equipamento -400A",
+      "active": true,
+      "source_row": 20,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "db1616e9-611e-5e4c-98d3-4b260f2a1587",
+      "equipment_class_option_id": "1f0d0fa3-73d4-5b23-a083-0811353be162"
+    },
+    {
+      "kind": "equipamento",
+      "id": "35addaba-3998-5644-b9af-9b61398b3838",
+      "code": "-600A",
+      "description": "Equipamento -600A",
+      "active": true,
+      "source_row": 21,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "db1616e9-611e-5e4c-98d3-4b260f2a1587",
+      "equipment_class_option_id": "1f0d0fa3-73d4-5b23-a083-0811353be162"
+    },
+    {
+      "kind": "equipamento",
+      "id": "b17bdf7d-0a5c-5ed7-9ab2-b0f08544ed05",
+      "code": "-630A",
+      "description": "Equipamento -630A",
+      "active": true,
+      "source_row": 22,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "db1616e9-611e-5e4c-98d3-4b260f2a1587",
+      "equipment_class_option_id": "1f0d0fa3-73d4-5b23-a083-0811353be162"
+    },
+    {
+      "kind": "equipamento",
+      "id": "ea780c9a-2c3a-5ec0-ba57-3aeb08f6e4fd",
+      "code": "300A-2KA-1H",
+      "description": "Equipamento 300A-2KA-1H",
+      "active": true,
+      "source_row": 23,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "db1616e9-611e-5e4c-98d3-4b260f2a1587",
+      "equipment_class_option_id": "5749ab3a-5d4d-5dfb-be15-492edb075d58"
+    },
+    {
+      "kind": "equipamento",
+      "id": "170d2aad-bc9b-5ed8-8a74-a79658f1b90f",
+      "code": "300A-2KA-2H",
+      "description": "Equipamento 300A-2KA-2H",
+      "active": true,
+      "source_row": 24,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "db1616e9-611e-5e4c-98d3-4b260f2a1587",
+      "equipment_class_option_id": "5749ab3a-5d4d-5dfb-be15-492edb075d58"
+    },
+    {
+      "kind": "equipamento",
+      "id": "d281850a-0691-559d-bccb-18015d52b356",
+      "code": "300A-2KA-3H",
+      "description": "Equipamento 300A-2KA-3H",
+      "active": true,
+      "source_row": 25,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "db1616e9-611e-5e4c-98d3-4b260f2a1587",
+      "equipment_class_option_id": "5749ab3a-5d4d-5dfb-be15-492edb075d58"
+    },
+    {
+      "kind": "equipamento",
+      "id": "266be6c0-2589-5be5-8959-b2f07d602395",
+      "code": "300A-2KA-5H",
+      "description": "Equipamento 300A-2KA-5H",
+      "active": true,
+      "source_row": 26,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "db1616e9-611e-5e4c-98d3-4b260f2a1587",
+      "equipment_class_option_id": "5749ab3a-5d4d-5dfb-be15-492edb075d58"
+    },
+    {
+      "kind": "equipamento",
+      "id": "9fd8e0f6-99e4-5cb4-96e7-1bd99fcc1f16",
+      "code": "300A-2KA-8K",
+      "description": "Equipamento 300A-2KA-8K",
+      "active": true,
+      "source_row": 27,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "db1616e9-611e-5e4c-98d3-4b260f2a1587",
+      "equipment_class_option_id": "5749ab3a-5d4d-5dfb-be15-492edb075d58"
+    }
+  ],
+  "compatibilities": [
+    {
+      "id": "b53ac44c-49ab-5fd4-a77a-fc893bf04f4b",
+      "structure_type_id": "0c68cf91-55d6-5aa1-b4dc-bd51be88206c",
+      "cable_type_id": "1a991b5c-d604-502f-93eb-b189c057e590",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "b2090b13-745a-545e-aa1f-1ddce94d42fb",
+      "structure_type_id": "0c68cf91-55d6-5aa1-b4dc-bd51be88206c",
+      "cable_type_id": "c6f979ad-7798-5318-9188-4c2a048fc4f3",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "d9f1a14a-61d9-5405-ae1e-5edbb9c88337",
+      "structure_type_id": "0c68cf91-55d6-5aa1-b4dc-bd51be88206c",
+      "cable_type_id": "8c56f0a4-0013-50ba-adb4-f883b0ff875f",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "2d10012e-91ce-58b1-88a0-3e372e1aca57",
+      "structure_type_id": "0c68cf91-55d6-5aa1-b4dc-bd51be88206c",
+      "cable_type_id": "f99f6ab5-ce98-5c51-bf28-928c78c18613",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "0200840c-431d-5a21-b7c9-e20b3793e15d",
+      "structure_type_id": "0c68cf91-55d6-5aa1-b4dc-bd51be88206c",
+      "cable_type_id": "38acb576-99d3-58ee-a7af-64eb7073ebe9",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "82eca878-b525-5111-8c2c-733450e80f0c",
+      "structure_type_id": "0c68cf91-55d6-5aa1-b4dc-bd51be88206c",
+      "cable_type_id": "557b4e20-0f88-54e0-b893-c4e11b49f78d",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "5754aa7a-ffb6-53e8-a24b-4ea6b0940135",
+      "structure_type_id": "0c68cf91-55d6-5aa1-b4dc-bd51be88206c",
+      "cable_type_id": "5261dd49-cb75-5747-a42f-39f19ad7d0cc",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "4e816837-2577-5e0b-ba10-3a348836f9eb",
+      "structure_type_id": "0c68cf91-55d6-5aa1-b4dc-bd51be88206c",
+      "cable_type_id": "1df91f4f-fe34-5d18-9e41-48eb33f2d3f6",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "9baea555-b044-51a9-8c25-ea8dbe83e33f",
+      "structure_type_id": "0c68cf91-55d6-5aa1-b4dc-bd51be88206c",
+      "cable_type_id": "29a6477a-24d2-50b5-8876-bd1e2d380040",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "75fc4e84-8ece-5180-9d9b-e29c90dd5249",
+      "structure_type_id": "0c68cf91-55d6-5aa1-b4dc-bd51be88206c",
+      "cable_type_id": "9aa2d19f-cca5-571a-93c7-793f3e715544",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "ea8b36cb-d57a-579f-8e17-a787ef937032",
+      "structure_type_id": "0c68cf91-55d6-5aa1-b4dc-bd51be88206c",
+      "cable_type_id": "b2bc6a65-906f-59c7-b3b3-e47d78ba1901",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "4e99aa6e-b264-599b-81ce-da33e5622b03",
+      "structure_type_id": "0c68cf91-55d6-5aa1-b4dc-bd51be88206c",
+      "cable_type_id": "d2161c66-2934-5748-8562-9ff40b63b9f6",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "f796794b-1fef-5e69-9884-1cebf11528f9",
+      "structure_type_id": "0c68cf91-55d6-5aa1-b4dc-bd51be88206c",
+      "cable_type_id": "e881f882-0d89-59ef-82d8-803215991229",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "1bfdd217-cd65-5fa5-93b2-1ca7f826d5b9",
+      "structure_type_id": "0c68cf91-55d6-5aa1-b4dc-bd51be88206c",
+      "cable_type_id": "65a670ad-4d15-5922-9ee6-6059a2ac11d1",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "9204ec00-4b81-5655-995e-c59ee6ca57f2",
+      "structure_type_id": "0c68cf91-55d6-5aa1-b4dc-bd51be88206c",
+      "cable_type_id": "1686b585-34f9-5097-9e1c-bb236a2070e6",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "b4c827a6-2d8c-5883-a062-d7b4586e8052",
+      "structure_type_id": "0c68cf91-55d6-5aa1-b4dc-bd51be88206c",
+      "cable_type_id": "8d0b2620-eac9-5d34-828e-d390c6b458c2",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "78cf7a0d-a988-5664-b0d9-a0ddb1f7f0f6",
+      "structure_type_id": "0c68cf91-55d6-5aa1-b4dc-bd51be88206c",
+      "cable_type_id": "bb034374-2c4e-5df2-a31b-13e26a2d6f30",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "c504cf5c-abc6-58e5-bb5b-956ec8786df5",
+      "structure_type_id": "0c68cf91-55d6-5aa1-b4dc-bd51be88206c",
+      "cable_type_id": "4e7e2294-470b-5ea1-b4d0-9ad18544f95e",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "2e116d28-f071-587c-9bfd-19baf27e8740",
+      "structure_type_id": "c40341da-b622-57ae-a7d2-b1c08dbad125",
+      "cable_type_id": "1a991b5c-d604-502f-93eb-b189c057e590",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "974dde26-67f4-588e-adc5-3702ed0a7b4f",
+      "structure_type_id": "c40341da-b622-57ae-a7d2-b1c08dbad125",
+      "cable_type_id": "c6f979ad-7798-5318-9188-4c2a048fc4f3",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "3b4d37ab-a5cd-53ca-b5e0-d6e03ae823ae",
+      "structure_type_id": "c40341da-b622-57ae-a7d2-b1c08dbad125",
+      "cable_type_id": "8c56f0a4-0013-50ba-adb4-f883b0ff875f",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "7b42e5a8-9d95-5c40-a0b7-d636a961b403",
+      "structure_type_id": "c40341da-b622-57ae-a7d2-b1c08dbad125",
+      "cable_type_id": "f99f6ab5-ce98-5c51-bf28-928c78c18613",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "490acd63-b94a-50db-a74a-4f247cb09daf",
+      "structure_type_id": "c40341da-b622-57ae-a7d2-b1c08dbad125",
+      "cable_type_id": "38acb576-99d3-58ee-a7af-64eb7073ebe9",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "6e78da8a-8412-5450-b157-348b48fa52b3",
+      "structure_type_id": "c40341da-b622-57ae-a7d2-b1c08dbad125",
+      "cable_type_id": "557b4e20-0f88-54e0-b893-c4e11b49f78d",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "4f98cf93-0543-5c9d-9707-bb2ebbf99fc0",
+      "structure_type_id": "c40341da-b622-57ae-a7d2-b1c08dbad125",
+      "cable_type_id": "5261dd49-cb75-5747-a42f-39f19ad7d0cc",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "05dc9dad-5f90-5b07-9c51-8ffb01e74d86",
+      "structure_type_id": "c40341da-b622-57ae-a7d2-b1c08dbad125",
+      "cable_type_id": "1df91f4f-fe34-5d18-9e41-48eb33f2d3f6",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "1c309671-471d-5196-bf7c-821f6cd61a00",
+      "structure_type_id": "c40341da-b622-57ae-a7d2-b1c08dbad125",
+      "cable_type_id": "29a6477a-24d2-50b5-8876-bd1e2d380040",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "f093d5bd-5a05-5f00-aa9d-97f7cf85e96f",
+      "structure_type_id": "c40341da-b622-57ae-a7d2-b1c08dbad125",
+      "cable_type_id": "9aa2d19f-cca5-571a-93c7-793f3e715544",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "3b47fca7-0307-5e96-977b-9ab9ca27e1c1",
+      "structure_type_id": "c40341da-b622-57ae-a7d2-b1c08dbad125",
+      "cable_type_id": "b2bc6a65-906f-59c7-b3b3-e47d78ba1901",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "3c5593ce-6d50-57b0-b9ca-d8527e3582f7",
+      "structure_type_id": "c40341da-b622-57ae-a7d2-b1c08dbad125",
+      "cable_type_id": "d2161c66-2934-5748-8562-9ff40b63b9f6",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "49a7ea01-47c6-5993-aafb-6317b40d05cb",
+      "structure_type_id": "c40341da-b622-57ae-a7d2-b1c08dbad125",
+      "cable_type_id": "e881f882-0d89-59ef-82d8-803215991229",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "9e826137-2d63-5cf4-8c29-ce8242bc7ae5",
+      "structure_type_id": "c40341da-b622-57ae-a7d2-b1c08dbad125",
+      "cable_type_id": "65a670ad-4d15-5922-9ee6-6059a2ac11d1",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "6831994b-e878-5442-93a5-caaa043de636",
+      "structure_type_id": "c40341da-b622-57ae-a7d2-b1c08dbad125",
+      "cable_type_id": "1686b585-34f9-5097-9e1c-bb236a2070e6",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "8148db0d-e682-5b83-8825-70553ddc617a",
+      "structure_type_id": "c40341da-b622-57ae-a7d2-b1c08dbad125",
+      "cable_type_id": "8d0b2620-eac9-5d34-828e-d390c6b458c2",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "798d4fc1-74dd-5df4-a84b-002257753cf7",
+      "structure_type_id": "c40341da-b622-57ae-a7d2-b1c08dbad125",
+      "cable_type_id": "bb034374-2c4e-5df2-a31b-13e26a2d6f30",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "6d7f7863-b447-5c2b-960d-caac07fd54ee",
+      "structure_type_id": "c40341da-b622-57ae-a7d2-b1c08dbad125",
+      "cable_type_id": "4e7e2294-470b-5ea1-b4d0-9ad18544f95e",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "7f82debf-44e6-5c78-8f2a-f39393ed7681",
+      "structure_type_id": "94ab5394-907c-51f1-b0c7-726ec1026707",
+      "cable_type_id": "1a991b5c-d604-502f-93eb-b189c057e590",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "bfb9b5b4-929f-5e5b-9923-42a1eebc2f82",
+      "structure_type_id": "94ab5394-907c-51f1-b0c7-726ec1026707",
+      "cable_type_id": "c6f979ad-7798-5318-9188-4c2a048fc4f3",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "1221e1f4-1371-523f-867c-cf0dc2cfc55c",
+      "structure_type_id": "94ab5394-907c-51f1-b0c7-726ec1026707",
+      "cable_type_id": "8c56f0a4-0013-50ba-adb4-f883b0ff875f",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "c492efdb-2777-51f0-8b8a-b8fe7e54889b",
+      "structure_type_id": "94ab5394-907c-51f1-b0c7-726ec1026707",
+      "cable_type_id": "f99f6ab5-ce98-5c51-bf28-928c78c18613",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "4ef9b785-45b1-5972-b056-caf485fb1bf6",
+      "structure_type_id": "94ab5394-907c-51f1-b0c7-726ec1026707",
+      "cable_type_id": "38acb576-99d3-58ee-a7af-64eb7073ebe9",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "c92b1290-a113-5cba-88ab-c0f846642850",
+      "structure_type_id": "94ab5394-907c-51f1-b0c7-726ec1026707",
+      "cable_type_id": "557b4e20-0f88-54e0-b893-c4e11b49f78d",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "2fe970b6-c785-5ecf-8a3e-0dc8b83715a3",
+      "structure_type_id": "94ab5394-907c-51f1-b0c7-726ec1026707",
+      "cable_type_id": "5261dd49-cb75-5747-a42f-39f19ad7d0cc",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "0dd9f6d2-7cd0-51bc-9134-0db0b4035cec",
+      "structure_type_id": "94ab5394-907c-51f1-b0c7-726ec1026707",
+      "cable_type_id": "1df91f4f-fe34-5d18-9e41-48eb33f2d3f6",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "1612c889-e059-5467-95b1-2c668fdcc764",
+      "structure_type_id": "94ab5394-907c-51f1-b0c7-726ec1026707",
+      "cable_type_id": "29a6477a-24d2-50b5-8876-bd1e2d380040",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "e4ffc4dd-fedc-5eb8-8497-57682d1a3876",
+      "structure_type_id": "94ab5394-907c-51f1-b0c7-726ec1026707",
+      "cable_type_id": "9aa2d19f-cca5-571a-93c7-793f3e715544",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "88826e70-caaf-50d3-a9b8-73ab474254e5",
+      "structure_type_id": "94ab5394-907c-51f1-b0c7-726ec1026707",
+      "cable_type_id": "b2bc6a65-906f-59c7-b3b3-e47d78ba1901",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "f28c782f-2362-50e4-9de2-f9fd256a559f",
+      "structure_type_id": "94ab5394-907c-51f1-b0c7-726ec1026707",
+      "cable_type_id": "d2161c66-2934-5748-8562-9ff40b63b9f6",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "70c2044d-5889-5409-9810-aa376298539d",
+      "structure_type_id": "94ab5394-907c-51f1-b0c7-726ec1026707",
+      "cable_type_id": "e881f882-0d89-59ef-82d8-803215991229",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "7e520e0a-7b73-5a84-95d0-88a23a072237",
+      "structure_type_id": "94ab5394-907c-51f1-b0c7-726ec1026707",
+      "cable_type_id": "65a670ad-4d15-5922-9ee6-6059a2ac11d1",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "b3dcc6de-0e39-5671-a6b3-9f91121f8d75",
+      "structure_type_id": "94ab5394-907c-51f1-b0c7-726ec1026707",
+      "cable_type_id": "1686b585-34f9-5097-9e1c-bb236a2070e6",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "c8073394-646f-567d-93cb-b172a02daa20",
+      "structure_type_id": "94ab5394-907c-51f1-b0c7-726ec1026707",
+      "cable_type_id": "8d0b2620-eac9-5d34-828e-d390c6b458c2",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "12db9085-9ff2-51f3-9717-e2d8f1620e3a",
+      "structure_type_id": "94ab5394-907c-51f1-b0c7-726ec1026707",
+      "cable_type_id": "bb034374-2c4e-5df2-a31b-13e26a2d6f30",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "c24927a6-9ba8-5202-871b-d628cf0c7264",
+      "structure_type_id": "94ab5394-907c-51f1-b0c7-726ec1026707",
+      "cable_type_id": "4e7e2294-470b-5ea1-b4d0-9ad18544f95e",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "d23c9c3f-27b6-5a65-92af-224066035afd",
+      "structure_type_id": "2db48492-7fe1-5b46-a916-86a2d4e05fb5",
+      "cable_type_id": "1a991b5c-d604-502f-93eb-b189c057e590",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "b85836e7-c9b9-5a35-b44e-41b5be26a4ac",
+      "structure_type_id": "2db48492-7fe1-5b46-a916-86a2d4e05fb5",
+      "cable_type_id": "c6f979ad-7798-5318-9188-4c2a048fc4f3",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "dd5ba15c-9e73-5a75-9f92-88c0fb505c9b",
+      "structure_type_id": "2db48492-7fe1-5b46-a916-86a2d4e05fb5",
+      "cable_type_id": "8c56f0a4-0013-50ba-adb4-f883b0ff875f",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "e5dbdf50-aba3-525e-921d-205834d1f899",
+      "structure_type_id": "2db48492-7fe1-5b46-a916-86a2d4e05fb5",
+      "cable_type_id": "f99f6ab5-ce98-5c51-bf28-928c78c18613",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "b4e14113-22e8-527a-a58c-c7e8bd019eda",
+      "structure_type_id": "2db48492-7fe1-5b46-a916-86a2d4e05fb5",
+      "cable_type_id": "38acb576-99d3-58ee-a7af-64eb7073ebe9",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "9f682b95-9eea-5e81-83b4-f5a12467aa56",
+      "structure_type_id": "2db48492-7fe1-5b46-a916-86a2d4e05fb5",
+      "cable_type_id": "557b4e20-0f88-54e0-b893-c4e11b49f78d",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "2e89d39c-285c-5b85-b977-ccb3169aafc4",
+      "structure_type_id": "2db48492-7fe1-5b46-a916-86a2d4e05fb5",
+      "cable_type_id": "5261dd49-cb75-5747-a42f-39f19ad7d0cc",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "55e86bf2-7f20-5dbd-bf31-8a419284d89e",
+      "structure_type_id": "2db48492-7fe1-5b46-a916-86a2d4e05fb5",
+      "cable_type_id": "1df91f4f-fe34-5d18-9e41-48eb33f2d3f6",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "cb30db2b-2075-5d91-9ad8-cdb6dfde7180",
+      "structure_type_id": "2db48492-7fe1-5b46-a916-86a2d4e05fb5",
+      "cable_type_id": "29a6477a-24d2-50b5-8876-bd1e2d380040",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "edd4bd44-a9ce-56c5-a060-a49fcb3e96f0",
+      "structure_type_id": "2db48492-7fe1-5b46-a916-86a2d4e05fb5",
+      "cable_type_id": "9aa2d19f-cca5-571a-93c7-793f3e715544",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "e523702e-7fb7-50be-b2e2-04e498f36793",
+      "structure_type_id": "2db48492-7fe1-5b46-a916-86a2d4e05fb5",
+      "cable_type_id": "b2bc6a65-906f-59c7-b3b3-e47d78ba1901",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "aad6487d-d3fe-5a33-9eea-a9713273f9e0",
+      "structure_type_id": "2db48492-7fe1-5b46-a916-86a2d4e05fb5",
+      "cable_type_id": "d2161c66-2934-5748-8562-9ff40b63b9f6",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "f8062d8a-5104-57e2-bc93-389d83613e34",
+      "structure_type_id": "2db48492-7fe1-5b46-a916-86a2d4e05fb5",
+      "cable_type_id": "e881f882-0d89-59ef-82d8-803215991229",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "c0011a7e-502f-5cbd-80d5-b290747f5029",
+      "structure_type_id": "2db48492-7fe1-5b46-a916-86a2d4e05fb5",
+      "cable_type_id": "65a670ad-4d15-5922-9ee6-6059a2ac11d1",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "ac159a3a-745e-5f79-84cc-20da48764c0a",
+      "structure_type_id": "2db48492-7fe1-5b46-a916-86a2d4e05fb5",
+      "cable_type_id": "1686b585-34f9-5097-9e1c-bb236a2070e6",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "1fe5b690-b4c7-5c72-a791-16b1d659339b",
+      "structure_type_id": "2db48492-7fe1-5b46-a916-86a2d4e05fb5",
+      "cable_type_id": "8d0b2620-eac9-5d34-828e-d390c6b458c2",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "4ed6f575-fed2-5b08-bdc6-b215ca2671aa",
+      "structure_type_id": "2db48492-7fe1-5b46-a916-86a2d4e05fb5",
+      "cable_type_id": "bb034374-2c4e-5df2-a31b-13e26a2d6f30",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "e3d25403-9b58-574c-9dfa-754753662026",
+      "structure_type_id": "2db48492-7fe1-5b46-a916-86a2d4e05fb5",
+      "cable_type_id": "4e7e2294-470b-5ea1-b4d0-9ad18544f95e",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "94c701db-0687-554b-8708-4a458e070727",
+      "structure_type_id": "1599266f-6712-5493-96b8-6745179bd11f",
+      "cable_type_id": "507fbb1f-cd6e-5bc6-95a9-2b44904f5180",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "7a73fadc-556f-57d4-b693-eb9dd671e846",
+      "structure_type_id": "1599266f-6712-5493-96b8-6745179bd11f",
+      "cable_type_id": "6a23aad4-2d71-58e0-871d-3fdaa00b8051",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "db6f127f-4d6e-5089-bfe5-3d334521a718",
+      "structure_type_id": "1599266f-6712-5493-96b8-6745179bd11f",
+      "cable_type_id": "48adef88-bc3f-5e3e-8a01-8ccbf590dc9a",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "35f46219-9fe9-51cf-bdda-fb798210b43d",
+      "structure_type_id": "1599266f-6712-5493-96b8-6745179bd11f",
+      "cable_type_id": "82b308a8-0731-542c-a774-9463ee6c0ccc",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "a22aea07-5c57-58d7-a3fb-f4b4cac08a69",
+      "structure_type_id": "1599266f-6712-5493-96b8-6745179bd11f",
+      "cable_type_id": "9db24051-075f-5d65-bee1-66ff353e766b",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "5b4d7e2b-32c6-5a71-b024-434933124973",
+      "structure_type_id": "1599266f-6712-5493-96b8-6745179bd11f",
+      "cable_type_id": "00d2a2dc-2bc1-50be-9d1e-64d014ed52df",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "7702d371-4479-5404-a530-b984603113a8",
+      "structure_type_id": "05bc1f12-a975-59f3-9059-b0caeda04f1e",
+      "cable_type_id": "507fbb1f-cd6e-5bc6-95a9-2b44904f5180",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "00284f98-9b79-55b4-a66b-93bdfca45bb9",
+      "structure_type_id": "05bc1f12-a975-59f3-9059-b0caeda04f1e",
+      "cable_type_id": "6a23aad4-2d71-58e0-871d-3fdaa00b8051",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "03ccdc3f-f0f9-536a-b046-c72e8662bf82",
+      "structure_type_id": "05bc1f12-a975-59f3-9059-b0caeda04f1e",
+      "cable_type_id": "48adef88-bc3f-5e3e-8a01-8ccbf590dc9a",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "662356ba-7b48-5f16-af43-284646f06e40",
+      "structure_type_id": "05bc1f12-a975-59f3-9059-b0caeda04f1e",
+      "cable_type_id": "82b308a8-0731-542c-a774-9463ee6c0ccc",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "8a2792e7-4fa4-5d57-b0d7-b7bd88382805",
+      "structure_type_id": "05bc1f12-a975-59f3-9059-b0caeda04f1e",
+      "cable_type_id": "9db24051-075f-5d65-bee1-66ff353e766b",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "290ceea1-4403-5b2b-8942-0638a471fad6",
+      "structure_type_id": "05bc1f12-a975-59f3-9059-b0caeda04f1e",
+      "cable_type_id": "00d2a2dc-2bc1-50be-9d1e-64d014ed52df",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "bad7f247-161f-571d-ac13-926cf9239328",
+      "structure_type_id": "64af74d8-34ef-5bc7-9a9a-b9635416a212",
+      "cable_type_id": "507fbb1f-cd6e-5bc6-95a9-2b44904f5180",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "921eb127-7890-5227-8c1f-d4cee528ea27",
+      "structure_type_id": "64af74d8-34ef-5bc7-9a9a-b9635416a212",
+      "cable_type_id": "6a23aad4-2d71-58e0-871d-3fdaa00b8051",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "a93619c4-f317-50b0-b317-88425d19b81d",
+      "structure_type_id": "64af74d8-34ef-5bc7-9a9a-b9635416a212",
+      "cable_type_id": "48adef88-bc3f-5e3e-8a01-8ccbf590dc9a",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "00fb4860-6c76-5b23-9fe8-0d39e3a7b264",
+      "structure_type_id": "64af74d8-34ef-5bc7-9a9a-b9635416a212",
+      "cable_type_id": "82b308a8-0731-542c-a774-9463ee6c0ccc",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "81723ad2-b212-519e-93b1-f650ab005074",
+      "structure_type_id": "64af74d8-34ef-5bc7-9a9a-b9635416a212",
+      "cable_type_id": "9db24051-075f-5d65-bee1-66ff353e766b",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "fd7f3f24-4f24-55bd-98b2-c0429a782d44",
+      "structure_type_id": "64af74d8-34ef-5bc7-9a9a-b9635416a212",
+      "cable_type_id": "00d2a2dc-2bc1-50be-9d1e-64d014ed52df",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "6458861d-e8d7-50af-abac-f85c9355dc3d",
+      "structure_type_id": "1ffe3464-8bfa-5176-a8d3-f6ca2c1c5d82",
+      "cable_type_id": "507fbb1f-cd6e-5bc6-95a9-2b44904f5180",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "464661aa-f8cd-5db2-bb8f-6724b7f66f6e",
+      "structure_type_id": "1ffe3464-8bfa-5176-a8d3-f6ca2c1c5d82",
+      "cable_type_id": "6a23aad4-2d71-58e0-871d-3fdaa00b8051",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "bd32522c-b30e-50aa-a948-af1398cbe0e4",
+      "structure_type_id": "1ffe3464-8bfa-5176-a8d3-f6ca2c1c5d82",
+      "cable_type_id": "48adef88-bc3f-5e3e-8a01-8ccbf590dc9a",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "7ded3fc7-af33-5a81-9bf1-54d2e72f897a",
+      "structure_type_id": "1ffe3464-8bfa-5176-a8d3-f6ca2c1c5d82",
+      "cable_type_id": "82b308a8-0731-542c-a774-9463ee6c0ccc",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "c41bb071-5e52-54a8-82c3-f5a4e609fbc0",
+      "structure_type_id": "1ffe3464-8bfa-5176-a8d3-f6ca2c1c5d82",
+      "cable_type_id": "9db24051-075f-5d65-bee1-66ff353e766b",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "964eda10-6497-5f43-9d53-a3361a616d1b",
+      "structure_type_id": "1ffe3464-8bfa-5176-a8d3-f6ca2c1c5d82",
+      "cable_type_id": "00d2a2dc-2bc1-50be-9d1e-64d014ed52df",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "de4b075e-0189-5457-8c9e-730ddc17d190",
+      "structure_type_id": "4ef800c1-f7cf-5356-8e18-2b82eca4dd34",
+      "cable_type_id": "82b308a8-0731-542c-a774-9463ee6c0ccc",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "b81e9db6-82ab-5912-aafc-147613331f9f",
+      "structure_type_id": "4ef800c1-f7cf-5356-8e18-2b82eca4dd34",
+      "cable_type_id": "9db24051-075f-5d65-bee1-66ff353e766b",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "986e3817-0dd4-55f6-838d-2e4bb03b29ea",
+      "structure_type_id": "4ef800c1-f7cf-5356-8e18-2b82eca4dd34",
+      "cable_type_id": "00d2a2dc-2bc1-50be-9d1e-64d014ed52df",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "d8e63d83-2434-50a0-ae9a-8c668966f79d",
+      "structure_type_id": "c3566ae6-ad0e-54c4-b4bc-9d3c4e67d914",
+      "cable_type_id": "0a3a9495-9284-531f-904c-081d10249e76",
+      "source_expression": "4/0"
+    },
+    {
+      "id": "83f5213b-0088-5177-b7dc-8d58993a533e",
+      "structure_type_id": "3fddd0a7-902a-522d-84b3-e926bf617392",
+      "cable_type_id": "aa12ffd2-1747-5b61-83c2-bd0ca966f81d",
+      "source_expression": "336.6"
+    },
+    {
+      "id": "e7ef8726-db5f-55e1-96b8-cc4e5510029a",
+      "structure_type_id": "7515ff23-e366-55b6-9d55-964a4d543e8a",
+      "cable_type_id": "507fbb1f-cd6e-5bc6-95a9-2b44904f5180",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "be0e409b-fd26-5329-ad50-6671a01c1f9a",
+      "structure_type_id": "7515ff23-e366-55b6-9d55-964a4d543e8a",
+      "cable_type_id": "6a23aad4-2d71-58e0-871d-3fdaa00b8051",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "d6fa2466-0367-5e61-957c-45648bbb45b8",
+      "structure_type_id": "7515ff23-e366-55b6-9d55-964a4d543e8a",
+      "cable_type_id": "48adef88-bc3f-5e3e-8a01-8ccbf590dc9a",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "ebbe82cf-2f7f-59ba-a1bc-6566a45f3951",
+      "structure_type_id": "d9650676-d109-5e95-91fd-4b3baedd09ce",
+      "cable_type_id": "507fbb1f-cd6e-5bc6-95a9-2b44904f5180",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "54784188-6c71-5408-8133-20620ed82288",
+      "structure_type_id": "d9650676-d109-5e95-91fd-4b3baedd09ce",
+      "cable_type_id": "6a23aad4-2d71-58e0-871d-3fdaa00b8051",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "627d9e44-0198-523e-b1af-9dc11c6d24f6",
+      "structure_type_id": "d9650676-d109-5e95-91fd-4b3baedd09ce",
+      "cable_type_id": "48adef88-bc3f-5e3e-8a01-8ccbf590dc9a",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "14f4d8bc-59a1-5f60-882e-2ad917c99801",
+      "structure_type_id": "4a09c6a4-439e-514f-944e-b75a58e144ac",
+      "cable_type_id": "507fbb1f-cd6e-5bc6-95a9-2b44904f5180",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "905e2a1d-89ab-5579-9065-084c4f5960bf",
+      "structure_type_id": "4a09c6a4-439e-514f-944e-b75a58e144ac",
+      "cable_type_id": "6a23aad4-2d71-58e0-871d-3fdaa00b8051",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "f03b5dae-4bff-5741-9e23-3d49fba0b768",
+      "structure_type_id": "4a09c6a4-439e-514f-944e-b75a58e144ac",
+      "cable_type_id": "48adef88-bc3f-5e3e-8a01-8ccbf590dc9a",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "a2d29c93-83cc-536e-82de-e1b87e20b690",
+      "structure_type_id": "2ee2aae5-ffab-5c87-9fd8-cc94c73ee4aa",
+      "cable_type_id": "507fbb1f-cd6e-5bc6-95a9-2b44904f5180",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "4eecc882-9530-5c06-9bc2-83f192e64d11",
+      "structure_type_id": "2ee2aae5-ffab-5c87-9fd8-cc94c73ee4aa",
+      "cable_type_id": "6a23aad4-2d71-58e0-871d-3fdaa00b8051",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "ba498197-7313-596a-8e6f-f968efc81cc2",
+      "structure_type_id": "2ee2aae5-ffab-5c87-9fd8-cc94c73ee4aa",
+      "cable_type_id": "48adef88-bc3f-5e3e-8a01-8ccbf590dc9a",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "bcb090d0-c2ab-5274-b79b-1bd9d32b03d7",
+      "structure_type_id": "7184070a-891a-5a7f-98cb-b5f9ccaefe94",
+      "cable_type_id": "507fbb1f-cd6e-5bc6-95a9-2b44904f5180",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "4ae0b06a-9935-5155-b772-3ea2f8fbbb69",
+      "structure_type_id": "7184070a-891a-5a7f-98cb-b5f9ccaefe94",
+      "cable_type_id": "6a23aad4-2d71-58e0-871d-3fdaa00b8051",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "b246c64a-8f87-5337-b3de-d61b8f1959a3",
+      "structure_type_id": "7184070a-891a-5a7f-98cb-b5f9ccaefe94",
+      "cable_type_id": "48adef88-bc3f-5e3e-8a01-8ccbf590dc9a",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "082c79a6-9377-508d-a68f-3eae91acdfeb",
+      "structure_type_id": "14520af1-e31c-5375-bed0-0570d7384999",
+      "cable_type_id": "507fbb1f-cd6e-5bc6-95a9-2b44904f5180",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "4134ee50-c591-502e-a7c4-2cbcf460331a",
+      "structure_type_id": "14520af1-e31c-5375-bed0-0570d7384999",
+      "cable_type_id": "6a23aad4-2d71-58e0-871d-3fdaa00b8051",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "77724967-698a-5d64-8d92-092a1b114877",
+      "structure_type_id": "14520af1-e31c-5375-bed0-0570d7384999",
+      "cable_type_id": "48adef88-bc3f-5e3e-8a01-8ccbf590dc9a",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "91dad9f3-a2fb-53f7-8757-435981a1a43f",
+      "structure_type_id": "246d38bd-1e94-5f1b-a406-988ac301a76e",
+      "cable_type_id": "507fbb1f-cd6e-5bc6-95a9-2b44904f5180",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "e70a46f4-d6c5-52dd-874f-b2245e2c0b89",
+      "structure_type_id": "246d38bd-1e94-5f1b-a406-988ac301a76e",
+      "cable_type_id": "6a23aad4-2d71-58e0-871d-3fdaa00b8051",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "174f0f13-b9f6-5af0-9ce4-2732a7e356f6",
+      "structure_type_id": "246d38bd-1e94-5f1b-a406-988ac301a76e",
+      "cable_type_id": "48adef88-bc3f-5e3e-8a01-8ccbf590dc9a",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "b2c66096-805b-5a97-91bf-2dece9ca4bf6",
+      "structure_type_id": "7d896f96-fe47-5fd2-8907-174ca9aae24f",
+      "cable_type_id": "507fbb1f-cd6e-5bc6-95a9-2b44904f5180",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "cf6685b0-2664-5ff9-8aae-6c831f1b0d07",
+      "structure_type_id": "7d896f96-fe47-5fd2-8907-174ca9aae24f",
+      "cable_type_id": "6a23aad4-2d71-58e0-871d-3fdaa00b8051",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "83570882-5bba-5fdf-abba-b6561bf7de69",
+      "structure_type_id": "7d896f96-fe47-5fd2-8907-174ca9aae24f",
+      "cable_type_id": "48adef88-bc3f-5e3e-8a01-8ccbf590dc9a",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "4767b153-e0eb-5004-84cb-2882b29884ef",
+      "structure_type_id": "3f9c9841-77f5-5c59-82a9-1d8ba14f71a4",
+      "cable_type_id": "507fbb1f-cd6e-5bc6-95a9-2b44904f5180",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "723b67c8-efb7-5b32-9a14-87c03448e0c8",
+      "structure_type_id": "3f9c9841-77f5-5c59-82a9-1d8ba14f71a4",
+      "cable_type_id": "6a23aad4-2d71-58e0-871d-3fdaa00b8051",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "baffdad6-cddc-59eb-826f-f0fc3ec87573",
+      "structure_type_id": "3f9c9841-77f5-5c59-82a9-1d8ba14f71a4",
+      "cable_type_id": "48adef88-bc3f-5e3e-8a01-8ccbf590dc9a",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "acc34a0b-400e-562c-93b7-50c9fe243702",
+      "structure_type_id": "912b4158-f5ec-5daa-a6f5-3411c9a59545",
+      "cable_type_id": "507fbb1f-cd6e-5bc6-95a9-2b44904f5180",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "248ab7ab-07e7-5797-a544-2c254c430f33",
+      "structure_type_id": "912b4158-f5ec-5daa-a6f5-3411c9a59545",
+      "cable_type_id": "6a23aad4-2d71-58e0-871d-3fdaa00b8051",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "14561615-741b-50f3-899b-e6a16b5e095c",
+      "structure_type_id": "912b4158-f5ec-5daa-a6f5-3411c9a59545",
+      "cable_type_id": "48adef88-bc3f-5e3e-8a01-8ccbf590dc9a",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "5eb55447-f13c-527a-b8bf-19cded64fb9e",
+      "structure_type_id": "a3cf8a7a-0db3-5bad-9b32-0000f92c14db",
+      "cable_type_id": "507fbb1f-cd6e-5bc6-95a9-2b44904f5180",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "274d95c9-cde8-560d-bc7d-1ae68d212ac0",
+      "structure_type_id": "a3cf8a7a-0db3-5bad-9b32-0000f92c14db",
+      "cable_type_id": "6a23aad4-2d71-58e0-871d-3fdaa00b8051",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "01f88949-5f3a-5c16-acf7-c53d50673128",
+      "structure_type_id": "a3cf8a7a-0db3-5bad-9b32-0000f92c14db",
+      "cable_type_id": "48adef88-bc3f-5e3e-8a01-8ccbf590dc9a",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "671bf5b3-c1f1-5833-9dd8-7cd04cdc6667",
+      "structure_type_id": "44b05c8f-612a-5d41-abef-e42045f172db",
+      "cable_type_id": "507fbb1f-cd6e-5bc6-95a9-2b44904f5180",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "c9f22819-0840-54dc-a8ba-e9fc29be45d0",
+      "structure_type_id": "44b05c8f-612a-5d41-abef-e42045f172db",
+      "cable_type_id": "6a23aad4-2d71-58e0-871d-3fdaa00b8051",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "bf4a1807-84cb-5028-b310-bc7cc5ee5393",
+      "structure_type_id": "44b05c8f-612a-5d41-abef-e42045f172db",
+      "cable_type_id": "48adef88-bc3f-5e3e-8a01-8ccbf590dc9a",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "7a0d8bee-2ae1-5646-8d32-a4c650a8fbb3",
+      "structure_type_id": "428a5e20-0286-5df5-ba69-18e6a86a40f0",
+      "cable_type_id": "507fbb1f-cd6e-5bc6-95a9-2b44904f5180",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "e5c2efba-c305-5626-9604-68de685cc384",
+      "structure_type_id": "428a5e20-0286-5df5-ba69-18e6a86a40f0",
+      "cable_type_id": "6a23aad4-2d71-58e0-871d-3fdaa00b8051",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "f7c004d6-8f04-5fad-97b5-9c1523f3ce8d",
+      "structure_type_id": "428a5e20-0286-5df5-ba69-18e6a86a40f0",
+      "cable_type_id": "48adef88-bc3f-5e3e-8a01-8ccbf590dc9a",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "b48f0be2-1441-5299-ba7a-6a7f8b39a7e2",
+      "structure_type_id": "f9ec2364-c660-5f47-ab37-a408e390def0",
+      "cable_type_id": "507fbb1f-cd6e-5bc6-95a9-2b44904f5180",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "36e67e25-9595-5643-9b1c-d0689dd37f0e",
+      "structure_type_id": "f9ec2364-c660-5f47-ab37-a408e390def0",
+      "cable_type_id": "6a23aad4-2d71-58e0-871d-3fdaa00b8051",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "efc22141-f776-55d6-9361-6379866d2c12",
+      "structure_type_id": "f9ec2364-c660-5f47-ab37-a408e390def0",
+      "cable_type_id": "48adef88-bc3f-5e3e-8a01-8ccbf590dc9a",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "6df4ff05-2cbe-58d8-aaae-73d1fcdf51de",
+      "structure_type_id": "1c0f03de-3429-5ca9-8bdb-1f152aed6e0d",
+      "cable_type_id": "507fbb1f-cd6e-5bc6-95a9-2b44904f5180",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "5f869c0c-ef72-5d53-a044-3c9092ce78bc",
+      "structure_type_id": "1c0f03de-3429-5ca9-8bdb-1f152aed6e0d",
+      "cable_type_id": "6a23aad4-2d71-58e0-871d-3fdaa00b8051",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "cad852ca-7865-520a-81f8-89a0e54e565a",
+      "structure_type_id": "1c0f03de-3429-5ca9-8bdb-1f152aed6e0d",
+      "cable_type_id": "48adef88-bc3f-5e3e-8a01-8ccbf590dc9a",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "37d104eb-7aba-52cf-a1eb-78624d90209d",
+      "structure_type_id": "d861fcb2-7c9b-5776-bbc5-95dedef4ff67",
+      "cable_type_id": "507fbb1f-cd6e-5bc6-95a9-2b44904f5180",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "8492f7e5-db63-5d6a-9ec5-3d5c185f46fc",
+      "structure_type_id": "d861fcb2-7c9b-5776-bbc5-95dedef4ff67",
+      "cable_type_id": "6a23aad4-2d71-58e0-871d-3fdaa00b8051",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "2322c5bd-8055-5e84-8070-9d28fd9d9d74",
+      "structure_type_id": "d861fcb2-7c9b-5776-bbc5-95dedef4ff67",
+      "cable_type_id": "48adef88-bc3f-5e3e-8a01-8ccbf590dc9a",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "d2b011ac-2374-555e-a27b-39aa4cc41a7b",
+      "structure_type_id": "b1e8f57a-03a5-5fed-97cd-f796d21ef739",
+      "cable_type_id": "3f7d9cf4-23fb-58f5-8df3-eb2ef7deefa3",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "96381c20-b4b1-521d-b423-db0145d3bdf8",
+      "structure_type_id": "b1e8f57a-03a5-5fed-97cd-f796d21ef739",
+      "cable_type_id": "f2135a1b-f7dc-5f41-a3a0-adbcd9af750e",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "22f0d6c1-3e56-57c1-9238-82769223b49e",
+      "structure_type_id": "b1e8f57a-03a5-5fed-97cd-f796d21ef739",
+      "cable_type_id": "210f780f-26cc-5611-a039-e4fc2338a99e",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "51a57c62-e284-5f5e-a541-67d59850522a",
+      "structure_type_id": "b1e8f57a-03a5-5fed-97cd-f796d21ef739",
+      "cable_type_id": "93fc78f0-9946-53fa-97df-8e20b77dc890",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "caa832b4-dac0-5bce-a36a-2ab8a383c27b",
+      "structure_type_id": "b1e8f57a-03a5-5fed-97cd-f796d21ef739",
+      "cable_type_id": "db404f69-5dbd-5ebe-bf7a-8563f4a4e119",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "cd18ba5a-bdd9-5de6-89d0-549e88530fad",
+      "structure_type_id": "b1e8f57a-03a5-5fed-97cd-f796d21ef739",
+      "cable_type_id": "6da8e2a1-a7d3-5921-abce-719018287b65",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "3399ac6f-9587-55b9-b2aa-2c4ebc3b7739",
+      "structure_type_id": "b1e8f57a-03a5-5fed-97cd-f796d21ef739",
+      "cable_type_id": "80b32cd3-6218-5b93-a1a6-01d48de33dbd",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "0ef8377f-269f-58d6-bea0-36e8e48ea293",
+      "structure_type_id": "b1e8f57a-03a5-5fed-97cd-f796d21ef739",
+      "cable_type_id": "eede0e2d-b94e-5656-9849-4cad881d8d7a",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "e269233b-0579-57d0-bf6d-7779cae4df08",
+      "structure_type_id": "b1e8f57a-03a5-5fed-97cd-f796d21ef739",
+      "cable_type_id": "22ccf80d-2b9f-5b1d-b11c-ada4182221f2",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "6938dd5b-66d7-5b0c-95b5-5eed5150da8c",
+      "structure_type_id": "920aff43-fed2-531a-a658-d3b63c464826",
+      "cable_type_id": "3f7d9cf4-23fb-58f5-8df3-eb2ef7deefa3",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "08a8a7a0-19a2-560b-859e-a4f1be512adf",
+      "structure_type_id": "920aff43-fed2-531a-a658-d3b63c464826",
+      "cable_type_id": "f2135a1b-f7dc-5f41-a3a0-adbcd9af750e",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "9bf1f5e6-6be3-5579-9119-e6cf6a3b560a",
+      "structure_type_id": "920aff43-fed2-531a-a658-d3b63c464826",
+      "cable_type_id": "210f780f-26cc-5611-a039-e4fc2338a99e",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "7ae34672-ce9e-5d3c-beb5-43401e494b6b",
+      "structure_type_id": "920aff43-fed2-531a-a658-d3b63c464826",
+      "cable_type_id": "93fc78f0-9946-53fa-97df-8e20b77dc890",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "84239560-bd4e-58fb-92fd-61f5accd62af",
+      "structure_type_id": "920aff43-fed2-531a-a658-d3b63c464826",
+      "cable_type_id": "db404f69-5dbd-5ebe-bf7a-8563f4a4e119",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "a9ebd170-1d78-56ba-8218-02cb91216f51",
+      "structure_type_id": "920aff43-fed2-531a-a658-d3b63c464826",
+      "cable_type_id": "6da8e2a1-a7d3-5921-abce-719018287b65",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "d8787c1f-598d-5029-8b84-7f81dc233dee",
+      "structure_type_id": "920aff43-fed2-531a-a658-d3b63c464826",
+      "cable_type_id": "80b32cd3-6218-5b93-a1a6-01d48de33dbd",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "98e1ec94-972e-5016-8aaf-d327768eeba6",
+      "structure_type_id": "920aff43-fed2-531a-a658-d3b63c464826",
+      "cable_type_id": "eede0e2d-b94e-5656-9849-4cad881d8d7a",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "6fe438d3-6c1d-584b-995d-5f4da8a50417",
+      "structure_type_id": "920aff43-fed2-531a-a658-d3b63c464826",
+      "cable_type_id": "22ccf80d-2b9f-5b1d-b11c-ada4182221f2",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "822874a1-2f2b-5820-a188-2e969c217e51",
+      "structure_type_id": "ae1c45aa-f269-56c8-bd3a-74a257cfad29",
+      "cable_type_id": "3f7d9cf4-23fb-58f5-8df3-eb2ef7deefa3",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "7b81b1c4-b4d8-55ee-8e36-208a32d49d88",
+      "structure_type_id": "ae1c45aa-f269-56c8-bd3a-74a257cfad29",
+      "cable_type_id": "f2135a1b-f7dc-5f41-a3a0-adbcd9af750e",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "b727875b-f006-516a-ac32-b56690c00668",
+      "structure_type_id": "ae1c45aa-f269-56c8-bd3a-74a257cfad29",
+      "cable_type_id": "210f780f-26cc-5611-a039-e4fc2338a99e",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "9833dce8-08c3-5331-9eb0-4de2c7c38c9b",
+      "structure_type_id": "ae1c45aa-f269-56c8-bd3a-74a257cfad29",
+      "cable_type_id": "93fc78f0-9946-53fa-97df-8e20b77dc890",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "61de44bc-8146-5bd5-af56-f77e4485c10e",
+      "structure_type_id": "ae1c45aa-f269-56c8-bd3a-74a257cfad29",
+      "cable_type_id": "db404f69-5dbd-5ebe-bf7a-8563f4a4e119",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "e331d77f-3c81-568b-90d5-0be952422adc",
+      "structure_type_id": "ae1c45aa-f269-56c8-bd3a-74a257cfad29",
+      "cable_type_id": "6da8e2a1-a7d3-5921-abce-719018287b65",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "a08a2fd3-7801-5e6e-a4aa-19566503206b",
+      "structure_type_id": "ae1c45aa-f269-56c8-bd3a-74a257cfad29",
+      "cable_type_id": "80b32cd3-6218-5b93-a1a6-01d48de33dbd",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "75a910d9-60f1-58f5-8ccf-595a1a191dd1",
+      "structure_type_id": "ae1c45aa-f269-56c8-bd3a-74a257cfad29",
+      "cable_type_id": "eede0e2d-b94e-5656-9849-4cad881d8d7a",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "402b40a0-667b-5394-a6f3-362e8c917855",
+      "structure_type_id": "ae1c45aa-f269-56c8-bd3a-74a257cfad29",
+      "cable_type_id": "22ccf80d-2b9f-5b1d-b11c-ada4182221f2",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "7a4a1dea-9b27-5594-aaac-e580e15a0a97",
+      "structure_type_id": "e53b6c48-59da-5e17-9c07-90e2bd523e87",
+      "cable_type_id": "3f7d9cf4-23fb-58f5-8df3-eb2ef7deefa3",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "ec64aa2d-e4b8-5642-9e13-5c1ad03371c2",
+      "structure_type_id": "e53b6c48-59da-5e17-9c07-90e2bd523e87",
+      "cable_type_id": "f2135a1b-f7dc-5f41-a3a0-adbcd9af750e",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "60c180ba-f134-5d75-937f-7c03e3086ac9",
+      "structure_type_id": "e53b6c48-59da-5e17-9c07-90e2bd523e87",
+      "cable_type_id": "210f780f-26cc-5611-a039-e4fc2338a99e",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "bd8fbf37-1d5c-5901-8a11-522d9302136c",
+      "structure_type_id": "e53b6c48-59da-5e17-9c07-90e2bd523e87",
+      "cable_type_id": "93fc78f0-9946-53fa-97df-8e20b77dc890",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "3a4da364-418a-5f68-93ed-8add7951b51c",
+      "structure_type_id": "e53b6c48-59da-5e17-9c07-90e2bd523e87",
+      "cable_type_id": "db404f69-5dbd-5ebe-bf7a-8563f4a4e119",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "7947b7e7-f2c3-517d-87e6-1e9f639a1dd6",
+      "structure_type_id": "e53b6c48-59da-5e17-9c07-90e2bd523e87",
+      "cable_type_id": "6da8e2a1-a7d3-5921-abce-719018287b65",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "93ab62fb-8cd7-52db-a02e-360712696b3f",
+      "structure_type_id": "e53b6c48-59da-5e17-9c07-90e2bd523e87",
+      "cable_type_id": "80b32cd3-6218-5b93-a1a6-01d48de33dbd",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "eb1986cd-e64d-599b-ad7d-f1e1f8049f55",
+      "structure_type_id": "e53b6c48-59da-5e17-9c07-90e2bd523e87",
+      "cable_type_id": "eede0e2d-b94e-5656-9849-4cad881d8d7a",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "e3b9a4c3-af4c-5aa7-b795-f7010d9c4071",
+      "structure_type_id": "e53b6c48-59da-5e17-9c07-90e2bd523e87",
+      "cable_type_id": "22ccf80d-2b9f-5b1d-b11c-ada4182221f2",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "c7b3a416-fe92-5653-a01e-7f512c40d200",
+      "structure_type_id": "b676d320-2a56-5673-ac8d-5255f396060c",
+      "cable_type_id": "3f7d9cf4-23fb-58f5-8df3-eb2ef7deefa3",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "43d3fa17-3f42-5ecf-a18d-3fadd3beae64",
+      "structure_type_id": "b676d320-2a56-5673-ac8d-5255f396060c",
+      "cable_type_id": "f2135a1b-f7dc-5f41-a3a0-adbcd9af750e",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "bd9981f9-63e1-5901-9720-dbb3637b4767",
+      "structure_type_id": "b676d320-2a56-5673-ac8d-5255f396060c",
+      "cable_type_id": "210f780f-26cc-5611-a039-e4fc2338a99e",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "fda05d8f-388c-5f20-8bce-8b1b40b81e12",
+      "structure_type_id": "b676d320-2a56-5673-ac8d-5255f396060c",
+      "cable_type_id": "93fc78f0-9946-53fa-97df-8e20b77dc890",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "eb0556a4-be31-5a89-8152-b190e936fe1f",
+      "structure_type_id": "b676d320-2a56-5673-ac8d-5255f396060c",
+      "cable_type_id": "db404f69-5dbd-5ebe-bf7a-8563f4a4e119",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "cbe6900c-ac8c-5e87-835e-10a4ec0261e7",
+      "structure_type_id": "b676d320-2a56-5673-ac8d-5255f396060c",
+      "cable_type_id": "6da8e2a1-a7d3-5921-abce-719018287b65",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "dc420c90-e409-5dc9-ba7a-25557b1d1157",
+      "structure_type_id": "b676d320-2a56-5673-ac8d-5255f396060c",
+      "cable_type_id": "80b32cd3-6218-5b93-a1a6-01d48de33dbd",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "dfa0e6c6-b702-5575-9376-ff505117b506",
+      "structure_type_id": "b676d320-2a56-5673-ac8d-5255f396060c",
+      "cable_type_id": "eede0e2d-b94e-5656-9849-4cad881d8d7a",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "9cad9fef-1e5a-5554-a288-a0a1b7361e27",
+      "structure_type_id": "b676d320-2a56-5673-ac8d-5255f396060c",
+      "cable_type_id": "22ccf80d-2b9f-5b1d-b11c-ada4182221f2",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "287ebd47-61e5-5c06-a6e9-33f52d697d51",
+      "structure_type_id": "9159cfe2-846c-5980-8a24-02ed457c7050",
+      "cable_type_id": "3f7d9cf4-23fb-58f5-8df3-eb2ef7deefa3",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "223e95c4-cce8-52ae-b9de-ba3184471643",
+      "structure_type_id": "9159cfe2-846c-5980-8a24-02ed457c7050",
+      "cable_type_id": "f2135a1b-f7dc-5f41-a3a0-adbcd9af750e",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "8a347fc9-b5fc-5391-81d0-8132ccc7e677",
+      "structure_type_id": "9159cfe2-846c-5980-8a24-02ed457c7050",
+      "cable_type_id": "210f780f-26cc-5611-a039-e4fc2338a99e",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "a5f7bf57-92c8-5b5d-8660-866098d9398e",
+      "structure_type_id": "9159cfe2-846c-5980-8a24-02ed457c7050",
+      "cable_type_id": "93fc78f0-9946-53fa-97df-8e20b77dc890",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "c8ddc9d9-463e-5e03-a091-f71818cd7a0a",
+      "structure_type_id": "9159cfe2-846c-5980-8a24-02ed457c7050",
+      "cable_type_id": "db404f69-5dbd-5ebe-bf7a-8563f4a4e119",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "1675d4b6-d287-5c29-8df0-706d6c2a36e9",
+      "structure_type_id": "9159cfe2-846c-5980-8a24-02ed457c7050",
+      "cable_type_id": "6da8e2a1-a7d3-5921-abce-719018287b65",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "81b9815f-491a-5436-ad5e-3949daf4a01f",
+      "structure_type_id": "9159cfe2-846c-5980-8a24-02ed457c7050",
+      "cable_type_id": "80b32cd3-6218-5b93-a1a6-01d48de33dbd",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "cd3391c6-a358-5fe1-a076-c3b2f095e17d",
+      "structure_type_id": "9159cfe2-846c-5980-8a24-02ed457c7050",
+      "cable_type_id": "eede0e2d-b94e-5656-9849-4cad881d8d7a",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "660124bc-6ea7-5dbd-abef-24917a2d36f6",
+      "structure_type_id": "9159cfe2-846c-5980-8a24-02ed457c7050",
+      "cable_type_id": "22ccf80d-2b9f-5b1d-b11c-ada4182221f2",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "60e161da-f147-5a9c-ab51-2de282a6183e",
+      "structure_type_id": "468768bb-2a35-5d0a-aaad-c1ab243f2af7",
+      "cable_type_id": "17a29fef-68f8-5726-924b-07b68b10fefb",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "29765e6b-d3c0-5bf0-be32-12fb6a76db6d",
+      "structure_type_id": "468768bb-2a35-5d0a-aaad-c1ab243f2af7",
+      "cable_type_id": "174ce6ec-a8cf-5f38-88dc-95efa498c0f4",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "833a742f-c1cf-59a0-bf2b-0e1ed74d4724",
+      "structure_type_id": "468768bb-2a35-5d0a-aaad-c1ab243f2af7",
+      "cable_type_id": "324866be-66e3-5438-86be-27583279fbf5",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "3bb239dc-62af-54e4-8a99-2962998a371a",
+      "structure_type_id": "9e90a498-1fb6-527f-b0af-e763a3f9da40",
+      "cable_type_id": "17a29fef-68f8-5726-924b-07b68b10fefb",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "1366db6d-f3bd-5bd7-b714-c729d5a2c2fb",
+      "structure_type_id": "9e90a498-1fb6-527f-b0af-e763a3f9da40",
+      "cable_type_id": "174ce6ec-a8cf-5f38-88dc-95efa498c0f4",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "18a7bf8c-6cb9-558c-9a11-d408969197e2",
+      "structure_type_id": "9e90a498-1fb6-527f-b0af-e763a3f9da40",
+      "cable_type_id": "324866be-66e3-5438-86be-27583279fbf5",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "0a5e0c7a-db8e-52b9-b448-6b26046fe94c",
+      "structure_type_id": "8942fed4-a8fb-5aab-a2a0-89bf262f6155",
+      "cable_type_id": "17a29fef-68f8-5726-924b-07b68b10fefb",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "c677d992-82b8-5be0-9584-7cce6d7bc1d8",
+      "structure_type_id": "8942fed4-a8fb-5aab-a2a0-89bf262f6155",
+      "cable_type_id": "174ce6ec-a8cf-5f38-88dc-95efa498c0f4",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "b4f4886f-cce3-5ff5-8ece-fecee00d02c8",
+      "structure_type_id": "8942fed4-a8fb-5aab-a2a0-89bf262f6155",
+      "cable_type_id": "324866be-66e3-5438-86be-27583279fbf5",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "3389936f-3305-5522-a806-b260de930044",
+      "structure_type_id": "9f11cdbd-3393-58ba-8b2a-15c5c3a0b884",
+      "cable_type_id": "17a29fef-68f8-5726-924b-07b68b10fefb",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "b0eb7841-9347-515c-840e-21b8762939d2",
+      "structure_type_id": "9f11cdbd-3393-58ba-8b2a-15c5c3a0b884",
+      "cable_type_id": "174ce6ec-a8cf-5f38-88dc-95efa498c0f4",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "b52e13c7-72e4-552c-a196-5a45ae2e1b51",
+      "structure_type_id": "9f11cdbd-3393-58ba-8b2a-15c5c3a0b884",
+      "cable_type_id": "324866be-66e3-5438-86be-27583279fbf5",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "2b9304b9-224b-5fb3-84ac-998ec34e1a03",
+      "structure_type_id": "4624b085-efc4-50e6-a270-c99190bfde22",
+      "cable_type_id": "17a29fef-68f8-5726-924b-07b68b10fefb",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "2ce8974f-6c77-5989-a209-c42ed5b446e3",
+      "structure_type_id": "4624b085-efc4-50e6-a270-c99190bfde22",
+      "cable_type_id": "174ce6ec-a8cf-5f38-88dc-95efa498c0f4",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "22decd00-4343-57c4-9770-c8fdd39ec87f",
+      "structure_type_id": "4624b085-efc4-50e6-a270-c99190bfde22",
+      "cable_type_id": "324866be-66e3-5438-86be-27583279fbf5",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "48328826-2f81-5f11-bce3-0449c04b53b3",
+      "structure_type_id": "e97f5c84-1853-5a0b-beef-7cf1691fc89b",
+      "cable_type_id": "17a29fef-68f8-5726-924b-07b68b10fefb",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "32e8e426-70cd-5dbc-b0d2-b4e457159732",
+      "structure_type_id": "e97f5c84-1853-5a0b-beef-7cf1691fc89b",
+      "cable_type_id": "174ce6ec-a8cf-5f38-88dc-95efa498c0f4",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "195fcd72-2b76-5478-81e9-4082fcad030a",
+      "structure_type_id": "e97f5c84-1853-5a0b-beef-7cf1691fc89b",
+      "cable_type_id": "324866be-66e3-5438-86be-27583279fbf5",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "319cbb91-1974-5811-b02d-1a42402fc4ce",
+      "structure_type_id": "68f3270d-cc31-5bc3-8224-1a45c2008bca",
+      "cable_type_id": "17a29fef-68f8-5726-924b-07b68b10fefb",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "cb2ef501-c1a0-5f91-8f9c-3b9deac8f499",
+      "structure_type_id": "68f3270d-cc31-5bc3-8224-1a45c2008bca",
+      "cable_type_id": "174ce6ec-a8cf-5f38-88dc-95efa498c0f4",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "cebadf03-157e-56fc-90c7-59919d5e7773",
+      "structure_type_id": "68f3270d-cc31-5bc3-8224-1a45c2008bca",
+      "cable_type_id": "324866be-66e3-5438-86be-27583279fbf5",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "8e0455a7-7536-5da7-b4cf-619c86f20103",
+      "structure_type_id": "5a457690-4d75-56c8-ae3f-3c2302afa30c",
+      "cable_type_id": "17a29fef-68f8-5726-924b-07b68b10fefb",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "5b060f51-5917-52e6-8dbb-5592af59cbd5",
+      "structure_type_id": "5a457690-4d75-56c8-ae3f-3c2302afa30c",
+      "cable_type_id": "174ce6ec-a8cf-5f38-88dc-95efa498c0f4",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "9b6831b5-a9e7-5930-a8fa-b3ed8d0328b9",
+      "structure_type_id": "5a457690-4d75-56c8-ae3f-3c2302afa30c",
+      "cable_type_id": "324866be-66e3-5438-86be-27583279fbf5",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "692eddbf-9667-5940-b282-c41a6bb8620a",
+      "structure_type_id": "ac4aa28f-be0f-5bbd-9708-950d327f2a15",
+      "cable_type_id": "17a29fef-68f8-5726-924b-07b68b10fefb",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "fe7a005a-d1ac-516e-be67-ffeb0e1f2fae",
+      "structure_type_id": "ac4aa28f-be0f-5bbd-9708-950d327f2a15",
+      "cable_type_id": "174ce6ec-a8cf-5f38-88dc-95efa498c0f4",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "dc24b240-761b-5277-ba98-b73676f44a80",
+      "structure_type_id": "ac4aa28f-be0f-5bbd-9708-950d327f2a15",
+      "cable_type_id": "324866be-66e3-5438-86be-27583279fbf5",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "4e3d7d54-420e-5f8c-9f26-e714987dde69",
+      "structure_type_id": "aecc4dfb-fe27-5fa8-bffb-9ea69461133b",
+      "cable_type_id": "17a29fef-68f8-5726-924b-07b68b10fefb",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "b85c0fde-04ab-5f8f-95ea-7983cd30ac0e",
+      "structure_type_id": "aecc4dfb-fe27-5fa8-bffb-9ea69461133b",
+      "cable_type_id": "174ce6ec-a8cf-5f38-88dc-95efa498c0f4",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "4d0f573d-1edb-53b7-8d70-850b4de7a281",
+      "structure_type_id": "aecc4dfb-fe27-5fa8-bffb-9ea69461133b",
+      "cable_type_id": "324866be-66e3-5438-86be-27583279fbf5",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "a3db6c20-7318-5fac-afbd-d9336da59acd",
+      "structure_type_id": "dc451f99-0831-5752-90fc-b885558ff1e8",
+      "cable_type_id": "17a29fef-68f8-5726-924b-07b68b10fefb",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "3e12a86d-a646-5ccd-9b90-60dc6709e6d2",
+      "structure_type_id": "dc451f99-0831-5752-90fc-b885558ff1e8",
+      "cable_type_id": "174ce6ec-a8cf-5f38-88dc-95efa498c0f4",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "a5af65ca-c700-5295-be08-9603696ba53c",
+      "structure_type_id": "dc451f99-0831-5752-90fc-b885558ff1e8",
+      "cable_type_id": "324866be-66e3-5438-86be-27583279fbf5",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "240f3880-2697-514c-a702-dd3fa200a008",
+      "structure_type_id": "fa3a077a-b471-5200-9fb7-25e4197a5c68",
+      "cable_type_id": "17a29fef-68f8-5726-924b-07b68b10fefb",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "58d7901e-bd20-5833-99cb-2142177da479",
+      "structure_type_id": "fa3a077a-b471-5200-9fb7-25e4197a5c68",
+      "cable_type_id": "174ce6ec-a8cf-5f38-88dc-95efa498c0f4",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "d51d9111-1b11-517f-bb47-e096373dc49a",
+      "structure_type_id": "fa3a077a-b471-5200-9fb7-25e4197a5c68",
+      "cable_type_id": "324866be-66e3-5438-86be-27583279fbf5",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "48f794fb-b1aa-5eec-9268-9499734552f7",
+      "structure_type_id": "cc641b64-b89d-5e5b-ab99-ef2962ae0586",
+      "cable_type_id": "17a29fef-68f8-5726-924b-07b68b10fefb",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "7e41ef75-63f6-5c27-80c9-8a98a36b7eb4",
+      "structure_type_id": "cc641b64-b89d-5e5b-ab99-ef2962ae0586",
+      "cable_type_id": "174ce6ec-a8cf-5f38-88dc-95efa498c0f4",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "d161a1e0-f3c8-58d7-aea6-7f70d085bd81",
+      "structure_type_id": "cc641b64-b89d-5e5b-ab99-ef2962ae0586",
+      "cable_type_id": "324866be-66e3-5438-86be-27583279fbf5",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "28af090b-23dd-5894-a772-37331fbb35a3",
+      "structure_type_id": "468f4e90-3e1d-5e4c-ac31-ec813f97da9a",
+      "cable_type_id": "17a29fef-68f8-5726-924b-07b68b10fefb",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "f81ebbc3-1480-5d1c-b937-3c5c69b94241",
+      "structure_type_id": "468f4e90-3e1d-5e4c-ac31-ec813f97da9a",
+      "cable_type_id": "174ce6ec-a8cf-5f38-88dc-95efa498c0f4",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "bc29b78a-1711-5dea-b0ca-8caed5cb95fa",
+      "structure_type_id": "468f4e90-3e1d-5e4c-ac31-ec813f97da9a",
+      "cable_type_id": "324866be-66e3-5438-86be-27583279fbf5",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "2310c5ab-8164-5863-942b-94733b351c98",
+      "structure_type_id": "5f3cc578-6f2f-5ae0-942f-4f3eb02714d3",
+      "cable_type_id": "17a29fef-68f8-5726-924b-07b68b10fefb",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "dc462a5a-120f-5268-86b5-d997ccfb812d",
+      "structure_type_id": "5f3cc578-6f2f-5ae0-942f-4f3eb02714d3",
+      "cable_type_id": "174ce6ec-a8cf-5f38-88dc-95efa498c0f4",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "b2bd24c1-4e45-5f22-95b7-36b3fb6f4cca",
+      "structure_type_id": "5f3cc578-6f2f-5ae0-942f-4f3eb02714d3",
+      "cable_type_id": "324866be-66e3-5438-86be-27583279fbf5",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "5587cefc-9e05-5257-80b0-e22ad3a3148b",
+      "structure_type_id": "cd7c0b83-dac7-5278-8d2d-e7c2239817cb",
+      "cable_type_id": "17a29fef-68f8-5726-924b-07b68b10fefb",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "7e1c58bd-c079-5eb8-a2ae-ce31c13e4d62",
+      "structure_type_id": "cd7c0b83-dac7-5278-8d2d-e7c2239817cb",
+      "cable_type_id": "174ce6ec-a8cf-5f38-88dc-95efa498c0f4",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "43972af7-85c5-55c4-8619-71ad8c57862c",
+      "structure_type_id": "cd7c0b83-dac7-5278-8d2d-e7c2239817cb",
+      "cable_type_id": "324866be-66e3-5438-86be-27583279fbf5",
+      "source_expression": "50, 150 E 240"
+    },
+    {
+      "id": "db4912c1-fc05-59c7-8ba9-48fb24217eac",
+      "structure_type_id": "8e40ad62-edc5-5b0d-8375-0273d42382ae",
+      "cable_type_id": "eba32867-73e9-52d1-838a-b28b0e5d5ea0",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "6e76872b-7f28-5b77-b342-fc50b159e7d9",
+      "structure_type_id": "8e40ad62-edc5-5b0d-8375-0273d42382ae",
+      "cable_type_id": "c0c27e43-d5d9-55ec-883f-b657899178bf",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "4e679f4e-ae47-54c1-8f22-d06f34fb2fbd",
+      "structure_type_id": "8e40ad62-edc5-5b0d-8375-0273d42382ae",
+      "cable_type_id": "4660a732-0ae9-5244-8198-5a3a29484a0b",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "eecec7ab-be1c-5354-beb6-f9915b981773",
+      "structure_type_id": "8e40ad62-edc5-5b0d-8375-0273d42382ae",
+      "cable_type_id": "c7254046-7c5d-54dc-aa66-510707a0a90e",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "46e47b34-a860-5442-a19f-a729f701120a",
+      "structure_type_id": "8e40ad62-edc5-5b0d-8375-0273d42382ae",
+      "cable_type_id": "6fd3172d-e0eb-5810-b05a-eb168fdb8104",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "7a6d93fb-1136-5b99-a8ef-a946bca938e2",
+      "structure_type_id": "8e40ad62-edc5-5b0d-8375-0273d42382ae",
+      "cable_type_id": "42d58e26-f660-5ba2-aad4-264301f7e26c",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "6928a43e-bb6d-5db6-ae28-4b73870e9622",
+      "structure_type_id": "8e40ad62-edc5-5b0d-8375-0273d42382ae",
+      "cable_type_id": "70f7a0a5-ba12-5aa8-aa1d-f1f5f53d3679",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "de4abbc1-dea2-5087-bbee-ca3790fdc0d2",
+      "structure_type_id": "8e40ad62-edc5-5b0d-8375-0273d42382ae",
+      "cable_type_id": "11754110-9a1d-5a5f-9122-516f484dacca",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "f19f9c46-b010-5f1e-8845-138ef2b288d0",
+      "structure_type_id": "8e40ad62-edc5-5b0d-8375-0273d42382ae",
+      "cable_type_id": "ab250036-5c6c-5661-a721-db2fc9322b5b",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "48493b76-b251-52c7-8a95-e8e54ec2c476",
+      "structure_type_id": "fd4b8060-0b10-5d50-bc34-4c7b66ddb371",
+      "cable_type_id": "eba32867-73e9-52d1-838a-b28b0e5d5ea0",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "ef2f373f-b19f-5125-a34c-de1dd5200417",
+      "structure_type_id": "fd4b8060-0b10-5d50-bc34-4c7b66ddb371",
+      "cable_type_id": "c0c27e43-d5d9-55ec-883f-b657899178bf",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "f808623f-b239-5a6d-9c85-8aa2b9f210d4",
+      "structure_type_id": "fd4b8060-0b10-5d50-bc34-4c7b66ddb371",
+      "cable_type_id": "4660a732-0ae9-5244-8198-5a3a29484a0b",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "b8100e0b-6499-50b0-89cf-6b2de1939141",
+      "structure_type_id": "fd4b8060-0b10-5d50-bc34-4c7b66ddb371",
+      "cable_type_id": "c7254046-7c5d-54dc-aa66-510707a0a90e",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "da1c54a4-db6a-5287-ae9b-8d67dccbb8a7",
+      "structure_type_id": "fd4b8060-0b10-5d50-bc34-4c7b66ddb371",
+      "cable_type_id": "6fd3172d-e0eb-5810-b05a-eb168fdb8104",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "bd632904-c5c7-5356-aede-ce70ceee18da",
+      "structure_type_id": "fd4b8060-0b10-5d50-bc34-4c7b66ddb371",
+      "cable_type_id": "42d58e26-f660-5ba2-aad4-264301f7e26c",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "4b35f31f-571a-5a03-ab54-a406e97400d8",
+      "structure_type_id": "fd4b8060-0b10-5d50-bc34-4c7b66ddb371",
+      "cable_type_id": "70f7a0a5-ba12-5aa8-aa1d-f1f5f53d3679",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "fc10b978-0581-59d7-8e9b-8f3c94d4b35b",
+      "structure_type_id": "fd4b8060-0b10-5d50-bc34-4c7b66ddb371",
+      "cable_type_id": "11754110-9a1d-5a5f-9122-516f484dacca",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "50dc4067-d5ca-5888-bd17-fc67b42c078b",
+      "structure_type_id": "fd4b8060-0b10-5d50-bc34-4c7b66ddb371",
+      "cable_type_id": "ab250036-5c6c-5661-a721-db2fc9322b5b",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "e3b7b0af-e79b-530d-8425-222dc7bf99cf",
+      "structure_type_id": "866be5f8-4c78-5e0a-beba-ccc9a8f0498f",
+      "cable_type_id": "eba32867-73e9-52d1-838a-b28b0e5d5ea0",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "6c7774a2-fb5f-54a9-8f5a-29c903c24f42",
+      "structure_type_id": "866be5f8-4c78-5e0a-beba-ccc9a8f0498f",
+      "cable_type_id": "c0c27e43-d5d9-55ec-883f-b657899178bf",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "f6f10dff-099d-54f0-9467-5cf3367029bb",
+      "structure_type_id": "866be5f8-4c78-5e0a-beba-ccc9a8f0498f",
+      "cable_type_id": "4660a732-0ae9-5244-8198-5a3a29484a0b",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "4a9ca383-18a3-5207-975c-2c1f51fe3602",
+      "structure_type_id": "866be5f8-4c78-5e0a-beba-ccc9a8f0498f",
+      "cable_type_id": "c7254046-7c5d-54dc-aa66-510707a0a90e",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "2c27eadb-973b-5586-8cec-0dcc0c585fed",
+      "structure_type_id": "866be5f8-4c78-5e0a-beba-ccc9a8f0498f",
+      "cable_type_id": "6fd3172d-e0eb-5810-b05a-eb168fdb8104",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "b419d002-cfb0-549e-ab35-2c8b1fbc3318",
+      "structure_type_id": "866be5f8-4c78-5e0a-beba-ccc9a8f0498f",
+      "cable_type_id": "42d58e26-f660-5ba2-aad4-264301f7e26c",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "f6020b38-0351-54e1-8c95-44b9b4e9a46e",
+      "structure_type_id": "866be5f8-4c78-5e0a-beba-ccc9a8f0498f",
+      "cable_type_id": "70f7a0a5-ba12-5aa8-aa1d-f1f5f53d3679",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "4de2e780-9b80-58a0-bc75-4c6479d07f89",
+      "structure_type_id": "866be5f8-4c78-5e0a-beba-ccc9a8f0498f",
+      "cable_type_id": "11754110-9a1d-5a5f-9122-516f484dacca",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "38e8cb3c-c00f-5f2b-a4a0-6a7d1aed1e95",
+      "structure_type_id": "866be5f8-4c78-5e0a-beba-ccc9a8f0498f",
+      "cable_type_id": "ab250036-5c6c-5661-a721-db2fc9322b5b",
+      "source_expression": "4 , 2, 1/0, 1N5, 1N2, 3N5"
+    },
+    {
+      "id": "ea43c668-c787-5b3a-91d1-238ab9f2a72d",
+      "structure_type_id": "cef93a19-4f6c-5f3d-8883-370af0e39011",
+      "cable_type_id": "870b9737-68ad-5973-97b0-db02e082b91a",
+      "source_expression": "35"
+    },
+    {
+      "id": "9ab1d46a-2344-5c8c-b7a9-29b88f58251c",
+      "structure_type_id": "cef93a19-4f6c-5f3d-8883-370af0e39011",
+      "cable_type_id": "123f78e5-61b0-5384-9d68-6ea805dba135",
+      "source_expression": "35"
+    },
+    {
+      "id": "cbb26c83-732b-5843-943b-f1aa26e63370",
+      "structure_type_id": "cef93a19-4f6c-5f3d-8883-370af0e39011",
+      "cable_type_id": "dee3fda1-71bd-5937-9ae5-faa124f62dc9",
+      "source_expression": "35"
+    },
+    {
+      "id": "8d48dd2c-4d5d-5047-bd0b-8453eda53ca8",
+      "structure_type_id": "cef93a19-4f6c-5f3d-8883-370af0e39011",
+      "cable_type_id": "9ba9616a-5ad9-5ff5-b4f1-faa471a6d338",
+      "source_expression": "35"
+    },
+    {
+      "id": "addecb47-8f7e-5027-ae27-1861308eac27",
+      "structure_type_id": "d6a2a6ea-8896-5a7d-9266-21421e1901f5",
+      "cable_type_id": "81f63090-83d8-5e44-8752-dc9bb2450d91",
+      "source_expression": "70"
+    },
+    {
+      "id": "a7b0baee-3a3c-5e65-9a49-051d77d11ece",
+      "structure_type_id": "d6a2a6ea-8896-5a7d-9266-21421e1901f5",
+      "cable_type_id": "21dc1205-9754-5ee7-8cb5-85b0ca86c46c",
+      "source_expression": "70"
+    },
+    {
+      "id": "c2bb7e83-fc8c-5324-8530-268008978acf",
+      "structure_type_id": "a6b04426-210a-5fc3-90c4-760e2786d543",
+      "cable_type_id": "870b9737-68ad-5973-97b0-db02e082b91a",
+      "source_expression": "35"
+    },
+    {
+      "id": "21cc96c0-b84a-512a-9cfb-690f9e24811b",
+      "structure_type_id": "a6b04426-210a-5fc3-90c4-760e2786d543",
+      "cable_type_id": "123f78e5-61b0-5384-9d68-6ea805dba135",
+      "source_expression": "35"
+    },
+    {
+      "id": "a71fb918-5272-5ca4-aedc-ddd43e92ba9c",
+      "structure_type_id": "a6b04426-210a-5fc3-90c4-760e2786d543",
+      "cable_type_id": "dee3fda1-71bd-5937-9ae5-faa124f62dc9",
+      "source_expression": "35"
+    },
+    {
+      "id": "27f644ee-244d-51fa-b63f-b190023fd98d",
+      "structure_type_id": "a6b04426-210a-5fc3-90c4-760e2786d543",
+      "cable_type_id": "9ba9616a-5ad9-5ff5-b4f1-faa471a6d338",
+      "source_expression": "35"
+    },
+    {
+      "id": "2d77b174-f1b4-5dd9-9e6b-2eda7f89984c",
+      "structure_type_id": "7cb16dc9-cfa4-52e4-a177-cdeb5484b09c",
+      "cable_type_id": "81f63090-83d8-5e44-8752-dc9bb2450d91",
+      "source_expression": "70"
+    },
+    {
+      "id": "d507761c-046c-5e5f-b8df-8666110a7585",
+      "structure_type_id": "7cb16dc9-cfa4-52e4-a177-cdeb5484b09c",
+      "cable_type_id": "21dc1205-9754-5ee7-8cb5-85b0ca86c46c",
+      "source_expression": "70"
+    },
+    {
+      "id": "c9452f8a-6842-5e61-977d-a551f96d0e80",
+      "structure_type_id": "25a88e70-bd93-5277-b4a1-aa70564bd9af",
+      "cable_type_id": "870b9737-68ad-5973-97b0-db02e082b91a",
+      "source_expression": "35 E 70"
+    },
+    {
+      "id": "ce379a61-24a4-55df-b642-a4a62cccb925",
+      "structure_type_id": "25a88e70-bd93-5277-b4a1-aa70564bd9af",
+      "cable_type_id": "123f78e5-61b0-5384-9d68-6ea805dba135",
+      "source_expression": "35 E 70"
+    },
+    {
+      "id": "03d95e28-8b5c-59bf-8983-bb338b5d6737",
+      "structure_type_id": "25a88e70-bd93-5277-b4a1-aa70564bd9af",
+      "cable_type_id": "dee3fda1-71bd-5937-9ae5-faa124f62dc9",
+      "source_expression": "35 E 70"
+    },
+    {
+      "id": "7287e8f5-6324-5492-aaa9-eebd03f83ad7",
+      "structure_type_id": "25a88e70-bd93-5277-b4a1-aa70564bd9af",
+      "cable_type_id": "81f63090-83d8-5e44-8752-dc9bb2450d91",
+      "source_expression": "35 E 70"
+    },
+    {
+      "id": "47bd491d-502c-5685-9a03-440ac044af10",
+      "structure_type_id": "25a88e70-bd93-5277-b4a1-aa70564bd9af",
+      "cable_type_id": "9ba9616a-5ad9-5ff5-b4f1-faa471a6d338",
+      "source_expression": "35 E 70"
+    },
+    {
+      "id": "0ca55d77-24ea-59bd-99a0-668d491d85fa",
+      "structure_type_id": "25a88e70-bd93-5277-b4a1-aa70564bd9af",
+      "cable_type_id": "21dc1205-9754-5ee7-8cb5-85b0ca86c46c",
+      "source_expression": "35 E 70"
+    },
+    {
+      "id": "ac0cc37c-f86c-5a8a-9e45-abed5b5a8a43",
+      "structure_type_id": "3cdeabb5-11ce-5640-9a5d-a2e4de04dda3",
+      "cable_type_id": "870b9737-68ad-5973-97b0-db02e082b91a",
+      "source_expression": "35 E 70"
+    },
+    {
+      "id": "cbc3ec4a-fcea-5d00-b38d-76a029edb6ce",
+      "structure_type_id": "3cdeabb5-11ce-5640-9a5d-a2e4de04dda3",
+      "cable_type_id": "123f78e5-61b0-5384-9d68-6ea805dba135",
+      "source_expression": "35 E 70"
+    },
+    {
+      "id": "58a58176-4f1f-5ab8-a46c-a82b520299b7",
+      "structure_type_id": "3cdeabb5-11ce-5640-9a5d-a2e4de04dda3",
+      "cable_type_id": "dee3fda1-71bd-5937-9ae5-faa124f62dc9",
+      "source_expression": "35 E 70"
+    },
+    {
+      "id": "19646b68-b3e1-5c26-8b2d-0b507750813b",
+      "structure_type_id": "3cdeabb5-11ce-5640-9a5d-a2e4de04dda3",
+      "cable_type_id": "81f63090-83d8-5e44-8752-dc9bb2450d91",
+      "source_expression": "35 E 70"
+    },
+    {
+      "id": "250e444e-992e-5a7b-a386-6fd387730654",
+      "structure_type_id": "3cdeabb5-11ce-5640-9a5d-a2e4de04dda3",
+      "cable_type_id": "9ba9616a-5ad9-5ff5-b4f1-faa471a6d338",
+      "source_expression": "35 E 70"
+    },
+    {
+      "id": "573fc3e1-7562-5184-a7f1-3953f3ee7991",
+      "structure_type_id": "3cdeabb5-11ce-5640-9a5d-a2e4de04dda3",
+      "cable_type_id": "21dc1205-9754-5ee7-8cb5-85b0ca86c46c",
+      "source_expression": "35 E 70"
+    },
+    {
+      "id": "4506b40e-c34b-5dd9-acdc-ae2a7f2cbb22",
+      "structure_type_id": "0dbbd465-8417-5a2c-8143-0480c658fc16",
+      "cable_type_id": "c7254046-7c5d-54dc-aa66-510707a0a90e",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "64a73e6b-f4cd-5553-a1e2-6f03b9f772db",
+      "structure_type_id": "0dbbd465-8417-5a2c-8143-0480c658fc16",
+      "cable_type_id": "6fd3172d-e0eb-5810-b05a-eb168fdb8104",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "6989acc2-6cf6-56fe-992c-d5951d4d9203",
+      "structure_type_id": "0dbbd465-8417-5a2c-8143-0480c658fc16",
+      "cable_type_id": "42d58e26-f660-5ba2-aad4-264301f7e26c",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "ba7daa7a-3b57-5ab2-a352-8b7aded106ab",
+      "structure_type_id": "9f927a5d-aa4b-5bde-b422-6ccce1199aae",
+      "cable_type_id": "c7254046-7c5d-54dc-aa66-510707a0a90e",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "e3253b4a-a095-5c7a-92f5-9ff6c8c2ea9c",
+      "structure_type_id": "9f927a5d-aa4b-5bde-b422-6ccce1199aae",
+      "cable_type_id": "6fd3172d-e0eb-5810-b05a-eb168fdb8104",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "c1118039-1373-53a6-8a23-8754aee8320d",
+      "structure_type_id": "9f927a5d-aa4b-5bde-b422-6ccce1199aae",
+      "cable_type_id": "42d58e26-f660-5ba2-aad4-264301f7e26c",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "e4f1ed60-785b-5143-a593-d67ccd8cd0b6",
+      "structure_type_id": "0c3fad6f-c3a2-58da-9a9d-2ebabfcc19fd",
+      "cable_type_id": "c7254046-7c5d-54dc-aa66-510707a0a90e",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "488972b5-07b2-5416-922e-8629c08be1e6",
+      "structure_type_id": "0c3fad6f-c3a2-58da-9a9d-2ebabfcc19fd",
+      "cable_type_id": "6fd3172d-e0eb-5810-b05a-eb168fdb8104",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "393c2236-648f-5fb7-b2a6-ca3e0289676d",
+      "structure_type_id": "0c3fad6f-c3a2-58da-9a9d-2ebabfcc19fd",
+      "cable_type_id": "42d58e26-f660-5ba2-aad4-264301f7e26c",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "e669ddff-94e7-58c2-ad82-3ef32f7c285d",
+      "structure_type_id": "fc7d742b-8a45-5446-ba33-37b33079695b",
+      "cable_type_id": "c7254046-7c5d-54dc-aa66-510707a0a90e",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "5ea0f3d2-ba6e-59c8-8316-1f7b07215db4",
+      "structure_type_id": "fc7d742b-8a45-5446-ba33-37b33079695b",
+      "cable_type_id": "6fd3172d-e0eb-5810-b05a-eb168fdb8104",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "8bd2cee2-089b-551b-b52c-d8b1a4ca9411",
+      "structure_type_id": "fc7d742b-8a45-5446-ba33-37b33079695b",
+      "cable_type_id": "42d58e26-f660-5ba2-aad4-264301f7e26c",
+      "source_expression": "4 , 2 E 1/0"
+    }
+  ],
+  "symbol_rules": [
+    {
+      "id": "186cf7ef-66fb-5ac3-bb88-eb742557bfa7",
+      "element_category": "POSTE",
+      "project_situation": "EXISTENTE",
+      "icon": "poste",
+      "color": "#000000",
+      "stroke_pattern": "SOLIDO",
+      "label": "Poste - Existente"
+    },
+    {
+      "id": "30f7002e-4dd0-5c44-9e6a-40dad7ef989d",
+      "element_category": "POSTE",
+      "project_situation": "INSTALAR",
+      "icon": "poste",
+      "color": "#008000",
+      "stroke_pattern": "SOLIDO",
+      "label": "Poste - Instalar"
+    },
+    {
+      "id": "30a80cc6-4f8b-51e4-8325-eab75d381c67",
+      "element_category": "POSTE",
+      "project_situation": "REMOVER",
+      "icon": "poste",
+      "color": "#FF0000",
+      "stroke_pattern": "SOLIDO",
+      "label": "Poste - Remover"
+    },
+    {
+      "id": "bf428df8-21f8-5f06-af08-ba44848f2708",
+      "element_category": "ESTRUTURA_MT",
+      "project_situation": "EXISTENTE",
+      "icon": "estrutura_mt",
+      "color": "#000000",
+      "stroke_pattern": "SOLIDO",
+      "label": "Estrutura Mt - Existente"
+    },
+    {
+      "id": "ef05dd89-b6bb-547f-bd46-47db95de7857",
+      "element_category": "ESTRUTURA_MT",
+      "project_situation": "INSTALAR",
+      "icon": "estrutura_mt",
+      "color": "#008000",
+      "stroke_pattern": "SOLIDO",
+      "label": "Estrutura Mt - Instalar"
+    },
+    {
+      "id": "458e43b0-7459-5e10-baf3-ca5e0ea3ca0e",
+      "element_category": "ESTRUTURA_MT",
+      "project_situation": "REMOVER",
+      "icon": "estrutura_mt",
+      "color": "#FF0000",
+      "stroke_pattern": "SOLIDO",
+      "label": "Estrutura Mt - Remover"
+    },
+    {
+      "id": "209439c8-2be5-59cf-b8c3-f0a9b8636cc1",
+      "element_category": "ESTRUTURA_BT",
+      "project_situation": "EXISTENTE",
+      "icon": "estrutura_bt",
+      "color": "#000000",
+      "stroke_pattern": "SOLIDO",
+      "label": "Estrutura Bt - Existente"
+    },
+    {
+      "id": "19cd31b7-a8fc-58e1-9811-86f84eb0c35e",
+      "element_category": "ESTRUTURA_BT",
+      "project_situation": "INSTALAR",
+      "icon": "estrutura_bt",
+      "color": "#008000",
+      "stroke_pattern": "SOLIDO",
+      "label": "Estrutura Bt - Instalar"
+    },
+    {
+      "id": "f6d0ba52-5c8b-5b69-a033-ae6ee0e5426f",
+      "element_category": "ESTRUTURA_BT",
+      "project_situation": "REMOVER",
+      "icon": "estrutura_bt",
+      "color": "#FF0000",
+      "stroke_pattern": "SOLIDO",
+      "label": "Estrutura Bt - Remover"
+    },
+    {
+      "id": "a63729ec-d994-5d50-8753-1f4fc87ab920",
+      "element_category": "CABO",
+      "project_situation": "EXISTENTE",
+      "icon": "cabo",
+      "color": "#000000",
+      "stroke_pattern": "SOLIDO",
+      "label": "Cabo - Existente"
+    },
+    {
+      "id": "e959a859-5f1d-53de-b6d0-37f217e74c93",
+      "element_category": "CABO",
+      "project_situation": "INSTALAR",
+      "icon": "cabo",
+      "color": "#008000",
+      "stroke_pattern": "SOLIDO",
+      "label": "Cabo - Instalar"
+    },
+    {
+      "id": "ef094378-208c-56fe-a9f0-86f109abe4ab",
+      "element_category": "CABO",
+      "project_situation": "REMOVER",
+      "icon": "cabo",
+      "color": "#FF0000",
+      "stroke_pattern": "SOLIDO",
+      "label": "Cabo - Remover"
+    },
+    {
+      "id": "2af4dbeb-872f-5077-80df-dc30ab2e0b1e",
+      "element_category": "EQUIPAMENTO",
+      "project_situation": "EXISTENTE",
+      "icon": "equipamento",
+      "color": "#000000",
+      "stroke_pattern": "SOLIDO",
+      "label": "Equipamento - Existente"
+    },
+    {
+      "id": "71ab088e-bded-5ce4-a1f1-f798f12b2349",
+      "element_category": "EQUIPAMENTO",
+      "project_situation": "INSTALAR",
+      "icon": "equipamento",
+      "color": "#008000",
+      "stroke_pattern": "SOLIDO",
+      "label": "Equipamento - Instalar"
+    },
+    {
+      "id": "0c28bb8c-9e63-5e68-b742-ae59d3ead1b8",
+      "element_category": "EQUIPAMENTO",
+      "project_situation": "REMOVER",
+      "icon": "equipamento",
+      "color": "#FF0000",
+      "stroke_pattern": "SOLIDO",
+      "label": "Equipamento - Remover"
+    }
+  ],
+  "recognition_signatures": [
+    {
+      "id": "77af4071-24b0-5c75-8d7b-a4b7ef289201",
+      "element_category": null,
+      "project_situation": "EXISTENTE",
+      "color": "#000000",
+      "color_tolerance": 24,
+      "stroke_pattern": null,
+      "priority": 100,
+      "source": "AMOSTRAS_REAIS_2026"
+    },
+    {
+      "id": "1d387c04-0af6-5ca1-81d1-84eb98608a0a",
+      "element_category": null,
+      "project_situation": "INSTALAR",
+      "color": "#008000",
+      "color_tolerance": 20,
+      "stroke_pattern": null,
+      "priority": 100,
+      "source": "AMOSTRAS_REAIS_2026"
+    },
+    {
+      "id": "5fac7075-1b5f-5142-8f10-2b62fb1ac250",
+      "element_category": null,
+      "project_situation": "INSTALAR",
+      "color": "#00B300",
+      "color_tolerance": 20,
+      "stroke_pattern": null,
+      "priority": 90,
+      "source": "AMOSTRAS_REAIS_2026"
+    },
+    {
+      "id": "874ed691-a203-51fc-87f3-cd22fb49ac30",
+      "element_category": null,
+      "project_situation": "REMOVER",
+      "color": "#FF0000",
+      "color_tolerance": 20,
+      "stroke_pattern": null,
+      "priority": 100,
+      "source": "AMOSTRAS_REAIS_2026"
+    },
+    {
+      "id": "5248b561-8d6b-57c4-a866-8d65ae5a7510",
+      "element_category": null,
+      "project_situation": "REMOVER",
+      "color": "#800000",
+      "color_tolerance": 20,
+      "stroke_pattern": null,
+      "priority": 90,
+      "source": "AMOSTRAS_REAIS_2026"
+    }
+  ],
+  "warnings": [
+    {
+      "code": "DUPLICATE_ITEM_CODE",
+      "message": "Código CEM4 repetido; a segunda ocorrência foi mantida inativa.",
+      "category": "ESTRUTURA_MT",
+      "value": "CEM4",
+      "source_rows": [
+        40,
+        46
+      ],
+      "resolution": "FIRST_ACTIVE_DUPLICATES_INACTIVE"
+    }
+  ]
+}
