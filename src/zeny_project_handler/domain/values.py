@@ -125,6 +125,24 @@ def _validate_polygon_geometry(points: tuple[PontoNormalizado, ...]) -> None:
         raise DomainValidationError("Polígono não aceita pontos consecutivos repetidos")
 
 
+def validar_geometria_normalizada(
+    tipo: TipoGeometria, pontos: tuple[PontoNormalizado, ...]
+) -> tuple[PontoNormalizado, ...]:
+    """Valide uma geometria 0..1 sem vinculá-la a uma página persistida."""
+    normalized_points = tuple(pontos)
+    validators = {
+        TipoGeometria.PONTO: _validate_point_geometry,
+        TipoGeometria.CAIXA: _validate_box_geometry,
+        TipoGeometria.POLILINHA: _validate_polyline_geometry,
+        TipoGeometria.POLIGONO: _validate_polygon_geometry,
+    }
+    validator = validators.get(tipo)
+    if validator is None:
+        raise DomainValidationError("Tipo de geometria não suportado")
+    validator(normalized_points)
+    return normalized_points
+
+
 @dataclass(frozen=True, slots=True)
 class GeometriaDocumento:
     pagina_id: UUID
@@ -132,17 +150,7 @@ class GeometriaDocumento:
     pontos: tuple[PontoNormalizado, ...]
 
     def __post_init__(self) -> None:
-        points = tuple(self.pontos)
-        validators = {
-            TipoGeometria.PONTO: _validate_point_geometry,
-            TipoGeometria.CAIXA: _validate_box_geometry,
-            TipoGeometria.POLILINHA: _validate_polyline_geometry,
-            TipoGeometria.POLIGONO: _validate_polygon_geometry,
-        }
-        validator = validators.get(self.tipo)
-        if validator is None:
-            raise DomainValidationError("Tipo de geometria não suportado")
-        validator(points)
+        points = validar_geometria_normalizada(self.tipo, self.pontos)
         object.__setattr__(self, "pontos", points)
 
     @classmethod

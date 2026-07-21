@@ -20,7 +20,7 @@ from zeny_project_handler.ports.analysis import (
 from zeny_project_handler.ports.pdf import ReferenciaFontePdf
 
 EXAMPLES_DIRECTORY = Path(__file__).parents[2] / "examples"
-MANIFEST_PATH = EXAMPLES_DIRECTORY / "manifesto-amostras.json"
+MANIFEST_PATH = Path(__file__).parents[2] / "evaluation" / "manifesto-amostras.json"
 
 
 def _samples() -> list[dict[str, Any]]:
@@ -61,7 +61,7 @@ def test_registered_real_pdf_smoke_by_anonymous_hash(sample: dict[str, Any]) -> 
     )
     assert dict(annotation_counts) == sample.get("annotations", {})
     assert len(inspection.grupos_conteudo_opcional) == sample.get("optional_content_groups", 0)
-    if "visible_images_in_annotation_appearance_streams" in sample.get("known_edge_cases", []):
+    if "visible-images-in-annotation-appearance-streams" in sample.get("known_edge_cases", []):
         assert any(
             annotation.aparencias_xrefs
             for page in inspection.paginas
@@ -108,7 +108,7 @@ def test_registered_real_pdf_native_evidence_by_anonymous_hash(sample: dict[str,
         for evidence in result.evidencias
         for point in evidence.geometria.pontos
     )
-    if "visible_images_in_annotation_appearance_streams" in sample.get("known_edge_cases", []):
+    if "visible-images-in-annotation-appearance-streams" in sample.get("known_edge_cases", []):
         assert any(
             item.tipo is TipoEvidencia.IMAGEM
             and item.origem_pdf.tipo is TipoOrigemPdf.APARENCIA_ANOTACAO

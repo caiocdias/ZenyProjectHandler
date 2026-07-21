@@ -88,3 +88,35 @@ class EstadoConexao(StrEnum):
     CONECTADA = "CONECTADA"
     DESCONECTADA = "DESCONECTADA"
     DESCONHECIDA = "DESCONHECIDA"
+
+
+class ParticaoAvaliacao(StrEnum):
+    DESENVOLVIMENTO = "DESENVOLVIMENTO"
+    TESTE = "TESTE"
+
+
+class EstadoConjuntoAvaliacao(StrEnum):
+    EM_PREPARACAO = "EM_PREPARACAO"
+    CONGELADO = "CONGELADO"
+
+
+class PapelAnotacao(StrEnum):
+    PRIMARIA = "PRIMARIA"
+    SECUNDARIA = "SECUNDARIA"
+    CONSENSO = "CONSENSO"
+
+
+class EstadoAnotacao(StrEnum):
+    RASCUNHO = "RASCUNHO"
+    REVISADA = "REVISADA"
+    CONGELADA = "CONGELADA"
+
+
+class EstadoCriteriosAvaliacao(StrEnum):
+    PROPOSTO = "PROPOSTO"
+    APROVADO = "APROVADO"
+
+
+class ModoBenchmark(StrEnum):
+    DESENVOLVIMENTO = "DESENVOLVIMENTO"
+    TESTE_FINAL = "TESTE_FINAL"

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zeny.local/schemas/evaluation/criteria-v1.json",
+  "title": "Critérios de regressão",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "criteria_version", "status", "per_category", "thresholds", "geometry_matching"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "criteria_version": {"type": "string", "minLength": 1},
+    "status": {"enum": ["PROPOSTO", "APROVADO"]},
+    "per_category": {
+      "type": "array", "minItems": 5, "maxItems": 5,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["category", "minimum_precision", "minimum_recall"],
+        "properties": {
+          "category": {"enum": ["POSTE", "ESTRUTURA_MT", "ESTRUTURA_BT", "CABO", "EQUIPAMENTO"]},
+          "minimum_precision": {"$ref": "#/$defs/rate"},
+          "minimum_recall": {"$ref": "#/$defs/rate"}
+        }
+      }
+    },
+    "thresholds": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "minimum_relation_precision", "minimum_relation_recall", "maximum_extraction_failure_rate",
+        "maximum_latency_p95_ms", "maximum_python_peak_memory_bytes", "maximum_human_divergence"
+      ],
+      "properties": {
+        "minimum_relation_precision": {"$ref": "#/$defs/rate"},
+        "minimum_relation_recall": {"$ref": "#/$defs/rate"},
+        "maximum_extraction_failure_rate": {"$ref": "#/$defs/rate"},
+        "maximum_latency_p95_ms": {"type": ["string", "number"], "exclusiveMinimum": 0},
+        "maximum_python_peak_memory_bytes": {"type": "integer", "minimum": 1},
+        "maximum_human_divergence": {"$ref": "#/$defs/rate"}
+      }
+    },
+    "geometry_matching": {
+      "type": "object", "additionalProperties": false,
+      "required": ["point_tolerance", "polyline_tolerance", "minimum_area_iou"],
+      "properties": {
+        "point_tolerance": {"$ref": "#/$defs/rate"},
+        "polyline_tolerance": {"$ref": "#/$defs/rate"},
+        "minimum_area_iou": {"$ref": "#/$defs/rate"}
+      }
+    }
+  },
+  "$defs": {
+    "rate": {"type": ["string", "number"], "pattern": "^(0(?:\\.\\d+)?|1(?:\\.0+)?)$"}
+  }
+}

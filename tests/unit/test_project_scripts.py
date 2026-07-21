@@ -46,14 +46,16 @@ def test_quality_script_enforces_coverage_and_records_metrics() -> None:
 
 def test_real_pdf_samples_are_ignored_and_have_an_anonymous_manifest() -> None:
     ignore_rules = script_text(".gitignore")
-    manifest_path = PROJECT_ROOT / "examples" / "manifesto-amostras.json"
+    manifest_path = PROJECT_ROOT / "evaluation" / "manifesto-amostras.json"
     manifest_text = manifest_path.read_text(encoding="utf-8")
     manifest = json.loads(manifest_text)
     samples = manifest["samples"]
 
     assert "examples/**/*.pdf" in ignore_rules
+    assert "evaluation/annotations/" in ignore_rules
     assert manifest["sensitive_source_files"] is True
     assert manifest["pdf_count"] == len(samples) == 9
+    assert {sample["split"] for sample in samples} == {"DESENVOLVIMENTO", "TESTE"}
     assert len({sample["id"] for sample in samples}) == len(samples)
     assert all(len(sample["sha256"]) == 64 for sample in samples)
     assert "file_name" not in manifest_text
