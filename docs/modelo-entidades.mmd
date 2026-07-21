@@ -1,0 +1,739 @@
+classDiagram
+direction LR
+
+namespace ModuloDocumento {
+    class DocumentoProjeto {
+        +UUID id
+        +String nomeArquivo
+        +String sha256
+        +Integer tamanhoBytes
+        +String versaoPdf
+        +String produtor
+    }
+
+    class PaginaDocumento {
+        +UUID id
+        +Integer numero
+        +Decimal larguraPontos
+        +Decimal alturaPontos
+        +Integer rotacaoGraus
+        +Decimal[6] matrizPdfParaPagina
+        +Decimal[6] matrizRotacaoPagina
+    }
+
+    class CaixaPagina {
+        +Decimal xMin
+        +Decimal yMin
+        +Decimal xMax
+        +Decimal yMax
+    }
+
+    class GeometriaDocumento {
+        +UUID paginaId
+        +TipoGeometria tipo
+    }
+
+    class PontoNormalizado {
+        +Decimal x
+        +Decimal y
+    }
+
+    class TipoGeometria {
+        <<enumeration>>
+        PONTO
+        CAIXA
+        POLILINHA
+        POLIGONO
+    }
+}
+
+namespace ModuloProjeto {
+    class Projeto {
+        +UUID id
+        +String nome
+        +UUID catalogoVersaoId
+        +Instant criadoEm
+    }
+
+    class MetadadosProjeto {
+        +String notaServico
+        +String circuito
+        +String municipio
+        +String bairro
+        +String tipoServico
+        +String escala
+        +String formatoFolha
+        +String numeroFolha
+        +Date dataProjeto
+        +Boolean impactoAmbiental
+        +String dispositivoSeccionamento
+        +JsonObject atributosExtras
+    }
+
+    class ContatoSolicitante {
+        +String nome
+        +String telefone
+        <<dadoSensivel>>
+    }
+
+    class CoordenadaCampo {
+        +Decimal leste
+        +Decimal norte
+        +String sistemaReferencia
+        +String zona
+        +Decimal altitudeM
+    }
+
+    class ElementoProjeto {
+        <<abstract>>
+        +UUID id
+        +UUID tipoCatalogoId
+        +SituacaoProjeto situacao
+        +String referenciaDesenho
+        +String codigoObservado
+        +String identificadorOperacional
+    }
+
+    class Poste
+
+    class EstruturaMt {
+        +UUID posteId
+        +UUID[] pontosFixadosIds
+    }
+
+    class EstruturaBt {
+        +UUID posteId
+        +UUID[] pontosFixadosIds
+    }
+
+    class Cabo {
+        +UUID pontoOrigemId
+        +UUID pontoDestinoId
+        +Decimal comprimentoM
+        +UUID[] postesApoioIds
+        +UUID[] pontosIntermediariosIds
+    }
+
+    class Equipamento {
+        +UUID posteId
+    }
+
+    class PontoRede {
+        +UUID id
+        +UUID? posteId
+        +String nome
+        +NivelRede nivelRede
+        +UUID nivelTensaoOpcaoId
+        +UUID configuracaoFasesOpcaoId
+        +TipoPontoRede tipo
+    }
+
+    class TerminalEquipamento {
+        +UUID id
+        +UUID equipamentoId
+        +String nome
+        +NivelRede nivelRede
+        +UUID nivelTensaoOpcaoId
+        +UUID configuracaoFasesOpcaoId
+        +UUID pontoRedeId
+    }
+
+    class ConexaoInternaEquipamento {
+        +UUID id
+        +UUID equipamentoId
+        +UUID terminalOrigemId
+        +UUID terminalDestinoId
+        +EstadoConexao estado
+    }
+
+    class FotoElemento {
+        +UUID id
+        +String caminhoRelativo
+        +String legenda
+    }
+
+    class VinculoObra {
+        +UUID id
+        +TipoVinculoObra tipo
+        +UUID elementoOrigemId
+        +UUID elementoDestinoId
+        +String observacao
+    }
+
+    class SituacaoProjeto {
+        <<enumeration>>
+        EXISTENTE
+        INSTALAR
+        REMOVER
+    }
+
+    class NivelRede {
+        <<enumeration>>
+        MT
+        BT
+    }
+
+    class TipoPontoRede {
+        <<enumeration>>
+        POSTE
+        DERIVACAO
+        CONEXAO
+        ENTREGA
+        CAIXA_PASSAGEM
+        TRANSICAO
+        OUTRO
+    }
+
+    class TipoVinculoObra {
+        <<enumeration>>
+        REALOCACAO
+        SUBSTITUICAO
+    }
+
+    class EstadoConexao {
+        <<enumeration>>
+        CONECTADA
+        DESCONECTADA
+        DESCONHECIDA
+    }
+}
+
+namespace ModuloAnalise {
+    class ExecucaoAnalise {
+        +UUID id
+        +UUID projetoId
+        +String metodo
+        +String versaoMetodo
+        +JsonObject parametros
+        +EstadoExecucaoAnalise estado
+        +Instant iniciadaEm
+        +Instant finalizadaEm
+        +String erro
+    }
+
+    class DiagnosticoAnalise {
+        +String codigo
+        +String mensagem
+        +String extrator
+        +Integer paginaNumero
+        +Integer objetoXref
+    }
+
+    class EvidenciaDocumento {
+        +UUID id
+        +UUID execucaoId
+        +UUID paginaId
+        +TipoEvidencia tipo
+        +String metodo
+        +String versaoMetodo
+        +JsonObject parametros
+        +String conteudoBruto
+        +JsonObject atributosExtraidos
+        +Instant criadaEm
+    }
+
+    class OrigemObjetoPdf {
+        +TipoOrigemPdf tipo
+        +Integer numeroObjeto
+        +Integer indiceAnotacao
+        +String subtipoAnotacao
+        +String nomeRecurso
+    }
+
+    class ArtefatoExtraido {
+        +String caminhoRelativo
+        +String sha256
+        +String mimeType
+        +Integer tamanhoBytes
+    }
+
+    class AnalisadorDocumentoPort {
+        <<interface>>
+        +analisar(SolicitacaoAnaliseDocumento) ResultadoAnaliseDocumento
+    }
+
+    class MotorOcrPort {
+        <<interface>>
+        +reconhecer(PaginaRasterOcr) TrechoTextoOcr[]
+    }
+
+    class CacheAnaliseDocumentoPort {
+        <<interface>>
+        +obter(String chave)
+        +salvar(String chave, ExtracaoDocumentoNormalizada)
+    }
+
+    class PyMuPdfDocumentAnalyzer {
+        <<adapter>>
+    }
+
+    class JsonAnalysisCache {
+        <<adapter>>
+    }
+
+    class ExecutarAnaliseDocumento {
+        +executar(UUID projetoId, UUID documentoId)
+    }
+
+    class PropostaElemento {
+        +UUID id
+        +UUID execucaoId
+        +CategoriaElemento categoria
+        +SituacaoProjeto situacaoProjeto
+        +EstadoRevisao estadoRevisao
+        +UUID tipoCatalogoSugeridoId
+        +String codigoObservado
+        +JsonObject atributosSugeridos
+        +Decimal confianca
+        +String justificativa
+    }
+
+    class PropostaRelacao {
+        +UUID id
+        +UUID execucaoId
+        +UUID origemReferenciaId
+        +UUID destinoReferenciaId
+        +String tipoRelacao
+        +EstadoRevisao estadoRevisao
+        +Decimal confianca
+        +String justificativa
+    }
+
+    class DecisaoRevisao {
+        +UUID id
+        +UUID propostaId
+        +TipoDecisaoRevisao decisao
+        +String revisor
+        +Instant decididaEm
+        +UUID elementoConfirmadoId
+        +String motivo
+    }
+
+    class EstadoRevisao {
+        <<enumeration>>
+        PROPOSTA
+        CONFIRMADA
+        REJEITADA
+        CONFLITANTE
+    }
+
+    class TipoEvidencia {
+        <<enumeration>>
+        TEXTO
+        VETOR
+        IMAGEM
+        OCR
+    }
+
+    class TipoOrigemPdf {
+        <<enumeration>>
+        CONTEUDO_PAGINA
+        ANOTACAO
+        APARENCIA_ANOTACAO
+        FORM_XOBJECT
+    }
+}
+
+namespace ModuloCatalogo {
+    class CatalogoTecnico {
+        +UUID id
+        +Integer versao
+        +Integer versaoSchema
+        +StatusCatalogo status
+        +Instant criadoEm
+        +Instant publicadoEm
+    }
+
+    class FonteCatalogo {
+        +String nomeArquivo
+        +String sha256
+        +String planilha
+        +Instant importadoEm
+    }
+
+    class ItemCatalogo {
+        <<abstract>>
+        +UUID id
+        +String codigo
+        +String descricao
+        +Boolean ativo
+        +Integer linhaOrigem
+        +JsonObject atributosExtras
+    }
+
+    class TipoPoste {
+        +Decimal alturaM
+        +Integer resistenciaDan
+        +UUID formatoOpcaoId
+    }
+
+    class TipoEstruturaMt {
+        +UUID configuracaoFasesOpcaoId
+        +UUID tecnologiaRedeOpcaoId
+        +Boolean ancoragem
+        +String expressaoCabosOriginal
+    }
+
+    class TipoEstruturaBt {
+        +UUID tecnologiaRedeOpcaoId
+        +Boolean ancoragem
+        +String expressaoCabosOriginal
+    }
+
+    class TipoCabo {
+        +UUID configuracaoFasesOpcaoId
+        +UUID tecnologiaRedeOpcaoId
+        +UUID nivelTensaoOpcaoId
+        +Decimal fatorCondenacao
+        +String referenciaCondutor
+    }
+
+    class TipoEquipamento {
+        +UUID configuracaoFasesOpcaoId
+        +UUID classeEquipamentoOpcaoId
+    }
+
+    class CompatibilidadeEstruturaCabo {
+        +UUID id
+        +UUID tipoEstruturaId
+        +UUID tipoCaboId
+        +String expressaoOrigem
+    }
+
+    class GrupoOpcao {
+        +UUID id
+        +String chave
+        +String nome
+        +Integer ordem
+    }
+
+    class OpcaoCatalogo {
+        +UUID id
+        +String codigo
+        +String rotulo
+        +Boolean ativo
+        +Integer ordem
+    }
+
+    class RegraSimbologia {
+        +UUID id
+        +CategoriaElemento categoriaElemento
+        +SituacaoProjeto situacaoProjeto
+        +String icone
+        +String cor
+        +String padraoTraco
+        +String rotulo
+    }
+
+    class AssinaturaSimbologia {
+        +UUID id
+        +CategoriaElemento? categoriaElemento
+        +SituacaoProjeto situacaoProjeto
+        +String cor
+        +Integer toleranciaCor
+        +String? padraoTraco
+        +Integer prioridade
+        +String origem
+    }
+
+    class AvisoImportacao {
+        +String codigo
+        +String mensagem
+        +CategoriaElemento categoria
+        +String valor
+        +Integer[] linhasOrigem
+        +String resolucao
+    }
+
+    class StatusCatalogo {
+        <<enumeration>>
+        RASCUNHO
+        PUBLICADO
+        ARQUIVADO
+    }
+
+    class CategoriaElemento {
+        <<enumeration>>
+        POSTE
+        ESTRUTURA_MT
+        ESTRUTURA_BT
+        CABO
+        EQUIPAMENTO
+    }
+}
+
+namespace ModuloPersistencia {
+    class SqlAlchemyUnitOfWork {
+        +commit()
+        +rollback()
+    }
+
+    class SqlCatalogRepository {
+        +salvar(CatalogoTecnico)
+        +obter(UUID) CatalogoTecnico
+    }
+
+    class SqlProjectRepository {
+        +salvar(Projeto)
+        +obter(UUID) Projeto
+        +remover(UUID)
+    }
+
+    class SqlDocumentRepository {
+        <<projecaoLeitura>>
+    }
+
+    class SqlElementRepository {
+        <<projecaoLeitura>>
+    }
+
+    class SqlAnalysisRunRepository
+    class SqlEvidenceRepository
+    class SqlProposalRepository
+    class SqlReviewDecisionRepository
+
+    class SqlPdfSourceRepository {
+        +salvar(ReferenciaFontePdf)
+        +obter(UUID) ReferenciaFontePdf
+    }
+
+    class MigracoesAlembic {
+        +upgrade(revisao)
+    }
+
+    class BackupAtomico {
+        +criar(origem, destino)
+    }
+}
+
+namespace ModuloIngestaoPdf {
+    class LeitorPdfPort {
+        <<interface>>
+        +inspecionar(Path) InspecaoPdf
+        +renderizarPagina(Path, numero, dpi) PaginaPdfRenderizada
+        +verificarOrigem(InspecaoPdf)
+    }
+
+    class PyMuPdfReader {
+        <<adapter>>
+    }
+
+    class InspecaoPdf {
+        +Path caminhoOrigem
+        +Integer tamanhoBytes
+        +Integer modificadoEmNs
+        +String adaptador
+    }
+
+    class InventarioPaginaPdf {
+        +FragmentoTextoPdf[] textos
+        +GraficoVetorialPdf[] vetores
+        +ImagemIncorporadaPdf[] imagens
+        +AnotacaoPdf[] anotacoes
+        +FormXObjectPdf[] formsXObjects
+    }
+
+    class DiagnosticoPdf {
+        +String codigo
+        +String mensagem
+        +Integer paginaNumero
+        +Integer objetoXref
+    }
+
+    class GrupoConteudoOpcionalPdf
+
+    class PaginaPdfRenderizada {
+        +Integer larguraPixels
+        +Integer alturaPixels
+        +Integer stride
+        +Bytes dadosRgb
+        +Integer dpi
+    }
+
+    class ReferenciaFontePdf {
+        +UUID documentoId
+        +UUID projetoId
+        +Path caminhoCanonico
+        +String sha256
+        +Integer tamanhoBytes
+        +Integer modificadoEmNs
+    }
+
+    class TransformadorCoordenadasPagina {
+        +pdfParaNormalizado()
+        +normalizadoParaPdf()
+        +normalizadoParaPixel()
+        +normalizadoParaCena()
+    }
+
+    class ImportarPdfNoProjeto {
+        +executar(UUID projetoId, Path origem)
+    }
+
+    class PdfViewerWidget
+    class PdfGraphicsView
+}
+
+namespace ModuloGrafo {
+    class GrafoProjeto {
+        <<derivado>>
+        +UUID projetoId
+        +Instant geradoEm
+    }
+
+    class VerticeFisico {
+        +UUID elementoOrigemId
+    }
+
+    class VerticeEletrico {
+        +UUID pontoOuTerminalOrigemId
+    }
+
+    class ArestaGrafo {
+        +UUID elementoOrigemId
+        +UUID origemId
+        +UUID destinoId
+        +String tipo
+    }
+}
+
+DocumentoProjeto "1" *-- "1..*" PaginaDocumento : paginas
+PaginaDocumento "1" *-- "2" CaixaPagina : mediaBox_e_cropBox
+GeometriaDocumento "1" *-- "1..*" PontoNormalizado : pontos
+GeometriaDocumento --> PaginaDocumento : localizadaEm
+GeometriaDocumento --> TipoGeometria : possui
+
+ElementoProjeto <|-- Poste
+ElementoProjeto <|-- EstruturaMt
+ElementoProjeto <|-- EstruturaBt
+ElementoProjeto <|-- Cabo
+ElementoProjeto <|-- Equipamento
+
+Projeto "1" *-- "0..*" DocumentoProjeto : documentos
+Projeto "1" *-- "0..*" ElementoProjeto : elementosConfirmados
+Projeto "1" *-- "0..*" PontoRede : pontos
+Projeto "1" *-- "0..*" TerminalEquipamento : terminais
+Projeto "1" *-- "0..1" MetadadosProjeto : metadadosTecnicos
+Projeto "1" *-- "0..1" ContatoSolicitante : dadosSensiveis
+Projeto "1" *-- "0..*" VinculoObra : movimentacoesESubstituicoes
+ElementoProjeto "1" *-- "0..*" FotoElemento : fotos
+ElementoProjeto --> GeometriaDocumento : geometria
+ElementoProjeto --> SituacaoProjeto : situacaoDeObra
+ElementoProjeto --> CoordenadaCampo : coordenadaOpcional
+
+Poste "1" --> "0..*" EstruturaMt : suporta
+Poste "1" --> "0..*" EstruturaBt : suporta
+Poste "1" --> "0..*" Equipamento : recebe
+Poste "0..1" --> "0..*" PontoRede : podeOferecer
+EstruturaMt "0..1" --> "0..*" PontoRede : fixaMT
+EstruturaBt "0..1" --> "0..*" PontoRede : fixaBT
+Cabo "0..*" --> "2" PontoRede : conecta
+Cabo "0..*" --> "0..*" PontoRede : percursoIntermediario
+Cabo "0..*" --> "0..*" Poste : apoiosIntermediarios
+PontoRede "0..*" --> "0..1" CoordenadaCampo : coordenadaOpcional
+PontoRede --> TipoPontoRede : papelEletrico
+Equipamento "1" *-- "1..*" TerminalEquipamento : possui
+Equipamento "1" *-- "0..*" ConexaoInternaEquipamento : continuidadeInterna
+TerminalEquipamento "0..*" --> "0..1" PontoRede : conectadoA
+VinculoObra "0..*" --> "1" ElementoProjeto : origemRetirada
+VinculoObra "0..*" --> "1" ElementoProjeto : destinoInstalacao
+
+Projeto "1" --> "0..*" ExecucaoAnalise : analisadoPor
+ExecucaoAnalise "1" *-- "0..*" EvidenciaDocumento : produz
+ExecucaoAnalise "1" *-- "0..*" DiagnosticoAnalise : registra
+ExecucaoAnalise "1" *-- "0..*" PropostaElemento : propoe
+ExecucaoAnalise "1" *-- "0..*" PropostaRelacao : propoe
+EvidenciaDocumento --> GeometriaDocumento : geometria
+EvidenciaDocumento "1" *-- "1" OrigemObjetoPdf : provenienciaPdf
+EvidenciaDocumento "1" *-- "0..1" ArtefatoExtraido : binarioDerivado
+PropostaElemento --> GeometriaDocumento : geometria
+PropostaElemento "0..*" --> "1..*" EvidenciaDocumento : fundamentadaEm
+PropostaRelacao "0..*" --> "1..*" EvidenciaDocumento : fundamentadaEm
+DecisaoRevisao --> PropostaElemento : revisa
+DecisaoRevisao --> PropostaRelacao : revisa
+DecisaoRevisao --> ElementoProjeto : podeConfirmar
+
+CatalogoTecnico "1" *-- "1" FonteCatalogo : proveniencia
+CatalogoTecnico "1" *-- "0..*" ItemCatalogo : itens
+CatalogoTecnico "1" *-- "1..*" GrupoOpcao : grupos
+CatalogoTecnico "1" *-- "0..*" CompatibilidadeEstruturaCabo : compatibilidades
+CatalogoTecnico "1" *-- "15" RegraSimbologia : apresentacaoCanonica
+CatalogoTecnico "1" *-- "0..*" AssinaturaSimbologia : reconhecimentoVisual
+CatalogoTecnico "1" *-- "0..*" AvisoImportacao : avisos
+GrupoOpcao "1" *-- "1..*" OpcaoCatalogo : opcoes
+
+ItemCatalogo <|-- TipoPoste
+ItemCatalogo <|-- TipoEstruturaMt
+ItemCatalogo <|-- TipoEstruturaBt
+ItemCatalogo <|-- TipoCabo
+ItemCatalogo <|-- TipoEquipamento
+TipoEstruturaMt "1" -- "0..*" CompatibilidadeEstruturaCabo : estrutura
+TipoEstruturaBt "1" -- "0..*" CompatibilidadeEstruturaCabo : estrutura
+TipoCabo "1" -- "0..*" CompatibilidadeEstruturaCabo : cabo
+TipoPoste ..> OpcaoCatalogo : formato
+TipoEstruturaMt ..> OpcaoCatalogo : fases_e_tecnologia
+TipoEstruturaBt ..> OpcaoCatalogo : tecnologia
+TipoCabo ..> OpcaoCatalogo : fases_tecnologia_tensao
+TipoEquipamento ..> OpcaoCatalogo : fases_e_classe
+
+SqlAlchemyUnitOfWork *-- SqlCatalogRepository
+SqlAlchemyUnitOfWork *-- SqlProjectRepository
+SqlAlchemyUnitOfWork *-- SqlDocumentRepository
+SqlAlchemyUnitOfWork *-- SqlElementRepository
+SqlAlchemyUnitOfWork *-- SqlAnalysisRunRepository
+SqlAlchemyUnitOfWork *-- SqlEvidenceRepository
+SqlAlchemyUnitOfWork *-- SqlProposalRepository
+SqlAlchemyUnitOfWork *-- SqlReviewDecisionRepository
+SqlAlchemyUnitOfWork *-- SqlPdfSourceRepository
+SqlCatalogRepository ..> CatalogoTecnico : reidrata
+SqlProjectRepository ..> Projeto : reidrata
+SqlDocumentRepository ..> DocumentoProjeto : projeta
+SqlElementRepository ..> ElementoProjeto : projeta
+SqlAnalysisRunRepository ..> ExecucaoAnalise : persiste
+SqlEvidenceRepository ..> EvidenciaDocumento : persiste
+SqlProposalRepository ..> PropostaElemento : persiste
+SqlProposalRepository ..> PropostaRelacao : persiste
+SqlReviewDecisionRepository ..> DecisaoRevisao : persiste
+SqlPdfSourceRepository ..> ReferenciaFontePdf : persiste
+MigracoesAlembic ..> SqlAlchemyUnitOfWork : preparaSchema
+BackupAtomico ..> SqlAlchemyUnitOfWork : protegeBanco
+
+LeitorPdfPort <|.. PyMuPdfReader
+PyMuPdfReader ..> InspecaoPdf : produz
+PyMuPdfReader ..> PaginaPdfRenderizada : rasterizaRgb
+InspecaoPdf *-- DocumentoProjeto : metadadosCanonicos
+InspecaoPdf *-- InventarioPaginaPdf : paginas
+InspecaoPdf *-- GrupoConteudoOpcionalPdf : ocgs
+InventarioPaginaPdf *-- PaginaDocumento : pagina
+InventarioPaginaPdf *-- DiagnosticoPdf : diagnosticosLocalizados
+TransformadorCoordenadasPagina --> PaginaDocumento : usaMatrizes
+ImportarPdfNoProjeto --> LeitorPdfPort : validaAntesDaTransacao
+ImportarPdfNoProjeto --> SqlAlchemyUnitOfWork : persisteAtomicamente
+ImportarPdfNoProjeto --> ReferenciaFontePdf : registraOrigem
+PdfViewerWidget --> LeitorPdfPort : inspecionaERenderiza
+PdfViewerWidget *-- PdfGraphicsView : exibe
+PdfGraphicsView --> TransformadorCoordenadasPagina : posicionaSobreposicoes
+
+AnalisadorDocumentoPort <|.. PyMuPdfDocumentAnalyzer
+CacheAnaliseDocumentoPort <|.. JsonAnalysisCache
+PyMuPdfDocumentAnalyzer --> CacheAnaliseDocumentoPort : reutilizaDerivados
+PyMuPdfDocumentAnalyzer --> MotorOcrPort : usaCondicionalmente
+PyMuPdfDocumentAnalyzer ..> EvidenciaDocumento : materializa
+ExecutarAnaliseDocumento --> AnalisadorDocumentoPort : executa
+ExecutarAnaliseDocumento --> SqlAlchemyUnitOfWork : persisteAtomicamente
+
+Projeto "0..*" --> "1" CatalogoTecnico : usaVersao
+ElementoProjeto "0..*" --> "1" ItemCatalogo : tipadoPor
+PontoRede ..> OpcaoCatalogo : tensao_e_fases
+TerminalEquipamento ..> OpcaoCatalogo : tensao_e_fases
+
+Projeto ..> GrafoProjeto : projeta
+GrafoProjeto "1" *-- "0..*" VerticeFisico : visaoFisica
+GrafoProjeto "1" *-- "0..*" VerticeEletrico : visaoEletrica
+GrafoProjeto "1" *-- "0..*" ArestaGrafo : arestas
+Poste ..> VerticeFisico : projeta
+Equipamento ..> VerticeFisico : projeta
+PontoRede ..> VerticeEletrico : projeta
+TerminalEquipamento ..> VerticeEletrico : projeta
+Cabo ..> ArestaGrafo : projeta
+ConexaoInternaEquipamento ..> ArestaGrafo : projeta
