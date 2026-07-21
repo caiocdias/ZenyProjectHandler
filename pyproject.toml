@@ -1,0 +1,72 @@
+[build-system]
+requires = ["setuptools>=75,<81"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zeny-project-handler"
+version = "0.1.0"
+description = "Aplicativo desktop para interpretação de projetos de expansão da rede CEMIG"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "alembic>=1.18,<2",
+    "PyMuPDF>=1.28,<1.29",
+    "PySide6>=6.8,<7",
+    "SQLAlchemy>=2.0.51,<2.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "mypy>=1.16,<2",
+    "pytest>=8.4,<9",
+    "pytest-cov>=6.2,<8",
+    "pytest-qt>=4.5,<5",
+    "radon>=6,<7",
+    "ruff>=0.12,<1",
+]
+
+[project.scripts]
+zeny-project-handler = "zeny_project_handler.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"zeny_project_handler.adapters.catalog.data" = ["*.json"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-config --strict-markers"
+testpaths = ["tests"]
+markers = [
+    "integration: testes que exercitam adaptadores ou frameworks",
+    "slow: testes intencionalmente demorados",
+    "e2e: testes completos de interface e persistência",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["zeny_project_handler"]
+omit = ["*/adapters/persistence/migrations/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+precision = 2
+fail_under = 85.01
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "C4", "SIM", "RUF"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["zeny_project_handler"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src", "tests"]
+exclude = ["build", "dist"]
