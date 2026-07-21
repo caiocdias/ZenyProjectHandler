@@ -170,11 +170,10 @@ class SqlProposalRepository:
             )
         ).all()
         if len(evidence_rows) != len(proposal.evidencia_ids) or any(
-            row.execution_id != str(proposal.execucao_id) or row.project_id != project_id
-            for row in evidence_rows
+            row.project_id != project_id for row in evidence_rows
         ):
             raise PersistenceConflictError(
-                "Proposta deve referenciar evidências existentes da mesma execução"
+                "Proposta deve referenciar evidências existentes do mesmo projeto"
             )
         existing_execution = self._session.scalar(
             select(proposals.c.execution_id).where(proposals.c.id == str(proposal.id))

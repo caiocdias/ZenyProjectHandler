@@ -31,6 +31,17 @@ def imported_root_names(source_file: Path) -> set[str]:
     return imported
 
 
+def imported_module_names(source_file: Path) -> set[str]:
+    tree = ast.parse(source_file.read_text(encoding="utf-8"), filename=str(source_file))
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            imported.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            imported.add(node.module)
+    return imported
+
+
 def test_domain_does_not_import_frameworks_or_adapters() -> None:
     violations: dict[str, list[str]] = {}
 
@@ -40,3 +51,16 @@ def test_domain_does_not_import_frameworks_or_adapters() -> None:
             violations[str(source_file.relative_to(DOMAIN_DIRECTORY))] = forbidden
 
     assert not violations, f"O domínio possui dependências proibidas: {violations}"
+
+
+def test_domain_does_not_know_concrete_adapters() -> None:
+    violations = {
+        str(source_file.relative_to(DOMAIN_DIRECTORY)): sorted(
+            module
+            for module in imported_module_names(source_file)
+            if module.startswith("zeny_project_handler.adapters")
+        )
+        for source_file in DOMAIN_DIRECTORY.rglob("*.py")
+    }
+
+    assert not {key: value for key, value in violations.items() if value}

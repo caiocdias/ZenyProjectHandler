@@ -23,3 +23,11 @@ class OrigemPdfNaoEncontradaError(ApplicationError):
 
 class AnaliseDocumentoError(ApplicationError):
     """A análise documental terminou com falha fatal e auditável."""
+
+
+class InterpretacaoProjetoError(ApplicationError):
+    """A interpretação semântica terminou com falha fatal e auditável."""
+
+
+class InterpretacaoCanceladaError(ApplicationError):
+    """A interpretação foi cancelada e pode ser retomada com a mesma configuração."""

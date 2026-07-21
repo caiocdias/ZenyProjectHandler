@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zeny.local/schemas/regras-interpretacao.schema.json",
+  "title": "Registro de regras de interpretação",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "registry", "recognition_rules", "relation_rules"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "registry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": {"type": "string", "format": "uuid"},
+        "version": {"type": "string", "minLength": 1}
+      }
+    },
+    "recognition_rules": {
+      "type": "array",
+      "minItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "category",
+          "evidence_types",
+          "strategy",
+          "base_confidence",
+          "maximum_context_distance",
+          "enabled"
+        ],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "category": {
+            "enum": ["POSTE", "ESTRUTURA_MT", "ESTRUTURA_BT", "CABO", "EQUIPAMENTO"]
+          },
+          "evidence_types": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"enum": ["TEXTO", "VETOR", "IMAGEM", "OCR"]}
+          },
+          "strategy": {"const": "CODIGO_CATALOGO"},
+          "base_confidence": {"type": ["string", "number"]},
+          "maximum_context_distance": {"type": ["string", "number"]},
+          "enabled": {"type": "boolean"}
+        }
+      }
+    },
+    "relation_rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "origin_category",
+          "destination_category",
+          "relation_type",
+          "strategy",
+          "maximum_distance",
+          "confidence",
+          "enabled"
+        ],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "origin_category": {
+            "enum": ["POSTE", "ESTRUTURA_MT", "ESTRUTURA_BT", "CABO", "EQUIPAMENTO"]
+          },
+          "destination_category": {
+            "enum": ["POSTE", "ESTRUTURA_MT", "ESTRUTURA_BT", "CABO", "EQUIPAMENTO"]
+          },
+          "relation_type": {"type": "string", "minLength": 1},
+          "strategy": {
+            "enum": [
+              "CENTROS_PROXIMOS",
+              "EXTREMIDADES_PROXIMAS",
+              "COMPATIBILIDADE_E_PROXIMIDADE"
+            ]
+          },
+          "maximum_distance": {"type": ["string", "number"]},
+          "confidence": {"type": ["string", "number"]},
+          "enabled": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}

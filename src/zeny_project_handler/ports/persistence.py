@@ -6,7 +6,11 @@ from types import TracebackType
 from typing import Protocol, Self
 from uuid import UUID
 
-from zeny_project_handler.domain.analysis import EvidenciaDocumento, ExecucaoAnalise
+from zeny_project_handler.domain.analysis import (
+    EvidenciaDocumento,
+    ExecucaoAnalise,
+    ReferenciaProposta,
+)
 from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler.ports.pdf import FontePdfRepositoryPort
@@ -42,6 +46,14 @@ class EvidenceRepositoryPort(Protocol):
     def salvar(self, evidence: EvidenciaDocumento) -> None: ...
 
 
+class ProposalRepositoryPort(Protocol):
+    def obter(self, proposal_id: UUID) -> ReferenciaProposta | None: ...
+
+    def listar_da_execucao(self, execution_id: UUID) -> tuple[ReferenciaProposta, ...]: ...
+
+    def salvar(self, proposal: ReferenciaProposta) -> None: ...
+
+
 class UnitOfWorkPort(Protocol):
     @property
     def catalogos(self) -> CatalogRepositoryPort: ...
@@ -57,6 +69,9 @@ class UnitOfWorkPort(Protocol):
 
     @property
     def evidencias(self) -> EvidenceRepositoryPort: ...
+
+    @property
+    def propostas(self) -> ProposalRepositoryPort: ...
 
     def __enter__(self) -> Self: ...
 
