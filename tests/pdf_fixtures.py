@@ -57,6 +57,49 @@ def create_golden_pdf(path: Path) -> Path:
     return path
 
 
+def create_catalog_pdf(path: Path, code: str) -> Path:
+    document = pymupdf.open()
+    try:
+        page = document.new_page(width=240, height=160)
+        page.insert_text((20, 40), code)
+        document.save(path)
+    finally:
+        document.close()
+    return path
+
+
+def create_mixed_raster_text_pdf(path: Path) -> Path:
+    """Página com texto nativo suficiente e uma imagem que ainda exige OCR."""
+    document = pymupdf.open()
+    try:
+        page = document.new_page(width=120, height=120)
+        page.insert_image(page.rect, stream=_red_pixel_png())
+        page.insert_text((10, 20), "TEXTO NATIVO SUFICIENTE NA MARGEM")
+        document.save(path)
+    finally:
+        document.close()
+    return path
+
+
+def create_dense_vector_text_pdf(path: Path) -> Path:
+    """Página CAD sintética em que glifos podem ter sido convertidos em muitos caminhos."""
+    document = pymupdf.open()
+    try:
+        page = document.new_page(width=120, height=120)
+        page.insert_text((10, 20), "TEXTO NATIVO SUFICIENTE NO CARIMBO")
+        shape = page.new_shape()
+        for index in range(1000):
+            coordinate = float(index % 100) + 10
+            row = float(index // 100) + 40
+            shape.draw_line((coordinate, row), (coordinate + 0.2, row + 0.2))
+            shape.finish()
+        shape.commit()
+        document.save(path)
+    finally:
+        document.close()
+    return path
+
+
 def create_analysis_pdf(path: Path) -> Path:
     """PDF rico, incluindo imagem em appearance stream e Form XObject aninhado."""
     document = pymupdf.open()

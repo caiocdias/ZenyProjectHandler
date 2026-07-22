@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from decimal import Decimal
 from hashlib import sha256
 from pathlib import Path
 from typing import Any, TypeVar
@@ -42,7 +43,7 @@ class PyMuPdfDocumentAnalyzer:
     """Converte recursos PDF nativos em evidências independentes da biblioteca."""
 
     nome = "pymupdf-nativo"
-    versao = "1.0.0"
+    versao = "1.1.0"
 
     def __init__(
         self,
@@ -168,6 +169,8 @@ def _extract_page(
     candidates: list[CandidatoEvidenciaDocumento] = []
     diagnostics: list[DiagnosticoAnalise] = []
     text_candidates: tuple[CandidatoEvidenciaDocumento, ...] = ()
+    image_candidates: tuple[CandidatoEvidenciaDocumento, ...] = ()
+    vector_candidates: tuple[CandidatoEvidenciaDocumento, ...] = ()
     extractors: tuple[
         tuple[bool, str, Callable[[], tuple[CandidatoEvidenciaDocumento, ...]]], ...
     ] = (
@@ -196,6 +199,10 @@ def _extract_page(
         extracted, found = _safe_extract(name, page_number, extractor)
         if name == "texto":
             text_candidates = extracted
+        elif name == "vetores":
+            vector_candidates = extracted
+        elif name == "imagens":
+            image_candidates = extracted
         candidates.extend(extracted)
         diagnostics.extend(found)
     native_characters = sum(
@@ -203,12 +210,25 @@ def _extract_page(
         for item in text_candidates
         if item.tipo is TipoEvidencia.TEXTO
     )
+    image_coverage = max((_geometry_area(item) for item in image_candidates), default=Decimal(0))
     ocr_candidates, ocr_diagnostics = _conditional_ocr(
-        page, page_number, request, ocr_engine, native_characters
+        page,
+        page_number,
+        request,
+        ocr_engine,
+        native_characters,
+        image_coverage,
+        len(vector_candidates),
     )
     candidates.extend(ocr_candidates)
     diagnostics.extend(ocr_diagnostics)
     return tuple(candidates), tuple(diagnostics)
+
+
+def _geometry_area(candidate: CandidatoEvidenciaDocumento) -> Decimal:
+    x_values = [point.x for point in candidate.geometria.pontos]
+    y_values = [point.y for point in candidate.geometria.pontos]
+    return (max(x_values) - min(x_values)) * (max(y_values) - min(y_values))
 
 
 def _safe_extract(

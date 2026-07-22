@@ -35,6 +35,11 @@ def _pdfs_by_hash() -> dict[str, Path]:
     return result
 
 
+def _unregistered_pdf_hashes() -> tuple[str, ...]:
+    registered = {str(sample["sha256"]) for sample in _samples()}
+    return tuple(sorted(set(_pdfs_by_hash()) - registered))
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize("sample", _samples(), ids=lambda item: str(item["id"]))
 def test_registered_real_pdf_smoke_by_anonymous_hash(sample: dict[str, Any]) -> None:
@@ -115,4 +120,28 @@ def test_registered_real_pdf_native_evidence_by_anonymous_hash(sample: dict[str,
             for item in result.evidencias
         )
     after = source.stat()
+    assert (before.st_size, before.st_mtime_ns) == (after.st_size, after.st_mtime_ns)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "pdf_hash",
+    _unregistered_pdf_hashes(),
+    ids=lambda value: f"local-extra-{str(value)[:12]}",
+)
+def test_unregistered_local_pdf_is_a_read_only_smoke_sample(pdf_hash: str) -> None:
+    source = _pdfs_by_hash()[pdf_hash]
+    before = source.stat()
+
+    inspection = PyMuPdfReader().inspecionar(source)
+    thumbnail = PyMuPdfReader().renderizar_miniatura(
+        source,
+        1,
+        sha256_esperado=pdf_hash,
+    )
+
+    after = source.stat()
+    assert inspection.documento.sha256 == pdf_hash
+    assert inspection.documento.paginas
+    assert thumbnail.dados_rgb
     assert (before.st_size, before.st_mtime_ns) == (after.st_size, after.st_mtime_ns)

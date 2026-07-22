@@ -14,7 +14,19 @@ from zeny_project_handler.domain.values import GeometriaDocumento
 
 
 def normalized_text(value: str) -> str:
-    normalized = unicodedata.normalize("NFKC", value).upper()
+    decomposed = unicodedata.normalize("NFKD", value)
+    without_accents = "".join(
+        character for character in decomposed if not unicodedata.combining(character)
+    )
+    translation: dict[str | int, str | int | None] = {
+        "\u2013": "-",
+        "\u2014": "-",
+        "\u2212": "-",
+        "\u00d7": "X",
+        "_": " ",
+    }
+    normalized = without_accents.upper().translate(str.maketrans(translation))
+    normalized = re.sub(r"\s*([-/,()])\s*", r"\1", normalized)
     return " ".join(normalized.split())
 
 

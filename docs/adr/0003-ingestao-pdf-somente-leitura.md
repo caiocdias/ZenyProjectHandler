@@ -41,8 +41,10 @@ geometria apenas à largura e altura raster não é suficiente para garantir pos
   as amostras RGB branca/vermelha admitem tolerância máxima de 8 níveis por canal para acomodar
   antialiasing controlado.
 - O round-trip geométrico é exercitado em 72, 144 e 300 DPI e nas rotações 0, 90, 180 e 270 graus.
-- As nove amostras privadas são endereçadas exclusivamente pelos hashes do manifesto; nomes e
-  conteúdo sensível não entram nos testes versionados.
+- As nove amostras formais privadas são endereçadas exclusivamente pelos hashes do manifesto.
+  PDFs exploratórios adicionais em `examples/` são descobertos e identificados apenas pelo hash em
+  smoke tests locais somente leitura, sem exigir inclusão no manifesto. Nomes e conteúdo sensível
+  não entram nos testes versionados.
 
 ## Consequências
 

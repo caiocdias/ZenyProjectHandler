@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
@@ -41,7 +42,10 @@ def test_analysis_configuration_is_stable_and_validated() -> None:
     configuration = ConfiguracaoAnaliseDocumento()
 
     assert configuration.assinatura() == configuration.assinatura()
-    assert dict(configuration.parametros())["minimo_caracteres_texto_nativo"] == 1
+    parameters = dict(configuration.parametros())
+    assert parameters["minimo_caracteres_texto_nativo"] == 20
+    assert parameters["area_imagem_minima_para_ocr"] == Decimal("0.10")
+    assert parameters["minimo_vetores_para_ocr"] == 1000
     assert (
         len(
             chave_cache_analise(
@@ -55,6 +59,10 @@ def test_analysis_configuration_is_stable_and_validated() -> None:
 
     with pytest.raises(ValueError, match="caracteres"):
         ConfiguracaoAnaliseDocumento(minimo_caracteres_texto_nativo=-1)
+    with pytest.raises(ValueError, match="Área"):
+        ConfiguracaoAnaliseDocumento(area_imagem_minima_para_ocr=Decimal("1.1"))
+    with pytest.raises(ValueError, match="vetores"):
+        ConfiguracaoAnaliseDocumento(minimo_vetores_para_ocr=0)
     with pytest.raises(ValueError, match="DPI"):
         ConfiguracaoAnaliseDocumento(dpi_ocr=40)
     with pytest.raises(ValueError, match="Profundidade"):

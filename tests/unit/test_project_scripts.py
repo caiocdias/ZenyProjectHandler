@@ -1,4 +1,3 @@
-import hashlib
 import json
 import tomllib
 from pathlib import Path
@@ -8,11 +7,6 @@ PROJECT_ROOT = Path(__file__).parents[2]
 
 def script_text(file_name: str) -> str:
     return (PROJECT_ROOT / file_name).read_text(encoding="utf-8")
-
-
-def sha256_file(path: Path) -> str:
-    with path.open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
 def test_setup_creates_venv_and_installs_locked_dependencies() -> None:
@@ -59,8 +53,3 @@ def test_real_pdf_samples_are_ignored_and_have_an_anonymous_manifest() -> None:
     assert len({sample["id"] for sample in samples}) == len(samples)
     assert all(len(sample["sha256"]) == 64 for sample in samples)
     assert "file_name" not in manifest_text
-
-    local_pdfs = tuple((PROJECT_ROOT / "examples").glob("*.pdf"))
-    if local_pdfs:
-        local_hashes = {sha256_file(pdf) for pdf in local_pdfs}
-        assert local_hashes == {sample["sha256"] for sample in samples}

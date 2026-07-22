@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from decimal import Decimal
 from uuid import uuid4
 
 from tests.interpretation_factories import image_evidence, text_evidence, vector_evidence
@@ -13,7 +14,9 @@ from zeny_project_handler.adapters.interpretation.rule_based import AnalisadorEs
 from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.domain.enums import (
     CategoriaElemento,
+    EstadoRevisao,
     SituacaoProjeto,
+    TipoEvidencia,
     TipoGeometria,
 )
 from zeny_project_handler.ports.interpretation import SolicitacaoInterpretacao
@@ -196,3 +199,70 @@ def test_dense_overlapping_page_remains_bounded_and_analyzer_failure_is_local(
     assert all(item.categoria is CategoriaElemento.ESTRUTURA_MT for item in result.elementos)
     assert len(result.elementos) < 10
     assert result.diagnosticos[0].codigo == "interpretacao.analisador_falhou"
+
+
+def test_pole_nomenclature_from_native_text_or_ocr_is_recognized(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    request = _request(catalogo_inicial)
+    source = request.evidencias[0]
+    dimensions = replace(
+        source,
+        id=uuid4(),
+        tipo=TipoEvidencia.OCR,
+        conteudo_bruto="11 / 300",
+        atributos_extraidos=(("confianca", Decimal("0.91")),),
+    )
+    request = replace(request, evidencias=(dimensions,))
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
+
+    assert len(result.elementos) == 1
+    pole = result.elementos[0]
+    assert pole.categoria is CategoriaElemento.POSTE
+    assert pole.codigo_observado == "11-300"
+    assert pole.tipo_catalogo_sugerido_id is None
+    assert pole.estado_revisao is EstadoRevisao.CONFLITANTE
+    assert dict(pole.atributos_sugeridos)["altura_m"] == "11"
+    assert dict(pole.atributos_sugeridos)["resistencia_dan"] == 300
+
+
+def test_pole_format_resolves_dimension_to_exact_catalog_item(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    request = _request(catalogo_inicial)
+    source = replace(
+        request.evidencias[0],
+        id=uuid4(),
+        conteudo_bruto="POSTE CIRCULAR 11-300",
+    )
+    request = replace(request, evidencias=(source,))
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
+
+    assert len(result.elementos) == 1
+    pole = result.elementos[0]
+    item = catalogo_inicial.item_por_id(pole.tipo_catalogo_sugerido_id)  # type: ignore[arg-type]
+    assert item is not None
+    assert item.codigo == "P-11M-300DAN-CIRCULAR"
+    assert pole.estado_revisao is EstadoRevisao.PROPOSTA
+
+
+def test_equipment_class_phrase_is_proposed_for_human_disambiguation(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    request = _request(catalogo_inicial)
+    source = replace(
+        request.evidencias[0],
+        id=uuid4(),
+        conteudo_bruto="CHAVE FUSÍVEL REPETIDORA",
+    )
+    request = replace(request, evidencias=(source,))
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
+
+    assert len(result.elementos) == 1
+    equipment = result.elementos[0]
+    assert equipment.categoria is CategoriaElemento.EQUIPAMENTO
+    assert equipment.tipo_catalogo_sugerido_id is None
+    assert dict(equipment.atributos_sugeridos)["classe_equipamento"] == ("CHAVE FUSIVEL REPETIDORA")

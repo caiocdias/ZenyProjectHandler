@@ -27,17 +27,24 @@ def _conditional_ocr(
     request: SolicitacaoAnaliseDocumento,
     ocr_engine: MotorOcrPort | None,
     native_characters: int,
+    image_coverage: Decimal,
+    vector_count: int,
 ) -> tuple[tuple[CandidatoEvidenciaDocumento, ...], tuple[DiagnosticoAnalise, ...]]:
     config = request.configuracao
     if not config.habilitar_ocr_condicional:
         return (), ()
-    if native_characters >= config.minimo_caracteres_texto_nativo:
+    has_enough_native_text = native_characters >= config.minimo_caracteres_texto_nativo
+    has_relevant_raster = image_coverage >= config.area_imagem_minima_para_ocr
+    has_dense_vector_content = vector_count >= config.minimo_vetores_para_ocr
+    if has_enough_native_text and not has_relevant_raster and not has_dense_vector_content:
         return (), ()
     if ocr_engine is None:
         return (), (
             DiagnosticoAnalise(
                 codigo="analise.ocr_indisponivel",
-                mensagem="A página tem pouco texto nativo, mas nenhum motor OCR está configurado.",
+                mensagem=(
+                    "A página pode conter texto rasterizado, mas nenhum motor OCR está configurado."
+                ),
                 extrator="ocr",
                 pagina_numero=page_number,
             ),

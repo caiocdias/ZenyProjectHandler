@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from hashlib import sha256
 from pathlib import Path
 from typing import Protocol
@@ -30,13 +31,21 @@ class ConfiguracaoAnaliseDocumento:
     extrair_anotacoes: bool = True
     extrair_forms_xobjects: bool = True
     habilitar_ocr_condicional: bool = True
-    minimo_caracteres_texto_nativo: int = 1
+    minimo_caracteres_texto_nativo: int = 20
+    area_imagem_minima_para_ocr: Decimal = Decimal("0.10")
+    minimo_vetores_para_ocr: int = 1000
     dpi_ocr: int = 200
     profundidade_maxima_xobject: int = 12
 
     def __post_init__(self) -> None:
         if self.minimo_caracteres_texto_nativo < 0:
             raise ValueError("Mínimo de caracteres nativos não pode ser negativo")
+        image_area = Decimal(self.area_imagem_minima_para_ocr)
+        if not Decimal(0) <= image_area <= Decimal(1):
+            raise ValueError("Área mínima de imagem para OCR deve estar entre 0 e 1")
+        object.__setattr__(self, "area_imagem_minima_para_ocr", image_area)
+        if self.minimo_vetores_para_ocr < 1:
+            raise ValueError("Mínimo de vetores para OCR deve ser positivo")
         if not 72 <= self.dpi_ocr <= 600:
             raise ValueError("DPI de OCR deve estar entre 72 e 600")
         if not 1 <= self.profundidade_maxima_xobject <= 64:
@@ -47,6 +56,7 @@ class ConfiguracaoAnaliseDocumento:
             sorted(
                 (
                     ("dpi_ocr", self.dpi_ocr),
+                    ("area_imagem_minima_para_ocr", self.area_imagem_minima_para_ocr),
                     ("extrair_anotacoes", self.extrair_anotacoes),
                     ("extrair_forms_xobjects", self.extrair_forms_xobjects),
                     ("extrair_imagens", self.extrair_imagens),
@@ -54,13 +64,21 @@ class ConfiguracaoAnaliseDocumento:
                     ("extrair_vetores", self.extrair_vetores),
                     ("habilitar_ocr_condicional", self.habilitar_ocr_condicional),
                     ("minimo_caracteres_texto_nativo", self.minimo_caracteres_texto_nativo),
+                    ("minimo_vetores_para_ocr", self.minimo_vetores_para_ocr),
                     ("profundidade_maxima_xobject", self.profundidade_maxima_xobject),
                 )
             )
         )
 
     def assinatura(self) -> str:
-        payload = json.dumps(dict(self.parametros()), sort_keys=True, separators=(",", ":"))
+        payload = json.dumps(
+            {
+                key: str(value) if isinstance(value, Decimal) else value
+                for key, value in self.parametros()
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
         return sha256(payload.encode("utf-8")).hexdigest()
 
 

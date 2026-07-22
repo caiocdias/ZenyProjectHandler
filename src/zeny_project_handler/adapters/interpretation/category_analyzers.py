@@ -2,21 +2,45 @@
 
 from __future__ import annotations
 
+import re
 from decimal import Decimal
-from uuid import uuid5
+from uuid import UUID, uuid5
 
 from zeny_project_handler.domain.analysis import EvidenciaDocumento, PropostaElemento
-from zeny_project_handler.domain.catalog import ItemCatalogoType
+from zeny_project_handler.domain.catalog import ItemCatalogoType, TipoEquipamento, TipoPoste
 from zeny_project_handler.domain.enums import (
     CategoriaElemento,
     EstadoRevisao,
     SituacaoProjeto,
+    TipoEvidencia,
     TipoGeometria,
 )
 from zeny_project_handler.domain.interpretation import RegraReconhecimento
 from zeny_project_handler.ports.interpretation import SolicitacaoInterpretacao
 
-from .rule_support import contains_code, nearest_context_evidence, situation_from_evidence
+from .rule_support import (
+    contains_code,
+    geometry_distance,
+    nearest_context_evidence,
+    normalized_text,
+    situation_from_evidence,
+)
+
+_POLE_DIMENSION_PATTERN = re.compile(
+    r"(?<!\d)(9|10|11|12|13|15|18)\s*M?\s*[-/X]\s*"
+    r"(150|300|600|1000)\s*(?:DA?N)?(?!\d)"
+)
+_POLE_FORMAT_PHRASES = {
+    "CIRCULAR": ("POSTE CIRCULAR", "CIRCULAR"),
+    "DUPLO T": ("POSTE DUPLO T", "DUPLO T"),
+    "MADEIRA": ("POSTE MADEIRA", "MADEIRA"),
+}
+_EQUIPMENT_PHRASES = (
+    ("CHAVE FUSIVEL REPETIDORA", "CHAVE FUSIVEL REPETIDORA"),
+    ("CHAVE FACA", "CHAVE FACA"),
+    ("CHAVE FUSIVEL", "CHAVE FUSIVEL"),
+    ("TRANSFORMADOR", "TRANSFORMADOR"),
+)
 
 
 class AnalisadorCatalogoPorCodigo:
@@ -115,8 +139,74 @@ class AnalisadorCatalogoPorCodigo:
 
 
 class AnalisadorPoste(AnalisadorCatalogoPorCodigo):
-    nome = "poste-codigo-catalogo"
+    nome = "poste-codigo-e-nomenclatura"
+    versao = "2.0"
     categoria = CategoriaElemento.POSTE
+
+    def analisar(
+        self,
+        solicitacao: SolicitacaoInterpretacao,
+        regra: RegraReconhecimento,
+    ) -> tuple[PropostaElemento, ...]:
+        exact = super().analisar(solicitacao, regra)
+        exact_evidence = {item.evidencia_ids[0] for item in exact}
+        proposals = list(exact)
+        poles = tuple(
+            item
+            for item in solicitacao.catalogo.itens_ativos(self.categoria)
+            if isinstance(item, TipoPoste)
+        )
+        option_codes = _option_codes(solicitacao, "formato_poste")
+        for evidence in _semantic_evidence(solicitacao, regra):
+            if evidence.id in exact_evidence:
+                continue
+            text = normalized_text(evidence.conteudo_bruto or "")
+            dimensions = tuple(dict.fromkeys(_POLE_DIMENSION_PATTERN.findall(text)))
+            for height_text, resistance_text in dimensions:
+                matching = tuple(
+                    item
+                    for item in poles
+                    if item.altura_m == Decimal(height_text)
+                    and item.resistencia_dan == int(resistance_text)
+                )
+                matching = _filter_poles_by_format(
+                    matching,
+                    _pole_format_near(evidence, solicitacao),
+                    option_codes,
+                )
+                if matching:
+                    proposals.append(
+                        _pole_dimension_proposal(
+                            solicitacao,
+                            regra,
+                            evidence,
+                            height_text,
+                            resistance_text,
+                            matching,
+                        )
+                    )
+            if not dimensions:
+                pole_format = _explicit_pole_format_from_text(text)
+                if pole_format is not None:
+                    matching = _filter_poles_by_format(poles, pole_format, option_codes)
+                    proposals.append(
+                        _untyped_phrase_proposal(
+                            solicitacao,
+                            regra,
+                            evidence,
+                            category=self.categoria,
+                            observed=f"POSTE {pole_format}",
+                            candidate_codes=tuple(item.codigo for item in matching),
+                            attribute_name="formato_poste",
+                            attribute_value=pole_format,
+                            confidence=Decimal("0.58"),
+                        )
+                    )
+        return tuple(
+            item
+            for item in proposals
+            if item.confianca is None or item.confianca >= solicitacao.configuracao.confianca_minima
+        )
 
 
 class AnalisadorEstruturaMt(AnalisadorCatalogoPorCodigo):
@@ -135,5 +225,224 @@ class AnalisadorCabo(AnalisadorCatalogoPorCodigo):
 
 
 class AnalisadorEquipamento(AnalisadorCatalogoPorCodigo):
-    nome = "equipamento-codigo-catalogo"
+    nome = "equipamento-codigo-e-nomenclatura"
+    versao = "2.0"
     categoria = CategoriaElemento.EQUIPAMENTO
+
+    def analisar(
+        self,
+        solicitacao: SolicitacaoInterpretacao,
+        regra: RegraReconhecimento,
+    ) -> tuple[PropostaElemento, ...]:
+        exact = super().analisar(solicitacao, regra)
+        exact_evidence = {item.evidencia_ids[0] for item in exact}
+        option_codes = _option_codes(solicitacao, "classe_equipamento")
+        equipment = tuple(
+            item
+            for item in solicitacao.catalogo.itens_ativos(self.categoria)
+            if isinstance(item, TipoEquipamento)
+        )
+        proposals = list(exact)
+        for evidence in _semantic_evidence(solicitacao, regra):
+            if evidence.id in exact_evidence:
+                continue
+            text = normalized_text(evidence.conteudo_bruto or "")
+            phrase = next((phrase for phrase, _ in _EQUIPMENT_PHRASES if phrase in text), None)
+            if phrase is None:
+                continue
+            class_code = next(code for label, code in _EQUIPMENT_PHRASES if label == phrase)
+            matching = tuple(
+                item
+                for item in equipment
+                if option_codes.get(item.classe_equipamento_opcao_id) == class_code
+            )
+            proposals.append(
+                _untyped_phrase_proposal(
+                    solicitacao,
+                    regra,
+                    evidence,
+                    category=self.categoria,
+                    observed=phrase,
+                    candidate_codes=tuple(item.codigo for item in matching),
+                    attribute_name="classe_equipamento",
+                    attribute_value=class_code,
+                    confidence=Decimal("0.62"),
+                )
+            )
+        return tuple(
+            item
+            for item in proposals
+            if item.confianca is None or item.confianca >= solicitacao.configuracao.confianca_minima
+        )
+
+
+def _semantic_evidence(
+    request: SolicitacaoInterpretacao, rule: RegraReconhecimento
+) -> tuple[EvidenciaDocumento, ...]:
+    return tuple(
+        evidence
+        for evidence in sorted(request.evidencias, key=lambda item: str(item.id))
+        if evidence.tipo in rule.tipos_evidencia and evidence.conteudo_bruto
+    )
+
+
+def _option_codes(request: SolicitacaoInterpretacao, group_key: str) -> dict[UUID, str]:
+    return {
+        option.id: normalized_text(option.codigo)
+        for group in request.catalogo.grupos_opcao
+        if group.chave == group_key
+        for option in group.opcoes
+    }
+
+
+def _format_from_text(text: str) -> str | None:
+    return next(
+        (code for code, phrases in _POLE_FORMAT_PHRASES.items() if any(p in text for p in phrases)),
+        None,
+    )
+
+
+def _explicit_pole_format_from_text(text: str) -> str | None:
+    return next(
+        (code for code in _POLE_FORMAT_PHRASES if f"POSTE {code}" in text),
+        None,
+    )
+
+
+def _pole_format_near(
+    evidence: EvidenciaDocumento,
+    request: SolicitacaoInterpretacao,
+) -> str | None:
+    direct = _format_from_text(normalized_text(evidence.conteudo_bruto or ""))
+    if direct is not None:
+        return direct
+    nearby = sorted(
+        (
+            item
+            for item in request.evidencias
+            if item.id != evidence.id
+            and item.tipo in {TipoEvidencia.TEXTO, TipoEvidencia.OCR}
+            and item.pagina_id == evidence.pagina_id
+            and item.conteudo_bruto
+            and geometry_distance(evidence.geometria, item.geometria) <= 0.025
+        ),
+        key=lambda item: geometry_distance(evidence.geometria, item.geometria),
+    )
+    return next(
+        (
+            pole_format
+            for item in nearby
+            if (pole_format := _format_from_text(normalized_text(item.conteudo_bruto or "")))
+            is not None
+        ),
+        None,
+    )
+
+
+def _filter_poles_by_format(
+    poles: tuple[TipoPoste, ...],
+    pole_format: str | None,
+    option_codes: dict[UUID, str],
+) -> tuple[TipoPoste, ...]:
+    if pole_format is None:
+        return poles
+    return tuple(item for item in poles if option_codes.get(item.formato_opcao_id) == pole_format)
+
+
+def _situation_and_evidence(
+    request: SolicitacaoInterpretacao,
+    rule: RegraReconhecimento,
+    evidence: EvidenciaDocumento,
+    category: CategoriaElemento,
+) -> tuple[SituacaoProjeto, tuple[UUID, ...]]:
+    contextual = nearest_context_evidence(
+        evidence,
+        request.evidencias,
+        rule.distancia_contexto_maxima,
+    )
+    situation = (
+        situation_from_evidence(contextual, category, request.catalogo)
+        if contextual is not None
+        else None
+    )
+    situation = situation or situation_from_evidence(evidence, category, request.catalogo)
+    evidence_ids = tuple(
+        sorted({evidence.id, *((contextual.id,) if contextual is not None else ())}, key=str)
+    )
+    return situation or SituacaoProjeto.EXISTENTE, evidence_ids
+
+
+def _pole_dimension_proposal(
+    request: SolicitacaoInterpretacao,
+    rule: RegraReconhecimento,
+    evidence: EvidenciaDocumento,
+    height: str,
+    resistance: str,
+    matching: tuple[TipoPoste, ...],
+) -> PropostaElemento:
+    situation, evidence_ids = _situation_and_evidence(
+        request, rule, evidence, CategoriaElemento.POSTE
+    )
+    unique = len(matching) == 1
+    observed = f"{height}-{resistance}"
+    return PropostaElemento(
+        id=uuid5(request.execucao_id, f"elemento:{rule.id}:nomenclatura:{evidence.id}:{observed}"),
+        execucao_id=request.execucao_id,
+        categoria=CategoriaElemento.POSTE,
+        situacao_projeto=situation,
+        estado_revisao=EstadoRevisao.PROPOSTA if unique else EstadoRevisao.CONFLITANTE,
+        evidencia_ids=evidence_ids,
+        geometria=evidence.geometria,
+        tipo_catalogo_sugerido_id=matching[0].id if unique else None,
+        codigo_observado=observed,
+        atributos_sugeridos=(
+            ("altura_m", height),
+            ("candidatos_catalogo", ",".join(item.codigo for item in matching)),
+            ("regra_id", rule.id),
+            ("resistencia_dan", int(resistance)),
+        ),
+        confianca=Decimal("0.86") if unique else Decimal("0.74"),
+        justificativa=(
+            "A nomenclatura de poste altura-resistência foi reconhecida em texto nativo ou OCR; "
+            + (
+                "o formato também foi identificado."
+                if unique
+                else "o formato requer revisão humana."
+            )
+        ),
+    )
+
+
+def _untyped_phrase_proposal(
+    request: SolicitacaoInterpretacao,
+    rule: RegraReconhecimento,
+    evidence: EvidenciaDocumento,
+    *,
+    category: CategoriaElemento,
+    observed: str,
+    candidate_codes: tuple[str, ...],
+    attribute_name: str,
+    attribute_value: str,
+    confidence: Decimal,
+) -> PropostaElemento:
+    situation, evidence_ids = _situation_and_evidence(request, rule, evidence, category)
+    return PropostaElemento(
+        id=uuid5(request.execucao_id, f"elemento:{rule.id}:frase:{evidence.id}:{observed}"),
+        execucao_id=request.execucao_id,
+        categoria=category,
+        situacao_projeto=situation,
+        estado_revisao=EstadoRevisao.CONFLITANTE,
+        evidencia_ids=evidence_ids,
+        geometria=evidence.geometria,
+        codigo_observado=observed,
+        atributos_sugeridos=(
+            (attribute_name, attribute_value),
+            ("candidatos_catalogo", ",".join(candidate_codes)),
+            ("regra_id", rule.id),
+        ),
+        confianca=confidence,
+        justificativa=(
+            "A classe ou formato foi reconhecido em texto nativo ou OCR; "
+            "o tipo exato requer revisão humana."
+        ),
+    )

@@ -7,7 +7,11 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from tests.pdf_fixtures import create_analysis_pdf
+from tests.pdf_fixtures import (
+    create_analysis_pdf,
+    create_dense_vector_text_pdf,
+    create_mixed_raster_text_pdf,
+)
 
 from zeny_project_handler.adapters.analysis import JsonAnalysisCache, PyMuPdfDocumentAnalyzer
 from zeny_project_handler.adapters.analysis import pymupdf_analyzer as analyzer_module
@@ -156,6 +160,26 @@ def test_same_input_and_configuration_are_reproducible_from_cache(tmp_path: Path
         motor_ocr=different_engine, cache=JsonAnalysisCache(tmp_path / "cache")
     ).analisar(request)
     assert not third.cache_utilizado
+
+
+def test_relevant_raster_triggers_ocr_even_with_native_text(tmp_path: Path) -> None:
+    request = _request(create_mixed_raster_text_pdf(tmp_path / "mixed.pdf"))
+    ocr = FakeOcr()
+
+    result = PyMuPdfDocumentAnalyzer(motor_ocr=ocr).analisar(request)
+
+    assert [page.pagina_numero for page in ocr.pages] == [1]
+    assert any(item.tipo is TipoEvidencia.OCR for item in result.evidencias)
+
+
+def test_dense_vector_page_triggers_ocr_even_with_native_text(tmp_path: Path) -> None:
+    request = _request(create_dense_vector_text_pdf(tmp_path / "dense-vectors.pdf"))
+    ocr = FakeOcr()
+
+    result = PyMuPdfDocumentAnalyzer(motor_ocr=ocr).analisar(request)
+
+    assert [page.pagina_numero for page in ocr.pages] == [1]
+    assert any(item.tipo is TipoEvidencia.OCR for item in result.evidencias)
 
 
 def test_extractor_failure_is_localized(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
