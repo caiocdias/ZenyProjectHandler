@@ -10,6 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "alembic>=1.18,<2",
+    "networkx>=3.6,<3.7",
     "PyMuPDF>=1.28,<1.29",
     "PySide6>=6.8,<7",
     "SQLAlchemy>=2.0.51,<2.1",
