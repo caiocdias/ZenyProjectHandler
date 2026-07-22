@@ -152,6 +152,20 @@ elements = Table(
     UniqueConstraint("id", "project_id", name="uq_elements_id_project"),
 )
 
+confirmed_relations = Table(
+    "confirmed_relations",
+    metadata,
+    Column("id", String(36), primary_key=True),
+    Column("project_id", String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False),
+    Column("position", Integer, nullable=False),
+    Column("relation_type", String(80), nullable=False),
+    Column("origin_id", String(36), nullable=False),
+    Column("destination_id", String(36), nullable=False),
+    Column("payload", Text, nullable=False),
+    UniqueConstraint("project_id", "position", name="uq_confirmed_relations_project_position"),
+    UniqueConstraint("id", "project_id", name="uq_confirmed_relations_id_project"),
+)
+
 analysis_runs = Table(
     "analysis_runs",
     metadata,

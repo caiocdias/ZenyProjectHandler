@@ -51,13 +51,16 @@ def test_migrations_upgrade_empty_database_and_previous_revision(tmp_path: Path)
     upgrade_database(engine)
     upgrade_database(engine)
 
-    assert current_database_revision(engine) == "0003_pdf_sources"
+    assert current_database_revision(engine) == "0004_human_review"
     assert "updated_at" in {column["name"] for column in inspect(engine).get_columns("projects")}
     assert "ix_elements_project" in {
         index["name"] for index in inspect(engine).get_indexes("elements")
     }
     assert "ix_document_sources_project" in {
         index["name"] for index in inspect(engine).get_indexes("document_sources")
+    }
+    assert "ix_confirmed_relations_project" in {
+        index["name"] for index in inspect(engine).get_indexes("confirmed_relations")
     }
     with engine.connect() as connection:
         trigger_count = connection.scalar(

@@ -187,14 +187,32 @@ def test_project_catalog_validation_rejects_wrong_item_category(
 
 
 def test_photo_paths_are_relative_and_normalized() -> None:
-    photo = FotoElemento(id=uuid4(), caminho_relativo="fotos\\poste-01.jpg", legenda=" Poste ")
+    photo = FotoElemento(
+        id=uuid4(),
+        caminho_relativo="fotos\\poste-01.jpg",
+        legenda=" Poste ",
+        sha256="a" * 64,
+        tipo_mime="image/jpeg",
+        tamanho_bytes=42,
+    )
 
     assert photo.caminho_relativo == "fotos/poste-01.jpg"
     assert photo.legenda == "Poste"
+    assert photo.sha256 == "a" * 64
     with pytest.raises(DomainValidationError, match="caminhos relativos"):
         FotoElemento(id=uuid4(), caminho_relativo="C:/fotos/poste.jpg")
     with pytest.raises(DomainValidationError, match="caminhos relativos"):
         FotoElemento(id=uuid4(), caminho_relativo="../poste.jpg")
+    with pytest.raises(DomainValidationError, match="em conjunto"):
+        FotoElemento(id=uuid4(), caminho_relativo="fotos/poste.jpg", sha256="a" * 64)
+    with pytest.raises(DomainValidationError, match="não é aceito"):
+        FotoElemento(
+            id=uuid4(),
+            caminho_relativo="fotos/poste.exe",
+            sha256="a" * 64,
+            tipo_mime="application/octet-stream",
+            tamanho_bytes=42,
+        )
 
 
 def test_cable_requires_distinct_points_and_polyline(

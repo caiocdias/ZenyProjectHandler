@@ -261,19 +261,25 @@ class DecisaoRevisao:
     revisor: str
     decidida_em: datetime
     elemento_confirmado_id: UUID | None = None
+    relacao_confirmada_id: UUID | None = None
     motivo: str | None = None
 
     def __post_init__(self) -> None:
         if self.decidida_em.tzinfo is None:
             raise DomainValidationError("Data da decisão deve possuir fuso horário")
-        if self.decisao is TipoDecisaoRevisao.REJEITAR and self.elemento_confirmado_id is not None:
-            raise DomainValidationError("Proposta rejeitada não pode gerar elemento confirmado")
+        confirmed_references = tuple(
+            item
+            for item in (self.elemento_confirmado_id, self.relacao_confirmada_id)
+            if item is not None
+        )
+        if self.decisao is TipoDecisaoRevisao.REJEITAR and confirmed_references:
+            raise DomainValidationError("Proposta rejeitada não pode gerar referência confirmada")
         if (
             self.decisao in {TipoDecisaoRevisao.ACEITAR, TipoDecisaoRevisao.AJUSTAR}
-            and self.elemento_confirmado_id is None
+            and len(confirmed_references) != 1
         ):
             raise DomainValidationError(
-                "Proposta aceita ou ajustada deve indicar o elemento confirmado"
+                "Proposta aceita ou ajustada deve indicar uma única referência confirmada"
             )
         object.__setattr__(self, "revisor", required_text(self.revisor, field_name="revisor"))
         object.__setattr__(self, "motivo", self.motivo.strip() if self.motivo else None)

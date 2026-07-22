@@ -55,10 +55,11 @@ class ExecutarAnaliseDocumento:
         *,
         configuracao: ConfiguracaoAnaliseDocumento | None = None,
         senha: str | None = None,
+        execucao_id: UUID | None = None,
     ) -> ResultadoExecucaoAnalise:
         document, source = self._load_source(projeto_id, documento_id)
         started_at = self._aware_now()
-        execution_id = self._gerador_id()
+        execution_id = execucao_id or self._gerador_id()
         parameters = configuracao or ConfiguracaoAnaliseDocumento()
         try:
             result = self._analisador.analisar(

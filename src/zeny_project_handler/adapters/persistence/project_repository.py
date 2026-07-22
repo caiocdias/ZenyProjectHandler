@@ -22,13 +22,26 @@ from zeny_project_handler.domain.project import (
     EstruturaMt,
     Poste,
     Projeto,
+    RelacaoConfirmada,
     validar_projeto_com_catalogo,
 )
 
 from .catalog_repository import SqlCatalogRepository
 from .domain_json import dumps_domain, loads_domain
 from .errors import PersistenceConflictError, PersistenceNotFoundError
-from .schema import documents, elements, pages, projects
+from .schema import (
+    analysis_runs,
+    confirmed_relations,
+    document_sources,
+    documents,
+    elements,
+    evidence,
+    pages,
+    projects,
+    proposal_evidence,
+    proposals,
+    review_decisions,
+)
 
 
 def _digest(payload: str) -> str:
@@ -86,11 +99,26 @@ class SqlProjectRepository:
 
         self._sync_documents(project)
         self._sync_elements(project)
+        self._sync_confirmed_relations(project)
 
     def remover(self, project_id: UUID) -> bool:
+        persisted_id = str(project_id)
+        for table in (
+            review_decisions,
+            proposal_evidence,
+            proposals,
+            evidence,
+            analysis_runs,
+            confirmed_relations,
+            elements,
+            document_sources,
+            pages,
+            documents,
+        ):
+            self._session.execute(delete(table).where(table.c.project_id == persisted_id))
         result = cast(
             CursorResult[Any],
-            self._session.execute(delete(projects).where(projects.c.id == str(project_id))),
+            self._session.execute(delete(projects).where(projects.c.id == persisted_id)),
         )
         return bool(result.rowcount)
 
@@ -201,6 +229,50 @@ class SqlProjectRepository:
                     "category": element.categoria.value,
                     "situation": element.situacao.value,
                     "payload": dumps_domain(element),
+                },
+            )
+        )
+
+    def _sync_confirmed_relations(self, project: Projeto) -> None:
+        project_id = str(project.id)
+        self._session.execute(
+            update(confirmed_relations)
+            .where(confirmed_relations.c.project_id == project_id)
+            .values(position=-(confirmed_relations.c.position + 1))
+        )
+        requested_ids = {str(relation.id) for relation in project.relacoes_confirmadas}
+        for position, relation in enumerate(project.relacoes_confirmadas):
+            self._upsert_confirmed_relation(project_id, position, relation)
+        deletion = delete(confirmed_relations).where(confirmed_relations.c.project_id == project_id)
+        if requested_ids:
+            deletion = deletion.where(confirmed_relations.c.id.not_in(requested_ids))
+        self._session.execute(deletion)
+
+    def _upsert_confirmed_relation(
+        self,
+        project_id: str,
+        position: int,
+        relation: RelacaoConfirmada,
+    ) -> None:
+        self._assert_project_owner(confirmed_relations, str(relation.id), project_id)
+        statement = sqlite_insert(confirmed_relations).values(
+            id=str(relation.id),
+            project_id=project_id,
+            position=position,
+            relation_type=relation.tipo_relacao,
+            origin_id=str(relation.origem_id),
+            destination_id=str(relation.destino_id),
+            payload=dumps_domain(relation),
+        )
+        self._session.execute(
+            statement.on_conflict_do_update(
+                index_elements=[confirmed_relations.c.id],
+                set_={
+                    "position": position,
+                    "relation_type": relation.tipo_relacao,
+                    "origin_id": str(relation.origem_id),
+                    "destination_id": str(relation.destino_id),
+                    "payload": dumps_domain(relation),
                 },
             )
         )

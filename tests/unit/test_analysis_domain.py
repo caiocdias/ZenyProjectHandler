@@ -173,6 +173,17 @@ def test_review_decision_controls_confirmed_element_reference() -> None:
             decidida_em=now,
         )
 
+    relation_id = uuid4()
+    relation_decision = DecisaoRevisao(
+        id=uuid4(),
+        proposta_id=uuid4(),
+        decisao=TipoDecisaoRevisao.ACEITAR,
+        revisor="Caio",
+        decidida_em=now,
+        relacao_confirmada_id=relation_id,
+    )
+    assert relation_decision.relacao_confirmada_id == relation_id
+
 
 def test_relation_proposal_rejects_self_relation() -> None:
     reference_id = uuid4()

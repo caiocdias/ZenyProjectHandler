@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -16,6 +17,7 @@ from zeny_project_handler.domain.enums import (
     EstadoConexao,
     NivelRede,
     SituacaoProjeto,
+    TipoAcaoRevisaoManual,
     TipoGeometria,
     TipoPontoRede,
     TipoVinculoObra,
@@ -41,6 +43,9 @@ class FotoElemento:
     id: UUID
     caminho_relativo: str
     legenda: str | None = None
+    sha256: str | None = None
+    tipo_mime: str | None = None
+    tamanho_bytes: int | None = None
 
     def __post_init__(self) -> None:
         normalized = required_text(
@@ -51,8 +56,26 @@ class FotoElemento:
         if posix_path.is_absolute() or windows_path.is_absolute() or ".." in posix_path.parts:
             raise DomainValidationError("Fotos devem usar caminhos relativos internos ao projeto")
         caption = self.legenda.strip() if self.legenda else None
+        digest = self.sha256.strip().lower() if self.sha256 else None
+        mime_type = self.tipo_mime.strip().lower() if self.tipo_mime else None
+        metadata = (digest, mime_type, self.tamanho_bytes)
+        if any(item is not None for item in metadata) and any(item is None for item in metadata):
+            raise DomainValidationError("Foto deve registrar hash, tipo MIME e tamanho em conjunto")
+        if digest is not None and not re.fullmatch(r"[0-9a-f]{64}", digest):
+            raise DomainValidationError("SHA-256 da foto é inválido")
+        if mime_type is not None and mime_type not in {
+            "image/jpeg",
+            "image/png",
+            "image/tiff",
+            "image/webp",
+        }:
+            raise DomainValidationError("Tipo de arquivo da foto não é aceito")
+        if self.tamanho_bytes is not None and self.tamanho_bytes <= 0:
+            raise DomainValidationError("Tamanho da foto deve ser positivo")
         object.__setattr__(self, "caminho_relativo", posix_path.as_posix())
         object.__setattr__(self, "legenda", caption or None)
+        object.__setattr__(self, "sha256", digest)
+        object.__setattr__(self, "tipo_mime", mime_type)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -176,6 +199,39 @@ ElementoProjetoType: TypeAlias = Poste | EstruturaMt | EstruturaBt | Cabo | Equi
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class RelacaoConfirmada:
+    id: UUID
+    tipo_relacao: str
+    origem_id: UUID
+    destino_id: UUID
+
+    def __post_init__(self) -> None:
+        if self.origem_id == self.destino_id:
+            raise DomainValidationError("Relação confirmada deve ligar referências distintas")
+        object.__setattr__(
+            self,
+            "tipo_relacao",
+            required_text(self.tipo_relacao, field_name="tipo_relacao"),
+        )
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RegistroRevisaoManual:
+    id: UUID
+    acao: TipoAcaoRevisaoManual
+    referencia_criada_id: UUID
+    revisor: str
+    realizada_em: datetime
+    motivo: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.realizada_em.tzinfo is None:
+            raise DomainValidationError("Data da revisão manual deve possuir fuso horário")
+        object.__setattr__(self, "revisor", required_text(self.revisor, field_name="revisor"))
+        object.__setattr__(self, "motivo", _optional_text(self.motivo))
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class PontoRede:
     id: UUID
     poste_id: UUID | None
@@ -232,6 +288,8 @@ class Projeto:
     terminais: tuple[TerminalEquipamento, ...] = ()
     conexoes_internas: tuple[ConexaoInternaEquipamento, ...] = ()
     vinculos_obra: tuple[VinculoObra, ...] = ()
+    relacoes_confirmadas: tuple[RelacaoConfirmada, ...] = ()
+    historico_revisao_manual: tuple[RegistroRevisaoManual, ...] = ()
     metadados: MetadadosProjeto | None = None
     contato_solicitante: ContatoSolicitante | None = None
 
@@ -246,12 +304,28 @@ class Projeto:
         terminals = tuple(self.terminais)
         internal_connections = tuple(self.conexoes_internas)
         work_links = tuple(self.vinculos_obra)
+        confirmed_relations = tuple(self.relacoes_confirmadas)
+        manual_review_history = tuple(self.historico_revisao_manual)
 
         self._validate_unique_ids(
-            documents, elements, points, terminals, internal_connections, work_links
+            documents,
+            elements,
+            points,
+            terminals,
+            internal_connections,
+            work_links,
+            confirmed_relations,
+            manual_review_history,
         )
         self._validate_relationships(
-            documents, elements, points, terminals, internal_connections, work_links
+            documents,
+            elements,
+            points,
+            terminals,
+            internal_connections,
+            work_links,
+            confirmed_relations,
+            manual_review_history,
         )
 
         object.__setattr__(self, "nome", name)
@@ -261,6 +335,8 @@ class Projeto:
         object.__setattr__(self, "terminais", terminals)
         object.__setattr__(self, "conexoes_internas", internal_connections)
         object.__setattr__(self, "vinculos_obra", work_links)
+        object.__setattr__(self, "relacoes_confirmadas", confirmed_relations)
+        object.__setattr__(self, "historico_revisao_manual", manual_review_history)
 
     @staticmethod
     def _validate_unique_ids(
@@ -270,6 +346,8 @@ class Projeto:
         terminals: tuple[TerminalEquipamento, ...],
         internal_connections: tuple[ConexaoInternaEquipamento, ...],
         work_links: tuple[VinculoObra, ...],
+        confirmed_relations: tuple[RelacaoConfirmada, ...],
+        manual_review_history: tuple[RegistroRevisaoManual, ...],
     ) -> None:
         entity_ids = [
             *[document.id for document in documents],
@@ -278,6 +356,8 @@ class Projeto:
             *[terminal.id for terminal in terminals],
             *[connection.id for connection in internal_connections],
             *[link.id for link in work_links],
+            *[relation.id for relation in confirmed_relations],
+            *[record.id for record in manual_review_history],
         ]
         if len(set(entity_ids)) != len(entity_ids):
             raise DomainValidationError("IDs de entidades devem ser únicos no projeto")
@@ -293,6 +373,8 @@ class Projeto:
         terminals: tuple[TerminalEquipamento, ...],
         internal_connections: tuple[ConexaoInternaEquipamento, ...],
         work_links: tuple[VinculoObra, ...],
+        confirmed_relations: tuple[RelacaoConfirmada, ...],
+        manual_review_history: tuple[RegistroRevisaoManual, ...],
     ) -> None:
         page_ids = {page.id for document in documents for page in document.paginas}
         Projeto._validate_geometry_pages(elements, points, page_ids)
@@ -309,6 +391,23 @@ class Projeto:
         Projeto._validate_terminals(terminals, equipment, point_by_id)
         Projeto._validate_internal_connections(internal_connections, terminal_by_id)
         Projeto._validate_work_links(work_links, {element.id: element for element in elements})
+        reference_ids = {
+            *[element.id for element in elements],
+            *[point.id for point in points],
+            *[terminal.id for terminal in terminals],
+        }
+        for relation in confirmed_relations:
+            if relation.origem_id not in reference_ids or relation.destino_id not in reference_ids:
+                raise DomainValidationError(
+                    "Relação confirmada deve referenciar entidades existentes no projeto"
+                )
+        created_ids = {element.id for element in elements} | {
+            relation.id for relation in confirmed_relations
+        }
+        if any(record.referencia_criada_id not in created_ids for record in manual_review_history):
+            raise DomainValidationError(
+                "Histórico de revisão manual deve referenciar uma criação existente"
+            )
 
     @staticmethod
     def _validate_geometry_pages(

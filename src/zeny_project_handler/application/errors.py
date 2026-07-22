@@ -31,3 +31,19 @@ class InterpretacaoProjetoError(ApplicationError):
 
 class InterpretacaoCanceladaError(ApplicationError):
     """A interpretação foi cancelada e pode ser retomada com a mesma configuração."""
+
+
+class RevisaoHumanaError(ApplicationError):
+    """A revisão solicitada viola o estado atual ou exige dados adicionais."""
+
+
+class FluxoMvpCanceladoError(ApplicationError):
+    """O fluxo operacional foi cancelado em um ponto seguro e pode ser retomado."""
+
+
+class ReconstrucaoGrafoError(ApplicationError):
+    """A reconstrução ou uma decisão do grafo não corresponde ao estado atual do projeto."""
+
+
+class PortabilidadeProjetoError(ApplicationError):
+    """O pacote, anexo, backup ou recuperação não pôde ser concluído com segurança."""

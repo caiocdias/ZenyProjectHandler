@@ -1,0 +1,243 @@
+from __future__ import annotations
+
+from dataclasses import replace
+from decimal import Decimal
+from pathlib import Path
+from threading import Event
+from uuid import UUID, uuid4
+
+import pytest
+from sqlalchemy import Engine
+from tests.pdf_fixtures import create_catalog_pdf, create_feature_pdf, create_golden_pdf
+
+from zeny_project_handler.adapters.analysis import JsonAnalysisCache, PyMuPdfDocumentAnalyzer
+from zeny_project_handler.adapters.interpretation import (
+    InterpretadorRegrasExplicitas,
+    carregar_registro_regras_inicial,
+)
+from zeny_project_handler.adapters.pdf import PdfArquivoInvalidoError, PyMuPdfReader
+from zeny_project_handler.adapters.persistence import (
+    SqlAlchemyUnitOfWork,
+    create_sqlite_engine,
+    upgrade_database,
+)
+from zeny_project_handler.application.document_analysis import ExecutarAnaliseDocumento
+from zeny_project_handler.application.errors import FluxoMvpCanceladoError
+from zeny_project_handler.application.human_review import (
+    DadosElementoRevisao,
+    ServicoRevisaoHumana,
+)
+from zeny_project_handler.application.interpretation_pipeline import ExecutarPipelineInterpretacao
+from zeny_project_handler.application.mvp_workflow import ServicoFluxoMvp
+from zeny_project_handler.application.pdf_import import ImportarPdfsNoProjeto
+from zeny_project_handler.domain.analysis import DecisaoRevisao, PropostaElemento
+from zeny_project_handler.domain.catalog import CatalogoTecnico
+from zeny_project_handler.domain.enums import CategoriaElemento, SituacaoProjeto
+from zeny_project_handler.domain.project import Poste
+from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
+
+pytestmark = pytest.mark.integration
+
+
+def _service(
+    engine: Engine,
+    catalog: CatalogoTecnico,
+    cache_directory: Path,
+) -> ServicoFluxoMvp:
+    reader = PyMuPdfReader()
+
+    def unit_of_work() -> SqlAlchemyUnitOfWork:
+        return SqlAlchemyUnitOfWork(engine)
+
+    registry = carregar_registro_regras_inicial()
+    return ServicoFluxoMvp(
+        unit_of_work,
+        catalogo_inicial_id=catalog.id,
+        importador=ImportarPdfsNoProjeto(reader, unit_of_work),
+        extrator=ExecutarAnaliseDocumento(
+            PyMuPdfDocumentAnalyzer(cache=JsonAnalysisCache(cache_directory)),
+            unit_of_work,
+        ),
+        interpretador=ExecutarPipelineInterpretacao(
+            InterpretadorRegrasExplicitas(registry),
+            registry,
+            unit_of_work,
+        ),
+    )
+
+
+@pytest.fixture
+def workflow(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> tuple[Engine, ServicoFluxoMvp]:
+    engine = create_sqlite_engine(tmp_path / "mvp.sqlite3")
+    upgrade_database(engine)
+    with SqlAlchemyUnitOfWork(engine) as work:
+        work.catalogos.salvar(catalogo_inicial)
+        work.commit()
+    return engine, _service(engine, catalogo_inicial, tmp_path / "cache")
+
+
+def _confirm_first_element_proposal(
+    engine: Engine,
+    project_id: UUID,
+    catalog: CatalogoTecnico,
+) -> DecisaoRevisao:
+    with SqlAlchemyUnitOfWork(engine) as work:
+        proposals = tuple(
+            proposal
+            for run in work.execucoes_analise.listar_do_projeto(project_id)
+            for proposal in work.propostas.listar_da_execucao(run.id)
+            if isinstance(proposal, PropostaElemento)
+        )
+    assert proposals
+    proposal = proposals[0]
+    pole_type = catalog.itens_ativos(CategoriaElemento.POSTE)[0]
+    return ServicoRevisaoHumana(lambda: SqlAlchemyUnitOfWork(engine)).confirmar_elemento(
+        proposal.id,
+        DadosElementoRevisao(
+            categoria=CategoriaElemento.POSTE,
+            tipo_catalogo_id=pole_type.id,
+            situacao=SituacaoProjeto.EXISTENTE,
+            geometria=proposal.geometria,
+            codigo_observado=pole_type.codigo,
+        ),
+        revisor="Teste de exclusão",
+    )
+
+
+def test_multiple_pdf_import_is_atomic_and_preserves_order(
+    workflow: tuple[Engine, ServicoFluxoMvp],
+    tmp_path: Path,
+) -> None:
+    engine, service = workflow
+    project = service.criar_projeto("Projeto com folhas")
+    first = create_feature_pdf(tmp_path / "folha-01.pdf")
+    second = create_golden_pdf(tmp_path / "folha-02.pdf")
+    corrupt = tmp_path / "corrompido.pdf"
+    corrupt.write_bytes(b"%PDF invalid")
+
+    with pytest.raises(PdfArquivoInvalidoError):
+        service.importar_pdfs(project.projeto.id, (first, corrupt))
+    assert service.abrir_projeto(project.projeto.id).projeto.documentos == ()
+
+    service.importar_pdfs(project.projeto.id, (first, second))
+    reopened = service.abrir_projeto(project.projeto.id)
+
+    assert [document.nome_arquivo for document in reopened.projeto.documentos] == [
+        "folha-01.pdf",
+        "folha-02.pdf",
+    ]
+    assert [source.caminho_canonico for source in reopened.fontes_pdf] == [
+        first.resolve(),
+        second.resolve(),
+    ]
+    engine.dispose()
+
+
+def test_cancel_and_resume_pipeline_reuses_completed_work_without_duplicates(
+    workflow: tuple[Engine, ServicoFluxoMvp],
+    tmp_path: Path,
+) -> None:
+    engine, service = workflow
+    project = service.criar_projeto("Projeto retomável")
+    first = create_feature_pdf(tmp_path / "primeira.pdf")
+    second = create_golden_pdf(tmp_path / "segunda.pdf")
+    service.importar_pdfs(project.projeto.id, (first, second))
+    cancellation = Event()
+
+    def progress(current: int, _total: int, _message: str) -> None:
+        if current == 2:
+            cancellation.set()
+
+    with pytest.raises(FluxoMvpCanceladoError, match="Retomar"):
+        service.executar_pipeline(
+            project.projeto.id,
+            progresso=progress,
+            cancelado=cancellation.is_set,
+        )
+
+    resumed = service.executar_pipeline(project.projeto.id)
+    repeated = service.executar_pipeline(project.projeto.id)
+
+    assert resumed.execucoes_interpretacao == repeated.execucoes_interpretacao
+    assert resumed.documentos_processados == 2
+    with SqlAlchemyUnitOfWork(engine) as work:
+        runs = work.execucoes_analise.listar_do_projeto(project.projeto.id)
+        assert len(runs) == 4
+        assert len({run.id for run in runs}) == 4
+    summary = service.abrir_projeto(project.projeto.id).resumo
+    assert summary.documentos == 2
+    assert summary.paginas == 4
+    engine.dispose()
+
+
+def test_remove_pdf_prunes_only_dependent_data_and_project_can_be_deleted(
+    workflow: tuple[Engine, ServicoFluxoMvp],
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    engine, service = workflow
+    created = service.criar_projeto("Projeto removível")
+    catalog_code = catalogo_inicial.itens_ativos(CategoriaElemento.POSTE)[0].codigo
+    first = create_catalog_pdf(tmp_path / "remover.pdf", catalog_code)
+    second = create_golden_pdf(tmp_path / "preservar.pdf")
+    service.importar_pdfs(created.projeto.id, (first, second))
+    session = service.abrir_projeto(created.projeto.id)
+    first_document, second_document = session.projeto.documentos
+    pole = Poste(
+        id=uuid4(),
+        tipo_catalogo_id=catalogo_inicial.itens_ativos(CategoriaElemento.POSTE)[0].id,
+        situacao=SituacaoProjeto.EXISTENTE,
+        geometria=GeometriaDocumento.ponto(
+            first_document.paginas[0].id,
+            PontoNormalizado(Decimal("0.2"), Decimal("0.3")),
+        ),
+    )
+    with SqlAlchemyUnitOfWork(engine) as work:
+        work.projetos.salvar(replace(session.projeto, elementos=(pole,)))
+        work.commit()
+    service.executar_pipeline(created.projeto.id)
+    decision = _confirm_first_element_proposal(engine, created.projeto.id, catalogo_inicial)
+
+    result = service.remover_documentos(created.projeto.id, (first_document.id,))
+
+    assert result.documentos_removidos == ("remover.pdf",)
+    assert result.elementos_removidos == 2
+    assert result.sessao.projeto.documentos == (second_document,)
+    assert result.sessao.projeto.elementos == ()
+    assert [source.caminho_canonico for source in result.sessao.fontes_pdf] == [second.resolve()]
+    with SqlAlchemyUnitOfWork(engine) as work:
+        remaining_runs = work.execucoes_analise.listar_do_projeto(created.projeto.id)
+        removed_decision = work.decisoes_revisao.obter(decision.id)
+    assert len(remaining_runs) == 2
+    assert removed_decision is None
+
+    assert service.excluir_projeto(created.projeto.id)
+    assert all(item.projeto_id != created.projeto.id for item in service.listar_projetos())
+    assert first.is_file() and second.is_file()
+    engine.dispose()
+
+
+def test_delete_project_with_confirmed_review_removes_dependents_in_safe_order(
+    workflow: tuple[Engine, ServicoFluxoMvp],
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    engine, service = workflow
+    created = service.criar_projeto("Projeto com aceite")
+    catalog_code = catalogo_inicial.itens_ativos(CategoriaElemento.POSTE)[0].codigo
+    source = create_catalog_pdf(tmp_path / "projeto-revisado.pdf", catalog_code)
+    service.importar_pdfs(created.projeto.id, (source,))
+    service.executar_pipeline(created.projeto.id)
+    decision = _confirm_first_element_proposal(engine, created.projeto.id, catalogo_inicial)
+
+    assert service.excluir_projeto(created.projeto.id)
+
+    with SqlAlchemyUnitOfWork(engine) as work:
+        assert work.projetos.obter(created.projeto.id) is None
+        assert work.execucoes_analise.listar_do_projeto(created.projeto.id) == ()
+        assert work.decisoes_revisao.obter(decision.id) is None
+    assert source.is_file()
+    engine.dispose()

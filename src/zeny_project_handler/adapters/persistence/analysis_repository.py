@@ -6,6 +6,7 @@ from typing import cast
 from uuid import UUID
 
 from sqlalchemy import delete, insert, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from zeny_project_handler.domain.analysis import (
@@ -21,6 +22,7 @@ from .domain_json import dumps_domain, loads_domain
 from .errors import PersistenceConflictError, PersistenceNotFoundError
 from .schema import (
     analysis_runs,
+    confirmed_relations,
     elements,
     evidence,
     pages,
@@ -83,6 +85,27 @@ class SqlAnalysisRunRepository:
                 .where(analysis_runs.c.id == str(execution.id))
                 .values(**values)
             )
+
+    def remover(self, execution_id: UUID) -> bool:
+        persisted_id = str(execution_id)
+        proposal_ids = select(proposals.c.id).where(proposals.c.execution_id == persisted_id)
+        evidence_ids = select(evidence.c.id).where(evidence.c.execution_id == persisted_id)
+        self._session.execute(
+            delete(review_decisions).where(review_decisions.c.proposal_id.in_(proposal_ids))
+        )
+        self._session.execute(
+            delete(proposal_evidence).where(proposal_evidence.c.proposal_id.in_(proposal_ids))
+        )
+        self._session.execute(
+            delete(proposal_evidence).where(proposal_evidence.c.evidence_id.in_(evidence_ids))
+        )
+        self._session.execute(delete(proposals).where(proposals.c.execution_id == persisted_id))
+        self._session.execute(delete(evidence).where(evidence.c.execution_id == persisted_id))
+        result = cast(
+            CursorResult[object],
+            self._session.execute(delete(analysis_runs).where(analysis_runs.c.id == persisted_id)),
+        )
+        return bool(result.rowcount)
 
 
 class SqlEvidenceRepository:
@@ -245,6 +268,16 @@ class SqlReviewDecisionRepository:
             if element_project != proposal_project:
                 raise PersistenceConflictError(
                     "Elemento confirmado deve pertencer ao projeto da proposta"
+                )
+        if decision.relacao_confirmada_id is not None:
+            relation_project = self._session.scalar(
+                select(confirmed_relations.c.project_id).where(
+                    confirmed_relations.c.id == str(decision.relacao_confirmada_id)
+                )
+            )
+            if relation_project != proposal_project:
+                raise PersistenceConflictError(
+                    "Relação confirmada deve pertencer ao projeto da proposta"
                 )
         payload = dumps_domain(decision)
         stored = self._session.scalar(

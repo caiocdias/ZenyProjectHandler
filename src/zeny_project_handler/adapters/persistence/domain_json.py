@@ -29,6 +29,7 @@ from zeny_project_handler.domain.enums import (
     NivelRede,
     SituacaoProjeto,
     StatusCatalogo,
+    TipoAcaoRevisaoManual,
     TipoDecisaoRevisao,
     TipoEvidencia,
     TipoGeometria,
@@ -47,6 +48,8 @@ from zeny_project_handler.domain.project import (
     PontoRede,
     Poste,
     Projeto,
+    RegistroRevisaoManual,
+    RelacaoConfirmada,
     TerminalEquipamento,
 )
 from zeny_project_handler.domain.project_metadata import ContatoSolicitante, MetadadosProjeto
@@ -89,6 +92,8 @@ _DOMAIN_CLASSES: dict[str, type[Any]] = {
         Projeto,
         PropostaElemento,
         PropostaRelacao,
+        RegistroRevisaoManual,
+        RelacaoConfirmada,
         TerminalEquipamento,
         VinculoObra,
     )
@@ -104,6 +109,7 @@ _ENUM_CLASSES: dict[str, type[Enum]] = {
         NivelRede,
         SituacaoProjeto,
         StatusCatalogo,
+        TipoAcaoRevisaoManual,
         TipoDecisaoRevisao,
         TipoEvidencia,
         TipoGeometria,

@@ -7,6 +7,7 @@ from typing import Protocol, Self
 from uuid import UUID
 
 from zeny_project_handler.domain.analysis import (
+    DecisaoRevisao,
     EvidenciaDocumento,
     ExecucaoAnalise,
     ReferenciaProposta,
@@ -25,6 +26,8 @@ class CatalogRepositoryPort(Protocol):
 class ProjectRepositoryPort(Protocol):
     def obter(self, project_id: UUID) -> Projeto | None: ...
 
+    def listar(self) -> tuple[Projeto, ...]: ...
+
     def salvar(self, project: Projeto) -> None: ...
 
     def remover(self, project_id: UUID) -> bool: ...
@@ -36,6 +39,8 @@ class AnalysisRunRepositoryPort(Protocol):
     def listar_do_projeto(self, project_id: UUID) -> tuple[ExecucaoAnalise, ...]: ...
 
     def salvar(self, execution: ExecucaoAnalise) -> None: ...
+
+    def remover(self, execution_id: UUID) -> bool: ...
 
 
 class EvidenceRepositoryPort(Protocol):
@@ -52,6 +57,14 @@ class ProposalRepositoryPort(Protocol):
     def listar_da_execucao(self, execution_id: UUID) -> tuple[ReferenciaProposta, ...]: ...
 
     def salvar(self, proposal: ReferenciaProposta) -> None: ...
+
+
+class ReviewDecisionRepositoryPort(Protocol):
+    def obter(self, decision_id: UUID) -> DecisaoRevisao | None: ...
+
+    def obter_da_proposta(self, proposal_id: UUID) -> DecisaoRevisao | None: ...
+
+    def salvar(self, decision: DecisaoRevisao) -> None: ...
 
 
 class UnitOfWorkPort(Protocol):
@@ -72,6 +85,9 @@ class UnitOfWorkPort(Protocol):
 
     @property
     def propostas(self) -> ProposalRepositoryPort: ...
+
+    @property
+    def decisoes_revisao(self) -> ReviewDecisionRepositoryPort: ...
 
     def __enter__(self) -> Self: ...
 

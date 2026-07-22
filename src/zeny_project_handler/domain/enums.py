@@ -84,10 +84,33 @@ class TipoDecisaoRevisao(StrEnum):
     AJUSTAR = "AJUSTAR"
 
 
+class TipoAcaoRevisaoManual(StrEnum):
+    CRIAR_ELEMENTO = "CRIAR_ELEMENTO"
+    CRIAR_RELACAO = "CRIAR_RELACAO"
+
+
 class EstadoConexao(StrEnum):
     CONECTADA = "CONECTADA"
     DESCONECTADA = "DESCONECTADA"
     DESCONHECIDA = "DESCONHECIDA"
+
+
+class VisaoGrafo(StrEnum):
+    FISICA = "FISICA"
+    ELETRICA = "ELETRICA"
+
+
+class TipoNoGrafo(StrEnum):
+    POSTE = "POSTE"
+    EQUIPAMENTO = "EQUIPAMENTO"
+    PONTO_REDE = "PONTO_REDE"
+    TERMINAL = "TERMINAL"
+
+
+class SeveridadeDiagnosticoGrafo(StrEnum):
+    ERRO = "ERRO"
+    AVISO = "AVISO"
+    INFORMACAO = "INFORMACAO"
 
 
 class ParticaoAvaliacao(StrEnum):
