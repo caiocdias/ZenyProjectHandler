@@ -12,30 +12,77 @@ Nenhum serviço externo ou modelo específico deve ser introduzido sem uma decis
 
 1. Trabalhar em apenas uma etapa por vez, respeitando as dependências indicadas.
 2. Antes de iniciar uma etapa, conferir seus critérios de entrada e registrar decisões novas neste documento ou em um ADR.
-3. Não avançar enquanto os critérios de saída e os testes da etapa atual não estiverem satisfeitos.
+3. Não marcar uma etapa como `CONCLUÍDA` enquanto seus critérios de saída, testes e aceites humanos
+   indicados na tabela não estiverem satisfeitos. O desenvolvimento técnico de uma etapa posterior só
+   pode começar antes disso por instrução explícita do usuário e quando as dependências técnicas
+   necessárias já estiverem disponíveis; o aceite pendente deve continuar registrado.
 4. Manter domínio, interface, persistência, processamento de PDF, análise e grafo desacoplados por portas e adaptadores.
 5. A suíte padrão deve executar sem rede, serviços externos ou arquivos confidenciais.
 6. Toda ocorrência automática é uma proposta revisável. Ela não pode alterar diretamente o conjunto confirmado do projeto.
 7. Fixar versões das dependências e manter migrações compatíveis com projetos já salvos.
-8. Ao concluir uma etapa, atualizar a tabela de estado e registrar arquivos alterados, comandos de teste, limitações e próximo passo.
+8. Ao concluir o desenvolvimento técnico de uma etapa, atualizar a tabela de estado e registrar
+   arquivos alterados, comandos de teste, limitações, fluxo disponível na interface, roteiro de
+   aceite humano e próximo passo.
+9. Uma capacidade necessária ao aceite não pode existir somente como caso de uso, adaptador, script,
+   teste ou dado inserido diretamente no SQLite. Ela deve ser alcançável pela interface do aplicativo
+   iniciado pelos launchers normais do usuário.
+10. Cada incremento deve preservar um caminho utilizável de MVP. Se uma etapa depender de uma
+    capacidade interna ainda não exposta, o escopo da etapa deve incluir a integração mínima de
+    interface necessária ou registrar uma etapa intermediária antes do aceite.
+
+## Processo de desenvolvimento e aceite do MVP
+
+O roadmap distingue implementação técnica de conclusão da etapa:
+
+- `PENDENTE`: o desenvolvimento técnico ainda não começou.
+- `EM ANDAMENTO`: há implementação em curso ou tecnicamente pronta aguardando integração/aceite.
+- `BLOQUEADA`: existe impedimento objetivo registrado, sem alternativa segura dentro do escopo.
+- `CONCLUÍDA`: gates automatizados aprovados e todos os aceites humanos indicados foram realizados.
+
+Para etapas que produzam comportamento usado por uma pessoa, o Codex deve entregar um **incremento
+vertical**: domínio, persistência, aplicação e interface conectados. O usuário não deve precisar de
+terminal, pytest, edição de JSON, acesso direto ao banco ou fixtures para executar o roteiro de aceite.
+
+Cada registro de desenvolvimento deve conter:
+
+1. **Fluxo MVP disponível:** de onde o usuário parte e qual resultado consegue obter pela interface.
+2. **Como aceitar:** passos curtos, dados necessários e resultado visível esperado.
+3. **Persistência e recuperação:** o que deve sobreviver ao fechamento e à reabertura.
+4. **Gates automatizados:** testes, cobertura, qualidade e falhas ambientais não relacionadas.
+5. **Limitações:** tudo que ainda exige etapa futura, decisão humana ou dado autorizado.
+
+Interpretação das próximas instruções do usuário:
+
+- **“Desenvolva a etapa X”**: implementar o incremento vertical completo, integrar à interface,
+  testar e documentar; manter `EM ANDAMENTO` se ainda faltar aceite humano.
+- **“Prepare o aceite da etapa X”**: deixar dados e navegação acessíveis pela interface e fornecer o
+  roteiro de validação, sem exigir ferramentas de desenvolvimento.
+- **“Aceito/Aprovei a etapa X”**: registrar o aceite informado, conferir pendências remanescentes e
+  marcar `CONCLUÍDA` somente se nenhuma permanecer.
+- **“Corrija o aceite da etapa X”**: tratar os problemas observados, repetir gates proporcionais e
+  emitir um novo roteiro de aceite.
+- **“Desenvolva a próxima etapa”**: escolher a primeira etapa com trabalho técnico acionável e
+  dependências técnicas satisfeitas; pendências exclusivamente humanas continuam registradas e não
+  são presumidas como aprovadas.
 
 ## Estado das etapas
 
-| Etapa | Estado inicial | Depende de |
-|---|---|---|
-| 0. Fundação do projeto Python | CONCLUÍDA | - |
-| 1. Revisão do domínio e catálogo | CONCLUÍDA | 0 |
-| 1.1 Calibração com projetos reais | CONCLUÍDA | 1 |
-| 2. Persistência local | CONCLUÍDA | 1.1 |
-| 3. Ingestão e visualização de PDF | CONCLUÍDA | 1.1, 2 |
-| 4. Extração de evidências do PDF | CONCLUÍDA | 3 |
-| 5. Conjunto de avaliação | EM ANDAMENTO | 3, 4 |
-| 6. Pipeline modular de interpretação | EM ANDAMENTO | 1, 4, 5 |
-| 7. Revisão humana na interface | PENDENTE | 3, 6 |
-| 8. Reconstrução e validação do grafo | PENDENTE | 1, 7 |
-| 9. Gestão do catálogo pela interface | PENDENTE | 2, 7 |
-| 10. Projeto portátil, fotos e recuperação | PENDENTE | 2, 7, 8 |
-| 11. Empacotamento e aceite | PENDENTE | 8, 9, 10 |
+| Etapa | Estado inicial | Depende de | O que falta para considerar concluída |
+|---|---|---|---|
+| 0. Fundação do projeto Python | CONCLUÍDA | - | Nada; critérios de saída e testes já foram atendidos pelo Codex. |
+| 1. Revisão do domínio e catálogo | CONCLUÍDA | 0 | Nada; critérios de saída e testes já foram atendidos pelo Codex. |
+| 1.1 Calibração com projetos reais | CONCLUÍDA | 1 | Nada; critérios de saída e testes já foram atendidos pelo Codex. |
+| 2. Persistência local | CONCLUÍDA | 1.1 | Nada; critérios de saída e testes já foram atendidos pelo Codex. |
+| 3. Ingestão e visualização de PDF | CONCLUÍDA | 1.1, 2 | Nada; critérios de saída e testes já foram atendidos pelo Codex. |
+| 4. Extração de evidências do PDF | CONCLUÍDA | 3 | Nada; critérios de saída e testes já foram atendidos pelo Codex. |
+| 5. Conjunto de avaliação | EM ANDAMENTO | 3, 4 | **Humano:** fornecer ao menos uma amostra autorizada em escala diferente, concluir anotações primárias/secundárias e consensos e aprovar os critérios numéricos. **Codex:** validar a auditoria e congelar manifesto e anotações. |
+| 6. Pipeline modular de interpretação | EM ANDAMENTO | 1, 4, 5 | **Humano:** concluir e aprovar a Etapa 5. **Codex:** executar o benchmark no conjunto congelado, ajustar apenas com a partição de desenvolvimento e comprovar os limites aprovados. |
+| 7. Revisão humana na interface | EM ANDAMENTO | 3, 6 | **Codex:** implementação técnica, testes e caminho operacional pela Etapa 7.1 concluídos. **Humano:** validar uma página real inteira, incluindo correções, criações manuais e reabertura. |
+| 7.1 Fluxo operacional do MVP pela interface | EM ANDAMENTO | 2, 3, 4, 6, 7 | **Codex:** implementação técnica e gates concluídos. **Humano:** executar e aprovar o roteiro ponta a ponta em um projeto autorizado. PDFs exploratórios adicionais em `examples/` são aceitos e testados automaticamente. |
+| 8. Reconstrução e validação do grafo | EM ANDAMENTO | 1, 7, 7.1 | **Codex:** implementação técnica, integração Qt, persistência das confirmações e gates concluídos. **Humano:** executar o roteiro pela interface, revisar uma conexão proposta e comprovar a navegação de um diagnóstico até o PDF. |
+| 9. Gestão do catálogo pela interface | PENDENTE | 2, 7.1 | **Codex:** implementar CRUD, versionamento, importação/exportação e testes. **Humano:** validar que alterações podem ser feitas sem recompilar e sem mudar projetos antigos. |
+| 10. Projeto portátil, fotos e recuperação | EM ANDAMENTO | 2, 7.1, 8 | **Codex:** implementação técnica, transporte, recuperação, integração Qt e gates concluídos. **Humano:** executar o roteiro de aceite em outra pasta ou máquina autorizada e aprovar a integridade do resultado. |
+| 11. Empacotamento e aceite | PENDENTE | 8, 9, 10 | **Codex:** gerar instalador, diagnóstico, documentação e executar testes E2E, privacidade e benchmark final. **Humano:** realizar o aceite do fluxo completo em uma máquina-alvo limpa e decidir a licença de distribuição do PyMuPDF/MuPDF. |
 
 Estados permitidos: `PENDENTE`, `EM ANDAMENTO`, `BLOQUEADA` e `CONCLUÍDA`.
 
@@ -274,16 +321,21 @@ Um projeto completo sobrevive a salvar, fechar e reabrir sem perda nem alteraç�
 - Renderizar miniaturas, páginas e recortes RGB em resolução configurável.
 - Implementar coordenadas normalizadas e transformações reversíveis entre PDF, pixels e cena gráfica.
 - Exibir página, zoom, rotação e sobreposições no `QGraphicsView`.
+- Permitir selecionar várias folhas em PDFs separados e uni-las logicamente, na ordem escolhida, em
+  um único projeto sem modificar ou concatenar os arquivos originais.
 
 ### Testar
 
 - PDFs vetoriais, escaneados, rotacionados, multipágina e com `CropBox` diferente de `MediaBox`.
-- Smoke test parametrizado pelos hashes do manifesto das nove amostras reais.
+- Smoke test parametrizado pelos hashes do manifesto das nove amostras formais e, quando presentes,
+  pelos hashes anônimos de PDFs exploratórios adicionais colocados em `examples/`.
 - Anotação malformada, fonte ausente e objeto não suportado geram diagnóstico localizado sem impedir
   a renderização válida do restante da página.
 - Golden tests de renderização com tolerância documentada.
 - Round-trip de coordenadas em diferentes DPI e rotações.
 - Arquivo inválido, protegido ou corrompido não altera o projeto existente.
+- Seleção múltipla preserva a ordem das folhas; arquivo inválido ou conteúdo duplicado impede a união
+  inteira, sem substituir o projeto que já estava aberto.
 
 ### Critério de saída
 
@@ -301,7 +353,9 @@ Qualquer geometria registrada no documento aparece na posição correta da pági
   golden test com dimensões exatas e tolerância de 8 níveis por canal RGB.
 - Coordenadas: matrizes PDF/página preservadas no domínio e round-trip PDF, normalizado, pixel e cena
   validado em 72, 144 e 300 DPI e rotações 0, 90, 180 e 270 graus.
-- Interface: `QGraphicsView` com paginação, zoom, ajuste, rotação, arraste e sobreposições alinhadas.
+- Interface: `QGraphicsView` com paginação, zoom, ajuste, rotação, arraste e sobreposições alinhadas;
+  seleção múltipla e o botão **Unir arquivos em um só projeto** apresentam PDFs separados como uma
+  sequência única de folhas, preservando cada documento de origem.
 - Persistência: revisão Alembic `0003_pdf_sources`, repositório da origem e caso de uso que grava
   projeto/documento/referência em uma única transação após validação completa.
 - Corpus: smoke test parametrizado pelos hashes das nove amostras reais, sem versionar nomes ou
@@ -492,6 +546,9 @@ O pipeline atinge os limites aprovados e toda proposta é rastreável até as ev
 
 ## Etapa 7 - Revisão humana na interface
 
+**Status: EM ANDAMENTO. Implementação técnica concluída em 2026-07-21; o aceite humano depende do
+fluxo operacional da Etapa 7.1.**
+
 ### Desenvolver
 
 - Exibir propostas sobre o PDF com filtros por classe e estado.
@@ -511,7 +568,161 @@ O pipeline atinge os limites aprovados e toda proposta é rastreável até as ev
 
 Um usuário consegue transformar todas as propostas de uma página em um conjunto confirmado, corrigindo erros sem editar arquivos manualmente.
 
+### Registro de desenvolvimento
+
+- Aplicação: `ServicoRevisaoHumana` carrega a execução mais recente com propostas e realiza aceitar,
+  ajustar, rejeitar, confirmar relação e criações manuais em transações atômicas.
+- Interface: painel lateral de revisão com filtros por classe e estado, tabela de propostas, vínculo a
+  item ativo do catálogo, situação de obra, referências estruturais e campos normalizados de posição
+  e tamanho.
+- PDF: propostas aparecem como sobreposições selecionáveis e movíveis; proposta, confirmada,
+  rejeitada e conflitante usam cores e traços distintos. A paginação, o zoom e a rotação existentes
+  permanecem disponíveis durante a revisão.
+- Decisões: autor, data, motivo opcional e referência confirmada são persistidos em histórico
+  imutável. Aceitação com mudança de classe, catálogo, situação ou geometria é registrada como
+  `AJUSTAR`.
+- Relações: `RelacaoConfirmada` passou a integrar o agregado do projeto e a projeção SQLite pela
+  migração `0004_human_review`; relações propostas só podem ser confirmadas depois de suas
+  extremidades estarem confirmadas.
+- Criação manual: elementos e relações ausentes podem ser acrescentados pela interface, com autor,
+  data e motivo preservados em `RegistroRevisaoManual`.
+- Segurança: uma decisão final não pode ser sobrescrita; proposta semanticamente equivalente a uma
+  rejeição anterior não pode ser confirmada por uma execução posterior.
+- Cabos: quando ainda não existem pontos de rede selecionáveis, a confirmação materializa duas
+  extremidades determinísticas a partir da geometria revisada e preserva a polilinha confirmada.
+- Atalhos: `A` aceita/salva o ajuste selecionado e `R` rejeita; os controles existentes continuam
+  cobrindo seleção, paginação, zoom e rotação.
+- Testes: domínio, migração, persistência, reabertura, histórico imutável, rejeição entre execuções,
+  filtros Qt, sobreposições e ajuste de geometria estão cobertos por testes automatizados.
+- Validação original da entrega: Ruff, formatação e mypy aprovados; 161 de 162 testes aprovados e
+  cobertura total de 87,22%, acima do limite estrito de 85%. A reprovação registrada naquele momento
+  revelou que PDFs exploratórios adicionais precisavam ser permitidos; a política foi corrigida na
+  Etapa 7.1 sem alterar nem registrar automaticamente os arquivos privados.
+- Fluxo MVP disponível hoje: projetos e propostas que já estejam persistidos podem ser carregados no
+  painel de revisão. Ainda não é possível criar o projeto, importar seus PDFs e disparar
+  extração/interpretação pela interface; essa ponte é o escopo da Etapa 7.1.
+- Como aceitar após a Etapa 7.1: iniciar pelos launchers normais, criar ou abrir um projeto autorizado,
+  importar suas folhas, executar a análise, revisar todas as propostas de uma página, criar uma
+  ausência manual, salvar, fechar e reabrir conferindo que as decisões foram preservadas.
+- Próximo passo técnico: etapa 7.1, tornando o caminho completo até esta revisão utilizável sem
+  terminal, fixtures ou acesso direto ao banco.
+
+## Etapa 7.1 - Fluxo operacional do MVP pela interface
+
+**Status: EM ANDAMENTO. Implementação técnica concluída em 2026-07-21; aguarda aceite humano pela
+interface.**
+
+### Desenvolver
+
+- Criar uma tela inicial para listar, criar, abrir e renomear projetos persistidos, usando uma versão
+  publicada do catálogo sem exigir acesso direto ao SQLite.
+- Integrar a seleção de um ou vários PDFs ao caso de uso de importação, preservando cada documento e
+  sua ordem dentro do projeto; a união lógica deve sobreviver ao fechamento e à reabertura.
+- Expor na interface as ações de extrair evidências e executar a interpretação, com progresso,
+  cancelamento, retomada, mensagens de erro localizadas e indicação clara da execução ativa.
+- Encadear o resultado concluído ao painel da Etapa 7, abrindo as propostas da execução correta sem
+  preparação manual de banco, scripts ou fixtures.
+- Exibir o estado operacional do projeto: documentos, última extração, última interpretação,
+  propostas pendentes, decisões realizadas e falhas que exigem ação.
+- Fornecer um modo ou roteiro visível de aceite do MVP, com passos e resultados esperados, sem enviar
+  dados a serviços externos.
+- Garantir que fechar e reabrir o aplicativo restaure o projeto, documentos, execuções, propostas,
+  decisões e página de trabalho de forma coerente.
+
+### Testar
+
+- E2E Qt partindo de uma pasta de dados vazia: criar projeto, importar um PDF, executar extração e
+  interpretação, revisar uma proposta, salvar, fechar e reabrir.
+- E2E com várias folhas em arquivos separados, preservando ordem, fontes e paginação do projeto.
+- Falha, proteção, corrupção ou alteração de um PDF não deixa projeto, execução ou interface em estado
+  parcialmente publicado.
+- Cancelar e retomar análise pela interface não duplica execuções, evidências ou propostas.
+- Projeto sem proposta, sem origem disponível ou com execução falha apresenta orientação acionável,
+  sem traceback ou necessidade de terminal.
+- Smoke test pelos launchers cotidianos, usando somente controles visíveis da aplicação.
+
+### Critério de saída
+
+Um usuário de MVP inicia o aplicativo pelos launchers normais e, sem ferramentas de desenvolvimento,
+consegue criar ou abrir um projeto, importar uma ou várias folhas, executar o pipeline, chegar à
+revisão humana, salvar, fechar e reabrir preservando o trabalho.
+
+### Roteiro de aceite humano esperado
+
+1. Abrir o aplicativo por `ZenyProjectHandler.vbs` ou `ZenyProjectHandler.bat`.
+2. Criar um projeto e selecionar um ou vários PDFs autorizados.
+3. Executar extração e interpretação acompanhando estado, progresso e eventuais diagnósticos.
+4. Abrir a revisão, aceitar/ajustar/rejeitar propostas e criar ao menos um elemento ausente.
+5. Salvar, fechar o aplicativo, abri-lo novamente e conferir documentos, página e decisões.
+6. Informar aprovação ou problemas observados; somente a aprovação explícita permite concluir as
+   Etapas 7 e 7.1.
+
+### Registro de desenvolvimento
+
+- Tela inicial: o painel **Fluxo do projeto** lista, cria, abre e renomeia projetos persistidos. O
+  catálogo inicial publicado é instalado automaticamente em uma pasta de dados vazia.
+- Exclusão: um projeto pode ser excluído pela interface após confirmação explícita. A remoção abrange
+  os dados locais do projeto por cascata transacional, mas nunca apaga os PDFs originais no disco.
+- Importação: a seleção de um ou vários PDFs usa o caso de uso transacional real. Todos os arquivos
+  são validados antes da publicação, duplicidades são recusadas e documento, origem e ordem são
+  preservados sem concatenar ou modificar os PDFs.
+- Remoção de folhas: o usuário seleciona um ou vários PDFs já importados. Uma confirmação informa que
+  extrações, propostas, decisões e elementos dependentes serão removidos; documentos e resultados não
+  relacionados permanecem no projeto e os arquivos originais são preservados.
+- Pipeline: **Executar análise completa** processa cada documento em uma thread de trabalho, exibe
+  progresso e execução ativa e encadeia extração, interpretação e revisão sem bloquear a janela.
+- Cancelamento e retomada: o cancelamento ocorre em pontos seguros entre documentos ou dentro da
+  interpretação. IDs determinísticos reutilizam extrações concluídas e o pipeline idempotente impede
+  execuções, evidências e propostas duplicadas na retomada.
+- Estado operacional: a interface mostra quantidade de PDFs e folhas, estados da última extração e
+  interpretação, propostas pendentes e decisões realizadas. Falhas esperadas aparecem como mensagens
+  localizadas, sem traceback.
+- Revisão: projetos analisados são abertos diretamente no painel da Etapa 7. Projetos com vários
+  documentos expõem cada execução concluída em um seletor, permitindo revisar as folhas analisadas.
+- Recuperação: o último projeto e a última folha aberta ficam em `ui-state.ini` na pasta local da
+  aplicação; projeto, documentos, fontes, execuções, propostas e decisões continuam no SQLite.
+- Aceite: o botão **Como validar este MVP** apresenta o roteiro dentro da própria aplicação.
+- Testes adicionados: importação múltipla atômica, ordem e reabertura das fontes, cancelamento e
+  retomada sem duplicação, remoção seletiva com limpeza das dependências, exclusão integral do projeto
+  e E2E Qt partindo de pasta vazia até propostas revisáveis, reabertura e remoções pela interface.
+- Corpus local: novos PDFs em `examples/` são amostras exploratórias permitidas e entram
+  automaticamente em um smoke test anônimo somente leitura. O manifesto permanece reservado ao
+  conjunto formal, que exige classificação e anotação; nenhum arquivo privado é alterado ou incluído
+  automaticamente no Git.
+- Correção de aceite: a exclusão de projeto e a remoção de PDF agora eliminam explicitamente
+  decisões, propostas, evidências e demais dependências na ordem segura antes do registro principal.
+  Isso evita violação de chave estrangeira em projetos que já possuem propostas confirmadas e
+  funciona nos bancos existentes sem migração destrutiva.
+- Revisão de reconhecimento de postes: a planilha fornecida foi conferida contra o seed e possui o
+  mesmo SHA-256, 38 postes e as mesmas opções de formato; portanto, não foi necessário apagar nem
+  migrar o banco. A falha estava na diferença entre códigos internos como
+  `P-11M-300DAN-CIRCULAR` e anotações reais como `11-300`.
+- Interpretação 2.0: postes agora aceitam nomenclatura altura-resistência em texto nativo ou OCR. O
+  formato explícito resolve o item do catálogo; sem formato, a proposta permanece conflitante com a
+  lista de candidatos para o humano. Frases de formato de poste e classes de transformador/chaves
+  também geram propostas revisáveis sem inventar atributos ausentes.
+- OCR local: o Tesseract instalado é descoberto automaticamente e recebe a página por memória. Além
+  de páginas rasterizadas, páginas com mais de 1.000 vetores são processadas para recuperar textos
+  plotados como caminhos, mesmo quando o carimbo possui texto nativo. Nenhum PDF é enviado à rede.
+- Verificação exploratória: os dez PDFs privados atualmente em `examples/` passaram a produzir ao
+  menos uma proposta de poste; nove foram resolvidos pelo texto nativo e o décimo pelo OCR da página
+  vetorial. Isso é smoke test, não substitui o benchmark anotado e o aceite humano das Etapas 5 e 6.
+- Referência normativa: a ND 3.1/2025 exige a simbologia do Electric Office, identificação do tipo de
+  poste/estrutura e numeração sequencial. A IT-EO-008 distingue postes Circular, Duplo T e Madeira e
+  os estados existente, instalar/substituir/retirar/abandonar; as propostas continuam sujeitas à
+  revisão humana quando o desenho não oferece evidência suficiente.
+- Validação atual: Ruff, formatação, mypy e os 175 testes aprovados; cobertura total de 87,00%,
+  acima do limite estrito de 85,01%. O PDF exploratório adicional foi lido e renderizado pelo smoke
+  test sem modificação de tamanho ou data do arquivo; os testes de exclusão também confirmam que os
+  PDFs originais permanecem no disco.
+- Próximo passo: executar o roteiro de aceite humano acima pelos launchers normais. A Etapa 8 foi
+  desenvolvida por instrução explícita do usuário, mas isso não presume nem substitui os aceites
+  ainda pendentes das Etapas 7 e 7.1.
+
 ## Etapa 8 - Reconstrução e validação do grafo
+
+**Status: EM ANDAMENTO. Implementação técnica concluída em 2026-07-21; aguarda aceite humano pela
+interface.**
 
 ### Desenvolver
 
@@ -520,6 +731,9 @@ Um usuário consegue transformar todas as propostas de uma página em um conjunt
 - Propor conexões por geometria, vetores do PDF, proximidade e regras de compatibilidade.
 - Exigir revisão humana para conexões ambíguas.
 - Detectar componentes desconectados, pontas órfãs, tensões ou fases incompatíveis, ciclos inesperados e equipamentos sem terminais.
+- Disponibilizar pela interface as visões física e elétrica, a reconstrução, os filtros e a lista de
+  diagnósticos; selecionar um diagnóstico deve destacar seus elementos e permitir navegar até a
+  evidência correspondente no PDF.
 
 ### Testar
 
@@ -527,10 +741,61 @@ Um usuário consegue transformar todas as propostas de uma página em um conjunt
 - Independência da ordem de inserção dos elementos.
 - Idempotência da geração do grafo.
 - Erros indicam os elementos de origem e não corrompem o projeto.
+- Teste Qt do fluxo de reconstruir, alternar visão, filtrar diagnóstico e navegar do grafo ao PDF.
 
 ### Critério de saída
 
-O mesmo conjunto confirmado sempre gera o mesmo grafo, com inconsistências explicáveis e navegáveis até o PDF.
+O mesmo conjunto confirmado sempre gera o mesmo grafo e um usuário consegue, somente pela
+interface, compreender as inconsistências, revisar ambiguidades e navegar até suas evidências no PDF.
+
+### Roteiro de aceite humano esperado
+
+1. Abrir pela interface um projeto da Etapa 7.1 com elementos confirmados.
+2. Reconstruir o grafo e alternar entre as visões física e elétrica.
+3. Inspecionar ao menos um diagnóstico e navegar dele até os elementos e o PDF de origem.
+4. Resolver ou justificar uma conexão ambígua, reconstruir novamente e conferir o resultado
+   persistido após reabrir o projeto.
+
+### Registro de desenvolvimento
+
+- Arquitetura: `ResultadoReconstrucaoGrafo` é uma projeção imutável do conjunto confirmado. O
+  domínio e a aplicação dependem de uma porta própria; o adaptador NetworkX materializa
+  `MultiGraph` somente durante a reconstrução e o SQLite continua armazenando as entidades de
+  origem, não uma segunda fonte de verdade.
+- Visão física: postes e equipamentos são nós; instalação de equipamento, percurso de cabo por
+  postes e relações físicas confirmadas formam as arestas. A geometria confirmada posiciona os nós
+  na mesma disposição normalizada das folhas.
+- Visão elétrica: pontos de rede e terminais são nós; cabos, ligações terminal-ponto, conexões
+  internas conectadas e relações confirmadas formam arestas. Cabos paralelos permanecem arestas
+  distintas. Os grafos são não direcionados porque o modelo confirmado atual não informa fonte nem
+  sentido de fluxo.
+- Determinismo: UUID5 identifica nós, arestas, sugestões e diagnósticos; ordenação canônica e uma
+  assinatura SHA-256 permitem comprovar idempotência e rejeitar confirmações feitas sobre uma
+  reconstrução desatualizada.
+- Sugestões: uma ponta órfã pode receber candidatos da mesma folha dentro da tolerância geométrica,
+  desde que nível, tensão e fases sejam compatíveis. Geometrias confirmadas podem ter sido obtidas
+  de texto, OCR, imagens ou vetores do PDF na etapa de interpretação. Um candidato único vira
+  conexão sugerida; vários candidatos permanecem ambíguos e exigem escolha humana.
+- Diagnósticos: componentes desconectados, pontas órfãs, ciclos inesperados, tensão/fases
+  incompatíveis, incompatibilidade estrutura-cabo, equipamento sem terminais e continuidade interna
+  desconhecida indicam as entidades de origem e a visão afetada.
+- Persistência da revisão: **Confirmar conexão** cria uma `RelacaoConfirmada` e um
+  `RegistroRevisaoManual` com responsável, data e justificativa, em uma transação. Reabrir o projeto
+  e reconstruir reproduz a mesma topologia confirmada.
+- Interface: o painel **Grafo do projeto** lista projetos, reconstrói sob comando, alterna as visões,
+  filtra tipos de nó e severidades, destaca referências ao selecionar um diagnóstico e abre a folha
+  correta no visualizador com sobreposição. Ao trocar de projeto, as fontes PDF corretas substituem
+  qualquer documento anteriormente aberto.
+- Testes: topologia radial, derivação, transformador MT/BT, chave aberta/desconhecida, cabos
+  paralelos, ilha, ciclo, incompatibilidade, equipamento sem terminais, sugestão por proximidade,
+  independência da ordem, idempotência, confirmação/reabertura SQLite e fluxo Qt estão cobertos. A
+  suíte completa possui 183 testes aprovados e cobertura de 86,68%, acima do limite estrito de
+  85,01%. O gate oficial
+  `IniciarTestes.bat` também aprovou integridade das dependências, Ruff, formatação, mypy e métricas.
+- Limitação intencional: sentido de fluxo não é inferido sem evidência confirmada. A projeção não
+  promove propostas da análise semântica; primeiro elas precisam passar pela revisão da Etapa 7.
+- Próximo passo: executar o roteiro de aceite acima em um projeto autorizado. Somente a aprovação
+  explícita permite marcar a Etapa 8 como `CONCLUÍDA`.
 
 ## Etapa 9 - Gestão do catálogo pela interface
 
@@ -540,6 +805,8 @@ O mesmo conjunto confirmado sempre gera o mesmo grafo, com inconsistências expl
 - Publicação imutável de nova versão, comparação entre versões e desativação segura.
 - Importação e exportação JSON e nova importação de planilha com prévia de alterações.
 - Impedir exclusão física de valores usados por projetos.
+- Oferecer pela interface uma área de rascunhos, comparação, validação e publicação, com mensagens
+  acionáveis e confirmação explícita antes de disponibilizar uma nova versão.
 
 ### Testar
 
@@ -547,12 +814,24 @@ O mesmo conjunto confirmado sempre gera o mesmo grafo, com inconsistências expl
 - Publicar cria nova versão consistente.
 - Importar dados inválidos produz relatório e rollback completo.
 - Interface de compatibilidade impede relações duplicadas.
+- E2E Qt cria um rascunho, importa uma alteração, revisa a prévia, publica e comprova que um projeto
+  anterior continua vinculado à versão antiga.
 
 ### Critério de saída
 
-O usuário altera as possibilidades do sistema sem recompilar e sem modificar o significado de projetos antigos.
+O usuário altera e publica as possibilidades do sistema somente pela interface, sem recompilar e sem
+modificar o significado de projetos antigos.
+
+### Roteiro de aceite humano esperado
+
+1. Abrir a gestão do catálogo pela interface e criar um rascunho a partir da versão publicada.
+2. Alterar um item e uma compatibilidade, conferir validações e comparar as versões.
+3. Publicar a nova versão e usá-la em um novo projeto.
+4. Reabrir um projeto antigo e confirmar que ele preserva a versão e o significado originais.
 
 ## Etapa 10 - Projeto portátil, fotos e recuperação
+
+**Status: EM ANDAMENTO. Implementação técnica concluída em 21/07/2026; aguarda aceite humano pela interface.**
 
 ### Desenvolver
 
@@ -560,6 +839,8 @@ O usuário altera as possibilidades do sistema sem recompilar e sem modificar o 
 - Salvar caminhos relativos e validar hash e tipo de arquivo.
 - Implementar anexar, remover, localizar arquivo ausente e deduplicar fotos.
 - Implementar exportação, importação, backup e recuperação após falha.
+- Expor anexos, exportação, importação, backup, restauração e localização de arquivos pela interface,
+  com progresso, destino explícito, confirmação para substituições e relatório de integridade.
 
 ### Testar
 
@@ -567,10 +848,47 @@ O usuário altera as possibilidades do sistema sem recompilar e sem modificar o 
 - Arquivo ausente ou adulterado é sinalizado sem impedir a abertura.
 - Exportação seguida de importação preserva IDs, catálogo, decisões e grafo.
 - Backup interrompido não substitui a última versão íntegra.
+- E2E Qt exporta um projeto, importa-o em uma pasta de dados vazia, localiza um anexo ausente e
+  restaura um backup sem recorrer ao terminal ou manipular o pacote manualmente.
 
 ### Critério de saída
 
-O projeto é transportável e recuperável, com integridade verificável dos arquivos associados.
+O projeto é transportável e recuperável pela interface, com integridade verificável e problemas de
+arquivos associados apresentados de modo acionável ao usuário.
+
+### Roteiro de aceite humano esperado
+
+1. Anexar uma foto autorizada e exportar o projeto pela interface.
+2. Importar o pacote em outra pasta ou máquina autorizada e conferir PDF, decisões, grafo e anexos.
+3. Simular um arquivo ausente, usar a ação de localização e conferir a integridade novamente.
+4. Criar e restaurar um backup, validando que a última versão íntegra pode ser recuperada.
+
+### Registro de desenvolvimento
+
+- O formato portátil `.zphproj` contém manifesto assinado, SQLite restrito ao projeto, PDFs, fotos e
+  a projeção derivada do grafo. Todos os caminhos internos são relativos e cada arquivo possui tipo,
+  tamanho e SHA-256 verificáveis.
+- A leitura do pacote rejeita caminhos inseguros, entradas duplicadas, links simbólicos e conteúdo
+  criptografado. Arquivos ausentes, alterados ou incompatíveis são apresentados no relatório de
+  integridade sem impedir a abertura dos dados ainda utilizáveis.
+- Fotos são copiadas para armazenamento gerenciado pelo hash, deduplicadas fisicamente e podem ser
+  anexadas, removidas ou localizadas novamente pela interface. PDFs ausentes também podem ser
+  localizados por correspondência exata de SHA-256.
+- Exportar e importar preserva IDs, catálogo, execuções, evidências, propostas, decisões e a
+  assinatura determinística do grafo. Substituir um projeto existente exige confirmação e a troca do
+  banco e dos arquivos possui rollback em caso de falha.
+- O formato `.zphbackup` reúne um snapshot íntegro do banco, arquivos gerenciados e cópias dos PDFs
+  externos. A publicação é atômica; a restauração valida o pacote e preserva a versão anterior se a
+  troca não puder ser concluída.
+- O painel **Portabilidade e recuperação** oferece fotos, localização, exportação, importação,
+  backup, restauração, progresso e relatório de integridade sem exigir terminal ou edição manual do
+  pacote.
+- A extensão dos metadados de foto permanece compatível com projetos antigos; nenhum reset ou
+  migração destrutiva do banco foi necessário.
+- Gates oficiais de 21/07/2026: dependências íntegras, Ruff e formatação aprovados, mypy sem erros em
+  150 arquivos, 188 testes aprovados e cobertura total de 85,44%.
+- O aceite humano continua pendente e, por isso, a etapa permanece `EM ANDAMENTO` mesmo após a
+  conclusão dos testes automatizados.
 
 ## Etapa 11 - Empacotamento e aceite
 
@@ -580,6 +898,8 @@ O projeto é transportável e recuperável, com integridade verificável dos arq
 - Criar diagnóstico de primeiro uso para pastas, permissões, banco e dependências locais.
 - Garantir operação totalmente local e sem tráfego de dados do projeto.
 - Documentar atualização de banco, catálogo e aplicativo de forma independente.
+- Incluir na própria aplicação acesso ao guia do fluxo MVP, versão instalada, diagnóstico local,
+  diretório dos projetos e instruções de recuperação, sem depender do ambiente de desenvolvimento.
 
 ### Testar
 
@@ -593,6 +913,13 @@ O projeto é transportável e recuperável, com integridade verificável dos arq
 
 Fluxo ponta a ponta aprovado na máquina-alvo, documentação atualizada e nenhuma limitação crítica sem tratamento ou aviso explícito.
 
+### Roteiro de aceite humano esperado
+
+1. Instalar em uma máquina-alvo limpa e iniciar pelo atalho instalado.
+2. Executar o fluxo completo das Etapas 7.1, 7, 8, 9 e 10 usando apenas a aplicação instalada.
+3. Fechar, atualizar e reabrir o aplicativo, conferindo a preservação dos projetos.
+4. Revisar diagnóstico, privacidade, desempenho e limitações exibidas e registrar o aceite final.
+
 ## Estratégia global de testes
 
 - Unitários: domínio, catálogo, extração, transformações geométricas e regras do grafo; rápidos e sem I/O externo.
@@ -600,7 +927,13 @@ Fluxo ponta a ponta aprovado na máquina-alvo, documentação atualizada e nenhu
 - Integração: SQLite, PyMuPDF, adaptador de análise falso e componentes Qt.
 - Golden: renderizações e projeções de coordenadas com tolerâncias controladas.
 - Regressão de interpretação: conjunto congelado, versão das regras fixada e métricas por classe.
-- E2E: fluxos completos com banco e diretórios temporários.
+- E2E técnico: fluxos completos com banco e diretórios temporários, incluindo falhas e retomadas.
+- E2E do incremento vertical: partir da tela inicial e alcançar o resultado da etapa somente por
+  controles visíveis, sem fixtures preparadas diretamente no banco.
+- Smoke dos launchers: validar que o mesmo caminho usado nos testes pode ser iniciado pelos atalhos
+  cotidianos do MVP.
+- Aceite humano: executar o roteiro documentado com dados autorizados, registrar problemas e manter
+  a etapa `EM ANDAMENTO` até a aprovação explícita do usuário.
 - Desempenho: tempo de abertura, renderização, extração, interpretação, memória e tamanho do projeto.
 
 ## Condições de parada
@@ -612,6 +945,8 @@ O Codex deve interromper o avanço e registrar bloqueio quando ocorrer qualquer 
 - qualidade do pipeline abaixo do critério aprovado;
 - migração com risco de perda de projetos existentes;
 - relação elétrica ambígua sem regra ou revisão humana disponível;
+- critério de aceite que dependa de terminal, fixture, edição direta do banco ou outra capacidade não
+  exposta pela interface do MVP;
 - necessidade de mudar uma decisão estrutural sem atualizar o diagrama, a especificação e este roadmap.
 
 ## Fontes técnicas de referência

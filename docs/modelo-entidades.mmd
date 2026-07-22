@@ -150,6 +150,9 @@ namespace ModuloProjeto {
         +UUID id
         +String caminhoRelativo
         +String legenda
+        +String sha256
+        +String tipoMime
+        +Integer tamanhoBytes
     }
 
     class VinculoObra {
@@ -158,6 +161,28 @@ namespace ModuloProjeto {
         +UUID elementoOrigemId
         +UUID elementoDestinoId
         +String observacao
+    }
+
+    class RelacaoConfirmada {
+        +UUID id
+        +String tipoRelacao
+        +UUID origemId
+        +UUID destinoId
+    }
+
+    class RegistroRevisaoManual {
+        +UUID id
+        +TipoAcaoRevisaoManual acao
+        +UUID referenciaCriadaId
+        +String revisor
+        +Instant realizadaEm
+        +String motivo
+    }
+
+    class TipoAcaoRevisaoManual {
+        <<enumeration>>
+        CRIAR_ELEMENTO
+        CRIAR_RELACAO
     }
 
     class SituacaoProjeto {
@@ -306,6 +331,7 @@ namespace ModuloAnalise {
         +String revisor
         +Instant decididaEm
         +UUID elementoConfirmadoId
+        +UUID relacaoConfirmadaId
         +String motivo
     }
 
@@ -714,25 +740,111 @@ namespace ModuloAvaliacao {
 }
 
 namespace ModuloGrafo {
-    class GrafoProjeto {
+    class ResultadoReconstrucaoGrafo {
         <<derivado>>
         +UUID projetoId
-        +Instant geradoEm
+        +String versaoMetodo
+        +String assinatura
     }
 
-    class VerticeFisico {
-        +UUID elementoOrigemId
+    class GrafoDerivado {
+        <<derivado>>
+        +VisaoGrafo visao
     }
 
-    class VerticeEletrico {
-        +UUID pontoOuTerminalOrigemId
+    class NoGrafo {
+        +UUID id
+        +UUID referenciaId
+        +TipoNoGrafo tipo
+        +String rotulo
+        +GeometriaDocumento geometria
     }
 
     class ArestaGrafo {
-        +UUID elementoOrigemId
+        +UUID id
+        +UUID referenciaId
         +UUID origemId
         +UUID destinoId
         +String tipo
+        +Boolean proposta
+    }
+
+    class SugestaoConexaoGrafo {
+        +UUID id
+        +UUID origemId
+        +UUID destinoId
+        +Decimal confianca
+        +String justificativa
+    }
+
+    class DiagnosticoGrafo {
+        +UUID id
+        +String codigo
+        +SeveridadeDiagnosticoGrafo severidade
+        +VisaoGrafo visao
+        +UUID[] referenciasIds
+    }
+}
+
+namespace ModuloPortabilidade {
+    class ManifestoProjetoPortatil {
+        +Integer versaoFormato
+        +UUID projetoId
+        +UUID catalogoId
+        +Instant criadoEm
+        +ArquivoPacoteProjeto[] arquivos
+    }
+
+    class ArquivoPacoteProjeto {
+        +String caminhoRelativo
+        +String tipoMime
+        +Integer tamanhoBytes
+        +String sha256
+    }
+
+    class ConteudoBancoProjetoPortatil {
+        +Projeto projeto
+        +CatalogoTecnico catalogo
+        +ExecucaoAnalise[] execucoes
+        +EvidenciaDocumento[] evidencias
+        +DecisaoRevisao[] decisoes
+    }
+
+    class RelatorioIntegridadeProjeto {
+        +UUID projetoId
+        +ProblemaIntegridadeProjeto[] problemas
+        +Boolean integro
+        +Boolean utilizavel
+    }
+
+    class ProblemaIntegridadeProjeto {
+        +String codigo
+        +String caminhoRelativo
+        +String mensagem
+        +Boolean critico
+    }
+
+    class ZipProjectArchive {
+        <<adapter>>
+        +criarAtomico(destino, manifesto, arquivos)
+        +extrairValidado(origem)
+    }
+
+    class SqlitePortableProjectDatabase {
+        <<adapter>>
+        +criar(conteudo, destino)
+        +carregar(origem)
+    }
+
+    class ServicoPortabilidadeProjeto {
+        +anexarFoto()
+        +localizarFoto()
+        +localizarPdf()
+        +exportarProjeto()
+        +importarProjeto()
+        +criarBackup()
+        +restaurarBackup()
+        +verificarIntegridade()
     }
 }
 
@@ -755,6 +867,8 @@ Projeto "1" *-- "0..*" TerminalEquipamento : terminais
 Projeto "1" *-- "0..1" MetadadosProjeto : metadadosTecnicos
 Projeto "1" *-- "0..1" ContatoSolicitante : dadosSensiveis
 Projeto "1" *-- "0..*" VinculoObra : movimentacoesESubstituicoes
+Projeto "1" *-- "0..*" RelacaoConfirmada : relacoesRevisadas
+Projeto "1" *-- "0..*" RegistroRevisaoManual : auditoriaManual
 ElementoProjeto "1" *-- "0..*" FotoElemento : fotos
 ElementoProjeto --> GeometriaDocumento : geometria
 ElementoProjeto --> SituacaoProjeto : situacaoDeObra
@@ -791,6 +905,8 @@ PropostaRelacao "0..*" --> "1..*" EvidenciaDocumento : fundamentadaEm
 DecisaoRevisao --> PropostaElemento : revisa
 DecisaoRevisao --> PropostaRelacao : revisa
 DecisaoRevisao --> ElementoProjeto : podeConfirmar
+DecisaoRevisao --> RelacaoConfirmada : podeConfirmar
+RegistroRevisaoManual --> TipoAcaoRevisaoManual : tipoDeCriacao
 
 CatalogoTecnico "1" *-- "1" FonteCatalogo : proveniencia
 CatalogoTecnico "1" *-- "0..*" ItemCatalogo : itens
@@ -836,6 +952,15 @@ SqlReviewDecisionRepository ..> DecisaoRevisao : persiste
 SqlPdfSourceRepository ..> ReferenciaFontePdf : persiste
 MigracoesAlembic ..> SqlAlchemyUnitOfWork : preparaSchema
 BackupAtomico ..> SqlAlchemyUnitOfWork : protegeBanco
+ManifestoProjetoPortatil "1" *-- "1..*" ArquivoPacoteProjeto : declara
+RelatorioIntegridadeProjeto "1" *-- "0..*" ProblemaIntegridadeProjeto : apresenta
+ConteudoBancoProjetoPortatil --> Projeto : transporta
+ConteudoBancoProjetoPortatil --> CatalogoTecnico : preserva
+ZipProjectArchive ..> ManifestoProjetoPortatil : valida
+SqlitePortableProjectDatabase ..> ConteudoBancoProjetoPortatil : materializa
+ServicoPortabilidadeProjeto ..> ZipProjectArchive : empacota
+ServicoPortabilidadeProjeto ..> SqlitePortableProjectDatabase : isolaBanco
+ServicoPortabilidadeProjeto ..> BackupAtomico : recupera
 
 LeitorPdfPort <|.. PyMuPdfReader
 PyMuPdfReader ..> InspecaoPdf : produz
@@ -900,13 +1025,16 @@ ElementoProjeto "0..*" --> "1" ItemCatalogo : tipadoPor
 PontoRede ..> OpcaoCatalogo : tensao_e_fases
 TerminalEquipamento ..> OpcaoCatalogo : tensao_e_fases
 
-Projeto ..> GrafoProjeto : projeta
-GrafoProjeto "1" *-- "0..*" VerticeFisico : visaoFisica
-GrafoProjeto "1" *-- "0..*" VerticeEletrico : visaoEletrica
-GrafoProjeto "1" *-- "0..*" ArestaGrafo : arestas
-Poste ..> VerticeFisico : projeta
-Equipamento ..> VerticeFisico : projeta
-PontoRede ..> VerticeEletrico : projeta
-TerminalEquipamento ..> VerticeEletrico : projeta
+Projeto ..> ResultadoReconstrucaoGrafo : projeta
+ResultadoReconstrucaoGrafo "1" *-- "2" GrafoDerivado : fisico_e_eletrico
+ResultadoReconstrucaoGrafo "1" *-- "0..*" SugestaoConexaoGrafo : sugestoes
+ResultadoReconstrucaoGrafo "1" *-- "0..*" DiagnosticoGrafo : diagnosticos
+GrafoDerivado "1" *-- "0..*" NoGrafo : nos
+GrafoDerivado "1" *-- "0..*" ArestaGrafo : arestas
+Poste ..> NoGrafo : projetaFisico
+Equipamento ..> NoGrafo : projetaFisico
+PontoRede ..> NoGrafo : projetaEletrico
+TerminalEquipamento ..> NoGrafo : projetaEletrico
 Cabo ..> ArestaGrafo : projeta
 ConexaoInternaEquipamento ..> ArestaGrafo : projeta
+RelacaoConfirmada ..> ArestaGrafo : projeta

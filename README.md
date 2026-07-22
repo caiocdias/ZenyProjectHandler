@@ -78,6 +78,28 @@ Backups são snapshots consistentes do SQLite, validados antes de substituir ato
 de destino. A pasta padrão reservada para eles é `backups` dentro do diretório de dados. Arquivos do
 banco, WAL, temporários e backups não devem ser adicionados ao Git.
 
+## Projeto portátil, fotos e recuperação
+
+O painel **Portabilidade e recuperação** permite usar o fluxo completo sem acesso ao terminal. Um
+projeto pode ser exportado como `.zphproj`, com manifesto assinado, banco restrito ao projeto, PDFs,
+fotos e grafo derivado. O pacote usa somente caminhos relativos e valida SHA-256, tamanho e tipo de
+cada arquivo ao ser importado.
+
+Fotos JPEG, PNG, TIFF e WebP podem ser anexadas a elementos confirmados. Elas são copiadas para
+`project-files/<projeto>/photos` dentro do diretório de dados e deduplicadas pelo conteúdo. O painel
+também permite remover uma foto ou localizar novamente uma foto ou PDF ausente, exigindo a mesma
+impressão SHA-256 do original.
+
+O relatório de integridade diferencia arquivos ausentes, alterados, de tipo incompatível e anexos
+antigos ainda sem impressão verificável. Os dados utilizáveis continuam abrindo para que o usuário
+possa corrigir o problema. A importação preserva identidades, catálogo, análises, decisões e grafo;
+substituir um projeto existente exige confirmação explícita.
+
+O backup completo `.zphbackup` inclui o banco local, arquivos gerenciados e cópias dos PDFs externos.
+Sua publicação e restauração usam trocas atômicas e validação do SQLite. Assim, uma gravação
+interrompida não substitui o último backup íntegro, e os PDFs recuperados deixam de depender do local
+original.
+
 ## Visualização e origem dos PDFs
 
 A janela principal abre PDFs locais em modo somente leitura e oferece paginação, zoom, rotação e
@@ -101,16 +123,21 @@ percurso de anotações e Form XObjects inclui imagens em appearance streams. A 
 recriada pelo hash do PDF e usa um cache JSON descartável em `cache/analysis` dentro da pasta de
 dados.
 
-OCR não é uma dependência do aplicativo. Há um contrato para motores locais opcionais, chamado
-somente em páginas sem texto nativo suficiente. Nenhum serviço de rede ou mecanismo OCR é iniciado
-automaticamente.
+Quando o Tesseract está instalado, o aplicativo o descobre no `PATH`, no local padrão do Windows ou
+no caminho indicado por `ZENY_TESSERACT_PATH`. O OCR é executado localmente, sem serviço de rede, em
+páginas com pouco texto nativo, área raster relevante ou grande densidade vetorial — caso típico de
+letras e números plotados como caminhos pelo AutoCAD. Sem Tesseract, os demais extratores continuam
+funcionando e a execução registra um diagnóstico revisável.
 
 ## Interpretação semântica por regras
 
 O registro inicial em `adapters/interpretation/data/regras_interpretacao_v1.json` é versionado,
 validado e possui assinatura de conteúdo. Cinco analisadores independentes reconhecem códigos ativos
-do catálogo em texto nativo ou OCR. Vetores e imagens próximos são vinculados como contexto para
-geometria, cor e proveniência; nada é confirmado automaticamente.
+do catálogo em texto nativo ou OCR. Postes também são reconhecidos pela nomenclatura de projeto
+`altura-resistência`, por exemplo `11-300`; se o desenho não informar Circular, Duplo T ou Madeira, a
+proposta fica conflitante para escolha humana. Classes textuais de transformadores e chaves também
+viram propostas revisáveis. Vetores e imagens próximos são vinculados como contexto para geometria,
+cor e proveniência; nada é confirmado automaticamente.
 
 O interpretador gera somente `PropostaElemento` e `PropostaRelacao`. Situação de obra usa as
 assinaturas de cor do catálogo; relações usam proximidade de centros, extremidades de cabos e as
@@ -120,6 +147,23 @@ duplicar resultados.
 
 O mesmo pipeline possui um adaptador para o benchmark. O teste final continua bloqueado enquanto o
 conjunto de avaliação não estiver congelado e os critérios não estiverem aprovados.
+
+## Reconstrução e validação do grafo
+
+O painel **Grafo do projeto** reconstrói duas projeções do conjunto confirmado: a visão física,
+formada por postes e equipamentos, e a visão elétrica, formada por pontos de rede e terminais. A
+implementação usa um `MultiGraph`, portanto cabos paralelos não são colapsados. A direção fica
+indefinida enquanto fonte e fluxo não estiverem confirmados no projeto.
+
+Na interface é possível reconstruir, alternar a visão, filtrar nós e severidades e inspecionar
+componentes desconectados, pontas órfãs, incompatibilidades, ciclos e equipamentos sem terminais.
+Selecionar um diagnóstico destaca suas entidades; **Ir ao PDF** abre a folha correspondente. Uma
+conexão sugerida por proximidade e compatibilidade só entra no conjunto confirmado depois que o
+usuário informa o responsável e aciona **Confirmar conexão**.
+
+O grafo é derivado e pode ser descartado: as entidades e relações confirmadas no SQLite permanecem
+a fonte de verdade. A ordenação canônica, os identificadores determinísticos e a assinatura SHA-256
+garantem que o mesmo conjunto confirmado produza o mesmo resultado ao reabrir o aplicativo.
 
 ## Projetos reais para testes
 
