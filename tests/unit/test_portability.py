@@ -1,0 +1,94 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from hashlib import sha256
+from pathlib import Path
+from uuid import uuid4
+from zipfile import ZIP_DEFLATED, ZipFile
+
+import pytest
+
+from zeny_project_handler.adapters.portability import ZipProjectArchive
+from zeny_project_handler.application.errors import PortabilidadeProjetoError
+from zeny_project_handler.domain.portability import (
+    ArquivoPacoteProjeto,
+    ManifestoProjetoPortatil,
+)
+from zeny_project_handler.ports.portability import OrigemArquivoPacote
+
+
+def _origin(path: Path, relative: str = "files/example.pdf") -> OrigemArquivoPacote:
+    payload = path.read_bytes()
+    return OrigemArquivoPacote(
+        arquivo=ArquivoPacoteProjeto(
+            caminho_relativo=relative,
+            tipo="PDF",
+            sha256=sha256(payload).hexdigest(),
+            tamanho_bytes=len(payload),
+            tipo_mime="application/pdf",
+        ),
+        caminho_origem=path,
+    )
+
+
+def _manifest(origin: OrigemArquivoPacote) -> ManifestoProjetoPortatil:
+    return ManifestoProjetoPortatil(
+        versao_formato=1,
+        projeto_id=uuid4(),
+        catalogo_id=uuid4(),
+        nome_projeto="Projeto portátil",
+        criado_em=datetime(2026, 7, 21, 20, tzinfo=UTC),
+        arquivos=(origin.arquivo,),
+    )
+
+
+def test_zip_package_survives_move_and_reports_tampered_content(tmp_path: Path) -> None:
+    source = tmp_path / "example.pdf"
+    source.write_bytes(b"%PDF-1.7\nexample")
+    origin = _origin(source)
+    package = ZipProjectArchive().criar(tmp_path / "project.zphproj", _manifest(origin), (origin,))
+    moved = tmp_path / "other-folder" / package.name
+    moved.parent.mkdir()
+    package.replace(moved)
+
+    extracted = ZipProjectArchive().extrair_validado(moved, tmp_path / "extracted")
+
+    assert extracted.integridade.integro
+    assert (
+        extracted.diretorio / origin.arquivo.caminho_relativo
+    ).read_bytes() == source.read_bytes()
+
+    tampered = tmp_path / "tampered.zphproj"
+    with ZipFile(moved) as original, ZipFile(tampered, "w", compression=ZIP_DEFLATED) as changed:
+        for item in original.infolist():
+            payload = original.read(item.filename)
+            if item.filename == origin.arquivo.caminho_relativo:
+                payload += b"changed"
+            changed.writestr(item.filename, payload)
+    result = ZipProjectArchive().extrair_validado(tampered, tmp_path / "tampered-output")
+    assert not result.integridade.integro
+    assert {item.codigo for item in result.integridade.problemas} == {"HASH_DIVERGENTE"}
+
+
+def test_zip_package_rejects_path_traversal_and_interruption_preserves_destination(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    unsafe = tmp_path / "unsafe.zphproj"
+    with ZipFile(unsafe, "w") as archive:
+        archive.writestr("../outside.txt", "unsafe")
+    with pytest.raises(PortabilidadeProjetoError, match="insegura"):
+        ZipProjectArchive().extrair_validado(unsafe, tmp_path / "unsafe-output")
+
+    source = tmp_path / "example.pdf"
+    source.write_bytes(b"%PDF-1.7\nexample")
+    origin = _origin(source)
+    destination = tmp_path / "stable.zphproj"
+    destination.write_bytes(b"last-integral-version")
+    monkeypatch.setattr(
+        "zeny_project_handler.adapters.portability.zip_archive.os.replace",
+        lambda _source, _target: (_ for _ in ()).throw(OSError("interrupted")),
+    )
+
+    with pytest.raises(PortabilidadeProjetoError, match="criar o pacote"):
+        ZipProjectArchive().criar(destination, _manifest(origin), (origin,))
+    assert destination.read_bytes() == b"last-integral-version"
