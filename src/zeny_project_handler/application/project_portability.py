@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import shutil
 from collections.abc import Callable
@@ -18,7 +17,6 @@ from zeny_project_handler.application.errors import (
     PortabilidadeProjetoError,
     ProjetoNaoEncontradoError,
 )
-from zeny_project_handler.domain.graph import ResultadoReconstrucaoGrafo
 from zeny_project_handler.domain.portability import (
     ArquivoPacoteProjeto,
     ManifestoProjetoPortatil,
@@ -26,7 +24,6 @@ from zeny_project_handler.domain.portability import (
     RelatorioIntegridadeProjeto,
 )
 from zeny_project_handler.domain.project import ElementoProjetoType, FotoElemento, Projeto
-from zeny_project_handler.ports.graph import ReconstrutorGrafoPort
 from zeny_project_handler.ports.pdf import ReferenciaFontePdf
 from zeny_project_handler.ports.persistence import UnitOfWorkPort
 from zeny_project_handler.ports.portability import (
@@ -96,7 +93,6 @@ class ServicoPortabilidadeProjeto:
         arquivo_portatil: ArquivoProjetoPortatilPort,
         banco_portatil: BancoProjetoPortatilPort,
         backup_local: BackupLocalPort,
-        reconstrutor_grafo: ReconstrutorGrafoPort,
         *,
         diretorio_dados: Path,
         caminho_banco: Path,
@@ -108,7 +104,6 @@ class ServicoPortabilidadeProjeto:
         self._archive = arquivo_portatil
         self._portable_database = banco_portatil
         self._backup = backup_local
-        self._graph_builder = reconstrutor_grafo
         self._data_directory = diretorio_dados.expanduser().resolve()
         self._database_path = caminho_banco.expanduser().resolve()
         self._managed_root = self._data_directory / "project-files"
@@ -320,22 +315,13 @@ class ServicoPortabilidadeProjeto:
     ) -> ResultadoExportacaoProjeto:
         report = self.verificar_integridade(projeto_id)
         content, sources = self._portable_content(projeto_id)
-        graph = self._graph_builder.reconstruir(content.projeto, content.catalogo)
         notify = progresso or (lambda _current, _total, _message: None)
         with TemporaryDirectory(prefix="zeny-export-") as temporary_name:
             temporary = Path(temporary_name)
             notify(1, 4, "Criando banco exclusivo do projeto")
             database = self._portable_database.criar(temporary / "project.sqlite3", content)
-            graph_file = temporary / "graph.json"
-            graph_file.write_text(_graph_json(graph), encoding="utf-8")
             origins = [
                 _package_origin(database, "project.sqlite3", "BANCO", "application/vnd.sqlite3"),
-                _package_origin(
-                    graph_file,
-                    "derived/graph.json",
-                    "DERIVADO",
-                    "application/json",
-                ),
             ]
             notify(2, 4, "Coletando PDFs íntegros")
             for document in content.projeto.documentos:
@@ -374,7 +360,6 @@ class ServicoPortabilidadeProjeto:
                 catalogo_id=content.catalogo.id,
                 nome_projeto=content.projeto.nome,
                 criado_em=self._aware_now(),
-                assinatura_grafo=graph.assinatura,
                 arquivos=tuple(item.arquivo for item in origins),
             )
             notify(4, 4, "Publicando pacote de projeto")
@@ -410,9 +395,6 @@ class ServicoPortabilidadeProjeto:
             )
             if content.catalogo.id != extracted.manifesto.catalogo_id:
                 raise PortabilidadeProjetoError("Catálogo do banco diverge do manifesto")
-            graph = self._graph_builder.reconstruir(content.projeto, content.catalogo)
-            if graph.assinatura != extracted.manifesto.assinatura_grafo:
-                raise PortabilidadeProjetoError("Grafo reconstruído diverge do pacote")
             notify(2, 4, "Preparando PDFs e fotos gerenciados")
             staging = self._stage_imported_files(extracted.diretorio, extracted.manifesto)
             final_root = self._project_root(content.projeto.id)
@@ -827,31 +809,6 @@ def _copy_atomic(source: Path, destination: Path) -> None:
     finally:
         with suppress(OSError):
             temporary.unlink(missing_ok=True)
-
-
-def _graph_json(result: ResultadoReconstrucaoGrafo) -> str:
-    payload = {
-        "project_id": str(result.projeto_id),
-        "method_version": result.versao_metodo,
-        "signature": result.assinatura,
-        "physical": {
-            "nodes": len(result.fisico.nos),
-            "edges": len(result.fisico.arestas),
-        },
-        "electrical": {
-            "nodes": len(result.eletrico.nos),
-            "edges": len(result.eletrico.arestas),
-        },
-        "diagnostics": [
-            {
-                "code": item.codigo,
-                "severity": item.severidade.value,
-                "references": list(map(str, item.referencias_ids)),
-            }
-            for item in result.diagnosticos
-        ],
-    }
-    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
 def _problem(code: str, message: str, path: str | None = None) -> ProblemaIntegridadeProjeto:

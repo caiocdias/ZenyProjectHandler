@@ -2,14 +2,16 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDockWidget,
     QFileDialog,
     QLabel,
+    QMenu,
     QMessageBox,
     QPushButton,
-    QScrollArea,
     QSpinBox,
+    QToolButton,
 )
 from pytestqt.qtbot import QtBot
 from tests.pdf_fixtures import create_feature_pdf, create_golden_pdf
@@ -38,17 +40,103 @@ def test_main_window_smoke(qtbot: QtBot, tmp_path: Path) -> None:
     portability_dock = window.findChild(QDockWidget, "projectPortabilityDock")
     assert review_dock is not None
     assert window.findChild(QDockWidget, "projectWorkflowDock") is not None
-    assert graph_dock is not None
+    assert graph_dock is None
     assert portability_dock is not None
-    assert graph_dock in window.tabifiedDockWidgets(review_dock)
     assert portability_dock in window.tabifiedDockWidgets(review_dock)
-    assert window.findChild(QScrollArea, "graphScrollArea") is not None
     assert window.review_panel is not None
     assert window.project_panel is not None
-    assert window.graph_panel is not None
     assert window.portability_panel is not None
     assert window.statusBar().currentMessage() == "Pronto para abrir um PDF"
     assert settings.database_path.is_file()
+
+
+@pytest.mark.integration
+def test_floating_panel_has_window_controls_and_can_be_reopened(
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> None:
+    settings = AppSettings(data_directory=tmp_path)
+    _application, window = create_application([], settings=settings)
+    qtbot.addWidget(window)
+    window.show()
+    review_dock = window.findChild(QDockWidget, "humanReviewDock")
+    panels_menu = window.findChild(QMenu, "panelsMenu")
+    assert review_dock is not None
+    assert panels_menu is not None
+
+    review_dock.setFloating(True)
+    qtbot.waitUntil(review_dock.isFloating)
+    minimize_button = review_dock.findChild(QToolButton, "humanReviewDockMinimizeButton")
+    maximize_button = review_dock.findChild(QToolButton, "humanReviewDockMaximizeButton")
+    float_button = review_dock.findChild(QToolButton, "humanReviewDockFloatButton")
+    close_button = review_dock.findChild(QToolButton, "humanReviewDockCloseButton")
+    assert minimize_button is not None and minimize_button.isVisible()
+    assert maximize_button is not None and maximize_button.isVisible()
+    assert float_button is not None and float_button.isVisible()
+    assert close_button is not None and close_button.isVisible()
+
+    qtbot.mouseClick(  # type: ignore[no-untyped-call]
+        maximize_button,
+        Qt.MouseButton.LeftButton,
+    )
+    qtbot.waitUntil(review_dock.isMaximized)
+    assert maximize_button.toolTip() == "Restaurar painel"
+    qtbot.mouseClick(  # type: ignore[no-untyped-call]
+        maximize_button,
+        Qt.MouseButton.LeftButton,
+    )
+    qtbot.waitUntil(lambda: not review_dock.isMaximized())
+
+    window.showMaximized()
+    qtbot.waitUntil(window.isMaximized)
+    portability_dock = window.findChild(QDockWidget, "projectPortabilityDock")
+    assert portability_dock is not None
+
+    def layout_occupies_window_width() -> bool:
+        docked_right_edges = [
+            dock.geometry().right()
+            for dock in window.findChildren(QDockWidget)
+            if dock.isVisible() and not dock.isFloating()
+        ]
+        occupied_right_edge = max(
+            window.centralWidget().geometry().right(),
+            *docked_right_edges,
+        )
+        return occupied_right_edge >= window.contentsRect().right() - 2
+
+    qtbot.waitUntil(layout_occupies_window_width)
+
+    qtbot.mouseClick(  # type: ignore[no-untyped-call]
+        close_button,
+        Qt.MouseButton.LeftButton,
+    )
+    qtbot.waitUntil(lambda: not review_dock.isVisible())
+    toggle_action = next(
+        action
+        for action in panels_menu.actions()
+        if action.objectName() == "humanReviewDockToggleAction"
+    )
+    assert not toggle_action.isChecked()
+
+    toggle_action.trigger()
+
+    qtbot.waitUntil(review_dock.isVisible)
+    assert toggle_action.isChecked()
+    assert review_dock.isFloating()
+
+    qtbot.mouseClick(  # type: ignore[no-untyped-call]
+        float_button,
+        Qt.MouseButton.LeftButton,
+    )
+    qtbot.waitUntil(lambda: not review_dock.isFloating())
+    assert not minimize_button.isVisible()
+    assert not maximize_button.isVisible()
+
+    qtbot.mouseClick(  # type: ignore[no-untyped-call]
+        float_button,
+        Qt.MouseButton.LeftButton,
+    )
+    qtbot.waitUntil(review_dock.isFloating)
 
 
 @pytest.mark.integration

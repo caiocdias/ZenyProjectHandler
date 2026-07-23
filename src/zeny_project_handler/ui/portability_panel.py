@@ -403,7 +403,7 @@ class PortabilityPanelWidget(QWidget):
         self.atualizar_projetos()
         self.abrir_projeto(result.projeto.id)
         self.data_changed.emit()
-        self.status_changed.emit("Projeto importado com IDs, revisões e grafo preservados")
+        self.status_changed.emit("Projeto importado com IDs, análises e revisões preservados")
 
     def criar_backup(self) -> None:
         name, _filter = QFileDialog.getSaveFileName(

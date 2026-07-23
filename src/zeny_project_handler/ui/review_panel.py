@@ -9,12 +9,14 @@ from uuid import UUID
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -27,6 +29,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from zeny_project_handler.application.analysis_regions import RegiaoAnalise
 from zeny_project_handler.application.errors import ApplicationError
 from zeny_project_handler.application.human_review import (
     DadosElementoRevisao,
@@ -106,7 +109,7 @@ class ReviewPanelWidget(QWidget):
 
         guidance = QLabel(
             "As identificações são incorporadas automaticamente ao projeto. "
-            "Expanda um poste para ver as estruturas, equipamentos e cabos relacionados; "
+            "Expanda cada região para ver a coordenada e tudo o que acontece naquele ponto; "
             "clique em qualquer elemento para localizá-lo no PDF."
         )
         guidance.setObjectName("analysisResultsGuidance")
@@ -115,10 +118,18 @@ class ReviewPanelWidget(QWidget):
 
         self._tree = QTreeWidget()
         self._tree.setObjectName("analysisRelationshipTree")
-        self._tree.setHeaderLabels(("Elemento e vínculo", "Situação", "Catálogo", "Confiança"))
+        self._tree.setHeaderLabels(
+            ("Ponto / elemento", "Ação", "Coordenada", "Catálogo", "Vínculos")
+        )
         self._tree.setSelectionMode(QTreeWidget.SelectionMode.SingleSelection)
         self._tree.setUniformRowHeights(True)
-        self._tree.header().setStretchLastSection(True)
+        self._tree.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        header = self._tree.header()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        header.setMinimumSectionSize(80)
+        for column, width in enumerate((190, 105, 185, 260, 260)):
+            header.resizeSection(column, width)
+        header.setStretchLastSection(False)
         layout.addWidget(self._tree, 1)
 
         self._table = QTableWidget(0, 4)
@@ -405,60 +416,51 @@ class ReviewPanelWidget(QWidget):
         if session is None:
             return
         self._tree.clear()
-        visible_elements = tuple(item for item in proposals if isinstance(item, PropostaElemento))
-        all_elements = tuple(
-            item for item in session.propostas if isinstance(item, PropostaElemento)
-        )
-        poles = {
-            item.id: item for item in all_elements if item.categoria is CategoriaElemento.POSTE
+        visible_elements = {
+            item.id: item for item in proposals if isinstance(item, PropostaElemento)
         }
-        relations = tuple(item for item in session.propostas if isinstance(item, PropostaRelacao))
-        pole_links: dict[UUID, list[tuple[UUID, str]]] = {}
-        for relation in relations:
-            if relation.destino_referencia_id not in poles:
-                continue
-            pole_links.setdefault(relation.origem_referencia_id, []).append(
-                (relation.destino_referencia_id, relation.tipo_relacao)
+        all_elements = {
+            item.id: item for item in session.propostas if isinstance(item, PropostaElemento)
+        }
+        all_relations = {
+            item.id: item for item in session.propostas if isinstance(item, PropostaRelacao)
+        }
+        for region_number, region in enumerate(session.regioes, start=1):
+            elements = tuple(
+                visible_elements[element_id]
+                for element_id in region.elemento_ids
+                if element_id in visible_elements
             )
-
-        roots: dict[UUID, QTreeWidgetItem] = {}
-
-        def pole_root(pole: PropostaElemento) -> QTreeWidgetItem:
-            existing = roots.get(pole.id)
-            if existing is not None:
-                return existing
-            root = self._result_item(pole)
-            self._tree.addTopLevelItem(root)
-            roots[pole.id] = root
-            return root
-
-        unlinked: QTreeWidgetItem | None = None
-        visible_ids = {item.id for item in visible_elements}
-        for element in visible_elements:
-            if element.categoria is CategoriaElemento.POSTE:
-                pole_root(element)
+            if not elements:
                 continue
-            links = sorted(
-                pole_links.get(element.id, ()),
-                key=lambda item: (item[1], str(item[0])),
-            )
-            if links:
-                pole_id, relation_type = links[0]
-                pole_root(poles[pole_id]).addChild(
-                    self._result_item(element, relationship=relation_type)
+            root = QTreeWidgetItem(
+                (
+                    self._region_label(region, region_number),
+                    _region_action_counts(elements),
+                    _coordinate_label(region),
+                    f"{len(elements)} elemento(s)",
+                    f"{len(region.vinculo_ids)} vínculo(s)",
                 )
-                continue
-            if unlinked is None:
-                unlinked = QTreeWidgetItem(("Sem vínculo de poste identificado", "", "", ""))
-                self._tree.addTopLevelItem(unlinked)
-            unlinked.addChild(self._result_item(element))
-
-        for pole_id, root in roots.items():
-            if pole_id not in visible_ids and root.childCount() == 0:
-                self._tree.takeTopLevelItem(self._tree.indexOfTopLevelItem(root))
+            )
+            root.setData(0, Qt.ItemDataRole.UserRole + 1, str(region.id))
+            root.setToolTip(0, self._region_location(region, region_number))
+            root.setToolTip(1, _region_summary(elements))
+            self._tree.addTopLevelItem(root)
+            for element in elements:
+                root.addChild(
+                    self._result_item(
+                        element,
+                        relationships=_relationship_labels(
+                            element,
+                            region,
+                            all_elements,
+                            all_relations,
+                        ),
+                    )
+                )
         if not visible_elements:
             self._tree.addTopLevelItem(
-                QTreeWidgetItem(("Nenhuma identificação neste filtro", "", "", ""))
+                QTreeWidgetItem(("Nenhuma identificação neste filtro", "", "", "", ""))
             )
         self._tree.expandAll()
 
@@ -466,21 +468,35 @@ class ReviewPanelWidget(QWidget):
         self,
         proposal: PropostaElemento,
         *,
-        relationship: str | None = None,
+        relationships: tuple[str, ...] = (),
     ) -> QTreeWidgetItem:
-        label = _proposal_label(proposal)
-        if relationship is not None:
-            label = f"{label} · {relationship.replace('_', ' ').lower()}"
         item = QTreeWidgetItem(
             (
-                label,
+                _proposal_label(proposal),
                 _situation_label(proposal.situacao_projeto),
+                "",
                 self._catalog_label(proposal),
-                f"{proposal.confianca:.0%}" if proposal.confianca is not None else "-",
+                "; ".join(relationships) or "Agrupado por proximidade",
             )
         )
         item.setData(0, Qt.ItemDataRole.UserRole, str(proposal.id))
         return item
+
+    def _region_label(self, region: RegiaoAnalise, number: int) -> str:
+        return region.rotulo_ponto or f"Ponto {number}"
+
+    def _region_location(self, region: RegiaoAnalise, number: int) -> str:
+        session = self._session
+        if session is None:
+            return self._region_label(region, number)
+        for document in session.projeto.documentos:
+            for page in document.paginas:
+                if page.id == region.pagina_id:
+                    return (
+                        f"{self._region_label(region, number)} · "
+                        f"{document.nome_arquivo} · página {page.numero}"
+                    )
+        return self._region_label(region, number)
 
     def _catalog_label(self, proposal: PropostaElemento) -> str:
         session = self._session
@@ -500,6 +516,26 @@ class ReviewPanelWidget(QWidget):
         proposal_id = selected[0].data(0, Qt.ItemDataRole.UserRole)
         if proposal_id:
             self._select_proposal_id(str(proposal_id))
+            return
+        region_id = selected[0].data(0, Qt.ItemDataRole.UserRole + 1)
+        if region_id:
+            self._select_region_id(str(region_id))
+
+    def _select_region_id(self, region_id: str) -> None:
+        session = self._session
+        if session is None:
+            return
+        region = next((item for item in session.regioes if str(item.id) == region_id), None)
+        if region is None:
+            return
+        page_number = self._project_page_number(region.pagina_id)
+        if page_number is not None:
+            self._viewer.ir_para_folha(page_number)
+        self._viewer.definir_sobreposicoes((region.geometria.pontos,))
+        self._detected.setText(
+            f"{self._region_location(region, session.regioes.index(region) + 1)} · "
+            f"{_coordinate_label(region)}"
+        )
 
     def _select_table_proposal(self) -> None:
         selected = self._table.selectedItems()
@@ -519,6 +555,10 @@ class ReviewPanelWidget(QWidget):
         self._syncing_selection = True
         try:
             self._selected_proposal_id = proposal.id
+            if isinstance(proposal, PropostaElemento):
+                page_number = self._project_page_number(proposal.geometria.pagina_id)
+                if page_number is not None:
+                    self._viewer.ir_para_folha(page_number)
             self._select_tree_item(proposal_id)
             self._select_table_row(proposal_id)
             self._viewer.selecionar_proposta(proposal_id)
@@ -545,6 +585,18 @@ class ReviewPanelWidget(QWidget):
             self._update_editor_visibility(proposal)
         finally:
             self._syncing_selection = False
+
+    def _project_page_number(self, page_id: UUID) -> int | None:
+        session = self._session
+        if session is None:
+            return None
+        project_page_number = 0
+        for document in session.projeto.documentos:
+            for page in document.paginas:
+                project_page_number += 1
+                if page.id == page_id:
+                    return project_page_number
+        return None
 
     def _select_tree_item(self, proposal_id: str) -> None:
         pending = [self._tree.invisibleRootItem()]
@@ -869,6 +921,69 @@ def _situation_label(situation: SituacaoProjeto) -> str:
         SituacaoProjeto.REMOVER: "A remover",
         SituacaoProjeto.EXISTENTE: "Existente",
     }[situation]
+
+
+def _coordinate_label(region: RegiaoAnalise) -> str:
+    if region.coordenada is None:
+        return "Sem coordenada identificada"
+    return f"E {region.coordenada.leste:.0f} · N {region.coordenada.norte:.0f}"
+
+
+def _region_summary(elements: tuple[PropostaElemento, ...]) -> str:
+    parts: list[str] = []
+    for situation, verb in (
+        (SituacaoProjeto.REMOVER, "Remover"),
+        (SituacaoProjeto.INSTALAR, "Instalar"),
+        (SituacaoProjeto.EXISTENTE, "Existente"),
+    ):
+        labels = tuple(
+            _proposal_label(element)
+            for element in elements
+            if element.situacao_projeto is situation
+        )
+        if labels:
+            parts.append(f"{verb}: {', '.join(labels)}")
+    return " · ".join(parts)
+
+
+def _region_action_counts(elements: tuple[PropostaElemento, ...]) -> str:
+    parts: list[str] = []
+    for situation, singular, plural in (
+        (SituacaoProjeto.REMOVER, "remover", "remover"),
+        (SituacaoProjeto.INSTALAR, "instalar", "instalar"),
+        (SituacaoProjeto.EXISTENTE, "existente", "existentes"),
+    ):
+        count = sum(element.situacao_projeto is situation for element in elements)
+        if count:
+            parts.append(f"{count} {singular if count == 1 else plural}")
+    return " · ".join(parts)
+
+
+def _relationship_labels(
+    element: PropostaElemento,
+    region: RegiaoAnalise,
+    elements: dict[UUID, PropostaElemento],
+    relations: dict[UUID, PropostaRelacao],
+) -> tuple[str, ...]:
+    labels: list[str] = []
+    for relation_id in region.vinculo_ids:
+        relation = relations.get(relation_id)
+        if relation is None:
+            continue
+        if relation.origem_referencia_id == element.id:
+            related_id = relation.destino_referencia_id
+            direction = "→"
+        elif relation.destino_referencia_id == element.id:
+            related_id = relation.origem_referencia_id
+            direction = "←"
+        else:
+            continue
+        related = elements.get(related_id)
+        if related is None:
+            continue
+        relation_label = relation.tipo_relacao.replace("_", " ").lower()
+        labels.append(f"{relation_label} {direction} {_proposal_label(related)}")
+    return tuple(labels)
 
 
 def _bounds(geometry: GeometriaDocumento) -> tuple[float, float, float, float]:

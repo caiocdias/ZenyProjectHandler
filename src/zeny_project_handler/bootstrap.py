@@ -16,7 +16,6 @@ from zeny_project_handler.adapters.analysis import (
     TesseractCliOcr,
 )
 from zeny_project_handler.adapters.catalog import carregar_catalogo_inicial
-from zeny_project_handler.adapters.graph import NetworkxProjectGraphBuilder
 from zeny_project_handler.adapters.interpretation import (
     InterpretadorRegrasExplicitas,
     carregar_registro_regras_inicial,
@@ -35,7 +34,6 @@ from zeny_project_handler.application.human_review import ServicoRevisaoHumana
 from zeny_project_handler.application.interpretation_pipeline import ExecutarPipelineInterpretacao
 from zeny_project_handler.application.mvp_workflow import ServicoFluxoMvp
 from zeny_project_handler.application.pdf_import import ImportarPdfsNoProjeto
-from zeny_project_handler.application.project_graph import ServicoGrafoProjeto
 from zeny_project_handler.application.project_portability import ServicoPortabilidadeProjeto
 from zeny_project_handler.config import AppSettings
 from zeny_project_handler.domain.catalog import CatalogoTecnico
@@ -93,13 +91,11 @@ def create_application(
         pdf_render_dpi=app_settings.pdf_render_dpi,
         review_service=ServicoRevisaoHumana(unit_of_work),
         workflow_service=workflow_service,
-        graph_service=ServicoGrafoProjeto(unit_of_work, NetworkxProjectGraphBuilder()),
         portability_service=ServicoPortabilidadeProjeto(
             unit_of_work,
             ZipProjectArchive(),
             SqlitePortableProjectDatabase(),
             SqliteBackupManager(),
-            NetworkxProjectGraphBuilder(),
             diretorio_dados=app_settings.data_directory,
             caminho_banco=app_settings.database_path,
             descartar_conexoes=engine.dispose,

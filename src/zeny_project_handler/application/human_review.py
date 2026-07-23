@@ -10,6 +10,7 @@ from uuid import UUID, uuid4, uuid5
 
 from zeny_project_handler.domain.analysis import (
     DecisaoRevisao,
+    EvidenciaDocumento,
     ExecucaoAnalise,
     PropostaElemento,
     PropostaRelacao,
@@ -43,6 +44,7 @@ from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormaliz
 from zeny_project_handler.ports.pdf import ReferenciaFontePdf
 from zeny_project_handler.ports.persistence import UnitOfWorkPort
 
+from .analysis_regions import RegiaoAnalise, agrupar_regioes_da_analise
 from .errors import ProjetoNaoEncontradoError, RevisaoHumanaError
 
 
@@ -67,6 +69,8 @@ class SessaoRevisao:
     catalogo: CatalogoTecnico
     execucao: ExecucaoAnalise
     propostas: tuple[ReferenciaProposta, ...]
+    regioes: tuple[RegiaoAnalise, ...]
+    evidencias: tuple[EvidenciaDocumento, ...]
     decisoes: tuple[DecisaoRevisao, ...]
     fontes_pdf: tuple[ReferenciaFontePdf, ...]
 
@@ -128,6 +132,10 @@ class ServicoRevisaoHumana:
                 raise RevisaoHumanaError("Catálogo do projeto não está disponível")
             execution = self._review_execution(work, project.id, execucao_id)
             proposals = work.propostas.listar_da_execucao(execution.id)
+            evidence_execution_id = _source_evidence_execution_id(execution)
+            evidence = work.evidencias.listar_da_execucao(evidence_execution_id)
+            if not evidence and evidence_execution_id != execution.id:
+                evidence = work.evidencias.listar_da_execucao(execution.id)
             decisions = tuple(
                 decision
                 for proposal in proposals
@@ -143,6 +151,12 @@ class ServicoRevisaoHumana:
                 catalogo=catalog,
                 execucao=execution,
                 propostas=proposals,
+                regioes=agrupar_regioes_da_analise(
+                    proposals,
+                    evidence,
+                    project.documentos,
+                ),
+                evidencias=evidence,
                 decisoes=decisions,
                 fontes_pdf=sources,
             )
@@ -632,3 +646,13 @@ def _proposal_signature(proposal: PropostaElemento) -> tuple[object, ...]:
         proposal.situacao_projeto,
         proposal.geometria,
     )
+
+
+def _source_evidence_execution_id(execution: ExecucaoAnalise) -> UUID:
+    raw_value = dict(execution.parametros).get("execucao_extracao_id")
+    if raw_value is None:
+        return execution.id
+    try:
+        return UUID(str(raw_value))
+    except ValueError:
+        return execution.id

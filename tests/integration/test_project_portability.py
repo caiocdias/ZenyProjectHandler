@@ -8,7 +8,6 @@ from sqlalchemy import Engine
 from tests.factories import complete_analysis, complete_project
 from tests.pdf_fixtures import create_golden_pdf
 
-from zeny_project_handler.adapters.graph import NetworkxProjectGraphBuilder
 from zeny_project_handler.adapters.pdf import PyMuPdfReader
 from zeny_project_handler.adapters.persistence import (
     SqlAlchemyUnitOfWork,
@@ -77,7 +76,6 @@ def _service(data: Path, engine: Engine) -> ServicoPortabilidadeProjeto:
         ZipProjectArchive(),
         SqlitePortableProjectDatabase(),
         SqliteBackupManager(),
-        NetworkxProjectGraphBuilder(),
         diretorio_dados=data,
         caminho_banco=data / "zeny-project-handler.sqlite3",
         descartar_conexoes=engine.dispose,
@@ -108,7 +106,7 @@ def _persist_complete_project(
         work.commit()
 
 
-def test_export_import_preserves_ids_decisions_graph_and_repairs_missing_photo(
+def test_export_import_preserves_ids_decisions_and_repairs_missing_photo(
     tmp_path: Path, catalogo_inicial: CatalogoTecnico
 ) -> None:
     source_data = tmp_path / "source-data"
@@ -126,8 +124,10 @@ def test_export_import_preserves_ids_decisions_graph_and_repairs_missing_photo(
     assert duplicated.deduplicada
     assert source_service.verificar_integridade(project.id).integro
     expected_project = attached.projeto
-    expected_graph = NetworkxProjectGraphBuilder().reconstruir(expected_project, catalogo_inicial)
     exported = source_service.exportar_projeto(project.id, tmp_path / "project.zphproj")
+    assert all(
+        item.caminho_relativo != "derived/graph.json" for item in exported.manifesto.arquivos
+    )
     moved_package = tmp_path / "moved" / exported.caminho.name
     moved_package.parent.mkdir()
     exported.caminho.replace(moved_package)
@@ -148,10 +148,6 @@ def test_export_import_preserves_ids_decisions_graph_and_repairs_missing_photo(
         imported_catalog = work.catalogos.obter(catalogo_inicial.id)
     assert imported_catalog == catalogo_inicial
     assert any(item is not None for item in decisions)
-    assert (
-        NetworkxProjectGraphBuilder().reconstruir(imported.projeto, catalogo_inicial).assinatura
-        == expected_graph.assinatura
-    )
 
     photo = imported.projeto.elementos[0].fotos[0]
     managed_photo = target_data / "project-files" / str(project.id) / photo.caminho_relativo

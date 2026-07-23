@@ -90,7 +90,7 @@ def review_panel_context(
         metodo="fixture",
         versao_metodo="1",
         parametros=(),
-        conteudo_bruto="POSTE",
+        conteudo_bruto="P4",
         criada_em=datetime(2026, 7, 21, 17, tzinfo=UTC),
     )
     pole_item = catalogo_inicial.itens_ativos(CategoriaElemento.POSTE)[0]
@@ -99,11 +99,16 @@ def review_panel_context(
         id=uuid4(),
         execucao_id=execution.id,
         categoria=CategoriaElemento.POSTE,
-        situacao_projeto=SituacaoProjeto.EXISTENTE,
+        situacao_projeto=SituacaoProjeto.REMOVER,
         estado_revisao=EstadoRevisao.PROPOSTA,
         evidencia_ids=(evidence.id,),
         geometria=geometry,
         tipo_catalogo_sugerido_id=pole_item.id,
+        codigo_observado="11-300",
+        atributos_sugeridos=(
+            ("coordenada_leste", 280653),
+            ("coordenada_norte", 7683008),
+        ),
         confianca=Decimal("0.90"),
     )
     conflict = PropostaElemento(
@@ -115,7 +120,7 @@ def review_panel_context(
         evidencia_ids=(evidence.id,),
         geometria=GeometriaDocumento.ponto(
             page_id,
-            PontoNormalizado(Decimal("0.70"), Decimal("0.70")),
+            PontoNormalizado(Decimal("0.22"), Decimal("0.28")),
         ),
         tipo_catalogo_sugerido_id=equipment_item.id,
         confianca=Decimal("0.70"),
@@ -177,37 +182,42 @@ def test_results_panel_groups_relationships_and_links_elements_to_pdf(
     tree = panel.findChild(QTreeWidget, "analysisRelationshipTree")
     assert tree is not None
     assert tree.topLevelItemCount() == 1
-    pole_item = tree.topLevelItem(0)
-    assert pole_item is not None
-    assert pole_item.text(0).startswith("Poste")
-    assert pole_item.childCount() == 1
-    equipment_item = pole_item.child(0)
+    region_item = tree.topLevelItem(0)
+    assert region_item is not None
+    assert region_item.text(0) == "P4"
+    assert region_item.text(1) == "1 remover · 1 instalar"
+    assert region_item.text(2) == "E 280653 · N 7683008"
+    assert "Remover: Poste 11-300" in region_item.toolTip(1)
+    assert "Instalar: Equipamento" in region_item.toolTip(1)
+    assert region_item.childCount() == 2
+    pole_item = region_item.child(0)
+    equipment_item = region_item.child(1)
+    assert pole_item.text(0) == "Poste 11-300"
+    assert pole_item.text(1) == "A remover"
     assert "Equipamento" in equipment_item.text(0)
-    assert "instalado em" in equipment_item.text(0)
+    assert "instalado em" in equipment_item.text(4)
     assert equipment_item.text(1) == "A instalar"
+    tree.setCurrentItem(region_item)
+    assert panel._viewer._overlays
 
     state_filter = panel.findChild(QComboBox, "reviewStateFilter")
     assert state_filter is not None
     state_filter.setCurrentIndex(state_filter.findData(EstadoRevisao.CONFLITANTE.value))
     assert tree.topLevelItemCount() == 1
-    filtered_pole = tree.topLevelItem(0)
-    assert filtered_pole is not None and filtered_pole.childCount() == 1
+    filtered_region = tree.topLevelItem(0)
+    assert filtered_region is not None and filtered_region.childCount() == 1
     state_filter.setCurrentIndex(0)
 
-    pole_item = tree.topLevelItem(0)
-    assert pole_item is not None
+    region_item = tree.topLevelItem(0)
+    assert region_item is not None
+    pole_item = region_item.child(0)
     tree.setCurrentItem(pole_item)
     assert str(proposal.id) in panel._viewer.view._review_items
     marker = panel._viewer.view._review_items[str(proposal.id)]
     assert marker.path().boundingRect().height() <= 4
     tree.clearSelection()
     marker.setSelected(False)
-    marker_position = panel._viewer.view.mapFromScene(marker.sceneBoundingRect().center())
-    qtbot.mouseClick(
-        panel._viewer.view.viewport(),
-        Qt.MouseButton.LeftButton,
-        pos=marker_position,
-    )  # type: ignore[no-untyped-call]
+    marker.setSelected(True)
     assert tree.selectedItems()
     assert tree.selectedItems()[0].data(0, Qt.ItemDataRole.UserRole) == str(proposal.id)
 

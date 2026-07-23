@@ -95,24 +95,6 @@ class EstadoConexao(StrEnum):
     DESCONHECIDA = "DESCONHECIDA"
 
 
-class VisaoGrafo(StrEnum):
-    FISICA = "FISICA"
-    ELETRICA = "ELETRICA"
-
-
-class TipoNoGrafo(StrEnum):
-    POSTE = "POSTE"
-    EQUIPAMENTO = "EQUIPAMENTO"
-    PONTO_REDE = "PONTO_REDE"
-    TERMINAL = "TERMINAL"
-
-
-class SeveridadeDiagnosticoGrafo(StrEnum):
-    ERRO = "ERRO"
-    AVISO = "AVISO"
-    INFORMACAO = "INFORMACAO"
-
-
 class ParticaoAvaliacao(StrEnum):
     DESENVOLVIMENTO = "DESENVOLVIMENTO"
     TESTE = "TESTE"

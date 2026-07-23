@@ -11,12 +11,19 @@ from uuid import uuid4
 import pytest
 
 from zeny_project_handler.adapters.analysis import PyMuPdfDocumentAnalyzer
+from zeny_project_handler.adapters.catalog import carregar_catalogo_inicial
+from zeny_project_handler.adapters.interpretation import (
+    InterpretadorRegrasExplicitas,
+    carregar_registro_regras_inicial,
+)
 from zeny_project_handler.adapters.pdf import PyMuPdfReader
+from zeny_project_handler.application.analysis_regions import agrupar_regioes_da_analise
 from zeny_project_handler.domain.enums import TipoEvidencia, TipoOrigemPdf
 from zeny_project_handler.ports.analysis import (
     ConfiguracaoAnaliseDocumento,
     SolicitacaoAnaliseDocumento,
 )
+from zeny_project_handler.ports.interpretation import SolicitacaoInterpretacao
 from zeny_project_handler.ports.pdf import ReferenciaFontePdf
 
 EXAMPLES_DIRECTORY = Path(__file__).parents[2] / "examples"
@@ -119,6 +126,24 @@ def test_registered_real_pdf_native_evidence_by_anonymous_hash(sample: dict[str,
             and item.origem_pdf.tipo is TipoOrigemPdf.APARENCIA_ANOTACAO
             for item in result.evidencias
         )
+    registry = carregar_registro_regras_inicial()
+    interpretation = InterpretadorRegrasExplicitas(registry).interpretar(
+        SolicitacaoInterpretacao(
+            projeto_id=project_id,
+            execucao_id=uuid4(),
+            execucao_extracao_id=request.execucao_id,
+            catalogo=carregar_catalogo_inicial(),
+            evidencias=result.evidencias,
+            registro=registry,
+        )
+    )
+    regions = agrupar_regioes_da_analise(
+        (*interpretation.elementos, *interpretation.relacoes),
+        result.evidencias,
+        (inspection.documento,),
+    )
+    grouped_element_ids = {element_id for region in regions for element_id in region.elemento_ids}
+    assert grouped_element_ids == {item.id for item in interpretation.elementos}
     after = source.stat()
     assert (before.st_size, before.st_mtime_ns) == (after.st_size, after.st_mtime_ns)
 

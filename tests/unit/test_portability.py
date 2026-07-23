@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
@@ -47,6 +48,9 @@ def test_zip_package_survives_move_and_reports_tampered_content(tmp_path: Path) 
     source.write_bytes(b"%PDF-1.7\nexample")
     origin = _origin(source)
     package = ZipProjectArchive().criar(tmp_path / "project.zphproj", _manifest(origin), (origin,))
+    with ZipFile(package) as archive:
+        envelope = json.loads(archive.read("manifest.json"))
+    assert "graph_signature" not in envelope["manifest"]
     moved = tmp_path / "other-folder" / package.name
     moved.parent.mkdir()
     package.replace(moved)

@@ -41,9 +41,5 @@ class FluxoMvpCanceladoError(ApplicationError):
     """O fluxo operacional foi cancelado em um ponto seguro e pode ser retomado."""
 
 
-class ReconstrucaoGrafoError(ApplicationError):
-    """A reconstrução ou uma decisão do grafo não corresponde ao estado atual do projeto."""
-
-
 class PortabilidadeProjetoError(ApplicationError):
     """O pacote, anexo, backup ou recuperação não pôde ser concluído com segurança."""

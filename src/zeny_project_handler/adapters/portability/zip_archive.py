@@ -204,7 +204,6 @@ def _manifest_from_envelope(envelope: dict[str, Any]) -> ManifestoProjetoPortati
             catalogo_id=UUID(str(raw["catalog_id"])),
             nome_projeto=str(raw["project_name"]),
             criado_em=datetime.fromisoformat(str(raw["created_at"])),
-            assinatura_grafo=(str(raw["graph_signature"]) if raw.get("graph_signature") else None),
             arquivos=tuple(
                 ArquivoPacoteProjeto(
                     caminho_relativo=str(item["path"]),
@@ -224,13 +223,12 @@ def _manifest_from_envelope(envelope: dict[str, Any]) -> ManifestoProjetoPortati
 
 
 def _manifest_to_dict(manifesto: ManifestoProjetoPortatil) -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "format_version": manifesto.versao_formato,
         "project_id": str(manifesto.projeto_id),
         "catalog_id": str(manifesto.catalogo_id),
         "project_name": manifesto.nome_projeto,
         "created_at": manifesto.criado_em.isoformat(),
-        "graph_signature": manifesto.assinatura_grafo,
         "files": [
             {
                 "path": item.caminho_relativo,
@@ -243,6 +241,7 @@ def _manifest_to_dict(manifesto: ManifestoProjetoPortatil) -> dict[str, object]:
             for item in manifesto.arquivos
         ],
     }
+    return payload
 
 
 def _file_digest(path: Path) -> tuple[str, int]:

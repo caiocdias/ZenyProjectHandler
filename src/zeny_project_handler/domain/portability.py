@@ -54,7 +54,6 @@ class ManifestoProjetoPortatil:
     nome_projeto: str
     criado_em: datetime
     arquivos: tuple[ArquivoPacoteProjeto, ...]
-    assinatura_grafo: str | None = None
 
     def __post_init__(self) -> None:
         files = tuple(self.arquivos)
@@ -64,14 +63,10 @@ class ManifestoProjetoPortatil:
             raise DomainValidationError("Data do manifesto deve possuir fuso horário")
         if len({item.caminho_relativo.casefold() for item in files}) != len(files):
             raise DomainValidationError("Manifesto não pode repetir caminhos de arquivos")
-        graph_signature = self.assinatura_grafo.strip().lower() if self.assinatura_grafo else None
-        if graph_signature is not None and not _SHA256_PATTERN.fullmatch(graph_signature):
-            raise DomainValidationError("Assinatura do grafo no pacote é inválida")
         object.__setattr__(
             self, "nome_projeto", required_text(self.nome_projeto, field_name="nome_projeto")
         )
         object.__setattr__(self, "arquivos", files)
-        object.__setattr__(self, "assinatura_grafo", graph_signature)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

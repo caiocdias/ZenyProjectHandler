@@ -10,7 +10,6 @@ from PySide6.QtWidgets import QComboBox, QFileDialog, QListWidget, QMessageBox, 
 from pytestqt.qtbot import QtBot
 from tests.factories import complete_project
 
-from zeny_project_handler.adapters.graph import NetworkxProjectGraphBuilder
 from zeny_project_handler.adapters.persistence import (
     SqlAlchemyUnitOfWork,
     SqliteBackupManager,
@@ -34,7 +33,6 @@ def _service(data: Path):  # type: ignore[no-untyped-def]
         ZipProjectArchive(),
         SqlitePortableProjectDatabase(),
         SqliteBackupManager(),
-        NetworkxProjectGraphBuilder(),
         diretorio_dados=data,
         caminho_banco=data / "zeny-project-handler.sqlite3",
         descartar_conexoes=engine.dispose,
