@@ -45,6 +45,7 @@ def test_analysis_configuration_is_stable_and_validated() -> None:
     parameters = dict(configuration.parametros())
     assert parameters["minimo_caracteres_texto_nativo"] == 20
     assert parameters["area_imagem_minima_para_ocr"] == Decimal("0.10")
+    assert parameters["area_imagem_regional_minima_para_ocr"] == Decimal("0.0025")
     assert parameters["minimo_vetores_para_ocr"] == 1000
     assert (
         len(
@@ -61,6 +62,8 @@ def test_analysis_configuration_is_stable_and_validated() -> None:
         ConfiguracaoAnaliseDocumento(minimo_caracteres_texto_nativo=-1)
     with pytest.raises(ValueError, match="Área"):
         ConfiguracaoAnaliseDocumento(area_imagem_minima_para_ocr=Decimal("1.1"))
+    with pytest.raises(ValueError, match="regional"):
+        ConfiguracaoAnaliseDocumento(area_imagem_regional_minima_para_ocr=Decimal("0.2"))
     with pytest.raises(ValueError, match="vetores"):
         ConfiguracaoAnaliseDocumento(minimo_vetores_para_ocr=0)
     with pytest.raises(ValueError, match="DPI"):

@@ -11,6 +11,7 @@ from tests.pdf_fixtures import (
     create_analysis_pdf,
     create_dense_vector_text_pdf,
     create_mixed_raster_text_pdf,
+    create_small_raster_region_pdf,
 )
 
 from zeny_project_handler.adapters.analysis import JsonAnalysisCache, PyMuPdfDocumentAnalyzer
@@ -170,6 +171,21 @@ def test_relevant_raster_triggers_ocr_even_with_native_text(tmp_path: Path) -> N
 
     assert [page.pagina_numero for page in ocr.pages] == [1]
     assert any(item.tipo is TipoEvidencia.OCR for item in result.evidencias)
+
+
+def test_small_raster_region_triggers_localized_ocr_on_text_rich_page(
+    tmp_path: Path,
+) -> None:
+    request = _request(create_small_raster_region_pdf(tmp_path / "small-region.pdf"))
+    ocr = FakeOcr()
+
+    result = PyMuPdfDocumentAnalyzer(motor_ocr=ocr).analisar(request)
+
+    assert len(ocr.pages) == 1
+    assert ocr.pages[0].largura_pixels < 200 * 200 / 72
+    evidence = next(item for item in result.evidencias if item.tipo is TipoEvidencia.OCR)
+    assert min(point.x for point in evidence.geometria.pontos) >= Decimal("0.7")
+    assert min(point.y for point in evidence.geometria.pontos) >= Decimal("0.6")
 
 
 def test_dense_vector_page_triggers_ocr_even_with_native_text(tmp_path: Path) -> None:

@@ -219,6 +219,7 @@ def _extract_page(
         native_characters,
         image_coverage,
         len(vector_candidates),
+        image_candidates,
     )
     candidates.extend(ocr_candidates)
     diagnostics.extend(ocr_diagnostics)

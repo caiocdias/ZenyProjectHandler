@@ -7,6 +7,7 @@ from dataclasses import replace
 from decimal import Decimal
 from uuid import UUID, uuid5
 
+from zeny_project_handler.application.coordinate_pairs import detectar_pares_coordenadas
 from zeny_project_handler.domain.analysis import EvidenciaDocumento, PropostaElemento
 from zeny_project_handler.domain.catalog import ItemCatalogoType, TipoEquipamento, TipoPoste
 from zeny_project_handler.domain.enums import (
@@ -31,7 +32,6 @@ _POLE_DIMENSION_PATTERN = re.compile(
     r"(?<!\d)(9|10|11|12|13|15|18)\s*M?(?:\s*[-/:X]\s*|\s+)"
     r"(150|300|600|1000)\s*(?:DA?N)?(?!\d)"
 )
-_COORDINATE_NUMBER_PATTERN = re.compile(r"(?<!\d)\d{6,8}(?!\d)")
 _COORDINATE_CONTEXT_DISTANCE = 0.12
 _POLE_FORMAT_PHRASES = {
     "CIRCULAR": ("POSTE CIRCULAR", "CIRCULAR"),
@@ -470,32 +470,35 @@ def _coordinate_near(
     proposal: PropostaElemento,
     request: SolicitacaoInterpretacao,
 ) -> tuple[int, int, tuple[UUID, ...]] | None:
+    pairs = detectar_pares_coordenadas(
+        request.evidencias,
+        distancia_maxima=_COORDINATE_CONTEXT_DISTANCE * 2,
+        distancia_geometrias=geometry_distance,
+    )
     nearby = tuple(
-        item
-        for item in request.evidencias
-        if item.pagina_id == proposal.geometria.pagina_id
-        and item.tipo in {TipoEvidencia.TEXTO, TipoEvidencia.OCR}
-        and item.conteudo_bruto
-        and geometry_distance(proposal.geometria, item.geometria) <= _COORDINATE_CONTEXT_DISTANCE
+        pair
+        for pair in pairs
+        if pair.geometria_leste.pagina_id == proposal.geometria.pagina_id
+        and max(
+            geometry_distance(proposal.geometria, pair.geometria_leste),
+            geometry_distance(proposal.geometria, pair.geometria_norte),
+        )
+        <= _COORDINATE_CONTEXT_DISTANCE
     )
-    numbers = tuple(
-        (number, item.id, geometry_distance(proposal.geometria, item.geometria))
-        for item in nearby
-        for number in _coordinate_numbers(item.conteudo_bruto or "")
-    )
-    eastings = tuple(item for item in numbers if 100_000 <= item[0] <= 999_999)
-    northings = tuple(item for item in numbers if 1_000_000 <= item[0] <= 10_000_000)
-    if not eastings or not northings:
+    if not nearby:
         return None
-    east = min(eastings, key=lambda item: (item[2], item[0]))
-    north = min(northings, key=lambda item: (item[2], item[0]))
-    return east[0], north[0], tuple(sorted({east[1], north[1]}, key=str))
-
-
-def _coordinate_numbers(text: str) -> tuple[int, ...]:
-    return tuple(
-        int(re.sub(r"\D", "", match.group())) for match in _COORDINATE_NUMBER_PATTERN.finditer(text)
+    selected = min(
+        nearby,
+        key=lambda pair: (
+            max(
+                geometry_distance(proposal.geometria, pair.geometria_leste),
+                geometry_distance(proposal.geometria, pair.geometria_norte),
+            ),
+            pair.leste,
+            pair.norte,
+        ),
     )
+    return selected.leste, selected.norte, selected.evidencia_ids
 
 
 def _untyped_phrase_proposal(

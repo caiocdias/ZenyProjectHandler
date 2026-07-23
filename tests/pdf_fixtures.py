@@ -81,6 +81,22 @@ def create_mixed_raster_text_pdf(path: Path) -> Path:
     return path
 
 
+def create_small_raster_region_pdf(path: Path) -> Path:
+    """Página híbrida com uma pequena região raster que precisa de OCR localizado."""
+    document = pymupdf.open()
+    try:
+        page = document.new_page(width=200, height=200)
+        page.insert_text((10, 20), "TEXTO NATIVO SUFICIENTE NO CARIMBO DO PROJETO")
+        page.insert_image(
+            pymupdf.Rect(140, 120, 180, 160),
+            stream=_scanned_text_png(),
+        )
+        document.save(path)
+    finally:
+        document.close()
+    return path
+
+
 def create_dense_vector_text_pdf(path: Path) -> Path:
     """Página CAD sintética em que glifos podem ter sido convertidos em muitos caminhos."""
     document = pymupdf.open()
@@ -164,3 +180,13 @@ def _red_pixel_png() -> bytes:
     pixmap = pymupdf.Pixmap(pymupdf.csRGB, (0, 0, 2, 2), False)
     pixmap.clear_with(0xFF0000)
     return bytes(pixmap.tobytes("png"))
+
+
+def _scanned_text_png() -> bytes:
+    document = pymupdf.open()
+    try:
+        page = document.new_page(width=100, height=50)
+        page.insert_text((5, 25), "280653/7683008", fontsize=8)
+        return bytes(page.get_pixmap(dpi=144, alpha=False).tobytes("png"))
+    finally:
+        document.close()

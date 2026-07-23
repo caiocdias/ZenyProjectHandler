@@ -23,10 +23,11 @@ from zeny_project_handler.domain.values import (
     PontoNormalizado,
 )
 
+from .coordinate_pairs import detectar_pares_coordenadas
+
 _DEFAULT_REGION_DISTANCE = 0.10
 _COORDINATE_REGION_DISTANCE = 0.18
 _POINT_ANCHOR_DISTANCE = 0.14
-_COORDINATE_NUMBER_PATTERN = re.compile(r"(?<!\d)\d{6,8}(?!\d)")
 _POINT_LABEL_PATTERN = re.compile(
     r"^\s*(?:PONTO\s+)?P\s*[-.:]?\s*0*(\d{1,4})\s*$",
     re.IGNORECASE,
@@ -75,6 +76,7 @@ def agrupar_regioes_da_analise(
     evidencias: tuple[EvidenciaDocumento, ...],
     documentos: tuple[DocumentoProjeto, ...],
     *,
+    ordem_paginas: tuple[UUID, ...] | None = None,
     distancia_maxima: float = _DEFAULT_REGION_DISTANCE,
 ) -> tuple[RegiaoAnalise, ...]:
     """Derive regiões estáveis sem transformar os resultados em um grafo."""
@@ -106,16 +108,14 @@ def agrupar_regioes_da_analise(
         )
         for region in preliminary
     )
-    page_order = {
-        page.id: (document_index, page.numero)
-        for document_index, document in enumerate(documentos)
-        for page in document.paginas
-    }
+    default_page_order = tuple(page.id for document in documentos for page in document.paginas)
+    reading_order = ordem_paginas or default_page_order
+    page_order = {page_id: index for index, page_id in enumerate(reading_order)}
     return tuple(
         sorted(
             regions,
             key=lambda item: (
-                page_order.get(item.pagina_id, (len(documentos), 0)),
+                page_order.get(item.pagina_id, len(page_order)),
                 _center(item.geometria)[1],
                 _center(item.geometria)[0],
                 str(item.id),
@@ -323,49 +323,23 @@ def _coordinate_from_elements(
 def _coordinate_candidates(
     evidence: tuple[EvidenciaDocumento, ...],
 ) -> tuple[_CoordinateCandidate, ...]:
-    numbers = tuple(
-        (
-            value,
-            item.geometria,
-        )
-        for item in evidence
-        if item.tipo in {TipoEvidencia.TEXTO, TipoEvidencia.OCR} and item.conteudo_bruto
-        for value in _coordinate_numbers(item.conteudo_bruto)
+    pairs = detectar_pares_coordenadas(
+        evidence,
+        distancia_maxima=_COORDINATE_REGION_DISTANCE,
+        distancia_geometrias=_box_gap,
     )
-    eastings = tuple(item for item in numbers if 100_000 <= item[0] <= 999_999)
-    northings = tuple(item for item in numbers if 1_000_000 <= item[0] <= 10_000_000)
     candidates: dict[tuple[UUID, int, int], _CoordinateCandidate] = {}
-    for east, east_geometry in eastings:
-        nearby_northings = tuple(
-            item
-            for item in northings
-            if item[1].pagina_id == east_geometry.pagina_id
-            and _box_gap(east_geometry, item[1]) <= _COORDINATE_REGION_DISTANCE
-        )
-        nearest = min(
-            nearby_northings,
-            key=lambda item: _box_gap(east_geometry, item[1]),
-            default=None,
-        )
-        if nearest is None:
-            continue
-        north, north_geometry = nearest
-        key = (east_geometry.pagina_id, east, north)
+    for pair in pairs:
+        key = (pair.geometria_leste.pagina_id, pair.leste, pair.norte)
         candidates[key] = _CoordinateCandidate(
             coordinate=CoordenadaCampo(
-                leste=Decimal(east),
-                norte=Decimal(north),
+                leste=Decimal(pair.leste),
+                norte=Decimal(pair.norte),
                 sistema_referencia="UTM",
             ),
-            geometry=_combined_geometry((east_geometry, north_geometry)),
+            geometry=_combined_geometry((pair.geometria_leste, pair.geometria_norte)),
         )
     return tuple(candidates.values())
-
-
-def _coordinate_numbers(text: str) -> tuple[int, ...]:
-    return tuple(
-        int(re.sub(r"\D", "", match.group())) for match in _COORDINATE_NUMBER_PATTERN.finditer(text)
-    )
 
 
 def _assign_coordinates(

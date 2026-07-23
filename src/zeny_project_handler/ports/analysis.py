@@ -33,6 +33,7 @@ class ConfiguracaoAnaliseDocumento:
     habilitar_ocr_condicional: bool = True
     minimo_caracteres_texto_nativo: int = 20
     area_imagem_minima_para_ocr: Decimal = Decimal("0.10")
+    area_imagem_regional_minima_para_ocr: Decimal = Decimal("0.0025")
     minimo_vetores_para_ocr: int = 1000
     dpi_ocr: int = 200
     profundidade_maxima_xobject: int = 12
@@ -44,6 +45,16 @@ class ConfiguracaoAnaliseDocumento:
         if not Decimal(0) <= image_area <= Decimal(1):
             raise ValueError("Área mínima de imagem para OCR deve estar entre 0 e 1")
         object.__setattr__(self, "area_imagem_minima_para_ocr", image_area)
+        regional_image_area = Decimal(self.area_imagem_regional_minima_para_ocr)
+        if not Decimal(0) <= regional_image_area <= image_area:
+            raise ValueError(
+                "Área mínima de OCR regional deve ficar entre zero e o limite de página"
+            )
+        object.__setattr__(
+            self,
+            "area_imagem_regional_minima_para_ocr",
+            regional_image_area,
+        )
         if self.minimo_vetores_para_ocr < 1:
             raise ValueError("Mínimo de vetores para OCR deve ser positivo")
         if not 72 <= self.dpi_ocr <= 600:
@@ -57,6 +68,10 @@ class ConfiguracaoAnaliseDocumento:
                 (
                     ("dpi_ocr", self.dpi_ocr),
                     ("area_imagem_minima_para_ocr", self.area_imagem_minima_para_ocr),
+                    (
+                        "area_imagem_regional_minima_para_ocr",
+                        self.area_imagem_regional_minima_para_ocr,
+                    ),
                     ("extrair_anotacoes", self.extrair_anotacoes),
                     ("extrair_forms_xobjects", self.extrair_forms_xobjects),
                     ("extrair_imagens", self.extrair_imagens),
