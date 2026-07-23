@@ -1,0 +1,223 @@
+{
+  "schema_version": 1,
+  "registry": {
+    "id": "710c56ea-8586-5cdd-a272-f885ab93ac73",
+    "version": "cemig-nd31-2025.2"
+  },
+  "rules": [
+    {
+      "id": "nd31.desenho.numero-projeto",
+      "title": "Número do projeto com 10 dígitos",
+      "description": "O desenho deve informar o número do projeto/Nota de Serviço com 10 dígitos.",
+      "scope": "PROJETO",
+      "severity": "ERRO",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Apresentação do Projeto, 2.4",
+        "page": 88,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "rede.contexto_urbano",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "projeto.nota_servico",
+          "operator": "EXISTE",
+          "expected": []
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.desenho.formato",
+      "title": "Formato de folha padronizado",
+      "description": "O formato identificado deve ser A1, A2, A3 ou A4.",
+      "scope": "PROJETO",
+      "severity": "ALERTA",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Apresentação do Projeto, 2.3",
+        "page": 88,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "rede.contexto_urbano",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "projeto.formato_folha",
+          "operator": "EM",
+          "expected": ["A1", "A2", "A3", "A4"]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.desenho.escala",
+      "title": "Escala urbana de apresentação",
+      "description": "A escala urbana usual deve ser 1:1000; 1:500 é admitida nos casos extraordinários descritos pela norma.",
+      "scope": "PROJETO",
+      "severity": "ALERTA",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Apresentação do Projeto, 2.1",
+        "page": 88,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "rede.contexto_urbano",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "projeto.escala",
+          "operator": "EM",
+          "expected": ["1:1000", "1:500"]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.equipamento.estrutura-angulo",
+      "title": "Equipamento em estrutura de ângulo",
+      "description": "Exceto chave fusível, equipamentos não devem ser instalados em estruturas de ângulo ou postes de esquina; para deflexão de até 30 graus a norma exige avaliação do risco de abalroamento.",
+      "scope": "REGIAO",
+      "severity": "CRITICA",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Dimensionamento Mecânico, observação j",
+        "page": 66,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "regiao.equipamento_instalar",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "regiao.equipamento_classe",
+          "operator": "NAO_EM",
+          "expected": ["CHAVE_FUSIVEL"],
+          "quantifier": "QUALQUER"
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "conexao.angulo_graus",
+          "operator": "MENOR_OU_IGUAL",
+          "expected": [30]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.equipamento.risco-abalroamento",
+      "title": "Avaliação de abalroamento em equipamento no ângulo",
+      "description": "Para equipamento não fusível instalado em deflexão maior que zero e menor ou igual a 30 graus, deve existir evidência da avaliação dos riscos de abalroamento.",
+      "scope": "REGIAO",
+      "severity": "CRITICA",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Dimensionamento Mecânico, observação j",
+        "page": 67,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "regiao.equipamento_instalar",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "regiao.equipamento_classe",
+          "operator": "NAO_EM",
+          "expected": ["CHAVE_FUSIVEL"],
+          "quantifier": "QUALQUER"
+        },
+        {
+          "fact": "conexao.angulo_graus",
+          "operator": "MAIOR",
+          "expected": [0]
+        },
+        {
+          "fact": "conexao.angulo_graus",
+          "operator": "MENOR_OU_IGUAL",
+          "expected": [30]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "regiao.risco_abalroamento_avaliado",
+          "operator": "EXISTE",
+          "expected": []
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.vao.urbano-compacto-isolado",
+      "title": "Vão máximo de rede compacta ou isolada urbana",
+      "description": "Em condição urbana ordinária, vãos de redes compactas ou isoladas não devem ultrapassar 45 m sem que a exceção e as condições de perfil sejam demonstradas.",
+      "scope": "REGIAO",
+      "severity": "ERRO",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Locação de Postes, 3, alíneas b e c",
+        "page": 26,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "rede.contexto_urbano",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "cabo.tecnologia",
+          "operator": "EM",
+          "expected": ["PROTEGIDA", "ISOLADA"],
+          "quantifier": "QUALQUER"
+        }
+      ],
+      "unless": [
+        {
+          "fact": "vao.excecao_45_60_demonstrada",
+          "operator": "EXISTE",
+          "expected": []
+        }
+      ],
+      "must": [
+        {
+          "fact": "vao.comprimento_m",
+          "operator": "MENOR_OU_IGUAL",
+          "expected": [45]
+        }
+      ],
+      "enabled": true
+    }
+  ]
+}

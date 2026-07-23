@@ -33,6 +33,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "zeny_project_handler.adapters.catalog.data" = ["*.json"]
+"zeny_project_handler.adapters.compliance.data" = ["*.json"]
 "zeny_project_handler.adapters.interpretation.data" = ["*.json"]
 
 [tool.pytest.ini_options]

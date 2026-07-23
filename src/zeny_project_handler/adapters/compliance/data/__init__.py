@@ -1,0 +1,1 @@
+"""Recursos embarcados de conformidade."""

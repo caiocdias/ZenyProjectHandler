@@ -33,9 +33,10 @@ def _extract_annotations(
     max_depth: int,
 ) -> tuple[CandidatoEvidenciaDocumento, ...]:
     candidates: list[CandidatoEvidenciaDocumento] = []
-    for index, (raw_xref, fallback_type, _field_name) in enumerate(page.annot_xrefs()):
+    for index, (raw_xref, fallback_type, field_name) in enumerate(page.annot_xrefs()):
         xref = int(raw_xref)
         subtype = _annotation_subtype(document, xref, int(fallback_type))
+        field_type, field_has_value = _annotation_field_data(document, xref)
         geometry = _annotation_geometry(document, page, xref)
         if geometry is None:
             continue
@@ -60,6 +61,9 @@ def _extract_annotations(
                     nome=_optional_string(info.get("name")),
                     titulo=_optional_string(info.get("title")),
                     assunto=_optional_string(info.get("subject")),
+                    campo_formulario=_optional_string(field_name),
+                    tipo_campo_formulario=field_type,
+                    campo_formulario_preenchido=field_has_value,
                 ),
             )
         )
@@ -83,6 +87,14 @@ def _extract_annotations(
 def _annotation_subtype(document: Any, xref: int, fallback: int) -> str:
     kind, value = document.xref_get_key(xref, "Subtype")
     return str(value).lstrip("/") if kind == "name" and value else f"Tipo-{fallback}"
+
+
+def _annotation_field_data(document: Any, xref: int) -> tuple[str | None, bool]:
+    field_kind, field_type = document.xref_get_key(xref, "FT")
+    value_kind, value = document.xref_get_key(xref, "V")
+    normalized_type = str(field_type).lstrip("/") if field_kind == "name" and field_type else None
+    has_value = value_kind not in {"null", "none"} and str(value).strip() not in {"", "null"}
+    return normalized_type, has_value
 
 
 def _annotation_geometry(document: Any, page: Any, xref: int) -> GeometriaNormalizada | None:
