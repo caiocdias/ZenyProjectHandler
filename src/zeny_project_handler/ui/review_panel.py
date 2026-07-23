@@ -87,11 +87,6 @@ class ReviewPanelWidget(QWidget):
         project_row.addWidget(refresh)
         layout.addLayout(project_row)
 
-        self._execution = QComboBox()
-        self._execution.setObjectName("reviewExecutionCombo")
-        self._execution.addItem("Execução mais recente", None)
-        layout.addWidget(self._execution)
-
         filter_row = QHBoxLayout()
         self._category_filter = QComboBox()
         self._category_filter.setObjectName("reviewCategoryFilter")
@@ -248,7 +243,6 @@ class ReviewPanelWidget(QWidget):
         layout.addLayout(reference_row)
 
         self._project.currentIndexChanged.connect(self._load_selected_project)
-        self._execution.currentIndexChanged.connect(self._load_selected_execution)
         self._category_filter.currentIndexChanged.connect(self._refresh_proposals)
         self._state_filter.currentIndexChanged.connect(self._refresh_proposals)
         self._tree.itemSelectionChanged.connect(self._select_tree_proposal)
@@ -286,7 +280,6 @@ class ReviewPanelWidget(QWidget):
         self._selected_proposal_id = None
         self._project.clear()
         self._project.addItem("Selecione um projeto analisado", None)
-        self._execution.clear()
         self._tree.clear()
         self._table.setRowCount(0)
         self._viewer.definir_propostas_revisao(())
@@ -296,10 +289,9 @@ class ReviewPanelWidget(QWidget):
         if value is None:
             return
         project_id = UUID(value)
-        self._refresh_executions(project_id)
         self._run_action(lambda: self._activate_session(self._service.carregar_sessao(project_id)))
 
-    def abrir_projeto(self, projeto_id: UUID, execucao_id: UUID | None = None) -> None:
+    def abrir_projeto(self, projeto_id: UUID) -> None:
         """Sincronize o painel com um projeto concluído pelo fluxo operacional."""
         self.atualizar_projetos()
         project_index = self._project.findData(str(projeto_id))
@@ -309,41 +301,7 @@ class ReviewPanelWidget(QWidget):
         self._project.blockSignals(True)
         self._project.setCurrentIndex(project_index)
         self._project.blockSignals(False)
-        self._refresh_executions(projeto_id, selected_execution=execucao_id)
-        self._load_selected_execution()
-
-    def _refresh_executions(
-        self,
-        project_id: UUID,
-        *,
-        selected_execution: UUID | None = None,
-    ) -> None:
-        current = str(selected_execution) if selected_execution is not None else None
-        self._execution.blockSignals(True)
-        self._execution.clear()
-        for index, summary in enumerate(self._service.listar_execucoes(project_id), start=1):
-            self._execution.addItem(
-                f"Análise {index} · {summary.propostas} identificações",
-                str(summary.execucao_id),
-            )
-        if current is not None:
-            selected_index = self._execution.findData(current)
-            if selected_index >= 0:
-                self._execution.setCurrentIndex(selected_index)
-        elif self._execution.count():
-            self._execution.setCurrentIndex(self._execution.count() - 1)
-        self._execution.blockSignals(False)
-
-    def _load_selected_execution(self) -> None:
-        project_value = self._project.currentData()
-        execution_value = self._execution.currentData()
-        if project_value is None or execution_value is None:
-            return
-        self._run_action(
-            lambda: self._activate_session(
-                self._service.carregar_sessao(UUID(project_value), UUID(execution_value))
-            )
-        )
+        self._run_action(lambda: self._activate_session(self._service.carregar_sessao(projeto_id)))
 
     def _activate_session(self, session: SessaoRevisao) -> None:
         self._session = session
@@ -351,6 +309,7 @@ class ReviewPanelWidget(QWidget):
         if source_paths and not self._viewer.carregar_projeto(
             source_paths,
             documentos=session.projeto.documentos,
+            ordem_paginas=session.projeto.ordem_leitura_paginas,
         ):
             raise ApplicationError("Não foi possível abrir todos os PDFs do projeto")
         if not source_paths:
@@ -590,13 +549,10 @@ class ReviewPanelWidget(QWidget):
         session = self._session
         if session is None:
             return None
-        project_page_number = 0
-        for document in session.projeto.documentos:
-            for page in document.paginas:
-                project_page_number += 1
-                if page.id == page_id:
-                    return project_page_number
-        return None
+        try:
+            return session.projeto.ordem_leitura_paginas.index(page_id) + 1
+        except ValueError:
+            return None
 
     def _select_tree_item(self, proposal_id: str) -> None:
         pending = [self._tree.invisibleRootItem()]
@@ -864,9 +820,7 @@ class ReviewPanelWidget(QWidget):
         if session is None:
             return
         selected = self._selected_proposal_id
-        self._activate_session(
-            self._service.carregar_sessao(session.projeto.id, session.execucao.id)
-        )
+        self._activate_session(self._service.carregar_sessao(session.projeto.id))
         if selected is not None:
             self._select_proposal_id(str(selected))
 

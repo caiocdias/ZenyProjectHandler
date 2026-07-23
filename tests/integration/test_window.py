@@ -242,6 +242,37 @@ def test_pdf_viewer_opens_selected_files_as_one_ordered_project(
 
 
 @pytest.mark.integration
+def test_pdf_viewer_follows_page_order_across_different_files(
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> None:
+    first = create_feature_pdf(tmp_path / "folha-01.pdf")
+    second = create_golden_pdf(tmp_path / "folha-02.pdf")
+    reader = PyMuPdfReader()
+    documents = (
+        reader.inspecionar(first).documento,
+        reader.inspecionar(second).documento,
+    )
+    first_page, second_page, third_page = documents[0].paginas
+    fourth_page = documents[1].paginas[0]
+    viewer = PdfViewerWidget(leitor=reader, dpi=72)
+    qtbot.addWidget(viewer)
+
+    loaded = viewer.carregar_projeto(
+        (first, second),
+        documentos=documents,
+        ordem_paginas=(fourth_page.id, second_page.id, first_page.id, third_page.id),
+    )
+
+    assert loaded
+    assert viewer.inspecao is not None
+    assert viewer.inspecao.documento.nome_arquivo == "folha-02.pdf"
+    viewer.ir_para_folha(2)
+    assert viewer.inspecao is not None
+    assert viewer.inspecao.documento.nome_arquivo == "folha-01.pdf"
+
+
+@pytest.mark.integration
 def test_pdf_viewer_keeps_current_project_when_one_selected_file_is_invalid(
     qtbot: QtBot,
     tmp_path: Path,

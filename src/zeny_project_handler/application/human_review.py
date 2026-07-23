@@ -67,12 +67,17 @@ class ResumoExecucaoRevisao:
 class SessaoRevisao:
     projeto: Projeto
     catalogo: CatalogoTecnico
-    execucao: ExecucaoAnalise
+    execucoes: tuple[ExecucaoAnalise, ...]
     propostas: tuple[ReferenciaProposta, ...]
     regioes: tuple[RegiaoAnalise, ...]
     evidencias: tuple[EvidenciaDocumento, ...]
     decisoes: tuple[DecisaoRevisao, ...]
     fontes_pdf: tuple[ReferenciaFontePdf, ...]
+
+    @property
+    def execucao(self) -> ExecucaoAnalise:
+        """Execução mais recente, mantida como referência para operações excepcionais."""
+        return max(self.execucoes, key=lambda item: (item.iniciada_em, str(item.id)))
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -103,7 +108,7 @@ class ServicoRevisaoHumana:
         with self._unit_of_work() as work:
             summaries: list[ResumoProjetoRevisao] = []
             for project in work.projetos.listar():
-                proposals = self._latest_proposals(work, project.id)
+                proposals = self._latest_proposals(work, project)
                 pending = sum(
                     item.estado_revisao in {EstadoRevisao.PROPOSTA, EstadoRevisao.CONFLITANTE}
                     for item in proposals
@@ -121,7 +126,6 @@ class ServicoRevisaoHumana:
     def carregar_sessao(
         self,
         projeto_id: UUID,
-        execucao_id: UUID | None = None,
     ) -> SessaoRevisao:
         with self._unit_of_work() as work:
             project = work.projetos.obter(projeto_id)
@@ -130,12 +134,22 @@ class ServicoRevisaoHumana:
             catalog = work.catalogos.obter(project.catalogo_versao_id)
             if catalog is None:
                 raise RevisaoHumanaError("Catálogo do projeto não está disponível")
-            execution = self._review_execution(work, project.id, execucao_id)
-            proposals = work.propostas.listar_da_execucao(execution.id)
-            evidence_execution_id = _source_evidence_execution_id(execution)
-            evidence = work.evidencias.listar_da_execucao(evidence_execution_id)
-            if not evidence and evidence_execution_id != execution.id:
-                evidence = work.evidencias.listar_da_execucao(execution.id)
+            executions = self._review_executions(work, project)
+            if not executions:
+                raise RevisaoHumanaError("Projeto não possui propostas concluídas para revisão")
+            proposals = tuple(
+                proposal
+                for execution in executions
+                for proposal in work.propostas.listar_da_execucao(execution.id)
+            )
+            evidence_by_id: dict[UUID, EvidenciaDocumento] = {}
+            for execution in executions:
+                evidence_execution_id = _source_evidence_execution_id(execution)
+                execution_evidence = work.evidencias.listar_da_execucao(evidence_execution_id)
+                if not execution_evidence and evidence_execution_id != execution.id:
+                    execution_evidence = work.evidencias.listar_da_execucao(execution.id)
+                evidence_by_id.update((item.id, item) for item in execution_evidence)
+            evidence = tuple(evidence_by_id.values())
             decisions = tuple(
                 decision
                 for proposal in proposals
@@ -149,12 +163,13 @@ class ServicoRevisaoHumana:
             return SessaoRevisao(
                 projeto=project,
                 catalogo=catalog,
-                execucao=execution,
+                execucoes=executions,
                 propostas=proposals,
                 regioes=agrupar_regioes_da_analise(
                     proposals,
                     evidence,
                     project.documentos,
+                    ordem_paginas=project.ordem_leitura_paginas,
                 ),
                 evidencias=evidence,
                 decisoes=decisions,
@@ -393,34 +408,65 @@ class ServicoRevisaoHumana:
     def _latest_proposals(
         self,
         work: UnitOfWorkPort,
-        project_id: UUID,
+        project: Projeto,
     ) -> tuple[ReferenciaProposta, ...]:
-        executions = reversed(work.execucoes_analise.listar_do_projeto(project_id))
-        for execution in executions:
-            proposals = work.propostas.listar_da_execucao(execution.id)
-            if proposals:
-                return proposals
-        return ()
+        return tuple(
+            proposal
+            for execution in self._review_executions(work, project)
+            for proposal in work.propostas.listar_da_execucao(execution.id)
+        )
 
-    def _review_execution(
+    def _review_executions(
         self,
         work: UnitOfWorkPort,
-        project_id: UUID,
-        execution_id: UUID | None,
-    ) -> ExecucaoAnalise:
-        executions = work.execucoes_analise.listar_do_projeto(project_id)
-        if execution_id is not None:
-            execution = work.execucoes_analise.obter(execution_id)
-            if execution is None or execution.projeto_id != project_id:
-                raise RevisaoHumanaError("Execução não pertence ao projeto")
-            if not work.propostas.listar_da_execucao(execution.id):
-                raise RevisaoHumanaError("Execução não possui propostas para revisão")
-            return execution
-        for execution in reversed(executions):
-            has_proposals = bool(work.propostas.listar_da_execucao(execution.id))
-            if execution.estado is EstadoExecucaoAnalise.CONCLUIDA and has_proposals:
-                return execution
-        raise RevisaoHumanaError("Projeto não possui propostas concluídas para revisão")
+        project: Projeto,
+    ) -> tuple[ExecucaoAnalise, ...]:
+        page_to_document = {
+            page.id: document.id for document in project.documentos for page in document.paginas
+        }
+        latest_by_document: dict[UUID, ExecucaoAnalise] = {}
+        latest_without_document: dict[UUID, ExecucaoAnalise] = {}
+        for execution in work.execucoes_analise.listar_do_projeto(project.id):
+            proposals = work.propostas.listar_da_execucao(execution.id)
+            if execution.estado is not EstadoExecucaoAnalise.CONCLUIDA or not proposals:
+                continue
+            source_id = _source_evidence_execution_id(execution)
+            source_evidence = work.evidencias.listar_da_execucao(source_id)
+            proposal_page_ids = {
+                proposal.geometria.pagina_id
+                for proposal in proposals
+                if isinstance(proposal, PropostaElemento)
+            }
+            document_ids = {
+                page_to_document[page_id]
+                for page_id in (
+                    *(item.pagina_id for item in source_evidence),
+                    *proposal_page_ids,
+                )
+                if page_id in page_to_document
+            }
+            if document_ids:
+                for document_id in document_ids:
+                    previous = latest_by_document.get(document_id)
+                    if previous is None or _execution_key(execution) > _execution_key(previous):
+                        latest_by_document[document_id] = execution
+            else:
+                previous = latest_without_document.get(source_id)
+                if previous is None or _execution_key(execution) > _execution_key(previous):
+                    latest_without_document[source_id] = execution
+        selected_by_document = tuple(
+            latest_by_document[document.id]
+            for document in project.documentos
+            if document.id in latest_by_document
+        )
+        return tuple(
+            dict.fromkeys(
+                (
+                    *selected_by_document,
+                    *sorted(latest_without_document.values(), key=_execution_key),
+                )
+            )
+        )
 
     def _element_context(
         self,
@@ -646,6 +692,10 @@ def _proposal_signature(proposal: PropostaElemento) -> tuple[object, ...]:
         proposal.situacao_projeto,
         proposal.geometria,
     )
+
+
+def _execution_key(execution: ExecucaoAnalise) -> tuple[datetime, str]:
+    return execution.iniciada_em, str(execution.id)
 
 
 def _source_evidence_execution_id(execution: ExecucaoAnalise) -> UUID:

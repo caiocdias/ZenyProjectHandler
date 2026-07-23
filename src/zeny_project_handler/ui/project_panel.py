@@ -92,7 +92,7 @@ class ProjectPanelWidget(QWidget):
         self._review_panel = review_panel
         self._settings = QSettings(str(state_path), QSettings.Format.IniFormat)
         self._session: SessaoProjetoMvp | None = None
-        self._updating_document_order = False
+        self._updating_page_order = False
         self._thread: QThread | None = None
         self._worker: _PipelineWorker | None = None
         self._cancellation: Event | None = None
@@ -142,31 +142,31 @@ class ProjectPanelWidget(QWidget):
         select.clicked.connect(self.selecionar_pdfs)
         document_layout.addWidget(select)
         order_help = QLabel(
-            "Ordem de leitura: arraste os PDFs ou use os botões abaixo. "
-            "As páginas de cada PDF mantêm sua ordem original."
+            "Ordem de leitura: arraste qualquer página ou use os botões abaixo. "
+            "Os PDFs originais não são modificados."
         )
-        order_help.setObjectName("mvpDocumentOrderHelp")
+        order_help.setObjectName("mvpPageOrderHelp")
         order_help.setWordWrap(True)
         document_layout.addWidget(order_help)
-        self._documents = QListWidget()
-        self._documents.setObjectName("mvpDocumentList")
-        self._documents.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
-        self._documents.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
-        self._documents.setDefaultDropAction(Qt.DropAction.MoveAction)
-        self._documents.model().rowsMoved.connect(self._document_order_changed)
-        self._documents.itemSelectionChanged.connect(self._update_order_controls)
-        document_layout.addWidget(self._documents)
+        self._pages = QListWidget()
+        self._pages.setObjectName("mvpPageOrderList")
+        self._pages.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        self._pages.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self._pages.setDefaultDropAction(Qt.DropAction.MoveAction)
+        self._pages.model().rowsMoved.connect(self._page_order_changed)
+        self._pages.itemSelectionChanged.connect(self._update_order_controls)
+        document_layout.addWidget(self._pages)
         order_actions = QHBoxLayout()
         self._move_up = QPushButton("Subir")
-        self._move_up.setObjectName("mvpMovePdfUpButton")
-        self._move_up.clicked.connect(lambda: self._move_selected_document(-1))
+        self._move_up.setObjectName("mvpMovePageUpButton")
+        self._move_up.clicked.connect(lambda: self._move_selected_page(-1))
         order_actions.addWidget(self._move_up)
         self._move_down = QPushButton("Descer")
-        self._move_down.setObjectName("mvpMovePdfDownButton")
-        self._move_down.clicked.connect(lambda: self._move_selected_document(1))
+        self._move_down.setObjectName("mvpMovePageDownButton")
+        self._move_down.clicked.connect(lambda: self._move_selected_page(1))
         order_actions.addWidget(self._move_down)
         document_layout.addLayout(order_actions)
-        remove_documents = QPushButton("Remover PDF(s) selecionado(s)")
+        remove_documents = QPushButton("Remover PDF(s) das páginas selecionadas")
         remove_documents.setObjectName("mvpRemovePdfsButton")
         remove_documents.clicked.connect(self.remover_pdfs)
         document_layout.addWidget(remove_documents)
@@ -305,51 +305,49 @@ class ProjectPanelWidget(QWidget):
             return
         count = len(result.inspecoes)
         self._activate(self._service.abrir_projeto(session.projeto.id))
-        self.status_changed.emit(
-            f"{count} PDF(s) adicionados; ajuste abaixo a ordem de leitura do projeto"
-        )
+        self.status_changed.emit(f"{count} PDF(s) adicionados; ajuste abaixo a ordem das páginas")
 
-    def _move_selected_document(self, offset: int) -> None:
+    def _move_selected_page(self, offset: int) -> None:
         if self.processando:
-            self._warn("Aguarde ou cancele a análise antes de alterar a ordem dos PDFs")
+            self._warn("Aguarde ou cancele a análise antes de alterar a ordem das páginas")
             return
-        selected = self._documents.selectedItems()
+        selected = self._pages.selectedItems()
         if len(selected) != 1:
-            self._warn("Selecione um único PDF para alterar sua posição")
+            self._warn("Selecione uma única página para alterar sua posição")
             return
-        row = self._documents.row(selected[0])
+        row = self._pages.row(selected[0])
         destination = row + offset
-        if destination < 0 or destination >= self._documents.count():
+        if destination < 0 or destination >= self._pages.count():
             return
-        self._updating_document_order = True
-        item = self._documents.takeItem(row)
-        self._documents.insertItem(destination, item)
-        self._documents.setCurrentItem(item)
-        self._updating_document_order = False
-        self._persist_document_order()
+        self._updating_page_order = True
+        item = self._pages.takeItem(row)
+        self._pages.insertItem(destination, item)
+        self._pages.setCurrentItem(item)
+        self._updating_page_order = False
+        self._persist_page_order()
 
-    def _document_order_changed(self, *_args: object) -> None:
-        if not self._updating_document_order:
-            QTimer.singleShot(0, self._persist_document_order)
+    def _page_order_changed(self, *_args: object) -> None:
+        if not self._updating_page_order:
+            QTimer.singleShot(0, self._persist_page_order)
 
-    def _persist_document_order(self) -> None:
+    def _persist_page_order(self) -> None:
         session = self._session
-        if session is None or self._updating_document_order:
+        if session is None or self._updating_page_order:
             return
         if self.processando:
-            self._warn("Aguarde ou cancele a análise antes de alterar a ordem dos PDFs")
+            self._warn("Aguarde ou cancele a análise antes de alterar a ordem das páginas")
             self._activate(session)
             return
         ordered_ids = tuple(
-            UUID(str(self._documents.item(row).data(Qt.ItemDataRole.UserRole)))
-            for row in range(self._documents.count())
+            UUID(str(self._pages.item(row).data(Qt.ItemDataRole.UserRole)))
+            for row in range(self._pages.count())
         )
-        current_ids = tuple(document.id for document in session.projeto.documentos)
+        current_ids = session.projeto.ordem_leitura_paginas
         if ordered_ids == current_ids:
             self._update_order_controls()
             return
         updated = self._action(
-            lambda: self._service.reordenar_documentos(session.projeto.id, ordered_ids)
+            lambda: self._service.reordenar_paginas(session.projeto.id, ordered_ids)
         )
         if updated is None:
             self._activate(session)
@@ -358,15 +356,15 @@ class ProjectPanelWidget(QWidget):
         self.status_changed.emit("Ordem de leitura do projeto atualizada")
 
     def _update_order_controls(self) -> None:
-        selected = self._documents.selectedItems()
-        row = self._documents.row(selected[0]) if len(selected) == 1 else -1
+        selected = self._pages.selectedItems()
+        row = self._pages.row(selected[0]) if len(selected) == 1 else -1
         enabled = not self.processando and row >= 0
         self._move_up.setEnabled(enabled and row > 0)
-        self._move_down.setEnabled(enabled and row < self._documents.count() - 1)
+        self._move_down.setEnabled(enabled and row < self._pages.count() - 1)
 
     def remover_pdfs(self) -> None:
         session = self._session
-        selected_items = self._documents.selectedItems()
+        selected_items = self._pages.selectedItems()
         if session is None or not selected_items:
             self._warn("Selecione no projeto ao menos um PDF para remover")
             return
@@ -374,9 +372,12 @@ class ProjectPanelWidget(QWidget):
             self._warn("Cancele ou aguarde a análise antes de remover PDFs")
             return
         document_ids = tuple(
-            UUID(str(item.data(Qt.ItemDataRole.UserRole))) for item in selected_items
+            dict.fromkeys(
+                UUID(str(item.data(Qt.ItemDataRole.UserRole + 1))) for item in selected_items
+            )
         )
-        names = ", ".join(item.text().split(" · ", maxsplit=1)[0] for item in selected_items)
+        document_by_id = {document.id: document for document in session.projeto.documentos}
+        names = ", ".join(document_by_id[item].nome_arquivo for item in document_ids)
         confirmation = QMessageBox.question(
             self,
             "Remover PDFs do projeto",
@@ -426,7 +427,7 @@ class ProjectPanelWidget(QWidget):
         self._run.setEnabled(False)
         self._run.setText("Análise em andamento…")
         self._cancel.setEnabled(True)
-        self._documents.setDragEnabled(False)
+        self._pages.setDragEnabled(False)
         self._update_order_controls()
         self._summary.setText("Execução ativa: preparando documentos")
         thread.start()
@@ -449,10 +450,7 @@ class ProjectPanelWidget(QWidget):
         if not isinstance(result, ResultadoFluxoMvp):
             return
         self._activate(self._service.abrir_projeto(result.projeto_id))
-        latest_execution = (
-            result.execucoes_interpretacao[-1] if result.execucoes_interpretacao else None
-        )
-        self._review_panel.abrir_projeto(result.projeto_id, latest_execution)
+        self._review_panel.abrir_projeto(result.projeto_id)
         if result.propostas_geradas:
             message = (
                 f"Análise concluída: {result.propostas_geradas} identificação(ões) "
@@ -484,7 +482,7 @@ class ProjectPanelWidget(QWidget):
         self._run.setEnabled(True)
         self._run.setText("Retomar / executar análise")
         self._cancel.setEnabled(False)
-        self._documents.setDragEnabled(True)
+        self._pages.setDragEnabled(True)
         self._update_order_controls()
         if self._session is not None:
             self._session = self._service.abrir_projeto(self._session.projeto.id)
@@ -519,6 +517,7 @@ class ProjectPanelWidget(QWidget):
             if not self._viewer.carregar_projeto(
                 source_paths,
                 documentos=session.projeto.documentos,
+                ordem_paginas=session.projeto.ordem_leitura_paginas,
             ):
                 self._viewer.limpar()
                 self.status_changed.emit(
@@ -528,17 +527,20 @@ class ProjectPanelWidget(QWidget):
                 self._viewer.ir_para_folha(saved_page)
         else:
             self._viewer.limpar()
-        self._updating_document_order = True
-        self._documents.clear()
-        first_page = 1
-        for position, document in enumerate(session.projeto.documentos, start=1):
-            last_page = first_page + len(document.paginas) - 1
-            page_range = str(first_page) if first_page == last_page else f"{first_page}-{last_page}"
-            item = QListWidgetItem(f"{position}. {document.nome_arquivo} · folhas {page_range}")
-            item.setData(Qt.ItemDataRole.UserRole, str(document.id))
-            self._documents.addItem(item)
-            first_page = last_page + 1
-        self._updating_document_order = False
+        self._updating_page_order = True
+        self._pages.clear()
+        page_by_id = {
+            page.id: (document, page)
+            for document in session.projeto.documentos
+            for page in document.paginas
+        }
+        for position, page_id in enumerate(session.projeto.ordem_leitura_paginas, start=1):
+            document, page = page_by_id[page_id]
+            item = QListWidgetItem(f"{position}. {document.nome_arquivo} · página {page.numero}")
+            item.setData(Qt.ItemDataRole.UserRole, str(page.id))
+            item.setData(Qt.ItemDataRole.UserRole + 1, str(document.id))
+            self._pages.addItem(item)
+        self._updating_page_order = False
         self._update_order_controls()
         self._show_summary(session)
 
@@ -574,9 +576,9 @@ class ProjectPanelWidget(QWidget):
             return None
 
     def _show_empty_state(self) -> None:
-        self._updating_document_order = True
-        self._documents.clear()
-        self._updating_document_order = False
+        self._updating_page_order = True
+        self._pages.clear()
+        self._updating_page_order = False
         self._update_order_controls()
         self._summary.setText("Crie ou abra um projeto para começar")
 

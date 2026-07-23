@@ -91,6 +91,14 @@ class ImportarPdfsNoProjeto:
                     *project.documentos,
                     *(inspection.documento for inspection in inspections),
                 ),
+                ordem_leitura_paginas=(
+                    *project.ordem_leitura_paginas,
+                    *(
+                        page.id
+                        for inspection in inspections
+                        for page in inspection.documento.paginas
+                    ),
+                ),
             )
             work.projetos.salvar(updated)
             for inspection in inspections:

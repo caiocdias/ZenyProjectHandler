@@ -72,20 +72,17 @@ def test_user_can_reorder_project_pdfs_and_reopen_in_reading_order(
         ),
     )
     add_pdfs = panel.findChild(QPushButton, "mvpAddPdfsButton")
-    documents = panel.findChild(QListWidget, "mvpDocumentList")
-    move_down = panel.findChild(QPushButton, "mvpMovePdfDownButton")
-    assert add_pdfs is not None and documents is not None and move_down is not None
+    pages = panel.findChild(QListWidget, "mvpPageOrderList")
+    move_down = panel.findChild(QPushButton, "mvpMovePageDownButton")
+    assert add_pdfs is not None and pages is not None and move_down is not None
     qtbot.mouseClick(add_pdfs, Qt.MouseButton.LeftButton)
-    assert documents.count() == 2
+    assert pages.count() == 3
 
-    documents.setCurrentRow(0)
+    pages.setCurrentRow(0)
     qtbot.mouseClick(move_down, Qt.MouseButton.LeftButton)
 
-    assert "folha-02.pdf" in documents.item(0).text()
-    assert [item.documento.nome_arquivo for item in window.pdf_viewer.inspecoes] == [
-        "folha-02.pdf",
-        "folha-01.pdf",
-    ]
+    assert "folha-01.pdf · página 2" in pages.item(0).text()
+    assert "folha-01.pdf · página 1" in pages.item(1).text()
 
     _reopened_application, reopened = create_application([], settings=settings)
     qtbot.addWidget(reopened)
@@ -94,10 +91,10 @@ def test_user_can_reorder_project_pdfs_and_reopen_in_reading_order(
     reopened_combo = reopened_panel.findChild(QComboBox, "mvpProjectCombo")
     assert reopened_combo is not None
     assert reopened_combo.currentData() == project_id
-    assert [item.documento.nome_arquivo for item in reopened.pdf_viewer.inspecoes] == [
-        "folha-02.pdf",
-        "folha-01.pdf",
-    ]
+    reopened_pages = reopened_panel.findChild(QListWidget, "mvpPageOrderList")
+    assert reopened_pages is not None
+    assert "folha-01.pdf · página 2" in reopened_pages.item(0).text()
+    assert "folha-01.pdf · página 1" in reopened_pages.item(1).text()
 
 
 def test_user_can_create_import_analyze_review_and_reopen_from_ui(
@@ -164,7 +161,7 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
         "question",
         lambda *_args, **_kwargs: QMessageBox.StandardButton.Yes,
     )
-    document_list = reopened_panel.findChild(QListWidget, "mvpDocumentList")
+    document_list = reopened_panel.findChild(QListWidget, "mvpPageOrderList")
     remove_pdf = reopened_panel.findChild(QPushButton, "mvpRemovePdfsButton")
     assert document_list is not None and remove_pdf is not None
     document_list.item(0).setSelected(True)

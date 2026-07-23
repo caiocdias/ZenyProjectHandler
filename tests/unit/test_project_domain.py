@@ -129,6 +129,19 @@ def valid_project(catalog: CatalogoTecnico) -> Projeto:
     )
 
 
+def test_project_reading_order_contains_every_page_once(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    project = valid_project(catalogo_inicial)
+    page_id = project.documentos[0].paginas[0].id
+
+    assert project.ordem_leitura_paginas == (page_id,)
+    with pytest.raises(DomainValidationError, match="Ordem de leitura"):
+        replace(project, ordem_leitura_paginas=(page_id, page_id))
+    with pytest.raises(DomainValidationError, match="Ordem de leitura"):
+        replace(project, ordem_leitura_paginas=(uuid4(),))
+
+
 def test_valid_project_links_poles_structures_points_and_cables(
     catalogo_inicial: CatalogoTecnico,
 ) -> None:

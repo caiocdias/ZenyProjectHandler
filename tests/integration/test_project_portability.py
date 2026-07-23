@@ -56,6 +56,7 @@ def _project_with_real_pdf(
     project = replace(
         base,
         documentos=(inspection.documento,),
+        ordem_leitura_paginas=tuple(page.id for page in inspection.documento.paginas),
         elementos=elements,
         pontos_rede=points,
     )

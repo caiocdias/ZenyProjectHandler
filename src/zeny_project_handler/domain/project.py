@@ -283,6 +283,7 @@ class Projeto:
     catalogo_versao_id: UUID
     criado_em: datetime
     documentos: tuple[DocumentoProjeto, ...] = ()
+    ordem_leitura_paginas: tuple[UUID, ...] = ()
     elementos: tuple[ElementoProjetoType, ...] = ()
     pontos_rede: tuple[PontoRede, ...] = ()
     terminais: tuple[TerminalEquipamento, ...] = ()
@@ -299,6 +300,12 @@ class Projeto:
             raise DomainValidationError("Data de criação do projeto deve possuir fuso horário")
 
         documents = tuple(self.documentos)
+        page_ids = tuple(page.id for document in documents for page in document.paginas)
+        reading_order = tuple(self.ordem_leitura_paginas) or page_ids
+        if len(reading_order) != len(page_ids) or set(reading_order) != set(page_ids):
+            raise DomainValidationError(
+                "Ordem de leitura deve conter todas as páginas do projeto uma única vez"
+            )
         elements = tuple(self.elementos)
         points = tuple(self.pontos_rede)
         terminals = tuple(self.terminais)
@@ -330,6 +337,7 @@ class Projeto:
 
         object.__setattr__(self, "nome", name)
         object.__setattr__(self, "documentos", documents)
+        object.__setattr__(self, "ordem_leitura_paginas", reading_order)
         object.__setattr__(self, "elementos", elements)
         object.__setattr__(self, "pontos_rede", points)
         object.__setattr__(self, "terminais", terminals)

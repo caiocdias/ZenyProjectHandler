@@ -23,6 +23,7 @@ from zeny_project_handler.adapters.persistence import (
 )
 from zeny_project_handler.application.document_analysis import ExecutarAnaliseDocumento
 from zeny_project_handler.application.errors import FluxoMvpCanceladoError
+from zeny_project_handler.application.human_review import ServicoRevisaoHumana
 from zeny_project_handler.application.interpretation_pipeline import ExecutarPipelineInterpretacao
 from zeny_project_handler.application.mvp_workflow import ServicoFluxoMvp
 from zeny_project_handler.application.pdf_import import ImportarPdfsNoProjeto
@@ -121,7 +122,7 @@ def test_multiple_pdf_import_is_atomic_and_preserves_order(
     engine.dispose()
 
 
-def test_project_pdf_order_can_be_changed_and_is_persisted(
+def test_project_page_order_can_interleave_pdfs_and_is_persisted(
     workflow: tuple[Engine, ServicoFluxoMvp],
     tmp_path: Path,
 ) -> None:
@@ -132,18 +133,24 @@ def test_project_pdf_order_can_be_changed_and_is_persisted(
     service.importar_pdfs(created.projeto.id, (first, second))
     session = service.abrir_projeto(created.projeto.id)
     first_document, second_document = session.projeto.documentos
+    first_page, second_page, third_page, fourth_page = session.projeto.ordem_leitura_paginas
 
-    reordered = service.reordenar_documentos(
+    reordered = service.reordenar_paginas(
         created.projeto.id,
-        (second_document.id, first_document.id),
+        (fourth_page, first_page, third_page, second_page),
     )
     reopened = service.abrir_projeto(created.projeto.id)
 
-    assert reordered.projeto.documentos == (second_document, first_document)
-    assert reopened.projeto.documentos == (second_document, first_document)
+    assert reordered.projeto.documentos == (first_document, second_document)
+    assert reopened.projeto.ordem_leitura_paginas == (
+        fourth_page,
+        first_page,
+        third_page,
+        second_page,
+    )
     assert [source.caminho_canonico for source in reopened.fontes_pdf] == [
-        second.resolve(),
         first.resolve(),
+        second.resolve(),
     ]
     engine.dispose()
 
@@ -182,6 +189,37 @@ def test_cancel_and_resume_pipeline_reuses_completed_work_without_duplicates(
     summary = service.abrir_projeto(project.projeto.id).resumo
     assert summary.documentos == 2
     assert summary.paginas == 4
+    engine.dispose()
+
+
+def test_review_session_consolidates_latest_results_from_every_pdf(
+    workflow: tuple[Engine, ServicoFluxoMvp],
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    engine, service = workflow
+    created = service.criar_projeto("Projeto consolidado")
+    code = catalogo_inicial.itens_ativos(CategoriaElemento.POSTE)[0].codigo
+    first = create_catalog_pdf(tmp_path / "primeiro.pdf", code)
+    second = create_catalog_pdf(tmp_path / "segundo.pdf", code)
+    service.importar_pdfs(created.projeto.id, (first, second))
+    project = service.abrir_projeto(created.projeto.id).projeto
+    first_page, second_page = project.ordem_leitura_paginas
+    service.reordenar_paginas(created.projeto.id, (second_page, first_page))
+    service.executar_pipeline(created.projeto.id)
+
+    review = ServicoRevisaoHumana(lambda: SqlAlchemyUnitOfWork(engine))
+    session = review.carregar_sessao(created.projeto.id)
+
+    assert len(session.execucoes) == 2
+    proposal_page_ids = {
+        item.geometria.pagina_id for item in session.propostas if isinstance(item, PropostaElemento)
+    }
+    assert proposal_page_ids == {
+        first_page,
+        second_page,
+    }
+    assert [region.pagina_id for region in session.regioes] == [second_page, first_page]
     engine.dispose()
 
 

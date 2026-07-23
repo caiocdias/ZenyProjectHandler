@@ -152,25 +152,24 @@ class ServicoFluxoMvp:
     ) -> ResultadoImportacaoPdfs:
         return self._importer.executar(projeto_id, caminhos, senha=senha)
 
-    def reordenar_documentos(
+    def reordenar_paginas(
         self,
         projeto_id: UUID,
-        documentos_ids: tuple[UUID, ...],
+        paginas_ids: tuple[UUID, ...],
     ) -> SessaoProjetoMvp:
-        """Persista a ordem de leitura dos PDFs de um projeto."""
+        """Persista a ordem de leitura das páginas de um projeto."""
         with self._unit_of_work() as work:
             project = work.projetos.obter(projeto_id)
             if project is None:
-                raise ProjetoNaoEncontradoError("Projeto não encontrado para reordenar PDFs")
-            current_ids = tuple(document.id for document in project.documentos)
-            if len(set(documentos_ids)) != len(documentos_ids):
-                raise ValueError("A ordem dos PDFs contém identificadores duplicados")
-            if set(documentos_ids) != set(current_ids) or len(documentos_ids) != len(current_ids):
-                raise ValueError("A nova ordem deve conter todos os PDFs do projeto uma única vez")
-            by_id = {document.id: document for document in project.documentos}
-            work.projetos.salvar(
-                replace(project, documentos=tuple(by_id[item] for item in documentos_ids))
-            )
+                raise ProjetoNaoEncontradoError("Projeto não encontrado para reordenar páginas")
+            current_ids = project.ordem_leitura_paginas
+            if len(set(paginas_ids)) != len(paginas_ids):
+                raise ValueError("A ordem das páginas contém identificadores duplicados")
+            if set(paginas_ids) != set(current_ids) or len(paginas_ids) != len(current_ids):
+                raise ValueError(
+                    "A nova ordem deve conter todas as páginas do projeto uma única vez"
+                )
+            work.projetos.salvar(replace(project, ordem_leitura_paginas=paginas_ids))
             work.commit()
         return self.abrir_projeto(projeto_id)
 
@@ -468,6 +467,9 @@ def _project_without_documents(
         project,
         documentos=tuple(
             document for document in project.documentos if document.id not in document_ids
+        ),
+        ordem_leitura_paginas=tuple(
+            page_id for page_id in project.ordem_leitura_paginas if page_id not in page_ids
         ),
         elementos=tuple(
             element for element in project.elementos if element.id not in removed_elements

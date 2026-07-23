@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+from uuid import UUID
 
 from PySide6.QtCore import QPointF, Qt, Signal
 from PySide6.QtGui import (
@@ -339,6 +340,7 @@ class PdfViewerWidget(QWidget):
         *,
         password: str | None = None,
         documentos: tuple[DocumentoProjeto, ...] | None = None,
+        ordem_paginas: tuple[UUID, ...] | None = None,
     ) -> bool:
         """Valide todos os PDFs antes de substituir o projeto atualmente exibido."""
         if not paths:
@@ -363,13 +365,22 @@ class PdfViewerWidget(QWidget):
             except ValueError as error:
                 self._open_warning(str(error))
                 return False
+        try:
+            project_pages = _ordered_project_pages(inspections, ordem_paginas)
+        except ValueError as error:
+            self._open_warning(str(error))
+            return False
         hashes = [inspection.documento.sha256 for inspection in inspections]
         if len(set(hashes)) != len(hashes):
             message = "A seleção contém arquivos PDF com conteúdo duplicado"
             self.status_changed.emit(message)
             QMessageBox.warning(self, "Não foi possível abrir os arquivos", message)
             return False
-        self._activate_project(inspections, password=password)
+        self._activate_project(
+            inspections,
+            project_pages=project_pages,
+            password=password,
+        )
         return True
 
     def _open_warning(self, message: str) -> None:
@@ -380,17 +391,14 @@ class PdfViewerWidget(QWidget):
         self,
         inspections: tuple[InspecaoPdf, ...],
         *,
+        project_pages: tuple[tuple[InspecaoPdf, int], ...],
         password: str | None,
     ) -> None:
         self._inspections = inspections
         self._overlays = ()
         self._review_proposals = ()
         self._last_page_id = None
-        self._project_pages = tuple(
-            (inspection, local_page_number)
-            for inspection in inspections
-            for local_page_number in range(1, len(inspection.paginas) + 1)
-        )
+        self._project_pages = project_pages
         self._inspection = inspections[0]
         self._password = password
         self._rotation = 0
@@ -490,6 +498,26 @@ class PdfViewerWidget(QWidget):
     def _rotate_page(self) -> None:
         self._rotation = (self._rotation + 90) % 360
         self._render_current_page()
+
+
+def _ordered_project_pages(
+    inspections: tuple[InspecaoPdf, ...],
+    reading_order: tuple[UUID, ...] | None,
+) -> tuple[tuple[InspecaoPdf, int], ...]:
+    page_by_id = {
+        page.id: (inspection, page.numero)
+        for inspection in inspections
+        for page in inspection.documento.paginas
+    }
+    if reading_order is None:
+        return tuple(
+            (inspection, page.numero)
+            for inspection in inspections
+            for page in inspection.documento.paginas
+        )
+    if len(reading_order) != len(page_by_id) or set(reading_order) != set(page_by_id):
+        raise ValueError("A ordem de leitura não corresponde às páginas dos PDFs abertos")
+    return tuple(page_by_id[page_id] for page_id in reading_order)
 
 
 def _review_color(state: EstadoRevisao, *, alpha: int = 255) -> QColor:
