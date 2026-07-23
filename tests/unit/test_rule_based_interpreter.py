@@ -172,6 +172,91 @@ def test_rule_interpreter_is_deterministic_and_does_not_match_code_as_substring(
     assert not any(false_positive.id in item.evidencia_ids for item in first.elementos)
 
 
+def test_header_rows_are_not_interpreted_as_project_equipment(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    request = _request(catalogo_inicial)
+    source = request.evidencias[0]
+    header_line = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=source.pagina_id,
+        key="header-device",
+        text="Dispositivo: CH.FACA 99146-630A",
+        x="0.70",
+        y="0.82",
+    )
+    split_label = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=source.pagina_id,
+        key="header-device-label",
+        text="Dispositivo:",
+        x="0.70",
+        y="0.86",
+    )
+    split_value = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=source.pagina_id,
+        key="header-device-value",
+        text="-630A",
+        x="0.79",
+        y="0.86",
+    )
+    drawing_equipment = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=source.pagina_id,
+        key="drawing-equipment",
+        text="-630A",
+        x="0.92",
+        y="0.95",
+    )
+    request = replace(
+        request,
+        evidencias=(header_line, split_label, split_value, drawing_equipment),
+    )
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
+
+    assert len(result.elementos) == 1
+    assert result.elementos[0].categoria is CategoriaElemento.EQUIPAMENTO
+    assert drawing_equipment.id in result.elementos[0].evidencia_ids
+
+
+def test_unknown_abcn_nomenclature_is_kept_as_removed_cable_for_review(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    request = _request(catalogo_inicial)
+    source = request.evidencias[0]
+    label = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=source.pagina_id,
+        key="unknown-abcn",
+        text="ABCN-4(4)",
+        x="0.40",
+        y="0.42",
+        color="#FF0000",
+        rotation="70",
+    )
+    removed_line = vector_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=source.pagina_id,
+        key="unknown-abcn-line",
+        points=(("0.25", "0.25"), ("0.55", "0.55")),
+        color="#FF0000",
+    )
+    request = replace(request, evidencias=(label, removed_line))
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
+
+    assert len(result.elementos) == 1
+    cable = result.elementos[0]
+    assert cable.categoria is CategoriaElemento.CABO
+    assert cable.codigo_observado == "ABCN-4(4)"
+    assert cable.tipo_catalogo_sugerido_id is None
+    assert cable.situacao_projeto is SituacaoProjeto.REMOVER
+    assert cable.estado_revisao is EstadoRevisao.CONFLITANTE
+    assert cable.geometria == removed_line.geometria
+
+
 def test_dense_overlapping_page_remains_bounded_and_analyzer_failure_is_local(
     catalogo_inicial: CatalogoTecnico,
 ) -> None:

@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 
+from zeny_project_handler.application.document_zones import evidencias_sem_cabecalho
 from zeny_project_handler.domain.analysis import DiagnosticoAnalise, PropostaElemento
 from zeny_project_handler.domain.interpretation import RegistroRegrasInterpretacao
 from zeny_project_handler.ports.interpretation import (
@@ -25,7 +27,7 @@ from .relation_rules import generate_relations, mark_conflicts
 
 class InterpretadorRegrasExplicitas:
     nome = "regras-explicitas-cemig"
-    versao = "4.0"
+    versao = "7.0"
 
     def __init__(
         self,
@@ -50,6 +52,10 @@ class InterpretadorRegrasExplicitas:
         if solicitacao.registro.assinatura() != self.registro.assinatura():
             raise ValueError("Solicitação usa um registro diferente do interpretador")
         cancellation = cancelado or (lambda: False)
+        project_request = replace(
+            solicitacao,
+            evidencias=evidencias_sem_cabecalho(solicitacao.evidencias),
+        )
         proposals: list[PropostaElemento] = []
         diagnostics: list[DiagnosticoAnalise] = []
         for analyzer in self._analyzers:
@@ -58,12 +64,12 @@ class InterpretadorRegrasExplicitas:
                 continue
             try:
                 rule = self.registro.regra_da_categoria(analyzer.categoria)
-                proposals.extend(analyzer.analisar(solicitacao, rule))
+                proposals.extend(analyzer.analisar(project_request, rule))
             except Exception as error:
                 diagnostics.append(_analyzer_diagnostic(analyzer.nome, error))
             if len(proposals) > solicitacao.configuracao.maximo_propostas:
                 raise ValueError("Quantidade de propostas excedeu o limite configurado")
-        elements = mark_conflicts(tuple(proposals), solicitacao.evidencias)
+        elements = mark_conflicts(tuple(proposals), project_request.evidencias)
         relations = (
             generate_relations(
                 solicitacao.execucao_id,

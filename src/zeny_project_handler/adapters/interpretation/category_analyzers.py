@@ -33,6 +33,9 @@ _POLE_DIMENSION_PATTERN = re.compile(
     r"(150|300|600|1000)\s*(?:DA?N)?(?!\d)"
 )
 _COORDINATE_CONTEXT_DISTANCE = 0.12
+_CABLE_NOMENCLATURE_PATTERN = re.compile(
+    r"(?<![A-Z0-9])(?:ABCN|ABN|BN|AN)-\d{1,3}\(\d{1,3}\)(?![A-Z0-9])"
+)
 _POLE_FORMAT_PHRASES = {
     "CIRCULAR": ("POSTE CIRCULAR", "CIRCULAR"),
     "DUPLO T": ("POSTE DUPLO T", "DUPLO T"),
@@ -157,7 +160,7 @@ class AnalisadorPoste(AnalisadorCatalogoPorCodigo):
         regra: RegraReconhecimento,
     ) -> tuple[PropostaElemento, ...]:
         exact = super().analisar(solicitacao, regra)
-        exact_evidence = {item.evidencia_ids[0] for item in exact}
+        exact_evidence = {evidence_id for item in exact for evidence_id in item.evidencia_ids}
         proposals = list(exact)
         poles = tuple(
             item
@@ -229,8 +232,76 @@ class AnalisadorEstruturaBt(AnalisadorCatalogoPorCodigo):
 
 
 class AnalisadorCabo(AnalisadorCatalogoPorCodigo):
-    nome = "cabo-codigo-catalogo"
+    nome = "cabo-codigo-e-nomenclatura"
+    versao = "2.0"
     categoria = CategoriaElemento.CABO
+
+    def analisar(
+        self,
+        solicitacao: SolicitacaoInterpretacao,
+        regra: RegraReconhecimento,
+    ) -> tuple[PropostaElemento, ...]:
+        exact = super().analisar(solicitacao, regra)
+        exact_evidence = {evidence_id for item in exact for evidence_id in item.evidencia_ids}
+        proposals = list(exact)
+        for evidence in _semantic_evidence(solicitacao, regra):
+            if evidence.id in exact_evidence:
+                continue
+            observed_codes = tuple(
+                dict.fromkeys(
+                    match.group(0)
+                    for match in _CABLE_NOMENCLATURE_PATTERN.finditer(
+                        normalized_text(evidence.conteudo_bruto or "")
+                    )
+                )
+            )
+            for observed in observed_codes:
+                situation, evidence_ids = _situation_and_evidence(
+                    solicitacao,
+                    regra,
+                    evidence,
+                    self.categoria,
+                )
+                contextual = nearest_context_evidence(
+                    evidence,
+                    solicitacao.evidencias,
+                    regra.distancia_contexto_maxima,
+                )
+                geometry = (
+                    contextual.geometria
+                    if contextual is not None
+                    and contextual.geometria.tipo is TipoGeometria.POLILINHA
+                    else evidence.geometria
+                )
+                proposals.append(
+                    PropostaElemento(
+                        id=uuid5(
+                            solicitacao.execucao_id,
+                            f"elemento:{regra.id}:nomenclatura:{evidence.id}:{observed}",
+                        ),
+                        execucao_id=solicitacao.execucao_id,
+                        categoria=self.categoria,
+                        situacao_projeto=situation,
+                        estado_revisao=EstadoRevisao.CONFLITANTE,
+                        evidencia_ids=evidence_ids,
+                        geometria=geometry,
+                        codigo_observado=observed,
+                        atributos_sugeridos=(
+                            ("catalogo_nao_localizado", True),
+                            ("regra_id", regra.id),
+                        ),
+                        confianca=Decimal("0.66"),
+                        justificativa=(
+                            "A nomenclatura de cabo foi reconhecida, mas não existe uma "
+                            "correspondência exata no catálogo publicado; requer classificação."
+                        ),
+                    )
+                )
+        return tuple(
+            item
+            for item in proposals
+            if item.confianca is None or item.confianca >= solicitacao.configuracao.confianca_minima
+        )
 
 
 class AnalisadorEquipamento(AnalisadorCatalogoPorCodigo):
