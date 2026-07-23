@@ -1,5 +1,8 @@
 # ADR 0007 - Grafo derivado, determinístico e revisável
 
+> **Substituída pela ADR 0010 em 2026-07-22.** A projeção de grafo, sua interface e sua dependência
+> foram removidas; este arquivo permanece somente como registro histórico.
+
 ## Status
 
 Aceita em 21/07/2026.

@@ -16,7 +16,7 @@ Nenhum serviço externo ou modelo específico deve ser introduzido sem uma decis
    indicados na tabela não estiverem satisfeitos. O desenvolvimento técnico de uma etapa posterior só
    pode começar antes disso por instrução explícita do usuário e quando as dependências técnicas
    necessárias já estiverem disponíveis; o aceite pendente deve continuar registrado.
-4. Manter domínio, interface, persistência, processamento de PDF, análise e grafo desacoplados por portas e adaptadores.
+4. Manter domínio, interface, persistência, processamento de PDF e análise desacoplados por portas e adaptadores.
 5. A suíte padrão deve executar sem rede, serviços externos ou arquivos confidenciais.
 6. Toda ocorrência automática mantém uma proposta auditável; quando o catálogo e as dependências
    estiverem resolvidos, ela é promovida deterministicamente ao conjunto confirmado sem confirmação
@@ -79,9 +79,9 @@ Interpretação das próximas instruções do usuário:
 | 4. Extração de evidências do PDF | CONCLUÍDA | 3 | Nada; critérios de saída e testes já foram atendidos pelo Codex. |
 | 5. Conjunto de avaliação | EM ANDAMENTO | 3, 4 | **Humano:** fornecer ao menos uma amostra autorizada em escala diferente, concluir anotações primárias/secundárias e consensos e aprovar os critérios numéricos. **Codex:** validar a auditoria e congelar manifesto e anotações. |
 | 6. Pipeline modular de interpretação | EM ANDAMENTO | 1, 4, 5 | **Humano:** concluir e aprovar a Etapa 5. **Codex:** executar o benchmark no conjunto congelado, ajustar apenas com a partição de desenvolvimento e comprovar os limites aprovados. |
-| 7. Resultados da análise na interface | EM ANDAMENTO | 3, 6 | **Codex:** promoção automática, árvore de vínculos, links no PDF e testes concluídos. **Humano:** validar uma página real inteira e a clareza dos relacionamentos. |
+| 7. Resultados da análise na interface | EM ANDAMENTO | 3, 6 | **Codex:** promoção automática, regiões de ocorrência, links no PDF e testes concluídos. **Humano:** validar uma página real inteira e a clareza dos agrupamentos. |
 | 7.1 Fluxo operacional do MVP pela interface | EM ANDAMENTO | 2, 3, 4, 6, 7 | **Codex:** implementação técnica e gates concluídos. **Humano:** executar e aprovar o roteiro ponta a ponta em um projeto autorizado. PDFs exploratórios adicionais em `examples/` são aceitos e testados automaticamente. |
-| 8. Reconstrução e validação do grafo | EM ANDAMENTO | 1, 7, 7.1 | **Codex:** implementação técnica, integração Qt, persistência das confirmações e gates concluídos. **Humano:** executar o roteiro pela interface, revisar uma conexão proposta e comprovar a navegação de um diagnóstico até o PDF. |
+| 8. Agrupamento por regiões do PDF | EM ANDAMENTO | 4, 6, 7 | **Codex:** agrupamento espacial, coordenadas, vínculos internos, navegação e remoção do grafo concluídos. **Humano:** validar as regiões em páginas reais. |
 | 9. Gestão do catálogo pela interface | PENDENTE | 2, 7.1 | **Codex:** implementar CRUD, versionamento, importação/exportação e testes. **Humano:** validar que alterações podem ser feitas sem recompilar e sem mudar projetos antigos. |
 | 10. Projeto portátil, fotos e recuperação | EM ANDAMENTO | 2, 7.1, 8 | **Codex:** implementação técnica, transporte, recuperação, integração Qt e gates concluídos. **Humano:** executar o roteiro de aceite em outra pasta ou máquina autorizada e aprovar a integridade do resultado. |
 | 11. Empacotamento e aceite | PENDENTE | 8, 9, 10 | **Codex:** gerar instalador, diagnóstico, documentação e executar testes E2E, privacidade e benchmark final. **Humano:** realizar o aceite do fluxo completo em uma máquina-alvo limpa e decidir a licença de distribuição do PyMuPDF/MuPDF. |
@@ -97,7 +97,7 @@ Estados permitidos: `PENDENTE`, `EM ANDAMENTO`, `BLOQUEADA` e `CONCLUÍDA`.
 - PDF: PyMuPDF para metadados, texto incorporado, vetores, imagens, renderização e recortes.
 - Imagem: Pillow como base; OpenCV poderá ser adotado no adaptador de análise raster se os testes demonstrarem necessidade.
 - OCR: porta independente e implementação escolhida somente após benchmark com projetos reais.
-- Grafo: NetworkX como projeção e mecanismo de validação; as entidades persistidas continuam sendo a fonte de verdade.
+- Regiões: projeção espacial determinística dos resultados por página; as análises persistidas continuam sendo a fonte de verdade.
 - Testes e qualidade: pytest, pytest-cov, pytest-qt, Ruff e verificação estática de tipos.
 - Distribuição: avaliar `pyside6-deploy` primeiro e manter os dados do usuário fora da pasta do executável.
 
@@ -112,7 +112,6 @@ src/zeny_project_handler/
     persistence/
     pdf/
     analysis/
-    graph/
   ui/
 tests/
   unit/
@@ -133,7 +132,7 @@ Estas revisões devem ser realizadas na etapa 1 e refletidas em `modelo-entidade
 6. Separar claramente objetos `PROPOSTOS`, produzidos pela análise, de elementos `CONFIRMADOS` do projeto.
 7. Substituir strings livres de tensão, fases e tecnologia por referências ao catálogo sempre que o valor for controlado.
 8. Tornar explícitas as ligações internas dos equipamentos. Um transformador conecta terminais MT e BT; chaves ligam ou seccionam terminais conforme seu estado.
-9. Revisar a projeção do grafo: postes servem à visão física; pontos de rede e terminais servem à visão elétrica. Equipamentos também podem produzir arestas internas.
+9. Agrupar resultados por região da folha, sem depender de um poste como item-pai e sem produzir nós ou arestas.
 10. Adotar SQLite desde a primeira persistência. JSON deve permanecer para seed, intercâmbio e diagnóstico.
 11. Permitir pontos de derivação, conexão, entrega, caixa de passagem e transição sem obrigá-los a
     pertencer a um poste.
@@ -711,6 +710,9 @@ resultados relacionados, fechar e reabrir preservando o trabalho.
   com `:`, `/`, espaço e quebra de linha. O formato explícito resolve o item do catálogo; sem formato,
   o tipo canônico é escolhido e os candidatos permanecem auditáveis. Coordenadas próximas são
   combinadas entre fragmentos nativos/OCR, e relações preferem postes com a mesma situação de obra.
+- Interpretação 4.0: equipamentos aceitam nomenclaturas abreviadas observadas nos desenhos, como
+  `3-150` para o item `-3-150` e `1-37.5 KVA` para `-1-37,5`; coordenadas contíguas separadas por
+  quebra de linha, `:` ou `/` deixam de ser confundidas como um único número.
 - OCR local: o Tesseract instalado é descoberto automaticamente e recebe a página por memória. Além
   de páginas rasterizadas, páginas com mais de 1.000 vetores são processadas para recuperar textos
   plotados como caminhos, mesmo quando o carimbo possui texto nativo. Nenhum PDF é enviado à rede.
@@ -725,11 +727,39 @@ resultados relacionados, fechar e reabrir preservando o trabalho.
   acima do limite estrito de 85,01%. O PDF exploratório adicional foi lido e renderizado pelo smoke
   test sem modificação de tamanho ou data do arquivo; os testes de exclusão também confirmam que os
   PDFs originais permanecem no disco.
-- Próximo passo: executar o roteiro de aceite humano acima pelos launchers normais. A Etapa 8 foi
-  desenvolvida por instrução explícita do usuário, mas isso não presume nem substitui os aceites
-  ainda pendentes das Etapas 7 e 7.1.
+- Próximo passo: executar o roteiro de aceite humano acima pelos launchers normais e validar as
+  regiões de ocorrência em páginas autorizadas.
 
-## Etapa 8 - Reconstrução e validação do grafo
+## Etapa 8 - Agrupamento por regiões do PDF
+
+**Status: EM ANDAMENTO. Implementação técnica concluída em 2026-07-22; aguarda validação humana em
+projetos reais.**
+
+### Desenvolver
+
+- Agrupar elementos próximos na mesma página sem depender de um poste como item-pai.
+- Associar coordenadas UTM lidas de texto nativo ou OCR, inclusive em fragmentos separados.
+- Resumir instalações, retiradas e elementos existentes dentro da mesma região.
+- Mostrar catálogo e vínculos semânticos em cada elemento, preservando o sublinhado clicável no PDF.
+- Remover projeções, dependências, pacotes portáteis e painéis de grafo.
+
+### Testar
+
+- Regiões com e sem coordenada, múltiplas situações e diferentes páginas.
+- Coordenadas separadas por quebra de linha, `:`, `/` ou fragmentos próximos.
+- Itens distantes na mesma página não são unidos.
+- Clique em elemento navega para a folha correta e destaca o sublinhado.
+
+### Critério de saída
+
+O usuário compreende o que acontece em cada local da folha sem confirmar item a item e sem precisar
+interpretar nós, arestas ou diagnósticos de grafo.
+
+## Histórico supersedido - reconstrução e validação do grafo
+
+> Esta seção registra a implementação anterior apenas como histórico. Ela foi substituída pela Etapa
+> 8 de regiões em 2026-07-22; o código, a dependência NetworkX e a interface descritos abaixo foram
+> removidos do produto.
 
 **Status: EM ANDAMENTO. Implementação técnica concluída em 2026-07-21; aguarda aceite humano pela
 interface.**
@@ -856,7 +886,7 @@ modificar o significado de projetos antigos.
 
 - Mover o pacote para outra pasta ou máquina mantém referências válidas.
 - Arquivo ausente ou adulterado é sinalizado sem impedir a abertura.
-- Exportação seguida de importação preserva IDs, catálogo, decisões e grafo.
+- Exportação seguida de importação preserva IDs, catálogo, análises e decisões.
 - Backup interrompido não substitui a última versão íntegra.
 - E2E Qt exporta um projeto, importa-o em uma pasta de dados vazia, localiza um anexo ausente e
   restaura um backup sem recorrer ao terminal ou manipular o pacote manualmente.
@@ -869,14 +899,14 @@ arquivos associados apresentados de modo acionável ao usuário.
 ### Roteiro de aceite humano esperado
 
 1. Anexar uma foto autorizada e exportar o projeto pela interface.
-2. Importar o pacote em outra pasta ou máquina autorizada e conferir PDF, decisões, grafo e anexos.
+2. Importar o pacote em outra pasta ou máquina autorizada e conferir PDF, análises, decisões e anexos.
 3. Simular um arquivo ausente, usar a ação de localização e conferir a integridade novamente.
 4. Criar e restaurar um backup, validando que a última versão íntegra pode ser recuperada.
 
 ### Registro de desenvolvimento
 
-- O formato portátil `.zphproj` contém manifesto assinado, SQLite restrito ao projeto, PDFs, fotos e
-  a projeção derivada do grafo. Todos os caminhos internos são relativos e cada arquivo possui tipo,
+- O formato portátil `.zphproj` contém manifesto assinado, SQLite restrito ao projeto, PDFs e fotos.
+  Todos os caminhos internos são relativos e cada arquivo possui tipo,
   tamanho e SHA-256 verificáveis.
 - A leitura do pacote rejeita caminhos inseguros, entradas duplicadas, links simbólicos e conteúdo
   criptografado. Arquivos ausentes, alterados ou incompatíveis são apresentados no relatório de
@@ -884,8 +914,8 @@ arquivos associados apresentados de modo acionável ao usuário.
 - Fotos são copiadas para armazenamento gerenciado pelo hash, deduplicadas fisicamente e podem ser
   anexadas, removidas ou localizadas novamente pela interface. PDFs ausentes também podem ser
   localizados por correspondência exata de SHA-256.
-- Exportar e importar preserva IDs, catálogo, execuções, evidências, propostas, decisões e a
-  assinatura determinística do grafo. Substituir um projeto existente exige confirmação e a troca do
+- Exportar e importar preserva IDs, catálogo, execuções, evidências, propostas e decisões. Substituir
+  um projeto existente exige confirmação e a troca do
   banco e dos arquivos possui rollback em caso de falha.
 - O formato `.zphbackup` reúne um snapshot íntegro do banco, arquivos gerenciados e cópias dos PDFs
   externos. A publicação é atômica; a restauração valida o pacote e preserva a versão anterior se a
@@ -915,7 +945,7 @@ arquivos associados apresentados de modo acionável ao usuário.
 
 - Instalação limpa em máquina-alvo sem ambiente de desenvolvimento.
 - Atualização e desinstalação preservam os projetos do usuário.
-- Teste ponta a ponta: importar PDF, extrair evidências, revisar propostas, gerar grafo, anexar foto, salvar, fechar e reabrir.
+- Teste ponta a ponta: importar PDF, extrair evidências, revisar regiões, anexar foto, salvar, fechar e reabrir.
 - Teste de privacidade confirma ausência de tráfego externo durante o processamento.
 - Benchmark final no conjunto congelado e comparação com os limites definidos na etapa 5.
 
@@ -932,7 +962,7 @@ Fluxo ponta a ponta aprovado na máquina-alvo, documentação atualizada e nenhu
 
 ## Estratégia global de testes
 
-- Unitários: domínio, catálogo, extração, transformações geométricas e regras do grafo; rápidos e sem I/O externo.
+- Unitários: domínio, catálogo, extração, transformações geométricas e agrupamento de regiões; rápidos e sem I/O externo.
 - Contrato: todos os adaptadores devem respeitar suas portas, especialmente persistência, PDF e análise.
 - Integração: SQLite, PyMuPDF, adaptador de análise falso e componentes Qt.
 - Golden: renderizações e projeções de coordenadas com tolerâncias controladas.
@@ -964,5 +994,4 @@ O Codex deve interromper o avanço e registrar bloqueio quando ocorrer qualquer 
 - [Qt for Python](https://doc.qt.io/qtforpython-6/): bindings oficiais PySide6 e requisitos.
 - [PyMuPDF](https://pymupdf.readthedocs.io/en/latest/): renderização, recortes, texto, vetores, imagens e OCR.
 - [SQLAlchemy 2.x](https://docs.sqlalchemy.org/en/20/): persistência e mapeamento ORM.
-- [NetworkX](https://networkx.org/documentation/stable/): estruturas e algoritmos de grafos.
 - [pytest](https://docs.pytest.org/en/stable/): testes, fixtures e parametrização.

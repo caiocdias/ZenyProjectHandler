@@ -41,19 +41,20 @@ O diagrama completo está em [`modelo-entidades.mmd`](./modelo-entidades.mmd). A
   existir fora dele e possuir geometria e coordenada próprias.
 - `EstruturaMt` só fixa pontos MT; `EstruturaBt` só fixa pontos BT. O ponto precisa estar no mesmo poste da estrutura.
 - Cada `Cabo` conecta duas extremidades distintas do mesmo projeto e pode registrar pontos
-  intermediários ordenados. Derivações devem possuir seu próprio ponto para que o grafo não perca
-  topologia.
+  intermediários ordenados. Derivações devem possuir seu próprio ponto para preservar a topologia
+  confirmada do projeto.
 - `Equipamento` possui `TerminalEquipamento`. Transformadores, chaves e outros dispositivos representam continuidade ou seccionamento por `ConexaoInternaEquipamento`.
 - Terminais conectados a pontos devem possuir o mesmo nível de rede e as mesmas opções catalogadas de tensão e fases.
 - `VinculoObra` associa uma retirada a uma instalação da mesma categoria. `REALOCACAO` também
   exige o mesmo tipo catalogado; `SUBSTITUICAO` permite mudança de tipo.
 - Fotos usam caminhos relativos internos ao projeto; caminhos absolutos ou com `..` são inválidos.
 
-O grafo é uma projeção, não uma fonte de dados. A visão física usa postes e equipamentos; a visão elétrica usa pontos de rede, terminais, cabos e conexões internas.
+As regiões do PDF são projeções espaciais dos resultados, não uma nova fonte de dados. Elas agrupam
+elementos e vínculos próximos na mesma folha sem produzir nós ou arestas.
 
 ## Análise, propostas e revisão
 
-Resultados automáticos não entram diretamente no conjunto confirmado:
+Resultados automáticos alimentam diretamente as etapas seguintes:
 
 1. `ExecucaoAnalise` registra método, versão, parâmetros, duração, estado, eventual erro fatal e
    diagnósticos de falhas parciais por extrator, página e objeto PDF.
@@ -66,17 +67,17 @@ Resultados automáticos não entram diretamente no conjunto confirmado:
 5. `PropostaElemento` e `PropostaRelacao` referenciam suas evidências e podem registrar confiança e
    justificativa. Uma proposta de elemento também preserva o código observado e atributos sugeridos,
    mesmo quando nenhum item do catálogo corresponde.
-6. `DecisaoRevisao` registra quem aceitou, rejeitou ou ajustou uma proposta e, quando aplicável, o ID
-   do elemento ou da relação confirmada. Uma decisão final é imutável.
-7. `ServicoRevisaoHumana` aplica a decisão, a alteração do agregado e o registro auditável na mesma
-   transação. Mudanças de classe, item do catálogo, situação ou geometria são decisões `AJUSTAR`.
+6. Resultados catalogados são promovidos automaticamente ao projeto. `DecisaoRevisao` preserva esse
+   aceite automático e continua registrando correções excepcionais quando houver intervenção humana.
+7. `ServicoRevisaoHumana` carrega a análise como uma coleção de regiões de ocorrência. Cada região
+   reúne os elementos próximos, os vínculos semânticos, a página, a geometria envolvente e eventual
+   coordenada encontrada em texto nativo ou OCR.
 8. `RelacaoConfirmada` preserva tipo e extremidades já confirmadas. Elementos e relações criados
    manualmente registram autor, data e motivo opcional em `RegistroRevisaoManual`.
-9. O PDF exibe um sublinhado clicável por proposta de elemento. O clique traz a aba lateral de revisão
-   para frente, seleciona a linha correspondente e mostra a classificação e o item de catálogo já
-   reconhecidos. Reclassificação e coordenadas aparecem somente quando o usuário solicita correção;
-   vínculos estruturais aparecem apenas nas categorias aplicáveis. Uma proposta equivalente a outra
-   anteriormente rejeitada não pode ser confirmada por nova análise.
+9. O PDF exibe um sublinhado clicável por proposta de elemento. O clique traz a aba lateral de
+   resultados para frente, abre a folha correta e seleciona o item dentro de sua região. A lista
+   apresenta coordenada, acontecimentos de instalação/retirada/existência, catálogo e vínculos sem
+   exigir confirmação item a item.
 
 `EstadoRevisao` é independente de `SituacaoProjeto`. Por exemplo, uma proposta ainda não revisada pode indicar corretamente que o símbolo representa um poste a remover.
 
@@ -299,8 +300,7 @@ sintéticas; a partição de teste privada não foi usada para criá-las.
 - Um pacote de projeto usa a extensão `.zphproj` e a versão de formato 1. Seu manifesto assinado
   declara projeto, catálogo, arquivos, tamanhos, tipos e hashes SHA-256.
 - O pacote contém um SQLite migrado e restrito ao projeto, seus PDFs disponíveis, fotos gerenciadas e
-  a projeção JSON do grafo. O banco continua sendo a fonte canônica; o grafo é derivado e sua
-  assinatura é conferida na importação.
+  resultados auditáveis da análise. O banco continua sendo a fonte canônica.
 - Entradas do arquivo compactado devem possuir caminhos relativos seguros. Caminhos absolutos ou com
   travessia, duplicatas, links simbólicos, conteúdo criptografado e arquivos não declarados são
   recusados antes da aplicação dos dados.
@@ -342,35 +342,28 @@ sintéticas; a partição de teste privada não foi usada para criá-las.
 - O usuário pode solicitar cancelamento. Resultados completos são preservados e a retomada reutiliza
   identidades determinísticas, sem duplicar execuções, evidências ou propostas.
 - O painel apresenta documentos, folhas, estados das execuções, identificações automáticas e
-  exceções. Cada execução pode ser selecionada no painel de resultados; postes formam os nós-pai e
-  estruturas, equipamentos e cabos vinculados aparecem como filhos clicáveis.
+  exceções. Cada execução pode ser selecionada no painel de resultados; regiões da folha formam os
+  itens-pai e todos os elementos e vínculos próximos aparecem como filhos clicáveis.
 - O último projeto e a última folha são restaurados por estado local da interface. Os dados canônicos
   permanecem no SQLite; `ui-state.ini` guarda somente preferências de navegação reproduzíveis.
 - Falhas de PDF ou pipeline são convertidas em mensagens visíveis e acionáveis. Nenhum fluxo de uso
   ou aceite requer terminal, fixture, edição de JSON ou acesso direto ao banco.
 
-## Reconstrução do conjunto confirmado
+## Agrupamento por regiões do PDF
 
-A reconstrução é uma projeção derivada e reproduzível, nunca uma nova fonte de verdade. A visão
-física usa postes e equipamentos; a visão elétrica usa pontos de rede e terminais. Cabos, ligações
-terminal-ponto, conexões internas e relações confirmadas produzem arestas. Cabos paralelos são
-preservados separadamente por um multigrafo. A projeção permanece não direcionada enquanto o
-projeto não contiver origem e sentido de fluxo confirmados.
+O agrupamento é uma projeção derivada e reproduzível da análise, nunca uma nova fonte de verdade.
+Elementos suficientemente próximos na mesma página pertencem à mesma região, independentemente de
+existir um poste reconhecido. Geometrias distantes continuam em regiões separadas mesmo que uma
+regra semântica tenha proposto um vínculo entre elas.
 
-Uma assinatura canônica inclui entidades, relações, catálogo e geometria usados. Assim, a ordem de
-inserção não altera o resultado e uma confirmação feita sobre uma versão desatualizada é recusada.
-Conexões ausentes podem ser propostas pela proximidade entre geometrias confirmadas na mesma folha,
-desde que nível, tensão e fases coincidam. Mais de um candidato compatível é tratado como ambíguo
-e nenhuma proposta modifica o projeto sem confirmação humana registrada.
+Cada região usa identidade determinística baseada na página e nos elementos que contém. A ordem de
+exibição segue a ordem persistida dos PDFs, o número da página e a posição de leitura na folha. Pares
+UTM são associados à região mais próxima e podem vir de um único texto ou de fragmentos distintos.
+Leste e norte podem estar separados por espaço, quebra de linha, dois-pontos ou barra.
 
-Os diagnósticos abrangem componentes desconectados, pontas órfãs, ciclos inesperados,
-incompatibilidade de tensão/fases, incompatibilidade entre estrutura e cabo, equipamentos sem
-terminais e continuidade interna desconhecida. Cada diagnóstico referencia as entidades envolvidas,
-destaca-as na visão apropriada e, quando há geometria, permite navegar até a folha do PDF.
-
-O painel **Grafo do projeto** expõe reconstrução, visões, filtros, diagnósticos, navegação e
-confirmação de conexão. Somente a relação aceita e seu registro de revisão são persistidos; o grafo
-é recalculado do conjunto confirmado sempre que solicitado.
+O painel **Resultados da análise** apresenta um resumo por situação de obra e, abaixo, cada elemento
+com catálogo e vínculos internos. Selecionar a região destaca sua área; selecionar um elemento abre
+a página correspondente e realça seu sublinhado no PDF.
 
 ## Fundamentação normativa
 
@@ -393,10 +386,10 @@ O pipeline ainda não classifica uma forma vetorial isolada sem texto ou OCR: ca
 carimbos e símbolos do AutoCAD são visualmente semelhantes e uma regra geométrica simples geraria
 falsos positivos. Os limiares ainda precisam do conjunto formal anotado e do consenso humano da
 Etapa 5; a verificação exploratória apenas comprovou que todos os dez PDFs locais atuais passaram a
-gerar ao menos uma proposta de poste. A reconstrução do grafo ocorre sob comando e considera o
-conjunto confirmado, agora alimentado automaticamente pelos resultados catalogados do pipeline.
+gerar ao menos uma proposta de poste. As regiões são derivadas automaticamente dos resultados do
+pipeline.
 Resultados sem tipo de catálogo resolvido permanecem apenas na trilha auditável. A importação, a
-extração, a interpretação, a inspeção dos resultados, a reconstrução e a portabilidade estão
+extração, a interpretação, a inspeção dos resultados e a portabilidade estão
 integradas à interface do MVP, mas as Etapas 7, 7.1, 8 e 10 continuam aguardando o aceite humano em
 um projeto autorizado.
 

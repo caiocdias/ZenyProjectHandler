@@ -82,7 +82,7 @@ banco, WAL, temporários e backups não devem ser adicionados ao Git.
 
 O painel **Portabilidade e recuperação** permite usar o fluxo completo sem acesso ao terminal. Um
 projeto pode ser exportado como `.zphproj`, com manifesto assinado, banco restrito ao projeto, PDFs,
-fotos e grafo derivado. O pacote usa somente caminhos relativos e valida SHA-256, tamanho e tipo de
+fotos e resultados da análise. O pacote usa somente caminhos relativos e valida SHA-256, tamanho e tipo de
 cada arquivo ao ser importado.
 
 Fotos JPEG, PNG, TIFF e WebP podem ser anexadas a elementos confirmados. Elas são copiadas para
@@ -92,7 +92,7 @@ impressão SHA-256 do original.
 
 O relatório de integridade diferencia arquivos ausentes, alterados, de tipo incompatível e anexos
 antigos ainda sem impressão verificável. Os dados utilizáveis continuam abrindo para que o usuário
-possa corrigir o problema. A importação preserva identidades, catálogo, análises, decisões e grafo;
+possa corrigir o problema. A importação preserva identidades, catálogo, análises e decisões;
 substituir um projeto existente exige confirmação explícita.
 
 O backup completo `.zphbackup` inclui o banco local, arquivos gerenciados e cópias dos PDFs externos.
@@ -102,9 +102,9 @@ original.
 
 ## Visualização e origem dos PDFs
 
-A janela principal mantém o leitor de PDF no centro. Fluxo, resultados da análise, grafo e
-portabilidade continuam dockáveis; resultados, grafo e portabilidade compartilham abas à direita
-para não se sobreporem, e o grafo possui rolagem vertical até os diagnósticos. O leitor oferece
+A janela principal mantém o leitor de PDF no centro. Fluxo, resultados da análise e portabilidade
+continuam dockáveis; resultados e portabilidade compartilham abas à direita para não se
+sobreporem. O leitor oferece
 paginação, zoom, rotação e sobreposições gráficas.
 
 Todo PDF selecionado no **Fluxo do projeto** é adicionado imediatamente ao projeto. Na lista de
@@ -115,9 +115,11 @@ renderizar ou concluir uma importação.
 
 Cada elemento identificado aparece no PDF como um sublinhado colorido e clicável. O clique abre a
 aba **Resultados da análise** e seleciona o elemento correspondente. A visão principal é hierárquica:
-cada poste reúne as estruturas, os equipamentos e os cabos relacionados, com situação de obra, item
-de catálogo e confiança. Não há confirmação item a item; resultados catalogados são incorporados
-automaticamente ao projeto e ficam imediatamente disponíveis para o grafo e as etapas seguintes.
+cada região da folha reúne coordenada, acontecimentos, estruturas, equipamentos, postes, cabos e
+vínculos próximos. Uma mesma região pode descrever simultaneamente retiradas, instalações e
+elementos existentes, mesmo quando não há poste catalogado ou coordenada. Não há confirmação item a
+item; resultados catalogados são incorporados automaticamente ao projeto e ficam imediatamente
+disponíveis para as etapas seguintes.
 
 A resolução padrão é 144 DPI. Ela pode ser alterada entre 36 e 600 DPI antes da inicialização:
 
@@ -163,22 +165,16 @@ mesma identidade sem duplicar resultados nem entidades promovidas.
 O mesmo pipeline possui um adaptador para o benchmark. O teste final continua bloqueado enquanto o
 conjunto de avaliação não estiver congelado e os critérios não estiverem aprovados.
 
-## Reconstrução e validação do grafo
+## Regiões de ocorrência no PDF
 
-O painel **Grafo do projeto** reconstrói duas projeções do conjunto confirmado: a visão física,
-formada por postes e equipamentos, e a visão elétrica, formada por pontos de rede e terminais. A
-implementação usa um `MultiGraph`, portanto cabos paralelos não são colapsados. A direção fica
-indefinida enquanto fonte e fluxo não estiverem confirmados no projeto.
+Depois da interpretação, os elementos são agrupados por proximidade na mesma folha. Cada região é
+uma visão derivada e determinística da análise: ela informa o PDF, a página, eventual par de
+coordenadas UTM, tudo o que será instalado ou removido e o que já existe no local. Os vínculos
+semânticos permanecem visíveis dentro da região, mas não são transformados em nós ou arestas.
 
-Na interface é possível reconstruir, alternar a visão, filtrar nós e severidades e inspecionar
-componentes desconectados, pontas órfãs, incompatibilidades, ciclos e equipamentos sem terminais.
-Selecionar um diagnóstico destaca suas entidades; **Ir ao PDF** abre a folha correspondente. Uma
-conexão sugerida por proximidade e compatibilidade só entra no conjunto confirmado depois que o
-usuário informa o responsável e aciona **Confirmar conexão**.
-
-O grafo é derivado e pode ser descartado: as entidades e relações confirmadas no SQLite permanecem
-a fonte de verdade. A ordenação canônica, os identificadores determinísticos e a assinatura SHA-256
-garantem que o mesmo conjunto confirmado produza o mesmo resultado ao reabrir o aplicativo.
+Coordenadas são coletadas de texto nativo e OCR, inclusive quando leste e norte aparecem separados
+por quebra de linha, `:`, `/` ou em fragmentos próximos. Selecionar a região destaca sua extensão;
+selecionar um elemento abre a folha correspondente e destaca seu sublinhado clicável.
 
 ## Projetos reais para testes
 

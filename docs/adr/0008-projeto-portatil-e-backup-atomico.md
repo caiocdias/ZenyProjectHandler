@@ -22,8 +22,8 @@ ausente ou adulterado; copiar apenas o SQLite deixaria anexos e PDFs externos fo
   integridade, preservando a abertura dos dados que ainda forem utilizáveis.
 - Armazenar fotos gerenciadas por hash em `project-files/<projeto>/photos` e deduplicar seu conteúdo.
   Localização de foto ou PDF somente adota arquivos cuja impressão corresponda ao registro.
-- Manter o SQLite como fonte canônica e o grafo como artefato derivado. Na importação, reconstruir o
-  grafo e comparar sua assinatura com o pacote.
+- Manter o SQLite como fonte canônica. Pacotes novos não incluem projeções derivadas; a importação
+  valida o manifesto, o banco e cada arquivo por tamanho, tipo e SHA-256.
 - Preservar IDs, catálogo, análises, evidências, propostas e decisões no banco portátil. Exigir
   autorização explícita para substituir um projeto existente e compensar as trocas de arquivos se a
   transação do banco falhar.

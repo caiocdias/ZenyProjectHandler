@@ -739,50 +739,20 @@ namespace ModuloAvaliacao {
     class RelatorioBenchmarkAvaliacao
 }
 
-namespace ModuloGrafo {
-    class ResultadoReconstrucaoGrafo {
+namespace ModuloRegioesAnalise {
+    class RegiaoAnalise {
         <<derivado>>
-        +UUID projetoId
-        +String versaoMetodo
-        +String assinatura
-    }
-
-    class GrafoDerivado {
-        <<derivado>>
-        +VisaoGrafo visao
-    }
-
-    class NoGrafo {
         +UUID id
-        +UUID referenciaId
-        +TipoNoGrafo tipo
-        +String rotulo
+        +UUID paginaId
         +GeometriaDocumento geometria
+        +UUID[] elementoIds
+        +UUID[] vinculoIds
+        +CoordenadaCampo coordenada
     }
 
-    class ArestaGrafo {
-        +UUID id
-        +UUID referenciaId
-        +UUID origemId
-        +UUID destinoId
-        +String tipo
-        +Boolean proposta
-    }
-
-    class SugestaoConexaoGrafo {
-        +UUID id
-        +UUID origemId
-        +UUID destinoId
-        +Decimal confianca
-        +String justificativa
-    }
-
-    class DiagnosticoGrafo {
-        +UUID id
-        +String codigo
-        +SeveridadeDiagnosticoGrafo severidade
-        +VisaoGrafo visao
-        +UUID[] referenciasIds
+    class AgruparRegioesDaAnalise {
+        <<servico>>
+        +agrupar(propostas, evidencias, documentos) RegiaoAnalise[]
     }
 }
 
@@ -1025,16 +995,9 @@ ElementoProjeto "0..*" --> "1" ItemCatalogo : tipadoPor
 PontoRede ..> OpcaoCatalogo : tensao_e_fases
 TerminalEquipamento ..> OpcaoCatalogo : tensao_e_fases
 
-Projeto ..> ResultadoReconstrucaoGrafo : projeta
-ResultadoReconstrucaoGrafo "1" *-- "2" GrafoDerivado : fisico_e_eletrico
-ResultadoReconstrucaoGrafo "1" *-- "0..*" SugestaoConexaoGrafo : sugestoes
-ResultadoReconstrucaoGrafo "1" *-- "0..*" DiagnosticoGrafo : diagnosticos
-GrafoDerivado "1" *-- "0..*" NoGrafo : nos
-GrafoDerivado "1" *-- "0..*" ArestaGrafo : arestas
-Poste ..> NoGrafo : projetaFisico
-Equipamento ..> NoGrafo : projetaFisico
-PontoRede ..> NoGrafo : projetaEletrico
-TerminalEquipamento ..> NoGrafo : projetaEletrico
-Cabo ..> ArestaGrafo : projeta
-ConexaoInternaEquipamento ..> ArestaGrafo : projeta
-RelacaoConfirmada ..> ArestaGrafo : projeta
+AgruparRegioesDaAnalise --> PropostaElemento : agrupaPorGeometria
+AgruparRegioesDaAnalise --> PropostaRelacao : preservaVinculos
+AgruparRegioesDaAnalise --> EvidenciaDocumento : encontraCoordenadas
+AgruparRegioesDaAnalise ..> RegiaoAnalise : produz
+RegiaoAnalise --> PaginaDocumento : localiza
+RegiaoAnalise ..> CoordenadaCampo : informa

@@ -7,7 +7,7 @@
 ## Contexto
 
 O fluxo inicial exigia aceitar ou rejeitar cada proposta antes que o elemento participasse do
-projeto. Isso repetia uma decisão que o próprio analisador já havia tomado e impedia o grafo e as
+projeto. Isso repetia uma decisão que o próprio analisador já havia tomado e impedia as
 etapas seguintes de usar resultados válidos. A tabela plana também ocultava relações importantes,
 como transformador e estruturas novas instalados em um poste novo próximo de outro poste a remover.
 
@@ -30,7 +30,7 @@ decisão deixam de fazer parte do fluxo principal.
 
 ## Consequências
 
-- Grafo, diagnósticos e etapas posteriores recebem os resultados assim que a análise termina.
+- Regiões de ocorrência e etapas posteriores recebem os resultados assim que a análise termina.
 - Uma instalação nova não se vincula a um poste a remover apenas por pequena diferença de distância.
 - A auditoria continua informando evidências, regra, confiança, inferências e alternativas de catálogo.
 - Erros de análise passam a exigir um fluxo excepcional de correção, não uma confirmação obrigatória
