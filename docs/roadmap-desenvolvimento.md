@@ -85,8 +85,9 @@ Interpretação das próximas instruções do usuário:
 | 7.1 Fluxo operacional do MVP pela interface | EM ANDAMENTO | 2, 3, 4, 6, 7 | **Codex:** implementação técnica e gates concluídos. **Humano:** executar e aprovar o roteiro ponta a ponta em um projeto autorizado. PDFs exploratórios adicionais em `examples/` são aceitos e testados automaticamente. |
 | 8. Agrupamento por regiões do PDF | EM ANDAMENTO | 4, 6, 7 | **Codex:** agrupamento espacial, coordenadas, vínculos internos, navegação e remoção do grafo concluídos. **Humano:** validar as regiões em páginas reais. |
 | 9. Gestão do catálogo pela interface | PENDENTE | 2, 7.1 | **Codex:** implementar CRUD, versionamento, importação/exportação e testes. **Humano:** validar que alterações podem ser feitas sem recompilar e sem mudar projetos antigos. |
-| 10. Projeto portátil, fotos e recuperação | EM ANDAMENTO | 2, 7.1, 8 | **Codex:** implementação técnica, transporte, recuperação, integração Qt e gates concluídos. **Humano:** executar o roteiro de aceite em outra pasta ou máquina autorizada e aprovar a integridade do resultado. |
+| 10. Transporte e recuperação | EM ANDAMENTO | 2, 7.1, 8 | **Codex:** implementação técnica, transporte, recuperação, integração Qt e gates concluídos. **Humano:** executar o roteiro de aceite em outra pasta ou máquina autorizada. |
 | 11. Empacotamento e aceite | PENDENTE | 8, 9, 10 | **Codex:** gerar instalador, diagnóstico, documentação e executar testes E2E, privacidade e benchmark final. **Humano:** realizar o aceite do fluxo completo em uma máquina-alvo limpa e decidir a licença de distribuição do PyMuPDF/MuPDF. |
+| 12. Comissionamento e conformidade | EM ANDAMENTO | 4, 6, 7, 8 | **Codex:** abstração de fatos/regras, scanner documental e painel inicial implementados. O detector de vãos/ângulos foi removido e aguarda uma nova abstração. Falta persistir fatos/achados, ampliar avaliadores técnicos e comparar projeto com campo. **Humano:** aprovar fontes, severidades e critérios antes de promover possíveis divergências. |
 
 Estados permitidos: `PENDENTE`, `EM ANDAMENTO`, `BLOQUEADA` e `CONCLUÍDA`.
 
@@ -876,62 +877,53 @@ modificar o significado de projetos antigos.
 3. Publicar a nova versão e usá-la em um novo projeto.
 4. Reabrir um projeto antigo e confirmar que ele preserva a versão e o significado originais.
 
-## Etapa 10 - Projeto portátil, fotos e recuperação
+## Etapa 10 - Transporte e recuperação
 
 **Status: EM ANDAMENTO. Implementação técnica concluída em 21/07/2026; aguarda aceite humano pela interface.**
 
 ### Desenvolver
 
-- Definir pacote de projeto com manifesto, banco, PDF, fotos e artefatos derivados.
+- Definir pacote de projeto com manifesto, banco, PDFs e resultados auditáveis.
 - Salvar caminhos relativos e validar hash e tipo de arquivo.
-- Implementar anexar, remover, localizar arquivo ausente e deduplicar fotos.
 - Implementar exportação, importação, backup e recuperação após falha.
-- Expor anexos, exportação, importação, backup, restauração e localização de arquivos pela interface,
-  com progresso, destino explícito, confirmação para substituições e relatório de integridade.
+- Expor exportação, importação, backup e restauração pela interface, com progresso, destino explícito
+  e confirmação para substituições. Fotos e relatório de integridade não fazem parte do fluxo.
 
 ### Testar
 
 - Mover o pacote para outra pasta ou máquina mantém referências válidas.
-- Arquivo ausente ou adulterado é sinalizado sem impedir a abertura.
+- Pacotes ausentes ou adulterados são recusados pelas validações internas.
 - Exportação seguida de importação preserva IDs, catálogo, análises e decisões.
 - Backup interrompido não substitui a última versão íntegra.
-- E2E Qt exporta um projeto, importa-o em uma pasta de dados vazia, localiza um anexo ausente e
-  restaura um backup sem recorrer ao terminal ou manipular o pacote manualmente.
+- E2E Qt exporta um projeto, importa-o em uma pasta de dados vazia e restaura um backup sem recorrer
+  ao terminal ou manipular o pacote manualmente.
 
 ### Critério de saída
 
-O projeto é transportável e recuperável pela interface, com integridade verificável e problemas de
-arquivos associados apresentados de modo acionável ao usuário.
+O projeto é transportável e recuperável pela interface; pacotes e backups são validados internamente
+antes de alterar os dados locais.
 
 ### Roteiro de aceite humano esperado
 
-1. Anexar uma foto autorizada e exportar o projeto pela interface.
-2. Importar o pacote em outra pasta ou máquina autorizada e conferir PDF, análises, decisões e anexos.
-3. Simular um arquivo ausente, usar a ação de localização e conferir a integridade novamente.
-4. Criar e restaurar um backup, validando que a última versão íntegra pode ser recuperada.
+1. Exportar o projeto pela interface.
+2. Importar o pacote em outra pasta ou máquina autorizada e conferir PDFs, análises e decisões.
+3. Criar e restaurar um backup, validando que a última versão íntegra pode ser recuperada.
 
 ### Registro de desenvolvimento
 
-- O formato portátil `.zphproj` contém manifesto assinado, SQLite restrito ao projeto, PDFs e fotos.
-  Todos os caminhos internos são relativos e cada arquivo possui tipo,
-  tamanho e SHA-256 verificáveis.
+- O formato portátil `.zphproj` contém manifesto assinado, SQLite restrito ao projeto e PDFs. Todos os
+  caminhos internos são relativos e cada arquivo possui tipo, tamanho e SHA-256 verificáveis.
 - A leitura do pacote rejeita caminhos inseguros, entradas duplicadas, links simbólicos e conteúdo
-  criptografado. Arquivos ausentes, alterados ou incompatíveis são apresentados no relatório de
-  integridade sem impedir a abertura dos dados ainda utilizáveis.
-- Fotos são copiadas para armazenamento gerenciado pelo hash, deduplicadas fisicamente e podem ser
-  anexadas, removidas ou localizadas novamente pela interface. PDFs ausentes também podem ser
-  localizados por correspondência exata de SHA-256.
+  criptografado. Arquivos ausentes, alterados ou incompatíveis impedem que um pacote inválido altere
+  os dados locais.
 - Exportar e importar preserva IDs, catálogo, execuções, evidências, propostas e decisões. Substituir
   um projeto existente exige confirmação e a troca do
   banco e dos arquivos possui rollback em caso de falha.
 - O formato `.zphbackup` reúne um snapshot íntegro do banco, arquivos gerenciados e cópias dos PDFs
   externos. A publicação é atômica; a restauração valida o pacote e preserva a versão anterior se a
   troca não puder ser concluída.
-- O painel **Portabilidade e recuperação** oferece fotos, localização, exportação, importação,
-  backup, restauração, progresso e relatório de integridade sem exigir terminal ou edição manual do
-  pacote.
-- A extensão dos metadados de foto permanece compatível com projetos antigos; nenhum reset ou
-  migração destrutiva do banco foi necessário.
+- O painel **Portabilidade e recuperação** oferece exportação, importação, backup, restauração e
+  progresso sem exigir terminal ou edição manual do pacote.
 - Gates oficiais de 21/07/2026: dependências íntegras, Ruff e formatação aprovados, mypy sem erros em
   150 arquivos, 188 testes aprovados e cobertura total de 85,44%.
 - O aceite humano continua pendente e, por isso, a etapa permanece `EM ANDAMENTO` mesmo após a
@@ -952,7 +944,8 @@ arquivos associados apresentados de modo acionável ao usuário.
 
 - Instalação limpa em máquina-alvo sem ambiente de desenvolvimento.
 - Atualização e desinstalação preservam os projetos do usuário.
-- Teste ponta a ponta: importar PDF, extrair evidências, revisar regiões, anexar foto, salvar, fechar e reabrir.
+- Teste ponta a ponta: importar PDF, extrair evidências, revisar regiões, exportar, salvar, fechar e
+  reabrir.
 - Teste de privacidade confirma ausência de tráfego externo durante o processamento.
 - Benchmark final no conjunto congelado e comparação com os limites definidos na etapa 5.
 
@@ -966,6 +959,61 @@ Fluxo ponta a ponta aprovado na máquina-alvo, documentação atualizada e nenhu
 2. Executar o fluxo completo das Etapas 7.1, 7, 8, 9 e 10 usando apenas a aplicação instalada.
 3. Fechar, atualizar e reabrir o aplicativo, conferindo a preservação dos projetos.
 4. Revisar diagnóstico, privacidade, desempenho e limitações exibidas e registrar o aceite final.
+
+## Etapa 12 - Comissionamento e conformidade
+
+### Desenvolver
+
+- Normalizar evidências em fatos auditáveis por projeto, documento, página, região e elemento.
+- Manter regras normativas versionadas com fonte, revisão, aplicabilidade, exceções e requisitos.
+- Extrair cabeçalho, servidão, carimbos, assinaturas, comprimentos de vão e ângulos.
+- Relacionar tecnologia, tensão, seção, estrutura, poste e equipamento antes de aplicar tabelas.
+- Exibir documentação, vãos/ângulos e conformidade em um painel próprio com navegação para o PDF.
+- Persistir fatos, achados, confirmações e a versão do registro usada.
+- Criar um modelo de coleta de campo com proveniência independente e comparação
+  `projetado x encontrado x exigido`.
+- Implementar avaliadores especializados para compatibilidade, topologia, afastamentos, cardinalidade
+  e cálculos, publicando resultados como fatos.
+- Experimentar Unlimited-OCR somente atrás de `MotorOcrPort`, com servidor local direto e benchmark;
+  MCP não faz parte do pipeline determinístico.
+
+### Testar
+
+- Casos sintéticos de conforme, possível divergência, não avaliável e exceção comprovada.
+- Repetição produz as mesmas assinaturas e não mistura fatos de alvos diferentes.
+- Ângulos geométricos usam dois vãos conectados no poste, as dimensões físicas da folha e não são
+  deformados pela normalização; um vértice isolado dentro de um cabo não forma ângulo.
+- Vão urbano não é aplicado a projeto rural nem a tecnologia desconhecida.
+- Chave fusível respeita a exceção; outros equipamentos até 30° exigem avaliação de abalroamento.
+- Ausência de assinatura visual ou servidão não é convertida em reprovação universal.
+- Alterar revisão ou condição normativa muda a assinatura sem reinterpretar histórico.
+- O benchmark OCR mede texto crítico, caixas, alucinação, latência, memória e operação offline apenas
+  na partição autorizada de desenvolvimento.
+
+### Critério de saída
+
+O sistema compara fatos persistidos de projeto e campo com um registro normativo aprovado, explica
+cada achado até a evidência e a fonte e não confunde dado ausente, exceção ou baixa confiança com
+descumprimento confirmado.
+
+### Registro de desenvolvimento
+
+- Criados domínio, carregador JSON, schema e avaliador determinístico em três estados.
+- Registro inicial baseado na ND-3.1 Jul/2025 inclui numeração, formato, escala, vão urbano,
+  equipamento em ângulo, chave fusível, exceção entre 45 e 60 m e risco de abalroamento.
+- Scanner inicial deriva campos documentais e controles PDF; medidas de vão e ângulo aguardam a
+  próxima implementação.
+- Dock próprio integrado à janela principal com as três visões e navegação até a folha.
+- Cabeçalhos são excluídos do inventário sem perder a inspeção documental; nomenclaturas de cabo
+  ainda não catalogadas são preservadas para revisão.
+- Campos de cabeçalho e do quadro de servidão são enumerados genericamente por
+  `rótulo: informação`, sem limitar a interface ao vocabulário normativo inicial.
+- A árvore de resultados permite ocultar no PDF o ponto inteiro ou elementos individuais por ícones
+  de olho, sem excluir as propostas.
+- O detector de vãos, comprimentos e ângulos foi removido integralmente; sua reconstrução depende da
+  próxima definição de modelo e não reutilizará as heurísticas anteriores.
+- ADRs 0011 e 0012 registram respectivamente a arquitetura normativa e a decisão sobre OCR local.
+- Persistência, coleta de campo, validadores criptográficos e promoção de achados permanecem futuros.
 
 ## Estratégia global de testes
 

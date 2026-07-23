@@ -221,6 +221,12 @@ que os reconheça.
 - Frases como `POSTE CIRCULAR`, `TRANSFORMADOR`, `CHAVE FACA`, `CHAVE FUSÍVEL` e
   `CHAVE FUSÍVEL REPETIDORA` geram propostas de classe sem inventar um tipo exato. Acentos,
   sublinhados, espaços em torno de separadores e variantes de hífen são normalizados antes da busca.
+- Linhas rotuladas do cabeçalho, incluindo `Dispositivo:`, `Circuito:`, `Projeto:` e campos
+  adjacentes na mesma linha, são retiradas da interpretação de elementos e continuam disponíveis
+  para a análise documental.
+- Nomenclaturas de cabo das famílias `ABCN`, `ABN`, `BN` e `AN` são mantidas para revisão mesmo
+  quando o código exato não está no catálogo. Nesse caso não se inventa um tipo: a proposta fica
+  conflitante, não catalogada e preserva a situação de obra obtida da cor.
 - Evidências vetoriais e de imagem próximas são agregadas à proposta como contexto. Para cabos, uma
   polilinha próxima substitui a caixa do texto como geometria sugerida. Imagens não são classificadas
   isoladamente nesta versão.
@@ -300,32 +306,26 @@ sintéticas; a partição de teste privada não foi usada para criá-las.
 - O backup usa um snapshot consistente do SQLite, valida a integridade do arquivo temporário e só
   então o publica por substituição atômica no mesmo diretório de destino.
 
-## Portabilidade, fotos e recuperação
+## Transporte e recuperação
 
 - Um pacote de projeto usa a extensão `.zphproj` e a versão de formato 1. Seu manifesto assinado
   declara projeto, catálogo, arquivos, tamanhos, tipos e hashes SHA-256.
-- O pacote contém um SQLite migrado e restrito ao projeto, seus PDFs disponíveis, fotos gerenciadas e
-  resultados auditáveis da análise. O banco continua sendo a fonte canônica.
+- O pacote contém um SQLite restrito ao projeto, seus PDFs disponíveis e resultados auditáveis da
+  análise. O banco continua sendo a fonte canônica.
 - Entradas do arquivo compactado devem possuir caminhos relativos seguros. Caminhos absolutos ou com
   travessia, duplicatas, links simbólicos, conteúdo criptografado e arquivos não declarados são
   recusados antes da aplicação dos dados.
-- A ausência ou alteração de um PDF ou foto vira problema acionável de integridade. Ela não impede a
-  abertura dos metadados e resultados ainda utilizáveis do projeto.
-- Fotos JPEG, PNG, TIFF e WebP são armazenadas sob `project-files/<projeto>/photos`, com nome
-  determinado pelo hash. Conteúdo igual é deduplicado fisicamente, embora possa permanecer vinculado
-  a mais de um elemento.
-- Remover uma foto elimina a cópia gerenciada somente quando nenhum elemento ainda a referencia.
-  Localizar uma foto ou PDF exige correspondência exata de conteúdo; anexos antigos sem metadados
-  verificáveis são adotados depois da primeira localização válida.
+- Tamanho, tipo e SHA-256 são validados internamente durante exportação, importação, backup e
+  restauração; não há relatório de integridade separado na interface.
 - Exportar e importar preserva IDs, catálogo, execuções, evidências, propostas, decisões de revisão e
   o conjunto confirmado. A substituição de um projeto já existente é explícita e as trocas de banco
   e arquivos possuem compensação em caso de falha.
 - O backup completo usa `.zphbackup` e contém snapshot íntegro do banco, arquivos gerenciados e cópias
   dos PDFs externos. As referências do snapshot são reescritas para as cópias recuperáveis. A
   publicação do pacote e a substituição do banco restaurado são atômicas.
-- O painel **Portabilidade e recuperação** oferece anexar, remover e localizar arquivos, exportar,
-  importar, criar e restaurar backup e consultar o relatório, sempre com progresso, destino explícito
-  e confirmação para operações de substituição.
+- O painel **Portabilidade e recuperação** oferece somente exportar e importar projetos e criar e
+  restaurar backups, sempre com progresso, destino explícito e confirmação para operações de
+  substituição.
 
 ## Fluxo operacional do MVP pela interface
 
@@ -369,7 +369,40 @@ em outro par.
 
 O painel **Resultados da análise** apresenta um resumo por situação de obra e, abaixo, cada elemento
 com catálogo e vínculos internos. Selecionar a região destaca sua área; selecionar um elemento abre
-a página correspondente e realça seu sublinhado no PDF.
+a página correspondente e realça seu sublinhado no PDF. A coluna **Exibir** oferece ícones de olho
+no nível da região e de cada elemento; ocultar muda somente as sobreposições da sessão visual e não
+remove a proposta nem sua auditoria.
+
+## Documentação e conformidade
+
+- O painel **Documentação e conformidade** é independente dos resultados semânticos e possui as abas
+  **Documentação** e **Conformidade**.
+- O cabeçalho lista todos os pares textuais `rótulo: informação` da zona de título, incluindo campos
+  não previstos no vocabulário inicial e campos sem valor. Nota de Serviço/número do projeto,
+  escala, formato, número da folha, data e circuito também alimentam fatos normalizados; o formato
+  pode ser inferido das dimensões físicas A1 a A4.
+- Ao localizar o quadro **Servidão**, o scanner lista todos os seus pares `rótulo: informação`, por
+  exemplo solicitante, extensão, início e final. A ausência do quadro permanece não avaliável
+  enquanto a aplicabilidade não for conhecida.
+- Anotações PDF `Stamp` na zona documental são apenas candidatos a carimbo. Campos `/Sig`
+  preenchidos, campos vazios e rótulos visuais de assinatura são distinguidos; a validade
+  criptográfica e a autenticidade gráfica não são afirmadas.
+- Não existe detector ativo de vãos, comprimentos ou ângulos nesta revisão. O mecanismo anterior foi
+  removido integralmente para que a próxima implementação parta de uma nova abstração, sem
+  reaproveitar associações geométricas ou heurísticas antigas.
+- Evidência, fato normalizado, regra e achado são objetos distintos. Fatos preservam escopo, origem,
+  confiança, geometria e evidências.
+- O registro `cemig-nd31-2025.2` é JSON validado, versionado e assinado por SHA-256. `when` define
+  aplicabilidade, `unless` exige comprovação positiva da exceção e `must` declara requisitos.
+- Cada regra aplicável resulta em `CONFORME`, `DIVERGENCIA` ou `NAO_AVALIAVEL`. A interface apresenta
+  divergência automática como **possível divergência**, sujeita a revisão.
+- As regras iniciais verificam numeração, formato, escala, vão urbano de rede compacta/isolada,
+  equipamento em ângulo e avaliação de abalroamento. Contextos rurais e tabelas de estrutura não
+  reutilizam limites urbanos sem os fatos técnicos específicos.
+
+A abstração, o vocabulário inicial e o procedimento para evolução normativa estão em
+[`arquitetura-conformidade.md`](arquitetura-conformidade.md). A decisão de arquitetura está na
+[`ADR 0011`](adr/0011-conformidade-baseada-em-fatos.md).
 
 ## Fundamentação normativa
 
@@ -382,7 +415,7 @@ a página correspondente e realça seu sublinhado no PDF.
   cabos ou equipamentos, fundamento para `PontoRede` não depender sempre de um poste.
 
 Fontes públicas oficiais: [normas de redes de distribuição da CEMIG](https://www.cemig.com.br/normas-tecnicas/normas-tecnicas-de-redes-de-distribuicao/),
-[ND 3.1/2025](https://www.cemig.com.br/wp-content/uploads/2025/09/ND_3_1_2025.pdf),
+[ND 3.1/2025](https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf),
 [IT-EO-008 — Simbologia EO](https://www.cemig.com.br/wp-content/uploads/2025/10/IT-EO-008_Simbologia_EO.pdf)
 e [ND 2.7](https://www.cemig.com.br/wp-content/uploads/2025/10/nd_2_7-1.pdf).
 
@@ -393,7 +426,9 @@ carimbos e símbolos do AutoCAD são visualmente semelhantes e uma regra geomét
 falsos positivos. Os limiares ainda precisam do conjunto formal anotado e do consenso humano da
 Etapa 5; a verificação exploratória apenas comprovou que todos os dez PDFs locais atuais passaram a
 gerar ao menos uma proposta de poste. As regiões são derivadas automaticamente dos resultados do
-pipeline.
+pipeline. A conformidade atual é derivada durante a leitura da sessão e ainda não persiste fatos,
+achados ou confirmações humanas. Servidão, carimbos, assinaturas e exceções normativas continuam
+dependentes de revisão quando a evidência automática não é conclusiva.
 Resultados sem tipo de catálogo resolvido permanecem apenas na trilha auditável. A importação, a
 extração, a interpretação, a inspeção dos resultados e a portabilidade estão
 integradas à interface do MVP, mas as Etapas 7, 7.1, 8 e 10 continuam aguardando o aceite humano em

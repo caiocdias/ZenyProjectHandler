@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://zeny.local/schemas/regras-conformidade.schema.json",
+  "title": "Registro de regras de conformidade",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "registry", "rules"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "registry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": {"type": "string", "format": "uuid"},
+        "version": {"type": "string", "minLength": 1}
+      }
+    },
+    "rules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id", "title", "description", "scope", "severity",
+          "source", "when", "must", "enabled"
+        ],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "title": {"type": "string", "minLength": 1},
+          "description": {"type": "string", "minLength": 1},
+          "scope": {"enum": ["PROJETO", "DOCUMENTO", "PAGINA", "REGIAO", "ELEMENTO"]},
+          "severity": {"enum": ["INFORMATIVA", "ALERTA", "ERRO", "CRITICA"]},
+          "source": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["document", "revision", "item"],
+            "properties": {
+              "document": {"type": "string", "minLength": 1},
+              "revision": {"type": "string", "minLength": 1},
+              "item": {"type": "string", "minLength": 1},
+              "page": {"type": ["integer", "null"], "minimum": 1},
+              "url": {"type": ["string", "null"], "format": "uri"}
+            }
+          },
+          "when": {"type": "array", "items": {"$ref": "#/$defs/condition"}},
+          "unless": {"type": "array", "items": {"$ref": "#/$defs/condition"}},
+          "must": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"$ref": "#/$defs/condition"}
+          },
+          "enabled": {"type": "boolean"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fact", "operator", "expected"],
+      "properties": {
+        "fact": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+        },
+        "operator": {
+          "enum": [
+            "EXISTE", "AUSENTE", "IGUAL", "DIFERENTE", "MENOR",
+            "MENOR_OU_IGUAL", "MAIOR", "MAIOR_OU_IGUAL", "EM", "NAO_EM", "CONTEM"
+          ]
+        },
+        "expected": {
+          "type": "array",
+          "items": {"type": ["string", "number", "integer", "boolean", "null"]}
+        },
+        "quantifier": {"enum": ["TODOS", "QUALQUER"]}
+      }
+    }
+  }
+}

@@ -110,7 +110,7 @@ namespace ModuloProjeto {
     class Cabo {
         +UUID pontoOrigemId
         +UUID pontoDestinoId
-        +Decimal comprimentoM
+        +Decimal? comprimentoM
         +UUID[] postesApoioIds
         +UUID[] pontosIntermediariosIds
     }
@@ -819,6 +819,78 @@ namespace ModuloPortabilidade {
     }
 }
 
+namespace ModuloConformidade {
+    class AlvoConformidade {
+        +UUID id
+        +TipoEscopoConformidade tipo
+        +UUID referenciaId
+        +UUID paginaId
+        +GeometriaDocumento geometria
+    }
+
+    class FatoConformidade {
+        <<derivado>>
+        +UUID id
+        +UUID alvoId
+        +String chave
+        +JsonPrimitive valor
+        +String origem
+        +UUID[] evidenciaIds
+        +Decimal confianca
+    }
+
+    class RegistroRegrasConformidade {
+        +UUID id
+        +String versao
+        +Integer versaoSchema
+        +assinatura() String
+    }
+
+    class RegraConformidade {
+        +String id
+        +String titulo
+        +TipoEscopoConformidade escopo
+        +SeveridadeConformidade severidade
+        +Boolean ativa
+    }
+
+    class CondicaoConformidade {
+        +String chaveFato
+        +OperadorCondicao operador
+        +JsonPrimitive[] valoresEsperados
+        +QuantificadorCondicao quantificador
+    }
+
+    class FonteNormativa {
+        +String documento
+        +String revisao
+        +String item
+        +Integer pagina
+        +String url
+    }
+
+    class AchadoConformidade {
+        <<derivado>>
+        +UUID id
+        +String regraId
+        +UUID alvoId
+        +ResultadoConformidade resultado
+        +String versaoRegras
+        +UUID[] evidenciaIds
+    }
+
+    class AnalisarConformidadeProjeto {
+        <<servico>>
+        +analisar(sessao, registro) ResultadoConformidadeProjeto
+    }
+
+    class ResultadoConformidadeProjeto {
+        +AlvoConformidade[] alvos
+        +FatoConformidade[] fatos
+        +AchadoConformidade[] achados
+    }
+}
+
 DocumentoProjeto "1" *-- "1..*" PaginaDocumento : paginas
 PaginaDocumento "1" *-- "2" CaixaPagina : mediaBox_e_cropBox
 GeometriaDocumento "1" *-- "1..*" PontoNormalizado : pontos
@@ -1002,3 +1074,15 @@ AgruparRegioesDaAnalise --> EvidenciaDocumento : encontraCoordenadas
 AgruparRegioesDaAnalise ..> RegiaoAnalise : produz
 RegiaoAnalise --> PaginaDocumento : localiza
 RegiaoAnalise ..> CoordenadaCampo : informa
+
+RegistroRegrasConformidade "1" *-- "1..*" RegraConformidade : versiona
+RegraConformidade "1" *-- "1" FonteNormativa : fundamentadaEm
+RegraConformidade "1" *-- "1..*" CondicaoConformidade : when_unless_must
+FatoConformidade --> AlvoConformidade : descreve
+FatoConformidade "0..*" --> "0..*" EvidenciaDocumento : fundamentadoEm
+AchadoConformidade --> AlvoConformidade : avalia
+AchadoConformidade --> RegraConformidade : aplica
+AchadoConformidade "0..*" --> "0..*" EvidenciaDocumento : explica
+AnalisarConformidadeProjeto --> RegiaoAnalise : usaAgrupamentos
+AnalisarConformidadeProjeto --> RegistroRegrasConformidade : aplica
+AnalisarConformidadeProjeto ..> ResultadoConformidadeProjeto : produz

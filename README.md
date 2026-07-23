@@ -78,27 +78,19 @@ Backups são snapshots consistentes do SQLite, validados antes de substituir ato
 de destino. A pasta padrão reservada para eles é `backups` dentro do diretório de dados. Arquivos do
 banco, WAL, temporários e backups não devem ser adicionados ao Git.
 
-## Projeto portátil, fotos e recuperação
+## Transporte e recuperação
 
-O painel **Portabilidade e recuperação** permite usar o fluxo completo sem acesso ao terminal. Um
-projeto pode ser exportado como `.zphproj`, com manifesto assinado, banco restrito ao projeto, PDFs,
-fotos e resultados da análise. O pacote usa somente caminhos relativos e valida SHA-256, tamanho e tipo de
-cada arquivo ao ser importado.
-
-Fotos JPEG, PNG, TIFF e WebP podem ser anexadas a elementos confirmados. Elas são copiadas para
-`project-files/<projeto>/photos` dentro do diretório de dados e deduplicadas pelo conteúdo. O painel
-também permite remover uma foto ou localizar novamente uma foto ou PDF ausente, exigindo a mesma
-impressão SHA-256 do original.
-
-O relatório de integridade diferencia arquivos ausentes, alterados, de tipo incompatível e anexos
-antigos ainda sem impressão verificável. Os dados utilizáveis continuam abrindo para que o usuário
-possa corrigir o problema. A importação preserva identidades, catálogo, análises e decisões;
-substituir um projeto existente exige confirmação explícita.
+O painel **Portabilidade e recuperação** contém somente as operações de transporte e proteção dos
+dados. Um projeto pode ser exportado como `.zphproj`, com manifesto assinado, banco restrito ao
+projeto, PDFs disponíveis e resultados da análise. O pacote usa somente caminhos relativos e valida
+internamente SHA-256, tamanho e tipo de cada arquivo ao ser importado. A importação preserva
+identidades, catálogo, análises e decisões; substituir um projeto existente exige confirmação
+explícita.
 
 O backup completo `.zphbackup` inclui o banco local, arquivos gerenciados e cópias dos PDFs externos.
 Sua publicação e restauração usam trocas atômicas e validação do SQLite. Assim, uma gravação
 interrompida não substitui o último backup íntegro, e os PDFs recuperados deixam de depender do local
-original.
+original. Gestão de fotos e relatório de integridade não fazem parte da interface.
 
 ## Visualização e origem dos PDFs
 
@@ -146,6 +138,26 @@ pequenas imagens com resolução útil são processadas por recorte, preservando
 folha sem renderizar a página inteira. Sem Tesseract, os demais extratores continuam funcionando e
 a execução registra um diagnóstico revisável.
 
+## Documentação e conformidade
+
+O dock **Documentação e conformidade** acompanha o projeto aberto e possui visões próprias para:
+
+- todos os pares `rótulo: informação` encontrados no cabeçalho e no quadro de servidão, além de
+  candidatos a carimbo e indícios/campos de assinatura;
+- regras conformes, possíveis divergências e casos não avaliáveis, sempre com fonte normativa.
+
+O detector anterior de vãos e ângulos foi removido e não há substituto ativo nesta revisão. O
+scanner documental não considera um carimbo ou rótulo de assinatura como prova de autenticidade.
+Cada informação vira um fato com origem, confiança, geometria e evidências. Regras ficam em um
+registro JSON versionado com condições de aplicabilidade, exceções comprovadas e requisitos. A
+arquitetura e os limites estão detalhados em
+[`docs/arquitetura-conformidade.md`](docs/arquitetura-conformidade.md).
+
+O Unlimited-OCR foi avaliado como possível segunda passagem local para layouts difíceis. A
+integração recomendada, caso o benchmark justifique, é diretamente por `MotorOcrPort` contra um
+servidor local vLLM/SGLang. LM Studio + MCP não entra no pipeline determinístico nesta etapa; veja a
+[`ADR 0012`](docs/adr/0012-ocr-local-por-porta-direta.md).
+
 ## Interpretação semântica por regras
 
 O registro inicial em `adapters/interpretation/data/regras_interpretacao_v1.json` é versionado,
@@ -158,6 +170,12 @@ ao poste são reconhecidos em texto nativo ou OCR, inclusive quando estão em li
 separados. Leste e norte são pareados uma única vez por fragmento e proximidade, evitando reutilizar
 o mesmo número em pontos vizinhos. Vetores e imagens próximos são vinculados como contexto para
 geometria, cor e proveniência.
+
+Linhas reconhecidas como cabeçalho, como `Dispositivo:`, `Circuito:` e `Projeto:`, continuam
+disponíveis para a inspeção documental, mas não entram no inventário da rede. Nomenclaturas de cabo
+coerentes que ainda não possuem item exato no catálogo, como `ABCN-4(4)`, são preservadas como
+propostas conflitantes para classificação humana, incluindo a situação instalar/remover derivada da
+simbologia.
 
 O interpretador preserva `PropostaElemento` e `PropostaRelacao` como trilha auditável e promove
 automaticamente os resultados catalogados ao agregado do projeto. Situação de obra usa as
@@ -179,7 +197,9 @@ painel consolida a análise mais recente de cada PDF do projeto e segue a ordem 
 
 Coordenadas são coletadas de texto nativo e OCR, inclusive quando leste e norte aparecem separados
 por quebra de linha, `:`, `/` ou em fragmentos próximos. Selecionar a região destaca sua extensão;
-selecionar um elemento abre a folha correspondente e destaca seu sublinhado clicável.
+selecionar um elemento abre a folha correspondente e destaca seu sublinhado clicável. Ícones de olho
+permitem ocultar temporariamente no PDF uma região inteira ou somente elementos individuais, sem
+apagar o resultado auditável.
 
 ## Projetos reais para testes
 
