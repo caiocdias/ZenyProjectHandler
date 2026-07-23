@@ -48,7 +48,6 @@ _SUPPORTED_PHOTO_MIME = {
 class ResumoProjetoPortabilidade:
     projeto_id: UUID
     nome: str
-    fotos: int
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -117,7 +116,6 @@ class ServicoPortabilidadeProjeto:
                 ResumoProjetoPortabilidade(
                     projeto_id=project.id,
                     nome=project.nome,
-                    fotos=sum(len(item.fotos) for item in project.elementos),
                 )
                 for project in work.projetos.listar()
             )

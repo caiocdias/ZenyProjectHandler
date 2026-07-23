@@ -2,11 +2,10 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
-from uuid import UUID
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QComboBox, QFileDialog, QListWidget, QMessageBox, QPushButton
+from PySide6.QtWidgets import QComboBox, QFileDialog, QMessageBox, QPushButton
 from pytestqt.qtbot import QtBot
 from tests.factories import complete_project
 
@@ -46,7 +45,7 @@ def _button(panel: PortabilityPanelWidget, name: str) -> QPushButton:
     return button
 
 
-def test_user_exports_imports_repairs_attachment_and_restores_backup_from_ui(
+def test_user_exports_imports_and_restores_backup_from_ui(
     qtbot: QtBot,
     tmp_path: Path,
     catalogo_inicial: CatalogoTecnico,
@@ -67,42 +66,11 @@ def test_user_exports_imports_repairs_attachment_and_restores_backup_from_ui(
     qtbot.addWidget(panel)
     panel.show()
     project_combo = panel.findChild(QComboBox, "portabilityProjectCombo")
-    element_combo = panel.findChild(QComboBox, "portabilityElementCombo")
-    photo_list = panel.findChild(QListWidget, "portabilityPhotoList")
     assert project_combo is not None
-    assert element_combo is not None
-    assert photo_list is not None
     project_combo.setCurrentIndex(project_combo.findData(str(project.id)))
-    element_combo.setCurrentIndex(1)
-    photo = tmp_path / "photo.png"
-    photo.write_bytes(b"\x89PNG\r\n\x1a\nportable-ui-photo")
-    monkeypatch.setattr(
-        QFileDialog,
-        "getOpenFileName",
-        lambda *_args, **_kwargs: (str(photo), "Imagens (*.png)"),
-    )
-
-    qtbot.mouseClick(  # type: ignore[no-untyped-call]
-        _button(panel, "portabilityAttachPhotoButton"), Qt.MouseButton.LeftButton
-    )
-
-    assert photo_list.count() == 1
-    element_id = UUID(str(element_combo.currentData()))
-    stored_photo = source_service.listar_elementos(project.id)[0].fotos[0]
-    managed = source_data / "project-files" / str(project.id) / stored_photo.caminho_relativo
-    managed.unlink()
-    qtbot.mouseClick(  # type: ignore[no-untyped-call]
-        _button(panel, "portabilityIntegrityButton"), Qt.MouseButton.LeftButton
-    )
-    photo_list.setCurrentRow(0)
-    qtbot.mouseClick(  # type: ignore[no-untyped-call]
-        _button(panel, "portabilityLocatePhotoButton"), Qt.MouseButton.LeftButton
-    )
-    assert managed.is_file()
-    assert source_service.verificar_integridade(project.id).problemas[0].codigo == (
-        "ORIGEM_PDF_AUSENTE"
-    )
-    assert source_service.listar_elementos(project.id)[0].elemento_id == element_id
+    assert panel.findChild(QPushButton, "portabilityAttachPhotoButton") is None
+    assert panel.findChild(QPushButton, "portabilityIntegrityButton") is None
+    assert panel.findChild(QPushButton, "portabilityLocatePdfButton") is None
 
     package = tmp_path / "ui-project.zphproj"
     monkeypatch.setattr(
