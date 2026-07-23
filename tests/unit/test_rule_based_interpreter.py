@@ -385,3 +385,34 @@ def test_equipment_class_phrase_is_proposed_for_human_disambiguation(
     assert equipment.categoria is CategoriaElemento.EQUIPAMENTO
     assert equipment.tipo_catalogo_sugerido_id is None
     assert dict(equipment.atributos_sugeridos)["classe_equipamento"] == ("CHAVE FUSIVEL REPETIDORA")
+
+
+@pytest.mark.parametrize(
+    ("observed", "catalog_code"),
+    [
+        ("3-150", "-3-150"),
+        ("1-37.5 KVA", "-1-37,5"),
+    ],
+)
+def test_equipment_nomenclature_variants_from_plan_are_cataloged(
+    catalogo_inicial: CatalogoTecnico,
+    observed: str,
+    catalog_code: str,
+) -> None:
+    request = _request(catalogo_inicial)
+    source = replace(
+        request.evidencias[0],
+        id=uuid4(),
+        tipo=TipoEvidencia.OCR,
+        conteudo_bruto=observed,
+    )
+    request = replace(request, evidencias=(source,))
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
+
+    equipment = next(
+        item for item in result.elementos if item.categoria is CategoriaElemento.EQUIPAMENTO
+    )
+    item = catalogo_inicial.item_por_id(equipment.tipo_catalogo_sugerido_id)  # type: ignore[arg-type]
+    assert item is not None
+    assert item.codigo == catalog_code

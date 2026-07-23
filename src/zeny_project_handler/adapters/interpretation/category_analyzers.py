@@ -31,7 +31,7 @@ _POLE_DIMENSION_PATTERN = re.compile(
     r"(?<!\d)(9|10|11|12|13|15|18)\s*M?(?:\s*[-/:X]\s*|\s+)"
     r"(150|300|600|1000)\s*(?:DA?N)?(?!\d)"
 )
-_COORDINATE_NUMBER_PATTERN = re.compile(r"(?<!\d)\d(?:[.\s]?\d){5,6}(?!\d)")
+_COORDINATE_NUMBER_PATTERN = re.compile(r"(?<!\d)\d{6,8}(?!\d)")
 _COORDINATE_CONTEXT_DISTANCE = 0.12
 _POLE_FORMAT_PHRASES = {
     "CIRCULAR": ("POSTE CIRCULAR", "CIRCULAR"),
@@ -69,7 +69,9 @@ class AnalisadorCatalogoPorCodigo:
             if evidence.tipo not in regra.tipos_evidencia or not evidence.conteudo_bruto:
                 continue
             matches = tuple(
-                item for item in items if contains_code(evidence.conteudo_bruto or "", item.codigo)
+                item
+                for item in items
+                if self._matches_catalog_item(evidence.conteudo_bruto or "", item)
             )
             for item in matches:
                 proposal = self._proposal(
@@ -83,6 +85,9 @@ class AnalisadorCatalogoPorCodigo:
                 if proposal.confianca is not None and proposal.confianca >= minimum:
                     proposals.append(proposal)
         return tuple(proposals)
+
+    def _matches_catalog_item(self, text: str, item: ItemCatalogoType) -> bool:
+        return contains_code(text, item.codigo)
 
     def _proposal(
         self,
@@ -232,6 +237,22 @@ class AnalisadorEquipamento(AnalisadorCatalogoPorCodigo):
     nome = "equipamento-codigo-e-nomenclatura"
     versao = "2.0"
     categoria = CategoriaElemento.EQUIPAMENTO
+
+    def _matches_catalog_item(self, text: str, item: ItemCatalogoType) -> bool:
+        normalized = normalized_text(text)
+        aliases = {item.codigo}
+        if item.codigo.startswith("-"):
+            aliases.add(item.codigo[1:])
+        aliases.update(alias.replace(",", ".") for alias in tuple(aliases))
+        return any(
+            re.search(
+                rf"(?<![A-Z0-9]){re.escape(normalized_text(alias))}"
+                rf"(?:\s*KVA)?(?![A-Z0-9])",
+                normalized,
+            )
+            is not None
+            for alias in aliases
+        )
 
     def analisar(
         self,
@@ -463,7 +484,7 @@ def _coordinate_near(
         for number in _coordinate_numbers(item.conteudo_bruto or "")
     )
     eastings = tuple(item for item in numbers if 100_000 <= item[0] <= 999_999)
-    northings = tuple(item for item in numbers if 1_000_000 <= item[0] <= 9_999_999)
+    northings = tuple(item for item in numbers if 1_000_000 <= item[0] <= 10_000_000)
     if not eastings or not northings:
         return None
     east = min(eastings, key=lambda item: (item[2], item[0]))
