@@ -102,9 +102,22 @@ original.
 
 ## Visualização e origem dos PDFs
 
-A janela principal abre PDFs locais em modo somente leitura e oferece paginação, zoom, rotação e
-sobreposições gráficas. O arquivo original não é copiado nem regravado: o aplicativo calcula o
-SHA-256, registra metadados e verifica o conteúdo antes de renderizar ou concluir uma importação.
+A janela principal mantém o leitor de PDF no centro. Fluxo, resultados da análise, grafo e
+portabilidade continuam dockáveis; resultados, grafo e portabilidade compartilham abas à direita
+para não se sobreporem, e o grafo possui rolagem vertical até os diagnósticos. O leitor oferece
+paginação, zoom, rotação e sobreposições gráficas.
+
+Todo PDF selecionado no **Fluxo do projeto** é adicionado imediatamente ao projeto. Na lista de
+folhas, arraste os PDFs ou use **Subir** e **Descer** para definir a ordem persistida de leitura; as
+páginas internas de cada PDF preservam a ordem original. O arquivo original não é copiado nem
+regravado: o aplicativo calcula o SHA-256, registra metadados e verifica o conteúdo antes de
+renderizar ou concluir uma importação.
+
+Cada elemento identificado aparece no PDF como um sublinhado colorido e clicável. O clique abre a
+aba **Resultados da análise** e seleciona o elemento correspondente. A visão principal é hierárquica:
+cada poste reúne as estruturas, os equipamentos e os cabos relacionados, com situação de obra, item
+de catálogo e confiança. Não há confirmação item a item; resultados catalogados são incorporados
+automaticamente ao projeto e ficam imediatamente disponíveis para o grafo e as etapas seguintes.
 
 A resolução padrão é 144 DPI. Ela pode ser alterada entre 36 e 600 DPI antes da inicialização:
 
@@ -134,16 +147,18 @@ funcionando e a execução registra um diagnóstico revisável.
 O registro inicial em `adapters/interpretation/data/regras_interpretacao_v1.json` é versionado,
 validado e possui assinatura de conteúdo. Cinco analisadores independentes reconhecem códigos ativos
 do catálogo em texto nativo ou OCR. Postes também são reconhecidos pela nomenclatura de projeto
-`altura-resistência`, por exemplo `11-300`; se o desenho não informar Circular, Duplo T ou Madeira, a
-proposta fica conflitante para escolha humana. Classes textuais de transformadores e chaves também
-viram propostas revisáveis. Vetores e imagens próximos são vinculados como contexto para geometria,
-cor e proveniência; nada é confirmado automaticamente.
+`altura-resistência`, por exemplo `11-300`. Também são aceitos `/`, `:`, `x`, espaços e quebra de
+linha; na ausência de Circular, Duplo T ou Madeira, uma correspondência canônica do catálogo é usada
+e os demais candidatos permanecem registrados na auditoria. Pares de coordenadas de campo próximos
+ao poste são reconhecidos em texto nativo ou OCR, inclusive quando estão em linhas ou fragmentos
+separados. Vetores e imagens próximos são vinculados como contexto para geometria, cor e proveniência.
 
-O interpretador gera somente `PropostaElemento` e `PropostaRelacao`. Situação de obra usa as
-assinaturas de cor do catálogo; relações usam proximidade de centros, extremidades de cabos e as
-compatibilidades estrutura-cabo. Cada proposta mantém evidências, regra, versão, confiança e
-justificativa. Uma execução cancelada ou interrompida pode ser retomada com a mesma identidade sem
-duplicar resultados.
+O interpretador preserva `PropostaElemento` e `PropostaRelacao` como trilha auditável e promove
+automaticamente os resultados catalogados ao agregado do projeto. Situação de obra usa as
+assinaturas de cor do catálogo; estruturas e equipamentos preferem postes com a mesma situação
+(instalar, remover ou existente), antes da distância. Cada resultado mantém evidências, regra,
+versão, confiança e justificativa. Uma execução cancelada ou interrompida pode ser retomada com a
+mesma identidade sem duplicar resultados nem entidades promovidas.
 
 O mesmo pipeline possui um adaptador para o benchmark. O teste final continua bloqueado enquanto o
 conjunto de avaliação não estiver congelado e os critérios não estiverem aprovados.

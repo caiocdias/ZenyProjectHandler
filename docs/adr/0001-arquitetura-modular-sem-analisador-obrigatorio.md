@@ -1,6 +1,6 @@
 # ADR 0001 - Arquitetura modular sem analisador proprietário obrigatório
 
-- Estado: aceito
+- Estado: aceito; requisito de revisão obrigatória substituído pelo ADR 0009
 - Data: 2026-07-20
 
 ## Contexto

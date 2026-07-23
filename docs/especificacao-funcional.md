@@ -72,9 +72,11 @@ Resultados automáticos não entram diretamente no conjunto confirmado:
    transação. Mudanças de classe, item do catálogo, situação ou geometria são decisões `AJUSTAR`.
 8. `RelacaoConfirmada` preserva tipo e extremidades já confirmadas. Elementos e relações criados
    manualmente registram autor, data e motivo opcional em `RegistroRevisaoManual`.
-9. O painel lateral exibe sobreposições por estado, filtros por classe/estado, seleção, movimento,
-   redimensionamento normalizado, reclassificação, vínculo ao catálogo e atalhos de aceitar/rejeitar.
-   Uma proposta equivalente a outra anteriormente rejeitada não pode ser confirmada por nova análise.
+9. O PDF exibe um sublinhado clicável por proposta de elemento. O clique traz a aba lateral de revisão
+   para frente, seleciona a linha correspondente e mostra a classificação e o item de catálogo já
+   reconhecidos. Reclassificação e coordenadas aparecem somente quando o usuário solicita correção;
+   vínculos estruturais aparecem apenas nas categorias aplicáveis. Uma proposta equivalente a outra
+   anteriormente rejeitada não pode ser confirmada por nova análise.
 
 `EstadoRevisao` é independente de `SituacaoProjeto`. Por exemplo, uma proposta ainda não revisada pode indicar corretamente que o símbolo representa um poste a remover.
 
@@ -162,10 +164,11 @@ que os reconheça.
   por `ZENY_PDF_RENDER_DPI` entre 36 e 600.
 - `TransformadorCoordenadasPagina` converte de forma reversível entre espaço PDF, normalizado,
   pixels e cena. A interface reaplica sobreposições após rotação usando essa transformação.
-- A abertura aceita um ou vários PDFs. Quando há várias folhas em arquivos separados, o botão
-  **Unir arquivos em um só projeto** valida todos os documentos e os apresenta, na ordem selecionada,
-  como uma paginação contínua. A união é lógica: nenhum PDF original é concatenado ou modificado, e
-  uma falha ou duplicidade mantém intacto o projeto que já estava aberto.
+- A abertura aceita um ou vários PDFs. Todo PDF selecionado no fluxo do projeto é importado
+  imediatamente como parte dele, sem uma ação separada de união. A lista de PDFs permite arrastar ou
+  usar **Subir** e **Descer**; essa ordem persistida define a paginação contínua e a ordem de leitura,
+  preservando a ordem interna das páginas de cada arquivo. Nenhum PDF original é concatenado ou
+  modificado, e uma falha ou duplicidade mantém intacto o projeto que já estava aberto.
 - A origem local é registrada em `document_sources`, fora do payload de domínio. Projeto,
   documento e referência são gravados na mesma transação; entrada inválida, protegida, corrompida,
   duplicada ou alterada não deixa uma importação parcial.
@@ -203,9 +206,12 @@ que os reconheça.
 - Existem analisadores independentes para poste, estrutura MT, estrutura BT, cabo e equipamento. A
   correspondência delimitada com códigos ativos continua sendo a evidência mais específica.
 - O analisador de postes também interpreta a nomenclatura `altura-resistência` usada nos projetos,
-  aceitando separadores `-`, `/` ou `x` e sufixos opcionais `m` e `daN`. Uma combinação como
-  `11-300` consulta os 38 postes do catálogo; sem formato explícito, preserva todos os candidatos e
-  exige escolha humana entre Circular, Duplo T e Madeira.
+  aceitando separadores `-`, `/`, `:`, `x`, espaço ou quebra de linha e sufixos opcionais `m` e
+  `daN`. Uma combinação como `11-300` consulta os postes do catálogo; sem formato explícito,
+  seleciona deterministicamente o tipo canônico e preserva todos os candidatos na auditoria.
+- Coordenadas de campo com seis ou sete algarismos são combinadas por proximidade com o poste. O
+  par pode estar no mesmo fragmento ou em fragmentos separados por quebra de linha, `:`, `/` ou
+  outros delimitadores, vindo tanto de texto pesquisável quanto de OCR de página escaneada.
 - Frases como `POSTE CIRCULAR`, `TRANSFORMADOR`, `CHAVE FACA`, `CHAVE FUSÍVEL` e
   `CHAVE FUSÍVEL REPETIDORA` geram propostas de classe sem inventar um tipo exato. Acentos,
   sublinhados, espaços em torno de separadores e variantes de hífen são normalizados antes da busca.
@@ -213,16 +219,19 @@ que os reconheça.
   polilinha próxima substitui a caixa do texto como geometria sugerida. Imagens não são classificadas
   isoladamente nesta versão.
 - `AssinaturaSimbologia` classifica `EXISTENTE`, `INSTALAR` e `REMOVER` por cor e tolerância. Sem uma
-  assinatura inequívoca, a proposta usa `EXISTENTE` com confiança conservadora e permanece sujeita à
-  revisão humana.
+  assinatura inequívoca, o resultado usa `EXISTENTE` com confiança conservadora e registra essa
+  inferência na trilha auditável.
 - Relações `INSTALADA_EM`, `INSTALADO_EM`, `CONECTA` e `SUPORTADO_POR` são propostas por centro,
-  extremidade ou proximidade combinada com `CompatibilidadeEstruturaCabo`.
+  extremidade ou proximidade combinada com `CompatibilidadeEstruturaCabo`. Estruturas e equipamentos
+  escolhem primeiro um poste com a mesma situação de obra, evitando vincular instalações novas a um
+  poste que será retirado apenas porque ele está graficamente mais perto.
 - IDs UUID5 combinam projeto, extração, interpretador, registro e configuração. Repetir uma execução
   concluída reutiliza o resultado; retomar uma cancelada usa a mesma identidade sem duplicação.
 - A extração e a interpretação são execuções auditáveis distintas. Propostas semânticas podem
   referenciar evidências de uma extração anterior do mesmo projeto, mas nunca de outro projeto.
-- Início, fim, estado, configuração, versões, diagnósticos e falha fatal são persistidos. Propostas
-  somente são publicadas atomicamente após a conclusão.
+- Início, fim, estado, configuração, versões, diagnósticos e falha fatal são persistidos. Ao concluir,
+  resultados catalogados, relações resolvidas e decisões automáticas são publicados atomicamente no
+  projeto; a mesma execução pode ser reaberta sem duplicar entidades.
 - `InterpretadorRegrasAvaliacao` executa leitura, extração e interpretação sem persistência para que o
   benchmark meça exatamente o pipeline real.
 
@@ -318,20 +327,23 @@ sintéticas; a partição de teste privada não foi usada para criá-las.
 - O painel **Fluxo do projeto** lista, cria, abre e renomeia projetos no SQLite. Em uma instalação
   vazia, o catálogo inicial publicado é persistido automaticamente antes da criação do primeiro
   projeto.
-- Um ou vários PDFs podem ser selecionados e importados no projeto em uma transação única. A ordem
-  selecionada define a paginação lógica, enquanto cada arquivo e sua referência verificável continuam
-  independentes.
+- Um ou vários PDFs podem ser selecionados e importados imediatamente no projeto em uma transação
+  única. O usuário pode reordenar os PDFs por arraste ou pelos controles **Subir** e **Descer**; a
+  ordem persistida define a paginação lógica, enquanto cada arquivo e sua referência verificável
+  continuam independentes.
 - Projetos podem ser excluídos após confirmação explícita. A exclusão remove banco, análises e estado
   local associados, preservando todos os arquivos PDF originais no sistema de arquivos.
 - Um ou vários PDFs importados podem ser removidos seletivamente. A mesma transação elimina execuções,
   evidências, propostas, decisões e elementos confirmados cuja geometria ou dependências pertençam às
   folhas removidas; documentos e resultados independentes permanecem válidos.
 - **Executar análise completa** processa todos os documentos do projeto fora da thread da interface,
-  apresenta progresso e encadeia extração, interpretação e abertura da revisão humana.
+  apresenta progresso e encadeia extração, interpretação, promoção automática e abertura dos
+  resultados relacionados.
 - O usuário pode solicitar cancelamento. Resultados completos são preservados e a retomada reutiliza
   identidades determinísticas, sem duplicar execuções, evidências ou propostas.
-- O painel apresenta documentos, folhas, estados das execuções, propostas pendentes e decisões. Cada
-  execução de interpretação com propostas pode ser selecionada separadamente na revisão.
+- O painel apresenta documentos, folhas, estados das execuções, identificações automáticas e
+  exceções. Cada execução pode ser selecionada no painel de resultados; postes formam os nós-pai e
+  estruturas, equipamentos e cabos vinculados aparecem como filhos clicáveis.
 - O último projeto e a última folha são restaurados por estado local da interface. Os dados canônicos
   permanecem no SQLite; `ui-state.ini` guarda somente preferências de navegação reproduzíveis.
 - Falhas de PDF ou pipeline são convertidas em mensagens visíveis e acionáveis. Nenhum fluxo de uso
@@ -381,10 +393,11 @@ O pipeline ainda não classifica uma forma vetorial isolada sem texto ou OCR: ca
 carimbos e símbolos do AutoCAD são visualmente semelhantes e uma regra geométrica simples geraria
 falsos positivos. Os limiares ainda precisam do conjunto formal anotado e do consenso humano da
 Etapa 5; a verificação exploratória apenas comprovou que todos os dez PDFs locais atuais passaram a
-gerar ao menos uma proposta de poste. A reconstrução do grafo ocorre sob comando e considera apenas
-o conjunto confirmado; o pipeline nunca confirma propostas por conta própria. A confirmação
-acontece exclusivamente pelos painéis de revisão humana. A importação, a extração, a interpretação,
-a revisão, a reconstrução e a portabilidade estão integradas à interface do MVP, mas as Etapas 7,
-7.1, 8 e 10 continuam aguardando o aceite humano em um projeto autorizado.
+gerar ao menos uma proposta de poste. A reconstrução do grafo ocorre sob comando e considera o
+conjunto confirmado, agora alimentado automaticamente pelos resultados catalogados do pipeline.
+Resultados sem tipo de catálogo resolvido permanecem apenas na trilha auditável. A importação, a
+extração, a interpretação, a inspeção dos resultados, a reconstrução e a portabilidade estão
+integradas à interface do MVP, mas as Etapas 7, 7.1, 8 e 10 continuam aguardando o aceite humano em
+um projeto autorizado.
 
 Como referência normativa geral, permanecem aplicáveis as [normas técnicas públicas de redes de distribuição da CEMIG](https://www.cemig.com.br/normas-tecnicas/normas-tecnicas-de-redes-de-distribuicao/), especialmente as famílias ND 2.x e ND 3.1 já levantadas para o projeto.

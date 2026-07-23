@@ -18,7 +18,9 @@ Nenhum serviço externo ou modelo específico deve ser introduzido sem uma decis
    necessárias já estiverem disponíveis; o aceite pendente deve continuar registrado.
 4. Manter domínio, interface, persistência, processamento de PDF, análise e grafo desacoplados por portas e adaptadores.
 5. A suíte padrão deve executar sem rede, serviços externos ou arquivos confidenciais.
-6. Toda ocorrência automática é uma proposta revisável. Ela não pode alterar diretamente o conjunto confirmado do projeto.
+6. Toda ocorrência automática mantém uma proposta auditável; quando o catálogo e as dependências
+   estiverem resolvidos, ela é promovida deterministicamente ao conjunto confirmado sem confirmação
+   item a item.
 7. Fixar versões das dependências e manter migrações compatíveis com projetos já salvos.
 8. Ao concluir o desenvolvimento técnico de uma etapa, atualizar a tabela de estado e registrar
    arquivos alterados, comandos de teste, limitações, fluxo disponível na interface, roteiro de
@@ -77,7 +79,7 @@ Interpretação das próximas instruções do usuário:
 | 4. Extração de evidências do PDF | CONCLUÍDA | 3 | Nada; critérios de saída e testes já foram atendidos pelo Codex. |
 | 5. Conjunto de avaliação | EM ANDAMENTO | 3, 4 | **Humano:** fornecer ao menos uma amostra autorizada em escala diferente, concluir anotações primárias/secundárias e consensos e aprovar os critérios numéricos. **Codex:** validar a auditoria e congelar manifesto e anotações. |
 | 6. Pipeline modular de interpretação | EM ANDAMENTO | 1, 4, 5 | **Humano:** concluir e aprovar a Etapa 5. **Codex:** executar o benchmark no conjunto congelado, ajustar apenas com a partição de desenvolvimento e comprovar os limites aprovados. |
-| 7. Revisão humana na interface | EM ANDAMENTO | 3, 6 | **Codex:** implementação técnica, testes e caminho operacional pela Etapa 7.1 concluídos. **Humano:** validar uma página real inteira, incluindo correções, criações manuais e reabertura. |
+| 7. Resultados da análise na interface | EM ANDAMENTO | 3, 6 | **Codex:** promoção automática, árvore de vínculos, links no PDF e testes concluídos. **Humano:** validar uma página real inteira e a clareza dos relacionamentos. |
 | 7.1 Fluxo operacional do MVP pela interface | EM ANDAMENTO | 2, 3, 4, 6, 7 | **Codex:** implementação técnica e gates concluídos. **Humano:** executar e aprovar o roteiro ponta a ponta em um projeto autorizado. PDFs exploratórios adicionais em `examples/` são aceitos e testados automaticamente. |
 | 8. Reconstrução e validação do grafo | EM ANDAMENTO | 1, 7, 7.1 | **Codex:** implementação técnica, integração Qt, persistência das confirmações e gates concluídos. **Humano:** executar o roteiro pela interface, revisar uma conexão proposta e comprovar a navegação de um diagnóstico até o PDF. |
 | 9. Gestão do catálogo pela interface | PENDENTE | 2, 7.1 | **Codex:** implementar CRUD, versionamento, importação/exportação e testes. **Humano:** validar que alterações podem ser feitas sem recompilar e sem mudar projetos antigos. |
@@ -321,8 +323,9 @@ Um projeto completo sobrevive a salvar, fechar e reabrir sem perda nem alteraç�
 - Renderizar miniaturas, páginas e recortes RGB em resolução configurável.
 - Implementar coordenadas normalizadas e transformações reversíveis entre PDF, pixels e cena gráfica.
 - Exibir página, zoom, rotação e sobreposições no `QGraphicsView`.
-- Permitir selecionar várias folhas em PDFs separados e uni-las logicamente, na ordem escolhida, em
-  um único projeto sem modificar ou concatenar os arquivos originais.
+- Importar todo PDF selecionado diretamente no projeto e permitir reordenar os arquivos por arraste
+  ou por controles explícitos. A ordem persistida define a sequência contínua de leitura sem modificar
+  ou concatenar os arquivos originais.
 
 ### Testar
 
@@ -334,8 +337,8 @@ Um projeto completo sobrevive a salvar, fechar e reabrir sem perda nem alteraç�
 - Golden tests de renderização com tolerância documentada.
 - Round-trip de coordenadas em diferentes DPI e rotações.
 - Arquivo inválido, protegido ou corrompido não altera o projeto existente.
-- Seleção múltipla preserva a ordem das folhas; arquivo inválido ou conteúdo duplicado impede a união
-  inteira, sem substituir o projeto que já estava aberto.
+- Seleção múltipla preserva a ordem inicial das folhas; a reordenação sobrevive à reabertura. Arquivo
+  inválido ou conteúdo duplicado impede a importação inteira, sem substituir o projeto já aberto.
 
 ### Critério de saída
 
@@ -354,8 +357,8 @@ Qualquer geometria registrada no documento aparece na posição correta da pági
 - Coordenadas: matrizes PDF/página preservadas no domínio e round-trip PDF, normalizado, pixel e cena
   validado em 72, 144 e 300 DPI e rotações 0, 90, 180 e 270 graus.
 - Interface: `QGraphicsView` com paginação, zoom, ajuste, rotação, arraste e sobreposições alinhadas;
-  seleção múltipla e o botão **Unir arquivos em um só projeto** apresentam PDFs separados como uma
-  sequência única de folhas, preservando cada documento de origem.
+  seleção múltipla importa os PDFs diretamente, e a lista reordenável os apresenta como uma sequência
+  única de folhas, preservando cada documento de origem.
 - Persistência: revisão Alembic `0003_pdf_sources`, repositório da origem e caso de uso que grava
   projeto/documento/referência em uma única transação após validação completa.
 - Corpus: smoke test parametrizado pelos hashes das nove amostras reais, sem versionar nomes ou
@@ -501,7 +504,8 @@ o congelamento da Etapa 5.**
 - Relacionar evidências de texto, vetores, imagens e OCR com itens do catálogo.
 - Implementar analisadores pequenos e independentes para postes, estruturas MT, estruturas BT, cabos e equipamentos.
 - Combinar resultados por regras explícitas de geometria, proximidade, compatibilidade e contexto.
-- Gerar `PropostaElemento` e `PropostaRelacao`; nunca criar diretamente um elemento confirmado.
+- Gerar `PropostaElemento` e `PropostaRelacao` como trilha auditável e promover automaticamente os
+  resultados catalogados para o conjunto confirmado.
 - Persistir configuração, tempos, erros e proveniência de cada execução.
 - Permitir novos adaptadores no futuro sem alterar domínio, persistência ou interface.
 
@@ -526,8 +530,10 @@ O pipeline atinge os limites aprovados e toda proposta é rastreável até as ev
 - Situação: assinaturas configuráveis de cor do catálogo diferenciam existente, instalar e remover.
 - Relações: proximidade de centros associa estruturas/equipamentos a postes; extremidades associam
   cabos; compatibilidades do catálogo restringem suporte por estruturas MT/BT.
-- Segurança: resultados são sempre propostas. Código ausente ou evidência visual isolada não produz
-  entidade confirmada.
+- Promoção automática: resultados com item ativo de catálogo e dependências resolvíveis são
+  materializados com IDs determinísticos; propostas e decisões automáticas preservam a auditoria.
+- Postes: nomenclaturas como `10-150` e `11-300` aceitam `-`, `/`, `:`, `x`, espaço e quebra de linha;
+  coordenadas próximas são combinadas a partir de texto nativo ou OCR.
 - Execução: UUID5 inclui projeto, extração, interpretador, regras e configuração. Cancelamento,
   retomada e repetição não duplicam propostas; falhas ficam persistidas e auditáveis.
 - Persistência: extração e interpretação usam execuções distintas, com referências de evidência
@@ -544,15 +550,16 @@ O pipeline atinge os limites aprovados e toda proposta é rastreável até as ev
 - Pendência do critério de saída: executar o benchmark final sobre o conjunto congelado, ajustar
   somente pela partição de desenvolvimento e demonstrar os limites aprovados.
 
-## Etapa 7 - Revisão humana na interface
+## Etapa 7 - Resultados da análise na interface
 
 **Status: EM ANDAMENTO. Implementação técnica concluída em 2026-07-21; o aceite humano depende do
 fluxo operacional da Etapa 7.1.**
 
 ### Desenvolver
 
-- Exibir propostas sobre o PDF com filtros por classe e estado.
-- Permitir aceitar, rejeitar, mover, redimensionar, reclassificar e vincular ao catálogo.
+- Exibir resultados sobre o PDF com filtros por classe e estado.
+- Organizar postes como elementos-pai e mostrar abaixo deles estruturas, equipamentos e cabos
+  relacionados.
 - Permitir criar manualmente elementos e relações ausentes.
 - Registrar autor, data, motivo opcional e histórico de cada decisão.
 - Diferenciar visualmente proposta, confirmada, rejeitada e conflitante.
@@ -566,18 +573,19 @@ fluxo operacional da Etapa 7.1.**
 
 ### Critério de saída
 
-Um usuário consegue transformar todas as propostas de uma página em um conjunto confirmado, corrigindo erros sem editar arquivos manualmente.
+Um usuário consegue inspecionar no PDF tudo que a análise já incorporou ao projeto e entender os
+vínculos sem confirmar item a item.
 
 ### Registro de desenvolvimento
 
 - Aplicação: `ServicoRevisaoHumana` carrega a execução mais recente com propostas e realiza aceitar,
   ajustar, rejeitar, confirmar relação e criações manuais em transações atômicas.
-- Interface: painel lateral de revisão com filtros por classe e estado, tabela de propostas, vínculo a
-  item ativo do catálogo, situação de obra, referências estruturais e campos normalizados de posição
-  e tamanho.
-- PDF: propostas aparecem como sobreposições selecionáveis e movíveis; proposta, confirmada,
-  rejeitada e conflitante usam cores e traços distintos. A paginação, o zoom e a rotação existentes
-  permanecem disponíveis durante a revisão.
+- Interface: painel lateral de resultados com filtros por classe e estado e uma árvore de vínculos.
+  Cada poste agrupa seus dependentes e mostra situação, catálogo e confiança; os antigos campos de
+  decisão e confirmação item a item não fazem parte do fluxo visível.
+- PDF: cada proposta de elemento aparece como um sublinhado colorido e clicável; o clique abre a aba
+  de resultados e seleciona o nó correspondente. Proposta, confirmada, rejeitada e conflitante usam
+  cores e traços distintos. A paginação, o zoom e a rotação permanecem disponíveis durante a revisão.
 - Decisões: autor, data, motivo opcional e referência confirmada são persistidos em histórico
   imutável. Aceitação com mudança de classe, catálogo, situação ou geometria é registrada como
   `AJUSTAR`.
@@ -616,8 +624,9 @@ interface.**
 
 - Criar uma tela inicial para listar, criar, abrir e renomear projetos persistidos, usando uma versão
   publicada do catálogo sem exigir acesso direto ao SQLite.
-- Integrar a seleção de um ou vários PDFs ao caso de uso de importação, preservando cada documento e
-  sua ordem dentro do projeto; a união lógica deve sobreviver ao fechamento e à reabertura.
+- Integrar a seleção de um ou vários PDFs diretamente ao caso de uso de importação, preservando cada
+  documento, e permitir editar a ordem de leitura; essa ordem deve sobreviver ao fechamento e à
+  reabertura.
 - Expor na interface as ações de extrair evidências e executar a interpretação, com progresso,
   cancelamento, retomada, mensagens de erro localizadas e indicação clara da execução ativa.
 - Encadear o resultado concluído ao painel da Etapa 7, abrindo as propostas da execução correta sem
@@ -632,8 +641,8 @@ interface.**
 ### Testar
 
 - E2E Qt partindo de uma pasta de dados vazia: criar projeto, importar um PDF, executar extração e
-  interpretação, revisar uma proposta, salvar, fechar e reabrir.
-- E2E com várias folhas em arquivos separados, preservando ordem, fontes e paginação do projeto.
+  interpretação, inspecionar os resultados promovidos, fechar e reabrir.
+- E2E com várias folhas em arquivos separados, reordenação persistida, fontes e paginação do projeto.
 - Falha, proteção, corrupção ou alteração de um PDF não deixa projeto, execução ou interface em estado
   parcialmente publicado.
 - Cancelar e retomar análise pela interface não duplica execuções, evidências ou propostas.
@@ -644,16 +653,16 @@ interface.**
 ### Critério de saída
 
 Um usuário de MVP inicia o aplicativo pelos launchers normais e, sem ferramentas de desenvolvimento,
-consegue criar ou abrir um projeto, importar uma ou várias folhas, executar o pipeline, chegar à
-revisão humana, salvar, fechar e reabrir preservando o trabalho.
+consegue criar ou abrir um projeto, importar uma ou várias folhas, executar o pipeline, chegar aos
+resultados relacionados, fechar e reabrir preservando o trabalho.
 
 ### Roteiro de aceite humano esperado
 
 1. Abrir o aplicativo por `ZenyProjectHandler.vbs` ou `ZenyProjectHandler.bat`.
 2. Criar um projeto e selecionar um ou vários PDFs autorizados.
 3. Executar extração e interpretação acompanhando estado, progresso e eventuais diagnósticos.
-4. Abrir a revisão, aceitar/ajustar/rejeitar propostas e criar ao menos um elemento ausente.
-5. Salvar, fechar o aplicativo, abri-lo novamente e conferir documentos, página e decisões.
+4. Abrir os resultados, expandir um poste e conferir estruturas/equipamentos vinculados no PDF.
+5. Fechar o aplicativo, abri-lo novamente e conferir documentos, página e resultados promovidos.
 6. Informar aprovação ou problemas observados; somente a aprovação explícita permite concluir as
    Etapas 7 e 7.1.
 
@@ -670,15 +679,16 @@ revisão humana, salvar, fechar e reabrir preservando o trabalho.
   extrações, propostas, decisões e elementos dependentes serão removidos; documentos e resultados não
   relacionados permanecem no projeto e os arquivos originais são preservados.
 - Pipeline: **Executar análise completa** processa cada documento em uma thread de trabalho, exibe
-  progresso e execução ativa e encadeia extração, interpretação e revisão sem bloquear a janela.
+  progresso e execução ativa e encadeia extração, interpretação, promoção e resultados sem bloquear
+  a janela.
 - Cancelamento e retomada: o cancelamento ocorre em pontos seguros entre documentos ou dentro da
   interpretação. IDs determinísticos reutilizam extrações concluídas e o pipeline idempotente impede
   execuções, evidências e propostas duplicadas na retomada.
 - Estado operacional: a interface mostra quantidade de PDFs e folhas, estados da última extração e
   interpretação, propostas pendentes e decisões realizadas. Falhas esperadas aparecem como mensagens
   localizadas, sem traceback.
-- Revisão: projetos analisados são abertos diretamente no painel da Etapa 7. Projetos com vários
-  documentos expõem cada execução concluída em um seletor, permitindo revisar as folhas analisadas.
+- Resultados: projetos analisados são abertos diretamente no painel da Etapa 7. Projetos com vários
+  documentos expõem cada execução concluída em um seletor; postes agrupam os elementos relacionados.
 - Recuperação: o último projeto e a última folha aberta ficam em `ui-state.ini` na pasta local da
   aplicação; projeto, documentos, fontes, execuções, propostas e decisões continuam no SQLite.
 - Aceite: o botão **Como validar este MVP** apresenta o roteiro dentro da própria aplicação.
@@ -697,10 +707,10 @@ revisão humana, salvar, fechar e reabrir preservando o trabalho.
   mesmo SHA-256, 38 postes e as mesmas opções de formato; portanto, não foi necessário apagar nem
   migrar o banco. A falha estava na diferença entre códigos internos como
   `P-11M-300DAN-CIRCULAR` e anotações reais como `11-300`.
-- Interpretação 2.0: postes agora aceitam nomenclatura altura-resistência em texto nativo ou OCR. O
-  formato explícito resolve o item do catálogo; sem formato, a proposta permanece conflitante com a
-  lista de candidatos para o humano. Frases de formato de poste e classes de transformador/chaves
-  também geram propostas revisáveis sem inventar atributos ausentes.
+- Interpretação 3.0: postes aceitam nomenclatura altura-resistência em texto nativo ou OCR, inclusive
+  com `:`, `/`, espaço e quebra de linha. O formato explícito resolve o item do catálogo; sem formato,
+  o tipo canônico é escolhido e os candidatos permanecem auditáveis. Coordenadas próximas são
+  combinadas entre fragmentos nativos/OCR, e relações preferem postes com a mesma situação de obra.
 - OCR local: o Tesseract instalado é descoberto automaticamente e recebe a página por memória. Além
   de páginas rasterizadas, páginas com mais de 1.000 vetores são processadas para recuperar textos
   plotados como caminhos, mesmo quando o carimbo possui texto nativo. Nenhum PDF é enviado à rede.
