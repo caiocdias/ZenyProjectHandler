@@ -2,7 +2,15 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from PySide6.QtWidgets import QDockWidget, QFileDialog, QLabel, QMessageBox, QPushButton, QSpinBox
+from PySide6.QtWidgets import (
+    QDockWidget,
+    QFileDialog,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QSpinBox,
+)
 from pytestqt.qtbot import QtBot
 from tests.pdf_fixtures import create_feature_pdf, create_golden_pdf
 
@@ -25,10 +33,16 @@ def test_main_window_smoke(qtbot: QtBot, tmp_path: Path) -> None:
     assert application.applicationName() == "Zeny Project Handler"
     assert window.windowTitle() == "Zeny Project Handler"
     assert window.centralWidget().objectName() == "pdfViewerWidget"
-    assert window.findChild(QDockWidget, "humanReviewDock") is not None
+    review_dock = window.findChild(QDockWidget, "humanReviewDock")
+    graph_dock = window.findChild(QDockWidget, "projectGraphDock")
+    portability_dock = window.findChild(QDockWidget, "projectPortabilityDock")
+    assert review_dock is not None
     assert window.findChild(QDockWidget, "projectWorkflowDock") is not None
-    assert window.findChild(QDockWidget, "projectGraphDock") is not None
-    assert window.findChild(QDockWidget, "projectPortabilityDock") is not None
+    assert graph_dock is not None
+    assert portability_dock is not None
+    assert graph_dock in window.tabifiedDockWidgets(review_dock)
+    assert portability_dock in window.tabifiedDockWidgets(review_dock)
+    assert window.findChild(QScrollArea, "graphScrollArea") is not None
     assert window.review_panel is not None
     assert window.project_panel is not None
     assert window.graph_panel is not None
@@ -104,7 +118,7 @@ def test_pdf_viewer_reports_controlled_open_failure(
 
 
 @pytest.mark.integration
-def test_pdf_viewer_joins_selected_files_as_one_ordered_project(
+def test_pdf_viewer_opens_selected_files_as_one_ordered_project(
     qtbot: QtBot,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -122,22 +136,12 @@ def test_pdf_viewer_joins_selected_files_as_one_ordered_project(
 
     viewer.selecionar_pdf()
 
-    merge_button = viewer.findChild(QPushButton, "mergePdfsIntoProjectButton")
-    assert merge_button is not None
-    assert merge_button.isEnabled()
-    assert viewer.inspecoes == ()
-
-    qtbot.mouseClick(  # type: ignore[no-untyped-call]
-        merge_button,
-        pytest.importorskip("PySide6.QtCore").Qt.MouseButton.LeftButton,
-    )
-
     inspections: tuple[InspecaoPdf, ...] = viewer.inspecoes
     assert [item.documento.nome_arquivo for item in inspections] == [
         "folha-01.pdf",
         "folha-02.pdf",
     ]
-    assert not merge_button.isEnabled()
+    assert viewer.findChild(QPushButton, "mergePdfsIntoProjectButton") is None
     page_selector = viewer.findChild(QSpinBox, "pdfPageSpinBox")
     assert page_selector is not None
     assert page_selector.maximum() == sum(len(item.paginas) for item in inspections)
@@ -146,7 +150,7 @@ def test_pdf_viewer_joins_selected_files_as_one_ordered_project(
     assert viewer.inspecao.documento.nome_arquivo == "folha-02.pdf"
     metadata = viewer.findChild(QLabel, "pdfMetadataLabel")
     assert metadata is not None
-    assert "Projeto unido: 2 arquivos" in metadata.text()
+    assert "Projeto: 2 PDFs" in metadata.text()
 
 
 @pytest.mark.integration

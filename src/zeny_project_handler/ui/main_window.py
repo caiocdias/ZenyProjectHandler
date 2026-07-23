@@ -1,5 +1,6 @@
 """Janela principal da aplicação."""
 
+from itertools import pairwise
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -36,7 +37,13 @@ class MainWindow(QMainWindow):
         super().__init__(parent)
         self.setObjectName("mainWindow")
         self.setWindowTitle(application_name)
-        self.resize(1200, 800)
+        self.resize(1400, 900)
+        self.setDockNestingEnabled(True)
+        self.setDockOptions(
+            QMainWindow.DockOption.AllowNestedDocks
+            | QMainWindow.DockOption.AllowTabbedDocks
+            | QMainWindow.DockOption.AnimatedDocks
+        )
         self.pdf_viewer = PdfViewerWidget(leitor=pdf_reader, dpi=pdf_render_dpi, parent=self)
         self.pdf_viewer.status_changed.connect(self.statusBar().showMessage)
         self.setCentralWidget(self.pdf_viewer)
@@ -44,6 +51,7 @@ class MainWindow(QMainWindow):
         self.project_panel: ProjectPanelWidget | None = None
         self.graph_panel: GraphPanelWidget | None = None
         self.portability_panel: PortabilityPanelWidget | None = None
+        right_docks: list[QDockWidget] = []
         if review_service is not None:
             self.review_panel = ReviewPanelWidget(
                 service=review_service,
@@ -51,13 +59,17 @@ class MainWindow(QMainWindow):
                 parent=self,
             )
             self.review_panel.status_changed.connect(self.statusBar().showMessage)
-            dock = QDockWidget("Revisão humana", self)
+            dock = QDockWidget("Resultados da análise", self)
             dock.setObjectName("humanReviewDock")
             dock.setAllowedAreas(
                 Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
             )
             dock.setWidget(self.review_panel)
             self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
+            self.pdf_viewer.proposal_selected.connect(
+                lambda _proposal_id, review_dock=dock: review_dock.raise_()
+            )
+            right_docks.append(dock)
         if (
             workflow_service is not None
             and self.review_panel is not None
@@ -91,7 +103,8 @@ class MainWindow(QMainWindow):
                 Qt.DockWidgetArea.BottomDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
             )
             graph_dock.setWidget(self.graph_panel)
-            self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, graph_dock)
+            self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, graph_dock)
+            right_docks.append(graph_dock)
         if portability_service is not None:
             self.portability_panel = PortabilityPanelWidget(
                 service=portability_service,
@@ -107,6 +120,11 @@ class MainWindow(QMainWindow):
             )
             portability_dock.setWidget(self.portability_panel)
             self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, portability_dock)
+            right_docks.append(portability_dock)
+        for current, following in pairwise(right_docks):
+            self.tabifyDockWidget(current, following)
+        if right_docks:
+            right_docks[0].raise_()
         self.statusBar().showMessage("Pronto para abrir um PDF")
 
     def _refresh_data_panels(self) -> None:

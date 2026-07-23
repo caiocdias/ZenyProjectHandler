@@ -8,7 +8,13 @@ from uuid import uuid4
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QComboBox, QDoubleSpinBox, QLineEdit, QPushButton, QTableWidget
+from PySide6.QtWidgets import (
+    QComboBox,
+    QGroupBox,
+    QLabel,
+    QPushButton,
+    QTreeWidget,
+)
 from pytestqt.qtbot import QtBot
 from sqlalchemy import Engine
 from tests.pdf_fixtures import create_golden_pdf
@@ -24,6 +30,7 @@ from zeny_project_handler.domain.analysis import (
     EvidenciaDocumento,
     ExecucaoAnalise,
     PropostaElemento,
+    PropostaRelacao,
 )
 from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.domain.enums import (
@@ -31,7 +38,6 @@ from zeny_project_handler.domain.enums import (
     EstadoExecucaoAnalise,
     EstadoRevisao,
     SituacaoProjeto,
-    TipoDecisaoRevisao,
     TipoEvidencia,
 )
 from zeny_project_handler.domain.project import Projeto
@@ -114,6 +120,15 @@ def review_panel_context(
         tipo_catalogo_sugerido_id=equipment_item.id,
         confianca=Decimal("0.70"),
     )
+    relation = PropostaRelacao(
+        id=uuid4(),
+        execucao_id=execution.id,
+        origem_referencia_id=conflict.id,
+        destino_referencia_id=pole_proposal.id,
+        tipo_relacao="INSTALADO_EM",
+        evidencia_ids=(evidence.id,),
+        confianca=Decimal("0.70"),
+    )
     engine = create_sqlite_engine(tmp_path / "review-panel.sqlite3")
     upgrade_database(engine)
     with SqlAlchemyUnitOfWork(engine) as work:
@@ -133,6 +148,7 @@ def review_panel_context(
         work.evidencias.salvar(evidence)
         work.propostas.salvar(pole_proposal)
         work.propostas.salvar(conflict)
+        work.propostas.salvar(relation)
         work.commit()
     service = ServicoRevisaoHumana(
         lambda: SqlAlchemyUnitOfWork(engine),
@@ -150,45 +166,54 @@ def review_panel_context(
         engine.dispose()
 
 
-def test_review_panel_filters_overlays_and_saves_geometry_adjustment(
+def test_results_panel_groups_relationships_and_links_elements_to_pdf(
     qtbot: QtBot,
     review_panel_context: tuple[Engine, ReviewPanelWidget, PropostaElemento],
 ) -> None:
-    engine, panel, proposal = review_panel_context
+    _engine, panel, proposal = review_panel_context
     project_combo = panel.findChild(QComboBox, "reviewProjectCombo")
     assert project_combo is not None
     project_combo.setCurrentIndex(1)
-    table = panel.findChild(QTableWidget, "reviewProposalTable")
-    assert table is not None
-    assert table.rowCount() == 2
+    tree = panel.findChild(QTreeWidget, "analysisRelationshipTree")
+    assert tree is not None
+    assert tree.topLevelItemCount() == 1
+    pole_item = tree.topLevelItem(0)
+    assert pole_item is not None
+    assert pole_item.text(0).startswith("Poste")
+    assert pole_item.childCount() == 1
+    equipment_item = pole_item.child(0)
+    assert "Equipamento" in equipment_item.text(0)
+    assert "instalado em" in equipment_item.text(0)
+    assert equipment_item.text(1) == "A instalar"
 
     state_filter = panel.findChild(QComboBox, "reviewStateFilter")
     assert state_filter is not None
     state_filter.setCurrentIndex(state_filter.findData(EstadoRevisao.CONFLITANTE.value))
-    assert table.rowCount() == 1
+    assert tree.topLevelItemCount() == 1
+    filtered_pole = tree.topLevelItem(0)
+    assert filtered_pole is not None and filtered_pole.childCount() == 1
     state_filter.setCurrentIndex(0)
 
-    pole_row = -1
-    for row in range(table.rowCount()):
-        category_item = table.item(row, 1)
-        if category_item is not None and category_item.text() == "POSTE":
-            pole_row = row
-            break
-    assert pole_row >= 0
-    table.selectRow(pole_row)
-    author = panel.findChild(QLineEdit, "reviewAuthorEdit")
-    x_spin = panel.findChild(QDoubleSpinBox, "reviewXSpin")
-    accept = panel.findChild(QPushButton, "reviewAcceptButton")
-    assert author is not None and x_spin is not None and accept is not None
-    author.setText("Caio")
-    x_spin.setValue(0.15)
-    qtbot.mouseClick(accept, Qt.MouseButton.LeftButton)  # type: ignore[no-untyped-call]
+    pole_item = tree.topLevelItem(0)
+    assert pole_item is not None
+    tree.setCurrentItem(pole_item)
+    assert str(proposal.id) in panel._viewer.view._review_items
+    marker = panel._viewer.view._review_items[str(proposal.id)]
+    assert marker.path().boundingRect().height() <= 4
+    tree.clearSelection()
+    marker.setSelected(False)
+    marker_position = panel._viewer.view.mapFromScene(marker.sceneBoundingRect().center())
+    qtbot.mouseClick(
+        panel._viewer.view.viewport(),
+        Qt.MouseButton.LeftButton,
+        pos=marker_position,
+    )  # type: ignore[no-untyped-call]
+    assert tree.selectedItems()
+    assert tree.selectedItems()[0].data(0, Qt.ItemDataRole.UserRole) == str(proposal.id)
 
-    with SqlAlchemyUnitOfWork(engine) as work:
-        stored = work.propostas.obter(proposal.id)
-        decision = work.decisoes_revisao.obter_da_proposta(proposal.id)
-    assert isinstance(stored, PropostaElemento)
-    assert stored.estado_revisao is EstadoRevisao.CONFIRMADA
-    assert stored.geometria.pontos[0].x == Decimal("0.15")
-    assert decision is not None
-    assert decision.decisao is TipoDecisaoRevisao.AJUSTAR
+    guidance = panel.findChild(QLabel, "analysisResultsGuidance")
+    editor = panel.findChild(QGroupBox, "reviewDecisionEditor")
+    accept = panel.findChild(QPushButton, "reviewAcceptButton")
+    assert guidance is not None and "automaticamente" in guidance.text()
+    assert editor is not None and not editor.isVisible()
+    assert accept is not None and not accept.isVisible()

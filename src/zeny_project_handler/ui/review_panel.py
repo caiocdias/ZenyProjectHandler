@@ -8,8 +8,8 @@ from typing import TypeVar
 from uuid import UUID
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFormLayout,
@@ -21,6 +21,8 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -58,13 +60,14 @@ class ReviewPanelWidget(QWidget):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setObjectName("humanReviewPanel")
+        self.setObjectName("analysisResultsPanel")
         self._service = service
         self._viewer = viewer
         self._session: SessaoRevisao | None = None
         self._page_id: UUID | None = None
         self._selected_proposal_id: UUID | None = None
         self._loaded_bounds: tuple[float, float, float, float] | None = None
+        self._syncing_selection = False
         self._build_ui()
         self._connect_viewer()
         self.atualizar_projetos()
@@ -101,6 +104,23 @@ class ReviewPanelWidget(QWidget):
         filter_row.addWidget(self._state_filter)
         layout.addLayout(filter_row)
 
+        guidance = QLabel(
+            "As identificações são incorporadas automaticamente ao projeto. "
+            "Expanda um poste para ver as estruturas, equipamentos e cabos relacionados; "
+            "clique em qualquer elemento para localizá-lo no PDF."
+        )
+        guidance.setObjectName("analysisResultsGuidance")
+        guidance.setWordWrap(True)
+        layout.addWidget(guidance)
+
+        self._tree = QTreeWidget()
+        self._tree.setObjectName("analysisRelationshipTree")
+        self._tree.setHeaderLabels(("Elemento e vínculo", "Situação", "Catálogo", "Confiança"))
+        self._tree.setSelectionMode(QTreeWidget.SelectionMode.SingleSelection)
+        self._tree.setUniformRowHeights(True)
+        self._tree.header().setStretchLastSection(True)
+        layout.addWidget(self._tree, 1)
+
         self._table = QTableWidget(0, 4)
         self._table.setObjectName("reviewProposalTable")
         self._table.setHorizontalHeaderLabels(("Tipo", "Classe/relação", "Estado", "Confiança"))
@@ -109,39 +129,56 @@ class ReviewPanelWidget(QWidget):
         self._table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self._table.verticalHeader().setVisible(False)
         self._table.horizontalHeader().setStretchLastSection(True)
-        layout.addWidget(self._table, 1)
+        self._table.hide()
+        layout.addWidget(self._table)
 
-        editor = QGroupBox("Decisão e ajustes")
-        form = QFormLayout(editor)
+        editor = QGroupBox("Correção excepcional")
+        editor.setObjectName("reviewDecisionEditor")
+        self._editor_form = QFormLayout(editor)
+        form = self._editor_form
+        self._detected = QLabel("Selecione uma identificação na lista ou no PDF")
+        self._detected.setObjectName("reviewDetectedSummary")
+        self._detected.setWordWrap(True)
+        form.addRow("Identificado", self._detected)
         self._reviewer = QLineEdit()
         self._reviewer.setObjectName("reviewAuthorEdit")
-        form.addRow("Revisor", self._reviewer)
+        self._reviewer.setPlaceholderText("Nome de quem está revisando")
+        form.addRow("Responsável", self._reviewer)
         self._reason = QLineEdit()
         self._reason.setObjectName("reviewReasonEdit")
-        form.addRow("Motivo", self._reason)
+        self._reason.setPlaceholderText("Opcional")
+        form.addRow("Observação", self._reason)
+        self._classification_correction = QCheckBox("Corrigir classe ou item do catálogo")
+        self._classification_correction.setObjectName("reviewCorrectClassificationCheck")
+        form.addRow(self._classification_correction)
         self._category = QComboBox()
         self._category.setObjectName("reviewCategoryCombo")
         for category in CategoriaElemento:
             self._category.addItem(category.value, category.value)
-        form.addRow("Classe", self._category)
+        form.addRow("Classe corrigida", self._category)
         self._catalog_item = QComboBox()
         self._catalog_item.setObjectName("reviewCatalogItemCombo")
-        form.addRow("Catálogo", self._catalog_item)
+        form.addRow("Item corrigido", self._catalog_item)
         self._situation = QComboBox()
         self._situation.setObjectName("reviewSituationCombo")
         for situation in SituacaoProjeto:
             self._situation.addItem(situation.value, situation.value)
-        form.addRow("Situação", self._situation)
+        form.addRow("Situação da obra", self._situation)
         self._pole = QComboBox()
         self._pole.setObjectName("reviewPoleCombo")
-        form.addRow("Poste", self._pole)
+        form.addRow("Poste associado", self._pole)
         self._origin_point = QComboBox()
         self._origin_point.setObjectName("reviewOriginPointCombo")
-        form.addRow("Ponto inicial", self._origin_point)
+        form.addRow("Origem do cabo", self._origin_point)
         self._destination_point = QComboBox()
         self._destination_point.setObjectName("reviewDestinationPointCombo")
-        form.addRow("Ponto final", self._destination_point)
-        geometry_row = QHBoxLayout()
+        form.addRow("Destino do cabo", self._destination_point)
+        self._adjust_geometry = QCheckBox("Ajustar posição numericamente")
+        self._adjust_geometry.setObjectName("reviewAdjustGeometryCheck")
+        form.addRow(self._adjust_geometry)
+        self._geometry_widget = QWidget(editor)
+        geometry_row = QHBoxLayout(self._geometry_widget)
+        geometry_row.setContentsMargins(0, 0, 0, 0)
         self._x = _coordinate_spin("reviewXSpin")
         self._y = _coordinate_spin("reviewYSpin")
         self._width = _coordinate_spin("reviewWidthSpin")
@@ -154,38 +191,46 @@ class ReviewPanelWidget(QWidget):
         ):
             geometry_row.addWidget(QLabel(label))
             geometry_row.addWidget(field)
-        form.addRow("Geometria", geometry_row)
+        form.addRow("Posição na folha (0 a 1)", self._geometry_widget)
+        editor.hide()
         layout.addWidget(editor)
 
         decision_row = QHBoxLayout()
-        accept = QPushButton("Aceitar / salvar ajuste")
-        accept.setObjectName("reviewAcceptButton")
-        accept.clicked.connect(self.aceitar_selecionada)
-        decision_row.addWidget(accept)
-        reject = QPushButton("Rejeitar")
-        reject.setObjectName("reviewRejectButton")
-        reject.clicked.connect(self.rejeitar_selecionada)
-        decision_row.addWidget(reject)
+        self._accept = QPushButton("Confirmar identificação")
+        self._accept.setObjectName("reviewAcceptButton")
+        self._accept.clicked.connect(self.aceitar_selecionada)
+        self._accept.hide()
+        decision_row.addWidget(self._accept)
+        self._reject = QPushButton("Não é este elemento")
+        self._reject.setObjectName("reviewRejectButton")
+        self._reject.clicked.connect(self.rejeitar_selecionada)
+        self._reject.hide()
+        decision_row.addWidget(self._reject)
         layout.addLayout(decision_row)
 
         manual_row = QHBoxLayout()
         manual_element = QPushButton("Criar elemento manual")
         manual_element.setObjectName("reviewCreateElementButton")
         manual_element.clicked.connect(self.criar_elemento_manual)
+        manual_element.hide()
         manual_row.addWidget(manual_element)
         self._relation_type = QLineEdit("RELACIONADO_A")
         self._relation_type.setObjectName("reviewRelationTypeEdit")
+        self._relation_type.hide()
         manual_row.addWidget(self._relation_type)
         manual_relation = QPushButton("Criar relação manual")
         manual_relation.setObjectName("reviewCreateRelationButton")
         manual_relation.clicked.connect(self.criar_relacao_manual)
+        manual_relation.hide()
         manual_row.addWidget(manual_relation)
         layout.addLayout(manual_row)
 
         self._reference_origin = QComboBox()
         self._reference_origin.setObjectName("reviewRelationOriginCombo")
+        self._reference_origin.hide()
         self._reference_destination = QComboBox()
         self._reference_destination.setObjectName("reviewRelationDestinationCombo")
+        self._reference_destination.hide()
         reference_row = QHBoxLayout()
         reference_row.addWidget(self._reference_origin)
         reference_row.addWidget(self._reference_destination)
@@ -195,14 +240,13 @@ class ReviewPanelWidget(QWidget):
         self._execution.currentIndexChanged.connect(self._load_selected_execution)
         self._category_filter.currentIndexChanged.connect(self._refresh_proposals)
         self._state_filter.currentIndexChanged.connect(self._refresh_proposals)
+        self._tree.itemSelectionChanged.connect(self._select_tree_proposal)
         self._table.itemSelectionChanged.connect(self._select_table_proposal)
         self._category.currentIndexChanged.connect(self._refresh_catalog_items)
-        accept_shortcut = QShortcut(self)
-        accept_shortcut.setKey(QKeySequence("A"))
-        accept_shortcut.activated.connect(self.aceitar_selecionada)
-        reject_shortcut = QShortcut(self)
-        reject_shortcut.setKey(QKeySequence("R"))
-        reject_shortcut.activated.connect(self.rejeitar_selecionada)
+        self._category.currentIndexChanged.connect(self._editor_mode_changed)
+        self._classification_correction.toggled.connect(self._editor_mode_changed)
+        self._adjust_geometry.toggled.connect(self._editor_mode_changed)
+        self._update_editor_visibility(None)
 
     def _connect_viewer(self) -> None:
         self._viewer.page_changed.connect(self._page_changed)
@@ -212,10 +256,10 @@ class ReviewPanelWidget(QWidget):
         selected = self._project.currentData()
         self._project.blockSignals(True)
         self._project.clear()
-        self._project.addItem("Selecione um projeto para revisão", None)
+        self._project.addItem("Selecione um projeto analisado", None)
         for summary in self._service.listar_projetos():
             self._project.addItem(
-                f"{summary.nome} ({summary.propostas_pendentes} pendentes)",
+                f"{summary.nome} (resultados disponíveis)",
                 str(summary.projeto_id),
             )
         if selected is not None:
@@ -230,8 +274,9 @@ class ReviewPanelWidget(QWidget):
         self._page_id = None
         self._selected_proposal_id = None
         self._project.clear()
-        self._project.addItem("Selecione um projeto para revisão", None)
+        self._project.addItem("Selecione um projeto analisado", None)
         self._execution.clear()
+        self._tree.clear()
         self._table.setRowCount(0)
         self._viewer.definir_propostas_revisao(())
 
@@ -248,7 +293,7 @@ class ReviewPanelWidget(QWidget):
         self.atualizar_projetos()
         project_index = self._project.findData(str(projeto_id))
         if project_index < 0:
-            self.status_changed.emit("Projeto ainda não possui propostas para revisão")
+            self.status_changed.emit("Projeto ainda não possui resultados de análise")
             return
         self._project.blockSignals(True)
         self._project.setCurrentIndex(project_index)
@@ -267,8 +312,7 @@ class ReviewPanelWidget(QWidget):
         self._execution.clear()
         for index, summary in enumerate(self._service.listar_execucoes(project_id), start=1):
             self._execution.addItem(
-                f"Folha analisada {index} · "
-                f"{summary.propostas_pendentes}/{summary.propostas} pendentes",
+                f"Análise {index} · {summary.propostas} identificações",
                 str(summary.execucao_id),
             )
         if current is not None:
@@ -293,11 +337,14 @@ class ReviewPanelWidget(QWidget):
     def _activate_session(self, session: SessaoRevisao) -> None:
         self._session = session
         source_paths = tuple(source.caminho_canonico for source in session.fontes_pdf)
-        if source_paths and not self._viewer.carregar_projeto(source_paths):
+        if source_paths and not self._viewer.carregar_projeto(
+            source_paths,
+            documentos=session.projeto.documentos,
+        ):
             raise ApplicationError("Não foi possível abrir todos os PDFs do projeto")
         if not source_paths:
             self.status_changed.emit(
-                "Projeto sem referências locais de PDF; revisão tabular disponível"
+                "Projeto sem referências locais de PDF; resultados estruturados disponíveis"
             )
         self._refresh_references()
         self._refresh_catalog_items()
@@ -319,6 +366,13 @@ class ReviewPanelWidget(QWidget):
             if (category is None or _proposal_category(item) == category)
             and (state is None or item.estado_revisao.value == state)
         )
+        if self._selected_proposal_id is not None and all(
+            item.id != self._selected_proposal_id for item in filtered
+        ):
+            self._selected_proposal_id = None
+            self._detected.setText("Selecione uma identificação na lista ou no PDF")
+            self._update_editor_visibility(None)
+        self._populate_result_tree(filtered)
         self._table.setRowCount(0)
         for proposal in filtered:
             row = self._table.rowCount()
@@ -343,6 +397,110 @@ class ReviewPanelWidget(QWidget):
         )
         self._viewer.definir_propostas_revisao(overlays)
 
+    def _populate_result_tree(
+        self,
+        proposals: tuple[PropostaElemento | PropostaRelacao, ...],
+    ) -> None:
+        session = self._session
+        if session is None:
+            return
+        self._tree.clear()
+        visible_elements = tuple(item for item in proposals if isinstance(item, PropostaElemento))
+        all_elements = tuple(
+            item for item in session.propostas if isinstance(item, PropostaElemento)
+        )
+        poles = {
+            item.id: item for item in all_elements if item.categoria is CategoriaElemento.POSTE
+        }
+        relations = tuple(item for item in session.propostas if isinstance(item, PropostaRelacao))
+        pole_links: dict[UUID, list[tuple[UUID, str]]] = {}
+        for relation in relations:
+            if relation.destino_referencia_id not in poles:
+                continue
+            pole_links.setdefault(relation.origem_referencia_id, []).append(
+                (relation.destino_referencia_id, relation.tipo_relacao)
+            )
+
+        roots: dict[UUID, QTreeWidgetItem] = {}
+
+        def pole_root(pole: PropostaElemento) -> QTreeWidgetItem:
+            existing = roots.get(pole.id)
+            if existing is not None:
+                return existing
+            root = self._result_item(pole)
+            self._tree.addTopLevelItem(root)
+            roots[pole.id] = root
+            return root
+
+        unlinked: QTreeWidgetItem | None = None
+        visible_ids = {item.id for item in visible_elements}
+        for element in visible_elements:
+            if element.categoria is CategoriaElemento.POSTE:
+                pole_root(element)
+                continue
+            links = sorted(
+                pole_links.get(element.id, ()),
+                key=lambda item: (item[1], str(item[0])),
+            )
+            if links:
+                pole_id, relation_type = links[0]
+                pole_root(poles[pole_id]).addChild(
+                    self._result_item(element, relationship=relation_type)
+                )
+                continue
+            if unlinked is None:
+                unlinked = QTreeWidgetItem(("Sem vínculo de poste identificado", "", "", ""))
+                self._tree.addTopLevelItem(unlinked)
+            unlinked.addChild(self._result_item(element))
+
+        for pole_id, root in roots.items():
+            if pole_id not in visible_ids and root.childCount() == 0:
+                self._tree.takeTopLevelItem(self._tree.indexOfTopLevelItem(root))
+        if not visible_elements:
+            self._tree.addTopLevelItem(
+                QTreeWidgetItem(("Nenhuma identificação neste filtro", "", "", ""))
+            )
+        self._tree.expandAll()
+
+    def _result_item(
+        self,
+        proposal: PropostaElemento,
+        *,
+        relationship: str | None = None,
+    ) -> QTreeWidgetItem:
+        label = _proposal_label(proposal)
+        if relationship is not None:
+            label = f"{label} · {relationship.replace('_', ' ').lower()}"
+        item = QTreeWidgetItem(
+            (
+                label,
+                _situation_label(proposal.situacao_projeto),
+                self._catalog_label(proposal),
+                f"{proposal.confianca:.0%}" if proposal.confianca is not None else "-",
+            )
+        )
+        item.setData(0, Qt.ItemDataRole.UserRole, str(proposal.id))
+        return item
+
+    def _catalog_label(self, proposal: PropostaElemento) -> str:
+        session = self._session
+        catalog_item = (
+            session.catalogo.item_por_id(proposal.tipo_catalogo_sugerido_id)
+            if session is not None and proposal.tipo_catalogo_sugerido_id is not None
+            else None
+        )
+        if catalog_item is None:
+            return "Não catalogado"
+        return f"{catalog_item.codigo} — {catalog_item.descricao}"
+
+    def _select_tree_proposal(self) -> None:
+        selected = self._tree.selectedItems()
+        if not selected:
+            return
+        proposal_id = selected[0].data(0, Qt.ItemDataRole.UserRole)
+        if proposal_id:
+            self._select_proposal_id(str(proposal_id))
+
     def _select_table_proposal(self) -> None:
         selected = self._table.selectedItems()
         if not selected:
@@ -353,20 +511,128 @@ class ReviewPanelWidget(QWidget):
 
     def _select_proposal_id(self, proposal_id: str) -> None:
         session = self._session
-        if session is None:
+        if session is None or self._syncing_selection:
             return
         proposal = next((item for item in session.propostas if str(item.id) == proposal_id), None)
         if proposal is None:
             return
-        self._selected_proposal_id = proposal.id
-        self._viewer.selecionar_proposta(proposal_id)
-        if isinstance(proposal, PropostaElemento):
-            self._set_combo_value(self._category, proposal.categoria.value)
-            self._refresh_catalog_items()
-            if proposal.tipo_catalogo_sugerido_id is not None:
-                self._set_combo_value(self._catalog_item, str(proposal.tipo_catalogo_sugerido_id))
-            self._set_combo_value(self._situation, proposal.situacao_projeto.value)
-            self._set_geometry_fields(proposal.geometria)
+        self._syncing_selection = True
+        try:
+            self._selected_proposal_id = proposal.id
+            self._select_tree_item(proposal_id)
+            self._select_table_row(proposal_id)
+            self._viewer.selecionar_proposta(proposal_id)
+            self._classification_correction.blockSignals(True)
+            self._classification_correction.setChecked(False)
+            self._classification_correction.blockSignals(False)
+            self._adjust_geometry.blockSignals(True)
+            self._adjust_geometry.setChecked(False)
+            self._adjust_geometry.blockSignals(False)
+            if isinstance(proposal, PropostaElemento):
+                self._set_combo_value(self._category, proposal.categoria.value)
+                self._refresh_catalog_items()
+                if proposal.tipo_catalogo_sugerido_id is not None:
+                    self._set_combo_value(
+                        self._catalog_item, str(proposal.tipo_catalogo_sugerido_id)
+                    )
+                else:
+                    self._classification_correction.setChecked(True)
+                self._set_combo_value(self._situation, proposal.situacao_projeto.value)
+                self._set_geometry_fields(proposal.geometria)
+                self._detected.setText(self._element_detection_summary(proposal))
+            else:
+                self._detected.setText(f"Relação proposta: {proposal.tipo_relacao}")
+            self._update_editor_visibility(proposal)
+        finally:
+            self._syncing_selection = False
+
+    def _select_tree_item(self, proposal_id: str) -> None:
+        pending = [self._tree.invisibleRootItem()]
+        while pending:
+            parent = pending.pop()
+            for index in range(parent.childCount()):
+                child = parent.child(index)
+                if str(child.data(0, Qt.ItemDataRole.UserRole)) == proposal_id:
+                    self._tree.blockSignals(True)
+                    self._tree.setCurrentItem(child)
+                    self._tree.scrollToItem(child)
+                    self._tree.blockSignals(False)
+                    return
+                pending.append(child)
+
+    def _select_table_row(self, proposal_id: str) -> None:
+        for row in range(self._table.rowCount()):
+            cell = self._table.item(row, 0)
+            if cell is None or str(cell.data(Qt.ItemDataRole.UserRole)) != proposal_id:
+                continue
+            self._table.blockSignals(True)
+            self._table.selectRow(row)
+            self._table.scrollToItem(cell)
+            self._table.blockSignals(False)
+            return
+
+    def _element_detection_summary(self, proposal: PropostaElemento) -> str:
+        session = self._session
+        item = (
+            session.catalogo.item_por_id(proposal.tipo_catalogo_sugerido_id)
+            if session is not None and proposal.tipo_catalogo_sugerido_id is not None
+            else None
+        )
+        if item is None:
+            return f"{proposal.categoria.value} · item do catálogo não identificado"
+        return f"{proposal.categoria.value} · {item.codigo} — {item.descricao}"
+
+    def _editor_mode_changed(self, *_args: object) -> None:
+        self._update_editor_visibility(self._selected_proposal())
+
+    def _update_editor_visibility(
+        self,
+        proposal: PropostaElemento | PropostaRelacao | None,
+    ) -> None:
+        is_element = isinstance(proposal, PropostaElemento)
+        decidable = proposal is not None and proposal.estado_revisao in {
+            EstadoRevisao.PROPOSTA,
+            EstadoRevisao.CONFLITANTE,
+        }
+        editable_element = is_element and decidable
+        correcting = editable_element and self._classification_correction.isChecked()
+        category = (
+            CategoriaElemento(self._category.currentData())
+            if is_element and self._category.currentData() is not None
+            else None
+        )
+        self._classification_correction.setVisible(editable_element)
+        self._editor_form.setRowVisible(self._category, correcting)
+        self._editor_form.setRowVisible(self._catalog_item, correcting)
+        self._editor_form.setRowVisible(self._situation, editable_element)
+        self._editor_form.setRowVisible(
+            self._pole,
+            editable_element
+            and category
+            in {
+                CategoriaElemento.ESTRUTURA_MT,
+                CategoriaElemento.ESTRUTURA_BT,
+                CategoriaElemento.EQUIPAMENTO,
+            },
+        )
+        is_cable = editable_element and category is CategoriaElemento.CABO
+        self._editor_form.setRowVisible(self._origin_point, is_cable)
+        self._editor_form.setRowVisible(self._destination_point, is_cable)
+        self._adjust_geometry.setVisible(editable_element)
+        self._editor_form.setRowVisible(
+            self._geometry_widget,
+            editable_element and self._adjust_geometry.isChecked(),
+        )
+        self._accept.setEnabled(decidable)
+        self._reject.setEnabled(decidable)
+        if proposal is not None and not decidable:
+            self._accept.setText("Decisão já registrada")
+        elif isinstance(proposal, PropostaRelacao):
+            self._accept.setText("Confirmar relação")
+        elif correcting or (is_element and self._adjust_geometry.isChecked()):
+            self._accept.setText("Salvar correções")
+        else:
+            self._accept.setText("Confirmar identificação")
 
     def _set_geometry_fields(self, geometry: GeometriaDocumento) -> None:
         left, top, width, height = _bounds(geometry)
@@ -584,6 +850,25 @@ def _proposal_category(proposal: PropostaElemento | PropostaRelacao) -> str:
         if isinstance(proposal, PropostaElemento)
         else proposal.tipo_relacao
     )
+
+
+def _proposal_label(proposal: PropostaElemento) -> str:
+    category = {
+        CategoriaElemento.POSTE: "Poste",
+        CategoriaElemento.ESTRUTURA_MT: "Estrutura MT",
+        CategoriaElemento.ESTRUTURA_BT: "Estrutura BT",
+        CategoriaElemento.CABO: "Cabo",
+        CategoriaElemento.EQUIPAMENTO: "Equipamento",
+    }[proposal.categoria]
+    return f"{category} {proposal.codigo_observado or ''}".strip()
+
+
+def _situation_label(situation: SituacaoProjeto) -> str:
+    return {
+        SituacaoProjeto.INSTALAR: "A instalar",
+        SituacaoProjeto.REMOVER: "A remover",
+        SituacaoProjeto.EXISTENTE: "Existente",
+    }[situation]
 
 
 def _bounds(geometry: GeometriaDocumento) -> tuple[float, float, float, float]:

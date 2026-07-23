@@ -2,10 +2,21 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import QPointF, Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QImage, QPainter, QPainterPath, QPen, QPixmap, QWheelEvent
+from PySide6.QtGui import (
+    QBrush,
+    QColor,
+    QImage,
+    QPainter,
+    QPainterPath,
+    QPainterPathStroker,
+    QPen,
+    QPixmap,
+    QWheelEvent,
+)
 from PySide6.QtWidgets import (
     QFileDialog,
     QGraphicsPathItem,
@@ -24,9 +35,19 @@ from PySide6.QtWidgets import (
 from zeny_project_handler.adapters.pdf.coordinates import PontoPlano, TransformadorCoordenadasPagina
 from zeny_project_handler.adapters.pdf.errors import PdfError
 from zeny_project_handler.domain.analysis import PropostaElemento
-from zeny_project_handler.domain.enums import EstadoRevisao, TipoGeometria
+from zeny_project_handler.domain.documents import DocumentoProjeto
+from zeny_project_handler.domain.enums import EstadoRevisao
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 from zeny_project_handler.ports.pdf import InspecaoPdf, LeitorPdfPort, PaginaPdfRenderizada
+
+
+class ReviewLinkItem(QGraphicsPathItem):
+    """Sublinhado com área de clique confortável, mesmo em zoom reduzido."""
+
+    def shape(self) -> QPainterPath:
+        stroker = QPainterPathStroker()
+        stroker.setWidth(14)
+        return stroker.createStroke(self.path())
 
 
 class PdfGraphicsView(QGraphicsView):
@@ -64,9 +85,9 @@ class PdfGraphicsView(QGraphicsView):
             rendered.stride,
             QImage.Format.Format_RGB888,
         ).copy()
-        self._scene.clear()
         self._review_items.clear()
         self._review_geometries.clear()
+        self._scene.clear()
         self._pixmap_item = self._scene.addPixmap(QPixmap.fromImage(image))
         self._scene.setSceneRect(self._pixmap_item.boundingRect())
         self.ajustar_pagina()
@@ -97,27 +118,31 @@ class PdfGraphicsView(QGraphicsView):
         proposals: tuple[PropostaElemento, ...],
         transformer: TransformadorCoordenadasPagina,
     ) -> None:
-        for item in self._review_items.values():
-            self._scene.removeItem(item)
-        self._review_items.clear()
-        self._review_geometries.clear()
+        signals_were_blocked = self._scene.blockSignals(True)
+        try:
+            for item in self._review_items.values():
+                self._scene.removeItem(item)
+            self._review_items.clear()
+            self._review_geometries.clear()
+        finally:
+            self._scene.blockSignals(signals_were_blocked)
         self._review_transformer = transformer
         for proposal in proposals:
-            item = self._scene.addPath(
-                _review_path(proposal.geometria, transformer),
-                _review_pen(proposal.estado_revisao),
-                QBrush(_review_color(proposal.estado_revisao, alpha=42)),
+            item = ReviewLinkItem(
+                _review_link_path(proposal.geometria, transformer),
             )
-            item.setFlags(
-                QGraphicsPathItem.GraphicsItemFlag.ItemIsSelectable
-                | QGraphicsPathItem.GraphicsItemFlag.ItemIsMovable
-            )
+            item.setPen(_review_link_pen(proposal.estado_revisao))
+            self._scene.addItem(item)
+            item.setFlag(QGraphicsPathItem.GraphicsItemFlag.ItemIsSelectable)
+            item.setCursor(Qt.CursorShape.PointingHandCursor)
             item.setToolTip(
-                f"{proposal.categoria.value} · {proposal.estado_revisao.value} · "
+                f"Abrir {proposal.categoria.value} na revisão · "
+                f"{proposal.estado_revisao.value} · "
                 f"confiança {proposal.confianca if proposal.confianca is not None else '-'}"
             )
             key = str(proposal.id)
             item.setData(0, key)
+            item.setData(1, proposal.estado_revisao.value)
             self._review_items[key] = item
             self._review_geometries[key] = proposal.geometria
 
@@ -150,6 +175,14 @@ class PdfGraphicsView(QGraphicsView):
 
     def _emit_selected_proposal(self) -> None:
         selected = self._scene.selectedItems()
+        selected_id = str(selected[0].data(0)) if selected and selected[0].data(0) else None
+        for key, item in self._review_items.items():
+            item.setPen(
+                _review_link_pen(
+                    EstadoRevisao(str(item.data(1))),
+                    selected=key == selected_id,
+                )
+            )
         if selected and selected[0].data(0):
             self.proposta_selecionada.emit(str(selected[0].data(0)))
 
@@ -197,7 +230,6 @@ class PdfViewerWidget(QWidget):
         self._inspection: InspecaoPdf | None = None
         self._inspections: tuple[InspecaoPdf, ...] = ()
         self._project_pages: tuple[tuple[InspecaoPdf, int], ...] = ()
-        self._pending_paths: tuple[Path, ...] = ()
         self._password: str | None = None
         self._rotation = 0
         self._overlays: tuple[tuple[PontoNormalizado, ...], ...] = ()
@@ -222,16 +254,10 @@ class PdfViewerWidget(QWidget):
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
         toolbar = QHBoxLayout()
-        open_button = QPushButton("Selecionar PDF(s)")
+        open_button = QPushButton("Abrir PDF(s)")
         open_button.setObjectName("openPdfButton")
         open_button.clicked.connect(self.selecionar_pdf)
         toolbar.addWidget(open_button)
-
-        self._merge_button = QPushButton("Unir arquivos em um só projeto")
-        self._merge_button.setObjectName("mergePdfsIntoProjectButton")
-        self._merge_button.setEnabled(False)
-        self._merge_button.clicked.connect(self.unir_arquivos_em_projeto)
-        toolbar.addWidget(self._merge_button)
 
         previous_button = QPushButton("Anterior")
         previous_button.clicked.connect(lambda: self._change_page(-1))
@@ -281,27 +307,7 @@ class PdfViewerWidget(QWidget):
         paths = tuple(Path(file_name) for file_name in file_names)
         if not paths:
             return
-        if len(paths) == 1:
-            self._pending_paths = ()
-            self._merge_button.setEnabled(False)
-            self.carregar_pdf(paths[0])
-            return
-        self._pending_paths = paths
-        self._merge_button.setEnabled(True)
-        self._metadata.setText(
-            f"{len(paths)} PDFs selecionados; clique em “Unir arquivos em um só projeto”"
-        )
-        self.status_changed.emit(
-            f"{len(paths)} arquivos selecionados na ordem em que serão exibidos"
-        )
-
-    def unir_arquivos_em_projeto(self) -> None:
-        """Abra os PDFs selecionados como documentos ordenados de um mesmo projeto."""
-        if len(self._pending_paths) < 2:
-            return
-        if self.carregar_projeto(self._pending_paths):
-            self._pending_paths = ()
-            self._merge_button.setEnabled(False)
+        self.carregar_projeto(paths)
 
     def carregar_pdf(self, path: Path, *, password: str | None = None) -> bool:
         return self.carregar_projeto((path,), password=password)
@@ -332,9 +338,15 @@ class PdfViewerWidget(QWidget):
         paths: tuple[Path, ...],
         *,
         password: str | None = None,
+        documentos: tuple[DocumentoProjeto, ...] | None = None,
     ) -> bool:
         """Valide todos os PDFs antes de substituir o projeto atualmente exibido."""
         if not paths:
+            return False
+        if documentos is not None and len(documentos) != len(paths):
+            self._open_warning(
+                "A quantidade de fontes PDF não corresponde aos documentos persistidos"
+            )
             return False
         try:
             inspections = tuple(self._reader.inspecionar(path, senha=password) for path in paths)
@@ -342,14 +354,27 @@ class PdfViewerWidget(QWidget):
             self.status_changed.emit(str(error))
             QMessageBox.warning(self, "Não foi possível abrir o PDF", str(error))
             return False
+        if documentos is not None:
+            try:
+                inspections = tuple(
+                    _align_persisted_document(inspection, document)
+                    for inspection, document in zip(inspections, documentos, strict=True)
+                )
+            except ValueError as error:
+                self._open_warning(str(error))
+                return False
         hashes = [inspection.documento.sha256 for inspection in inspections]
         if len(set(hashes)) != len(hashes):
             message = "A seleção contém arquivos PDF com conteúdo duplicado"
             self.status_changed.emit(message)
-            QMessageBox.warning(self, "Não foi possível unir os arquivos", message)
+            QMessageBox.warning(self, "Não foi possível abrir os arquivos", message)
             return False
         self._activate_project(inspections, password=password)
         return True
+
+    def _open_warning(self, message: str) -> None:
+        self.status_changed.emit(message)
+        QMessageBox.warning(self, "Não foi possível abrir os arquivos", message)
 
     def _activate_project(
         self,
@@ -431,7 +456,7 @@ class PdfViewerWidget(QWidget):
         else:
             document_position = self._inspections.index(inspection) + 1
             self._metadata.setText(
-                f"Projeto unido: {len(self._inspections)} arquivos, "
+                f"Projeto: {len(self._inspections)} PDFs, "
                 f"{len(self._project_pages)} folhas  |  "
                 f"Arquivo {document_position}: {inspection.documento.nome_arquivo}"
             )
@@ -478,36 +503,51 @@ def _review_color(state: EstadoRevisao, *, alpha: int = 255) -> QColor:
     return QColor(red, green, blue, alpha)
 
 
-def _review_pen(state: EstadoRevisao) -> QPen:
-    pen = QPen(_review_color(state), 3)
+def _align_persisted_document(
+    inspection: InspecaoPdf,
+    persisted: DocumentoProjeto,
+) -> InspecaoPdf:
+    if inspection.documento.sha256 != persisted.sha256:
+        raise ValueError(f"O conteúdo de {persisted.nome_arquivo} foi alterado desde a importação")
+    if len(inspection.paginas) != len(persisted.paginas):
+        raise ValueError(f"A paginação de {persisted.nome_arquivo} não corresponde ao projeto")
+    return replace(
+        inspection,
+        documento=persisted,
+        paginas=tuple(
+            replace(inventory, pagina=page)
+            for inventory, page in zip(inspection.paginas, persisted.paginas, strict=True)
+        ),
+    )
+
+
+def _review_link_pen(state: EstadoRevisao, *, selected: bool = False) -> QPen:
+    pen = QPen(QColor("#0078d4") if selected else _review_color(state), 5 if selected else 3)
     pen.setCosmetic(True)
     if state is EstadoRevisao.REJEITADA:
         pen.setStyle(Qt.PenStyle.DashLine)
     return pen
 
 
-def _review_path(
+def _review_link_path(
     geometry: GeometriaDocumento,
     transformer: TransformadorCoordenadasPagina,
 ) -> QPainterPath:
     pixels = tuple(transformer.normalizado_para_pixel(point) for point in geometry.pontos)
+    left = min(point.x for point in pixels)
+    right = max(point.x for point in pixels)
+    bottom = max(point.y for point in pixels)
+    minimum_width = 24.0
+    if right - left < minimum_width:
+        center = (left + right) / 2
+        left = max(0.0, center - minimum_width / 2)
+        right = min(float(transformer.largura_pixels), center + minimum_width / 2)
+    baseline = min(float(transformer.altura_pixels) - 2, bottom + 5)
     path = QPainterPath()
-    if geometry.tipo is TipoGeometria.PONTO:
-        point = pixels[0]
-        path.addEllipse(QPointF(point.x, point.y), 8, 8)
-        return path
-    if geometry.tipo is TipoGeometria.CAIXA:
-        first, second = pixels
-        path.addRect(
-            min(first.x, second.x),
-            min(first.y, second.y),
-            abs(second.x - first.x),
-            abs(second.y - first.y),
-        )
-        return path
-    path.moveTo(pixels[0].x, pixels[0].y)
-    for point in pixels[1:]:
-        path.lineTo(point.x, point.y)
-    if geometry.tipo is TipoGeometria.POLIGONO:
-        path.closeSubpath()
+    path.moveTo(left, baseline)
+    path.lineTo(right, baseline)
+    path.moveTo(left, baseline - 4)
+    path.lineTo(left, baseline)
+    path.moveTo(right, baseline - 4)
+    path.lineTo(right, baseline)
     return path

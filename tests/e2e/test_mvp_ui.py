@@ -13,10 +13,11 @@ from PySide6.QtWidgets import (
     QListWidget,
     QMessageBox,
     QPushButton,
-    QTableWidget,
+    QTreeWidget,
 )
 from pytestqt.qtbot import QtBot
 
+from tests.pdf_fixtures import create_golden_pdf
 from zeny_project_handler.adapters.catalog import carregar_catalogo_inicial
 from zeny_project_handler.bootstrap import create_application
 from zeny_project_handler.config import AppSettings
@@ -38,6 +39,65 @@ def _catalog_pdf(path: Path) -> Path:
     finally:
         document.close()
     return path
+
+
+def test_user_can_reorder_project_pdfs_and_reopen_in_reading_order(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = AppSettings(data_directory=tmp_path / "data", pdf_render_dpi=72)
+    first = _catalog_pdf(tmp_path / "folha-01.pdf")
+    second = create_golden_pdf(tmp_path / "folha-02.pdf")
+    _application, window = create_application([], settings=settings)
+    qtbot.addWidget(window)
+    panel = window.project_panel
+    assert isinstance(panel, ProjectPanelWidget)
+
+    name = panel.findChild(QLineEdit, "mvpProjectNameEdit")
+    create = panel.findChild(QPushButton, "mvpCreateProjectButton")
+    assert name is not None and create is not None
+    name.setText("Projeto ordenado")
+    qtbot.mouseClick(create, Qt.MouseButton.LeftButton)
+    project_combo = panel.findChild(QComboBox, "mvpProjectCombo")
+    assert project_combo is not None
+    project_id = project_combo.currentData()
+
+    monkeypatch.setattr(
+        QFileDialog,
+        "getOpenFileNames",
+        lambda *_args, **_kwargs: (
+            [str(first), str(second)],
+            "Documentos PDF (*.pdf)",
+        ),
+    )
+    add_pdfs = panel.findChild(QPushButton, "mvpAddPdfsButton")
+    documents = panel.findChild(QListWidget, "mvpDocumentList")
+    move_down = panel.findChild(QPushButton, "mvpMovePdfDownButton")
+    assert add_pdfs is not None and documents is not None and move_down is not None
+    qtbot.mouseClick(add_pdfs, Qt.MouseButton.LeftButton)
+    assert documents.count() == 2
+
+    documents.setCurrentRow(0)
+    qtbot.mouseClick(move_down, Qt.MouseButton.LeftButton)
+
+    assert "folha-02.pdf" in documents.item(0).text()
+    assert [item.documento.nome_arquivo for item in window.pdf_viewer.inspecoes] == [
+        "folha-02.pdf",
+        "folha-01.pdf",
+    ]
+
+    _reopened_application, reopened = create_application([], settings=settings)
+    qtbot.addWidget(reopened)
+    reopened_panel = reopened.project_panel
+    assert isinstance(reopened_panel, ProjectPanelWidget)
+    reopened_combo = reopened_panel.findChild(QComboBox, "mvpProjectCombo")
+    assert reopened_combo is not None
+    assert reopened_combo.currentData() == project_id
+    assert [item.documento.nome_arquivo for item in reopened.pdf_viewer.inspecoes] == [
+        "folha-02.pdf",
+        "folha-01.pdf",
+    ]
 
 
 def test_user_can_create_import_analyze_review_and_reopen_from_ui(
@@ -68,11 +128,10 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
         "getOpenFileNames",
         lambda *_args, **_kwargs: ([str(source)], "Documentos PDF (*.pdf)"),
     )
-    select = panel.findChild(QPushButton, "mvpSelectPdfsButton")
-    merge = panel.findChild(QPushButton, "mvpMergePdfsButton")
-    assert select is not None and merge is not None
-    qtbot.mouseClick(select, Qt.MouseButton.LeftButton)
-    qtbot.mouseClick(merge, Qt.MouseButton.LeftButton)
+    add_pdfs = panel.findChild(QPushButton, "mvpAddPdfsButton")
+    assert add_pdfs is not None
+    assert panel.findChild(QPushButton, "mvpMergePdfsButton") is None
+    qtbot.mouseClick(add_pdfs, Qt.MouseButton.LeftButton)
     assert window.pdf_viewer.inspecao is not None
 
     run = panel.findChild(QPushButton, "mvpRunAnalysisButton")
@@ -83,10 +142,10 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
     review_panel = window.review_panel
     assert review_panel is not None
     review_project = review_panel.findChild(QComboBox, "reviewProjectCombo")
-    proposals = review_panel.findChild(QTableWidget, "reviewProposalTable")
-    assert review_project is not None and proposals is not None
+    results = review_panel.findChild(QTreeWidget, "analysisRelationshipTree")
+    assert review_project is not None and results is not None
     assert review_project.currentData() == project_id
-    assert proposals.rowCount() >= 1
+    assert results.topLevelItemCount() >= 1
 
     window.pdf_viewer.ir_para_folha(2)
     assert window.pdf_viewer.folha_atual == 2

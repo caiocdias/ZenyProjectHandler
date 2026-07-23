@@ -8,8 +8,9 @@ from threading import Event
 from typing import TypeVar
 from uuid import UUID
 
-from PySide6.QtCore import QObject, QSettings, Qt, QThread, Signal, Slot
+from PySide6.QtCore import QObject, QSettings, Qt, QThread, QTimer, Signal, Slot
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QComboBox,
     QFileDialog,
     QGroupBox,
@@ -91,7 +92,7 @@ class ProjectPanelWidget(QWidget):
         self._review_panel = review_panel
         self._settings = QSettings(str(state_path), QSettings.Format.IniFormat)
         self._session: SessaoProjetoMvp | None = None
-        self._pending_paths: tuple[Path, ...] = ()
+        self._updating_document_order = False
         self._thread: QThread | None = None
         self._worker: _PipelineWorker | None = None
         self._cancellation: Event | None = None
@@ -136,23 +137,35 @@ class ProjectPanelWidget(QWidget):
 
         document_box = QGroupBox("Folhas PDF")
         document_layout = QVBoxLayout(document_box)
-        select = QPushButton("Selecionar PDF(s)")
-        select.setObjectName("mvpSelectPdfsButton")
+        select = QPushButton("Adicionar PDF(s) ao projeto")
+        select.setObjectName("mvpAddPdfsButton")
         select.clicked.connect(self.selecionar_pdfs)
         document_layout.addWidget(select)
-        self._selection = QLabel("Nenhum arquivo selecionado")
-        self._selection.setObjectName("mvpSelectedPdfsLabel")
-        self._selection.setWordWrap(True)
-        document_layout.addWidget(self._selection)
-        self._import = QPushButton("Unir arquivos em um só projeto")
-        self._import.setObjectName("mvpMergePdfsButton")
-        self._import.setEnabled(False)
-        self._import.clicked.connect(self.importar_pdfs)
-        document_layout.addWidget(self._import)
+        order_help = QLabel(
+            "Ordem de leitura: arraste os PDFs ou use os botões abaixo. "
+            "As páginas de cada PDF mantêm sua ordem original."
+        )
+        order_help.setObjectName("mvpDocumentOrderHelp")
+        order_help.setWordWrap(True)
+        document_layout.addWidget(order_help)
         self._documents = QListWidget()
         self._documents.setObjectName("mvpDocumentList")
         self._documents.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        self._documents.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self._documents.setDefaultDropAction(Qt.DropAction.MoveAction)
+        self._documents.model().rowsMoved.connect(self._document_order_changed)
+        self._documents.itemSelectionChanged.connect(self._update_order_controls)
         document_layout.addWidget(self._documents)
+        order_actions = QHBoxLayout()
+        self._move_up = QPushButton("Subir")
+        self._move_up.setObjectName("mvpMovePdfUpButton")
+        self._move_up.clicked.connect(lambda: self._move_selected_document(-1))
+        order_actions.addWidget(self._move_up)
+        self._move_down = QPushButton("Descer")
+        self._move_down.setObjectName("mvpMovePdfDownButton")
+        self._move_down.clicked.connect(lambda: self._move_selected_document(1))
+        order_actions.addWidget(self._move_down)
+        document_layout.addLayout(order_actions)
         remove_documents = QPushButton("Remover PDF(s) selecionado(s)")
         remove_documents.setObjectName("mvpRemovePdfsButton")
         remove_documents.clicked.connect(self.remover_pdfs)
@@ -271,39 +284,85 @@ class ProjectPanelWidget(QWidget):
         self.status_changed.emit("Projeto excluído; os PDFs originais foram preservados")
 
     def selecionar_pdfs(self) -> None:
+        session = self._session
+        if session is None:
+            self._warn("Crie ou abra um projeto antes de adicionar PDFs")
+            return
+        if self.processando:
+            self._warn("Aguarde ou cancele a análise antes de adicionar PDFs")
+            return
         names, _selected_filter = QFileDialog.getOpenFileNames(
             self,
             "Selecionar folhas do projeto em PDF",
             "",
             "Documentos PDF (*.pdf)",
         )
-        self._pending_paths = tuple(Path(name) for name in names)
-        if not self._pending_paths:
+        paths = tuple(Path(name) for name in names)
+        if not paths:
             return
-        self._selection.setText("\n".join(path.name for path in self._pending_paths))
-        self._import.setText(
-            "Adicionar PDF ao projeto"
-            if len(self._pending_paths) == 1
-            else "Unir arquivos em um só projeto"
-        )
-        self._import.setEnabled(self._session is not None)
-
-    def importar_pdfs(self) -> None:
-        session = self._session
-        if session is None or not self._pending_paths:
-            self._warn("Abra um projeto e selecione ao menos um PDF")
-            return
-        result = self._action(
-            lambda: self._service.importar_pdfs(session.projeto.id, self._pending_paths)
-        )
+        result = self._action(lambda: self._service.importar_pdfs(session.projeto.id, paths))
         if result is None:
             return
         count = len(result.inspecoes)
-        self._pending_paths = ()
-        self._selection.setText("Nenhum arquivo selecionado")
-        self._import.setEnabled(False)
         self._activate(self._service.abrir_projeto(session.projeto.id))
-        self.status_changed.emit(f"{count} PDF(s) adicionados ao projeto na ordem selecionada")
+        self.status_changed.emit(
+            f"{count} PDF(s) adicionados; ajuste abaixo a ordem de leitura do projeto"
+        )
+
+    def _move_selected_document(self, offset: int) -> None:
+        if self.processando:
+            self._warn("Aguarde ou cancele a análise antes de alterar a ordem dos PDFs")
+            return
+        selected = self._documents.selectedItems()
+        if len(selected) != 1:
+            self._warn("Selecione um único PDF para alterar sua posição")
+            return
+        row = self._documents.row(selected[0])
+        destination = row + offset
+        if destination < 0 or destination >= self._documents.count():
+            return
+        self._updating_document_order = True
+        item = self._documents.takeItem(row)
+        self._documents.insertItem(destination, item)
+        self._documents.setCurrentItem(item)
+        self._updating_document_order = False
+        self._persist_document_order()
+
+    def _document_order_changed(self, *_args: object) -> None:
+        if not self._updating_document_order:
+            QTimer.singleShot(0, self._persist_document_order)
+
+    def _persist_document_order(self) -> None:
+        session = self._session
+        if session is None or self._updating_document_order:
+            return
+        if self.processando:
+            self._warn("Aguarde ou cancele a análise antes de alterar a ordem dos PDFs")
+            self._activate(session)
+            return
+        ordered_ids = tuple(
+            UUID(str(self._documents.item(row).data(Qt.ItemDataRole.UserRole)))
+            for row in range(self._documents.count())
+        )
+        current_ids = tuple(document.id for document in session.projeto.documentos)
+        if ordered_ids == current_ids:
+            self._update_order_controls()
+            return
+        updated = self._action(
+            lambda: self._service.reordenar_documentos(session.projeto.id, ordered_ids)
+        )
+        if updated is None:
+            self._activate(session)
+            return
+        self._activate(updated)
+        self.status_changed.emit("Ordem de leitura do projeto atualizada")
+
+    def _update_order_controls(self) -> None:
+        selected = self._documents.selectedItems()
+        row = self._documents.row(selected[0]) if len(selected) == 1 else -1
+        enabled = not self.processando and row >= 0
+        self._move_up.setEnabled(enabled and row > 0)
+        self._move_down.setEnabled(enabled and row < self._documents.count() - 1)
 
     def remover_pdfs(self) -> None:
         session = self._session
@@ -367,6 +426,8 @@ class ProjectPanelWidget(QWidget):
         self._run.setEnabled(False)
         self._run.setText("Análise em andamento…")
         self._cancel.setEnabled(True)
+        self._documents.setDragEnabled(False)
+        self._update_order_controls()
         self._summary.setText("Execução ativa: preparando documentos")
         thread.start()
 
@@ -394,12 +455,11 @@ class ProjectPanelWidget(QWidget):
         self._review_panel.abrir_projeto(result.projeto_id, latest_execution)
         if result.propostas_geradas:
             message = (
-                f"Análise concluída: {result.propostas_geradas} proposta(s) prontas para revisão"
+                f"Análise concluída: {result.propostas_geradas} identificação(ões) "
+                "incorporada(s) ao projeto"
             )
         else:
-            message = (
-                "Análise concluída sem propostas; use a criação manual na revisão se necessário"
-            )
+            message = "Análise concluída sem novas identificações"
         self.status_changed.emit(message)
         self._summary.setText(message)
 
@@ -424,6 +484,8 @@ class ProjectPanelWidget(QWidget):
         self._run.setEnabled(True)
         self._run.setText("Retomar / executar análise")
         self._cancel.setEnabled(False)
+        self._documents.setDragEnabled(True)
+        self._update_order_controls()
         if self._session is not None:
             self._session = self._service.abrir_projeto(self._session.projeto.id)
             self._show_summary(self._session)
@@ -435,8 +497,8 @@ class ProjectPanelWidget(QWidget):
             "1. Crie ou abra um projeto.\n"
             "2. Selecione um ou vários PDFs e adicione-os ao projeto.\n"
             "3. Execute a análise e acompanhe o progresso.\n"
-            "4. No painel Revisão humana, aceite, ajuste ou rejeite propostas.\n"
-            "5. Crie ao menos um elemento manual.\n"
+            "4. Confira os vínculos no painel Resultados da análise.\n"
+            "5. Clique nos itens para conferir os sublinhados no PDF.\n"
             "6. Feche e reabra o aplicativo e confira se o trabalho foi preservado.",
         )
 
@@ -454,7 +516,10 @@ class ProjectPanelWidget(QWidget):
         source_paths = tuple(source.caminho_canonico for source in session.fontes_pdf)
         if source_paths:
             saved_page = int(str(self._settings.value(f"projects/{project_id}/page", 1)))
-            if not self._viewer.carregar_projeto(source_paths):
+            if not self._viewer.carregar_projeto(
+                source_paths,
+                documentos=session.projeto.documentos,
+            ):
                 self._viewer.limpar()
                 self.status_changed.emit(
                     "Projeto aberto, mas uma origem PDF precisa ser localizada ou restaurada"
@@ -463,12 +528,18 @@ class ProjectPanelWidget(QWidget):
                 self._viewer.ir_para_folha(saved_page)
         else:
             self._viewer.limpar()
+        self._updating_document_order = True
         self._documents.clear()
-        for document in session.projeto.documentos:
-            item = QListWidgetItem(f"{document.nome_arquivo} · {len(document.paginas)} folha(s)")
+        first_page = 1
+        for position, document in enumerate(session.projeto.documentos, start=1):
+            last_page = first_page + len(document.paginas) - 1
+            page_range = str(first_page) if first_page == last_page else f"{first_page}-{last_page}"
+            item = QListWidgetItem(f"{position}. {document.nome_arquivo} · folhas {page_range}")
             item.setData(Qt.ItemDataRole.UserRole, str(document.id))
             self._documents.addItem(item)
-        self._import.setEnabled(bool(self._pending_paths))
+            first_page = last_page + 1
+        self._updating_document_order = False
+        self._update_order_controls()
         self._show_summary(session)
 
     def _show_summary(self, session: SessaoProjetoMvp) -> None:
@@ -478,7 +549,8 @@ class ProjectPanelWidget(QWidget):
         self._summary.setText(
             f"{summary.documentos} PDF(s), {summary.paginas} folha(s)\n"
             f"Extração: {extraction} · Interpretação: {interpretation}\n"
-            f"Pendentes: {summary.propostas_pendentes} · Decisões: {summary.decisoes_realizadas}"
+            f"Identificações automáticas: {summary.decisoes_realizadas} · "
+            f"Exceções: {summary.propostas_pendentes}"
         )
 
     def _remember_page(self, _page_id: str) -> None:
@@ -502,7 +574,10 @@ class ProjectPanelWidget(QWidget):
             return None
 
     def _show_empty_state(self) -> None:
+        self._updating_document_order = True
         self._documents.clear()
+        self._updating_document_order = False
+        self._update_order_controls()
         self._summary.setText("Crie ou abra um projeto para começar")
 
 

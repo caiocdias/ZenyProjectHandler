@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -127,7 +128,17 @@ class GraphPanelWidget(QWidget):
         self.atualizar_projetos()
 
     def _build_ui(self) -> None:
-        layout = QVBoxLayout(self)
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        self._scroll = QScrollArea(self)
+        self._scroll.setObjectName("graphScrollArea")
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self._scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        content = QWidget(self._scroll)
+        content.setObjectName("graphScrollContent")
+        content.setMinimumHeight(760)
+        layout = QVBoxLayout(content)
         project_row = QHBoxLayout()
         self._project = QComboBox()
         self._project.setObjectName("graphProjectCombo")
@@ -171,7 +182,7 @@ class GraphPanelWidget(QWidget):
         layout.addWidget(self._summary)
 
         self.canvas = GraphCanvas(self)
-        self.canvas.setMinimumHeight(230)
+        self.canvas.setMinimumHeight(320)
         layout.addWidget(self.canvas, 2)
 
         diagnostic_box = QGroupBox("Diagnósticos e conexões propostas")
@@ -186,6 +197,7 @@ class GraphPanelWidget(QWidget):
         self._table.itemSelectionChanged.connect(self._diagnostic_selected)
         self._table.itemDoubleClicked.connect(lambda _item: self.ir_ao_pdf())
         diagnostic_layout.addWidget(self._table)
+        self._table.setMinimumHeight(220)
         action_row = QHBoxLayout()
         self._reviewer = QLineEdit()
         self._reviewer.setObjectName("graphReviewerEdit")
@@ -202,6 +214,8 @@ class GraphPanelWidget(QWidget):
         action_row.addWidget(self._confirm)
         diagnostic_layout.addLayout(action_row)
         layout.addWidget(diagnostic_box, 1)
+        self._scroll.setWidget(content)
+        outer_layout.addWidget(self._scroll)
 
     def atualizar_projetos(self) -> None:
         selected = self._project.currentData()
@@ -319,7 +333,10 @@ class GraphPanelWidget(QWidget):
             item.caminho_origem.expanduser().resolve() for item in self._viewer.inspecoes
         )
         expected_paths = tuple(item.expanduser().resolve() for item in paths)
-        if current_paths != expected_paths and not self._viewer.carregar_projeto(paths):
+        if current_paths != expected_paths and not self._viewer.carregar_projeto(
+            paths,
+            documentos=session.projeto.documentos,
+        ):
             self._warn("Não foi possível abrir as fontes PDF do projeto")
             return
         self._viewer.ir_para_folha(destination.folha_numero)
