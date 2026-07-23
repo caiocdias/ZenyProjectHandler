@@ -102,9 +102,7 @@ class _DockTitleBar(QWidget):
 
     def _update_maximize_button(self) -> None:
         maximized = self._dock.isMaximized()
-        self._maximize_button.setToolTip(
-            "Restaurar painel" if maximized else "Maximizar painel"
-        )
+        self._maximize_button.setToolTip("Restaurar painel" if maximized else "Maximizar painel")
         icon = (
             QStyle.StandardPixmap.SP_TitleBarNormalButton
             if maximized

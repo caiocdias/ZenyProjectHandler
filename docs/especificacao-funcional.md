@@ -166,9 +166,9 @@ que os reconheça.
 - `TransformadorCoordenadasPagina` converte de forma reversível entre espaço PDF, normalizado,
   pixels e cena. A interface reaplica sobreposições após rotação usando essa transformação.
 - A abertura aceita um ou vários PDFs. Todo PDF selecionado no fluxo do projeto é importado
-  imediatamente como parte dele, sem uma ação separada de união. A lista de PDFs permite arrastar ou
-  usar **Subir** e **Descer**; essa ordem persistida define a paginação contínua e a ordem de leitura,
-  preservando a ordem interna das páginas de cada arquivo. Nenhum PDF original é concatenado ou
+  imediatamente como parte dele, sem uma ação separada de união. A lista de folhas permite arrastar
+  qualquer página ou usar **Subir** e **Descer**; essa sequência persistida define a paginação
+  contínua e pode intercalar páginas de arquivos diferentes. Nenhum PDF original é concatenado ou
   modificado, e uma falha ou duplicidade mantém intacto o projeto que já estava aberto.
 - A origem local é registrada em `document_sources`, fora do payload de domínio. Projeto,
   documento e referência são gravados na mesma transação; entrada inválida, protegida, corrompida,
@@ -194,6 +194,9 @@ que os reconheça.
 - O OCR é acionado quando há menos de 20 caracteres nativos, quando uma ocorrência raster ocupa ao
   menos 10% da página ou quando há pelo menos 1.000 caminhos vetoriais. O terceiro caso cobre textos
   plotados como contornos pelo AutoCAD mesmo quando o carimbo ainda contém texto nativo pesquisável.
+- Quando a página possui texto nativo suficiente, imagens menores com área normalizada de pelo menos
+  0,25% e resolução útil recebem OCR somente em seu recorte. As caixas retornadas pelo motor são
+  transformadas novamente para as coordenadas normalizadas da página.
 - O cache derivado fica em `cache/analysis` na pasta de dados. Sua chave combina hash do PDF,
   configuração e versão do analisador; conteúdo ausente ou inválido é refeito a partir do original.
 - `ExecutarAnaliseDocumento` valida a referência do PDF, registra execução concluída ou falha fatal e
@@ -210,9 +213,11 @@ que os reconheça.
   aceitando separadores `-`, `/`, `:`, `x`, espaço ou quebra de linha e sufixos opcionais `m` e
   `daN`. Uma combinação como `11-300` consulta os postes do catálogo; sem formato explícito,
   seleciona deterministicamente o tipo canônico e preserva todos os candidatos na auditoria.
-- Coordenadas de campo com seis ou sete algarismos são combinadas por proximidade com o poste. O
+- Coordenadas de campo com seis a oito algarismos são combinadas por proximidade com o poste. O
   par pode estar no mesmo fragmento ou em fragmentos separados por quebra de linha, `:`, `/` ou
-  outros delimitadores, vindo tanto de texto pesquisável quanto de OCR de página escaneada.
+  outros delimitadores, vindo tanto de texto pesquisável quanto de OCR de página escaneada. Cada
+  ocorrência numérica participa de no máximo um par, com preferência pela ordem dentro do mesmo
+  fragmento e depois pela distância gráfica.
 - Frases como `POSTE CIRCULAR`, `TRANSFORMADOR`, `CHAVE FACA`, `CHAVE FUSÍVEL` e
   `CHAVE FUSÍVEL REPETIDORA` geram propostas de classe sem inventar um tipo exato. Acentos,
   sublinhados, espaços em torno de separadores e variantes de hífen são normalizados antes da busca.
@@ -328,9 +333,9 @@ sintéticas; a partição de teste privada não foi usada para criá-las.
   vazia, o catálogo inicial publicado é persistido automaticamente antes da criação do primeiro
   projeto.
 - Um ou vários PDFs podem ser selecionados e importados imediatamente no projeto em uma transação
-  única. O usuário pode reordenar os PDFs por arraste ou pelos controles **Subir** e **Descer**; a
-  ordem persistida define a paginação lógica, enquanto cada arquivo e sua referência verificável
-  continuam independentes.
+  única. O usuário pode reordenar qualquer página por arraste ou pelos controles **Subir** e
+  **Descer**; a sequência persistida define a paginação lógica, enquanto cada arquivo e sua
+  referência verificável continuam independentes.
 - Projetos podem ser excluídos após confirmação explícita. A exclusão remove banco, análises e estado
   local associados, preservando todos os arquivos PDF originais no sistema de arquivos.
 - Um ou vários PDFs importados podem ser removidos seletivamente. A mesma transação elimina execuções,
@@ -342,8 +347,8 @@ sintéticas; a partição de teste privada não foi usada para criá-las.
 - O usuário pode solicitar cancelamento. Resultados completos são preservados e a retomada reutiliza
   identidades determinísticas, sem duplicar execuções, evidências ou propostas.
 - O painel apresenta documentos, folhas, estados das execuções, identificações automáticas e
-  exceções. Cada execução pode ser selecionada no painel de resultados; regiões da folha formam os
-  itens-pai e todos os elementos e vínculos próximos aparecem como filhos clicáveis.
+  exceções. Os resultados consolidam a análise mais recente de cada PDF do projeto; regiões da folha
+  formam os itens-pai e todos os elementos e vínculos próximos aparecem como filhos clicáveis.
 - O último projeto e a última folha são restaurados por estado local da interface. Os dados canônicos
   permanecem no SQLite; `ui-state.ini` guarda somente preferências de navegação reproduzíveis.
 - Falhas de PDF ou pipeline são convertidas em mensagens visíveis e acionáveis. Nenhum fluxo de uso
@@ -357,9 +362,10 @@ existir um poste reconhecido. Geometrias distantes continuam em regiões separad
 regra semântica tenha proposto um vínculo entre elas.
 
 Cada região usa identidade determinística baseada na página e nos elementos que contém. A ordem de
-exibição segue a ordem persistida dos PDFs, o número da página e a posição de leitura na folha. Pares
-UTM são associados à região mais próxima e podem vir de um único texto ou de fragmentos distintos.
-Leste e norte podem estar separados por espaço, quebra de linha, dois-pontos ou barra.
+exibição segue a sequência persistida de páginas e a posição de leitura na folha. Pares UTM são
+associados à região mais próxima e podem vir de um único texto ou de fragmentos distintos. Leste e
+norte podem estar separados por espaço, quebra de linha, dois-pontos ou barra e não são reutilizados
+em outro par.
 
 O painel **Resultados da análise** apresenta um resumo por situação de obra e, abaixo, cada elemento
 com catálogo e vínculos internos. Selecionar a região destaca sua área; selecionar um elemento abre

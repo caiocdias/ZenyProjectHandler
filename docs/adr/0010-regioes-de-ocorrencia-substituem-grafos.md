@@ -18,8 +18,10 @@ coordenada. O poste nem sempre está catalogado e, portanto, não pode ser o ite
 - Manter `PropostaRelacao` como vínculo semântico auditável, exibido dentro da região, sem
   transformá-lo em aresta.
 - Associar coordenadas UTM obtidas de texto nativo ou OCR à região mais próxima. Leste e norte podem
-  estar no mesmo fragmento ou separados por quebra de linha, `:`, `/` ou fragmentos próximos.
-- Ordenar regiões pela ordem persistida dos PDFs, página e posição na folha.
+  estar no mesmo fragmento ou separados por quebra de linha, `:`, `/` ou fragmentos próximos. Cada
+  ocorrência numérica participa de no máximo um par.
+- Ordenar regiões pela sequência persistida das páginas e pela posição na folha.
+- Consolidar na mesma visão a análise mais recente disponível para cada PDF do projeto.
 - Preservar o sublinhado clicável de cada elemento e permitir que o clique navegue para a página
   correta.
 

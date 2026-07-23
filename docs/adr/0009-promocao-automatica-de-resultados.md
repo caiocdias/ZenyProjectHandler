@@ -24,9 +24,10 @@ atributos da proposta. Resultados sem item exato de catálogo continuam auditáv
 materializados em uma entidade inválida.
 
 Relações de estrutura ou equipamento com poste priorizam a mesma situação de obra antes da distância.
-A interface apresenta os resultados em árvore, com postes como pais e seus dependentes como filhos;
-o PDF mantém um sublinhado clicável para cada elemento. A confirmação item a item e seus campos de
-decisão deixam de fazer parte do fluxo principal.
+A interface apresenta os resultados em árvore, com regiões da folha como pais e todos os elementos e
+vínculos próximos como filhos; o PDF mantém um sublinhado clicável para cada elemento. A confirmação
+item a item e seus campos de decisão deixam de fazer parte do fluxo principal. A visão consolida a
+análise mais recente de cada PDF do projeto.
 
 ## Consequências
 

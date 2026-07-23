@@ -108,10 +108,10 @@ sobreporem. O leitor oferece
 paginação, zoom, rotação e sobreposições gráficas.
 
 Todo PDF selecionado no **Fluxo do projeto** é adicionado imediatamente ao projeto. Na lista de
-folhas, arraste os PDFs ou use **Subir** e **Descer** para definir a ordem persistida de leitura; as
-páginas internas de cada PDF preservam a ordem original. O arquivo original não é copiado nem
-regravado: o aplicativo calcula o SHA-256, registra metadados e verifica o conteúdo antes de
-renderizar ou concluir uma importação.
+folhas, arraste qualquer página ou use **Subir** e **Descer** para definir a ordem persistida de
+leitura, inclusive intercalando páginas de PDFs diferentes. O arquivo original não é copiado nem
+regravado: a ordem pertence ao projeto, enquanto o aplicativo calcula o SHA-256, registra metadados
+e verifica o conteúdo antes de renderizar ou concluir uma importação.
 
 Cada elemento identificado aparece no PDF como um sublinhado colorido e clicável. O clique abre a
 aba **Resultados da análise** e seleciona o elemento correspondente. A visão principal é hierárquica:
@@ -141,8 +141,10 @@ dados.
 Quando o Tesseract está instalado, o aplicativo o descobre no `PATH`, no local padrão do Windows ou
 no caminho indicado por `ZENY_TESSERACT_PATH`. O OCR é executado localmente, sem serviço de rede, em
 páginas com pouco texto nativo, área raster relevante ou grande densidade vetorial — caso típico de
-letras e números plotados como caminhos pelo AutoCAD. Sem Tesseract, os demais extratores continuam
-funcionando e a execução registra um diagnóstico revisável.
+letras e números plotados como caminhos pelo AutoCAD. Em páginas com texto nativo suficiente,
+pequenas imagens com resolução útil são processadas por recorte, preservando a geometria correta na
+folha sem renderizar a página inteira. Sem Tesseract, os demais extratores continuam funcionando e
+a execução registra um diagnóstico revisável.
 
 ## Interpretação semântica por regras
 
@@ -153,7 +155,9 @@ do catálogo em texto nativo ou OCR. Postes também são reconhecidos pela nomen
 linha; na ausência de Circular, Duplo T ou Madeira, uma correspondência canônica do catálogo é usada
 e os demais candidatos permanecem registrados na auditoria. Pares de coordenadas de campo próximos
 ao poste são reconhecidos em texto nativo ou OCR, inclusive quando estão em linhas ou fragmentos
-separados. Vetores e imagens próximos são vinculados como contexto para geometria, cor e proveniência.
+separados. Leste e norte são pareados uma única vez por fragmento e proximidade, evitando reutilizar
+o mesmo número em pontos vizinhos. Vetores e imagens próximos são vinculados como contexto para
+geometria, cor e proveniência.
 
 O interpretador preserva `PropostaElemento` e `PropostaRelacao` como trilha auditável e promove
 automaticamente os resultados catalogados ao agregado do projeto. Situação de obra usa as
@@ -170,7 +174,8 @@ conjunto de avaliação não estiver congelado e os critérios não estiverem ap
 Depois da interpretação, os elementos são agrupados por proximidade na mesma folha. Cada região é
 uma visão derivada e determinística da análise: ela informa o PDF, a página, eventual par de
 coordenadas UTM, tudo o que será instalado ou removido e o que já existe no local. Os vínculos
-semânticos permanecem visíveis dentro da região, mas não são transformados em nós ou arestas.
+semânticos permanecem visíveis dentro da região, mas não são transformados em nós ou arestas. O
+painel consolida a análise mais recente de cada PDF do projeto e segue a ordem de leitura das páginas.
 
 Coordenadas são coletadas de texto nativo e OCR, inclusive quando leste e norte aparecem separados
 por quebra de linha, `:`, `/` ou em fragmentos próximos. Selecionar a região destaca sua extensão;

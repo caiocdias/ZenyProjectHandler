@@ -21,7 +21,9 @@ Nenhum serviço externo ou modelo específico deve ser introduzido sem uma decis
 6. Toda ocorrência automática mantém uma proposta auditável; quando o catálogo e as dependências
    estiverem resolvidos, ela é promovida deterministicamente ao conjunto confirmado sem confirmação
    item a item.
-7. Fixar versões das dependências e manter migrações compatíveis com projetos já salvos.
+7. Fixar versões das dependências. Enquanto o produto permanecer em desenvolvimento, bancos e
+   pacotes antigos podem ser descartados; compatibilidade entre versões passa a ser exigida somente
+   após a definição explícita da primeira versão distribuível.
 8. Ao concluir o desenvolvimento técnico de uma etapa, atualizar a tabela de estado e registrar
    arquivos alterados, comandos de teste, limitações, fluxo disponível na interface, roteiro de
    aceite humano e próximo passo.
@@ -322,9 +324,9 @@ Um projeto completo sobrevive a salvar, fechar e reabrir sem perda nem alteraç�
 - Renderizar miniaturas, páginas e recortes RGB em resolução configurável.
 - Implementar coordenadas normalizadas e transformações reversíveis entre PDF, pixels e cena gráfica.
 - Exibir página, zoom, rotação e sobreposições no `QGraphicsView`.
-- Importar todo PDF selecionado diretamente no projeto e permitir reordenar os arquivos por arraste
-  ou por controles explícitos. A ordem persistida define a sequência contínua de leitura sem modificar
-  ou concatenar os arquivos originais.
+- Importar todo PDF selecionado diretamente no projeto e permitir reordenar cada página por arraste
+  ou por controles explícitos. A sequência persistida pode intercalar páginas de PDFs diferentes sem
+  modificar ou concatenar os arquivos originais.
 
 ### Testar
 
@@ -336,8 +338,9 @@ Um projeto completo sobrevive a salvar, fechar e reabrir sem perda nem alteraç�
 - Golden tests de renderização com tolerância documentada.
 - Round-trip de coordenadas em diferentes DPI e rotações.
 - Arquivo inválido, protegido ou corrompido não altera o projeto existente.
-- Seleção múltipla preserva a ordem inicial das folhas; a reordenação sobrevive à reabertura. Arquivo
-  inválido ou conteúdo duplicado impede a importação inteira, sem substituir o projeto já aberto.
+- Seleção múltipla preserva a ordem inicial das folhas; a reordenação de páginas, inclusive entre
+  arquivos, sobrevive à reabertura. Arquivo inválido ou conteúdo duplicado impede a importação
+  inteira, sem substituir o projeto já aberto.
 
 ### Critério de saída
 
@@ -557,8 +560,8 @@ fluxo operacional da Etapa 7.1.**
 ### Desenvolver
 
 - Exibir resultados sobre o PDF com filtros por classe e estado.
-- Organizar postes como elementos-pai e mostrar abaixo deles estruturas, equipamentos e cabos
-  relacionados.
+- Organizar regiões da folha como itens-pai e mostrar abaixo delas todos os elementos e vínculos
+  próximos, exista ou não um poste reconhecido.
 - Permitir criar manualmente elementos e relações ausentes.
 - Registrar autor, data, motivo opcional e histórico de cada decisão.
 - Diferenciar visualmente proposta, confirmada, rejeitada e conflitante.
@@ -577,11 +580,12 @@ vínculos sem confirmar item a item.
 
 ### Registro de desenvolvimento
 
-- Aplicação: `ServicoRevisaoHumana` carrega a execução mais recente com propostas e realiza aceitar,
-  ajustar, rejeitar, confirmar relação e criações manuais em transações atômicas.
+- Aplicação: `ServicoRevisaoHumana` consolida a execução mais recente de cada PDF do projeto e mantém
+  aceitar, ajustar, rejeitar, confirmar relação e criações manuais como operações excepcionais
+  atômicas.
 - Interface: painel lateral de resultados com filtros por classe e estado e uma árvore de vínculos.
-  Cada poste agrupa seus dependentes e mostra situação, catálogo e confiança; os antigos campos de
-  decisão e confirmação item a item não fazem parte do fluxo visível.
+  Cada região agrupa elementos próximos e mostra situação, catálogo, confiança e vínculos; os antigos
+  campos de decisão e confirmação item a item não fazem parte do fluxo visível.
 - PDF: cada proposta de elemento aparece como um sublinhado colorido e clicável; o clique abre a aba
   de resultados e seleciona o nó correspondente. Proposta, confirmada, rejeitada e conflitante usam
   cores e traços distintos. A paginação, o zoom e a rotação permanecem disponíveis durante a revisão.
@@ -624,12 +628,12 @@ interface.**
 - Criar uma tela inicial para listar, criar, abrir e renomear projetos persistidos, usando uma versão
   publicada do catálogo sem exigir acesso direto ao SQLite.
 - Integrar a seleção de um ou vários PDFs diretamente ao caso de uso de importação, preservando cada
-  documento, e permitir editar a ordem de leitura; essa ordem deve sobreviver ao fechamento e à
-  reabertura.
+  documento, e permitir editar a ordem de qualquer página; essa sequência deve sobreviver ao
+  fechamento e à reabertura.
 - Expor na interface as ações de extrair evidências e executar a interpretação, com progresso,
   cancelamento, retomada, mensagens de erro localizadas e indicação clara da execução ativa.
-- Encadear o resultado concluído ao painel da Etapa 7, abrindo as propostas da execução correta sem
-  preparação manual de banco, scripts ou fixtures.
+- Encadear o resultado concluído ao painel da Etapa 7, consolidando a execução mais recente de cada
+  PDF sem preparação manual de banco, scripts ou fixtures.
 - Exibir o estado operacional do projeto: documentos, última extração, última interpretação,
   propostas pendentes, decisões realizadas e falhas que exigem ação.
 - Fornecer um modo ou roteiro visível de aceite do MVP, com passos e resultados esperados, sem enviar
@@ -660,7 +664,7 @@ resultados relacionados, fechar e reabrir preservando o trabalho.
 1. Abrir o aplicativo por `ZenyProjectHandler.vbs` ou `ZenyProjectHandler.bat`.
 2. Criar um projeto e selecionar um ou vários PDFs autorizados.
 3. Executar extração e interpretação acompanhando estado, progresso e eventuais diagnósticos.
-4. Abrir os resultados, expandir um poste e conferir estruturas/equipamentos vinculados no PDF.
+4. Abrir os resultados, expandir uma região e conferir estruturas/equipamentos vinculados no PDF.
 5. Fechar o aplicativo, abri-lo novamente e conferir documentos, página e resultados promovidos.
 6. Informar aprovação ou problemas observados; somente a aprovação explícita permite concluir as
    Etapas 7 e 7.1.
@@ -672,8 +676,8 @@ resultados relacionados, fechar e reabrir preservando o trabalho.
 - Exclusão: um projeto pode ser excluído pela interface após confirmação explícita. A remoção abrange
   os dados locais do projeto por cascata transacional, mas nunca apaga os PDFs originais no disco.
 - Importação: a seleção de um ou vários PDFs usa o caso de uso transacional real. Todos os arquivos
-  são validados antes da publicação, duplicidades são recusadas e documento, origem e ordem são
-  preservados sem concatenar ou modificar os PDFs.
+  são validados antes da publicação, duplicidades são recusadas e documento, origem e sequência de
+  páginas são preservados sem concatenar ou modificar os PDFs.
 - Remoção de folhas: o usuário seleciona um ou vários PDFs já importados. Uma confirmação informa que
   extrações, propostas, decisões e elementos dependentes serão removidos; documentos e resultados não
   relacionados permanecem no projeto e os arquivos originais são preservados.
@@ -687,7 +691,8 @@ resultados relacionados, fechar e reabrir preservando o trabalho.
   interpretação, propostas pendentes e decisões realizadas. Falhas esperadas aparecem como mensagens
   localizadas, sem traceback.
 - Resultados: projetos analisados são abertos diretamente no painel da Etapa 7. Projetos com vários
-  documentos expõem cada execução concluída em um seletor; postes agrupam os elementos relacionados.
+  documentos consolidam a execução mais recente de cada PDF; regiões agrupam os elementos e vínculos
+  relacionados seguindo a sequência de páginas do projeto.
 - Recuperação: o último projeto e a última folha aberta ficam em `ui-state.ini` na pasta local da
   aplicação; projeto, documentos, fontes, execuções, propostas e decisões continuam no SQLite.
 - Aceite: o botão **Como validar este MVP** apresenta o roteiro dentro da própria aplicação.
@@ -747,6 +752,8 @@ projetos reais.**
 
 - Regiões com e sem coordenada, múltiplas situações e diferentes páginas.
 - Coordenadas separadas por quebra de linha, `:`, `/` ou fragmentos próximos.
+- Múltiplos pares próximos são associados um a um, sem reutilizar leste ou norte entre pontos.
+- Pequenas regiões rasterizadas em páginas com texto nativo recebem OCR localizado.
 - Itens distantes na mesma página não são unidos.
 - Clique em elemento navega para a folha correta e destaca o sublinhado.
 
