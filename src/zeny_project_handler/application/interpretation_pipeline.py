@@ -28,6 +28,7 @@ from zeny_project_handler.ports.interpretation import (
 )
 from zeny_project_handler.ports.persistence import UnitOfWorkPort
 
+from .automatic_promotion import promover_resultado_automatico
 from .errors import (
     InterpretacaoCanceladaError,
     InterpretacaoProjetoError,
@@ -85,7 +86,21 @@ class ExecutarPipelineInterpretacao:
         )
         stored = self._load_completed(execution_id)
         if stored is not None:
-            return stored
+            promoted = self._persist_result(
+                stored.execucao,
+                ResultadoInterpretacao(
+                    elementos=stored.elementos,
+                    relacoes=stored.relacoes,
+                    diagnosticos=stored.execucao.diagnosticos,
+                ),
+                context,
+            )
+            return ResultadoExecucaoInterpretacao(
+                execucao=stored.execucao,
+                elementos=promoted.elementos,
+                relacoes=promoted.relacoes,
+                resultado_reutilizado=True,
+            )
         started_at = self._aware_now()
         parameters = _execution_parameters(execucao_extracao_id, self._registry, config)
         self._persist_execution(
@@ -143,11 +158,11 @@ class ExecutarPipelineInterpretacao:
             EstadoExecucaoAnalise.CONCLUIDA,
             result=result,
         )
-        self._persist_result(completed, result)
+        promoted = self._persist_result(completed, result, context)
         return ResultadoExecucaoInterpretacao(
             execucao=completed,
-            elementos=result.elementos,
-            relacoes=result.relacoes,
+            elementos=promoted.elementos,
+            relacoes=promoted.relacoes,
             resultado_reutilizado=False,
         )
 
@@ -192,16 +207,38 @@ class ExecutarPipelineInterpretacao:
             work.execucoes_analise.salvar(execution)
             work.commit()
 
-    def _persist_result(self, execution: ExecucaoAnalise, result: ResultadoInterpretacao) -> None:
+    def _persist_result(
+        self,
+        execution: ExecucaoAnalise,
+        result: ResultadoInterpretacao,
+        context: ContextoInterpretacao,
+    ) -> ResultadoInterpretacao:
         with self._unit_of_work() as work:
-            if work.projetos.obter(execution.projeto_id) is None:
+            project = work.projetos.obter(execution.projeto_id)
+            if project is None:
                 raise ProjetoNaoEncontradoError("Projeto removido durante a interpretação")
+            promoted = promover_resultado_automatico(
+                project,
+                context.catalogo,
+                result.elementos,
+                result.relacoes,
+                promovido_em=execution.finalizada_em or self._aware_now(),
+            )
             work.execucoes_analise.salvar(execution)
-            for element_proposal in result.elementos:
+            work.projetos.salvar(promoted.projeto)
+            for element_proposal in promoted.elementos:
                 work.propostas.salvar(element_proposal)
-            for relation_proposal in result.relacoes:
+            for relation_proposal in promoted.relacoes:
                 work.propostas.salvar(relation_proposal)
+            for decision in promoted.decisoes:
+                if work.decisoes_revisao.obter_da_proposta(decision.proposta_id) is None:
+                    work.decisoes_revisao.salvar(decision)
             work.commit()
+        return ResultadoInterpretacao(
+            elementos=promoted.elementos,
+            relacoes=promoted.relacoes,
+            diagnosticos=result.diagnosticos,
+        )
 
     def _finished_execution(
         self,

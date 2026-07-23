@@ -71,8 +71,12 @@ def _relation_targets(
         item for item in destinations if item.geometria.pagina_id == origin.geometria.pagina_id
     )
     if rule.estrategia == "CENTROS_PROXIMOS":
+        same_situation = tuple(
+            item for item in same_page if item.situacao_projeto is origin.situacao_projeto
+        )
+        candidates = same_situation or same_page
         nearest = min(
-            same_page,
+            candidates,
             key=lambda item: geometry_distance(origin.geometria, item.geometria),
             default=None,
         )

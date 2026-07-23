@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from decimal import Decimal
 from uuid import UUID, uuid5
 
@@ -27,9 +28,11 @@ from .rule_support import (
 )
 
 _POLE_DIMENSION_PATTERN = re.compile(
-    r"(?<!\d)(9|10|11|12|13|15|18)\s*M?\s*[-/X]\s*"
+    r"(?<!\d)(9|10|11|12|13|15|18)\s*M?(?:\s*[-/:X]\s*|\s+)"
     r"(150|300|600|1000)\s*(?:DA?N)?(?!\d)"
 )
+_COORDINATE_NUMBER_PATTERN = re.compile(r"(?<!\d)\d(?:[.\s]?\d){5,6}(?!\d)")
+_COORDINATE_CONTEXT_DISTANCE = 0.12
 _POLE_FORMAT_PHRASES = {
     "CIRCULAR": ("POSTE CIRCULAR", "CIRCULAR"),
     "DUPLO T": ("POSTE DUPLO T", "DUPLO T"),
@@ -202,9 +205,10 @@ class AnalisadorPoste(AnalisadorCatalogoPorCodigo):
                             confidence=Decimal("0.58"),
                         )
                     )
+        with_coordinates = tuple(_with_nearby_coordinate(item, solicitacao) for item in proposals)
         return tuple(
             item
-            for item in proposals
+            for item in with_coordinates
             if item.confianca is None or item.confianca >= solicitacao.configuracao.confianca_minima
         )
 
@@ -384,32 +388,92 @@ def _pole_dimension_proposal(
         request, rule, evidence, CategoriaElemento.POSTE
     )
     unique = len(matching) == 1
+    selected = matching[0]
     observed = f"{height}-{resistance}"
     return PropostaElemento(
         id=uuid5(request.execucao_id, f"elemento:{rule.id}:nomenclatura:{evidence.id}:{observed}"),
         execucao_id=request.execucao_id,
         categoria=CategoriaElemento.POSTE,
         situacao_projeto=situation,
-        estado_revisao=EstadoRevisao.PROPOSTA if unique else EstadoRevisao.CONFLITANTE,
+        estado_revisao=EstadoRevisao.PROPOSTA,
         evidencia_ids=evidence_ids,
         geometria=evidence.geometria,
-        tipo_catalogo_sugerido_id=matching[0].id if unique else None,
+        tipo_catalogo_sugerido_id=selected.id,
         codigo_observado=observed,
         atributos_sugeridos=(
             ("altura_m", height),
             ("candidatos_catalogo", ",".join(item.codigo for item in matching)),
+            ("catalogo_inferido", not unique),
             ("regra_id", rule.id),
             ("resistencia_dan", int(resistance)),
         ),
-        confianca=Decimal("0.86") if unique else Decimal("0.74"),
+        confianca=Decimal("0.86") if unique else Decimal("0.80"),
         justificativa=(
             "A nomenclatura de poste altura-resistência foi reconhecida em texto nativo ou OCR; "
             + (
                 "o formato também foi identificado."
                 if unique
-                else "o formato requer revisão humana."
+                else (
+                    f"o formato não estava explícito e {selected.codigo} foi escolhido "
+                    "como correspondência canônica."
+                )
             )
         ),
+    )
+
+
+def _with_nearby_coordinate(
+    proposal: PropostaElemento,
+    request: SolicitacaoInterpretacao,
+) -> PropostaElemento:
+    coordinate = _coordinate_near(proposal, request)
+    if coordinate is None:
+        return proposal
+    east, north, evidence_ids = coordinate
+    attributes = dict(proposal.atributos_sugeridos)
+    attributes.update(
+        {
+            "coordenada_leste": east,
+            "coordenada_norte": north,
+            "coordenada_origem": "texto_ou_ocr",
+        }
+    )
+    return replace(
+        proposal,
+        evidencia_ids=tuple(sorted({*proposal.evidencia_ids, *evidence_ids}, key=str)),
+        atributos_sugeridos=tuple(attributes.items()),
+    )
+
+
+def _coordinate_near(
+    proposal: PropostaElemento,
+    request: SolicitacaoInterpretacao,
+) -> tuple[int, int, tuple[UUID, ...]] | None:
+    nearby = tuple(
+        item
+        for item in request.evidencias
+        if item.pagina_id == proposal.geometria.pagina_id
+        and item.tipo in {TipoEvidencia.TEXTO, TipoEvidencia.OCR}
+        and item.conteudo_bruto
+        and geometry_distance(proposal.geometria, item.geometria) <= _COORDINATE_CONTEXT_DISTANCE
+    )
+    numbers = tuple(
+        (number, item.id, geometry_distance(proposal.geometria, item.geometria))
+        for item in nearby
+        for number in _coordinate_numbers(item.conteudo_bruto or "")
+    )
+    eastings = tuple(item for item in numbers if 100_000 <= item[0] <= 999_999)
+    northings = tuple(item for item in numbers if 1_000_000 <= item[0] <= 9_999_999)
+    if not eastings or not northings:
+        return None
+    east = min(eastings, key=lambda item: (item[2], item[0]))
+    north = min(northings, key=lambda item: (item[2], item[0]))
+    return east[0], north[0], tuple(sorted({east[1], north[1]}, key=str))
+
+
+def _coordinate_numbers(text: str) -> tuple[int, ...]:
+    return tuple(
+        int(re.sub(r"\D", "", match.group())) for match in _COORDINATE_NUMBER_PATTERN.finditer(text)
     )
 
 

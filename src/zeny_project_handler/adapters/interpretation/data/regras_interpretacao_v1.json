@@ -2,7 +2,7 @@
   "schema_version": 1,
   "registry": {
     "id": "a1b7d74a-0c02-5c99-a74e-0b3fb449c92f",
-    "version": "1.1.0"
+    "version": "1.2.0"
   },
   "recognition_rules": [
     {
@@ -58,7 +58,7 @@
       "destination_category": "POSTE",
       "relation_type": "INSTALADA_EM",
       "strategy": "CENTROS_PROXIMOS",
-      "maximum_distance": "0.030",
+      "maximum_distance": "0.100",
       "confidence": "0.78",
       "enabled": true
     },
@@ -68,7 +68,7 @@
       "destination_category": "POSTE",
       "relation_type": "INSTALADA_EM",
       "strategy": "CENTROS_PROXIMOS",
-      "maximum_distance": "0.030",
+      "maximum_distance": "0.100",
       "confidence": "0.78",
       "enabled": true
     },
@@ -78,7 +78,7 @@
       "destination_category": "POSTE",
       "relation_type": "INSTALADO_EM",
       "strategy": "CENTROS_PROXIMOS",
-      "maximum_distance": "0.035",
+      "maximum_distance": "0.100",
       "confidence": "0.78",
       "enabled": true
     },

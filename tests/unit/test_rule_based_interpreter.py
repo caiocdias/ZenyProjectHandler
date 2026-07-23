@@ -4,6 +4,7 @@ from dataclasses import replace
 from decimal import Decimal
 from uuid import uuid4
 
+import pytest
 from tests.interpretation_factories import image_evidence, text_evidence, vector_evidence
 
 from zeny_project_handler.adapters.interpretation import (
@@ -201,8 +202,10 @@ def test_dense_overlapping_page_remains_bounded_and_analyzer_failure_is_local(
     assert result.diagnosticos[0].codigo == "interpretacao.analisador_falhou"
 
 
-def test_pole_nomenclature_from_native_text_or_ocr_is_recognized(
+@pytest.mark.parametrize("pole_text", ("11 / 300", "11:300", "11\n300"))
+def test_pole_nomenclature_from_native_text_or_ocr_is_recognized_and_cataloged(
     catalogo_inicial: CatalogoTecnico,
+    pole_text: str,
 ) -> None:
     request = _request(catalogo_inicial)
     source = request.evidencias[0]
@@ -210,7 +213,7 @@ def test_pole_nomenclature_from_native_text_or_ocr_is_recognized(
         source,
         id=uuid4(),
         tipo=TipoEvidencia.OCR,
-        conteudo_bruto="11 / 300",
+        conteudo_bruto=pole_text,
         atributos_extraidos=(("confianca", Decimal("0.91")),),
     )
     request = replace(request, evidencias=(dimensions,))
@@ -221,10 +224,126 @@ def test_pole_nomenclature_from_native_text_or_ocr_is_recognized(
     pole = result.elementos[0]
     assert pole.categoria is CategoriaElemento.POSTE
     assert pole.codigo_observado == "11-300"
-    assert pole.tipo_catalogo_sugerido_id is None
-    assert pole.estado_revisao is EstadoRevisao.CONFLITANTE
-    assert dict(pole.atributos_sugeridos)["altura_m"] == "11"
-    assert dict(pole.atributos_sugeridos)["resistencia_dan"] == 300
+    assert pole.tipo_catalogo_sugerido_id is not None
+    catalog_item = catalogo_inicial.item_por_id(pole.tipo_catalogo_sugerido_id)
+    assert catalog_item is not None
+    assert catalog_item.codigo == "P-11M-300DAN-CIRCULAR"
+    assert pole.estado_revisao is EstadoRevisao.PROPOSTA
+    attributes = dict(pole.atributos_sugeridos)
+    assert attributes["altura_m"] == "11"
+    assert attributes["resistencia_dan"] == 300
+    assert attributes["catalogo_inferido"] is True
+
+
+def test_pole_collects_nearby_coordinates_from_native_text_and_ocr(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    request = _request(catalogo_inicial)
+    source = request.evidencias[0]
+    pole = replace(source, id=uuid4(), conteudo_bruto="11-300")
+    east = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=source.pagina_id,
+        key="coordinate-east",
+        text="0465702",
+        x="0.11",
+        y="0.10",
+    )
+    north = replace(
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=source.pagina_id,
+            key="coordinate-north",
+            text="7772468",
+            x="0.12",
+            y="0.10",
+        ),
+        tipo=TipoEvidencia.OCR,
+    )
+    request = replace(request, evidencias=(pole, east, north))
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
+
+    assert len(result.elementos) == 1
+    proposal = result.elementos[0]
+    attributes = dict(proposal.atributos_sugeridos)
+    assert attributes["coordenada_leste"] == 465702
+    assert attributes["coordenada_norte"] == 7772468
+    assert attributes["coordenada_origem"] == "texto_ou_ocr"
+    assert {east.id, north.id} <= set(proposal.evidencia_ids)
+
+
+def test_installed_assets_are_related_to_installed_pole_instead_of_nearer_removed_pole(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    request = _request(catalogo_inicial)
+    source = request.evidencias[0]
+    structure_code = next(
+        item.codigo
+        for item in catalogo_inicial.itens_ativos(CategoriaElemento.ESTRUTURA_MT)
+        if item.codigo == "U3"
+    )
+    evidence = (
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=source.pagina_id,
+            key="removed-pole",
+            text="10-150",
+            x="0.10",
+            y="0.10",
+            color="#FF0000",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=source.pagina_id,
+            key="installed-pole",
+            text="11-300",
+            x="0.12",
+            y="0.10",
+            color="#008000",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=source.pagina_id,
+            key="installed-structure",
+            text=structure_code,
+            x="0.105",
+            y="0.10",
+            color="#008000",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=source.pagina_id,
+            key="installed-transformer",
+            text="100A-10KA-2H",
+            x="0.105",
+            y="0.11",
+            color="#008000",
+        ),
+    )
+    request = replace(request, evidencias=evidence)
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
+
+    installed_pole = next(
+        item
+        for item in result.elementos
+        if item.categoria is CategoriaElemento.POSTE and item.codigo_observado == "11-300"
+    )
+    installed_dependents = {
+        item.id
+        for item in result.elementos
+        if item.categoria in {CategoriaElemento.ESTRUTURA_MT, CategoriaElemento.EQUIPAMENTO}
+    }
+    related = {
+        relation.origem_referencia_id: relation.destino_referencia_id
+        for relation in result.relacoes
+        if relation.origem_referencia_id in installed_dependents
+        and relation.tipo_relacao in {"INSTALADA_EM", "INSTALADO_EM"}
+    }
+    assert related
+    assert set(related) == installed_dependents
+    assert set(related.values()) == {installed_pole.id}
 
 
 def test_pole_format_resolves_dimension_to_exact_catalog_item(

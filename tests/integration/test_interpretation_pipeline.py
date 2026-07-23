@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -27,8 +28,13 @@ from zeny_project_handler.application.errors import (
 from zeny_project_handler.application.interpretation_pipeline import ExecutarPipelineInterpretacao
 from zeny_project_handler.domain.analysis import ExecucaoAnalise
 from zeny_project_handler.domain.catalog import CatalogoTecnico
-from zeny_project_handler.domain.enums import CategoriaElemento, EstadoExecucaoAnalise
-from zeny_project_handler.domain.project import Projeto
+from zeny_project_handler.domain.enums import (
+    CategoriaElemento,
+    EstadoExecucaoAnalise,
+    EstadoRevisao,
+    TipoEvidencia,
+)
+from zeny_project_handler.domain.project import Poste, Projeto
 from zeny_project_handler.ports.interpretation import ConfiguracaoInterpretacao
 
 pytestmark = pytest.mark.integration
@@ -73,6 +79,26 @@ def interpretation_context(
         )
         for index, category in enumerate(CategoriaElemento)
     )
+    coordinate_east = text_evidence(
+        execution_id=source_execution.id,
+        page_id=page_id,
+        key="coordinate-east",
+        text="0465702",
+        x="0.11",
+        y="0.21",
+    )
+    coordinate_north = replace(
+        text_evidence(
+            execution_id=source_execution.id,
+            page_id=page_id,
+            key="coordinate-north",
+            text="7772468",
+            x="0.12",
+            y="0.21",
+        ),
+        tipo=TipoEvidencia.OCR,
+    )
+    evidence = (*evidence, coordinate_east, coordinate_north)
     with SqlAlchemyUnitOfWork(engine) as work:
         work.catalogos.salvar(catalogo_inicial)
         work.projetos.salvar(project)
@@ -108,10 +134,28 @@ def test_pipeline_persists_cross_run_provenance_and_reuses_completed_result(
     assert second.resultado_reutilizado
     assert second.execucao.id == first.execucao.id
     assert second.elementos == first.elementos
+    assert all(item.estado_revisao is EstadoRevisao.CONFIRMADA for item in first.elementos)
     assert all(source_execution.id != item.execucao_id for item in first.elementos)
     with SqlAlchemyUnitOfWork(engine) as work:
         stored = work.propostas.listar_da_execucao(first.execucao.id)
+        promoted_project = work.projetos.obter(project.id)
         assert len(stored) == len(first.elementos) + len(first.relacoes)
+        assert promoted_project is not None
+        assert {item.id for item in project.elementos} < {
+            item.id for item in promoted_project.elementos
+        }
+        promoted_pole = next(
+            item
+            for item in promoted_project.elementos
+            if isinstance(item, Poste) and item.id not in {old.id for old in project.elementos}
+        )
+        assert promoted_pole.coordenada_campo is not None
+        assert promoted_pole.coordenada_campo.leste == Decimal(465702)
+        assert promoted_pole.coordenada_campo.norte == Decimal(7772468)
+        decisions = tuple(
+            work.decisoes_revisao.obter_da_proposta(item.id) for item in first.elementos
+        )
+        assert all(item is not None and item.revisor == "Análise automática" for item in decisions)
 
 
 def test_cancelled_pipeline_resumes_with_same_identity_without_duplicates(

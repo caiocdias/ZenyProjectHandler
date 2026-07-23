@@ -23,10 +23,6 @@ from zeny_project_handler.adapters.persistence import (
 )
 from zeny_project_handler.application.document_analysis import ExecutarAnaliseDocumento
 from zeny_project_handler.application.errors import FluxoMvpCanceladoError
-from zeny_project_handler.application.human_review import (
-    DadosElementoRevisao,
-    ServicoRevisaoHumana,
-)
 from zeny_project_handler.application.interpretation_pipeline import ExecutarPipelineInterpretacao
 from zeny_project_handler.application.mvp_workflow import ServicoFluxoMvp
 from zeny_project_handler.application.pdf_import import ImportarPdfsNoProjeto
@@ -79,10 +75,9 @@ def workflow(
     return engine, _service(engine, catalogo_inicial, tmp_path / "cache")
 
 
-def _confirm_first_element_proposal(
+def _first_automatic_decision(
     engine: Engine,
     project_id: UUID,
-    catalog: CatalogoTecnico,
 ) -> DecisaoRevisao:
     with SqlAlchemyUnitOfWork(engine) as work:
         proposals = tuple(
@@ -91,20 +86,10 @@ def _confirm_first_element_proposal(
             for proposal in work.propostas.listar_da_execucao(run.id)
             if isinstance(proposal, PropostaElemento)
         )
-    assert proposals
-    proposal = proposals[0]
-    pole_type = catalog.itens_ativos(CategoriaElemento.POSTE)[0]
-    return ServicoRevisaoHumana(lambda: SqlAlchemyUnitOfWork(engine)).confirmar_elemento(
-        proposal.id,
-        DadosElementoRevisao(
-            categoria=CategoriaElemento.POSTE,
-            tipo_catalogo_id=pole_type.id,
-            situacao=SituacaoProjeto.EXISTENTE,
-            geometria=proposal.geometria,
-            codigo_observado=pole_type.codigo,
-        ),
-        revisor="Teste de exclusão",
-    )
+        assert proposals
+        decision = work.decisoes_revisao.obter_da_proposta(proposals[0].id)
+    assert decision is not None
+    return decision
 
 
 def test_multiple_pdf_import_is_atomic_and_preserves_order(
@@ -132,6 +117,33 @@ def test_multiple_pdf_import_is_atomic_and_preserves_order(
     assert [source.caminho_canonico for source in reopened.fontes_pdf] == [
         first.resolve(),
         second.resolve(),
+    ]
+    engine.dispose()
+
+
+def test_project_pdf_order_can_be_changed_and_is_persisted(
+    workflow: tuple[Engine, ServicoFluxoMvp],
+    tmp_path: Path,
+) -> None:
+    engine, service = workflow
+    created = service.criar_projeto("Projeto reordenável")
+    first = create_feature_pdf(tmp_path / "primeira.pdf")
+    second = create_golden_pdf(tmp_path / "segunda.pdf")
+    service.importar_pdfs(created.projeto.id, (first, second))
+    session = service.abrir_projeto(created.projeto.id)
+    first_document, second_document = session.projeto.documentos
+
+    reordered = service.reordenar_documentos(
+        created.projeto.id,
+        (second_document.id, first_document.id),
+    )
+    reopened = service.abrir_projeto(created.projeto.id)
+
+    assert reordered.projeto.documentos == (second_document, first_document)
+    assert reopened.projeto.documentos == (second_document, first_document)
+    assert [source.caminho_canonico for source in reopened.fontes_pdf] == [
+        second.resolve(),
+        first.resolve(),
     ]
     engine.dispose()
 
@@ -199,7 +211,7 @@ def test_remove_pdf_prunes_only_dependent_data_and_project_can_be_deleted(
         work.projetos.salvar(replace(session.projeto, elementos=(pole,)))
         work.commit()
     service.executar_pipeline(created.projeto.id)
-    decision = _confirm_first_element_proposal(engine, created.projeto.id, catalogo_inicial)
+    decision = _first_automatic_decision(engine, created.projeto.id)
 
     result = service.remover_documentos(created.projeto.id, (first_document.id,))
 
@@ -231,7 +243,7 @@ def test_delete_project_with_confirmed_review_removes_dependents_in_safe_order(
     source = create_catalog_pdf(tmp_path / "projeto-revisado.pdf", catalog_code)
     service.importar_pdfs(created.projeto.id, (source,))
     service.executar_pipeline(created.projeto.id)
-    decision = _confirm_first_element_proposal(engine, created.projeto.id, catalogo_inicial)
+    decision = _first_automatic_decision(engine, created.projeto.id)
 
     assert service.excluir_projeto(created.projeto.id)
 
