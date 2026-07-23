@@ -13,12 +13,14 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QLabel,
     QPushButton,
+    QToolButton,
     QTreeWidget,
 )
 from pytestqt.qtbot import QtBot
 from sqlalchemy import Engine
 from tests.pdf_fixtures import create_golden_pdf
 
+from zeny_project_handler.adapters.compliance import carregar_registro_conformidade_inicial
 from zeny_project_handler.adapters.pdf import PyMuPdfReader
 from zeny_project_handler.adapters.persistence import (
     SqlAlchemyUnitOfWork,
@@ -43,6 +45,7 @@ from zeny_project_handler.domain.enums import (
 from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 from zeny_project_handler.ports.pdf import ReferenciaFontePdf
+from zeny_project_handler.ui.documentation_panel import DocumentationPanelWidget
 from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
 from zeny_project_handler.ui.review_panel import ReviewPanelWidget
 
@@ -227,3 +230,78 @@ def test_results_panel_groups_relationships_and_links_elements_to_pdf(
     assert guidance is not None and "automaticamente" in guidance.text()
     assert editor is not None and not editor.isVisible()
     assert accept is not None and not accept.isVisible()
+
+
+def test_result_visibility_can_hide_a_whole_point_or_one_element(
+    qtbot: QtBot,
+    review_panel_context: tuple[Engine, ReviewPanelWidget, PropostaElemento],
+) -> None:
+    _engine, panel, pole = review_panel_context
+    project_combo = panel.findChild(QComboBox, "reviewProjectCombo")
+    assert project_combo is not None
+    project_combo.setCurrentIndex(1)
+
+    tree = panel.findChild(QTreeWidget, "analysisRelationshipTree")
+    assert tree is not None
+    region_item = tree.topLevelItem(0)
+    assert region_item is not None
+    region_button = tree.itemWidget(region_item, 5)
+    assert isinstance(region_button, QToolButton)
+    pole_item = next(
+        region_item.child(index)
+        for index in range(region_item.childCount())
+        if region_item.child(index).data(0, Qt.ItemDataRole.UserRole) == str(pole.id)
+    )
+    pole_button = tree.itemWidget(pole_item, 5)
+    assert isinstance(pole_button, QToolButton)
+    other_ids = set(panel._viewer.view._review_items) - {str(pole.id)}
+    assert other_ids
+    assert str(pole.id) in panel._viewer.view._review_items
+
+    pole_button.click()
+
+    assert str(pole.id) not in panel._viewer.view._review_items
+    assert other_ids <= set(panel._viewer.view._review_items)
+
+    region_button.click()
+
+    assert not panel._viewer.view._review_items
+    assert not pole_button.isEnabled()
+
+    region_button.click()
+
+    assert pole_button.isEnabled()
+    assert str(pole.id) not in panel._viewer.view._review_items
+    assert other_ids <= set(panel._viewer.view._review_items)
+
+    pole_button.click()
+
+    assert str(pole.id) in panel._viewer.view._review_items
+
+
+def test_documentation_panel_has_own_document_and_compliance_views(
+    qtbot: QtBot,
+    review_panel_context: tuple[Engine, ReviewPanelWidget, PropostaElemento],
+) -> None:
+    _engine, review_panel, _proposal = review_panel_context
+    panel = DocumentationPanelWidget(
+        service=review_panel._service,
+        registry=carregar_registro_conformidade_inicial(),
+        viewer=review_panel._viewer,
+    )
+    qtbot.addWidget(panel)
+    panel.show()
+    project = panel.findChild(QComboBox, "documentationProjectCombo")
+    documents = panel.findChild(QTreeWidget, "documentationTree")
+    findings = panel.findChild(QTreeWidget, "complianceFindingsTree")
+    assert project is not None
+    assert documents is not None
+    assert findings is not None
+
+    project.setCurrentIndex(1)
+
+    assert documents.topLevelItemCount() == 1
+    document_root = documents.topLevelItem(0)
+    assert document_root is not None
+    assert document_root.childCount() >= 3
+    assert findings.topLevelItemCount() >= 3

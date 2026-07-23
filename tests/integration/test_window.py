@@ -2,10 +2,12 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, Qt
+from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import (
     QDockWidget,
     QFileDialog,
+    QFrame,
     QLabel,
     QMenu,
     QMessageBox,
@@ -21,6 +23,7 @@ from zeny_project_handler.bootstrap import create_application, run
 from zeny_project_handler.config import AppSettings
 from zeny_project_handler.domain.values import PontoNormalizado
 from zeny_project_handler.ports.pdf import InspecaoPdf
+from zeny_project_handler.ui.main_window import _DockTitleBar
 from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
 
 
@@ -38,14 +41,18 @@ def test_main_window_smoke(qtbot: QtBot, tmp_path: Path) -> None:
     review_dock = window.findChild(QDockWidget, "humanReviewDock")
     graph_dock = window.findChild(QDockWidget, "projectGraphDock")
     portability_dock = window.findChild(QDockWidget, "projectPortabilityDock")
+    documentation_dock = window.findChild(QDockWidget, "documentationComplianceDock")
     assert review_dock is not None
     assert window.findChild(QDockWidget, "projectWorkflowDock") is not None
     assert graph_dock is None
     assert portability_dock is not None
+    assert documentation_dock is not None
+    assert documentation_dock in window.tabifiedDockWidgets(review_dock)
     assert portability_dock in window.tabifiedDockWidgets(review_dock)
     assert window.review_panel is not None
     assert window.project_panel is not None
     assert window.portability_panel is not None
+    assert window.documentation_panel is not None
     assert window.statusBar().currentMessage() == "Pronto para abrir um PDF"
     assert settings.database_path.is_file()
 
@@ -74,7 +81,17 @@ def test_floating_panel_has_window_controls_and_can_be_reopened(
     assert maximize_button is not None and maximize_button.isVisible()
     assert float_button is not None and float_button.isVisible()
     assert close_button is not None and close_button.isVisible()
+    assert float_button.text() == "Reacoplar"
+    controls_separator = review_dock.findChild(
+        QFrame,
+        "humanReviewDockWindowControlsSeparator",
+    )
+    assert controls_separator is not None and controls_separator.isVisible()
+    assert float_button.geometry().right() < controls_separator.geometry().left()
+    assert controls_separator.geometry().right() < minimize_button.geometry().left()
 
+    title_bar = review_dock.titleBarWidget()
+    assert title_bar is not None
     qtbot.mouseClick(  # type: ignore[no-untyped-call]
         maximize_button,
         Qt.MouseButton.LeftButton,
@@ -83,6 +100,19 @@ def test_floating_panel_has_window_controls_and_can_be_reopened(
     assert maximize_button.toolTip() == "Restaurar painel"
     qtbot.mouseClick(  # type: ignore[no-untyped-call]
         maximize_button,
+        Qt.MouseButton.LeftButton,
+    )
+    qtbot.waitUntil(lambda: not review_dock.isMaximized())
+
+    qtbot.mouseDClick(  # type: ignore[no-untyped-call]
+        title_bar,
+        Qt.MouseButton.LeftButton,
+    )
+    qtbot.waitUntil(review_dock.isMaximized)
+    assert review_dock.isFloating()
+    assert maximize_button.toolTip() == "Restaurar painel"
+    qtbot.mouseDClick(  # type: ignore[no-untyped-call]
+        title_bar,
         Qt.MouseButton.LeftButton,
     )
     qtbot.waitUntil(lambda: not review_dock.isMaximized())
@@ -137,6 +167,108 @@ def test_floating_panel_has_window_controls_and_can_be_reopened(
         Qt.MouseButton.LeftButton,
     )
     qtbot.waitUntil(review_dock.isFloating)
+
+
+@pytest.mark.integration
+def test_floating_panel_screen_edge_snap_geometry(qtbot: QtBot, tmp_path: Path) -> None:
+    settings = AppSettings(data_directory=tmp_path)
+    _application, window = create_application([], settings=settings)
+    qtbot.addWidget(window)
+    review_dock = window.findChild(QDockWidget, "humanReviewDock")
+    assert review_dock is not None
+    title_bar = review_dock.titleBarWidget()
+    assert isinstance(title_bar, _DockTitleBar)
+    available = QRect(0, 0, 1920, 1080)
+
+    assert title_bar._screen_edge_geometry(QPoint(960, 0), available) == QRect()
+    assert title_bar._screen_edge_geometry(QPoint(0, 540), available) == QRect(
+        0,
+        0,
+        960,
+        1080,
+    )
+    assert title_bar._screen_edge_geometry(QPoint(1919, 0), available) == QRect(
+        960,
+        0,
+        960,
+        540,
+    )
+    assert title_bar._screen_edge_geometry(QPoint(960, 540), available) is None
+
+
+@pytest.mark.integration
+def test_dock_title_bar_propagates_drag_events_to_qdockwidget(
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> None:
+    settings = AppSettings(data_directory=tmp_path)
+    _application, window = create_application([], settings=settings)
+    qtbot.addWidget(window)
+    review_dock = window.findChild(QDockWidget, "humanReviewDock")
+    assert review_dock is not None
+    title_bar = review_dock.titleBarWidget()
+    assert isinstance(title_bar, _DockTitleBar)
+    press = QMouseEvent(
+        QEvent.Type.MouseButtonPress,
+        QPointF(20, 10),
+        QPointF(200, 100),
+        Qt.MouseButton.LeftButton,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    move = QMouseEvent(
+        QEvent.Type.MouseMove,
+        QPointF(21, 10),
+        QPointF(201, 100),
+        Qt.MouseButton.NoButton,
+        Qt.MouseButton.LeftButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    release = QMouseEvent(
+        QEvent.Type.MouseButtonRelease,
+        QPointF(20, 10),
+        QPointF(200, 100),
+        Qt.MouseButton.LeftButton,
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+    )
+
+    title_bar.mousePressEvent(press)
+    title_bar.mouseMoveEvent(move)
+    title_bar.mouseReleaseEvent(release)
+
+    assert not press.isAccepted()
+    assert not move.isAccepted()
+    assert not release.isAccepted()
+
+
+@pytest.mark.integration
+def test_floating_panel_has_consistent_docking_fallback(
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> None:
+    settings = AppSettings(data_directory=tmp_path)
+    _application, window = create_application([], settings=settings)
+    qtbot.addWidget(window)
+    window.resize(1200, 800)
+    window.show()
+    review_dock = window.findChild(QDockWidget, "humanReviewDock")
+    assert review_dock is not None
+    title_bar = review_dock.titleBarWidget()
+    assert isinstance(title_bar, _DockTitleBar)
+
+    for x, expected_area in (
+        (window.contentsRect().left() + 5, Qt.DockWidgetArea.LeftDockWidgetArea),
+        (window.contentsRect().right() - 5, Qt.DockWidgetArea.RightDockWidgetArea),
+    ):
+        review_dock.setFloating(True)
+        qtbot.waitUntil(review_dock.isFloating)
+        drop_position = window.mapToGlobal(QPoint(x, window.contentsRect().center().y()))
+
+        title_bar._finish_drag(drop_position, allow_docking=True)
+
+        assert not review_dock.isFloating()
+        assert window.dockWidgetArea(review_dock) == expected_area
 
 
 @pytest.mark.integration

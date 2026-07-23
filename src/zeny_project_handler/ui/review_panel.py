@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from decimal import Decimal
+from functools import partial
 from typing import TypeVar
 from uuid import UUID
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QRectF, Qt, Signal
+from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -23,6 +25,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
+    QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -54,6 +57,7 @@ T = TypeVar("T")
 
 class ReviewPanelWidget(QWidget):
     status_changed = Signal(str)
+    session_changed = Signal(object)
 
     def __init__(
         self,
@@ -69,6 +73,9 @@ class ReviewPanelWidget(QWidget):
         self._session: SessaoRevisao | None = None
         self._page_id: UUID | None = None
         self._selected_proposal_id: UUID | None = None
+        self._hidden_region_ids: set[UUID] = set()
+        self._hidden_proposal_ids: set[UUID] = set()
+        self._visibility_buttons: dict[tuple[str, UUID], QToolButton] = {}
         self._loaded_bounds: tuple[float, float, float, float] | None = None
         self._syncing_selection = False
         self._build_ui()
@@ -114,7 +121,14 @@ class ReviewPanelWidget(QWidget):
         self._tree = QTreeWidget()
         self._tree.setObjectName("analysisRelationshipTree")
         self._tree.setHeaderLabels(
-            ("Ponto / elemento", "Ação", "Coordenada", "Catálogo", "Vínculos")
+            (
+                "Ponto / elemento",
+                "Ação",
+                "Coordenada",
+                "Catálogo",
+                "Vínculos",
+                "Exibir",
+            )
         )
         self._tree.setSelectionMode(QTreeWidget.SelectionMode.SingleSelection)
         self._tree.setUniformRowHeights(True)
@@ -122,7 +136,7 @@ class ReviewPanelWidget(QWidget):
         header = self._tree.header()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         header.setMinimumSectionSize(80)
-        for column, width in enumerate((190, 105, 185, 260, 260)):
+        for column, width in enumerate((190, 105, 185, 260, 260, 70)):
             header.resizeSection(column, width)
         header.setStretchLastSection(False)
         layout.addWidget(self._tree, 1)
@@ -278,11 +292,15 @@ class ReviewPanelWidget(QWidget):
         self._session = None
         self._page_id = None
         self._selected_proposal_id = None
+        self._hidden_region_ids.clear()
+        self._hidden_proposal_ids.clear()
+        self._visibility_buttons.clear()
         self._project.clear()
         self._project.addItem("Selecione um projeto analisado", None)
         self._tree.clear()
         self._table.setRowCount(0)
         self._viewer.definir_propostas_revisao(())
+        self.session_changed.emit(None)
 
     def _load_selected_project(self) -> None:
         value = self._project.currentData()
@@ -305,6 +323,9 @@ class ReviewPanelWidget(QWidget):
 
     def _activate_session(self, session: SessaoRevisao) -> None:
         self._session = session
+        self._hidden_region_ids.clear()
+        self._hidden_proposal_ids.clear()
+        self._visibility_buttons.clear()
         source_paths = tuple(source.caminho_canonico for source in session.fontes_pdf)
         if source_paths and not self._viewer.carregar_projeto(
             source_paths,
@@ -319,6 +340,7 @@ class ReviewPanelWidget(QWidget):
         self._refresh_references()
         self._refresh_catalog_items()
         self._refresh_proposals()
+        self.session_changed.emit(session)
 
     def _page_changed(self, page_id: str) -> None:
         self._page_id = UUID(page_id)
@@ -330,12 +352,7 @@ class ReviewPanelWidget(QWidget):
             return
         category = self._category_filter.currentData()
         state = self._state_filter.currentData()
-        filtered = tuple(
-            item
-            for item in session.propostas
-            if (category is None or _proposal_category(item) == category)
-            and (state is None or item.estado_revisao.value == state)
-        )
+        filtered = self._filtered_proposals(category=category, state=state)
         if self._selected_proposal_id is not None and all(
             item.id != self._selected_proposal_id for item in filtered
         ):
@@ -359,13 +376,117 @@ class ReviewPanelWidget(QWidget):
                 if column == 0:
                     cell.setData(Qt.ItemDataRole.UserRole, str(proposal.id))
                 self._table.setItem(row, column, cell)
+        self._update_review_overlays(filtered)
+
+    def _filtered_proposals(
+        self,
+        *,
+        category: object,
+        state: object,
+    ) -> tuple[PropostaElemento | PropostaRelacao, ...]:
+        session = self._session
+        if session is None:
+            return ()
+        return tuple(
+            item
+            for item in session.propostas
+            if (category is None or _proposal_category(item) == category)
+            and (state is None or item.estado_revisao.value == state)
+        )
+
+    def _update_review_overlays(
+        self,
+        filtered: tuple[PropostaElemento | PropostaRelacao, ...] | None = None,
+    ) -> None:
+        session = self._session
+        if session is None:
+            self._viewer.definir_propostas_revisao(())
+            return
+        proposals = filtered or self._filtered_proposals(
+            category=self._category_filter.currentData(),
+            state=self._state_filter.currentData(),
+        )
+        hidden_by_region = {
+            element_id
+            for region in session.regioes
+            if region.id in self._hidden_region_ids
+            for element_id in region.elemento_ids
+        }
         overlays = tuple(
             item
-            for item in filtered
+            for item in proposals
             if isinstance(item, PropostaElemento)
+            and item.id not in self._hidden_proposal_ids
+            and item.id not in hidden_by_region
             and (self._page_id is None or item.geometria.pagina_id == self._page_id)
         )
         self._viewer.definir_propostas_revisao(overlays)
+
+    def _visibility_button(
+        self,
+        *,
+        visible: bool,
+        object_name: str,
+        tooltip: str,
+        toggled: Callable[[bool], None],
+    ) -> QToolButton:
+        button = QToolButton(self._tree)
+        button.setObjectName(object_name)
+        button.setCheckable(True)
+        button.setChecked(visible)
+        button.setIcon(_visibility_icon(visible))
+        button.setToolTip(tooltip)
+        button.setAccessibleName(tooltip)
+        button.toggled.connect(toggled)
+        return button
+
+    def _set_region_visible(self, region_id: UUID, visible: bool) -> None:
+        if visible:
+            self._hidden_region_ids.discard(region_id)
+        else:
+            self._hidden_region_ids.add(region_id)
+            self._viewer.definir_sobreposicoes(())
+        self._sync_visibility_buttons()
+        self._update_review_overlays()
+
+    def _set_element_visible(self, proposal_id: UUID, visible: bool) -> None:
+        if visible:
+            self._hidden_proposal_ids.discard(proposal_id)
+        else:
+            self._hidden_proposal_ids.add(proposal_id)
+        self._sync_visibility_buttons()
+        self._update_review_overlays()
+
+    def _sync_visibility_buttons(self) -> None:
+        session = self._session
+        if session is None:
+            return
+        region_by_element = {
+            element_id: region for region in session.regioes for element_id in region.elemento_ids
+        }
+        for (kind, reference_id), button in self._visibility_buttons.items():
+            if kind == "region":
+                visible = reference_id not in self._hidden_region_ids
+                enabled = True
+                tooltip = (
+                    "Ocultar o ponto inteiro no PDF" if visible else "Exibir o ponto inteiro no PDF"
+                )
+            else:
+                region = region_by_element.get(reference_id)
+                enabled = region is None or region.id not in self._hidden_region_ids
+                visible = enabled and reference_id not in self._hidden_proposal_ids
+                tooltip = (
+                    "Ocultar somente este elemento no PDF"
+                    if visible
+                    else "Exibir somente este elemento no PDF"
+                )
+            button.blockSignals(True)
+            button.setEnabled(enabled)
+            button.setChecked(visible)
+            button.setIcon(_visibility_icon(visible))
+            button.setToolTip(tooltip)
+            button.setAccessibleName(tooltip)
+            button.blockSignals(False)
 
     def _populate_result_tree(
         self,
@@ -375,6 +496,7 @@ class ReviewPanelWidget(QWidget):
         if session is None:
             return
         self._tree.clear()
+        self._visibility_buttons.clear()
         visible_elements = {
             item.id: item for item in proposals if isinstance(item, PropostaElemento)
         }
@@ -399,27 +521,56 @@ class ReviewPanelWidget(QWidget):
                     _coordinate_label(region),
                     f"{len(elements)} elemento(s)",
                     f"{len(region.vinculo_ids)} vínculo(s)",
+                    "",
                 )
             )
             root.setData(0, Qt.ItemDataRole.UserRole + 1, str(region.id))
             root.setToolTip(0, self._region_location(region, region_number))
             root.setToolTip(1, _region_summary(elements))
             self._tree.addTopLevelItem(root)
+            region_visible = region.id not in self._hidden_region_ids
+            region_button = self._visibility_button(
+                visible=region_visible,
+                object_name="analysisRegionVisibilityButton",
+                tooltip=(
+                    "Ocultar o ponto inteiro no PDF"
+                    if region_visible
+                    else "Exibir o ponto inteiro no PDF"
+                ),
+                toggled=partial(self._set_region_visible, region.id),
+            )
+            region_button.setProperty("regionId", str(region.id))
+            self._visibility_buttons[("region", region.id)] = region_button
+            self._tree.setItemWidget(root, 5, region_button)
             for element in elements:
-                root.addChild(
-                    self._result_item(
+                child = self._result_item(
+                    element,
+                    relationships=_relationship_labels(
                         element,
-                        relationships=_relationship_labels(
-                            element,
-                            region,
-                            all_elements,
-                            all_relations,
-                        ),
-                    )
+                        region,
+                        all_elements,
+                        all_relations,
+                    ),
                 )
+                root.addChild(child)
+                element_visible = region_visible and element.id not in self._hidden_proposal_ids
+                element_button = self._visibility_button(
+                    visible=element_visible,
+                    object_name="analysisElementVisibilityButton",
+                    tooltip=(
+                        "Ocultar somente este elemento no PDF"
+                        if element_visible
+                        else "Exibir somente este elemento no PDF"
+                    ),
+                    toggled=partial(self._set_element_visible, element.id),
+                )
+                element_button.setEnabled(region_visible)
+                element_button.setProperty("proposalId", str(element.id))
+                self._visibility_buttons[("element", element.id)] = element_button
+                self._tree.setItemWidget(child, 5, element_button)
         if not visible_elements:
             self._tree.addTopLevelItem(
-                QTreeWidgetItem(("Nenhuma identificação neste filtro", "", "", "", ""))
+                QTreeWidgetItem(("Nenhuma identificação neste filtro", "", "", "", "", ""))
             )
         self._tree.expandAll()
 
@@ -436,6 +587,7 @@ class ReviewPanelWidget(QWidget):
                 "",
                 self._catalog_label(proposal),
                 "; ".join(relationships) or "Agrupado por proximidade",
+                "",
             )
         )
         item.setData(0, Qt.ItemDataRole.UserRole, str(proposal.id))
@@ -490,7 +642,9 @@ class ReviewPanelWidget(QWidget):
         page_number = self._project_page_number(region.pagina_id)
         if page_number is not None:
             self._viewer.ir_para_folha(page_number)
-        self._viewer.definir_sobreposicoes((region.geometria.pontos,))
+        self._viewer.definir_sobreposicoes(
+            () if region.id in self._hidden_region_ids else (region.geometria.pontos,)
+        )
         self._detected.setText(
             f"{self._region_location(region, session.regioes.index(region) + 1)} · "
             f"{_coordinate_label(region)}"
@@ -839,6 +993,27 @@ class ReviewPanelWidget(QWidget):
         index = combo.findData(value)
         if index >= 0:
             combo.setCurrentIndex(index)
+
+
+def _visibility_icon(visible: bool) -> QIcon:
+    pixmap = QPixmap(20, 20)
+    pixmap.fill(Qt.GlobalColor.transparent)
+    painter = QPainter(pixmap)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+    pen = QPen(QColor("#2f5f8f"), 1.8)
+    pen.setCosmetic(True)
+    painter.setPen(pen)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    painter.drawEllipse(QRectF(2.0, 5.0, 16.0, 10.0))
+    painter.setBrush(QColor("#2f5f8f"))
+    painter.drawEllipse(QRectF(8.0, 8.0, 4.0, 4.0))
+    if not visible:
+        slash = QPen(QColor("#a33a3a"), 2.2)
+        slash.setCosmetic(True)
+        painter.setPen(slash)
+        painter.drawLine(3, 3, 17, 17)
+    painter.end()
+    return QIcon(pixmap)
 
 
 def _coordinate_spin(name: str) -> QDoubleSpinBox:

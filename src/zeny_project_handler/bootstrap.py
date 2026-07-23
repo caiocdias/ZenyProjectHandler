@@ -16,6 +16,7 @@ from zeny_project_handler.adapters.analysis import (
     TesseractCliOcr,
 )
 from zeny_project_handler.adapters.catalog import carregar_catalogo_inicial
+from zeny_project_handler.adapters.compliance import carregar_registro_conformidade_inicial
 from zeny_project_handler.adapters.interpretation import (
     InterpretadorRegrasExplicitas,
     carregar_registro_regras_inicial,
@@ -100,6 +101,7 @@ def create_application(
             caminho_banco=app_settings.database_path,
             descartar_conexoes=engine.dispose,
         ),
+        compliance_registry=carregar_registro_conformidade_inicial(),
         ui_state_path=app_settings.data_directory / "ui-state.ini",
     )
     application.aboutToQuit.connect(engine.dispose)
