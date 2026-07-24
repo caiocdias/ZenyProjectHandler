@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
 from uuid import UUID
@@ -37,7 +39,7 @@ from zeny_project_handler.adapters.pdf.coordinates import PontoPlano, Transforma
 from zeny_project_handler.adapters.pdf.errors import PdfError
 from zeny_project_handler.domain.analysis import PropostaElemento
 from zeny_project_handler.domain.documents import DocumentoProjeto
-from zeny_project_handler.domain.enums import EstadoRevisao
+from zeny_project_handler.domain.enums import EstadoRevisao, TipoGeometria
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 from zeny_project_handler.ports.pdf import InspecaoPdf, LeitorPdfPort, PaginaPdfRenderizada
 
@@ -118,6 +120,7 @@ class PdfGraphicsView(QGraphicsView):
         self,
         proposals: tuple[PropostaElemento, ...],
         transformer: TransformadorCoordenadasPagina,
+        link_geometries: Mapping[str, GeometriaDocumento] | None = None,
     ) -> None:
         signals_were_blocked = self._scene.blockSignals(True)
         try:
@@ -129,8 +132,14 @@ class PdfGraphicsView(QGraphicsView):
             self._scene.blockSignals(signals_were_blocked)
         self._review_transformer = transformer
         for proposal in proposals:
+            key = str(proposal.id)
+            link_geometry = (
+                link_geometries.get(key, proposal.geometria)
+                if link_geometries is not None
+                else proposal.geometria
+            )
             item = ReviewLinkItem(
-                _review_link_path(proposal.geometria, transformer),
+                _review_link_path(link_geometry, transformer),
             )
             item.setPen(_review_link_pen(proposal.estado_revisao))
             self._scene.addItem(item)
@@ -141,7 +150,6 @@ class PdfGraphicsView(QGraphicsView):
                 f"{proposal.estado_revisao.value} · "
                 f"confiança {proposal.confianca if proposal.confianca is not None else '-'}"
             )
-            key = str(proposal.id)
             item.setData(0, key)
             item.setData(1, proposal.estado_revisao.value)
             self._review_items[key] = item
@@ -235,6 +243,7 @@ class PdfViewerWidget(QWidget):
         self._rotation = 0
         self._overlays: tuple[tuple[PontoNormalizado, ...], ...] = ()
         self._review_proposals: tuple[PropostaElemento, ...] = ()
+        self._review_link_geometries: dict[str, GeometriaDocumento] = {}
         self._current_transformer: TransformadorCoordenadasPagina | None = None
         self._last_page_id: str | None = None
         self._build_ui()
@@ -319,6 +328,7 @@ class PdfViewerWidget(QWidget):
         self._project_pages = ()
         self._overlays = ()
         self._review_proposals = ()
+        self._review_link_geometries = {}
         self._current_transformer = None
         self._last_page_id = None
         self._page.blockSignals(True)
@@ -397,6 +407,7 @@ class PdfViewerWidget(QWidget):
         self._inspections = inspections
         self._overlays = ()
         self._review_proposals = ()
+        self._review_link_geometries = {}
         self._last_page_id = None
         self._project_pages = project_pages
         self._inspection = inspections[0]
@@ -413,10 +424,22 @@ class PdfViewerWidget(QWidget):
         self._overlays = geometries
         self._render_current_page()
 
-    def definir_propostas_revisao(self, proposals: tuple[PropostaElemento, ...]) -> None:
+    def definir_propostas_revisao(
+        self,
+        proposals: tuple[PropostaElemento, ...],
+        *,
+        geometrias_links: Mapping[UUID, GeometriaDocumento] | None = None,
+    ) -> None:
         self._review_proposals = proposals
+        self._review_link_geometries = {
+            str(proposal_id): geometry for proposal_id, geometry in (geometrias_links or {}).items()
+        }
         if self._current_transformer is not None:
-            self.view.definir_propostas_revisao(proposals, self._current_transformer)
+            self.view.definir_propostas_revisao(
+                proposals,
+                self._current_transformer,
+                self._review_link_geometries,
+            )
 
     def selecionar_proposta(self, proposal_id: str) -> None:
         self.view.selecionar_proposta(proposal_id)
@@ -453,7 +476,11 @@ class PdfViewerWidget(QWidget):
         )
         self._current_transformer = transformer
         self.view.definir_sobreposicoes(self._overlays, transformer)
-        self.view.definir_propostas_revisao(self._review_proposals, transformer)
+        self.view.definir_propostas_revisao(
+            self._review_proposals,
+            transformer,
+            self._review_link_geometries,
+        )
         diagnostics = len(inspection.paginas[page_number - 1].diagnosticos)
         if len(self._inspections) == 1:
             self._metadata.setText(
@@ -562,6 +589,8 @@ def _review_link_path(
     transformer: TransformadorCoordenadasPagina,
 ) -> QPainterPath:
     pixels = tuple(transformer.normalizado_para_pixel(point) for point in geometry.pontos)
+    if geometry.tipo is TipoGeometria.POLIGONO and len(pixels) == 4:
+        return _polygon_review_link_path(pixels)
     left = min(point.x for point in pixels)
     right = max(point.x for point in pixels)
     bottom = max(point.y for point in pixels)
@@ -578,4 +607,34 @@ def _review_link_path(
     path.lineTo(left, baseline)
     path.moveTo(right, baseline - 4)
     path.lineTo(right, baseline)
+    return path
+
+
+def _polygon_review_link_path(points: tuple[PontoPlano, ...]) -> QPainterPath:
+    top_center = PontoPlano(
+        (points[0].x + points[1].x) / 2,
+        (points[0].y + points[1].y) / 2,
+    )
+    bottom_center = PontoPlano(
+        (points[2].x + points[3].x) / 2,
+        (points[2].y + points[3].y) / 2,
+    )
+    outward_x = bottom_center.x - top_center.x
+    outward_y = bottom_center.y - top_center.y
+    outward_length = math.hypot(outward_x, outward_y)
+    if outward_length <= 1e-9:
+        outward_x, outward_y = 0.0, 1.0
+    else:
+        outward_x /= outward_length
+        outward_y /= outward_length
+
+    start = PontoPlano(points[3].x + outward_x * 4, points[3].y + outward_y * 4)
+    end = PontoPlano(points[2].x + outward_x * 4, points[2].y + outward_y * 4)
+
+    path = QPainterPath(QPointF(start.x, start.y))
+    path.lineTo(end.x, end.y)
+    path.moveTo(start.x - outward_x * 4, start.y - outward_y * 4)
+    path.lineTo(start.x, start.y)
+    path.moveTo(end.x - outward_x * 4, end.y - outward_y * 4)
+    path.lineTo(end.x, end.y)
     return path

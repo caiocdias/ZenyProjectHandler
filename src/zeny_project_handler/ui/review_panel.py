@@ -41,13 +41,18 @@ from zeny_project_handler.application.human_review import (
     SessaoRevisao,
 )
 from zeny_project_handler.application.spans import VaoDetectado, detectar_vaos
-from zeny_project_handler.domain.analysis import PropostaElemento, PropostaRelacao
+from zeny_project_handler.domain.analysis import (
+    EvidenciaDocumento,
+    PropostaElemento,
+    PropostaRelacao,
+)
 from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.domain.enums import (
     CategoriaElemento,
     EstadoRevisao,
     OrigemComprimentoVao,
     SituacaoProjeto,
+    TipoEvidencia,
     TipoGeometria,
 )
 from zeny_project_handler.domain.errors import DomainValidationError
@@ -563,7 +568,10 @@ class ReviewPanelWidget(QWidget):
             and item.id not in hidden_by_region
             and (self._page_id is None or item.geometria.pagina_id == self._page_id)
         )
-        self._viewer.definir_propostas_revisao(overlays)
+        self._viewer.definir_propostas_revisao(
+            overlays,
+            geometrias_links=_link_geometries(overlays, session.evidencias),
+        )
 
     def _visibility_button(
         self,
@@ -1251,6 +1259,70 @@ def _proposal_label(proposal: PropostaElemento) -> str:
         CategoriaElemento.EQUIPAMENTO: "Equipamento",
     }[proposal.categoria]
     return f"{category} {proposal.codigo_observado or ''}".strip()
+
+
+def _link_geometries(
+    proposals: tuple[PropostaElemento, ...],
+    evidence: tuple[EvidenciaDocumento, ...],
+) -> dict[UUID, GeometriaDocumento]:
+    evidence_by_id = {item.id: item for item in evidence}
+    geometries: dict[UUID, GeometriaDocumento] = {}
+    for proposal in proposals:
+        if proposal.categoria is not CategoriaElemento.CABO:
+            continue
+        label = _cable_label_evidence(proposal, evidence_by_id)
+        if label is not None:
+            geometries[proposal.id] = label.geometria
+    return geometries
+
+
+def _cable_label_evidence(
+    proposal: PropostaElemento,
+    evidence_by_id: dict[UUID, EvidenciaDocumento],
+) -> EvidenciaDocumento | None:
+    attributes = dict(proposal.atributos_sugeridos)
+    explicit_id = _safe_uuid(attributes.get("evidencia_rotulo_id"))
+    if explicit_id is not None:
+        explicit = evidence_by_id.get(explicit_id)
+        if (
+            explicit is not None
+            and explicit.tipo in {TipoEvidencia.TEXTO, TipoEvidencia.OCR}
+            and explicit.pagina_id == proposal.geometria.pagina_id
+        ):
+            return explicit
+
+    excluded_ids = {
+        identifier
+        for key in ("evidencia_identificador_id", "evidencia_comprimento_id")
+        if (identifier := _safe_uuid(attributes.get(key))) is not None
+    }
+    candidates = tuple(
+        item
+        for evidence_id in proposal.evidencia_ids
+        if evidence_id not in excluded_ids
+        if (item := evidence_by_id.get(evidence_id)) is not None
+        and item.tipo in {TipoEvidencia.TEXTO, TipoEvidencia.OCR}
+        and item.pagina_id == proposal.geometria.pagina_id
+    )
+    if not candidates:
+        return None
+    observed = (proposal.codigo_observado or "").casefold()
+    return min(
+        candidates,
+        key=lambda item: (
+            0 if observed and observed in (item.conteudo_bruto or "").casefold() else 1,
+            str(item.id),
+        ),
+    )
+
+
+def _safe_uuid(value: object) -> UUID | None:
+    if value is None:
+        return None
+    try:
+        return UUID(str(value))
+    except ValueError:
+        return None
 
 
 def _situation_label(situation: SituacaoProjeto) -> str:

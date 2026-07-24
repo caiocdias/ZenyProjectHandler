@@ -338,6 +338,87 @@ def test_span_visibility_button_hides_matching_cable_overlay(
     assert str(cable_proposal.id) in panel._viewer.view._review_items
 
 
+def test_cable_link_uses_the_rotated_label_instead_of_the_span_path(
+    review_panel_context: tuple[Engine, ReviewPanelWidget, PropostaElemento],
+) -> None:
+    _engine, panel, _proposal = review_panel_context
+    project_combo = panel.findChild(QComboBox, "reviewProjectCombo")
+    assert project_combo is not None
+    project_combo.setCurrentIndex(1)
+    assert panel._session is not None
+    page_id = panel._session.projeto.documentos[0].paginas[0].id
+    label_geometry = GeometriaDocumento.poligono(
+        page_id,
+        (
+            PontoNormalizado(Decimal("0.40"), Decimal("0.30")),
+            PontoNormalizado(Decimal("0.60"), Decimal("0.40")),
+            PontoNormalizado(Decimal("0.58"), Decimal("0.44")),
+            PontoNormalizado(Decimal("0.38"), Decimal("0.34")),
+        ),
+    )
+    label = EvidenciaDocumento(
+        id=uuid4(),
+        execucao_id=panel._session.execucao.id,
+        pagina_id=page_id,
+        tipo=TipoEvidencia.TEXTO,
+        geometria=label_geometry,
+        metodo="fixture",
+        versao_metodo="1",
+        parametros=(),
+        conteudo_bruto="B-2-CAA",
+        criada_em=datetime(2026, 7, 21, 17, tzinfo=UTC),
+    )
+    span_geometry = GeometriaDocumento.polilinha(
+        page_id,
+        (
+            PontoNormalizado(Decimal("0.05"), Decimal("0.05")),
+            PontoNormalizado(Decimal("0.95"), Decimal("0.95")),
+        ),
+    )
+    cable_proposal = PropostaElemento(
+        id=uuid4(),
+        execucao_id=panel._session.execucao.id,
+        categoria=CategoriaElemento.CABO,
+        situacao_projeto=SituacaoProjeto.INSTALAR,
+        estado_revisao=EstadoRevisao.CONFIRMADA,
+        evidencia_ids=(label.id,),
+        geometria=span_geometry,
+        codigo_observado="B-2-CAA",
+        atributos_sugeridos=(("evidencia_rotulo_id", str(label.id)),),
+        confianca=Decimal("0.95"),
+    )
+    panel._session = replace(
+        panel._session,
+        propostas=(cable_proposal,),
+        evidencias=(label,),
+    )
+    panel._page_id = page_id
+
+    panel._update_review_overlays((cable_proposal,))
+
+    proposal_id = str(cable_proposal.id)
+    marker = panel._viewer.view._review_items[proposal_id]
+    first = marker.path().elementAt(0)
+    second = marker.path().elementAt(1)
+    assert marker.path().boundingRect().width() < 30
+    assert abs(first.y - second.y) > 1
+    assert panel._viewer.view._review_geometries[proposal_id] == span_geometry
+    editable_geometry = panel._viewer.geometria_proposta(proposal_id)
+    assert editable_geometry is not None
+    assert editable_geometry.tipo is span_geometry.tipo
+    assert float(editable_geometry.pontos[0].x) == pytest.approx(0.05)
+    assert float(editable_geometry.pontos[0].y) == pytest.approx(0.05)
+    assert float(editable_geometry.pontos[1].x) == pytest.approx(0.95)
+    assert float(editable_geometry.pontos[1].y) == pytest.approx(0.95)
+
+    legacy_proposal = replace(cable_proposal, atributos_sugeridos=())
+    panel._session = replace(panel._session, propostas=(legacy_proposal,))
+    panel._update_review_overlays((legacy_proposal,))
+
+    legacy_marker = panel._viewer.view._review_items[proposal_id]
+    assert legacy_marker.path().boundingRect().width() < 30
+
+
 def test_result_visibility_can_hide_a_whole_point_or_one_element(
     qtbot: QtBot,
     review_panel_context: tuple[Engine, ReviewPanelWidget, PropostaElemento],
