@@ -31,8 +31,10 @@ from zeny_project_handler.adapters.persistence import (
     create_sqlite_engine,
     upgrade_database,
 )
+from zeny_project_handler.application.analysis_regions import RegiaoAnalise
 from zeny_project_handler.application.human_review import ServicoRevisaoHumana
 from zeny_project_handler.domain.analysis import (
+    DecisaoRevisao,
     EvidenciaDocumento,
     ExecucaoAnalise,
     PropostaElemento,
@@ -44,9 +46,10 @@ from zeny_project_handler.domain.enums import (
     EstadoExecucaoAnalise,
     EstadoRevisao,
     SituacaoProjeto,
+    TipoDecisaoRevisao,
     TipoEvidencia,
 )
-from zeny_project_handler.domain.project import Projeto
+from zeny_project_handler.domain.project import Cabo, Projeto
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 from zeny_project_handler.ports.pdf import ReferenciaFontePdf
 from zeny_project_handler.ui.documentation_panel import DocumentationPanelWidget
@@ -261,6 +264,78 @@ def test_results_panel_has_span_tab_with_length_source(
     source_item = table.item(0, 5)
     assert length_item is not None and length_item.text() == "31,50 m"
     assert source_item is not None and source_item.text() == "Comprimento informado"
+    visibility = table.cellWidget(0, 7)
+    assert isinstance(visibility, QToolButton)
+    assert visibility.property("spanId")
+    assert visibility.isChecked()
+
+    visibility.click()
+
+    assert not visibility.isChecked()
+    assert visibility.property("spanId") in {str(item) for item in panel._hidden_span_ids}
+
+
+def test_span_visibility_button_hides_matching_cable_overlay(
+    review_panel_context: tuple[Engine, ReviewPanelWidget, PropostaElemento],
+) -> None:
+    _engine, panel, _proposal = review_panel_context
+    project_combo = panel.findChild(QComboBox, "reviewProjectCombo")
+    table = panel.findChild(QTableWidget, "analysisSpanTable")
+    assert project_combo is not None
+    assert table is not None
+    project_combo.setCurrentIndex(1)
+    assert panel._session is not None
+    project = complete_project(panel._session.catalogo)
+    cable = next(item for item in project.elementos if isinstance(item, Cabo))
+    assert cable.geometria is not None
+    cable_proposal = PropostaElemento(
+        id=uuid4(),
+        execucao_id=panel._session.execucao.id,
+        categoria=CategoriaElemento.CABO,
+        situacao_projeto=cable.situacao,
+        estado_revisao=EstadoRevisao.CONFIRMADA,
+        evidencia_ids=(panel._session.evidencias[0].id,),
+        geometria=cable.geometria,
+        tipo_catalogo_sugerido_id=cable.tipo_catalogo_id,
+        confianca=Decimal("0.95"),
+    )
+    decision = DecisaoRevisao(
+        id=uuid4(),
+        proposta_id=cable_proposal.id,
+        decisao=TipoDecisaoRevisao.ACEITAR,
+        revisor="Caio",
+        decidida_em=datetime(2026, 7, 21, 18, tzinfo=UTC),
+        elemento_confirmado_id=cable.id,
+    )
+    region = RegiaoAnalise(
+        id=uuid4(),
+        pagina_id=cable.geometria.pagina_id,
+        geometria=cable.geometria,
+        elemento_ids=(cable_proposal.id,),
+    )
+    panel._session = replace(
+        panel._session,
+        projeto=project,
+        propostas=(cable_proposal,),
+        regioes=(region,),
+        decisoes=(decision,),
+    )
+    panel._page_id = cable.geometria.pagina_id
+
+    panel._refresh_spans()
+    panel._refresh_proposals()
+
+    visibility = table.cellWidget(0, 7)
+    assert isinstance(visibility, QToolButton)
+    assert str(cable_proposal.id) in panel._viewer.view._review_items
+
+    visibility.click()
+
+    assert str(cable_proposal.id) not in panel._viewer.view._review_items
+
+    visibility.click()
+
+    assert str(cable_proposal.id) in panel._viewer.view._review_items
 
 
 def test_result_visibility_can_hide_a_whole_point_or_one_element(

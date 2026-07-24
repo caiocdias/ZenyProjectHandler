@@ -87,7 +87,9 @@ class ReviewPanelWidget(QWidget):
         self._spans: tuple[VaoDetectado, ...] = ()
         self._hidden_region_ids: set[UUID] = set()
         self._hidden_proposal_ids: set[UUID] = set()
+        self._hidden_span_ids: set[UUID] = set()
         self._visibility_buttons: dict[tuple[str, UUID], QToolButton] = {}
+        self._span_visibility_buttons: dict[UUID, QToolButton] = {}
         self._loaded_bounds: tuple[float, float, float, float] | None = None
         self._syncing_selection = False
         self._build_ui()
@@ -184,7 +186,7 @@ class ReviewPanelWidget(QWidget):
         spans_guidance.setObjectName("spanResultsGuidance")
         spans_guidance.setWordWrap(True)
         spans_layout.addWidget(spans_guidance)
-        self._span_table = QTableWidget(0, 7)
+        self._span_table = QTableWidget(0, 8)
         self._span_table.setObjectName("analysisSpanTable")
         self._span_table.setHorizontalHeaderLabels(
             (
@@ -195,6 +197,7 @@ class ReviewPanelWidget(QWidget):
                 "Comprimento",
                 "Fonte",
                 "Folha",
+                "Exibir",
             )
         )
         self._span_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -203,7 +206,8 @@ class ReviewPanelWidget(QWidget):
         self._span_table.verticalHeader().setVisible(False)
         span_header = self._span_table.horizontalHeader()
         span_header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        span_header.setStretchLastSection(True)
+        span_header.setSectionResizeMode(6, QHeaderView.ResizeMode.Stretch)
+        span_header.setStretchLastSection(False)
         spans_layout.addWidget(self._span_table, 1)
         self._results_tabs.addTab(spans_page, "Vãos")
         layout.addWidget(self._results_tabs, 1)
@@ -352,7 +356,9 @@ class ReviewPanelWidget(QWidget):
         self._spans = ()
         self._hidden_region_ids.clear()
         self._hidden_proposal_ids.clear()
+        self._hidden_span_ids.clear()
         self._visibility_buttons.clear()
+        self._span_visibility_buttons.clear()
         self._project.clear()
         self._project.addItem("Selecione um projeto analisado", None)
         self._tree.clear()
@@ -384,7 +390,9 @@ class ReviewPanelWidget(QWidget):
         self._session = session
         self._hidden_region_ids.clear()
         self._hidden_proposal_ids.clear()
+        self._hidden_span_ids.clear()
         self._visibility_buttons.clear()
+        self._span_visibility_buttons.clear()
         source_paths = tuple(source.caminho_canonico for source in session.fontes_pdf)
         if source_paths and not self._viewer.carregar_projeto(
             source_paths,
@@ -442,6 +450,7 @@ class ReviewPanelWidget(QWidget):
         session = self._session
         self._spans = detectar_vaos(session.projeto) if session is not None else ()
         self._span_table.setRowCount(0)
+        self._span_visibility_buttons.clear()
         if session is None:
             return
         elements = {item.id: item for item in session.projeto.elementos}
@@ -470,6 +479,23 @@ class ReviewPanelWidget(QWidget):
                 if column == 0:
                     cell.setData(Qt.ItemDataRole.UserRole, str(span.id))
                 self._span_table.setItem(row, column, cell)
+            visible, enabled = self._span_visibility_state(span)
+            span_button = self._visibility_button(
+                visible=visible,
+                object_name="analysisSpanVisibilityButton",
+                tooltip=(
+                    "Ocultar este vão no PDF" if visible else "Exibir este vão no PDF"
+                ),
+                toggled=partial(self._set_span_visible, span.id),
+                parent=self._span_table,
+            )
+            span_button.setEnabled(enabled)
+            span_button.setProperty("spanId", str(span.id))
+            span_button.setProperty("cableId", str(span.cabo_id))
+            if (proposal_id := self._span_proposal_id(span)) is not None:
+                span_button.setProperty("proposalId", str(proposal_id))
+            self._span_visibility_buttons[span.id] = span_button
+            self._span_table.setCellWidget(row, 7, span_button)
 
     def _select_span(self) -> None:
         selected = self._span_table.selectedItems()
@@ -546,8 +572,9 @@ class ReviewPanelWidget(QWidget):
         object_name: str,
         tooltip: str,
         toggled: Callable[[bool], None],
+        parent: QWidget | None = None,
     ) -> QToolButton:
-        button = QToolButton(self._tree)
+        button = QToolButton(parent or self._tree)
         button.setObjectName(object_name)
         button.setCheckable(True)
         button.setChecked(visible)
@@ -569,6 +596,24 @@ class ReviewPanelWidget(QWidget):
     def _set_element_visible(self, proposal_id: UUID, visible: bool) -> None:
         if visible:
             self._hidden_proposal_ids.discard(proposal_id)
+        else:
+            self._hidden_proposal_ids.add(proposal_id)
+        self._sync_visibility_buttons()
+        self._update_review_overlays()
+
+    def _set_span_visible(self, span_id: UUID, visible: bool) -> None:
+        span = next((item for item in self._spans if item.id == span_id), None)
+        if span is None:
+            return
+        proposal_id = self._span_proposal_id(span)
+        if proposal_id is None:
+            if visible:
+                self._hidden_span_ids.discard(span_id)
+            else:
+                self._hidden_span_ids.add(span_id)
+        elif visible:
+            self._hidden_proposal_ids.discard(proposal_id)
+            self._hidden_span_ids.discard(span_id)
         else:
             self._hidden_proposal_ids.add(proposal_id)
         self._sync_visibility_buttons()
@@ -604,6 +649,53 @@ class ReviewPanelWidget(QWidget):
             button.setToolTip(tooltip)
             button.setAccessibleName(tooltip)
             button.blockSignals(False)
+        self._sync_span_visibility_buttons()
+
+    def _sync_span_visibility_buttons(self) -> None:
+        for span_id, button in self._span_visibility_buttons.items():
+            span = next((item for item in self._spans if item.id == span_id), None)
+            if span is None:
+                continue
+            visible, enabled = self._span_visibility_state(span)
+            tooltip = "Ocultar este vão no PDF" if visible else "Exibir este vão no PDF"
+            button.blockSignals(True)
+            button.setEnabled(enabled)
+            button.setChecked(visible)
+            button.setIcon(_visibility_icon(visible))
+            button.setToolTip(tooltip)
+            button.setAccessibleName(tooltip)
+            button.blockSignals(False)
+
+    def _span_visibility_state(self, span: VaoDetectado) -> tuple[bool, bool]:
+        proposal_id = self._span_proposal_id(span)
+        if proposal_id is None:
+            return span.id not in self._hidden_span_ids, True
+        session = self._session
+        region = (
+            next(
+                (
+                    item
+                    for item in session.regioes
+                    if proposal_id in item.elemento_ids
+                ),
+                None,
+            )
+            if session is not None
+            else None
+        )
+        enabled = region is None or region.id not in self._hidden_region_ids
+        visible = enabled and proposal_id not in self._hidden_proposal_ids
+        return visible, enabled
+
+    def _span_proposal_id(self, span: VaoDetectado) -> UUID | None:
+        session = self._session
+        if session is None:
+            return None
+        decision = next(
+            (item for item in session.decisoes if item.elemento_confirmado_id == span.cabo_id),
+            None,
+        )
+        return decision.proposta_id if decision is not None else None
 
     def _populate_result_tree(
         self,
