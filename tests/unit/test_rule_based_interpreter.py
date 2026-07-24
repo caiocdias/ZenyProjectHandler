@@ -182,6 +182,123 @@ def test_cable_length_annotation_is_attached_to_the_detected_line(
     assert annotation.id in cable.evidencia_ids
 
 
+def test_cable_uses_solid_path_between_same_situation_poles(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    request = _request(catalogo_inicial)
+    page_id = request.evidencias[0].pagina_id
+    pole_code = request.evidencias[0].conteudo_bruto
+    cable_code = request.evidencias[3].conteudo_bruto
+    assert pole_code is not None
+    assert cable_code is not None
+    installed_first = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=page_id,
+        key="installed-first-pole",
+        text=pole_code,
+        x="0.20",
+        y="0.50",
+        color="#008000",
+    )
+    installed_second = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=page_id,
+        key="installed-second-pole",
+        text=pole_code,
+        x="0.80",
+        y="0.50",
+        color="#008000",
+    )
+    removed_nearer = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=page_id,
+        key="removed-nearer-pole",
+        text=pole_code,
+        x="0.245",
+        y="0.48",
+        color="#FF0000",
+    )
+    label = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=page_id,
+        key="installed-cable-label",
+        text=cable_code,
+        x="0.50",
+        y="0.45",
+        color="#008000",
+    )
+    nearby_short_vector = vector_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=page_id,
+        key="nearby-short-vector",
+        points=(("0.49", "0.45"), ("0.51", "0.45")),
+        color="#008000",
+    )
+    solid_path = vector_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=page_id,
+        key="solid-cable-path",
+        points=(("0.24", "0.48"), ("0.76", "0.48")),
+        color="#008000",
+    )
+    dashed_path = replace(
+        vector_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="dashed-cable-path",
+            points=(("0.24", "0.47"), ("0.76", "0.47")),
+            color="#008000",
+        ),
+        atributos_extraidos=(
+            ("cor_contorno", "#008000"),
+            ("tracejado", "[ 4.61 4.61 ] 0"),
+        ),
+    )
+    length = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=page_id,
+        key="solid-cable-length",
+        text="55m",
+        x="0.50",
+        y="0.44",
+    )
+    request = replace(
+        request,
+        evidencias=(
+            installed_first,
+            installed_second,
+            removed_nearer,
+            label,
+            nearby_short_vector,
+            solid_path,
+            dashed_path,
+            length,
+        ),
+    )
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
+
+    cable = next(item for item in result.elementos if item.categoria is CategoriaElemento.CABO)
+    assert cable.geometria == solid_path.geometria
+    assert solid_path.id in cable.evidencia_ids
+    assert dashed_path.id not in cable.evidencia_ids
+    attributes = dict(cable.atributos_sugeridos)
+    assert attributes["geometria_cabo_origem"] == "vetor_ligando_postes"
+    assert attributes["comprimento_m"] == Decimal("55")
+    installed_pole_ids = {
+        item.id
+        for item in result.elementos
+        if item.categoria is CategoriaElemento.POSTE
+        and item.situacao_projeto is SituacaoProjeto.INSTALAR
+    }
+    connected_pole_ids = {
+        relation.destino_referencia_id
+        for relation in result.relacoes
+        if relation.origem_referencia_id == cable.id and relation.tipo_relacao == "CONECTA"
+    }
+    assert connected_pole_ids == installed_pole_ids
+
+
 def test_rule_interpreter_is_deterministic_and_does_not_match_code_as_substring(
     catalogo_inicial: CatalogoTecnico,
 ) -> None:

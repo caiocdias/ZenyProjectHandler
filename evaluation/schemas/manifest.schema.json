@@ -37,6 +37,14 @@
           "quality": {"type": "string", "minLength": 1},
           "density": {"type": "string", "minLength": 1},
           "double_annotation": {"type": "boolean"},
+          "expected_spans": {
+            "type": "object",
+            "propertyNames": {"enum": ["EXISTENTE", "INSTALAR", "REMOVER"]},
+            "additionalProperties": {
+              "type": "array",
+              "items": {"type": "number", "exclusiveMinimum": 0}
+            }
+          },
           "known_edge_cases": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
         }
       }

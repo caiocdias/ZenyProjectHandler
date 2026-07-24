@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from collections import Counter
 from datetime import UTC, datetime
+from decimal import Decimal
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
@@ -18,7 +19,12 @@ from zeny_project_handler.adapters.interpretation import (
 )
 from zeny_project_handler.adapters.pdf import PyMuPdfReader
 from zeny_project_handler.application.analysis_regions import agrupar_regioes_da_analise
+from zeny_project_handler.application.automatic_promotion import (
+    promover_resultado_automatico,
+)
+from zeny_project_handler.application.spans import detectar_vaos
 from zeny_project_handler.domain.enums import TipoEvidencia, TipoOrigemPdf
+from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler.ports.analysis import (
     ConfiguracaoAnaliseDocumento,
     SolicitacaoAnaliseDocumento,
@@ -126,13 +132,14 @@ def test_registered_real_pdf_native_evidence_by_anonymous_hash(sample: dict[str,
             and item.origem_pdf.tipo is TipoOrigemPdf.APARENCIA_ANOTACAO
             for item in result.evidencias
         )
+    catalog = carregar_catalogo_inicial()
     registry = carregar_registro_regras_inicial()
     interpretation = InterpretadorRegrasExplicitas(registry).interpretar(
         SolicitacaoInterpretacao(
             projeto_id=project_id,
             execucao_id=uuid4(),
             execucao_extracao_id=request.execucao_id,
-            catalogo=carregar_catalogo_inicial(),
+            catalogo=catalog,
             evidencias=result.evidencias,
             registro=registry,
         )
@@ -144,6 +151,33 @@ def test_registered_real_pdf_native_evidence_by_anonymous_hash(sample: dict[str,
     )
     grouped_element_ids = {element_id for region in regions for element_id in region.elemento_ids}
     assert grouped_element_ids == {item.id for item in interpretation.elementos}
+    if expected_spans := sample.get("expected_spans"):
+        project = Projeto(
+            id=project_id,
+            nome=f"validação-{sample['id']}",
+            catalogo_versao_id=catalog.id,
+            criado_em=request.criada_em,
+            documentos=(inspection.documento,),
+        )
+        promoted = promover_resultado_automatico(
+            project,
+            catalog,
+            interpretation.elementos,
+            interpretation.relacoes,
+            promovido_em=request.criada_em,
+        )
+        spans = detectar_vaos(promoted.projeto)
+        actual = Counter(
+            (span.situacao.value, span.comprimento_m)
+            for span in spans
+            if span.comprimento_m is not None
+        )
+        expected = Counter(
+            (situation, Decimal(str(length)))
+            for situation, lengths in expected_spans.items()
+            for length in lengths
+        )
+        assert actual == expected
     after = source.stat()
     assert (before.st_size, before.st_mtime_ns) == (after.st_size, after.st_mtime_ns)
 
