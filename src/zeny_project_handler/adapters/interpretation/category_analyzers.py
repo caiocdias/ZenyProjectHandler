@@ -27,6 +27,7 @@ from .rule_support import (
     normalized_text,
     situation_from_evidence,
 )
+from .span_rules import detectar_comprimento_anotado
 
 _POLE_DIMENSION_PATTERN = re.compile(
     r"(?<!\d)(9|10|11|12|13|15|18)\s*M?(?:\s*[-/:X]\s*|\s+)"
@@ -297,9 +298,10 @@ class AnalisadorCabo(AnalisadorCatalogoPorCodigo):
                         ),
                     )
                 )
+        with_lengths = tuple(_with_nearby_span_length(item, solicitacao) for item in proposals)
         return tuple(
             item
-            for item in proposals
+            for item in with_lengths
             if item.confianca is None or item.confianca >= solicitacao.configuracao.confianca_minima
         )
 
@@ -533,6 +535,29 @@ def _with_nearby_coordinate(
     return replace(
         proposal,
         evidencia_ids=tuple(sorted({*proposal.evidencia_ids, *evidence_ids}, key=str)),
+        atributos_sugeridos=tuple(attributes.items()),
+    )
+
+
+def _with_nearby_span_length(
+    proposal: PropostaElemento,
+    request: SolicitacaoInterpretacao,
+) -> PropostaElemento:
+    detected = detectar_comprimento_anotado(proposal.geometria, request.evidencias)
+    if detected is None:
+        return proposal
+    length, evidence = detected
+    attributes = dict(proposal.atributos_sugeridos)
+    attributes.update(
+        {
+            "comprimento_m": length,
+            "comprimento_origem": "anotacao_desenho",
+            "evidencia_comprimento_id": str(evidence.id),
+        }
+    )
+    return replace(
+        proposal,
+        evidencia_ids=tuple(sorted({*proposal.evidencia_ids, evidence.id}, key=str)),
         atributos_sugeridos=tuple(attributes.items()),
     )
 

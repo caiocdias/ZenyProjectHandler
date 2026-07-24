@@ -52,6 +52,12 @@ class TipoPontoRede(StrEnum):
     OUTRO = "OUTRO"
 
 
+class OrigemComprimentoVao(StrEnum):
+    ANOTACAO_DESENHO = "ANOTACAO_DESENHO"
+    COORDENADAS = "COORDENADAS"
+    INFORMADO = "INFORMADO"
+
+
 class TipoVinculoObra(StrEnum):
     REALOCACAO = "REALOCACAO"
     SUBSTITUICAO = "SUBSTITUICAO"

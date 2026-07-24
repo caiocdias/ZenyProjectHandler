@@ -18,6 +18,7 @@ from zeny_project_handler.domain.enums import (
     CategoriaElemento,
     EstadoRevisao,
     NivelRede,
+    OrigemComprimentoVao,
     TipoDecisaoRevisao,
     TipoGeometria,
     TipoPontoRede,
@@ -242,6 +243,7 @@ def _dependent_element(
         )
         for index in range(2)
     )
+    span_length, length_origin = _cable_length(proposal, pole_proposals)
     return (
         Cabo(
             id=element_id,
@@ -251,6 +253,8 @@ def _dependent_element(
             geometria=geometry,
             ponto_origem_id=points[0].id,
             ponto_destino_id=points[1].id,
+            comprimento_m=span_length,
+            origem_comprimento=length_origin,
             postes_apoio_ids=pole_ids,
         ),
         points,
@@ -342,6 +346,29 @@ def _coordinate(proposal: PropostaElemento) -> CoordenadaCampo | None:
         norte=Decimal(str(north)),
         sistema_referencia="UTM",
     )
+
+
+def _cable_length(
+    proposal: PropostaElemento,
+    poles: tuple[PropostaElemento, ...],
+) -> tuple[Decimal | None, OrigemComprimentoVao | None]:
+    attributes = dict(proposal.atributos_sugeridos)
+    annotated = attributes.get("comprimento_m")
+    if annotated is not None:
+        length = Decimal(str(annotated))
+        if length > 0:
+            return length, OrigemComprimentoVao.ANOTACAO_DESENHO
+    coordinates = tuple(
+        coordinate for pole in poles if (coordinate := _coordinate(pole)) is not None
+    )
+    if len(coordinates) != 2:
+        return None, None
+    delta_east = coordinates[1].leste - coordinates[0].leste
+    delta_north = coordinates[1].norte - coordinates[0].norte
+    length = (delta_east * delta_east + delta_north * delta_north).sqrt()
+    if length <= 0:
+        return None, None
+    return length.quantize(Decimal("0.01")), OrigemComprimentoVao.COORDENADAS
 
 
 def _catalog_id(proposal: PropostaElemento) -> UUID:

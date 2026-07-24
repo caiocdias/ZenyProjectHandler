@@ -16,6 +16,7 @@ from zeny_project_handler.domain.enums import (
     CategoriaElemento,
     EstadoConexao,
     NivelRede,
+    OrigemComprimentoVao,
     SituacaoProjeto,
     TipoAcaoRevisaoManual,
     TipoGeometria,
@@ -154,6 +155,7 @@ class Cabo(ElementoProjeto):
     ponto_origem_id: UUID
     ponto_destino_id: UUID
     comprimento_m: Decimal | None = None
+    origem_comprimento: OrigemComprimentoVao | None = None
     postes_apoio_ids: tuple[UUID, ...] = ()
     pontos_intermediarios_ids: tuple[UUID, ...] = ()
 
@@ -166,6 +168,10 @@ class Cabo(ElementoProjeto):
             length = decimal_value(length, field_name="comprimento_m")
             if length <= 0:
                 raise DomainValidationError("Comprimento do cabo deve ser positivo")
+        if length is None and self.origem_comprimento is not None:
+            raise DomainValidationError(
+                "Origem do comprimento somente pode ser informada quando há comprimento"
+            )
         supports = tuple(self.postes_apoio_ids)
         intermediate_points = tuple(self.pontos_intermediarios_ids)
         if len(set(supports)) != len(supports):

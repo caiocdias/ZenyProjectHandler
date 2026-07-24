@@ -27,7 +27,7 @@ from .relation_rules import generate_relations, mark_conflicts
 
 class InterpretadorRegrasExplicitas:
     nome = "regras-explicitas-cemig"
-    versao = "7.0"
+    versao = "8.0"
 
     def __init__(
         self,
