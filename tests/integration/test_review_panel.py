@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -13,11 +14,14 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QLabel,
     QPushButton,
+    QTableWidget,
+    QTabWidget,
     QToolButton,
     QTreeWidget,
 )
 from pytestqt.qtbot import QtBot
 from sqlalchemy import Engine
+from tests.factories import complete_project
 from tests.pdf_fixtures import create_golden_pdf
 
 from zeny_project_handler.adapters.compliance import carregar_registro_conformidade_inicial
@@ -230,6 +234,33 @@ def test_results_panel_groups_relationships_and_links_elements_to_pdf(
     assert guidance is not None and "automaticamente" in guidance.text()
     assert editor is not None and not editor.isVisible()
     assert accept is not None and not accept.isVisible()
+
+
+def test_results_panel_has_span_tab_with_length_source(
+    review_panel_context: tuple[Engine, ReviewPanelWidget, PropostaElemento],
+) -> None:
+    _engine, panel, _proposal = review_panel_context
+    project_combo = panel.findChild(QComboBox, "reviewProjectCombo")
+    tabs = panel.findChild(QTabWidget, "analysisResultTabs")
+    table = panel.findChild(QTableWidget, "analysisSpanTable")
+    assert project_combo is not None
+    assert tabs is not None
+    assert table is not None
+    project_combo.setCurrentIndex(1)
+    assert panel._session is not None
+    panel._session = replace(
+        panel._session,
+        projeto=complete_project(panel._session.catalogo),
+    )
+
+    panel._refresh_spans()
+
+    assert [tabs.tabText(index) for index in range(tabs.count())] == ["Elementos", "Vãos"]
+    assert table.rowCount() == 1
+    length_item = table.item(0, 4)
+    source_item = table.item(0, 5)
+    assert length_item is not None and length_item.text() == "31,50 m"
+    assert source_item is not None and source_item.text() == "Comprimento informado"
 
 
 def test_result_visibility_can_hide_a_whole_point_or_one_element(

@@ -6,7 +6,7 @@ import pytest
 
 from zeny_project_handler.adapters.persistence.domain_json import dumps_domain, loads_domain
 from zeny_project_handler.adapters.persistence.errors import DomainCodecError
-from zeny_project_handler.domain.enums import SituacaoProjeto
+from zeny_project_handler.domain.enums import OrigemComprimentoVao, SituacaoProjeto
 from zeny_project_handler.domain.project import Projeto
 
 
@@ -18,6 +18,7 @@ def test_codec_supports_tagged_values_lists_and_dictionaries() -> None:
             datetime(2026, 7, 21, tzinfo=UTC),
             date(2026, 7, 21),
             SituacaoProjeto.INSTALAR,
+            OrigemComprimentoVao.ANOTACAO_DESENHO,
         ]
     }
 

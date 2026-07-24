@@ -158,6 +158,30 @@ def test_rule_interpreter_proposes_all_categories_situations_and_relations(
     assert all(item.evidencia_ids for item in result.relacoes)
 
 
+def test_cable_length_annotation_is_attached_to_the_detected_line(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    request = _request(catalogo_inicial)
+    annotation = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=request.evidencias[0].pagina_id,
+        key="span-length",
+        text="Vão: 42,5 m",
+        x="0.45",
+        y="0.42",
+    )
+    request = replace(request, evidencias=(*request.evidencias, annotation))
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
+
+    cable = next(item for item in result.elementos if item.categoria is CategoriaElemento.CABO)
+    attributes = dict(cable.atributos_sugeridos)
+    assert attributes["comprimento_m"] == Decimal("42.5")
+    assert attributes["comprimento_origem"] == "anotacao_desenho"
+    assert attributes["evidencia_comprimento_id"] == str(annotation.id)
+    assert annotation.id in cable.evidencia_ids
+
+
 def test_rule_interpreter_is_deterministic_and_does_not_match_code_as_substring(
     catalogo_inicial: CatalogoTecnico,
 ) -> None:
