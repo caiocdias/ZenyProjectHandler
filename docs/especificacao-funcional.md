@@ -74,10 +74,11 @@ Resultados automáticos alimentam diretamente as etapas seguintes:
    coordenada encontrada em texto nativo ou OCR.
 8. `RelacaoConfirmada` preserva tipo e extremidades já confirmadas. Elementos e relações criados
    manualmente registram autor, data e motivo opcional em `RegistroRevisaoManual`.
-9. O PDF exibe um sublinhado clicável por proposta de elemento. O clique traz a aba lateral de
-   resultados para frente, abre a folha correta e seleciona o item dentro de sua região. A lista
-   apresenta coordenada, acontecimentos de instalação/retirada/existência, catálogo e vínculos sem
-   exigir confirmação item a item.
+9. O PDF exibe um sublinhado clicável por proposta de elemento. Para cabos, o sublinhado acompanha
+   a caixa e a inclinação do texto classificador, sem se estender pelo traçado do vão. O clique traz
+   a aba lateral de resultados para frente, abre a folha correta e seleciona o item dentro de sua
+   região. A lista apresenta coordenada, acontecimentos de instalação/retirada/existência, catálogo
+   e vínculos sem exigir confirmação item a item.
 
 `EstadoRevisao` é independente de `SituacaoProjeto`. Por exemplo, uma proposta ainda não revisada pode indicar corretamente que o símbolo representa um poste a remover.
 
@@ -209,6 +210,10 @@ que os reconheça.
   externo validado.
 - Existem analisadores independentes para poste, estrutura MT, estrutura BT, cabo e equipamento. A
   correspondência delimitada com códigos ativos continua sendo a evidência mais específica.
+- Somente postes, estruturas e equipamentos próximos de um identificador operacional `P<n>` entram
+  nos resultados do projeto. Cabos exigem um identificador de vão `V<n>-<n>`. Os demais códigos
+  reconhecidos no desenho permanecem apenas como referências elétricas e não geram propostas,
+  relações ou elementos confirmados. O identificador e sua evidência são preservados na auditoria.
 - O analisador de postes também interpreta a nomenclatura `altura-resistência` usada nos projetos,
   aceitando separadores `-`, `/`, `:`, `x`, espaço ou quebra de linha e sufixos opcionais `m` e
   `daN`. Uma combinação como `11-300` consulta os postes do catálogo; sem formato explícito,
