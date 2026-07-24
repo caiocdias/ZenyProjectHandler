@@ -116,6 +116,30 @@ def _request(catalog: CatalogoTecnico):  # type: ignore[no-untyped-def]
             x="0.95",
             y="0.95",
         ),
+        text_evidence(
+            execution_id=source_execution_id,
+            page_id=page_id,
+            key="point-label-1",
+            text="P1",
+            x="0.10",
+            y="0.08",
+        ),
+        text_evidence(
+            execution_id=source_execution_id,
+            page_id=page_id,
+            key="point-label-2",
+            text="P2",
+            x="0.80",
+            y="0.78",
+        ),
+        text_evidence(
+            execution_id=source_execution_id,
+            page_id=page_id,
+            key="span-label-1-2",
+            text="V1-2",
+            x="0.45",
+            y="0.43",
+        ),
     )
     registry = carregar_registro_regras_inicial()
     return SolicitacaoInterpretacao(
@@ -147,6 +171,20 @@ def test_rule_interpreter_proposes_all_categories_situations_and_relations(
     assert bt.situacao_projeto is SituacaoProjeto.REMOVER
     assert cable.geometria.tipo is TipoGeometria.POLILINHA
     assert cable.situacao_projeto is SituacaoProjeto.INSTALAR
+    assert dict(cable.atributos_sugeridos)["evidencia_rotulo_id"] == str(
+        request.evidencias[3].id
+    )
+    identifiers = {
+        item.categoria: dict(item.atributos_sugeridos)["identificador_operacional"]
+        for item in result.elementos
+    }
+    assert identifiers == {
+        CategoriaElemento.POSTE: "P1",
+        CategoriaElemento.ESTRUTURA_MT: "P1",
+        CategoriaElemento.ESTRUTURA_BT: "P1",
+        CategoriaElemento.CABO: "V1-2",
+        CategoriaElemento.EQUIPAMENTO: "P2",
+    }
     image = next(item for item in request.evidencias if item.tipo.value == "IMAGEM")
     assert image.id in equipment.evidencia_ids
     assert {item.tipo_relacao for item in result.relacoes} >= {
@@ -273,6 +311,30 @@ def test_cable_uses_solid_path_between_same_situation_poles(
             solid_path,
             dashed_path,
             length,
+            text_evidence(
+                execution_id=request.execucao_extracao_id,
+                page_id=page_id,
+                key="point-label-first",
+                text="P1",
+                x="0.20",
+                y="0.52",
+            ),
+            text_evidence(
+                execution_id=request.execucao_extracao_id,
+                page_id=page_id,
+                key="point-label-second",
+                text="P2",
+                x="0.80",
+                y="0.52",
+            ),
+            text_evidence(
+                execution_id=request.execucao_extracao_id,
+                page_id=page_id,
+                key="span-label",
+                text="V1-2",
+                x="0.50",
+                y="0.43",
+            ),
         ),
     )
 
@@ -350,9 +412,17 @@ def test_header_rows_are_not_interpreted_as_project_equipment(
         x="0.92",
         y="0.95",
     )
+    point_label = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=source.pagina_id,
+        key="drawing-point-label",
+        text="P3",
+        x="0.92",
+        y="0.93",
+    )
     request = replace(
         request,
-        evidencias=(header_line, split_label, split_value, drawing_equipment),
+        evidencias=(header_line, split_label, split_value, drawing_equipment, point_label),
     )
 
     result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
@@ -384,7 +454,15 @@ def test_unknown_abcn_nomenclature_is_kept_as_removed_cable_for_review(
         points=(("0.25", "0.25"), ("0.55", "0.55")),
         color="#FF0000",
     )
-    request = replace(request, evidencias=(label, removed_line))
+    span_label = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=source.pagina_id,
+        key="unknown-span-label",
+        text="V3-4",
+        x="0.40",
+        y="0.40",
+    )
+    request = replace(request, evidencias=(label, removed_line, span_label))
 
     result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
 
@@ -442,7 +520,15 @@ def test_pole_nomenclature_from_native_text_or_ocr_is_recognized_and_cataloged(
         conteudo_bruto=pole_text,
         atributos_extraidos=(("confianca", Decimal("0.91")),),
     )
-    request = replace(request, evidencias=(dimensions,))
+    point_label = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=source.pagina_id,
+        key="dimension-point-label",
+        text="P7",
+        x="0.10",
+        y="0.08",
+    )
+    request = replace(request, evidencias=(dimensions, point_label))
 
     result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
 
@@ -486,7 +572,15 @@ def test_pole_collects_nearby_coordinates_from_native_text_and_ocr(
         ),
         tipo=TipoEvidencia.OCR,
     )
-    request = replace(request, evidencias=(pole, east, north))
+    point_label = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=source.pagina_id,
+        key="coordinate-point-label",
+        text="P8",
+        x="0.10",
+        y="0.08",
+    )
+    request = replace(request, evidencias=(pole, east, north, point_label))
 
     result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
 
@@ -546,6 +640,14 @@ def test_installed_assets_are_related_to_installed_pole_instead_of_nearer_remove
             y="0.11",
             color="#008000",
         ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=source.pagina_id,
+            key="installed-point-label",
+            text="P9",
+            x="0.11",
+            y="0.08",
+        ),
     )
     request = replace(request, evidencias=evidence)
 
@@ -581,7 +683,15 @@ def test_pole_format_resolves_dimension_to_exact_catalog_item(
         id=uuid4(),
         conteudo_bruto="POSTE CIRCULAR 11-300",
     )
-    request = replace(request, evidencias=(source,))
+    point_label = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=source.pagina_id,
+        key="format-point-label",
+        text="P10",
+        x="0.10",
+        y="0.08",
+    )
+    request = replace(request, evidencias=(source, point_label))
 
     result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
 
@@ -602,7 +712,15 @@ def test_equipment_class_phrase_is_proposed_for_human_disambiguation(
         id=uuid4(),
         conteudo_bruto="CHAVE FUSÍVEL REPETIDORA",
     )
-    request = replace(request, evidencias=(source,))
+    point_label = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=source.pagina_id,
+        key="class-point-label",
+        text="P11",
+        x="0.10",
+        y="0.08",
+    )
+    request = replace(request, evidencias=(source, point_label))
 
     result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
 
@@ -632,7 +750,15 @@ def test_equipment_nomenclature_variants_from_plan_are_cataloged(
         tipo=TipoEvidencia.OCR,
         conteudo_bruto=observed,
     )
-    request = replace(request, evidencias=(source,))
+    point_label = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=source.pagina_id,
+        key="equipment-point-label",
+        text="P12",
+        x="0.10",
+        y="0.08",
+    )
+    request = replace(request, evidencias=(source, point_label))
 
     result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
 
@@ -642,3 +768,42 @@ def test_equipment_nomenclature_variants_from_plan_are_cataloged(
     item = catalogo_inicial.item_por_id(equipment.tipo_catalogo_sugerido_id)  # type: ignore[arg-type]
     assert item is not None
     assert item.codigo == catalog_code
+
+
+def test_unidentified_electrical_references_are_not_project_elements(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    request = _request(catalogo_inicial)
+    references_only = replace(request, evidencias=request.evidencias[:-3])
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(references_only)
+
+    assert result.elementos == ()
+    assert result.relacoes == ()
+
+
+def test_operational_identifiers_can_share_text_with_the_catalog_nomenclature(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    request = _request(catalogo_inicial)
+    pole = replace(
+        request.evidencias[0],
+        id=uuid4(),
+        conteudo_bruto="P013 POSTE CIRCULAR 11-300",
+    )
+    cable = replace(
+        request.evidencias[3],
+        id=uuid4(),
+        conteudo_bruto=f"V003-004 {request.evidencias[3].conteudo_bruto}",
+    )
+    request = replace(request, evidencias=(pole, cable))
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
+
+    assert {
+        (item.categoria, dict(item.atributos_sugeridos)["identificador_operacional"])
+        for item in result.elementos
+    } == {
+        (CategoriaElemento.POSTE, "P13"),
+        (CategoriaElemento.CABO, "V3-4"),
+    }

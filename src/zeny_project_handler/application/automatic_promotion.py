@@ -87,6 +87,7 @@ def promover_resultado_automatico(
                     tipo_catalogo_id=_catalog_id(proposal),
                     situacao=proposal.situacao_projeto,
                     codigo_observado=proposal.codigo_observado,
+                    identificador_operacional=_operational_identifier(proposal),
                     geometria=proposal.geometria,
                     coordenada_campo=_coordinate(proposal),
                 )
@@ -193,6 +194,7 @@ def _dependent_element(
                 tipo_catalogo_id=catalog_id,
                 situacao=proposal.situacao_projeto,
                 codigo_observado=proposal.codigo_observado,
+                identificador_operacional=_operational_identifier(proposal),
                 geometria=proposal.geometria,
                 poste_id=pole_ids[0],
             ),
@@ -207,6 +209,7 @@ def _dependent_element(
                 tipo_catalogo_id=catalog_id,
                 situacao=proposal.situacao_projeto,
                 codigo_observado=proposal.codigo_observado,
+                identificador_operacional=_operational_identifier(proposal),
                 geometria=proposal.geometria,
                 poste_id=pole_ids[0],
             ),
@@ -221,6 +224,7 @@ def _dependent_element(
                 tipo_catalogo_id=catalog_id,
                 situacao=proposal.situacao_projeto,
                 codigo_observado=proposal.codigo_observado,
+                identificador_operacional=_operational_identifier(proposal),
                 geometria=proposal.geometria,
                 poste_id=pole_ids[0],
             ),
@@ -250,6 +254,7 @@ def _dependent_element(
             tipo_catalogo_id=catalog_id,
             situacao=proposal.situacao_projeto,
             codigo_observado=proposal.codigo_observado,
+            identificador_operacional=_operational_identifier(proposal),
             geometria=geometry,
             ponto_origem_id=points[0].id,
             ponto_destino_id=points[1].id,
@@ -268,6 +273,12 @@ def _relations_by_origin(
     for relation in relations:
         origins.setdefault(relation.origem_referencia_id, []).append(relation)
     return {key: tuple(value) for key, value in origins.items()}
+
+
+def _operational_identifier(proposal: PropostaElemento) -> str | None:
+    value = dict(proposal.atributos_sugeridos).get("identificador_operacional")
+    normalized = str(value).strip() if value is not None else ""
+    return normalized or None
 
 
 def _related_poles(

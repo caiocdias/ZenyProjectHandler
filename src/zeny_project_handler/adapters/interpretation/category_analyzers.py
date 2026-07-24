@@ -129,6 +129,12 @@ class AnalisadorCatalogoPorCodigo:
             request.execucao_id,
             f"elemento:{rule.id}:{item.id}:{evidence.id}",
         )
+        attributes: list[tuple[str, str]] = [
+            ("registro_regras", request.registro.versao),
+            ("regra_id", rule.id),
+        ]
+        if self.categoria is CategoriaElemento.CABO:
+            attributes.append(("evidencia_rotulo_id", str(evidence.id)))
         return PropostaElemento(
             id=proposal_id,
             execucao_id=request.execucao_id,
@@ -139,10 +145,7 @@ class AnalisadorCatalogoPorCodigo:
             geometria=geometry,
             tipo_catalogo_sugerido_id=item.id,
             codigo_observado=item.codigo,
-            atributos_sugeridos=(
-                ("registro_regras", request.registro.versao),
-                ("regra_id", rule.id),
-            ),
+            atributos_sugeridos=tuple(attributes),
             confianca=confidence,
             justificativa=(
                 f"A regra {rule.id} reconheceu exatamente o código {item.codigo} em texto ou OCR."
@@ -234,7 +237,7 @@ class AnalisadorEstruturaBt(AnalisadorCatalogoPorCodigo):
 
 class AnalisadorCabo(AnalisadorCatalogoPorCodigo):
     nome = "cabo-codigo-e-nomenclatura"
-    versao = "2.0"
+    versao = "3.0"
     categoria = CategoriaElemento.CABO
 
     def analisar(
@@ -289,6 +292,7 @@ class AnalisadorCabo(AnalisadorCatalogoPorCodigo):
                         codigo_observado=observed,
                         atributos_sugeridos=(
                             ("catalogo_nao_localizado", True),
+                            ("evidencia_rotulo_id", str(evidence.id)),
                             ("regra_id", regra.id),
                         ),
                         confianca=Decimal("0.66"),

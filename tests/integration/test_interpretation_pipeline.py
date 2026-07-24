@@ -98,7 +98,38 @@ def interpretation_context(
         ),
         tipo=TipoEvidencia.OCR,
     )
-    evidence = (*evidence, coordinate_east, coordinate_north)
+    point_label = text_evidence(
+        execution_id=source_execution.id,
+        page_id=page_id,
+        key="point-label",
+        text="P1",
+        x="0.20",
+        y="0.18",
+    )
+    equipment_point_label = text_evidence(
+        execution_id=source_execution.id,
+        page_id=page_id,
+        key="equipment-point-label",
+        text="P2",
+        x="0.50",
+        y="0.18",
+    )
+    span_label = text_evidence(
+        execution_id=source_execution.id,
+        page_id=page_id,
+        key="span-label",
+        text="V1-2",
+        x="0.40",
+        y="0.18",
+    )
+    evidence = (
+        *evidence,
+        coordinate_east,
+        coordinate_north,
+        point_label,
+        equipment_point_label,
+        span_label,
+    )
     with SqlAlchemyUnitOfWork(engine) as work:
         work.catalogos.salvar(catalogo_inicial)
         work.projetos.salvar(project)
@@ -152,6 +183,7 @@ def test_pipeline_persists_cross_run_provenance_and_reuses_completed_result(
         assert promoted_pole.coordenada_campo is not None
         assert promoted_pole.coordenada_campo.leste == Decimal(465702)
         assert promoted_pole.coordenada_campo.norte == Decimal(7772468)
+        assert promoted_pole.identificador_operacional == "P1"
         decisions = tuple(
             work.decisoes_revisao.obter_da_proposta(item.id) for item in first.elementos
         )

@@ -61,6 +61,7 @@ def create_catalog_pdf(path: Path, code: str) -> Path:
     document = pymupdf.open()
     try:
         page = document.new_page(width=240, height=160)
+        page.insert_text((20, 25), "P1")
         page.insert_text((20, 40), code)
         document.save(path)
     finally:
@@ -127,6 +128,7 @@ def create_analysis_pdf(path: Path) -> Path:
 
         page = document.new_page(width=240, height=160)
         page.insert_text((12, 25), "POSTE P1", fontsize=10)
+        page.insert_text((105, 40), "P2", fontsize=10)
         page.insert_text((25, 135), "MT", fontsize=9, rotate=90)
         page.draw_line((10, 40), (90, 40), color=(0, 1, 0), width=2)
         page.draw_bezier((10, 55), (30, 35), (60, 75), (90, 55), color=(0, 0, 1))

@@ -34,7 +34,7 @@ _EVALUATION_NAMESPACE = UUID("6e55709a-0d4e-5af3-8e61-ecc532acbf46")
 
 class InterpretadorRegrasAvaliacao:
     nome = "pipeline-regras-explicitas"
-    versao = "1.0"
+    versao = "3.0"
 
     def __init__(
         self,

@@ -32,6 +32,7 @@ def _catalog_pdf(path: Path) -> Path:
     document = pymupdf.open()
     try:
         first = document.new_page(width=240, height=160)
+        first.insert_text((20, 25), "P1")
         first.insert_text((20, 40), code)
         second = document.new_page(width=240, height=160)
         second.insert_text((20, 40), "SEGUNDA FOLHA")

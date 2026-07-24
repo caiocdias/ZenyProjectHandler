@@ -22,13 +22,14 @@ from .category_analyzers import (
     AnalisadorEstruturaMt,
     AnalisadorPoste,
 )
+from .operational_labels import filtrar_propostas_identificadas
 from .relation_rules import generate_relations, mark_conflicts
 from .span_rules import associar_tracados_de_cabos
 
 
 class InterpretadorRegrasExplicitas:
     nome = "regras-explicitas-cemig"
-    versao = "9.0"
+    versao = "11.0"
 
     def __init__(
         self,
@@ -68,10 +69,14 @@ class InterpretadorRegrasExplicitas:
                 proposals.extend(analyzer.analisar(project_request, rule))
             except Exception as error:
                 diagnostics.append(_analyzer_diagnostic(analyzer.nome, error))
-            if len(proposals) > solicitacao.configuracao.maximo_propostas:
-                raise ValueError("Quantidade de propostas excedeu o limite configurado")
-        proposals_with_paths = associar_tracados_de_cabos(
+        identified_proposals = filtrar_propostas_identificadas(
             tuple(proposals),
+            project_request.evidencias,
+        )
+        if len(identified_proposals) > solicitacao.configuracao.maximo_propostas:
+            raise ValueError("Quantidade de propostas excedeu o limite configurado")
+        proposals_with_paths = associar_tracados_de_cabos(
+            identified_proposals,
             project_request.evidencias,
             solicitacao.catalogo,
         )
