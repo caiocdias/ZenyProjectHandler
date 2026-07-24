@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
@@ -39,15 +40,25 @@ from zeny_project_handler.application.human_review import (
     ServicoRevisaoHumana,
     SessaoRevisao,
 )
+from zeny_project_handler.application.spans import VaoDetectado, detectar_vaos
 from zeny_project_handler.domain.analysis import PropostaElemento, PropostaRelacao
+from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.domain.enums import (
     CategoriaElemento,
     EstadoRevisao,
+    OrigemComprimentoVao,
     SituacaoProjeto,
     TipoGeometria,
 )
 from zeny_project_handler.domain.errors import DomainValidationError
-from zeny_project_handler.domain.project import Cabo, Equipamento, EstruturaBt, EstruturaMt, Poste
+from zeny_project_handler.domain.project import (
+    Cabo,
+    ElementoProjetoType,
+    Equipamento,
+    EstruturaBt,
+    EstruturaMt,
+    Poste,
+)
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 
 from .pdf_viewer import PdfViewerWidget
@@ -73,6 +84,7 @@ class ReviewPanelWidget(QWidget):
         self._session: SessaoRevisao | None = None
         self._page_id: UUID | None = None
         self._selected_proposal_id: UUID | None = None
+        self._spans: tuple[VaoDetectado, ...] = ()
         self._hidden_region_ids: set[UUID] = set()
         self._hidden_proposal_ids: set[UUID] = set()
         self._visibility_buttons: dict[tuple[str, UUID], QToolButton] = {}
@@ -94,7 +106,9 @@ class ReviewPanelWidget(QWidget):
         project_row.addWidget(refresh)
         layout.addLayout(project_row)
 
-        filter_row = QHBoxLayout()
+        filter_widget = QWidget()
+        filter_row = QHBoxLayout(filter_widget)
+        filter_row.setContentsMargins(0, 0, 0, 0)
         self._category_filter = QComboBox()
         self._category_filter.setObjectName("reviewCategoryFilter")
         self._category_filter.addItem("Todas as classes", None)
@@ -107,7 +121,13 @@ class ReviewPanelWidget(QWidget):
         for state in EstadoRevisao:
             self._state_filter.addItem(state.value, state.value)
         filter_row.addWidget(self._state_filter)
-        layout.addLayout(filter_row)
+
+        self._results_tabs = QTabWidget()
+        self._results_tabs.setObjectName("analysisResultTabs")
+        elements_page = QWidget()
+        elements_layout = QVBoxLayout(elements_page)
+        elements_layout.setContentsMargins(0, 0, 0, 0)
+        elements_layout.addWidget(filter_widget)
 
         guidance = QLabel(
             "As identificações são incorporadas automaticamente ao projeto. "
@@ -116,7 +136,7 @@ class ReviewPanelWidget(QWidget):
         )
         guidance.setObjectName("analysisResultsGuidance")
         guidance.setWordWrap(True)
-        layout.addWidget(guidance)
+        elements_layout.addWidget(guidance)
 
         self._tree = QTreeWidget()
         self._tree.setObjectName("analysisRelationshipTree")
@@ -139,7 +159,7 @@ class ReviewPanelWidget(QWidget):
         for column, width in enumerate((190, 105, 185, 260, 260, 70)):
             header.resizeSection(column, width)
         header.setStretchLastSection(False)
-        layout.addWidget(self._tree, 1)
+        elements_layout.addWidget(self._tree, 1)
 
         self._table = QTableWidget(0, 4)
         self._table.setObjectName("reviewProposalTable")
@@ -150,7 +170,43 @@ class ReviewPanelWidget(QWidget):
         self._table.verticalHeader().setVisible(False)
         self._table.horizontalHeader().setStretchLastSection(True)
         self._table.hide()
-        layout.addWidget(self._table)
+        elements_layout.addWidget(self._table)
+        self._results_tabs.addTab(elements_page, "Elementos")
+
+        spans_page = QWidget()
+        spans_layout = QVBoxLayout(spans_page)
+        spans_layout.setContentsMargins(0, 0, 0, 0)
+        spans_guidance = QLabel(
+            "Um vão é exibido quando o desenho permite associar as duas extremidades "
+            "de um cabo a postes distintos. O comprimento prioriza a anotação do desenho "
+            "e, na ausência dela, a distância entre coordenadas."
+        )
+        spans_guidance.setObjectName("spanResultsGuidance")
+        spans_guidance.setWordWrap(True)
+        spans_layout.addWidget(spans_guidance)
+        self._span_table = QTableWidget(0, 7)
+        self._span_table.setObjectName("analysisSpanTable")
+        self._span_table.setHorizontalHeaderLabels(
+            (
+                "Vão",
+                "Poste de origem",
+                "Poste de destino",
+                "Cabo",
+                "Comprimento",
+                "Fonte",
+                "Folha",
+            )
+        )
+        self._span_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self._span_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self._span_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._span_table.verticalHeader().setVisible(False)
+        span_header = self._span_table.horizontalHeader()
+        span_header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        span_header.setStretchLastSection(True)
+        spans_layout.addWidget(self._span_table, 1)
+        self._results_tabs.addTab(spans_page, "Vãos")
+        layout.addWidget(self._results_tabs, 1)
 
         editor = QGroupBox("Correção excepcional")
         editor.setObjectName("reviewDecisionEditor")
@@ -261,6 +317,7 @@ class ReviewPanelWidget(QWidget):
         self._state_filter.currentIndexChanged.connect(self._refresh_proposals)
         self._tree.itemSelectionChanged.connect(self._select_tree_proposal)
         self._table.itemSelectionChanged.connect(self._select_table_proposal)
+        self._span_table.itemSelectionChanged.connect(self._select_span)
         self._category.currentIndexChanged.connect(self._refresh_catalog_items)
         self._category.currentIndexChanged.connect(self._editor_mode_changed)
         self._classification_correction.toggled.connect(self._editor_mode_changed)
@@ -292,6 +349,7 @@ class ReviewPanelWidget(QWidget):
         self._session = None
         self._page_id = None
         self._selected_proposal_id = None
+        self._spans = ()
         self._hidden_region_ids.clear()
         self._hidden_proposal_ids.clear()
         self._visibility_buttons.clear()
@@ -299,6 +357,7 @@ class ReviewPanelWidget(QWidget):
         self._project.addItem("Selecione um projeto analisado", None)
         self._tree.clear()
         self._table.setRowCount(0)
+        self._span_table.setRowCount(0)
         self._viewer.definir_propostas_revisao(())
         self.session_changed.emit(None)
 
@@ -340,6 +399,7 @@ class ReviewPanelWidget(QWidget):
         self._refresh_references()
         self._refresh_catalog_items()
         self._refresh_proposals()
+        self._refresh_spans()
         self.session_changed.emit(session)
 
     def _page_changed(self, page_id: str) -> None:
@@ -377,6 +437,63 @@ class ReviewPanelWidget(QWidget):
                     cell.setData(Qt.ItemDataRole.UserRole, str(proposal.id))
                 self._table.setItem(row, column, cell)
         self._update_review_overlays(filtered)
+
+    def _refresh_spans(self) -> None:
+        session = self._session
+        self._spans = detectar_vaos(session.projeto) if session is not None else ()
+        self._span_table.setRowCount(0)
+        if session is None:
+            return
+        elements = {item.id: item for item in session.projeto.elementos}
+        for index, span in enumerate(self._spans, start=1):
+            row = self._span_table.rowCount()
+            self._span_table.insertRow(row)
+            origin = elements.get(span.poste_origem_id)
+            destination = elements.get(span.poste_destino_id)
+            cable = elements.get(span.cabo_id)
+            page_number = (
+                self._project_page_number(span.geometria.pagina_id)
+                if span.geometria is not None
+                else None
+            )
+            values = (
+                f"Vão {index}",
+                _project_element_label(origin),
+                _project_element_label(destination),
+                _project_element_label(cable, catalog=session.catalogo),
+                _span_length_label(span.comprimento_m),
+                _span_length_source_label(span.origem_comprimento),
+                f"Folha {page_number}" if page_number is not None else "-",
+            )
+            for column, value in enumerate(values):
+                cell = QTableWidgetItem(value)
+                if column == 0:
+                    cell.setData(Qt.ItemDataRole.UserRole, str(span.id))
+                self._span_table.setItem(row, column, cell)
+
+    def _select_span(self) -> None:
+        selected = self._span_table.selectedItems()
+        if not selected:
+            return
+        row = selected[0].row()
+        identity_cell = self._span_table.item(row, 0)
+        if identity_cell is None:
+            return
+        span_id = identity_cell.data(Qt.ItemDataRole.UserRole)
+        span = next((item for item in self._spans if str(item.id) == span_id), None)
+        session = self._session
+        if span is None or session is None:
+            return
+        if span.geometria is not None:
+            page_number = self._project_page_number(span.geometria.pagina_id)
+            if page_number is not None:
+                self._viewer.ir_para_folha(page_number)
+        decision = next(
+            (item for item in session.decisoes if item.elemento_confirmado_id == span.cabo_id),
+            None,
+        )
+        if decision is not None:
+            self._select_proposal_id(str(decision.proposta_id))
 
     def _filtered_proposals(
         self,
@@ -1158,3 +1275,44 @@ def _element_label(element: object) -> str:
     if isinstance(element, (Poste, EstruturaMt, EstruturaBt, Cabo, Equipamento)):
         return f"{element.categoria.value}: {element.codigo_observado or element.id}"
     return str(element)
+
+
+def _project_element_label(
+    element: ElementoProjetoType | None,
+    *,
+    catalog: CatalogoTecnico | None = None,
+) -> str:
+    if element is None:
+        return "-"
+    if isinstance(element, Poste):
+        reference = (
+            element.identificador_operacional
+            or element.referencia_desenho
+            or element.codigo_observado
+        )
+        coordinate = element.coordenada_campo
+        if coordinate is not None:
+            coordinate_label = f"E {coordinate.leste:f} · N {coordinate.norte:f}"
+            return f"{reference} · {coordinate_label}" if reference else coordinate_label
+        return f"{reference} · {str(element.id)[:8]}" if reference else str(element.id)
+    if isinstance(element, Cabo) and catalog is not None:
+        item = catalog.item_por_id(element.tipo_catalogo_id)
+        if item is not None:
+            return f"{item.codigo} — {item.descricao}"
+    return element.codigo_observado or element.identificador_operacional or str(element.id)
+
+
+def _span_length_label(length: Decimal | None) -> str:
+    if length is None:
+        return "Não identificado"
+    return f"{length.quantize(Decimal('0.01')):f} m".replace(".", ",")
+
+
+def _span_length_source_label(source: OrigemComprimentoVao | None) -> str:
+    if source is None:
+        return "-"
+    return {
+        OrigemComprimentoVao.ANOTACAO_DESENHO: "Anotação do desenho",
+        OrigemComprimentoVao.COORDENADAS: "Distância entre coordenadas",
+        OrigemComprimentoVao.INFORMADO: "Comprimento informado",
+    }[source]
