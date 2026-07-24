@@ -102,10 +102,13 @@ O incremento atual deriva:
 - tecnologia do cabo e classe do equipamento resolvidas pelo catálogo;
 - notas próximas que demonstrem avaliação de abalroamento.
 
-O detector anterior de vãos, comprimentos e ângulos foi removido integralmente. O registro normativo
-continua preparado para receber fatos como `vao.comprimento_m` e `conexao.angulo_graus`, mas o
-scanner atual não os publica. A próxima implementação deverá definir uma nova abstração antes de
-reativar essas regras.
+A análise semântica também produz a projeção `VaoDetectado` quando uma polilinha de cabo possui
+relações `CONECTA` com dois postes distintos. A medida anotada junto à linha tem precedência; sem
+anotação, usa-se a distância euclidiana entre as coordenadas dos postes. `Cabo` preserva o valor e a
+origem `ANOTACAO_DESENHO`, `COORDENADAS` ou `INFORMADO`, e a aba **Vãos** expõe essa proveniência.
+Essa projeção foi desenhada para alimentar futuramente fatos `vao.comprimento_m`; o scanner
+normativo ainda não publica o fato nem avalia regras de vão automaticamente. Ângulos continuam sem
+detector ativo.
 
 ## Regras normativas iniciais
 

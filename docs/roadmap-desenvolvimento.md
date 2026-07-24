@@ -1001,8 +1001,9 @@ descumprimento confirmado.
 - Criados domínio, carregador JSON, schema e avaliador determinístico em três estados.
 - Registro inicial baseado na ND-3.1 Jul/2025 inclui numeração, formato, escala, vão urbano,
   equipamento em ângulo, chave fusível, exceção entre 45 e 60 m e risco de abalroamento.
-- Scanner inicial deriva campos documentais e controles PDF; medidas de vão e ângulo aguardam a
-  próxima implementação.
+- Scanner inicial deriva campos documentais e controles PDF. A análise semântica passou a derivar
+  vãos e seus comprimentos; a publicação como fato normativo e a medição de ângulos permanecem
+  futuras.
 - Dock próprio integrado à janela principal com as três visões e navegação até a folha.
 - Cabeçalhos são excluídos do inventário sem perder a inspeção documental; nomenclaturas de cabo
   ainda não catalogadas são preservadas para revisão.
@@ -1010,8 +1011,9 @@ descumprimento confirmado.
   `rótulo: informação`, sem limitar a interface ao vocabulário normativo inicial.
 - A árvore de resultados permite ocultar no PDF o ponto inteiro ou elementos individuais por ícones
   de olho, sem excluir as propostas.
-- O detector de vãos, comprimentos e ângulos foi removido integralmente; sua reconstrução depende da
-  próxima definição de modelo e não reutilizará as heurísticas anteriores.
+- `VaoDetectado` reconstrói a detecção a partir das relações de extremidade do cabo com dois postes.
+  O comprimento prioriza texto/OCR próximo à linha e usa coordenadas como alternativa, com origem
+  explícita. Ângulos ainda dependem de uma abstração futura.
 - ADRs 0011 e 0012 registram respectivamente a arquitetura normativa e a decisão sobre OCR local.
 - Persistência, coleta de campo, validadores criptográficos e promoção de achados permanecem futuros.
 

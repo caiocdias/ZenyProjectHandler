@@ -146,11 +146,13 @@ O dock **Documentação e conformidade** acompanha o projeto aberto e possui vis
   candidatos a carimbo e indícios/campos de assinatura;
 - regras conformes, possíveis divergências e casos não avaliáveis, sempre com fonte normativa.
 
-O detector anterior de vãos e ângulos foi removido e não há substituto ativo nesta revisão. O
-scanner documental não considera um carimbo ou rótulo de assinatura como prova de autenticidade.
-Cada informação vira um fato com origem, confiança, geometria e evidências. Regras ficam em um
-registro JSON versionado com condições de aplicabilidade, exceções comprovadas e requisitos. A
-arquitetura e os limites estão detalhados em
+O analisador identifica vãos quando uma linha de cabo possui extremidades associadas a dois postes
+distintos. O comprimento usa primeiro a anotação próxima ao cabo e, quando ela não existe, a
+distância entre as coordenadas dos postes; a aba **Vãos** informa também a fonte da medida. Ângulos
+ainda não são derivados. O scanner documental não considera um carimbo ou rótulo de assinatura como
+prova de autenticidade. Cada informação vira um fato com origem, confiança, geometria e evidências.
+Regras ficam em um registro JSON versionado com condições de aplicabilidade, exceções comprovadas e
+requisitos. A arquitetura e os limites estão detalhados em
 [`docs/arquitetura-conformidade.md`](docs/arquitetura-conformidade.md).
 
 O Unlimited-OCR foi avaliado como possível segunda passagem local para layouts difíceis. A

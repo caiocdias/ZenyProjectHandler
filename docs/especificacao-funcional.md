@@ -230,6 +230,9 @@ que os reconheça.
 - Evidências vetoriais e de imagem próximas são agregadas à proposta como contexto. Para cabos, uma
   polilinha próxima substitui a caixa do texto como geometria sugerida. Imagens não são classificadas
   isoladamente nesta versão.
+- Textos como `Vão: 42,5 m`, `Comprimento 42.5 m` ou `42,5 m` próximos ao interior da polilinha são
+  candidatos a comprimento do vão. Rótulos nas extremidades do cabo são excluídos para não confundir
+  dimensões de postes com comprimento.
 - `AssinaturaSimbologia` classifica `EXISTENTE`, `INSTALAR` e `REMOVER` por cor e tolerância. Sem uma
   assinatura inequívoca, o resultado usa `EXISTENTE` com confiança conservadora e registra essa
   inferência na trilha auditável.
@@ -237,6 +240,9 @@ que os reconheça.
   extremidade ou proximidade combinada com `CompatibilidadeEstruturaCabo`. Estruturas e equipamentos
   escolhem primeiro um poste com a mesma situação de obra, evitando vincular instalações novas a um
   poste que será retirado apenas porque ele está graficamente mais perto.
+- Um `VaoDetectado` só existe quando as duas extremidades do cabo são resolvidas para postes
+  distintos. A anotação do desenho tem precedência sobre o cálculo euclidiano entre coordenadas; o
+  valor e sua origem permanecem no `Cabo` promovido.
 - IDs UUID5 combinam projeto, extração, interpretador, registro e configuração. Repetir uma execução
   concluída reutiliza o resultado; retomar uma cancelada usa a mesma identidade sem duplicação.
 - A extração e a interpretação são execuções auditáveis distintas. Propostas semânticas podem
@@ -373,6 +379,10 @@ a página correspondente e realça seu sublinhado no PDF. A coluna **Exibir** of
 no nível da região e de cada elemento; ocultar muda somente as sobreposições da sessão visual e não
 remove a proposta nem sua auditoria.
 
+A aba **Vãos** lista poste de origem, poste de destino, cabo, comprimento, fonte da medida e folha.
+Selecionar um vão navega até a folha e reutiliza a proposta do cabo como realce quando ela está
+disponível.
+
 ## Documentação e conformidade
 
 - O painel **Documentação e conformidade** é independente dos resultados semânticos e possui as abas
@@ -387,9 +397,8 @@ remove a proposta nem sua auditoria.
 - Anotações PDF `Stamp` na zona documental são apenas candidatos a carimbo. Campos `/Sig`
   preenchidos, campos vazios e rótulos visuais de assinatura são distinguidos; a validade
   criptográfica e a autenticidade gráfica não são afirmadas.
-- Não existe detector ativo de vãos, comprimentos ou ângulos nesta revisão. O mecanismo anterior foi
-  removido integralmente para que a próxima implementação parta de uma nova abstração, sem
-  reaproveitar associações geométricas ou heurísticas antigas.
+- A projeção de vãos e comprimentos já está disponível nos resultados semânticos, mas ainda não é
+  convertida em fatos ou achados normativos. Ângulos continuam sem detector ativo.
 - Evidência, fato normalizado, regra e achado são objetos distintos. Fatos preservam escopo, origem,
   confiança, geometria e evidências.
 - O registro `cemig-nd31-2025.2` é JSON validado, versionado e assinado por SHA-256. `when` define

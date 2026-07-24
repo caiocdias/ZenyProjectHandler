@@ -45,6 +45,13 @@ namespace ModuloDocumento {
         POLILINHA
         POLIGONO
     }
+
+    class OrigemComprimentoVao {
+        <<enumeration>>
+        ANOTACAO_DESENHO
+        COORDENADAS
+        INFORMADO
+    }
 }
 
 namespace ModuloProjeto {
@@ -111,6 +118,7 @@ namespace ModuloProjeto {
         +UUID pontoOrigemId
         +UUID pontoDestinoId
         +Decimal? comprimentoM
+        +OrigemComprimentoVao? origemComprimento
         +UUID[] postesApoioIds
         +UUID[] pontosIntermediariosIds
     }
@@ -323,6 +331,19 @@ namespace ModuloAnalise {
         +EstadoRevisao estadoRevisao
         +Decimal confianca
         +String justificativa
+    }
+
+    class VaoDetectado {
+        +UUID id
+        +UUID caboId
+        +UUID posteOrigemId
+        +UUID posteDestinoId
+        +Decimal? comprimentoM
+        +OrigemComprimentoVao? origemComprimento
+    }
+
+    class DetectarVaos {
+        +detectar(Projeto) VaoDetectado[]
     }
 
     class DecisaoRevisao {
@@ -926,6 +947,11 @@ EstruturaBt "0..1" --> "0..*" PontoRede : fixaBT
 Cabo "0..*" --> "2" PontoRede : conecta
 Cabo "0..*" --> "0..*" PontoRede : percursoIntermediario
 Cabo "0..*" --> "0..*" Poste : apoiosIntermediarios
+Cabo --> OrigemComprimentoVao : provenienciaDaMedida
+DetectarVaos --> Projeto : derivaDe
+DetectarVaos ..> VaoDetectado : produz
+VaoDetectado --> Cabo : trechoReconhecido
+VaoDetectado --> Poste : origemEDestino
 PontoRede "0..*" --> "0..1" CoordenadaCampo : coordenadaOpcional
 PontoRede --> TipoPontoRede : papelEletrico
 Equipamento "1" *-- "1..*" TerminalEquipamento : possui
