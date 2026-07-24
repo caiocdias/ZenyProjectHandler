@@ -87,7 +87,14 @@ def _relation_targets(
         return ()
     if rule.estrategia in {"EXTREMIDADES_PROXIMAS", "COMPATIBILIDADE_E_PROXIMIDADE"}:
         compatible = tuple(item for item in same_page if _compatible(origin, item, rule, catalog))
-        return _targets_near_endpoints(origin, compatible, float(rule.distancia_maxima))
+        same_situation = tuple(
+            item for item in compatible if item.situacao_projeto is origin.situacao_projeto
+        )
+        return _targets_near_endpoints(
+            origin,
+            same_situation or compatible,
+            float(rule.distancia_maxima),
+        )
     raise ValueError(f"Estratégia de relação não suportada: {rule.estrategia}")
 
 
