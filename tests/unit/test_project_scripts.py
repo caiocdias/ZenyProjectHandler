@@ -18,6 +18,27 @@ def test_setup_creates_venv_and_installs_locked_dependencies() -> None:
     assert "ZENY_BOOTSTRAP_PYTHON" in setup_script
 
 
+def test_setup_recreates_incompatible_existing_venv() -> None:
+    setup_script = script_text("setup.bat")
+    configuration = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+
+    assert "ensure_supported_python" in setup_script
+    assert "sys.version_info[:2] in ((3, 11), (3, 12), (3, 13))" in setup_script
+    assert configuration["project"]["requires-python"] == ">=3.11,<3.14"
+    assert 'rmdir /s /q "%VENV_DIR%"' in setup_script
+    assert "Ambiente virtual existente usa uma versao de Python incompativel" in setup_script
+
+
+def test_setup_installs_and_validates_tesseract_ocr() -> None:
+    setup_script = script_text("setup.bat")
+
+    assert "ensure_tesseract" in setup_script
+    assert "UB-Mannheim.TesseractOCR" in setup_script
+    assert "--accept-package-agreements --accept-source-agreements" in setup_script
+    assert "ZENY_TESSERACT_PATH" in setup_script
+    assert "ocr_dependency_error" in setup_script
+
+
 def test_launcher_activates_venv_and_runs_application() -> None:
     launcher_script = script_text("ZenyProjectHandler.bat")
 
