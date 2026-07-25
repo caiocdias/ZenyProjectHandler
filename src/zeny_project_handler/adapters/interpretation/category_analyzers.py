@@ -9,7 +9,12 @@ from uuid import UUID, uuid5
 
 from zeny_project_handler.application.coordinate_pairs import detectar_pares_coordenadas
 from zeny_project_handler.domain.analysis import EvidenciaDocumento, PropostaElemento
-from zeny_project_handler.domain.catalog import ItemCatalogoType, TipoEquipamento, TipoPoste
+from zeny_project_handler.domain.catalog import (
+    ItemCatalogoType,
+    JsonPrimitive,
+    TipoEquipamento,
+    TipoPoste,
+)
 from zeny_project_handler.domain.enums import (
     CategoriaElemento,
     EstadoRevisao,
@@ -25,6 +30,7 @@ from .rule_support import (
     geometry_distance,
     nearest_context_evidence,
     normalized_text,
+    project_situation_override,
     situation_from_evidence,
 )
 from .span_rules import detectar_comprimento_anotado
@@ -36,6 +42,10 @@ _POLE_DIMENSION_PATTERN = re.compile(
 _COORDINATE_CONTEXT_DISTANCE = 0.12
 _CABLE_NOMENCLATURE_PATTERN = re.compile(
     r"(?<![A-Z0-9])(?:ABCN|ABN|BN|AN)-\d{1,3}\(\d{1,3}\)(?![A-Z0-9])"
+)
+_EQUIPMENT_NOMENCLATURE_PATTERN = re.compile(
+    r"(?<![A-Z0-9])(\d{2,4})\s*A\s*[-/:]\s*(\d{1,2})\s*KA"
+    r"\s*[-/:]\s*(\d{1,2})\s*([HK])(?![A-Z0-9])"
 )
 _POLE_FORMAT_PHRASES = {
     "CIRCULAR": ("POSTE CIRCULAR", "CIRCULAR"),
@@ -106,13 +116,17 @@ class AnalisadorCatalogoPorCodigo:
             request.evidencias,
             rule.distancia_contexto_maxima,
         )
-        situation = None
-        if contextual is not None:
+        override = project_situation_override(evidence, request.evidencias)
+        situation = override[0] if override is not None else None
+        if situation is None and contextual is not None:
             situation = situation_from_evidence(contextual, self.categoria, request.catalogo)
         if situation is None:
             situation = situation_from_evidence(evidence, self.categoria, request.catalogo)
         situation = situation or SituacaoProjeto.EXISTENTE
-        context_ids = (contextual.id,) if contextual is not None else ()
+        context_ids = (
+            *((contextual.id,) if contextual is not None else ()),
+            *((override[1].id,) if override is not None and override[1] is not None else ()),
+        )
         evidence_ids = tuple(sorted({evidence.id, *context_ids}, key=str))
         situation_bonus = (
             Decimal("0.08") if situation is not SituacaoProjeto.EXISTENTE else Decimal(0)
@@ -129,12 +143,14 @@ class AnalisadorCatalogoPorCodigo:
             request.execucao_id,
             f"elemento:{rule.id}:{item.id}:{evidence.id}",
         )
-        attributes: list[tuple[str, str]] = [
+        attributes: list[tuple[str, JsonPrimitive]] = [
             ("registro_regras", request.registro.versao),
             ("regra_id", rule.id),
         ]
         if self.categoria is CategoriaElemento.CABO:
             attributes.append(("evidencia_rotulo_id", str(evidence.id)))
+        if override is not None and override[1] is not None:
+            attributes.append(("situacao_inferida_bolha", True))
         return PropostaElemento(
             id=proposal_id,
             execucao_id=request.execucao_id,
@@ -312,11 +328,18 @@ class AnalisadorCabo(AnalisadorCatalogoPorCodigo):
 
 class AnalisadorEquipamento(AnalisadorCatalogoPorCodigo):
     nome = "equipamento-codigo-e-nomenclatura"
-    versao = "2.0"
+    versao = "3.0"
     categoria = CategoriaElemento.EQUIPAMENTO
 
     def _matches_catalog_item(self, text: str, item: ItemCatalogoType) -> bool:
         normalized = normalized_text(text)
+        catalog_nomenclature = _canonical_equipment_nomenclature(item.codigo)
+        observed_nomenclatures = {
+            _canonical_equipment_match(match)
+            for match in _EQUIPMENT_NOMENCLATURE_PATTERN.finditer(normalized)
+        }
+        if catalog_nomenclature is not None and catalog_nomenclature in observed_nomenclatures:
+            return True
         aliases = {item.codigo}
         if item.codigo.startswith("-"):
             aliases.add(item.codigo[1:])
@@ -337,18 +360,62 @@ class AnalisadorEquipamento(AnalisadorCatalogoPorCodigo):
         regra: RegraReconhecimento,
     ) -> tuple[PropostaElemento, ...]:
         exact = super().analisar(solicitacao, regra)
-        exact_evidence = {item.evidencia_ids[0] for item in exact}
+        exact_evidence = {evidence_id for item in exact for evidence_id in item.evidencia_ids}
         option_codes = _option_codes(solicitacao, "classe_equipamento")
         equipment = tuple(
             item
             for item in solicitacao.catalogo.itens_ativos(self.categoria)
             if isinstance(item, TipoEquipamento)
         )
+        known_nomenclatures = {
+            canonical
+            for item in equipment
+            if (canonical := _canonical_equipment_nomenclature(item.codigo)) is not None
+        }
         proposals = list(exact)
         for evidence in _semantic_evidence(solicitacao, regra):
             if evidence.id in exact_evidence:
                 continue
             text = normalized_text(evidence.conteudo_bruto or "")
+            observed_nomenclatures = tuple(
+                dict.fromkeys(
+                    _canonical_equipment_match(match)
+                    for match in _EQUIPMENT_NOMENCLATURE_PATTERN.finditer(text)
+                )
+            )
+            for observed in observed_nomenclatures:
+                if observed in known_nomenclatures:
+                    continue
+                situation, evidence_ids = _situation_and_evidence(
+                    solicitacao,
+                    regra,
+                    evidence,
+                    self.categoria,
+                )
+                proposals.append(
+                    PropostaElemento(
+                        id=uuid5(
+                            solicitacao.execucao_id,
+                            f"elemento:{regra.id}:nomenclatura:{evidence.id}:{observed}",
+                        ),
+                        execucao_id=solicitacao.execucao_id,
+                        categoria=self.categoria,
+                        situacao_projeto=situation,
+                        estado_revisao=EstadoRevisao.CONFLITANTE,
+                        evidencia_ids=evidence_ids,
+                        geometria=evidence.geometria,
+                        codigo_observado=observed,
+                        atributos_sugeridos=(
+                            ("catalogo_nao_localizado", True),
+                            ("regra_id", regra.id),
+                        ),
+                        confianca=Decimal("0.66"),
+                        justificativa=(
+                            "A nomenclatura de equipamento foi reconhecida, mas não existe "
+                            "uma correspondência exata no catálogo publicado; requer classificação."
+                        ),
+                    )
+                )
             phrase = next((phrase for phrase, _ in _EQUIPMENT_PHRASES if phrase in text), None)
             if phrase is None:
                 continue
@@ -376,6 +443,18 @@ class AnalisadorEquipamento(AnalisadorCatalogoPorCodigo):
             for item in proposals
             if item.confianca is None or item.confianca >= solicitacao.configuracao.confianca_minima
         )
+
+
+def _canonical_equipment_nomenclature(value: str) -> str | None:
+    match = _EQUIPMENT_NOMENCLATURE_PATTERN.search(normalized_text(value))
+    return _canonical_equipment_match(match) if match is not None else None
+
+
+def _canonical_equipment_match(match: re.Match[str]) -> str:
+    return (
+        f"{int(match.group(1))}A-{int(match.group(2))}KA-"
+        f"{int(match.group(3))}{match.group(4).upper()}"
+    )
 
 
 def _semantic_evidence(
@@ -462,14 +541,24 @@ def _situation_and_evidence(
         request.evidencias,
         rule.distancia_contexto_maxima,
     )
-    situation = (
-        situation_from_evidence(contextual, category, request.catalogo)
-        if contextual is not None
-        else None
-    )
+    override = project_situation_override(evidence, request.evidencias)
+    situation = override[0] if override is not None else None
+    if situation is None:
+        situation = (
+            situation_from_evidence(contextual, category, request.catalogo)
+            if contextual is not None
+            else None
+        )
     situation = situation or situation_from_evidence(evidence, category, request.catalogo)
     evidence_ids = tuple(
-        sorted({evidence.id, *((contextual.id,) if contextual is not None else ())}, key=str)
+        sorted(
+            {
+                evidence.id,
+                *((contextual.id,) if contextual is not None else ()),
+                *((override[1].id,) if override is not None and override[1] is not None else ()),
+            },
+            key=str,
+        )
     )
     return situation or SituacaoProjeto.EXISTENTE, evidence_ids
 

@@ -171,9 +171,7 @@ def test_rule_interpreter_proposes_all_categories_situations_and_relations(
     assert bt.situacao_projeto is SituacaoProjeto.REMOVER
     assert cable.geometria.tipo is TipoGeometria.POLILINHA
     assert cable.situacao_projeto is SituacaoProjeto.INSTALAR
-    assert dict(cable.atributos_sugeridos)["evidencia_rotulo_id"] == str(
-        request.evidencias[3].id
-    )
+    assert dict(cable.atributos_sugeridos)["evidencia_rotulo_id"] == str(request.evidencias[3].id)
     identifiers = {
         item.categoria: dict(item.atributos_sugeridos)["identificador_operacional"]
         for item in result.elementos
@@ -229,6 +227,11 @@ def test_cable_uses_solid_path_between_same_situation_poles(
     cable_code = request.evidencias[3].conteudo_bruto
     assert pole_code is not None
     assert cable_code is not None
+    second_cable_code = next(
+        item.codigo
+        for item in catalogo_inicial.itens_ativos(CategoriaElemento.CABO)
+        if item.codigo != cable_code
+    )
     installed_first = text_evidence(
         execution_id=request.execucao_extracao_id,
         page_id=page_id,
@@ -256,14 +259,37 @@ def test_cable_uses_solid_path_between_same_situation_poles(
         y="0.48",
         color="#FF0000",
     )
-    label = text_evidence(
-        execution_id=request.execucao_extracao_id,
-        page_id=page_id,
-        key="installed-cable-label",
-        text=cable_code,
-        x="0.50",
-        y="0.45",
-        color="#008000",
+    label = replace(
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="installed-cable-label",
+            text=cable_code,
+            x="0.50",
+            y="0.45",
+            color="#008000",
+        ),
+        tipo=TipoEvidencia.OCR,
+        atributos_extraidos=(
+            ("cor_preenchimento", "#008000"),
+            ("motor_ocr", "tesseract-rotulo-linear-retificado"),
+        ),
+    )
+    second_label = replace(
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="second-installed-cable-label",
+            text=second_cable_code,
+            x="0.50",
+            y="0.455",
+            color="#008000",
+        ),
+        tipo=TipoEvidencia.OCR,
+        atributos_extraidos=(
+            ("cor_preenchimento", "#008000"),
+            ("motor_ocr", "tesseract-rotulo-linear-retificado"),
+        ),
     )
     nearby_short_vector = vector_evidence(
         execution_id=request.execucao_extracao_id,
@@ -307,6 +333,7 @@ def test_cable_uses_solid_path_between_same_situation_poles(
             installed_second,
             removed_nearer,
             label,
+            second_label,
             nearby_short_vector,
             solid_path,
             dashed_path,
@@ -340,25 +367,34 @@ def test_cable_uses_solid_path_between_same_situation_poles(
 
     result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
 
-    cable = next(item for item in result.elementos if item.categoria is CategoriaElemento.CABO)
-    assert cable.geometria == solid_path.geometria
-    assert solid_path.id in cable.evidencia_ids
-    assert dashed_path.id not in cable.evidencia_ids
-    attributes = dict(cable.atributos_sugeridos)
-    assert attributes["geometria_cabo_origem"] == "vetor_ligando_postes"
-    assert attributes["comprimento_m"] == Decimal("55")
+    cables = tuple(item for item in result.elementos if item.categoria is CategoriaElemento.CABO)
+    assert len(cables) == 2
+    assert all(item.geometria == solid_path.geometria for item in cables), [
+        (item.codigo_observado, item.geometria, dict(item.atributos_sugeridos)) for item in cables
+    ]
+    assert all(dict(item.atributos_sugeridos)["comprimento_m"] == Decimal("55") for item in cables)
+    assert all(solid_path.id in item.evidencia_ids for item in cables)
+    assert all(dashed_path.id not in item.evidencia_ids for item in cables)
+    assert {dict(item.atributos_sugeridos)["geometria_cabo_origem"] for item in cables} == {
+        "vetor_ligando_postes",
+        "vetor_compartilhado_do_vao",
+    }
     installed_pole_ids = {
         item.id
         for item in result.elementos
         if item.categoria is CategoriaElemento.POSTE
         and item.situacao_projeto is SituacaoProjeto.INSTALAR
     }
-    connected_pole_ids = {
-        relation.destino_referencia_id
-        for relation in result.relacoes
-        if relation.origem_referencia_id == cable.id and relation.tipo_relacao == "CONECTA"
-    }
-    assert connected_pole_ids == installed_pole_ids
+    proposals_by_id = {item.id: item for item in result.elementos}
+    for cable in cables:
+        connected_pole_ids = {
+            relation.destino_referencia_id
+            for relation in result.relacoes
+            if relation.origem_referencia_id == cable.id
+            and relation.tipo_relacao == "CONECTA"
+            and proposals_by_id[relation.destino_referencia_id].categoria is CategoriaElemento.POSTE
+        }
+        assert connected_pole_ids == installed_pole_ids
 
 
 def test_rule_interpreter_is_deterministic_and_does_not_match_code_as_substring(
@@ -736,6 +772,7 @@ def test_equipment_class_phrase_is_proposed_for_human_disambiguation(
     [
         ("3-150", "-3-150"),
         ("1-37.5 KVA", "-1-37,5"),
+        ("100A/10KA/2H", "100A-10KA-2H"),
     ],
 )
 def test_equipment_nomenclature_variants_from_plan_are_cataloged(
@@ -770,6 +807,90 @@ def test_equipment_nomenclature_variants_from_plan_are_cataloged(
     assert item.codigo == catalog_code
 
 
+def test_unknown_struck_equipment_nomenclature_is_preserved_as_removal(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    request = _request(catalogo_inicial)
+    source = replace(
+        request.evidencias[0],
+        id=uuid4(),
+        tipo=TipoEvidencia.OCR,
+        conteudo_bruto="100A/2KA/2H",
+        atributos_extraidos=(("situacao_projeto_forcada", "REMOVER"),),
+    )
+    point_label = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=source.pagina_id,
+        key="unknown-equipment-point-label",
+        text="P13",
+        x="0.10",
+        y="0.08",
+    )
+    request = replace(request, evidencias=(source, point_label))
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
+
+    equipment = next(
+        item for item in result.elementos if item.categoria is CategoriaElemento.EQUIPAMENTO
+    )
+    assert equipment.codigo_observado == "100A-2KA-2H"
+    assert equipment.tipo_catalogo_sugerido_id is None
+    assert equipment.situacao_projeto is SituacaoProjeto.REMOVER
+    assert equipment.estado_revisao is EstadoRevisao.CONFLITANTE
+    assert dict(equipment.atributos_sugeridos)["catalogo_nao_localizado"] is True
+
+
+def test_dark_red_bubble_forces_installation_regardless_of_equipment_text_color(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    request = _request(catalogo_inicial)
+    source = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=request.evidencias[0].pagina_id,
+        key="black-equipment-inside-bubble",
+        text="100A/10KA/2H",
+        x="0.24",
+        y="0.20",
+        color="#000000",
+    )
+    bubble = replace(
+        vector_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=source.pagina_id,
+            key="installation-bubble",
+            points=(
+                ("0.18", "0.18"),
+                ("0.30", "0.18"),
+                ("0.30", "0.22"),
+                ("0.18", "0.22"),
+            ),
+            color="#800000",
+        ),
+        atributos_extraidos=(
+            ("cor_contorno", "#800000"),
+            ("operacoes", "qu"),
+        ),
+    )
+    point_label = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=source.pagina_id,
+        key="bubble-equipment-point-label",
+        text="P13",
+        x="0.24",
+        y="0.17",
+    )
+    request = replace(request, evidencias=(source, bubble, point_label))
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
+
+    equipment = next(
+        item for item in result.elementos if item.categoria is CategoriaElemento.EQUIPAMENTO
+    )
+    assert equipment.situacao_projeto is SituacaoProjeto.INSTALAR
+    assert bubble.id in equipment.evidencia_ids
+    assert dict(equipment.atributos_sugeridos)["situacao_inferida_bolha"] is True
+
+
 def test_unidentified_electrical_references_are_not_project_elements(
     catalogo_inicial: CatalogoTecnico,
 ) -> None:
@@ -780,6 +901,34 @@ def test_unidentified_electrical_references_are_not_project_elements(
 
     assert result.elementos == ()
     assert result.relacoes == ()
+
+
+def test_coordinate_identifies_pole_and_nearby_structure_without_point_label(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    request = _request(catalogo_inicial)
+    coordinate = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=request.evidencias[0].pagina_id,
+        key="field-coordinate",
+        text="405402:7804568",
+        x="0.10",
+        y="0.12",
+    )
+    request = replace(
+        request,
+        evidencias=(request.evidencias[0], request.evidencias[1], coordinate),
+    )
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
+
+    assert {item.categoria for item in result.elementos} == {
+        CategoriaElemento.POSTE,
+        CategoriaElemento.ESTRUTURA_MT,
+    }
+    pole = next(item for item in result.elementos if item.categoria is CategoriaElemento.POSTE)
+    assert dict(pole.atributos_sugeridos)["coordenada_leste"] == 405402
+    assert dict(pole.atributos_sugeridos)["coordenada_norte"] == 7804568
 
 
 def test_operational_identifiers_can_share_text_with_the_catalog_nomenclature(
@@ -807,3 +956,64 @@ def test_operational_identifiers_can_share_text_with_the_catalog_nomenclature(
         (CategoriaElemento.POSTE, "P13"),
         (CategoriaElemento.CABO, "V3-4"),
     }
+
+
+def test_point_reference_inside_instruction_does_not_identify_nearby_asset(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    request = _request(catalogo_inicial)
+    structure = request.evidencias[1]
+    instruction = replace(
+        structure,
+        id=uuid4(),
+        conteudo_bruto="Realocar chave p/ trafo no P13",
+    )
+    request = replace(request, evidencias=(structure, instruction))
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
+
+    assert result.elementos == ()
+    assert result.relacoes == ()
+
+
+def test_targeted_operational_ocr_consolidates_duplicate_structure_at_same_point(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    request = _request(catalogo_inicial)
+    source = request.evidencias[2]
+    general = replace(
+        source,
+        id=uuid4(),
+        tipo=TipoEvidencia.OCR,
+        conteudo_bruto=f"{source.conteudo_bruto}|",
+        atributos_extraidos=(
+            ("confianca", Decimal("0.40")),
+            ("motor_ocr", "tesseract-cli"),
+        ),
+    )
+    targeted = replace(
+        source,
+        id=uuid4(),
+        tipo=TipoEvidencia.OCR,
+        atributos_extraidos=(
+            ("confianca", Decimal("0.95")),
+            ("motor_ocr", "tesseract-rotulo-operacional-localizado"),
+        ),
+    )
+    point_label = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=source.pagina_id,
+        key="targeted-point-label",
+        text="P7",
+        x="0.11",
+        y="0.08",
+    )
+    request = replace(request, evidencias=(general, targeted, point_label))
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
+
+    assert len(result.elementos) == 1
+    structure = result.elementos[0]
+    assert structure.categoria is CategoriaElemento.ESTRUTURA_BT
+    assert structure.codigo_observado == source.conteudo_bruto
+    assert {general.id, targeted.id} <= set(structure.evidencia_ids)

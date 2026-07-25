@@ -13,19 +13,19 @@ from zeny_project_handler.domain.values import GeometriaDocumento
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class VaoDetectado:
-    """Trecho de um cabo cujas duas extremidades pertencem a postes distintos."""
+    """Trecho identificado entre pontos; postes podem aguardar classificação."""
 
     id: UUID
     cabo_id: UUID
-    poste_origem_id: UUID
-    poste_destino_id: UUID
+    poste_origem_id: UUID | None
+    poste_destino_id: UUID | None
     situacao: SituacaoProjeto
     geometria: GeometriaDocumento | None
     comprimento_m: Decimal | None = None
     origem_comprimento: OrigemComprimentoVao | None = None
 
     def __post_init__(self) -> None:
-        if self.poste_origem_id == self.poste_destino_id:
+        if self.poste_origem_id is not None and self.poste_origem_id == self.poste_destino_id:
             raise ValueError("Vão deve ligar dois postes distintos")
         if self.comprimento_m is None and self.origem_comprimento is not None:
             raise ValueError("Origem do comprimento requer um comprimento identificado")
@@ -45,15 +45,23 @@ def detectar_vaos(projeto: Projeto) -> tuple[VaoDetectado, ...]:
             continue
         origem = pontos.get(cabo.ponto_origem_id)
         destino = pontos.get(cabo.ponto_destino_id)
+        if origem is None or destino is None:
+            continue
+        poste_origem = postes.get(origem.poste_id) if origem.poste_id is not None else None
+        poste_destino = postes.get(destino.poste_id) if destino.poste_id is not None else None
         if (
-            origem is None
-            or destino is None
-            or origem.poste_id not in postes
-            or destino.poste_id not in postes
-            or origem.poste_id == destino.poste_id
+            poste_origem is not None
+            and poste_destino is not None
+            and poste_origem.id == poste_destino.id
         ):
             continue
-        comprimento, fonte = _comprimento(cabo, postes[origem.poste_id], postes[destino.poste_id])
+        identified_span = bool(
+            cabo.identificador_operacional
+            and cabo.identificador_operacional.upper().startswith("V")
+        )
+        if (poste_origem is None or poste_destino is None) and not identified_span:
+            continue
+        comprimento, fonte = _comprimento(cabo, poste_origem, poste_destino)
         vaos.append(
             VaoDetectado(
                 id=uuid5(cabo.id, "vao-detectado"),
@@ -84,16 +92,16 @@ def detectar_vaos(projeto: Projeto) -> tuple[VaoDetectado, ...]:
 
 def _comprimento(
     cabo: Cabo,
-    poste_origem: Poste,
-    poste_destino: Poste,
+    poste_origem: Poste | None,
+    poste_destino: Poste | None,
 ) -> tuple[Decimal | None, OrigemComprimentoVao | None]:
     if cabo.comprimento_m is not None:
         return (
             cabo.comprimento_m,
             cabo.origem_comprimento or OrigemComprimentoVao.INFORMADO,
         )
-    origem = poste_origem.coordenada_campo
-    destino = poste_destino.coordenada_campo
+    origem = poste_origem.coordenada_campo if poste_origem is not None else None
+    destino = poste_destino.coordenada_campo if poste_destino is not None else None
     if origem is None or destino is None:
         return None, None
     delta_leste = destino.leste - origem.leste

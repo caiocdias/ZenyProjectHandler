@@ -219,7 +219,8 @@ def test_review_session_consolidates_latest_results_from_every_pdf(
         first_page,
         second_page,
     }
-    assert [region.pagina_id for region in session.regioes] == [second_page, first_page]
+    region_page_order = tuple(dict.fromkeys(region.pagina_id for region in session.regioes))
+    assert region_page_order == (second_page, first_page)
     engine.dispose()
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
@@ -260,3 +261,89 @@ def test_distinct_point_labels_prevent_nearby_occurrences_from_merging() -> None
         "P5": {p5_removed_pole.id, p5_installed_pole.id},
         "P4": {p4_existing_pole.id, p4_transformer.id},
     }
+
+
+def test_distant_unlabeled_structure_is_not_absorbed_by_labeled_point_region() -> None:
+    page_id = uuid4()
+    execution_id = uuid4()
+    anchor = EvidenciaDocumento(
+        id=uuid4(),
+        execucao_id=execution_id,
+        pagina_id=page_id,
+        tipo=TipoEvidencia.OCR,
+        geometria=GeometriaDocumento.ponto(
+            page_id,
+            PontoNormalizado(Decimal("0.40"), Decimal("0.18")),
+        ),
+        metodo="fixture",
+        versao_metodo="1",
+        parametros=(),
+        conteudo_bruto="P12",
+        criada_em=datetime(2026, 7, 25, tzinfo=UTC),
+    )
+    p12_pole = replace(
+        _element(
+            execution_id,
+            anchor.id,
+            page_id,
+            category=CategoriaElemento.POSTE,
+            situation=SituacaoProjeto.EXISTENTE,
+            code="11-300",
+            x="0.40",
+            y="0.13",
+        ),
+        atributos_sugeridos=(("identificador_operacional", "P12"),),
+    )
+    remote_u1 = _element(
+        execution_id,
+        uuid4(),
+        page_id,
+        category=CategoriaElemento.ESTRUTURA_MT,
+        situation=SituacaoProjeto.EXISTENTE,
+        code="U1",
+        x="0.40",
+        y="0.05",
+    )
+
+    regions = agrupar_regioes_da_analise(
+        (p12_pole, remote_u1),
+        (anchor,),
+        (_document(page_id),),
+    )
+
+    assert len(regions) == 2
+    p12_region = next(region for region in regions if region.rotulo_ponto == "P12")
+    unlabeled_region = next(region for region in regions if region.rotulo_ponto is None)
+    assert p12_region.elemento_ids == (p12_pole.id,)
+    assert unlabeled_region.elemento_ids == (remote_u1.id,)
+
+
+def test_preserves_recognized_point_without_associated_elements() -> None:
+    page_id = uuid4()
+    execution_id = uuid4()
+    p11_anchor = EvidenciaDocumento(
+        id=uuid4(),
+        execucao_id=execution_id,
+        pagina_id=page_id,
+        tipo=TipoEvidencia.OCR,
+        geometria=GeometriaDocumento.ponto(
+            page_id,
+            PontoNormalizado(Decimal("0.44"), Decimal("0.52")),
+        ),
+        metodo="tesseract-identificador",
+        versao_metodo="1",
+        parametros=(),
+        conteudo_bruto="P11",
+        criada_em=datetime(2026, 7, 24, tzinfo=UTC),
+    )
+
+    regions = agrupar_regioes_da_analise(
+        (),
+        (p11_anchor,),
+        (_document(page_id),),
+    )
+
+    assert len(regions) == 1
+    assert regions[0].rotulo_ponto == "P11"
+    assert regions[0].elemento_ids == ()
+    assert regions[0].geometria == p11_anchor.geometria

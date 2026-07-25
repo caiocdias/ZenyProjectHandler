@@ -162,7 +162,7 @@ que os reconheça.
   registra Optional Content Groups.
 - Um problema localizado produz `DiagnosticoPdf` com página e `xref` quando disponível. Texto,
   vetores, imagens e renderização válidos continuam utilizáveis.
-- Miniaturas, páginas e recortes são renderizados em RGB. O DPI padrão é 144 e pode ser configurado
+- Miniaturas, páginas e recortes são renderizados em RGB. O DPI padrão é 600 e pode ser configurado
   por `ZENY_PDF_RENDER_DPI` entre 36 e 600.
 - `TransformadorCoordenadasPagina` converte de forma reversível entre espaço PDF, normalizado,
   pixels e cena. A interface reaplica sobreposições após rotação usando essa transformação.
@@ -195,11 +195,31 @@ que os reconheça.
 - O OCR é acionado quando há menos de 20 caracteres nativos, quando uma ocorrência raster ocupa ao
   menos 10% da página ou quando há pelo menos 1.000 caminhos vetoriais. O terceiro caso cobre textos
   plotados como contornos pelo AutoCAD mesmo quando o carimbo ainda contém texto nativo pesquisável.
+- Páginas vetoriais densas são reconhecidas em nove blocos sobrepostos a 450 DPI. Marcadores azuis
+  contidos em círculos vetoriais vermelhos recebem uma passagem localizada a 1200 DPI, com isolamento
+  de cor e correção da inclinação antes da leitura do identificador operacional. Glifos azuis
+  convertidos em contornos são agrupados por geometria e reconhecidos como `P<n>` ou `V<n>-<n>`,
+  inclusive quando inclinados. Identificadores reconhecidos formam regiões revisáveis mesmo quando
+  ainda não possuem um elemento associado.
+- Caixas vetoriais verdes próximas ao marcador são segmentadas individualmente, têm a borda e as
+  outras cores removidas e recebem OCR de linha única a 1200 DPI. A leitura localizada substitui o
+  resultado geral quando ambos ocupam a mesma posição. Na ausência dessas caixas, o bloco escuro
+  imediatamente abaixo do marcador recebe OCR localizado em modo uniforme.
+- Caixas lineares verdes que acompanham a rede são retificadas por transformação afim e recebem OCR
+  a 1800 DPI com alfabeto técnico. Essa passagem preserva códigos de cabo e pontuação como
+  `CM-50(3/8")`, `(N-1N2)` e `ABN-16(16)`. Uma máscara separada recupera os comprimentos escuros
+  laterais no mesmo eixo.
+- Caixas vinho com nomenclaturas de equipamento são retificadas no próprio eixo a 1800 DPI, inclusive
+  quando inclinadas. A imagem é corrigida verticalmente, a borda é removida e somente os glifos
+  neutros seguem ao OCR. Traços vinho sobre uma nomenclatura geram recorte equivalente sem o traço.
+  As evidências resultantes registram explicitamente `INSTALAR` para o conteúdo da caixa e `REMOVER`
+  para o conteúdo riscado.
 - Quando a página possui texto nativo suficiente, imagens menores com área normalizada de pelo menos
   0,25% e resolução útil recebem OCR somente em seu recorte. As caixas retornadas pelo motor são
   transformadas novamente para as coordenadas normalizadas da página.
 - O cache derivado fica em `cache/analysis` na pasta de dados. Sua chave combina hash do PDF,
-  configuração e versão do analisador; conteúdo ausente ou inválido é refeito a partir do original.
+  configuração e versão do analisador; a identidade da extração persistida usa a mesma versão.
+  Conteúdo ausente, inválido ou produzido por uma versão anterior é refeito a partir do original.
 - `ExecutarAnaliseDocumento` valida a referência do PDF, registra execução concluída ou falha fatal e
   persiste todas as evidências válidas em uma transação.
 
@@ -232,22 +252,31 @@ que os reconheça.
 - Nomenclaturas de cabo das famílias `ABCN`, `ABN`, `BN` e `AN` são mantidas para revisão mesmo
   quando o código exato não está no catálogo. Nesse caso não se inventa um tipo: a proposta fica
   conflitante, não catalogada e preserva a situação de obra obtida da cor.
+- Nomenclaturas de equipamento no formato corrente-tensão-capacidade aceitam `-`, `/` e `:` como
+  separadores. O valor é convertido para a forma canônica do catálogo; uma nomenclatura válida sem
+  correspondência publicada permanece como proposta conflitante e não catalogada.
 - Evidências vetoriais e de imagem próximas são agregadas à proposta como contexto. Para cabos, uma
   polilinha próxima substitui a caixa do texto como geometria sugerida. Imagens não são classificadas
   isoladamente nesta versão.
 - Textos como `Vão: 42,5 m`, `Comprimento 42.5 m` ou `42,5 m` próximos ao interior da polilinha são
-  candidatos a comprimento do vão. Rótulos nas extremidades do cabo são excluídos para não confundir
-  dimensões de postes com comprimento.
+  candidatos a comprimento do vão. Rótulos genéricos nas extremidades do cabo são excluídos para não
+  confundir dimensões de postes com comprimento; a evidência especializada de comprimento retificado
+  usa o eixo do rótulo linear e não sofre essa exclusão.
 - `AssinaturaSimbologia` classifica `EXISTENTE`, `INSTALAR` e `REMOVER` por cor e tolerância. Sem uma
   assinatura inequívoca, o resultado usa `EXISTENTE` com confiança conservadora e registra essa
   inferência na trilha auditável.
+- Uma caixa vetorial vinho (`qu` ou `re`) tem precedência sobre a cor do texto: qualquer elemento
+  semanticamente reconhecido cujo centro esteja dentro da caixa é `INSTALAR`. A regra é comum às
+  cinco categorias e preserva a caixa como evidência da decisão.
 - Relações `INSTALADA_EM`, `INSTALADO_EM`, `CONECTA` e `SUPORTADO_POR` são propostas por centro,
   extremidade ou proximidade combinada com `CompatibilidadeEstruturaCabo`. Estruturas e equipamentos
   escolhem primeiro um poste com a mesma situação de obra, evitando vincular instalações novas a um
   poste que será retirado apenas porque ele está graficamente mais perto.
-- Um `VaoDetectado` só existe quando as duas extremidades do cabo são resolvidas para postes
-  distintos. A anotação do desenho tem precedência sobre o cálculo euclidiano entre coordenadas; o
-  valor e sua origem permanecem no `Cabo` promovido.
+- Um `VaoDetectado` normalmente exige que as extremidades do cabo sejam resolvidas para postes
+  distintos. Quando há um identificador explícito `V<n>-<n>`, o trecho permanece revisável mesmo se
+  uma extremidade ainda não tiver poste classificado. Cabos diferentes com o mesmo identificador
+  compartilham o traçado do trecho. A anotação do desenho tem precedência sobre o cálculo euclidiano
+  entre coordenadas; o valor e sua origem permanecem no `Cabo` promovido.
 - IDs UUID5 combinam projeto, extração, interpretador, registro e configuração. Repetir uma execução
   concluída reutiliza o resultado; retomar uma cancelada usa a mesma identidade sem duplicação.
 - A extração e a interpretação são execuções auditáveis distintas. Propostas semânticas podem
@@ -384,9 +413,10 @@ a página correspondente e realça seu sublinhado no PDF. A coluna **Exibir** of
 no nível da região e de cada elemento; ocultar muda somente as sobreposições da sessão visual e não
 remove a proposta nem sua auditoria.
 
-A aba **Vãos** lista poste de origem, poste de destino, cabo, comprimento, fonte da medida e folha.
-Selecionar um vão navega até a folha e reutiliza a proposta do cabo como realce quando ela está
-disponível.
+A aba **Vãos** lista o identificador operacional original, poste de origem, poste de destino, cabo,
+comprimento, fonte da medida e folha. Uma extremidade ainda não classificada aparece vazia sem
+eliminar o vão. Selecionar um vão navega até a folha e reutiliza a proposta do cabo como realce
+quando ela está disponível.
 
 ## Documentação e conformidade
 

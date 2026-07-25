@@ -239,6 +239,37 @@ def test_results_panel_groups_relationships_and_links_elements_to_pdf(
     assert accept is not None and not accept.isVisible()
 
 
+def test_results_panel_keeps_recognized_point_without_elements(
+    review_panel_context: tuple[Engine, ReviewPanelWidget, PropostaElemento],
+) -> None:
+    _engine, panel, _proposal = review_panel_context
+    project_combo = panel.findChild(QComboBox, "reviewProjectCombo")
+    tree = panel.findChild(QTreeWidget, "analysisRelationshipTree")
+    assert project_combo is not None
+    assert tree is not None
+    project_combo.setCurrentIndex(1)
+    assert panel._session is not None
+    evidence = panel._session.evidencias[0]
+    standalone = RegiaoAnalise(
+        id=uuid4(),
+        pagina_id=evidence.pagina_id,
+        geometria=evidence.geometria,
+        elemento_ids=(),
+        rotulo_ponto="P11",
+    )
+    panel._session = replace(panel._session, regioes=(standalone,))
+
+    panel._refresh_proposals()
+
+    assert tree.topLevelItemCount() == 1
+    point_item = tree.topLevelItem(0)
+    assert point_item is not None
+    assert point_item.text(0) == "P11"
+    assert point_item.text(1) == "Ponto identificado"
+    assert point_item.text(3) == "0 elemento(s)"
+    assert point_item.childCount() == 0
+
+
 def test_results_panel_has_span_tab_with_length_source(
     review_panel_context: tuple[Engine, ReviewPanelWidget, PropostaElemento],
 ) -> None:
@@ -251,17 +282,27 @@ def test_results_panel_has_span_tab_with_length_source(
     assert table is not None
     project_combo.setCurrentIndex(1)
     assert panel._session is not None
+    project = complete_project(panel._session.catalogo)
+    cable = next(item for item in project.elementos if isinstance(item, Cabo))
     panel._session = replace(
         panel._session,
-        projeto=complete_project(panel._session.catalogo),
+        projeto=replace(
+            project,
+            elementos=tuple(
+                replace(item, identificador_operacional="V1-2") if item.id == cable.id else item
+                for item in project.elementos
+            ),
+        ),
     )
 
     panel._refresh_spans()
 
     assert [tabs.tabText(index) for index in range(tabs.count())] == ["Elementos", "Vãos"]
     assert table.rowCount() == 1
+    identifier_item = table.item(0, 0)
     length_item = table.item(0, 4)
     source_item = table.item(0, 5)
+    assert identifier_item is not None and identifier_item.text() == "V1-2"
     assert length_item is not None and length_item.text() == "31,50 m"
     assert source_item is not None and source_item.text() == "Comprimento informado"
     visibility = table.cellWidget(0, 7)

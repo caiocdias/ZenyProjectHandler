@@ -27,7 +27,8 @@ from .coordinate_pairs import detectar_pares_coordenadas
 
 _DEFAULT_REGION_DISTANCE = 0.10
 _COORDINATE_REGION_DISTANCE = 0.18
-_POINT_ANCHOR_DISTANCE = 0.14
+_POINT_ANCHOR_DISTANCE = 0.10
+_POINT_COMPONENT_ATTACHMENT_DISTANCE = 0.06
 _POINT_LABEL_PATTERN = re.compile(
     r"^\s*(?:PONTO\s+)?P\s*[-.:]?\s*0*(\d{1,4})\s*$",
     re.IGNORECASE,
@@ -51,8 +52,10 @@ class RegiaoAnalise:
         links = tuple(self.vinculo_ids)
         if self.geometria.pagina_id != self.pagina_id:
             raise ValueError("Geometria da região deve pertencer à página informada")
-        if not elements or len(set(elements)) != len(elements):
+        if len(set(elements)) != len(elements):
             raise ValueError("Região deve possuir elementos únicos")
+        if not elements and not self.rotulo_ponto:
+            raise ValueError("Região sem elementos deve possuir um rótulo de ponto")
         if len(set(links)) != len(links):
             raise ValueError("Região deve possuir vínculos únicos")
         object.__setattr__(self, "elemento_ids", elements)
@@ -84,14 +87,18 @@ def agrupar_regioes_da_analise(
         raise ValueError("Distância máxima de uma região deve ser positiva")
     elements = tuple(item for item in propostas if isinstance(item, PropostaElemento))
     relations = tuple(item for item in propostas if isinstance(item, PropostaRelacao))
-    if not elements:
-        return ()
-
-    point_labels = _assign_point_labels(elements, _point_anchors(evidencias))
+    point_anchors = _point_anchors(evidencias)
+    point_labels = _assign_point_labels(elements, point_anchors)
     components = _spatial_components(elements, distancia_maxima, point_labels)
-    preliminary = tuple(
+    element_regions = tuple(
         _build_region(component, relations, point_labels) for component in components
     )
+    preliminary = (
+        *element_regions,
+        *_standalone_point_regions(point_anchors, element_regions),
+    )
+    if not preliminary:
+        return ()
     coordinate_candidates = _coordinate_candidates(evidencias)
     assigned_coordinates = _assign_coordinates(preliminary, coordinate_candidates)
     regions = tuple(
@@ -134,6 +141,7 @@ def _spatial_components(
         ({point_labels[element.id]} if element.id in point_labels else set())
         for element in elements
     ]
+    component_evidence = [set(element.evidencia_ids) for element in elements]
 
     def find(index: int) -> int:
         while parents[index] != index:
@@ -141,7 +149,7 @@ def _spatial_components(
             index = parents[index]
         return index
 
-    def union(left: int, right: int) -> None:
+    def union(left: int, right: int, distance: float) -> None:
         left_root = find(left)
         right_root = find(right)
         if left_root == right_root:
@@ -150,8 +158,15 @@ def _spatial_components(
         right_labels = component_labels[right_root]
         if left_labels and right_labels and left_labels != right_labels:
             return
+        if (
+            bool(left_labels) != bool(right_labels)
+            and distance > _POINT_COMPONENT_ATTACHMENT_DISTANCE
+            and not component_evidence[left_root] & component_evidence[right_root]
+        ):
+            return
         parents[right_root] = left_root
         component_labels[left_root] = left_labels | right_labels
+        component_evidence[left_root] |= component_evidence[right_root]
 
     edges: list[tuple[float, str, str, int, int]] = []
     for left_index, left in enumerate(elements):
@@ -170,8 +185,8 @@ def _spatial_components(
                         right_index,
                     )
                 )
-    for _distance, _left_id, _right_id, left_index, right_index in sorted(edges):
-        union(left_index, right_index)
+    for distance, _left_id, _right_id, left_index, right_index in sorted(edges):
+        union(left_index, right_index, distance)
 
     grouped: dict[int, list[PropostaElemento]] = {}
     for index, element in enumerate(elements):
@@ -257,6 +272,15 @@ def _assign_point_labels(
 ) -> dict[UUID, str]:
     assignments: dict[UUID, str] = {}
     for element in elements:
+        operational_identifier = str(
+            dict(element.atributos_sugeridos).get("identificador_operacional") or ""
+        )
+        direct = _POINT_LABEL_PATTERN.fullmatch(operational_identifier)
+        if direct is not None:
+            assignments[element.id] = f"P{int(direct.group(1))}"
+            continue
+        if operational_identifier.upper().startswith("V"):
+            continue
         same_page = tuple(
             anchor for anchor in anchors if anchor.geometry.pagina_id == element.geometria.pagina_id
         )
@@ -277,6 +301,42 @@ def _assign_point_labels(
         if distance <= _POINT_ANCHOR_DISTANCE:
             assignments[element.id] = nearest.label
     return assignments
+
+
+def _standalone_point_regions(
+    anchors: tuple[_PointAnchor, ...],
+    element_regions: tuple[RegiaoAnalise, ...],
+) -> tuple[RegiaoAnalise, ...]:
+    represented = {
+        (region.pagina_id, region.rotulo_ponto)
+        for region in element_regions
+        if region.rotulo_ponto is not None
+    }
+    canonical: dict[tuple[UUID, str], _PointAnchor] = {}
+    for anchor in anchors:
+        key = (anchor.geometry.pagina_id, anchor.label)
+        current = canonical.get(key)
+        if current is None or _geometry_area(anchor.geometry) < _geometry_area(current.geometry):
+            canonical[key] = anchor
+    return tuple(
+        RegiaoAnalise(
+            id=uuid5(page_id, f"regiao-analise:ponto:{label}"),
+            pagina_id=page_id,
+            geometria=anchor.geometry,
+            elemento_ids=(),
+            rotulo_ponto=label,
+        )
+        for (page_id, label), anchor in sorted(
+            canonical.items(),
+            key=lambda item: (
+                str(item[0][0]),
+                _center(item[1].geometry)[1],
+                _center(item[1].geometry)[0],
+                item[0][1],
+            ),
+        )
+        if (page_id, label) not in represented
+    )
 
 
 def _combined_geometry(geometries: tuple[GeometriaDocumento, ...]) -> GeometriaDocumento:
@@ -371,6 +431,11 @@ def _bounds(geometry: GeometriaDocumento) -> tuple[float, float, float, float]:
     x_values = [float(point.x) for point in geometry.pontos]
     y_values = [float(point.y) for point in geometry.pontos]
     return min(x_values), min(y_values), max(x_values), max(y_values)
+
+
+def _geometry_area(geometry: GeometriaDocumento) -> float:
+    left, top, right, bottom = _bounds(geometry)
+    return (right - left) * (bottom - top)
 
 
 def _center(geometry: GeometriaDocumento) -> tuple[float, float]:

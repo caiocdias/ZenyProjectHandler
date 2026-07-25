@@ -6,7 +6,12 @@ from collections.abc import Callable
 from dataclasses import replace
 
 from zeny_project_handler.application.document_zones import evidencias_sem_cabecalho
-from zeny_project_handler.domain.analysis import DiagnosticoAnalise, PropostaElemento
+from zeny_project_handler.domain.analysis import (
+    DiagnosticoAnalise,
+    EvidenciaDocumento,
+    PropostaElemento,
+)
+from zeny_project_handler.domain.enums import CategoriaElemento
 from zeny_project_handler.domain.interpretation import RegistroRegrasInterpretacao
 from zeny_project_handler.ports.interpretation import (
     AnalisadorCategoriaPort,
@@ -29,7 +34,7 @@ from .span_rules import associar_tracados_de_cabos
 
 class InterpretadorRegrasExplicitas:
     nome = "regras-explicitas-cemig"
-    versao = "11.0"
+    versao = "13.0"
 
     def __init__(
         self,
@@ -80,7 +85,13 @@ class InterpretadorRegrasExplicitas:
             project_request.evidencias,
             solicitacao.catalogo,
         )
-        elements = mark_conflicts(proposals_with_paths, project_request.evidencias)
+        elements = mark_conflicts(
+            _deduplicate_point_proposals(
+                proposals_with_paths,
+                project_request.evidencias,
+            ),
+            project_request.evidencias,
+        )
         relations = (
             generate_relations(
                 solicitacao.execucao_id,
@@ -102,6 +113,78 @@ class InterpretadorRegrasExplicitas:
 def _raise_if_cancelled(cancelled: Callable[[], bool]) -> None:
     if cancelled():
         raise InterpretacaoCanceladaError("Interpretação cancelada")
+
+
+def _deduplicate_point_proposals(
+    proposals: tuple[PropostaElemento, ...],
+    evidence: tuple[EvidenciaDocumento, ...],
+) -> tuple[PropostaElemento, ...]:
+    targeted_evidence_ids = {
+        item.id
+        for item in evidence
+        if dict(item.atributos_extraidos).get("motor_ocr")
+        in {
+            "tesseract-bloco-operacional-localizado",
+            "tesseract-rotulo-linear-retificado",
+            "tesseract-rotulo-operacional-localizado",
+        }
+    }
+    groups: dict[tuple[object, ...], list[PropostaElemento]] = {}
+    keys: dict[object, tuple[object, ...] | None] = {}
+    for proposal in proposals:
+        attributes = dict(proposal.atributos_sugeridos)
+        operational_label = attributes.get("identificador_operacional")
+        catalog_reference = proposal.tipo_catalogo_sugerido_id or proposal.codigo_observado
+        if (
+            proposal.categoria is CategoriaElemento.CABO
+            or operational_label is None
+            or catalog_reference is None
+        ):
+            keys[proposal.id] = None
+            continue
+        key = (
+            proposal.categoria,
+            catalog_reference,
+            operational_label,
+            proposal.situacao_projeto,
+        )
+        keys[proposal.id] = key
+        groups.setdefault(key, []).append(proposal)
+    result = []
+    emitted: set[tuple[object, ...]] = set()
+    for proposal in proposals:
+        proposal_key = keys[proposal.id]
+        if proposal_key is None:
+            result.append(proposal)
+            continue
+        if proposal_key in emitted:
+            continue
+        emitted.add(proposal_key)
+        candidates = groups[proposal_key]
+        selected = max(
+            candidates,
+            key=lambda item: (
+                any(reference in targeted_evidence_ids for reference in item.evidencia_ids),
+                item.confianca or 0,
+                str(item.id),
+            ),
+        )
+        result.append(
+            replace(
+                selected,
+                evidencia_ids=tuple(
+                    sorted(
+                        {
+                            reference
+                            for candidate in candidates
+                            for reference in candidate.evidencia_ids
+                        },
+                        key=str,
+                    )
+                ),
+            )
+        )
+    return tuple(result)
 
 
 def _analyzer_diagnostic(name: str, error: Exception) -> DiagnosticoAnalise:

@@ -462,16 +462,25 @@ class ReviewPanelWidget(QWidget):
         for index, span in enumerate(self._spans, start=1):
             row = self._span_table.rowCount()
             self._span_table.insertRow(row)
-            origin = elements.get(span.poste_origem_id)
-            destination = elements.get(span.poste_destino_id)
+            origin = (
+                elements.get(span.poste_origem_id) if span.poste_origem_id is not None else None
+            )
+            destination = (
+                elements.get(span.poste_destino_id) if span.poste_destino_id is not None else None
+            )
             cable = elements.get(span.cabo_id)
             page_number = (
                 self._project_page_number(span.geometria.pagina_id)
                 if span.geometria is not None
                 else None
             )
+            span_label = (
+                cable.identificador_operacional
+                if isinstance(cable, Cabo) and cable.identificador_operacional
+                else f"Vão {index}"
+            )
             values = (
-                f"Vão {index}",
+                span_label,
                 _project_element_label(origin),
                 _project_element_label(destination),
                 _project_element_label(cable, catalog=session.catalogo),
@@ -488,9 +497,7 @@ class ReviewPanelWidget(QWidget):
             span_button = self._visibility_button(
                 visible=visible,
                 object_name="analysisSpanVisibilityButton",
-                tooltip=(
-                    "Ocultar este vão no PDF" if visible else "Exibir este vão no PDF"
-                ),
+                tooltip=("Ocultar este vão no PDF" if visible else "Exibir este vão no PDF"),
                 toggled=partial(self._set_span_visible, span.id),
                 parent=self._span_table,
             )
@@ -681,11 +688,7 @@ class ReviewPanelWidget(QWidget):
         session = self._session
         region = (
             next(
-                (
-                    item
-                    for item in session.regioes
-                    if proposal_id in item.elemento_ids
-                ),
+                (item for item in session.regioes if proposal_id in item.elemento_ids),
                 None,
             )
             if session is not None
@@ -729,12 +732,16 @@ class ReviewPanelWidget(QWidget):
                 for element_id in region.elemento_ids
                 if element_id in visible_elements
             )
-            if not elements:
+            if not elements and region.elemento_ids:
                 continue
+            action_summary = _region_action_counts(elements) or "Ponto identificado"
+            detail_summary = _region_summary(elements) or (
+                "Identificador de ponto reconhecido no PDF"
+            )
             root = QTreeWidgetItem(
                 (
                     self._region_label(region, region_number),
-                    _region_action_counts(elements),
+                    action_summary,
                     _coordinate_label(region),
                     f"{len(elements)} elemento(s)",
                     f"{len(region.vinculo_ids)} vínculo(s)",
@@ -743,7 +750,7 @@ class ReviewPanelWidget(QWidget):
             )
             root.setData(0, Qt.ItemDataRole.UserRole + 1, str(region.id))
             root.setToolTip(0, self._region_location(region, region_number))
-            root.setToolTip(1, _region_summary(elements))
+            root.setToolTip(1, detail_summary)
             self._tree.addTopLevelItem(root)
             region_visible = region.id not in self._hidden_region_ids
             region_button = self._visibility_button(

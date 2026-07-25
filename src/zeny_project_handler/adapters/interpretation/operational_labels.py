@@ -14,6 +14,11 @@ from zeny_project_handler.domain.values import GeometriaDocumento
 from .rule_support import center, normalized_text
 
 _MAXIMUM_IDENTIFIER_DISTANCE = 0.14
+_MAXIMUM_TARGETED_IDENTIFIER_DISTANCE = 0.06
+_TARGETED_IDENTIFIER_ENGINES = {
+    "tesseract-identificador-localizado",
+    "tesseract-identificador-vetorial-localizado",
+}
 _POLE_IDENTIFIER_PATTERN = re.compile(
     r"(?<![A-Z0-9])(?:(?:POSTE|PONTO)\s+)?P\s*[-.:]?\s*0*(\d{1,4})(?![A-Z0-9])"
 )
@@ -40,10 +45,15 @@ def filtrar_propostas_identificadas(
     *,
     distancia_maxima: float = _MAXIMUM_IDENTIFIER_DISTANCE,
 ) -> tuple[PropostaElemento, ...]:
-    """Mantenha apenas ativos de obra identificados por ponto ou vão."""
+    """Mantenha ativos identificados por rótulo ou coordenada de campo."""
     if distancia_maxima <= 0:
         raise ValueError("Distância máxima do identificador deve ser positiva")
     pole_labels, span_labels = _operational_labels(evidencias)
+    coordinate_poles = tuple(
+        proposal
+        for proposal in propostas
+        if proposal.categoria is CategoriaElemento.POSTE and _has_field_coordinate(proposal)
+    )
     identified: list[PropostaElemento] = []
     for proposal in propostas:
         labels = (
@@ -56,7 +66,44 @@ def filtrar_propostas_identificadas(
         nearest = _nearest_label(proposal, labels, distancia_maxima)
         if nearest is not None:
             identified.append(_with_operational_label(proposal, nearest))
+        elif _has_field_coordinate(proposal) or (
+            proposal.categoria in _POLE_IDENTIFIED_CATEGORIES - {CategoriaElemento.POSTE}
+            and _nearest_coordinate_pole(
+                proposal,
+                coordinate_poles,
+                distancia_maxima,
+            )
+            is not None
+        ):
+            identified.append(proposal)
     return tuple(identified)
+
+
+def _has_field_coordinate(proposal: PropostaElemento) -> bool:
+    attributes = dict(proposal.atributos_sugeridos)
+    return (
+        attributes.get("coordenada_leste") is not None
+        and attributes.get("coordenada_norte") is not None
+    )
+
+
+def _nearest_coordinate_pole(
+    proposal: PropostaElemento,
+    poles: tuple[PropostaElemento, ...],
+    maximum_distance: float,
+) -> PropostaElemento | None:
+    same_page = tuple(
+        pole for pole in poles if pole.geometria.pagina_id == proposal.geometria.pagina_id
+    )
+    nearest = min(
+        same_page,
+        key=lambda pole: _distance_to_geometry(center(pole.geometria), proposal.geometria),
+        default=None,
+    )
+    if nearest is None:
+        return None
+    distance = _distance_to_geometry(center(nearest.geometria), proposal.geometria)
+    return nearest if distance <= maximum_distance else None
 
 
 def _operational_labels(
@@ -69,7 +116,7 @@ def _operational_labels(
             continue
         text = normalized_text(item.conteudo_bruto)
         pole_match = _POLE_IDENTIFIER_PATTERN.search(text)
-        if pole_match is not None:
+        if pole_match is not None and _is_operational_identifier_evidence(item, pole_match):
             point_number = int(pole_match.group(1))
             if point_number == 0:
                 continue
@@ -81,7 +128,7 @@ def _operational_labels(
             )
             continue
         span_match = _SPAN_IDENTIFIER_PATTERN.search(text)
-        if span_match is not None:
+        if span_match is not None and _is_operational_identifier_evidence(item, span_match):
             origin_number = int(span_match.group(1))
             destination_number = int(span_match.group(2))
             if origin_number == 0 or destination_number == 0 or origin_number == destination_number:
@@ -99,26 +146,46 @@ def _operational_labels(
     return tuple(sorted(pole_labels, key=key)), tuple(sorted(span_labels, key=key))
 
 
+def _is_operational_identifier_evidence(
+    evidence: EvidenciaDocumento,
+    match: re.Match[str],
+) -> bool:
+    engine = dict(evidence.atributos_extraidos).get("motor_ocr")
+    return match.start() == 0 or engine in _TARGETED_IDENTIFIER_ENGINES
+
+
 def _nearest_label(
     proposal: PropostaElemento,
     labels: tuple[_OperationalLabel, ...],
     maximum_distance: float,
 ) -> _OperationalLabel | None:
-    same_page = tuple(
-        label for label in labels if label.evidence.pagina_id == proposal.geometria.pagina_id
+    eligible = tuple(
+        label
+        for label in labels
+        if label.evidence.pagina_id == proposal.geometria.pagina_id
+        and _distance_to_geometry(center(label.evidence.geometria), proposal.geometria)
+        <= _maximum_distance_for_label(label, maximum_distance)
     )
-    if not same_page:
+    if not eligible:
         return None
-    nearest = min(
-        same_page,
+    return min(
+        eligible,
         key=lambda label: (
             _distance_to_geometry(center(label.evidence.geometria), proposal.geometria),
             label.value,
             str(label.evidence.id),
         ),
     )
-    distance = _distance_to_geometry(center(nearest.evidence.geometria), proposal.geometria)
-    return nearest if distance <= maximum_distance else None
+
+
+def _maximum_distance_for_label(
+    label: _OperationalLabel,
+    configured_maximum: float,
+) -> float:
+    engine = dict(label.evidence.atributos_extraidos).get("motor_ocr")
+    if engine in _TARGETED_IDENTIFIER_ENGINES:
+        return min(configured_maximum, _MAXIMUM_TARGETED_IDENTIFIER_DISTANCE)
+    return configured_maximum
 
 
 def _with_operational_label(

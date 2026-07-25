@@ -97,6 +97,80 @@ def situation_from_evidence(
     return None
 
 
+def project_situation_override(
+    source: EvidenciaDocumento,
+    evidence: tuple[EvidenciaDocumento, ...],
+) -> tuple[SituacaoProjeto, EvidenciaDocumento | None] | None:
+    """Aplique marcações explícitas do desenho antes da inferência por cor."""
+    bubbles = tuple(
+        item
+        for item in evidence
+        if item.pagina_id == source.pagina_id
+        and _is_installation_bubble(item)
+        and _geometry_center_is_inside(source.geometria, item.geometria)
+    )
+    if bubbles:
+        bubble = min(bubbles, key=lambda item: _geometry_area(item.geometria))
+        return SituacaoProjeto.INSTALAR, bubble
+    forced = dict(source.atributos_extraidos).get("situacao_projeto_forcada")
+    try:
+        situation = SituacaoProjeto(str(forced)) if forced is not None else None
+    except ValueError:
+        situation = None
+    return (situation, None) if situation is not None else None
+
+
+def _is_installation_bubble(evidence: EvidenciaDocumento) -> bool:
+    if evidence.tipo is not TipoEvidencia.VETOR:
+        return False
+    attributes = dict(evidence.atributos_extraidos)
+    operations = {
+        operation.strip()
+        for operation in str(attributes.get("operacoes") or "").split(",")
+        if operation.strip()
+    }
+    if operations not in ({"qu"}, {"re"}):
+        return False
+    colors = tuple(
+        color
+        for color in _color_values(evidence)
+        if (rgb := _rgb(color)) is not None
+        and 96 <= rgb[0] <= 160
+        and rgb[1] <= 32
+        and rgb[2] <= 32
+    )
+    if not colors:
+        return False
+    left, top, right, bottom = _geometry_bounds(evidence.geometria)
+    width = right - left
+    height = bottom - top
+    return min(width, height) >= 0.0005 and max(width, height) <= 0.20
+
+
+def _geometry_bounds(geometry: GeometriaDocumento) -> tuple[float, float, float, float]:
+    x_values = [float(point.x) for point in geometry.pontos]
+    y_values = [float(point.y) for point in geometry.pontos]
+    return min(x_values), min(y_values), max(x_values), max(y_values)
+
+
+def _geometry_area(geometry: GeometriaDocumento) -> float:
+    left, top, right, bottom = _geometry_bounds(geometry)
+    return (right - left) * (bottom - top)
+
+
+def _geometry_center_is_inside(
+    source: GeometriaDocumento,
+    container: GeometriaDocumento,
+) -> bool:
+    source_x, source_y = center(source)
+    left, top, right, bottom = _geometry_bounds(container)
+    tolerance = 0.001
+    return (
+        left - tolerance <= source_x <= right + tolerance
+        and top - tolerance <= source_y <= bottom + tolerance
+    )
+
+
 def nearest_context_evidence(
     source: EvidenciaDocumento,
     evidence: tuple[EvidenciaDocumento, ...],

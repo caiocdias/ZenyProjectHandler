@@ -85,7 +85,19 @@ def _relation_targets(
         ):
             return (nearest,)
         return ()
-    if rule.estrategia in {"EXTREMIDADES_PROXIMAS", "COMPATIBILIDADE_E_PROXIMIDADE"}:
+    if rule.estrategia == "EXTREMIDADES_PROXIMAS":
+        operational_targets = _targets_for_operational_endpoints(origin, same_page)
+        if operational_targets is not None:
+            return operational_targets
+        same_situation = tuple(
+            item for item in same_page if item.situacao_projeto is origin.situacao_projeto
+        )
+        return _targets_near_endpoints(
+            origin,
+            same_situation or same_page,
+            float(rule.distancia_maxima),
+        )
+    if rule.estrategia == "COMPATIBILIDADE_E_PROXIMIDADE":
         compatible = tuple(item for item in same_page if _compatible(origin, item, rule, catalog))
         same_situation = tuple(
             item for item in compatible if item.situacao_projeto is origin.situacao_projeto
@@ -96,6 +108,45 @@ def _relation_targets(
             float(rule.distancia_maxima),
         )
     raise ValueError(f"Estratégia de relação não suportada: {rule.estrategia}")
+
+
+def _targets_for_operational_endpoints(
+    origin: PropostaElemento,
+    destinations: tuple[PropostaElemento, ...],
+) -> tuple[PropostaElemento, ...] | None:
+    attributes = dict(origin.atributos_sugeridos)
+    labels = (
+        attributes.get("ponto_operacional_origem"),
+        attributes.get("ponto_operacional_destino"),
+    )
+    if not all(isinstance(label, str) and label for label in labels):
+        return None
+    selected: dict[UUID, PropostaElemento] = {}
+    for endpoint, label in zip(
+        (origin.geometria.pontos[0], origin.geometria.pontos[-1]),
+        labels,
+        strict=True,
+    ):
+        matching = tuple(
+            item
+            for item in destinations
+            if dict(item.atributos_sugeridos).get("identificador_operacional") == label
+        )
+        same_situation = tuple(
+            item for item in matching if item.situacao_projeto is origin.situacao_projeto
+        )
+        candidates = same_situation or matching
+        nearest = min(
+            candidates,
+            key=lambda item: point_distance(
+                (float(endpoint.x), float(endpoint.y)),
+                center(item.geometria),
+            ),
+            default=None,
+        )
+        if nearest is not None:
+            selected[nearest.id] = nearest
+    return tuple(selected.values())
 
 
 def _compatible(

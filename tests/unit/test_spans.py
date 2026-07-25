@@ -19,6 +19,7 @@ from zeny_project_handler.domain.enums import (
     EstadoRevisao,
     OrigemComprimentoVao,
     SituacaoProjeto,
+    TipoPontoRede,
 )
 from zeny_project_handler.domain.project import Cabo
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
@@ -34,6 +35,33 @@ def test_existing_informed_cable_is_exposed_as_a_span(
     assert len(spans) == 1
     assert spans[0].comprimento_m == Decimal("31.5")
     assert spans[0].origem_comprimento is OrigemComprimentoVao.INFORMADO
+
+
+def test_identified_span_is_kept_when_one_endpoint_has_no_classified_pole(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    project = complete_project(catalogo_inicial)
+    cable = next(item for item in project.elementos if isinstance(item, Cabo))
+    destination = next(point for point in project.pontos_rede if point.id == cable.ponto_destino_id)
+    project = replace(
+        project,
+        elementos=tuple(
+            replace(item, identificador_operacional="V1-2") if item.id == cable.id else item
+            for item in project.elementos
+        ),
+        pontos_rede=tuple(
+            replace(point, poste_id=None, tipo=TipoPontoRede.CONEXAO)
+            if point.id == destination.id
+            else point
+            for point in project.pontos_rede
+        ),
+    )
+
+    spans = detectar_vaos(project)
+
+    assert len(spans) == 1
+    assert spans[0].poste_origem_id is not None
+    assert spans[0].poste_destino_id is None
 
 
 @pytest.mark.parametrize(
