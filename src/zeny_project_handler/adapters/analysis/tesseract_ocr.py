@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import csv
-import io
 import os
 import shutil
 import subprocess
@@ -17,6 +15,7 @@ _DEFAULT_WINDOWS_PATHS = (
     Path("C:/Program Files/Tesseract-OCR/tesseract.exe"),
     Path("C:/Program Files (x86)/Tesseract-OCR/tesseract.exe"),
 )
+_PREFERRED_LANGUAGES = ("por", "eng")
 
 
 class TesseractCliOcr:
@@ -25,12 +24,12 @@ class TesseractCliOcr:
     nome = "tesseract-cli"
     versao = "5"
 
-    def __init__(self, executable: Path, *, language: str = "eng") -> None:
+    def __init__(self, executable: Path, *, language: str | None = None) -> None:
         resolved = executable.expanduser().resolve(strict=True)
         if not resolved.is_file():
             raise ValueError("Executável Tesseract inválido")
         self._executable = resolved
-        self._language = language
+        self._language = language or _best_available_language(resolved)
 
     @classmethod
     def descobrir(cls) -> TesseractCliOcr | None:
@@ -46,17 +45,59 @@ class TesseractCliOcr:
         return None
 
     def reconhecer(self, pagina: PaginaRasterOcr) -> tuple[TrechoTextoOcr, ...]:
+        return self._recognize(pagina, page_segmentation_mode=11)
+
+    def reconhecer_identificador(
+        self,
+        pagina: PaginaRasterOcr,
+    ) -> tuple[TrechoTextoOcr, ...]:
+        return self._recognize(
+            pagina,
+            page_segmentation_mode=10,
+            character_whitelist="P0123456789",
+        )
+
+    def reconhecer_rotulo_operacional(
+        self,
+        pagina: PaginaRasterOcr,
+    ) -> tuple[TrechoTextoOcr, ...]:
+        return self._recognize(
+            pagina,
+            page_segmentation_mode=7,
+            character_whitelist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789()-/".,:',
+        )
+
+    def reconhecer_bloco_operacional(
+        self,
+        pagina: PaginaRasterOcr,
+    ) -> tuple[TrechoTextoOcr, ...]:
+        return self._recognize(
+            pagina,
+            page_segmentation_mode=6,
+            character_whitelist='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789()-/".,:',
+        )
+
+    def _recognize(
+        self,
+        pagina: PaginaRasterOcr,
+        *,
+        page_segmentation_mode: int,
+        character_whitelist: str | None = None,
+    ) -> tuple[TrechoTextoOcr, ...]:
+        arguments = [
+            str(self._executable),
+            "stdin",
+            "stdout",
+            "-l",
+            self._language,
+            "--psm",
+            str(page_segmentation_mode),
+        ]
+        if character_whitelist is not None:
+            arguments.extend(("-c", f"tessedit_char_whitelist={character_whitelist}"))
+        arguments.append("tsv")
         completed = subprocess.run(
-            (
-                str(self._executable),
-                "stdin",
-                "stdout",
-                "-l",
-                self._language,
-                "--psm",
-                "11",
-                "tsv",
-            ),
+            tuple(arguments),
             input=_ppm_bytes(pagina),
             capture_output=True,
             check=True,
@@ -68,6 +109,28 @@ class TesseractCliOcr:
             width=pagina.largura_pixels,
             height=pagina.altura_pixels,
         )
+
+
+def _best_available_language(executable: Path) -> str:
+    """Prefira português técnico, mantendo inglês como fallback portátil."""
+    try:
+        completed = subprocess.run(
+            (str(executable), "--list-langs"),
+            capture_output=True,
+            check=True,
+            text=True,
+            timeout=15,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except (OSError, subprocess.SubprocessError):
+        return "eng"
+    available = {
+        line.strip()
+        for line in completed.stdout.splitlines()
+        if line.strip() and "available languages" not in line.lower()
+    }
+    selected = tuple(language for language in _PREFERRED_LANGUAGES if language in available)
+    return "+".join(selected) if selected else "eng"
 
 
 def _ppm_bytes(page: PaginaRasterOcr) -> bytes:
@@ -87,7 +150,15 @@ def _parse_tsv(tsv: str, *, width: int, height: int) -> tuple[TrechoTextoOcr, ..
     if width < 1 or height < 1:
         raise ValueError("Dimensões do raster devem ser positivas")
     groups: dict[tuple[str, str, str, str], list[dict[str, str]]] = defaultdict(list)
-    for row in csv.DictReader(io.StringIO(tsv), delimiter="\t"):
+    lines = tsv.splitlines()
+    if not lines:
+        return ()
+    header = lines[0].split("\t")
+    for raw_line in lines[1:]:
+        values = raw_line.split("\t", maxsplit=len(header) - 1)
+        if len(values) != len(header):
+            continue
+        row = dict(zip(header, values, strict=True))
         text = (row.get("text") or "").strip()
         try:
             confidence = float(row.get("conf", "-1"))
@@ -102,7 +173,7 @@ def _parse_tsv(tsv: str, *, width: int, height: int) -> tuple[TrechoTextoOcr, ..
             )
             groups[key].append(row)
 
-    lines = []
+    recognized_lines = []
     for key in sorted(groups):
         words = groups[key]
         left = min(int(word["left"]) for word in words)
@@ -110,7 +181,7 @@ def _parse_tsv(tsv: str, *, width: int, height: int) -> tuple[TrechoTextoOcr, ..
         right = max(int(word["left"]) + int(word["width"]) for word in words)
         bottom = max(int(word["top"]) + int(word["height"]) for word in words)
         confidence = sum(float(word["conf"]) for word in words) / (100 * len(words))
-        lines.append(
+        recognized_lines.append(
             TrechoTextoOcr(
                 texto=" ".join(word["text"].strip() for word in words),
                 caixa_normalizada=(
@@ -122,4 +193,4 @@ def _parse_tsv(tsv: str, *, width: int, height: int) -> tuple[TrechoTextoOcr, ..
                 confianca=max(0.0, min(1.0, confidence)),
             )
         )
-    return tuple(lines)
+    return tuple(recognized_lines)

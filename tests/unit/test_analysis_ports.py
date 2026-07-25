@@ -7,9 +7,12 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from tests.factories import complete_project
 from tests.pdf_fixtures import create_golden_pdf
 
 from zeny_project_handler.adapters.pdf import PyMuPdfReader
+from zeny_project_handler.application.mvp_workflow import _extraction_id
+from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.ports.analysis import (
     ConfiguracaoAnaliseDocumento,
     SolicitacaoAnaliseDocumento,
@@ -47,6 +50,11 @@ def test_analysis_configuration_is_stable_and_validated() -> None:
     assert parameters["area_imagem_minima_para_ocr"] == Decimal("0.10")
     assert parameters["area_imagem_regional_minima_para_ocr"] == Decimal("0.0025")
     assert parameters["minimo_vetores_para_ocr"] == 1000
+    assert parameters["dpi_ocr"] == 450
+    assert parameters["dpi_ocr_identificadores"] == 1200
+    assert parameters["dpi_ocr_rotulos_inclinados"] == 1800
+    assert parameters["divisoes_ocr_conteudo_denso"] == 3
+    assert parameters["sobreposicao_ocr_conteudo_denso"] == Decimal("0.025")
     assert (
         len(
             chave_cache_analise(
@@ -68,8 +76,41 @@ def test_analysis_configuration_is_stable_and_validated() -> None:
         ConfiguracaoAnaliseDocumento(minimo_vetores_para_ocr=0)
     with pytest.raises(ValueError, match="DPI"):
         ConfiguracaoAnaliseDocumento(dpi_ocr=40)
+    with pytest.raises(ValueError, match="identificadores"):
+        ConfiguracaoAnaliseDocumento(dpi_ocr_identificadores=200)
+    with pytest.raises(ValueError, match="inclinados"):
+        ConfiguracaoAnaliseDocumento(dpi_ocr_rotulos_inclinados=500)
+    with pytest.raises(ValueError, match="Divisões"):
+        ConfiguracaoAnaliseDocumento(divisoes_ocr_conteudo_denso=1)
+    with pytest.raises(ValueError, match="Sobreposição"):
+        ConfiguracaoAnaliseDocumento(sobreposicao_ocr_conteudo_denso=Decimal("0.20"))
     with pytest.raises(ValueError, match="Profundidade"):
         ConfiguracaoAnaliseDocumento(profundidade_maxima_xobject=0)
+
+
+def test_persisted_extraction_identity_changes_with_analyzer_version(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    project = complete_project(catalogo_inicial)
+    document = project.documentos[0]
+    configuration = ConfiguracaoAnaliseDocumento()
+
+    first = _extraction_id(
+        project,
+        document.id,
+        document.sha256,
+        configuration,
+        "pymupdf-nativo:1.5.1",
+    )
+    second = _extraction_id(
+        project,
+        document.id,
+        document.sha256,
+        configuration,
+        "pymupdf-nativo:1.7.0",
+    )
+
+    assert first != second
 
 
 def test_analysis_request_validates_source_links(tmp_path: Path) -> None:

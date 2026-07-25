@@ -48,6 +48,11 @@ class ExecutarAnaliseDocumento:
         self._relogio = relogio or (lambda: datetime.now(UTC))
         self._gerador_id = gerador_id
 
+    @property
+    def assinatura_analisador(self) -> str:
+        """Identidade que invalida execuções persistidas quando o extrator muda."""
+        return f"{self._analisador.nome}:{self._analisador.versao}"
+
     def executar(
         self,
         projeto_id: UUID,

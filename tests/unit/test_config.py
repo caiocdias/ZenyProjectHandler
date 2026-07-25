@@ -28,6 +28,12 @@ def test_default_data_directory_uses_local_app_data() -> None:
     assert result == Path("C:/temporary/local/ZenyProjectHandler")
 
 
+def test_default_rendering_uses_print_quality(tmp_path: Path) -> None:
+    settings = AppSettings.from_environment({"ZENY_DATA_DIR": str(tmp_path)})
+
+    assert settings.pdf_render_dpi == 600
+
+
 def test_settings_reject_invalid_log_level(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="Nível de log inválido"):
         AppSettings(data_directory=tmp_path, log_level="verbose")

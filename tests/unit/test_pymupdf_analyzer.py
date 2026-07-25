@@ -1,3 +1,4 @@
+# mypy: disable-error-code="no-untyped-call"
 from __future__ import annotations
 
 from dataclasses import replace
@@ -6,6 +7,7 @@ from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
+import pymupdf
 import pytest
 from tests.pdf_fixtures import (
     create_analysis_pdf,
@@ -16,11 +18,22 @@ from tests.pdf_fixtures import (
 
 from zeny_project_handler.adapters.analysis import JsonAnalysisCache, PyMuPdfDocumentAnalyzer
 from zeny_project_handler.adapters.analysis import pymupdf_analyzer as analyzer_module
+from zeny_project_handler.adapters.analysis.pymupdf_ocr import (
+    _deduplicate_tiled_candidates,
+    _extract_marked_equipment_labels,
+    _extract_point_identifiers,
+    _normalize_equipment_ocr_text,
+    _normalize_operational_label_text,
+)
 from zeny_project_handler.adapters.pdf import PyMuPdfReader
-from zeny_project_handler.domain.enums import TipoEvidencia, TipoOrigemPdf
+from zeny_project_handler.domain.analysis import OrigemObjetoPdf
+from zeny_project_handler.domain.enums import TipoEvidencia, TipoGeometria, TipoOrigemPdf
+from zeny_project_handler.domain.values import PontoNormalizado
 from zeny_project_handler.ports.analysis import (
     AnalisadorDocumentoPort,
+    CandidatoEvidenciaDocumento,
     ConfiguracaoAnaliseDocumento,
+    GeometriaNormalizada,
     PaginaRasterOcr,
     ResultadoAnaliseDocumento,
     SolicitacaoAnaliseDocumento,
@@ -57,6 +70,67 @@ class FakeAnalyzer:
 
 class OtherFakeOcr(FakeOcr):
     nome = "outro-ocr"
+
+
+class FakeTargetedOcr:
+    def __init__(self) -> None:
+        self._labels = iter(("CM2(1)", "S1N", "11-300"))
+
+    def reconhecer_identificador(
+        self,
+        _pagina: PaginaRasterOcr,
+    ) -> tuple[TrechoTextoOcr, ...]:
+        return (
+            TrechoTextoOcr(
+                texto="P7",
+                caixa_normalizada=(0.1, 0.1, 0.9, 0.9),
+                confianca=0.95,
+            ),
+        )
+
+    def reconhecer_rotulo_operacional(
+        self,
+        _pagina: PaginaRasterOcr,
+    ) -> tuple[TrechoTextoOcr, ...]:
+        return (
+            TrechoTextoOcr(
+                texto=next(self._labels),
+                caixa_normalizada=(0.1, 0.1, 0.9, 0.9),
+                confianca=0.95,
+            ),
+        )
+
+
+class FakeBlockTargetedOcr(FakeTargetedOcr):
+    def reconhecer_bloco_operacional(
+        self,
+        _pagina: PaginaRasterOcr,
+    ) -> tuple[TrechoTextoOcr, ...]:
+        return tuple(
+            TrechoTextoOcr(
+                texto=text,
+                caixa_normalizada=(0.1, index * 0.2, 0.9, index * 0.2 + 0.1),
+                confianca=0.95,
+            )
+            for index, text in enumerate(("U3(1)", "S3R", "11-300"))
+        )
+
+
+class FakeEquipmentMarkerOcr:
+    def __init__(self) -> None:
+        self._labels = iter(("100A/10KA/2H", "100A/2KA/2H"))
+
+    def reconhecer_bloco_operacional(
+        self,
+        _pagina: PaginaRasterOcr,
+    ) -> tuple[TrechoTextoOcr, ...]:
+        return (
+            TrechoTextoOcr(
+                texto=next(self._labels),
+                caixa_normalizada=(0.1, 0.1, 0.9, 0.9),
+                confianca=0.92,
+            ),
+        )
 
 
 def _request(path: Path) -> SolicitacaoAnaliseDocumento:
@@ -194,8 +268,182 @@ def test_dense_vector_page_triggers_ocr_even_with_native_text(tmp_path: Path) ->
 
     result = PyMuPdfDocumentAnalyzer(motor_ocr=ocr).analisar(request)
 
-    assert [page.pagina_numero for page in ocr.pages] == [1]
+    assert [page.pagina_numero for page in ocr.pages] == [1] * 9
+    assert all(page.dpi == 450 for page in ocr.pages)
     assert any(item.tipo is TipoEvidencia.OCR for item in result.evidencias)
+
+
+def test_targeted_ocr_reads_each_green_operational_label_below_point() -> None:
+    document = pymupdf.open()
+    try:
+        page = document.new_page(width=1000, height=1000)
+        page.draw_oval(
+            pymupdf.Rect(100, 100, 114, 110),
+            color=(0.5, 0, 0),
+        )
+        for rectangle in (
+            pymupdf.Rect(98, 111, 116, 116),
+            pymupdf.Rect(101, 117, 112, 122),
+            pymupdf.Rect(97, 123, 117, 129),
+        ):
+            page.draw_rect(rectangle, color=(0, 0.5, 0))
+
+        candidates = _extract_point_identifiers(
+            page,
+            1,
+            FakeTargetedOcr(),
+            1200,
+        )
+    finally:
+        document.close()
+
+    assert [item.conteudo_bruto for item in candidates] == [
+        "P7",
+        "CM2(1)",
+        "S1N",
+        "11-300",
+    ]
+    assert all(item.tipo is TipoEvidencia.OCR for item in candidates)
+    assert {dict(item.atributos_extraidos).get("motor_ocr") for item in candidates[1:]} == {
+        "tesseract-rotulo-operacional-localizado"
+    }
+
+
+def test_targeted_ocr_falls_back_to_unboxed_dark_block_below_point() -> None:
+    document = pymupdf.open()
+    try:
+        page = document.new_page(width=1000, height=1000)
+        page.draw_oval(
+            pymupdf.Rect(100, 100, 114, 110),
+            color=(0.5, 0, 0),
+        )
+
+        candidates = _extract_point_identifiers(
+            page,
+            1,
+            FakeBlockTargetedOcr(),
+            1200,
+        )
+    finally:
+        document.close()
+
+    assert [item.conteudo_bruto for item in candidates] == [
+        "P7",
+        "U3(1)",
+        "S3R",
+        "11-300",
+    ]
+    assert {dict(item.atributos_extraidos).get("motor_ocr") for item in candidates[1:]} == {
+        "tesseract-bloco-operacional-localizado"
+    }
+
+
+def test_targeted_ocr_reads_boxed_installation_and_struck_removal() -> None:
+    document = pymupdf.open()
+    try:
+        page = document.new_page(width=1000, height=1000)
+        page.draw_rect(
+            pymupdf.Rect(200, 200, 260, 206),
+            color=(0.5, 0, 0),
+        )
+        page.draw_line(
+            (100, 300),
+            (150, 300),
+            color=(0.5, 0, 0),
+        )
+
+        candidates = _extract_marked_equipment_labels(
+            page,
+            1,
+            FakeEquipmentMarkerOcr(),
+            1800,
+        )
+    finally:
+        document.close()
+
+    assert [item.conteudo_bruto for item in candidates] == [
+        "100A/10KA/2H",
+        "100A/2KA/2H",
+    ]
+    assert [dict(item.atributos_extraidos)["situacao_projeto_forcada"] for item in candidates] == [
+        "INSTALAR",
+        "REMOVER",
+    ]
+    assert {dict(item.atributos_extraidos)["motor_ocr"] for item in candidates} == {
+        "tesseract-equipamento-marcado-localizado"
+    }
+
+
+@pytest.mark.parametrize(
+    ("ocr_text", "expected"),
+    [
+        ("11-30C", "11-300"),
+        ("11-60O", "11-600"),
+        ("CM2(1)", "CM2(1)"),
+        ("S1N", "S1N"),
+        ('CM-50(3/8")', 'CM-50(3/8")'),
+        ("CM-50(3/8)", 'CM-50(3/8")'),
+        ("N-(1N2)", "(N-1N2)"),
+        ("ABN-16(16)", "ABN-16(16)"),
+    ],
+)
+def test_targeted_ocr_normalizes_ambiguous_characters_only_in_numeric_labels(
+    ocr_text: str,
+    expected: str,
+) -> None:
+    assert _normalize_operational_label_text(ocr_text) == expected
+
+
+def test_targeted_equipment_ocr_normalizes_numeric_glyph_confusion() -> None:
+    assert _normalize_equipment_ocr_text("1OOA/1OKA/2H") == "100A/10KA/2H"
+
+
+def test_targeted_operational_label_replaces_general_ocr_at_same_position() -> None:
+    def candidate(
+        text: str,
+        motor: str,
+        *,
+        y: str,
+    ) -> CandidatoEvidenciaDocumento:
+        return CandidatoEvidenciaDocumento(
+            chave_estavel=f"{motor}:{text}",
+            pagina_numero=1,
+            tipo=TipoEvidencia.OCR,
+            geometria=GeometriaNormalizada(
+                tipo=TipoGeometria.CAIXA,
+                pontos=(
+                    PontoNormalizado(Decimal("0.34"), Decimal(y)),
+                    PontoNormalizado(Decimal("0.36"), Decimal(y) + Decimal("0.004")),
+                ),
+            ),
+            origem_pdf=OrigemObjetoPdf(),
+            conteudo_bruto=text,
+            atributos_extraidos=(
+                ("confianca", Decimal("0.90")),
+                ("motor_ocr", motor),
+            ),
+        )
+
+    general = candidate("M2", "tesseract-cli", y="0.65")
+    composite = candidate("S4R S3R", "tesseract-cli", y="0.65")
+    point = candidate(
+        "P7",
+        "tesseract-identificador-localizado",
+        y="0.642",
+    )
+    targeted = candidate(
+        "CM2(1)",
+        "tesseract-rotulo-operacional-localizado",
+        y="0.65",
+    )
+
+    selected = _deduplicate_tiled_candidates((general, composite, point, targeted))
+
+    assert [item.conteudo_bruto for item in selected] == [
+        "S4R S3R",
+        "P7",
+        "CM2(1)",
+    ]
 
 
 def test_extractor_failure_is_localized(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

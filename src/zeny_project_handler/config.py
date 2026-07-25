@@ -35,7 +35,7 @@ class AppSettings:
     log_level: str = "INFO"
     application_name: str = APPLICATION_NAME
     organization_name: str = ORGANIZATION_NAME
-    pdf_render_dpi: int = 144
+    pdf_render_dpi: int = 600
 
     def __post_init__(self) -> None:
         normalized_level = self.log_level.upper()
@@ -80,7 +80,7 @@ class AppSettings:
 
 
 def _pdf_render_dpi(values: Mapping[str, str]) -> int:
-    raw_value = values.get(PDF_RENDER_DPI_ENVIRONMENT_VARIABLE, "144")
+    raw_value = values.get(PDF_RENDER_DPI_ENVIRONMENT_VARIABLE, "600")
     try:
         return int(raw_value)
     except ValueError as error:

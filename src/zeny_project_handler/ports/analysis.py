@@ -8,7 +8,7 @@ from datetime import datetime
 from decimal import Decimal
 from hashlib import sha256
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 from uuid import UUID
 
 from zeny_project_handler.domain.analysis import (
@@ -35,7 +35,11 @@ class ConfiguracaoAnaliseDocumento:
     area_imagem_minima_para_ocr: Decimal = Decimal("0.10")
     area_imagem_regional_minima_para_ocr: Decimal = Decimal("0.0025")
     minimo_vetores_para_ocr: int = 1000
-    dpi_ocr: int = 200
+    dpi_ocr: int = 450
+    dpi_ocr_identificadores: int = 1200
+    dpi_ocr_rotulos_inclinados: int = 1800
+    divisoes_ocr_conteudo_denso: int = 3
+    sobreposicao_ocr_conteudo_denso: Decimal = Decimal("0.025")
     profundidade_maxima_xobject: int = 12
 
     def __post_init__(self) -> None:
@@ -59,6 +63,16 @@ class ConfiguracaoAnaliseDocumento:
             raise ValueError("Mínimo de vetores para OCR deve ser positivo")
         if not 72 <= self.dpi_ocr <= 600:
             raise ValueError("DPI de OCR deve estar entre 72 e 600")
+        if not 300 <= self.dpi_ocr_identificadores <= 1200:
+            raise ValueError("DPI de OCR de identificadores deve estar entre 300 e 1200")
+        if not 600 <= self.dpi_ocr_rotulos_inclinados <= 2400:
+            raise ValueError("DPI de OCR de rótulos inclinados deve estar entre 600 e 2400")
+        if not 2 <= self.divisoes_ocr_conteudo_denso <= 6:
+            raise ValueError("Divisões de OCR denso devem estar entre 2 e 6")
+        dense_overlap = Decimal(self.sobreposicao_ocr_conteudo_denso)
+        if not Decimal(0) <= dense_overlap <= Decimal("0.10"):
+            raise ValueError("Sobreposição de OCR denso deve estar entre zero e 0,10")
+        object.__setattr__(self, "sobreposicao_ocr_conteudo_denso", dense_overlap)
         if not 1 <= self.profundidade_maxima_xobject <= 64:
             raise ValueError("Profundidade de XObject deve estar entre 1 e 64")
 
@@ -67,6 +81,12 @@ class ConfiguracaoAnaliseDocumento:
             sorted(
                 (
                     ("dpi_ocr", self.dpi_ocr),
+                    ("dpi_ocr_identificadores", self.dpi_ocr_identificadores),
+                    ("dpi_ocr_rotulos_inclinados", self.dpi_ocr_rotulos_inclinados),
+                    (
+                        "divisoes_ocr_conteudo_denso",
+                        self.divisoes_ocr_conteudo_denso,
+                    ),
                     ("area_imagem_minima_para_ocr", self.area_imagem_minima_para_ocr),
                     (
                         "area_imagem_regional_minima_para_ocr",
@@ -81,6 +101,10 @@ class ConfiguracaoAnaliseDocumento:
                     ("minimo_caracteres_texto_nativo", self.minimo_caracteres_texto_nativo),
                     ("minimo_vetores_para_ocr", self.minimo_vetores_para_ocr),
                     ("profundidade_maxima_xobject", self.profundidade_maxima_xobject),
+                    (
+                        "sobreposicao_ocr_conteudo_denso",
+                        self.sobreposicao_ocr_conteudo_denso,
+                    ),
                 )
             )
         )
@@ -160,6 +184,30 @@ class MotorOcrPort(Protocol):
     versao: str
 
     def reconhecer(self, pagina: PaginaRasterOcr) -> tuple[TrechoTextoOcr, ...]: ...
+
+
+@runtime_checkable
+class MotorOcrIdentificadorPort(Protocol):
+    def reconhecer_identificador(
+        self,
+        pagina: PaginaRasterOcr,
+    ) -> tuple[TrechoTextoOcr, ...]: ...
+
+
+@runtime_checkable
+class MotorOcrRotuloOperacionalPort(Protocol):
+    def reconhecer_rotulo_operacional(
+        self,
+        pagina: PaginaRasterOcr,
+    ) -> tuple[TrechoTextoOcr, ...]: ...
+
+
+@runtime_checkable
+class MotorOcrBlocoOperacionalPort(Protocol):
+    def reconhecer_bloco_operacional(
+        self,
+        pagina: PaginaRasterOcr,
+    ) -> tuple[TrechoTextoOcr, ...]: ...
 
 
 class CacheAnaliseDocumentoPort(Protocol):

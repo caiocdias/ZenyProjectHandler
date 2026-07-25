@@ -236,6 +236,7 @@ class ServicoFluxoMvp:
                 document.id,
                 document.sha256,
                 extraction_config,
+                self._extractor.assinatura_analisador,
             )
             self._progress(
                 progresso,
@@ -305,7 +306,13 @@ class ServicoFluxoMvp:
         }
         default_config = ConfiguracaoAnaliseDocumento()
         extraction_ids.update(
-            _extraction_id(project, document.id, document.sha256, default_config)
+            _extraction_id(
+                project,
+                document.id,
+                document.sha256,
+                default_config,
+                self._extractor.assinatura_analisador,
+            )
             for document in selected_documents
         )
         existing_ids = {run.id for run in runs}
@@ -383,6 +390,7 @@ def _extraction_id(
     document_id: UUID,
     document_hash: str,
     configuration: ConfiguracaoAnaliseDocumento,
+    analyzer_identity: str,
 ) -> UUID:
     identity = ":".join(
         (
@@ -390,7 +398,7 @@ def _extraction_id(
             str(document_id),
             document_hash,
             repr(configuration.parametros()),
-            "pymupdf-nativo:1.1.0",
+            analyzer_identity,
         )
     )
     return uuid5(NAMESPACE_URL, identity)
