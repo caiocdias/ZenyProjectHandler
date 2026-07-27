@@ -37,7 +37,7 @@ from zeny_project_handler.domain.errors import DomainValidationError
 
 SUPPORTED_SCHEMA_VERSIONS = frozenset({1, 2})
 SEED_PACKAGE = "zeny_project_handler.adapters.catalog.data"
-SEED_FILE_NAME = "catalogo_cemig_v1.json"
+SEED_FILE_NAME = "catalogo_cemig_v2.json"
 
 
 def _object(value: object, *, field_name: str) -> dict[str, Any]:

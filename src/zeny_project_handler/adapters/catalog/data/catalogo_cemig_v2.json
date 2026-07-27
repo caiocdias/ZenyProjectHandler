@@ -1,11 +1,11 @@
 {
   "schema_version": 2,
   "catalog": {
-    "id": "224588ea-051b-56b4-9dda-b4abf0998f91",
-    "version": 1,
+    "id": "7195a6d6-731c-54e3-b95a-40cf162c0454",
+    "version": 2,
     "status": "PUBLICADO",
     "created_at": "2026-07-21T00:00:00+00:00",
-    "published_at": "2026-07-21T00:00:00+00:00"
+    "published_at": "2026-07-27T00:00:00-03:00"
   },
   "source": {
     "file_name": "NOMENCLATURAS.xlsx",
@@ -13,7 +13,7 @@
     "sheet": "Planilha1",
     "source_counts": {
       "postes": 38,
-      "estruturas_mt": 50,
+      "estruturas_mt": 51,
       "estruturas_bt": 13,
       "cabos": 72,
       "equipamentos": 25
@@ -1446,6 +1446,22 @@
       "network_level": "MT"
     },
     {
+      "kind": "estrutura_mt",
+      "id": "ce304cb9-1266-591f-832e-61ce7ec25a27",
+      "code": "N",
+      "description": "Estrutura MT N",
+      "active": true,
+      "source_row": 53,
+      "extra_attributes": {},
+      "phase_configuration_option_id": "a080fc71-cef2-5359-b367-6e3e8cce830c",
+      "network_technology_option_id": "c9da5db0-4108-58e6-b9ba-a8f1c9ed09aa",
+      "anchorage": false,
+      "original_cable_expression": "4 , 2 E 1/0",
+      "raw_phase_configuration": "MONOFÁSICA",
+      "raw_network_technology": "CONVENCIONAL CA/CAA",
+      "network_level": "MT"
+    },
+    {
       "kind": "estrutura_bt",
       "id": "8e40ad62-edc5-5b0d-8375-0273d42382ae",
       "code": "S1N",
@@ -2310,8 +2326,8 @@
     {
       "kind": "cabo",
       "id": "eba32867-73e9-52d1-838a-b28b0e5d5ea0",
-      "code": "(N- 1N5)",
-      "description": "Cabo (N- 1N5)",
+      "code": "N- (1N5)",
+      "description": "Cabo N- (1N5)",
       "active": true,
       "source_row": 43,
       "extra_attributes": {},
@@ -2327,8 +2343,8 @@
     {
       "kind": "cabo",
       "id": "c0c27e43-d5d9-55ec-883f-b657899178bf",
-      "code": "(N- 3N5)",
-      "description": "Cabo (N- 3N5)",
+      "code": "N- (3N5)",
+      "description": "Cabo N- (3N5)",
       "active": true,
       "source_row": 44,
       "extra_attributes": {},
@@ -2344,8 +2360,8 @@
     {
       "kind": "cabo",
       "id": "4660a732-0ae9-5244-8198-5a3a29484a0b",
-      "code": "(N- 1N2)",
-      "description": "Cabo (N- 1N2)",
+      "code": "N- (1N2)",
+      "description": "Cabo N- (1N2)",
       "active": true,
       "source_row": 45,
       "extra_attributes": {},
@@ -2361,8 +2377,8 @@
     {
       "kind": "cabo",
       "id": "c7254046-7c5d-54dc-aa66-510707a0a90e",
-      "code": "(N-4 CA)",
-      "description": "Cabo (N-4 CA)",
+      "code": "N-(4 CA)",
+      "description": "Cabo N-(4 CA)",
       "active": true,
       "source_row": 46,
       "extra_attributes": {},
@@ -2378,8 +2394,8 @@
     {
       "kind": "cabo",
       "id": "6fd3172d-e0eb-5810-b05a-eb168fdb8104",
-      "code": "(N-2 CA)",
-      "description": "Cabo (N-2 CA)",
+      "code": "N-(2 CA)",
+      "description": "Cabo N-(2 CA)",
       "active": true,
       "source_row": 47,
       "extra_attributes": {},
@@ -2395,8 +2411,8 @@
     {
       "kind": "cabo",
       "id": "42d58e26-f660-5ba2-aad4-264301f7e26c",
-      "code": "(N-1/0 CA)",
-      "description": "Cabo (N-1/0 CA)",
+      "code": "N-(1/0 CA)",
+      "description": "Cabo N-(1/0 CA)",
       "active": true,
       "source_row": 48,
       "extra_attributes": {},
@@ -2412,8 +2428,8 @@
     {
       "kind": "cabo",
       "id": "9d443db3-1f9b-5d9e-afd5-44f8ebdb05cb",
-      "code": "(N-4/0 CA)",
-      "description": "Cabo (N-4/0 CA)",
+      "code": "N-(4/0 CA)",
+      "description": "Cabo N-(4/0 CA)",
       "active": true,
       "source_row": 49,
       "extra_attributes": {},
@@ -2429,8 +2445,8 @@
     {
       "kind": "cabo",
       "id": "70f7a0a5-ba12-5aa8-aa1d-f1f5f53d3679",
-      "code": "(N-4 CAA)",
-      "description": "Cabo (N-4 CAA)",
+      "code": "N-(4 CAA)",
+      "description": "Cabo N-(4 CAA)",
       "active": true,
       "source_row": 50,
       "extra_attributes": {},
@@ -2446,8 +2462,8 @@
     {
       "kind": "cabo",
       "id": "11754110-9a1d-5a5f-9122-516f484dacca",
-      "code": "(N-2 CAA)",
-      "description": "Cabo (N-2 CAA)",
+      "code": "N-(2 CAA)",
+      "description": "Cabo N-(2 CAA)",
       "active": true,
       "source_row": 51,
       "extra_attributes": {},
@@ -2463,8 +2479,8 @@
     {
       "kind": "cabo",
       "id": "ab250036-5c6c-5661-a721-db2fc9322b5b",
-      "code": "(N-1/0 CAA)",
-      "description": "Cabo (N-1/0 CAA)",
+      "code": "N-(1/0 CAA)",
+      "description": "Cabo N-(1/0 CAA)",
       "active": true,
       "source_row": 52,
       "extra_attributes": {},
@@ -2480,8 +2496,8 @@
     {
       "kind": "cabo",
       "id": "03a29e99-d54a-56ae-80eb-ae9a98c56c5c",
-      "code": "(N-4/0 CAA)",
-      "description": "Cabo (N-4/0 CAA)",
+      "code": "N-(4/0 CAA)",
+      "description": "Cabo N-(4/0 CAA)",
       "active": true,
       "source_row": 53,
       "extra_attributes": {},
@@ -5010,6 +5026,114 @@
       "id": "8bd2cee2-089b-551b-b52c-d8b1a4ca9411",
       "structure_type_id": "fc7d742b-8a45-5446-ba33-37b33079695b",
       "cable_type_id": "42d58e26-f660-5ba2-aad4-264301f7e26c",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "c6b2d881-2546-5501-b275-c65cb350b188",
+      "structure_type_id": "ce304cb9-1266-591f-832e-61ce7ec25a27",
+      "cable_type_id": "1a991b5c-d604-502f-93eb-b189c057e590",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "df34d7d6-cc1e-5044-8387-da9547700335",
+      "structure_type_id": "ce304cb9-1266-591f-832e-61ce7ec25a27",
+      "cable_type_id": "c6f979ad-7798-5318-9188-4c2a048fc4f3",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "efd3dac6-ed03-5bac-a2f5-c0923f23e438",
+      "structure_type_id": "ce304cb9-1266-591f-832e-61ce7ec25a27",
+      "cable_type_id": "8c56f0a4-0013-50ba-adb4-f883b0ff875f",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "087e83e5-7744-5de0-8921-7b714faa46b0",
+      "structure_type_id": "ce304cb9-1266-591f-832e-61ce7ec25a27",
+      "cable_type_id": "f99f6ab5-ce98-5c51-bf28-928c78c18613",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "88df1ace-9ef7-552e-abf8-f96f4671e968",
+      "structure_type_id": "ce304cb9-1266-591f-832e-61ce7ec25a27",
+      "cable_type_id": "38acb576-99d3-58ee-a7af-64eb7073ebe9",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "8e08ad49-a5c8-567b-b7f9-a1c1e62b5de8",
+      "structure_type_id": "ce304cb9-1266-591f-832e-61ce7ec25a27",
+      "cable_type_id": "557b4e20-0f88-54e0-b893-c4e11b49f78d",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "4cb9e239-b9ed-5e01-b4d0-36359a8cbdfc",
+      "structure_type_id": "ce304cb9-1266-591f-832e-61ce7ec25a27",
+      "cable_type_id": "5261dd49-cb75-5747-a42f-39f19ad7d0cc",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "6384ec23-26ea-5f02-ae46-3824af6c9980",
+      "structure_type_id": "ce304cb9-1266-591f-832e-61ce7ec25a27",
+      "cable_type_id": "1df91f4f-fe34-5d18-9e41-48eb33f2d3f6",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "86779021-993a-5329-b777-9ad17ed8ae06",
+      "structure_type_id": "ce304cb9-1266-591f-832e-61ce7ec25a27",
+      "cable_type_id": "29a6477a-24d2-50b5-8876-bd1e2d380040",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "f6b9e0ca-f993-56f3-b7c9-c64e729c7caf",
+      "structure_type_id": "ce304cb9-1266-591f-832e-61ce7ec25a27",
+      "cable_type_id": "9aa2d19f-cca5-571a-93c7-793f3e715544",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "6aad2267-2434-53e8-85ec-7f0b1355b142",
+      "structure_type_id": "ce304cb9-1266-591f-832e-61ce7ec25a27",
+      "cable_type_id": "b2bc6a65-906f-59c7-b3b3-e47d78ba1901",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "13a29249-da5d-5610-8839-172acad9a183",
+      "structure_type_id": "ce304cb9-1266-591f-832e-61ce7ec25a27",
+      "cable_type_id": "d2161c66-2934-5748-8562-9ff40b63b9f6",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "1978540c-c676-5307-9029-d2f4aed2a282",
+      "structure_type_id": "ce304cb9-1266-591f-832e-61ce7ec25a27",
+      "cable_type_id": "e881f882-0d89-59ef-82d8-803215991229",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "03cef2e0-ae2c-5b38-a456-e4b288e54b01",
+      "structure_type_id": "ce304cb9-1266-591f-832e-61ce7ec25a27",
+      "cable_type_id": "65a670ad-4d15-5922-9ee6-6059a2ac11d1",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "c3e722b3-f9dc-56ed-bfc8-3f2cda666800",
+      "structure_type_id": "ce304cb9-1266-591f-832e-61ce7ec25a27",
+      "cable_type_id": "1686b585-34f9-5097-9e1c-bb236a2070e6",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "23671cb6-d666-5cf9-8578-a8484bc88ec2",
+      "structure_type_id": "ce304cb9-1266-591f-832e-61ce7ec25a27",
+      "cable_type_id": "8d0b2620-eac9-5d34-828e-d390c6b458c2",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "18ba05e4-1721-52bb-b0a4-453379e63e6a",
+      "structure_type_id": "ce304cb9-1266-591f-832e-61ce7ec25a27",
+      "cable_type_id": "bb034374-2c4e-5df2-a31b-13e26a2d6f30",
+      "source_expression": "4 , 2 E 1/0"
+    },
+    {
+      "id": "ab2032a8-42cc-51d6-920d-e91e3b87d087",
+      "structure_type_id": "ce304cb9-1266-591f-832e-61ce7ec25a27",
+      "cable_type_id": "4e7e2294-470b-5ea1-b4d0-9ad18544f95e",
       "source_expression": "4 , 2 E 1/0"
     }
   ],

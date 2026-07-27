@@ -38,7 +38,7 @@ _MESSENGER_CABLE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _NEUTRAL_CABLE_PATTERN = re.compile(
-    r"N-\((\d{1,2}N\d{1,2})\)?",
+    r"N-\((\d{1,2}N\d{1,2}|(?:\d{1,2}(?:/\d{1,2})?)(?:CAA|CA))\)?",
     re.IGNORECASE,
 )
 _INSULATED_CABLE_PATTERN = re.compile(
@@ -46,7 +46,9 @@ _INSULATED_CABLE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _CANONICAL_MESSENGER_CABLE_PATTERN = re.compile(r"[ABC]+M-\d{1,3}\(3/8\"\)")
-_CANONICAL_NEUTRAL_CABLE_PATTERN = re.compile(r"\(N-\d{1,2}N\d{1,2}\)")
+_CANONICAL_NEUTRAL_CABLE_PATTERN = re.compile(
+    r"N-(?: \(\d{1,2}N\d{1,2}\)|\(\d{1,2}(?:/\d{1,2})? (?:CAA|CA)\))"
+)
 _CANONICAL_INSULATED_CABLE_PATTERN = re.compile(r"[ABC]+N-\d{1,3}\(\d{1,3}\)")
 _SPAN_LENGTH_PATTERN = re.compile(
     r"(?<!\d)(\d{1,4})\s*M\s+VR\s*[:=]?\s*(\d{1,4})\s*M(?![A-Z0-9])",
@@ -790,7 +792,11 @@ def _normalize_operational_label_text(text: str) -> str:
     if messenger := _MESSENGER_CABLE_PATTERN.fullmatch(normalized):
         return f'{messenger.group(1)}")'
     if neutral := _NEUTRAL_CABLE_PATTERN.fullmatch(normalized):
-        return f"(N-{neutral.group(1)})"
+        designation = neutral.group(1)
+        material = re.fullmatch(r"(\d{1,2}(?:/\d{1,2})?)(CAA|CA)", designation)
+        if material is not None:
+            return f"N-({material.group(1)} {material.group(2)})"
+        return f"N- ({designation})"
     if insulated := _INSULATED_CABLE_PATTERN.fullmatch(normalized):
         return insulated.group(1)
     return normalized

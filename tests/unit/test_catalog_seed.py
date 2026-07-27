@@ -28,7 +28,7 @@ def test_seed_preserves_source_counts_and_original_codes(
     catalogo_inicial: CatalogoTecnico,
 ) -> None:
     counts = catalogo_inicial.fonte.contagens
-    assert (counts.postes, counts.estruturas_mt, counts.estruturas_bt) == (38, 50, 13)
+    assert (counts.postes, counts.estruturas_mt, counts.estruturas_bt) == (38, 51, 13)
     assert (counts.cabos, counts.equipamentos) == (72, 25)
     assert catalogo_inicial.fonte.sha256 == (
         "4ba9bd5cb284f6d18c3ee000a6064061d0d814bd23ec29d8630c2b15e58f8867"
@@ -37,7 +37,7 @@ def test_seed_preserves_source_counts_and_original_codes(
     item_counts = Counter(item.categoria for item in catalogo_inicial.itens)
     assert item_counts == {
         CategoriaElemento.POSTE: 38,
-        CategoriaElemento.ESTRUTURA_MT: 50,
+        CategoriaElemento.ESTRUTURA_MT: 51,
         CategoriaElemento.ESTRUTURA_BT: 13,
         CategoriaElemento.CABO: 72,
         CategoriaElemento.EQUIPAMENTO: 25,
@@ -69,8 +69,43 @@ def test_dash_condemnation_factor_becomes_null_without_changing_codes(
 
     assert cables["A-4 CA"].fator_condenacao is not None
     assert str(cables["A-4 CA"].fator_condenacao) == "1.7"
-    assert cables["(N- 1N5)"].fator_condenacao is None
+    assert cables["N- (1N5)"].fator_condenacao is None
     assert cables['AM-50(3/8")'].fator_condenacao is None
+
+
+def test_seed_contains_corrected_n_structure_and_neutral_cable_codes(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    structures = {
+        item.codigo: item for item in catalogo_inicial.itens if isinstance(item, TipoEstruturaMt)
+    }
+    structure = structures["N"]
+    option_labels = {
+        option.id: option.rotulo
+        for group in catalogo_inicial.grupos_opcao
+        for option in group.opcoes
+    }
+
+    assert option_labels[structure.configuracao_fases_opcao_id] == "MONOFÁSICA"
+    assert option_labels[structure.tecnologia_rede_opcao_id] == "CONVENCIONAL CA/CAA"
+    assert structure.expressao_cabos_original == "4 , 2 E 1/0"
+    assert structure.ancoragem is False
+
+    cables = {item.codigo for item in catalogo_inicial.itens if isinstance(item, TipoCabo)}
+    assert {
+        "N- (1N5)",
+        "N- (3N5)",
+        "N- (1N2)",
+        "N-(4 CA)",
+        "N-(2 CA)",
+        "N-(1/0 CA)",
+        "N-(4/0 CA)",
+        "N-(4 CAA)",
+        "N-(2 CAA)",
+        "N-(1/0 CAA)",
+        "N-(4/0 CAA)",
+    } <= cables
+    assert not any(code.startswith("(N-") for code in cables)
 
 
 def test_seed_contains_explicit_valid_compatibilities(
@@ -86,7 +121,7 @@ def test_seed_contains_explicit_valid_compatibilities(
         compatibility.tipo_estrutura_id for compatibility in catalogo_inicial.compatibilidades
     }
 
-    assert len(catalogo_inicial.compatibilidades) == 314
+    assert len(catalogo_inicial.compatibilidades) == 332
     assert structures_with_cables == active_structures
 
 
@@ -108,6 +143,7 @@ def test_seed_has_configurable_options_and_all_symbol_combinations(
         "MADEIRA",
     }
     assert len(catalogo_inicial.regras_simbologia) == 15
+    assert catalogo_inicial.versao == 2
     assert catalogo_inicial.versao_schema == 2
     assert len(catalogo_inicial.assinaturas_simbologia) == 5
     assert {
