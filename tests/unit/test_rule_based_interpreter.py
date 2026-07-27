@@ -768,6 +768,58 @@ def test_equipment_class_phrase_is_proposed_for_human_disambiguation(
 
 
 @pytest.mark.parametrize(
+    ("symbol", "equipment_class", "situation"),
+    [
+        ("ATERRAMENTO", "ATERRAMENTO", SituacaoProjeto.EXISTENTE),
+        ("PARA RAIOS MT", "PARA_RAIOS_MT", SituacaoProjeto.INSTALAR),
+        ("PARA RAIOS BT", "PARA_RAIOS_BT", SituacaoProjeto.REMOVER),
+    ],
+)
+def test_symbol_only_equipment_is_proposed_with_type_and_situation(
+    catalogo_inicial: CatalogoTecnico,
+    symbol: str,
+    equipment_class: str,
+    situation: SituacaoProjeto,
+) -> None:
+    request = _request(catalogo_inicial)
+    source = replace(
+        request.evidencias[0],
+        id=uuid4(),
+        tipo=TipoEvidencia.VETOR,
+        conteudo_bruto=symbol,
+        atributos_extraidos=(
+            ("classe_equipamento", equipment_class),
+            ("confianca", Decimal("0.88")),
+            ("origem_simbologia", "SIMBOLOGIA.pdf"),
+            ("reconhecido_por_simbologia", True),
+            ("situacao_projeto_forcada", situation.value),
+        ),
+    )
+    point_label = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=source.pagina_id,
+        key=f"symbol-point-label-{equipment_class}",
+        text="P13",
+        x="0.10",
+        y="0.08",
+    )
+    request = replace(request, evidencias=(source, point_label))
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
+
+    assert len(result.elementos) == 1
+    equipment = result.elementos[0]
+    assert equipment.categoria is CategoriaElemento.EQUIPAMENTO
+    assert equipment.situacao_projeto is situation
+    assert equipment.confianca == Decimal("0.88")
+    assert equipment.codigo_observado == symbol
+    assert equipment.tipo_catalogo_sugerido_id is None
+    assert dict(equipment.atributos_sugeridos)["classe_equipamento"] == equipment_class
+    assert dict(equipment.atributos_sugeridos)["reconhecido_por_simbologia"] is True
+    assert "assinatura vetorial" in (equipment.justificativa or "")
+
+
+@pytest.mark.parametrize(
     ("observed", "catalog_code"),
     [
         ("3-150", "-3-150"),

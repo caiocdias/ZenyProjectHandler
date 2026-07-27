@@ -34,6 +34,7 @@ from .pymupdf_page_extractors import (
     _extract_text,
     _extract_vectors,
 )
+from .pymupdf_symbols import _extract_symbolic_equipment
 
 _READ_CHUNK_SIZE = 1024 * 1024
 T = TypeVar("T")
@@ -43,7 +44,7 @@ class PyMuPdfDocumentAnalyzer:
     """Converte recursos PDF nativos em evidências independentes da biblioteca."""
 
     nome = "pymupdf-nativo"
-    versao = "1.7.0"
+    versao = "1.8.0"
 
     def __init__(
         self,
@@ -205,6 +206,14 @@ def _extract_page(
             image_candidates = extracted
         candidates.extend(extracted)
         diagnostics.extend(found)
+    if config.extrair_vetores:
+        symbolic_candidates, symbolic_diagnostics = _safe_extract(
+            "simbolos_vetoriais",
+            page_number,
+            lambda: _extract_symbolic_equipment(page, page_number),
+        )
+        candidates.extend(symbolic_candidates)
+        diagnostics.extend(symbolic_diagnostics)
     native_characters = sum(
         len(item.conteudo_bruto or "")
         for item in text_candidates

@@ -34,7 +34,7 @@ from .span_rules import associar_tracados_de_cabos
 
 class InterpretadorRegrasExplicitas:
     nome = "regras-explicitas-cemig"
-    versao = "13.0"
+    versao = "14.0"
 
     def __init__(
         self,

@@ -54,7 +54,7 @@ from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormaliz
 from zeny_project_handler.ports.pdf import ReferenciaFontePdf
 from zeny_project_handler.ui.documentation_panel import DocumentationPanelWidget
 from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
-from zeny_project_handler.ui.review_panel import ReviewPanelWidget
+from zeny_project_handler.ui.review_panel import ReviewPanelWidget, _proposal_label
 
 pytestmark = pytest.mark.integration
 
@@ -198,13 +198,13 @@ def test_results_panel_groups_relationships_and_links_elements_to_pdf(
     assert region_item.text(1) == "1 remover · 1 instalar"
     assert region_item.text(2) == "E 280653 · N 7683008"
     assert "Remover: Poste 11-300" in region_item.toolTip(1)
-    assert "Instalar: Equipamento" in region_item.toolTip(1)
+    assert "Instalar: Transformador" in region_item.toolTip(1)
     assert region_item.childCount() == 2
     pole_item = region_item.child(0)
     equipment_item = region_item.child(1)
     assert pole_item.text(0) == "Poste 11-300"
     assert pole_item.text(1) == "A remover"
-    assert "Equipamento" in equipment_item.text(0)
+    assert equipment_item.text(0) == "Transformador"
     assert "instalado em" in equipment_item.text(4)
     assert equipment_item.text(1) == "A instalar"
     tree.setCurrentItem(region_item)
@@ -239,6 +239,34 @@ def test_results_panel_groups_relationships_and_links_elements_to_pdf(
     assert accept is not None and not accept.isVisible()
 
 
+@pytest.mark.parametrize(
+    ("equipment_class", "expected_label"),
+    (
+        ("ATERRAMENTO", "Aterramento"),
+        ("PARA_RAIOS_MT", "Para-raios MT"),
+        ("PARA_RAIOS_BT", "Para-raios BT"),
+    ),
+)
+def test_symbolic_equipment_uses_identified_type_as_label(
+    review_panel_context: tuple[Engine, ReviewPanelWidget, PropostaElemento],
+    equipment_class: str,
+    expected_label: str,
+) -> None:
+    _engine, _panel, proposal = review_panel_context
+    symbolic = replace(
+        proposal,
+        categoria=CategoriaElemento.EQUIPAMENTO,
+        tipo_catalogo_sugerido_id=None,
+        codigo_observado=expected_label.upper(),
+        atributos_sugeridos=(
+            ("classe_equipamento", equipment_class),
+            ("reconhecido_por_simbologia", True),
+        ),
+    )
+
+    assert _proposal_label(symbolic) == expected_label
+
+
 def test_results_panel_keeps_recognized_point_without_elements(
     review_panel_context: tuple[Engine, ReviewPanelWidget, PropostaElemento],
 ) -> None:
@@ -270,8 +298,18 @@ def test_results_panel_keeps_recognized_point_without_elements(
     assert point_item.childCount() == 0
 
 
-def test_results_panel_has_span_tab_with_length_source(
+@pytest.mark.parametrize(
+    ("cable_situation", "expected_situation"),
+    (
+        (SituacaoProjeto.INSTALAR, "A instalar"),
+        (SituacaoProjeto.REMOVER, "A remover"),
+        (SituacaoProjeto.EXISTENTE, "Existente"),
+    ),
+)
+def test_results_panel_has_span_tab_with_situation_cable_and_length_source(
     review_panel_context: tuple[Engine, ReviewPanelWidget, PropostaElemento],
+    cable_situation: SituacaoProjeto,
+    expected_situation: str,
 ) -> None:
     _engine, panel, _proposal = review_panel_context
     project_combo = panel.findChild(QComboBox, "reviewProjectCombo")
@@ -289,7 +327,13 @@ def test_results_panel_has_span_tab_with_length_source(
         projeto=replace(
             project,
             elementos=tuple(
-                replace(item, identificador_operacional="V1-2") if item.id == cable.id else item
+                replace(
+                    item,
+                    identificador_operacional="V1-2",
+                    situacao=cable_situation,
+                )
+                if item.id == cable.id
+                else item
                 for item in project.elementos
             ),
         ),
@@ -299,13 +343,36 @@ def test_results_panel_has_span_tab_with_length_source(
 
     assert [tabs.tabText(index) for index in range(tabs.count())] == ["Elementos", "Vãos"]
     assert table.rowCount() == 1
+    headers: list[str] = []
+    for index in range(table.columnCount()):
+        header = table.horizontalHeaderItem(index)
+        assert header is not None
+        headers.append(header.text())
+    assert headers == [
+        "Vão",
+        "Situação",
+        "Poste de origem",
+        "Poste de destino",
+        "Cabo",
+        "Comprimento",
+        "Fonte",
+        "Folha",
+        "Exibir",
+    ]
     identifier_item = table.item(0, 0)
-    length_item = table.item(0, 4)
-    source_item = table.item(0, 5)
+    situation_item = table.item(0, 1)
+    cable_item = table.item(0, 4)
+    length_item = table.item(0, 5)
+    source_item = table.item(0, 6)
+    catalog_cable = panel._session.catalogo.item_por_id(cable.tipo_catalogo_id)
     assert identifier_item is not None and identifier_item.text() == "V1-2"
+    assert situation_item is not None and situation_item.text() == expected_situation
+    assert catalog_cable is not None
+    assert cable_item is not None
+    assert cable_item.text() == f"{catalog_cable.codigo} — {catalog_cable.descricao}"
     assert length_item is not None and length_item.text() == "31,50 m"
     assert source_item is not None and source_item.text() == "Comprimento informado"
-    visibility = table.cellWidget(0, 7)
+    visibility = table.cellWidget(0, 8)
     assert isinstance(visibility, QToolButton)
     assert visibility.property("spanId")
     assert visibility.isChecked()
@@ -366,7 +433,7 @@ def test_span_visibility_button_hides_matching_cable_overlay(
     panel._refresh_spans()
     panel._refresh_proposals()
 
-    visibility = table.cellWidget(0, 7)
+    visibility = table.cellWidget(0, 8)
     assert isinstance(visibility, QToolButton)
     assert str(cable_proposal.id) in panel._viewer.view._review_items
 

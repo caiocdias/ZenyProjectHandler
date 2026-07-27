@@ -227,6 +227,12 @@ Domínio e catálogo carregam sem infraestrutura, rejeitam estados inválidos e 
 - Limites: persistência SQLite, importação interativa de planilha e telas de edição permanecem para etapas posteriores.
 - Próximo passo registrado à época: calibração com projetos reais, concluída na etapa 1.1.
 
+### Revisão do catálogo em 2026-07-27
+
+- Publicado o catálogo v2, com identidade própria para preservar projetos vinculados à versão anterior.
+- Incluída a estrutura MT `N`; o seed passa a ter 199 itens, 198 ativos e 332 compatibilidades.
+- Corrigidas as 11 nomenclaturas de cabos neutros e alinhado o OCR aos novos formatos.
+
 ## Etapa 1.1 - Calibração com projetos reais
 
 ### Desenvolver
@@ -530,6 +536,9 @@ O pipeline atinge os limites aprovados e toda proposta é rastreável até as ev
   sete regras de relação. Um carregador externo permite substituir o registro sem alterar o motor.
 - Reconhecimento: analisadores separados por classe relacionam códigos delimitados em texto/OCR com
   itens ativos do catálogo; vetores e imagens próximos entram como contexto e proveniência.
+- Simbologia sem texto: assinaturas geométricas calibradas na legenda e nos projetos AutoCAD
+  reconhecem aterramento, para-raios MT e para-raios BT, registrando classe, confiança, vetores de
+  origem e situação existente/instalar/remover.
 - Situação: assinaturas configuráveis de cor do catálogo diferenciam existente, instalar e remover.
 - Relações: proximidade de centros associa estruturas/equipamentos a postes; extremidades associam
   cabos; compatibilidades do catálogo restringem suporte por estruturas MT/BT.

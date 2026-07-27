@@ -85,16 +85,18 @@ Resultados automáticos alimentam diretamente as etapas seguintes:
 ## Catálogo técnico configurável
 
 Os valores da planilha são itens reutilizáveis e não enums da linguagem. O seed inicial, distribuído como JSON versionado, foi extraído de `NOMENCLATURAS.xlsx`, aba `Planilha1`, SHA-256 `4ba9bd5cb284f6d18c3ee000a6064061d0d814bd23ec29d8630c2b15e58f8867`.
+O catálogo publicado v2 mantém essa origem como base e incorpora as correções de nomenclatura
+recebidas em 27/07/2026.
 
 | Categoria | Linhas preservadas | Itens ativos |
 |---|---:|---:|
 | Postes | 38 | 38 |
-| Estruturas MT | 50 | 49 |
+| Estruturas MT | 51 | 50 |
 | Estruturas BT | 13 | 13 |
 | Cabos | 72 | 72 |
 | Equipamentos | 25 | 25 |
 
-O seed contém 198 itens, dos quais 197 estão ativos. Os valores controlados são organizados em cinco grupos editáveis:
+O seed contém 199 itens, dos quais 198 estão ativos. Os valores controlados são organizados em cinco grupos editáveis:
 
 - formato de poste;
 - configuração de fases;
@@ -102,7 +104,7 @@ O seed contém 198 itens, dos quais 197 estão ativos. Os valores controlados s�
 - nível de tensão;
 - classe de equipamento.
 
-As expressões textuais de cabos aceitos pelas estruturas foram normalizadas em 314 relações explícitas `CompatibilidadeEstruturaCabo`, preservando também a expressão original e a linha de origem.
+As expressões textuais de cabos aceitos pelas estruturas foram normalizadas em 332 relações explícitas `CompatibilidadeEstruturaCabo`, preservando também a expressão original e a linha de origem.
 
 ### Tratamentos de importação
 
@@ -207,13 +209,18 @@ que os reconheça.
   imediatamente abaixo do marcador recebe OCR localizado em modo uniforme.
 - Caixas lineares verdes que acompanham a rede são retificadas por transformação afim e recebem OCR
   a 1800 DPI com alfabeto técnico. Essa passagem preserva códigos de cabo e pontuação como
-  `CM-50(3/8")`, `(N-1N2)` e `ABN-16(16)`. Uma máscara separada recupera os comprimentos escuros
+  `CM-50(3/8")`, `N- (1N2)` e `ABN-16(16)`. Uma máscara separada recupera os comprimentos escuros
   laterais no mesmo eixo.
 - Caixas vinho com nomenclaturas de equipamento são retificadas no próprio eixo a 1800 DPI, inclusive
   quando inclinadas. A imagem é corrigida verticalmente, a borda é removida e somente os glifos
   neutros seguem ao OCR. Traços vinho sobre uma nomenclatura geram recorte equivalente sem o traço.
   As evidências resultantes registram explicitamente `INSTALAR` para o conteúdo da caixa e `REMOVER`
   para o conteúdo riscado.
+- Equipamentos representados apenas por vetores são comparados às assinaturas da `SIMBOLOGIA.pdf`.
+  O detector reconhece aterramento pela haste e três barras graduadas, para-raios MT pela sequência
+  ampliada de barras e para-raios BT pela haste, corpo e diagonal. As proporções e os ângulos tornam
+  a leitura tolerante à rotação e às variações usuais de escala; preto, verde e vermelho definem
+  respectivamente `EXISTENTE`, `INSTALAR` e `REMOVER`.
 - Quando a página possui texto nativo suficiente, imagens menores com área normalizada de pelo menos
   0,25% e resolução útil recebem OCR somente em seu recorte. As caixas retornadas pelo motor são
   transformadas novamente para as coordenadas normalizadas da página.
@@ -246,6 +253,10 @@ que os reconheça.
 - Frases como `POSTE CIRCULAR`, `TRANSFORMADOR`, `CHAVE FACA`, `CHAVE FUSÍVEL` e
   `CHAVE FUSÍVEL REPETIDORA` geram propostas de classe sem inventar um tipo exato. Acentos,
   sublinhados, espaços em torno de separadores e variantes de hífen são normalizados antes da busca.
+- Evidências simbólicas de `ATERRAMENTO`, `PARA RAIOS MT` e `PARA RAIOS BT` geram propostas de
+  equipamento com confiança 0,88, tipo legível no painel e situação explícita. A legenda não contém
+  modelo, corrente ou capacidade; por isso a proposta permanece não catalogada e conflitante para
+  revisão, preservando os índices dos vetores e `SIMBOLOGIA.pdf` como origem.
 - Linhas rotuladas do cabeçalho, incluindo `Dispositivo:`, `Circuito:`, `Projeto:` e campos
   adjacentes na mesma linha, são retiradas da interpretação de elementos e continuam disponíveis
   para a análise documental.

@@ -126,6 +126,13 @@ def test_registered_real_pdf_native_evidence_by_anonymous_hash(sample: dict[str,
         for evidence in result.evidencias
         for point in evidence.geometria.pontos
     )
+    if sample["id"] == "amostra-004":
+        symbolic_types = {
+            item.conteudo_bruto
+            for item in result.evidencias
+            if dict(item.atributos_extraidos).get("reconhecido_por_simbologia") is True
+        }
+        assert {"ATERRAMENTO", "PARA RAIOS MT", "PARA RAIOS BT"} <= symbolic_types
     if "visible-images-in-annotation-appearance-streams" in sample.get("known_edge_cases", []):
         assert any(
             item.tipo is TipoEvidencia.IMAGEM
@@ -144,6 +151,13 @@ def test_registered_real_pdf_native_evidence_by_anonymous_hash(sample: dict[str,
             registro=registry,
         )
     )
+    if sample["id"] == "amostra-004":
+        proposed_symbol_classes = {
+            dict(item.atributos_sugeridos).get("classe_equipamento")
+            for item in interpretation.elementos
+            if dict(item.atributos_sugeridos).get("reconhecido_por_simbologia") is True
+        }
+        assert {"ATERRAMENTO", "PARA_RAIOS_MT", "PARA_RAIOS_BT"} <= proposed_symbol_classes
     regions = agrupar_regioes_da_analise(
         (*interpretation.elementos, *interpretation.relacoes),
         result.evidencias,

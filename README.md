@@ -170,7 +170,7 @@ escuro abaixo do marcador recebe uma leitura localizada, como ocorre em `P13`.
 
 Rótulos lineares verdes ao longo da rede recebem um tratamento próprio a 1800 DPI. A caixa
 inclinada é retificada por transformação afim antes da leitura, preservando pontuação técnica como
-em `CM-50(3/8")`, `(N-1N2)` e `ABN-16(16)`. O mesmo eixo orienta uma leitura isolada dos textos
+em `CM-50(3/8")`, `N- (1N2)` e `ABN-16(16)`. O mesmo eixo orienta uma leitura isolada dos textos
 escuros de comprimento, como `54m (VR-49m)`. O identificador `V<n>-<n>` fixa as extremidades em
 `P<n>` e permite que os dois cabos do mesmo trecho compartilhem o traçado e o comprimento.
 
@@ -180,6 +180,12 @@ texto neutro é lido isoladamente. Pela convenção do projeto, qualquer element
 “bolha” é classificado como **a instalar**, independentemente da cor do próprio texto. Já uma
 nomenclatura atravessada por um traço vinho recebe um recorte sem o traço e é classificada como
 **a remover**.
+
+Equipamentos sem nomenclatura textual também entram na análise. As assinaturas vetoriais da
+`SIMBOLOGIA.pdf` reconhecem aterramento, para-raios MT e para-raios BT por proporções, paralelismo e
+ângulos, tolerando rotação e as variações usuais de escala. Preto indica existente, verde indica
+instalação e vermelho indica retirada. O resultado registra o tipo identificado, a confiança, a
+situação e os vetores que originaram a evidência.
 
 ## Documentação e conformidade
 
@@ -228,6 +234,11 @@ Nomenclaturas de equipamento como `100A/10KA/2H` aceitam barras, dois-pontos ou 
 normalizadas para o código canônico do catálogo, como `100A-10KA-2H`. Quando uma nomenclatura válida,
 como `100A/2KA/2H`, ainda não existe no catálogo publicado, ela continua visível como proposta
 conflitante em vez de ser descartada.
+
+Aterramento e para-raios BT/MT reconhecidos somente pela simbologia geram propostas de equipamento
+com a classe exibida diretamente em **Elementos**. Como a legenda não informa modelo ou capacidade,
+essas propostas permanecem não catalogadas e conflitantes para a revisão humana, sem inventar um
+tipo técnico mais específico.
 
 O interpretador preserva `PropostaElemento` e `PropostaRelacao` como trilha auditável e promove
 automaticamente os resultados catalogados ao agregado do projeto. Situação de obra usa as

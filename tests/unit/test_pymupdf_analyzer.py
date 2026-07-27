@@ -25,6 +25,9 @@ from zeny_project_handler.adapters.analysis.pymupdf_ocr import (
     _normalize_equipment_ocr_text,
     _normalize_operational_label_text,
 )
+from zeny_project_handler.adapters.analysis.pymupdf_symbols import (
+    _extract_symbolic_equipment,
+)
 from zeny_project_handler.adapters.pdf import PyMuPdfReader
 from zeny_project_handler.domain.analysis import OrigemObjetoPdf
 from zeny_project_handler.domain.enums import TipoEvidencia, TipoGeometria, TipoOrigemPdf
@@ -216,6 +219,57 @@ def test_native_extraction_preserves_geometry_provenance_and_properties(tmp_path
     assert dict(ocr_evidence.atributos_extraidos)["confianca"] == Decimal("0.91")
 
 
+def test_vector_symbols_identify_grounding_and_surge_arresters_with_situation(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "simbolos-vetoriais.pdf"
+    document = pymupdf.open()
+    try:
+        page = document.new_page(width=500, height=400)
+        _draw_ground_family(page, x=50, y=60, bars=3, color=(0, 0, 0))
+        _draw_ground_family(page, x=50, y=170, bars=4, color=(0, 0.5, 0))
+        _draw_bt_arrester(page, x=50, y=280, color=(1, 0, 0))
+
+        direct = _extract_symbolic_equipment(page, 1)
+        document.save(path)
+    finally:
+        document.close()
+
+    assert {
+        (
+            item.conteudo_bruto,
+            dict(item.atributos_extraidos)["situacao_projeto_forcada"],
+        )
+        for item in direct
+    } == {
+        ("ATERRAMENTO", "EXISTENTE"),
+        ("PARA RAIOS MT", "INSTALAR"),
+        ("PARA RAIOS BT", "REMOVER"),
+    }
+    assert all(
+        dict(item.atributos_extraidos)["origem_simbologia"] == "SIMBOLOGIA.pdf" for item in direct
+    )
+    assert all(item.tipo is TipoEvidencia.VETOR for item in direct)
+
+    request = replace(
+        _request(path),
+        configuracao=ConfiguracaoAnaliseDocumento(habilitar_ocr_condicional=False),
+    )
+    result = PyMuPdfDocumentAnalyzer().analisar(request)
+    symbolic = tuple(
+        item
+        for item in result.evidencias
+        if dict(item.atributos_extraidos).get("reconhecido_por_simbologia") is True
+    )
+
+    assert {item.conteudo_bruto for item in symbolic} == {
+        "ATERRAMENTO",
+        "PARA RAIOS MT",
+        "PARA RAIOS BT",
+    }
+    assert not result.diagnosticos
+
+
 def test_same_input_and_configuration_are_reproducible_from_cache(tmp_path: Path) -> None:
     request = _request(create_analysis_pdf(tmp_path / "reproducible.pdf"))
     analyzer = PyMuPdfDocumentAnalyzer(
@@ -383,7 +437,9 @@ def test_targeted_ocr_reads_boxed_installation_and_struck_removal() -> None:
         ("S1N", "S1N"),
         ('CM-50(3/8")', 'CM-50(3/8")'),
         ("CM-50(3/8)", 'CM-50(3/8")'),
-        ("N-(1N2)", "(N-1N2)"),
+        ("N-(1N2)", "N- (1N2)"),
+        ("N-(4CA)", "N-(4 CA)"),
+        ("N-(4/0 CAA)", "N-(4/0 CAA)"),
         ("ABN-16(16)", "ABN-16(16)"),
     ],
 )
@@ -472,3 +528,41 @@ def test_changed_source_is_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="alterada"):
         PyMuPdfDocumentAnalyzer().analisar(request)
+
+
+def _draw_ground_family(
+    page: pymupdf.Page,
+    *,
+    x: float,
+    y: float,
+    bars: int,
+    color: tuple[float, float, float],
+) -> None:
+    page.draw_line((x, y), (x + 15, y), color=color, width=0.5)
+    lengths = (10.0, 7.0, 4.0, 7.0)
+    for index in range(bars):
+        center_x = x + 15 + index * 4
+        length = lengths[index]
+        page.draw_line(
+            (center_x, y - length / 2),
+            (center_x, y + length / 2),
+            color=color,
+            width=0.5,
+        )
+
+
+def _draw_bt_arrester(
+    page: pymupdf.Page,
+    *,
+    x: float,
+    y: float,
+    color: tuple[float, float, float],
+) -> None:
+    page.draw_line((x, y), (x + 15, y), color=color, width=0.5)
+    page.draw_rect(pymupdf.Rect(x + 15, y - 1.5, x + 24, y + 1.5), color=color, width=0.5)
+    page.draw_line(
+        (x + 15, y - 3.5),
+        (x + 24, y + 3.5),
+        color=color,
+        width=0.5,
+    )

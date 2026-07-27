@@ -46,7 +46,7 @@ from zeny_project_handler.domain.analysis import (
     PropostaElemento,
     PropostaRelacao,
 )
-from zeny_project_handler.domain.catalog import CatalogoTecnico
+from zeny_project_handler.domain.catalog import CatalogoTecnico, TipoEquipamento
 from zeny_project_handler.domain.enums import (
     CategoriaElemento,
     EstadoRevisao,
@@ -191,11 +191,12 @@ class ReviewPanelWidget(QWidget):
         spans_guidance.setObjectName("spanResultsGuidance")
         spans_guidance.setWordWrap(True)
         spans_layout.addWidget(spans_guidance)
-        self._span_table = QTableWidget(0, 8)
+        self._span_table = QTableWidget(0, 9)
         self._span_table.setObjectName("analysisSpanTable")
         self._span_table.setHorizontalHeaderLabels(
             (
                 "Vão",
+                "Situação",
                 "Poste de origem",
                 "Poste de destino",
                 "Cabo",
@@ -211,7 +212,7 @@ class ReviewPanelWidget(QWidget):
         self._span_table.verticalHeader().setVisible(False)
         span_header = self._span_table.horizontalHeader()
         span_header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        span_header.setSectionResizeMode(6, QHeaderView.ResizeMode.Stretch)
+        span_header.setSectionResizeMode(7, QHeaderView.ResizeMode.Stretch)
         span_header.setStretchLastSection(False)
         spans_layout.addWidget(self._span_table, 1)
         self._results_tabs.addTab(spans_page, "Vãos")
@@ -481,6 +482,7 @@ class ReviewPanelWidget(QWidget):
             )
             values = (
                 span_label,
+                _situation_label(span.situacao),
                 _project_element_label(origin),
                 _project_element_label(destination),
                 _project_element_label(cable, catalog=session.catalogo),
@@ -507,7 +509,7 @@ class ReviewPanelWidget(QWidget):
             if (proposal_id := self._span_proposal_id(span)) is not None:
                 span_button.setProperty("proposalId", str(proposal_id))
             self._span_visibility_buttons[span.id] = span_button
-            self._span_table.setCellWidget(row, 7, span_button)
+            self._span_table.setCellWidget(row, 8, span_button)
 
     def _select_span(self) -> None:
         selected = self._span_table.selectedItems()
@@ -735,7 +737,7 @@ class ReviewPanelWidget(QWidget):
             if not elements and region.elemento_ids:
                 continue
             action_summary = _region_action_counts(elements) or "Ponto identificado"
-            detail_summary = _region_summary(elements) or (
+            detail_summary = _region_summary(elements, catalog=session.catalogo) or (
                 "Identificador de ponto reconhecido no PDF"
             )
             root = QTreeWidgetItem(
@@ -774,6 +776,7 @@ class ReviewPanelWidget(QWidget):
                         region,
                         all_elements,
                         all_relations,
+                        catalog=session.catalogo,
                     ),
                 )
                 root.addChild(child)
@@ -806,7 +809,10 @@ class ReviewPanelWidget(QWidget):
     ) -> QTreeWidgetItem:
         item = QTreeWidgetItem(
             (
-                _proposal_label(proposal),
+                _proposal_label(
+                    proposal,
+                    catalog=self._session.catalogo if self._session is not None else None,
+                ),
                 _situation_label(proposal.situacao_projeto),
                 "",
                 self._catalog_label(proposal),
@@ -1257,15 +1263,55 @@ def _proposal_category(proposal: PropostaElemento | PropostaRelacao) -> str:
     )
 
 
-def _proposal_label(proposal: PropostaElemento) -> str:
+def _proposal_label(
+    proposal: PropostaElemento,
+    *,
+    catalog: CatalogoTecnico | None = None,
+) -> str:
+    if proposal.categoria is CategoriaElemento.EQUIPAMENTO:
+        category = _equipment_type_label(proposal, catalog)
+        if dict(proposal.atributos_sugeridos).get("reconhecido_por_simbologia") is True:
+            return category
+        return f"{category} {proposal.codigo_observado or ''}".strip()
     category = {
         CategoriaElemento.POSTE: "Poste",
         CategoriaElemento.ESTRUTURA_MT: "Estrutura MT",
         CategoriaElemento.ESTRUTURA_BT: "Estrutura BT",
         CategoriaElemento.CABO: "Cabo",
-        CategoriaElemento.EQUIPAMENTO: "Equipamento",
     }[proposal.categoria]
     return f"{category} {proposal.codigo_observado or ''}".strip()
+
+
+def _equipment_type_label(
+    proposal: PropostaElemento,
+    catalog: CatalogoTecnico | None,
+) -> str:
+    if catalog is not None and proposal.tipo_catalogo_sugerido_id is not None:
+        catalog_item = catalog.item_por_id(proposal.tipo_catalogo_sugerido_id)
+        if isinstance(catalog_item, TipoEquipamento):
+            option_label = next(
+                (
+                    option.rotulo
+                    for group in catalog.grupos_opcao
+                    if group.chave == "classe_equipamento"
+                    for option in group.opcoes
+                    if option.id == catalog_item.classe_equipamento_opcao_id
+                ),
+                None,
+            )
+            if option_label is not None:
+                return option_label.capitalize()
+    suggested_class = dict(proposal.atributos_sugeridos).get("classe_equipamento")
+    if isinstance(suggested_class, str) and suggested_class.strip():
+        symbolic_labels = {
+            "ATERRAMENTO": "Aterramento",
+            "PARA_RAIOS_BT": "Para-raios BT",
+            "PARA_RAIOS_MT": "Para-raios MT",
+        }
+        if suggested_class.strip().upper() in symbolic_labels:
+            return symbolic_labels[suggested_class.strip().upper()]
+        return suggested_class.replace("_", " ").strip().capitalize()
+    return "Equipamento"
 
 
 def _link_geometries(
@@ -1346,7 +1392,11 @@ def _coordinate_label(region: RegiaoAnalise) -> str:
     return f"E {region.coordenada.leste:.0f} · N {region.coordenada.norte:.0f}"
 
 
-def _region_summary(elements: tuple[PropostaElemento, ...]) -> str:
+def _region_summary(
+    elements: tuple[PropostaElemento, ...],
+    *,
+    catalog: CatalogoTecnico | None = None,
+) -> str:
     parts: list[str] = []
     for situation, verb in (
         (SituacaoProjeto.REMOVER, "Remover"),
@@ -1354,7 +1404,7 @@ def _region_summary(elements: tuple[PropostaElemento, ...]) -> str:
         (SituacaoProjeto.EXISTENTE, "Existente"),
     ):
         labels = tuple(
-            _proposal_label(element)
+            _proposal_label(element, catalog=catalog)
             for element in elements
             if element.situacao_projeto is situation
         )
@@ -1381,6 +1431,8 @@ def _relationship_labels(
     region: RegiaoAnalise,
     elements: dict[UUID, PropostaElemento],
     relations: dict[UUID, PropostaRelacao],
+    *,
+    catalog: CatalogoTecnico | None = None,
 ) -> tuple[str, ...]:
     labels: list[str] = []
     for relation_id in region.vinculo_ids:
@@ -1399,7 +1451,7 @@ def _relationship_labels(
         if related is None:
             continue
         relation_label = relation.tipo_relacao.replace("_", " ").lower()
-        labels.append(f"{relation_label} {direction} {_proposal_label(related)}")
+        labels.append(f"{relation_label} {direction} {_proposal_label(related, catalog=catalog)}")
     return tuple(labels)
 
 

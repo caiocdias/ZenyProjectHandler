@@ -99,7 +99,7 @@
       "top_level_images": 1,
       "annotations": {"Stamp": 8, "Popup": 8},
       "expected_spans": {
-        "INSTALAR": [30, 50, 55],
+        "INSTALAR": [30, 30, 50, 55],
         "REMOVER": [105]
       },
       "producer_family": "iText"

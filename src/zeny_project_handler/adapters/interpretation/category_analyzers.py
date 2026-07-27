@@ -53,6 +53,9 @@ _POLE_FORMAT_PHRASES = {
     "MADEIRA": ("POSTE MADEIRA", "MADEIRA"),
 }
 _EQUIPMENT_PHRASES = (
+    ("PARA RAIOS BT", "PARA_RAIOS_BT"),
+    ("PARA RAIOS MT", "PARA_RAIOS_MT"),
+    ("ATERRAMENTO", "ATERRAMENTO"),
     ("CHAVE FUSIVEL REPETIDORA", "CHAVE FUSIVEL REPETIDORA"),
     ("CHAVE FACA", "CHAVE FACA"),
     ("CHAVE FUSIVEL", "CHAVE FUSIVEL"),
@@ -328,7 +331,7 @@ class AnalisadorCabo(AnalisadorCatalogoPorCodigo):
 
 class AnalisadorEquipamento(AnalisadorCatalogoPorCodigo):
     nome = "equipamento-codigo-e-nomenclatura"
-    versao = "3.0"
+    versao = "3.1"
     categoria = CategoriaElemento.EQUIPAMENTO
 
     def _matches_catalog_item(self, text: str, item: ItemCatalogoType) -> bool:
@@ -373,7 +376,7 @@ class AnalisadorEquipamento(AnalisadorCatalogoPorCodigo):
             if (canonical := _canonical_equipment_nomenclature(item.codigo)) is not None
         }
         proposals = list(exact)
-        for evidence in _semantic_evidence(solicitacao, regra):
+        for evidence in _semantic_evidence(solicitacao, regra, include_symbolic=True):
             if evidence.id in exact_evidence:
                 continue
             text = normalized_text(evidence.conteudo_bruto or "")
@@ -425,6 +428,12 @@ class AnalisadorEquipamento(AnalisadorCatalogoPorCodigo):
                 for item in equipment
                 if option_codes.get(item.classe_equipamento_opcao_id) == class_code
             )
+            source_attributes = dict(evidence.atributos_extraidos)
+            confidence = (
+                Decimal(str(source_attributes.get("confianca", "0.88")))
+                if source_attributes.get("reconhecido_por_simbologia") is True
+                else Decimal("0.62")
+            )
             proposals.append(
                 _untyped_phrase_proposal(
                     solicitacao,
@@ -435,7 +444,7 @@ class AnalisadorEquipamento(AnalisadorCatalogoPorCodigo):
                     candidate_codes=tuple(item.codigo for item in matching),
                     attribute_name="classe_equipamento",
                     attribute_value=class_code,
-                    confidence=Decimal("0.62"),
+                    confidence=confidence,
                 )
             )
         return tuple(
@@ -458,12 +467,22 @@ def _canonical_equipment_match(match: re.Match[str]) -> str:
 
 
 def _semantic_evidence(
-    request: SolicitacaoInterpretacao, rule: RegraReconhecimento
+    request: SolicitacaoInterpretacao,
+    rule: RegraReconhecimento,
+    *,
+    include_symbolic: bool = False,
 ) -> tuple[EvidenciaDocumento, ...]:
     return tuple(
         evidence
         for evidence in sorted(request.evidencias, key=lambda item: str(item.id))
-        if evidence.tipo in rule.tipos_evidencia and evidence.conteudo_bruto
+        if (
+            evidence.tipo in rule.tipos_evidencia
+            or (
+                include_symbolic
+                and dict(evidence.atributos_extraidos).get("reconhecido_por_simbologia") is True
+            )
+        )
+        and evidence.conteudo_bruto
     )
 
 
@@ -703,6 +722,20 @@ def _untyped_phrase_proposal(
     confidence: Decimal,
 ) -> PropostaElemento:
     situation, evidence_ids = _situation_and_evidence(request, rule, evidence, category)
+    evidence_attributes = dict(evidence.atributos_extraidos)
+    symbolic = evidence_attributes.get("reconhecido_por_simbologia") is True
+    suggested_attributes: list[tuple[str, JsonPrimitive]] = [
+        (attribute_name, attribute_value),
+        ("candidatos_catalogo", ",".join(candidate_codes)),
+        ("regra_id", rule.id),
+    ]
+    if symbolic:
+        suggested_attributes.extend(
+            (
+                ("origem_simbologia", str(evidence_attributes.get("origem_simbologia") or "")),
+                ("reconhecido_por_simbologia", True),
+            )
+        )
     return PropostaElemento(
         id=uuid5(request.execucao_id, f"elemento:{rule.id}:frase:{evidence.id}:{observed}"),
         execucao_id=request.execucao_id,
@@ -712,14 +745,17 @@ def _untyped_phrase_proposal(
         evidencia_ids=evidence_ids,
         geometria=evidence.geometria,
         codigo_observado=observed,
-        atributos_sugeridos=(
-            (attribute_name, attribute_value),
-            ("candidatos_catalogo", ",".join(candidate_codes)),
-            ("regra_id", rule.id),
-        ),
+        atributos_sugeridos=tuple(suggested_attributes),
         confianca=confidence,
         justificativa=(
-            "A classe ou formato foi reconhecido em texto nativo ou OCR; "
-            "o tipo exato requer revisão humana."
+            (
+                "A classe foi reconhecida pela assinatura vetorial definida em SIMBOLOGIA.pdf; "
+                "o tipo exato requer revisão humana."
+            )
+            if symbolic
+            else (
+                "A classe ou formato foi reconhecido em texto nativo ou OCR; "
+                "o tipo exato requer revisão humana."
+            )
         ),
     )
