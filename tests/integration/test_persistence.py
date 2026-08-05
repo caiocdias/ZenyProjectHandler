@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
 from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -18,6 +19,7 @@ from zeny_project_handler.adapters.persistence import (
     create_atomic_backup,
     create_sqlite_engine,
     current_database_revision,
+    managed_sqlite_engine,
     restore_atomic_backup,
     upgrade_database,
 )
@@ -35,11 +37,14 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
-def database(tmp_path: Path) -> tuple[Path, Engine]:
+def database(tmp_path: Path) -> Iterator[tuple[Path, Engine]]:
     path = tmp_path / "dados" / "zeny.sqlite3"
     engine = create_sqlite_engine(path)
     upgrade_database(engine)
-    return path, engine
+    try:
+        yield path, engine
+    finally:
+        engine.dispose()
 
 
 def test_migrations_upgrade_empty_database_and_previous_revision(tmp_path: Path) -> None:
@@ -361,3 +366,34 @@ def test_unit_of_work_requires_open_context(database: tuple[Path, Engine]) -> No
     with unit, pytest.raises(RuntimeError, match="já está aberta"):
         unit.__enter__()
     engine.dispose()
+
+
+@pytest.mark.parametrize("fail_inside_scope", [False, True])
+def test_managed_engine_closes_sessions_connections_and_unlocks_sqlite(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+    fail_inside_scope: bool,
+) -> None:
+    database_path = tmp_path / f"managed-{fail_inside_scope}.sqlite3"
+
+    def use_database() -> None:
+        with managed_sqlite_engine(database_path) as engine:
+            upgrade_database(engine)
+            with SqlAlchemyUnitOfWork(engine) as unit:
+                unit.catalogos.salvar(catalogo_inicial)
+                if fail_inside_scope:
+                    raise RuntimeError("falha controlada")
+                unit.commit()
+            with engine.connect() as connection:
+                assert connection.scalar(text("SELECT COUNT(*) FROM catalog_versions")) == 1
+
+    if fail_inside_scope:
+        with pytest.raises(RuntimeError, match="controlada"):
+            use_database()
+    else:
+        use_database()
+
+    moved_path = database_path.with_name("moved.sqlite3")
+    database_path.replace(moved_path)
+    moved_path.unlink()
+    assert not moved_path.exists()

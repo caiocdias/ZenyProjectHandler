@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from zeny_project_handler.adapters.persistence import (
     create_sqlite_engine,
     upgrade_database,
 )
+from zeny_project_handler.adapters.persistence.errors import PersistenceError
 from zeny_project_handler.adapters.portability import ZipProjectArchive
 from zeny_project_handler.application.errors import PortabilidadeProjetoError
 from zeny_project_handler.application.project_portability import ServicoPortabilidadeProjeto
@@ -74,7 +76,11 @@ def _project_with_real_pdf(
     return project, source
 
 
-def _service(data: Path, engine: Engine) -> ServicoPortabilidadeProjeto:
+def _service(
+    data: Path,
+    engine: Engine,
+    dispose_connections: Callable[[], None] | None = None,
+) -> ServicoPortabilidadeProjeto:
     return ServicoPortabilidadeProjeto(
         lambda: SqlAlchemyUnitOfWork(engine),
         ZipProjectArchive(),
@@ -82,7 +88,7 @@ def _service(data: Path, engine: Engine) -> ServicoPortabilidadeProjeto:
         SqliteBackupManager(),
         diretorio_dados=data,
         caminho_banco=data / "zeny-project-handler.sqlite3",
-        descartar_conexoes=engine.dispose,
+        descartar_conexoes=dispose_connections or engine.dispose,
     )
 
 
@@ -235,7 +241,14 @@ def test_full_backup_restores_database_and_managed_files(
     upgrade_database(engine)
     project, pdf_source = _project_with_real_pdf(tmp_path, catalogo_inicial)
     _persist_complete_project(engine, catalogo_inicial, project, pdf_source)
-    service = _service(data, engine)
+    dispose_calls = 0
+
+    def dispose_connections() -> None:
+        nonlocal dispose_calls
+        dispose_calls += 1
+        engine.dispose()
+
+    service = _service(data, engine, dispose_connections)
     photo_path = _create_png(tmp_path / "backup-photo.png")
     attached = service.anexar_foto(project.id, project.elementos[0].id, photo_path)
     backup = service.criar_backup(tmp_path / "backup.zphbackup")
@@ -264,6 +277,7 @@ def test_full_backup_restores_database_and_managed_files(
     assert restored_source is not None
     assert restored_source.caminho_canonico.is_file()
     assert restored_source.caminho_canonico.is_relative_to(data / "project-files")
+    assert dispose_calls == 1
     engine.dispose()
     assert not tuple(data.glob(".z-*"))
 
@@ -279,3 +293,59 @@ def test_full_backup_restores_database_and_managed_files(
         ]
         assert all(record.levelno == logging.INFO for record in records)
         assert len({getattr(record, "correlation_id", None) for record in records}) == 1
+
+
+def test_restore_disposes_connections_again_before_rollback(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data = tmp_path / "rollback-data"
+    database_path = data / "zeny-project-handler.sqlite3"
+    engine = create_sqlite_engine(database_path)
+    try:
+        upgrade_database(engine)
+        project, pdf_source = _project_with_real_pdf(tmp_path, catalogo_inicial)
+        _persist_complete_project(engine, catalogo_inicial, project, pdf_source)
+        dispose_calls = 0
+
+        def dispose_connections() -> None:
+            nonlocal dispose_calls
+            dispose_calls += 1
+            engine.dispose()
+
+        service = _service(data, engine, dispose_connections)
+        backup = service.criar_backup(tmp_path / "rollback.zphbackup")
+        with SqlAlchemyUnitOfWork(engine) as work:
+            work.projetos.salvar(replace(project, nome="Estado posterior"))
+            work.commit()
+
+        manager = service._backup
+        real_restore = manager.restaurar_snapshot
+        restore_calls = 0
+
+        def fail_first_restore(source: Path, destination: Path) -> Path:
+            nonlocal restore_calls
+            restore_calls += 1
+            if restore_calls == 1:
+                raise PersistenceError("falha simulada na troca")
+            return real_restore(source, destination)
+
+        monkeypatch.setattr(manager, "restaurar_snapshot", fail_first_restore)
+
+        with pytest.raises(PersistenceError, match="falha simulada"):
+            service.restaurar_backup(backup)
+
+        assert dispose_calls == 2
+        assert restore_calls == 2
+        with SqlAlchemyUnitOfWork(engine) as work:
+            current = work.projetos.obter(project.id)
+        assert current is not None
+        assert current.nome == "Estado posterior"
+    finally:
+        engine.dispose()
+
+    moved_database = data / "rollback-closed.sqlite3"
+    database_path.replace(moved_database)
+    moved_database.unlink()
+    assert not moved_database.exists()

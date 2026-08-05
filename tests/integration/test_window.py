@@ -1,5 +1,6 @@
 from decimal import Decimal
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, Qt
@@ -16,10 +17,12 @@ from PySide6.QtWidgets import (
     QToolButton,
 )
 from pytestqt.qtbot import QtBot
+from tests.conftest import ApplicationFactory
 from tests.pdf_fixtures import create_feature_pdf, create_golden_pdf
 
+from zeny_project_handler import bootstrap
 from zeny_project_handler.adapters.pdf import PyMuPdfReader
-from zeny_project_handler.bootstrap import create_application, run
+from zeny_project_handler.bootstrap import _EngineLifetime, run
 from zeny_project_handler.config import AppSettings
 from zeny_project_handler.domain.values import PontoNormalizado
 from zeny_project_handler.ports.pdf import InspecaoPdf
@@ -28,10 +31,12 @@ from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
 
 
 @pytest.mark.integration
-def test_main_window_smoke(qtbot: QtBot, tmp_path: Path) -> None:
+def test_main_window_smoke(
+    qtbot: QtBot, tmp_path: Path, application_factory: ApplicationFactory
+) -> None:
     settings = AppSettings(data_directory=tmp_path)
 
-    application, window = create_application([], settings=settings)
+    application, window = application_factory([], settings=settings)
     qtbot.addWidget(window)
     window.show()
 
@@ -61,9 +66,10 @@ def test_main_window_smoke(qtbot: QtBot, tmp_path: Path) -> None:
 def test_floating_panel_has_window_controls_and_can_be_reopened(
     qtbot: QtBot,
     tmp_path: Path,
+    application_factory: ApplicationFactory,
 ) -> None:
     settings = AppSettings(data_directory=tmp_path)
-    _application, window = create_application([], settings=settings)
+    _application, window = application_factory([], settings=settings)
     qtbot.addWidget(window)
     window.show()
     review_dock = window.findChild(QDockWidget, "humanReviewDock")
@@ -170,9 +176,11 @@ def test_floating_panel_has_window_controls_and_can_be_reopened(
 
 
 @pytest.mark.integration
-def test_floating_panel_screen_edge_snap_geometry(qtbot: QtBot, tmp_path: Path) -> None:
+def test_floating_panel_screen_edge_snap_geometry(
+    qtbot: QtBot, tmp_path: Path, application_factory: ApplicationFactory
+) -> None:
     settings = AppSettings(data_directory=tmp_path)
-    _application, window = create_application([], settings=settings)
+    _application, window = application_factory([], settings=settings)
     qtbot.addWidget(window)
     review_dock = window.findChild(QDockWidget, "humanReviewDock")
     assert review_dock is not None
@@ -200,9 +208,10 @@ def test_floating_panel_screen_edge_snap_geometry(qtbot: QtBot, tmp_path: Path) 
 def test_dock_title_bar_propagates_drag_events_to_qdockwidget(
     qtbot: QtBot,
     tmp_path: Path,
+    application_factory: ApplicationFactory,
 ) -> None:
     settings = AppSettings(data_directory=tmp_path)
-    _application, window = create_application([], settings=settings)
+    _application, window = application_factory([], settings=settings)
     qtbot.addWidget(window)
     review_dock = window.findChild(QDockWidget, "humanReviewDock")
     assert review_dock is not None
@@ -246,9 +255,10 @@ def test_dock_title_bar_propagates_drag_events_to_qdockwidget(
 def test_floating_panel_has_consistent_docking_fallback(
     qtbot: QtBot,
     tmp_path: Path,
+    application_factory: ApplicationFactory,
 ) -> None:
     settings = AppSettings(data_directory=tmp_path)
-    _application, window = create_application([], settings=settings)
+    _application, window = application_factory([], settings=settings)
     qtbot.addWidget(window)
     window.resize(1200, 800)
     window.show()
@@ -278,6 +288,34 @@ def test_application_smoke_mode_opens_and_closes(tmp_path: Path) -> None:
     exit_code = run(["zeny-project-handler", "--smoke-test"], settings=settings)
 
     assert exit_code == 0
+    moved_database = tmp_path / "closed.sqlite3"
+    settings.database_path.replace(moved_database)
+    moved_database.unlink()
+    assert not moved_database.exists()
+
+
+@pytest.mark.integration
+def test_engine_lifetime_disposes_once_and_bootstrap_failure_disposes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = Mock()
+    lifetime = _EngineLifetime(engine)
+
+    lifetime.dispose()
+    lifetime.dispose(object())
+
+    engine.dispose.assert_called_once_with()
+    failed_engine = Mock()
+    monkeypatch.setattr(bootstrap, "initialize_local_storage", lambda _settings: failed_engine)
+
+    def fail_composition(*_args: object) -> None:
+        raise RuntimeError("composição interrompida")
+
+    monkeypatch.setattr(bootstrap, "_compose_initialized_application", fail_composition)
+    with pytest.raises(RuntimeError, match="interrompida"):
+        bootstrap._compose_application([], AppSettings(data_directory=tmp_path))
+    failed_engine.dispose.assert_called_once_with()
 
 
 @pytest.mark.integration

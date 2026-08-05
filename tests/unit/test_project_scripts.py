@@ -62,6 +62,12 @@ def test_quality_script_enforces_coverage_and_records_metrics() -> None:
     assert "radon mi" in quality_script
     assert "radon raw" in quality_script
     assert configuration["tool"]["coverage"]["report"]["fail_under"] > 85
+    warning_filters = configuration["tool"]["pytest"]["ini_options"]["filterwarnings"]
+    assert "error::ResourceWarning" in warning_filters
+    assert "error::pytest.PytestUnraisableExceptionWarning" in warning_filters
+    assert not any(
+        item.startswith("ignore") and "ResourceWarning" in item for item in warning_filters
+    )
 
 
 def test_private_gate_is_opt_in_and_private_modules_declare_the_marker() -> None:

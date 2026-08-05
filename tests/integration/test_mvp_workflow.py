@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
@@ -67,13 +68,16 @@ def _service(
 def workflow(
     tmp_path: Path,
     catalogo_inicial: CatalogoTecnico,
-) -> tuple[Engine, ServicoFluxoMvp]:
+) -> Iterator[tuple[Engine, ServicoFluxoMvp]]:
     engine = create_sqlite_engine(tmp_path / "mvp.sqlite3")
     upgrade_database(engine)
     with SqlAlchemyUnitOfWork(engine) as work:
         work.catalogos.salvar(catalogo_inicial)
         work.commit()
-    return engine, _service(engine, catalogo_inicial, tmp_path / "cache")
+    try:
+        yield engine, _service(engine, catalogo_inicial, tmp_path / "cache")
+    finally:
+        engine.dispose()
 
 
 def _first_automatic_decision(

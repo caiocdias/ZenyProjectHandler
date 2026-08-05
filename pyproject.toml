@@ -40,6 +40,10 @@ where = ["src"]
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers"
 testpaths = ["tests"]
+filterwarnings = [
+    "error::ResourceWarning",
+    "error::pytest.PytestUnraisableExceptionWarning",
+]
 markers = [
     "private_samples: testes opt-in que exigem o corpus privado autorizado",
     "integration: testes que exercitam adaptadores ou frameworks",

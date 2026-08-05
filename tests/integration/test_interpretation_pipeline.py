@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -52,7 +53,7 @@ class FailingInterpreter:
 def interpretation_context(
     tmp_path: Path,
     catalogo_inicial: CatalogoTecnico,
-) -> tuple[Engine, Projeto, ExecucaoAnalise]:
+) -> Iterator[tuple[Engine, Projeto, ExecucaoAnalise]]:
     engine = create_sqlite_engine(tmp_path / "interpretation.sqlite3")
     upgrade_database(engine)
     project = complete_project(catalogo_inicial)
@@ -137,7 +138,10 @@ def interpretation_context(
         for item in evidence:
             work.evidencias.salvar(item)
         work.commit()
-    return engine, project, source_execution
+    try:
+        yield engine, project, source_execution
+    finally:
+        engine.dispose()
 
 
 def _runner(engine: Engine) -> ExecutarPipelineInterpretacao:

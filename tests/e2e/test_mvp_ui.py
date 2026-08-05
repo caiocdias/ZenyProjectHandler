@@ -19,14 +19,17 @@ from PySide6.QtWidgets import (
 )
 from pytestqt.qtbot import QtBot
 
+from tests.conftest import ApplicationFactory
 from tests.pdf_fixtures import create_golden_pdf
 from zeny_project_handler.adapters.catalog import carregar_catalogo_inicial
-from zeny_project_handler.bootstrap import create_application
 from zeny_project_handler.config import AppSettings
 from zeny_project_handler.domain.enums import CategoriaElemento
 from zeny_project_handler.ui.project_panel import ProjectPanelWidget
 
-pytestmark = [pytest.mark.integration, pytest.mark.e2e]
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.e2e,
+]
 
 
 def _catalog_pdf(path: Path) -> Path:
@@ -58,11 +61,12 @@ def test_user_can_reorder_project_pdfs_and_reopen_in_reading_order(
     qtbot: QtBot,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    application_factory: ApplicationFactory,
 ) -> None:
     settings = AppSettings(data_directory=tmp_path / "data", pdf_render_dpi=72)
     first = _catalog_pdf(tmp_path / "folha-01.pdf")
     second = create_golden_pdf(tmp_path / "folha-02.pdf")
-    _application, window = create_application([], settings=settings)
+    _application, window = application_factory([], settings=settings)
     qtbot.addWidget(window)
     panel = window.project_panel
     assert isinstance(panel, ProjectPanelWidget)
@@ -97,7 +101,7 @@ def test_user_can_reorder_project_pdfs_and_reopen_in_reading_order(
     assert "folha-01.pdf · página 2" in pages.item(0).text()
     assert "folha-01.pdf · página 1" in pages.item(1).text()
 
-    _reopened_application, reopened = create_application([], settings=settings)
+    _reopened_application, reopened = application_factory([], settings=settings)
     qtbot.addWidget(reopened)
     reopened_panel = reopened.project_panel
     assert isinstance(reopened_panel, ProjectPanelWidget)
@@ -114,10 +118,11 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
     qtbot: QtBot,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    application_factory: ApplicationFactory,
 ) -> None:
     settings = AppSettings(data_directory=tmp_path / "data", pdf_render_dpi=72)
     source = _catalog_pdf(tmp_path / "projeto.pdf")
-    _application, window = create_application([], settings=settings)
+    _application, window = application_factory([], settings=settings)
     qtbot.addWidget(window)
     window.show()
     panel = window.project_panel
@@ -179,7 +184,7 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
 
     window.pdf_viewer.ir_para_folha(2)
     assert window.pdf_viewer.folha_atual == 2
-    _second_application, reopened = create_application([], settings=settings)
+    _second_application, reopened = application_factory([], settings=settings)
     qtbot.addWidget(reopened)
     reopened.show()
     reopened_panel = reopened.project_panel
