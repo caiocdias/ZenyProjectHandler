@@ -8,10 +8,24 @@ set "QT_QPA_PLATFORM=offscreen"
 set "REPORT_FILE=%CD%\relatorio-testes.txt"
 set "VENV_ACTIVATE=%CD%\.venv\Scripts\activate.bat"
 set "SUITE_STATUS=0"
+set "PYTEST_TEMP_ROOT=%SystemDrive%\tmp"
+set "PYTEST_BASETEMP=!PYTEST_TEMP_ROOT!\zph-basic-!RANDOM!"
 
 > "%REPORT_FILE%" echo RELATÓRIO DE QUALIDADE - ZENY PROJECT HANDLER
 >> "%REPORT_FILE%" echo Data: %DATE% %TIME%
 >> "%REPORT_FILE%" echo Diretório: %CD%
+
+>> "%REPORT_FILE%" echo Escopo: gate basico offline; corpus privado explicitamente excluido.
+>> "%REPORT_FILE%" echo Gate privado complementar: IniciarTestesPrivados.bat
+
+if not exist "%PYTEST_TEMP_ROOT%" mkdir "%PYTEST_TEMP_ROOT%" >nul 2>&1
+if not exist "%PYTEST_TEMP_ROOT%" (
+    >> "%REPORT_FILE%" echo.
+    >> "%REPORT_FILE%" echo RESULTADO FINAL: REPROVADO
+    >> "%REPORT_FILE%" echo Nao foi possivel criar a raiz temporaria curta %PYTEST_TEMP_ROOT%.
+    type "%REPORT_FILE%"
+    exit /b 1
+)
 
 if not exist "%VENV_ACTIVATE%" (
     >> "%REPORT_FILE%" echo.
@@ -35,14 +49,34 @@ call :run_section "INTEGRIDADE DAS DEPENDÊNCIAS" "python -m pip check"
 call :run_section "LINT - RUFF" "python -m ruff check ."
 call :run_section "FORMATAÇÃO - RUFF" "python -m ruff format --check ."
 call :run_section "TIPAGEM ESTÁTICA - MYPY" "python -m mypy"
-call :run_section "TESTES E COBERTURA" "python -m pytest --cov --cov-report=term-missing --cov-fail-under=85.01"
-call :run_section "COMPLEXIDADE CICLOMÁTICA" "python -m radon cc src -s -a"
+>> "%REPORT_FILE%" echo.
+>> "%REPORT_FILE%" echo ============================================================
+>> "%REPORT_FILE%" echo TESTES PUBLICOS E COBERTURA
+>> "%REPORT_FILE%" echo Comando: python -m pytest -m "not private_samples" --cov
+>> "%REPORT_FILE%" echo ============================================================
+python -m pytest -m "not private_samples" --basetemp="!PYTEST_BASETEMP!" ^
+    --cov --cov-report=term-missing --cov-fail-under=85.01 >> "%REPORT_FILE%" 2>&1
+set "SECTION_EXIT_CODE=!ERRORLEVEL!"
+>> "%REPORT_FILE%" echo Codigo de saida: !SECTION_EXIT_CODE!
+if not "!SECTION_EXIT_CODE!"=="0" set "SUITE_STATUS=1"
+
+>> "%REPORT_FILE%" echo.
+>> "%REPORT_FILE%" echo ============================================================
+>> "%REPORT_FILE%" echo COMPLEXIDADE CICLOMATICA
+>> "%REPORT_FILE%" echo Comando: python -m radon cc src -s -a
+>> "%REPORT_FILE%" echo ============================================================
+python -m radon cc src -s -a >> "%REPORT_FILE%" 2>&1
+set "SECTION_EXIT_CODE=!ERRORLEVEL!"
+>> "%REPORT_FILE%" echo Codigo de saida: !SECTION_EXIT_CODE!
+if not "!SECTION_EXIT_CODE!"=="0" set "SUITE_STATUS=1"
+
 call :run_section "ÍNDICE DE MANUTENIBILIDADE" "python -m radon mi src -s"
 call :run_section "MÉTRICAS BRUTAS DO CÓDIGO" "python -m radon raw src -s"
 
 >> "%REPORT_FILE%" echo.
 if "!SUITE_STATUS!"=="0" (
     >> "%REPORT_FILE%" echo RESULTADO FINAL: APROVADO
+    >> "%REPORT_FILE%" echo O corpus privado nao foi acessado por este gate.
     >> "%REPORT_FILE%" echo Cobertura mínima obrigatória: superior a 85%%.
 ) else (
     >> "%REPORT_FILE%" echo RESULTADO FINAL: REPROVADO

@@ -41,6 +41,7 @@ where = ["src"]
 addopts = "-ra --strict-config --strict-markers"
 testpaths = ["tests"]
 markers = [
+    "private_samples: testes opt-in que exigem o corpus privado autorizado",
     "integration: testes que exercitam adaptadores ou frameworks",
     "slow: testes intencionalmente demorados",
     "e2e: testes completos de interface e persistência",

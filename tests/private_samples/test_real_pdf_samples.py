@@ -4,6 +4,7 @@ import json
 from collections import Counter
 from datetime import UTC, datetime
 from decimal import Decimal
+from functools import cache
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
@@ -35,17 +36,28 @@ from zeny_project_handler.ports.pdf import ReferenciaFontePdf
 EXAMPLES_DIRECTORY = Path(__file__).parents[2] / "examples"
 MANIFEST_PATH = Path(__file__).parents[2] / "evaluation" / "manifesto-amostras.json"
 
+pytestmark = [pytest.mark.integration, pytest.mark.private_samples]
+
 
 def _samples() -> list[dict[str, Any]]:
     payload = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     return list(payload["samples"])
 
 
-def _pdfs_by_hash() -> dict[str, Path]:
+@cache
+def _pdf_inventory() -> tuple[dict[str, Path], int]:
     result = {}
+    unreadable = 0
     for path in EXAMPLES_DIRECTORY.glob("*.pdf"):
-        result[sha256(path.read_bytes()).hexdigest()] = path
-    return result
+        try:
+            result[sha256(path.read_bytes()).hexdigest()] = path
+        except OSError:
+            unreadable += 1
+    return result, unreadable
+
+
+def _pdfs_by_hash() -> dict[str, Path]:
+    return _pdf_inventory()[0]
 
 
 def _unregistered_pdf_hashes() -> tuple[str, ...]:
@@ -53,12 +65,42 @@ def _unregistered_pdf_hashes() -> tuple[str, ...]:
     return tuple(sorted(set(_pdfs_by_hash()) - registered))
 
 
+def _required_pdf(sample: dict[str, Any]) -> Path:
+    source = _pdfs_by_hash().get(str(sample["sha256"]))
+    assert source is not None, (
+        f"Amostra privada {sample['id']} ausente ou com SHA-256 divergente; "
+        "execute primeiro a pré-condição do gate privado"
+    )
+    return source
+
+
+def test_private_corpus_is_complete_and_authentic() -> None:
+    pdfs_by_hash, unreadable = _pdf_inventory()
+    samples = _samples()
+    missing = tuple(
+        str(sample["id"]) for sample in samples if str(sample["sha256"]) not in pdfs_by_hash
+    )
+    inconsistent_sizes = tuple(
+        str(sample["id"])
+        for sample in samples
+        if (source := pdfs_by_hash.get(str(sample["sha256"]))) is not None
+        and source.stat().st_size != int(sample["bytes"])
+    )
+    problems = []
+    if missing:
+        problems.append(f"ausentes ou com hash divergente: {', '.join(missing)}")
+    if inconsistent_sizes:
+        problems.append(f"tamanho divergente: {', '.join(inconsistent_sizes)}")
+    if unreadable:
+        problems.append(f"arquivos PDF locais ilegíveis: {unreadable}")
+
+    assert not problems, "Corpus privado ausente ou inválido; " + "; ".join(problems)
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize("sample", _samples(), ids=lambda item: str(item["id"]))
 def test_registered_real_pdf_smoke_by_anonymous_hash(sample: dict[str, Any]) -> None:
-    source = _pdfs_by_hash().get(str(sample["sha256"]))
-    if source is None:
-        pytest.skip("Amostra real privada não está presente neste ambiente")
+    source = _required_pdf(sample)
     reader = PyMuPdfReader()
     before = source.stat()
 
@@ -92,9 +134,7 @@ def test_registered_real_pdf_smoke_by_anonymous_hash(sample: dict[str, Any]) -> 
 @pytest.mark.integration
 @pytest.mark.parametrize("sample", _samples(), ids=lambda item: str(item["id"]))
 def test_registered_real_pdf_native_evidence_by_anonymous_hash(sample: dict[str, Any]) -> None:
-    source = _pdfs_by_hash().get(str(sample["sha256"]))
-    if source is None:
-        pytest.skip("Amostra real privada não está presente neste ambiente")
+    source = _required_pdf(sample)
     before = source.stat()
     inspection = PyMuPdfReader().inspecionar(source)
     project_id = uuid4()
@@ -196,25 +236,20 @@ def test_registered_real_pdf_native_evidence_by_anonymous_hash(sample: dict[str,
     assert (before.st_size, before.st_mtime_ns) == (after.st_size, after.st_mtime_ns)
 
 
-@pytest.mark.integration
-@pytest.mark.parametrize(
-    "pdf_hash",
-    _unregistered_pdf_hashes(),
-    ids=lambda value: f"local-extra-{str(value)[:12]}",
-)
-def test_unregistered_local_pdf_is_a_read_only_smoke_sample(pdf_hash: str) -> None:
-    source = _pdfs_by_hash()[pdf_hash]
-    before = source.stat()
+def test_unregistered_local_pdfs_are_read_only_smoke_samples() -> None:
+    for pdf_hash in _unregistered_pdf_hashes():
+        source = _pdfs_by_hash()[pdf_hash]
+        before = source.stat()
 
-    inspection = PyMuPdfReader().inspecionar(source)
-    thumbnail = PyMuPdfReader().renderizar_miniatura(
-        source,
-        1,
-        sha256_esperado=pdf_hash,
-    )
+        inspection = PyMuPdfReader().inspecionar(source)
+        thumbnail = PyMuPdfReader().renderizar_miniatura(
+            source,
+            1,
+            sha256_esperado=pdf_hash,
+        )
 
-    after = source.stat()
-    assert inspection.documento.sha256 == pdf_hash
-    assert inspection.documento.paginas
-    assert thumbnail.dados_rgb
-    assert (before.st_size, before.st_mtime_ns) == (after.st_size, after.st_mtime_ns)
+        after = source.stat()
+        assert inspection.documento.sha256 == pdf_hash
+        assert inspection.documento.paginas
+        assert thumbnail.dados_rgb
+        assert (before.st_size, before.st_mtime_ns) == (after.st_size, after.st_mtime_ns)

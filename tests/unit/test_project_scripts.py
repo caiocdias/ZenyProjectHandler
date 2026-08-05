@@ -2,6 +2,8 @@ import json
 import tomllib
 from pathlib import Path
 
+import pytest
+
 PROJECT_ROOT = Path(__file__).parents[2]
 
 
@@ -52,11 +54,45 @@ def test_quality_script_enforces_coverage_and_records_metrics() -> None:
     configuration = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
     assert "relatorio-testes.txt" in quality_script
-    assert "pytest --cov" in quality_script
+    assert "python -m pytest" in quality_script
+    assert "--cov" in quality_script
+    assert "not private_samples" in quality_script
+    assert "corpus privado explicitamente excluido" in quality_script
     assert "radon cc" in quality_script
     assert "radon mi" in quality_script
     assert "radon raw" in quality_script
     assert configuration["tool"]["coverage"]["report"]["fail_under"] > 85
+
+
+def test_private_gate_is_opt_in_and_private_modules_declare_the_marker() -> None:
+    private_script = script_text("IniciarTestesPrivados.bat")
+    configuration = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    registered_markers = configuration["tool"]["pytest"]["ini_options"]["markers"]
+    private_test_modules = tuple((PROJECT_ROOT / "tests" / "private_samples").glob("test_*.py"))
+
+    assert "-m private_samples" in private_script
+    assert "--maxfail=1" in private_script
+    assert "relatorio-testes-privados.txt" in private_script
+    assert any(marker.startswith("private_samples:") for marker in registered_markers)
+    assert private_test_modules
+    for path in private_test_modules:
+        source = path.read_text(encoding="utf-8")
+        assert "pytest.mark.private_samples" in source, f"Marcador ausente em {path.name}"
+        assert "pytest.skip" not in source, f"Skip mascara pré-condição em {path.name}"
+
+
+def test_private_gate_precondition_fails_clearly_without_the_corpus(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.private_samples import test_real_pdf_samples as private_samples
+
+    monkeypatch.setattr(private_samples, "EXAMPLES_DIRECTORY", tmp_path)
+    private_samples._pdf_inventory.cache_clear()
+    try:
+        with pytest.raises(AssertionError, match="Corpus privado ausente ou inválido"):
+            private_samples.test_private_corpus_is_complete_and_authentic()
+    finally:
+        private_samples._pdf_inventory.cache_clear()
 
 
 def test_real_pdf_samples_are_ignored_and_have_an_anonymous_manifest() -> None:
