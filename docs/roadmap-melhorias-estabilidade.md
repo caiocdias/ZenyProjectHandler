@@ -78,7 +78,7 @@ com o corpus completo. Seus resultados não substituem o gate básico.
 | 1. Gate básico independente do corpus privado | CONCLUÍDA | - | Suíte pública verde e gate privado opt-in |
 | 2. Arquivos temporários compatíveis com Windows | CONCLUÍDA | 1 | Cópias atômicas sem exceder o caminho do destino |
 | 3. Logging estruturado nas fronteiras | CONCLUÍDA | 1 | Falhas diagnosticáveis sem dados sensíveis |
-| 4. Ciclo de vida de SQLite e ResourceWarnings | PENDENTE | 1 | Engines e conexões sempre encerradas |
+| 4. Ciclo de vida de SQLite e ResourceWarnings | CONCLUÍDA | 1 | Engines e conexões sempre encerradas |
 | 5. Backup degradado com confirmação explícita | PENDENTE | 2, 3 | Nenhuma omissão silenciosa de PDF |
 | 6. Coordenador central de operações | PENDENTE | 3, 4 | Operações incompatíveis não concorrem |
 | 7. Portabilidade assíncrona e UI não reentrante | PENDENTE | 6 | UI responsiva, sem `processEvents()` manual |
@@ -298,7 +298,7 @@ Crie commits seccionados para as alterações, mantenha na branch main.
 ## Etapa 4 — Ciclo de vida de SQLite e eliminação de ResourceWarnings
 
 **Achado original:** 15, parte de recursos.  
-**Estado:** PENDENTE.  
+**Estado:** CONCLUÍDA.
 **Arquivos prováveis:** fixtures e testes de integração que criam engines, `bootstrap.py`,
 `adapters/persistence/database.py` e fábricas de unidade de trabalho.
 
@@ -318,6 +318,41 @@ Crie commits seccionados para as alterações, mantenha na branch main.
 - Arquivos SQLite temporários podem ser movidos/removidos logo após cada teste no Windows.
 - Fechar a janela e falhar durante o bootstrap sempre chama `dispose()` exatamente quando apropriado.
 - O gate impede regressões de recursos sem esconder warnings de terceiros.
+
+### Registro de conclusão — 05/08/2026
+
+- A reprodução em Python 3.13 confirmou sete conexões SQLite não fechadas: três engines pertenciam à
+  fixture `interpretation_context` e quatro à fixture `database`. Ambas passaram a usar
+  `yield`/`finally`; a fixture `workflow` recebeu o mesmo contrato preventivo. As aplicações Qt dos
+  testes passaram a ser criadas por uma factory que mantém todas as janelas e descarta seus recursos
+  no teardown, antes da coleta forçada do pytest.
+- O inventário de produção deixou owners explícitos. O engine principal pertence ao ciclo de vida
+  composto no bootstrap; engines de bancos portáteis pertencem a `managed_sqlite_engine`; e o engine
+  criado internamente pelo Alembic é descartado no próprio ambiente de migração, enquanto um engine
+  fornecido pelo chamador continua pertencendo ao chamador. Todas as `Connection` são delimitadas por
+  `with`; cada `Session` pertence a `SqlAlchemyUnitOfWork`, que faz rollback e close na saída; e as
+  conexões `sqlite3` diretas de backup/restauração permanecem sob `closing`.
+- O owner do engine principal é idempotente e cobre falha em qualquer ponto posterior à criação do
+  armazenamento, `aboutToQuit`, destruição e fechamento aceito da janela, além do `finally` de
+  `run()`. A janela mantém um callback tipado de liberação; assim, uma tentativa de fechamento
+  recusada durante análise ativa não descarta prematuramente o banco.
+- A restauração continua descartando o pool antes da substituição física do banco e volta a descartá-lo
+  antes do rollback. Os testes comprovam uma chamada na troca bem-sucedida e duas quando a primeira
+  restauração falha e o snapshot de recuperação precisa ser publicado.
+- No Windows, testes reais moveram e excluíram imediatamente arquivos SQLite após fechamento normal,
+  exceção dentro de sessão/conexão, saída do aplicativo e rollback de restauração. Sucesso e exceção
+  do context manager liberam `Session`, `Connection` e `Engine` sem depender do coletor de lixo.
+- O pytest agora trata `ResourceWarning` como erro. Python 3.13 emite o aviso de `sqlite3.Connection`
+  dentro de `__del__`; nesse caso o pytest o encapsula em `PytestUnraisableExceptionWarning`, que
+  também foi promovido a erro para o gate não produzir falso verde. Não foi adicionado nenhum
+  `ignore`, amplo ou estreito, e nenhuma exceção de biblioteca externa foi necessária.
+- Validações concluídas: conjunto focado final (`36 passed`); suíte pública com warnings visíveis e
+  `tracemalloc` (`276 passed, 20 deselected`, sem warnings); Ruff, `ruff format --check`, Mypy
+  (`165 source files`) e `pip check`; e gate básico canônico. O resultado final do gate foi
+  `276 passed, 20 deselected`, cobertura `85,31%`, complexidade média A (`3,9985`) e
+  `RESULTADO FINAL: APROVADO`.
+- Commits: `7e09908` (`fix(persistence): close owned SQLite resources`) e `531cfcf`
+  (`test(persistence): gate resource lifecycle regressions`).
 
 ### Mensagem para um novo chat do Codex
 
