@@ -23,7 +23,7 @@ def test_annotation_template_round_trips_atomically(tmp_path: Path) -> None:
 
     assert restored == annotation
     assert saved.name == "primaria.json"
-    assert not saved.with_suffix(".json.tmp").exists()
+    assert not tuple(saved.parent.glob(".z-*"))
 
 
 def test_malformed_annotation_is_rejected(tmp_path: Path) -> None:

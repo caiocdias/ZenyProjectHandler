@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -10,12 +11,14 @@ import pytest
 from sqlalchemy import Engine, inspect, text, update
 from sqlalchemy.exc import IntegrityError
 from tests.factories import complete_analysis, complete_project
+from tests.path_fixtures import near_windows_path_limit
 
 from zeny_project_handler.adapters.persistence import (
     SqlAlchemyUnitOfWork,
     create_atomic_backup,
     create_sqlite_engine,
     current_database_revision,
+    restore_atomic_backup,
     upgrade_database,
 )
 from zeny_project_handler.adapters.persistence.errors import (
@@ -282,6 +285,71 @@ def test_backup_rejects_missing_or_same_source(
         create_atomic_backup(tmp_path / "ausente.sqlite3", tmp_path / "backup.sqlite3")
     with pytest.raises(PersistenceError, match="diferente"):
         create_atomic_backup(database_path, database_path)
+    engine.dispose()
+
+
+def test_backup_and_restore_use_short_sibling_temps_near_windows_path_limit(
+    database: tuple[Path, Engine], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database_path, engine = database
+    backup_destination = near_windows_path_limit(tmp_path / "backup-output", "snapshot.sqlite3")
+    restore_destination = near_windows_path_limit(
+        tmp_path / "restore-output", "zeny-project-handler.sqlite3"
+    )
+    observed: list[tuple[Path, Path]] = []
+    real_replace = os.replace
+
+    def observe_replace(source_path: Path, target_path: Path) -> None:
+        observed.append((Path(source_path), Path(target_path)))
+        real_replace(source_path, target_path)
+
+    monkeypatch.setattr(
+        "zeny_project_handler.adapters.persistence.backup.os.replace",
+        observe_replace,
+    )
+
+    backup = create_atomic_backup(database_path, backup_destination)
+    restored = restore_atomic_backup(backup, restore_destination)
+
+    assert backup == backup_destination
+    assert restored == restore_destination
+    assert len(observed) == 2
+    for temporary, target in observed:
+        assert temporary.parent == target.parent
+        assert len(temporary.name) <= 15
+        assert len(str(temporary)) < len(str(target))
+        assert set(target.parent.iterdir()) == {target}
+    engine.dispose()
+
+
+@pytest.mark.parametrize("operation", ["backup", "restore"])
+def test_atomic_sqlite_failure_preserves_destination_without_residue(
+    operation: str,
+    database: tuple[Path, Engine],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_path, engine = database
+    snapshot = create_atomic_backup(database_path, tmp_path / "source-snapshot.sqlite3")
+    destination = near_windows_path_limit(tmp_path / operation, "zeny-project-handler.sqlite3")
+    destination.write_bytes(b"stable-version")
+
+    def interrupt_replace(_source: Path, _target: Path) -> None:
+        raise OSError("interrupted")
+
+    monkeypatch.setattr(
+        "zeny_project_handler.adapters.persistence.backup.os.replace",
+        interrupt_replace,
+    )
+
+    with pytest.raises(PersistenceError, match="destino informado"):
+        if operation == "backup":
+            create_atomic_backup(database_path, destination)
+        else:
+            restore_atomic_backup(snapshot, destination)
+
+    assert destination.read_bytes() == b"stable-version"
+    assert set(destination.parent.iterdir()) == {destination}
     engine.dispose()
 
 

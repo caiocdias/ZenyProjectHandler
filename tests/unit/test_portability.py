@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
@@ -8,6 +9,7 @@ from uuid import uuid4
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import pytest
+from tests.path_fixtures import near_windows_path_limit
 
 from zeny_project_handler.adapters.portability import ZipProjectArchive
 from zeny_project_handler.application.errors import PortabilidadeProjetoError
@@ -96,3 +98,34 @@ def test_zip_package_rejects_path_traversal_and_interruption_preserves_destinati
     with pytest.raises(PortabilidadeProjetoError, match="criar o pacote"):
         ZipProjectArchive().criar(destination, _manifest(origin), (origin,))
     assert destination.read_bytes() == b"last-integral-version"
+    assert not tuple(tmp_path.glob(".z-*"))
+
+
+def test_zip_package_uses_short_sibling_temp_near_windows_path_limit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "example.pdf"
+    source.write_bytes(b"%PDF-1.7\nexample")
+    origin = _origin(source)
+    destination = near_windows_path_limit(tmp_path, "project.zphproj")
+    observed: list[Path] = []
+    real_replace = os.replace
+
+    def observe_replace(source_path: Path, target_path: Path) -> None:
+        observed.append(Path(source_path))
+        real_replace(source_path, target_path)
+
+    monkeypatch.setattr(
+        "zeny_project_handler.adapters.portability.zip_archive.os.replace",
+        observe_replace,
+    )
+
+    package = ZipProjectArchive().criar(destination, _manifest(origin), (origin,))
+
+    assert package == destination
+    assert destination.is_file()
+    assert len(observed) == 1
+    assert observed[0].parent == destination.parent
+    assert len(observed[0].name) <= 15
+    assert len(str(observed[0])) <= len(str(destination))
+    assert set(destination.parent.iterdir()) == {destination}

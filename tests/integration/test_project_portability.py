@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import replace
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from zeny_project_handler.adapters.persistence import (
     upgrade_database,
 )
 from zeny_project_handler.adapters.portability import ZipProjectArchive
+from zeny_project_handler.application.errors import PortabilidadeProjetoError
 from zeny_project_handler.application.project_portability import ServicoPortabilidadeProjeto
 from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.domain.project import Projeto
@@ -108,7 +110,9 @@ def _persist_complete_project(
 
 
 def test_export_import_preserves_ids_decisions_and_repairs_missing_photo(
-    tmp_path: Path, catalogo_inicial: CatalogoTecnico
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     source_data = tmp_path / "source-data"
     source_engine = create_sqlite_engine(source_data / "zeny-project-handler.sqlite3")
@@ -138,6 +142,37 @@ def test_export_import_preserves_ids_decisions_and_repairs_missing_photo(
     upgrade_database(target_engine)
     target_service = _service(target_data, target_engine)
     imported = target_service.importar_projeto(moved_package)
+
+    managed_root = target_data / "project-files" / str(project.id)
+    assets_before_failure = {
+        path.relative_to(managed_root): path.read_bytes()
+        for path in managed_root.rglob("*")
+        if path.is_file()
+    }
+    real_replace = os.replace
+    replace_calls = 0
+
+    def interrupt_staging_publication(source: Path, destination: Path) -> None:
+        nonlocal replace_calls
+        replace_calls += 1
+        if replace_calls == 2:
+            raise OSError("interrupted")
+        real_replace(source, destination)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(
+            "zeny_project_handler.application.project_portability.os.replace",
+            interrupt_staging_publication,
+        )
+        with pytest.raises(PortabilidadeProjetoError, match="publicar os arquivos"):
+            target_service.importar_projeto(moved_package, substituir_existente=True)
+
+    assert {
+        path.relative_to(managed_root): path.read_bytes()
+        for path in managed_root.rglob("*")
+        if path.is_file()
+    } == assets_before_failure
+    assert not tuple(target_data.glob(".z-*"))
 
     assert imported.projeto == expected_project
     assert imported.projeto.catalogo_versao_id == catalogo_inicial.id
@@ -175,6 +210,8 @@ def test_export_import_preserves_ids_decisions_and_repairs_missing_photo(
 
     source_engine.dispose()
     target_engine.dispose()
+    assert not tuple(source_data.glob(".z-*"))
+    assert not tuple(target_data.glob(".z-*"))
 
 
 def test_full_backup_restores_database_and_managed_files(
@@ -215,3 +252,4 @@ def test_full_backup_restores_database_and_managed_files(
     assert restored_source.caminho_canonico.is_file()
     assert restored_source.caminho_canonico.is_relative_to(data / "project-files")
     engine.dispose()
+    assert not tuple(data.glob(".z-*"))
