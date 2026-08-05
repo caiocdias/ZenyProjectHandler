@@ -8,7 +8,7 @@ from uuid import UUID
 from zeny_project_handler.application.errors import PortabilidadeProjetoError
 from zeny_project_handler.ports.portability import ConteudoBancoProjetoPortatil
 
-from .database import create_sqlite_engine, upgrade_database
+from .database import managed_sqlite_engine, upgrade_database
 from .unit_of_work import SqlAlchemyUnitOfWork
 
 
@@ -17,8 +17,7 @@ class SqlitePortableProjectDatabase:
         target = destino.expanduser().resolve()
         if target.exists():
             raise PortabilidadeProjetoError("Banco temporário do pacote já existe")
-        engine = create_sqlite_engine(target)
-        try:
+        with managed_sqlite_engine(target) as engine:
             upgrade_database(engine)
             with SqlAlchemyUnitOfWork(engine) as work:
                 work.catalogos.salvar(conteudo.catalogo)
@@ -32,16 +31,13 @@ class SqlitePortableProjectDatabase:
                 for decision in conteudo.decisoes:
                     work.decisoes_revisao.salvar(decision)
                 work.commit()
-        finally:
-            engine.dispose()
         return target
 
     def carregar(self, origem: Path, projeto_id: UUID) -> ConteudoBancoProjetoPortatil:
         source = origem.expanduser().resolve()
         if not source.is_file():
             raise PortabilidadeProjetoError("Banco do projeto não foi encontrado no pacote")
-        engine = create_sqlite_engine(source)
-        try:
+        with managed_sqlite_engine(source) as engine:
             upgrade_database(engine)
             with SqlAlchemyUnitOfWork(engine) as work:
                 project = work.projetos.obter(projeto_id)
@@ -75,5 +71,3 @@ class SqlitePortableProjectDatabase:
                     propostas=proposals,
                     decisoes=decisions,
                 )
-        finally:
-            engine.dispose()

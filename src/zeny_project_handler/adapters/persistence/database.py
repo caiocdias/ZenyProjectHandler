@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from alembic import command
@@ -13,7 +15,7 @@ MIGRATIONS_DIRECTORY = Path(__file__).with_name("migrations")
 
 
 def create_sqlite_engine(database_path: Path) -> Engine:
-    """Crie o engine ativando integridade referencial em toda conexão."""
+    """Crie o engine; quem chama passa a ser responsável por ``dispose()``."""
     resolved_path = database_path.expanduser().resolve()
     resolved_path.parent.mkdir(parents=True, exist_ok=True)
     engine = create_engine(f"sqlite+pysqlite:///{resolved_path.as_posix()}")
@@ -29,6 +31,16 @@ def create_sqlite_engine(database_path: Path) -> Engine:
             cursor.close()
 
     return engine
+
+
+@contextmanager
+def managed_sqlite_engine(database_path: Path) -> Iterator[Engine]:
+    """Delimite explicitamente o ownership de um engine SQLite temporário."""
+    engine = create_sqlite_engine(database_path)
+    try:
+        yield engine
+    finally:
+        engine.dispose()
 
 
 def upgrade_database(engine: Engine, revision: str = "head") -> None:

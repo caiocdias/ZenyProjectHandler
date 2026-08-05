@@ -297,6 +297,7 @@ class MainWindow(QMainWindow):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
+        self._resource_cleanup: Callable[[], None] = lambda: None
         self.setObjectName("mainWindow")
         self.setWindowTitle(application_name)
         self.resize(1400, 900)
@@ -427,6 +428,12 @@ class MainWindow(QMainWindow):
             self.documentation_panel.limpar()
         self._refresh_data_panels()
 
+    def set_resource_cleanup(self, callback: Callable[[], None]) -> None:
+        self._resource_cleanup = callback
+
+    def release_resources(self) -> None:
+        self._resource_cleanup()
+
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - API Qt
         if self.project_panel is not None and self.project_panel.processando:
             self.project_panel.cancelar_analise()
@@ -438,3 +445,5 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
         super().closeEvent(event)
+        if event.isAccepted():
+            self.release_resources()

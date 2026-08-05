@@ -34,8 +34,11 @@ def run_migrations_online() -> None:
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
-    with engine.connect() as connection:
-        _run_with_connection(connection)
+    try:
+        with engine.connect() as connection:
+            _run_with_connection(connection)
+    finally:
+        engine.dispose()
 
 
 run_migrations_online()

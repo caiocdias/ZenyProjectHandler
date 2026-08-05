@@ -46,6 +46,20 @@ from zeny_project_handler.logging_config import (
 from zeny_project_handler.ui.main_window import MainWindow
 
 
+class _EngineLifetime:
+    """Descarte idempotente compartilhado pelas saídas normais do Qt."""
+
+    def __init__(self, engine: Engine) -> None:
+        self._engine = engine
+        self._disposed = False
+
+    def dispose(self, *_signal_arguments: object) -> None:
+        if self._disposed:
+            return
+        self._disposed = True
+        self._engine.dispose()
+
+
 def create_application(
     argv: Sequence[str] | None = None,
     *,
@@ -75,6 +89,20 @@ def _compose_application(
     app_settings: AppSettings,
 ) -> tuple[QApplication, MainWindow]:
     engine = initialize_local_storage(app_settings)
+    lifetime = _EngineLifetime(engine)
+    try:
+        return _compose_initialized_application(argv, app_settings, engine, lifetime)
+    except BaseException:
+        lifetime.dispose()
+        raise
+
+
+def _compose_initialized_application(
+    argv: Sequence[str] | None,
+    app_settings: AppSettings,
+    engine: Engine,
+    lifetime: _EngineLifetime,
+) -> tuple[QApplication, MainWindow]:
 
     arguments = list(argv) if argv is not None else list(sys.argv)
     existing_application = QApplication.instance()
@@ -128,8 +156,9 @@ def _compose_application(
         compliance_registry=carregar_registro_conformidade_inicial(),
         ui_state_path=app_settings.data_directory / "ui-state.ini",
     )
-    application.aboutToQuit.connect(engine.dispose)
-    window.destroyed.connect(engine.dispose)
+    window.set_resource_cleanup(lifetime.dispose)
+    application.aboutToQuit.connect(lifetime.dispose)
+    window.destroyed.connect(lifetime.dispose)
     return application, window
 
 
@@ -167,4 +196,7 @@ def run(
     window.show()
     if smoke_test:
         QTimer.singleShot(0, application.quit)
-    return application.exec()
+    try:
+        return application.exec()
+    finally:
+        window.close()

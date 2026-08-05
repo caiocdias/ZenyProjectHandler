@@ -11,6 +11,7 @@ from .backup import (
 from .database import (
     create_sqlite_engine,
     current_database_revision,
+    managed_sqlite_engine,
     upgrade_database,
 )
 from .portable_database import SqlitePortableProjectDatabase
@@ -24,6 +25,7 @@ __all__ = [
     "create_atomic_backup",
     "create_sqlite_engine",
     "current_database_revision",
+    "managed_sqlite_engine",
     "restore_atomic_backup",
     "rewrite_backup_pdf_sources",
     "upgrade_database",
