@@ -77,7 +77,7 @@ com o corpus completo. Seus resultados não substituem o gate básico.
 |---|---|---|---|
 | 1. Gate básico independente do corpus privado | CONCLUÍDA | - | Suíte pública verde e gate privado opt-in |
 | 2. Arquivos temporários compatíveis com Windows | CONCLUÍDA | 1 | Cópias atômicas sem exceder o caminho do destino |
-| 3. Logging estruturado nas fronteiras | PENDENTE | 1 | Falhas diagnosticáveis sem dados sensíveis |
+| 3. Logging estruturado nas fronteiras | CONCLUÍDA | 1 | Falhas diagnosticáveis sem dados sensíveis |
 | 4. Ciclo de vida de SQLite e ResourceWarnings | PENDENTE | 1 | Engines e conexões sempre encerradas |
 | 5. Backup degradado com confirmação explícita | PENDENTE | 2, 3 | Nenhuma omissão silenciosa de PDF |
 | 6. Coordenador central de operações | PENDENTE | 3, 4 | Operações incompatíveis não concorrem |
@@ -230,7 +230,7 @@ Crie commits seccionados para as alterações, mantenha na branch main.
 ## Etapa 3 — Logging estruturado nas fronteiras da aplicação
 
 **Achado original:** 15, parte de observabilidade.  
-**Estado:** PENDENTE.  
+**Estado:** CONCLUÍDA.
 **Arquivos prováveis:** `logging_config.py`, `bootstrap.py`, painéis Qt, workers e casos de uso que
 encerram operações externas.
 
@@ -253,6 +253,37 @@ encerram operações externas.
 - Senhas e outros campos sensíveis nunca aparecem, inclusive em `repr`, `extra` ou traceback.
 - Não há duplicação de handlers após reinicialização em testes.
 - Testes validam estrutura JSON, níveis, correlação, traceback e redação.
+
+### Registro de conclusão — 05/08/2026
+
+- O formatter JSON passou a aceitar apenas um esquema explícito de campos operacionais. Eventos de
+  início, sucesso e cancelamento usam `INFO`; falhas esperadas usam `WARNING` sem traceback; falhas
+  inesperadas usam `ERROR` com pilha, e exceções não capturadas usam `CRITICAL`.
+- Cada operação recebe uma correlação aleatória propagada por `ContextVar`. Somente UUIDs de
+  projeto, documento e execução, listas de UUIDs, contagens e o indicador de cache podem acompanhar
+  o evento; caminhos, nomes de arquivo, conteúdo, coordenadas, fotos e credenciais não são campos do
+  esquema.
+- A redação não serializa `extra` desconhecido, não interpola argumentos nem chama `repr`/`str` de
+  objetos arbitrários. Tracebacks preservam arquivo-base, linha, função, tipo e encadeamento, mas
+  removem caminhos absolutos, linhas-fonte e detalhes das exceções. A redação textual complementar
+  cobre atribuições de senha/token/conteúdo e caminhos Windows/POSIX.
+- Foram instrumentados o bootstrap, importação e análise de PDF, abertura e renderização no
+  visualizador, exportação/importação/backup/restauração, seleções e confirmações canceláveis da UI
+  e o worker Qt de análise. As mensagens amigáveis existentes foram mantidas e nenhum widget é
+  acessado pelos hooks ou pela lógica de logging do worker.
+- `sys.excepthook` e `threading.excepthook` são instalados de forma idempotente e apenas registram a
+  falha sanitizada. A configuração repetida substitui e fecha handlers anteriores, sem acumular
+  streams ou arquivos rotativos.
+- Os testes cobrem o contrato JSON, níveis, correlação aninhada, traceback, campos extras hostis,
+  `repr` hostil, hooks, handlers duplicados, cancelamentos Qt e as fronteiras de PDF, visualizador,
+  portabilidade, restauração e bootstrap. Os testes focados finalizaram com `29 passed`.
+- Validações concluídas: Ruff completo, `ruff format --check`, Mypy (`165 source files`), `pip check`
+  e gate básico canônico. O resultado final foi `272 passed, 20 deselected`, cobertura `85,20%`, as
+  três seções Radon aprovadas e `RESULTADO FINAL: APROVADO`.
+- Permanecem os sete `ResourceWarning` de conexões SQLite já atribuídos à Etapa 4; a observabilidade
+  não os promove a erro nem introduz novo aviso.
+- Commits: `aef9468` (`feat(logging): add safe structured operation telemetry`) e `e082afd`
+  (`feat(observability): instrument application boundaries`).
 
 ### Mensagem para um novo chat do Codex
 
