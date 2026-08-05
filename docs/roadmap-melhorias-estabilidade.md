@@ -76,7 +76,7 @@ com o corpus completo. Seus resultados não substituem o gate básico.
 | Etapa | Estado atual | Depende de | Resultado principal |
 |---|---|---|---|
 | 1. Gate básico independente do corpus privado | CONCLUÍDA | - | Suíte pública verde e gate privado opt-in |
-| 2. Arquivos temporários compatíveis com Windows | PENDENTE | 1 | Cópias atômicas sem exceder o caminho do destino |
+| 2. Arquivos temporários compatíveis com Windows | CONCLUÍDA | 1 | Cópias atômicas sem exceder o caminho do destino |
 | 3. Logging estruturado nas fronteiras | PENDENTE | 1 | Falhas diagnosticáveis sem dados sensíveis |
 | 4. Ciclo de vida de SQLite e ResourceWarnings | PENDENTE | 1 | Engines e conexões sempre encerradas |
 | 5. Backup degradado com confirmação explícita | PENDENTE | 2, 3 | Nenhuma omissão silenciosa de PDF |
@@ -165,7 +165,7 @@ Crie commits seccionados para as alterações, mantenha na branch main.
 ## Etapa 2 — Arquivos temporários compatíveis com caminhos do Windows
 
 **Achado original:** 1.  
-**Estado:** PENDENTE.  
+**Estado:** CONCLUÍDA.
 **Arquivos prováveis:** `application/project_portability.py`, `adapters/portability/zip_archive.py`,
 `adapters/persistence/backup.py` e seus testes.
 
@@ -187,6 +187,35 @@ Crie commits seccionados para as alterações, mantenha na branch main.
 - O temporário não aumenta materialmente o comprimento do nome do destino.
 - Sucesso e falha não deixam arquivos `.tmp` ou substituições parciais.
 - Linux e outros ambientes continuam funcionando sem lógica destrutiva específica do Windows.
+
+### Registro de conclusão — 05/08/2026
+
+- Foi criada uma primitiva comum para arquivos e diretórios temporários irmãos, com prefixo curto
+  `.z-`, aleatoriedade fornecida por `tempfile`, criação exclusiva e limpeza por gerenciador de
+  contexto. Arquivos usam nomes de até 15 caracteres e diretórios, de até 11, sem incorporar o nome
+  final ao temporário.
+- Cópias de fotos, pacotes ZIP, snapshots e restaurações SQLite passaram a publicar com temporário
+  no mesmo diretório do destino. `copy2` continua preservando metadados; a verificação de
+  integridade SQLite foi mantida e a limpeza agora inclui também sidecars `-journal`, `-wal` e
+  `-shm` dos bancos temporários.
+- Os stagings e diretórios de recuperação da importação/restauração também foram movidos para o
+  diretório irmão da raiz gerenciada. Isso evita troca entre volumes no Windows e preserva o estado
+  anterior quando a publicação do novo staging é interrompida.
+- A busca pelas ocorrências equivalentes encontrou as publicações JSON do cache de análise e do
+  dataset de avaliação. Ambas usam agora a mesma primitiva; os `TemporaryDirectory` restantes
+  constroem conteúdo interno sem substituir diretamente um destino final e permanecem curtos.
+- Os testes constroem destinos absolutos entre 245 e 259 caracteres no diretório temporário padrão,
+  sem depender do `basetemp` curto do gate. Eles observam os caminhos realmente entregues a
+  `os.replace` e comprovam unicidade, tamanho, diretório irmão, metadados, rollback e ausência de
+  resíduos após falhas de cópia, pacote, backup, restauração e publicação do staging.
+- Validações concluídas: testes focados de temporários, cache, dataset, backup e portabilidade
+  (`24 passed`); Ruff completo; `ruff format --check`; Mypy (`164 source files`); e o gate básico
+  canônico. O resultado final foi `266 passed, 20 deselected`, cobertura `85,16%`, complexidade média
+  A (`4,0338`) e `RESULTADO FINAL: APROVADO`.
+- Permanecem sete `ResourceWarning` de conexões SQLite, já registrados para a Etapa 4. Nenhum aviso
+  novo ou limitação específica de plataforma foi introduzido nesta etapa.
+- Commits: `c53561c` (`fix(portability): use short sibling temporaries`) e `5d69bf7`
+  (`test(portability): cover near-limit Windows paths`).
 
 ### Mensagem para um novo chat do Codex
 
