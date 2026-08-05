@@ -11,3 +11,8 @@ incluídos no manifesto, em logs ou em relatórios versionados.
 As amostras reais serão usadas inicialmente como corpus de smoke/regressão. Fixtures sintéticas
 continuam necessárias para cenários ausentes, como PDF multipágina, rotacionado, protegido,
 corrompido, escaneado e com `CropBox` diferente de `MediaBox`.
+
+O gate básico (`..\IniciarTestes.bat`) ignora integralmente esta pasta. Em um ambiente autorizado,
+o gate privado deve ser acionado de forma explícita com `..\IniciarTestesPrivados.bat`; ele compara
+as amostras locais ao manifesto por tamanho e SHA-256 e falha claramente se o conjunto requerido
+estiver ausente ou divergente. Os arquivos continuam locais e não devem ser adicionados ao Git.

@@ -39,7 +39,24 @@ Para executar todos os gates de qualidade:
 .\IniciarTestes.bat
 ```
 
-O resultado completo é salvo em `relatorio-testes.txt` na raiz. O comando falha se lint, formatação, tipagem, dependências, testes ou cobertura falharem. A cobertura deve permanecer estritamente acima de 85%. O relatório também apresenta complexidade ciclomática, índice de manutenibilidade e métricas de linhas de código.
+Esse é o **gate básico**: funciona offline em um clone limpo e exclui explicitamente os testes
+marcados com `private_samples`. Ele não procura, calcula hashes nem abre PDFs reais em `examples/`.
+O resultado consolidado é salvo em `relatorio-testes.txt` na raiz. O comando falha se lint,
+formatação, tipagem, dependências, testes ou cobertura falharem. A cobertura deve permanecer
+estritamente acima de 85,01%. O relatório também apresenta complexidade ciclomática, índice de
+manutenibilidade e métricas de linhas de código.
+
+Em um ambiente autorizado que possua todas as amostras do manifesto, execute separadamente o
+**gate privado opt-in**:
+
+```powershell
+.\IniciarTestesPrivados.bat
+```
+
+Esse segundo fluxo executa somente `private_samples`, valida antes dos testes a presença, o tamanho
+e o SHA-256 anônimo de cada amostra requerida e falha, sem `skip`, quando o corpus está ausente,
+incompleto ou adulterado. O relatório local fica em `relatorio-testes-privados.txt`; ele não
+substitui o gate básico nem autoriza publicar PDFs, nomes de arquivo ou conteúdo extraído.
 
 ## Preparação manual
 
@@ -62,7 +79,7 @@ Valide o projeto:
 ```powershell
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m mypy
-.\.venv\Scripts\python.exe -m pytest --cov
+.\.venv\Scripts\python.exe -m pytest -m "not private_samples" --cov
 ```
 
 As decisões arquiteturais estão em [`docs/adr`](docs/adr) e a sequência de implementação está em [`docs/roadmap-desenvolvimento.md`](docs/roadmap-desenvolvimento.md).

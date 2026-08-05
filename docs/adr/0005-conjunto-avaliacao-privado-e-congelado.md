@@ -22,6 +22,9 @@ coordenadas e fotografias que não podem acompanhar o código-fonte.
    de conjunto, interpretador, regras e configuração deve produzir a mesma assinatura semântica.
 7. Precisão, recall e F1 são calculados por classe e para relações. Recursos registram falhas de
    extração, latência p95 e pico de memória rastreada pelo Python.
+8. Testes dependentes dos PDFs reais usam o marcador `private_samples` e pertencem somente ao gate
+   privado opt-in. O gate básico os exclui explicitamente e preserva sua cobertura com fixtures
+   sintéticas ou dados públicos. O gate privado recusa corpus ausente ou divergente, sem `skip`.
 
 ## Consequências
 
@@ -31,3 +34,4 @@ coordenadas e fotografias que não podem acompanhar o código-fonte.
   poderá substituir essa implementação sem alterar os contratos.
 - O corpus atual permanece em preparação porque só possui escala 1:1000 e ainda não recebeu revisão
   humana. Essa pendência é explícita e impede avanço indevido do roadmap.
+- Um clone limpo consegue executar o gate básico offline; possuir o corpus não altera esse resultado.

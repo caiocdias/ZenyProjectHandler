@@ -10,3 +10,8 @@
 6. A partição `TESTE` só pode ser acessada para execução final, nunca para criar ou ajustar regras.
 7. Relatórios publicáveis contêm somente IDs anônimos, contagens, métricas e versões.
 8. Inclusão, substituição ou reclassificação de amostra altera a versão e invalida o congelamento.
+9. O gate básico exclui `private_samples` explicitamente e nunca acessa os PDFs reais. O gate
+   privado é opt-in, roda apenas em ambiente autorizado e deve falhar se uma amostra requerida
+   estiver ausente, ilegível, incompleta ou com SHA-256 divergente; ausência não pode virar `skip`.
+10. Testes que acessam o corpus devem ficar em `tests/private_samples/`, declarar o marcador
+    `private_samples` e emitir somente IDs anônimos e contagens em falhas e relatórios.
