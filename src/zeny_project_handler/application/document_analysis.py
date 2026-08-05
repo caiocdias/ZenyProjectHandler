@@ -10,6 +10,8 @@ from uuid import UUID, uuid4
 from zeny_project_handler.domain.analysis import EvidenciaDocumento, ExecucaoAnalise
 from zeny_project_handler.domain.documents import DocumentoProjeto
 from zeny_project_handler.domain.enums import EstadoExecucaoAnalise
+from zeny_project_handler.domain.errors import DomainValidationError
+from zeny_project_handler.logging_config import OperationLogger, operation_logger
 from zeny_project_handler.ports.analysis import (
     AnalisadorDocumentoPort,
     ConfiguracaoAnaliseDocumento,
@@ -21,6 +23,7 @@ from zeny_project_handler.ports.persistence import UnitOfWorkPort
 
 from .errors import (
     AnaliseDocumentoError,
+    ApplicationError,
     DocumentoNaoEncontradoError,
     OrigemPdfNaoEncontradaError,
     ProjetoNaoEncontradoError,
@@ -62,10 +65,45 @@ class ExecutarAnaliseDocumento:
         senha: str | None = None,
         execucao_id: UUID | None = None,
     ) -> ResultadoExecucaoAnalise:
-        document, source = self._load_source(projeto_id, documento_id)
-        started_at = self._aware_now()
         execution_id = execucao_id or self._gerador_id()
         parameters = configuracao or ConfiguracaoAnaliseDocumento()
+        observation = operation_logger(
+            "pdf.analysis",
+            project_id=projeto_id,
+            document_id=documento_id,
+            execution_id=execution_id,
+        )
+        with observation.context():
+            observation.started()
+            try:
+                document, source = self._load_source(projeto_id, documento_id)
+                started_at = self._aware_now()
+            except Exception as error:
+                observation.failed(error, expected=_is_expected_analysis_failure(error))
+                raise
+            return self._analyze_and_persist(
+                document,
+                source,
+                projeto_id=projeto_id,
+                execution_id=execution_id,
+                started_at=started_at,
+                parameters=parameters,
+                senha=senha,
+                observation=observation,
+            )
+
+    def _analyze_and_persist(
+        self,
+        document: DocumentoProjeto,
+        source: ReferenciaFontePdf,
+        *,
+        projeto_id: UUID,
+        execution_id: UUID,
+        started_at: datetime,
+        parameters: ConfiguracaoAnaliseDocumento,
+        senha: str | None,
+        observation: OperationLogger,
+    ) -> ResultadoExecucaoAnalise:
         try:
             result = self._analisador.analisar(
                 SolicitacaoAnaliseDocumento(
@@ -79,20 +117,31 @@ class ExecutarAnaliseDocumento:
                 )
             )
         except Exception as error:
+            observation.failed(error, expected=_is_expected_analysis_failure(error))
             failed = self._failed_execution(execution_id, projeto_id, started_at, parameters, error)
-            self._persist(failed, ())
+            try:
+                self._persist(failed, ())
+            except Exception as persistence_error:
+                observation.failed(persistence_error, expected=False)
+                raise
             raise AnaliseDocumentoError(
                 f"A análise do documento falhou. Execução registrada: {execution_id}"
             ) from error
         execution = self._completed_execution(
             execution_id, projeto_id, started_at, parameters, result
         )
-        self._persist(execution, result.evidencias)
-        return ResultadoExecucaoAnalise(
+        try:
+            self._persist(execution, result.evidencias)
+        except Exception as error:
+            observation.failed(error, expected=_is_expected_analysis_failure(error))
+            raise
+        response = ResultadoExecucaoAnalise(
             execucao=execution,
             evidencias=result.evidencias,
             cache_utilizado=result.cache_utilizado,
         )
+        observation.succeeded(cache_hit=result.cache_utilizado)
+        return response
 
     def _load_source(
         self, project_id: UUID, document_id: UUID
@@ -170,3 +219,13 @@ class ExecutarAnaliseDocumento:
     def _finished_at(self, started_at: datetime) -> datetime:
         finished_at = self._aware_now()
         return max(started_at, finished_at)
+
+
+def _is_expected_analysis_failure(error: BaseException) -> bool:
+    if isinstance(error, (ApplicationError, DomainValidationError, ValueError)):
+        return True
+    return any(
+        error_type.__name__ == "PdfError"
+        and error_type.__module__ == "zeny_project_handler.adapters.pdf.errors"
+        for error_type in type(error).__mro__
+    )

@@ -11,16 +11,20 @@ from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
+from typing import TypeVar
 from uuid import UUID, uuid4, uuid5
+from zipfile import BadZipFile
 
 from zeny_project_handler._atomic_files import (
     sibling_temporary_directory,
     sibling_temporary_file,
 )
 from zeny_project_handler.application.errors import (
+    ApplicationError,
     PortabilidadeProjetoError,
     ProjetoNaoEncontradoError,
 )
+from zeny_project_handler.domain.errors import DomainValidationError
 from zeny_project_handler.domain.portability import (
     ArquivoPacoteProjeto,
     ManifestoProjetoPortatil,
@@ -28,6 +32,7 @@ from zeny_project_handler.domain.portability import (
     RelatorioIntegridadeProjeto,
 )
 from zeny_project_handler.domain.project import ElementoProjetoType, FotoElemento, Projeto
+from zeny_project_handler.logging_config import operation_logger
 from zeny_project_handler.ports.pdf import ReferenciaFontePdf
 from zeny_project_handler.ports.persistence import UnitOfWorkPort
 from zeny_project_handler.ports.portability import (
@@ -39,6 +44,7 @@ from zeny_project_handler.ports.portability import (
 )
 
 ProgressCallback = Callable[[int, int, str], None]
+T = TypeVar("T")
 _BACKUP_ID = UUID(int=0)
 _SUPPORTED_PHOTO_MIME = {
     "image/jpeg": ".jpg",
@@ -315,6 +321,19 @@ class ServicoPortabilidadeProjeto:
         *,
         progresso: ProgressCallback | None = None,
     ) -> ResultadoExportacaoProjeto:
+        return self._observe_external_operation(
+            "portability.export",
+            lambda: self._exportar_projeto(projeto_id, destino, progresso=progresso),
+            project_id=projeto_id,
+        )
+
+    def _exportar_projeto(
+        self,
+        projeto_id: UUID,
+        destino: Path,
+        *,
+        progresso: ProgressCallback | None,
+    ) -> ResultadoExportacaoProjeto:
         report = self.verificar_integridade(projeto_id)
         content, sources = self._portable_content(projeto_id)
         notify = progresso or (lambda _current, _total, _message: None)
@@ -379,6 +398,22 @@ class ServicoPortabilidadeProjeto:
         substituir_existente: bool = False,
         progresso: ProgressCallback | None = None,
     ) -> ResultadoImportacaoProjeto:
+        return self._observe_external_operation(
+            "portability.import",
+            lambda: self._importar_projeto(
+                pacote,
+                substituir_existente=substituir_existente,
+                progresso=progresso,
+            ),
+        )
+
+    def _importar_projeto(
+        self,
+        pacote: Path,
+        *,
+        substituir_existente: bool,
+        progresso: ProgressCallback | None,
+    ) -> ResultadoImportacaoProjeto:
         notify = progresso or (lambda _current, _total, _message: None)
         with TemporaryDirectory(prefix="zeny-import-") as temporary_name:
             temporary = Path(temporary_name)
@@ -438,6 +473,12 @@ class ServicoPortabilidadeProjeto:
         )
 
     def criar_backup(self, destino: Path, *, progresso: ProgressCallback | None = None) -> Path:
+        return self._observe_external_operation(
+            "portability.backup",
+            lambda: self._criar_backup(destino, progresso=progresso),
+        )
+
+    def _criar_backup(self, destino: Path, *, progresso: ProgressCallback | None) -> Path:
         notify = progresso or (lambda _current, _total, _message: None)
         with TemporaryDirectory(prefix="zeny-backup-") as temporary_name:
             temporary = Path(temporary_name)
@@ -491,6 +532,12 @@ class ServicoPortabilidadeProjeto:
             return self._archive.criar(destino, manifest, tuple(origins))
 
     def restaurar_backup(self, origem: Path, *, progresso: ProgressCallback | None = None) -> Path:
+        return self._observe_external_operation(
+            "portability.restore",
+            lambda: self._restaurar_backup(origem, progresso=progresso),
+        )
+
+    def _restaurar_backup(self, origem: Path, *, progresso: ProgressCallback | None) -> Path:
         notify = progresso or (lambda _current, _total, _message: None)
         with TemporaryDirectory(prefix="zeny-restore-") as temporary_name:
             temporary = Path(temporary_name)
@@ -720,12 +767,37 @@ class ServicoPortabilidadeProjeto:
             raise ValueError("Relógio da aplicação deve retornar data com fuso horário")
         return value
 
+    def _observe_external_operation(
+        self,
+        operation: str,
+        action: Callable[[], T],
+        *,
+        project_id: UUID | None = None,
+    ) -> T:
+        observation = operation_logger(operation, project_id=project_id)
+        with observation.context():
+            observation.started()
+            try:
+                result = action()
+            except Exception as error:
+                observation.failed(error, expected=_is_expected_portability_failure(error))
+                raise
+            observation.succeeded()
+            return result
+
 
 def _element(project: Projeto, element_id: UUID) -> ElementoProjetoType:
     element = next((item for item in project.elementos if item.id == element_id), None)
     if element is None:
         raise PortabilidadeProjetoError("Elemento não pertence ao projeto")
     return element
+
+
+def _is_expected_portability_failure(error: BaseException) -> bool:
+    if not isinstance(error, (ApplicationError, DomainValidationError, ValueError)):
+        return False
+    cause = error.__cause__
+    return cause is None or isinstance(cause, (BadZipFile, KeyError, TypeError, ValueError))
 
 
 def _replace_element(project: Projeto, updated: ElementoProjetoType) -> Projeto:

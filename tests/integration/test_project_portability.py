@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import replace
 from pathlib import Path
@@ -113,6 +114,7 @@ def test_export_import_preserves_ids_decisions_and_repairs_missing_photo(
     tmp_path: Path,
     catalogo_inicial: CatalogoTecnico,
     monkeypatch: pytest.MonkeyPatch,
+    app_log_capture: pytest.LogCaptureFixture,
 ) -> None:
     source_data = tmp_path / "source-data"
     source_engine = create_sqlite_engine(source_data / "zeny-project-handler.sqlite3")
@@ -212,10 +214,21 @@ def test_export_import_preserves_ids_decisions_and_repairs_missing_photo(
     target_engine.dispose()
     assert not tuple(source_data.glob(".z-*"))
     assert not tuple(target_data.glob(".z-*"))
+    import_failures = [
+        record
+        for record in app_log_capture.records
+        if getattr(record, "operation", None) == "portability.import"
+        and getattr(record, "status", None) == "failed"
+    ]
+    unexpected = [record for record in import_failures if record.levelno == logging.ERROR]
+    assert unexpected
+    assert all(record.exc_info is not None for record in unexpected)
 
 
 def test_full_backup_restores_database_and_managed_files(
-    tmp_path: Path, catalogo_inicial: CatalogoTecnico
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+    app_log_capture: pytest.LogCaptureFixture,
 ) -> None:
     data = tmp_path / "data"
     engine = create_sqlite_engine(data / "zeny-project-handler.sqlite3")
@@ -253,3 +266,16 @@ def test_full_backup_restores_database_and_managed_files(
     assert restored_source.caminho_canonico.is_relative_to(data / "project-files")
     engine.dispose()
     assert not tuple(data.glob(".z-*"))
+
+    for operation in ("portability.backup", "portability.restore"):
+        records = [
+            record
+            for record in app_log_capture.records
+            if getattr(record, "operation", None) == operation
+        ]
+        assert [getattr(record, "status", None) for record in records] == [
+            "started",
+            "succeeded",
+        ]
+        assert all(record.levelno == logging.INFO for record in records)
+        assert len({getattr(record, "correlation_id", None) for record in records}) == 1

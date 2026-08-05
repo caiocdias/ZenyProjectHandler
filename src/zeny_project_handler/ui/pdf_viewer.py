@@ -41,6 +41,7 @@ from zeny_project_handler.domain.analysis import PropostaElemento
 from zeny_project_handler.domain.documents import DocumentoProjeto
 from zeny_project_handler.domain.enums import EstadoRevisao, TipoGeometria
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
+from zeny_project_handler.logging_config import OperationLogger, operation_logger
 from zeny_project_handler.ports.pdf import InspecaoPdf, LeitorPdfPort, PaginaPdfRenderizada
 
 
@@ -308,16 +309,21 @@ class PdfViewerWidget(QWidget):
         layout.addWidget(self.view, 1)
 
     def selecionar_pdf(self) -> None:
-        file_names, _selected_filter = QFileDialog.getOpenFileNames(
-            self,
-            "Selecionar folhas do projeto em PDF",
-            "",
-            "Documentos PDF (*.pdf)",
-        )
-        paths = tuple(Path(file_name) for file_name in file_names)
-        if not paths:
-            return
-        self.carregar_projeto(paths)
+        observation = operation_logger("pdf.viewer.selection")
+        with observation.context():
+            observation.started()
+            file_names, _selected_filter = QFileDialog.getOpenFileNames(
+                self,
+                "Selecionar folhas do projeto em PDF",
+                "",
+                "Documentos PDF (*.pdf)",
+            )
+            paths = tuple(Path(file_name) for file_name in file_names)
+            if not paths:
+                observation.cancelled()
+                return
+            observation.succeeded(item_count=len(paths))
+            self.carregar_projeto(paths)
 
     def carregar_pdf(self, path: Path, *, password: str | None = None) -> bool:
         return self.carregar_projeto((path,), password=password)
@@ -353,16 +359,44 @@ class PdfViewerWidget(QWidget):
         ordem_paginas: tuple[UUID, ...] | None = None,
     ) -> bool:
         """Valide todos os PDFs antes de substituir o projeto atualmente exibido."""
-        if not paths:
-            return False
+        observation = operation_logger("pdf.viewer.open")
+        with observation.context():
+            observation.started(item_count=len(paths))
+            if not paths:
+                observation.cancelled()
+                return False
+            try:
+                return self._load_project(
+                    paths,
+                    password=password,
+                    documentos=documentos,
+                    ordem_paginas=ordem_paginas,
+                    observation=observation,
+                )
+            except Exception as error:
+                observation.failed(error, expected=False)
+                raise
+
+    def _load_project(
+        self,
+        paths: tuple[Path, ...],
+        *,
+        password: str | None,
+        documentos: tuple[DocumentoProjeto, ...] | None,
+        ordem_paginas: tuple[UUID, ...] | None,
+        observation: OperationLogger,
+    ) -> bool:
         if documentos is not None and len(documentos) != len(paths):
-            self._open_warning(
+            error = ValueError(
                 "A quantidade de fontes PDF não corresponde aos documentos persistidos"
             )
+            observation.failed(error, expected=True)
+            self._open_warning(str(error))
             return False
         try:
             inspections = tuple(self._reader.inspecionar(path, senha=password) for path in paths)
         except PdfError as error:
+            observation.failed(error, expected=True)
             self.status_changed.emit(str(error))
             QMessageBox.warning(self, "Não foi possível abrir o PDF", str(error))
             return False
@@ -373,16 +407,19 @@ class PdfViewerWidget(QWidget):
                     for inspection, document in zip(inspections, documentos, strict=True)
                 )
             except ValueError as error:
+                observation.failed(error, expected=True)
                 self._open_warning(str(error))
                 return False
         try:
             project_pages = _ordered_project_pages(inspections, ordem_paginas)
         except ValueError as error:
+            observation.failed(error, expected=True)
             self._open_warning(str(error))
             return False
         hashes = [inspection.documento.sha256 for inspection in inspections]
         if len(set(hashes)) != len(hashes):
             message = "A seleção contém arquivos PDF com conteúdo duplicado"
+            observation.failed(ValueError(message), expected=True)
             self.status_changed.emit(message)
             QMessageBox.warning(self, "Não foi possível abrir os arquivos", message)
             return False
@@ -390,6 +427,10 @@ class PdfViewerWidget(QWidget):
             inspections,
             project_pages=project_pages,
             password=password,
+        )
+        observation.succeeded(
+            item_count=len(inspections),
+            document_ids=tuple(item.documento.id for item in inspections),
         )
         return True
 
@@ -453,18 +494,44 @@ class PdfViewerWidget(QWidget):
         project_page_number = self._page.value()
         inspection, page_number = self._project_pages[project_page_number - 1]
         self._inspection = inspection
-        try:
-            rendered = self._reader.renderizar_pagina(
-                inspection.caminho_origem,
-                page_number,
-                dpi=self._dpi,
-                rotacao_adicional_graus=self._rotation,
-                senha=self._password,
-                sha256_esperado=inspection.documento.sha256,
-            )
-        except PdfError as error:
-            self.status_changed.emit(str(error))
-            return
+        observation = operation_logger(
+            "pdf.viewer.render",
+            document_id=inspection.documento.id,
+        )
+        with observation.context():
+            observation.started()
+            try:
+                rendered = self._reader.renderizar_pagina(
+                    inspection.caminho_origem,
+                    page_number,
+                    dpi=self._dpi,
+                    rotacao_adicional_graus=self._rotation,
+                    senha=self._password,
+                    sha256_esperado=inspection.documento.sha256,
+                )
+                self._finish_render(
+                    inspection,
+                    project_page_number=project_page_number,
+                    page_number=page_number,
+                    rendered=rendered,
+                )
+            except PdfError as error:
+                observation.failed(error, expected=True)
+                self.status_changed.emit(str(error))
+                return
+            except Exception as error:
+                observation.failed(error, expected=False)
+                raise
+            observation.succeeded()
+
+    def _finish_render(
+        self,
+        inspection: InspecaoPdf,
+        *,
+        project_page_number: int,
+        page_number: int,
+        rendered: PaginaPdfRenderizada,
+    ) -> None:
         self.view.definir_pagina(rendered)
         page = inspection.paginas[page_number - 1].pagina
         transformer = TransformadorCoordenadasPagina(

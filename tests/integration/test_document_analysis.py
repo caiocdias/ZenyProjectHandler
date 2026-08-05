@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Never
@@ -91,7 +92,9 @@ def test_analysis_use_case_persists_evidence_and_reuses_derived_cache(
 
 
 def test_fatal_analysis_failure_is_persisted_and_context_errors_are_specific(
-    tmp_path: Path, analysis_project: tuple[Engine, Projeto]
+    tmp_path: Path,
+    analysis_project: tuple[Engine, Projeto],
+    app_log_capture: pytest.LogCaptureFixture,
 ) -> None:
     engine, original = analysis_project
     source = create_analysis_pdf(tmp_path / "failure.pdf")
@@ -116,3 +119,23 @@ def test_fatal_analysis_failure_is_persisted_and_context_errors_are_specific(
         use_case.executar(original.id, uuid4())
     with pytest.raises(ProjetoNaoEncontradoError):
         use_case.executar(uuid4(), imported.inspecao.documento.id)
+
+    analysis_failures = [
+        record
+        for record in app_log_capture.records
+        if getattr(record, "operation", None) == "pdf.analysis"
+        and getattr(record, "status", None) == "failed"
+    ]
+    unexpected = next(
+        record
+        for record in analysis_failures
+        if getattr(record, "error_code", None) == "RuntimeError"
+    )
+    assert unexpected.levelno == logging.ERROR
+    assert unexpected.exc_info is not None
+    expected = [record for record in analysis_failures if record is not unexpected]
+    assert expected
+    assert all(record.levelno == logging.WARNING for record in expected)
+    assert all(record.exc_info is None for record in expected)
+    assert all(getattr(record, "correlation_id", None) for record in analysis_failures)
+    assert all(getattr(record, "execution_id", None) for record in analysis_failures)

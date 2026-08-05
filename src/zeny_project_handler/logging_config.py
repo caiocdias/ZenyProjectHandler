@@ -98,8 +98,13 @@ def _safe_traceback(
     error_type: type[BaseException],
     error: BaseException,
     traceback_value: TracebackType | None,
+    seen: set[int] | None = None,
 ) -> str:
     """Preserve a pilha sem caminhos absolutos, linhas-fonte ou mensagens da exceção."""
+    visited = seen if seen is not None else set()
+    if id(error) in visited:
+        return "<exception-chain-cycle-redacted>"
+    visited.add(id(error))
     lines = ["Traceback (most recent call last):"]
     current = traceback_value
     while current is not None:
@@ -113,11 +118,11 @@ def _safe_traceback(
     cause = error.__cause__
     if cause is not None:
         lines.append("Caused by:")
-        lines.append(_safe_traceback(type(cause), cause, cause.__traceback__))
+        lines.append(_safe_traceback(type(cause), cause, cause.__traceback__, visited))
     elif error.__context__ is not None and not error.__suppress_context__:
         context = error.__context__
         lines.append("During handling of:")
-        lines.append(_safe_traceback(type(context), context, context.__traceback__))
+        lines.append(_safe_traceback(type(context), context, context.__traceback__, visited))
     return "\n".join(lines)
 
 

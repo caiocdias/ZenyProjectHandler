@@ -7,7 +7,10 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from uuid import UUID
 
+from zeny_project_handler.application.errors import ApplicationError
+from zeny_project_handler.domain.errors import DomainValidationError
 from zeny_project_handler.domain.project import Projeto
+from zeny_project_handler.logging_config import operation_logger
 from zeny_project_handler.ports.pdf import InspecaoPdf, LeitorPdfPort, ReferenciaFontePdf
 from zeny_project_handler.ports.persistence import UnitOfWorkPort
 
@@ -70,6 +73,30 @@ class ImportarPdfsNoProjeto:
         *,
         senha: str | None = None,
     ) -> ResultadoImportacaoPdfs:
+        observation = operation_logger(
+            "pdf.import",
+            project_id=projeto_id,
+        )
+        with observation.context():
+            observation.started(item_count=len(caminhos))
+            try:
+                result = self._executar(projeto_id, caminhos, senha=senha)
+            except Exception as error:
+                observation.failed(error, expected=_is_expected_import_failure(error))
+                raise
+            observation.succeeded(
+                item_count=len(result.inspecoes),
+                document_ids=tuple(item.documento.id for item in result.inspecoes),
+            )
+            return result
+
+    def _executar(
+        self,
+        projeto_id: UUID,
+        caminhos: tuple[Path, ...],
+        *,
+        senha: str | None,
+    ) -> ResultadoImportacaoPdfs:
         if not caminhos:
             raise ValueError("Selecione ao menos um PDF para importar")
         inspections = tuple(self._leitor.inspecionar(path, senha=senha) for path in caminhos)
@@ -116,3 +143,13 @@ class ImportarPdfsNoProjeto:
                 self._leitor.verificar_origem(inspection)
             work.commit()
         return ResultadoImportacaoPdfs(projeto=updated, inspecoes=inspections)
+
+
+def _is_expected_import_failure(error: BaseException) -> bool:
+    if isinstance(error, (ApplicationError, DomainValidationError, ValueError)):
+        return True
+    return any(
+        error_type.__name__ == "PdfError"
+        and error_type.__module__ == "zeny_project_handler.adapters.pdf.errors"
+        for error_type in type(error).__mro__
+    )

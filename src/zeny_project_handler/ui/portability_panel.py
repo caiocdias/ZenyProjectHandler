@@ -25,6 +25,7 @@ from zeny_project_handler.application.project_portability import (
     ResultadoImportacaoProjeto,
     ServicoPortabilidadeProjeto,
 )
+from zeny_project_handler.logging_config import operation_logger
 
 T = TypeVar("T")
 
@@ -109,58 +110,74 @@ class PortabilityPanelWidget(QWidget):
         if project_id is None:
             self._warn("Selecione um projeto para exportar")
             return
-        name, _filter = QFileDialog.getSaveFileName(
-            self, "Exportar projeto portátil", "projeto.zphproj", "Projeto Zeny (*.zphproj)"
-        )
-        if not name:
-            return
-        result = self._action(
-            lambda: self._service.exportar_projeto(
-                project_id, _with_suffix(Path(name), ".zphproj"), progresso=self._show_progress
+        selection = operation_logger("portability.export.selection", project_id=project_id)
+        with selection.context():
+            selection.started()
+            name, _filter = QFileDialog.getSaveFileName(
+                self, "Exportar projeto portátil", "projeto.zphproj", "Projeto Zeny (*.zphproj)"
             )
-        )
+            if not name:
+                selection.cancelled()
+                return
+            selection.succeeded()
+            result = self._action(
+                lambda: self._service.exportar_projeto(
+                    project_id,
+                    _with_suffix(Path(name), ".zphproj"),
+                    progresso=self._show_progress,
+                )
+            )
         self._reset_progress()
         if result is not None:
             self.status_changed.emit(f"Projeto exportado para {result.caminho}")
 
     def importar_projeto(self) -> None:
-        name, _filter = QFileDialog.getOpenFileName(
-            self, "Importar projeto portátil", "", "Projeto Zeny (*.zphproj)"
-        )
-        if not name:
-            return
-        result: ResultadoImportacaoProjeto | None
-        try:
-            result = self._service.importar_projeto(Path(name), progresso=self._show_progress)
-        except Exception as error:
-            if "confirme explicitamente" not in str(error):
-                self._reset_progress()
-                self._warn(str(error).strip() or error.__class__.__name__)
-                return
-            confirmation = QMessageBox.question(
-                self,
-                "Substituir projeto existente",
-                "O pacote possui o mesmo ID de um projeto local. Substituir seus dados e arquivos "
-                "pela versão importada?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
+        selection = operation_logger("portability.import.selection")
+        with selection.context():
+            selection.started()
+            name, _filter = QFileDialog.getOpenFileName(
+                self, "Importar projeto portátil", "", "Projeto Zeny (*.zphproj)"
             )
-            if confirmation != QMessageBox.StandardButton.Yes:
-                self._reset_progress()
+            if not name:
+                selection.cancelled()
                 return
-            result = self._action(
-                lambda: self._service.importar_projeto(
-                    Path(name),
-                    substituir_existente=True,
-                    progresso=self._show_progress,
+            selection.succeeded()
+            result: ResultadoImportacaoProjeto | None
+            try:
+                result = self._service.importar_projeto(Path(name), progresso=self._show_progress)
+            except Exception as error:
+                if "confirme explicitamente" not in str(error):
+                    self._reset_progress()
+                    self._warn(str(error).strip() or error.__class__.__name__)
+                    return
+                confirmation_log = operation_logger("portability.import.replace_confirmation")
+                confirmation_log.started()
+                confirmation = QMessageBox.question(
+                    self,
+                    "Substituir projeto existente",
+                    "O pacote possui o mesmo ID de um projeto local. Substituir seus dados e "
+                    "arquivos pela versão importada?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
                 )
-            )
+                if confirmation != QMessageBox.StandardButton.Yes:
+                    confirmation_log.cancelled()
+                    self._reset_progress()
+                    return
+                confirmation_log.succeeded()
+                result = self._action(
+                    lambda: self._service.importar_projeto(
+                        Path(name),
+                        substituir_existente=True,
+                        progresso=self._show_progress,
+                    )
+                )
+                if result is None:
+                    self._reset_progress()
+                    return
             if result is None:
                 self._reset_progress()
                 return
-        if result is None:
-            self._reset_progress()
-            return
         self._reset_progress()
         self.atualizar_projetos()
         self.abrir_projeto(result.projeto.id)
@@ -168,44 +185,63 @@ class PortabilityPanelWidget(QWidget):
         self.status_changed.emit("Projeto importado com IDs, análises e revisões preservados")
 
     def criar_backup(self) -> None:
-        name, _filter = QFileDialog.getSaveFileName(
-            self, "Criar backup completo", "zeny-backup.zphbackup", "Backup Zeny (*.zphbackup)"
-        )
-        if not name:
-            return
-        result = self._action(
-            lambda: self._service.criar_backup(
-                _with_suffix(Path(name), ".zphbackup"), progresso=self._show_progress
+        selection = operation_logger("portability.backup.selection")
+        with selection.context():
+            selection.started()
+            name, _filter = QFileDialog.getSaveFileName(
+                self,
+                "Criar backup completo",
+                "zeny-backup.zphbackup",
+                "Backup Zeny (*.zphbackup)",
             )
-        )
+            if not name:
+                selection.cancelled()
+                return
+            selection.succeeded()
+            result = self._action(
+                lambda: self._service.criar_backup(
+                    _with_suffix(Path(name), ".zphbackup"), progresso=self._show_progress
+                )
+            )
         self._reset_progress()
         if result is not None:
             self.status_changed.emit(f"Backup íntegro criado em {result}")
 
     def restaurar_backup(self) -> None:
-        name, _filter = QFileDialog.getOpenFileName(
-            self, "Restaurar backup completo", "", "Backup Zeny (*.zphbackup)"
-        )
-        if not name:
-            return
-        confirmation = QMessageBox.question(
-            self,
-            "Restaurar backup",
-            "Substituir o banco e os arquivos gerenciados atuais pelo backup selecionado? O estado "
-            "atual será preservado temporariamente para reversão se houver falha.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if confirmation != QMessageBox.StandardButton.Yes:
-            return
-        if (
-            self._action(
-                lambda: self._service.restaurar_backup(Path(name), progresso=self._show_progress)
+        selection = operation_logger("portability.restore.selection")
+        with selection.context():
+            selection.started()
+            name, _filter = QFileDialog.getOpenFileName(
+                self, "Restaurar backup completo", "", "Backup Zeny (*.zphbackup)"
             )
-            is None
-        ):
-            self._reset_progress()
-            return
+            if not name:
+                selection.cancelled()
+                return
+            selection.succeeded()
+            confirmation_log = operation_logger("portability.restore.confirmation")
+            confirmation_log.started()
+            confirmation = QMessageBox.question(
+                self,
+                "Restaurar backup",
+                "Substituir o banco e os arquivos gerenciados atuais pelo backup selecionado? O "
+                "estado atual será preservado temporariamente para reversão se houver falha.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if confirmation != QMessageBox.StandardButton.Yes:
+                confirmation_log.cancelled()
+                return
+            confirmation_log.succeeded()
+            if (
+                self._action(
+                    lambda: self._service.restaurar_backup(
+                        Path(name), progresso=self._show_progress
+                    )
+                )
+                is None
+            ):
+                self._reset_progress()
+                return
         self._reset_progress()
         self.atualizar_projetos()
         self.data_restored.emit()

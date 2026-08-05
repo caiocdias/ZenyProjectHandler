@@ -26,13 +26,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from zeny_project_handler.application.errors import FluxoMvpCanceladoError
+from zeny_project_handler.application.errors import ApplicationError, FluxoMvpCanceladoError
 from zeny_project_handler.application.mvp_workflow import (
     ResultadoFluxoMvp,
     ServicoFluxoMvp,
     SessaoProjetoMvp,
 )
 from zeny_project_handler.domain.enums import EstadoExecucaoAnalise
+from zeny_project_handler.domain.errors import DomainValidationError
+from zeny_project_handler.logging_config import operation_logger
 
 from .pdf_viewer import PdfViewerWidget
 from .review_panel import ReviewPanelWidget
@@ -46,29 +48,50 @@ class _PipelineWorker(QObject):
     failed = Signal(str, bool)
     finished = Signal()
 
-    def __init__(self, service: ServicoFluxoMvp, project_id: UUID, cancellation: Event) -> None:
+    def __init__(
+        self,
+        service: ServicoFluxoMvp,
+        project_id: UUID,
+        cancellation: Event,
+        correlation_id: str,
+    ) -> None:
         super().__init__()
         self._service = service
         self._project_id = project_id
         self._cancellation = cancellation
+        self._correlation_id = correlation_id
 
     @Slot()
     def run(self) -> None:
-        try:
-            result = self._service.executar_pipeline(
-                self._project_id,
-                progresso=self.progress.emit,
-                cancelado=self._cancellation.is_set,
-            )
-        except FluxoMvpCanceladoError as error:
-            self.failed.emit(str(error), True)
-        except Exception as error:  # UI boundary: never expose a traceback to the user.
-            message = str(error).strip() or error.__class__.__name__
-            self.failed.emit(message, False)
-        else:
-            self.completed.emit(result)
-        finally:
-            self.finished.emit()
+        observation = operation_logger(
+            "qt.worker.analysis_pipeline",
+            correlation_id=self._correlation_id,
+            project_id=self._project_id,
+        )
+        with observation.context():
+            observation.started()
+            try:
+                result = self._service.executar_pipeline(
+                    self._project_id,
+                    progresso=self.progress.emit,
+                    cancelado=self._cancellation.is_set,
+                )
+            except FluxoMvpCanceladoError as error:
+                observation.cancelled(error_code=error.__class__.__name__)
+                self.failed.emit(str(error), True)
+            except (ApplicationError, DomainValidationError, ValueError) as error:
+                observation.failed(error, expected=True)
+                message = str(error).strip() or error.__class__.__name__
+                self.failed.emit(message, False)
+            except Exception as error:  # UI boundary: never expose a traceback to the user.
+                observation.failed(error, expected=False)
+                message = str(error).strip() or error.__class__.__name__
+                self.failed.emit(message, False)
+            else:
+                observation.succeeded()
+                self.completed.emit(result)
+            finally:
+                self.finished.emit()
 
 
 class ProjectPanelWidget(QWidget):
@@ -291,21 +314,31 @@ class ProjectPanelWidget(QWidget):
         if self.processando:
             self._warn("Aguarde ou cancele a análise antes de adicionar PDFs")
             return
-        names, _selected_filter = QFileDialog.getOpenFileNames(
-            self,
-            "Selecionar folhas do projeto em PDF",
-            "",
-            "Documentos PDF (*.pdf)",
+        observation = operation_logger(
+            "pdf.import.selection",
+            project_id=session.projeto.id,
         )
-        paths = tuple(Path(name) for name in names)
-        if not paths:
-            return
-        result = self._action(lambda: self._service.importar_pdfs(session.projeto.id, paths))
-        if result is None:
-            return
-        count = len(result.inspecoes)
-        self._activate(self._service.abrir_projeto(session.projeto.id))
-        self.status_changed.emit(f"{count} PDF(s) adicionados; ajuste abaixo a ordem das páginas")
+        with observation.context():
+            observation.started()
+            names, _selected_filter = QFileDialog.getOpenFileNames(
+                self,
+                "Selecionar folhas do projeto em PDF",
+                "",
+                "Documentos PDF (*.pdf)",
+            )
+            paths = tuple(Path(name) for name in names)
+            if not paths:
+                observation.cancelled()
+                return
+            observation.succeeded(item_count=len(paths))
+            result = self._action(lambda: self._service.importar_pdfs(session.projeto.id, paths))
+            if result is None:
+                return
+            count = len(result.inspecoes)
+            self._activate(self._service.abrir_projeto(session.projeto.id))
+            self.status_changed.emit(
+                f"{count} PDF(s) adicionados; ajuste abaixo a ordem das páginas"
+            )
 
     def _move_selected_page(self, offset: int) -> None:
         if self.processando:
@@ -414,7 +447,16 @@ class ProjectPanelWidget(QWidget):
             return
         self._cancellation = Event()
         thread = QThread(self)
-        worker = _PipelineWorker(self._service, session.projeto.id, self._cancellation)
+        worker_observation = operation_logger(
+            "qt.worker.analysis_pipeline",
+            project_id=session.projeto.id,
+        )
+        worker = _PipelineWorker(
+            self._service,
+            session.projeto.id,
+            self._cancellation,
+            worker_observation.correlation_id,
+        )
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.progress.connect(self._update_progress)

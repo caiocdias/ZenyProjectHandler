@@ -38,7 +38,11 @@ from zeny_project_handler.application.pdf_import import ImportarPdfsNoProjeto
 from zeny_project_handler.application.project_portability import ServicoPortabilidadeProjeto
 from zeny_project_handler.config import AppSettings
 from zeny_project_handler.domain.catalog import CatalogoTecnico
-from zeny_project_handler.logging_config import configure_logging
+from zeny_project_handler.logging_config import (
+    configure_logging,
+    install_unhandled_exception_logging,
+    operation_logger,
+)
 from zeny_project_handler.ui.main_window import MainWindow
 
 
@@ -49,7 +53,27 @@ def create_application(
 ) -> tuple[QApplication, MainWindow]:
     """Monte a aplicação sem iniciar o loop de eventos."""
     app_settings = settings or AppSettings.from_environment()
-    configure_logging(app_settings)
+    logger = configure_logging(app_settings)
+    install_unhandled_exception_logging()
+    observation = operation_logger("application.bootstrap", logger=logger)
+    with observation.context():
+        observation.started()
+        try:
+            application, window = _compose_application(argv, app_settings)
+        except ValueError as error:
+            observation.failed(error, expected=True)
+            raise
+        except Exception as error:
+            observation.failed(error, expected=False)
+            raise
+        observation.succeeded()
+        return application, window
+
+
+def _compose_application(
+    argv: Sequence[str] | None,
+    app_settings: AppSettings,
+) -> tuple[QApplication, MainWindow]:
     engine = initialize_local_storage(app_settings)
 
     arguments = list(argv) if argv is not None else list(sys.argv)

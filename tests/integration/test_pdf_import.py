@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 from pathlib import Path
 from uuid import uuid4
@@ -73,6 +74,7 @@ def test_valid_pdf_is_added_with_verified_source_in_one_transaction(
 def test_invalid_protected_duplicate_and_missing_project_do_not_mutate_existing_project(
     tmp_path: Path,
     persisted_project: tuple[Engine, Projeto],
+    app_log_capture: pytest.LogCaptureFixture,
 ) -> None:
     engine, project = persisted_project
     source = create_feature_pdf(tmp_path / "duplicado.pdf")
@@ -101,6 +103,32 @@ def test_invalid_protected_duplicate_and_missing_project_do_not_mutate_existing_
     with SqlAlchemyUnitOfWork(engine) as work:
         persisted = work.projetos.obter(project.id)
     assert persisted == first.projeto
+
+    import_records = [
+        record
+        for record in app_log_capture.records
+        if getattr(record, "operation", None) == "pdf.import"
+    ]
+    failed_records = [
+        record for record in import_records if getattr(record, "status", None) == "failed"
+    ]
+    assert failed_records
+    assert all(record.levelno == logging.WARNING for record in failed_records)
+    assert all(record.exc_info is None for record in failed_records)
+    correlations = {
+        str(record.__dict__["correlation_id"])
+        for record in import_records
+        if getattr(record, "status", None) == "started"
+    }
+    assert correlations
+    for correlation in correlations:
+        statuses = {
+            getattr(record, "status", None)
+            for record in import_records
+            if str(record.__dict__["correlation_id"]) == correlation
+        }
+        assert "started" in statuses
+        assert statuses.intersection({"succeeded", "failed"})
 
 
 @pytest.mark.integration

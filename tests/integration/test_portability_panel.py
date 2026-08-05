@@ -137,3 +137,45 @@ def test_user_exports_imports_and_restores_backup_from_ui(
 
     source_engine.dispose()
     target_engine.dispose()
+
+
+def test_cancelled_portability_dialogs_are_correlated_without_running_service(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    app_log_capture: pytest.LogCaptureFixture,
+) -> None:
+    engine, service = _service(tmp_path / "data")
+    panel = PortabilityPanelWidget(service=service)
+    qtbot.addWidget(panel)
+    monkeypatch.setattr(
+        QFileDialog,
+        "getSaveFileName",
+        lambda *_args, **_kwargs: ("", ""),
+    )
+    monkeypatch.setattr(
+        QFileDialog,
+        "getOpenFileName",
+        lambda *_args, **_kwargs: ("", ""),
+    )
+
+    panel.criar_backup()
+    panel.importar_projeto()
+    panel.restaurar_backup()
+
+    for operation in (
+        "portability.backup.selection",
+        "portability.import.selection",
+        "portability.restore.selection",
+    ):
+        records = [
+            record
+            for record in app_log_capture.records
+            if getattr(record, "operation", None) == operation
+        ]
+        assert [getattr(record, "status", None) for record in records] == [
+            "started",
+            "cancelled",
+        ]
+        assert len({getattr(record, "correlation_id", None) for record in records}) == 1
+    engine.dispose()

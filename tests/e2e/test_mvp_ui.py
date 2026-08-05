@@ -1,7 +1,9 @@
 # mypy: disable-error-code="no-untyped-call"
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import cast
 
 import pymupdf
 import pytest
@@ -40,6 +42,16 @@ def _catalog_pdf(path: Path) -> Path:
     finally:
         document.close()
     return path
+
+
+def _application_log(data_directory: Path) -> tuple[dict[str, object], ...]:
+    log_path = data_directory / "logs" / "application.jsonl"
+    payloads: list[dict[str, object]] = []
+    for line in log_path.read_text(encoding="utf-8").splitlines():
+        decoded = json.loads(line)
+        assert isinstance(decoded, dict)
+        payloads.append(cast(dict[str, object], decoded))
+    return tuple(payloads)
 
 
 def test_user_can_reorder_project_pdfs_and_reopen_in_reading_order(
@@ -136,6 +148,26 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
     assert run is not None
     qtbot.mouseClick(run, Qt.MouseButton.LeftButton)
     qtbot.waitUntil(lambda: not panel.processando, timeout=30_000)
+
+    log_payloads = _application_log(settings.data_directory)
+    for operation in (
+        "application.bootstrap",
+        "pdf.import",
+        "pdf.viewer.open",
+        "pdf.viewer.render",
+        "pdf.analysis",
+        "qt.worker.analysis_pipeline",
+    ):
+        records = [item for item in log_payloads if item.get("operation") == operation]
+        assert {item.get("status") for item in records} >= {"started", "succeeded"}
+    worker_records = [
+        item for item in log_payloads if item.get("operation") == "qt.worker.analysis_pipeline"
+    ]
+    assert len({item.get("correlation_id") for item in worker_records}) == 1
+    serialized_log = json.dumps(log_payloads, ensure_ascii=False)
+    assert str(source.resolve()) not in serialized_log
+    assert "password" not in serialized_log.casefold()
+    assert "senha" not in serialized_log.casefold()
 
     review_panel = window.review_panel
     assert review_panel is not None
