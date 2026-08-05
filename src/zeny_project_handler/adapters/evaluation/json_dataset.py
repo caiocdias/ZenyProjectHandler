@@ -9,6 +9,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
+from zeny_project_handler._atomic_files import sibling_temporary_file
 from zeny_project_handler.domain.enums import (
     CategoriaElemento,
     EstadoAnotacao,
@@ -119,8 +120,6 @@ class JsonEvaluationDataset:
 
     def salvar_anotacao(self, anotacao: AnotacaoAmostra) -> Path:
         destination = self._annotation_path(anotacao.amostra_id, anotacao.papel)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        temporary = destination.with_suffix(".json.tmp")
         serialized = json.dumps(
             _annotation_dict(anotacao),
             ensure_ascii=False,
@@ -128,10 +127,12 @@ class JsonEvaluationDataset:
             sort_keys=True,
         )
         try:
-            temporary.write_text(f"{serialized}\n", encoding="utf-8")
-            os.replace(temporary, destination)
-        finally:
-            temporary.unlink(missing_ok=True)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with sibling_temporary_file(destination) as temporary:
+                temporary.write_text(f"{serialized}\n", encoding="utf-8")
+                os.replace(temporary, destination)
+        except OSError as error:
+            raise ArquivoAvaliacaoError("Não foi possível salvar a anotação") from error
         return destination
 
     def _annotation_path(self, sample_id: str, role: PapelAnotacao) -> Path:

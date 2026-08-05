@@ -6,9 +6,9 @@ import json
 import re
 from decimal import Decimal
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 from typing import Any, cast
 
+from zeny_project_handler._atomic_files import sibling_temporary_file
 from zeny_project_handler.domain.analysis import DiagnosticoAnalise, OrigemObjetoPdf
 from zeny_project_handler.domain.catalog import JsonPrimitive
 from zeny_project_handler.domain.enums import TipoEvidencia, TipoGeometria, TipoOrigemPdf
@@ -48,18 +48,9 @@ class JsonAnalysisCache:
             sort_keys=True,
             separators=(",", ":"),
         )
-        temporary_path: Path | None = None
-        try:
-            with NamedTemporaryFile(
-                "w", encoding="utf-8", dir=self._directory, delete=False, suffix=".tmp"
-            ) as temporary:
-                temporary.write(payload)
-                temporary.flush()
-                temporary_path = Path(temporary.name)
+        with sibling_temporary_file(target) as temporary_path:
+            temporary_path.write_text(payload, encoding="utf-8")
             temporary_path.replace(target)
-        finally:
-            if temporary_path is not None and temporary_path.exists():
-                temporary_path.unlink()
 
     def _target(self, chave: str) -> Path:
         if not _CACHE_KEY.fullmatch(chave):

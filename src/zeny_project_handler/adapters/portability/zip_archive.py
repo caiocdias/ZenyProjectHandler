@@ -5,14 +5,14 @@ from __future__ import annotations
 import json
 import os
 import stat
-from contextlib import suppress
 from datetime import datetime
 from hashlib import sha256
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, cast
-from uuid import UUID, uuid4
+from uuid import UUID
 from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile, ZipInfo
 
+from zeny_project_handler._atomic_files import sibling_temporary_file
 from zeny_project_handler.application.errors import PortabilidadeProjetoError
 from zeny_project_handler.domain.portability import (
     ArquivoPacoteProjeto,
@@ -35,26 +35,28 @@ class ZipProjectArchive:
         manifesto: ManifestoProjetoPortatil,
         origens: tuple[OrigemArquivoPacote, ...],
     ) -> Path:
-        target = destino.expanduser().resolve()
+        try:
+            target = destino.expanduser().resolve()
+        except (OSError, RuntimeError) as error:
+            raise PortabilidadeProjetoError("Destino do pacote é inválido") from error
         source_by_name = {item.arquivo.caminho_relativo: item for item in origens}
         expected = {item.caminho_relativo for item in manifesto.arquivos}
         if set(source_by_name) != expected:
             raise PortabilidadeProjetoError("As origens não correspondem ao manifesto do pacote")
         for item in origens:
             _validate_source(item)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        temporary = target.with_name(f".{target.name}.{uuid4().hex}.tmp")
         try:
-            with ZipFile(temporary, "w", compression=ZIP_DEFLATED, compresslevel=6) as archive:
-                archive.writestr(_MANIFEST_PATH, _manifest_envelope(manifesto))
-                for item in sorted(origens, key=lambda entry: entry.arquivo.caminho_relativo):
-                    archive.write(item.caminho_origem, item.arquivo.caminho_relativo)
-            os.replace(temporary, target)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with sibling_temporary_file(target) as temporary:
+                with ZipFile(temporary, "w", compression=ZIP_DEFLATED, compresslevel=6) as archive:
+                    archive.writestr(_MANIFEST_PATH, _manifest_envelope(manifesto))
+                    for item in sorted(origens, key=lambda entry: entry.arquivo.caminho_relativo):
+                        archive.write(item.caminho_origem, item.arquivo.caminho_relativo)
+                os.replace(temporary, target)
         except (OSError, BadZipFile) as error:
-            raise PortabilidadeProjetoError("Não foi possível criar o pacote") from error
-        finally:
-            with suppress(OSError):
-                temporary.unlink(missing_ok=True)
+            raise PortabilidadeProjetoError(
+                "Não foi possível criar o pacote no destino informado"
+            ) from error
         return target
 
     def extrair_validado(self, pacote: Path, destino: Path) -> PacoteProjetoExtraido:

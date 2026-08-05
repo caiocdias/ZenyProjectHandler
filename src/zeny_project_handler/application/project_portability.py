@@ -13,6 +13,10 @@ from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
 from uuid import UUID, uuid4, uuid5
 
+from zeny_project_handler._atomic_files import (
+    sibling_temporary_directory,
+    sibling_temporary_file,
+)
 from zeny_project_handler.application.errors import (
     PortabilidadeProjetoError,
     ProjetoNaoEncontradoError,
@@ -393,28 +397,38 @@ class ServicoPortabilidadeProjeto:
             )
             if content.catalogo.id != extracted.manifesto.catalogo_id:
                 raise PortabilidadeProjetoError("Catálogo do banco diverge do manifesto")
-            notify(2, 4, "Preparando PDFs e fotos gerenciados")
-            staging = self._stage_imported_files(extracted.diretorio, extracted.manifesto)
             final_root = self._project_root(content.projeto.id)
-            recovery_root = final_root.with_name(f".{final_root.name}.{uuid4().hex}.previous")
-            replaced_assets = final_root.exists()
-            if replaced_assets:
-                os.replace(final_root, recovery_root)
-            final_root.parent.mkdir(parents=True, exist_ok=True)
-            os.replace(staging, final_root)
             try:
-                notify(3, 4, "Persistindo projeto e histórico")
-                replaced_project = self._persist_imported_content(
-                    content,
-                    extracted.manifesto,
-                    substituir_existente=substituir_existente,
-                )
-            except Exception:
-                shutil.rmtree(final_root, ignore_errors=True)
-                if recovery_root.exists():
-                    os.replace(recovery_root, final_root)
-                raise
-            shutil.rmtree(recovery_root, ignore_errors=True)
+                final_root.parent.mkdir(parents=True, exist_ok=True)
+                with (
+                    sibling_temporary_directory(final_root) as staging,
+                    sibling_temporary_directory(final_root, vacant=True) as recovery_root,
+                ):
+                    notify(2, 4, "Preparando PDFs e fotos gerenciados")
+                    self._stage_imported_files(extracted.diretorio, extracted.manifesto, staging)
+                    replaced_assets = final_root.exists()
+                    published_assets = False
+                    try:
+                        if replaced_assets:
+                            os.replace(final_root, recovery_root)
+                        os.replace(staging, final_root)
+                        published_assets = True
+                        notify(3, 4, "Persistindo projeto e histórico")
+                        replaced_project = self._persist_imported_content(
+                            content,
+                            extracted.manifesto,
+                            substituir_existente=substituir_existente,
+                        )
+                    except Exception:
+                        if published_assets:
+                            shutil.rmtree(final_root, ignore_errors=True)
+                        if recovery_root.exists():
+                            os.replace(recovery_root, final_root)
+                        raise
+            except OSError as error:
+                raise PortabilidadeProjetoError(
+                    "Não foi possível publicar os arquivos importados"
+                ) from error
             notify(4, 4, "Conferindo projeto importado")
             imported = self._project(content.projeto.id)
         return ResultadoImportacaoProjeto(
@@ -496,31 +510,37 @@ class ServicoPortabilidadeProjeto:
             recovery_database = self._backup.criar_snapshot(
                 self._database_path, temporary / "recovery.sqlite3"
             )
-            staging = temporary / "managed-staging"
-            staging.mkdir()
-            for entry in extracted.manifesto.arquivos:
-                if entry.tipo != "ARQUIVO_GERENCIADO":
-                    continue
-                relative = PurePosixPath(entry.caminho_relativo).relative_to("managed")
-                destination = staging / relative
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(extracted.diretorio / entry.caminho_relativo, destination)
-            old_assets = temporary / "managed-previous"
-            self._dispose_connections()
-            notify(3, 4, "Restaurando banco e anexos")
             try:
-                if self._managed_root.exists():
-                    os.replace(self._managed_root, old_assets)
                 self._managed_root.parent.mkdir(parents=True, exist_ok=True)
-                os.replace(staging, self._managed_root)
-                self._backup.restaurar_snapshot(restored_database, self._database_path)
-            except Exception:
-                self._dispose_connections()
-                self._backup.restaurar_snapshot(recovery_database, self._database_path)
-                shutil.rmtree(self._managed_root, ignore_errors=True)
-                if old_assets.exists():
-                    os.replace(old_assets, self._managed_root)
-                raise
+                with (
+                    sibling_temporary_directory(self._managed_root) as staging,
+                    sibling_temporary_directory(self._managed_root, vacant=True) as old_assets,
+                ):
+                    for entry in extracted.manifesto.arquivos:
+                        if entry.tipo != "ARQUIVO_GERENCIADO":
+                            continue
+                        relative = PurePosixPath(entry.caminho_relativo).relative_to("managed")
+                        destination = staging / relative
+                        destination.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(extracted.diretorio / entry.caminho_relativo, destination)
+                    self._dispose_connections()
+                    notify(3, 4, "Restaurando banco e anexos")
+                    try:
+                        if self._managed_root.exists():
+                            os.replace(self._managed_root, old_assets)
+                        os.replace(staging, self._managed_root)
+                        self._backup.restaurar_snapshot(restored_database, self._database_path)
+                    except Exception:
+                        self._dispose_connections()
+                        self._backup.restaurar_snapshot(recovery_database, self._database_path)
+                        shutil.rmtree(self._managed_root, ignore_errors=True)
+                        if old_assets.exists():
+                            os.replace(old_assets, self._managed_root)
+                        raise
+            except OSError as error:
+                raise PortabilidadeProjetoError(
+                    "Não foi possível restaurar os arquivos gerenciados"
+                ) from error
             notify(4, 4, "Recuperação concluída")
         return self._database_path
 
@@ -618,22 +638,18 @@ class ServicoPortabilidadeProjeto:
             return existing is not None
 
     def _stage_imported_files(
-        self, extracted_root: Path, manifest: ManifestoProjetoPortatil
-    ) -> Path:
-        staging = self._managed_root.parent / f".import-{manifest.projeto_id}-{uuid4().hex}"
-        staging.mkdir(parents=True)
-        try:
-            for entry in manifest.arquivos:
-                if entry.tipo not in {"PDF", "FOTO"}:
-                    continue
-                relative = PurePosixPath(entry.caminho_relativo).relative_to("files")
-                destination = staging / relative
-                destination.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(extracted_root / entry.caminho_relativo, destination)
-            return staging
-        except Exception:
-            shutil.rmtree(staging, ignore_errors=True)
-            raise
+        self,
+        extracted_root: Path,
+        manifest: ManifestoProjetoPortatil,
+        staging: Path,
+    ) -> None:
+        for entry in manifest.arquivos:
+            if entry.tipo not in {"PDF", "FOTO"}:
+                continue
+            relative = PurePosixPath(entry.caminho_relativo).relative_to("files")
+            destination = staging / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(extracted_root / entry.caminho_relativo, destination)
 
     def _project(self, project_id: UUID) -> Projeto:
         with self._unit_of_work() as work:
@@ -797,16 +813,15 @@ def _file_digest(path: Path) -> tuple[str, int]:
 
 
 def _copy_atomic(source: Path, destination: Path) -> None:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_name(f".{destination.name}.{uuid4().hex}.tmp")
     try:
-        shutil.copy2(source, temporary)
-        os.replace(temporary, destination)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with sibling_temporary_file(destination) as temporary:
+            shutil.copy2(source, temporary)
+            os.replace(temporary, destination)
     except OSError as error:
-        raise PortabilidadeProjetoError("Não foi possível copiar o arquivo") from error
-    finally:
-        with suppress(OSError):
-            temporary.unlink(missing_ok=True)
+        raise PortabilidadeProjetoError(
+            "Não foi possível copiar o arquivo para o destino gerenciado"
+        ) from error
 
 
 def _problem(code: str, message: str, path: str | None = None) -> ProblemaIntegridadeProjeto:
