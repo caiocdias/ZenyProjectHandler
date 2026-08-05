@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+from dataclasses import replace
+from datetime import datetime
 from decimal import Decimal
 
 import pytest
-from tests.evaluation_factories import make_annotation, make_manifest, make_sample
+from tests.evaluation_factories import FIXED_TIME, make_annotation, make_manifest, make_sample
 
 from zeny_project_handler.adapters.evaluation import JsonEvaluationDataset
 from zeny_project_handler.domain.enums import (
     EstadoConjuntoAvaliacao,
     EstadoCriteriosAvaliacao,
+    ParticaoAvaliacao,
     TipoGeometria,
 )
 from zeny_project_handler.domain.errors import DomainValidationError
@@ -51,3 +54,70 @@ def test_real_manifest_records_current_coverage_gap() -> None:
     assert len(manifest.amostras) == 9
     assert {item.particao.value for item in manifest.amostras} == {"DESENVOLVIMENTO", "TESTE"}
     assert lacunas_cobertura_manifesto(manifest) == ("ESCALAS_INSUFICIENTES",)
+
+
+def test_sample_metadata_rejects_invalid_digest_size_and_page_count() -> None:
+    sample = make_sample()
+
+    with pytest.raises(DomainValidationError, match="SHA-256"):
+        replace(sample, sha256="inválido")
+    with pytest.raises(DomainValidationError, match="Tamanho"):
+        replace(sample, tamanho_bytes=0)
+    with pytest.raises(DomainValidationError, match="página"):
+        replace(sample, total_paginas=0)
+
+    normalized = replace(
+        sample,
+        sha256="A" * 64,
+        orientacao=" paisagem ",
+        qualidade=" hibrido ",
+        densidade=" alta ",
+        casos_especiais=("edge-b", "edge-a", "edge-a"),
+    )
+    assert normalized.sha256 == "a" * 64
+    assert (normalized.orientacao, normalized.qualidade, normalized.densidade) == (
+        "PAISAGEM",
+        "HIBRIDO",
+        "ALTA",
+    )
+    assert normalized.casos_especiais == ("edge-a", "edge-b")
+
+
+def test_manifest_rejects_inconsistent_versions_dates_and_state() -> None:
+    manifest = make_manifest()
+
+    with pytest.raises(DomainValidationError, match="schema"):
+        replace(manifest, schema_version=2)
+    with pytest.raises(DomainValidationError, match="Criação"):
+        replace(manifest, criado_em=datetime(2026, 7, 21))
+    with pytest.raises(DomainValidationError, match="Congelamento"):
+        replace(manifest, congelado_em=datetime(2026, 7, 21))
+    with pytest.raises(DomainValidationError, match="deve registrar"):
+        replace(manifest, congelado_em=None)
+    with pytest.raises(DomainValidationError, match="não pode possuir"):
+        replace(
+            manifest,
+            estado=EstadoConjuntoAvaliacao.EM_PREPARACAO,
+            congelado_em=FIXED_TIME,
+        )
+
+
+def test_manifest_requires_unique_samples_and_both_partitions() -> None:
+    manifest = make_manifest()
+    development, test = manifest.amostras
+
+    with pytest.raises(DomainValidationError, match="possuir amostras"):
+        replace(manifest, amostras=())
+    with pytest.raises(DomainValidationError, match="IDs de amostra"):
+        replace(manifest, amostras=(development, replace(test, id=development.id)))
+    with pytest.raises(DomainValidationError, match="Hashes de amostra"):
+        replace(manifest, amostras=(development, replace(test, sha256=development.sha256)))
+    with pytest.raises(DomainValidationError, match="separar desenvolvimento e teste"):
+        replace(
+            manifest,
+            amostras=tuple(
+                replace(sample, particao=ParticaoAvaliacao.TESTE) for sample in manifest.amostras
+            ),
+        )
+    with pytest.raises(DomainValidationError, match="não pertence"):
+        manifest.obter_amostra("amostra-inexistente")

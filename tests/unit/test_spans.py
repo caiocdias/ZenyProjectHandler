@@ -11,7 +11,7 @@ from tests.factories import complete_project
 from zeny_project_handler.application.automatic_promotion import (
     promover_resultado_automatico,
 )
-from zeny_project_handler.application.spans import detectar_vaos
+from zeny_project_handler.application.spans import VaoDetectado, detectar_vaos
 from zeny_project_handler.domain.analysis import PropostaElemento, PropostaRelacao
 from zeny_project_handler.domain.catalog import CatalogoTecnico, ExtraAttributes
 from zeny_project_handler.domain.enums import (
@@ -62,6 +62,81 @@ def test_identified_span_is_kept_when_one_endpoint_has_no_classified_pole(
     assert len(spans) == 1
     assert spans[0].poste_origem_id is not None
     assert spans[0].poste_destino_id is None
+
+
+def test_unidentified_cable_without_both_classified_poles_is_not_a_span(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    project = complete_project(catalogo_inicial)
+    cable = next(item for item in project.elementos if isinstance(item, Cabo))
+    destination = next(point for point in project.pontos_rede if point.id == cable.ponto_destino_id)
+    project = replace(
+        project,
+        pontos_rede=tuple(
+            replace(point, poste_id=None, tipo=TipoPontoRede.CONEXAO)
+            if point.id == destination.id
+            else point
+            for point in project.pontos_rede
+        ),
+    )
+
+    assert detectar_vaos(project) == ()
+
+
+def test_span_without_informed_length_keeps_unknown_measurement(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    project = complete_project(catalogo_inicial)
+    project = replace(
+        project,
+        elementos=tuple(
+            replace(item, comprimento_m=None, origem_comprimento=None, geometria=None)
+            if isinstance(item, Cabo)
+            else item
+            for item in project.elementos
+        ),
+    )
+
+    span = detectar_vaos(project)[0]
+
+    assert span.comprimento_m is None
+    assert span.origem_comprimento is None
+    assert span.geometria is None
+
+
+def test_detected_span_validates_endpoints_and_length_metadata() -> None:
+    cable_id = uuid4()
+    pole_id = uuid4()
+
+    with pytest.raises(ValueError, match="distintos"):
+        VaoDetectado(
+            id=uuid4(),
+            cabo_id=cable_id,
+            poste_origem_id=pole_id,
+            poste_destino_id=pole_id,
+            situacao=SituacaoProjeto.EXISTENTE,
+            geometria=None,
+        )
+    with pytest.raises(ValueError, match="Origem do comprimento"):
+        VaoDetectado(
+            id=uuid4(),
+            cabo_id=cable_id,
+            poste_origem_id=None,
+            poste_destino_id=None,
+            situacao=SituacaoProjeto.EXISTENTE,
+            geometria=None,
+            origem_comprimento=OrigemComprimentoVao.INFORMADO,
+        )
+    with pytest.raises(ValueError, match="positivo"):
+        VaoDetectado(
+            id=uuid4(),
+            cabo_id=cable_id,
+            poste_origem_id=None,
+            poste_destino_id=None,
+            situacao=SituacaoProjeto.EXISTENTE,
+            geometria=None,
+            comprimento_m=Decimal(0),
+        )
 
 
 @pytest.mark.parametrize(
