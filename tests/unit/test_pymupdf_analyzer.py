@@ -35,10 +35,13 @@ from zeny_project_handler.domain.values import PontoNormalizado
 from zeny_project_handler.ports.analysis import (
     AnalisadorDocumentoPort,
     CandidatoEvidenciaDocumento,
+    CapacidadeMotorOcr,
     ConfiguracaoAnaliseDocumento,
     GeometriaNormalizada,
+    IdentidadeDadosTreinadosOcr,
     PaginaRasterOcr,
     ResultadoAnaliseDocumento,
+    ResultadoConsultaCapacidadeOcr,
     SolicitacaoAnaliseDocumento,
     TrechoTextoOcr,
 )
@@ -47,10 +50,29 @@ from zeny_project_handler.ports.pdf import ReferenciaFontePdf
 
 class FakeOcr:
     nome = "ocr-falso"
-    versao = "1.0"
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        version: str = "1.0",
+        languages: tuple[str, ...] = ("por", "eng"),
+        traineddata_digests: tuple[str, ...] = ("1" * 64, "2" * 64),
+        oem: int = 3,
+    ) -> None:
         self.pages: list[PaginaRasterOcr] = []
+        self._capability = CapacidadeMotorOcr(
+            implementacao=self.nome,
+            versao=version,
+            idiomas=languages,
+            dados_treinados=tuple(
+                IdentidadeDadosTreinadosOcr(idioma=language, sha256=digest)
+                for language, digest in zip(languages, traineddata_digests, strict=True)
+            ),
+            parametros=(("oem", oem), ("preprocessamento", "fake-v1")),
+        )
+
+    def consultar_capacidade(self) -> ResultadoConsultaCapacidadeOcr:
+        return ResultadoConsultaCapacidadeOcr(capacidade=self._capability)
 
     def reconhecer(self, pagina: PaginaRasterOcr) -> tuple[TrechoTextoOcr, ...]:
         self.pages.append(pagina)
@@ -66,6 +88,7 @@ class FakeOcr:
 class FakeAnalyzer:
     nome = "fake"
     versao = "1"
+    assinatura_capacidade = "fake-capability-v1"
 
     def analisar(self, _request: SolicitacaoAnaliseDocumento) -> ResultadoAnaliseDocumento:
         return ResultadoAnaliseDocumento(evidencias=(), diagnosticos=(), cache_utilizado=False)
@@ -291,6 +314,41 @@ def test_same_input_and_configuration_are_reproducible_from_cache(tmp_path: Path
     assert not third.cache_utilizado
 
 
+@pytest.mark.parametrize(
+    ("version", "languages", "traineddata_digests", "oem"),
+    (
+        ("1.1", ("por", "eng"), ("1" * 64, "2" * 64), 3),
+        ("1.0", ("eng",), ("2" * 64,), 3),
+        ("1.0", ("por", "eng"), ("3" * 64, "2" * 64), 3),
+        ("1.0", ("por", "eng"), ("1" * 64, "2" * 64), 1),
+    ),
+    ids=("version", "language", "traineddata", "adapter-configuration"),
+)
+def test_ocr_capability_changes_invalidate_derived_cache(
+    tmp_path: Path,
+    version: str,
+    languages: tuple[str, ...],
+    traineddata_digests: tuple[str, ...],
+    oem: int,
+) -> None:
+    request = _request(create_analysis_pdf(tmp_path / "capability-cache.pdf"))
+    cache = JsonAnalysisCache(tmp_path / "cache")
+
+    baseline = PyMuPdfDocumentAnalyzer(motor_ocr=FakeOcr(), cache=cache).analisar(request)
+    changed = PyMuPdfDocumentAnalyzer(
+        motor_ocr=FakeOcr(
+            version=version,
+            languages=languages,
+            traineddata_digests=traineddata_digests,
+            oem=oem,
+        ),
+        cache=cache,
+    ).analisar(request)
+
+    assert not baseline.cache_utilizado
+    assert not changed.cache_utilizado
+
+
 def test_relevant_raster_triggers_ocr_even_with_native_text(tmp_path: Path) -> None:
     request = _request(create_mixed_raster_text_pdf(tmp_path / "mixed.pdf"))
     ocr = FakeOcr()
@@ -299,6 +357,18 @@ def test_relevant_raster_triggers_ocr_even_with_native_text(tmp_path: Path) -> N
 
     assert [page.pagina_numero for page in ocr.pages] == [1]
     assert any(item.tipo is TipoEvidencia.OCR for item in result.evidencias)
+
+
+def test_missing_ocr_engine_preserves_all_native_extractors(tmp_path: Path) -> None:
+    request = _request(create_analysis_pdf(tmp_path / "without-tesseract.pdf"))
+
+    result = PyMuPdfDocumentAnalyzer().analisar(request)
+
+    assert {TipoEvidencia.TEXTO, TipoEvidencia.VETOR, TipoEvidencia.IMAGEM} <= {
+        item.tipo for item in result.evidencias
+    }
+    assert not any(item.tipo is TipoEvidencia.OCR for item in result.evidencias)
+    assert any(item.codigo == "analise.ocr_indisponivel" for item in result.diagnosticos)
 
 
 def test_small_raster_region_triggers_localized_ocr_on_text_rich_page(

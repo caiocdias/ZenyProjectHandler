@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from decimal import Decimal
 from pathlib import Path
 
@@ -65,3 +66,15 @@ def test_json_cache_rejects_unsafe_key(tmp_path: Path) -> None:
     cache = JsonAnalysisCache(tmp_path)
     with pytest.raises(ValueError, match="SHA-256"):
         cache.salvar("../escape", _extraction())
+
+
+def test_json_cache_cleanly_rejects_previous_schema(tmp_path: Path) -> None:
+    cache = JsonAnalysisCache(tmp_path / "cache")
+    key = "b" * 64
+    cache.salvar(key, _extraction())
+    target = tmp_path / "cache" / f"{key}.json"
+    payload = json.loads(target.read_text(encoding="utf-8"))
+    payload["schema_version"] = 1
+    target.write_text(json.dumps(payload), encoding="utf-8")
+
+    assert cache.obter(key) is None

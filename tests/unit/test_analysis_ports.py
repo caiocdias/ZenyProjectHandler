@@ -14,7 +14,9 @@ from zeny_project_handler.adapters.pdf import PyMuPdfReader
 from zeny_project_handler.application.mvp_workflow import _extraction_id
 from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.ports.analysis import (
+    CapacidadeMotorOcr,
     ConfiguracaoAnaliseDocumento,
+    IdentidadeDadosTreinadosOcr,
     SolicitacaoAnaliseDocumento,
     chave_cache_analise,
     validar_fonte_solicitacao,
@@ -86,6 +88,30 @@ def test_analysis_configuration_is_stable_and_validated() -> None:
         ConfiguracaoAnaliseDocumento(sobreposicao_ocr_conteudo_denso=Decimal("0.20"))
     with pytest.raises(ValueError, match="Profundidade"):
         ConfiguracaoAnaliseDocumento(profundidade_maxima_xobject=0)
+
+
+def test_ocr_capability_signature_is_canonical_and_path_free() -> None:
+    traineddata = (
+        IdentidadeDadosTreinadosOcr(idioma="por", sha256="1" * 64),
+        IdentidadeDadosTreinadosOcr(idioma="eng", sha256="2" * 64),
+    )
+    first = CapacidadeMotorOcr(
+        implementacao="tesseract-cli",
+        versao="5.4.1",
+        idiomas=("por", "eng"),
+        dados_treinados=traineddata,
+        parametros=(("psm", 11), ("oem", 3)),
+    )
+    second = CapacidadeMotorOcr(
+        implementacao="tesseract-cli",
+        versao="5.4.1",
+        idiomas=("por", "eng"),
+        dados_treinados=traineddata,
+        parametros=(("oem", 3), ("psm", 11)),
+    )
+
+    assert first.assinatura() == second.assinatura()
+    assert len(first.assinatura()) == 64
 
 
 def test_persisted_extraction_identity_changes_with_analyzer_version(

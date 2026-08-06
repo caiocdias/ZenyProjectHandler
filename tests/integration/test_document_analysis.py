@@ -37,6 +37,7 @@ pytestmark = pytest.mark.integration
 class FailingAnalyzer:
     nome = "falha-controlada"
     versao = "1"
+    assinatura_capacidade = "falha-controlada-capacidade-v1"
 
     def analisar(self, _request: SolicitacaoAnaliseDocumento) -> Never:
         raise RuntimeError("decodificador indisponível")
@@ -80,6 +81,14 @@ def test_analysis_use_case_persists_evidence_and_reuses_derived_cache(
     assert first.evidencias
     assert not first.cache_utilizado
     assert second.cache_utilizado
+    assert (
+        dict(first.execucao.parametros)["assinatura_capacidade_analisador"]
+        == use_case.assinatura_analisador
+    )
+    assert all(
+        dict(item.parametros)["assinatura_capacidade_analisador"] == use_case.assinatura_analisador
+        for item in first.evidencias
+    )
     assert {item.tipo for item in first.evidencias} >= {
         TipoEvidencia.TEXTO,
         TipoEvidencia.VETOR,

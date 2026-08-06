@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from subprocess import CompletedProcess
+from subprocess import CompletedProcess, TimeoutExpired
 
 import pytest
 
@@ -12,6 +12,43 @@ from zeny_project_handler.adapters.analysis.tesseract_ocr import (
     _ppm_bytes,
 )
 from zeny_project_handler.ports.analysis import PaginaRasterOcr
+
+
+def _fake_installation(
+    root: Path,
+    *,
+    portuguese: bytes = b"trained-por",
+    english: bytes = b"trained-eng",
+) -> tuple[Path, Path]:
+    root.mkdir()
+    executable = root / "tesseract.exe"
+    executable.write_bytes(b"stub")
+    tessdata = root / "tessdata"
+    tessdata.mkdir()
+    (tessdata / "por.traineddata").write_bytes(portuguese)
+    (tessdata / "eng.traineddata").write_bytes(english)
+    return executable, tessdata
+
+
+def _metadata_process(
+    arguments: tuple[str, ...],
+    *,
+    tessdata: Path,
+    version: str = "5.4.1.20250101",
+) -> CompletedProcess[str] | None:
+    if "--version" in arguments:
+        return CompletedProcess(
+            args=arguments,
+            returncode=0,
+            stdout=f"tesseract {version}\n leptonica-1.85.0\n",
+        )
+    if "--list-langs" in arguments:
+        return CompletedProcess(
+            args=arguments,
+            returncode=0,
+            stdout=f'List of available languages in "{tessdata}" (2):\neng\npor\n',
+        )
+    return None
 
 
 def test_ppm_encoder_removes_stride_padding() -> None:
@@ -83,12 +120,142 @@ def test_ocr_prefers_portuguese_and_keeps_english(
     assert _best_available_language(Path("tesseract.exe")) == "por+eng"
 
 
+def test_capability_is_real_normalized_cached_and_stable_across_machine_paths(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    first_executable, first_tessdata = _fake_installation(tmp_path / "first")
+    second_executable, second_tessdata = _fake_installation(tmp_path / "other-location")
+    tessdata_by_executable = {
+        str(first_executable.resolve()): first_tessdata.resolve(),
+        str(second_executable.resolve()): second_tessdata.resolve(),
+    }
+    calls: list[tuple[tuple[str, ...], int]] = []
+
+    def fake_run(arguments: tuple[str, ...], **kwargs: object) -> CompletedProcess[str]:
+        normalized = tuple(arguments)
+        timeout = kwargs["timeout"]
+        assert isinstance(timeout, int)
+        calls.append((normalized, timeout))
+        metadata = _metadata_process(
+            normalized,
+            tessdata=tessdata_by_executable[normalized[0]],
+            version="5.4.1.20250101",
+        )
+        assert metadata is not None
+        return metadata
+
+    monkeypatch.setattr(
+        "zeny_project_handler.adapters.analysis.tesseract_ocr.subprocess.run",
+        fake_run,
+    )
+    first = ocr_module.TesseractCliOcr(first_executable, capability_timeout_seconds=7)
+    second = ocr_module.TesseractCliOcr(second_executable, capability_timeout_seconds=7)
+
+    first_result = first.consultar_capacidade()
+    assert first.consultar_capacidade() is first_result
+    second_result = second.consultar_capacidade()
+
+    assert first_result.capacidade is not None
+    assert second_result.capacidade is not None
+    assert first_result.capacidade.versao == "5.4.1.20250101"
+    assert first_result.capacidade.idiomas == ("por", "eng")
+    assert first_result.capacidade.assinatura() == second_result.capacidade.assinatura()
+    assert len(calls) == 4
+    assert all(timeout == 7 for _, timeout in calls)
+
+
+@pytest.mark.parametrize(
+    "change",
+    ("version", "language", "traineddata", "configuration"),
+)
+def test_capability_signature_changes_with_every_semantic_input(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    change: str,
+) -> None:
+    baseline_executable, baseline_tessdata = _fake_installation(tmp_path / "baseline")
+    changed_executable, changed_tessdata = _fake_installation(
+        tmp_path / "changed",
+        portuguese=b"changed-por" if change == "traineddata" else b"trained-por",
+    )
+    tessdata_by_executable = {
+        str(baseline_executable.resolve()): baseline_tessdata.resolve(),
+        str(changed_executable.resolve()): changed_tessdata.resolve(),
+    }
+
+    def fake_run(arguments: tuple[str, ...], **_kwargs: object) -> CompletedProcess[str]:
+        normalized = tuple(arguments)
+        version = (
+            "5.5.0"
+            if change == "version" and normalized[0] == str(changed_executable.resolve())
+            else "5.4.1"
+        )
+        metadata = _metadata_process(
+            normalized,
+            tessdata=tessdata_by_executable[normalized[0]],
+            version=version,
+        )
+        assert metadata is not None
+        return metadata
+
+    monkeypatch.setattr(
+        "zeny_project_handler.adapters.analysis.tesseract_ocr.subprocess.run",
+        fake_run,
+    )
+    baseline = ocr_module.TesseractCliOcr(baseline_executable, language="por+eng")
+    changed = ocr_module.TesseractCliOcr(
+        changed_executable,
+        language="eng" if change == "language" else "por+eng",
+        oem=1 if change == "configuration" else 3,
+    )
+
+    baseline_capability = baseline.consultar_capacidade().capacidade
+    changed_capability = changed.consultar_capacidade().capacidade
+
+    assert baseline_capability is not None
+    assert changed_capability is not None
+    assert baseline_capability.assinatura() != changed_capability.assinatura()
+
+
+def test_capability_timeout_is_diagnostic_and_is_not_retried(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    executable, _tessdata = _fake_installation(tmp_path / "timeout")
+    calls = 0
+
+    def fake_run(arguments: tuple[str, ...], **kwargs: object) -> CompletedProcess[str]:
+        nonlocal calls
+        calls += 1
+        timeout = kwargs["timeout"]
+        assert isinstance(timeout, int)
+        raise TimeoutExpired(arguments, timeout)
+
+    monkeypatch.setattr(
+        "zeny_project_handler.adapters.analysis.tesseract_ocr.subprocess.run",
+        fake_run,
+    )
+    engine = ocr_module.TesseractCliOcr(executable, capability_timeout_seconds=3)
+
+    first = engine.consultar_capacidade()
+    second = engine.consultar_capacidade()
+
+    assert first is second
+    assert first.capacidade is None
+    assert [item.codigo for item in first.diagnosticos] == ["analise.ocr_capacidade_timeout"]
+    assert calls == 1
+
+
 def test_identifier_ocr_uses_single_character_mode_and_whitelist(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     executable = tmp_path / "tesseract.exe"
     executable.write_bytes(b"stub")
+    tessdata = tmp_path / "tessdata"
+    tessdata.mkdir()
+    (tessdata / "eng.traineddata").write_bytes(b"trained-eng")
     captured: list[tuple[str, ...]] = []
     tsv = "\n".join(
         (
@@ -98,10 +265,13 @@ def test_identifier_ocr_uses_single_character_mode_and_whitelist(
     )
 
     def fake_run(
-        arguments: list[str],
+        arguments: tuple[str, ...],
         **_kwargs: object,
-    ) -> CompletedProcess[bytes]:
-        captured.append(tuple(arguments))
+    ) -> CompletedProcess[str] | CompletedProcess[bytes]:
+        normalized = tuple(arguments)
+        if metadata := _metadata_process(normalized, tessdata=tessdata):
+            return metadata
+        captured.append(normalized)
         return CompletedProcess(args=arguments, returncode=0, stdout=tsv.encode())
 
     monkeypatch.setattr(
@@ -131,6 +301,9 @@ def test_operational_label_ocr_uses_single_line_mode_and_technical_whitelist(
 ) -> None:
     executable = tmp_path / "tesseract.exe"
     executable.write_bytes(b"stub")
+    tessdata = tmp_path / "tessdata"
+    tessdata.mkdir()
+    (tessdata / "eng.traineddata").write_bytes(b"trained-eng")
     captured: list[tuple[str, ...]] = []
     tsv = "\n".join(
         (
@@ -140,10 +313,13 @@ def test_operational_label_ocr_uses_single_line_mode_and_technical_whitelist(
     )
 
     def fake_run(
-        arguments: list[str],
+        arguments: tuple[str, ...],
         **_kwargs: object,
-    ) -> CompletedProcess[bytes]:
-        captured.append(tuple(arguments))
+    ) -> CompletedProcess[str] | CompletedProcess[bytes]:
+        normalized = tuple(arguments)
+        if metadata := _metadata_process(normalized, tessdata=tessdata):
+            return metadata
+        captured.append(normalized)
         return CompletedProcess(args=arguments, returncode=0, stdout=tsv.encode())
 
     monkeypatch.setattr(
@@ -173,6 +349,9 @@ def test_operational_block_ocr_uses_uniform_block_mode(
 ) -> None:
     executable = tmp_path / "tesseract.exe"
     executable.write_bytes(b"stub")
+    tessdata = tmp_path / "tessdata"
+    tessdata.mkdir()
+    (tessdata / "eng.traineddata").write_bytes(b"trained-eng")
     captured: list[tuple[str, ...]] = []
     tsv = "\n".join(
         (
@@ -182,10 +361,13 @@ def test_operational_block_ocr_uses_uniform_block_mode(
     )
 
     def fake_run(
-        arguments: list[str],
+        arguments: tuple[str, ...],
         **_kwargs: object,
-    ) -> CompletedProcess[bytes]:
-        captured.append(tuple(arguments))
+    ) -> CompletedProcess[str] | CompletedProcess[bytes]:
+        normalized = tuple(arguments)
+        if metadata := _metadata_process(normalized, tessdata=tessdata):
+            return metadata
+        captured.append(normalized)
         return CompletedProcess(args=arguments, returncode=0, stdout=tsv.encode())
 
     monkeypatch.setattr(
