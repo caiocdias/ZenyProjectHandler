@@ -101,6 +101,27 @@ class _CampoRotuladoDocumento:
     geometria: GeometriaDocumento
 
 
+@dataclass(frozen=True, slots=True)
+class _SignatureEvidence:
+    fields: tuple[EvidenciaDocumento, ...]
+    signed_fields: tuple[EvidenciaDocumento, ...]
+    labels: tuple[EvidenciaDocumento, ...]
+
+    @property
+    def combined(self) -> tuple[EvidenciaDocumento, ...]:
+        return (*self.fields, *self.labels)
+
+
+@dataclass(frozen=True, slots=True)
+class _RegionFactContext:
+    proposals_by_id: dict[UUID, PropostaElemento]
+    technology_options: dict[UUID, str]
+    equipment_class_options: dict[UUID, str]
+    urban_context: bool
+    text_evidence: tuple[EvidenciaDocumento, ...]
+    evidence: tuple[EvidenciaDocumento, ...]
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ResultadoConformidadeProjeto:
     alvos: tuple[AlvoConformidade, ...]
@@ -605,9 +626,26 @@ def _document_control_facts(
     target_id: UUID,
     evidence: tuple[EvidenciaDocumento, ...],
 ) -> tuple[tuple[FatoConformidade, ...], tuple[ItemInspecaoDocumental, ...]]:
-    facts: list[FatoConformidade] = []
-    items: list[ItemInspecaoDocumental] = []
-    servitude = tuple(
+    servitude = _servitude_evidence(evidence)
+    stamps = _stamp_evidence(evidence)
+    signatures = _signature_evidence(evidence)
+    facts = (
+        *_servitude_facts(target_id, servitude),
+        _stamp_fact(target_id, stamps),
+        *_signature_facts(target_id, signatures),
+    )
+    items = (
+        *_servitude_items(document, evidence, servitude),
+        _stamp_item(document, stamps),
+        _signature_item(document, signatures),
+    )
+    return facts, items
+
+
+def _servitude_evidence(
+    evidence: tuple[EvidenciaDocumento, ...],
+) -> tuple[EvidenciaDocumento, ...]:
+    return tuple(
         item
         for item in evidence
         if item.tipo in _TEXT_TYPES
@@ -616,20 +654,34 @@ def _document_control_facts(
             for token in ("SERVIDAO", "FAIXA DE SERVIDAO", "FAIXA DE DOMINIO")
         )
     )
-    if servitude:
-        facts.append(
-            _fact(
-                target_id,
-                "documento.servidao_mencionada",
-                True,
-                "menção textual",
-                evidence=servitude,
-                confidence=Decimal("0.90"),
-            )
-        )
-    servitude_fields = _servitude_labeled_fields(evidence, servitude)
-    if servitude_fields:
-        items.extend(
+
+
+def _servitude_facts(
+    target_id: UUID,
+    servitude: tuple[EvidenciaDocumento, ...],
+) -> tuple[FatoConformidade, ...]:
+    if not servitude:
+        return ()
+    return (
+        _fact(
+            target_id,
+            "documento.servidao_mencionada",
+            True,
+            "menção textual",
+            evidence=servitude,
+            confidence=Decimal("0.90"),
+        ),
+    )
+
+
+def _servitude_items(
+    document: DocumentoProjeto,
+    evidence: tuple[EvidenciaDocumento, ...],
+    servitude: tuple[EvidenciaDocumento, ...],
+) -> tuple[ItemInspecaoDocumental, ...]:
+    fields = _servitude_labeled_fields(evidence, servitude)
+    if fields:
+        return tuple(
             ItemInspecaoDocumental(
                 grupo="Servidão",
                 campo=field.rotulo,
@@ -641,73 +693,86 @@ def _document_control_facts(
                 evidencia_ids=tuple(item.id for item in field.evidencias),
                 confianca=Decimal("0.92") if field.valor else Decimal("0.86"),
             )
-            for field in servitude_fields
+            for field in fields
         )
-    else:
-        items.append(
-            ItemInspecaoDocumental(
-                grupo="Servidão",
-                campo="Servidão / faixa de domínio",
-                valor=(
-                    f"{len(servitude)} menção(ões) localizada(s), sem campos rotulados"
-                    if servitude
-                    else "Nenhuma menção localizada; aplicabilidade ainda não determinada"
-                ),
-                estado="REQUER_REVISAO_VISUAL" if servitude else "NAO_AVALIAVEL",
-                documento_id=document.id,
-                pagina_id=servitude[0].pagina_id if servitude else None,
-                geometria=servitude[0].geometria if servitude else None,
-                evidencia_ids=tuple(item.id for item in servitude),
-                confianca=Decimal("0.72") if servitude else None,
-            )
-        )
+    return (
+        ItemInspecaoDocumental(
+            grupo="Servidão",
+            campo="Servidão / faixa de domínio",
+            valor=(
+                f"{len(servitude)} menção(ões) localizada(s), sem campos rotulados"
+                if servitude
+                else "Nenhuma menção localizada; aplicabilidade ainda não determinada"
+            ),
+            estado="REQUER_REVISAO_VISUAL" if servitude else "NAO_AVALIAVEL",
+            documento_id=document.id,
+            pagina_id=servitude[0].pagina_id if servitude else None,
+            geometria=servitude[0].geometria if servitude else None,
+            evidencia_ids=tuple(item.id for item in servitude),
+            confianca=Decimal("0.72") if servitude else None,
+        ),
+    )
 
-    stamps = tuple(
+
+def _stamp_evidence(
+    evidence: tuple[EvidenciaDocumento, ...],
+) -> tuple[EvidenciaDocumento, ...]:
+    return tuple(
         item
         for item in evidence
         if item.origem_pdf.tipo is TipoOrigemPdf.ANOTACAO
         and (item.origem_pdf.subtipo_anotacao or "").casefold() == "stamp"
         and _in_document_control_zone(item.geometria)
     )
-    facts.append(
-        _fact(
-            target_id,
-            "documento.carimbo_candidato_quantidade",
-            len(stamps),
-            "anotações PDF Stamp na zona de cabeçalho/rodapé",
-            evidence=stamps,
-            confidence=Decimal("0.65"),
-        )
-    )
-    items.append(
-        ItemInspecaoDocumental(
-            grupo="Carimbos e selos",
-            campo="Candidatos gráficos",
-            valor=(
-                f"{len(stamps)} candidato(s) em zona documental"
-                if stamps
-                else "Nenhum candidato localizado"
-            ),
-            estado="REQUER_REVISAO_VISUAL" if stamps else "NAO_IDENTIFICADO",
-            documento_id=document.id,
-            pagina_id=stamps[0].pagina_id if stamps else None,
-            geometria=stamps[0].geometria if stamps else None,
-            evidencia_ids=tuple(item.id for item in stamps),
-            confianca=Decimal("0.65") if stamps else None,
-        )
+
+
+def _stamp_fact(
+    target_id: UUID,
+    stamps: tuple[EvidenciaDocumento, ...],
+) -> FatoConformidade:
+    return _fact(
+        target_id,
+        "documento.carimbo_candidato_quantidade",
+        len(stamps),
+        "anotações PDF Stamp na zona de cabeçalho/rodapé",
+        evidence=stamps,
+        confidence=Decimal("0.65"),
     )
 
-    signature_fields = tuple(
+
+def _stamp_item(
+    document: DocumentoProjeto,
+    stamps: tuple[EvidenciaDocumento, ...],
+) -> ItemInspecaoDocumental:
+    return ItemInspecaoDocumental(
+        grupo="Carimbos e selos",
+        campo="Candidatos gráficos",
+        valor=(
+            f"{len(stamps)} candidato(s) em zona documental"
+            if stamps
+            else "Nenhum candidato localizado"
+        ),
+        estado="REQUER_REVISAO_VISUAL" if stamps else "NAO_IDENTIFICADO",
+        documento_id=document.id,
+        pagina_id=stamps[0].pagina_id if stamps else None,
+        geometria=stamps[0].geometria if stamps else None,
+        evidencia_ids=tuple(item.id for item in stamps),
+        confianca=Decimal("0.65") if stamps else None,
+    )
+
+
+def _signature_evidence(evidence: tuple[EvidenciaDocumento, ...]) -> _SignatureEvidence:
+    fields = tuple(
         item
         for item in evidence
         if dict(item.atributos_extraidos).get("tipo_campo_formulario") == "Sig"
     )
     signed_fields = tuple(
         item
-        for item in signature_fields
+        for item in fields
         if dict(item.atributos_extraidos).get("campo_formulario_preenchido") is True
     )
-    signature_labels = tuple(
+    labels = tuple(
         item
         for item in evidence
         if item.tipo in _TEXT_TYPES
@@ -716,40 +781,53 @@ def _document_control_facts(
             for token in ("ASSINATURA", "RESPONSAVEL TECNICO", "CREA")
         )
     )
-    if signed_fields:
-        facts.append(
-            _fact(
-                target_id,
-                "documento.assinatura_pdf_preenchida",
-                True,
-                "campo PDF /Sig preenchido",
-                evidence=signed_fields,
-                confidence=Decimal("0.98"),
-            )
-        )
-    signature_evidence = (*signature_fields, *signature_labels)
-    items.append(
-        ItemInspecaoDocumental(
-            grupo="Assinaturas",
-            campo="Campos e indícios de assinatura",
-            valor=_signature_summary(signature_fields, signed_fields, signature_labels),
-            estado=(
-                "ASSINATURA_PDF_PRESENTE"
-                if signed_fields
-                else ("REQUER_REVISAO_VISUAL" if signature_evidence else "NAO_IDENTIFICADO")
-            ),
-            documento_id=document.id,
-            pagina_id=signature_evidence[0].pagina_id if signature_evidence else None,
-            geometria=signature_evidence[0].geometria if signature_evidence else None,
-            evidencia_ids=tuple(dict.fromkeys(item.id for item in signature_evidence)),
-            confianca=(
-                Decimal("0.98")
-                if signed_fields
-                else (Decimal("0.60") if signature_evidence else None)
-            ),
-        )
+    return _SignatureEvidence(fields, signed_fields, labels)
+
+
+def _signature_facts(
+    target_id: UUID,
+    signatures: _SignatureEvidence,
+) -> tuple[FatoConformidade, ...]:
+    if not signatures.signed_fields:
+        return ()
+    return (
+        _fact(
+            target_id,
+            "documento.assinatura_pdf_preenchida",
+            True,
+            "campo PDF /Sig preenchido",
+            evidence=signatures.signed_fields,
+            confidence=Decimal("0.98"),
+        ),
     )
-    return tuple(facts), tuple(items)
+
+
+def _signature_item(
+    document: DocumentoProjeto,
+    signatures: _SignatureEvidence,
+) -> ItemInspecaoDocumental:
+    combined = signatures.combined
+    return ItemInspecaoDocumental(
+        grupo="Assinaturas",
+        campo="Campos e indícios de assinatura",
+        valor=_signature_summary(
+            signatures.fields,
+            signatures.signed_fields,
+            signatures.labels,
+        ),
+        estado=(
+            "ASSINATURA_PDF_PRESENTE"
+            if signatures.signed_fields
+            else ("REQUER_REVISAO_VISUAL" if combined else "NAO_IDENTIFICADO")
+        ),
+        documento_id=document.id,
+        pagina_id=combined[0].pagina_id if combined else None,
+        geometria=combined[0].geometria if combined else None,
+        evidencia_ids=tuple(dict.fromkeys(item.id for item in combined)),
+        confianca=(
+            Decimal("0.98") if signatures.signed_fields else (Decimal("0.60") if combined else None)
+        ),
+    )
 
 
 def _region_facts(
@@ -757,130 +835,177 @@ def _region_facts(
     *,
     region_targets: dict[UUID | None, AlvoConformidade],
 ) -> tuple[FatoConformidade, ...]:
-    proposal_by_id = {
-        item.id: item for item in session.propostas if isinstance(item, PropostaElemento)
-    }
-    technology_options = {
-        option.id: option.codigo
-        for group in session.catalogo.grupos_opcao
-        if group.chave == "tecnologia_rede"
-        for option in group.opcoes
-    }
-    equipment_class_options = {
-        option.id: option.codigo
-        for group in session.catalogo.grupos_opcao
-        if group.chave == "classe_equipamento"
-        for option in group.opcoes
-    }
-    facts = []
-    urban_context = _is_urban_context(session)
-    text_evidence = tuple(
-        item for item in session.evidencias if item.tipo in _TEXT_TYPES and item.conteudo_bruto
-    )
+    context = _region_fact_context(session)
+    facts: list[FatoConformidade] = []
     for region in session.regioes:
         target = region_targets[region.id]
+        proposals = tuple(
+            context.proposals_by_id[item_id]
+            for item_id in region.elemento_ids
+            if item_id in context.proposals_by_id
+        )
         nearby_text = tuple(
             item
-            for item in text_evidence
+            for item in context.text_evidence
             if item.pagina_id == region.pagina_id
             and _box_gap(region.geometria, item.geometria) <= _REGION_TEXT_DISTANCE
         )
-        proposals = tuple(
-            proposal_by_id[item_id] for item_id in region.elemento_ids if item_id in proposal_by_id
+        facts.append(_equipment_install_fact(target.id, proposals, context.evidence))
+        facts.extend(_equipment_class_facts(target.id, proposals, session, context))
+        facts.extend(_urban_context_facts(target.id, context.urban_context))
+        facts.extend(_risk_facts(target.id, nearby_text))
+        facts.extend(_cable_technology_facts(target.id, proposals, session, context))
+    return tuple(facts)
+
+
+def _region_fact_context(session: SessaoRevisao) -> _RegionFactContext:
+    return _RegionFactContext(
+        proposals_by_id={
+            item.id: item for item in session.propostas if isinstance(item, PropostaElemento)
+        },
+        technology_options=_catalog_option_codes(session, "tecnologia_rede"),
+        equipment_class_options=_catalog_option_codes(session, "classe_equipamento"),
+        urban_context=_is_urban_context(session),
+        text_evidence=tuple(
+            item for item in session.evidencias if item.tipo in _TEXT_TYPES and item.conteudo_bruto
+        ),
+        evidence=session.evidencias,
+    )
+
+
+def _catalog_option_codes(session: SessaoRevisao, group_key: str) -> dict[UUID, str]:
+    return {
+        option.id: option.codigo
+        for group in session.catalogo.grupos_opcao
+        if group.chave == group_key
+        for option in group.opcoes
+    }
+
+
+def _proposal_evidence(
+    proposal: PropostaElemento,
+    evidence: tuple[EvidenciaDocumento, ...],
+) -> tuple[EvidenciaDocumento, ...]:
+    return tuple(item for item in evidence if item.id in proposal.evidencia_ids)
+
+
+def _equipment_install_fact(
+    target_id: UUID,
+    proposals: tuple[PropostaElemento, ...],
+    evidence: tuple[EvidenciaDocumento, ...],
+) -> FatoConformidade:
+    equipment = tuple(item for item in proposals if item.categoria is CategoriaElemento.EQUIPAMENTO)
+    return _fact(
+        target_id,
+        "regiao.equipamento_instalar",
+        any(item.situacao_projeto is SituacaoProjeto.INSTALAR for item in equipment),
+        "elementos reconhecidos na região",
+        evidence=tuple(
+            item for proposal in equipment for item in evidence if item.id in proposal.evidencia_ids
+        ),
+        confidence=Decimal("0.90"),
+    )
+
+
+def _equipment_class_facts(
+    target_id: UUID,
+    proposals: tuple[PropostaElemento, ...],
+    session: SessaoRevisao,
+    context: _RegionFactContext,
+) -> tuple[FatoConformidade, ...]:
+    facts: list[FatoConformidade] = []
+    for proposal in proposals:
+        if proposal.categoria is not CategoriaElemento.EQUIPAMENTO:
+            continue
+        catalog_item = (
+            session.catalogo.item_por_id(proposal.tipo_catalogo_sugerido_id)
+            if proposal.tipo_catalogo_sugerido_id is not None
+            else None
         )
-        equipment_install = any(
-            item.categoria is CategoriaElemento.EQUIPAMENTO
-            and item.situacao_projeto is SituacaoProjeto.INSTALAR
-            for item in proposals
+        if not isinstance(catalog_item, TipoEquipamento):
+            continue
+        equipment_class = context.equipment_class_options.get(
+            catalog_item.classe_equipamento_opcao_id
         )
-        facts.append(
-            _fact(
-                target.id,
-                "regiao.equipamento_instalar",
-                equipment_install,
-                "elementos reconhecidos na região",
-                evidence=tuple(
-                    evidence
-                    for item in proposals
-                    if item.categoria is CategoriaElemento.EQUIPAMENTO
-                    for evidence in session.evidencias
-                    if evidence.id in item.evidencia_ids
-                ),
-                confidence=Decimal("0.90"),
-            )
-        )
-        for proposal in proposals:
-            if proposal.categoria is not CategoriaElemento.EQUIPAMENTO:
-                continue
-            item = (
-                session.catalogo.item_por_id(proposal.tipo_catalogo_sugerido_id)
-                if proposal.tipo_catalogo_sugerido_id is not None
-                else None
-            )
-            if isinstance(item, TipoEquipamento):
-                equipment_class = equipment_class_options.get(item.classe_equipamento_opcao_id)
-                if equipment_class:
-                    facts.append(
-                        _fact(
-                            target.id,
-                            "regiao.equipamento_classe",
-                            equipment_class,
-                            "catálogo do equipamento reconhecido",
-                            evidence=tuple(
-                                evidence
-                                for evidence in session.evidencias
-                                if evidence.id in proposal.evidencia_ids
-                            ),
-                            confidence=proposal.confianca,
-                        )
-                    )
-        if urban_context:
+        if equipment_class:
             facts.append(
                 _fact(
-                    target.id,
-                    "rede.contexto_urbano",
-                    True,
-                    "tipo de serviço do projeto",
-                    confidence=Decimal("1"),
+                    target_id,
+                    "regiao.equipamento_classe",
+                    equipment_class,
+                    "catálogo do equipamento reconhecido",
+                    evidence=_proposal_evidence(proposal, context.evidence),
+                    confidence=proposal.confianca,
                 )
             )
-        risk_evidence = _risk_assessment_evidence(nearby_text)
-        if risk_evidence:
+    return tuple(facts)
+
+
+def _urban_context_facts(
+    target_id: UUID,
+    urban_context: bool,
+) -> tuple[FatoConformidade, ...]:
+    if not urban_context:
+        return ()
+    return (
+        _fact(
+            target_id,
+            "rede.contexto_urbano",
+            True,
+            "tipo de serviço do projeto",
+            confidence=Decimal("1"),
+        ),
+    )
+
+
+def _risk_facts(
+    target_id: UUID,
+    nearby_text: tuple[EvidenciaDocumento, ...],
+) -> tuple[FatoConformidade, ...]:
+    risk_evidence = _risk_assessment_evidence(nearby_text)
+    if not risk_evidence:
+        return ()
+    return (
+        _fact(
+            target_id,
+            "regiao.risco_abalroamento_avaliado",
+            True,
+            "nota textual próxima ao equipamento",
+            evidence=risk_evidence,
+            confidence=Decimal("0.82"),
+        ),
+    )
+
+
+def _cable_technology_facts(
+    target_id: UUID,
+    proposals: tuple[PropostaElemento, ...],
+    session: SessaoRevisao,
+    context: _RegionFactContext,
+) -> tuple[FatoConformidade, ...]:
+    facts: list[FatoConformidade] = []
+    for proposal in proposals:
+        if proposal.categoria is not CategoriaElemento.CABO:
+            continue
+        catalog_item = (
+            session.catalogo.item_por_id(proposal.tipo_catalogo_sugerido_id)
+            if proposal.tipo_catalogo_sugerido_id is not None
+            else None
+        )
+        if not isinstance(catalog_item, TipoCabo):
+            continue
+        technology = context.technology_options.get(catalog_item.tecnologia_rede_opcao_id)
+        if technology:
             facts.append(
                 _fact(
-                    target.id,
-                    "regiao.risco_abalroamento_avaliado",
-                    True,
-                    "nota textual próxima ao equipamento",
-                    evidence=risk_evidence,
-                    confidence=Decimal("0.82"),
+                    target_id,
+                    "cabo.tecnologia",
+                    technology,
+                    "catálogo do cabo reconhecido",
+                    evidence=_proposal_evidence(proposal, context.evidence),
+                    confidence=proposal.confianca,
                 )
             )
-        for proposal in proposals:
-            if proposal.categoria is not CategoriaElemento.CABO:
-                continue
-            item = (
-                session.catalogo.item_por_id(proposal.tipo_catalogo_sugerido_id)
-                if proposal.tipo_catalogo_sugerido_id is not None
-                else None
-            )
-            if isinstance(item, TipoCabo):
-                technology = technology_options.get(item.tecnologia_rede_opcao_id)
-                if technology:
-                    facts.append(
-                        _fact(
-                            target.id,
-                            "cabo.tecnologia",
-                            technology,
-                            "catálogo do cabo reconhecido",
-                            evidence=tuple(
-                                evidence
-                                for evidence in session.evidencias
-                                if evidence.id in proposal.evidencia_ids
-                            ),
-                            confidence=proposal.confianca,
-                        )
-                    )
     return tuple(facts)
 
 

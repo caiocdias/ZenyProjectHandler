@@ -11,14 +11,7 @@ from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 from zeny_project_handler.domain.analysis import ExecucaoAnalise
 from zeny_project_handler.domain.documents import DocumentoProjeto
 from zeny_project_handler.domain.enums import EstadoExecucaoAnalise, EstadoRevisao
-from zeny_project_handler.domain.project import (
-    Cabo,
-    Equipamento,
-    EstruturaBt,
-    EstruturaMt,
-    Poste,
-    Projeto,
-)
+from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler.ports.analysis import ConfiguracaoAnaliseDocumento
 from zeny_project_handler.ports.interpretation import ConfiguracaoInterpretacao
 from zeny_project_handler.ports.pdf import ReferenciaFontePdf
@@ -34,6 +27,9 @@ from .interpretation_pipeline import ExecutarPipelineInterpretacao
 from .managed_files import GerenciadorArquivosGerenciados, fotos_removidas
 from .operation_coordinator import CoordenadorOperacoes, TipoOperacao
 from .pdf_import import ImportarPdfsNoProjeto, ResultadoImportacaoPdfs
+from .project_document_removal import project_without_documents
+
+_project_without_documents = project_without_documents
 
 ProgressCallback = Callable[[int, int, str], None]
 
@@ -509,121 +505,3 @@ def _latest_interpretations_by_source(
         source_id = str(dict(execution.parametros).get("execucao_extracao_id", execution.id))
         latest[source_id] = execution
     return tuple(latest.values())
-
-
-def _project_without_documents(
-    project: Projeto,
-    document_ids: set[UUID],
-    page_ids: set[UUID],
-) -> Projeto:
-    removed_elements = {
-        element.id
-        for element in project.elementos
-        if element.geometria is not None and element.geometria.pagina_id in page_ids
-    }
-    removed_points = {
-        point.id
-        for point in project.pontos_rede
-        if point.geometria is not None and point.geometria.pagina_id in page_ids
-    }
-    changed = True
-    while changed:
-        before = len(removed_elements) + len(removed_points)
-        removed_poles = {
-            element.id
-            for element in project.elementos
-            if isinstance(element, Poste) and element.id in removed_elements
-        }
-        removed_points.update(
-            point.id for point in project.pontos_rede if point.poste_id in removed_poles
-        )
-        for element in project.elementos:
-            if _element_depends_on_removed_reference(
-                element,
-                removed_poles,
-                removed_points,
-            ):
-                removed_elements.add(element.id)
-        changed = before != len(removed_elements) + len(removed_points)
-
-    removed_equipment = {
-        element.id
-        for element in project.elementos
-        if isinstance(element, Equipamento) and element.id in removed_elements
-    }
-    removed_terminals = {
-        terminal.id
-        for terminal in project.terminais
-        if terminal.equipamento_id in removed_equipment or terminal.ponto_rede_id in removed_points
-    }
-    removed_references = removed_elements | removed_points | removed_terminals
-    retained_relations = tuple(
-        relation
-        for relation in project.relacoes_confirmadas
-        if relation.origem_id not in removed_references
-        and relation.destino_id not in removed_references
-    )
-    removed_relation_ids = {
-        relation.id
-        for relation in project.relacoes_confirmadas
-        if relation not in retained_relations
-    }
-    return replace(
-        project,
-        documentos=tuple(
-            document for document in project.documentos if document.id not in document_ids
-        ),
-        ordem_leitura_paginas=tuple(
-            page_id for page_id in project.ordem_leitura_paginas if page_id not in page_ids
-        ),
-        elementos=tuple(
-            element for element in project.elementos if element.id not in removed_elements
-        ),
-        pontos_rede=tuple(point for point in project.pontos_rede if point.id not in removed_points),
-        terminais=tuple(
-            terminal for terminal in project.terminais if terminal.id not in removed_terminals
-        ),
-        conexoes_internas=tuple(
-            connection
-            for connection in project.conexoes_internas
-            if connection.equipamento_id not in removed_equipment
-            and connection.terminal_origem_id not in removed_terminals
-            and connection.terminal_destino_id not in removed_terminals
-        ),
-        vinculos_obra=tuple(
-            link
-            for link in project.vinculos_obra
-            if link.elemento_origem_id not in removed_elements
-            and link.elemento_destino_id not in removed_elements
-        ),
-        relacoes_confirmadas=retained_relations,
-        historico_revisao_manual=tuple(
-            record
-            for record in project.historico_revisao_manual
-            if record.referencia_criada_id not in removed_elements
-            and record.referencia_criada_id not in removed_relation_ids
-        ),
-    )
-
-
-def _element_depends_on_removed_reference(
-    element: object,
-    removed_poles: set[UUID],
-    removed_points: set[UUID],
-) -> bool:
-    if isinstance(element, (EstruturaMt, EstruturaBt)):
-        return element.poste_id in removed_poles or bool(
-            set(element.pontos_fixados_ids).intersection(removed_points)
-        )
-    if isinstance(element, Equipamento):
-        return element.poste_id in removed_poles
-    if isinstance(element, Cabo):
-        return bool(
-            {
-                element.ponto_origem_id,
-                element.ponto_destino_id,
-                *element.pontos_intermediarios_ids,
-            }.intersection(removed_points)
-            or set(element.postes_apoio_ids).intersection(removed_poles)
-        )
-    return False
