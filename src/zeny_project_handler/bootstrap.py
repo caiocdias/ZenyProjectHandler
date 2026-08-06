@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from collections.abc import Sequence
 from typing import cast
+from uuid import UUID
 
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
@@ -31,7 +32,9 @@ from zeny_project_handler.adapters.persistence import (
 )
 from zeny_project_handler.adapters.portability import ZipProjectArchive
 from zeny_project_handler.application.document_analysis import ExecutarAnaliseDocumento
+from zeny_project_handler.application.errors import ApplicationError
 from zeny_project_handler.application.human_review import ServicoRevisaoHumana
+from zeny_project_handler.application.import_recovery import RecuperadorImportacaoProjeto
 from zeny_project_handler.application.interpretation_pipeline import ExecutarPipelineInterpretacao
 from zeny_project_handler.application.mvp_workflow import ServicoFluxoMvp
 from zeny_project_handler.application.operation_coordinator import CoordenadorOperacoes
@@ -44,6 +47,7 @@ from zeny_project_handler.logging_config import (
     install_unhandled_exception_logging,
     operation_logger,
 )
+from zeny_project_handler.ports.persistence import ComprovanteCommitImportacao
 from zeny_project_handler.ui.main_window import MainWindow
 
 
@@ -75,7 +79,7 @@ def create_application(
         observation.started()
         try:
             application, window = _compose_application(argv, app_settings)
-        except ValueError as error:
+        except (ApplicationError, ValueError) as error:
             observation.failed(error, expected=True)
             raise
         except Exception as error:
@@ -172,10 +176,17 @@ def _compose_initialized_application(
 
 
 def initialize_local_storage(settings: AppSettings) -> Engine:
-    """Crie a pasta local e migre o banco antes de expor a interface."""
+    """Migre e reconcilie o estado local antes de expor qualquer operação."""
     engine = create_sqlite_engine(settings.database_path)
     try:
         upgrade_database(engine)
+        recovery = RecuperadorImportacaoProjeto(settings.data_directory)
+
+        def obter_comprovante(operation_id: UUID) -> ComprovanteCommitImportacao | None:
+            with SqlAlchemyUnitOfWork(engine) as work:
+                return work.comprovantes_importacao.obter(operation_id)
+
+        recovery.reconciliar(obter_comprovante)
     except Exception:
         engine.dispose()
         raise

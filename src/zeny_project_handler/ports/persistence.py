@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime
 from types import TracebackType
 from typing import Protocol, Self
 from uuid import UUID
@@ -15,6 +17,24 @@ from zeny_project_handler.domain.analysis import (
 from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler.ports.pdf import FontePdfRepositoryPort
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ComprovanteCommitImportacao:
+    """Prova persistida na mesma transação dos dados importados."""
+
+    operacao_id: UUID
+    projeto_id: UUID
+    pacote_sha256: str
+    plano_sha256: str
+    arquivos_sha256: str
+    confirmado_em: datetime
+
+
+class ComprovanteCommitImportacaoRepositoryPort(Protocol):
+    def obter(self, operacao_id: UUID) -> ComprovanteCommitImportacao | None: ...
+
+    def salvar(self, comprovante: ComprovanteCommitImportacao) -> None: ...
 
 
 class CatalogRepositoryPort(Protocol):
@@ -88,6 +108,9 @@ class UnitOfWorkPort(Protocol):
 
     @property
     def decisoes_revisao(self) -> ReviewDecisionRepositoryPort: ...
+
+    @property
+    def comprovantes_importacao(self) -> ComprovanteCommitImportacaoRepositoryPort: ...
 
     def __enter__(self) -> Self: ...
 

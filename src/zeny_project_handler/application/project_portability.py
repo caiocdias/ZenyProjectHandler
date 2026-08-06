@@ -26,6 +26,14 @@ from zeny_project_handler.application.errors import (
     PortabilidadeProjetoError,
     ProjetoNaoEncontradoError,
 )
+from zeny_project_handler.application.import_recovery import (
+    FaseJournalImportacao,
+    JournalImportacaoProjeto,
+    PontoFalhaImportacao,
+    RecuperadorImportacaoProjeto,
+    fingerprint_arquivos_esperados,
+    fingerprint_arvore_gerenciada,
+)
 from zeny_project_handler.application.operation_coordinator import (
     CoordenadorOperacoes,
     TipoOperacao,
@@ -43,7 +51,10 @@ from zeny_project_handler.domain.portability import (
 from zeny_project_handler.domain.project import ElementoProjetoType, FotoElemento, Projeto
 from zeny_project_handler.logging_config import operation_logger
 from zeny_project_handler.ports.pdf import ReferenciaFontePdf
-from zeny_project_handler.ports.persistence import UnitOfWorkPort
+from zeny_project_handler.ports.persistence import (
+    ComprovanteCommitImportacao,
+    UnitOfWorkPort,
+)
 from zeny_project_handler.ports.portability import (
     ArquivoProjetoPortatilPort,
     BackupLocalPort,
@@ -55,6 +66,7 @@ from zeny_project_handler.ports.portability import (
 
 ProgressCallback = Callable[[int, int, str], None]
 CancelCallback = Callable[[], bool]
+FailureInjectionCallback = Callable[[PontoFalhaImportacao], None]
 T = TypeVar("T")
 _BACKUP_ID = UUID(int=0)
 _PREFLIGHT_STALE_MESSAGE = (
@@ -199,6 +211,7 @@ class ServicoPortabilidadeProjeto:
         descartar_conexoes: Callable[[], None] | None = None,
         relogio: Callable[[], datetime] | None = None,
         gerar_id: Callable[[], UUID] = uuid4,
+        injetar_falha_importacao: FailureInjectionCallback | None = None,
     ) -> None:
         self._unit_of_work = unidade_de_trabalho
         self._archive = arquivo_portatil
@@ -211,6 +224,8 @@ class ServicoPortabilidadeProjeto:
         self._dispose_connections = descartar_conexoes or (lambda: None)
         self._clock = relogio or (lambda: datetime.now(UTC))
         self._new_id = gerar_id
+        self._import_recovery = RecuperadorImportacaoProjeto(self._data_directory)
+        self._inject_import_failure = injetar_falha_importacao
 
     @property
     def coordenador(self) -> CoordenadorOperacoes:
@@ -637,6 +652,7 @@ class ServicoPortabilidadeProjeto:
         progresso: ProgressCallback | None,
         cancelado: CancelCallback | None,
     ) -> ResultadoImportacaoProjeto:
+        self._import_recovery.reconciliar(self._obter_comprovante_importacao)
         notify = progresso or (lambda _current, _total, _message: None)
         self._ensure_not_cancelled(cancelado)
         if plano.fingerprint != _import_plan_fingerprint(plano):
@@ -681,39 +697,62 @@ class ServicoPortabilidadeProjeto:
             if revalidated_plan != plano:
                 raise PlanoImportacaoObsoletoError(_IMPORT_PLAN_STALE_MESSAGE)
             final_root = self._project_root(content.projeto.id)
+            new_files_digest = fingerprint_arquivos_esperados(
+                _managed_manifest_files(extracted.manifesto)
+            )
+            previous_files_digest = fingerprint_arvore_gerenciada(final_root)
+            journal = JournalImportacaoProjeto.novo(
+                operation_id=self._new_id(),
+                project_id=content.projeto.id,
+                package_sha256=plano.pacote_sha256,
+                plan_sha256=plano.fingerprint,
+                target_state_sha256=plano.estado_alvo_sha256,
+                new_files_sha256=new_files_digest,
+                previous_files_sha256=previous_files_digest,
+                previous_assets_existed=previous_files_digest is not None,
+                created_at=self._aware_now(),
+            )
             try:
-                final_root.parent.mkdir(parents=True, exist_ok=True)
-                with (
-                    sibling_temporary_directory(final_root) as staging,
-                    sibling_temporary_directory(final_root, vacant=True) as recovery_root,
-                ):
-                    notify(2, 5, "Preparando PDFs e fotos gerenciados")
-                    self._stage_imported_files(extracted.diretorio, extracted.manifesto, staging)
-                    self._ensure_not_cancelled(cancelado)
-                    replaced_assets = final_root.exists()
-                    published_assets = False
-                    try:
-                        if replaced_assets:
-                            os.replace(final_root, recovery_root)
-                        os.replace(staging, final_root)
-                        published_assets = True
-                        notify(3, 5, "Publicando arquivos validados")
-                        notify(4, 5, "Persistindo projeto e histórico")
-                        replaced_project = self._persist_imported_content(
-                            content,
-                            extracted.manifesto,
-                            substituir_existente=confirmar_substituicao,
-                        )
-                    except Exception:
-                        if published_assets:
-                            shutil.rmtree(final_root, ignore_errors=True)
-                        if recovery_root.exists():
-                            os.replace(recovery_root, final_root)
-                        raise
-            except OSError as error:
-                raise PortabilidadeProjetoError(
-                    "Não foi possível publicar os arquivos importados"
-                ) from error
+                self._import_recovery.registrar(journal)
+                self._inject_failure(PontoFalhaImportacao.ANTES_PREPARAR)
+                paths = self._import_recovery.armazenamento.preparar_workspace(journal)
+                notify(2, 5, "Preparando PDFs e fotos gerenciados")
+                self._stage_imported_files(
+                    extracted.diretorio,
+                    extracted.manifesto,
+                    paths.staging,
+                )
+                if fingerprint_arvore_gerenciada(paths.staging) != new_files_digest:
+                    raise PortabilidadeProjetoError(
+                        "Os arquivos preparados divergiram do manifesto validado"
+                    )
+                self._ensure_not_cancelled(cancelado)
+                journal = journal.avancar(FaseJournalImportacao.PREPARADO)
+                self._import_recovery.registrar(journal)
+                self._inject_failure(PontoFalhaImportacao.DEPOIS_PREPARAR)
+                self._inject_failure(PontoFalhaImportacao.ANTES_TROCAR_ARQUIVOS)
+                if previous_files_digest is not None:
+                    os.replace(final_root, paths.previous)
+                    self._inject_failure(PontoFalhaImportacao.DEPOIS_MOVER_ANTERIOR)
+                os.replace(paths.staging, final_root)
+                journal = journal.avancar(FaseJournalImportacao.ARQUIVOS_TROCADOS)
+                self._import_recovery.registrar(journal)
+                self._inject_failure(PontoFalhaImportacao.DEPOIS_TROCAR_ARQUIVOS)
+                notify(3, 5, "Publicando arquivos validados")
+                notify(4, 5, "Persistindo projeto e histórico")
+                replaced_project, receipt = self._persist_imported_content(
+                    content,
+                    extracted.manifesto,
+                    journal=journal,
+                    substituir_existente=confirmar_substituicao,
+                )
+                self._import_recovery.concluir_commit(
+                    journal,
+                    receipt,
+                    injetar_falha=self._inject_import_failure,
+                )
+            except Exception as error:
+                self._reconcile_after_import_failure(error)
             notify(5, 5, "Conferindo projeto importado")
             imported = self._project(content.projeto.id)
         return ResultadoImportacaoProjeto(
@@ -1117,8 +1156,9 @@ class ServicoPortabilidadeProjeto:
         content: ConteudoBancoProjetoPortatil,
         manifest: ManifestoProjetoPortatil,
         *,
+        journal: JournalImportacaoProjeto,
         substituir_existente: bool,
-    ) -> bool:
+    ) -> tuple[bool, ComprovanteCommitImportacao]:
         final_root = self._project_root(content.projeto.id)
         pdf_entries = {
             item.referencia_id: item
@@ -1159,8 +1199,41 @@ class ServicoPortabilidadeProjeto:
                         modificado_em_ns=stat_result.st_mtime_ns,
                     )
                 )
+            receipt = ComprovanteCommitImportacao(
+                operacao_id=journal.operation_id,
+                projeto_id=journal.project_id,
+                pacote_sha256=journal.package_sha256,
+                plano_sha256=journal.plan_sha256,
+                arquivos_sha256=journal.new_files_sha256,
+                confirmado_em=self._aware_now(),
+            )
+            work.comprovantes_importacao.salvar(receipt)
+            self._inject_failure(PontoFalhaImportacao.ANTES_COMMIT_BANCO)
             work.commit()
-            return existing is not None
+            self._inject_failure(PontoFalhaImportacao.DEPOIS_COMMIT_BANCO)
+            return existing is not None, receipt
+
+    def _obter_comprovante_importacao(
+        self,
+        operation_id: UUID,
+    ) -> ComprovanteCommitImportacao | None:
+        with self._unit_of_work() as work:
+            return work.comprovantes_importacao.obter(operation_id)
+
+    def _reconcile_after_import_failure(self, error: Exception) -> None:
+        try:
+            self._import_recovery.reconciliar(self._obter_comprovante_importacao)
+        except Exception as recovery_error:
+            raise recovery_error from error
+        if isinstance(error, OSError):
+            raise PortabilidadeProjetoError(
+                "Não foi possível publicar os arquivos importados"
+            ) from error
+        raise error
+
+    def _inject_failure(self, point: PontoFalhaImportacao) -> None:
+        if self._inject_import_failure is not None:
+            self._inject_import_failure(point)
 
     def _stage_imported_files(
         self,
@@ -1376,6 +1449,18 @@ def _update_managed_tree_fingerprint(digest: _HashWriter, root: Path) -> None:
             _update_fingerprint(digest, "file", f"{relative}:{size}:{file_digest}")
         else:
             _update_fingerprint(digest, "other", relative)
+
+
+def _managed_manifest_files(
+    manifest: ManifestoProjetoPortatil,
+) -> tuple[tuple[str, int, str], ...]:
+    files: list[tuple[str, int, str]] = []
+    for entry in manifest.arquivos:
+        if entry.tipo not in {"PDF", "FOTO"}:
+            continue
+        relative = PurePosixPath(entry.caminho_relativo).relative_to("files")
+        files.append((relative.as_posix(), entry.tamanho_bytes, entry.sha256))
+    return tuple(files)
 
 
 def _element(project: Projeto, element_id: UUID) -> ElementoProjetoType:

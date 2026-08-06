@@ -49,6 +49,10 @@ class PlanoImportacaoObsoletoError(PortabilidadeProjetoError):
     """O pacote ou o destino mudou depois do preflight de importação."""
 
 
+class RecuperacaoImportacaoBloqueadaError(PortabilidadeProjetoError):
+    """O journal não permite reconciliar a importação sem risco para os dados."""
+
+
 class PortabilidadeCanceladaError(ApplicationError):
     """A portabilidade foi cancelada antes de uma fronteira de publicação segura."""
 

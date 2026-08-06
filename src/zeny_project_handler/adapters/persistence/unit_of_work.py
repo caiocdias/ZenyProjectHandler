@@ -14,6 +14,7 @@ from .analysis_repository import (
     SqlReviewDecisionRepository,
 )
 from .catalog_repository import SqlCatalogRepository
+from .import_commit_repository import SqlImportCommitRepository
 from .pdf_source_repository import SqlPdfSourceRepository
 from .project_repository import (
     SqlDocumentRepository,
@@ -42,6 +43,7 @@ class SqlAlchemyUnitOfWork:
         self.evidencias = SqlEvidenceRepository(self._session)
         self.propostas = SqlProposalRepository(self._session)
         self.decisoes_revisao = SqlReviewDecisionRepository(self._session)
+        self.comprovantes_importacao = SqlImportCommitRepository(self._session)
         return self
 
     def __exit__(

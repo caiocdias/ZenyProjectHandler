@@ -33,8 +33,11 @@ _STRUCTURED_FIELDS = (
     "error_code",
     "item_count",
     "cache_hit",
+    "phase",
+    "recovery_action",
+    "journal_version",
 )
-_TOKEN_FIELDS = frozenset({"operation", "status", "error_code"})
+_TOKEN_FIELDS = frozenset({"operation", "status", "error_code", "phase", "recovery_action"})
 _ID_FIELDS = frozenset({"correlation_id", "project_id", "document_id", "execution_id"})
 _TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{1,100}$")
 _ID_PATTERN = re.compile(r"^[A-Fa-f0-9-]{8,64}$")
@@ -82,7 +85,7 @@ def _safe_structured_value(name: str, value: object) -> object | None:
     if name == "document_ids" and isinstance(value, (tuple, list)):
         identifiers = tuple(_safe_identifier(item) for item in value)
         return list(identifiers) if all(item is not None for item in identifiers) else None
-    if name == "item_count":
+    if name in {"item_count", "journal_version"}:
         valid_count = isinstance(value, int) and not isinstance(value, bool) and value >= 0
         return value if valid_count else None
     if name == "cache_hit":
@@ -191,12 +194,14 @@ class OperationLogger:
     def cancelled(self, **fields: object) -> None:
         self._emit(logging.INFO, "cancelled", fields)
 
-    def failed(self, error: BaseException, *, expected: bool) -> None:
+    def failed(self, error: BaseException, *, expected: bool, **fields: object) -> None:
         level = logging.WARNING if expected else logging.ERROR
+        failure_fields = dict(fields)
+        failure_fields["error_code"] = error.__class__.__name__
         self._emit(
             level,
             "failed",
-            {"error_code": error.__class__.__name__},
+            failure_fields,
             exc_info=None if expected else (type(error), error, error.__traceback__),
         )
 

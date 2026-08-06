@@ -263,3 +263,14 @@ review_decisions = Table(
         name="fk_review_decisions_element_project",
     ),
 )
+
+import_commits = Table(
+    "import_commits",
+    metadata,
+    Column("operation_id", String(36), primary_key=True),
+    Column("project_id", String(36), nullable=False),
+    Column("package_sha256", String(64), nullable=False),
+    Column("plan_sha256", String(64), nullable=False),
+    Column("files_sha256", String(64), nullable=False),
+    Column("committed_at", String(40), nullable=False),
+)
