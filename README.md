@@ -19,7 +19,11 @@ Execute uma vez:
 .\setup.bat
 ```
 
-O script cria `.venv`, instala todas as versões fixadas em `requirements.lock` e instala o aplicativo no ambiente virtual.
+O script cria `.venv`, instala todas as versões fixadas em `requirements.lock`, instala o aplicativo
+no ambiente virtual e só então valida o Tesseract e o idioma português. Se a instalação do
+executável, a rede ou o provisionamento do idioma falhar, o setup retorna erro sem remover a
+`.venv`: o aplicativo continua disponível com os extratores nativos e mostra na barra de status uma
+ação com a remediação do OCR.
 
 Para abrir o aplicativo sem uma janela de console, dê dois cliques em `ZenyProjectHandler.vbs` ou
 execute:
@@ -219,18 +223,57 @@ instalações equivalentes em pastas diferentes têm a mesma assinatura. O mesmo
 chave do cache, do ID estável da execução e da proveniência persistida nas execuções e evidências.
 Caches do schema anterior são apenas ignorados e reconstruídos sob demanda.
 
-O `setup.bat` verifica o Tesseract e, quando ele não está presente, instala automaticamente o pacote
-`UB-Mannheim.TesseractOCR` pelo Windows Package Manager (`winget`). O aplicativo o descobre no
-`PATH`, no local padrão do Windows ou no caminho indicado por `ZENY_TESSERACT_PATH`. Se a instalação
-automática não estiver disponível, o comando equivalente é:
+O `setup.bat` verifica o Tesseract e, quando ele não está presente, tenta instalar para o usuário o
+pacote `UB-Mannheim.TesseractOCR` pelo Windows Package Manager (`winget`). O aplicativo o descobre no
+`PATH`, no local padrão do Windows ou no caminho indicado por `ZENY_TESSERACT_PATH`. Se o pacote não
+admitir instalação sem elevação nessa máquina, solicite a instalação ao administrador ou indique uma
+instalação autorizada em pasta gravável por essa variável. O comando equivalente é:
 
 ```powershell
-winget install --id UB-Mannheim.TesseractOCR
+winget install --id UB-Mannheim.TesseractOCR --exact --scope user
 ```
 
-Instale também os dados de idioma `por` quando o instalador oferecer essa opção. O aplicativo usa
-`por+eng` automaticamente quando ambos estão disponíveis e mantém `eng` como fallback. O OCR é
-executado localmente, a 450 DPI e sem serviço de rede, em
+Encontrar o `.exe` não basta: tanto o setup quanto o diagnóstico de inicialização executam
+`tesseract --list-langs` e só declaram o OCR português pronto quando `por` aparece. Se o idioma já
+estiver na instalação selecionada, ele é usado no lugar. Caso contrário, o setup baixa somente
+`por.traineddata` para a pasta gravável
+`<dados-do-aplicativo>\ocr\tessdata-fast-4.1.0`; `ZENY_DATA_DIR` controla a raiz de dados e
+`ZENY_TESSDATA_DIR` pode indicar outra pasta gravável. Não há tentativa de escrever em
+`Program Files`. Quando `eng` existe na instalação, ele é copiado para a pasta gerenciada e o
+adaptador seleciona `por+eng`; sem `eng`, seleciona `por`. Ausência de `por` desativa o OCR, sem
+aceitar `eng` sozinho como sucesso da instalação.
+
+O artefato provisionado vem do repositório oficial
+[`tesseract-ocr/tessdata_fast`](https://github.com/tesseract-ocr/tessdata_fast), release assinada
+`4.1.0`, revisão imutável `65727574dfcd264acbb0c3e07860e4e9e9b22185`:
+
+- origem: [`por.traineddata`](https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/65727574dfcd264acbb0c3e07860e4e9e9b22185/por.traineddata);
+- tamanho observado: `1.982.756` bytes;
+- SHA-256 obrigatório: `c4932b937207a9514b7514d518b931a99938c02a28a5a5a553f8599ed58b7deb`;
+- licença: Apache-2.0, registrada em [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+
+O download é gravado primeiro em arquivo temporário na pasta gerenciada. Somente um conteúdo com o
+SHA-256 fixado substitui `por.traineddata`; um arquivo inválido é descartado antes de qualquer uso.
+`TESSDATA_PREFIX` é acrescentado apenas ao ambiente dos subprocessos `tesseract --list-langs` e de
+reconhecimento, sem alterar o ambiente do aplicativo, do terminal ou do sistema.
+
+Em uma máquina offline, obtenha o arquivo da origem acima por um canal autorizado, confira
+`Get-FileHash .\por.traineddata -Algorithm SHA256`, copie-o para `ZENY_TESSDATA_DIR` (ou para a pasta
+gerenciada padrão) e repita:
+
+```powershell
+.\.venv\Scripts\python.exe -m zeny_project_handler.tesseract_setup --provision
+```
+
+O comando ainda confirma o resultado pelo próprio `--list-langs`; não imprime sucesso se a rede,
+o acesso à pasta, o checksum ou essa validação falhar. A inicialização exibe “OCR português
+indisponível — como corrigir”, e a ação apresenta os mesmos passos. Para remover o dado provisionado,
+feche o aplicativo e exclua somente `por.traineddata` e a cópia de `eng.traineddata` dessa pasta, ou
+a pasta versionada `tessdata-fast-4.1.0` inteira. Ela é um recurso reconstruível, não participa dos
+backups de projetos e funciona como cache local versionado do modelo: será recriada pelo próximo
+setup. Não remova a raiz de dados do aplicativo.
+
+O OCR é executado localmente, a 450 DPI e sem serviço de rede, em
 páginas com pouco texto nativo, área raster relevante ou grande densidade vetorial — caso típico de
 letras e números plotados como caminhos pelo AutoCAD. Desenhos vetoriais densos são divididos em
 nove blocos sobrepostos antes do reconhecimento, para
@@ -239,7 +282,8 @@ nativo suficiente,
 pequenas imagens com resolução útil são processadas por recorte, preservando a geometria correta na
 folha sem renderizar a página inteira. Sem Tesseract, os demais extratores continuam funcionando e
 a execução registra um diagnóstico revisável. Um executável defeituoso, uma consulta que exceda o
-timeout ou um `traineddata` inacessível também desativa somente o OCR, com diagnóstico sanitizado;
+timeout, ausência de `por` ou um `traineddata` inacessível também desativa somente o OCR, com
+diagnóstico sanitizado e remediação na interface;
 texto, vetores, imagens, anotações e Form XObjects continuam sendo extraídos.
 
 Marcadores de ponto desenhados como texto azul dentro de círculos vermelhos recebem uma segunda

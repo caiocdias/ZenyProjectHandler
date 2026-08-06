@@ -204,6 +204,10 @@ que os reconheça.
   texto, vetores, imagens ou anotações válidos obtidos por outros extratores.
 - OCR permanece desacoplado por `MotorOcrPort`. O adaptador local Tesseract é descoberto no `PATH`,
   no local padrão do Windows ou por `ZENY_TESSERACT_PATH`; nenhum documento é enviado à rede.
+  A inicialização só o habilita quando `tesseract --list-langs` confirma `por`, selecionando
+  `por+eng` quando ambos existem. Dados portugueses provisionados ficam em pasta gravável do
+  aplicativo ou em `ZENY_TESSDATA_DIR`, com checksum fixado; `TESSDATA_PREFIX` é restrito aos
+  subprocessos necessários.
 - O OCR é acionado quando há menos de 20 caracteres nativos, quando uma ocorrência raster ocupa ao
   menos 10% da página ou quando há pelo menos 1.000 caminhos vetoriais. O terceiro caso cobre textos
   plotados como contornos pelo AutoCAD mesmo quando o carimbo ainda contém texto nativo pesquisável.

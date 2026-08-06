@@ -47,6 +47,7 @@ derivado do PDF e não deve competir com o original como fonte canônica.
 9. Caminhos do executável e de `tessdata` nunca entram na capacidade. O adaptador consulta
    `--version` e `--list-langs` uma vez por instância, com timeout; depois fixa o diretório de dados
    identificado para que o reconhecimento use exatamente os arquivos que foram assinados.
+   `TESSDATA_PREFIX` existe somente no ambiente dos subprocessos de metadados/reconhecimento.
 10. O cache JSON guarda candidatos normalizados, nunca IDs de uma execução. Sua chave combina
     SHA-256 do PDF, configuração e a assinatura de capacidade do analisador, que incorpora a
     assinatura OCR. O schema incompatível anterior é rejeitado como cache vazio e reconstruído sob
@@ -57,6 +58,12 @@ derivado do PDF e não deve competir com o original como fonte canônica.
 12. Na materialização, IDs de evidência usam UUID v5 dentro do ID da execução e uma chave estável do
     recurso. O caso de uso valida a referência local e grava execução e evidências em uma transação
     SQLite. O PDF permanece somente leitura.
+13. A inicialização consulta um componente de runtime separado e só compõe o adaptador quando
+    `tesseract --list-langs` confirma `por`. O setup pode provisionar o `por.traineddata` oficial de
+    `tessdata_fast` 4.1.0, revisão `65727574dfcd264acbb0c3e07860e4e9e9b22185`, em pasta gravável de
+    dados do aplicativo. SHA-256 é conferido antes da substituição atômica; análise e inicialização
+    nunca baixam dados. Quando `eng` já está instalado, uma cópia local permite selecionar
+    `por+eng` na mesma raiz sem escrever em `Program Files`.
 
 ## Verificação
 
@@ -81,6 +88,8 @@ derivado do PDF e não deve competir com o original como fonte canônica.
   portabilidade do projeto.
 - Tesseract continua substituível por outro mecanismo que implemente a mesma consulta de capacidade;
   uma implementação sem identidade reproduzível não satisfaz mais a porta.
+- Falha de rede ou de provisionamento não remove a `.venv` nem bloqueia os extratores nativos. O
+  setup retorna erro e a interface mantém uma remediação visível até `por` ser validado.
 - Calcular hashes dos `traineddata` tem custo de I/O, limitado à primeira consulta de cada instância.
   O ganho é impedir reaproveitamento silencioso de resultados produzidos por dados diferentes.
 - A decisão de licenciamento do PyMuPDF registrada no ADR 0003 continua pendente antes da
@@ -91,3 +100,5 @@ derivado do PDF e não deve competir com o original como fonte canônica.
 - [Estrutura de `rawdict` e propriedades de texto](https://pymupdf.readthedocs.io/en/latest/textpage.html)
 - [Extração de desenhos vetoriais](https://pymupdf.readthedocs.io/en/latest/recipes-drawing-and-graphics.html)
 - [Objetos, streams e recursos PDF](https://pymupdf.readthedocs.io/en/latest/document.html)
+- [`tessdata_fast` e licença Apache-2.0](https://github.com/tesseract-ocr/tessdata_fast/tree/65727574dfcd264acbb0c3e07860e4e9e9b22185)
+- [Configuração de `TESSDATA_PREFIX`](https://tesseract-ocr.github.io/tessdoc/Compiling-%E2%80%93-GitInstallation.html)

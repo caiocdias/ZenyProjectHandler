@@ -89,7 +89,7 @@ com o corpus completo. Seus resultados não substituem o gate básico.
 | 12. Renderização por orçamento e região | CONCLUÍDA | 11 | Pranchas grandes não exigem raster integral de 600 DPI |
 | 13. Visualizador progressivo e assíncrono | CONCLUÍDA | 6, 12 | Zoom detalhado sem congelamento ou resultados obsoletos |
 | 14. Assinatura reprodutível do OCR | CONCLUÍDA | 1 | Cache muda com motor, idioma e configuração |
-| 15. Provisionamento e diagnóstico do português | PENDENTE | 14 | Instalação funcional com `por`, ou erro acionável |
+| 15. Provisionamento e diagnóstico do português | CONCLUÍDA | 14 | Instalação funcional com `por`, ou erro acionável |
 | 16. Credenciais efêmeras para PDFs protegidos | PENDENTE | 6, 11, 13 | Importação, visualização e análise protegidas funcionam |
 | 17. Redução e gate de complexidade | PENDENTE | Todas as anteriores | Sem funções E/F e regressão bloqueada |
 
@@ -1082,7 +1082,7 @@ Crie commits seccionados para as alterações, mantenha na branch main.
 ## Etapa 15 — Provisionamento e diagnóstico do idioma português
 
 **Achado original:** 9.  
-**Estado:** PENDENTE.  
+**Estado:** CONCLUÍDA.
 **Arquivos prováveis:** `setup.bat`, possível helper Python/PowerShell testável, configuração do
 Tesseract, diagnóstico de inicialização, README e testes.
 
@@ -1105,6 +1105,41 @@ Tesseract, diagnóstico de inicialização, README e testes.
 - Download adulterado é rejeitado antes de uso.
 - Falha offline não danifica setup Python e é visível na inicialização/UI.
 - README descreve origem, versão, licença, cache e remoção do traineddata provisionado.
+
+### Registro de conclusão — 06/08/2026
+
+- `tesseract_runtime.py` centralizou descoberta do executável, execução limitada de
+  `tesseract --list-langs`, seleção de idiomas e diagnóstico sanitizado. A inicialização só compõe
+  o adaptador se `por` foi observado; quando `por` e `eng` estão disponíveis na mesma raiz, a ordem
+  efetiva é `por+eng`. Ausência ou defeito do OCR mantém os extratores nativos e cria na barra de
+  status uma ação “como corrigir” com remediação completa.
+- O setup agora conclui dependências, instalação editável e `pip check` antes da etapa OCR. Por isso,
+  falha de `winget`, rede, pasta ou validação preserva a `.venv` e retorna erro sem declarar o OCR
+  português pronto. O executável é tentado com escopo de usuário; instalações autorizadas podem ser
+  indicadas por `ZENY_TESSERACT_PATH`.
+- Quando a instalação selecionada não contém `por`, o provisionador grava em
+  `<dados>/ocr/tessdata-fast-4.1.0` ou `ZENY_TESSDATA_DIR`, sem escrever em `Program Files`. A origem
+  é `tesseract-ocr/tessdata_fast` 4.1.0, revisão
+  `65727574dfcd264acbb0c3e07860e4e9e9b22185`, Apache-2.0, com SHA-256 pinado
+  `c4932b937207a9514b7514d518b931a99938c02a28a5a5a553f8599ed58b7deb`. Download temporário só é
+  promovido atomicamente após o hash; `eng` já instalado é copiado para a raiz gerenciada para
+  permitir `por+eng`.
+- `TESSDATA_PREFIX` não é publicado no processo do aplicativo nem no sistema: cada consulta de
+  idiomas e reconhecimento recebe uma cópia de ambiente própria. O adaptador continua hasheando os
+  arquivos efetivamente usados, portanto a assinatura, o cache e a proveniência da Etapa 14 mudam
+  quando o conteúdo provisionado muda.
+- Testes simulados cobrem idioma presente/ausente, caminho inválido, timeout, pasta sem permissão,
+  instalação sem admin, offline com `.venv` preservada, checksum adulterado, cópia de `eng`,
+  `por+eng`, ambiente filho, CLI/setup, aviso acionável na UI e integração com a assinatura da Etapa
+  14. Os testes focados finais aprovaram `60 passed`.
+- O gate básico canônico aprovou Python 3.13.14, `pip check`, Ruff, `ruff format --check` (`183
+  files`), Mypy (`183 source files`), `408 passed, 20 deselected`, cobertura `85,16%`, complexidade
+  média A (`3,7938`) e `RESULTADO FINAL: APROVADO`. Permaneceu somente o `PytestCacheWarning`
+  ambiental já conhecido por falta de permissão em `.pytest_cache`; o corpus privado não foi
+  acessado.
+- Commits seccionados: `b823871` (`feat(ocr): provision pinned Portuguese tessdata`), `4729cf7`
+  (`test(ocr): cover Portuguese provisioning diagnostics`) e `553dea0` (`test(ocr): cover runtime
+  remediation branches`).
 
 ### Mensagem para um novo chat do Codex
 
