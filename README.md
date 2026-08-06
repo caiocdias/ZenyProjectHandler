@@ -167,6 +167,18 @@ leitura, inclusive intercalando páginas de PDFs diferentes. O arquivo original 
 regravado: a ordem pertence ao projeto, enquanto o aplicativo calcula o SHA-256, registra metadados
 e verifica o conteúdo antes de renderizar ou concluir uma importação.
 
+PDFs protegidos solicitam a senha em campo mascarado, individualmente por arquivo. Cada item permite
+até três senhas digitadas; **Cancelar** pula somente aquele PDF durante uma seleção múltipla e o
+resumo informa quantos foram adicionados, cancelados, ficaram sem senha válida ou falharam. Senhas
+corretas são reutilizadas somente na sessão atual e pela identidade SHA-256, tamanho e `mtime` da
+origem. Limpar/trocar o conjunto visual, fechar ou reiniciar o aplicativo, ou alterar a identidade do
+arquivo exige nova solicitação.
+
+Antes de criar a thread de análise, a interface faz o preflight de todos os documentos e resolve as
+credenciais na thread principal; workers nunca abrem diálogos. Senhas não são gravadas no SQLite,
+log, cache de análise/visual, manifesto de pacote, backup, `QSettings` ou mensagens de erro. Elas
+existem apenas no provedor em memória e nas chamadas transitórias do leitor/analisador.
+
 Cada elemento identificado aparece no PDF como um sublinhado colorido e clicável. O clique abre a
 aba **Resultados da análise** e seleciona o elemento correspondente. A visão principal é hierárquica:
 cada região da folha reúne coordenada, acontecimentos, estruturas, equipamentos, postes, cabos e

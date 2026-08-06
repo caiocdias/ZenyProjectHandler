@@ -90,7 +90,7 @@ com o corpus completo. Seus resultados não substituem o gate básico.
 | 13. Visualizador progressivo e assíncrono | CONCLUÍDA | 6, 12 | Zoom detalhado sem congelamento ou resultados obsoletos |
 | 14. Assinatura reprodutível do OCR | CONCLUÍDA | 1 | Cache muda com motor, idioma e configuração |
 | 15. Provisionamento e diagnóstico do português | CONCLUÍDA | 14 | Instalação funcional com `por`, ou erro acionável |
-| 16. Credenciais efêmeras para PDFs protegidos | PENDENTE | 6, 11, 13 | Importação, visualização e análise protegidas funcionam |
+| 16. Credenciais efêmeras para PDFs protegidos | CONCLUÍDA | 6, 11, 13 | Importação, visualização e análise protegidas funcionam |
 | 17. Redução e gate de complexidade | PENDENTE | Todas as anteriores | Sem funções E/F e regressão bloqueada |
 
 Estados permitidos: `PENDENTE`, `EM ANDAMENTO`, `BLOQUEADA` e `CONCLUÍDA`.
@@ -1154,7 +1154,7 @@ Crie commits seccionados para as alterações, mantenha na branch main.
 ## Etapa 16 — Credenciais efêmeras para PDFs protegidos
 
 **Achado original:** 14.  
-**Estado:** PENDENTE.  
+**Estado:** CONCLUÍDA.
 **Arquivos prováveis:** erros/portas PDF, casos de uso de importação/análise, estado de sessão,
 `project_panel.py`, `pdf_viewer.py`, diálogo seguro e testes.
 
@@ -1180,6 +1180,34 @@ Crie commits seccionados para as alterações, mantenha na branch main.
   reinício/limpeza.
 - Senha não aparece em banco, logs, cache, manifesto, configurações ou mensagens.
 - Cancelamento, senha errada, troca de arquivo e fechamento limpam estado corretamente.
+
+### Registro de conclusão — 06/08/2026
+
+- `ProvedorCredenciaisPdfMemoria` mantém senhas sob `RLock` somente no processo atual e as indexa por
+  SHA-256, tamanho e `mtime`. A representação do provedor expõe apenas a quantidade; troca de
+  identidade não encontra a entrada anterior, e limpeza, troca do conjunto visual ou fechamento
+  removem as credenciais alcançáveis.
+- `PdfProtegidoError` agora distingue de forma segura senha ausente e senha incorreta. Leitor e
+  analisador emitem o mesmo erro sem incorporar a credencial em mensagem, `repr` ou encadeamento.
+- Importações selecionadas pela UI são confirmadas uma a uma. Cada PDF protegido possui até três
+  tentativas digitadas em `QInputDialog` com `EchoMode.Password`; cancelar pula somente o item atual e
+  o resumo final preserva e contabiliza documentos já adicionados, cancelados, esgotados e falhos.
+- O visualizador abre cada origem com sua própria credencial e preserva a visualização anterior se a
+  solicitação for cancelada ou esgotada. Credenciais corretas são reutilizadas apenas enquanto a
+  identidade permanece ativa na sessão.
+- A análise executa preflight de todas as origens na thread principal antes de instanciar o
+  `_PipelineWorker`. O worker recebe um mapa transitório por UUID de documento, nunca abre modal e
+  limpa sua cópia em `finally`; o pipeline encaminha somente a senha do documento corrente.
+- Testes unitários e pytest-qt cobrem provedor, identidade alterada, mensagens seguras, senhas
+  distintas, reutilização, limpeza, reinício, limite de tentativas, cancelamento parcial, thread do
+  diálogo e ausência de modal no worker. Uma varredura pelos bytes do SQLite, JSON/JSONL, cache,
+  `ui-state.ini` e `.zphproj` confirma que os segredos sintéticos não aparecem nos artefatos.
+- Gate básico canônico aprovado: dependências íntegras; Ruff e formatação limpos; Mypy sem erros em
+  `187 source files`; `414 passed, 20 deselected`; cobertura `85,07%`; complexidade média A
+  (`3,7801`); `RESULTADO FINAL: APROVADO`. Houve um único `PytestCacheWarning` porque o ambiente de
+  execução não permitiu atualizar `.pytest_cache`; nenhum teste, cobertura ou gate foi afetado.
+- Commits: `855d5ad` (`feat(pdf): add ephemeral per-document credentials`) e `0b444dc`
+  (`feat(ui): complete protected PDF workflows`).
 
 ### Mensagem para um novo chat do Codex
 

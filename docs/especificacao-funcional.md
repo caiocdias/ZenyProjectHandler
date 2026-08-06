@@ -179,13 +179,22 @@ que os reconheça.
   pixels e cena, incluindo origem/dimensões de clips. A interface reaplica sobreposições após
   rotação usando essa transformação; tiles permanecem sob overlays e links de revisão clicáveis.
 - A abertura aceita um ou vários PDFs. Todo PDF selecionado no fluxo do projeto é importado
-  imediatamente como parte dele, sem uma ação separada de união. A lista de folhas permite arrastar
-  qualquer página ou usar **Subir** e **Descer**; essa sequência persistida define a paginação
-  contínua e pode intercalar páginas de arquivos diferentes. Nenhum PDF original é concatenado ou
-  modificado, e uma falha ou duplicidade mantém intacto o projeto que já estava aberto.
+  imediatamente como parte dele, sem uma ação separada de união. A interface confirma cada arquivo
+  em sua própria transação para preservar os anteriores quando um item posterior é cancelado ou
+  falha. A lista de folhas permite arrastar qualquer página ou usar **Subir** e **Descer**; essa
+  sequência persistida define a paginação contínua e pode intercalar páginas de arquivos diferentes.
+  Nenhum PDF original é concatenado ou modificado.
 - A origem local é registrada em `document_sources`, fora do payload de domínio. Projeto,
-  documento e referência são gravados na mesma transação; entrada inválida, protegida, corrompida,
-  duplicada ou alterada não deixa uma importação parcial.
+  documento e referência de cada arquivo são gravados na mesma transação; entrada inválida,
+  corrompida, duplicada ou alterada não deixa aquele arquivo parcialmente importado.
+- PDFs protegidos usam um provedor estritamente em memória, indexado por SHA-256, tamanho e `mtime`.
+  O diálogo é mascarado, diferencia ausência de senha de senha incorreta e aceita no máximo três
+  senhas digitadas por documento. Cancelar pula somente o item atual na importação múltipla. Troca de
+  identidade, limpeza, fechamento e reinício invalidam a reutilização.
+- Visualização e análise reutilizam a credencial somente durante a sessão. A análise valida todos os
+  documentos na thread principal antes de criar o worker; nenhuma thread de trabalho abre modal.
+  Senhas não integram entidades, parâmetros persistidos, cache, log, manifesto, backup, `QSettings`
+  ou exceções.
 - O inventário é derivado e recriável. `AnalisadorDocumentoPort` normaliza esse material como
   `EvidenciaDocumento` sem depender da interface.
 
@@ -428,10 +437,11 @@ sintéticas; a partição de teste privada não foi usada para criá-las.
 - O painel **Fluxo do projeto** lista, cria, abre e renomeia projetos no SQLite. Em uma instalação
   vazia, o catálogo inicial publicado é persistido automaticamente antes da criação do primeiro
   projeto.
-- Um ou vários PDFs podem ser selecionados e importados imediatamente no projeto em uma transação
-  única. O usuário pode reordenar qualquer página por arraste ou pelos controles **Subir** e
-  **Descer**; a sequência persistida define a paginação lógica, enquanto cada arquivo e sua
-  referência verificável continuam independentes.
+- Um ou vários PDFs podem ser selecionados e importados imediatamente no projeto. Cada arquivo é
+  confirmado separadamente e a interface apresenta um resumo de adicionados, cancelados, senhas
+  esgotadas e demais falhas. O usuário pode reordenar qualquer página por arraste ou pelos controles
+  **Subir** e **Descer**; a sequência persistida define a paginação lógica, enquanto cada arquivo e
+  sua referência verificável continuam independentes.
 - Projetos podem ser excluídos após confirmação explícita. A exclusão remove banco, análises,
   revisões, fotos e cópias internas da pasta gerenciada, preservando todos os arquivos PDF originais
   externos no sistema de arquivos.
@@ -441,7 +451,8 @@ sintéticas; a partição de teste privada não foi usada para criá-las.
   elementos são coletadas depois do commit somente quando seu digest não possui referência viva.
 - **Executar análise completa** processa todos os documentos do projeto fora da thread da interface,
   apresenta progresso e encadeia extração, interpretação, promoção automática e abertura dos
-  resultados relacionados.
+  resultados relacionados. Um preflight síncrono resolve ou cancela credenciais protegidas antes de
+  construir a thread de trabalho.
 - O usuário pode solicitar cancelamento. Resultados completos são preservados e a retomada reutiliza
   identidades determinísticas, sem duplicar execuções, evidências ou propostas.
 - O painel apresenta documentos, folhas, estados das execuções, identificações automáticas e
