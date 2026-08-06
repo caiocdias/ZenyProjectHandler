@@ -1725,6 +1725,10 @@ def _extract_ocr_region(
     bounds: tuple[Decimal, Decimal, Decimal, Decimal],
     stable_suffix: str,
 ) -> tuple[CandidatoEvidenciaDocumento, ...]:
+    capability = engine.consultar_capacidade().capacidade
+    if capability is None:
+        raise RuntimeError("Capacidade do motor OCR indisponível")
+    capability_signature = capability.assinatura()
     left, top, right, bottom = bounds
     page_rect = page.rect
     clip = pymupdf.Rect(
@@ -1770,7 +1774,8 @@ def _extract_ocr_region(
         candidates.append(
             CandidatoEvidenciaDocumento(
                 chave_estavel=(
-                    f"p{page_number}:ocr:{engine.nome}:{engine.versao}:{stable_suffix}:{index}"
+                    f"p{page_number}:ocr:{engine.nome}:{capability_signature}:"
+                    f"{stable_suffix}:{index}"
                 ),
                 pagina_numero=page_number,
                 tipo=TipoEvidencia.OCR,
@@ -1779,7 +1784,9 @@ def _extract_ocr_region(
                 conteudo_bruto=item.texto,
                 atributos_extraidos=_extras(
                     motor_ocr=engine.nome,
-                    versao_motor_ocr=engine.versao,
+                    versao_motor_ocr=capability.versao,
+                    assinatura_capacidade_ocr=capability_signature,
+                    idiomas_motor_ocr="+".join(capability.idiomas),
                     confianca=confidence,
                     dpi=dpi,
                     recorte_normalizado=",".join(map(str, bounds)),

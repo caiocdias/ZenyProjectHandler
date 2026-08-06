@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from zeny_project_handler.domain.analysis import EvidenciaDocumento, ExecucaoAnalise
+from zeny_project_handler.domain.catalog import ExtraAttributes
 from zeny_project_handler.domain.documents import DocumentoProjeto
 from zeny_project_handler.domain.enums import EstadoExecucaoAnalise
 from zeny_project_handler.domain.errors import DomainValidationError
@@ -54,7 +55,7 @@ class ExecutarAnaliseDocumento:
     @property
     def assinatura_analisador(self) -> str:
         """Identidade que invalida execuções persistidas quando o extrator muda."""
-        return f"{self._analisador.nome}:{self._analisador.versao}"
+        return self._analisador.assinatura_capacidade
 
     def executar(
         self,
@@ -171,7 +172,7 @@ class ExecutarAnaliseDocumento:
             projeto_id=project_id,
             metodo=self._analisador.nome,
             versao_metodo=self._analisador.versao,
-            parametros=configuration.parametros(),
+            parametros=self._execution_parameters(configuration),
             estado=EstadoExecucaoAnalise.CONCLUIDA,
             iniciada_em=started_at,
             finalizada_em=self._finished_at(started_at),
@@ -192,7 +193,7 @@ class ExecutarAnaliseDocumento:
             projeto_id=project_id,
             metodo=self._analisador.nome,
             versao_metodo=self._analisador.versao,
-            parametros=configuration.parametros(),
+            parametros=self._execution_parameters(configuration),
             estado=EstadoExecucaoAnalise.FALHOU,
             iniciada_em=started_at,
             finalizada_em=self._finished_at(started_at),
@@ -209,6 +210,15 @@ class ExecutarAnaliseDocumento:
             for item in evidence:
                 work.evidencias.salvar(item)
             work.commit()
+
+    def _execution_parameters(
+        self,
+        configuration: ConfiguracaoAnaliseDocumento,
+    ) -> ExtraAttributes:
+        return (
+            *configuration.parametros(),
+            ("assinatura_capacidade_analisador", self.assinatura_analisador),
+        )
 
     def _aware_now(self) -> datetime:
         value = self._relogio()

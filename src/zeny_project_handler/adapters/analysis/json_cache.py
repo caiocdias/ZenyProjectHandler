@@ -20,7 +20,7 @@ from zeny_project_handler.ports.analysis import (
 )
 
 _CACHE_KEY = re.compile(r"^[0-9a-f]{64}$")
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 
 
 class JsonAnalysisCache:

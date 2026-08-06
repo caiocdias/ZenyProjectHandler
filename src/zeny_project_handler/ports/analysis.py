@@ -17,7 +17,7 @@ from zeny_project_handler.domain.analysis import (
     OrigemObjetoPdf,
 )
 from zeny_project_handler.domain.catalog import ExtraAttributes
-from zeny_project_handler.domain.documents import DocumentoProjeto
+from zeny_project_handler.domain.documents import SHA256_PATTERN, DocumentoProjeto
 from zeny_project_handler.domain.enums import TipoEvidencia, TipoGeometria
 from zeny_project_handler.domain.values import PontoNormalizado
 from zeny_project_handler.ports.pdf import ReferenciaFontePdf
@@ -179,9 +179,88 @@ class TrechoTextoOcr:
     confianca: float | None = None
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class IdentidadeDadosTreinadosOcr:
+    idioma: str
+    sha256: str
+
+    def __post_init__(self) -> None:
+        language = self.idioma.strip()
+        digest = self.sha256.strip().lower()
+        if not language:
+            raise ValueError("Idioma dos dados treinados deve ser informado")
+        if not SHA256_PATTERN.fullmatch(digest):
+            raise ValueError("Identidade traineddata deve ser um SHA-256 hexadecimal")
+        object.__setattr__(self, "idioma", language)
+        object.__setattr__(self, "sha256", digest)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CapacidadeMotorOcr:
+    implementacao: str
+    versao: str
+    idiomas: tuple[str, ...]
+    dados_treinados: tuple[IdentidadeDadosTreinadosOcr, ...]
+    parametros: ExtraAttributes
+
+    def __post_init__(self) -> None:
+        implementation = self.implementacao.strip()
+        version = self.versao.strip()
+        languages = tuple(language.strip() for language in self.idiomas)
+        parameters = tuple(sorted(self.parametros, key=lambda item: item[0]))
+        if not implementation or not version:
+            raise ValueError("Implementação e versão do OCR devem ser informadas")
+        if not languages or any(not language for language in languages):
+            raise ValueError("A capacidade OCR deve selecionar ao menos um idioma")
+        if len(set(languages)) != len(languages):
+            raise ValueError("Idiomas selecionados para OCR devem ser únicos")
+        if tuple(item.idioma for item in self.dados_treinados) != languages:
+            raise ValueError("Dados treinados devem corresponder aos idiomas selecionados")
+        if any(not key.strip() for key, _ in parameters) or len(
+            {key for key, _ in parameters}
+        ) != len(parameters):
+            raise ValueError("Parâmetros da capacidade OCR devem possuir chaves únicas")
+        object.__setattr__(self, "implementacao", implementation)
+        object.__setattr__(self, "versao", version)
+        object.__setattr__(self, "idiomas", languages)
+        object.__setattr__(self, "parametros", parameters)
+
+    def assinatura(self) -> str:
+        payload = json.dumps(
+            {
+                "implementacao": self.implementacao,
+                "versao": self.versao,
+                "idiomas": self.idiomas,
+                "dados_treinados": [
+                    {"idioma": item.idioma, "sha256": item.sha256} for item in self.dados_treinados
+                ],
+                "parametros": {
+                    key: str(value) if isinstance(value, Decimal) else value
+                    for key, value in self.parametros
+                },
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return sha256(payload.encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ResultadoConsultaCapacidadeOcr:
+    capacidade: CapacidadeMotorOcr | None
+    diagnosticos: tuple[DiagnosticoAnalise, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.capacidade is None and not self.diagnosticos:
+            raise ValueError("Capacidade OCR ausente deve possuir diagnóstico")
+        object.__setattr__(self, "diagnosticos", tuple(self.diagnosticos))
+
+
 class MotorOcrPort(Protocol):
     nome: str
-    versao: str
+
+    def consultar_capacidade(self) -> ResultadoConsultaCapacidadeOcr: ...
 
     def reconhecer(self, pagina: PaginaRasterOcr) -> tuple[TrechoTextoOcr, ...]: ...
 
@@ -219,6 +298,9 @@ class CacheAnaliseDocumentoPort(Protocol):
 class AnalisadorDocumentoPort(Protocol):
     nome: str
     versao: str
+
+    @property
+    def assinatura_capacidade(self) -> str: ...
 
     def analisar(self, solicitacao: SolicitacaoAnaliseDocumento) -> ResultadoAnaliseDocumento: ...
 

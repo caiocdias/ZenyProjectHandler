@@ -3,8 +3,11 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
+from dataclasses import dataclass
 from decimal import Decimal
+from functools import cached_property
 from hashlib import sha256
 from pathlib import Path
 from typing import Any, TypeVar
@@ -44,7 +47,7 @@ class PyMuPdfDocumentAnalyzer:
     """Converte recursos PDF nativos em evidências independentes da biblioteca."""
 
     nome = "pymupdf-nativo"
-    versao = "1.8.0"
+    versao = "1.9.0"
 
     def __init__(
         self,
@@ -55,13 +58,26 @@ class PyMuPdfDocumentAnalyzer:
         self._cache = cache
         self._motor_ocr = motor_ocr
 
+    @property
+    def assinatura_capacidade(self) -> str:
+        payload = json.dumps(
+            {
+                "analisador": self.nome,
+                "versao": self.versao,
+                "ocr": self._ocr_runtime.assinatura,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return sha256(payload.encode("utf-8")).hexdigest()
+
     def analisar(self, solicitacao: SolicitacaoAnaliseDocumento) -> ResultadoAnaliseDocumento:
         source = validar_fonte_solicitacao(solicitacao).expanduser().resolve(strict=True)
         _verify_source(source, solicitacao.fonte.sha256, solicitacao.fonte.tamanho_bytes)
         cache_key = chave_cache_analise(
             documento_sha256=solicitacao.documento.sha256,
             configuracao=solicitacao.configuracao,
-            analisador=self._cache_identity(),
+            analisador=self.assinatura_capacidade,
         )
         extraction, cache_used, runtime_diagnostics = self._load_or_extract(
             source, cache_key, solicitacao
@@ -71,20 +87,43 @@ class PyMuPdfDocumentAnalyzer:
             solicitacao,
             method=self.nome,
             version=self.versao,
+            capability_signature=self.assinatura_capacidade,
         )
         return ResultadoAnaliseDocumento(
             evidencias=evidence,
-            diagnosticos=(*extraction.diagnosticos, *runtime_diagnostics),
+            diagnosticos=(
+                *self._ocr_runtime.diagnosticos,
+                *extraction.diagnosticos,
+                *runtime_diagnostics,
+            ),
             cache_utilizado=cache_used,
         )
 
-    def _cache_identity(self) -> str:
-        ocr_identity = (
-            f"{self._motor_ocr.nome}:{self._motor_ocr.versao}"
-            if self._motor_ocr is not None
-            else "ausente"
+    @cached_property
+    def _ocr_runtime(self) -> _OcrRuntime:
+        if self._motor_ocr is None:
+            return _OcrRuntime(motor=None, assinatura="ausente")
+        try:
+            result = self._motor_ocr.consultar_capacidade()
+        except Exception:
+            diagnostic = _ocr_capability_diagnostic()
+            return _OcrRuntime(
+                motor=None,
+                assinatura=f"indisponivel:{diagnostic.codigo}",
+                diagnosticos=(diagnostic,),
+            )
+        if result.capacidade is None:
+            codes = ",".join(item.codigo for item in result.diagnosticos)
+            return _OcrRuntime(
+                motor=None,
+                assinatura=f"indisponivel:{codes}",
+                diagnosticos=result.diagnosticos,
+            )
+        return _OcrRuntime(
+            motor=self._motor_ocr,
+            assinatura=result.capacidade.assinatura(),
+            diagnosticos=result.diagnosticos,
         )
-        return f"{self.nome}:{self.versao}:ocr={ocr_identity}"
 
     def _load_or_extract(
         self,
@@ -95,7 +134,7 @@ class PyMuPdfDocumentAnalyzer:
         cached, cache_diagnostics = self._read_cache(cache_key)
         if cached is not None:
             return cached, True, cache_diagnostics
-        extraction = _extract_document(source, request, self._motor_ocr)
+        extraction = _extract_document(source, request, self._ocr_runtime.motor)
         _verify_source(source, request.fonte.sha256, request.fonte.tamanho_bytes)
         write_diagnostics = self._write_cache(cache_key, extraction)
         return extraction, False, (*cache_diagnostics, *write_diagnostics)
@@ -127,6 +166,14 @@ def _cache_diagnostic(code: str) -> DiagnosticoAnalise:
         codigo=code,
         mensagem="O cache derivado não pôde ser usado; a análise nativa permanece válida.",
         extrator="cache",
+    )
+
+
+def _ocr_capability_diagnostic() -> DiagnosticoAnalise:
+    return DiagnosticoAnalise(
+        codigo="analise.ocr_capacidade_falhou",
+        mensagem="A capacidade do motor OCR não pôde ser consultada; o OCR foi desativado.",
+        extrator="ocr-capacidade",
     )
 
 
@@ -268,6 +315,7 @@ def _materialize_evidence(
     *,
     method: str,
     version: str,
+    capability_signature: str,
 ) -> tuple[EvidenciaDocumento, ...]:
     page_ids = {page.numero: page.id for page in request.documento.paginas}
     evidence = []
@@ -289,7 +337,10 @@ def _materialize_evidence(
                 geometria=geometry,
                 metodo=method,
                 versao_metodo=version,
-                parametros=request.configuracao.parametros(),
+                parametros=(
+                    *request.configuracao.parametros(),
+                    ("assinatura_capacidade_analisador", capability_signature),
+                ),
                 conteudo_bruto=candidate.conteudo_bruto,
                 criada_em=request.criada_em,
                 origem_pdf=candidate.origem_pdf,
@@ -329,3 +380,10 @@ def _ensure_unique_candidate_keys(candidates: list[CandidatoEvidenciaDocumento])
     keys = [candidate.chave_estavel for candidate in candidates]
     if len(keys) != len(set(keys)):
         raise ValueError("Extração gerou chaves de evidência duplicadas")
+
+
+@dataclass(frozen=True, slots=True)
+class _OcrRuntime:
+    motor: MotorOcrPort | None
+    assinatura: str
+    diagnosticos: tuple[DiagnosticoAnalise, ...] = ()
