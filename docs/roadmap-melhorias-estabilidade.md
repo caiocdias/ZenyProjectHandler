@@ -81,7 +81,7 @@ com o corpus completo. Seus resultados não substituem o gate básico.
 | 4. Ciclo de vida de SQLite e ResourceWarnings | CONCLUÍDA | 1 | Engines e conexões sempre encerradas |
 | 5. Backup degradado com confirmação explícita | CONCLUÍDA | 2, 3 | Nenhuma omissão silenciosa de PDF |
 | 6. Coordenador central de operações | CONCLUÍDA | 3, 4 | Operações incompatíveis não concorrem |
-| 7. Portabilidade assíncrona e UI não reentrante | PENDENTE | 6 | UI responsiva, sem `processEvents()` manual |
+| 7. Portabilidade assíncrona e UI não reentrante | CONCLUÍDA | 6 | UI responsiva, sem `processEvents()` manual |
 | 8. Preflight de substituição antes de mutar arquivos | PENDENTE | 6, 7 | Confirmação ocorre antes da troca física |
 | 9. Journal e recuperação de importações interrompidas | PENDENTE | 8 | Banco e arquivos reconciliados após queda |
 | 10. Limpeza segura de arquivos gerenciados | PENDENTE | 6, 9 | Exclusões não deixam fotos órfãs |
@@ -502,7 +502,7 @@ Crie commits seccionados para as alterações, mantenha na branch main.
 ## Etapa 7 — Portabilidade assíncrona e interface não reentrante
 
 **Achado original:** 4, parte de execução Qt.  
-**Estado:** PENDENTE.  
+**Estado:** CONCLUÍDA.
 **Arquivos prováveis:** `ui/portability_panel.py`, workers/controladores Qt, `bootstrap.py` e testes
 com `pytest-qt`.
 
@@ -523,6 +523,51 @@ com `pytest-qt`.
 - Progresso é monotônico; sinais atrasados de uma execução antiga não alteram estado atual.
 - Sucesso, erro e cancelamento restauram botões e liberam o coordenador uma única vez.
 - Testes Qt usam serviço falso bloqueável e não dependem de `sleep` frágil.
+
+### Registro de conclusão — 05/08/2026
+
+- Importação, exportação, backup e restauração passaram a executar em um `QObject` dedicado movido
+  para uma `QThread`. Progresso, pedido de confirmação, sucesso, falha/cancelamento e finalização
+  carregam a identidade hexadecimal da execução; os slots do painel descartam qualquer callback que
+  não pertença à execução ativa. O worker não importa nem acessa widgets.
+- O preflight potencialmente demorado do backup também roda no worker. Confirmações de backup
+  degradado e substituição de projeto são solicitadas por sinal e exibidas somente na thread
+  principal; a resposta usa sincronização por `Event`, que o cancelamento também libera. Seletores de
+  arquivo e diálogos permanecem na GUI.
+- `QApplication.processEvents()` foi removido por completo do fluxo. O painel rejeita reentrada antes
+  de abrir outro diálogo ou criar outra thread, desabilita suas ações imediatamente e oferece um
+  botão de cancelamento. Atualizações regressivas de progresso são ignoradas, mantendo a apresentação
+  monotônica inclusive quando a importação exige uma segunda tentativa confirmada.
+- O coordenador da Etapa 6 ganhou observadores independentes de Qt, chamados fora do lock e incapazes
+  de interferir no ciclo do token. Uma ponte Qt transforma essas transições em sinais enfileirados; a
+  janela combina o estado confirmado do coordenador com o curto estado local de inicialização para
+  desabilitar portabilidade, fluxo do projeto, revisão e documentação sem impedir o botão de cancelar
+  da operação proprietária. A guarda dos serviços continua sendo a fonte de verdade contra corridas.
+- Os casos de uso aceitam cancelamento cooperativo e o verificam entre unidades seguras de trabalho,
+  antes da publicação do ZIP e antes da primeira troca física de importação/restauração. Depois que
+  uma sequência de `replace`, restauração SQLite ou publicação atômica começa, ela termina ou executa
+  seu rollback sem interrupção. O fechamento solicita cancelamento e espera no máximo 300 ms; se o
+  trecho crítico ainda estiver ativo, mantém a janela aberta e orienta nova tentativa. Nenhum caminho
+  usa `QThread.terminate()` ou outra finalização forçada.
+- A finalização visual é idempotente por identidade. Quando o fechamento já aguardou a thread, a
+  identidade é invalidada antes de liberar recursos, de modo que resultados enfileirados antigos não
+  atualizam a janela. Sucesso, falha, cancelamento e recusa pelo coordenador liberam o token no
+  `finally` do serviço, e observadores/testes comprovam uma única transição de liberação.
+- Os testes `pytest-qt` usam serviços falsos controlados por `threading.Event`, sem `sleep`. Eles
+  comprovam que um `QTimer` da GUI dispara enquanto o serviço está bloqueado, progresso monotônico,
+  execução fora da thread principal, sucesso, erro, cancelamento, reentrada recusada, sinais
+  obsoletos ignorados, desabilitação dos demais painéis e fechamento limitado sem destruir a thread.
+  Os testes de integração existentes aguardam a conclusão real das quatro operações.
+- Validações concluídas: conjunto focado de coordenação, serviço, workers, painel e janela
+  (`42 passed`); `pip check`; Ruff completo; `ruff format --check`; Mypy (`169 source files`); e gate
+  básico canônico. O resultado final foi `297 passed, 20 deselected`, cobertura `85,08%`, complexidade
+  média A (`3,9606`) e `RESULTADO FINAL: APROVADO`. O único aviso foi um `PytestCacheWarning`
+  ambiental por falta de permissão para atualizar `.pytest_cache`; não houve `ResourceWarning`.
+- Limitação deliberada: chamadas monolíticas de bibliotecas externas, como a escrita final do ZIP ou
+  o backup SQLite em andamento, não são interrompidas no meio. O pedido permanece registrado e o
+  fechamento aguarda de forma limitada; isso preserva transações, publicações atômicas e rollback.
+- Commits: `31094a3` (`feat(portability): run Qt operations asynchronously`) e `8a990ea`
+  (`test(portability): cover asynchronous Qt lifecycle`).
 
 ### Mensagem para um novo chat do Codex
 
