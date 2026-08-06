@@ -438,10 +438,10 @@ class PortabilityPanelWidget(QWidget):
         if self._thread is thread:
             self._thread = None
             self._worker = None
-        thread.deleteLater()
         if execution_id == self._execution_id:
             self._finalize_execution(execution_id)
         self._apply_action_state()
+        thread.deleteLater()
 
     def _apply_action_state(self) -> None:
         thread_running = self._thread is not None and self._thread.isRunning()
