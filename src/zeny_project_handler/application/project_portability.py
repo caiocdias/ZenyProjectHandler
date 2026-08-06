@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path, PurePosixPath
 from tempfile import TemporaryDirectory
-from typing import TypeVar
+from typing import Protocol, TypeVar
 from uuid import UUID, uuid4, uuid5
 from zipfile import BadZipFile
 
@@ -21,6 +21,7 @@ from zeny_project_handler._atomic_files import (
 )
 from zeny_project_handler.application.errors import (
     ApplicationError,
+    PlanoImportacaoObsoletoError,
     PortabilidadeCanceladaError,
     PortabilidadeProjetoError,
     ProjetoNaoEncontradoError,
@@ -49,6 +50,7 @@ from zeny_project_handler.ports.portability import (
     BancoProjetoPortatilPort,
     ConteudoBancoProjetoPortatil,
     OrigemArquivoPacote,
+    PacoteProjetoExtraido,
 )
 
 ProgressCallback = Callable[[int, int, str], None]
@@ -58,12 +60,24 @@ _BACKUP_ID = UUID(int=0)
 _PREFLIGHT_STALE_MESSAGE = (
     "A integridade dos PDFs mudou após o preflight; revise o relatório novamente"
 )
+_IMPORT_PLAN_STALE_MESSAGE = (
+    "O pacote ou o projeto local mudou após o preflight; inspecione a importação novamente"
+)
 _SUPPORTED_PHOTO_MIME = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
     "image/tiff": ".tiff",
     "image/webp": ".webp",
 }
+
+
+class _HashWriter(Protocol):
+    def update(self, data: bytes) -> None: ...
+
+
+class _EntityWithId(Protocol):
+    @property
+    def id(self) -> UUID: ...
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -110,6 +124,43 @@ class ResultadoImportacaoProjeto:
     integridade_pacote: RelatorioIntegridadeProjeto
     substituiu_existente: bool
     omissoes_origem: tuple[OmissaoPacoteProjeto, ...] = ()
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ResumoPreflightImportacaoProjeto:
+    projeto_id: UUID
+    catalogo_id: UUID
+    nome: str
+    quantidade_documentos: int
+    quantidade_fotos: int
+    quantidade_analises: int
+    quantidade_arquivos: int
+    quantidade_omissoes: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PlanoImportacaoProjeto:
+    pacote: Path
+    pacote_sha256: str
+    pacote_tamanho_bytes: int
+    estado_alvo_sha256: str
+    projeto_existente: bool
+    pasta_destino_existente: bool
+    resumo: ResumoPreflightImportacaoProjeto
+    integridade_pacote: RelatorioIntegridadeProjeto
+    omissoes_origem: tuple[OmissaoPacoteProjeto, ...]
+    fingerprint: str
+
+    @property
+    def requer_confirmacao(self) -> bool:
+        return self.projeto_existente or self.pasta_destino_existente
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class _EstadoAlvoImportacao:
+    projeto_existente: bool
+    pasta_destino_existente: bool
+    fingerprint: str
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -512,46 +563,126 @@ class ServicoPortabilidadeProjeto:
         progresso: ProgressCallback | None = None,
         cancelado: CancelCallback | None = None,
     ) -> ResultadoImportacaoProjeto:
-        with self._coordinator.adquirir(TipoOperacao.IMPORTACAO_PROJETO):
-            return self._observe_external_operation(
-                "portability.import",
-                lambda: self._importar_projeto(
-                    pacote,
-                    substituir_existente=substituir_existente,
-                    progresso=progresso,
-                    cancelado=cancelado,
-                ),
-            )
+        """Atalho compatível que sempre passa pelo preflight e pelo plano imutável."""
+        plan = self.preflight_importacao(pacote, cancelado=cancelado)
+        return self.aplicar_plano_importacao(
+            plan,
+            confirmar_substituicao=substituir_existente,
+            progresso=progresso,
+            cancelado=cancelado,
+        )
 
-    def _importar_projeto(
+    def preflight_importacao(
         self,
         pacote: Path,
         *,
-        substituir_existente: bool,
+        cancelado: CancelCallback | None = None,
+    ) -> PlanoImportacaoProjeto:
+        """Valide pacote e banco e fotografe o alvo sem alterar o estado local."""
+        return self._observe_external_operation(
+            "portability.import.preflight",
+            lambda: self._preflight_importacao(pacote, cancelado=cancelado),
+        )
+
+    def _preflight_importacao(
+        self,
+        pacote: Path,
+        *,
+        cancelado: CancelCallback | None,
+    ) -> PlanoImportacaoProjeto:
+        self._ensure_not_cancelled(cancelado)
+        with TemporaryDirectory(prefix="zeny-import-preflight-") as temporary_name:
+            extracted, content, package_path, package_digest, package_size = (
+                self._load_validated_import_package(
+                    pacote,
+                    Path(temporary_name) / "package",
+                    cancelado=cancelado,
+                )
+            )
+            target = self._import_target_state(content.projeto.id)
+            return _create_import_plan(
+                package_path=package_path,
+                package_digest=package_digest,
+                package_size=package_size,
+                extracted=extracted,
+                content=content,
+                target=target,
+            )
+
+    def aplicar_plano_importacao(
+        self,
+        plano: PlanoImportacaoProjeto,
+        *,
+        confirmar_substituicao: bool = False,
+        progresso: ProgressCallback | None = None,
+        cancelado: CancelCallback | None = None,
+    ) -> ResultadoImportacaoProjeto:
+        with self._coordinator.adquirir(TipoOperacao.IMPORTACAO_PROJETO):
+            return self._observe_external_operation(
+                "portability.import",
+                lambda: self._aplicar_plano_importacao(
+                    plano,
+                    confirmar_substituicao=confirmar_substituicao,
+                    progresso=progresso,
+                    cancelado=cancelado,
+                ),
+                project_id=plano.resumo.projeto_id,
+            )
+
+    def _aplicar_plano_importacao(
+        self,
+        plano: PlanoImportacaoProjeto,
+        *,
+        confirmar_substituicao: bool,
         progresso: ProgressCallback | None,
         cancelado: CancelCallback | None,
     ) -> ResultadoImportacaoProjeto:
         notify = progresso or (lambda _current, _total, _message: None)
         self._ensure_not_cancelled(cancelado)
+        if plano.fingerprint != _import_plan_fingerprint(plano):
+            raise PlanoImportacaoObsoletoError(_IMPORT_PLAN_STALE_MESSAGE)
+        if plano.requer_confirmacao and not confirmar_substituicao:
+            raise PortabilidadeProjetoError(
+                "Projeto ou pasta de destino já existe; confirme explicitamente a substituição"
+            )
+        current_target = self._import_target_state(plano.resumo.projeto_id)
+        if (
+            current_target.fingerprint != plano.estado_alvo_sha256
+            or current_target.projeto_existente != plano.projeto_existente
+            or current_target.pasta_destino_existente != plano.pasta_destino_existente
+        ):
+            raise PlanoImportacaoObsoletoError(_IMPORT_PLAN_STALE_MESSAGE)
+        try:
+            current_digest, current_size = _file_digest(plano.pacote)
+        except OSError as error:
+            raise PlanoImportacaoObsoletoError(_IMPORT_PLAN_STALE_MESSAGE) from error
+        if (
+            current_digest != plano.pacote_sha256
+            or current_size != plano.pacote_tamanho_bytes
+        ):
+            raise PlanoImportacaoObsoletoError(_IMPORT_PLAN_STALE_MESSAGE)
         with TemporaryDirectory(prefix="zeny-import-") as temporary_name:
             temporary = Path(temporary_name)
-            notify(1, 4, "Validando manifesto e arquivos")
-            extracted = self._archive.extrair_validado(pacote, temporary / "package")
-            self._ensure_not_cancelled(cancelado)
-            if not extracted.integridade.utilizavel:
-                raise PortabilidadeProjetoError("Pacote possui problemas críticos de integridade")
-            database_entry = next(
-                (item for item in extracted.manifesto.arquivos if item.tipo == "BANCO"), None
+            notify(1, 5, "Revalidando plano, pacote e projeto local")
+            extracted, content, package_path, package_digest, package_size = (
+                self._load_validated_import_package(
+                    plano.pacote,
+                    temporary / "package",
+                    cancelado=cancelado,
+                    expected_digest=plano.pacote_sha256,
+                    expected_size=plano.pacote_tamanho_bytes,
+                )
             )
-            if database_entry is None:
-                raise PortabilidadeProjetoError("Pacote não possui banco de projeto")
-            content = self._portable_database.carregar(
-                extracted.diretorio / PurePosixPath(database_entry.caminho_relativo),
-                extracted.manifesto.projeto_id,
+            revalidated_plan = _create_import_plan(
+                package_path=package_path,
+                package_digest=package_digest,
+                package_size=package_size,
+                extracted=extracted,
+                content=content,
+                target=current_target,
             )
-            self._ensure_not_cancelled(cancelado)
-            if content.catalogo.id != extracted.manifesto.catalogo_id:
-                raise PortabilidadeProjetoError("Catálogo do banco diverge do manifesto")
+            if revalidated_plan != plano:
+                raise PlanoImportacaoObsoletoError(_IMPORT_PLAN_STALE_MESSAGE)
             final_root = self._project_root(content.projeto.id)
             try:
                 final_root.parent.mkdir(parents=True, exist_ok=True)
@@ -559,7 +690,7 @@ class ServicoPortabilidadeProjeto:
                     sibling_temporary_directory(final_root) as staging,
                     sibling_temporary_directory(final_root, vacant=True) as recovery_root,
                 ):
-                    notify(2, 4, "Preparando PDFs e fotos gerenciados")
+                    notify(2, 5, "Preparando PDFs e fotos gerenciados")
                     self._stage_imported_files(extracted.diretorio, extracted.manifesto, staging)
                     self._ensure_not_cancelled(cancelado)
                     replaced_assets = final_root.exists()
@@ -569,11 +700,12 @@ class ServicoPortabilidadeProjeto:
                             os.replace(final_root, recovery_root)
                         os.replace(staging, final_root)
                         published_assets = True
-                        notify(3, 4, "Persistindo projeto e histórico")
+                        notify(3, 5, "Publicando arquivos validados")
+                        notify(4, 5, "Persistindo projeto e histórico")
                         replaced_project = self._persist_imported_content(
                             content,
                             extracted.manifesto,
-                            substituir_existente=substituir_existente,
+                            substituir_existente=confirmar_substituicao,
                         )
                     except Exception:
                         if published_assets:
@@ -585,7 +717,7 @@ class ServicoPortabilidadeProjeto:
                 raise PortabilidadeProjetoError(
                     "Não foi possível publicar os arquivos importados"
                 ) from error
-            notify(4, 4, "Conferindo projeto importado")
+            notify(5, 5, "Conferindo projeto importado")
             imported = self._project(content.projeto.id)
         return ResultadoImportacaoProjeto(
             projeto=imported,
@@ -802,6 +934,145 @@ class ServicoPortabilidadeProjeto:
             caminho_banco=self._database_path,
             manifesto=extracted.manifesto,
             integridade_pacote=extracted.integridade,
+        )
+
+    def _load_validated_import_package(
+        self,
+        package: Path,
+        destination: Path,
+        *,
+        cancelado: CancelCallback | None,
+        expected_digest: str | None = None,
+        expected_size: int | None = None,
+    ) -> tuple[PacoteProjetoExtraido, ConteudoBancoProjetoPortatil, Path, str, int]:
+        try:
+            package_path = package.expanduser().resolve()
+            package_digest, package_size = _file_digest(package_path)
+        except (OSError, RuntimeError) as error:
+            if expected_digest is not None:
+                raise PlanoImportacaoObsoletoError(_IMPORT_PLAN_STALE_MESSAGE) from error
+            raise PortabilidadeProjetoError("Pacote informado não existe") from error
+        if (
+            (expected_digest is not None and package_digest != expected_digest)
+            or (expected_size is not None and package_size != expected_size)
+        ):
+            raise PlanoImportacaoObsoletoError(_IMPORT_PLAN_STALE_MESSAGE)
+        self._ensure_not_cancelled(cancelado)
+        extracted = self._archive.extrair_validado(package_path, destination)
+        self._ensure_not_cancelled(cancelado)
+        if not extracted.integridade.utilizavel:
+            raise PortabilidadeProjetoError("Pacote possui problemas críticos de integridade")
+        database_entries = tuple(
+            item for item in extracted.manifesto.arquivos if item.tipo == "BANCO"
+        )
+        if len(database_entries) != 1:
+            raise PortabilidadeProjetoError("Pacote deve possuir exatamente um banco de projeto")
+        content = self._portable_database.carregar(
+            extracted.diretorio / PurePosixPath(database_entries[0].caminho_relativo),
+            extracted.manifesto.projeto_id,
+        )
+        self._ensure_not_cancelled(cancelado)
+        if content.projeto.id != extracted.manifesto.projeto_id:
+            raise PortabilidadeProjetoError("Projeto do banco diverge do manifesto")
+        if content.catalogo.id != extracted.manifesto.catalogo_id:
+            raise PortabilidadeProjetoError("Catálogo do banco diverge do manifesto")
+        try:
+            final_digest, final_size = _file_digest(package_path)
+        except OSError as error:
+            if expected_digest is not None:
+                raise PlanoImportacaoObsoletoError(_IMPORT_PLAN_STALE_MESSAGE) from error
+            raise PortabilidadeProjetoError(
+                "Pacote mudou durante o preflight de importação"
+            ) from error
+        if final_digest != package_digest or final_size != package_size:
+            if expected_digest is not None:
+                raise PlanoImportacaoObsoletoError(_IMPORT_PLAN_STALE_MESSAGE)
+            raise PortabilidadeProjetoError("Pacote mudou durante o preflight de importação")
+        return extracted, content, package_path, final_digest, final_size
+
+    def _import_target_state(self, project_id: UUID) -> _EstadoAlvoImportacao:
+        digest = sha256()
+        with self._unit_of_work() as work:
+            project = work.projetos.obter(project_id)
+            if project is None:
+                database_state: object = ("PROJETO_AUSENTE", str(project_id))
+            else:
+                catalog = work.catalogos.obter(project.catalogo_versao_id)
+                executions = tuple(
+                    sorted(work.execucoes_analise.listar_do_projeto(project.id), key=_entity_id)
+                )
+                evidence = tuple(
+                    sorted(
+                        (
+                            item
+                            for execution in executions
+                            for item in work.evidencias.listar_da_execucao(execution.id)
+                        ),
+                        key=_entity_id,
+                    )
+                )
+                proposals = tuple(
+                    sorted(
+                        (
+                            item
+                            for execution in executions
+                            for item in work.propostas.listar_da_execucao(execution.id)
+                        ),
+                        key=_entity_id,
+                    )
+                )
+                decisions = tuple(
+                    sorted(
+                        (
+                            decision
+                            for proposal in proposals
+                            if (
+                                decision := work.decisoes_revisao.obter_da_proposta(proposal.id)
+                            )
+                            is not None
+                        ),
+                        key=_entity_id,
+                    )
+                )
+                sources = tuple(
+                    (
+                        str(document.id),
+                        (
+                            None
+                            if (source := work.fontes_pdf.obter(document.id)) is None
+                            else (
+                                str(source.projeto_id),
+                                str(source.caminho_canonico),
+                                source.sha256,
+                                source.tamanho_bytes,
+                                source.modificado_em_ns,
+                            )
+                        ),
+                    )
+                    for document in sorted(project.documentos, key=lambda item: str(item.id))
+                )
+                database_state = (
+                    project,
+                    catalog,
+                    executions,
+                    evidence,
+                    proposals,
+                    decisions,
+                    sources,
+                )
+        _update_fingerprint(digest, "database", repr(database_state))
+        root = self._project_root(project_id)
+        root_exists = root.exists() or root.is_symlink()
+        try:
+            _update_managed_tree_fingerprint(digest, root)
+        except OSError as error:
+            raise PortabilidadeProjetoError(
+                "Não foi possível inspecionar os arquivos locais do projeto"
+            ) from error
+        return _EstadoAlvoImportacao(
+            projeto_existente=project is not None,
+            pasta_destino_existente=root_exists,
+            fingerprint=digest.hexdigest(),
         )
 
     def _portable_content(
@@ -1023,6 +1294,96 @@ class ServicoPortabilidadeProjeto:
                 raise
             observation.succeeded()
             return result
+
+
+def _create_import_plan(
+    *,
+    package_path: Path,
+    package_digest: str,
+    package_size: int,
+    extracted: PacoteProjetoExtraido,
+    content: ConteudoBancoProjetoPortatil,
+    target: _EstadoAlvoImportacao,
+) -> PlanoImportacaoProjeto:
+    summary = ResumoPreflightImportacaoProjeto(
+        projeto_id=content.projeto.id,
+        catalogo_id=content.catalogo.id,
+        nome=content.projeto.nome,
+        quantidade_documentos=len(content.projeto.documentos),
+        quantidade_fotos=sum(
+            len(element.fotos) for element in content.projeto.elementos
+        ),
+        quantidade_analises=len(content.execucoes),
+        quantidade_arquivos=len(extracted.manifesto.arquivos),
+        quantidade_omissoes=len(extracted.manifesto.omissoes),
+    )
+    plan = PlanoImportacaoProjeto(
+        pacote=package_path,
+        pacote_sha256=package_digest,
+        pacote_tamanho_bytes=package_size,
+        estado_alvo_sha256=target.fingerprint,
+        projeto_existente=target.projeto_existente,
+        pasta_destino_existente=target.pasta_destino_existente,
+        resumo=summary,
+        integridade_pacote=extracted.integridade,
+        omissoes_origem=extracted.manifesto.omissoes,
+        fingerprint="",
+    )
+    return replace(plan, fingerprint=_import_plan_fingerprint(plan))
+
+
+def _import_plan_fingerprint(plan: PlanoImportacaoProjeto) -> str:
+    digest = sha256()
+    for label, value in (
+        ("version", "1"),
+        ("package", str(plan.pacote)),
+        ("package_digest", plan.pacote_sha256),
+        ("package_size", str(plan.pacote_tamanho_bytes)),
+        ("target", plan.estado_alvo_sha256),
+        ("project_exists", str(plan.projeto_existente)),
+        ("folder_exists", str(plan.pasta_destino_existente)),
+        ("summary", repr(plan.resumo)),
+        ("integrity", repr(plan.integridade_pacote)),
+        ("omissions", repr(plan.omissoes_origem)),
+    ):
+        _update_fingerprint(digest, label, value)
+    return digest.hexdigest()
+
+
+def _entity_id(value: _EntityWithId) -> str:
+    return str(value.id)
+
+
+def _update_fingerprint(digest: _HashWriter, label: str, value: str) -> None:
+    digest.update(label.encode("utf-8"))
+    digest.update(b"\0")
+    digest.update(value.encode("utf-8"))
+    digest.update(b"\0")
+
+
+def _update_managed_tree_fingerprint(digest: _HashWriter, root: Path) -> None:
+    if root.is_symlink():
+        _update_fingerprint(digest, "root-link", os.readlink(root))
+        return
+    if not root.exists():
+        _update_fingerprint(digest, "root", "missing")
+        return
+    if root.is_file():
+        file_digest, size = _file_digest(root)
+        _update_fingerprint(digest, "root-file", f"{size}:{file_digest}")
+        return
+    _update_fingerprint(digest, "root", "directory")
+    for path in sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix()):
+        relative = path.relative_to(root).as_posix()
+        if path.is_symlink():
+            _update_fingerprint(digest, "link", f"{relative}:{os.readlink(path)}")
+        elif path.is_dir():
+            _update_fingerprint(digest, "directory", relative)
+        elif path.is_file():
+            file_digest, size = _file_digest(path)
+            _update_fingerprint(digest, "file", f"{relative}:{size}:{file_digest}")
+        else:
+            _update_fingerprint(digest, "other", relative)
 
 
 def _element(project: Projeto, element_id: UUID) -> ElementoProjetoType:

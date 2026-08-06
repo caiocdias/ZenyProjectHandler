@@ -45,6 +45,10 @@ class PortabilidadeProjetoError(ApplicationError):
     """O pacote, anexo, backup ou recuperação não pôde ser concluído com segurança."""
 
 
+class PlanoImportacaoObsoletoError(PortabilidadeProjetoError):
+    """O pacote ou o destino mudou depois do preflight de importação."""
+
+
 class PortabilidadeCanceladaError(ApplicationError):
     """A portabilidade foi cancelada antes de uma fronteira de publicação segura."""
 
