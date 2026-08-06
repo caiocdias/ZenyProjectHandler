@@ -15,6 +15,10 @@ from zeny_project_handler.adapters.analysis import (
     PyMuPdfDocumentAnalyzer,
     TesseractCliOcr,
 )
+from zeny_project_handler.adapters.analysis.tesseract_runtime import (
+    RuntimeTesseract,
+    inspect_tesseract_runtime,
+)
 from zeny_project_handler.adapters.catalog import carregar_catalogo_inicial
 from zeny_project_handler.adapters.compliance import carregar_registro_conformidade_inicial
 from zeny_project_handler.adapters.interpretation import (
@@ -133,6 +137,7 @@ def _compose_initialized_application(
 
     registry = carregar_registro_regras_inicial()
     operation_coordinator = CoordenadorOperacoes()
+    ocr_runtime = inspect_tesseract_runtime(app_settings.data_directory)
     managed_files = GerenciadorArquivosGerenciados(
         app_settings.data_directory,
         list_projects,
@@ -148,7 +153,7 @@ def _compose_initialized_application(
         extrator=ExecutarAnaliseDocumento(
             PyMuPdfDocumentAnalyzer(
                 cache=JsonAnalysisCache(app_settings.analysis_cache_directory),
-                motor_ocr=TesseractCliOcr.descobrir(),
+                motor_ocr=_ocr_engine(ocr_runtime),
             ),
             unit_of_work,
         ),
@@ -185,11 +190,28 @@ def _compose_initialized_application(
         operation_coordinator=operation_coordinator,
         compliance_registry=carregar_registro_conformidade_inicial(),
         ui_state_path=app_settings.data_directory / "ui-state.ini",
+        startup_ocr_diagnostic=(
+            ocr_runtime.diagnostico.texto_ui if ocr_runtime.diagnostico is not None else None
+        ),
     )
     window.set_resource_cleanup(lifetime.dispose)
     application.aboutToQuit.connect(lifetime.dispose)
     window.destroyed.connect(lifetime.dispose)
     return application, window
+
+
+def _ocr_engine(runtime: RuntimeTesseract) -> TesseractCliOcr | None:
+    if not runtime.portugues_pronto:
+        return None
+    executable = runtime.executavel
+    tessdata_directory = runtime.diretorio_tessdata
+    if executable is None or tessdata_directory is None:
+        return None
+    return TesseractCliOcr(
+        executable,
+        language="+".join(runtime.idiomas_selecionados),
+        tessdata_directory=tessdata_directory,
+    )
 
 
 def initialize_local_storage(settings: AppSettings) -> Engine:

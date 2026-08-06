@@ -325,12 +325,15 @@ class MainWindow(QMainWindow):
         operation_coordinator: CoordenadorOperacoes | None = None,
         compliance_registry: RegistroRegrasConformidade | None = None,
         ui_state_path: Path | None = None,
+        startup_ocr_diagnostic: str | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._resource_cleanup: Callable[[], None] = lambda: None
         self._operation_bridge: _OperationStateBridge | None = None
         self._coordinator_operation: TipoOperacao | None = None
+        self._startup_ocr_diagnostic = startup_ocr_diagnostic
+        self.ocr_diagnostic_button: QToolButton | None = None
         self.setObjectName("mainWindow")
         self.setWindowTitle(application_name)
         self.resize(1400, 900)
@@ -449,7 +452,29 @@ class MainWindow(QMainWindow):
             self._operation_bridge = _OperationStateBridge(selected_coordinator, self)
             self._operation_bridge.state_changed.connect(self._operation_state_changed)
             self._operation_state_changed(self._operation_bridge.current)
+        if startup_ocr_diagnostic is not None:
+            self.ocr_diagnostic_button = QToolButton(self)
+            self.ocr_diagnostic_button.setObjectName("ocrStartupDiagnosticButton")
+            self.ocr_diagnostic_button.setText("OCR português indisponível — como corrigir")
+            self.ocr_diagnostic_button.setToolTip(startup_ocr_diagnostic)
+            self.ocr_diagnostic_button.setAccessibleDescription(startup_ocr_diagnostic)
+            self.ocr_diagnostic_button.setIcon(
+                self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxWarning)
+            )
+            self.ocr_diagnostic_button.setAutoRaise(True)
+            self.ocr_diagnostic_button.clicked.connect(self._show_startup_ocr_diagnostic)
+            self.statusBar().addPermanentWidget(self.ocr_diagnostic_button)
         self.statusBar().showMessage("Pronto para abrir um PDF")
+
+    @Slot()
+    def _show_startup_ocr_diagnostic(self) -> None:
+        if self._startup_ocr_diagnostic is None:
+            return
+        QMessageBox.warning(
+            self,
+            "OCR em português indisponível",
+            self._startup_ocr_diagnostic,
+        )
 
     def _register_dock(self, dock: QDockWidget) -> None:
         dock.setFeatures(

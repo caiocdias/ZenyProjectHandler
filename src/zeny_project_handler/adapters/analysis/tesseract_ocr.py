@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import os
 import re
-import shutil
 import subprocess
 from collections import defaultdict
 from dataclasses import dataclass
@@ -12,6 +10,12 @@ from functools import cached_property
 from hashlib import sha256
 from pathlib import Path
 
+from zeny_project_handler.adapters.analysis.tesseract_runtime import (
+    parse_available_languages,
+    select_ocr_languages,
+    tessdata_directory_from_language_output,
+    tesseract_subprocess_environment,
+)
 from zeny_project_handler.domain.analysis import DiagnosticoAnalise
 from zeny_project_handler.domain.catalog import ExtraAttributes
 from zeny_project_handler.ports.analysis import (
@@ -22,17 +26,10 @@ from zeny_project_handler.ports.analysis import (
     TrechoTextoOcr,
 )
 
-TESSERACT_PATH_ENVIRONMENT_VARIABLE = "ZENY_TESSERACT_PATH"
-_DEFAULT_WINDOWS_PATHS = (
-    Path("C:/Program Files/Tesseract-OCR/tesseract.exe"),
-    Path("C:/Program Files (x86)/Tesseract-OCR/tesseract.exe"),
-)
-_PREFERRED_LANGUAGES = ("por", "eng")
 _VERSION_PATTERN = re.compile(
     r"^\s*tesseract\s+v?([0-9][0-9a-z.+_-]*)",
     flags=re.IGNORECASE | re.MULTILINE,
 )
-_QUOTED_DIRECTORY_PATTERN = re.compile(r"[\"']([^\"']+)[\"']")
 _GENERAL_PSM = 11
 _IDENTIFIER_PSM = 10
 _OPERATIONAL_LABEL_PSM = 7
@@ -78,22 +75,6 @@ class TesseractCliOcr:
         self._capability_timeout_seconds = capability_timeout_seconds
         self._recognition_timeout_seconds = recognition_timeout_seconds
 
-    @classmethod
-    def descobrir(cls) -> TesseractCliOcr | None:
-        configured = os.environ.get(TESSERACT_PATH_ENVIRONMENT_VARIABLE)
-        candidates = (
-            *((Path(configured),) if configured else ()),
-            *((Path(found),) if (found := shutil.which("tesseract")) else ()),
-            *_DEFAULT_WINDOWS_PATHS,
-        )
-        for candidate in candidates:
-            if candidate.is_file():
-                try:
-                    return cls(candidate)
-                except (OSError, ValueError):
-                    continue
-        return None
-
     def consultar_capacidade(self) -> ResultadoConsultaCapacidadeOcr:
         """Consulte versão, idiomas e traineddata uma única vez nesta instância."""
         return self._inspection.result
@@ -104,11 +85,7 @@ class TesseractCliOcr:
             version_process = self._run_metadata("--version")
             language_process = self._run_metadata(
                 "--list-langs",
-                *(
-                    ("--tessdata-dir", str(self._configured_tessdata_directory))
-                    if self._configured_tessdata_directory is not None
-                    else ()
-                ),
+                tessdata_directory=self._configured_tessdata_directory,
             )
         except subprocess.TimeoutExpired:
             return _failed_inspection(
@@ -124,8 +101,8 @@ class TesseractCliOcr:
         try:
             version = _normalize_version(_completed_stdout(version_process))
             language_output = _completed_stdout(language_process)
-            available_languages = _parse_available_languages(language_output)
-            selected_languages = _select_languages(
+            available_languages = parse_available_languages(language_output)
+            selected_languages = select_ocr_languages(
                 self._requested_languages,
                 available_languages,
             )
@@ -136,7 +113,7 @@ class TesseractCliOcr:
             )
 
         try:
-            tessdata_directory = _locate_tessdata_directory(
+            tessdata_directory = tessdata_directory_from_language_output(
                 language_output,
                 configured=self._configured_tessdata_directory,
                 executable=self._executable,
@@ -209,8 +186,6 @@ class TesseractCliOcr:
             str(self._executable),
             "stdin",
             "stdout",
-            "--tessdata-dir",
-            str(inspection.tessdata_directory),
             "-l",
             "+".join(capability.idiomas),
             "--oem",
@@ -228,6 +203,7 @@ class TesseractCliOcr:
             check=True,
             timeout=self._recognition_timeout_seconds,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            env=tesseract_subprocess_environment(inspection.tessdata_directory),
         )
         return _parse_tsv(
             _completed_stdout(completed),
@@ -235,7 +211,11 @@ class TesseractCliOcr:
             height=pagina.altura_pixels,
         )
 
-    def _run_metadata(self, *arguments: str) -> subprocess.CompletedProcess[str]:
+    def _run_metadata(
+        self,
+        *arguments: str,
+        tessdata_directory: Path | None = None,
+    ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             (str(self._executable), *arguments),
             capture_output=True,
@@ -245,6 +225,7 @@ class TesseractCliOcr:
             errors="replace",
             timeout=self._capability_timeout_seconds,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            env=tesseract_subprocess_environment(tessdata_directory),
         )
 
     def _semantic_parameters(self) -> ExtraAttributes:
@@ -294,31 +275,6 @@ def _normalize_version(output: str) -> str:
     return match.group(1).lower()
 
 
-def _parse_available_languages(output: str) -> frozenset[str]:
-    languages = frozenset(
-        line.strip()
-        for line in output.splitlines()
-        if line.strip() and not line.strip().lower().startswith("list of available languages")
-    )
-    if not languages:
-        raise ValueError("Nenhum idioma disponível no Tesseract")
-    return languages
-
-
-def _select_languages(
-    requested: tuple[str, ...] | None,
-    available: frozenset[str],
-) -> tuple[str, ...]:
-    if requested is not None:
-        if any(language not in available for language in requested):
-            raise ValueError("Idioma solicitado não está disponível")
-        return requested
-    selected = tuple(language for language in _PREFERRED_LANGUAGES if language in available)
-    if not selected:
-        raise ValueError("Nenhum idioma preferencial está disponível")
-    return selected
-
-
 def _resolve_configured_tessdata_directory(directory: Path | None) -> Path | None:
     if directory is None:
         return None
@@ -326,27 +282,6 @@ def _resolve_configured_tessdata_directory(directory: Path | None) -> Path | Non
     if not resolved.is_dir():
         raise ValueError("Diretório tessdata inválido")
     return resolved
-
-
-def _locate_tessdata_directory(
-    language_output: str,
-    *,
-    configured: Path | None,
-    executable: Path,
-) -> Path:
-    if configured is not None:
-        return configured
-    for line in language_output.splitlines():
-        if not line.strip().lower().startswith("list of available languages"):
-            continue
-        if match := _QUOTED_DIRECTORY_PATTERN.search(line):
-            candidate = Path(match.group(1)).expanduser()
-            if candidate.is_dir():
-                return candidate.resolve()
-    fallback = executable.parent / "tessdata"
-    if fallback.is_dir():
-        return fallback.resolve()
-    raise ValueError("Diretório tessdata não identificado")
 
 
 def _traineddata_identities(
@@ -375,24 +310,6 @@ def _completed_stdout(
     if isinstance(output, bytes):
         return output.decode("utf-8", errors="replace")
     return str(output or "")
-
-
-def _best_available_language(executable: Path) -> str:
-    """Compatibilidade: prefira português técnico e mantenha inglês quando disponível."""
-    try:
-        completed = subprocess.run(
-            (str(executable), "--list-langs"),
-            capture_output=True,
-            check=True,
-            text=True,
-            timeout=15,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-        available = _parse_available_languages(_completed_stdout(completed))
-        selected = _select_languages(None, available)
-    except (OSError, subprocess.SubprocessError, ValueError):
-        return "eng"
-    return "+".join(selected)
 
 
 def _ppm_bytes(page: PaginaRasterOcr) -> bytes:
