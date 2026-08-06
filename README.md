@@ -91,9 +91,10 @@ Ao iniciar, o aplicativo cria e migra automaticamente
 usar outra pasta, inclusive em testes. O banco utiliza chaves estrangeiras, transações explícitas e
 versionamento Alembic.
 
-Backups são snapshots consistentes do SQLite, validados antes de substituir atomicamente o arquivo
-de destino. A pasta padrão reservada para eles é `backups` dentro do diretório de dados. Arquivos do
-banco, WAL, temporários e backups não devem ser adicionados ao Git.
+Backups começam por um preflight somente leitura das origens PDF e por um snapshot consistente do
+SQLite, validado antes de substituir atomicamente o arquivo de destino. A pasta padrão reservada para
+eles é `backups` dentro do diretório de dados. Arquivos do banco, WAL, temporários e backups não devem
+ser adicionados ao Git.
 
 ## Transporte e recuperação
 
@@ -104,10 +105,18 @@ internamente SHA-256, tamanho e tipo de cada arquivo ao ser importado. A importa
 identidades, catálogo, análises e decisões; substituir um projeto existente exige confirmação
 explícita.
 
-O backup completo `.zphbackup` inclui o banco local, arquivos gerenciados e cópias dos PDFs externos.
-Sua publicação e restauração usam trocas atômicas e validação do SQLite. Assim, uma gravação
-interrompida não substitui o último backup íntegro, e os PDFs recuperados deixam de depender do local
-original. Gestão de fotos e relatório de integridade não fazem parte da interface.
+Novos `.zphproj` e `.zphbackup` usam manifesto de formato 2; pacotes antigos de formato 1 continuam
+aceitos. O formato 2 registra `INTEGRO` ou `DEGRADADO` e, sem expor nomes ou caminhos, identifica por
+IDs anônimos cada arquivo omitido e seu tratamento.
+
+O backup completo `.zphbackup` inclui o banco local, arquivos gerenciados e cópias dos PDFs externos
+que passaram no preflight. Se um PDF estiver ausente, alterado ou ilegível, o painel lista somente o
+ID abreviado e a classificação e exige confirmação específica. Cancelar não cria pacote nem
+temporários. Ao prosseguir, a UI informa que o backup foi **criado com ressalvas**; o manifesto
+registra a omissão e, quando existe uma referência externa original, o snapshot a mantém sem
+inventar uma cópia recuperável. A restauração ainda exige integridade física de todos os itens
+declarados e informa as limitações de um backup degradado. Publicação, restauração e rollback
+continuam atômicos.
 
 ## Visualização e origem dos PDFs
 

@@ -79,7 +79,7 @@ com o corpus completo. Seus resultados não substituem o gate básico.
 | 2. Arquivos temporários compatíveis com Windows | CONCLUÍDA | 1 | Cópias atômicas sem exceder o caminho do destino |
 | 3. Logging estruturado nas fronteiras | CONCLUÍDA | 1 | Falhas diagnosticáveis sem dados sensíveis |
 | 4. Ciclo de vida de SQLite e ResourceWarnings | CONCLUÍDA | 1 | Engines e conexões sempre encerradas |
-| 5. Backup degradado com confirmação explícita | PENDENTE | 2, 3 | Nenhuma omissão silenciosa de PDF |
+| 5. Backup degradado com confirmação explícita | CONCLUÍDA | 2, 3 | Nenhuma omissão silenciosa de PDF |
 | 6. Coordenador central de operações | PENDENTE | 3, 4 | Operações incompatíveis não concorrem |
 | 7. Portabilidade assíncrona e UI não reentrante | PENDENTE | 6 | UI responsiva, sem `processEvents()` manual |
 | 8. Preflight de substituição antes de mutar arquivos | PENDENTE | 6, 7 | Confirmação ocorre antes da troca física |
@@ -367,7 +367,7 @@ Crie commits seccionados para as alterações, mantenha na branch main.
 ## Etapa 5 — Backup degradado com confirmação explícita
 
 **Achado original:** 3.  
-**Estado:** PENDENTE.  
+**Estado:** CONCLUÍDA.
 **Arquivos prováveis:** `application/project_portability.py`, modelos/portas de portabilidade,
 `ui/portability_panel.py`, manifesto do pacote, ADR 0008 e testes.
 
@@ -389,6 +389,35 @@ Crie commits seccionados para as alterações, mantenha na branch main.
 - Testes cobrem íntegro, ausente, hash divergente, cancelamento e aceite explícito.
 - Restauração de backup degradado mantém estado previsível e expõe limitações, sem inventar caminhos.
 - O usuário recebe detalhes suficientes sem exposição desnecessária de caminho completo.
+
+### Registro de conclusão — 05/08/2026
+
+- O serviço ganhou `preflight_backup`, que percorre projetos e origens PDF somente para leitura,
+  classifica `PDF_AUSENTE`, `PDF_ADULTERADO` e `PDF_ILEGIVEL` e produz referências auditáveis por IDs
+  de projeto/documento. O teste substitui o construtor de diretório temporário por uma falha sentinela
+  e comprova que o preflight não cria snapshots, stagings, pacotes ou resíduos.
+- A criação reexecuta e compara o relatório antes de qualquer temporário. Um relatório degradado sem
+  `confirmar_degradado=True` é recusado; confirmação obsoleta também é recusada. Cancelar na UI não
+  chama a criação, preserva um destino anterior e não deixa `.z-*`.
+- Novas exportações e backups usam o manifesto de formato 2; o leitor mantém compatibilidade com o
+  formato 1. O formato 2 assina `INTEGRO`/`DEGRADADO` e omissões com código, tipo, tratamento e IDs
+  seguros. Exportação reaproveita o relatório da origem, enquanto importação e restauração mantêm
+  separados os avisos declarados e a integridade física dos arquivos recebidos.
+- O diálogo Qt lista somente IDs abreviados e as classes ausente, alterado ou ilegível, além de dizer
+  se não há origem registrada ou se a referência permanecerá externa. Nenhum nome de documento ou
+  caminho absoluto é apresentado. O aceite usa “Backup criado com ressalvas”; o fluxo íntegro diz
+  apenas “Backup criado” e nunca anuncia integridade total.
+- A restauração exige que snapshot e todos os membros declarados estejam íntegros, inclusive quando o
+  manifesto é `DEGRADADO`. PDFs copiados recebem caminhos gerenciados; omissões preservam a referência
+  externa preexistente ou a ausência de origem, e o resultado/UI expõem quantos continuam
+  indisponíveis sem inventar caminhos.
+- Validações concluídas: conjunto focado de serviço, ZIP e Qt (`15 passed`); `pip check`; Ruff;
+  `ruff format --check`; Mypy (`165 source files`); e gate básico canônico. O resultado final foi
+  `283 passed, 20 deselected`, cobertura `85,26%`, complexidade média A (`4,0214`) e
+  `RESULTADO FINAL: APROVADO`. O único aviso foi um `PytestCacheWarning` ambiental por falta de
+  permissão para atualizar `.pytest_cache`; não houve `ResourceWarning` nem falha de teste.
+- Commits: `9ff2607` (`feat(portability): confirm degraded backups`) e `9aabd23`
+  (`test(portability): cover degraded backup consent`).
 
 ### Mensagem para um novo chat do Codex
 

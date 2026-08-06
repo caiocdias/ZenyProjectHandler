@@ -2,7 +2,7 @@
 
 ## Status
 
-Aceita em 21/07/2026.
+Aceita em 21/07/2026; revisada em 05/08/2026.
 
 ## Contexto
 
@@ -13,8 +13,9 @@ adulterado; copiar apenas o SQLite deixaria os PDFs externos fora do backup.
 
 ## Decisão
 
-- Adotar `.zphproj` como pacote ZIP de formato 1, com manifesto canônico assinado por SHA-256,
-  SQLite restrito a um projeto, PDFs e resultados auditáveis.
+- Adotar `.zphproj` como pacote ZIP. O formato 1 permanece aceito para leitura; novas exportações e
+  backups usam o formato 2, cujo manifesto canônico assinado por SHA-256 acrescenta estado de
+  integridade e omissões auditáveis ao SQLite restrito a um projeto, PDFs e resultados.
 - Declarar no manifesto o caminho relativo, tipo MIME, tamanho e SHA-256 de cada arquivo. Rejeitar
   caminhos absolutos ou com travessia, entradas duplicadas, links simbólicos, conteúdo criptografado
   e arquivos não declarados.
@@ -28,15 +29,32 @@ adulterado; copiar apenas o SQLite deixaria os PDFs externos fora do backup.
 - Adotar `.zphbackup` para o ambiente local completo: snapshot íntegro do SQLite, arquivos
   gerenciados e cópias dos PDFs originalmente externos. Reescrever no snapshot as referências dos
   PDFs para caminhos gerenciados recuperáveis.
+- Executar antes do backup completo um preflight somente leitura sobre todas as referências PDF. Ele
+  classifica cada documento como disponível, ausente, alterado ou ilegível e identifica problemas
+  apenas por IDs de projeto/documento. Nenhum snapshot, staging ou pacote é criado nessa fase.
+- Prosseguir diretamente quando o preflight for íntegro. Quando houver PDF indisponível, exigir
+  confirmação explícita antes de criar temporários; uma recusa preserva inclusive um destino já
+  existente. A criação revalida o relatório confirmado para não aceitar omissões novas.
+- Marcar o manifesto e o resultado como `DEGRADADO` quando uma confirmação permitir omissões. Cada
+  omissão registra código, tipo, IDs seguros e tratamento. Em backup, o tratamento
+  `PERMANECE_EXTERNO` deixa no snapshot a referência canônica já existente e não inventa um caminho
+  gerenciado para uma cópia ausente; `OMITIDO` informa que não há origem registrada ou que um anexo
+  de exportação não foi incluído.
 - Publicar pacote e banco restaurado por substituição atômica. Validar o SQLite temporário antes da
   troca e restaurar banco e arquivos anteriores se uma etapa posterior falhar.
-- Manter a validação de integridade como detalhe interno dessas operações. Gestão de fotos,
-  localização manual de arquivos e relatório separado não fazem parte da interface.
+- Separar limitações declaradas pela origem da integridade física do pacote recebido. Mesmo um
+  backup `DEGRADADO` precisa ter manifesto, snapshot e todos os arquivos declarados íntegros para ser
+  restaurado; o resultado da restauração expõe as omissões sem tratá-las como corrupção do ZIP.
+- Mostrar no diálogo apenas identificadores abreviados e a classificação do problema, nunca nome de
+  arquivo nem caminho absoluto. Gestão de fotos e localização manual de arquivos permanecem fora do
+  painel de portabilidade.
 
 ## Consequências
 
-O pacote permanece autocontido depois de movido e sua integridade é validada internamente. A
-recuperação não depende da sobrevivência dos PDFs em seus diretórios originais, e uma gravação
-interrompida não invalida o último destino íntegro. O custo é duplicar os PDFs dentro de exportações
-e backups e manter uma versão explícita do formato. Arquivos inválidos não são aplicados
-silenciosamente; o usuário deve produzir uma nova exportação válida.
+Um pacote sem omissões permanece autocontido depois de movido e sua integridade é validada
+internamente. Um pacote degradado é deliberadamente incompleto, mas deixa essa condição verificável e
+restaurável de modo previsível: dados canônicos são recuperados e as origens omitidas continuam
+externas ou indisponíveis conforme registrado. Uma gravação interrompida não invalida o último
+destino publicado. O custo é duplicar PDFs íntegros, manter compatibilidade de leitura com o formato
+1 e distinguir degradação declarada de corrupção real. Nenhuma origem inválida é omitida
+silenciosamente e a interface nunca apresenta um backup degradado como íntegro.

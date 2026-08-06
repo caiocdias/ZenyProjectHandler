@@ -359,24 +359,27 @@ sintéticas; a partição de teste privada não foi usada para criá-las.
 
 ## Transporte e recuperação
 
-- Um pacote de projeto usa a extensão `.zphproj` e a versão de formato 1. Seu manifesto assinado
-  declara projeto, catálogo, arquivos, tamanhos, tipos e hashes SHA-256.
+- Um pacote de projeto usa a extensão `.zphproj`. O formato 1 permanece legível e novas criações usam
+  o formato 2. Seu manifesto assinado declara projeto, catálogo, arquivos, tamanhos, tipos, hashes
+  SHA-256, estado de integridade e eventuais omissões por identificadores seguros.
 - O pacote contém um SQLite restrito ao projeto, seus PDFs disponíveis e resultados auditáveis da
   análise. O banco continua sendo a fonte canônica.
 - Entradas do arquivo compactado devem possuir caminhos relativos seguros. Caminhos absolutos ou com
   travessia, duplicatas, links simbólicos, conteúdo criptografado e arquivos não declarados são
   recusados antes da aplicação dos dados.
 - Tamanho, tipo e SHA-256 são validados internamente durante exportação, importação, backup e
-  restauração; não há relatório de integridade separado na interface.
+  restauração. O relatório da origem permanece separado de problemas físicos do pacote recebido.
 - Exportar e importar preserva IDs, catálogo, execuções, evidências, propostas, decisões de revisão e
   o conjunto confirmado. A substituição de um projeto já existente é explícita e as trocas de banco
   e arquivos possuem compensação em caso de falha.
-- O backup completo usa `.zphbackup` e contém snapshot íntegro do banco, arquivos gerenciados e cópias
-  dos PDFs externos. As referências do snapshot são reescritas para as cópias recuperáveis. A
-  publicação do pacote e a substituição do banco restaurado são atômicas.
+- O backup completo usa `.zphbackup` e executa preflight sem efeitos colaterais antes de criar o
+  snapshot. PDFs externos íntegros recebem cópias recuperáveis e referências reescritas. PDF ausente,
+  alterado ou ilegível exige confirmação explícita; se aceito, o backup fica `DEGRADADO`, registra a
+  omissão e preserva no snapshot a referência externa existente. A publicação do pacote e a
+  substituição do banco restaurado são atômicas.
 - O painel **Portabilidade e recuperação** oferece somente exportar e importar projetos e criar e
-  restaurar backups, sempre com progresso, destino explícito e confirmação para operações de
-  substituição.
+  restaurar backups, sempre com progresso, destino explícito e confirmação para substituições ou
+  backup degradado. Detalhes de integridade mostram IDs abreviados, nunca nomes ou caminhos privados.
 
 ## Fluxo operacional do MVP pela interface
 
