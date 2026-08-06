@@ -17,6 +17,7 @@ from zeny_project_handler.ports.analysis import (
     CapacidadeMotorOcr,
     ConfiguracaoAnaliseDocumento,
     IdentidadeDadosTreinadosOcr,
+    ResultadoConsultaCapacidadeOcr,
     SolicitacaoAnaliseDocumento,
     chave_cache_analise,
     validar_fonte_solicitacao,
@@ -112,6 +113,56 @@ def test_ocr_capability_signature_is_canonical_and_path_free() -> None:
 
     assert first.assinatura() == second.assinatura()
     assert len(first.assinatura()) == 64
+
+
+def test_ocr_capability_rejects_incomplete_or_ambiguous_identity() -> None:
+    valid_traineddata = IdentidadeDadosTreinadosOcr(idioma="eng", sha256="1" * 64)
+    with pytest.raises(ValueError, match="Idioma"):
+        IdentidadeDadosTreinadosOcr(idioma=" ", sha256="1" * 64)
+    with pytest.raises(ValueError, match="SHA-256"):
+        IdentidadeDadosTreinadosOcr(idioma="eng", sha256="invalid")
+    with pytest.raises(ValueError, match="Implementação"):
+        CapacidadeMotorOcr(
+            implementacao=" ",
+            versao="5.4.1",
+            idiomas=("eng",),
+            dados_treinados=(valid_traineddata,),
+            parametros=(),
+        )
+    with pytest.raises(ValueError, match="ao menos um"):
+        CapacidadeMotorOcr(
+            implementacao="tesseract-cli",
+            versao="5.4.1",
+            idiomas=(),
+            dados_treinados=(),
+            parametros=(),
+        )
+    with pytest.raises(ValueError, match="únicos"):
+        CapacidadeMotorOcr(
+            implementacao="tesseract-cli",
+            versao="5.4.1",
+            idiomas=("eng", "eng"),
+            dados_treinados=(valid_traineddata, valid_traineddata),
+            parametros=(),
+        )
+    with pytest.raises(ValueError, match="corresponder"):
+        CapacidadeMotorOcr(
+            implementacao="tesseract-cli",
+            versao="5.4.1",
+            idiomas=("por",),
+            dados_treinados=(valid_traineddata,),
+            parametros=(),
+        )
+    with pytest.raises(ValueError, match="chaves únicas"):
+        CapacidadeMotorOcr(
+            implementacao="tesseract-cli",
+            versao="5.4.1",
+            idiomas=("eng",),
+            dados_treinados=(valid_traineddata,),
+            parametros=(("oem", 3), ("oem", 1)),
+        )
+    with pytest.raises(ValueError, match="diagnóstico"):
+        ResultadoConsultaCapacidadeOcr(capacidade=None)
 
 
 def test_persisted_extraction_identity_changes_with_analyzer_version(

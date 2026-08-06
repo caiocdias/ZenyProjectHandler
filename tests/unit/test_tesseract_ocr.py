@@ -247,6 +247,116 @@ def test_capability_timeout_is_diagnostic_and_is_not_retried(
     assert calls == 1
 
 
+@pytest.mark.parametrize(
+    ("failure", "expected_code"),
+    (
+        ("process", "analise.ocr_capacidade_indisponivel"),
+        ("version", "analise.ocr_capacidade_invalida"),
+        ("language", "analise.ocr_capacidade_invalida"),
+        ("traineddata", "analise.ocr_traineddata_indisponivel"),
+    ),
+)
+def test_capability_failures_return_sanitized_diagnostics(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    failure: str,
+    expected_code: str,
+) -> None:
+    executable, tessdata = _fake_installation(tmp_path / failure)
+
+    def fake_run(arguments: tuple[str, ...], **_kwargs: object) -> CompletedProcess[str]:
+        normalized = tuple(arguments)
+        if failure == "process":
+            raise OSError("machine-specific path must not escape")
+        if "--version" in normalized:
+            output = "unexpected banner" if failure == "version" else "tesseract 5.4.1"
+            return CompletedProcess(args=arguments, returncode=0, stdout=output)
+        languages = "eng" if failure == "language" else "eng\ndeu"
+        return CompletedProcess(
+            args=arguments,
+            returncode=0,
+            stdout=f'List of available languages in "{tessdata}" (2):\n{languages}\n',
+        )
+
+    monkeypatch.setattr(
+        "zeny_project_handler.adapters.analysis.tesseract_ocr.subprocess.run",
+        fake_run,
+    )
+    engine = ocr_module.TesseractCliOcr(
+        executable,
+        language="por" if failure == "language" else "deu" if failure == "traineddata" else "eng",
+    )
+
+    result = engine.consultar_capacidade()
+
+    assert result.capacidade is None
+    assert [item.codigo for item in result.diagnosticos] == [expected_code]
+    assert all("machine-specific" not in item.mensagem for item in result.diagnosticos)
+
+
+def test_constructor_rejects_invalid_executable_and_semantic_settings(tmp_path: Path) -> None:
+    executable, tessdata = _fake_installation(tmp_path / "validation")
+
+    with pytest.raises(ValueError, match="Executável"):
+        ocr_module.TesseractCliOcr(tessdata)
+    with pytest.raises(ValueError, match="OEM"):
+        ocr_module.TesseractCliOcr(executable, oem=4)
+    with pytest.raises(ValueError, match="Timeouts"):
+        ocr_module.TesseractCliOcr(executable, capability_timeout_seconds=0)
+
+
+def test_general_ocr_pins_tessdata_language_oem_and_has_no_whitelist(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    executable, tessdata = _fake_installation(tmp_path / "general")
+    captured: list[tuple[str, ...]] = []
+    tsv = "\n".join(
+        (
+            "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext",
+            "5\t1\t1\t1\t1\t1\t1\t1\t10\t10\t95\tPOSTE",
+        )
+    )
+
+    def fake_run(
+        arguments: tuple[str, ...],
+        **_kwargs: object,
+    ) -> CompletedProcess[str] | CompletedProcess[bytes]:
+        normalized = tuple(arguments)
+        if metadata := _metadata_process(normalized, tessdata=tessdata):
+            return metadata
+        captured.append(normalized)
+        return CompletedProcess(args=arguments, returncode=0, stdout=tsv.encode())
+
+    monkeypatch.setattr(
+        "zeny_project_handler.adapters.analysis.tesseract_ocr.subprocess.run",
+        fake_run,
+    )
+    engine = ocr_module.TesseractCliOcr(
+        executable,
+        language="eng",
+        oem=2,
+        tessdata_directory=tessdata,
+    )
+    page = PaginaRasterOcr(
+        pagina_numero=1,
+        largura_pixels=1,
+        altura_pixels=1,
+        stride=3,
+        dados_rgb=b"\xff\xff\xff",
+        dpi=450,
+    )
+
+    result = engine.reconhecer(page)
+
+    assert [item.texto for item in result] == ["POSTE"]
+    arguments = captured[0]
+    assert arguments[arguments.index("--tessdata-dir") + 1] == str(tessdata.resolve())
+    assert arguments[arguments.index("-l") + 1] == "eng"
+    assert arguments[arguments.index("--oem") + 1] == "2"
+    assert "-c" not in arguments
+
+
 def test_identifier_ocr_uses_single_character_mode_and_whitelist(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
