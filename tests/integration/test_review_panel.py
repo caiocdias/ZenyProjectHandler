@@ -189,6 +189,7 @@ def test_results_panel_groups_relationships_and_links_elements_to_pdf(
     project_combo = panel.findChild(QComboBox, "reviewProjectCombo")
     assert project_combo is not None
     project_combo.setCurrentIndex(1)
+    qtbot.waitUntil(lambda: panel._viewer._current_transformer is not None)
     tree = panel.findChild(QTreeWidget, "analysisRelationshipTree")
     assert tree is not None
     assert tree.topLevelItemCount() == 1
@@ -384,6 +385,7 @@ def test_results_panel_has_span_tab_with_situation_cable_and_length_source(
 
 
 def test_span_visibility_button_hides_matching_cable_overlay(
+    qtbot: QtBot,
     review_panel_context: tuple[Engine, ReviewPanelWidget, PropostaElemento],
 ) -> None:
     _engine, panel, _proposal = review_panel_context
@@ -392,6 +394,7 @@ def test_span_visibility_button_hides_matching_cable_overlay(
     assert project_combo is not None
     assert table is not None
     project_combo.setCurrentIndex(1)
+    qtbot.waitUntil(lambda: panel._viewer._current_transformer is not None)
     assert panel._session is not None
     project = complete_project(panel._session.catalogo)
     cable = next(item for item in project.elementos if isinstance(item, Cabo))
@@ -447,12 +450,14 @@ def test_span_visibility_button_hides_matching_cable_overlay(
 
 
 def test_cable_link_uses_the_rotated_label_instead_of_the_span_path(
+    qtbot: QtBot,
     review_panel_context: tuple[Engine, ReviewPanelWidget, PropostaElemento],
 ) -> None:
     _engine, panel, _proposal = review_panel_context
     project_combo = panel.findChild(QComboBox, "reviewProjectCombo")
     assert project_combo is not None
     project_combo.setCurrentIndex(1)
+    qtbot.waitUntil(lambda: panel._viewer._current_transformer is not None)
     assert panel._session is not None
     page_id = panel._session.projeto.documentos[0].paginas[0].id
     label_geometry = GeometriaDocumento.poligono(
@@ -535,6 +540,7 @@ def test_result_visibility_can_hide_a_whole_point_or_one_element(
     project_combo = panel.findChild(QComboBox, "reviewProjectCombo")
     assert project_combo is not None
     project_combo.setCurrentIndex(1)
+    qtbot.waitUntil(lambda: panel._viewer._current_transformer is not None)
 
     tree = panel.findChild(QTreeWidget, "analysisRelationshipTree")
     assert tree is not None

@@ -381,6 +381,7 @@ def test_pdf_viewer_navigation_zoom_rotation_and_overlays(qtbot: QtBot, tmp_path
 
     assert viewer.inspecao is not None
     assert viewer.view.scene() is not None
+    qtbot.waitUntil(lambda: bool(viewer.view.scene().items()))
     assert viewer.view.scene().items()
     viewer.definir_sobreposicoes(
         (
@@ -401,6 +402,10 @@ def test_pdf_viewer_navigation_zoom_rotation_and_overlays(qtbot: QtBot, tmp_path
     qtbot.mouseClick(  # type: ignore[no-untyped-call]
         viewer.findChild(QPushButton, "pdfRotateButton"),
         pytest.importorskip("PySide6.QtCore").Qt.MouseButton.LeftButton,
+    )
+    qtbot.waitUntil(
+        lambda: viewer._current_transformer is not None
+        and viewer._current_transformer.rotacao_adicional_graus == 90
     )
     assert viewer.view.scene().items()
 
@@ -464,6 +469,7 @@ def test_pdf_viewer_closes_sessions_when_switching_document_and_closing(
 
     assert viewer.carregar_pdf(first)
     assert viewer.carregar_pdf(second)
+    qtbot.waitUntil(lambda: len(closed_sessions) >= 1)
     assert len(closed_sessions) == 1
 
     viewer.close()
