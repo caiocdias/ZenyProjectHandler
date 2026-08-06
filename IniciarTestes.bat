@@ -62,10 +62,20 @@ if not "!SECTION_EXIT_CODE!"=="0" set "SUITE_STATUS=1"
 
 >> "%REPORT_FILE%" echo.
 >> "%REPORT_FILE%" echo ============================================================
->> "%REPORT_FILE%" echo COMPLEXIDADE CICLOMATICA
->> "%REPORT_FILE%" echo Comando: python -m radon cc src -s -a
+>> "%REPORT_FILE%" echo GATE DE COMPLEXIDADE CICLOMATICA E/F
+>> "%REPORT_FILE%" echo Comando: python scripts\complexity_gate.py src
 >> "%REPORT_FILE%" echo ============================================================
-python -m radon cc src -s -a >> "%REPORT_FILE%" 2>&1
+python scripts\complexity_gate.py src >> "%REPORT_FILE%" 2>&1
+set "SECTION_EXIT_CODE=!ERRORLEVEL!"
+>> "%REPORT_FILE%" echo Codigo de saida: !SECTION_EXIT_CODE!
+if not "!SECTION_EXIT_CODE!"=="0" set "SUITE_STATUS=1"
+
+>> "%REPORT_FILE%" echo.
+>> "%REPORT_FILE%" echo ============================================================
+>> "%REPORT_FILE%" echo RELATORIO DE HOTSPOTS D
+>> "%REPORT_FILE%" echo Comando: python -m radon cc src -s -a -n D
+>> "%REPORT_FILE%" echo ============================================================
+python -m radon cc src -s -a -n D >> "%REPORT_FILE%" 2>&1
 set "SECTION_EXIT_CODE=!ERRORLEVEL!"
 >> "%REPORT_FILE%" echo Codigo de saida: !SECTION_EXIT_CODE!
 if not "!SECTION_EXIT_CODE!"=="0" set "SUITE_STATUS=1"

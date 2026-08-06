@@ -94,7 +94,8 @@ def test_quality_script_enforces_coverage_and_records_metrics() -> None:
     assert "--cov" in quality_script
     assert "not private_samples" in quality_script
     assert "corpus privado explicitamente excluido" in quality_script
-    assert "radon cc" in quality_script
+    assert "python scripts\\complexity_gate.py src" in quality_script
+    assert "radon cc src -s -a -n D" in quality_script
     assert "radon mi" in quality_script
     assert "radon raw" in quality_script
     assert configuration["tool"]["coverage"]["report"]["fail_under"] > 85
