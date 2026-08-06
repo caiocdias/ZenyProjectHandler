@@ -1,5 +1,6 @@
 from decimal import Decimal
 from pathlib import Path
+from threading import Event
 from unittest.mock import Mock
 
 import pytest
@@ -22,12 +23,14 @@ from tests.pdf_fixtures import create_feature_pdf, create_golden_pdf
 
 from zeny_project_handler import bootstrap
 from zeny_project_handler.adapters.pdf import PyMuPdfReader
+from zeny_project_handler.application.operation_coordinator import TipoOperacao
 from zeny_project_handler.bootstrap import _EngineLifetime, run
 from zeny_project_handler.config import AppSettings
 from zeny_project_handler.domain.values import PontoNormalizado
 from zeny_project_handler.ports.pdf import InspecaoPdf
 from zeny_project_handler.ui.main_window import _DockTitleBar
 from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
+from zeny_project_handler.ui.project_panel import _PipelineWorker
 
 
 @pytest.mark.integration
@@ -58,8 +61,51 @@ def test_main_window_smoke(
     assert window.project_panel is not None
     assert window.portability_panel is not None
     assert window.documentation_panel is not None
+    workflow_coordinator = window.project_panel._service._coordinator
+    assert workflow_coordinator is window.project_panel._service._importer._coordenador
+    assert workflow_coordinator is window.portability_panel._service._coordinator
     assert window.statusBar().currentMessage() == "Pronto para abrir um PDF"
     assert settings.database_path.is_file()
+
+
+@pytest.mark.integration
+def test_bootstrapped_analysis_worker_refuses_restore_conflict_before_mutation(
+    qtbot: QtBot,
+    tmp_path: Path,
+    application_factory: ApplicationFactory,
+) -> None:
+    settings = AppSettings(data_directory=tmp_path / "coordinated-window")
+    _application, window = application_factory([], settings=settings)
+    qtbot.addWidget(window)
+    panel = window.project_panel
+    assert panel is not None
+    service = panel._service
+    coordinator = service._coordinator
+    created = service.criar_projeto("Projeto para recusa no worker")
+    source = create_golden_pdf(tmp_path / "worker-source.pdf")
+    service.importar_pdfs(created.projeto.id, (source,))
+    worker = _PipelineWorker(
+        service,
+        created.projeto.id,
+        Event(),
+        "44444444444444444444444444444444",
+    )
+    failures: list[tuple[str, bool]] = []
+    worker.failed.connect(lambda message, cancelled: failures.append((message, cancelled)))
+
+    with coordinator.adquirir(TipoOperacao.RESTAURACAO):
+        worker.run()
+
+    assert failures == [
+        (
+            "Não foi possível iniciar análise do projeto: restauração do backup está em andamento. "
+            "Aguarde a conclusão ou o cancelamento.",
+            False,
+        )
+    ]
+    summary = service.abrir_projeto(created.projeto.id).resumo
+    assert summary.ultima_extracao is None
+    assert summary.ultima_interpretacao is None
 
 
 @pytest.mark.integration

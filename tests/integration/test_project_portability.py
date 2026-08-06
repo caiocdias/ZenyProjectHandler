@@ -21,7 +21,14 @@ from zeny_project_handler.adapters.persistence import (
 )
 from zeny_project_handler.adapters.persistence.errors import PersistenceError
 from zeny_project_handler.adapters.portability import ZipProjectArchive
-from zeny_project_handler.application.errors import PortabilidadeProjetoError
+from zeny_project_handler.application.errors import (
+    OperacaoEmAndamentoError,
+    PortabilidadeProjetoError,
+)
+from zeny_project_handler.application.operation_coordinator import (
+    CoordenadorOperacoes,
+    TipoOperacao,
+)
 from zeny_project_handler.application.project_portability import ServicoPortabilidadeProjeto
 from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.domain.portability import EstadoIntegridadePacote
@@ -81,6 +88,7 @@ def _service(
     data: Path,
     engine: Engine,
     dispose_connections: Callable[[], None] | None = None,
+    coordinator: CoordenadorOperacoes | None = None,
 ) -> ServicoPortabilidadeProjeto:
     return ServicoPortabilidadeProjeto(
         lambda: SqlAlchemyUnitOfWork(engine),
@@ -89,6 +97,7 @@ def _service(
         SqliteBackupManager(),
         diretorio_dados=data,
         caminho_banco=data / "zeny-project-handler.sqlite3",
+        coordenador=coordinator,
         descartar_conexoes=dispose_connections or engine.dispose,
     )
 
@@ -463,3 +472,48 @@ def test_restore_disposes_connections_again_before_rollback(
     database_path.replace(moved_database)
     moved_database.unlink()
     assert not moved_database.exists()
+
+
+def test_portability_refuses_conflict_before_mutating_and_releases_after_success(
+    tmp_path: Path,
+) -> None:
+    data = tmp_path / "coordinated-data"
+    engine = create_sqlite_engine(data / "zeny-project-handler.sqlite3")
+    upgrade_database(engine)
+    coordinator = CoordenadorOperacoes()
+    service = _service(data, engine, coordinator=coordinator)
+    destination = tmp_path / "coordinated.zphbackup"
+    destination.write_bytes(b"backup anterior")
+
+    try:
+        with (
+            coordinator.adquirir(TipoOperacao.ANALISE),
+            pytest.raises(OperacaoEmAndamentoError, match="análise do projeto"),
+        ):
+            service.criar_backup(destination)
+
+        assert destination.read_bytes() == b"backup anterior"
+        assert not tuple(tmp_path.glob(".z-*"))
+        result = service.criar_backup(destination)
+        assert result.caminho == destination
+        assert coordinator.operacao_em_andamento is None
+    finally:
+        engine.dispose()
+
+
+def test_portability_exception_releases_coordinator_for_next_operation(tmp_path: Path) -> None:
+    data = tmp_path / "exception-data"
+    engine = create_sqlite_engine(data / "zeny-project-handler.sqlite3")
+    upgrade_database(engine)
+    coordinator = CoordenadorOperacoes()
+    service = _service(data, engine, coordinator=coordinator)
+
+    try:
+        with pytest.raises(PortabilidadeProjetoError, match="Pacote informado não existe"):
+            service.importar_projeto(tmp_path / "pacote-inexistente.zphproj")
+
+        assert coordinator.operacao_em_andamento is None
+        with coordinator.adquirir(TipoOperacao.BACKUP):
+            assert coordinator.operacao_em_andamento is TipoOperacao.BACKUP
+    finally:
+        engine.dispose()

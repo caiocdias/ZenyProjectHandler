@@ -27,6 +27,10 @@ from zeny_project_handler.application.errors import FluxoMvpCanceladoError
 from zeny_project_handler.application.human_review import ServicoRevisaoHumana
 from zeny_project_handler.application.interpretation_pipeline import ExecutarPipelineInterpretacao
 from zeny_project_handler.application.mvp_workflow import ServicoFluxoMvp
+from zeny_project_handler.application.operation_coordinator import (
+    CoordenadorOperacoes,
+    TipoOperacao,
+)
 from zeny_project_handler.application.pdf_import import ImportarPdfsNoProjeto
 from zeny_project_handler.domain.analysis import DecisaoRevisao, PropostaElemento
 from zeny_project_handler.domain.catalog import CatalogoTecnico
@@ -41,6 +45,7 @@ def _service(
     engine: Engine,
     catalog: CatalogoTecnico,
     cache_directory: Path,
+    coordinator: CoordenadorOperacoes | None = None,
 ) -> ServicoFluxoMvp:
     reader = PyMuPdfReader()
 
@@ -51,7 +56,11 @@ def _service(
     return ServicoFluxoMvp(
         unit_of_work,
         catalogo_inicial_id=catalog.id,
-        importador=ImportarPdfsNoProjeto(reader, unit_of_work),
+        importador=ImportarPdfsNoProjeto(
+            reader,
+            unit_of_work,
+            coordenador=coordinator,
+        ),
         extrator=ExecutarAnaliseDocumento(
             PyMuPdfDocumentAnalyzer(cache=JsonAnalysisCache(cache_directory)),
             unit_of_work,
@@ -61,6 +70,7 @@ def _service(
             registry,
             unit_of_work,
         ),
+        coordenador=coordinator,
     )
 
 
@@ -194,6 +204,31 @@ def test_cancel_and_resume_pipeline_reuses_completed_work_without_duplicates(
     assert summary.documentos == 2
     assert summary.paginas == 4
     engine.dispose()
+
+
+def test_cancelled_analysis_releases_shared_coordinator(
+    workflow: tuple[Engine, ServicoFluxoMvp],
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    engine, _default_service = workflow
+    coordinator = CoordenadorOperacoes()
+    service = _service(
+        engine,
+        catalogo_inicial,
+        tmp_path / "coordinated-cache",
+        coordinator,
+    )
+    project = service.criar_projeto("Projeto cancelado coordenado")
+    source = create_golden_pdf(tmp_path / "cancelado.pdf")
+    service.importar_pdfs(project.projeto.id, (source,))
+
+    with pytest.raises(FluxoMvpCanceladoError):
+        service.executar_pipeline(project.projeto.id, cancelado=lambda: True)
+
+    assert coordinator.operacao_em_andamento is None
+    with coordinator.adquirir(TipoOperacao.BACKUP):
+        assert coordinator.operacao_em_andamento is TipoOperacao.BACKUP
 
 
 def test_review_session_consolidates_latest_results_from_every_pdf(

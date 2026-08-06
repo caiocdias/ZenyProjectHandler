@@ -10,6 +10,10 @@ import pytest
 
 from zeny_project_handler.application.errors import FluxoMvpCanceladoError
 from zeny_project_handler.application.mvp_workflow import ServicoFluxoMvp
+from zeny_project_handler.application.operation_coordinator import (
+    CoordenadorOperacoes,
+    TipoOperacao,
+)
 from zeny_project_handler.logging_config import JsonFormatter
 from zeny_project_handler.ui.project_panel import _PipelineWorker
 
@@ -24,6 +28,15 @@ class CancelledPipeline:
 class BrokenPipeline:
     def executar_pipeline(self, _project_id: UUID, **_kwargs: object) -> Never:
         raise RuntimeError("senha=segredo em C:\\clientes\\obra.pdf")
+
+
+class CoordinatorGuardedPipeline:
+    def __init__(self, coordinator: CoordenadorOperacoes) -> None:
+        self._coordinator = coordinator
+
+    def executar_pipeline(self, _project_id: UUID, **_kwargs: object) -> None:
+        with self._coordinator.adquirir(TipoOperacao.ANALISE):
+            raise AssertionError("A operação incompatível deveria ter sido recusada")
 
 
 @pytest.mark.parametrize(
@@ -84,3 +97,23 @@ def test_qt_worker_logs_terminal_state_without_touching_widgets(
     serialized = json.loads(JsonFormatter().format(terminal))
     assert "segredo" not in json.dumps(serialized, ensure_ascii=False)
     assert "clientes" not in json.dumps(serialized, ensure_ascii=False)
+
+
+def test_analysis_worker_reports_coordinator_refusal_without_mutating_owner() -> None:
+    coordinator = CoordenadorOperacoes()
+    worker = _PipelineWorker(
+        cast(ServicoFluxoMvp, CoordinatorGuardedPipeline(coordinator)),
+        PROJECT_ID,
+        Event(),
+        "33333333333333333333333333333333",
+    )
+    failures: list[tuple[str, bool]] = []
+    worker.failed.connect(lambda message, cancelled: failures.append((message, cancelled)))
+
+    with coordinator.adquirir(TipoOperacao.RESTAURACAO):
+        worker.run()
+        assert coordinator.operacao_em_andamento is TipoOperacao.RESTAURACAO
+
+    assert len(failures) == 1
+    assert failures[0][1] is False
+    assert "restauração do backup está em andamento" in failures[0][0]
