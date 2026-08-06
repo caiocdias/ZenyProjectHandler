@@ -34,11 +34,30 @@ def test_setup_recreates_incompatible_existing_venv() -> None:
 def test_setup_installs_and_validates_tesseract_ocr() -> None:
     setup_script = script_text("setup.bat")
 
-    assert "ensure_tesseract" in setup_script
+    assert "ensure_tesseract_executable" in setup_script
     assert "UB-Mannheim.TesseractOCR" in setup_script
+    assert "--scope user" in setup_script
     assert "--accept-package-agreements --accept-source-agreements" in setup_script
     assert "ZENY_TESSERACT_PATH" in setup_script
     assert "ocr_dependency_error" in setup_script
+    assert "python -m zeny_project_handler.tesseract_setup --provision" in setup_script
+    assert "tesseract --list-langs" in script_text(
+        "src/zeny_project_handler/adapters/analysis/tesseract_runtime.py"
+    )
+
+
+def test_setup_preserves_completed_python_environment_when_ocr_is_offline() -> None:
+    setup_script = script_text("setup.bat")
+
+    application_install = setup_script.index(
+        'python -m pip install --disable-pip-version-check --no-build-isolation --no-deps -e "%CD%"'
+    )
+    python_validation = setup_script.index("python -m pip check")
+    ocr_provision = setup_script.index("python -m zeny_project_handler.tesseract_setup --provision")
+
+    assert application_install < python_validation < ocr_provision
+    assert "o ambiente virtual e o aplicativo foram preservados" in setup_script
+    assert "O setup NAO confirmou o OCR em portugues" in setup_script
 
 
 def test_launcher_activates_venv_and_runs_application() -> None:

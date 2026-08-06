@@ -7,7 +7,6 @@ import pytest
 
 from zeny_project_handler.adapters.analysis import tesseract_ocr as ocr_module
 from zeny_project_handler.adapters.analysis.tesseract_ocr import (
-    _best_available_language,
     _parse_tsv,
     _ppm_bytes,
 )
@@ -97,27 +96,6 @@ def test_tsv_parser_does_not_treat_literal_quotes_as_csv_quoting() -> None:
     result = _parse_tsv(tsv, width=100, height=100)
 
     assert [item.texto for item in result] == ['"Seu dia', 'ASTA"']
-
-
-def test_ocr_prefers_portuguese_and_keeps_english(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def fake_language_run(
-        *_args: object,
-        **_kwargs: object,
-    ) -> CompletedProcess[str]:
-        return CompletedProcess(
-            args=[],
-            returncode=0,
-            stdout="List of available languages:\neng\npor\n",
-        )
-
-    monkeypatch.setattr(
-        "zeny_project_handler.adapters.analysis.tesseract_ocr.subprocess.run",
-        fake_language_run,
-    )
-
-    assert _best_available_language(Path("tesseract.exe")) == "por+eng"
 
 
 def test_capability_is_real_normalized_cached_and_stable_across_machine_paths(
@@ -310,7 +288,7 @@ def test_general_ocr_pins_tessdata_language_oem_and_has_no_whitelist(
     tmp_path: Path,
 ) -> None:
     executable, tessdata = _fake_installation(tmp_path / "general")
-    captured: list[tuple[str, ...]] = []
+    captured: list[tuple[tuple[str, ...], dict[str, object]]] = []
     tsv = "\n".join(
         (
             "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext",
@@ -320,12 +298,12 @@ def test_general_ocr_pins_tessdata_language_oem_and_has_no_whitelist(
 
     def fake_run(
         arguments: tuple[str, ...],
-        **_kwargs: object,
+        **kwargs: object,
     ) -> CompletedProcess[str] | CompletedProcess[bytes]:
         normalized = tuple(arguments)
         if metadata := _metadata_process(normalized, tessdata=tessdata):
             return metadata
-        captured.append(normalized)
+        captured.append((normalized, kwargs))
         return CompletedProcess(args=arguments, returncode=0, stdout=tsv.encode())
 
     monkeypatch.setattr(
@@ -350,8 +328,11 @@ def test_general_ocr_pins_tessdata_language_oem_and_has_no_whitelist(
     result = engine.reconhecer(page)
 
     assert [item.texto for item in result] == ["POSTE"]
-    arguments = captured[0]
-    assert arguments[arguments.index("--tessdata-dir") + 1] == str(tessdata.resolve())
+    arguments, run_options = captured[0]
+    child_environment = run_options["env"]
+    assert isinstance(child_environment, dict)
+    assert child_environment["TESSDATA_PREFIX"] == str(tessdata.resolve())
+    assert "--tessdata-dir" not in arguments
     assert arguments[arguments.index("-l") + 1] == "eng"
     assert arguments[arguments.index("--oem") + 1] == "2"
     assert "-c" not in arguments

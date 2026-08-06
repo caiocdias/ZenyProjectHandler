@@ -23,6 +23,10 @@ from tests.pdf_fixtures import TEST_RENDER_BUDGET, create_feature_pdf, create_go
 
 import zeny_project_handler.adapters.pdf.pymupdf_reader as pdf_reader_module
 from zeny_project_handler import bootstrap
+from zeny_project_handler.adapters.analysis.tesseract_runtime import (
+    DiagnosticoRuntimeOcr,
+    RuntimeTesseract,
+)
 from zeny_project_handler.adapters.pdf import PyMuPdfReader
 from zeny_project_handler.application.operation_coordinator import TipoOperacao
 from zeny_project_handler.bootstrap import _EngineLifetime, run
@@ -71,6 +75,49 @@ def test_main_window_smoke(
     )
     assert window.statusBar().currentMessage() == "Pronto para abrir um PDF"
     assert settings.database_path.is_file()
+
+
+@pytest.mark.integration
+def test_startup_exposes_actionable_portuguese_ocr_remediation(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    application_factory: ApplicationFactory,
+) -> None:
+    diagnostic = DiagnosticoRuntimeOcr(
+        codigo="ocr.portugues_ausente",
+        mensagem="tesseract --list-langs não confirmou por.",
+        remediacao="Execute setup.bat com acesso à rede e tente novamente.",
+    )
+    monkeypatch.setattr(
+        bootstrap,
+        "inspect_tesseract_runtime",
+        lambda _data_directory: RuntimeTesseract(
+            executavel=None,
+            diretorio_tessdata=None,
+            diagnostico=diagnostic,
+        ),
+    )
+    shown_messages: list[str] = []
+    monkeypatch.setattr(
+        QMessageBox,
+        "warning",
+        lambda _parent, _title, message: shown_messages.append(str(message)),
+    )
+
+    _application, window = application_factory(
+        [],
+        settings=AppSettings(data_directory=tmp_path / "startup-diagnostic"),
+    )
+    qtbot.addWidget(window)
+    window.show()
+    button = window.findChild(QToolButton, "ocrStartupDiagnosticButton")
+
+    assert button is not None
+    assert "como corrigir" in button.text()
+    assert "setup.bat" in button.toolTip()
+    qtbot.mouseClick(button, Qt.MouseButton.LeftButton)  # type: ignore[no-untyped-call]
+    assert shown_messages == [diagnostic.texto_ui]
 
 
 @pytest.mark.integration
