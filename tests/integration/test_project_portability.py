@@ -3,11 +3,12 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass, replace
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine
+from sqlalchemy import Engine, inspect
 from tests.factories import complete_analysis, complete_project
 from tests.pdf_fixtures import create_golden_pdf
 
@@ -23,6 +24,7 @@ from zeny_project_handler.adapters.persistence.errors import PersistenceError
 from zeny_project_handler.adapters.portability import ZipProjectArchive
 from zeny_project_handler.application.errors import (
     OperacaoEmAndamentoError,
+    PlanoImportacaoObsoletoError,
     PortabilidadeProjetoError,
 )
 from zeny_project_handler.application.operation_coordinator import (
@@ -36,6 +38,12 @@ from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler.ports.pdf import ReferenciaFontePdf
 
 pytestmark = pytest.mark.integration
+
+
+@dataclass(frozen=True, slots=True)
+class _ImportStateSnapshot:
+    database: tuple[tuple[str, tuple[tuple[str, ...], ...]], ...]
+    filesystem: tuple[tuple[str, str, str], ...]
 
 
 def _project_with_real_pdf(
@@ -124,6 +132,214 @@ def _persist_complete_project(
         work.propostas.salvar(relation)
         work.decisoes_revisao.salvar(decision)
         work.commit()
+
+
+def _snapshot_import_state(data: Path, engine: Engine) -> _ImportStateSnapshot:
+    database: list[tuple[str, tuple[tuple[str, ...], ...]]] = []
+    inspector = inspect(engine)
+    with engine.connect() as connection:
+        for table in sorted(inspector.get_table_names()):
+            rows = connection.exec_driver_sql(f'SELECT * FROM "{table}"').all()
+            normalized = tuple(sorted(tuple(repr(value) for value in row) for row in rows))
+            database.append((table, normalized))
+    filesystem: list[tuple[str, str, str]] = []
+    if data.is_dir():
+        for path in sorted(data.rglob("*"), key=lambda item: item.relative_to(data).as_posix()):
+            relative = path.relative_to(data).as_posix()
+            if relative.split("/", 1)[0].startswith("zeny-project-handler.sqlite3"):
+                continue
+            if path.is_dir():
+                filesystem.append((relative, "directory", ""))
+            elif path.is_file():
+                content = path.read_bytes()
+                filesystem.append((relative, "file", sha256(content).hexdigest()))
+            else:
+                filesystem.append((relative, "other", ""))
+    return _ImportStateSnapshot(database=tuple(database), filesystem=tuple(filesystem))
+
+
+def _assert_no_import_residue(data: Path) -> None:
+    assert not tuple(data.rglob(".z-*"))
+    assert not tuple(data.rglob("*.previous"))
+
+
+def _create_import_package(
+    tmp_path: Path,
+    catalog: CatalogoTecnico,
+) -> tuple[Path, Projeto, ReferenciaFontePdf]:
+    source_data = tmp_path / "package-source"
+    source_engine = create_sqlite_engine(source_data / "zeny-project-handler.sqlite3")
+    try:
+        upgrade_database(source_engine)
+        project, pdf_source = _project_with_real_pdf(tmp_path, catalog)
+        project = replace(project, nome="Projeto validado do pacote")
+        _persist_complete_project(source_engine, catalog, project, pdf_source)
+        service = _service(source_data, source_engine)
+        attached = service.anexar_foto(
+            project.id,
+            project.elementos[0].id,
+            _create_png(tmp_path / "package-photo.png"),
+            legenda="Foto preservada",
+        )
+        exported = service.exportar_projeto(project.id, tmp_path / "validated.zphproj")
+        return exported.caminho, attached.projeto, pdf_source
+    finally:
+        source_engine.dispose()
+
+
+def _persist_conflicting_target(
+    data: Path,
+    engine: Engine,
+    catalog: CatalogoTecnico,
+    packaged_project: Projeto,
+    pdf_source: ReferenciaFontePdf,
+) -> Projeto:
+    local = replace(packaged_project, nome="Versão local anterior")
+    _persist_complete_project(engine, catalog, local, pdf_source)
+    root = data / "project-files" / str(local.id)
+    root.mkdir(parents=True)
+    (root / "local-only.bin").write_bytes(b"estado-local-anterior")
+    return local
+
+
+def test_import_new_project_preflight_is_pure_and_applies_validated_plan(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    package, packaged_project, _pdf_source = _create_import_package(tmp_path, catalogo_inicial)
+    data = tmp_path / "new-target"
+    engine = create_sqlite_engine(data / "zeny-project-handler.sqlite3")
+    try:
+        upgrade_database(engine)
+        service = _service(data, engine)
+        before = _snapshot_import_state(data, engine)
+
+        plan = service.preflight_importacao(package)
+
+        assert _snapshot_import_state(data, engine) == before
+        assert plan.resumo.projeto_id == packaged_project.id
+        assert plan.resumo.nome == packaged_project.nome
+        assert plan.resumo.quantidade_documentos == 1
+        assert plan.resumo.quantidade_fotos == 1
+        assert len(plan.pacote_sha256) == 64
+        assert len(plan.estado_alvo_sha256) == 64
+        assert len(plan.fingerprint) == 64
+        assert not plan.requer_confirmacao
+        _assert_no_import_residue(data)
+
+        result = service.aplicar_plano_importacao(plan)
+
+        after = _snapshot_import_state(data, engine)
+        assert after != before
+        assert result.projeto == packaged_project
+        assert not result.substituiu_existente
+        assert service.verificar_integridade(packaged_project.id).integro
+        _assert_no_import_residue(data)
+    finally:
+        engine.dispose()
+
+
+def test_import_conflict_refused_preserves_database_files_and_has_no_residue(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    package, packaged_project, pdf_source = _create_import_package(tmp_path, catalogo_inicial)
+    data = tmp_path / "refused-target"
+    engine = create_sqlite_engine(data / "zeny-project-handler.sqlite3")
+    try:
+        upgrade_database(engine)
+        service = _service(data, engine)
+        local = _persist_conflicting_target(
+            data, engine, catalogo_inicial, packaged_project, pdf_source
+        )
+        before = _snapshot_import_state(data, engine)
+
+        plan = service.preflight_importacao(package)
+
+        assert plan.projeto_existente
+        assert plan.pasta_destino_existente
+        assert plan.requer_confirmacao
+        assert _snapshot_import_state(data, engine) == before
+        with pytest.raises(PortabilidadeProjetoError, match="confirme explicitamente"):
+            service.aplicar_plano_importacao(plan)
+
+        assert _snapshot_import_state(data, engine) == before
+        with SqlAlchemyUnitOfWork(engine) as work:
+            assert work.projetos.obter(local.id) == local
+        _assert_no_import_residue(data)
+    finally:
+        engine.dispose()
+
+
+def test_import_conflict_accepted_replaces_database_and_files_preserving_ids(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    package, packaged_project, pdf_source = _create_import_package(tmp_path, catalogo_inicial)
+    data = tmp_path / "accepted-target"
+    engine = create_sqlite_engine(data / "zeny-project-handler.sqlite3")
+    try:
+        upgrade_database(engine)
+        service = _service(data, engine)
+        _persist_conflicting_target(data, engine, catalogo_inicial, packaged_project, pdf_source)
+        before = _snapshot_import_state(data, engine)
+
+        plan = service.preflight_importacao(package)
+
+        assert _snapshot_import_state(data, engine) == before
+        result = service.aplicar_plano_importacao(plan, confirmar_substituicao=True)
+
+        after = _snapshot_import_state(data, engine)
+        assert after != before
+        assert result.substituiu_existente
+        assert result.projeto == packaged_project
+        assert {item.id for item in result.projeto.documentos} == {
+            item.id for item in packaged_project.documentos
+        }
+        assert {item.id for item in result.projeto.elementos} == {
+            item.id for item in packaged_project.elementos
+        }
+        root = data / "project-files" / str(packaged_project.id)
+        assert not (root / "local-only.bin").exists()
+        assert service.verificar_integridade(packaged_project.id).integro
+        _assert_no_import_residue(data)
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("changed_state", ["target", "package"])
+def test_import_rejects_race_between_preflight_and_application_without_mutation(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+    changed_state: str,
+) -> None:
+    package, packaged_project, pdf_source = _create_import_package(tmp_path, catalogo_inicial)
+    data = tmp_path / f"stale-{changed_state}-target"
+    engine = create_sqlite_engine(data / "zeny-project-handler.sqlite3")
+    try:
+        upgrade_database(engine)
+        service = _service(data, engine)
+        local = _persist_conflicting_target(
+            data, engine, catalogo_inicial, packaged_project, pdf_source
+        )
+        plan = service.preflight_importacao(package)
+        if changed_state == "target":
+            with SqlAlchemyUnitOfWork(engine) as work:
+                work.projetos.salvar(replace(local, nome="Alterado durante a corrida"))
+                work.commit()
+            root = data / "project-files" / str(local.id)
+            (root / "race.bin").write_bytes(b"mudanca-concorrente")
+        else:
+            package.write_bytes(package.read_bytes() + b"pacote-alterado")
+        raced = _snapshot_import_state(data, engine)
+
+        with pytest.raises(PlanoImportacaoObsoletoError, match="após o preflight"):
+            service.aplicar_plano_importacao(plan, confirmar_substituicao=True)
+
+        assert _snapshot_import_state(data, engine) == raced
+        _assert_no_import_residue(data)
+    finally:
+        engine.dispose()
 
 
 def test_export_import_preserves_ids_decisions_and_repairs_missing_photo(

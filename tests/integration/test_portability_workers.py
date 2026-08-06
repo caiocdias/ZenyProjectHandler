@@ -24,8 +24,10 @@ from zeny_project_handler.application.operation_coordinator import (
 )
 from zeny_project_handler.application.project_portability import (
     CancelCallback,
+    PlanoImportacaoProjeto,
     ProgressCallback,
     ResultadoExportacaoProjeto,
+    ResumoPreflightImportacaoProjeto,
     ResumoProjetoPortabilidade,
     ServicoPortabilidadeProjeto,
 )
@@ -36,6 +38,11 @@ from zeny_project_handler.domain.portability import (
     RelatorioIntegridadeProjeto,
 )
 from zeny_project_handler.ui.portability_panel import PortabilityPanelWidget
+from zeny_project_handler.ui.portability_worker import (
+    PortabilityCommand,
+    PortabilityOperation,
+    PortabilityWorker,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -93,6 +100,66 @@ class ControlledPortabilityService:
             return _export_result(projeto_id, destino)
 
 
+class ControlledImportService:
+    def __init__(self, coordinator: CoordenadorOperacoes, plan: PlanoImportacaoProjeto) -> None:
+        self.coordenador = coordinator
+        self.plan = plan
+        self.events: list[str] = []
+
+    def listar_projetos(self) -> tuple[ResumoProjetoPortabilidade, ...]:
+        return ()
+
+    def preflight_importacao(
+        self,
+        _package: Path,
+        *,
+        cancelado: CancelCallback | None = None,
+    ) -> PlanoImportacaoProjeto:
+        assert cancelado is not None and not cancelado()
+        self.events.append("preflight")
+        return self.plan
+
+    def aplicar_plano_importacao(
+        self,
+        plan: PlanoImportacaoProjeto,
+        *,
+        confirmar_substituicao: bool = False,
+        progresso: ProgressCallback | None = None,
+        cancelado: CancelCallback | None = None,
+    ) -> object:
+        assert plan is self.plan
+        assert confirmar_substituicao
+        assert progresso is not None
+        assert cancelado is not None and not cancelado()
+        self.events.append("apply")
+        return object()
+
+
+def _conflicting_import_plan(path: Path) -> PlanoImportacaoProjeto:
+    summary = ResumoPreflightImportacaoProjeto(
+        projeto_id=PROJECT_ID,
+        catalogo_id=PROJECT_ID,
+        nome="Projeto controlado",
+        quantidade_documentos=1,
+        quantidade_fotos=2,
+        quantidade_analises=3,
+        quantidade_arquivos=4,
+        quantidade_omissoes=0,
+    )
+    return PlanoImportacaoProjeto(
+        pacote=path,
+        pacote_sha256="a" * 64,
+        pacote_tamanho_bytes=100,
+        estado_alvo_sha256="b" * 64,
+        projeto_existente=True,
+        pasta_destino_existente=True,
+        resumo=summary,
+        integridade_pacote=RelatorioIntegridadeProjeto(),
+        omissoes_origem=(),
+        fingerprint="c" * 64,
+    )
+
+
 def _export_result(project_id: UUID, destination: Path) -> ResultadoExportacaoProjeto:
     manifest = ManifestoProjetoPortatil(
         versao_formato=2,
@@ -145,6 +212,86 @@ def _start_export(
     qtbot.mouseClick(  # type: ignore[no-untyped-call]
         _export_button(panel), Qt.MouseButton.LeftButton
     )
+
+
+@pytest.mark.parametrize("accepted", [False, True])
+def test_import_worker_confirms_preflight_plan_before_applying(
+    tmp_path: Path,
+    accepted: bool,
+) -> None:
+    package = tmp_path / "controlled.zphproj"
+    plan = _conflicting_import_plan(package)
+    service = ControlledImportService(CoordenadorOperacoes(), plan)
+    worker = PortabilityWorker(
+        cast(ServicoPortabilidadeProjeto, service),
+        PortabilityCommand(PortabilityOperation.IMPORT, package),
+        Event(),
+        "a" * 32,
+    )
+    confirmations: list[tuple[str, object, tuple[str, ...]]] = []
+    failures: list[tuple[str, bool]] = []
+    successes: list[object] = []
+
+    def confirm(_execution_id: str, kind: str, payload: object) -> None:
+        confirmations.append((kind, payload, tuple(service.events)))
+        worker.resolve_confirmation(accepted)
+
+    worker.confirmation_required.connect(confirm)
+    worker.failed.connect(
+        lambda _execution_id, message, cancelled: failures.append((message, cancelled))
+    )
+    worker.succeeded.connect(lambda _execution_id, result: successes.append(result))
+
+    worker.run()
+
+    assert confirmations == [("replace_project", plan, ("preflight",))]
+    if accepted:
+        assert service.events == ["preflight", "apply"]
+        assert len(successes) == 1
+        assert failures == []
+    else:
+        assert service.events == ["preflight"]
+        assert successes == []
+        assert failures == [("Importação cancelada antes da substituição", True)]
+
+
+def test_import_panel_shows_plan_summary_and_refusal_never_applies(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package = tmp_path / "panel-controlled.zphproj"
+    plan = _conflicting_import_plan(package)
+    service = ControlledImportService(CoordenadorOperacoes(), plan)
+    panel = PortabilityPanelWidget(
+        service=cast(ServicoPortabilidadeProjeto, service),
+        coordinator=service.coordenador,
+    )
+    qtbot.addWidget(panel)
+    panel.show()
+    questions: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        QFileDialog,
+        "getOpenFileName",
+        lambda *_args, **_kwargs: (str(package), "Projeto Zeny (*.zphproj)"),
+    )
+
+    def refuse(_parent: object, title: str, message: str, *_args: object) -> object:
+        questions.append((title, message))
+        return QMessageBox.StandardButton.No
+
+    monkeypatch.setattr(QMessageBox, "question", refuse)
+
+    qtbot.mouseClick(panel._import, Qt.MouseButton.LeftButton)  # type: ignore[no-untyped-call]
+    qtbot.waitUntil(lambda: not panel.processando)
+
+    assert service.events == ["preflight"]
+    assert len(questions) == 1
+    title, message = questions[0]
+    assert title == "Substituir projeto existente"
+    assert "Projeto controlado" in message
+    assert str(PROJECT_ID)[:8] in message
+    assert plan.fingerprint[:12] in message
 
 
 def test_worker_keeps_gui_responsive_and_reports_monotonic_success_once(

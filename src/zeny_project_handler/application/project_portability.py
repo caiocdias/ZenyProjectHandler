@@ -656,10 +656,7 @@ class ServicoPortabilidadeProjeto:
             current_digest, current_size = _file_digest(plano.pacote)
         except OSError as error:
             raise PlanoImportacaoObsoletoError(_IMPORT_PLAN_STALE_MESSAGE) from error
-        if (
-            current_digest != plano.pacote_sha256
-            or current_size != plano.pacote_tamanho_bytes
-        ):
+        if current_digest != plano.pacote_sha256 or current_size != plano.pacote_tamanho_bytes:
             raise PlanoImportacaoObsoletoError(_IMPORT_PLAN_STALE_MESSAGE)
         with TemporaryDirectory(prefix="zeny-import-") as temporary_name:
             temporary = Path(temporary_name)
@@ -952,9 +949,8 @@ class ServicoPortabilidadeProjeto:
             if expected_digest is not None:
                 raise PlanoImportacaoObsoletoError(_IMPORT_PLAN_STALE_MESSAGE) from error
             raise PortabilidadeProjetoError("Pacote informado não existe") from error
-        if (
-            (expected_digest is not None and package_digest != expected_digest)
-            or (expected_size is not None and package_size != expected_size)
+        if (expected_digest is not None and package_digest != expected_digest) or (
+            expected_size is not None and package_size != expected_size
         ):
             raise PlanoImportacaoObsoletoError(_IMPORT_PLAN_STALE_MESSAGE)
         self._ensure_not_cancelled(cancelado)
@@ -1026,9 +1022,7 @@ class ServicoPortabilidadeProjeto:
                         (
                             decision
                             for proposal in proposals
-                            if (
-                                decision := work.decisoes_revisao.obter_da_proposta(proposal.id)
-                            )
+                            if (decision := work.decisoes_revisao.obter_da_proposta(proposal.id))
                             is not None
                         ),
                         key=_entity_id,
@@ -1310,9 +1304,7 @@ def _create_import_plan(
         catalogo_id=content.catalogo.id,
         nome=content.projeto.nome,
         quantidade_documentos=len(content.projeto.documentos),
-        quantidade_fotos=sum(
-            len(element.fotos) for element in content.projeto.elementos
-        ),
+        quantidade_fotos=sum(len(element.fotos) for element in content.projeto.elementos),
         quantidade_analises=len(content.execucoes),
         quantidade_arquivos=len(extracted.manifesto.arquivos),
         quantidade_omissoes=len(extracted.manifesto.omissoes),
