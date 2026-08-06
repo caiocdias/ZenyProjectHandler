@@ -7,7 +7,6 @@ from collections.abc import Sequence
 from typing import cast
 from uuid import UUID
 
-from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 from sqlalchemy import Engine
 
@@ -169,6 +168,7 @@ def _compose_initialized_application(
             limite_pixels=app_settings.pdf_render_max_pixels,
             limite_bytes=app_settings.pdf_render_max_bytes,
         ),
+        pdf_tile_cache_max_bytes=app_settings.pdf_tile_cache_max_bytes,
         review_service=ServicoRevisaoHumana(unit_of_work),
         workflow_service=workflow_service,
         portability_service=ServicoPortabilidadeProjeto(
@@ -237,11 +237,14 @@ def run(
     arguments = list(argv) if argv is not None else list(sys.argv)
     smoke_test = "--smoke-test" in arguments
     qt_arguments = [argument for argument in arguments if argument != "--smoke-test"]
-
     application, window = create_application(qt_arguments, settings=settings)
     window.show()
     if smoke_test:
-        QTimer.singleShot(0, application.quit)
+        try:
+            application.processEvents()
+            return 0
+        finally:
+            window.close()
     try:
         return application.exec()
     finally:

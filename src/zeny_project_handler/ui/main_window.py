@@ -318,6 +318,7 @@ class MainWindow(QMainWindow):
         pdf_reader: LeitorPdfPort,
         pdf_render_dpi: int,
         pdf_render_budget: OrcamentoRenderizacaoPdf,
+        pdf_tile_cache_max_bytes: int,
         review_service: ServicoRevisaoHumana | None = None,
         workflow_service: ServicoFluxoMvp | None = None,
         portability_service: ServicoPortabilidadeProjeto | None = None,
@@ -345,6 +346,7 @@ class MainWindow(QMainWindow):
             leitor=pdf_reader,
             dpi=pdf_render_dpi,
             orcamento=pdf_render_budget,
+            cache_limite_bytes=pdf_tile_cache_max_bytes,
             parent=self,
         )
         self.pdf_viewer.status_changed.connect(self.statusBar().showMessage)

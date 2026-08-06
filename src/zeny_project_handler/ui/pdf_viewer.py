@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from uuid import UUID
 
-from PySide6.QtCore import QPointF, Qt, Signal
+from PySide6.QtCore import QEvent, QPointF, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import (
     QBrush,
     QCloseEvent,
@@ -19,9 +19,12 @@ from PySide6.QtGui import (
     QPainterPathStroker,
     QPen,
     QPixmap,
+    QResizeEvent,
+    QTransform,
     QWheelEvent,
 )
 from PySide6.QtWidgets import (
+    QApplication,
     QFileDialog,
     QGraphicsPathItem,
     QGraphicsPixmapItem,
@@ -37,7 +40,8 @@ from PySide6.QtWidgets import (
 )
 
 from zeny_project_handler.adapters.pdf.coordinates import PontoPlano, TransformadorCoordenadasPagina
-from zeny_project_handler.adapters.pdf.errors import PdfError
+from zeny_project_handler.adapters.pdf.errors import PdfError, PdfOrigemAlteradaError
+from zeny_project_handler.config import DEFAULT_PDF_TILE_CACHE_MAX_BYTES
 from zeny_project_handler.domain.analysis import PropostaElemento
 from zeny_project_handler.domain.documents import DocumentoProjeto
 from zeny_project_handler.domain.enums import EstadoRevisao, TipoGeometria
@@ -48,8 +52,27 @@ from zeny_project_handler.ports.pdf import (
     LeitorPdfPort,
     OrcamentoRenderizacaoPdf,
     PaginaPdfRenderizada,
+    PlanoRenderizacaoPdf,
     SessaoLeituraPdfPort,
 )
+
+from .pdf_rendering import (
+    CacheLruBytes,
+    CancelamentoRenderizacao,
+    ChaveCacheRenderizacao,
+    FilaRenderizacao,
+    IdentidadeDocumentoRenderizacao,
+    ResultadoRenderizacao,
+    SolicitacaoRenderizacao,
+    TrabalhoRenderizacao,
+    regioes_tiles_priorizadas,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class _RasterEmCache:
+    pixmap: QPixmap
+    plano: PlanoRenderizacaoPdf
 
 
 class ReviewLinkItem(QGraphicsPathItem):
@@ -65,6 +88,8 @@ class PdfGraphicsView(QGraphicsView):
     """Cena raster com zoom suave e sobreposições em coordenadas normalizadas."""
 
     proposta_selecionada = Signal(str)
+    viewport_alterado = Signal()
+    zoom_alterado = Signal(float)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -72,6 +97,8 @@ class PdfGraphicsView(QGraphicsView):
         self._scene = QGraphicsScene(self)
         self.setScene(self._scene)
         self._pixmap_item: QGraphicsPixmapItem | None = None
+        self._tile_items: dict[ChaveCacheRenderizacao, QGraphicsPixmapItem] = {}
+        self._overlay_items: list[QGraphicsPathItem] = []
         self._review_items: dict[str, QGraphicsPathItem] = {}
         self._review_geometries: dict[str, GeometriaDocumento] = {}
         self._review_transformer: TransformadorCoordenadasPagina | None = None
@@ -88,22 +115,48 @@ class PdfGraphicsView(QGraphicsView):
     def zoom(self) -> float:
         return self._zoom
 
-    def definir_pagina(self, rendered: PaginaPdfRenderizada) -> None:
-        image = QImage(
-            rendered.dados_rgb,
-            rendered.largura_pixels,
-            rendered.altura_pixels,
-            rendered.stride,
-            QImage.Format.Format_RGB888,
-        )
-        if image.isNull():
-            raise ValueError("O buffer RGB do PDF não pôde ser convertido em imagem")
+    def definir_previa(self, pixmap: QPixmap) -> None:
         self._review_items.clear()
         self._review_geometries.clear()
+        self._tile_items.clear()
+        self._overlay_items.clear()
         self._scene.clear()
-        self._pixmap_item = self._scene.addPixmap(QPixmap.fromImage(image))
+        self._pixmap_item = self._scene.addPixmap(pixmap)
+        self._pixmap_item.setZValue(0)
         self._scene.setSceneRect(self._pixmap_item.boundingRect())
-        self.ajustar_pagina()
+        self.ajustar_pagina(notificar=False)
+
+    def adicionar_tile(
+        self,
+        key: ChaveCacheRenderizacao,
+        pixmap: QPixmap,
+        *,
+        plano: PlanoRenderizacaoPdf,
+        plano_previa: PlanoRenderizacaoPdf,
+    ) -> None:
+        if self._pixmap_item is None or key in self._tile_items:
+            return
+        scale_x = plano_previa.largura_pagina_pixels / plano.largura_pagina_pixels
+        scale_y = plano_previa.altura_pagina_pixels / plano.altura_pagina_pixels
+        item = self._scene.addPixmap(pixmap)
+        item.setZValue(1)
+        item.setTransform(QTransform.fromScale(scale_x, scale_y))
+        item.setPos(plano.origem_x_pixels * scale_x, plano.origem_y_pixels * scale_y)
+        self._tile_items[key] = item
+
+    def limpar_tiles(self) -> None:
+        for item in self._tile_items.values():
+            self._scene.removeItem(item)
+        self._tile_items.clear()
+
+    def limpar(self) -> None:
+        self._review_items.clear()
+        self._review_geometries.clear()
+        self._review_transformer = None
+        self._tile_items.clear()
+        self._overlay_items.clear()
+        self._scene.clear()
+        self._pixmap_item = None
 
     def definir_sobreposicoes(
         self,
@@ -112,6 +165,9 @@ class PdfGraphicsView(QGraphicsView):
     ) -> None:
         if self._pixmap_item is None:
             return
+        for item in self._overlay_items:
+            self._scene.removeItem(item)
+        self._overlay_items.clear()
         pen = QPen(QColor("#ff3b30"), 2)
         pen.setCosmetic(True)
         for geometry in geometries:
@@ -124,7 +180,9 @@ class PdfGraphicsView(QGraphicsView):
                 path.lineTo(mapped.x, mapped.y)
             if len(geometry) > 2:
                 path.closeSubpath()
-            self._scene.addPath(path, pen)
+            item = self._scene.addPath(path, pen)
+            item.setZValue(10)
+            self._overlay_items.append(item)
 
     def definir_propostas_revisao(
         self,
@@ -153,6 +211,7 @@ class PdfGraphicsView(QGraphicsView):
             )
             item.setPen(_review_link_pen(proposal.estado_revisao))
             self._scene.addItem(item)
+            item.setZValue(20)
             item.setFlag(QGraphicsPathItem.GraphicsItemFlag.ItemIsSelectable)
             item.setCursor(Qt.CursorShape.PointingHandCursor)
             item.setToolTip(
@@ -209,6 +268,7 @@ class PdfGraphicsView(QGraphicsView):
         self._zoom = min(16.0, max(0.05, value))
         self.resetTransform()
         self.scale(self._zoom, self._zoom)
+        self.zoom_alterado.emit(self._zoom)
 
     def ampliar(self) -> None:
         self.definir_zoom(self._zoom * 1.25)
@@ -216,11 +276,41 @@ class PdfGraphicsView(QGraphicsView):
     def reduzir(self) -> None:
         self.definir_zoom(self._zoom / 1.25)
 
-    def ajustar_pagina(self) -> None:
+    def ajustar_pagina(self, *, notificar: bool = True) -> None:
         if self._pixmap_item is None:
             return
         self.fitInView(self._pixmap_item, Qt.AspectRatioMode.KeepAspectRatio)
         self._zoom = self.transform().m11()
+        if notificar:
+            self.zoom_alterado.emit(self._zoom)
+
+    def viewport_normalizado(self) -> tuple[float, float, float, float]:
+        scene_rect = self._scene.sceneRect()
+        if self._pixmap_item is None or scene_rect.isEmpty():
+            return (0.0, 0.0, 1.0, 1.0)
+        visible = self.mapToScene(self.viewport().rect()).boundingRect().intersected(scene_rect)
+        if visible.isEmpty():
+            return (0.0, 0.0, 1.0, 1.0)
+        return (
+            max(0.0, visible.left() / scene_rect.width()),
+            max(0.0, visible.top() / scene_rect.height()),
+            min(1.0, visible.right() / scene_rect.width()),
+            min(1.0, visible.bottom() / scene_rect.height()),
+        )
+
+    def scrollContentsBy(self, dx: int, dy: int) -> None:  # noqa: N802 - API Qt
+        super().scrollContentsBy(dx, dy)
+        self.viewport_alterado.emit()
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802 - API Qt
+        super().resizeEvent(event)
+        self.viewport_alterado.emit()
+
+    def event(self, event: QEvent) -> bool:
+        handled = super().event(event)
+        if event.type() == QEvent.Type.DevicePixelRatioChange:
+            self.viewport_alterado.emit()
+        return handled
 
     def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802 - API Qt
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
@@ -241,6 +331,7 @@ class PdfViewerWidget(QWidget):
         leitor: LeitorPdfPort,
         dpi: int,
         orcamento: OrcamentoRenderizacaoPdf,
+        cache_limite_bytes: int = DEFAULT_PDF_TILE_CACHE_MAX_BYTES,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -248,6 +339,16 @@ class PdfViewerWidget(QWidget):
         self._reader = leitor
         self._dpi = dpi
         self._render_budget = orcamento
+        self._render_cache: CacheLruBytes[ChaveCacheRenderizacao, _RasterEmCache] = CacheLruBytes(
+            cache_limite_bytes
+        )
+        self._render_queue = FilaRenderizacao()
+        self._generation = 0
+        self._render_cancellation = CancelamentoRenderizacao()
+        self._scheduled_requests: set[ChaveCacheRenderizacao] = set()
+        self._retired_sessions: list[tuple[SessaoLeituraPdfPort, ...]] = []
+        self._current_preview: _RasterEmCache | None = None
+        self._closed = False
         self._inspection: InspecaoPdf | None = None
         self._inspections: tuple[InspecaoPdf, ...] = ()
         self._sessions: tuple[SessaoLeituraPdfPort, ...] = ()
@@ -259,6 +360,15 @@ class PdfViewerWidget(QWidget):
         self._current_transformer: TransformadorCoordenadasPagina | None = None
         self._last_page_id: str | None = None
         self._build_ui()
+        self._detail_timer = QTimer(self)
+        self._detail_timer.setSingleShot(True)
+        self._detail_timer.setInterval(0)
+        self._detail_timer.timeout.connect(self._schedule_viewport_tiles)
+        self._result_timer = QTimer(self)
+        self._result_timer.setInterval(1)
+        self._result_timer.timeout.connect(self._drain_render_results)
+        self.view.zoom_alterado.connect(self._zoom_changed)
+        self.view.viewport_alterado.connect(self._viewport_changed)
 
     @property
     def inspecao(self) -> InspecaoPdf | None:
@@ -340,7 +450,11 @@ class PdfViewerWidget(QWidget):
         return self.carregar_projeto((path,), password=password)
 
     def limpar(self) -> None:
-        self._close_pdf_sessions()
+        self._cancel_current_rendering()
+        self._render_cache.limpar()
+        self._current_preview = None
+        self._retire_sessions(self._sessions)
+        self._sessions = ()
         self._inspection = None
         self._inspections = ()
         self._project_pages = ()
@@ -355,10 +469,26 @@ class PdfViewerWidget(QWidget):
         self._page.setEnabled(False)
         self._page.blockSignals(False)
         self._metadata.setText("Projeto sem PDF importado")
-        self.view.scene().clear()
+        self.view.limpar()
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - API Qt
-        self._close_pdf_sessions()
+        if not self._closed:
+            self._closed = True
+            self._detail_timer.stop()
+            self._result_timer.stop()
+            self._render_cancellation.cancelar()
+            self._render_queue.encerrar()
+            if self._render_queue.isRunning():
+                self._render_queue.wait()
+            self._render_queue.retirar_resultados()
+            sessions = self._sessions
+            self._sessions = ()
+            retired = tuple(
+                session for group in self._retired_sessions for session in group
+            )
+            self._retired_sessions.clear()
+            _close_sessions((*sessions, *retired))
+            self._render_cache.limpar()
         super().closeEvent(event)
 
     def ir_para_folha(self, numero: int) -> None:
@@ -471,6 +601,10 @@ class PdfViewerWidget(QWidget):
         project_pages: tuple[tuple[InspecaoPdf, SessaoLeituraPdfPort, int], ...],
     ) -> None:
         previous_sessions = self._sessions
+        self._cancel_current_rendering()
+        self._render_cache.limpar()
+        self._current_preview = None
+        self.view.limpar()
         self._inspections = inspections
         self._sessions = sessions
         self._overlays = ()
@@ -485,16 +619,13 @@ class PdfViewerWidget(QWidget):
         self._page.setValue(1)
         self._page.setEnabled(True)
         self._page.blockSignals(False)
-        _close_sessions(previous_sessions)
+        self._retire_sessions(previous_sessions)
         self._render_current_page()
-
-    def _close_pdf_sessions(self) -> None:
-        sessions, self._sessions = self._sessions, ()
-        _close_sessions(sessions)
 
     def definir_sobreposicoes(self, geometries: tuple[tuple[PontoNormalizado, ...], ...]) -> None:
         self._overlays = geometries
-        self._render_current_page()
+        if self._current_transformer is not None:
+            self.view.definir_sobreposicoes(geometries, self._current_transformer)
 
     def definir_propostas_revisao(
         self,
@@ -525,54 +656,168 @@ class PdfViewerWidget(QWidget):
         project_page_number = self._page.value()
         inspection, session, page_number = self._project_pages[project_page_number - 1]
         self._inspection = inspection
-        observation = operation_logger(
-            "pdf.viewer.render",
-            document_id=inspection.documento.id,
+        self._cancel_current_rendering()
+        self._current_preview = None
+        self._current_transformer = None
+        self.view.limpar()
+        self._update_metadata(inspection)
+        page_id = str(inspection.paginas[page_number - 1].pagina.id)
+        if page_id != self._last_page_id:
+            self._last_page_id = page_id
+            self.page_changed.emit(page_id)
+        request = self._new_request(
+            inspection,
+            page_number=page_number,
+            region=(0.0, 0.0, 1.0, 1.0),
+            dpi=self._dpi,
+            preview=True,
         )
-        with observation.context():
-            observation.started()
-            try:
-                rendered = session.renderizar_pagina(
-                    page_number,
-                    dpi=self._dpi,
-                    orcamento=self._render_budget,
-                    rotacao_adicional_graus=self._rotation,
-                )
-                self._finish_render(
-                    inspection,
-                    project_page_number=project_page_number,
-                    page_number=page_number,
-                    rendered=rendered,
-                )
-            except PdfError as error:
-                observation.failed(error, expected=True)
-                self.status_changed.emit(str(error))
-                return
-            except Exception as error:
-                observation.failed(error, expected=False)
-                raise
-            observation.succeeded()
+        self._request_raster(request, session=session, priority=-2_000_000)
 
-    def _finish_render(
+    def _new_request(
         self,
         inspection: InspecaoPdf,
         *,
-        project_page_number: int,
         page_number: int,
+        region: tuple[float, float, float, float],
+        dpi: int,
+        preview: bool,
+    ) -> SolicitacaoRenderizacao:
+        return SolicitacaoRenderizacao(
+            geracao=self._generation,
+            documento=_render_document_identity(inspection),
+            pagina=page_number,
+            rotacao=self._rotation,
+            zoom=_stable_scale(self.view.zoom),
+            device_pixel_ratio=_stable_scale(self.view.devicePixelRatioF()),
+            regiao=region,
+            dpi=dpi,
+            previa=preview,
+        )
+
+    def _request_raster(
+        self,
+        request: SolicitacaoRenderizacao,
+        *,
+        session: SessaoLeituraPdfPort,
+        priority: int,
+    ) -> None:
+        if request.chave_cache in self._scheduled_requests:
+            return
+        self._scheduled_requests.add(request.chave_cache)
+        cached = self._render_cache.obter(request.chave_cache)
+        if cached is not None:
+            self._apply_raster(request, cached)
+            return
+        submitted = self._render_queue.enviar(
+            TrabalhoRenderizacao(
+                solicitacao=request,
+                sessao=session,
+                orcamento=self._render_budget,
+                prioridade=priority,
+                cancelamento=self._render_cancellation,
+            )
+        )
+        if submitted:
+            self._result_timer.start()
+
+    def _drain_render_results(self) -> None:
+        _require_ui_thread()
+        for result in self._render_queue.retirar_resultados():
+            self._dispatch_render_result(result)
+        if self._render_queue.esta_ociosa():
+            self._result_timer.stop()
+            self._liberar_sessoes_apos_renderizacao()
+
+    def _dispatch_render_result(self, result: ResultadoRenderizacao) -> None:
+        if result.pagina is not None:
+            self._receber_renderizacao(result.solicitacao, result.pagina)
+            return
+        assert result.erro is not None
+        self._receber_falha_renderizacao(result.solicitacao, result.erro)
+
+    def _receber_renderizacao(
+        self,
+        request: SolicitacaoRenderizacao,
         rendered: PaginaPdfRenderizada,
     ) -> None:
-        self.view.definir_pagina(rendered)
+        _require_ui_thread()
+        if not self._request_is_current(request):
+            if request.previa and self._request_needs_replacement(request):
+                self._render_current_page()
+            return
+        self._scheduled_requests.discard(request.chave_cache)
+        if (
+            rendered.pagina_numero != request.pagina
+            or rendered.rotacao_adicional_graus != request.rotacao
+            or rendered.plano.dpi_solicitado != request.dpi
+            or (
+                (request.previa and not rendered.plano.pagina_inteira)
+                or (
+                    not request.previa
+                    and rendered.plano.recorte_normalizado != request.regiao
+                )
+            )
+        ):
+            self.status_changed.emit("O backend devolveu uma região PDF incompatível")
+            return
+        raster = _RasterEmCache(
+            pixmap=_rendered_to_pixmap(rendered),
+            plano=rendered.plano,
+        )
+        self._render_cache.armazenar(
+            request.chave_cache,
+            raster,
+            tamanho_bytes=_pixmap_size_bytes(raster.pixmap),
+        )
+        self._apply_raster(request, raster)
+
+    def _apply_raster(
+        self,
+        request: SolicitacaoRenderizacao,
+        raster: _RasterEmCache,
+    ) -> None:
+        if not self._request_is_current(request):
+            return
+        if request.previa:
+            self._finish_preview(request, raster)
+            return
+        preview = self._current_preview
+        if preview is None:
+            return
+        self.view.adicionar_tile(
+            request.chave_cache,
+            raster.pixmap,
+            plano=raster.plano,
+            plano_previa=preview.plano,
+        )
+
+    def _finish_preview(
+        self,
+        request: SolicitacaoRenderizacao,
+        raster: _RasterEmCache,
+    ) -> None:
+        if not raster.plano.pagina_inteira:
+            self.status_changed.emit("A prévia do PDF não corresponde à página inteira")
+            return
+        inspection, _session, page_number = self._current_page_context()
+        self._current_preview = raster
+        signals_blocked = self.view.blockSignals(True)
+        try:
+            self.view.definir_previa(raster.pixmap)
+        finally:
+            self.view.blockSignals(signals_blocked)
         page = inspection.paginas[page_number - 1].pagina
         transformer = TransformadorCoordenadasPagina(
             page,
-            dpi=rendered.dpi,
-            largura_pixels=rendered.largura_pixels,
-            altura_pixels=rendered.altura_pixels,
-            largura_pagina_pixels=rendered.largura_pagina_pixels,
-            altura_pagina_pixels=rendered.altura_pagina_pixels,
-            origem_x_pixels=rendered.plano.origem_x_pixels,
-            origem_y_pixels=rendered.plano.origem_y_pixels,
-            rotacao_adicional_graus=self._rotation,
+            dpi=raster.plano.dpi_efetivo,
+            largura_pixels=raster.plano.largura_pixels,
+            altura_pixels=raster.plano.altura_pixels,
+            largura_pagina_pixels=raster.plano.largura_pagina_pixels,
+            altura_pagina_pixels=raster.plano.altura_pagina_pixels,
+            origem_x_pixels=raster.plano.origem_x_pixels,
+            origem_y_pixels=raster.plano.origem_y_pixels,
+            rotacao_adicional_graus=request.rotacao,
         )
         self._current_transformer = transformer
         self.view.definir_sobreposicoes(self._overlays, transformer)
@@ -582,6 +827,19 @@ class PdfViewerWidget(QWidget):
             self._review_link_geometries,
         )
         diagnostics = len(inspection.paginas[page_number - 1].diagnosticos)
+        project_page_number = self._page.value()
+        self.status_changed.emit(
+            f"Folha {project_page_number}/{len(self._project_pages)} - "
+            f"página {page_number}/{len(inspection.paginas)} de "
+            f"{inspection.documento.nome_arquivo} - "
+            f"{raster.plano.largura_pixels}x{raster.plano.altura_pixels}px - "
+            f"{raster.plano.dpi_efetivo}/{raster.plano.dpi_solicitado} DPI - "
+            f"{diagnostics} diagnóstico(s)"
+        )
+        self._cancel_current_rendering()
+        self._detail_timer.start()
+
+    def _update_metadata(self, inspection: InspecaoPdf) -> None:
         if len(self._inspections) == 1:
             self._metadata.setText(
                 f"{inspection.documento.nome_arquivo}  |  "
@@ -595,18 +853,122 @@ class PdfViewerWidget(QWidget):
                 f"{len(self._project_pages)} folhas  |  "
                 f"Arquivo {document_position}: {inspection.documento.nome_arquivo}"
             )
-        self.status_changed.emit(
-            f"Folha {project_page_number}/{len(self._project_pages)} - "
-            f"página {page_number}/{len(inspection.paginas)} de "
-            f"{inspection.documento.nome_arquivo} - "
-            f"{rendered.largura_pixels}x{rendered.altura_pixels}px - "
-            f"{rendered.dpi}/{rendered.plano.dpi_solicitado} DPI - "
-            f"{diagnostics} diagnóstico(s)"
+
+    def _schedule_viewport_tiles(self) -> None:
+        if self._closed or self._current_preview is None or not self._project_pages:
+            return
+        preview = self._current_preview
+        target_dpi = min(
+            self._dpi,
+            max(
+                1,
+                math.ceil(
+                    preview.plano.dpi_efetivo
+                    * self.view.zoom
+                    * self.view.devicePixelRatioF()
+                ),
+            ),
         )
-        page_id = str(page.id)
-        if page_id != self._last_page_id:
-            self._last_page_id = page_id
-            self.page_changed.emit(page_id)
+        if target_dpi <= preview.plano.dpi_efetivo:
+            return
+        inspection, session, page_number = self._current_page_context()
+        for priority, region in regioes_tiles_priorizadas(
+            largura_pagina_pixels=preview.plano.largura_pagina_pixels,
+            altura_pagina_pixels=preview.plano.altura_pagina_pixels,
+            dpi_previa=preview.plano.dpi_efetivo,
+            dpi_detalhe=target_dpi,
+            viewport_normalizado=self.view.viewport_normalizado(),
+            rotacao=self._rotation,
+            orcamento=self._render_budget,
+        ):
+            request = self._new_request(
+                inspection,
+                page_number=page_number,
+                region=region,
+                dpi=target_dpi,
+                preview=False,
+            )
+            self._request_raster(request, session=session, priority=priority)
+
+    def _receber_falha_renderizacao(
+        self,
+        request: SolicitacaoRenderizacao,
+        error: Exception,
+    ) -> None:
+        _require_ui_thread()
+        if not self._request_is_current(request):
+            return
+        self._scheduled_requests.discard(request.chave_cache)
+        if isinstance(error, PdfOrigemAlteradaError):
+            self.limpar()
+        self.status_changed.emit(str(error))
+
+    def _request_is_current(self, request: SolicitacaoRenderizacao) -> bool:
+        if self._closed or request.geracao != self._generation or not self._project_pages:
+            return False
+        inspection, _session, page_number = self._current_page_context()
+        return (
+            request.documento == _render_document_identity(inspection)
+            and request.pagina == page_number
+            and request.rotacao == self._rotation
+            and request.zoom == _stable_scale(self.view.zoom)
+            and request.device_pixel_ratio == _stable_scale(self.view.devicePixelRatioF())
+        )
+
+    def _request_needs_replacement(self, request: SolicitacaoRenderizacao) -> bool:
+        if self._closed or request.geracao != self._generation or not self._project_pages:
+            return False
+        inspection, _session, page_number = self._current_page_context()
+        return (
+            request.documento == _render_document_identity(inspection)
+            and request.pagina == page_number
+            and request.rotacao == self._rotation
+        )
+
+    def _current_page_context(
+        self,
+    ) -> tuple[InspecaoPdf, SessaoLeituraPdfPort, int]:
+        return self._project_pages[self._page.value() - 1]
+
+    def _cancel_current_rendering(self) -> None:
+        self._render_cancellation.cancelar()
+        self._render_cancellation = CancelamentoRenderizacao()
+        self._generation += 1
+        self._scheduled_requests.clear()
+        if hasattr(self, "_detail_timer"):
+            self._detail_timer.stop()
+
+    def _zoom_changed(self, _zoom: float) -> None:
+        if not self._project_pages:
+            return
+        if self._current_preview is None:
+            self._render_current_page()
+            return
+        self._cancel_current_rendering()
+        self.view.limpar_tiles()
+        self._detail_timer.start()
+
+    def _viewport_changed(self) -> None:
+        if not self._project_pages:
+            return
+        if self._current_preview is None:
+            self._render_current_page()
+            return
+        self._cancel_current_rendering()
+        self._detail_timer.start()
+
+    def _retire_sessions(self, sessions: tuple[SessaoLeituraPdfPort, ...]) -> None:
+        if not sessions:
+            return
+        if self._render_queue.esta_ociosa():
+            _close_sessions(sessions)
+            return
+        self._retired_sessions.append(sessions)
+
+    def _liberar_sessoes_apos_renderizacao(self) -> None:
+        retired, self._retired_sessions = self._retired_sessions, []
+        for sessions in retired:
+            _close_sessions(sessions)
 
     def _change_page(self, offset: int) -> None:
         self._page.setValue(self._page.value() + offset)
@@ -626,6 +988,44 @@ class PdfViewerWidget(QWidget):
     def _rotate_page(self) -> None:
         self._rotation = (self._rotation + 90) % 360
         self._render_current_page()
+
+
+def _render_document_identity(inspection: InspecaoPdf) -> IdentidadeDocumentoRenderizacao:
+    return IdentidadeDocumentoRenderizacao(
+        documento_id=inspection.documento.id,
+        sha256=inspection.documento.sha256,
+        tamanho_bytes=inspection.tamanho_bytes,
+        modificado_em_ns=inspection.modificado_em_ns,
+    )
+
+
+def _stable_scale(value: float) -> float:
+    return round(value, 6)
+
+
+def _require_ui_thread() -> None:
+    application = QApplication.instance()
+    if application is None or QThread.currentThread() != application.thread():
+        raise RuntimeError("QPixmap e widgets do visualizador exigem a thread da interface")
+
+
+def _rendered_to_pixmap(rendered: PaginaPdfRenderizada) -> QPixmap:
+    _require_ui_thread()
+    image = QImage(
+        rendered.dados_rgb,
+        rendered.largura_pixels,
+        rendered.altura_pixels,
+        rendered.stride,
+        QImage.Format.Format_RGB888,
+    )
+    if image.isNull():
+        raise ValueError("O buffer RGB do PDF não pôde ser convertido em imagem")
+    return QPixmap.fromImage(image)
+
+
+def _pixmap_size_bytes(pixmap: QPixmap) -> int:
+    bytes_per_pixel = max(1, math.ceil(pixmap.depth() / 8))
+    return pixmap.width() * pixmap.height() * bytes_per_pixel
 
 
 def _ordered_project_pages(

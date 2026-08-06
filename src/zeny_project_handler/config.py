@@ -14,8 +14,10 @@ LOG_LEVEL_ENVIRONMENT_VARIABLE = "ZENY_LOG_LEVEL"
 PDF_RENDER_DPI_ENVIRONMENT_VARIABLE = "ZENY_PDF_RENDER_DPI"
 PDF_RENDER_MAX_PIXELS_ENVIRONMENT_VARIABLE = "ZENY_PDF_RENDER_MAX_PIXELS"
 PDF_RENDER_MAX_BYTES_ENVIRONMENT_VARIABLE = "ZENY_PDF_RENDER_MAX_BYTES"
+PDF_TILE_CACHE_MAX_BYTES_ENVIRONMENT_VARIABLE = "ZENY_PDF_TILE_CACHE_MAX_BYTES"
 DEFAULT_PDF_RENDER_MAX_PIXELS = 8_000_000
 DEFAULT_PDF_RENDER_MAX_BYTES = 64 * 1024 * 1024
+DEFAULT_PDF_TILE_CACHE_MAX_BYTES = 128 * 1024 * 1024
 DATABASE_FILE_NAME = "zeny-project-handler.sqlite3"
 BACKUP_DIRECTORY_NAME = "backups"
 ANALYSIS_CACHE_DIRECTORY_NAME = "cache/analysis"
@@ -42,6 +44,7 @@ class AppSettings:
     pdf_render_dpi: int = 600
     pdf_render_max_pixels: int = DEFAULT_PDF_RENDER_MAX_PIXELS
     pdf_render_max_bytes: int = DEFAULT_PDF_RENDER_MAX_BYTES
+    pdf_tile_cache_max_bytes: int = DEFAULT_PDF_TILE_CACHE_MAX_BYTES
 
     def __post_init__(self) -> None:
         normalized_level = self.log_level.upper()
@@ -54,6 +57,8 @@ class AppSettings:
             raise ValueError("O orçamento de pixels do PDF deve ser positivo")
         if self.pdf_render_max_bytes <= 0:
             raise ValueError("O orçamento de bytes do PDF deve ser positivo")
+        if self.pdf_tile_cache_max_bytes <= 0:
+            raise ValueError("O limite em bytes do cache de tiles deve ser positivo")
         object.__setattr__(self, "log_level", normalized_level)
         object.__setattr__(self, "data_directory", self.data_directory.expanduser().resolve())
 
@@ -95,6 +100,11 @@ class AppSettings:
                 values,
                 PDF_RENDER_MAX_BYTES_ENVIRONMENT_VARIABLE,
                 DEFAULT_PDF_RENDER_MAX_BYTES,
+            ),
+            pdf_tile_cache_max_bytes=_positive_integer_setting(
+                values,
+                PDF_TILE_CACHE_MAX_BYTES_ENVIRONMENT_VARIABLE,
+                DEFAULT_PDF_TILE_CACHE_MAX_BYTES,
             ),
         )
 
