@@ -33,11 +33,13 @@ def _manager(
     state: list[Projeto],
     *,
     remover_arvore: Callable[[Path], None] = shutil.rmtree,
+    remover_arquivo: Callable[[Path], None] | None = None,
 ) -> GerenciadorArquivosGerenciados:
     return GerenciadorArquivosGerenciados(
         data,
         lambda: tuple(state),
         remover_arvore=remover_arvore,
+        remover_arquivo=remover_arquivo,
     )
 
 
@@ -174,6 +176,91 @@ def test_post_commit_failure_keeps_journal_for_a_later_retry(
     assert retry.reconciliar_pendencias() == 0
     assert retry.armazenamento.carregar_todos() == ()
     assert not retry.armazenamento.tombstone_path(task).exists()
+
+
+def test_partial_post_commit_failure_keeps_blob_and_retries_safely(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    payload = b"locked-photo"
+    base = complete_project(catalogo_inicial)
+    photo = _photo(base.elementos[0].fotos[0].id, payload)
+    element = replace(base.elementos[0], fotos=(photo,))
+    project = replace(base, elementos=(element, *base.elementos[1:]))
+    updated = replace(project, elementos=(replace(element, fotos=()), *base.elementos[1:]))
+    state = [project]
+    managed_file = tmp_path / "project-files" / str(project.id) / photo.caminho_relativo
+    managed_file.parent.mkdir(parents=True)
+    managed_file.write_bytes(payload)
+
+    def fail_unlink(_path: Path) -> None:
+        raise OSError("locked")
+
+    manager = _manager(tmp_path, state, remover_arquivo=fail_unlink)
+    task = manager.preparar_coleta_fotos(project.id, (photo,))
+    state[:] = [updated]
+    result = manager.concluir(task)
+
+    assert result.pendente
+    assert managed_file.is_file()
+    assert task is not None
+    assert manager.armazenamento.journal_path(task.operation_id).is_file()
+
+    retry = _manager(tmp_path, state)
+    assert retry.reconciliar_pendencias() == 0
+    assert not managed_file.exists()
+    assert retry.armazenamento.carregar_todos() == ()
+
+
+def test_legacy_photo_is_hashed_for_cleanup_and_missing_file_needs_no_task(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    project = complete_project(catalogo_inicial)
+    legacy = project.elementos[0].fotos[0]
+    state = [project]
+    manager = _manager(tmp_path, state)
+    managed_file = tmp_path / "project-files" / str(project.id) / legacy.caminho_relativo
+
+    assert manager.preparar_coleta_fotos(project.id, (legacy,)) is None
+
+    managed_file.parent.mkdir(parents=True)
+    managed_file.write_bytes(b"legacy")
+    task = manager.preparar_coleta_fotos(project.id, (legacy,))
+    state[:] = [
+        replace(
+            project,
+            elementos=(replace(project.elementos[0], fotos=()), *project.elementos[1:]),
+        )
+    ]
+    result = manager.concluir(task)
+
+    assert result.arquivos_removidos == 1
+    assert not managed_file.exists()
+
+
+@pytest.mark.parametrize(
+    ("name", "content", "message"),
+    (
+        ("unexpected.bin", b"residue", "resíduos sem journal"),
+        (f"{'1' * 8}-{'1' * 4}-{'1' * 4}-{'1' * 4}-{'1' * 12}.cleanup-v1.json", b"{", "corrompido"),
+    ),
+)
+def test_invalid_cleanup_recovery_entries_block_without_deleting_them(
+    tmp_path: Path,
+    name: str,
+    content: bytes,
+    message: str,
+) -> None:
+    recovery_root = tmp_path / "project-files" / ".cleanup-recovery"
+    recovery_root.mkdir(parents=True)
+    entry = recovery_root / name
+    entry.write_bytes(content)
+
+    with pytest.raises(RecuperacaoLimpezaBloqueadaError, match=message):
+        _manager(tmp_path, []).reconciliar_pendencias()
+
+    assert entry.read_bytes() == content
 
 
 def test_malicious_journal_path_blocks_bootstrap_without_touching_external_file(
