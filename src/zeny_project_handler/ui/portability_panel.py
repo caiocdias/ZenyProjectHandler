@@ -25,6 +25,10 @@ from zeny_project_handler.application.project_portability import (
     ResultadoImportacaoProjeto,
     ServicoPortabilidadeProjeto,
 )
+from zeny_project_handler.domain.portability import (
+    EstadoIntegridadePacote,
+    RelatorioIntegridadeProjeto,
+)
 from zeny_project_handler.logging_config import operation_logger
 
 T = TypeVar("T")
@@ -129,7 +133,10 @@ class PortabilityPanelWidget(QWidget):
             )
         self._reset_progress()
         if result is not None:
-            self.status_changed.emit(f"Projeto exportado para {result.caminho}")
+            if result.estado_integridade is EstadoIntegridadePacote.DEGRADADO:
+                self.status_changed.emit(f"Projeto exportado com ressalvas para {result.caminho}")
+            else:
+                self.status_changed.emit(f"Projeto exportado para {result.caminho}")
 
     def importar_projeto(self) -> None:
         selection = operation_logger("portability.import.selection")
@@ -182,7 +189,12 @@ class PortabilityPanelWidget(QWidget):
         self.atualizar_projetos()
         self.abrir_projeto(result.projeto.id)
         self.data_changed.emit()
-        self.status_changed.emit("Projeto importado com IDs, análises e revisões preservados")
+        if result.omissoes_origem:
+            self.status_changed.emit(
+                "Projeto importado com ressalvas da origem; PDFs omitidos continuam indisponíveis"
+            )
+        else:
+            self.status_changed.emit("Projeto importado com IDs, análises e revisões preservados")
 
     def criar_backup(self) -> None:
         selection = operation_logger("portability.backup.selection")
@@ -198,14 +210,40 @@ class PortabilityPanelWidget(QWidget):
                 selection.cancelled()
                 return
             selection.succeeded()
+            report = self._action(self._service.preflight_backup)
+            if report is None:
+                return
+            confirmed_degraded = False
+            if not report.integro:
+                confirmation_log = operation_logger("portability.backup.degraded_confirmation")
+                confirmation_log.started()
+                confirmation = QMessageBox.question(
+                    self,
+                    "Criar backup com ressalvas",
+                    _backup_confirmation_message(report),
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No,
+                )
+                if confirmation != QMessageBox.StandardButton.Yes:
+                    confirmation_log.cancelled()
+                    self._reset_progress()
+                    return
+                confirmation_log.succeeded()
+                confirmed_degraded = True
             result = self._action(
                 lambda: self._service.criar_backup(
-                    _with_suffix(Path(name), ".zphbackup"), progresso=self._show_progress
+                    _with_suffix(Path(name), ".zphbackup"),
+                    confirmar_degradado=confirmed_degraded,
+                    relatorio_integridade=report,
+                    progresso=self._show_progress,
                 )
             )
         self._reset_progress()
         if result is not None:
-            self.status_changed.emit(f"Backup íntegro criado em {result}")
+            if result.estado_integridade is EstadoIntegridadePacote.DEGRADADO:
+                self.status_changed.emit(f"Backup criado com ressalvas em {result.caminho}")
+            else:
+                self.status_changed.emit(f"Backup criado em {result.caminho}")
 
     def restaurar_backup(self) -> None:
         selection = operation_logger("portability.restore.selection")
@@ -232,20 +270,22 @@ class PortabilityPanelWidget(QWidget):
                 confirmation_log.cancelled()
                 return
             confirmation_log.succeeded()
-            if (
-                self._action(
-                    lambda: self._service.restaurar_backup(
-                        Path(name), progresso=self._show_progress
-                    )
-                )
-                is None
-            ):
+            result = self._action(
+                lambda: self._service.restaurar_backup(Path(name), progresso=self._show_progress)
+            )
+            if result is None:
                 self._reset_progress()
                 return
         self._reset_progress()
         self.atualizar_projetos()
         self.data_restored.emit()
-        self.status_changed.emit("Backup restaurado e dados da interface recarregados")
+        if result.estado_integridade is EstadoIntegridadePacote.DEGRADADO:
+            count = len(result.manifesto.omissoes)
+            self.status_changed.emit(
+                f"Backup restaurado com ressalvas; {count} PDF(s) continuam indisponíveis"
+            )
+        else:
+            self.status_changed.emit("Backup restaurado e dados da interface recarregados")
 
     def _show_progress(self, current: int, total: int, message: str) -> None:
         self._progress.setRange(0, max(1, total))
@@ -277,3 +317,27 @@ class PortabilityPanelWidget(QWidget):
 
 def _with_suffix(path: Path, suffix: str) -> Path:
     return path if path.suffix.casefold() == suffix else path.with_suffix(suffix)
+
+
+def _backup_confirmation_message(report: RelatorioIntegridadeProjeto) -> str:
+    labels = {
+        "PDF_AUSENTE": "ausente",
+        "PDF_ADULTERADO": "alterado desde a importação",
+        "PDF_ILEGIVEL": "ilegível",
+    }
+    treatments = {
+        "OMITIDO": "cópia omitida; não há origem registrada",
+        "PERMANECE_EXTERNO": "cópia omitida; referência permanecerá externa",
+    }
+    details = "\n".join(
+        f"• Documento {str(item.referencia_id)[:8]} — "
+        f"{labels.get(item.codigo, 'indisponível')}; "
+        f"{treatments.get(str(item.tratamento), 'cópia omitida')}"
+        for item in report.problemas
+    )
+    return (
+        "Os PDFs abaixo não serão copiados. O efeito de cada omissão após uma restauração está "
+        "indicado individualmente:\n\n"
+        f"{details}\n\n"
+        "Criar o backup degradado mesmo assim?"
+    )

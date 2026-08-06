@@ -16,9 +16,12 @@ from zeny_project_handler._atomic_files import sibling_temporary_file
 from zeny_project_handler.application.errors import PortabilidadeProjetoError
 from zeny_project_handler.domain.portability import (
     ArquivoPacoteProjeto,
+    EstadoIntegridadePacote,
     ManifestoProjetoPortatil,
+    OmissaoPacoteProjeto,
     ProblemaIntegridadeProjeto,
     RelatorioIntegridadeProjeto,
+    TratamentoOmissaoPacote,
 )
 from zeny_project_handler.ports.portability import (
     OrigemArquivoPacote,
@@ -200,8 +203,10 @@ def _manifest_from_envelope(envelope: dict[str, Any]) -> ManifestoProjetoPortati
     if sha256(canonical.encode()).hexdigest() != signature:
         raise PortabilidadeProjetoError("Assinatura do manifesto é inválida")
     try:
+        format_version = int(raw["format_version"])
+        integrity = cast(dict[str, Any], raw["integrity"]) if format_version >= 2 else None
         return ManifestoProjetoPortatil(
-            versao_formato=int(raw["format_version"]),
+            versao_formato=format_version,
             projeto_id=UUID(str(raw["project_id"])),
             catalogo_id=UUID(str(raw["catalog_id"])),
             nome_projeto=str(raw["project_name"]),
@@ -218,6 +223,25 @@ def _manifest_from_envelope(envelope: dict[str, Any]) -> ManifestoProjetoPortati
                     ),
                 )
                 for item in cast(list[dict[str, Any]], raw["files"])
+            ),
+            estado_integridade=(
+                EstadoIntegridadePacote(str(integrity["status"]))
+                if integrity is not None
+                else EstadoIntegridadePacote.INTEGRO
+            ),
+            omissoes=(
+                tuple(
+                    OmissaoPacoteProjeto(
+                        codigo=str(item["code"]),
+                        tipo=str(item["kind"]),
+                        referencia_id=UUID(str(item["reference_id"])),
+                        projeto_id=UUID(str(item["project_id"])),
+                        tratamento=TratamentoOmissaoPacote(str(item["handling"])),
+                    )
+                    for item in cast(list[dict[str, Any]], integrity["omissions"])
+                )
+                if integrity is not None
+                else ()
             ),
         )
     except (KeyError, TypeError, ValueError) as error:
@@ -243,6 +267,20 @@ def _manifest_to_dict(manifesto: ManifestoProjetoPortatil) -> dict[str, object]:
             for item in manifesto.arquivos
         ],
     }
+    if manifesto.versao_formato >= 2:
+        payload["integrity"] = {
+            "status": manifesto.estado_integridade.value,
+            "omissions": [
+                {
+                    "code": item.codigo,
+                    "kind": item.tipo,
+                    "reference_id": str(item.referencia_id),
+                    "project_id": str(item.projeto_id),
+                    "handling": item.tratamento.value,
+                }
+                for item in manifesto.omissoes
+            ],
+        }
     return payload
 
 

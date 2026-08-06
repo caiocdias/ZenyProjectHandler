@@ -27,9 +27,12 @@ from zeny_project_handler.application.errors import (
 from zeny_project_handler.domain.errors import DomainValidationError
 from zeny_project_handler.domain.portability import (
     ArquivoPacoteProjeto,
+    EstadoIntegridadePacote,
     ManifestoProjetoPortatil,
+    OmissaoPacoteProjeto,
     ProblemaIntegridadeProjeto,
     RelatorioIntegridadeProjeto,
+    TratamentoOmissaoPacote,
 )
 from zeny_project_handler.domain.project import ElementoProjetoType, FotoElemento, Projeto
 from zeny_project_handler.logging_config import operation_logger
@@ -46,6 +49,9 @@ from zeny_project_handler.ports.portability import (
 ProgressCallback = Callable[[int, int, str], None]
 T = TypeVar("T")
 _BACKUP_ID = UUID(int=0)
+_PREFLIGHT_STALE_MESSAGE = (
+    "A integridade dos PDFs mudou após o preflight; revise o relatório novamente"
+)
 _SUPPORTED_PHOTO_MIME = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
@@ -87,12 +93,39 @@ class ResultadoExportacaoProjeto:
     manifesto: ManifestoProjetoPortatil
     integridade_origem: RelatorioIntegridadeProjeto
 
+    @property
+    def estado_integridade(self) -> EstadoIntegridadePacote:
+        return self.manifesto.estado_integridade
+
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ResultadoImportacaoProjeto:
     projeto: Projeto
     integridade_pacote: RelatorioIntegridadeProjeto
     substituiu_existente: bool
+    omissoes_origem: tuple[OmissaoPacoteProjeto, ...] = ()
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ResultadoBackupCompleto:
+    caminho: Path
+    manifesto: ManifestoProjetoPortatil
+    integridade_origem: RelatorioIntegridadeProjeto
+
+    @property
+    def estado_integridade(self) -> EstadoIntegridadePacote:
+        return self.manifesto.estado_integridade
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ResultadoRestauracaoBackup:
+    caminho_banco: Path
+    manifesto: ManifestoProjetoPortatil
+    integridade_pacote: RelatorioIntegridadeProjeto
+
+    @property
+    def estado_integridade(self) -> EstadoIntegridadePacote:
+        return self.manifesto.estado_integridade
 
 
 class ServicoPortabilidadeProjeto:
@@ -295,16 +328,14 @@ class ServicoPortabilidadeProjeto:
             }
         for document in project.documentos:
             source = sources[document.id]
-            if source is None:
-                problems.append(
-                    _problem(
-                        "ORIGEM_PDF_AUSENTE",
-                        f"A origem de {document.nome_arquivo} precisa ser localizada "
-                        "ou restaurada.",
-                    )
+            problems.extend(
+                _source_problems(
+                    source,
+                    projeto_id=project.id,
+                    documento_id=document.id,
+                    tratamento=TratamentoOmissaoPacote.OMITIDO,
                 )
-                continue
-            problems.extend(_source_problems(source, document.nome_arquivo))
+            )
         checked_paths: set[str] = set()
         for element in project.elementos:
             for photo in element.fotos:
@@ -312,6 +343,23 @@ class ServicoPortabilidadeProjeto:
                     continue
                 checked_paths.add(photo.caminho_relativo)
                 problems.extend(self._photo_problems(project.id, photo))
+        return RelatorioIntegridadeProjeto(problemas=tuple(problems))
+
+    def preflight_backup(self) -> RelatorioIntegridadeProjeto:
+        """Classifique PDFs do backup sem criar snapshots, diretórios ou pacotes."""
+        problems: list[ProblemaIntegridadeProjeto] = []
+        with self._unit_of_work() as work:
+            projects = tuple(sorted(work.projetos.listar(), key=lambda item: str(item.id)))
+            for project in projects:
+                for document in sorted(project.documentos, key=lambda item: str(item.id)):
+                    problems.extend(
+                        _source_problems(
+                            work.fontes_pdf.obter(document.id),
+                            projeto_id=project.id,
+                            documento_id=document.id,
+                            tratamento=TratamentoOmissaoPacote.PERMANECE_EXTERNO,
+                        )
+                    )
         return RelatorioIntegridadeProjeto(problemas=tuple(problems))
 
     def exportar_projeto(
@@ -336,6 +384,7 @@ class ServicoPortabilidadeProjeto:
     ) -> ResultadoExportacaoProjeto:
         report = self.verificar_integridade(projeto_id)
         content, sources = self._portable_content(projeto_id)
+        omitted_references = {item.referencia_id for item in report.omissoes}
         notify = progresso or (lambda _current, _total, _message: None)
         with TemporaryDirectory(prefix="zeny-export-") as temporary_name:
             temporary = Path(temporary_name)
@@ -347,14 +396,12 @@ class ServicoPortabilidadeProjeto:
             notify(2, 4, "Coletando PDFs íntegros")
             for document in content.projeto.documentos:
                 source = sources.get(document.id)
-                if source is not None and not _source_problems(source, document.nome_arquivo):
+                if source is not None and document.id not in omitted_references:
                     origins.append(
-                        _package_origin(
-                            source.caminho_canonico,
+                        _verified_pdf_origin(
+                            source,
                             f"files/pdfs/{document.id}.pdf",
-                            "PDF",
-                            "application/pdf",
-                            document.id,
+                            projeto_id=content.projeto.id,
                         )
                     )
             notify(3, 4, "Coletando fotos íntegras")
@@ -376,12 +423,14 @@ class ServicoPortabilidadeProjeto:
                         )
                     )
             manifest = ManifestoProjetoPortatil(
-                versao_formato=1,
+                versao_formato=2,
                 projeto_id=content.projeto.id,
                 catalogo_id=content.catalogo.id,
                 nome_projeto=content.projeto.nome,
                 criado_em=self._aware_now(),
                 arquivos=tuple(item.arquivo for item in origins),
+                estado_integridade=report.estado,
+                omissoes=report.omissoes,
             )
             notify(4, 4, "Publicando pacote de projeto")
             path = self._archive.criar(destino, manifest, tuple(origins))
@@ -470,15 +519,54 @@ class ServicoPortabilidadeProjeto:
             projeto=imported,
             integridade_pacote=extracted.integridade,
             substituiu_existente=replaced_project,
+            omissoes_origem=extracted.manifesto.omissoes,
         )
 
-    def criar_backup(self, destino: Path, *, progresso: ProgressCallback | None = None) -> Path:
+    def criar_backup(
+        self,
+        destino: Path,
+        *,
+        confirmar_degradado: bool = False,
+        relatorio_integridade: RelatorioIntegridadeProjeto | None = None,
+        progresso: ProgressCallback | None = None,
+    ) -> ResultadoBackupCompleto:
         return self._observe_external_operation(
             "portability.backup",
-            lambda: self._criar_backup(destino, progresso=progresso),
+            lambda: self._criar_backup(
+                destino,
+                confirmar_degradado=confirmar_degradado,
+                relatorio_integridade=relatorio_integridade,
+                progresso=progresso,
+            ),
         )
 
-    def _criar_backup(self, destino: Path, *, progresso: ProgressCallback | None) -> Path:
+    def _criar_backup(
+        self,
+        destino: Path,
+        *,
+        confirmar_degradado: bool,
+        relatorio_integridade: RelatorioIntegridadeProjeto | None,
+        progresso: ProgressCallback | None,
+    ) -> ResultadoBackupCompleto:
+        current_report = self.preflight_backup()
+        if relatorio_integridade is not None and current_report != relatorio_integridade:
+            raise PortabilidadeProjetoError(_PREFLIGHT_STALE_MESSAGE)
+        if not current_report.integro and not confirmar_degradado:
+            raise PortabilidadeProjetoError(
+                "Backup degradado exige confirmação explícita após o preflight de integridade"
+            )
+        pdf_records: list[tuple[UUID, UUID, ReferenciaFontePdf | None]] = []
+        reserved_pdf_paths: set[str] = set()
+        with self._unit_of_work() as work:
+            for project in work.projetos.listar():
+                for document in project.documentos:
+                    pdf_records.append(
+                        (project.id, document.id, work.fontes_pdf.obter(document.id))
+                    )
+                    reserved_pdf_paths.add(f"{project.id}/pdfs/{document.id}.pdf")
+        omitted_pdf_ids = {
+            item.referencia_id for item in current_report.omissoes if item.tipo == "PDF"
+        }
         notify = progresso or (lambda _current, _total, _message: None)
         with TemporaryDirectory(prefix="zeny-backup-") as temporary_name:
             temporary = Path(temporary_name)
@@ -493,6 +581,8 @@ class ServicoPortabilidadeProjeto:
                     item for item in self._managed_root.rglob("*") if item.is_file()
                 ):
                     relative = path.relative_to(self._managed_root).as_posix()
+                    if relative in reserved_pdf_paths:
+                        continue
                     managed_origins[relative] = _package_origin(
                         path,
                         f"managed/{relative}",
@@ -500,44 +590,53 @@ class ServicoPortabilidadeProjeto:
                         _mime_for_path(path),
                     )
             restored_pdf_paths: dict[UUID, Path] = {}
-            with self._unit_of_work() as work:
-                for project in work.projetos.listar():
-                    for document in project.documentos:
-                        source = work.fontes_pdf.obter(document.id)
-                        if source is None or _source_problems(source, document.nome_arquivo):
-                            continue
-                        relative = f"{project.id}/pdfs/{document.id}.pdf"
-                        managed_origins[relative] = _package_origin(
-                            source.caminho_canonico,
-                            f"managed/{relative}",
-                            "ARQUIVO_GERENCIADO",
-                            "application/pdf",
-                            document.id,
-                        )
-                        restored_pdf_paths[document.id] = self._managed_root / relative
+            for project_id, document_id, source in pdf_records:
+                if document_id in omitted_pdf_ids:
+                    continue
+                if source is None:
+                    raise PortabilidadeProjetoError(_PREFLIGHT_STALE_MESSAGE)
+                relative = f"{project_id}/pdfs/{document_id}.pdf"
+                managed_origins[relative] = _verified_pdf_origin(
+                    source,
+                    f"managed/{relative}",
+                    projeto_id=project_id,
+                    kind="ARQUIVO_GERENCIADO",
+                )
+                restored_pdf_paths[document_id] = self._managed_root / relative
             self._backup.preparar_origens_pdf(snapshot, restored_pdf_paths)
             origins = [
                 _package_origin(snapshot, "database.sqlite3", "BANCO", "application/vnd.sqlite3"),
                 *managed_origins.values(),
             ]
             manifest = ManifestoProjetoPortatil(
-                versao_formato=1,
+                versao_formato=2,
                 projeto_id=_BACKUP_ID,
                 catalogo_id=_BACKUP_ID,
                 nome_projeto="Backup local completo",
                 criado_em=self._aware_now(),
                 arquivos=tuple(item.arquivo for item in origins),
+                estado_integridade=current_report.estado,
+                omissoes=current_report.omissoes,
             )
             notify(3, 3, "Publicando backup atômico")
-            return self._archive.criar(destino, manifest, tuple(origins))
+            path = self._archive.criar(destino, manifest, tuple(origins))
+        return ResultadoBackupCompleto(
+            caminho=path,
+            manifesto=manifest,
+            integridade_origem=current_report,
+        )
 
-    def restaurar_backup(self, origem: Path, *, progresso: ProgressCallback | None = None) -> Path:
+    def restaurar_backup(
+        self, origem: Path, *, progresso: ProgressCallback | None = None
+    ) -> ResultadoRestauracaoBackup:
         return self._observe_external_operation(
             "portability.restore",
             lambda: self._restaurar_backup(origem, progresso=progresso),
         )
 
-    def _restaurar_backup(self, origem: Path, *, progresso: ProgressCallback | None) -> Path:
+    def _restaurar_backup(
+        self, origem: Path, *, progresso: ProgressCallback | None
+    ) -> ResultadoRestauracaoBackup:
         notify = progresso or (lambda _current, _total, _message: None)
         with TemporaryDirectory(prefix="zeny-restore-") as temporary_name:
             temporary = Path(temporary_name)
@@ -547,6 +646,16 @@ class ServicoPortabilidadeProjeto:
                 raise PortabilidadeProjetoError("Arquivo selecionado não é um backup completo")
             if not extracted.integridade.integro:
                 raise PortabilidadeProjetoError("Backup possui problemas de integridade")
+            if any(
+                item.tipo != "PDF"
+                or item.tratamento
+                not in {
+                    TratamentoOmissaoPacote.OMITIDO,
+                    TratamentoOmissaoPacote.PERMANECE_EXTERNO,
+                }
+                for item in extracted.manifesto.omissoes
+            ):
+                raise PortabilidadeProjetoError("Registro de omissões do backup é inválido")
             database_entry = next(
                 (item for item in extracted.manifesto.arquivos if item.tipo == "BANCO"), None
             )
@@ -589,7 +698,11 @@ class ServicoPortabilidadeProjeto:
                     "Não foi possível restaurar os arquivos gerenciados"
                 ) from error
             notify(4, 4, "Recuperação concluída")
-        return self._database_path
+        return ResultadoRestauracaoBackup(
+            caminho_banco=self._database_path,
+            manifesto=extracted.manifesto,
+            integridade_pacote=extracted.integridade,
+        )
 
     def _portable_content(
         self, projeto_id: UUID
@@ -730,6 +843,10 @@ class ServicoPortabilidadeProjeto:
                     "FOTO_AUSENTE",
                     "Foto não foi encontrada; use Localizar arquivo.",
                     photo.caminho_relativo,
+                    tipo="FOTO",
+                    referencia_id=photo.id,
+                    projeto_id=project_id,
+                    tratamento=TratamentoOmissaoPacote.OMITIDO,
                 ),
             )
         if photo.sha256 is None or photo.tipo_mime is None or photo.tamanho_bytes is None:
@@ -738,6 +855,10 @@ class ServicoPortabilidadeProjeto:
                     "FOTO_SEM_METADADOS",
                     "Foto legada precisa ser localizada para registrar hash e tipo.",
                     photo.caminho_relativo,
+                    tipo="FOTO",
+                    referencia_id=photo.id,
+                    projeto_id=project_id,
+                    tratamento=TratamentoOmissaoPacote.OMITIDO,
                 ),
             )
         digest, size = _file_digest(path)
@@ -748,6 +869,10 @@ class ServicoPortabilidadeProjeto:
                     "FOTO_ADULTERADA",
                     "Hash ou tamanho da foto diverge do registro.",
                     photo.caminho_relativo,
+                    tipo="FOTO",
+                    referencia_id=photo.id,
+                    projeto_id=project_id,
+                    tratamento=TratamentoOmissaoPacote.OMITIDO,
                 )
             )
         detected = _detect_photo_mime(path)
@@ -757,6 +882,10 @@ class ServicoPortabilidadeProjeto:
                     "TIPO_FOTO_DIVERGENTE",
                     "Assinatura do arquivo não corresponde ao tipo registrado.",
                     photo.caminho_relativo,
+                    tipo="FOTO",
+                    referencia_id=photo.id,
+                    projeto_id=project_id,
+                    tratamento=TratamentoOmissaoPacote.OMITIDO,
                 )
             )
         return tuple(problems)
@@ -832,21 +961,66 @@ def _detect_photo_mime(path: Path) -> str | None:
 
 
 def _source_problems(
-    source: ReferenciaFontePdf, name: str
+    source: ReferenciaFontePdf | None,
+    *,
+    projeto_id: UUID,
+    documento_id: UUID,
+    tratamento: TratamentoOmissaoPacote,
 ) -> tuple[ProblemaIntegridadeProjeto, ...]:
-    path = source.caminho_canonico.expanduser().resolve()
-    if not path.is_file():
-        return (_problem("PDF_AUSENTE", f"PDF {name} não foi encontrado.", str(path)),)
-    digest, size = _file_digest(path)
-    problems: list[ProblemaIntegridadeProjeto] = []
-    if digest != source.sha256 or size != source.tamanho_bytes:
-        problems.append(
-            _problem("PDF_ADULTERADO", f"PDF {name} diverge do hash ou tamanho importado.")
+    effective_treatment = TratamentoOmissaoPacote.OMITIDO if source is None else tratamento
+
+    def pdf_problem(code: str, message: str) -> ProblemaIntegridadeProjeto:
+        return _problem(
+            code,
+            message,
+            critico=True,
+            tipo="PDF",
+            referencia_id=documento_id,
+            projeto_id=projeto_id,
+            tratamento=effective_treatment,
         )
-    with path.open("rb") as stream:
-        if not stream.read(5).startswith(b"%PDF-"):
-            problems.append(_problem("TIPO_PDF_INVALIDO", f"Arquivo {name} não é um PDF."))
-    return tuple(problems)
+
+    if source is None:
+        return (
+            pdf_problem(
+                "PDF_AUSENTE",
+                "A origem registrada do PDF não está disponível; a cópia não entrará no pacote.",
+            ),
+        )
+    try:
+        path = source.caminho_canonico.expanduser().resolve()
+        if not path.is_file():
+            return (
+                pdf_problem(
+                    "PDF_AUSENTE",
+                    "O PDF não foi encontrado; a cópia não entrará no pacote.",
+                ),
+            )
+        digest, size = _file_digest(path)
+        with path.open("rb") as stream:
+            header = stream.read(5)
+    except (OSError, RuntimeError):
+        return (
+            pdf_problem(
+                "PDF_ILEGIVEL",
+                "O PDF não pôde ser lido; a cópia não entrará no pacote.",
+            ),
+        )
+    if not header.startswith(b"%PDF-"):
+        return (
+            pdf_problem(
+                "PDF_ILEGIVEL",
+                "O arquivo não possui uma assinatura PDF legível; a cópia não entrará no pacote.",
+            ),
+        )
+    if digest != source.sha256 or size != source.tamanho_bytes:
+        return (
+            pdf_problem(
+                "PDF_ADULTERADO",
+                "O PDF diverge do hash ou tamanho importado; a cópia não entrará no pacote.",
+            ),
+        )
+    return ()
 
 
 def _pdf_source_available(source: ReferenciaFontePdf | None) -> bool:
@@ -874,6 +1048,35 @@ def _package_origin(
     )
 
 
+def _verified_pdf_origin(
+    source: ReferenciaFontePdf,
+    relative: str,
+    *,
+    projeto_id: UUID,
+    kind: str = "PDF",
+) -> OrigemArquivoPacote:
+    if _source_problems(
+        source,
+        projeto_id=projeto_id,
+        documento_id=source.documento_id,
+        tratamento=TratamentoOmissaoPacote.OMITIDO,
+    ):
+        raise PortabilidadeProjetoError(_PREFLIGHT_STALE_MESSAGE)
+    origin = _package_origin(
+        source.caminho_canonico,
+        relative,
+        kind,
+        "application/pdf",
+        source.documento_id,
+    )
+    if (
+        origin.arquivo.sha256 != source.sha256
+        or origin.arquivo.tamanho_bytes != source.tamanho_bytes
+    ):
+        raise PortabilidadeProjetoError(_PREFLIGHT_STALE_MESSAGE)
+    return origin
+
+
 def _file_digest(path: Path) -> tuple[str, int]:
     digest = sha256()
     size = 0
@@ -896,11 +1099,26 @@ def _copy_atomic(source: Path, destination: Path) -> None:
         ) from error
 
 
-def _problem(code: str, message: str, path: str | None = None) -> ProblemaIntegridadeProjeto:
+def _problem(
+    code: str,
+    message: str,
+    path: str | None = None,
+    *,
+    critico: bool = False,
+    tipo: str | None = None,
+    referencia_id: UUID | None = None,
+    projeto_id: UUID | None = None,
+    tratamento: TratamentoOmissaoPacote | None = None,
+) -> ProblemaIntegridadeProjeto:
     return ProblemaIntegridadeProjeto(
         codigo=code,
         mensagem=message,
         caminho_relativo=path,
+        critico=critico,
+        tipo=tipo,
+        referencia_id=referencia_id,
+        projeto_id=projeto_id,
+        tratamento=tratamento,
     )
 
 
