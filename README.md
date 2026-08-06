@@ -96,6 +96,12 @@ SQLite, validado antes de substituir atomicamente o arquivo de destino. A pasta 
 eles é `backups` dentro do diretório de dados. Arquivos do banco, WAL, temporários e backups não devem
 ser adicionados ao Git.
 
+Fotos e cópias internas restauradas/importadas ficam em `project-files/<project-id>`. PDFs escolhidos
+diretamente pelo usuário permanecem origens externas somente leitura: remover um documento ou o
+projeto elimina a referência local, nunca o PDF original. Fotos são blobs identificados por SHA-256;
+uma remoção parcial só apaga o arquivo depois do commit e quando nenhuma referência viva do projeto
+usa o digest.
+
 ## Transporte e recuperação
 
 O painel **Portabilidade e recuperação** contém somente as operações de transporte e proteção dos
@@ -121,6 +127,15 @@ fora da raiz, recibo divergente ou árvore ambígua bloqueiam a inicialização 
 insegura. Preserve a pasta e restaure um `.zphbackup` confiável ou encaminhe o diagnóstico ao suporte.
 O log `logs/application.jsonl` registra `portability.import.recovery`, fase, ação e IDs seguros, mas
 nunca caminhos do journal ou dos arquivos.
+
+Exclusões usam o mesmo mecanismo compartilhado de publicação atômica de journals no namespace
+separado `project-files/.cleanup-recovery`. A raiz de um projeto é primeiro renomeada para um
+tombstone na mesma raiz gerenciada: rollback a restaura, enquanto commit confirmado permite a
+remoção. Tarefas parciais registram somente UUID, digest e caminho relativo validado. Na próxima
+inicialização, o SQLite decide entre restaurar e repetir a limpeza; uma falha pós-commit continua
+visível no log e na UI e conserva o journal para nova tentativa. Não edite nem apague manualmente
+`.cleanup-recovery`; caminho hostil, link ou estado ambíguo bloqueia a reconciliação sem alcançar
+arquivos externos.
 
 Novos `.zphproj` e `.zphbackup` usam manifesto de formato 2; pacotes antigos de formato 1 continuam
 aceitos. O formato 2 registra `INTEGRO` ou `DEGRADADO` e, sem expor nomes ou caminhos, identifica por

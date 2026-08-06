@@ -717,6 +717,10 @@ resultados relacionados, fechar e reabrir preservando o trabalho.
   decisões, propostas, evidências e demais dependências na ordem segura antes do registro principal.
   Isso evita violação de chave estrangeira em projetos que já possuem propostas confirmadas e
   funciona nos bancos existentes sem migração destrutiva.
+- Estabilidade da exclusão: arquivos sob `project-files` agora pertencem a uma política central. A
+  exclusão integral usa tombstone restaurável antes do commit; remoções de documentos/elementos/fotos
+  coletam somente blobs sem digest vivo depois do commit. Journals pendentes são reconciliados no
+  bootstrap, e PDFs originais externos permanecem intocados.
 - Revisão de reconhecimento de postes: a planilha fornecida foi conferida contra o seed e possui o
   mesmo SHA-256, 38 postes e as mesmas opções de formato; portanto, não foi necessário apagar nem
   migrar o banco. A falha estava na diferença entre códigos internos como

@@ -389,6 +389,17 @@ sintéticas; a partição de teste privada não foi usada para criá-las.
   ambíguo bloqueia novas operações com orientação para preservar os resíduos e usar backup ou
   suporte. Nenhuma dessas condições autoriza excluir um caminho inferido ou não comprovado. Logs de
   recuperação expõem somente operação, fase, ação, versão e IDs seguros.
+- A política de exclusão de arquivos gerenciados é única para o fluxo do projeto e para fotos. Ela
+  aceita somente caminhos relativos contidos em `project-files/<project-id>`, recusa links e confere
+  o SHA-256 antes de apagar um blob. Referências PDF externas nunca são candidatas à limpeza.
+- Excluir um projeto publica uma tarefa em `project-files/.cleanup-recovery`, move sua raiz por rename
+  para um tombstone na mesma raiz gerenciada e só remove a árvore depois do commit SQLite. Exceção e
+  rollback restauram o rename. Após uma interrupção, projeto ainda presente no banco prova rollback;
+  projeto ausente prova que a limpeza pode continuar.
+- Remover documento, elemento dependente ou foto registra previamente os blobs candidatos, confirma
+  a alteração no banco e recalcula os digests vivos. Um digest compartilhado permanece enquanto
+  houver referência. Falha posterior ao commit mantém o journal, produz status de limpeza pendente e
+  é tentada novamente pelo bootstrap; não desfaz nem oculta a mutação já confirmada.
 - O backup completo usa `.zphbackup` e executa preflight sem efeitos colaterais antes de criar o
   snapshot. PDFs externos íntegros recebem cópias recuperáveis e referências reescritas. PDF ausente,
   alterado ou ilegível exige confirmação explícita; se aceito, o backup fica `DEGRADADO`, registra a
@@ -407,11 +418,13 @@ sintéticas; a partição de teste privada não foi usada para criá-las.
   única. O usuário pode reordenar qualquer página por arraste ou pelos controles **Subir** e
   **Descer**; a sequência persistida define a paginação lógica, enquanto cada arquivo e sua
   referência verificável continuam independentes.
-- Projetos podem ser excluídos após confirmação explícita. A exclusão remove banco, análises e estado
-  local associados, preservando todos os arquivos PDF originais no sistema de arquivos.
+- Projetos podem ser excluídos após confirmação explícita. A exclusão remove banco, análises,
+  revisões, fotos e cópias internas da pasta gerenciada, preservando todos os arquivos PDF originais
+  externos no sistema de arquivos.
 - Um ou vários PDFs importados podem ser removidos seletivamente. A mesma transação elimina execuções,
   evidências, propostas, decisões e elementos confirmados cuja geometria ou dependências pertençam às
-  folhas removidas; documentos e resultados independentes permanecem válidos.
+  folhas removidas; documentos e resultados independentes permanecem válidos. Fotos desses
+  elementos são coletadas depois do commit somente quando seu digest não possui referência viva.
 - **Executar análise completa** processa todos os documentos do projeto fora da thread da interface,
   apresenta progresso e encadeia extração, interpretação, promoção automática e abertura dos
   resultados relacionados.

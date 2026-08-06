@@ -84,7 +84,7 @@ com o corpus completo. Seus resultados não substituem o gate básico.
 | 7. Portabilidade assíncrona e UI não reentrante | CONCLUÍDA | 6 | UI responsiva, sem `processEvents()` manual |
 | 8. Preflight de substituição antes de mutar arquivos | CONCLUÍDA | 6, 7 | Confirmação ocorre antes da troca física |
 | 9. Journal e recuperação de importações interrompidas | CONCLUÍDA | 8 | Banco e arquivos reconciliados após queda |
-| 10. Limpeza segura de arquivos gerenciados | PENDENTE | 6, 9 | Exclusões não deixam fotos órfãs |
+| 10. Limpeza segura de arquivos gerenciados | CONCLUÍDA | 6, 9 | Exclusões não deixam fotos órfãs |
 | 11. Identidade verificada da origem por sessão | PENDENTE | 1 | Navegação não recalcula o PDF inteiro |
 | 12. Renderização por orçamento e região | PENDENTE | 11 | Pranchas grandes não exigem raster integral de 600 DPI |
 | 13. Visualizador progressivo e assíncrono | PENDENTE | 6, 12 | Zoom detalhado sem congelamento ou resultados obsoletos |
@@ -728,7 +728,7 @@ Crie commits seccionados para as alterações, mantenha na branch main.
 ## Etapa 10 — Limpeza transacional de arquivos gerenciados
 
 **Achado original:** 7.  
-**Estado:** PENDENTE.  
+**Estado:** CONCLUÍDA.
 **Arquivos prováveis:** `application/mvp_workflow.py`, abstração de armazenamento gerenciado,
 repositórios, UI de projeto e testes.
 
@@ -748,6 +748,41 @@ repositórios, UI de projeto e testes.
 - Excluir documento/elemento remove somente fotos sem referência restante.
 - Rollback restaura tombstone; falha pós-commit deixa tarefa de limpeza recuperável.
 - Testes cobrem arquivos compartilhados, caminho hostil, raiz inexistente e interrupções.
+
+### Registro de conclusão — 06/08/2026
+
+- `GerenciadorArquivosGerenciados` centraliza a exclusão usada por projeto, remoção de documentos
+  e fotos/localização de anexos. O bootstrap injeta a mesma instância nos serviços do MVP e de
+  portabilidade, sob o coordenador global existente. PDFs originais continuam apenas como
+  referências externas e nunca entram na lista de candidatos.
+- A exclusão integral publica um journal de formato 1 em `.cleanup-recovery`, valida que a árvore é
+  regular e renomeia a raiz UUID para um tombstone derivado da operação. Falha do commit restaura o
+  rename; commit concluído permite remover somente o tombstone. Raiz originalmente ausente é um caso
+  idempotente e não amplia o alvo.
+- Exclusões parciais registram fotos candidatas antes da transação e recalculam os SHA-256 vivos no
+  agregado confirmado. Caminho, contenção na raiz de dados, arquivo regular e digest são conferidos
+  antes do `unlink`; duas referências ao mesmo digest preservam o blob até a última ser removida.
+- Journals de importação e limpeza mantêm semânticas e namespaces independentes, mas compartilham
+  a implementação de JSON canônico sem chaves duplicadas, limite de tamanho, temporário irmão,
+  `fsync`, `replace` e caminho POSIX seguro. O bootstrap reconcilia ambos antes de liberar a UI.
+- Interrupção com projeto ainda vivo restaura o tombstone; projeto ausente conclui a limpeza. Falha
+  de I/O depois do commit retorna `limpeza_pendente`, emite `managed_files.cleanup.failed` com ação
+  `retry_cleanup` e conserva o journal. Corrupção, link, travessia ou estado ambíguo bloqueia a
+  reconciliação sem tocar o caminho hostil.
+- A UI agora distingue cadastro/análises/revisões, fotos e cópias internas gerenciadas dos PDFs
+  originais externos. Remoção seletiva informa que fotos compartilhadas só são apagadas sem
+  referência viva e apresenta explicitamente qualquer limpeza pendente.
+- Testes focados aprovados: journals, compartilhamento, rollback do banco, interrupção nas duas
+  decisões, nova tentativa pós-commit, raiz ausente, caminho malicioso, serviços, janela e UI
+  (`64 passed` no conjunto não-E2E e `2 passed` no E2E isolado).
+- Gate básico canônico aprovado: `pip check`; Ruff; `ruff format --check` (`176 files`); Mypy
+  (`176 source files`); `337 passed, 20 deselected`, cobertura `85,10%`; complexidade média A
+  (`3,9074`); e `RESULTADO FINAL: APROVADO`. O único aviso foi o `PytestCacheWarning` ambiental já
+  conhecido por falta de permissão para atualizar `.pytest_cache`; não houve `ResourceWarning` nem
+  falha de teste.
+- Commits seccionados de implementação e prova: `06b5347` (`feat(storage): make managed file cleanup
+  recoverable`), `7248914` (`test(storage): cover transactional managed cleanup`) e `179b697`
+  (`test(storage): harden cleanup retry coverage`).
 
 ### Mensagem para um novo chat do Codex
 

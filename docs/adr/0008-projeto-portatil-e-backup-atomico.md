@@ -58,6 +58,24 @@ adulterado; copiar apenas o SQLite deixaria os PDFs externos fora do backup.
   forem corrompidos ou ambíguos. O diagnóstico orienta preservar `.import-recovery` e recuperar por
   backup ou suporte; ele nunca tenta inferir outro destino nem executa exclusão ampla. Logs registram
   operação, fase, ação, versão e IDs seguros, sem caminhos.
+- Centralizar a posse e a exclusão de `project-files` em um gerenciador compartilhado pelos fluxos de
+  projeto, documentos e fotos. PDFs de origem escolhidos no disco são externos e somente leitura;
+  apenas fotos e cópias explicitamente publicadas sob a raiz gerenciada pertencem ao aplicativo.
+- Para excluir um projeto, publicar atomicamente uma tarefa de formato 1 em
+  `.cleanup-recovery/<operation-id>.cleanup-v1.json` e renomear `project-files/<project-id>` para o
+  tombstone derivado do UUID na mesma raiz. Rollback restaura o rename; somente depois do commit o
+  tombstone é verificado contra links/junções e removido.
+- Para exclusões parciais, registrar antes do commit apenas caminhos POSIX relativos e SHA-256 dos
+  blobs candidatos. Depois do commit, recalcular digests vivos no agregado confirmado e preservar
+  qualquer blob compartilhado. Conferir contenção, regularidade e digest imediatamente antes do
+  `unlink`.
+- Reutilizar as primitivas de JSON canônico, temporário irmão, `fsync`, `replace`, rejeição de chaves
+  duplicadas e validação de caminhos do journal de importação, mantendo namespaces e decisões de
+  recuperação separados. O bootstrap primeiro resolve importação e então limpeza. Projeto vivo
+  restaura tombstone; projeto ausente ou blob sem digest vivo autoriza concluir a coleta.
+- Tratar falha pós-commit como limpeza pendente, não como rollback fictício. O resultado e o log
+  informam a pendência, o journal permanece para nova tentativa e corrupção/ambiguidade bloqueia a
+  inicialização sem remover caminhos inferidos.
 - Adotar `.zphbackup` para o ambiente local completo: snapshot íntegro do SQLite, arquivos
   gerenciados e cópias dos PDFs originalmente externos. Reescrever no snapshot as referências dos
   PDFs para caminhos gerenciados recuperáveis.
@@ -101,3 +119,9 @@ reservado mesmo quando vazio. Isso troca um pequeno custo de armazenamento e mig
 determinística entre concluir e restaurar, inclusive depois de outra queda durante a própria
 reconciliação. Corrupção externa deixa de ser tratada como rollback presumivelmente seguro e passa a
 exigir intervenção explícita.
+
+Exclusões passam a ter a mesma propriedade de recuperação sem transformar o SQLite e o filesystem
+em uma transação distribuída. O custo é um journal curto por tarefa pendente e a verificação de
+digests vivos depois do commit. Em troca, rollback nunca perde a raiz renomeada, blobs compartilhados
+não são coletados cedo, falhas de lock no Windows permanecem retomáveis e nenhum caminho externo à
+raiz de dados pode se tornar alvo de remoção.
