@@ -31,6 +31,7 @@ from .errors import (
     ProjetoNaoEncontradoError,
 )
 from .interpretation_pipeline import ExecutarPipelineInterpretacao
+from .operation_coordinator import CoordenadorOperacoes, TipoOperacao
 from .pdf_import import ImportarPdfsNoProjeto, ResultadoImportacaoPdfs
 
 ProgressCallback = Callable[[int, int, str], None]
@@ -82,6 +83,7 @@ class ServicoFluxoMvp:
         importador: ImportarPdfsNoProjeto,
         extrator: ExecutarAnaliseDocumento,
         interpretador: ExecutarPipelineInterpretacao,
+        coordenador: CoordenadorOperacoes | None = None,
         relogio: Callable[[], datetime] | None = None,
         gerar_id: Callable[[], UUID] = uuid4,
     ) -> None:
@@ -90,6 +92,7 @@ class ServicoFluxoMvp:
         self._importer = importador
         self._extractor = extrator
         self._interpreter = interpretador
+        self._coordinator = coordenador or CoordenadorOperacoes()
         self._clock = relogio or (lambda: datetime.now(UTC))
         self._generate_id = gerar_id
 
@@ -98,6 +101,10 @@ class ServicoFluxoMvp:
             return tuple(self._summary(work, project) for project in work.projetos.listar())
 
     def criar_projeto(self, nome: str) -> SessaoProjetoMvp:
+        with self._coordinator.adquirir(TipoOperacao.ALTERACAO_PROJETO):
+            return self._criar_projeto(nome)
+
+    def _criar_projeto(self, nome: str) -> SessaoProjetoMvp:
         project = Projeto(
             id=self._generate_id(),
             nome=nome,
@@ -112,6 +119,10 @@ class ServicoFluxoMvp:
         return self.abrir_projeto(project.id)
 
     def renomear_projeto(self, projeto_id: UUID, nome: str) -> SessaoProjetoMvp:
+        with self._coordinator.adquirir(TipoOperacao.ALTERACAO_PROJETO):
+            return self._renomear_projeto(projeto_id, nome)
+
+    def _renomear_projeto(self, projeto_id: UUID, nome: str) -> SessaoProjetoMvp:
         with self._unit_of_work() as work:
             project = work.projetos.obter(projeto_id)
             if project is None:
@@ -121,6 +132,10 @@ class ServicoFluxoMvp:
         return self.abrir_projeto(projeto_id)
 
     def excluir_projeto(self, projeto_id: UUID) -> bool:
+        with self._coordinator.adquirir(TipoOperacao.EXCLUSAO_PROJETO):
+            return self._excluir_projeto(projeto_id)
+
+    def _excluir_projeto(self, projeto_id: UUID) -> bool:
         with self._unit_of_work() as work:
             if not work.projetos.remover(projeto_id):
                 raise ProjetoNaoEncontradoError("Projeto não encontrado para exclusão")
@@ -158,6 +173,14 @@ class ServicoFluxoMvp:
         paginas_ids: tuple[UUID, ...],
     ) -> SessaoProjetoMvp:
         """Persista a ordem de leitura das páginas de um projeto."""
+        with self._coordinator.adquirir(TipoOperacao.ALTERACAO_PROJETO):
+            return self._reordenar_paginas(projeto_id, paginas_ids)
+
+    def _reordenar_paginas(
+        self,
+        projeto_id: UUID,
+        paginas_ids: tuple[UUID, ...],
+    ) -> SessaoProjetoMvp:
         with self._unit_of_work() as work:
             project = work.projetos.obter(projeto_id)
             if project is None:
@@ -174,6 +197,14 @@ class ServicoFluxoMvp:
         return self.abrir_projeto(projeto_id)
 
     def remover_documentos(
+        self,
+        projeto_id: UUID,
+        documentos_ids: tuple[UUID, ...],
+    ) -> ResultadoRemocaoDocumentos:
+        with self._coordinator.adquirir(TipoOperacao.EXCLUSAO_DOCUMENTOS):
+            return self._remover_documentos(projeto_id, documentos_ids)
+
+    def _remover_documentos(
         self,
         projeto_id: UUID,
         documentos_ids: tuple[UUID, ...],
@@ -219,6 +250,24 @@ class ServicoFluxoMvp:
         cancelado: Callable[[], bool] | None = None,
         configuracao_extracao: ConfiguracaoAnaliseDocumento | None = None,
         configuracao_interpretacao: ConfiguracaoInterpretacao | None = None,
+    ) -> ResultadoFluxoMvp:
+        with self._coordinator.adquirir(TipoOperacao.ANALISE):
+            return self._executar_pipeline(
+                projeto_id,
+                progresso=progresso,
+                cancelado=cancelado,
+                configuracao_extracao=configuracao_extracao,
+                configuracao_interpretacao=configuracao_interpretacao,
+            )
+
+    def _executar_pipeline(
+        self,
+        projeto_id: UUID,
+        *,
+        progresso: ProgressCallback | None,
+        cancelado: Callable[[], bool] | None,
+        configuracao_extracao: ConfiguracaoAnaliseDocumento | None,
+        configuracao_interpretacao: ConfiguracaoInterpretacao | None,
     ) -> ResultadoFluxoMvp:
         session = self.abrir_projeto(projeto_id)
         documents = session.projeto.documentos

@@ -43,3 +43,15 @@ class FluxoMvpCanceladoError(ApplicationError):
 
 class PortabilidadeProjetoError(ApplicationError):
     """O pacote, anexo, backup ou recuperação não pôde ser concluído com segurança."""
+
+
+class OperacaoEmAndamentoError(ApplicationError):
+    """Uma operação incompatível já possui o estado compartilhado."""
+
+    def __init__(self, *, operacao_solicitada: str, operacao_em_andamento: str) -> None:
+        self.operacao_solicitada = operacao_solicitada
+        self.operacao_em_andamento = operacao_em_andamento
+        super().__init__(
+            f"Não foi possível iniciar {operacao_solicitada}: "
+            f"{operacao_em_andamento} está em andamento. Aguarde a conclusão ou o cancelamento."
+        )

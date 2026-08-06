@@ -24,6 +24,10 @@ from zeny_project_handler.application.errors import (
     PortabilidadeProjetoError,
     ProjetoNaoEncontradoError,
 )
+from zeny_project_handler.application.operation_coordinator import (
+    CoordenadorOperacoes,
+    TipoOperacao,
+)
 from zeny_project_handler.domain.errors import DomainValidationError
 from zeny_project_handler.domain.portability import (
     ArquivoPacoteProjeto,
@@ -138,6 +142,7 @@ class ServicoPortabilidadeProjeto:
         *,
         diretorio_dados: Path,
         caminho_banco: Path,
+        coordenador: CoordenadorOperacoes | None = None,
         descartar_conexoes: Callable[[], None] | None = None,
         relogio: Callable[[], datetime] | None = None,
         gerar_id: Callable[[], UUID] = uuid4,
@@ -149,6 +154,7 @@ class ServicoPortabilidadeProjeto:
         self._data_directory = diretorio_dados.expanduser().resolve()
         self._database_path = caminho_banco.expanduser().resolve()
         self._managed_root = self._data_directory / "project-files"
+        self._coordinator = coordenador or CoordenadorOperacoes()
         self._dispose_connections = descartar_conexoes or (lambda: None)
         self._clock = relogio or (lambda: datetime.now(UTC))
         self._new_id = gerar_id
@@ -197,6 +203,12 @@ class ServicoPortabilidadeProjeto:
     def localizar_pdf(
         self, projeto_id: UUID, documento_id: UUID, origem: Path
     ) -> ReferenciaFontePdf:
+        with self._coordinator.adquirir(TipoOperacao.ALTERACAO_PROJETO):
+            return self._localizar_pdf(projeto_id, documento_id, origem)
+
+    def _localizar_pdf(
+        self, projeto_id: UUID, documento_id: UUID, origem: Path
+    ) -> ReferenciaFontePdf:
         project = self._project(projeto_id)
         document = next((item for item in project.documentos if item.id == documento_id), None)
         if document is None:
@@ -233,6 +245,17 @@ class ServicoPortabilidadeProjeto:
         *,
         legenda: str | None = None,
     ) -> ResultadoFotoProjeto:
+        with self._coordinator.adquirir(TipoOperacao.ALTERACAO_PROJETO):
+            return self._anexar_foto(projeto_id, elemento_id, origem, legenda=legenda)
+
+    def _anexar_foto(
+        self,
+        projeto_id: UUID,
+        elemento_id: UUID,
+        origem: Path,
+        *,
+        legenda: str | None,
+    ) -> ResultadoFotoProjeto:
         source = origem.expanduser().resolve()
         digest, size, mime_type = _inspect_photo(source)
         relative = f"photos/{digest}{_SUPPORTED_PHOTO_MIME[mime_type]}"
@@ -267,6 +290,12 @@ class ServicoPortabilidadeProjeto:
     def remover_foto(
         self, projeto_id: UUID, elemento_id: UUID, foto_id: UUID
     ) -> ResultadoFotoProjeto:
+        with self._coordinator.adquirir(TipoOperacao.EXCLUSAO_FOTO):
+            return self._remover_foto(projeto_id, elemento_id, foto_id)
+
+    def _remover_foto(
+        self, projeto_id: UUID, elemento_id: UUID, foto_id: UUID
+    ) -> ResultadoFotoProjeto:
         project = self._project(projeto_id)
         element = _element(project, elemento_id)
         photo = next((item for item in element.fotos if item.id == foto_id), None)
@@ -287,6 +316,16 @@ class ServicoPortabilidadeProjeto:
         return ResultadoFotoProjeto(projeto=updated, foto=photo)
 
     def localizar_foto(
+        self,
+        projeto_id: UUID,
+        elemento_id: UUID,
+        foto_id: UUID,
+        origem: Path,
+    ) -> ResultadoFotoProjeto:
+        with self._coordinator.adquirir(TipoOperacao.ALTERACAO_PROJETO):
+            return self._localizar_foto(projeto_id, elemento_id, foto_id, origem)
+
+    def _localizar_foto(
         self,
         projeto_id: UUID,
         elemento_id: UUID,
@@ -369,11 +408,12 @@ class ServicoPortabilidadeProjeto:
         *,
         progresso: ProgressCallback | None = None,
     ) -> ResultadoExportacaoProjeto:
-        return self._observe_external_operation(
-            "portability.export",
-            lambda: self._exportar_projeto(projeto_id, destino, progresso=progresso),
-            project_id=projeto_id,
-        )
+        with self._coordinator.adquirir(TipoOperacao.EXPORTACAO_PROJETO):
+            return self._observe_external_operation(
+                "portability.export",
+                lambda: self._exportar_projeto(projeto_id, destino, progresso=progresso),
+                project_id=projeto_id,
+            )
 
     def _exportar_projeto(
         self,
@@ -447,14 +487,15 @@ class ServicoPortabilidadeProjeto:
         substituir_existente: bool = False,
         progresso: ProgressCallback | None = None,
     ) -> ResultadoImportacaoProjeto:
-        return self._observe_external_operation(
-            "portability.import",
-            lambda: self._importar_projeto(
-                pacote,
-                substituir_existente=substituir_existente,
-                progresso=progresso,
-            ),
-        )
+        with self._coordinator.adquirir(TipoOperacao.IMPORTACAO_PROJETO):
+            return self._observe_external_operation(
+                "portability.import",
+                lambda: self._importar_projeto(
+                    pacote,
+                    substituir_existente=substituir_existente,
+                    progresso=progresso,
+                ),
+            )
 
     def _importar_projeto(
         self,
@@ -530,15 +571,16 @@ class ServicoPortabilidadeProjeto:
         relatorio_integridade: RelatorioIntegridadeProjeto | None = None,
         progresso: ProgressCallback | None = None,
     ) -> ResultadoBackupCompleto:
-        return self._observe_external_operation(
-            "portability.backup",
-            lambda: self._criar_backup(
-                destino,
-                confirmar_degradado=confirmar_degradado,
-                relatorio_integridade=relatorio_integridade,
-                progresso=progresso,
-            ),
-        )
+        with self._coordinator.adquirir(TipoOperacao.BACKUP):
+            return self._observe_external_operation(
+                "portability.backup",
+                lambda: self._criar_backup(
+                    destino,
+                    confirmar_degradado=confirmar_degradado,
+                    relatorio_integridade=relatorio_integridade,
+                    progresso=progresso,
+                ),
+            )
 
     def _criar_backup(
         self,
@@ -629,10 +671,11 @@ class ServicoPortabilidadeProjeto:
     def restaurar_backup(
         self, origem: Path, *, progresso: ProgressCallback | None = None
     ) -> ResultadoRestauracaoBackup:
-        return self._observe_external_operation(
-            "portability.restore",
-            lambda: self._restaurar_backup(origem, progresso=progresso),
-        )
+        with self._coordinator.adquirir(TipoOperacao.RESTAURACAO):
+            return self._observe_external_operation(
+                "portability.restore",
+                lambda: self._restaurar_backup(origem, progresso=progresso),
+            )
 
     def _restaurar_backup(
         self, origem: Path, *, progresso: ProgressCallback | None

@@ -34,6 +34,7 @@ from zeny_project_handler.application.document_analysis import ExecutarAnaliseDo
 from zeny_project_handler.application.human_review import ServicoRevisaoHumana
 from zeny_project_handler.application.interpretation_pipeline import ExecutarPipelineInterpretacao
 from zeny_project_handler.application.mvp_workflow import ServicoFluxoMvp
+from zeny_project_handler.application.operation_coordinator import CoordenadorOperacoes
 from zeny_project_handler.application.pdf_import import ImportarPdfsNoProjeto
 from zeny_project_handler.application.project_portability import ServicoPortabilidadeProjeto
 from zeny_project_handler.config import AppSettings
@@ -121,10 +122,15 @@ def _compose_initialized_application(
         return SqlAlchemyUnitOfWork(engine)
 
     registry = carregar_registro_regras_inicial()
+    operation_coordinator = CoordenadorOperacoes()
     workflow_service = ServicoFluxoMvp(
         unit_of_work,
         catalogo_inicial_id=catalog.id,
-        importador=ImportarPdfsNoProjeto(reader, unit_of_work),
+        importador=ImportarPdfsNoProjeto(
+            reader,
+            unit_of_work,
+            coordenador=operation_coordinator,
+        ),
         extrator=ExecutarAnaliseDocumento(
             PyMuPdfDocumentAnalyzer(
                 cache=JsonAnalysisCache(app_settings.analysis_cache_directory),
@@ -137,6 +143,7 @@ def _compose_initialized_application(
             registry,
             unit_of_work,
         ),
+        coordenador=operation_coordinator,
     )
     window = MainWindow(
         application_name=app_settings.application_name,
@@ -151,6 +158,7 @@ def _compose_initialized_application(
             SqliteBackupManager(),
             diretorio_dados=app_settings.data_directory,
             caminho_banco=app_settings.database_path,
+            coordenador=operation_coordinator,
             descartar_conexoes=engine.dispose,
         ),
         compliance_registry=carregar_registro_conformidade_inicial(),

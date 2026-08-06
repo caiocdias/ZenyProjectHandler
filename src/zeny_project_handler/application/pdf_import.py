@@ -15,6 +15,7 @@ from zeny_project_handler.ports.pdf import InspecaoPdf, LeitorPdfPort, Referenci
 from zeny_project_handler.ports.persistence import UnitOfWorkPort
 
 from .errors import DocumentoDuplicadoError, ProjetoNaoEncontradoError
+from .operation_coordinator import CoordenadorOperacoes, TipoOperacao
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,9 +37,12 @@ class ImportarPdfNoProjeto:
         self,
         leitor: LeitorPdfPort,
         unidade_de_trabalho: Callable[[], UnitOfWorkPort],
+        *,
+        coordenador: CoordenadorOperacoes | None = None,
     ) -> None:
         self._leitor = leitor
         self._unidade_de_trabalho = unidade_de_trabalho
+        self._coordenador = coordenador or CoordenadorOperacoes()
 
     def executar(
         self,
@@ -47,7 +51,11 @@ class ImportarPdfNoProjeto:
         *,
         senha: str | None = None,
     ) -> ResultadoImportacaoPdf:
-        result = ImportarPdfsNoProjeto(self._leitor, self._unidade_de_trabalho).executar(
+        result = ImportarPdfsNoProjeto(
+            self._leitor,
+            self._unidade_de_trabalho,
+            coordenador=self._coordenador,
+        ).executar(
             projeto_id,
             (caminho,),
             senha=senha,
@@ -62,9 +70,12 @@ class ImportarPdfsNoProjeto:
         self,
         leitor: LeitorPdfPort,
         unidade_de_trabalho: Callable[[], UnitOfWorkPort],
+        *,
+        coordenador: CoordenadorOperacoes | None = None,
     ) -> None:
         self._leitor = leitor
         self._unidade_de_trabalho = unidade_de_trabalho
+        self._coordenador = coordenador or CoordenadorOperacoes()
 
     def executar(
         self,
@@ -72,6 +83,16 @@ class ImportarPdfsNoProjeto:
         caminhos: tuple[Path, ...],
         *,
         senha: str | None = None,
+    ) -> ResultadoImportacaoPdfs:
+        with self._coordenador.adquirir(TipoOperacao.IMPORTACAO_PDFS):
+            return self._executar_observado(projeto_id, caminhos, senha=senha)
+
+    def _executar_observado(
+        self,
+        projeto_id: UUID,
+        caminhos: tuple[Path, ...],
+        *,
+        senha: str | None,
     ) -> ResultadoImportacaoPdfs:
         observation = operation_logger(
             "pdf.import",
