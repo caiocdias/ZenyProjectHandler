@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import replace
 from decimal import Decimal
+from hashlib import sha256
 from pathlib import Path
 from threading import Event
 from uuid import UUID, uuid4
@@ -26,6 +27,7 @@ from zeny_project_handler.application.document_analysis import ExecutarAnaliseDo
 from zeny_project_handler.application.errors import FluxoMvpCanceladoError
 from zeny_project_handler.application.human_review import ServicoRevisaoHumana
 from zeny_project_handler.application.interpretation_pipeline import ExecutarPipelineInterpretacao
+from zeny_project_handler.application.managed_files import GerenciadorArquivosGerenciados
 from zeny_project_handler.application.mvp_workflow import ServicoFluxoMvp
 from zeny_project_handler.application.operation_coordinator import (
     CoordenadorOperacoes,
@@ -35,7 +37,7 @@ from zeny_project_handler.application.pdf_import import ImportarPdfsNoProjeto
 from zeny_project_handler.domain.analysis import DecisaoRevisao, PropostaElemento
 from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.domain.enums import CategoriaElemento, SituacaoProjeto
-from zeny_project_handler.domain.project import Poste
+from zeny_project_handler.domain.project import FotoElemento, Poste, Projeto
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 
 pytestmark = pytest.mark.integration
@@ -53,6 +55,11 @@ def _service(
         return SqlAlchemyUnitOfWork(engine)
 
     registry = carregar_registro_regras_inicial()
+
+    def list_projects() -> tuple[Projeto, ...]:
+        with unit_of_work() as work:
+            return work.projetos.listar()
+
     return ServicoFluxoMvp(
         unit_of_work,
         catalogo_inicial_id=catalog.id,
@@ -69,6 +76,10 @@ def _service(
             InterpretadorRegrasExplicitas(registry),
             registry,
             unit_of_work,
+        ),
+        gerenciador_arquivos=GerenciadorArquivosGerenciados(
+            cache_directory.parent,
+            list_projects,
         ),
         coordenador=coordinator,
     )
@@ -276,6 +287,15 @@ def test_remove_pdf_prunes_only_dependent_data_and_project_can_be_deleted(
     service.importar_pdfs(created.projeto.id, (first, second))
     session = service.abrir_projeto(created.projeto.id)
     first_document, second_document = session.projeto.documentos
+    photo_payload = b"managed-document-photo"
+    photo_digest = sha256(photo_payload).hexdigest()
+    photo = FotoElemento(
+        id=uuid4(),
+        caminho_relativo=f"photos/{photo_digest}.png",
+        sha256=photo_digest,
+        tipo_mime="image/png",
+        tamanho_bytes=len(photo_payload),
+    )
     pole = Poste(
         id=uuid4(),
         tipo_catalogo_id=catalogo_inicial.itens_ativos(CategoriaElemento.POSTE)[0].id,
@@ -284,7 +304,11 @@ def test_remove_pdf_prunes_only_dependent_data_and_project_can_be_deleted(
             first_document.paginas[0].id,
             PontoNormalizado(Decimal("0.2"), Decimal("0.3")),
         ),
+        fotos=(photo,),
     )
+    managed_photo = tmp_path / "project-files" / str(created.projeto.id) / photo.caminho_relativo
+    managed_photo.parent.mkdir(parents=True)
+    managed_photo.write_bytes(photo_payload)
     with SqlAlchemyUnitOfWork(engine) as work:
         work.projetos.salvar(replace(session.projeto, elementos=(pole,)))
         work.commit()
@@ -295,6 +319,9 @@ def test_remove_pdf_prunes_only_dependent_data_and_project_can_be_deleted(
 
     assert result.documentos_removidos == ("remover.pdf",)
     assert result.elementos_removidos == 2
+    assert result.arquivos_gerenciados_removidos == 1
+    assert not result.limpeza_pendente
+    assert not managed_photo.exists()
     assert result.sessao.projeto.documentos == (second_document,)
     assert result.sessao.projeto.elementos == ()
     assert [source.caminho_canonico for source in result.sessao.fontes_pdf] == [second.resolve()]
@@ -323,11 +350,46 @@ def test_delete_project_with_confirmed_review_removes_dependents_in_safe_order(
     service.executar_pipeline(created.projeto.id)
     decision = _first_automatic_decision(engine, created.projeto.id)
 
-    assert service.excluir_projeto(created.projeto.id)
+    managed_root = tmp_path / "project-files" / str(created.projeto.id)
+    managed_root.mkdir(parents=True)
+    (managed_root / "local-copy.bin").write_bytes(b"managed")
 
+    result = service.excluir_projeto(created.projeto.id)
+
+    assert result
+    assert result.arquivos_gerenciados_removidos == 1
+    assert not result.limpeza_pendente
+    assert not managed_root.exists()
     with SqlAlchemyUnitOfWork(engine) as work:
         assert work.projetos.obter(created.projeto.id) is None
         assert work.execucoes_analise.listar_do_projeto(created.projeto.id) == ()
         assert work.decisoes_revisao.obter(decision.id) is None
     assert source.is_file()
+    engine.dispose()
+
+
+def test_delete_project_restores_tombstone_when_database_commit_rolls_back(
+    workflow: tuple[Engine, ServicoFluxoMvp],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine, service = workflow
+    created = service.criar_projeto("Projeto com rollback")
+    managed_root = tmp_path / "project-files" / str(created.projeto.id)
+    managed_root.mkdir(parents=True)
+    managed_file = managed_root / "rollback.bin"
+    managed_file.write_bytes(b"restore-me")
+    original_commit = SqlAlchemyUnitOfWork.commit
+
+    def fail_commit(_work: SqlAlchemyUnitOfWork) -> None:
+        raise RuntimeError("commit failed")
+
+    monkeypatch.setattr(SqlAlchemyUnitOfWork, "commit", fail_commit)
+    with pytest.raises(RuntimeError, match="commit failed"):
+        service.excluir_projeto(created.projeto.id)
+    monkeypatch.setattr(SqlAlchemyUnitOfWork, "commit", original_commit)
+
+    assert managed_file.read_bytes() == b"restore-me"
+    assert service.abrir_projeto(created.projeto.id).projeto.id == created.projeto.id
+    assert service.coordenador.operacao_em_andamento is None
     engine.dispose()

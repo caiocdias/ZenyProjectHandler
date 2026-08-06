@@ -64,6 +64,10 @@ def test_main_window_smoke(
     workflow_coordinator = window.project_panel._service._coordinator
     assert workflow_coordinator is window.project_panel._service._importer._coordenador
     assert workflow_coordinator is window.portability_panel._service._coordinator
+    assert (
+        window.project_panel._service._managed_files
+        is window.portability_panel._service._managed_files
+    )
     assert window.statusBar().currentMessage() == "Pronto para abrir um PDF"
     assert settings.database_path.is_file()
 

@@ -534,6 +534,11 @@ def test_export_import_preserves_ids_decisions_and_repairs_missing_photo(
     repaired = target_service.localizar_foto(project.id, element_id, photo.id, photo_path)
     assert repaired.foto is not None
     assert target_service.verificar_integridade(project.id).integro
+    removed_photo = target_service.remover_foto(project.id, element_id, photo.id)
+    assert removed_photo.arquivos_gerenciados_removidos == 1
+    assert not removed_photo.limpeza_pendente
+    assert not managed_photo.exists()
+    assert target_service.verificar_integridade(project.id).integro
 
     with SqlAlchemyUnitOfWork(target_engine) as work:
         imported_source = work.fontes_pdf.obter(project.documentos[0].id)

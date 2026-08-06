@@ -194,11 +194,13 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
     assert reopened_combo.currentData() == project_id
     assert reopened.pdf_viewer.folha_atual == 2
 
-    monkeypatch.setattr(
-        QMessageBox,
-        "question",
-        lambda *_args, **_kwargs: QMessageBox.StandardButton.Yes,
-    )
+    confirmations: list[str] = []
+
+    def confirm(*args: object, **_kwargs: object) -> QMessageBox.StandardButton:
+        confirmations.extend(item for item in args if isinstance(item, str))
+        return QMessageBox.StandardButton.Yes
+
+    monkeypatch.setattr(QMessageBox, "question", confirm)
     document_list = reopened_panel.findChild(QListWidget, "mvpPageOrderList")
     remove_pdf = reopened_panel.findChild(QPushButton, "mvpRemovePdfsButton")
     assert document_list is not None and remove_pdf is not None
@@ -206,8 +208,17 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
     qtbot.mouseClick(remove_pdf, Qt.MouseButton.LeftButton)
     assert document_list.count() == 0
     assert reopened.pdf_viewer.inspecao is None
+    assert any(
+        "Fotos gerenciadas" in message and "PDF originais externos serão preservados" in message
+        for message in confirmations
+    )
 
     delete_project = reopened_panel.findChild(QPushButton, "mvpDeleteProjectButton")
     assert delete_project is not None
     qtbot.mouseClick(delete_project, Qt.MouseButton.LeftButton)
     assert reopened_combo.findData(project_id) < 0
+    assert any(
+        "fotos e cópias de arquivos mantidas na pasta gerenciada" in message
+        and "PDF originais externos permanecem" in message
+        for message in confirmations
+    )
