@@ -168,9 +168,16 @@ que os reconheça.
   configurado por `ZENY_PDF_RENDER_DPI` entre 36 e 600. `ZENY_PDF_RENDER_MAX_PIXELS` e
   `ZENY_PDF_RENDER_MAX_BYTES` limitam cada solicitação antes da alocação: pranchas grandes usam
   prévia reduzida e clips pequenos ainda podem usar o teto de detalhe.
+- A prévia é composta com tiles detalhados assíncronos do viewport e de uma margem. Solicitações
+  carregam geração, identidade verificada do documento, página, rotação, zoom, DPR e região; uma
+  resposta divergente ou obsoleta não altera a cena. Cancelamento ocorre entre tiles, sem bloquear
+  navegação, e nenhuma conversão para `QPixmap` ou mutação gráfica sai da thread da interface.
+- O cache visual é LRU limitado por bytes por `ZENY_PDF_TILE_CACHE_MAX_BYTES` (128 MiB por padrão).
+  A chave usa UUID, SHA-256, tamanho e `mtime` da sessão verificada, além de toda identidade visual;
+  trocar o conjunto de documentos ou detectar alteração da origem limpa o cache.
 - `TransformadorCoordenadasPagina` converte de forma reversível entre espaço PDF, normalizado,
   pixels e cena, incluindo origem/dimensões de clips. A interface reaplica sobreposições após
-  rotação usando essa transformação.
+  rotação usando essa transformação; tiles permanecem sob overlays e links de revisão clicáveis.
 - A abertura aceita um ou vários PDFs. Todo PDF selecionado no fluxo do projeto é importado
   imediatamente como parte dele, sem uma ação separada de união. A lista de folhas permite arrastar
   qualquer página ou usar **Subir** e **Descer**; essa sequência persistida define a paginação

@@ -87,7 +87,7 @@ com o corpus completo. Seus resultados não substituem o gate básico.
 | 10. Limpeza segura de arquivos gerenciados | CONCLUÍDA | 6, 9 | Exclusões não deixam fotos órfãs |
 | 11. Identidade verificada da origem por sessão | CONCLUÍDA | 1 | Navegação não recalcula o PDF inteiro |
 | 12. Renderização por orçamento e região | CONCLUÍDA | 11 | Pranchas grandes não exigem raster integral de 600 DPI |
-| 13. Visualizador progressivo e assíncrono | PENDENTE | 6, 12 | Zoom detalhado sem congelamento ou resultados obsoletos |
+| 13. Visualizador progressivo e assíncrono | CONCLUÍDA | 6, 12 | Zoom detalhado sem congelamento ou resultados obsoletos |
 | 14. Assinatura reprodutível do OCR | PENDENTE | 1 | Cache muda com motor, idioma e configuração |
 | 15. Provisionamento e diagnóstico do português | PENDENTE | 14 | Instalação funcional com `por`, ou erro acionável |
 | 16. Credenciais efêmeras para PDFs protegidos | PENDENTE | 6, 11, 13 | Importação, visualização e análise protegidas funcionam |
@@ -938,7 +938,8 @@ Crie commits seccionados para as alterações, mantenha na branch main.
 ## Etapa 13 — Visualizador progressivo, assíncrono e com cache limitado
 
 **Achado original:** 5, parte da experiência Qt.  
-**Estado:** PENDENTE.  
+**Estado:** CONCLUÍDA.
+
 **Arquivos prováveis:** `ui/pdf_viewer.py`, workers de renderização, cache de tiles, configuração e
 testes `pytest-qt`.
 
@@ -963,6 +964,44 @@ testes `pytest-qt`.
 - Overlays continuam clicáveis e alinhados em todas as rotações.
 - Aceite manual inclui uma prancha grande autorizada: visão geral legível e texto pequeno nítido ao
   ampliar, sem crescimento de memória proporcional ao raster integral de 600 DPI.
+
+### Registro de conclusão — 06/08/2026
+
+- `PdfViewerWidget` passou a abrir cada página com uma prévia integral orçada e a refiná-la com
+  clips detalhados assíncronos somente no viewport e em uma margem de um tile. A prioridade combina
+  visibilidade e distância ao centro; pan, zoom, rotação, navegação e mudança de DPR iniciam nova
+  geração e cancelam cooperativamente a anterior.
+- Toda solicitação identifica geração, UUID/SHA-256/tamanho/`mtime` verificados, página, rotação,
+  zoom, DPR, região canônica, DPI e tipo prévia/tile. Só respostas que ainda correspondem ao estado
+  corrente chegam à cena. Regiões visuais são convertidas de volta ao espaço canônico nas rotações
+  90/180/270 antes de chamar o backend regional da Etapa 12.
+- A fila serial priorizada rasteriza em `QThread`, sem acessar widgets, cena ou `QPixmap`. O worker
+  materializa uma única cópia RGB proprietária e libera o `Pixmap` nativo do PyMuPDF na thread que o
+  criou; `QImage`, `QPixmap` e todas as mutações visuais ficam na UI. Isso elimina proprietários
+  nativos entre threads sem elevar o pico conservador de 7 bytes por pixel.
+- O cache visual é LRU com limite estrito em bytes de `QPixmap`, 128 MiB por padrão via
+  `ZENY_PDF_TILE_CACHE_MAX_BYTES`. A chave contém a identidade verificada e todo o estado visual
+  reutilizável; troca de documentos, limpeza ou alteração detectada da origem esvazia o cache.
+- Prévia e tiles usam camadas abaixo dos overlays e links de revisão. Testes confirmaram alinhamento
+  e clique nas rotações 0/90/180/270. O DPI de detalhe deriva do zoom e DPR e continua limitado pelo
+  teto visual configurado de até 600 DPI; análise/OCR, seus DPIs e suas decisões não foram alterados.
+- O conjunto `pytest-qt` determinístico cobre responsividade com backend bloqueado por `Event`,
+  execução fora da UI, resultado fora de sequência, invalidação por troca/alteração, limite e
+  evicção LRU, prioridade/conversão de regiões, rotação com overlay clicável e fechamento durante
+  raster ativo. O fechamento da janela principal também possui regressão para encerramento explícito
+  da fila e das sessões.
+- O roteiro `docs/aceite-manual-visualizador-progressivo.md` registra o aceite com A0/A1 autorizada,
+  incluindo nitidez em zoom, prioridade do viewport, DPR, memória, quatro rotações, invalidação e
+  fechamento. A prancha privada não integra nem foi acessada pelo gate automatizado.
+- Gate básico aprovado: `pip check`; Ruff; `ruff format --check` (`179 files`); Mypy (`179 source
+  files`); `371 passed, 20 deselected`, cobertura `85,03%`; complexidade média A (`3,8006`); e
+  `RESULTADO FINAL: APROVADO`. Permaneceu somente o `PytestCacheWarning` ambiental já conhecido por
+  falta de permissão em `.pytest_cache`; não houve falha ou aviso de ciclo de vida Qt.
+- Commits seccionados: `2bf9c56` (`feat(viewer): add progressive regional rendering`), `c2d1fa0`
+  (`test(viewer): cover progressive rendering lifecycle`), `14dd784`
+  (`style(viewer): apply canonical formatting`), `0a2e3f4`
+  (`fix(viewer): stop render queue with main window`) e `d4f4de6`
+  (`fix(viewer): own raster buffers across worker boundary`).
 
 ### Mensagem para um novo chat do Codex
 

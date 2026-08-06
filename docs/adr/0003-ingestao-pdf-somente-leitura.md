@@ -57,10 +57,30 @@ geometria apenas à largura e altura raster não é suficiente para garantir pos
     `TransformadorCoordenadasPagina` usa esses dados para manter round-trip e overlays alinhados em
     raster integral ou regional, inclusive com `CropBox`, rotação intrínseca e rotação adicional.
 13. `PaginaPdfRenderizada` expõe uma `memoryview` de `Pixmap.samples_mv` e retém o `Pixmap` que possui
-    esse buffer. `QImage` apenas o envolve enquanto o resultado está vivo; a cópia intermediária para
-    `bytes` e `QImage.copy()` foi removida. `QPixmap.fromImage()` continua sendo a conversão necessária
-    na thread da interface. O pipeline de análise/OCR não usa esse contrato nem teve seus DPIs ou
-    decisões alterados.
+    esse buffer. No uso síncrono, `QImage` pode apenas envolvê-lo enquanto o resultado está vivo. Na
+    fronteira assíncrona, o worker faz uma única cópia RGB proprietária e libera o `Pixmap` nativo na
+    própria thread antes de publicar o resultado. Na UI, `QImage` envolve esse `bytes` e
+    `QPixmap.fromImage()` faz a conversão final. Assim, o pico continua em 7 bytes por pixel: a cópia
+    RGB de 3 bytes já substituiu o buffer nativo quando o `QPixmap` de 4 bytes é criado. O pipeline de
+    análise/OCR não usa esse contrato nem teve seus DPIs ou decisões alterados.
+14. O visualizador envia prévias e regiões a uma fila serial priorizada em `QThread`. O trabalho usa
+    somente a sessão PDF e objetos Python; a UI drena resultados por uma fila protegida. `QImage`,
+    `QPixmap`, cena, widgets e overlays são criados ou alterados exclusivamente na thread principal.
+15. Toda solicitação registra geração, identidade verificada do documento (UUID, SHA-256, tamanho e
+    `mtime`), página, rotação, zoom, `devicePixelRatio`, região canônica, DPI e tipo prévia/tile.
+    Apenas uma resposta compatível com o estado corrente pode alcançar a conversão para `QPixmap`.
+16. A página mostra primeiro a prévia integral orçada. O DPI necessário no viewport deriva do DPI da
+    prévia, zoom e DPR, limitado pelo teto configurado de até 600 DPI. A malha cobre somente o viewport
+    e uma margem de um tile; regiões visíveis mais próximas do centro precedem a margem. Em rotações
+    90/180/270, a célula visual é convertida de volta ao recorte normalizado canônico antes do backend.
+17. O cache visual é LRU com limite estrito em bytes de `QPixmap`, 128 MiB por padrão e configurável
+    por `ZENY_PDF_TILE_CACHE_MAX_BYTES`. Geração não pertence à chave reutilizável, mas todos os demais
+    campos de identidade pertencem. Troca de projeto, limpeza e alteração detectada da origem esvaziam
+    o cache; entradas individuais maiores que o limite não são armazenadas.
+18. O cancelamento é cooperativo entre rasterizações regionais: cada nova geração marca o token
+    anterior, itens enfileirados são ignorados e o resultado de um tile já em execução é descartado.
+    Sessões substituídas permanecem vivas somente até a fila não poder mais usá-las e são encerradas
+    deterministicamente; o fechamento cancela a fila, aguarda o raster corrente e libera tudo.
 
 ## Verificação
 
@@ -75,6 +95,10 @@ geometria apenas à largura e altura raster não é suficiente para garantir pos
   esse raster. A prévia real permanece sob os dois limites, e um clip de 1% preserva 600 DPI.
 - Um hasher instrumentado comprova um único SHA-256 por sessão ao navegar por páginas, recortes e
   rotações. Alteração, remoção e movimentação da origem invalidam a sessão sem novo hash implícito.
+- Testes pytest-qt bloqueiam o backend por `Event` e comprovam que o loop da UI continua ativo, que
+  páginas antigas não vencem a geração corrente, que alteração/troca limpa o cache, que o LRU não
+  excede bytes, que rotação mantém links alinhados/clicáveis e que fechar com raster ativo encerra a
+  thread e as sessões. O planejamento puro também prova prioridade e conversão visual-canônica.
 - O teste de movimentação ocorre com a sessão ainda viva, comprovando no Windows que nenhum handle
   persistente bloqueia backup, restauração ou substituição do arquivo.
 - As nove amostras formais privadas são endereçadas exclusivamente pelos hashes do manifesto.
@@ -89,9 +113,10 @@ geometria apenas à largura e altura raster não é suficiente para garantir pos
   serão tratados na etapa 10; até lá a ausência ou divergência de hash é reportada sem substituir a
   referência silenciosamente.
 - Inventários podem ser recriados a partir do PDF e não aumentam o payload canônico do projeto.
-- Uma página grande pode aparecer inicialmente com DPI efetivo menor que o teto configurado. O
-  backend regional já fornece clips detalhados; priorização, composição assíncrona e cache limitado
-  de tiles pertencem à etapa progressiva seguinte.
+- Uma página grande pode aparecer inicialmente com DPI efetivo menor que o teto configurado. Tiles
+  detalhados substituem visualmente a prévia conforme o viewport pede resolução, sem alocar o raster
+  integral no teto. O cache impõe limite ao conjunto reutilizável; prévia e tiles visíveis atuais ainda
+  compõem a memória ativa necessária da cena.
 - Uma sessão invalidada não tenta se recuperar por caminho nem recalcula o hash silenciosamente: o
   chamador precisa abrir e inspecionar a origem novamente.
 - A interface desta etapa abre um PDF avulso. Vincular a importação a um projeto escolhido na

@@ -172,26 +172,31 @@ item; resultados catalogados são incorporados automaticamente ao projeto e fica
 disponíveis para as etapas seguintes.
 
 A resolução solicitada por padrão é 600 DPI, que é o teto de detalhe visual disponível para
-regiões. Ela não obriga a rasterizar uma prancha inteira nessa resolução. Antes de chamar o
-PyMuPDF, o backend calcula dimensões, pixels, bytes RGB e o pico estimado da conversão para
-`QPixmap`. Páginas que cabem nos dois limites usam raster integral; páginas grandes recebem a maior
-prévia integral que caiba, enquanto clips pequenos podem manter os 600 DPI.
+regiões. Ela não obriga a rasterizar uma prancha inteira nessa resolução. O visualizador produz uma
+prévia integral limitada e, fora da thread da interface, solicita tiles detalhados apenas para o
+viewport e uma margem. Tiles visíveis são priorizados pela proximidade do centro; pan, zoom, rotação,
+navegação, DPR ou troca de página cancelam cooperativamente a fila anterior. `QPixmap`, cena, widgets
+e overlays continuam restritos à thread da interface.
 
 Os limites padrão são 8.000.000 pixels e 64 MiB por solicitação. A estimativa de pico usa 7 bytes
-por pixel: 3 do buffer RGB mantido pelo PyMuPDF/QImage e 4 da conversão para QPixmap. Os três valores
-podem ser configurados antes da inicialização; limites de pixels e bytes devem ser inteiros positivos,
-e o DPI deve permanecer entre 36 e 600:
+por pixel: 3 do buffer RGB proprietário entregue ao QImage e 4 da conversão para QPixmap. O cache
+LRU de `QPixmap` usa no máximo 128 MiB por padrão, contabilizados por dimensões e profundidade. Sua
+chave inclui identidade verificada (UUID, SHA-256, tamanho e `mtime`), página, rotação, zoom, DPR,
+região e DPI; troca ou alteração da origem limpa integralmente o cache. Os quatro valores podem ser
+configurados antes da inicialização; limites devem ser inteiros positivos e o DPI deve permanecer
+entre 36 e 600:
 
 ```powershell
 $env:ZENY_PDF_RENDER_DPI = "600"
 $env:ZENY_PDF_RENDER_MAX_PIXELS = "8000000"
 $env:ZENY_PDF_RENDER_MAX_BYTES = "67108864"
+$env:ZENY_PDF_TILE_CACHE_MAX_BYTES = "134217728"
 .\ZenyProjectHandler.vbs
 ```
 
 Essas opções pertencem somente ao visualizador. Elas não alteram DPI, seleção de regiões,
-decisões nem resultados do pipeline de análise/OCR. A composição progressiva e assíncrona dos
-clips detalhados no viewport pertence à próxima etapa do visualizador.
+decisões nem resultados do pipeline de análise/OCR. O roteiro de validação com uma prancha grande
+autorizada está em [`docs/aceite-manual-visualizador-progressivo.md`](docs/aceite-manual-visualizador-progressivo.md).
 
 O inventário técnico distingue texto, caminhos vetoriais, imagens incorporadas, anotações e seus
 appearance streams, Form XObjects e Optional Content Groups. Uma falha localizada vira diagnóstico
