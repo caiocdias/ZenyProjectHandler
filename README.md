@@ -47,8 +47,9 @@ Esse é o **gate básico**: funciona offline em um clone limpo e exclui explicit
 marcados com `private_samples`. Ele não procura, calcula hashes nem abre PDFs reais em `examples/`.
 O resultado consolidado é salvo em `relatorio-testes.txt` na raiz. O comando falha se lint,
 formatação, tipagem, dependências, testes ou cobertura falharem. A cobertura deve permanecer
-estritamente acima de 85,01%. O relatório também apresenta complexidade ciclomática, índice de
-manutenibilidade e métricas de linhas de código.
+estritamente acima de 85,01%. O gate também reprova qualquer função ou método de `src/` com
+complexidade ciclomática E/F; os blocos D continuam listados para acompanhamento. O relatório
+preserva ainda o índice de manutenibilidade e as métricas de linhas de código.
 
 Em um ambiente autorizado que possua todas as amostras do manifesto, execute separadamente o
 **gate privado opt-in**:

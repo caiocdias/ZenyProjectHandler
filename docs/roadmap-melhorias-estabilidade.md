@@ -91,7 +91,7 @@ com o corpus completo. Seus resultados não substituem o gate básico.
 | 14. Assinatura reprodutível do OCR | CONCLUÍDA | 1 | Cache muda com motor, idioma e configuração |
 | 15. Provisionamento e diagnóstico do português | CONCLUÍDA | 14 | Instalação funcional com `por`, ou erro acionável |
 | 16. Credenciais efêmeras para PDFs protegidos | CONCLUÍDA | 6, 11, 13 | Importação, visualização e análise protegidas funcionam |
-| 17. Redução e gate de complexidade | PENDENTE | Todas as anteriores | Sem funções E/F e regressão bloqueada |
+| 17. Redução e gate de complexidade | CONCLUÍDA | Todas as anteriores | Sem funções E/F e regressão bloqueada |
 
 Estados permitidos: `PENDENTE`, `EM ANDAMENTO`, `BLOQUEADA` e `CONCLUÍDA`.
 
@@ -1222,7 +1222,7 @@ Crie commits seccionados para as alterações, mantenha na branch main.
 ## Etapa 17 — Redução e gate de complexidade ciclomática
 
 **Achado original:** 15, parte de manutenção.  
-**Estado:** PENDENTE.  
+**Estado:** CONCLUÍDA.
 **Arquivos prováveis:** `application/project_compliance.py`, `application/mvp_workflow.py`,
 `adapters/analysis/pymupdf_ocr.py`, `adapters/analysis/tesseract_ocr.py`,
 `adapters/interpretation/span_rules.py`, `IniciarTestes.bat` e testes de caracterização.
@@ -1246,6 +1246,30 @@ Crie commits seccionados para as alterações, mantenha na branch main.
 - `IniciarTestes.bat` falha de forma demonstrável diante de uma fixture/função E/F controlada ou o
   checker possui teste próprio equivalente.
 - Gate básico, cobertura e benchmark público/sintético permanecem verdes.
+
+### Registro de conclusão — 06/08/2026
+
+- Antes da refatoração, testes de caracterização fixaram ramos, ordem, IDs e proveniência dos fatos
+  de conformidade, remoção transitiva de documentos, associação de vãos, diagnósticos do OCR e
+  semântica do TSV. As extrações posteriores preservam esses contratos sem alterar APIs públicas.
+- A conformidade foi dividida nas fronteiras de servidão, carimbo e assinaturas; a remoção do grafo
+  documental passou para o módulo puro `application/project_document_removal.py`; e OCR, TSV e
+  associação de endpoints foram separados em decisões e transformações coesas.
+- Os seis alvos passaram de F/E/F/D/D/D para, respectivamente, `_document_control_facts` A (`1`),
+  `_region_facts` B (`7`), `project_without_documents` B (`7`, preservando o alias interno),
+  `_associate_operational_span_endpoints` A (`2`), `_conditional_ocr` B (`7`) e `_parse_tsv` A (`4`).
+- `scripts/complexity_gate.py`, integrado ao `IniciarTestes.bat`, analisa funções e métodos de
+  `src/`, reprova E/F e possui testes controlados que demonstram aprovação de D e reprovação de E e
+  F. O relatório continua exibindo D, índice de manutenibilidade e LOC.
+- O Radon final analisou 1.804 blocos, com média A (`3,7062`), nenhum E/F e seis blocos D ainda
+  reportados. O gate básico canônico aprovou dependências, Ruff, `ruff format --check` (`190 files`),
+  Mypy (`189 source files`), `425 passed, 20 deselected`, cobertura `85,48%` e
+  `RESULTADO FINAL: APROVADO`. Permaneceu apenas o `PytestCacheWarning` ambiental conhecido por
+  falta de permissão em `.pytest_cache`; o corpus privado não foi acessado.
+- Commits seccionados: `70aaa20` (`test(quality): characterize complexity hotspots`), `9c1c3f8`
+  (`refactor(application): decompose compliance and document pruning`), `c46ad0d`
+  (`refactor(analysis): decompose OCR and span hotspots`) e `3df67c6`
+  (`build(quality): block cyclomatic complexity E and F`).
 
 ### Mensagem para um novo chat do Codex
 
