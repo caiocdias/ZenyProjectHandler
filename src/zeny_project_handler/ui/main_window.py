@@ -26,11 +26,13 @@ from zeny_project_handler.application.operation_coordinator import (
     CoordenadorOperacoes,
     TipoOperacao,
 )
+from zeny_project_handler.application.pdf_credentials import ProvedorCredenciaisPdfMemoria
 from zeny_project_handler.application.project_portability import ServicoPortabilidadeProjeto
 from zeny_project_handler.domain.compliance import RegistroRegrasConformidade
 from zeny_project_handler.ports.pdf import LeitorPdfPort, OrcamentoRenderizacaoPdf
 
 from .documentation_panel import DocumentationPanelWidget
+from .pdf_credentials import ResolvedorCredenciaisPdf
 from .pdf_viewer import PdfViewerWidget
 from .portability_panel import PortabilityPanelWidget
 from .project_panel import ProjectPanelWidget
@@ -319,6 +321,7 @@ class MainWindow(QMainWindow):
         pdf_render_dpi: int,
         pdf_render_budget: OrcamentoRenderizacaoPdf,
         pdf_tile_cache_max_bytes: int,
+        provedor_credenciais_pdf: ProvedorCredenciaisPdfMemoria | None = None,
         review_service: ServicoRevisaoHumana | None = None,
         workflow_service: ServicoFluxoMvp | None = None,
         portability_service: ServicoPortabilidadeProjeto | None = None,
@@ -345,11 +348,15 @@ class MainWindow(QMainWindow):
         )
         self._panels_menu = self.menuBar().addMenu("Painéis")
         self._panels_menu.setObjectName("panelsMenu")
+        credential_resolver = ResolvedorCredenciaisPdf(
+            provedor_credenciais_pdf or ProvedorCredenciaisPdfMemoria()
+        )
         self.pdf_viewer = PdfViewerWidget(
             leitor=pdf_reader,
             dpi=pdf_render_dpi,
             orcamento=pdf_render_budget,
             cache_limite_bytes=pdf_tile_cache_max_bytes,
+            resolvedor_credenciais=credential_resolver,
             parent=self,
         )
         self.pdf_viewer.status_changed.connect(self.statusBar().showMessage)
@@ -408,6 +415,8 @@ class MainWindow(QMainWindow):
                 service=workflow_service,
                 viewer=self.pdf_viewer,
                 review_panel=self.review_panel,
+                leitor_pdf=pdf_reader,
+                resolvedor_credenciais=credential_resolver,
                 state_path=ui_state_path,
                 parent=self,
             )

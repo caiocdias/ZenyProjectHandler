@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 from uuid import UUID
@@ -41,6 +41,11 @@ from PySide6.QtWidgets import (
 
 from zeny_project_handler.adapters.pdf.coordinates import PontoPlano, TransformadorCoordenadasPagina
 from zeny_project_handler.adapters.pdf.errors import PdfError, PdfOrigemAlteradaError
+from zeny_project_handler.application.pdf_credentials import (
+    IdentidadeCredencialPdf,
+    ProvedorCredenciaisPdfMemoria,
+    identificar_origem_pdf,
+)
 from zeny_project_handler.config import DEFAULT_PDF_TILE_CACHE_MAX_BYTES
 from zeny_project_handler.domain.analysis import PropostaElemento
 from zeny_project_handler.domain.documents import DocumentoProjeto
@@ -52,9 +57,11 @@ from zeny_project_handler.ports.pdf import (
     LeitorPdfPort,
     OrcamentoRenderizacaoPdf,
     PlanoRenderizacaoPdf,
+    ReferenciaFontePdf,
     SessaoLeituraPdfPort,
 )
 
+from .pdf_credentials import EstadoResolucaoCredencialPdf, ResolvedorCredenciaisPdf
 from .pdf_rendering import (
     CacheLruBytes,
     CancelamentoRenderizacao,
@@ -73,6 +80,14 @@ from .pdf_rendering import (
 class _RasterEmCache:
     pixmap: QPixmap
     plano: PlanoRenderizacaoPdf
+
+
+@dataclass(frozen=True, slots=True)
+class _ResultadoAberturaSessoes:
+    sessoes: tuple[SessaoLeituraPdfPort, ...] = ()
+    identidades: frozenset[IdentidadeCredencialPdf] = frozenset()
+    mensagem_interrupcao: str | None = None
+    cancelada: bool = False
 
 
 class ReviewLinkItem(QGraphicsPathItem):
@@ -332,11 +347,15 @@ class PdfViewerWidget(QWidget):
         dpi: int,
         orcamento: OrcamentoRenderizacaoPdf,
         cache_limite_bytes: int = DEFAULT_PDF_TILE_CACHE_MAX_BYTES,
+        resolvedor_credenciais: ResolvedorCredenciaisPdf | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("pdfViewerWidget")
         self._reader = leitor
+        self._credential_resolver = resolvedor_credenciais or ResolvedorCredenciaisPdf(
+            ProvedorCredenciaisPdfMemoria()
+        )
         self._dpi = dpi
         self._render_budget = orcamento
         self._render_cache: CacheLruBytes[ChaveCacheRenderizacao, _RasterEmCache] = CacheLruBytes(
@@ -447,7 +466,9 @@ class PdfViewerWidget(QWidget):
             self.carregar_projeto(paths)
 
     def carregar_pdf(self, path: Path, *, password: str | None = None) -> bool:
-        return self.carregar_projeto((path,), password=password)
+        if password is not None:
+            self._credential_resolver.provedor.guardar(identificar_origem_pdf(path), password)
+        return self.carregar_projeto((path,))
 
     def limpar(self) -> None:
         self._cancel_current_rendering()
@@ -470,6 +491,7 @@ class PdfViewerWidget(QWidget):
         self._page.blockSignals(False)
         self._metadata.setText("Projeto sem PDF importado")
         self.view.limpar()
+        self._credential_resolver.provedor.limpar()
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - API Qt
         self.encerrar()
@@ -492,6 +514,7 @@ class PdfViewerWidget(QWidget):
             self._retired_sessions.clear()
             _close_sessions((*sessions, *retired))
             self._render_cache.limpar()
+            self._credential_resolver.provedor.limpar()
 
     def ir_para_folha(self, numero: int) -> None:
         if not self._project_pages:
@@ -502,8 +525,8 @@ class PdfViewerWidget(QWidget):
         self,
         paths: tuple[Path, ...],
         *,
-        password: str | None = None,
         documentos: tuple[DocumentoProjeto, ...] | None = None,
+        fontes: tuple[ReferenciaFontePdf, ...] | None = None,
         ordem_paginas: tuple[UUID, ...] | None = None,
     ) -> bool:
         """Valide todos os PDFs antes de substituir o projeto atualmente exibido."""
@@ -516,8 +539,8 @@ class PdfViewerWidget(QWidget):
             try:
                 return self._load_project(
                     paths,
-                    password=password,
                     documentos=documentos,
+                    fontes=fontes,
                     ordem_paginas=ordem_paginas,
                     observation=observation,
                 )
@@ -529,8 +552,8 @@ class PdfViewerWidget(QWidget):
         self,
         paths: tuple[Path, ...],
         *,
-        password: str | None,
         documentos: tuple[DocumentoProjeto, ...] | None,
+        fontes: tuple[ReferenciaFontePdf, ...] | None,
         ordem_paginas: tuple[UUID, ...] | None,
         observation: OperationLogger,
     ) -> bool:
@@ -541,18 +564,33 @@ class PdfViewerWidget(QWidget):
             observation.failed(error, expected=True)
             self._open_warning(str(error))
             return False
+        if fontes is not None and len(fontes) != len(paths):
+            error = ValueError("A quantidade de fontes PDF não corresponde aos caminhos informados")
+            observation.failed(error, expected=True)
+            self._open_warning(str(error))
+            return False
         try:
-            sessions = _open_verified_sessions(
+            opening = _open_verified_sessions(
                 self._reader,
                 paths,
-                password=password,
+                parent=self,
+                resolvedor=self._credential_resolver,
                 documents=documentos,
+                sources=fontes,
             )
         except PdfError as error:
             observation.failed(error, expected=True)
             self.status_changed.emit(str(error))
             QMessageBox.warning(self, "Não foi possível abrir o PDF", str(error))
             return False
+        if opening.mensagem_interrupcao is not None:
+            if opening.cancelada:
+                observation.cancelled()
+            else:
+                observation.failed(ValueError(opening.mensagem_interrupcao), expected=True)
+            self._open_warning(opening.mensagem_interrupcao)
+            return False
+        sessions = opening.sessoes
         inspections = tuple(session.inspecao for session in sessions)
         if documentos is not None:
             try:
@@ -585,6 +623,7 @@ class PdfViewerWidget(QWidget):
             sessions=sessions,
             project_pages=project_pages,
         )
+        self._credential_resolver.provedor.reter(set(opening.identidades))
         observation.succeeded(
             item_count=len(inspections),
             document_ids=tuple(item.documento.id for item in inspections),
@@ -1050,25 +1089,71 @@ def _open_verified_sessions(
     reader: LeitorPdfPort,
     paths: tuple[Path, ...],
     *,
-    password: str | None,
+    parent: QWidget,
+    resolvedor: ResolvedorCredenciaisPdf,
     documents: tuple[DocumentoProjeto, ...] | None,
-) -> tuple[SessaoLeituraPdfPort, ...]:
+    sources: tuple[ReferenciaFontePdf, ...] | None,
+) -> _ResultadoAberturaSessoes:
     sessions: list[SessaoLeituraPdfPort] = []
+    identities: set[IdentidadeCredencialPdf] = set()
     try:
         for index, path in enumerate(paths):
             persisted = documents[index] if documents is not None else None
-            sessions.append(
-                reader.abrir_sessao(
-                    path,
-                    senha=password,
-                    documento_id=persisted.id if persisted is not None else None,
-                    sha256_esperado=persisted.sha256 if persisted is not None else None,
-                )
+            source = sources[index] if sources is not None else None
+            suggested_identity = (
+                IdentidadeCredencialPdf.da_fonte(source) if source is not None else None
             )
+
+            result = resolvedor.executar(
+                parent=parent,
+                caminho=path,
+                identidade_sugerida=suggested_identity,
+                acao=_session_action(reader, path, persisted),
+            )
+            if result.estado is not EstadoResolucaoCredencialPdf.SUCESSO:
+                _close_sessions(tuple(sessions))
+                if result.estado is EstadoResolucaoCredencialPdf.CANCELADA:
+                    message = (
+                        f"A abertura foi cancelada em {path.name} após {len(sessions)} PDF(s) "
+                        "validados; a visualização anterior foi preservada"
+                    )
+                    return _ResultadoAberturaSessoes(
+                        mensagem_interrupcao=message,
+                        cancelada=True,
+                    )
+                message = (
+                    f"O limite de 3 tentativas de senha foi atingido em {path.name}; "
+                    "a visualização anterior foi preservada"
+                )
+                return _ResultadoAberturaSessoes(mensagem_interrupcao=message)
+            session = result.valor
+            assert session is not None
+            sessions.append(session)
+            if result.identidade is not None:
+                identities.add(result.identidade)
     except BaseException:
         _close_sessions(tuple(sessions))
         raise
-    return tuple(sessions)
+    return _ResultadoAberturaSessoes(
+        sessoes=tuple(sessions),
+        identidades=frozenset(identities),
+    )
+
+
+def _session_action(
+    reader: LeitorPdfPort,
+    path: Path,
+    persisted: DocumentoProjeto | None,
+) -> Callable[[str | None], SessaoLeituraPdfPort]:
+    def open_session(password: str | None) -> SessaoLeituraPdfPort:
+        return reader.abrir_sessao(
+            path,
+            senha=password,
+            documento_id=persisted.id if persisted is not None else None,
+            sha256_esperado=persisted.sha256 if persisted is not None else None,
+        )
+
+    return open_session
 
 
 def _close_sessions(sessions: tuple[SessaoLeituraPdfPort, ...]) -> None:

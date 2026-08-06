@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from zeny_project_handler.adapters.pdf.errors import PdfError
 from zeny_project_handler.application.errors import ApplicationError, FluxoMvpCanceladoError
 from zeny_project_handler.application.mvp_workflow import (
     ResultadoFluxoMvp,
@@ -33,10 +34,14 @@ from zeny_project_handler.application.mvp_workflow import (
     SessaoProjetoMvp,
 )
 from zeny_project_handler.application.operation_coordinator import TipoOperacao
+from zeny_project_handler.application.pdf_credentials import IdentidadeCredencialPdf
+from zeny_project_handler.application.pdf_import import ResultadoImportacaoPdfs
 from zeny_project_handler.domain.enums import EstadoExecucaoAnalise
 from zeny_project_handler.domain.errors import DomainValidationError
 from zeny_project_handler.logging_config import operation_logger
+from zeny_project_handler.ports.pdf import LeitorPdfPort, ReferenciaFontePdf
 
+from .pdf_credentials import EstadoResolucaoCredencialPdf, ResolvedorCredenciaisPdf
 from .pdf_viewer import PdfViewerWidget
 from .review_panel import ReviewPanelWidget
 
@@ -55,12 +60,14 @@ class _PipelineWorker(QObject):
         project_id: UUID,
         cancellation: Event,
         correlation_id: str,
+        senhas_documentos: dict[UUID, str] | None = None,
     ) -> None:
         super().__init__()
         self._service = service
         self._project_id = project_id
         self._cancellation = cancellation
         self._correlation_id = correlation_id
+        self._senhas_documentos = dict(senhas_documentos or {})
 
     @Slot()
     def run(self) -> None:
@@ -76,6 +83,7 @@ class _PipelineWorker(QObject):
                     self._project_id,
                     progresso=self.progress.emit,
                     cancelado=self._cancellation.is_set,
+                    senhas_documentos=self._senhas_documentos,
                 )
             except FluxoMvpCanceladoError as error:
                 observation.cancelled(error_code=error.__class__.__name__)
@@ -92,6 +100,7 @@ class _PipelineWorker(QObject):
                 observation.succeeded()
                 self.completed.emit(result)
             finally:
+                self._senhas_documentos.clear()
                 self.finished.emit()
 
 
@@ -107,6 +116,8 @@ class ProjectPanelWidget(QWidget):
         service: ServicoFluxoMvp,
         viewer: PdfViewerWidget,
         review_panel: ReviewPanelWidget,
+        leitor_pdf: LeitorPdfPort,
+        resolvedor_credenciais: ResolvedorCredenciaisPdf,
         state_path: Path,
         parent: QWidget | None = None,
     ) -> None:
@@ -115,6 +126,8 @@ class ProjectPanelWidget(QWidget):
         self._service = service
         self._viewer = viewer
         self._review_panel = review_panel
+        self._pdf_reader = leitor_pdf
+        self._credential_resolver = resolvedor_credenciais
         self._settings = QSettings(str(state_path), QSettings.Format.IniFormat)
         self._session: SessaoProjetoMvp | None = None
         self._updating_page_order = False
@@ -347,14 +360,51 @@ class ProjectPanelWidget(QWidget):
                 observation.cancelled()
                 return
             observation.succeeded(item_count=len(paths))
-            result = self._action(lambda: self._service.importar_pdfs(session.projeto.id, paths))
-            if result is None:
-                return
-            count = len(result.inspecoes)
-            self._activate(self._service.abrir_projeto(session.projeto.id))
-            self.status_changed.emit(
-                f"{count} PDF(s) adicionados; ajuste abaixo a ordem das páginas"
-            )
+            self._importar_selecao(session.projeto.id, paths)
+
+    def _importar_selecao(self, projeto_id: UUID, caminhos: tuple[Path, ...]) -> None:
+        importados = 0
+        cancelados = 0
+        tentativas_esgotadas = 0
+        falhas = 0
+        for caminho in caminhos:
+            try:
+                result = self._credential_resolver.executar(
+                    parent=self,
+                    caminho=caminho,
+                    acao=self._acao_importacao_pdf(projeto_id, caminho),
+                )
+            except (ApplicationError, DomainValidationError, PdfError, ValueError):
+                falhas += 1
+                continue
+            except Exception:
+                falhas += 1
+                continue
+            if result.estado is EstadoResolucaoCredencialPdf.CANCELADA:
+                cancelados += 1
+            elif result.estado is EstadoResolucaoCredencialPdf.TENTATIVAS_ESGOTADAS:
+                tentativas_esgotadas += 1
+            else:
+                importados += 1
+        if importados:
+            self._activate(self._service.abrir_projeto(projeto_id))
+        resumo = (
+            f"Importação concluída: {importados} adicionado(s), {cancelados} cancelado(s), "
+            f"{tentativas_esgotadas} sem senha válida e {falhas} com erro"
+        )
+        self.status_changed.emit(resumo)
+        if cancelados or tentativas_esgotadas or falhas:
+            QMessageBox.information(self, "Resumo da importação", resumo)
+
+    def _acao_importacao_pdf(
+        self,
+        projeto_id: UUID,
+        caminho: Path,
+    ) -> Callable[[str | None], ResultadoImportacaoPdfs]:
+        def execute(senha: str | None) -> ResultadoImportacaoPdfs:
+            return self._service.importar_pdfs(projeto_id, (caminho,), senha=senha)
+
+        return execute
 
     def _move_selected_page(self, offset: int) -> None:
         if self.processando:
@@ -467,6 +517,9 @@ class ProjectPanelWidget(QWidget):
             return
         if self.processando:
             return
+        senhas_documentos = self._preflight_credenciais_analise(session)
+        if senhas_documentos is None:
+            return
         self._cancellation = Event()
         self._ignore_pipeline_signals = False
         thread = QThread(self)
@@ -479,6 +532,7 @@ class ProjectPanelWidget(QWidget):
             session.projeto.id,
             self._cancellation,
             worker_observation.correlation_id,
+            senhas_documentos,
         )
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
@@ -496,6 +550,81 @@ class ProjectPanelWidget(QWidget):
         self._apply_operation_state()
         self.busy_changed.emit(True)
         thread.start()
+
+    def _preflight_credenciais_analise(
+        self,
+        session: SessaoProjetoMvp,
+    ) -> dict[UUID, str] | None:
+        fontes = {fonte.documento_id: fonte for fonte in session.fontes_pdf}
+        senhas: dict[UUID, str] = {}
+        for validados, documento in enumerate(session.projeto.documentos):
+            fonte = fontes.get(documento.id)
+            if fonte is None:
+                self._warn(
+                    "Análise não iniciada: uma origem PDF não está disponível para o preflight"
+                )
+                return None
+
+            try:
+                result = self._credential_resolver.executar(
+                    parent=self,
+                    caminho=fonte.caminho_canonico,
+                    identidade_sugerida=IdentidadeCredencialPdf.da_fonte(fonte),
+                    acao=self._acao_preflight_analise(
+                        documento.id,
+                        documento.sha256,
+                        fonte,
+                    ),
+                )
+            except (PdfError, ValueError) as error:
+                self._warn(f"Análise não iniciada no preflight: {error}")
+                return None
+            if result.estado is not EstadoResolucaoCredencialPdf.SUCESSO:
+                motivo = (
+                    "solicitação de senha cancelada"
+                    if result.estado is EstadoResolucaoCredencialPdf.CANCELADA
+                    else "limite de 3 tentativas de senha atingido"
+                )
+                self._warn(
+                    f"Análise não iniciada: {motivo} em {documento.nome_arquivo}; "
+                    f"{validados} PDF(s) já haviam sido validados"
+                )
+                return None
+            if result.senha is not None:
+                senhas[documento.id] = result.senha
+        return senhas
+
+    def _acao_preflight_analise(
+        self,
+        documento_id: UUID,
+        sha256_esperado: str,
+        fonte: ReferenciaFontePdf,
+    ) -> Callable[[str | None], bool]:
+        def execute(senha: str | None) -> bool:
+            return self._validar_credencial_analise(
+                documento_id,
+                sha256_esperado,
+                fonte,
+                senha,
+            )
+
+        return execute
+
+    def _validar_credencial_analise(
+        self,
+        documento_id: UUID,
+        sha256_esperado: str,
+        fonte: ReferenciaFontePdf,
+        senha: str | None,
+    ) -> bool:
+        sessao = self._pdf_reader.abrir_sessao(
+            fonte.caminho_canonico,
+            senha=senha,
+            documento_id=documento_id,
+            sha256_esperado=sha256_esperado,
+        )
+        sessao.fechar()
+        return True
 
     def cancelar_analise(self) -> None:
         if self._cancellation is not None:
@@ -610,6 +739,7 @@ class ProjectPanelWidget(QWidget):
             if not self._viewer.carregar_projeto(
                 source_paths,
                 documentos=session.projeto.documentos,
+                fontes=session.fontes_pdf,
                 ordem_paginas=session.projeto.ordem_leitura_paginas,
             ):
                 self._viewer.limpar()

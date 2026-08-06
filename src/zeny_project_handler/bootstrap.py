@@ -42,6 +42,7 @@ from zeny_project_handler.application.interpretation_pipeline import ExecutarPip
 from zeny_project_handler.application.managed_files import GerenciadorArquivosGerenciados
 from zeny_project_handler.application.mvp_workflow import ServicoFluxoMvp
 from zeny_project_handler.application.operation_coordinator import CoordenadorOperacoes
+from zeny_project_handler.application.pdf_credentials import ProvedorCredenciaisPdfMemoria
 from zeny_project_handler.application.pdf_import import ImportarPdfsNoProjeto
 from zeny_project_handler.application.project_portability import ServicoPortabilidadeProjeto
 from zeny_project_handler.config import AppSettings
@@ -142,6 +143,7 @@ def _compose_initialized_application(
         app_settings.data_directory,
         list_projects,
     )
+    pdf_credentials = ProvedorCredenciaisPdfMemoria()
     workflow_service = ServicoFluxoMvp(
         unit_of_work,
         catalogo_inicial_id=catalog.id,
@@ -174,6 +176,7 @@ def _compose_initialized_application(
             limite_bytes=app_settings.pdf_render_max_bytes,
         ),
         pdf_tile_cache_max_bytes=app_settings.pdf_tile_cache_max_bytes,
+        provedor_credenciais_pdf=pdf_credentials,
         review_service=ServicoRevisaoHumana(unit_of_work),
         workflow_service=workflow_service,
         portability_service=ServicoPortabilidadeProjeto(
