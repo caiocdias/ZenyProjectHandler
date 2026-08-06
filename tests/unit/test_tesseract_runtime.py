@@ -4,7 +4,7 @@ import os
 from collections.abc import Mapping
 from hashlib import sha256
 from pathlib import Path
-from subprocess import CompletedProcess
+from subprocess import CompletedProcess, TimeoutExpired
 from typing import cast
 from urllib.error import URLError
 
@@ -20,7 +20,11 @@ from zeny_project_handler.adapters.analysis.tesseract_runtime import (
     TESSDATA_PREFIX_ENVIRONMENT_VARIABLE,
     TESSERACT_PATH_ENVIRONMENT_VARIABLE,
     inspect_tesseract_runtime,
+    parse_available_languages,
     provision_portuguese_language,
+    select_ocr_languages,
+    tessdata_directory_from_language_output,
+    tesseract_subprocess_environment,
 )
 
 
@@ -118,6 +122,105 @@ def test_runtime_rejects_executable_when_list_langs_has_no_portuguese(
     assert "setup.bat" in result.diagnostico.remediacao
 
 
+def test_runtime_reports_invalid_configured_executable(tmp_path: Path) -> None:
+    result = inspect_tesseract_runtime(
+        tmp_path / "data",
+        {
+            "PATH": "",
+            TESSERACT_PATH_ENVIRONMENT_VARIABLE: str(tmp_path / "missing.exe"),
+        },
+    )
+
+    assert not result.portugues_pronto
+    assert result.diagnostico is not None
+    assert result.diagnostico.codigo == "ocr.caminho_tesseract_invalido"
+    assert "ZENY_TESSERACT_PATH" in result.diagnostico.remediacao
+
+
+def test_runtime_reports_list_langs_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    executable, _system_tessdata = _fake_installation(
+        tmp_path / "system",
+        {"eng": b"english"},
+    )
+
+    def timeout(arguments: tuple[str, ...], **_kwargs: object) -> CompletedProcess[str]:
+        raise TimeoutExpired(arguments, 15)
+
+    monkeypatch.setattr(
+        "zeny_project_handler.adapters.analysis.tesseract_runtime.subprocess.run",
+        timeout,
+    )
+
+    result = inspect_tesseract_runtime(
+        tmp_path / "data",
+        _environment(executable, tmp_path / "managed"),
+    )
+
+    assert result.diagnostico is not None
+    assert result.diagnostico.codigo == "ocr.consulta_idiomas_timeout"
+
+
+def test_runtime_accepts_valid_managed_data_and_rejects_later_tampering(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    managed_portuguese = b"managed portuguese"
+    executable, system_tessdata = _fake_installation(
+        tmp_path / "system",
+        {"eng": b"english"},
+    )
+    managed = tmp_path / "managed"
+    managed.mkdir()
+    (managed / "por.traineddata").write_bytes(managed_portuguese)
+    (managed / "eng.traineddata").write_bytes(b"english")
+    _install_fake_runner(monkeypatch, system_tessdata)
+    monkeypatch.setattr(
+        runtime_module,
+        "PORTUGUESE_TRAINEDDATA_SHA256",
+        sha256(managed_portuguese).hexdigest(),
+    )
+    environment = _environment(executable, managed)
+
+    ready = inspect_tesseract_runtime(tmp_path / "data", environment)
+    (managed / "por.traineddata").write_bytes(b"tampered after validation")
+    rejected = inspect_tesseract_runtime(tmp_path / "data", environment)
+
+    assert ready.portugues_pronto
+    assert ready.idiomas_selecionados == ("por", "eng")
+    assert rejected.diagnostico is not None
+    assert rejected.diagnostico.codigo == "ocr.checksum_portugues_invalido"
+
+
+def test_language_helpers_reject_invalid_data_and_use_child_environment(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ValueError, match="Nenhum idioma"):
+        parse_available_languages("List of available languages (0):\n")
+    with pytest.raises(ValueError, match="solicitado"):
+        select_ocr_languages(("por",), frozenset({"eng"}))
+    with pytest.raises(ValueError, match="preferencial"):
+        select_ocr_languages(None, frozenset({"deu"}))
+
+    parent_environment = {"SENTINEL": "unchanged"}
+    child_environment = tesseract_subprocess_environment(tmp_path, parent_environment)
+
+    assert child_environment[TESSDATA_PREFIX_ENVIRONMENT_VARIABLE] == str(tmp_path)
+    assert TESSDATA_PREFIX_ENVIRONMENT_VARIABLE not in parent_environment
+
+    executable, tessdata = _fake_installation(tmp_path / "fallback", {"eng": b"english"})
+    assert (
+        tessdata_directory_from_language_output(
+            "eng\n",
+            configured=None,
+            executable=executable,
+        )
+        == tessdata.resolve()
+    )
+
+
 def test_provision_without_admin_writes_only_to_managed_directory(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -193,6 +296,52 @@ def test_offline_provision_preserves_existing_venv_and_reports_remediation(
     assert "Conecte-se" in result.diagnostico.remediacao
     assert venv_marker.read_text(encoding="utf-8") == "preserve=true"
     assert not (managed / "por.traineddata").exists()
+
+
+def test_provision_reports_unwritable_managed_location(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    executable, system_tessdata = _fake_installation(
+        tmp_path / "system",
+        {"eng": b"english"},
+    )
+    _install_fake_runner(monkeypatch, system_tessdata)
+    managed_file = tmp_path / "not-a-directory"
+    managed_file.write_text("occupied", encoding="utf-8")
+
+    result = provision_portuguese_language(
+        tmp_path / "data",
+        _environment(executable, managed_file),
+    )
+
+    assert result.diagnostico is not None
+    assert result.diagnostico.codigo == "ocr.pasta_tessdata_indisponivel"
+    assert managed_file.read_text(encoding="utf-8") == "occupied"
+
+
+def test_provision_reports_failure_to_copy_installed_english(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    executable, system_tessdata = _fake_installation(
+        tmp_path / "system",
+        {"eng": b"english"},
+    )
+    _install_fake_runner(monkeypatch, system_tessdata)
+
+    def fail_copy(_source: Path, _target: Path) -> None:
+        raise PermissionError("read only")
+
+    monkeypatch.setattr(runtime_module, "_atomic_copy", fail_copy)
+
+    result = provision_portuguese_language(
+        tmp_path / "data",
+        _environment(executable, tmp_path / "managed"),
+    )
+
+    assert result.diagnostico is not None
+    assert result.diagnostico.codigo == "ocr.copia_ingles_falhou"
 
 
 def test_invalid_download_checksum_is_rejected_before_use(

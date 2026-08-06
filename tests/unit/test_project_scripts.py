@@ -60,6 +60,23 @@ def test_setup_preserves_completed_python_environment_when_ocr_is_offline() -> N
     assert "O setup NAO confirmou o OCR em portugues" in setup_script
 
 
+def test_portuguese_tessdata_provenance_is_pinned_and_documented() -> None:
+    from zeny_project_handler.adapters.analysis.tesseract_runtime import (
+        PORTUGUESE_TRAINEDDATA_SHA256,
+        TESSDATA_FAST_REVISION,
+    )
+
+    readme = script_text("README.md")
+    notices = script_text("THIRD_PARTY_NOTICES.md")
+    runtime_source = script_text("src/zeny_project_handler/adapters/analysis/tesseract_runtime.py")
+
+    for document in (readme, notices, runtime_source):
+        assert TESSDATA_FAST_REVISION in document
+        assert PORTUGUESE_TRAINEDDATA_SHA256 in document
+    assert "Apache-2.0" in notices
+    assert "tesseract-ocr/tessdata_fast" in notices
+
+
 def test_launcher_activates_venv_and_runs_application() -> None:
     launcher_script = script_text("ZenyProjectHandler.bat")
 
