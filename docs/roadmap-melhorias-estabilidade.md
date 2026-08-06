@@ -82,8 +82,8 @@ com o corpus completo. Seus resultados não substituem o gate básico.
 | 5. Backup degradado com confirmação explícita | CONCLUÍDA | 2, 3 | Nenhuma omissão silenciosa de PDF |
 | 6. Coordenador central de operações | CONCLUÍDA | 3, 4 | Operações incompatíveis não concorrem |
 | 7. Portabilidade assíncrona e UI não reentrante | CONCLUÍDA | 6 | UI responsiva, sem `processEvents()` manual |
-| 8. Preflight de substituição antes de mutar arquivos | PENDENTE | 6, 7 | Confirmação ocorre antes da troca física |
-| 9. Journal e recuperação de importações interrompidas | PENDENTE | 8 | Banco e arquivos reconciliados após queda |
+| 8. Preflight de substituição antes de mutar arquivos | CONCLUÍDA | 6, 7 | Confirmação ocorre antes da troca física |
+| 9. Journal e recuperação de importações interrompidas | CONCLUÍDA | 8 | Banco e arquivos reconciliados após queda |
 | 10. Limpeza segura de arquivos gerenciados | PENDENTE | 6, 9 | Exclusões não deixam fotos órfãs |
 | 11. Identidade verificada da origem por sessão | PENDENTE | 1 | Navegação não recalcula o PDF inteiro |
 | 12. Renderização por orçamento e região | PENDENTE | 11 | Pranchas grandes não exigem raster integral de 600 DPI |
@@ -653,7 +653,7 @@ Crie commits seccionados para as alterações, mantenha na branch main.
 ## Etapa 9 — Journal persistente e recuperação de importação interrompida
 
 **Achado original:** 12, parte de recuperação.  
-**Estado:** PENDENTE.  
+**Estado:** CONCLUÍDA.
 **Arquivos prováveis:** serviço de portabilidade, novo journal na pasta de dados, sequência de
 bootstrap, ADR 0008 e testes de injeção de falha.
 
@@ -675,6 +675,45 @@ bootstrap, ADR 0008 e testes de injeção de falha.
 - O último estado consistente do banco e dos arquivos é preservado; resíduos são limpos somente após
   confirmação.
 - Logs registram operação e fase sem caminhos sensíveis.
+
+### Registro de conclusão — 06/08/2026
+
+- A aplicação cria primeiro um journal JSON de formato 1 em
+  `project-files/.import-recovery/import-journal-v1.json`, com publicação por temporário irmão,
+  `fsync` e `os.replace`. Operação, projeto, pacote, plano, estado alvo, árvores anterior/nova, fase e
+  horário formam sua identidade. Os quatro caminhos persistidos são POSIX relativos e precisam
+  coincidir exatamente com os UUIDs sob a raiz gerenciada.
+- O workspace reservado por operação contém apenas `staging` e `previous`. Fingerprints de conteúdo
+  são calculados sem seguir links ou junções. Remoção de uma pasta publicada exige identidade
+  verificada; limpezas retomadas só alcançam o workspace exato já confirmado pela fase persistida.
+  Estrutura inesperada, árvore alterada, caminho hostil, versão desconhecida, JSON duplicado ou
+  resíduo sem journal bloqueia o bootstrap e orienta preservar `.import-recovery`, restaurar backup
+  ou solicitar suporte.
+- A migração `0005_import_commits` acrescenta o comprovante de operação, projeto e hashes do pacote,
+  plano e arquivos. Ele é inserido na mesma sessão e no mesmo commit do agregado importado. Na
+  reconciliação, comprovante integralmente compatível conserva a árvore nova e conclui a limpeza;
+  sua ausência restaura a árvore anterior. A fase declarada pelo journal nunca substitui essa prova
+  transacional.
+- O bootstrap migra o banco, reconcilia e só então persiste o catálogo inicial ou compõe serviços,
+  coordenador e janela. Falha de leitura, contenção ou ambiguidade descarta o engine e impede a
+  liberação de operações. Uma nova queda durante rollback ou limpeza deixa fases retomáveis; repetir
+  a recuperação depois do término é inerte.
+- Dez failpoints estáveis cobrem antes/depois da preparação, troca de arquivos, commit e limpeza,
+  incluindo a janela após o commit e antes da atualização do journal. Os testes também cobrem
+  recuperação interrompida nas duas decisões, repetição, resíduos órfãos, journal corrompido,
+  caminhos relativos hostis, estado ambíguo, escrita atômica e liberação do SQLite no bloqueio.
+- O logging estruturado aceita `phase`, `recovery_action` e `journal_version`. Eventos
+  `portability.import.journal` e `portability.import.recovery` permanecem correlacionáveis e não
+  incluem caminho absoluto, nome de arquivo ou conteúdo. README, especificação funcional e ADR 0008
+  documentam o protocolo e o procedimento acionável para bloqueio seguro.
+- Validações concluídas: conjunto focado de journal, persistência, portabilidade, logging e bootstrap
+  (`63 passed`); `pip check`; Ruff completo; `ruff format --check` (`173 files`); Mypy
+  (`173 source files`); e gate básico canônico. O resultado final foi `325 passed, 20 deselected`,
+  cobertura `85,19%`, complexidade média A (`3,9145`) e `RESULTADO FINAL: APROVADO`. O único aviso
+  foi o `PytestCacheWarning` ambiental já conhecido por falta de permissão para atualizar
+  `.pytest_cache`; não houve `ResourceWarning` nem falha de teste.
+- Commits de implementação e prova: `e7053cc` (`feat(portability): recover interrupted project
+  imports`) e `329ccfd` (`test(portability): cover journal crash recovery`).
 
 ### Mensagem para um novo chat do Codex
 

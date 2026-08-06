@@ -109,6 +109,19 @@ local. Depois da confirmação, pacote e destino são revalidados sob o coordena
 algum deles mudou, o plano é recusado como obsoleto e precisa ser inspecionado novamente, sem criar
 `.previous`, publicar arquivos ou deixar staging.
 
+Depois da confirmação, a substituição usa um journal persistente de formato 1 no namespace reservado
+`project-files/.import-recovery`. Cada fase é publicada atomicamente e o commit do projeto grava, na
+mesma transação SQLite, um comprovante com as identidades da operação, pacote, plano e árvore nova.
+Na inicialização seguinte, um comprovante compatível conclui a limpeza; sem ele, os arquivos
+anteriores são restaurados. A reconciliação pode ser repetida e termina antes de catálogo, serviços e
+janela ficarem disponíveis.
+
+Não edite nem apague manualmente `.import-recovery`. Journal ilegível, versão desconhecida, caminho
+fora da raiz, recibo divergente ou árvore ambígua bloqueiam a inicialização para evitar remoção
+insegura. Preserve a pasta e restaure um `.zphbackup` confiável ou encaminhe o diagnóstico ao suporte.
+O log `logs/application.jsonl` registra `portability.import.recovery`, fase, ação e IDs seguros, mas
+nunca caminhos do journal ou dos arquivos.
+
 Novos `.zphproj` e `.zphbackup` usam manifesto de formato 2; pacotes antigos de formato 1 continuam
 aceitos. O formato 2 registra `INTEGRO` ou `DEGRADADO` e, sem expor nomes ou caminhos, identifica por
 IDs anônimos cada arquivo omitido e seu tratamento.

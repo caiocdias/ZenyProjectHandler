@@ -377,6 +377,18 @@ sintéticas; a partição de teste privada não foi usada para criá-las.
   confirma esse plano antes de iniciar a aplicação. A aplicação adquire o coordenador de operações,
   revalida pacote, SQLite portátil e estado alvo e recusa planos obsoletos antes de staging,
   `.previous`, publicação de arquivos ou escrita no SQLite local.
+- A aplicação confirmada publica atomicamente um journal de formato 1 sob
+  `project-files/.import-recovery`. Ele contém apenas identidade, fase e caminhos POSIX relativos
+  derivados dos UUIDs. A mesma transação dos dados importados persiste um comprovante com os hashes
+  de pacote, plano e árvore publicada.
+- Depois das migrações e antes de liberar catálogo, serviços ou UI, o bootstrap reconcilia qualquer
+  journal pendente. Comprovante compatível conclui a publicação e limpa o estado anterior; ausência
+  de comprovante restaura a árvore anterior. Nova interrupção pode repetir a reconciliação sem mudar
+  o resultado final.
+- Journal inválido, caminho fora do namespace reservado, recibo divergente, link/junção ou estado
+  ambíguo bloqueia novas operações com orientação para preservar os resíduos e usar backup ou
+  suporte. Nenhuma dessas condições autoriza excluir um caminho inferido ou não comprovado. Logs de
+  recuperação expõem somente operação, fase, ação, versão e IDs seguros.
 - O backup completo usa `.zphbackup` e executa preflight sem efeitos colaterais antes de criar o
   snapshot. PDFs externos íntegros recebem cópias recuperáveis e referências reescritas. PDF ausente,
   alterado ou ilegível exige confirmação explícita; se aceito, o backup fica `DEGRADADO`, registra a

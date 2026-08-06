@@ -38,6 +38,26 @@ adulterado; copiar apenas o SQLite deixaria os PDFs externos fora do backup.
   recalcula o hash do pacote e repete a validação completa do manifesto e do banco. Qualquer
   divergência produz uma recusa por plano obsoleto e exige novo preflight antes de criar staging ou
   publicar arquivos.
+- Registrar cada aplicação autorizada no journal de formato 1
+  `project-files/.import-recovery/import-journal-v1.json`. Publicá-lo por arquivo temporário irmão,
+  `fsync` e substituição atômica antes de criar o workspace. O documento contém somente UUIDs,
+  hashes, fase, horário e caminhos POSIX relativos derivados dos UUIDs; nenhum caminho absoluto ou
+  livre vindo do pacote é aceito.
+- Reservar o workspace `project-files/.import-recovery/<operation-id>` para `staging` e `previous`.
+  Antes de trocar arquivos, assinar separadamente a árvore nova e a árvore anterior sem seguir links
+  ou junções. As fases persistidas distinguem preparação, arquivos trocados, banco confirmado,
+  restauração anterior e limpeza concluída.
+- Inserir em `import_commits` um comprovante com operação, projeto e identidades de pacote, plano e
+  arquivos na mesma transação que substitui o agregado. Esse registro é a prova do commit; a fase
+  escrita no journal, isoladamente, não é prova suficiente.
+- Reconciliar o journal depois das migrações e antes de compor catálogo, serviços ou janela. Um
+  comprovante compatível conclui a limpeza e conserva os arquivos novos. Sem comprovante, restaurar
+  a árvore anterior e descartar somente o workspace identificado. As duas rotas são idempotentes e
+  deixam o journal até a limpeza terminar.
+- Bloquear a inicialização quando versão, estrutura, identidade, recibo, contenção ou estado físico
+  forem corrompidos ou ambíguos. O diagnóstico orienta preservar `.import-recovery` e recuperar por
+  backup ou suporte; ele nunca tenta inferir outro destino nem executa exclusão ampla. Logs registram
+  operação, fase, ação, versão e IDs seguros, sem caminhos.
 - Adotar `.zphbackup` para o ambiente local completo: snapshot íntegro do SQLite, arquivos
   gerenciados e cópias dos PDFs originalmente externos. Reescrever no snapshot as referências dos
   PDFs para caminhos gerenciados recuperáveis.
@@ -74,3 +94,10 @@ continua removendo o agregado anterior e persistindo o pacote com seus IDs origi
 antecipa a autorização e não altera essa semântica. O preflight calcula a identidade do pacote antes
 e depois da validação para detectar troca durante a inspeção, e a aplicação repete esse custo para
 fechar a janela entre confirmação e publicação.
+
+Uma queda durante a substituição deixa um protocolo pequeno e autocontido para o bootstrap. A tabela
+de comprovantes cresce uma linha por importação confirmada e o namespace `.import-recovery` permanece
+reservado mesmo quando vazio. Isso troca um pequeno custo de armazenamento e migração pela decisão
+determinística entre concluir e restaurar, inclusive depois de outra queda durante a própria
+reconciliação. Corrupção externa deixa de ser tratada como rollback presumivelmente seguro e passa a
+exigir intervenção explícita.
