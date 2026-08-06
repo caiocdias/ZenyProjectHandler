@@ -85,7 +85,7 @@ com o corpus completo. Seus resultados não substituem o gate básico.
 | 8. Preflight de substituição antes de mutar arquivos | CONCLUÍDA | 6, 7 | Confirmação ocorre antes da troca física |
 | 9. Journal e recuperação de importações interrompidas | CONCLUÍDA | 8 | Banco e arquivos reconciliados após queda |
 | 10. Limpeza segura de arquivos gerenciados | CONCLUÍDA | 6, 9 | Exclusões não deixam fotos órfãs |
-| 11. Identidade verificada da origem por sessão | PENDENTE | 1 | Navegação não recalcula o PDF inteiro |
+| 11. Identidade verificada da origem por sessão | CONCLUÍDA | 1 | Navegação não recalcula o PDF inteiro |
 | 12. Renderização por orçamento e região | PENDENTE | 11 | Pranchas grandes não exigem raster integral de 600 DPI |
 | 13. Visualizador progressivo e assíncrono | PENDENTE | 6, 12 | Zoom detalhado sem congelamento ou resultados obsoletos |
 | 14. Assinatura reprodutível do OCR | PENDENTE | 1 | Cache muda com motor, idioma e configuração |
@@ -797,7 +797,8 @@ Crie commits seccionados para as alterações, mantenha na branch main.
 ## Etapa 11 — Identidade verificada da origem durante a sessão
 
 **Achado original:** 6.  
-**Estado:** PENDENTE.  
+**Estado:** CONCLUÍDA.
+
 **Arquivos prováveis:** porta PDF, `adapters/pdf/pymupdf_reader.py`, controlador/estado do visualizador
 e testes.
 
@@ -819,6 +820,40 @@ e testes.
 - Substituir ou modificar o arquivo invalida a sessão antes de renderizar conteúdo divergente.
 - Fechar/trocar documento libera recursos e dados de sessão.
 - Testes usam hasher instrumentado e arquivo modificado, sem depender apenas de tempo de execução.
+
+### Registro de conclusão — 06/08/2026
+
+- A porta PDF passou a expor `SessaoLeituraPdfPort`, criada por `abrir_sessao()`. A abertura calcula
+  SHA-256 uma vez, inventaria o documento e registra tamanho, `mtime`, `ctime`, dispositivo e inode.
+  Os metadados são comparados depois do hash e da inspeção para rejeitar uma origem que mude durante
+  a abertura.
+- A sessão do adaptador PyMuPDF guarda somente inspeção, identidade e credencial efêmera. Cada
+  rasterização confere os metadados antes e depois, abre seu próprio `fitz.Document` e o fecha em
+  `finally`. Alteração, substituição ou remoção invalida a sessão definitivamente e exige nova
+  abertura/inspeção, sem hash implícito nem cache global por caminho.
+- O visualizador mantém uma sessão por PDF do projeto aberto. Candidatas são encerradas quando uma
+  abertura composta falha; as anteriores são encerradas na troca; e todas são liberadas em `limpar()`
+  e `closeEvent()`. Documentos persistidos ainda validam o SHA-256 esperado ao abrir. O raster e o
+  `TransformadorCoordenadasPagina` continuaram recebendo os mesmos DPI, dimensões e rotações, sem
+  mudança de geometria ou overlays.
+- O hasher instrumentado comprovou uma chamada em uma sessão com três páginas, recorte e rotações.
+  Os testes também cobrem modificação e reabertura, uso posterior de sessão encerrada/invalidada,
+  troca de documento, encerramento do widget e movimentação real do PDF enquanto a sessão existe,
+  demonstrando a ausência de lock persistente no Windows.
+- `inspecionar()`, `verificar_origem()` e a renderização avulsa com hash esperado continuam fazendo
+  verificação integral. Os verificadores independentes de análise, importação e portabilidade não
+  foram convertidos para a checagem barata. O conjunto focado ampliado dessas fronteiras e da UI
+  aprovou `77 passed`.
+- O primeiro gate expôs uma falha nativa reproduzível do Qt 6.11 no painel de portabilidade: o
+  `QThread` recebia `deleteLater()` antes da finalização dos widgets. A ordem foi corrigida em commit
+  isolado, o arquivo focado aprovou `7 passed` e o gate canônico seguinte passou integralmente.
+- Gate básico aprovado: `pip check`; Ruff; `ruff format --check` (`176 files`); Mypy (`176 source
+  files`); `343 passed, 20 deselected`, cobertura `85,16%`; complexidade média A (`3,8665`); e
+  `RESULTADO FINAL: APROVADO`. Permaneceu somente o `PytestCacheWarning` ambiental já conhecido por
+  falta de permissão para atualizar `.pytest_cache`; não houve `ResourceWarning`.
+- Commits seccionados: `220d432` (`feat(pdf): add verified source sessions`), `31886df`
+  (`test(pdf): cover verified session lifecycle`) e `a2dc5dc`
+  (`fix(ui): defer portability thread deletion`).
 
 ### Mensagem para um novo chat do Codex
 

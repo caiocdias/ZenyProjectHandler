@@ -2,6 +2,7 @@
 
 - Status: aceita
 - Data: 2026-07-21
+- Atualizada: 2026-08-06
 
 ## Contexto
 
@@ -17,9 +18,11 @@ geometria apenas à largura e altura raster não é suficiente para garantir pos
 ## Decisão
 
 1. `LeitorPdfPort` é o contrato da aplicação. O primeiro adaptador usa PyMuPDF 1.28.x e somente APIs
-   públicas de leitura, inventário e rasterização.
-2. A inspeção calcula SHA-256 em fluxo, captura tamanho e data de modificação, abre o PDF sem salvar
-   e confirma novamente que o arquivo não mudou durante a operação.
+   públicas de leitura, inventário e rasterização. Para navegação repetida, a porta fornece uma
+   `SessaoLeituraPdfPort` explicitamente encerrável.
+2. A abertura/inspeção calcula SHA-256 uma vez em fluxo e captura tamanho, `mtime`, `ctime`, dispositivo
+   e identidade do arquivo. Os metadados são conferidos depois do hash e da inspeção; divergência
+   invalida a operação sem aceitar o inventário produzido.
 3. `PaginaDocumento` registra as matrizes públicas PDF -> página e página -> página rotacionada,
    além de `MediaBox`, `CropBox`, dimensões e rotação. `TransformadorCoordenadasPagina` faz round-trip
    entre espaço PDF, coordenadas normalizadas, pixels e cena gráfica.
@@ -34,6 +37,13 @@ geometria apenas à largura e altura raster não é suficiente para garantir pos
    referência são confirmados na mesma unidade de trabalho.
 8. `PdfGraphicsView` exibe raster RGB e sobreposições na mesma cena. Zoom é uma transformação da
    visão; rotação gera um novo raster e reaplica as geometrias pela transformação registrada.
+9. A sessão retém somente a inspeção, os metadados verificados e a credencial efêmera. Antes e
+   depois de cada rasterização ela faz uma comparação barata desses metadados. Cada uso abre e fecha
+   seu próprio `fitz.Document`; nenhum descritor permanece aberto entre usos, e a sessão é invalidada
+   definitivamente diante de remoção, substituição ou modificação da origem.
+10. Não existe cache global por caminho. O visualizador possui as sessões dos documentos atualmente
+    abertos e as encerra ao limpar, substituir ou fechar a interface. Inspeção/importação, análise e
+    portabilidade continuam calculando e comparando hashes integrais em suas fronteiras de integridade.
 
 ## Verificação
 
@@ -41,6 +51,10 @@ geometria apenas à largura e altura raster não é suficiente para garantir pos
   as amostras RGB branca/vermelha admitem tolerância máxima de 8 níveis por canal para acomodar
   antialiasing controlado.
 - O round-trip geométrico é exercitado em 72, 144 e 300 DPI e nas rotações 0, 90, 180 e 270 graus.
+- Um hasher instrumentado comprova um único SHA-256 por sessão ao navegar por páginas, recortes e
+  rotações. Alteração, remoção e movimentação da origem invalidam a sessão sem novo hash implícito.
+- O teste de movimentação ocorre com a sessão ainda viva, comprovando no Windows que nenhum handle
+  persistente bloqueia backup, restauração ou substituição do arquivo.
 - As nove amostras formais privadas são endereçadas exclusivamente pelos hashes do manifesto.
   PDFs exploratórios adicionais em `examples/` são descobertos e identificados apenas pelo hash em
   smoke tests locais somente leitura, sem exigir inclusão no manifesto. Nomes e conteúdo sensível
@@ -53,6 +67,8 @@ geometria apenas à largura e altura raster não é suficiente para garantir pos
   serão tratados na etapa 10; até lá a ausência ou divergência de hash é reportada sem substituir a
   referência silenciosamente.
 - Inventários podem ser recriados a partir do PDF e não aumentam o payload canônico do projeto.
+- Uma sessão invalidada não tenta se recuperar por caminho nem recalcula o hash silenciosamente: o
+  chamador precisa abrir e inspecionar a origem novamente.
 - A interface desta etapa abre um PDF avulso. Vincular a importação a um projeto escolhido na
   interface depende das telas de gestão de projeto posteriores, embora o caso de uso transacional já
   esteja disponível.
