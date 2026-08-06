@@ -18,6 +18,7 @@ from tests.pdf_fixtures import (
 
 from zeny_project_handler.adapters.analysis import JsonAnalysisCache, PyMuPdfDocumentAnalyzer
 from zeny_project_handler.adapters.analysis import pymupdf_analyzer as analyzer_module
+from zeny_project_handler.adapters.analysis import pymupdf_ocr as ocr_module
 from zeny_project_handler.adapters.analysis.pymupdf_ocr import (
     _deduplicate_tiled_candidates,
     _extract_marked_equipment_labels,
@@ -96,6 +97,26 @@ class FakeAnalyzer:
 
 class OtherFakeOcr(FakeOcr):
     nome = "outro-ocr"
+
+
+class CharacterizationOcr(FakeOcr):
+    def reconhecer_identificador(
+        self,
+        _pagina: PaginaRasterOcr,
+    ) -> tuple[TrechoTextoOcr, ...]:
+        return ()
+
+    def reconhecer_rotulo_operacional(
+        self,
+        _pagina: PaginaRasterOcr,
+    ) -> tuple[TrechoTextoOcr, ...]:
+        return ()
+
+    def reconhecer_bloco_operacional(
+        self,
+        _pagina: PaginaRasterOcr,
+    ) -> tuple[TrechoTextoOcr, ...]:
+        return ()
 
 
 class FakeTargetedOcr:
@@ -395,6 +416,125 @@ def test_dense_vector_page_triggers_ocr_even_with_native_text(tmp_path: Path) ->
     assert [page.pagina_numero for page in ocr.pages] == [1] * 9
     assert all(page.dpi == 450 for page in ocr.pages)
     assert any(item.tipo is TipoEvidencia.OCR for item in result.evidencias)
+
+
+def test_conditional_ocr_preserves_partial_candidates_and_diagnostic_order(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    request = replace(
+        _request(create_analysis_pdf(tmp_path / "conditional-characterization.pdf")),
+        configuracao=ConfiguracaoAnaliseDocumento(minimo_vetores_para_ocr=1),
+    )
+
+    def candidate(key: str, text: str, x: str) -> CandidatoEvidenciaDocumento:
+        return CandidatoEvidenciaDocumento(
+            chave_estavel=key,
+            pagina_numero=3,
+            tipo=TipoEvidencia.OCR,
+            geometria=GeometriaNormalizada(
+                tipo=TipoGeometria.CAIXA,
+                pontos=(
+                    PontoNormalizado(Decimal(x), Decimal("0.20")),
+                    PontoNormalizado(Decimal(x) + Decimal("0.10"), Decimal("0.30")),
+                ),
+            ),
+            origem_pdf=OrigemObjetoPdf(),
+            conteudo_bruto=text,
+            atributos_extraidos=(("motor_ocr", key),),
+        )
+
+    general = candidate("geral", "TEXTO GERAL", "0.10")
+    linear = candidate("linear", "V1-2", "0.60")
+
+    def general_candidates(
+        *_args: object,
+        **_kwargs: object,
+    ) -> tuple[CandidatoEvidenciaDocumento, ...]:
+        return (general,)
+
+    def fail(*_args: object, **_kwargs: object) -> tuple[CandidatoEvidenciaDocumento, ...]:
+        raise RuntimeError("falha caracterizada")
+
+    def linear_candidates(
+        *_args: object,
+        **_kwargs: object,
+    ) -> tuple[CandidatoEvidenciaDocumento, ...]:
+        return (linear,)
+
+    monkeypatch.setattr(ocr_module, "_extract_ocr_tiled", general_candidates)
+    monkeypatch.setattr(ocr_module, "_extract_point_identifiers", fail)
+    monkeypatch.setattr(ocr_module, "_extract_blue_operational_identifiers", linear_candidates)
+    monkeypatch.setattr(ocr_module, "_extract_linear_operational_labels", fail)
+    monkeypatch.setattr(ocr_module, "_extract_marked_equipment_labels", fail)
+
+    candidates, diagnostics = ocr_module._conditional_ocr(
+        object(),
+        3,
+        request,
+        CharacterizationOcr(),
+        native_characters=100,
+        image_coverage=Decimal(0),
+        vector_count=1,
+        image_candidates=(),
+    )
+
+    assert [item.chave_estavel for item in candidates] == ["geral", "linear"]
+    assert [item.codigo for item in diagnostics] == [
+        "analise.ocr_identificadores_falhou",
+        "analise.ocr_rotulos_lineares_falhou",
+        "analise.ocr_equipamentos_marcados_falhou",
+    ]
+    assert [item.extrator for item in diagnostics] == [
+        "ocr-identificadores",
+        "ocr-rotulos-lineares",
+        "ocr-equipamentos-marcados",
+    ]
+    assert all(item.pagina_numero == 3 for item in diagnostics)
+
+
+def test_conditional_ocr_general_failure_short_circuits_targeted_extraction(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    request = replace(
+        _request(create_analysis_pdf(tmp_path / "conditional-failure.pdf")),
+        configuracao=ConfiguracaoAnaliseDocumento(minimo_vetores_para_ocr=1),
+    )
+    targeted_calls = 0
+
+    def fail_general(
+        *_args: object,
+        **_kwargs: object,
+    ) -> tuple[CandidatoEvidenciaDocumento, ...]:
+        raise RuntimeError("falha geral")
+
+    def targeted(
+        *_args: object,
+        **_kwargs: object,
+    ) -> tuple[CandidatoEvidenciaDocumento, ...]:
+        nonlocal targeted_calls
+        targeted_calls += 1
+        return ()
+
+    monkeypatch.setattr(ocr_module, "_extract_ocr_tiled", fail_general)
+    monkeypatch.setattr(ocr_module, "_extract_point_identifiers", targeted)
+
+    candidates, diagnostics = ocr_module._conditional_ocr(
+        object(),
+        7,
+        request,
+        CharacterizationOcr(),
+        native_characters=100,
+        image_coverage=Decimal(0),
+        vector_count=1,
+        image_candidates=(),
+    )
+
+    assert candidates == ()
+    assert [item.codigo for item in diagnostics] == ["analise.ocr_falhou"]
+    assert diagnostics[0].pagina_numero == 7
+    assert targeted_calls == 0
 
 
 def test_targeted_ocr_reads_each_green_operational_label_below_point() -> None:

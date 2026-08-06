@@ -4,7 +4,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5
 
 from zeny_project_handler.adapters.catalog import carregar_catalogo_inicial
 from zeny_project_handler.adapters.compliance import (
@@ -14,10 +14,15 @@ from zeny_project_handler.adapters.compliance import (
 from zeny_project_handler.application.analysis_regions import RegiaoAnalise
 from zeny_project_handler.application.compliance_evaluation import avaliar_regras_conformidade
 from zeny_project_handler.application.human_review import SessaoRevisao
-from zeny_project_handler.application.project_compliance import analisar_conformidade_projeto
+from zeny_project_handler.application.project_compliance import (
+    _document_control_facts,
+    _region_facts,
+    analisar_conformidade_projeto,
+)
 from zeny_project_handler.domain.analysis import (
     EvidenciaDocumento,
     ExecucaoAnalise,
+    OrigemObjetoPdf,
     PropostaElemento,
 )
 from zeny_project_handler.domain.catalog import JsonPrimitive, TipoCabo
@@ -33,6 +38,7 @@ from zeny_project_handler.domain.enums import (
     EstadoRevisao,
     SituacaoProjeto,
     TipoEvidencia,
+    TipoOrigemPdf,
 )
 from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler.domain.project_metadata import MetadadosProjeto
@@ -139,6 +145,134 @@ def test_documentation_lists_every_labeled_header_and_servitude_value() -> None:
     assert header["Dispositivo"] == "CH. FUSÍVEL 31399-300A-6T-C"
     assert header["Serviço"] == "EXTENSÃO DE REDE / LIGAÇÃO NOVA"
     assert header["Aprovação"] == "Não informado"
+
+
+def test_document_control_facts_preserve_branch_order_ids_and_provenance() -> None:
+    session = _session_with_document_controls()
+    document = session.projeto.documentos[0]
+    execution = session.execucoes[0]
+    page_id = document.paginas[0].id
+    servitude = _text_evidence(execution.id, page_id, "SERVIDÃO", "0.20", "0.18")
+    servitude_field = _text_evidence(
+        execution.id,
+        page_id,
+        "EXTENSÃO: 135m",
+        "0.20",
+        "0.20",
+    )
+    stamp = replace(
+        _text_evidence(execution.id, page_id, "APROVADO", "0.80", "0.20"),
+        origem_pdf=OrigemObjetoPdf(
+            tipo=TipoOrigemPdf.ANOTACAO,
+            indice_anotacao=0,
+            subtipo_anotacao="Stamp",
+        ),
+    )
+    empty_signature = replace(
+        _text_evidence(execution.id, page_id, "Assinatura", "0.72", "0.88"),
+        atributos_extraidos=(
+            ("tipo_campo_formulario", "Sig"),
+            ("campo_formulario_preenchido", False),
+        ),
+    )
+    signed_signature = replace(
+        _text_evidence(execution.id, page_id, "Responsável técnico", "0.75", "0.90"),
+        atributos_extraidos=(
+            ("tipo_campo_formulario", "Sig"),
+            ("campo_formulario_preenchido", True),
+        ),
+    )
+    evidence = (
+        servitude,
+        servitude_field,
+        stamp,
+        empty_signature,
+        signed_signature,
+    )
+    target_id = uuid5(document.id, "characterization:document")
+
+    first = _document_control_facts(document, target_id, evidence)
+    second = _document_control_facts(document, target_id, evidence)
+    facts, items = first
+
+    assert first == second
+    assert [fact.chave for fact in facts] == [
+        "documento.servidao_mencionada",
+        "documento.carimbo_candidato_quantidade",
+        "documento.assinatura_pdf_preenchida",
+    ]
+    assert [fact.id for fact in facts] == [
+        uuid5(
+            target_id,
+            f"documento.servidao_mencionada:True:menção textual:{servitude.id}",
+        ),
+        uuid5(
+            target_id,
+            "documento.carimbo_candidato_quantidade:1:"
+            f"anotações PDF Stamp na zona de cabeçalho/rodapé:{stamp.id}",
+        ),
+        uuid5(
+            target_id,
+            "documento.assinatura_pdf_preenchida:True:campo PDF /Sig preenchido:"
+            f"{signed_signature.id}",
+        ),
+    ]
+    assert [(item.grupo, item.estado) for item in items] == [
+        ("Servidão", "IDENTIFICADO"),
+        ("Carimbos e selos", "REQUER_REVISAO_VISUAL"),
+        ("Assinaturas", "ASSINATURA_PDF_PRESENTE"),
+    ]
+    assert items[0].evidencia_ids == (servitude_field.id,)
+    assert items[1].evidencia_ids == (stamp.id,)
+    assert items[2].evidencia_ids == (
+        empty_signature.id,
+        signed_signature.id,
+    )
+
+
+def test_region_facts_preserve_semantic_order_and_deterministic_ids() -> None:
+    session = _session_with_document_controls()
+    region = session.regioes[0]
+    execution = session.execucoes[0]
+    risk = _text_evidence(
+        execution.id,
+        region.pagina_id,
+        "RISCO DE ABALROAMENTO AVALIADO",
+        "0.32",
+        "0.36",
+    )
+    session = replace(session, evidencias=(*session.evidencias, risk))
+    target = AlvoConformidade(
+        id=uuid5(region.id, "characterization:region"),
+        tipo=TipoEscopoConformidade.REGIAO,
+        rotulo="Região caracterizada",
+        referencia_id=region.id,
+        pagina_id=region.pagina_id,
+        geometria=region.geometria,
+    )
+
+    first = _region_facts(session, region_targets={region.id: target})
+    second = _region_facts(session, region_targets={region.id: target})
+
+    assert first == second
+    assert [fact.chave for fact in first] == [
+        "regiao.equipamento_instalar",
+        "regiao.equipamento_classe",
+        "rede.contexto_urbano",
+        "regiao.risco_abalroamento_avaliado",
+        "cabo.tecnologia",
+    ]
+    assert len({fact.id for fact in first}) == len(first)
+    assert next(
+        fact for fact in first if fact.chave == "regiao.risco_abalroamento_avaliado"
+    ).evidencia_ids == (risk.id,)
+    assert [fact.valor for fact in first] == [
+        True,
+        "TRANSFORMADOR",
+        True,
+        True,
+        "PROTEGIDA",
+    ]
 
 
 def test_compliance_requires_collision_review_and_honors_documented_span_exception() -> None:

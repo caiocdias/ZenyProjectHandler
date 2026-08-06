@@ -4,7 +4,9 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
+from tests.factories import complete_project
 
+from zeny_project_handler.application.mvp_workflow import _project_without_documents
 from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.domain.documents import DocumentoProjeto, PaginaDocumento
 from zeny_project_handler.domain.enums import (
@@ -12,6 +14,7 @@ from zeny_project_handler.domain.enums import (
     EstadoConexao,
     NivelRede,
     SituacaoProjeto,
+    TipoAcaoRevisaoManual,
     TipoPontoRede,
     TipoVinculoObra,
 )
@@ -27,6 +30,8 @@ from zeny_project_handler.domain.project import (
     PontoRede,
     Poste,
     Projeto,
+    RegistroRevisaoManual,
+    RelacaoConfirmada,
     TerminalEquipamento,
     validar_projeto_com_catalogo,
 )
@@ -37,6 +42,62 @@ from zeny_project_handler.domain.values import (
     GeometriaDocumento,
     PontoNormalizado,
 )
+
+
+def test_project_without_documents_preserves_order_and_prunes_transitive_references(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    project = complete_project(catalogo_inicial)
+    existing_pole, retained_removed_pole, retained_installed_pole = project.elementos[:3]
+    removed_relation = RelacaoConfirmada(
+        id=uuid4(),
+        tipo_relacao="REFERENCIA",
+        origem_id=existing_pole.id,
+        destino_id=retained_removed_pole.id,
+    )
+    retained_relation = RelacaoConfirmada(
+        id=uuid4(),
+        tipo_relacao="REFERENCIA",
+        origem_id=retained_removed_pole.id,
+        destino_id=retained_installed_pole.id,
+    )
+    removed_history = RegistroRevisaoManual(
+        id=uuid4(),
+        acao=TipoAcaoRevisaoManual.CRIAR_RELACAO,
+        referencia_criada_id=removed_relation.id,
+        revisor="fixture",
+        realizada_em=datetime(2026, 8, 6, 10, tzinfo=UTC),
+    )
+    retained_history = RegistroRevisaoManual(
+        id=uuid4(),
+        acao=TipoAcaoRevisaoManual.CRIAR_RELACAO,
+        referencia_criada_id=retained_relation.id,
+        revisor="fixture",
+        realizada_em=datetime(2026, 8, 6, 10, tzinfo=UTC),
+    )
+    project = replace(
+        project,
+        relacoes_confirmadas=(removed_relation, retained_relation),
+        historico_revisao_manual=(removed_history, retained_history),
+    )
+    document = project.documentos[0]
+    page_id = document.paginas[0].id
+
+    result = _project_without_documents(project, {document.id}, {page_id})
+
+    assert project.documentos == (document,)
+    assert result.documentos == ()
+    assert result.ordem_leitura_paginas == ()
+    assert [item.id for item in result.elementos] == [
+        retained_removed_pole.id,
+        retained_installed_pole.id,
+    ]
+    assert [item.id for item in result.pontos_rede] == [project.pontos_rede[1].id]
+    assert result.terminais == ()
+    assert result.conexoes_internas == ()
+    assert result.vinculos_obra == project.vinculos_obra
+    assert result.relacoes_confirmadas == (retained_relation,)
+    assert result.historico_revisao_manual == (retained_history,)
 
 
 def option_id(catalog: CatalogoTecnico, group_key: str, label: str) -> UUID:

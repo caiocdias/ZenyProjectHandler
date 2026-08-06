@@ -365,9 +365,18 @@ def test_cable_uses_solid_path_between_same_situation_poles(
         ),
     )
 
-    result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
+    interpreter = InterpretadorRegrasExplicitas(request.registro)
+    result = interpreter.interpretar(request)
+    repeated = interpreter.interpretar(request)
 
     cables = tuple(item for item in result.elementos if item.categoria is CategoriaElemento.CABO)
+    repeated_cables = tuple(
+        item for item in repeated.elementos if item.categoria is CategoriaElemento.CABO
+    )
+    assert [item.id for item in cables] == [item.id for item in repeated_cables]
+    assert [item.evidencia_ids for item in cables] == [
+        item.evidencia_ids for item in repeated_cables
+    ]
     assert len(cables) == 2
     assert all(item.geometria == solid_path.geometria for item in cables), [
         (item.codigo_observado, item.geometria, dict(item.atributos_sugeridos)) for item in cables
@@ -379,6 +388,12 @@ def test_cable_uses_solid_path_between_same_situation_poles(
         "vetor_ligando_postes",
         "vetor_compartilhado_do_vao",
     }
+    assert all(item.evidencia_ids == tuple(sorted(item.evidencia_ids, key=str)) for item in cables)
+    assert all(
+        item.justificativa is not None
+        and "O identificador V1-2 fixou as extremidades em P1 e P2." in item.justificativa
+        for item in cables
+    )
     installed_pole_ids = {
         item.id
         for item in result.elementos

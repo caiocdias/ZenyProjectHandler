@@ -98,6 +98,33 @@ def test_tsv_parser_does_not_treat_literal_quotes_as_csv_quoting() -> None:
     assert [item.texto for item in result] == ['"Seu dia', 'ASTA"']
 
 
+def test_tsv_parser_preserves_group_order_and_skips_malformed_rows() -> None:
+    tsv = "\n".join(
+        (
+            "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext",
+            "5\t1\t2\t1\t1\t1\t-10\t90\t30\t20\t120\tSEGUNDA",
+            "5\t1\t1\t1\t1\t1\t10\t20\t20\t10\t80\tPRIMEIRA",
+            "5\t1\t1\t1\t1\t2\t35\t20\t20\t10\tinválida\tIGNORADA",
+            "5\t1\t1\t1\t1\t3\t60\t20\t20\t10\t-1\tIGNORADA",
+            "linha\ttruncada",
+        )
+    )
+
+    result = _parse_tsv(tsv, width=100, height=100)
+
+    assert [item.texto for item in result] == ["PRIMEIRA", "SEGUNDA"]
+    assert result[0].caixa_normalizada == (0.1, 0.2, 0.3, 0.3)
+    assert result[0].confianca == 0.8
+    assert result[1].caixa_normalizada == (0.0, 0.9, 0.2, 1.0)
+    assert result[1].confianca == 1.0
+
+
+@pytest.mark.parametrize(("width", "height"), ((0, 100), (100, 0), (-1, 100)))
+def test_tsv_parser_rejects_non_positive_raster_dimensions(width: int, height: int) -> None:
+    with pytest.raises(ValueError, match="positivas"):
+        _parse_tsv("", width=width, height=height)
+
+
 def test_capability_is_real_normalized_cached_and_stable_across_machine_paths(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
