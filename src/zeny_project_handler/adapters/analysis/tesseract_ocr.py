@@ -328,48 +328,60 @@ def _ppm_bytes(page: PaginaRasterOcr) -> bytes:
 def _parse_tsv(tsv: str, *, width: int, height: int) -> tuple[TrechoTextoOcr, ...]:
     if width < 1 or height < 1:
         raise ValueError("Dimensões do raster devem ser positivas")
+    groups = _tsv_word_groups(tsv)
+    return tuple(_recognized_tsv_line(groups[key], width, height) for key in sorted(groups))
+
+
+def _tsv_word_groups(tsv: str) -> dict[tuple[str, str, str, str], list[dict[str, str]]]:
     groups: dict[tuple[str, str, str, str], list[dict[str, str]]] = defaultdict(list)
     lines = tsv.splitlines()
     if not lines:
-        return ()
+        return groups
     header = lines[0].split("\t")
     for raw_line in lines[1:]:
-        values = raw_line.split("\t", maxsplit=len(header) - 1)
-        if len(values) != len(header):
+        row = _tsv_word_row(header, raw_line)
+        if row is None:
             continue
-        row = dict(zip(header, values, strict=True))
-        text = (row.get("text") or "").strip()
-        try:
-            confidence = float(row.get("conf", "-1"))
-        except ValueError:
-            continue
-        if text and confidence >= 0:
-            key = (
-                row.get("page_num") or "",
-                row.get("block_num") or "",
-                row.get("par_num") or "",
-                row.get("line_num") or "",
-            )
-            groups[key].append(row)
-
-    recognized_lines = []
-    for key in sorted(groups):
-        words = groups[key]
-        left = min(int(word["left"]) for word in words)
-        top = min(int(word["top"]) for word in words)
-        right = max(int(word["left"]) + int(word["width"]) for word in words)
-        bottom = max(int(word["top"]) + int(word["height"]) for word in words)
-        confidence = sum(float(word["conf"]) for word in words) / (100 * len(words))
-        recognized_lines.append(
-            TrechoTextoOcr(
-                texto=" ".join(word["text"].strip() for word in words),
-                caixa_normalizada=(
-                    max(0.0, min(1.0, left / width)),
-                    max(0.0, min(1.0, top / height)),
-                    max(0.0, min(1.0, right / width)),
-                    max(0.0, min(1.0, bottom / height)),
-                ),
-                confianca=max(0.0, min(1.0, confidence)),
-            )
+        key = (
+            row.get("page_num") or "",
+            row.get("block_num") or "",
+            row.get("par_num") or "",
+            row.get("line_num") or "",
         )
-    return tuple(recognized_lines)
+        groups[key].append(row)
+    return groups
+
+
+def _tsv_word_row(header: list[str], raw_line: str) -> dict[str, str] | None:
+    values = raw_line.split("\t", maxsplit=len(header) - 1)
+    if len(values) != len(header):
+        return None
+    row = dict(zip(header, values, strict=True))
+    text = (row.get("text") or "").strip()
+    try:
+        confidence = float(row.get("conf", "-1"))
+    except ValueError:
+        return None
+    return row if text and confidence >= 0 else None
+
+
+def _recognized_tsv_line(
+    words: list[dict[str, str]],
+    width: int,
+    height: int,
+) -> TrechoTextoOcr:
+    left = min(int(word["left"]) for word in words)
+    top = min(int(word["top"]) for word in words)
+    right = max(int(word["left"]) + int(word["width"]) for word in words)
+    bottom = max(int(word["top"]) + int(word["height"]) for word in words)
+    confidence = sum(float(word["conf"]) for word in words) / (100 * len(words))
+    return TrechoTextoOcr(
+        texto=" ".join(word["text"].strip() for word in words),
+        caixa_normalizada=(
+            max(0.0, min(1.0, left / width)),
+            max(0.0, min(1.0, top / height)),
+            max(0.0, min(1.0, right / width)),
+            max(0.0, min(1.0, bottom / height)),
+        ),
+        confianca=max(0.0, min(1.0, confidence)),
+    )

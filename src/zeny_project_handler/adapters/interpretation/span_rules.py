@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import math
 import re
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from decimal import Decimal, InvalidOperation
 from itertools import pairwise
+from uuid import UUID
 
 from zeny_project_handler.domain.analysis import EvidenciaDocumento, PropostaElemento
-from zeny_project_handler.domain.catalog import CatalogoTecnico
+from zeny_project_handler.domain.catalog import CatalogoTecnico, JsonPrimitive
 from zeny_project_handler.domain.enums import (
     CategoriaElemento,
     TipoEvidencia,
@@ -34,6 +35,14 @@ _LENGTH_WITH_UNIT_PATTERN = re.compile(
 )
 _POINT_IDENTIFIER_PATTERN = re.compile(r"^P(\d{1,4})$")
 _SPAN_IDENTIFIER_PATTERN = re.compile(r"^V(\d{1,4})-(\d{1,4})$")
+
+
+@dataclass(frozen=True, slots=True)
+class _OperationalSpanContext:
+    evidence_by_id: dict[UUID, EvidenciaDocumento]
+    poles: dict[int, PropostaElemento]
+    vector_paths: dict[str, tuple[GeometriaDocumento, JsonPrimitive]]
+    evidence: tuple[EvidenciaDocumento, ...]
 
 
 def associar_tracados_de_cabos(
@@ -87,7 +96,23 @@ def _associate_operational_span_endpoints(
     proposals: tuple[PropostaElemento, ...],
     evidence: tuple[EvidenciaDocumento, ...],
 ) -> tuple[PropostaElemento, ...]:
-    evidence_by_id = {item.id: item for item in evidence}
+    context = _operational_span_context(proposals, evidence)
+    return tuple(_associate_operational_span(proposal, context) for proposal in proposals)
+
+
+def _operational_span_context(
+    proposals: tuple[PropostaElemento, ...],
+    evidence: tuple[EvidenciaDocumento, ...],
+) -> _OperationalSpanContext:
+    return _OperationalSpanContext(
+        evidence_by_id={item.id: item for item in evidence},
+        poles=_operational_poles(proposals),
+        vector_paths=_operational_vector_paths(proposals),
+        evidence=evidence,
+    )
+
+
+def _operational_poles(proposals: tuple[PropostaElemento, ...]) -> dict[int, PropostaElemento]:
     poles: dict[int, PropostaElemento] = {}
     for proposal in proposals:
         if proposal.categoria is not CategoriaElemento.POSTE:
@@ -96,7 +121,13 @@ def _associate_operational_span_endpoints(
         match = _POINT_IDENTIFIER_PATTERN.fullmatch(identifier)
         if match is not None:
             poles[int(match.group(1))] = proposal
-    vector_paths = {
+    return poles
+
+
+def _operational_vector_paths(
+    proposals: tuple[PropostaElemento, ...],
+) -> dict[str, tuple[GeometriaDocumento, JsonPrimitive]]:
+    return {
         str(dict(proposal.atributos_sugeridos).get("identificador_operacional") or ""): (
             proposal.geometria,
             dict(proposal.atributos_sugeridos).get("evidencia_geometria_id"),
@@ -107,98 +138,142 @@ def _associate_operational_span_endpoints(
         and dict(proposal.atributos_sugeridos).get("geometria_cabo_origem")
         == "vetor_ligando_postes"
     }
-    result = []
-    for proposal in proposals:
-        if proposal.categoria is not CategoriaElemento.CABO:
-            result.append(proposal)
-            continue
-        attributes = dict(proposal.atributos_sugeridos)
-        identifier = str(attributes.get("identificador_operacional") or "")
-        match = _SPAN_IDENTIFIER_PATTERN.fullmatch(identifier)
-        if match is None:
-            result.append(proposal)
-            continue
-        targeted_linear_label = any(
-            dict(item.atributos_extraidos).get("motor_ocr") == "tesseract-rotulo-linear-retificado"
-            for evidence_id in proposal.evidencia_ids
-            if (item := evidence_by_id.get(evidence_id)) is not None
+
+
+def _associate_operational_span(
+    proposal: PropostaElemento,
+    context: _OperationalSpanContext,
+) -> PropostaElemento:
+    if proposal.categoria is not CategoriaElemento.CABO:
+        return proposal
+    attributes = dict(proposal.atributos_sugeridos)
+    identifier = str(attributes.get("identificador_operacional") or "")
+    match = _SPAN_IDENTIFIER_PATTERN.fullmatch(identifier)
+    if match is None or not _has_targeted_linear_label(proposal, context.evidence_by_id):
+        return proposal
+    origin = context.poles.get(int(match.group(1)))
+    destination = context.poles.get(int(match.group(2)))
+    if not _valid_span_endpoints(origin, destination):
+        return proposal
+    assert origin is not None and destination is not None
+    geometry, geometry_evidence_token = _operational_span_geometry(
+        identifier,
+        origin,
+        destination,
+        context.vector_paths,
+    )
+    geometry_origin = attributes.get("geometria_cabo_origem") or (
+        "vetor_compartilhado_do_vao"
+        if identifier in context.vector_paths
+        else "identificador_operacional_de_vao"
+    )
+    attributes.update(
+        {
+            "geometria_cabo_origem": geometry_origin,
+            "ponto_operacional_origem": f"P{int(match.group(1))}",
+            "ponto_operacional_destino": f"P{int(match.group(2))}",
+        }
+    )
+    evidence_ids = set(proposal.evidencia_ids)
+    if geometry_evidence_token is not None:
+        attributes["evidencia_geometria_id"] = geometry_evidence_token
+        geometry_evidence_id = _evidence_id_for_token(
+            geometry_evidence_token,
+            context.evidence_by_id,
         )
-        if not targeted_linear_label:
-            result.append(proposal)
-            continue
-        origin = poles.get(int(match.group(1)))
-        destination = poles.get(int(match.group(2)))
-        if (
-            origin is None
-            or destination is None
-            or origin.geometria.pagina_id != destination.geometria.pagina_id
-        ):
-            result.append(proposal)
-            continue
-        shared_path = vector_paths.get(identifier)
-        if shared_path is None:
-            geometry = GeometriaDocumento.polilinha(
-                origin.geometria.pagina_id,
-                (
-                    _center_point(origin.geometria),
-                    _center_point(destination.geometria),
-                ),
-            )
-            geometry_evidence_token = None
-        else:
-            geometry, geometry_evidence_token = shared_path
-        geometry_origin = attributes.get("geometria_cabo_origem")
-        if geometry_origin is None:
-            geometry_origin = (
-                "vetor_compartilhado_do_vao"
-                if identifier in vector_paths
-                else "identificador_operacional_de_vao"
-            )
-        attributes.update(
-            {
-                "geometria_cabo_origem": geometry_origin,
-                "ponto_operacional_origem": f"P{int(match.group(1))}",
-                "ponto_operacional_destino": f"P{int(match.group(2))}",
-            }
-        )
-        evidence_ids = set(proposal.evidencia_ids)
-        if geometry_evidence_token is not None:
-            attributes["evidencia_geometria_id"] = geometry_evidence_token
-            geometry_evidence_id = next(
-                (
-                    evidence_id
-                    for evidence_id in evidence_by_id
-                    if str(evidence_id) == str(geometry_evidence_token)
-                ),
-                None,
-            )
-            if geometry_evidence_id is not None:
-                evidence_ids.add(geometry_evidence_id)
-        annotated = detectar_comprimento_anotado(geometry, evidence)
-        if annotated is not None:
-            length, length_evidence = annotated
-            attributes.update(
-                {
-                    "comprimento_m": length,
-                    "comprimento_origem": "anotacao_desenho",
-                    "evidencia_comprimento_id": str(length_evidence.id),
-                }
-            )
-            evidence_ids.add(length_evidence.id)
-        result.append(
-            replace(
-                proposal,
-                geometria=geometry,
-                evidencia_ids=tuple(sorted(evidence_ids, key=str)),
-                atributos_sugeridos=tuple(attributes.items()),
-                justificativa=(
-                    f"{proposal.justificativa or ''} "
-                    f"O identificador {identifier} fixou as extremidades em "
-                    f"P{int(match.group(1))} e P{int(match.group(2))}."
-                ).strip(),
-            )
-        )
-    return tuple(result)
+        if geometry_evidence_id is not None:
+            evidence_ids.add(geometry_evidence_id)
+    attributes, evidence_ids = _with_annotated_length(
+        attributes,
+        evidence_ids,
+        geometry,
+        context.evidence,
+    )
+    return replace(
+        proposal,
+        geometria=geometry,
+        evidencia_ids=tuple(sorted(evidence_ids, key=str)),
+        atributos_sugeridos=tuple(attributes.items()),
+        justificativa=(
+            f"{proposal.justificativa or ''} "
+            f"O identificador {identifier} fixou as extremidades em "
+            f"P{int(match.group(1))} e P{int(match.group(2))}."
+        ).strip(),
+    )
+
+
+def _has_targeted_linear_label(
+    proposal: PropostaElemento,
+    evidence_by_id: dict[UUID, EvidenciaDocumento],
+) -> bool:
+    return any(
+        dict(item.atributos_extraidos).get("motor_ocr") == "tesseract-rotulo-linear-retificado"
+        for evidence_id in proposal.evidencia_ids
+        if (item := evidence_by_id.get(evidence_id)) is not None
+    )
+
+
+def _valid_span_endpoints(
+    origin: PropostaElemento | None,
+    destination: PropostaElemento | None,
+) -> bool:
+    return bool(
+        origin is not None
+        and destination is not None
+        and origin.geometria.pagina_id == destination.geometria.pagina_id
+    )
+
+
+def _operational_span_geometry(
+    identifier: str,
+    origin: PropostaElemento,
+    destination: PropostaElemento,
+    vector_paths: dict[str, tuple[GeometriaDocumento, JsonPrimitive]],
+) -> tuple[GeometriaDocumento, JsonPrimitive]:
+    shared_path = vector_paths.get(identifier)
+    if shared_path is not None:
+        return shared_path
+    return (
+        GeometriaDocumento.polilinha(
+            origin.geometria.pagina_id,
+            (
+                _center_point(origin.geometria),
+                _center_point(destination.geometria),
+            ),
+        ),
+        None,
+    )
+
+
+def _evidence_id_for_token(
+    token: JsonPrimitive,
+    evidence_by_id: dict[UUID, EvidenciaDocumento],
+) -> UUID | None:
+    return next(
+        (evidence_id for evidence_id in evidence_by_id if str(evidence_id) == str(token)),
+        None,
+    )
+
+
+def _with_annotated_length(
+    attributes: dict[str, JsonPrimitive],
+    evidence_ids: set[UUID],
+    geometry: GeometriaDocumento,
+    evidence: tuple[EvidenciaDocumento, ...],
+) -> tuple[dict[str, JsonPrimitive], set[UUID]]:
+    annotated = detectar_comprimento_anotado(geometry, evidence)
+    if annotated is None:
+        return attributes, evidence_ids
+    length, length_evidence = annotated
+    attributes.update(
+        {
+            "comprimento_m": length,
+            "comprimento_origem": "anotacao_desenho",
+            "evidencia_comprimento_id": str(length_evidence.id),
+        }
+    )
+    evidence_ids.add(length_evidence.id)
+    return attributes, evidence_ids
 
 
 def _center_point(geometry: GeometriaDocumento) -> PontoNormalizado:

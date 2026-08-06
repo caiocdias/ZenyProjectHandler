@@ -16,6 +16,7 @@ from zeny_project_handler.domain.analysis import DiagnosticoAnalise, OrigemObjet
 from zeny_project_handler.domain.enums import TipoEvidencia, TipoGeometria
 from zeny_project_handler.ports.analysis import (
     CandidatoEvidenciaDocumento,
+    ConfiguracaoAnaliseDocumento,
     GeometriaNormalizada,
     MotorOcrBlocoOperacionalPort,
     MotorOcrIdentificadorPort,
@@ -107,6 +108,17 @@ class _RectifiedRegion:
     padding_pixels: int
 
 
+@dataclass(frozen=True, slots=True)
+class _OcrDecision:
+    use_full_page: bool
+    dense_vector_content: bool
+    regional_images: tuple[CandidatoEvidenciaDocumento, ...]
+
+    @property
+    def should_run(self) -> bool:
+        return self.use_full_page or bool(self.regional_images)
+
+
 def _conditional_ocr(
     page: Any,
     page_number: int,
@@ -120,6 +132,52 @@ def _conditional_ocr(
     config = request.configuracao
     if not config.habilitar_ocr_condicional:
         return (), ()
+    decision = _ocr_decision(
+        config,
+        native_characters=native_characters,
+        image_coverage=image_coverage,
+        vector_count=vector_count,
+        image_candidates=image_candidates,
+    )
+    if not decision.should_run:
+        return (), ()
+    if ocr_engine is None:
+        return (), (_ocr_unavailable_diagnostic(page_number),)
+    try:
+        candidates = _primary_ocr_candidates(
+            page,
+            page_number,
+            ocr_engine,
+            config,
+            decision,
+        )
+    except Exception:
+        return (), (_ocr_failure_diagnostic(page_number),)
+    if not decision.dense_vector_content or not isinstance(
+        ocr_engine,
+        MotorOcrIdentificadorPort,
+    ):
+        return candidates, ()
+    targeted_candidates, targeted_diagnostics = _targeted_ocr_candidates(
+        page,
+        page_number,
+        ocr_engine,
+        config,
+    )
+    return (
+        _deduplicate_tiled_candidates((*candidates, *targeted_candidates)),
+        targeted_diagnostics,
+    )
+
+
+def _ocr_decision(
+    config: ConfiguracaoAnaliseDocumento,
+    *,
+    native_characters: int,
+    image_coverage: Decimal,
+    vector_count: int,
+    image_candidates: tuple[CandidatoEvidenciaDocumento, ...],
+) -> _OcrDecision:
     has_enough_native_text = native_characters >= config.minimo_caracteres_texto_nativo
     has_relevant_raster = image_coverage >= config.area_imagem_minima_para_ocr
     has_dense_vector_content = vector_count >= config.minimo_vetores_para_ocr
@@ -130,74 +188,110 @@ def _conditional_ocr(
         if _candidate_area(item) >= config.area_imagem_regional_minima_para_ocr
         and _has_regional_ocr_resolution(item)
     )
-    if not use_full_page and not regional_images:
-        return (), ()
-    if ocr_engine is None:
-        return (), (
-            DiagnosticoAnalise(
-                codigo="analise.ocr_indisponivel",
-                mensagem=(
-                    "A página pode conter texto rasterizado, mas nenhum motor OCR está configurado."
-                ),
-                extrator="ocr",
-                pagina_numero=page_number,
-            ),
+    return _OcrDecision(use_full_page, has_dense_vector_content, regional_images)
+
+
+def _ocr_unavailable_diagnostic(page_number: int) -> DiagnosticoAnalise:
+    return DiagnosticoAnalise(
+        codigo="analise.ocr_indisponivel",
+        mensagem="A página pode conter texto rasterizado, mas nenhum motor OCR está configurado.",
+        extrator="ocr",
+        pagina_numero=page_number,
+    )
+
+
+def _ocr_failure_diagnostic(page_number: int) -> DiagnosticoAnalise:
+    return DiagnosticoAnalise(
+        codigo="analise.ocr_falhou",
+        mensagem="O extrator de ocr falhou nesta página; os demais resultados foram mantidos.",
+        extrator="ocr",
+        pagina_numero=page_number,
+    )
+
+
+def _primary_ocr_candidates(
+    page: Any,
+    page_number: int,
+    ocr_engine: MotorOcrPort,
+    config: ConfiguracaoAnaliseDocumento,
+    decision: _OcrDecision,
+) -> tuple[CandidatoEvidenciaDocumento, ...]:
+    if decision.use_full_page and decision.dense_vector_content:
+        return _extract_ocr_tiled(
+            page,
+            page_number,
+            ocr_engine,
+            config.dpi_ocr,
+            divisions=config.divisoes_ocr_conteudo_denso,
+            overlap=config.sobreposicao_ocr_conteudo_denso,
         )
-    try:
-        if use_full_page:
-            if has_dense_vector_content:
-                candidates = _extract_ocr_tiled(
-                    page,
-                    page_number,
-                    ocr_engine,
-                    config.dpi_ocr,
-                    divisions=config.divisoes_ocr_conteudo_denso,
-                    overlap=config.sobreposicao_ocr_conteudo_denso,
-                )
-            else:
-                candidates = _extract_ocr(page, page_number, ocr_engine, config.dpi_ocr)
-        else:
-            candidates = tuple(
-                candidate
-                for index, image in enumerate(regional_images)
-                for candidate in _extract_ocr_region(
-                    page,
-                    page_number,
-                    ocr_engine,
-                    config.dpi_ocr,
-                    bounds=_candidate_bounds(image),
-                    stable_suffix=f"imagem:{index}",
-                )
-            )
-    except Exception:
-        return (), (
-            DiagnosticoAnalise(
-                codigo="analise.ocr_falhou",
-                mensagem=(
-                    "O extrator de ocr falhou nesta página; os demais resultados foram mantidos."
-                ),
-                extrator="ocr",
-                pagina_numero=page_number,
-            ),
+    if decision.use_full_page:
+        return _extract_ocr(page, page_number, ocr_engine, config.dpi_ocr)
+    return tuple(
+        candidate
+        for index, image in enumerate(decision.regional_images)
+        for candidate in _extract_ocr_region(
+            page,
+            page_number,
+            ocr_engine,
+            config.dpi_ocr,
+            bounds=_candidate_bounds(image),
+            stable_suffix=f"imagem:{index}",
         )
-    if not has_dense_vector_content or not isinstance(
-        ocr_engine,
-        MotorOcrIdentificadorPort,
-    ):
-        return candidates, ()
+    )
+
+
+def _targeted_ocr_candidates(
+    page: Any,
+    page_number: int,
+    ocr_engine: MotorOcrPort,
+    config: ConfiguracaoAnaliseDocumento,
+) -> tuple[tuple[CandidatoEvidenciaDocumento, ...], tuple[DiagnosticoAnalise, ...]]:
+    assert isinstance(ocr_engine, MotorOcrIdentificadorPort)
     targeted_candidates: list[CandidatoEvidenciaDocumento] = []
     targeted_diagnostics: list[DiagnosticoAnalise] = []
+    point_candidates, point_diagnostics = _point_identifier_candidates(
+        page,
+        page_number,
+        ocr_engine,
+        config,
+    )
+    targeted_candidates.extend(point_candidates)
+    targeted_diagnostics.extend(point_diagnostics)
+    linear_candidates, linear_diagnostics = _linear_label_candidates(
+        page,
+        page_number,
+        ocr_engine,
+        config,
+    )
+    targeted_candidates.extend(linear_candidates)
+    targeted_diagnostics.extend(linear_diagnostics)
+    equipment_candidates, equipment_diagnostics = _marked_equipment_candidates(
+        page,
+        page_number,
+        ocr_engine,
+        config,
+    )
+    targeted_candidates.extend(equipment_candidates)
+    targeted_diagnostics.extend(equipment_diagnostics)
+    return tuple(targeted_candidates), tuple(targeted_diagnostics)
+
+
+def _point_identifier_candidates(
+    page: Any,
+    page_number: int,
+    ocr_engine: MotorOcrIdentificadorPort,
+    config: ConfiguracaoAnaliseDocumento,
+) -> tuple[tuple[CandidatoEvidenciaDocumento, ...], tuple[DiagnosticoAnalise, ...]]:
     try:
-        targeted_candidates.extend(
+        return (
             _extract_point_identifiers(
-                page,
-                page_number,
-                ocr_engine,
-                config.dpi_ocr_identificadores,
-            )
+                page, page_number, ocr_engine, config.dpi_ocr_identificadores
+            ),
+            (),
         )
     except Exception:
-        targeted_diagnostics.append(
+        return (), (
             DiagnosticoAnalise(
                 codigo="analise.ocr_identificadores_falhou",
                 mensagem=(
@@ -206,64 +300,81 @@ def _conditional_ocr(
                 ),
                 extrator="ocr-identificadores",
                 pagina_numero=page_number,
+            ),
+        )
+
+
+def _linear_label_candidates(
+    page: Any,
+    page_number: int,
+    ocr_engine: MotorOcrPort,
+    config: ConfiguracaoAnaliseDocumento,
+) -> tuple[tuple[CandidatoEvidenciaDocumento, ...], tuple[DiagnosticoAnalise, ...]]:
+    if not isinstance(ocr_engine, MotorOcrRotuloOperacionalPort):
+        return (), ()
+    candidates: list[CandidatoEvidenciaDocumento] = []
+    try:
+        candidates.extend(
+            _extract_blue_operational_identifiers(
+                page,
+                page_number,
+                ocr_engine,
+                config.dpi_ocr_identificadores,
             )
         )
-    if isinstance(ocr_engine, MotorOcrRotuloOperacionalPort):
-        try:
-            targeted_candidates.extend(
-                _extract_blue_operational_identifiers(
-                    page,
-                    page_number,
-                    ocr_engine,
-                    config.dpi_ocr_identificadores,
-                )
+        candidates.extend(
+            _extract_linear_operational_labels(
+                page,
+                page_number,
+                ocr_engine,
+                config.dpi_ocr_rotulos_inclinados,
             )
-            targeted_candidates.extend(
-                _extract_linear_operational_labels(
-                    page,
-                    page_number,
-                    ocr_engine,
-                    config.dpi_ocr_rotulos_inclinados,
-                )
-            )
-        except Exception:
-            targeted_diagnostics.append(
-                DiagnosticoAnalise(
-                    codigo="analise.ocr_rotulos_lineares_falhou",
-                    mensagem=(
-                        "A leitura localizada de rótulos inclinados falhou; "
-                        "os demais resultados de OCR foram mantidos."
-                    ),
-                    extrator="ocr-rotulos-lineares",
-                    pagina_numero=page_number,
-                )
-            )
-    if isinstance(ocr_engine, MotorOcrBlocoOperacionalPort):
-        try:
-            targeted_candidates.extend(
-                _extract_marked_equipment_labels(
-                    page,
-                    page_number,
-                    ocr_engine,
-                    config.dpi_ocr_rotulos_inclinados,
-                )
-            )
-        except Exception:
-            targeted_diagnostics.append(
-                DiagnosticoAnalise(
-                    codigo="analise.ocr_equipamentos_marcados_falhou",
-                    mensagem=(
-                        "A leitura localizada de equipamentos em caixas ou riscados falhou; "
-                        "os demais resultados de OCR foram mantidos."
-                    ),
-                    extrator="ocr-equipamentos-marcados",
-                    pagina_numero=page_number,
-                )
-            )
-    return (
-        _deduplicate_tiled_candidates((*candidates, *targeted_candidates)),
-        tuple(targeted_diagnostics),
-    )
+        )
+    except Exception:
+        return tuple(candidates), (
+            DiagnosticoAnalise(
+                codigo="analise.ocr_rotulos_lineares_falhou",
+                mensagem=(
+                    "A leitura localizada de rótulos inclinados falhou; "
+                    "os demais resultados de OCR foram mantidos."
+                ),
+                extrator="ocr-rotulos-lineares",
+                pagina_numero=page_number,
+            ),
+        )
+    return tuple(candidates), ()
+
+
+def _marked_equipment_candidates(
+    page: Any,
+    page_number: int,
+    ocr_engine: MotorOcrPort,
+    config: ConfiguracaoAnaliseDocumento,
+) -> tuple[tuple[CandidatoEvidenciaDocumento, ...], tuple[DiagnosticoAnalise, ...]]:
+    if not isinstance(ocr_engine, MotorOcrBlocoOperacionalPort):
+        return (), ()
+    try:
+        return (
+            _extract_marked_equipment_labels(
+                page,
+                page_number,
+                ocr_engine,
+                config.dpi_ocr_rotulos_inclinados,
+            ),
+            (),
+        )
+    except Exception:
+        return (), (
+            DiagnosticoAnalise(
+                codigo="analise.ocr_equipamentos_marcados_falhou",
+                mensagem=(
+                    "A leitura localizada de equipamentos em caixas ou riscados falhou; "
+                    "os demais resultados de OCR foram mantidos."
+                ),
+                extrator="ocr-equipamentos-marcados",
+                pagina_numero=page_number,
+            ),
+        )
 
 
 def _extract_ocr(
