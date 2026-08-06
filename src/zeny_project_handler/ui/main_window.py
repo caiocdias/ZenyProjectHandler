@@ -529,6 +529,7 @@ class MainWindow(QMainWindow):
             )
             event.ignore()
             return
+        self.pdf_viewer.encerrar()
         super().closeEvent(event)
         if event.isAccepted():
             if self._operation_bridge is not None:

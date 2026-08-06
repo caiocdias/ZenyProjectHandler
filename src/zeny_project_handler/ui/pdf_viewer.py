@@ -472,6 +472,11 @@ class PdfViewerWidget(QWidget):
         self.view.limpar()
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - API Qt
+        self.encerrar()
+        super().closeEvent(event)
+
+    def encerrar(self) -> None:
+        """Pare a fila e libere sessões mesmo quando o contêiner fecha o widget central."""
         if not self._closed:
             self._closed = True
             self._detail_timer.stop()
@@ -487,7 +492,6 @@ class PdfViewerWidget(QWidget):
             self._retired_sessions.clear()
             _close_sessions((*sessions, *retired))
             self._render_cache.limpar()
-        super().closeEvent(event)
 
     def ir_para_folha(self, numero: int) -> None:
         if not self._project_pages:

@@ -480,6 +480,29 @@ def test_pdf_viewer_closes_sessions_when_switching_document_and_closing(
 
 
 @pytest.mark.integration
+def test_main_window_stops_pdf_render_queue_when_closing_central_viewer(
+    qtbot: QtBot,
+    tmp_path: Path,
+    application_factory: ApplicationFactory,
+) -> None:
+    _application, window = application_factory(
+        [],
+        settings=AppSettings(data_directory=tmp_path / "close-main-viewer"),
+    )
+    qtbot.addWidget(window)
+    window.show()
+    source = create_golden_pdf(tmp_path / "central-viewer.pdf")
+
+    assert window.pdf_viewer.carregar_pdf(source)
+    qtbot.waitUntil(lambda: window.pdf_viewer._current_preview is not None)
+    assert window.pdf_viewer._render_queue.isRunning()
+
+    window.close()
+
+    assert not window.pdf_viewer._render_queue.isRunning()
+
+
+@pytest.mark.integration
 def test_pdf_viewer_reports_controlled_open_failure(
     qtbot: QtBot,
     tmp_path: Path,
