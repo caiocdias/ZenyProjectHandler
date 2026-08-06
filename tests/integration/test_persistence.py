@@ -59,7 +59,7 @@ def test_migrations_upgrade_empty_database_and_previous_revision(tmp_path: Path)
     upgrade_database(engine)
     upgrade_database(engine)
 
-    assert current_database_revision(engine) == "0004_human_review"
+    assert current_database_revision(engine) == "0005_import_commits"
     assert "updated_at" in {column["name"] for column in inspect(engine).get_columns("projects")}
     assert "ix_elements_project" in {
         index["name"] for index in inspect(engine).get_indexes("elements")
@@ -69,6 +69,9 @@ def test_migrations_upgrade_empty_database_and_previous_revision(tmp_path: Path)
     }
     assert "ix_confirmed_relations_project" in {
         index["name"] for index in inspect(engine).get_indexes("confirmed_relations")
+    }
+    assert "ix_import_commits_project" in {
+        index["name"] for index in inspect(engine).get_indexes("import_commits")
     }
     with engine.connect() as connection:
         trigger_count = connection.scalar(

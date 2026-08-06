@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import logging
-import os
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from hashlib import sha256
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 from sqlalchemy import Engine, inspect
@@ -27,17 +27,29 @@ from zeny_project_handler.application.errors import (
     PlanoImportacaoObsoletoError,
     PortabilidadeProjetoError,
 )
+from zeny_project_handler.application.import_recovery import (
+    ArmazenamentoJournalImportacao,
+    PontoFalhaImportacao,
+    RecuperadorImportacaoProjeto,
+)
 from zeny_project_handler.application.operation_coordinator import (
     CoordenadorOperacoes,
     TipoOperacao,
 )
 from zeny_project_handler.application.project_portability import ServicoPortabilidadeProjeto
+from zeny_project_handler.bootstrap import initialize_local_storage
+from zeny_project_handler.config import AppSettings
 from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.domain.portability import EstadoIntegridadePacote
 from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler.ports.pdf import ReferenciaFontePdf
+from zeny_project_handler.ports.persistence import ComprovanteCommitImportacao
 
 pytestmark = pytest.mark.integration
+
+
+class _SimulatedProcessCrash(BaseException):
+    pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +109,7 @@ def _service(
     engine: Engine,
     dispose_connections: Callable[[], None] | None = None,
     coordinator: CoordenadorOperacoes | None = None,
+    inject_import_failure: Callable[[PontoFalhaImportacao], None] | None = None,
 ) -> ServicoPortabilidadeProjeto:
     return ServicoPortabilidadeProjeto(
         lambda: SqlAlchemyUnitOfWork(engine),
@@ -107,6 +120,7 @@ def _service(
         caminho_banco=data / "zeny-project-handler.sqlite3",
         coordenador=coordinator,
         descartar_conexoes=dispose_connections or engine.dispose,
+        injetar_falha_importacao=inject_import_failure,
     )
 
 
@@ -161,6 +175,8 @@ def _snapshot_import_state(data: Path, engine: Engine) -> _ImportStateSnapshot:
 def _assert_no_import_residue(data: Path) -> None:
     assert not tuple(data.rglob(".z-*"))
     assert not tuple(data.rglob("*.previous"))
+    recovery_root = data / "project-files" / ".import-recovery"
+    assert not recovery_root.exists() or not tuple(recovery_root.iterdir())
 
 
 def _create_import_package(
@@ -307,6 +323,103 @@ def test_import_conflict_accepted_replaces_database_and_files_preserving_ids(
         engine.dispose()
 
 
+@pytest.mark.parametrize(
+    ("failure_point", "commit_expected"),
+    (
+        (PontoFalhaImportacao.ANTES_PREPARAR, False),
+        (PontoFalhaImportacao.DEPOIS_PREPARAR, False),
+        (PontoFalhaImportacao.ANTES_TROCAR_ARQUIVOS, False),
+        (PontoFalhaImportacao.DEPOIS_MOVER_ANTERIOR, False),
+        (PontoFalhaImportacao.DEPOIS_TROCAR_ARQUIVOS, False),
+        (PontoFalhaImportacao.ANTES_COMMIT_BANCO, False),
+        (PontoFalhaImportacao.DEPOIS_COMMIT_BANCO, True),
+        (PontoFalhaImportacao.DEPOIS_CONFIRMAR_BANCO, True),
+        (PontoFalhaImportacao.ANTES_LIMPEZA, True),
+        (PontoFalhaImportacao.DEPOIS_LIMPEZA, True),
+    ),
+)
+def test_bootstrap_reconciles_each_import_crash_boundary_idempotently(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+    failure_point: PontoFalhaImportacao,
+    commit_expected: bool,
+    app_log_capture: pytest.LogCaptureFixture,
+) -> None:
+    package, packaged_project, pdf_source = _create_import_package(tmp_path, catalogo_inicial)
+    data = tmp_path / "crash-target"
+    engine = create_sqlite_engine(data / "zeny-project-handler.sqlite3")
+    upgrade_database(engine)
+    local_project = _persist_conflicting_target(
+        data,
+        engine,
+        catalogo_inicial,
+        packaged_project,
+        pdf_source,
+    )
+
+    def interrupt(selected: PontoFalhaImportacao) -> None:
+        if selected is failure_point:
+            raise _SimulatedProcessCrash(selected.value)
+
+    service = _service(data, engine, inject_import_failure=interrupt)
+    plan = service.preflight_importacao(package)
+    with pytest.raises(_SimulatedProcessCrash, match=failure_point.value):
+        service.aplicar_plano_importacao(plan, confirmar_substituicao=True)
+    engine.dispose()
+
+    recovered_engine = initialize_local_storage(AppSettings(data_directory=data))
+    try:
+        with SqlAlchemyUnitOfWork(recovered_engine) as work:
+            recovered_project = work.projetos.obter(packaged_project.id)
+        assert recovered_project is not None
+        assert recovered_project.nome == (
+            packaged_project.nome if commit_expected else local_project.nome
+        )
+        project_root = data / "project-files" / str(packaged_project.id)
+        assert (project_root / "local-only.bin").exists() is not commit_expected
+        assert any(project_root.rglob("*.pdf")) is commit_expected
+        _assert_no_import_residue(data)
+
+        before_repeat = _snapshot_import_state(data, recovered_engine)
+        recovery = RecuperadorImportacaoProjeto(data)
+
+        def get_receipt(operation_id: UUID) -> ComprovanteCommitImportacao | None:
+            with SqlAlchemyUnitOfWork(recovered_engine) as work:
+                return work.comprovantes_importacao.obter(operation_id)
+
+        assert recovery.reconciliar(get_receipt) is None
+        assert _snapshot_import_state(data, recovered_engine) == before_repeat
+    finally:
+        recovered_engine.dispose()
+
+    recovery_records = [
+        record
+        for record in app_log_capture.records
+        if getattr(record, "operation", None) == "portability.import.recovery"
+    ]
+    assert recovery_records
+    assert all(getattr(record, "phase", None) for record in recovery_records)
+    assert str(data) not in app_log_capture.text
+
+
+def test_bootstrap_blocks_corrupted_journal_and_releases_database(
+    tmp_path: Path,
+) -> None:
+    data = tmp_path / "blocked-bootstrap"
+    store = ArmazenamentoJournalImportacao(data)
+    store.recovery_root.mkdir(parents=True)
+    store.journal_path.write_text("{corrompido", encoding="utf-8")
+    settings = AppSettings(data_directory=data)
+
+    with pytest.raises(PortabilidadeProjetoError, match="corrompido"):
+        initialize_local_storage(settings)
+
+    moved_database = data / "closed.sqlite3"
+    settings.database_path.replace(moved_database)
+    moved_database.unlink()
+    assert store.journal_path.exists()
+
+
 @pytest.mark.parametrize("changed_state", ["target", "package"])
 def test_import_rejects_race_between_preflight_and_application_without_mutation(
     tmp_path: Path,
@@ -345,7 +458,6 @@ def test_import_rejects_race_between_preflight_and_application_without_mutation(
 def test_export_import_preserves_ids_decisions_and_repairs_missing_photo(
     tmp_path: Path,
     catalogo_inicial: CatalogoTecnico,
-    monkeypatch: pytest.MonkeyPatch,
     app_log_capture: pytest.LogCaptureFixture,
 ) -> None:
     source_data = tmp_path / "source-data"
@@ -383,23 +495,18 @@ def test_export_import_preserves_ids_decisions_and_repairs_missing_photo(
         for path in managed_root.rglob("*")
         if path.is_file()
     }
-    real_replace = os.replace
-    replace_calls = 0
 
-    def interrupt_staging_publication(source: Path, destination: Path) -> None:
-        nonlocal replace_calls
-        replace_calls += 1
-        if replace_calls == 2:
+    def interrupt_staging_publication(point: PontoFalhaImportacao) -> None:
+        if point is PontoFalhaImportacao.DEPOIS_MOVER_ANTERIOR:
             raise OSError("interrupted")
-        real_replace(source, destination)
 
-    with monkeypatch.context() as patch:
-        patch.setattr(
-            "zeny_project_handler.application.project_portability.os.replace",
-            interrupt_staging_publication,
-        )
-        with pytest.raises(PortabilidadeProjetoError, match="publicar os arquivos"):
-            target_service.importar_projeto(moved_package, substituir_existente=True)
+    interrupted_service = _service(
+        target_data,
+        target_engine,
+        inject_import_failure=interrupt_staging_publication,
+    )
+    with pytest.raises(PortabilidadeProjetoError, match="publicar os arquivos"):
+        interrupted_service.importar_projeto(moved_package, substituir_existente=True)
 
     assert {
         path.relative_to(managed_root): path.read_bytes()
