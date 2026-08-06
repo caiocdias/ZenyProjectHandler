@@ -108,6 +108,7 @@ def test_user_exports_imports_and_restores_backup_from_ui(
     qtbot.mouseClick(  # type: ignore[no-untyped-call]
         _button(panel, "portabilityExportButton"), Qt.MouseButton.LeftButton
     )
+    qtbot.waitUntil(lambda: not panel.processando)
     assert package.is_file()
 
     backup = tmp_path / "ui-backup.zphbackup"
@@ -119,6 +120,7 @@ def test_user_exports_imports_and_restores_backup_from_ui(
     qtbot.mouseClick(  # type: ignore[no-untyped-call]
         _button(panel, "portabilityBackupButton"), Qt.MouseButton.LeftButton
     )
+    qtbot.waitUntil(lambda: not panel.processando)
     assert backup.is_file()
 
     target_data = tmp_path / "target-data"
@@ -134,6 +136,7 @@ def test_user_exports_imports_and_restores_backup_from_ui(
     qtbot.mouseClick(  # type: ignore[no-untyped-call]
         _button(target_panel, "portabilityImportButton"), Qt.MouseButton.LeftButton
     )
+    qtbot.waitUntil(lambda: not target_panel.processando)
     target_combo = target_panel.findChild(QComboBox, "portabilityProjectCombo")
     assert target_combo is not None
     assert target_combo.findData(str(project.id)) >= 0
@@ -159,6 +162,7 @@ def test_user_exports_imports_and_restores_backup_from_ui(
     qtbot.mouseClick(  # type: ignore[no-untyped-call]
         _button(target_panel, "portabilityRestoreButton"), Qt.MouseButton.LeftButton
     )
+    qtbot.waitUntil(lambda: not target_panel.processando)
     assert restored, warnings
     assert target_service.listar_projetos()[0].projeto_id == project.id
 
@@ -203,6 +207,7 @@ def test_user_cancels_degraded_backup_without_package_or_temporaries(
     qtbot.mouseClick(  # type: ignore[no-untyped-call]
         _button(panel, "portabilityBackupButton"), Qt.MouseButton.LeftButton
     )
+    qtbot.waitUntil(lambda: not panel.processando)
 
     assert destination.read_bytes() == b"backup-anterior"
     assert not tuple(tmp_path.glob(".z-*"))
@@ -271,6 +276,7 @@ def test_user_explicitly_confirms_different_degraded_backup_problems(
     qtbot.mouseClick(  # type: ignore[no-untyped-call]
         _button(panel, "portabilityBackupButton"), Qt.MouseButton.LeftButton
     )
+    qtbot.waitUntil(lambda: not panel.processando)
 
     assert destination.is_file()
     assert len(questions) == 1

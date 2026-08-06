@@ -85,6 +85,26 @@ def test_repeated_or_stale_release_never_releases_another_operation() -> None:
     assert coordinator.operacao_em_andamento is None
 
 
+def test_observers_receive_transitions_and_cannot_break_token_lifecycle() -> None:
+    coordinator = CoordenadorOperacoes()
+    transitions: list[TipoOperacao | None] = []
+    remove = coordinator.observar(transitions.append)
+
+    def broken_observer(_operation: TipoOperacao | None) -> None:
+        raise RuntimeError("observer")
+
+    coordinator.observar(broken_observer)
+
+    with coordinator.adquirir(TipoOperacao.BACKUP):
+        assert coordinator.operacao_em_andamento is TipoOperacao.BACKUP
+
+    assert transitions == [None, TipoOperacao.BACKUP, None]
+    remove()
+    with coordinator.adquirir(TipoOperacao.RESTAURACAO):
+        pass
+    assert transitions == [None, TipoOperacao.BACKUP, None]
+
+
 def test_application_coordinator_has_no_qt_or_infrastructure_dependency() -> None:
     tree = ast.parse(COORDINATOR_SOURCE.read_text(encoding="utf-8"))
     modules = {
