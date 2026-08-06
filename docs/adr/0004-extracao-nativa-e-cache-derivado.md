@@ -2,6 +2,7 @@
 
 - Status: aceita
 - Data: 2026-07-21
+- Atualizada: 2026-08-06
 
 ## Contexto
 
@@ -35,17 +36,27 @@ derivado do PDF e não deve competir com o original como fonte canônica.
 6. Cada extrator é uma unidade de falha. Erros localizados viram `DiagnosticoAnalise` persistido na
    `ExecucaoAnalise`; evidências válidas dos outros extratores são mantidas. Uma falha fatal registra
    a execução como `FALHOU`.
-7. OCR é uma porta opcional (`MotorOcrPort`). Rasterização e reconhecimento só são chamados quando a
-   página possui menos texto nativo que o limite configurado. A aplicação não inclui nem exige motor
-   OCR nesta etapa; a ausência é um diagnóstico, não uma tentativa de instalação ou acesso à rede.
-8. O cache JSON guarda candidatos normalizados, nunca IDs de uma execução. Sua chave combina
-   SHA-256 do PDF, configuração e nome/versão do analisador. O arquivo fica em `cache/analysis` na
-   pasta de dados, é publicado por substituição atômica e pode ser apagado ou reconstruído.
-9. Na materialização, IDs de evidência usam UUID v5 dentro do ID da execução e uma chave estável do
-   recurso. A mesma entrada, configuração e execução produz o mesmo resultado semântico, inclusive
-   quando os candidatos vêm do cache.
-10. O caso de uso `ExecutarAnaliseDocumento` valida a referência local, executa o adaptador e grava
-    execução e evidências em uma transação SQLite. O PDF permanece somente leitura.
+7. OCR é uma porta opcional (`MotorOcrPort`). Antes de reconhecer, o motor fornece uma consulta de
+   capacidade que retorna uma capacidade válida ou diagnósticos sanitizados. Ausência, timeout,
+   executável defeituoso, idioma inválido ou `traineddata` inacessível desativam somente o OCR; os
+   extratores nativos continuam e não há instalação nem acesso à rede durante a análise.
+8. `CapacidadeMotorOcr` produz uma assinatura SHA-256 canônica a partir da implementação, versão real
+   normalizada, ordem dos idiomas efetivamente selecionados, SHA-256 dos `traineddata` relevantes e
+   todos os parâmetros semânticos do adaptador. No Tesseract isso inclui OEM, PSM de cada perfil,
+   whitelists, formato/agregação TSV, pré-processamento PPM e timeout de reconhecimento.
+9. Caminhos do executável e de `tessdata` nunca entram na capacidade. O adaptador consulta
+   `--version` e `--list-langs` uma vez por instância, com timeout; depois fixa o diretório de dados
+   identificado para que o reconhecimento use exatamente os arquivos que foram assinados.
+10. O cache JSON guarda candidatos normalizados, nunca IDs de uma execução. Sua chave combina
+    SHA-256 do PDF, configuração e a assinatura de capacidade do analisador, que incorpora a
+    assinatura OCR. O schema incompatível anterior é rejeitado como cache vazio e reconstruído sob
+    demanda, sem migração de dado derivado.
+11. A mesma assinatura do analisador participa do UUID v5 estável da extração e é persistida nos
+    parâmetros de `ExecucaoAnalise` e `EvidenciaDocumento`. Assim, versão, idioma, `traineddata` ou
+    configuração diferente cria outra execução e deixa proveniência verificável.
+12. Na materialização, IDs de evidência usam UUID v5 dentro do ID da execução e uma chave estável do
+    recurso. O caso de uso valida a referência local e grava execução e evidências em uma transação
+    SQLite. O PDF permanece somente leitura.
 
 ## Verificação
 
@@ -54,6 +65,11 @@ derivado do PDF e não deve competir com o original como fonte canônica.
 - O mesmo arquivo também contém `Stamp`, `Popup`, `FreeText` e `Square`.
 - Um motor OCR falso prova que uma página com texto nativo não é rasterizada e uma página apenas com
   imagem é rasterizada uma única vez.
+- Motores falsos provam que versão, idiomas, `traineddata` e OEM diferentes invalidam cache e
+  identidade de execução. Subprocessos simulados provam consulta única, timeout diagnosticável e
+  assinatura igual para instalações de conteúdo idêntico em caminhos diferentes.
+- O cache rejeita explicitamente o schema anterior, e a execução/evidências persistem a mesma
+  assinatura usada pela chave derivada.
 - Testes de contrato exercitam o adaptador real e um falso. Testes de integração verificam
   persistência, reaproveitamento do cache e registro de falha fatal.
 
@@ -63,8 +79,10 @@ derivado do PDF e não deve competir com o original como fonte canônica.
   depender de widgets ou detalhes do PyMuPDF.
 - O cache pode crescer e será tratado como dado temporário; ele não participa de backup nem de
   portabilidade do projeto.
-- OCR real continua sendo uma decisão substituível. Adicionar Tesseract ou outro mecanismo exigirá
-  um adaptador, testes de qualidade e revisão de distribuição, mas não alteração no domínio.
+- Tesseract continua substituível por outro mecanismo que implemente a mesma consulta de capacidade;
+  uma implementação sem identidade reproduzível não satisfaz mais a porta.
+- Calcular hashes dos `traineddata` tem custo de I/O, limitado à primeira consulta de cada instância.
+  O ganho é impedir reaproveitamento silencioso de resultados produzidos por dados diferentes.
 - A decisão de licenciamento do PyMuPDF registrada no ADR 0003 continua pendente antes da
   distribuição do aplicativo.
 

@@ -88,7 +88,7 @@ com o corpus completo. Seus resultados não substituem o gate básico.
 | 11. Identidade verificada da origem por sessão | CONCLUÍDA | 1 | Navegação não recalcula o PDF inteiro |
 | 12. Renderização por orçamento e região | CONCLUÍDA | 11 | Pranchas grandes não exigem raster integral de 600 DPI |
 | 13. Visualizador progressivo e assíncrono | CONCLUÍDA | 6, 12 | Zoom detalhado sem congelamento ou resultados obsoletos |
-| 14. Assinatura reprodutível do OCR | PENDENTE | 1 | Cache muda com motor, idioma e configuração |
+| 14. Assinatura reprodutível do OCR | CONCLUÍDA | 1 | Cache muda com motor, idioma e configuração |
 | 15. Provisionamento e diagnóstico do português | PENDENTE | 14 | Instalação funcional com `por`, ou erro acionável |
 | 16. Credenciais efêmeras para PDFs protegidos | PENDENTE | 6, 11, 13 | Importação, visualização e análise protegidas funcionam |
 | 17. Redução e gate de complexidade | PENDENTE | Todas as anteriores | Sem funções E/F e regressão bloqueada |
@@ -1016,7 +1016,7 @@ Crie commits seccionados para as alterações, mantenha na branch main.
 ## Etapa 14 — Assinatura reprodutível do motor OCR e invalidação de cache
 
 **Achado original:** 8.  
-**Estado:** PENDENTE.  
+**Estado:** CONCLUÍDA.
 **Arquivos prováveis:** porta de OCR, `adapters/analysis/tesseract_ocr.py`,
 `adapters/analysis/pymupdf_analyzer.py`, cache derivado, execução persistida e testes.
 
@@ -1038,6 +1038,36 @@ Crie commits seccionados para as alterações, mantenha na branch main.
 - Mesma capacidade em outra pasta produz a mesma assinatura.
 - Tesseract ausente/defeituoso gera diagnóstico determinístico e não quebra extratores nativos.
 - Testes usam motores falsos e subprocesso simulado; não dependem do Tesseract local.
+
+### Registro de conclusão — 06/08/2026
+
+- A porta de OCR passou a expor uma capacidade canônica com implementação, versão real normalizada,
+  idiomas ordenados efetivamente selecionados, SHA-256 dos `traineddata` correspondentes e parâmetros
+  semânticos. O Tesseract declara explicitamente OEM, PSM dos quatro perfis, whitelists, formato e
+  agregação TSV, pré-processamento PPM e timeout de reconhecimento; nenhum caminho entra no payload.
+- `--version` e `--list-langs` são executados uma vez por instância com timeout. O diretório
+  `tessdata` identificado é fixado para o reconhecimento subsequente. Timeout, subprocesso inválido,
+  idioma ausente ou dados ilegíveis retornam códigos determinísticos e desativam somente o OCR; os
+  extratores nativos permanecem ativos.
+- A assinatura OCR compõe uma assinatura de capacidade do analisador. Esse mesmo valor entra na
+  chave do cache, no UUID v5 estável da extração e nos parâmetros persistidos de execução e
+  evidência. O cache JSON avançou para o schema 2 e trata o schema 1 como dado derivado ausente,
+  reconstruindo-o sem migração.
+- Motores falsos cobrem invalidação independente por versão, idioma, hash de `traineddata` e OEM.
+  Subprocessos simulados cobrem normalização da versão, identidade igual em pastas diferentes,
+  consulta única, timeouts e falhas sanitizadas. A ausência de motor preserva texto, vetores,
+  imagens, anotações e Forms.
+- Validações focadas concluídas: `58 passed`. O gate básico final aprovou `391 passed, 20 deselected`,
+  cobertura `85,11%`, Ruff, `ruff format --check`, Mypy (`179 source files`), `pip check` e métricas
+  Radon. Uma primeira execução encontrou uma violação de acesso nativa e intermitente do Qt; o teste
+  isolado passou, a repetição prosseguiu e os testes públicos ficaram verdes. A cobertura então foi
+  recuperada de `84,88%` com testes dos novos ramos, sem alterar o limite de `85,01%`.
+- Limitação remanescente: provisionamento e diagnóstico orientado especificamente ao idioma `por`
+  continuam pertencendo à Etapa 15. O custo de ler e hashear os `traineddata` ocorre uma vez por
+  instância.
+- Commits: `2e59ef6` (`feat(ocr): derive reproducible capability identity`), `2b76151`
+  (`test(ocr): cover capability-driven invalidation`) e `b885bbf`
+  (`test(ocr): cover capability failure diagnostics`).
 
 ### Mensagem para um novo chat do Codex
 

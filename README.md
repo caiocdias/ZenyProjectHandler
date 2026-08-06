@@ -210,6 +210,15 @@ dados. A identidade e a versão reais do extrator fazem parte tanto da chave des
 execução persistida, portanto uma atualização do reconhecimento refaz automaticamente resultados
 antigos.
 
+Para o Tesseract, essa identidade não é uma versão declarada manualmente. Na primeira consulta de
+cada instância, com timeout, o adaptador obtém e normaliza a versão real do executável, fixa os
+idiomas efetivamente selecionados, calcula SHA-256 de cada `traineddata` usado e inclui OEM, PSM,
+listas permitidas, formato/agregação TSV, pré-processamento do raster e timeout de reconhecimento.
+O hash canônico resultante não contém o caminho do executável nem do diretório `tessdata`: duas
+instalações equivalentes em pastas diferentes têm a mesma assinatura. O mesmo hash participa da
+chave do cache, do ID estável da execução e da proveniência persistida nas execuções e evidências.
+Caches do schema anterior são apenas ignorados e reconstruídos sob demanda.
+
 O `setup.bat` verifica o Tesseract e, quando ele não está presente, instala automaticamente o pacote
 `UB-Mannheim.TesseractOCR` pelo Windows Package Manager (`winget`). O aplicativo o descobre no
 `PATH`, no local padrão do Windows ou no caminho indicado por `ZENY_TESSERACT_PATH`. Se a instalação
@@ -229,7 +238,9 @@ preservar textos pequenos que se perderiam na segmentação da folha inteira. Em
 nativo suficiente,
 pequenas imagens com resolução útil são processadas por recorte, preservando a geometria correta na
 folha sem renderizar a página inteira. Sem Tesseract, os demais extratores continuam funcionando e
-a execução registra um diagnóstico revisável.
+a execução registra um diagnóstico revisável. Um executável defeituoso, uma consulta que exceda o
+timeout ou um `traineddata` inacessível também desativa somente o OCR, com diagnóstico sanitizado;
+texto, vetores, imagens, anotações e Form XObjects continuam sendo extraídos.
 
 Marcadores de ponto desenhados como texto azul dentro de círculos vermelhos recebem uma segunda
 passagem localizada a 1200 DPI. Quando as letras foram convertidas em contornos vetoriais, seus
