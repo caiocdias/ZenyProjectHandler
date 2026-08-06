@@ -103,7 +103,11 @@ dados. Um projeto pode ser exportado como `.zphproj`, com manifesto assinado, ba
 projeto, PDFs disponíveis e resultados da análise. O pacote usa somente caminhos relativos e valida
 internamente SHA-256, tamanho e tipo de cada arquivo ao ser importado. A importação preserva
 identidades, catálogo, análises e decisões; substituir um projeto existente exige confirmação
-explícita.
+explícita. Antes do diálogo, um preflight somente leitura valida manifesto, arquivos e SQLite,
+detecta conflito e apresenta um resumo com fingerprint. Recusar preserva integralmente banco e pasta
+local. Depois da confirmação, pacote e destino são revalidados sob o coordenador de operações; se
+algum deles mudou, o plano é recusado como obsoleto e precisa ser inspecionado novamente, sem criar
+`.previous`, publicar arquivos ou deixar staging.
 
 Novos `.zphproj` e `.zphbackup` usam manifesto de formato 2; pacotes antigos de formato 1 continuam
 aceitos. O formato 2 registra `INTEGRO` ou `DEGRADADO` e, sem expor nomes ou caminhos, identifica por

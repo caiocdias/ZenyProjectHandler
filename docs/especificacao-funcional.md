@@ -372,6 +372,11 @@ sintéticas; a partição de teste privada não foi usada para criá-las.
 - Exportar e importar preserva IDs, catálogo, execuções, evidências, propostas, decisões de revisão e
   o conjunto confirmado. A substituição de um projeto já existente é explícita e as trocas de banco
   e arquivos possuem compensação em caso de falha.
+- A importação começa por um preflight sem escrita no estado local. O resultado contém resumo,
+  integridade, identidade do pacote e fingerprint do projeto/pasta alvo. Quando há conflito, a UI
+  confirma esse plano antes de iniciar a aplicação. A aplicação adquire o coordenador de operações,
+  revalida pacote, SQLite portátil e estado alvo e recusa planos obsoletos antes de staging,
+  `.previous`, publicação de arquivos ou escrita no SQLite local.
 - O backup completo usa `.zphbackup` e executa preflight sem efeitos colaterais antes de criar o
   snapshot. PDFs externos íntegros recebem cópias recuperáveis e referências reescritas. PDF ausente,
   alterado ou ilegível exige confirmação explícita; se aceito, o backup fica `DEGRADADO`, registra a

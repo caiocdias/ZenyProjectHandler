@@ -2,7 +2,7 @@
 
 ## Status
 
-Aceita em 21/07/2026; revisada em 05/08/2026.
+Aceita em 21/07/2026; revisada em 06/08/2026.
 
 ## Contexto
 
@@ -26,6 +26,18 @@ adulterado; copiar apenas o SQLite deixaria os PDFs externos fora do backup.
 - Preservar IDs, catálogo, análises, evidências, propostas e decisões no banco portátil. Exigir
   autorização explícita para substituir um projeto existente e compensar as trocas de arquivos se a
   transação do banco falhar.
+- Separar a importação em preflight e aplicação. O preflight extrai o pacote apenas em área
+  temporária descartável, valida manifesto, arquivos e SQLite, detecta projeto/pasta gerenciada com o
+  mesmo ID e devolve um plano imutável. Ele não cria staging ao lado do destino, `.previous`, raiz
+  gerenciada nem transação de escrita no SQLite local.
+- Identificar o plano por SHA-256 e tamanho do pacote, resumo do conteúdo e fingerprint do estado
+  alvo. O fingerprint do alvo cobre o agregado do projeto e seus registros auditáveis no SQLite,
+  referências PDF e a árvore de arquivos gerenciados daquele ID.
+- Solicitar confirmação na UI sobre o resumo e a identidade do plano antes de chamar a aplicação.
+  Sob o coordenador global, a aplicação confere a identidade do plano, fotografa novamente o alvo,
+  recalcula o hash do pacote e repete a validação completa do manifesto e do banco. Qualquer
+  divergência produz uma recusa por plano obsoleto e exige novo preflight antes de criar staging ou
+  publicar arquivos.
 - Adotar `.zphbackup` para o ambiente local completo: snapshot íntegro do SQLite, arquivos
   gerenciados e cópias dos PDFs originalmente externos. Reescrever no snapshot as referências dos
   PDFs para caminhos gerenciados recuperáveis.
@@ -57,4 +69,8 @@ restaurável de modo previsível: dados canônicos são recuperados e as origens
 externas ou indisponíveis conforme registrado. Uma gravação interrompida não invalida o último
 destino publicado. O custo é duplicar PDFs íntegros, manter compatibilidade de leitura com o formato
 1 e distinguir degradação declarada de corrupção real. Nenhuma origem inválida é omitida
-silenciosamente e a interface nunca apresenta um backup degradado como íntegro.
+silenciosamente e a interface nunca apresenta um backup degradado como íntegro. A substituição
+continua removendo o agregado anterior e persistindo o pacote com seus IDs originais; o plano apenas
+antecipa a autorização e não altera essa semântica. O preflight calcula a identidade do pacote antes
+e depois da validação para detectar troca durante a inspeção, e a aplicação repete esse custo para
+fechar a janela entre confirmação e publicação.

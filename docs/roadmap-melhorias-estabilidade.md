@@ -582,7 +582,7 @@ Crie commits seccionados para as alterações, mantenha na branch main.
 ## Etapa 8 — Preflight de substituição antes de alterar arquivos
 
 **Achado original:** 12, parte de ordenação.  
-**Estado:** PENDENTE.  
+**Estado:** CONCLUÍDA.
 **Arquivos prováveis:** `application/project_portability.py`, DTOs/erros de importação,
 `ui/portability_panel.py`, ADR 0008 e testes.
 
@@ -603,6 +603,42 @@ Crie commits seccionados para as alterações, mantenha na branch main.
 - Plano possui identidade/fingerprint e não pode ser aplicado a pacote ou estado diferente.
 - Corridas entre preflight e aplicação são detectadas sob o coordenador.
 - Testes inspecionam banco, raiz gerenciada e resíduos antes/depois de cada cenário.
+
+### Registro de conclusão — 06/08/2026
+
+- A importação foi separada em `preflight_importacao` e `aplicar_plano_importacao`. O preflight
+  valida manifesto, todos os arquivos e o SQLite portátil em temporário descartável, detecta projeto
+  e pasta gerenciada com o mesmo ID e devolve `PlanoImportacaoProjeto`, um DTO congelado com resumo,
+  integridade, omissões, SHA-256/tamanho do pacote, fingerprint do alvo e fingerprint combinado.
+- O fingerprint do alvo cobre o agregado e os registros auditáveis relacionados no SQLite, as
+  referências PDF e a árvore gerenciada do ID. A identidade do pacote é calculada antes e depois da
+  inspeção para detectar troca durante o próprio preflight. Nenhuma dessas leituras cria staging na
+  raiz de dados, `.previous`, projeto, escrita no SQLite local ou resíduo temporário.
+- O worker Qt apresenta o resumo e o fingerprint na thread principal e só chama a aplicação depois
+  da resposta afirmativa. Recusa e cancelamento terminam no worker sem segunda chamada ao serviço.
+  O atalho público anterior `importar_projeto` foi preservado, mas agora também passa obrigatoriamente
+  pelo plano e não depende de reconhecer texto de exceção para decidir se confirma.
+- A aplicação adquire o coordenador da Etapa 6 antes da revalidação. Ela recusa plano adulterado,
+  confirmação ausente, mudança semântica do alvo e mudança de hash/tamanho do pacote antes de criar
+  temporário de aplicação. Depois repete a validação completa do ZIP e do banco e compara o novo
+  plano; `PlanoImportacaoObsoletoError` orienta executar outro preflight. Staging e publicação só
+  começam quando todas as verificações coincidem.
+- A persistência continua removendo o agregado anterior e gravando o conteúdo portátil com os mesmos
+  IDs de projeto, catálogo, documentos, análises, evidências, propostas e decisões. A compensação de
+  arquivos existente foi mantida para falhas posteriores ao início autorizado da publicação, em
+  conformidade com a ADR 0008.
+- Os testes fotografam todas as tabelas do banco e a árvore do diretório de dados, separadamente, em
+  projeto novo, conflito recusado, conflito aceito e corridas por alteração do alvo e do pacote.
+  Também comprovam no worker e no painel que a confirmação recebe o plano depois do preflight e que
+  uma recusa não chama a aplicação. O conjunto focado final terminou com `25 passed`.
+- Validações concluídas: `pip check`; Ruff completo; `ruff format --check` (`169 files`); Mypy
+  (`169 source files`); e gate básico canônico. O resultado final foi `305 passed, 20 deselected`,
+  cobertura `85,28%`, complexidade média A (`3,9536`) e `RESULTADO FINAL: APROVADO`. O único aviso
+  foi o `PytestCacheWarning` ambiental já conhecido por falta de permissão para atualizar
+  `.pytest_cache`; não houve `ResourceWarning` nem falha de teste.
+- Commits de implementação e prova: `5f170b0` (`feat(portability): add validated import preflight
+  plans`), `099afc0` (`feat(ui): confirm import plan before replacement`) e `0126f08`
+  (`test(portability): snapshot import plan safety`).
 
 ### Mensagem para um novo chat do Codex
 
