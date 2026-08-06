@@ -3,8 +3,9 @@
 from collections.abc import Callable
 from itertools import pairwise
 from pathlib import Path
+from time import monotonic
 
-from PySide6.QtCore import QEvent, QObject, QPoint, QRect, Qt, QTimer
+from PySide6.QtCore import QEvent, QObject, QPoint, QRect, Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QCloseEvent, QGuiApplication, QMouseEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -21,6 +22,10 @@ from PySide6.QtWidgets import (
 
 from zeny_project_handler.application.human_review import ServicoRevisaoHumana
 from zeny_project_handler.application.mvp_workflow import ServicoFluxoMvp
+from zeny_project_handler.application.operation_coordinator import (
+    CoordenadorOperacoes,
+    TipoOperacao,
+)
 from zeny_project_handler.application.project_portability import ServicoPortabilidadeProjeto
 from zeny_project_handler.domain.compliance import RegistroRegrasConformidade
 from zeny_project_handler.ports.pdf import LeitorPdfPort
@@ -30,6 +35,29 @@ from .pdf_viewer import PdfViewerWidget
 from .portability_panel import PortabilityPanelWidget
 from .project_panel import ProjectPanelWidget
 from .review_panel import ReviewPanelWidget
+
+_CLOSE_WAIT_MS = 300
+
+
+class _OperationStateBridge(QObject):
+    """Converta observações thread-safe do coordenador em sinais enfileirados do Qt."""
+
+    state_changed = Signal(object)
+
+    def __init__(self, coordinator: CoordenadorOperacoes, parent: QObject) -> None:
+        super().__init__(parent)
+        self.current = coordinator.operacao_em_andamento
+        self._remove_observer: Callable[[], None] | None = coordinator.observar(self._relay)
+
+    def _relay(self, operation: TipoOperacao | None) -> None:
+        self.current = operation
+        self.state_changed.emit(operation)
+
+    def close(self) -> None:
+        remove = self._remove_observer
+        self._remove_observer = None
+        if remove is not None:
+            remove()
 
 
 class _DockTitleBar(QWidget):
@@ -292,12 +320,15 @@ class MainWindow(QMainWindow):
         review_service: ServicoRevisaoHumana | None = None,
         workflow_service: ServicoFluxoMvp | None = None,
         portability_service: ServicoPortabilidadeProjeto | None = None,
+        operation_coordinator: CoordenadorOperacoes | None = None,
         compliance_registry: RegistroRegrasConformidade | None = None,
         ui_state_path: Path | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._resource_cleanup: Callable[[], None] = lambda: None
+        self._operation_bridge: _OperationStateBridge | None = None
+        self._coordinator_operation: TipoOperacao | None = None
         self.setObjectName("mainWindow")
         self.setWindowTitle(application_name)
         self.resize(1400, 900)
@@ -370,6 +401,7 @@ class MainWindow(QMainWindow):
                 parent=self,
             )
             self.project_panel.status_changed.connect(self.statusBar().showMessage)
+            self.project_panel.busy_changed.connect(self._refresh_operation_controls)
             project_dock = QDockWidget("Fluxo do projeto", self)
             project_dock.setObjectName("projectWorkflowDock")
             project_dock.setAllowedAreas(
@@ -386,6 +418,7 @@ class MainWindow(QMainWindow):
             self.portability_panel.status_changed.connect(self.statusBar().showMessage)
             self.portability_panel.data_changed.connect(self._refresh_data_panels)
             self.portability_panel.data_restored.connect(self._refresh_after_restore)
+            self.portability_panel.busy_changed.connect(self._refresh_operation_controls)
             portability_dock = QDockWidget("Portabilidade e recuperação", self)
             portability_dock.setObjectName("projectPortabilityDock")
             portability_dock.setAllowedAreas(
@@ -399,6 +432,15 @@ class MainWindow(QMainWindow):
             self.tabifyDockWidget(current, following)
         if right_docks:
             right_docks[0].raise_()
+        selected_coordinator = operation_coordinator
+        if selected_coordinator is None and workflow_service is not None:
+            selected_coordinator = workflow_service.coordenador
+        if selected_coordinator is None and portability_service is not None:
+            selected_coordinator = portability_service.coordenador
+        if selected_coordinator is not None:
+            self._operation_bridge = _OperationStateBridge(selected_coordinator, self)
+            self._operation_bridge.state_changed.connect(self._operation_state_changed)
+            self._operation_state_changed(self._operation_bridge.current)
         self.statusBar().showMessage("Pronto para abrir um PDF")
 
     def _register_dock(self, dock: QDockWidget) -> None:
@@ -428,6 +470,27 @@ class MainWindow(QMainWindow):
             self.documentation_panel.limpar()
         self._refresh_data_panels()
 
+    @Slot(object)
+    def _operation_state_changed(self, operation: object) -> None:
+        self._coordinator_operation = operation if isinstance(operation, TipoOperacao) else None
+        self._refresh_operation_controls()
+
+    @Slot(bool)
+    def _refresh_operation_controls(self, _busy: bool = False) -> None:
+        project_busy = self.project_panel is not None and self.project_panel.processando
+        portability_busy = self.portability_panel is not None and self.portability_panel.processando
+        busy = self._coordinator_operation is not None or project_busy or portability_busy
+        if self.project_panel is not None:
+            self.project_panel.setEnabled(not portability_busy)
+            self.project_panel.set_global_operation(self._coordinator_operation)
+        if self.portability_panel is not None:
+            self.portability_panel.setEnabled(not project_busy)
+            self.portability_panel.set_global_operation(self._coordinator_operation)
+        if self.review_panel is not None:
+            self.review_panel.setEnabled(not busy)
+        if self.documentation_panel is not None:
+            self.documentation_panel.setEnabled(not busy)
+
     def set_resource_cleanup(self, callback: Callable[[], None]) -> None:
         self._resource_cleanup = callback
 
@@ -435,15 +498,31 @@ class MainWindow(QMainWindow):
         self._resource_cleanup()
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - API Qt
-        if self.project_panel is not None and self.project_panel.processando:
-            self.project_panel.cancelar_analise()
+        active = (self.project_panel is not None and self.project_panel.processando) or (
+            self.portability_panel is not None and self.portability_panel.processando
+        )
+        if active:
+            deadline = monotonic() + (_CLOSE_WAIT_MS / 1000)
+            finished = True
+            if self.project_panel is not None:
+                remaining = max(0, round((deadline - monotonic()) * 1000))
+                finished = self.project_panel.cancelar_e_aguardar(remaining) and finished
+            if self.portability_panel is not None:
+                remaining = max(0, round((deadline - monotonic()) * 1000))
+                finished = self.portability_panel.cancelar_e_aguardar(remaining) and finished
+            if finished:
+                active = False
+        if active:
             QMessageBox.information(
                 self,
-                "Análise em andamento",
-                "O cancelamento foi solicitado. Feche novamente quando a análise terminar.",
+                "Operação em andamento",
+                "O cancelamento foi solicitado. A operação está concluindo um trecho seguro; "
+                "feche novamente quando ela terminar.",
             )
             event.ignore()
             return
         super().closeEvent(event)
         if event.isAccepted():
+            if self._operation_bridge is not None:
+                self._operation_bridge.close()
             self.release_resources()

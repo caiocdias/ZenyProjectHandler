@@ -32,6 +32,7 @@ from zeny_project_handler.application.mvp_workflow import (
     ServicoFluxoMvp,
     SessaoProjetoMvp,
 )
+from zeny_project_handler.application.operation_coordinator import TipoOperacao
 from zeny_project_handler.domain.enums import EstadoExecucaoAnalise
 from zeny_project_handler.domain.errors import DomainValidationError
 from zeny_project_handler.logging_config import operation_logger
@@ -98,6 +99,7 @@ class ProjectPanelWidget(QWidget):
     """Conecte criação, importação, análise e revisão em um único fluxo visível."""
 
     status_changed = Signal(str)
+    busy_changed = Signal(bool)
 
     def __init__(
         self,
@@ -119,18 +121,20 @@ class ProjectPanelWidget(QWidget):
         self._thread: QThread | None = None
         self._worker: _PipelineWorker | None = None
         self._cancellation: Event | None = None
+        self._global_operation: TipoOperacao | None = None
+        self._ignore_pipeline_signals = False
         self._build_ui()
         self._viewer.page_changed.connect(self._remember_page)
         self.atualizar_projetos(restaurar_ultimo=True)
 
     @property
     def processando(self) -> bool:
-        return self._thread is not None and self._thread.isRunning()
+        return self._thread is not None
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        project_box = QGroupBox("Projeto")
-        project_layout = QVBoxLayout(project_box)
+        self._project_box = QGroupBox("Projeto")
+        project_layout = QVBoxLayout(self._project_box)
         self._projects = QComboBox()
         self._projects.setObjectName("mvpProjectCombo")
         project_layout.addWidget(self._projects)
@@ -156,10 +160,10 @@ class ProjectPanelWidget(QWidget):
         delete_project.clicked.connect(self.excluir_projeto)
         project_actions.addWidget(delete_project)
         project_layout.addLayout(project_actions)
-        layout.addWidget(project_box)
+        layout.addWidget(self._project_box)
 
-        document_box = QGroupBox("Folhas PDF")
-        document_layout = QVBoxLayout(document_box)
+        self._document_box = QGroupBox("Folhas PDF")
+        document_layout = QVBoxLayout(self._document_box)
         select = QPushButton("Adicionar PDF(s) ao projeto")
         select.setObjectName("mvpAddPdfsButton")
         select.clicked.connect(self.selecionar_pdfs)
@@ -193,7 +197,7 @@ class ProjectPanelWidget(QWidget):
         remove_documents.setObjectName("mvpRemovePdfsButton")
         remove_documents.clicked.connect(self.remover_pdfs)
         document_layout.addWidget(remove_documents)
-        layout.addWidget(document_box)
+        layout.addWidget(self._document_box)
 
         analysis_box = QGroupBox("Análise")
         analysis_layout = QVBoxLayout(analysis_box)
@@ -224,6 +228,7 @@ class ProjectPanelWidget(QWidget):
         guide.clicked.connect(self.exibir_guia_aceite)
         layout.addWidget(guide)
         layout.addStretch(1)
+        self._apply_operation_state()
 
     def atualizar_projetos(self, *, restaurar_ultimo: bool = False) -> None:
         selected = self._projects.currentData()
@@ -446,6 +451,7 @@ class ProjectPanelWidget(QWidget):
         if self.processando:
             return
         self._cancellation = Event()
+        self._ignore_pipeline_signals = False
         thread = QThread(self)
         worker_observation = operation_logger(
             "qt.worker.analysis_pipeline",
@@ -462,16 +468,16 @@ class ProjectPanelWidget(QWidget):
         worker.progress.connect(self._update_progress)
         worker.completed.connect(self._pipeline_completed)
         worker.failed.connect(self._pipeline_failed)
-        worker.finished.connect(thread.quit)
+        worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)
         thread.finished.connect(self._pipeline_finished)
         self._thread = thread
         self._worker = worker
-        self._run.setEnabled(False)
         self._run.setText("Análise em andamento…")
-        self._cancel.setEnabled(True)
         self._pages.setDragEnabled(False)
         self._update_order_controls()
         self._summary.setText("Execução ativa: preparando documentos")
+        self._apply_operation_state()
+        self.busy_changed.emit(True)
         thread.start()
 
     def cancelar_analise(self) -> None:
@@ -480,8 +486,25 @@ class ProjectPanelWidget(QWidget):
             self._cancel.setEnabled(False)
             self.status_changed.emit("Cancelamento solicitado; aguardando um ponto seguro")
 
+    def cancelar_e_aguardar(self, timeout_ms: int) -> bool:
+        """Cancele cooperativamente e aguarde sem finalizar a thread à força."""
+        thread = self._thread
+        if thread is None or not thread.isRunning():
+            return True
+        self.cancelar_analise()
+        finished = thread.wait(max(0, timeout_ms))
+        if finished:
+            self._ignore_pipeline_signals = True
+        return finished
+
+    def set_global_operation(self, operation: TipoOperacao | None) -> None:
+        self._global_operation = operation
+        self._apply_operation_state()
+
     @Slot(int, int, str)
     def _update_progress(self, current: int, total: int, message: str) -> None:
+        if self._ignore_pipeline_signals:
+            return
         self._progress.setRange(0, max(1, total))
         self._progress.setValue(current)
         self._summary.setText(f"Execução ativa: {message}")
@@ -489,6 +512,8 @@ class ProjectPanelWidget(QWidget):
 
     @Slot(object)
     def _pipeline_completed(self, result: object) -> None:
+        if self._ignore_pipeline_signals:
+            return
         if not isinstance(result, ResultadoFluxoMvp):
             return
         self._activate(self._service.abrir_projeto(result.projeto_id))
@@ -505,6 +530,8 @@ class ProjectPanelWidget(QWidget):
 
     @Slot(str, bool)
     def _pipeline_failed(self, message: str, cancelled: bool) -> None:
+        if self._ignore_pipeline_signals:
+            return
         title = "Análise cancelada" if cancelled else "Análise não concluída"
         self._summary.setText(message)
         self.status_changed.emit(message)
@@ -521,14 +548,21 @@ class ProjectPanelWidget(QWidget):
         self._thread = None
         self._worker = None
         self._cancellation = None
-        self._run.setEnabled(True)
         self._run.setText("Retomar / executar análise")
-        self._cancel.setEnabled(False)
         self._pages.setDragEnabled(True)
+        self._apply_operation_state()
+        self.busy_changed.emit(False)
         self._update_order_controls()
         if self._session is not None:
             self._session = self._service.abrir_projeto(self._session.projeto.id)
             self._show_summary(self._session)
+
+    def _apply_operation_state(self) -> None:
+        blocked = self._global_operation is not None or self.processando
+        self._project_box.setEnabled(not blocked)
+        self._document_box.setEnabled(not blocked)
+        self._run.setEnabled(not blocked)
+        self._cancel.setEnabled(self.processando)
 
     def exibir_guia_aceite(self) -> None:
         QMessageBox.information(

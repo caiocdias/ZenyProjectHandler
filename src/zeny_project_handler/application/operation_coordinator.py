@@ -8,6 +8,8 @@ ordenação de múltiplos locks que possa produzir deadlock.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from contextlib import suppress
 from enum import StrEnum
 from threading import Lock
 from types import TracebackType
@@ -64,6 +66,7 @@ class CoordenadorOperacoes:
     def __init__(self) -> None:
         self._lock = Lock()
         self._ativo: TokenOperacao | None = None
+        self._observadores: set[Callable[[TipoOperacao | None], None]] = set()
 
     @property
     def operacao_em_andamento(self) -> TipoOperacao | None:
@@ -80,7 +83,22 @@ class CoordenadorOperacoes:
                 )
             token = TokenOperacao(self, operacao)
             self._ativo = token
-            return token
+            observadores = tuple(self._observadores)
+        self._notificar(observadores, operacao)
+        return token
+
+    def observar(self, observador: Callable[[TipoOperacao | None], None]) -> Callable[[], None]:
+        """Observe trocas de estado sem acoplar o coordenador a um framework de interface."""
+        with self._lock:
+            self._observadores.add(observador)
+            atual = self._ativo.operacao if self._ativo is not None else None
+        self._notificar((observador,), atual)
+
+        def remover() -> None:
+            with self._lock:
+                self._observadores.discard(observador)
+
+        return remover
 
     def _liberar(self, token: TokenOperacao) -> bool:
         with self._lock:
@@ -90,4 +108,16 @@ class CoordenadorOperacoes:
                 raise RuntimeError("Token não pertence à operação ativa")
             token._liberado = True
             self._ativo = None
-            return True
+            observadores = tuple(self._observadores)
+        self._notificar(observadores, None)
+        return True
+
+    @staticmethod
+    def _notificar(
+        observadores: tuple[Callable[[TipoOperacao | None], None], ...],
+        operacao: TipoOperacao | None,
+    ) -> None:
+        for observador in observadores:
+            # Observabilidade não pode reter um token nem transformar sucesso em falha.
+            with suppress(Exception):
+                observador(operacao)

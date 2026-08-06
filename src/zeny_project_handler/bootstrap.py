@@ -161,6 +161,7 @@ def _compose_initialized_application(
             coordenador=operation_coordinator,
             descartar_conexoes=engine.dispose,
         ),
+        operation_coordinator=operation_coordinator,
         compliance_registry=carregar_registro_conformidade_inicial(),
         ui_state_path=app_settings.data_directory / "ui-state.ini",
     )

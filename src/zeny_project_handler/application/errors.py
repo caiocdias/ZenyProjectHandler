@@ -45,6 +45,10 @@ class PortabilidadeProjetoError(ApplicationError):
     """O pacote, anexo, backup ou recuperação não pôde ser concluído com segurança."""
 
 
+class PortabilidadeCanceladaError(ApplicationError):
+    """A portabilidade foi cancelada antes de uma fronteira de publicação segura."""
+
+
 class OperacaoEmAndamentoError(ApplicationError):
     """Uma operação incompatível já possui o estado compartilhado."""
 

@@ -96,6 +96,10 @@ class ServicoFluxoMvp:
         self._clock = relogio or (lambda: datetime.now(UTC))
         self._generate_id = gerar_id
 
+    @property
+    def coordenador(self) -> CoordenadorOperacoes:
+        return self._coordinator
+
     def listar_projetos(self) -> tuple[ResumoProjetoMvp, ...]:
         with self._unit_of_work() as work:
             return tuple(self._summary(work, project) for project in work.projetos.listar())

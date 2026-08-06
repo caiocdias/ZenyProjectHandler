@@ -21,6 +21,7 @@ from zeny_project_handler._atomic_files import (
 )
 from zeny_project_handler.application.errors import (
     ApplicationError,
+    PortabilidadeCanceladaError,
     PortabilidadeProjetoError,
     ProjetoNaoEncontradoError,
 )
@@ -51,6 +52,7 @@ from zeny_project_handler.ports.portability import (
 )
 
 ProgressCallback = Callable[[int, int, str], None]
+CancelCallback = Callable[[], bool]
 T = TypeVar("T")
 _BACKUP_ID = UUID(int=0)
 _PREFLIGHT_STALE_MESSAGE = (
@@ -158,6 +160,10 @@ class ServicoPortabilidadeProjeto:
         self._dispose_connections = descartar_conexoes or (lambda: None)
         self._clock = relogio or (lambda: datetime.now(UTC))
         self._new_id = gerar_id
+
+    @property
+    def coordenador(self) -> CoordenadorOperacoes:
+        return self._coordinator
 
     def listar_projetos(self) -> tuple[ResumoProjetoPortabilidade, ...]:
         with self._unit_of_work() as work:
@@ -384,13 +390,17 @@ class ServicoPortabilidadeProjeto:
                 problems.extend(self._photo_problems(project.id, photo))
         return RelatorioIntegridadeProjeto(problemas=tuple(problems))
 
-    def preflight_backup(self) -> RelatorioIntegridadeProjeto:
+    def preflight_backup(
+        self, *, cancelado: CancelCallback | None = None
+    ) -> RelatorioIntegridadeProjeto:
         """Classifique PDFs do backup sem criar snapshots, diretórios ou pacotes."""
         problems: list[ProblemaIntegridadeProjeto] = []
+        self._ensure_not_cancelled(cancelado)
         with self._unit_of_work() as work:
             projects = tuple(sorted(work.projetos.listar(), key=lambda item: str(item.id)))
             for project in projects:
                 for document in sorted(project.documentos, key=lambda item: str(item.id)):
+                    self._ensure_not_cancelled(cancelado)
                     problems.extend(
                         _source_problems(
                             work.fontes_pdf.obter(document.id),
@@ -407,11 +417,17 @@ class ServicoPortabilidadeProjeto:
         destino: Path,
         *,
         progresso: ProgressCallback | None = None,
+        cancelado: CancelCallback | None = None,
     ) -> ResultadoExportacaoProjeto:
         with self._coordinator.adquirir(TipoOperacao.EXPORTACAO_PROJETO):
             return self._observe_external_operation(
                 "portability.export",
-                lambda: self._exportar_projeto(projeto_id, destino, progresso=progresso),
+                lambda: self._exportar_projeto(
+                    projeto_id,
+                    destino,
+                    progresso=progresso,
+                    cancelado=cancelado,
+                ),
                 project_id=projeto_id,
             )
 
@@ -421,20 +437,25 @@ class ServicoPortabilidadeProjeto:
         destino: Path,
         *,
         progresso: ProgressCallback | None,
+        cancelado: CancelCallback | None,
     ) -> ResultadoExportacaoProjeto:
+        self._ensure_not_cancelled(cancelado)
         report = self.verificar_integridade(projeto_id)
         content, sources = self._portable_content(projeto_id)
+        self._ensure_not_cancelled(cancelado)
         omitted_references = {item.referencia_id for item in report.omissoes}
         notify = progresso or (lambda _current, _total, _message: None)
         with TemporaryDirectory(prefix="zeny-export-") as temporary_name:
             temporary = Path(temporary_name)
             notify(1, 4, "Criando banco exclusivo do projeto")
             database = self._portable_database.criar(temporary / "project.sqlite3", content)
+            self._ensure_not_cancelled(cancelado)
             origins = [
                 _package_origin(database, "project.sqlite3", "BANCO", "application/vnd.sqlite3"),
             ]
             notify(2, 4, "Coletando PDFs íntegros")
             for document in content.projeto.documentos:
+                self._ensure_not_cancelled(cancelado)
                 source = sources.get(document.id)
                 if source is not None and document.id not in omitted_references:
                     origins.append(
@@ -448,6 +469,7 @@ class ServicoPortabilidadeProjeto:
             seen_photos: set[str] = set()
             for element in content.projeto.elementos:
                 for photo in element.fotos:
+                    self._ensure_not_cancelled(cancelado)
                     if photo.caminho_relativo in seen_photos or self._photo_problems(
                         projeto_id, photo
                     ):
@@ -472,7 +494,9 @@ class ServicoPortabilidadeProjeto:
                 estado_integridade=report.estado,
                 omissoes=report.omissoes,
             )
+            self._ensure_not_cancelled(cancelado)
             notify(4, 4, "Publicando pacote de projeto")
+            self._ensure_not_cancelled(cancelado)
             path = self._archive.criar(destino, manifest, tuple(origins))
         return ResultadoExportacaoProjeto(
             caminho=path,
@@ -486,6 +510,7 @@ class ServicoPortabilidadeProjeto:
         *,
         substituir_existente: bool = False,
         progresso: ProgressCallback | None = None,
+        cancelado: CancelCallback | None = None,
     ) -> ResultadoImportacaoProjeto:
         with self._coordinator.adquirir(TipoOperacao.IMPORTACAO_PROJETO):
             return self._observe_external_operation(
@@ -494,6 +519,7 @@ class ServicoPortabilidadeProjeto:
                     pacote,
                     substituir_existente=substituir_existente,
                     progresso=progresso,
+                    cancelado=cancelado,
                 ),
             )
 
@@ -503,12 +529,15 @@ class ServicoPortabilidadeProjeto:
         *,
         substituir_existente: bool,
         progresso: ProgressCallback | None,
+        cancelado: CancelCallback | None,
     ) -> ResultadoImportacaoProjeto:
         notify = progresso or (lambda _current, _total, _message: None)
+        self._ensure_not_cancelled(cancelado)
         with TemporaryDirectory(prefix="zeny-import-") as temporary_name:
             temporary = Path(temporary_name)
             notify(1, 4, "Validando manifesto e arquivos")
             extracted = self._archive.extrair_validado(pacote, temporary / "package")
+            self._ensure_not_cancelled(cancelado)
             if not extracted.integridade.utilizavel:
                 raise PortabilidadeProjetoError("Pacote possui problemas críticos de integridade")
             database_entry = next(
@@ -520,6 +549,7 @@ class ServicoPortabilidadeProjeto:
                 extracted.diretorio / PurePosixPath(database_entry.caminho_relativo),
                 extracted.manifesto.projeto_id,
             )
+            self._ensure_not_cancelled(cancelado)
             if content.catalogo.id != extracted.manifesto.catalogo_id:
                 raise PortabilidadeProjetoError("Catálogo do banco diverge do manifesto")
             final_root = self._project_root(content.projeto.id)
@@ -531,6 +561,7 @@ class ServicoPortabilidadeProjeto:
                 ):
                     notify(2, 4, "Preparando PDFs e fotos gerenciados")
                     self._stage_imported_files(extracted.diretorio, extracted.manifesto, staging)
+                    self._ensure_not_cancelled(cancelado)
                     replaced_assets = final_root.exists()
                     published_assets = False
                     try:
@@ -570,6 +601,7 @@ class ServicoPortabilidadeProjeto:
         confirmar_degradado: bool = False,
         relatorio_integridade: RelatorioIntegridadeProjeto | None = None,
         progresso: ProgressCallback | None = None,
+        cancelado: CancelCallback | None = None,
     ) -> ResultadoBackupCompleto:
         with self._coordinator.adquirir(TipoOperacao.BACKUP):
             return self._observe_external_operation(
@@ -579,6 +611,7 @@ class ServicoPortabilidadeProjeto:
                     confirmar_degradado=confirmar_degradado,
                     relatorio_integridade=relatorio_integridade,
                     progresso=progresso,
+                    cancelado=cancelado,
                 ),
             )
 
@@ -589,8 +622,9 @@ class ServicoPortabilidadeProjeto:
         confirmar_degradado: bool,
         relatorio_integridade: RelatorioIntegridadeProjeto | None,
         progresso: ProgressCallback | None,
+        cancelado: CancelCallback | None,
     ) -> ResultadoBackupCompleto:
-        current_report = self.preflight_backup()
+        current_report = self.preflight_backup(cancelado=cancelado)
         if relatorio_integridade is not None and current_report != relatorio_integridade:
             raise PortabilidadeProjetoError(_PREFLIGHT_STALE_MESSAGE)
         if not current_report.integro and not confirmar_degradado:
@@ -602,6 +636,7 @@ class ServicoPortabilidadeProjeto:
         with self._unit_of_work() as work:
             for project in work.projetos.listar():
                 for document in project.documentos:
+                    self._ensure_not_cancelled(cancelado)
                     pdf_records.append(
                         (project.id, document.id, work.fontes_pdf.obter(document.id))
                     )
@@ -610,18 +645,21 @@ class ServicoPortabilidadeProjeto:
             item.referencia_id for item in current_report.omissoes if item.tipo == "PDF"
         }
         notify = progresso or (lambda _current, _total, _message: None)
+        self._ensure_not_cancelled(cancelado)
         with TemporaryDirectory(prefix="zeny-backup-") as temporary_name:
             temporary = Path(temporary_name)
             notify(1, 3, "Criando snapshot consistente do banco")
             snapshot = self._backup.criar_snapshot(
                 self._database_path, temporary / "database.sqlite3"
             )
+            self._ensure_not_cancelled(cancelado)
             notify(2, 3, "Coletando arquivos gerenciados")
             managed_origins: dict[str, OrigemArquivoPacote] = {}
             if self._managed_root.is_dir():
                 for path in sorted(
                     item for item in self._managed_root.rglob("*") if item.is_file()
                 ):
+                    self._ensure_not_cancelled(cancelado)
                     relative = path.relative_to(self._managed_root).as_posix()
                     if relative in reserved_pdf_paths:
                         continue
@@ -633,6 +671,7 @@ class ServicoPortabilidadeProjeto:
                     )
             restored_pdf_paths: dict[UUID, Path] = {}
             for project_id, document_id, source in pdf_records:
+                self._ensure_not_cancelled(cancelado)
                 if document_id in omitted_pdf_ids:
                     continue
                 if source is None:
@@ -660,6 +699,7 @@ class ServicoPortabilidadeProjeto:
                 estado_integridade=current_report.estado,
                 omissoes=current_report.omissoes,
             )
+            self._ensure_not_cancelled(cancelado)
             notify(3, 3, "Publicando backup atômico")
             path = self._archive.criar(destino, manifest, tuple(origins))
         return ResultadoBackupCompleto(
@@ -669,22 +709,36 @@ class ServicoPortabilidadeProjeto:
         )
 
     def restaurar_backup(
-        self, origem: Path, *, progresso: ProgressCallback | None = None
+        self,
+        origem: Path,
+        *,
+        progresso: ProgressCallback | None = None,
+        cancelado: CancelCallback | None = None,
     ) -> ResultadoRestauracaoBackup:
         with self._coordinator.adquirir(TipoOperacao.RESTAURACAO):
             return self._observe_external_operation(
                 "portability.restore",
-                lambda: self._restaurar_backup(origem, progresso=progresso),
+                lambda: self._restaurar_backup(
+                    origem,
+                    progresso=progresso,
+                    cancelado=cancelado,
+                ),
             )
 
     def _restaurar_backup(
-        self, origem: Path, *, progresso: ProgressCallback | None
+        self,
+        origem: Path,
+        *,
+        progresso: ProgressCallback | None,
+        cancelado: CancelCallback | None,
     ) -> ResultadoRestauracaoBackup:
         notify = progresso or (lambda _current, _total, _message: None)
+        self._ensure_not_cancelled(cancelado)
         with TemporaryDirectory(prefix="zeny-restore-") as temporary_name:
             temporary = Path(temporary_name)
             notify(1, 4, "Validando backup")
             extracted = self._archive.extrair_validado(origem, temporary / "backup")
+            self._ensure_not_cancelled(cancelado)
             if extracted.manifesto.projeto_id != _BACKUP_ID:
                 raise PortabilidadeProjetoError("Arquivo selecionado não é um backup completo")
             if not extracted.integridade.integro:
@@ -709,6 +763,7 @@ class ServicoPortabilidadeProjeto:
             recovery_database = self._backup.criar_snapshot(
                 self._database_path, temporary / "recovery.sqlite3"
             )
+            self._ensure_not_cancelled(cancelado)
             try:
                 self._managed_root.parent.mkdir(parents=True, exist_ok=True)
                 with (
@@ -716,12 +771,14 @@ class ServicoPortabilidadeProjeto:
                     sibling_temporary_directory(self._managed_root, vacant=True) as old_assets,
                 ):
                     for entry in extracted.manifesto.arquivos:
+                        self._ensure_not_cancelled(cancelado)
                         if entry.tipo != "ARQUIVO_GERENCIADO":
                             continue
                         relative = PurePosixPath(entry.caminho_relativo).relative_to("managed")
                         destination = staging / relative
                         destination.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copy2(extracted.diretorio / entry.caminho_relativo, destination)
+                    self._ensure_not_cancelled(cancelado)
                     self._dispose_connections()
                     notify(3, 4, "Restaurando banco e anexos")
                     try:
@@ -939,6 +996,13 @@ class ServicoPortabilidadeProjeto:
             raise ValueError("Relógio da aplicação deve retornar data com fuso horário")
         return value
 
+    @staticmethod
+    def _ensure_not_cancelled(cancelado: CancelCallback | None) -> None:
+        if cancelado is not None and cancelado():
+            raise PortabilidadeCanceladaError(
+                "Operação de portabilidade cancelada em um ponto seguro"
+            )
+
     def _observe_external_operation(
         self,
         operation: str,
@@ -951,6 +1015,9 @@ class ServicoPortabilidadeProjeto:
             observation.started()
             try:
                 result = action()
+            except PortabilidadeCanceladaError as error:
+                observation.cancelled(error_code=error.__class__.__name__)
+                raise
             except Exception as error:
                 observation.failed(error, expected=_is_expected_portability_failure(error))
                 raise
