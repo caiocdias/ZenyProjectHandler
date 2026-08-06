@@ -594,11 +594,13 @@ def _open_document(path: Path, password: str | None) -> Any:
     if not document.is_pdf or document.page_count < 1:
         document.close()  # type: ignore[no-untyped-call]
         raise PdfArquivoInvalidoError("O arquivo não contém um documento PDF paginado")
-    if document.needs_pass and (
-        not password or document.authenticate(password) <= 0  # type: ignore[no-untyped-call]
-    ):
-        document.close()  # type: ignore[no-untyped-call]
-        raise PdfProtegidoError("O PDF requer uma senha válida")
+    if document.needs_pass:
+        authenticated = bool(
+            password and document.authenticate(password) > 0  # type: ignore[no-untyped-call]
+        )
+        if not authenticated:
+            document.close()  # type: ignore[no-untyped-call]
+            raise PdfProtegidoError(senha_fornecida=bool(password))
     return document
 
 

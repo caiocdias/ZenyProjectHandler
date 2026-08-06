@@ -12,6 +12,15 @@ class PdfArquivoInvalidoError(PdfError):
 class PdfProtegidoError(PdfError):
     """O PDF requer uma senha válida."""
 
+    def __init__(self, *, senha_fornecida: bool) -> None:
+        self.senha_fornecida = senha_fornecida
+        mensagem = (
+            "A senha informada para o PDF está incorreta"
+            if senha_fornecida
+            else "O PDF é protegido e requer uma senha"
+        )
+        super().__init__(mensagem)
+
 
 class PdfOrigemAlteradaError(PdfError):
     """A origem mudou depois da inspeção registrada."""

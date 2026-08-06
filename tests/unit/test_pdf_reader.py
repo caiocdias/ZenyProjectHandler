@@ -207,8 +207,10 @@ def test_invalid_corrupt_and_protected_inputs_are_controlled(tmp_path: Path) -> 
         reader.inspecionar(corrupt)
     with pytest.raises(PdfProtegidoError):
         reader.inspecionar(protected)
-    with pytest.raises(PdfProtegidoError):
+    with pytest.raises(PdfProtegidoError) as wrong_password:
         reader.inspecionar(protected, senha="errada")
+    assert wrong_password.value.senha_fornecida
+    assert "errada" not in str(wrong_password.value)
 
     assert reader.inspecionar(protected, senha="senha").documento.paginas
 

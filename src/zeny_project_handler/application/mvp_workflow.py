@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -294,6 +294,7 @@ class ServicoFluxoMvp:
         cancelado: Callable[[], bool] | None = None,
         configuracao_extracao: ConfiguracaoAnaliseDocumento | None = None,
         configuracao_interpretacao: ConfiguracaoInterpretacao | None = None,
+        senhas_documentos: Mapping[UUID, str] | None = None,
     ) -> ResultadoFluxoMvp:
         with self._coordinator.adquirir(TipoOperacao.ANALISE):
             return self._executar_pipeline(
@@ -302,6 +303,7 @@ class ServicoFluxoMvp:
                 cancelado=cancelado,
                 configuracao_extracao=configuracao_extracao,
                 configuracao_interpretacao=configuracao_interpretacao,
+                senhas_documentos=senhas_documentos,
             )
 
     def _executar_pipeline(
@@ -312,6 +314,7 @@ class ServicoFluxoMvp:
         cancelado: Callable[[], bool] | None,
         configuracao_extracao: ConfiguracaoAnaliseDocumento | None,
         configuracao_interpretacao: ConfiguracaoInterpretacao | None,
+        senhas_documentos: Mapping[UUID, str] | None,
     ) -> ResultadoFluxoMvp:
         session = self.abrir_projeto(projeto_id)
         documents = session.projeto.documentos
@@ -343,6 +346,7 @@ class ServicoFluxoMvp:
                     projeto_id,
                     document.id,
                     configuracao=extraction_config,
+                    senha=(senhas_documentos or {}).get(document.id),
                     execucao_id=extraction_id,
                 ).execucao
             self._ensure_not_cancelled(cancelado)

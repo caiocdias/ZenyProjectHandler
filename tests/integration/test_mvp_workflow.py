@@ -10,7 +10,12 @@ from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import Engine
-from tests.pdf_fixtures import create_catalog_pdf, create_feature_pdf, create_golden_pdf
+from tests.pdf_fixtures import (
+    create_catalog_pdf,
+    create_feature_pdf,
+    create_golden_pdf,
+    create_protected_pdf,
+)
 
 from zeny_project_handler.adapters.analysis import JsonAnalysisCache, PyMuPdfDocumentAnalyzer
 from zeny_project_handler.adapters.interpretation import (
@@ -144,6 +149,29 @@ def test_multiple_pdf_import_is_atomic_and_preserves_order(
         first.resolve(),
         second.resolve(),
     ]
+    engine.dispose()
+
+
+def test_pipeline_uses_a_distinct_ephemeral_password_for_each_document(
+    workflow: tuple[Engine, ServicoFluxoMvp],
+    tmp_path: Path,
+) -> None:
+    engine, service = workflow
+    created = service.criar_projeto("Projeto protegido")
+    first = create_protected_pdf(tmp_path / "protegido-a.pdf", "senha-a")
+    second = create_protected_pdf(tmp_path / "protegido-b.pdf", "senha-b")
+    first_import = service.importar_pdfs(created.projeto.id, (first,), senha="senha-a")
+    second_import = service.importar_pdfs(created.projeto.id, (second,), senha="senha-b")
+    first_id = first_import.inspecoes[0].documento.id
+    second_id = second_import.inspecoes[0].documento.id
+
+    result = service.executar_pipeline(
+        created.projeto.id,
+        senhas_documentos={first_id: "senha-a", second_id: "senha-b"},
+    )
+
+    assert result.documentos_processados == 2
+    assert len(result.execucoes_interpretacao) == 2
     engine.dispose()
 
 

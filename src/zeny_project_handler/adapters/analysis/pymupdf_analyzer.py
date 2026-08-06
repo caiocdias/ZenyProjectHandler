@@ -15,6 +15,7 @@ from uuid import uuid5
 
 import pymupdf
 
+from zeny_project_handler.adapters.pdf.errors import PdfProtegidoError
 from zeny_project_handler.domain.analysis import DiagnosticoAnalise, EvidenciaDocumento
 from zeny_project_handler.domain.enums import TipoEvidencia
 from zeny_project_handler.domain.values import GeometriaDocumento
@@ -355,9 +356,11 @@ def _open_document(source: Path, password: str | None) -> Any:
     if not document.is_pdf or document.page_count < 1:
         document.close()
         raise ValueError("A origem não é um PDF paginado válido")
-    if document.needs_pass and (not password or document.authenticate(password) <= 0):
-        document.close()
-        raise ValueError("O PDF requer uma senha válida para análise")
+    if document.needs_pass:
+        authenticated = bool(password and document.authenticate(password) > 0)
+        if not authenticated:
+            document.close()
+            raise PdfProtegidoError(senha_fornecida=bool(password))
     return document
 
 
