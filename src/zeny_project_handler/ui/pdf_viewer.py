@@ -11,6 +11,7 @@ from uuid import UUID
 from PySide6.QtCore import QPointF, Qt, Signal
 from PySide6.QtGui import (
     QBrush,
+    QCloseEvent,
     QColor,
     QImage,
     QPainter,
@@ -42,7 +43,12 @@ from zeny_project_handler.domain.documents import DocumentoProjeto
 from zeny_project_handler.domain.enums import EstadoRevisao, TipoGeometria
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 from zeny_project_handler.logging_config import OperationLogger, operation_logger
-from zeny_project_handler.ports.pdf import InspecaoPdf, LeitorPdfPort, PaginaPdfRenderizada
+from zeny_project_handler.ports.pdf import (
+    InspecaoPdf,
+    LeitorPdfPort,
+    PaginaPdfRenderizada,
+    SessaoLeituraPdfPort,
+)
 
 
 class ReviewLinkItem(QGraphicsPathItem):
@@ -239,8 +245,8 @@ class PdfViewerWidget(QWidget):
         self._dpi = dpi
         self._inspection: InspecaoPdf | None = None
         self._inspections: tuple[InspecaoPdf, ...] = ()
-        self._project_pages: tuple[tuple[InspecaoPdf, int], ...] = ()
-        self._password: str | None = None
+        self._sessions: tuple[SessaoLeituraPdfPort, ...] = ()
+        self._project_pages: tuple[tuple[InspecaoPdf, SessaoLeituraPdfPort, int], ...] = ()
         self._rotation = 0
         self._overlays: tuple[tuple[PontoNormalizado, ...], ...] = ()
         self._review_proposals: tuple[PropostaElemento, ...] = ()
@@ -329,6 +335,7 @@ class PdfViewerWidget(QWidget):
         return self.carregar_projeto((path,), password=password)
 
     def limpar(self) -> None:
+        self._close_pdf_sessions()
         self._inspection = None
         self._inspections = ()
         self._project_pages = ()
@@ -344,6 +351,10 @@ class PdfViewerWidget(QWidget):
         self._page.blockSignals(False)
         self._metadata.setText("Projeto sem PDF importado")
         self.view.scene().clear()
+
+    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - API Qt
+        self._close_pdf_sessions()
+        super().closeEvent(event)
 
     def ir_para_folha(self, numero: int) -> None:
         if not self._project_pages:
@@ -394,12 +405,18 @@ class PdfViewerWidget(QWidget):
             self._open_warning(str(error))
             return False
         try:
-            inspections = tuple(self._reader.inspecionar(path, senha=password) for path in paths)
+            sessions = _open_verified_sessions(
+                self._reader,
+                paths,
+                password=password,
+                documents=documentos,
+            )
         except PdfError as error:
             observation.failed(error, expected=True)
             self.status_changed.emit(str(error))
             QMessageBox.warning(self, "Não foi possível abrir o PDF", str(error))
             return False
+        inspections = tuple(session.inspecao for session in sessions)
         if documentos is not None:
             try:
                 inspections = tuple(
@@ -407,17 +424,20 @@ class PdfViewerWidget(QWidget):
                     for inspection, document in zip(inspections, documentos, strict=True)
                 )
             except ValueError as error:
+                _close_sessions(sessions)
                 observation.failed(error, expected=True)
                 self._open_warning(str(error))
                 return False
         try:
-            project_pages = _ordered_project_pages(inspections, ordem_paginas)
+            project_pages = _ordered_project_pages(inspections, sessions, ordem_paginas)
         except ValueError as error:
+            _close_sessions(sessions)
             observation.failed(error, expected=True)
             self._open_warning(str(error))
             return False
         hashes = [inspection.documento.sha256 for inspection in inspections]
         if len(set(hashes)) != len(hashes):
+            _close_sessions(sessions)
             message = "A seleção contém arquivos PDF com conteúdo duplicado"
             observation.failed(ValueError(message), expected=True)
             self.status_changed.emit(message)
@@ -425,8 +445,8 @@ class PdfViewerWidget(QWidget):
             return False
         self._activate_project(
             inspections,
+            sessions=sessions,
             project_pages=project_pages,
-            password=password,
         )
         observation.succeeded(
             item_count=len(inspections),
@@ -442,24 +462,30 @@ class PdfViewerWidget(QWidget):
         self,
         inspections: tuple[InspecaoPdf, ...],
         *,
-        project_pages: tuple[tuple[InspecaoPdf, int], ...],
-        password: str | None,
+        sessions: tuple[SessaoLeituraPdfPort, ...],
+        project_pages: tuple[tuple[InspecaoPdf, SessaoLeituraPdfPort, int], ...],
     ) -> None:
+        previous_sessions = self._sessions
         self._inspections = inspections
+        self._sessions = sessions
         self._overlays = ()
         self._review_proposals = ()
         self._review_link_geometries = {}
         self._last_page_id = None
         self._project_pages = project_pages
         self._inspection = inspections[0]
-        self._password = password
         self._rotation = 0
         self._page.blockSignals(True)
         self._page.setRange(1, len(self._project_pages))
         self._page.setValue(1)
         self._page.setEnabled(True)
         self._page.blockSignals(False)
+        _close_sessions(previous_sessions)
         self._render_current_page()
+
+    def _close_pdf_sessions(self) -> None:
+        sessions, self._sessions = self._sessions, ()
+        _close_sessions(sessions)
 
     def definir_sobreposicoes(self, geometries: tuple[tuple[PontoNormalizado, ...], ...]) -> None:
         self._overlays = geometries
@@ -492,7 +518,7 @@ class PdfViewerWidget(QWidget):
         if not self._project_pages:
             return
         project_page_number = self._page.value()
-        inspection, page_number = self._project_pages[project_page_number - 1]
+        inspection, session, page_number = self._project_pages[project_page_number - 1]
         self._inspection = inspection
         observation = operation_logger(
             "pdf.viewer.render",
@@ -501,13 +527,10 @@ class PdfViewerWidget(QWidget):
         with observation.context():
             observation.started()
             try:
-                rendered = self._reader.renderizar_pagina(
-                    inspection.caminho_origem,
+                rendered = session.renderizar_pagina(
                     page_number,
                     dpi=self._dpi,
                     rotacao_adicional_graus=self._rotation,
-                    senha=self._password,
-                    sha256_esperado=inspection.documento.sha256,
                 )
                 self._finish_render(
                     inspection,
@@ -596,22 +619,53 @@ class PdfViewerWidget(QWidget):
 
 def _ordered_project_pages(
     inspections: tuple[InspecaoPdf, ...],
+    sessions: tuple[SessaoLeituraPdfPort, ...],
     reading_order: tuple[UUID, ...] | None,
-) -> tuple[tuple[InspecaoPdf, int], ...]:
+) -> tuple[tuple[InspecaoPdf, SessaoLeituraPdfPort, int], ...]:
     page_by_id = {
-        page.id: (inspection, page.numero)
-        for inspection in inspections
+        page.id: (inspection, session, page.numero)
+        for inspection, session in zip(inspections, sessions, strict=True)
         for page in inspection.documento.paginas
     }
     if reading_order is None:
         return tuple(
-            (inspection, page.numero)
-            for inspection in inspections
+            (inspection, session, page.numero)
+            for inspection, session in zip(inspections, sessions, strict=True)
             for page in inspection.documento.paginas
         )
     if len(reading_order) != len(page_by_id) or set(reading_order) != set(page_by_id):
         raise ValueError("A ordem de leitura não corresponde às páginas dos PDFs abertos")
     return tuple(page_by_id[page_id] for page_id in reading_order)
+
+
+def _open_verified_sessions(
+    reader: LeitorPdfPort,
+    paths: tuple[Path, ...],
+    *,
+    password: str | None,
+    documents: tuple[DocumentoProjeto, ...] | None,
+) -> tuple[SessaoLeituraPdfPort, ...]:
+    sessions: list[SessaoLeituraPdfPort] = []
+    try:
+        for index, path in enumerate(paths):
+            persisted = documents[index] if documents is not None else None
+            sessions.append(
+                reader.abrir_sessao(
+                    path,
+                    senha=password,
+                    documento_id=persisted.id if persisted is not None else None,
+                    sha256_esperado=persisted.sha256 if persisted is not None else None,
+                )
+            )
+    except BaseException:
+        _close_sessions(tuple(sessions))
+        raise
+    return tuple(sessions)
+
+
+def _close_sessions(sessions: tuple[SessaoLeituraPdfPort, ...]) -> None:
+    for session in sessions:
+        session.fechar()
 
 
 def _review_color(state: EstadoRevisao, *, alpha: int = 255) -> QColor:

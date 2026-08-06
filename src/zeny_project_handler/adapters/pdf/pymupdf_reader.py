@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from dataclasses import dataclass
 from decimal import Decimal
 from hashlib import sha256
 from pathlib import Path
+from types import TracebackType
 from typing import Any, TypeVar, cast
 from uuid import UUID, uuid4
 
@@ -26,6 +28,7 @@ from zeny_project_handler.ports.pdf import (
     InventarioPaginaPdf,
     PaginaPdfRenderizada,
     PdfRectangle,
+    SessaoLeituraPdfPort,
 )
 
 from .errors import (
@@ -38,12 +41,48 @@ from .errors import (
 _XREF_PATTERN = re.compile(r"(?<!\d)(\d+)\s+\d+\s+R")
 _READ_CHUNK_SIZE = 1024 * 1024
 T = TypeVar("T")
+FileHasher = Callable[[Path], str]
+
+
+@dataclass(frozen=True, slots=True)
+class _SourceMetadata:
+    size: int
+    modified_ns: int
+    changed_ns: int
+    device: int
+    inode: int
 
 
 class PyMuPdfReader:
     """Inspeciona conteúdo nativo e renderiza sem chamar qualquer API de gravação."""
 
     adapter_name = f"PyMuPDF {pymupdf.__version__}"
+
+    def __init__(self, *, file_hasher: FileHasher | None = None) -> None:
+        self._file_hasher = file_hasher or _file_sha256
+
+    def abrir_sessao(
+        self,
+        caminho: Path,
+        *,
+        senha: str | None = None,
+        documento_id: UUID | None = None,
+        sha256_esperado: str | None = None,
+    ) -> SessaoLeituraPdfPort:
+        source = _validated_path(caminho)
+        inspection, metadata = self._inspect_verified_source(
+            source,
+            password=senha,
+            document_id=documento_id,
+        )
+        if sha256_esperado is not None and inspection.documento.sha256 != sha256_esperado:
+            raise PdfOrigemAlteradaError("O conteúdo do PDF não corresponde ao hash registrado")
+        return PyMuPdfSession(
+            source=source,
+            inspection=inspection,
+            metadata=metadata,
+            password=senha,
+        )
 
     def inspecionar(
         self,
@@ -53,9 +92,24 @@ class PyMuPdfReader:
         documento_id: UUID | None = None,
     ) -> InspecaoPdf:
         source = _validated_path(caminho)
-        initial_stat = source.stat()
-        digest = _file_sha256(source)
-        document = _open_document(source, senha)
+        inspection, _metadata = self._inspect_verified_source(
+            source,
+            password=senha,
+            document_id=documento_id,
+        )
+        return inspection
+
+    def _inspect_verified_source(
+        self,
+        source: Path,
+        *,
+        password: str | None,
+        document_id: UUID | None,
+    ) -> tuple[InspecaoPdf, _SourceMetadata]:
+        initial_metadata = _source_metadata(source)
+        digest = self._file_hasher(source)
+        _require_same_metadata(source, initial_metadata, "durante a leitura da identidade")
+        document = _open_document(source, password)
         try:
             diagnostics: list[DiagnosticoPdf] = []
             if document.is_repaired:
@@ -74,34 +128,28 @@ class PyMuPdfReader:
             pages = tuple(_inspect_page(document, index) for index in range(document.page_count))
             metadata = cast(dict[str, Any], document.metadata or {})
             project_document = DocumentoProjeto(
-                id=documento_id or uuid4(),
+                id=document_id or uuid4(),
                 nome_arquivo=source.name,
                 sha256=digest,
                 paginas=tuple(item.pagina for item in pages),
-                tamanho_bytes=initial_stat.st_size,
+                tamanho_bytes=initial_metadata.size,
                 versao_pdf=_optional_string(metadata.get("format")),
                 produtor=_optional_string(metadata.get("producer")),
             )
         finally:
             document.close()
 
-        final_stat = source.stat()
-        if (
-            final_stat.st_size != initial_stat.st_size
-            or final_stat.st_mtime_ns != initial_stat.st_mtime_ns
-            or _file_sha256(source) != digest
-        ):
-            raise PdfOrigemAlteradaError("O PDF foi alterado durante a inspeção")
+        final_metadata = _require_same_metadata(source, initial_metadata, "durante a inspeção")
         return InspecaoPdf(
             documento=project_document,
             caminho_origem=source,
-            tamanho_bytes=final_stat.st_size,
-            modificado_em_ns=final_stat.st_mtime_ns,
+            tamanho_bytes=final_metadata.size,
+            modificado_em_ns=final_metadata.modified_ns,
             adaptador=self.adapter_name,
             paginas=pages,
             grupos_conteudo_opcional=ocgs,
             diagnosticos=tuple(diagnostics),
-        )
+        ), final_metadata
 
     def renderizar_pagina(
         self,
@@ -116,40 +164,16 @@ class PyMuPdfReader:
     ) -> PaginaPdfRenderizada:
         source = _validated_path(caminho)
         _validate_render_parameters(dpi, rotacao_adicional_graus, recorte_normalizado)
-        if sha256_esperado is not None and _file_sha256(source) != sha256_esperado:
+        if sha256_esperado is not None and self._file_hasher(source) != sha256_esperado:
             raise PdfOrigemAlteradaError("O conteúdo do PDF não corresponde ao hash registrado")
-        document = _open_document(source, senha)
-        try:
-            if not 1 <= pagina_numero <= document.page_count:
-                raise PdfPaginaInvalidaError("Número de página fora do documento")
-            page = document.load_page(pagina_numero - 1)
-            matrix = pymupdf.Matrix(dpi / 72, dpi / 72).prerotate(  # type: ignore[no-untyped-call]
-                rotacao_adicional_graus
-            )
-            pixmap = page.get_pixmap(
-                matrix=matrix,
-                colorspace=pymupdf.csRGB,
-                alpha=False,
-                clip=_normalized_clip(page, recorte_normalizado),
-                annots=True,
-            )
-            return PaginaPdfRenderizada(
-                pagina_numero=pagina_numero,
-                largura_pixels=pixmap.width,
-                altura_pixels=pixmap.height,
-                stride=pixmap.stride,
-                dados_rgb=bytes(pixmap.samples),
-                dpi=dpi,
-                rotacao_adicional_graus=rotacao_adicional_graus,
-            )
-        except PdfPaginaInvalidaError:
-            raise
-        except Exception as error:
-            raise PdfPaginaInvalidaError(
-                "Não foi possível rasterizar a página solicitada"
-            ) from error
-        finally:
-            document.close()
+        return _render_page(
+            source,
+            pagina_numero,
+            dpi=dpi,
+            rotation=rotacao_adicional_graus,
+            normalized_clip=recorte_normalizado,
+            password=senha,
+        )
 
     def renderizar_miniatura(
         self,
@@ -173,9 +197,94 @@ class PyMuPdfReader:
         current_stat = source.stat()
         if (
             current_stat.st_size != inspecao.tamanho_bytes
-            or _file_sha256(source) != inspecao.documento.sha256
+            or self._file_hasher(source) != inspecao.documento.sha256
         ):
             raise PdfOrigemAlteradaError("O PDF foi alterado depois da inspeção")
+
+
+class PyMuPdfSession:
+    """Sessão curta que guarda identidade, mas nenhum handle de arquivo ou documento."""
+
+    def __init__(
+        self,
+        *,
+        source: Path,
+        inspection: InspecaoPdf,
+        metadata: _SourceMetadata,
+        password: str | None,
+    ) -> None:
+        self._source: Path | None = source
+        self._inspection: InspecaoPdf | None = inspection
+        self._metadata: _SourceMetadata | None = metadata
+        self._password = password
+        self._invalidated = False
+
+    @property
+    def inspecao(self) -> InspecaoPdf:
+        if self._inspection is None:
+            raise PdfOrigemAlteradaError(self._unavailable_message())
+        return self._inspection
+
+    def renderizar_pagina(
+        self,
+        pagina_numero: int,
+        *,
+        dpi: int,
+        rotacao_adicional_graus: int = 0,
+        recorte_normalizado: PdfRectangle | None = None,
+    ) -> PaginaPdfRenderizada:
+        source, metadata = self._active_source()
+        _validate_render_parameters(dpi, rotacao_adicional_graus, recorte_normalizado)
+        self._verify_metadata(source, metadata)
+        try:
+            return _render_page(
+                source,
+                pagina_numero,
+                dpi=dpi,
+                rotation=rotacao_adicional_graus,
+                normalized_clip=recorte_normalizado,
+                password=self._password,
+            )
+        finally:
+            self._verify_metadata(source, metadata)
+
+    def fechar(self) -> None:
+        self._source = None
+        self._inspection = None
+        self._metadata = None
+        self._password = None
+
+    def __enter__(self) -> PyMuPdfSession:
+        self._active_source()
+        return self
+
+    def __exit__(
+        self,
+        _exception_type: type[BaseException] | None,
+        _exception: BaseException | None,
+        _traceback: TracebackType | None,
+    ) -> None:
+        self.fechar()
+
+    def _active_source(self) -> tuple[Path, _SourceMetadata]:
+        if self._source is None or self._metadata is None:
+            raise PdfOrigemAlteradaError(self._unavailable_message())
+        return self._source, self._metadata
+
+    def _verify_metadata(self, source: Path, expected: _SourceMetadata) -> None:
+        try:
+            _require_same_metadata(source, expected, "depois da abertura da sessão")
+        except (PdfArquivoInvalidoError, PdfOrigemAlteradaError):
+            self._invalidated = True
+            self.fechar()
+            raise PdfOrigemAlteradaError(
+                "O PDF foi alterado; abra e inspecione o documento novamente"
+            ) from None
+
+    def _unavailable_message(self) -> str:
+        if self._invalidated:
+            return "A sessão foi invalidada; inspecione o PDF novamente"
+        return "A sessão de leitura do PDF já foi encerrada"
 
 
 def _validated_path(path: Path) -> Path:
@@ -197,6 +306,72 @@ def _file_sha256(path: Path) -> str:
     except OSError as error:
         raise PdfArquivoInvalidoError("Não foi possível ler o arquivo PDF") from error
     return digest.hexdigest()
+
+
+def _source_metadata(path: Path) -> _SourceMetadata:
+    try:
+        result = path.stat()
+    except OSError as error:
+        raise PdfArquivoInvalidoError("Não foi possível consultar o arquivo PDF") from error
+    return _SourceMetadata(
+        size=result.st_size,
+        modified_ns=result.st_mtime_ns,
+        changed_ns=result.st_ctime_ns,
+        device=result.st_dev,
+        inode=result.st_ino,
+    )
+
+
+def _require_same_metadata(
+    path: Path,
+    expected: _SourceMetadata,
+    operation: str,
+) -> _SourceMetadata:
+    current = _source_metadata(path)
+    if current != expected:
+        raise PdfOrigemAlteradaError(f"O PDF foi alterado {operation}")
+    return current
+
+
+def _render_page(
+    source: Path,
+    page_number: int,
+    *,
+    dpi: int,
+    rotation: int,
+    normalized_clip: PdfRectangle | None,
+    password: str | None,
+) -> PaginaPdfRenderizada:
+    document = _open_document(source, password)
+    try:
+        if not 1 <= page_number <= document.page_count:
+            raise PdfPaginaInvalidaError("Número de página fora do documento")
+        page = document.load_page(page_number - 1)
+        matrix = pymupdf.Matrix(dpi / 72, dpi / 72).prerotate(  # type: ignore[no-untyped-call]
+            rotation
+        )
+        pixmap = page.get_pixmap(
+            matrix=matrix,
+            colorspace=pymupdf.csRGB,
+            alpha=False,
+            clip=_normalized_clip(page, normalized_clip),
+            annots=True,
+        )
+        return PaginaPdfRenderizada(
+            pagina_numero=page_number,
+            largura_pixels=pixmap.width,
+            altura_pixels=pixmap.height,
+            stride=pixmap.stride,
+            dados_rgb=bytes(pixmap.samples),
+            dpi=dpi,
+            rotacao_adicional_graus=rotation,
+        )
+    except PdfPaginaInvalidaError:
+        raise
+    except Exception as error:
+        raise PdfPaginaInvalidaError("Não foi possível rasterizar a página solicitada") from error
+    finally:
+        document.close()
 
 
 def _open_document(path: Path, password: str | None) -> Any:

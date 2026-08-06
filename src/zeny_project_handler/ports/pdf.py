@@ -114,7 +114,34 @@ class ReferenciaFontePdf:
     modificado_em_ns: int
 
 
+class SessaoLeituraPdfPort(Protocol):
+    """Origem inspecionada cuja identidade vale apenas durante esta sessão."""
+
+    @property
+    def inspecao(self) -> InspecaoPdf: ...
+
+    def renderizar_pagina(
+        self,
+        pagina_numero: int,
+        *,
+        dpi: int,
+        rotacao_adicional_graus: int = 0,
+        recorte_normalizado: PdfRectangle | None = None,
+    ) -> PaginaPdfRenderizada: ...
+
+    def fechar(self) -> None: ...
+
+
 class LeitorPdfPort(Protocol):
+    def abrir_sessao(
+        self,
+        caminho: Path,
+        *,
+        senha: str | None = None,
+        documento_id: UUID | None = None,
+        sha256_esperado: str | None = None,
+    ) -> SessaoLeituraPdfPort: ...
+
     def inspecionar(
         self,
         caminho: Path,
