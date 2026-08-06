@@ -24,6 +24,7 @@ from zeny_project_handler.adapters.portability import ZipProjectArchive
 from zeny_project_handler.application.errors import PortabilidadeProjetoError
 from zeny_project_handler.application.project_portability import ServicoPortabilidadeProjeto
 from zeny_project_handler.domain.catalog import CatalogoTecnico
+from zeny_project_handler.domain.portability import EstadoIntegridadePacote
 from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler.ports.pdf import ReferenciaFontePdf
 
@@ -209,6 +210,12 @@ def test_export_import_preserves_ids_decisions_and_repairs_missing_photo(
     assert {item.codigo for item in target_service.verificar_integridade(project.id).problemas} == {
         "PDF_AUSENTE"
     }
+    degraded_export = target_service.exportar_projeto(
+        project.id, tmp_path / "project-with-omission.zphproj"
+    )
+    assert degraded_export.estado_integridade is EstadoIntegridadePacote.DEGRADADO
+    assert [item.codigo for item in degraded_export.manifesto.omissoes] == ["PDF_AUSENTE"]
+    assert degraded_export.integridade_origem.problemas[0].referencia_id == project.documentos[0].id
     target_service.localizar_pdf(
         project.id,
         project.documentos[0].id,
@@ -252,6 +259,8 @@ def test_full_backup_restores_database_and_managed_files(
     photo_path = _create_png(tmp_path / "backup-photo.png")
     attached = service.anexar_foto(project.id, project.elementos[0].id, photo_path)
     backup = service.criar_backup(tmp_path / "backup.zphbackup")
+    assert backup.estado_integridade is EstadoIntegridadePacote.INTEGRO
+    assert backup.manifesto.versao_formato == 2
 
     with SqlAlchemyUnitOfWork(engine) as work:
         work.projetos.salvar(replace(attached.projeto, nome="Estado posterior"))
@@ -265,7 +274,8 @@ def test_full_backup_restores_database_and_managed_files(
     managed_photo.unlink()
     pdf_source.caminho_canonico.unlink()
 
-    service.restaurar_backup(backup)
+    restored_backup = service.restaurar_backup(backup.caminho)
+    assert restored_backup.estado_integridade is EstadoIntegridadePacote.INTEGRO
 
     with SqlAlchemyUnitOfWork(engine) as work:
         restored = work.projetos.obter(project.id)
@@ -293,6 +303,110 @@ def test_full_backup_restores_database_and_managed_files(
         ]
         assert all(record.levelno == logging.INFO for record in records)
         assert len({getattr(record, "correlation_id", None) for record in records}) == 1
+
+
+def test_backup_preflight_is_side_effect_free_and_classifies_pdf_problems(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data = tmp_path / "preflight-data"
+    engine = create_sqlite_engine(data / "zeny-project-handler.sqlite3")
+    try:
+        upgrade_database(engine)
+        project, pdf_source = _project_with_real_pdf(tmp_path, catalogo_inicial)
+        _persist_complete_project(engine, catalogo_inicial, project, pdf_source)
+        service = _service(data, engine)
+        original = pdf_source.caminho_canonico.read_bytes()
+
+        def reject_temporary_directory(*_args: object, **_kwargs: object) -> None:
+            raise AssertionError("preflight tentou criar diretório temporário")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(
+                "zeny_project_handler.application.project_portability.TemporaryDirectory",
+                reject_temporary_directory,
+            )
+            assert service.preflight_backup().integro
+
+        pdf_source.caminho_canonico.unlink()
+        missing = service.preflight_backup()
+        assert [item.codigo for item in missing.problemas] == ["PDF_AUSENTE"]
+
+        pdf_source.caminho_canonico.write_bytes(original + b"alterado")
+        changed = service.preflight_backup()
+        assert [item.codigo for item in changed.problemas] == ["PDF_ADULTERADO"]
+
+        pdf_source.caminho_canonico.write_bytes(b"conteudo ilegivel")
+        unreadable = service.preflight_backup()
+        assert [item.codigo for item in unreadable.problemas] == ["PDF_ILEGIVEL"]
+        assert all(item.caminho_relativo is None for item in unreadable.problemas)
+        assert all(item.referencia_id == project.documentos[0].id for item in unreadable.problemas)
+        assert not (tmp_path / "preflight.zphbackup").exists()
+        assert not tuple(data.glob(".z-*"))
+    finally:
+        engine.dispose()
+
+
+def test_degraded_backup_requires_confirmation_records_omission_and_restores_predictably(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    data = tmp_path / "degraded-data"
+    engine = create_sqlite_engine(data / "zeny-project-handler.sqlite3")
+    try:
+        upgrade_database(engine)
+        project, pdf_source = _project_with_real_pdf(tmp_path, catalogo_inicial)
+        _persist_complete_project(engine, catalogo_inicial, project, pdf_source)
+        service = _service(data, engine)
+        pdf_source.caminho_canonico.unlink()
+        report = service.preflight_backup()
+        destination = tmp_path / "degraded.zphbackup"
+        destination.write_bytes(b"ultimo-backup-publicado")
+
+        with pytest.raises(PortabilidadeProjetoError, match="confirmação explícita"):
+            service.criar_backup(destination, relatorio_integridade=report)
+
+        assert destination.read_bytes() == b"ultimo-backup-publicado"
+        assert not tuple(tmp_path.glob(".z-*"))
+        accepted = service.criar_backup(
+            destination,
+            confirmar_degradado=True,
+            relatorio_integridade=report,
+        )
+        assert accepted.estado_integridade is EstadoIntegridadePacote.DEGRADADO
+        assert accepted.manifesto.versao_formato == 2
+        assert [item.codigo for item in accepted.manifesto.omissoes] == ["PDF_AUSENTE"]
+        omission = accepted.manifesto.omissoes[0]
+        assert omission.referencia_id == project.documentos[0].id
+        assert omission.projeto_id == project.id
+        assert all(
+            item.referencia_id != project.documentos[0].id for item in accepted.manifesto.arquivos
+        )
+
+        extracted = ZipProjectArchive().extrair_validado(
+            accepted.caminho, tmp_path / "degraded-extracted"
+        )
+        assert extracted.integridade.integro
+        assert extracted.manifesto.estado_integridade is EstadoIntegridadePacote.DEGRADADO
+
+        with SqlAlchemyUnitOfWork(engine) as work:
+            work.projetos.salvar(replace(project, nome="Estado posterior"))
+            work.commit()
+        restoration = service.restaurar_backup(accepted.caminho)
+        assert restoration.estado_integridade is EstadoIntegridadePacote.DEGRADADO
+        with SqlAlchemyUnitOfWork(engine) as work:
+            restored_project = work.projetos.obter(project.id)
+            restored_source = work.fontes_pdf.obter(project.documentos[0].id)
+        assert restored_project == project
+        assert restored_source is not None
+        assert restored_source.caminho_canonico == pdf_source.caminho_canonico
+        assert not restored_source.caminho_canonico.exists()
+        assert [item.codigo for item in service.verificar_integridade(project.id).problemas] == [
+            "PDF_AUSENTE"
+        ]
+    finally:
+        engine.dispose()
 
 
 def test_restore_disposes_connections_again_before_rollback(
@@ -334,7 +448,7 @@ def test_restore_disposes_connections_again_before_rollback(
         monkeypatch.setattr(manager, "restaurar_snapshot", fail_first_restore)
 
         with pytest.raises(PersistenceError, match="falha simulada"):
-            service.restaurar_backup(backup)
+            service.restaurar_backup(backup.caminho)
 
         assert dispose_calls == 2
         assert restore_calls == 2

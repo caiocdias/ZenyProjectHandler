@@ -15,7 +15,10 @@ from zeny_project_handler.adapters.portability import ZipProjectArchive
 from zeny_project_handler.application.errors import PortabilidadeProjetoError
 from zeny_project_handler.domain.portability import (
     ArquivoPacoteProjeto,
+    EstadoIntegridadePacote,
     ManifestoProjetoPortatil,
+    OmissaoPacoteProjeto,
+    TratamentoOmissaoPacote,
 )
 from zeny_project_handler.ports.portability import OrigemArquivoPacote
 
@@ -74,6 +77,43 @@ def test_zip_package_survives_move_and_reports_tampered_content(tmp_path: Path) 
     result = ZipProjectArchive().extrair_validado(tampered, tmp_path / "tampered-output")
     assert not result.integridade.integro
     assert {item.codigo for item in result.integridade.problemas} == {"HASH_DIVERGENTE"}
+
+
+def test_format_2_round_trips_degraded_status_and_auditable_omissions(tmp_path: Path) -> None:
+    source = tmp_path / "example.pdf"
+    source.write_bytes(b"%PDF-1.7\nexample")
+    origin = _origin(source)
+    project_id = uuid4()
+    omitted_document_id = uuid4()
+    manifest = ManifestoProjetoPortatil(
+        versao_formato=2,
+        projeto_id=project_id,
+        catalogo_id=uuid4(),
+        nome_projeto="Projeto portátil",
+        criado_em=datetime(2026, 7, 21, 20, tzinfo=UTC),
+        arquivos=(origin.arquivo,),
+        estado_integridade=EstadoIntegridadePacote.DEGRADADO,
+        omissoes=(
+            OmissaoPacoteProjeto(
+                codigo="PDF_AUSENTE",
+                tipo="PDF",
+                referencia_id=omitted_document_id,
+                projeto_id=project_id,
+                tratamento=TratamentoOmissaoPacote.OMITIDO,
+            ),
+        ),
+    )
+
+    package = ZipProjectArchive().criar(tmp_path / "degraded.zphproj", manifest, (origin,))
+    extracted = ZipProjectArchive().extrair_validado(package, tmp_path / "degraded-output")
+    with ZipFile(package) as archive:
+        raw_manifest = json.loads(archive.read("manifest.json"))["manifest"]
+
+    assert extracted.integridade.integro
+    assert extracted.manifesto == manifest
+    assert raw_manifest["format_version"] == 2
+    assert raw_manifest["integrity"]["status"] == "DEGRADADO"
+    assert raw_manifest["integrity"]["omissions"][0]["reference_id"] == str(omitted_document_id)
 
 
 def test_zip_package_rejects_path_traversal_and_interruption_preserves_destination(
