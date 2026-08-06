@@ -8,7 +8,13 @@ from pathlib import Path
 
 import pymupdf
 
+from zeny_project_handler.ports.pdf import OrcamentoRenderizacaoPdf
+
 _XREF_PATTERN = re.compile(r"(?<!\d)(\d+)\s+\d+\s+R")
+TEST_RENDER_BUDGET = OrcamentoRenderizacaoPdf(
+    limite_pixels=8_000_000,
+    limite_bytes=64 * 1024 * 1024,
+)
 
 
 def create_feature_pdf(path: Path) -> Path:
@@ -51,6 +57,31 @@ def create_golden_pdf(path: Path) -> Path:
         page = document.new_page(width=72, height=48)
         page.draw_rect(page.rect, color=(1, 1, 1), fill=(1, 1, 1))
         page.draw_rect(pymupdf.Rect(18, 12, 54, 36), color=(1, 0, 0), fill=(1, 0, 0))
+        document.save(path)
+    finally:
+        document.close()
+    return path
+
+
+def create_clip_rotation_golden_pdf(path: Path) -> Path:
+    document = pymupdf.open()
+    try:
+        page = document.new_page(width=80, height=60)
+        page.draw_rect(pymupdf.Rect(0, 0, 40, 30), color=(1, 0, 0), fill=(1, 0, 0))
+        page.draw_rect(pymupdf.Rect(40, 0, 80, 30), color=(0, 1, 0), fill=(0, 1, 0))
+        page.draw_rect(pymupdf.Rect(0, 30, 40, 60), color=(0, 0, 1), fill=(0, 0, 1))
+        page.draw_rect(pymupdf.Rect(40, 30, 80, 60), color=(1, 1, 0), fill=(1, 1, 0))
+        document.save(path)
+    finally:
+        document.close()
+    return path
+
+
+def create_large_format_pdf(path: Path, *, width_points: float, height_points: float) -> Path:
+    document = pymupdf.open()
+    try:
+        page = document.new_page(width=width_points, height=height_points)
+        page.insert_text((24, 36), "PRANCHA SINTETICA")
         document.save(path)
     finally:
         document.close()

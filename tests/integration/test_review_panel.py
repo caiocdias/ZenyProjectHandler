@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
 from pytestqt.qtbot import QtBot
 from sqlalchemy import Engine
 from tests.factories import complete_project
-from tests.pdf_fixtures import create_golden_pdf
+from tests.pdf_fixtures import TEST_RENDER_BUDGET, create_golden_pdf
 
 from zeny_project_handler.adapters.compliance import carregar_registro_conformidade_inicial
 from zeny_project_handler.adapters.pdf import PyMuPdfReader
@@ -169,7 +169,7 @@ def review_panel_context(
         lambda: SqlAlchemyUnitOfWork(engine),
         relogio=lambda: datetime(2026, 7, 21, 18, tzinfo=UTC),
     )
-    viewer = PdfViewerWidget(leitor=reader, dpi=72)
+    viewer = PdfViewerWidget(leitor=reader, dpi=72, orcamento=TEST_RENDER_BUDGET)
     panel = ReviewPanelWidget(service=service, viewer=viewer)
     qtbot.addWidget(viewer)
     qtbot.addWidget(panel)

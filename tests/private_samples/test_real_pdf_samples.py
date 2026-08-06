@@ -31,7 +31,12 @@ from zeny_project_handler.ports.analysis import (
     SolicitacaoAnaliseDocumento,
 )
 from zeny_project_handler.ports.interpretation import SolicitacaoInterpretacao
-from zeny_project_handler.ports.pdf import ReferenciaFontePdf
+from zeny_project_handler.ports.pdf import OrcamentoRenderizacaoPdf, ReferenciaFontePdf
+
+PRIVATE_RENDER_BUDGET = OrcamentoRenderizacaoPdf(
+    limite_pixels=8_000_000,
+    limite_bytes=64 * 1024 * 1024,
+)
 
 EXAMPLES_DIRECTORY = Path(__file__).parents[2] / "examples"
 MANIFEST_PATH = Path(__file__).parents[2] / "evaluation" / "manifesto-amostras.json"
@@ -108,6 +113,7 @@ def test_registered_real_pdf_smoke_by_anonymous_hash(sample: dict[str, Any]) -> 
     thumbnail = reader.renderizar_miniatura(
         source,
         1,
+        orcamento=PRIVATE_RENDER_BUDGET,
         sha256_esperado=str(sample["sha256"]),
     )
 
@@ -245,6 +251,7 @@ def test_unregistered_local_pdfs_are_read_only_smoke_samples() -> None:
         thumbnail = PyMuPdfReader().renderizar_miniatura(
             source,
             1,
+            orcamento=PRIVATE_RENDER_BUDGET,
             sha256_esperado=pdf_hash,
         )
 

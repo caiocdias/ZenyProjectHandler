@@ -4,7 +4,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from tests.pdf_fixtures import create_feature_pdf, create_golden_pdf, create_protected_pdf
+from tests.pdf_fixtures import (
+    TEST_RENDER_BUDGET,
+    create_feature_pdf,
+    create_golden_pdf,
+    create_protected_pdf,
+)
 
 import zeny_project_handler.adapters.pdf.pymupdf_reader as reader_module
 from zeny_project_handler.adapters.pdf import (
@@ -54,6 +59,7 @@ def test_rendering_golden_rgb_rotation_crop_and_thumbnail(tmp_path: Path) -> Non
         source,
         1,
         dpi=72,
+        orcamento=TEST_RENDER_BUDGET,
         sha256_esperado=inspection.documento.sha256,
     )
 
@@ -61,16 +67,23 @@ def test_rendering_golden_rgb_rotation_crop_and_thumbnail(tmp_path: Path) -> Non
     assert _rgb_at(rendered, 2, 2) == pytest.approx((255, 255, 255), abs=8)
     assert _rgb_at(rendered, 30, 24) == pytest.approx((255, 0, 0), abs=8)
 
-    rotated = reader.renderizar_pagina(source, 1, dpi=72, rotacao_adicional_graus=90)
+    rotated = reader.renderizar_pagina(
+        source,
+        1,
+        dpi=72,
+        orcamento=TEST_RENDER_BUDGET,
+        rotacao_adicional_graus=90,
+    )
     assert (rotated.largura_pixels, rotated.altura_pixels) == (48, 72)
     cropped = reader.renderizar_pagina(
         source,
         1,
         dpi=72,
+        orcamento=TEST_RENDER_BUDGET,
         recorte_normalizado=(0.25, 0.25, 0.75, 0.75),
     )
     assert (cropped.largura_pixels, cropped.altura_pixels) == (36, 24)
-    thumbnail = reader.renderizar_miniatura(source, 1)
+    thumbnail = reader.renderizar_miniatura(source, 1, orcamento=TEST_RENDER_BUDGET)
     assert (thumbnail.largura_pixels, thumbnail.altura_pixels) == (36, 24)
 
 
@@ -85,11 +98,17 @@ def test_verified_session_hashes_once_across_pages_rotations_and_clips(tmp_path:
     reader = PyMuPdfReader(file_hasher=instrumented_hasher)
     session = reader.abrir_sessao(source)
     try:
-        first = session.renderizar_pagina(1, dpi=72)
-        second = session.renderizar_pagina(2, dpi=72, rotacao_adicional_graus=90)
+        first = session.renderizar_pagina(1, dpi=72, orcamento=TEST_RENDER_BUDGET)
+        second = session.renderizar_pagina(
+            2,
+            dpi=72,
+            orcamento=TEST_RENDER_BUDGET,
+            rotacao_adicional_graus=90,
+        )
         clipped = session.renderizar_pagina(
             3,
             dpi=144,
+            orcamento=TEST_RENDER_BUDGET,
             rotacao_adicional_graus=180,
             recorte_normalizado=(0.25, 0.25, 0.75, 0.75),
         )
@@ -101,7 +120,7 @@ def test_verified_session_hashes_once_across_pages_rotations_and_clips(tmp_path:
     assert second.pagina_numero == 2
     assert clipped.pagina_numero == 3
     with pytest.raises(PdfOrigemAlteradaError, match="encerrada"):
-        session.renderizar_pagina(1, dpi=72)
+        session.renderizar_pagina(1, dpi=72, orcamento=TEST_RENDER_BUDGET)
 
 
 def test_verified_session_invalidates_on_change_and_requires_reinspection(tmp_path: Path) -> None:
@@ -119,15 +138,15 @@ def test_verified_session_invalidates_on_change_and_requires_reinspection(tmp_pa
     source.write_bytes(original + b"\n% alterado")
 
     with pytest.raises(PdfOrigemAlteradaError, match="novamente"):
-        session.renderizar_pagina(1, dpi=72)
+        session.renderizar_pagina(1, dpi=72, orcamento=TEST_RENDER_BUDGET)
     with pytest.raises(PdfOrigemAlteradaError, match="invalidada"):
-        session.renderizar_pagina(1, dpi=72)
+        session.renderizar_pagina(1, dpi=72, orcamento=TEST_RENDER_BUDGET)
     assert hash_calls == 1
 
     source.write_bytes(original)
     replacement = reader.abrir_sessao(source)
     try:
-        assert replacement.renderizar_pagina(1, dpi=72).dados_rgb
+        assert replacement.renderizar_pagina(1, dpi=72, orcamento=TEST_RENDER_BUDGET).dados_rgb
     finally:
         replacement.fechar()
     assert hash_calls == 2
@@ -142,7 +161,7 @@ def test_verified_session_keeps_no_windows_file_lock_between_uses(tmp_path: Path
 
     assert moved.is_file()
     with pytest.raises(PdfOrigemAlteradaError, match="novamente"):
-        session.renderizar_pagina(1, dpi=72)
+        session.renderizar_pagina(1, dpi=72, orcamento=TEST_RENDER_BUDGET)
     moved.replace(source)
 
 
@@ -164,6 +183,7 @@ def test_strong_checks_still_hash_at_inspection_and_verification_boundaries(
         source,
         1,
         dpi=72,
+        orcamento=TEST_RENDER_BUDGET,
         sha256_esperado=inspection.documento.sha256,
     )
 
@@ -198,13 +218,24 @@ def test_rendering_rejects_invalid_parameters_and_changed_source(tmp_path: Path)
     reader = PyMuPdfReader()
     inspection = reader.inspecionar(source)
 
-    for kwargs in (
-        {"pagina_numero": 0, "dpi": 72},
-        {"pagina_numero": 2, "dpi": 72},
-        {"pagina_numero": 1, "dpi": 10},
-        {"pagina_numero": 1, "dpi": 72, "rotacao_adicional_graus": 45},
-        {"pagina_numero": 1, "dpi": 72, "recorte_normalizado": (0.8, 0, 0.2, 1)},
-    ):
+    invalid_requests: tuple[dict[str, Any], ...] = (
+        {"pagina_numero": 0, "dpi": 72, "orcamento": TEST_RENDER_BUDGET},
+        {"pagina_numero": 2, "dpi": 72, "orcamento": TEST_RENDER_BUDGET},
+        {"pagina_numero": 1, "dpi": 10, "orcamento": TEST_RENDER_BUDGET},
+        {
+            "pagina_numero": 1,
+            "dpi": 72,
+            "orcamento": TEST_RENDER_BUDGET,
+            "rotacao_adicional_graus": 45,
+        },
+        {
+            "pagina_numero": 1,
+            "dpi": 72,
+            "orcamento": TEST_RENDER_BUDGET,
+            "recorte_normalizado": (0.8, 0, 0.2, 1),
+        },
+    )
+    for kwargs in invalid_requests:
         with pytest.raises(PdfPaginaInvalidaError):
             reader.renderizar_pagina(source, **kwargs)
 
@@ -216,6 +247,7 @@ def test_rendering_rejects_invalid_parameters_and_changed_source(tmp_path: Path)
             source,
             1,
             dpi=72,
+            orcamento=TEST_RENDER_BUDGET,
             sha256_esperado=inspection.documento.sha256,
         )
 
@@ -236,7 +268,16 @@ def test_extractor_failure_is_localized_and_other_resources_survive(
     assert any(item.codigo == "pdf.vetor_nao_lido" for item in first.diagnosticos)
     assert first.textos
     assert first.imagens
-    assert PyMuPdfReader().renderizar_pagina(source, 1, dpi=72).dados_rgb
+    assert (
+        PyMuPdfReader()
+        .renderizar_pagina(
+            source,
+            1,
+            dpi=72,
+            orcamento=TEST_RENDER_BUDGET,
+        )
+        .dados_rgb
+    )
 
 
 def test_mupdf_warning_classification_is_localized(monkeypatch: pytest.MonkeyPatch) -> None:

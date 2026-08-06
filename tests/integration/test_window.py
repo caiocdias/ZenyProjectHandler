@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 )
 from pytestqt.qtbot import QtBot
 from tests.conftest import ApplicationFactory
-from tests.pdf_fixtures import create_feature_pdf, create_golden_pdf
+from tests.pdf_fixtures import TEST_RENDER_BUDGET, create_feature_pdf, create_golden_pdf
 
 import zeny_project_handler.adapters.pdf.pymupdf_reader as pdf_reader_module
 from zeny_project_handler import bootstrap
@@ -372,7 +372,7 @@ def test_engine_lifetime_disposes_once_and_bootstrap_failure_disposes(
 @pytest.mark.integration
 def test_pdf_viewer_navigation_zoom_rotation_and_overlays(qtbot: QtBot, tmp_path: Path) -> None:
     source = create_feature_pdf(tmp_path / "interface.pdf")
-    viewer = PdfViewerWidget(leitor=PyMuPdfReader(), dpi=72)
+    viewer = PdfViewerWidget(leitor=PyMuPdfReader(), dpi=72, orcamento=TEST_RENDER_BUDGET)
     qtbot.addWidget(viewer)
     viewer.resize(800, 600)
     viewer.show()
@@ -421,6 +421,7 @@ def test_pdf_viewer_reuses_verified_identity_across_navigation_and_rotation(
     viewer = PdfViewerWidget(
         leitor=PyMuPdfReader(file_hasher=instrumented_hasher),
         dpi=72,
+        orcamento=TEST_RENDER_BUDGET,
     )
     qtbot.addWidget(viewer)
 
@@ -458,7 +459,7 @@ def test_pdf_viewer_closes_sessions_when_switching_document_and_closing(
         original_close(session)
 
     monkeypatch.setattr(pdf_reader_module.PyMuPdfSession, "fechar", track_close)
-    viewer = PdfViewerWidget(leitor=PyMuPdfReader(), dpi=72)
+    viewer = PdfViewerWidget(leitor=PyMuPdfReader(), dpi=72, orcamento=TEST_RENDER_BUDGET)
     qtbot.addWidget(viewer)
 
     assert viewer.carregar_pdf(first)
@@ -476,7 +477,7 @@ def test_pdf_viewer_reports_controlled_open_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    viewer = PdfViewerWidget(leitor=PyMuPdfReader(), dpi=72)
+    viewer = PdfViewerWidget(leitor=PyMuPdfReader(), dpi=72, orcamento=TEST_RENDER_BUDGET)
     qtbot.addWidget(viewer)
     messages: list[str] = []
     monkeypatch.setattr(
@@ -499,7 +500,7 @@ def test_pdf_viewer_opens_selected_files_as_one_ordered_project(
 ) -> None:
     first = create_feature_pdf(tmp_path / "folha-01.pdf")
     second = create_golden_pdf(tmp_path / "folha-02.pdf")
-    viewer = PdfViewerWidget(leitor=PyMuPdfReader(), dpi=72)
+    viewer = PdfViewerWidget(leitor=PyMuPdfReader(), dpi=72, orcamento=TEST_RENDER_BUDGET)
     qtbot.addWidget(viewer)
     viewer.show()
     monkeypatch.setattr(
@@ -541,7 +542,7 @@ def test_pdf_viewer_follows_page_order_across_different_files(
     )
     first_page, second_page, third_page = documents[0].paginas
     fourth_page = documents[1].paginas[0]
-    viewer = PdfViewerWidget(leitor=reader, dpi=72)
+    viewer = PdfViewerWidget(leitor=reader, dpi=72, orcamento=TEST_RENDER_BUDGET)
     qtbot.addWidget(viewer)
 
     loaded = viewer.carregar_projeto(
@@ -566,7 +567,7 @@ def test_pdf_viewer_keeps_current_project_when_one_selected_file_is_invalid(
 ) -> None:
     current = create_feature_pdf(tmp_path / "atual.pdf")
     another = create_golden_pdf(tmp_path / "outra.pdf")
-    viewer = PdfViewerWidget(leitor=PyMuPdfReader(), dpi=72)
+    viewer = PdfViewerWidget(leitor=PyMuPdfReader(), dpi=72, orcamento=TEST_RENDER_BUDGET)
     qtbot.addWidget(viewer)
     viewer.carregar_pdf(current)
     original_inspections = viewer.inspecoes
