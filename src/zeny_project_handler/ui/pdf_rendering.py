@@ -248,18 +248,14 @@ class FilaRenderizacao(QThread):
                     return
                 observation.failed(error, expected=isinstance(error, PdfError))
                 with self._condition:
-                    self._results.append(
-                        ResultadoRenderizacao(solicitacao=request, erro=error)
-                    )
+                    self._results.append(ResultadoRenderizacao(solicitacao=request, erro=error))
                 return
             if work.cancelamento.cancelado:
                 observation.cancelled()
                 return
             observation.succeeded()
             with self._condition:
-                self._results.append(
-                    ResultadoRenderizacao(solicitacao=request, pagina=rendered)
-                )
+                self._results.append(ResultadoRenderizacao(solicitacao=request, pagina=rendered))
 
 
 def regioes_tiles_priorizadas(
@@ -292,9 +288,7 @@ def regioes_tiles_priorizadas(
     visible_center = ((visible[0] + visible[2]) / 2, (visible[1] + visible[3]) / 2)
     planned: list[tuple[int, PdfRectangle]] = []
     for row in range(max(0, first_row - 1), min(rows - 1, last_row + 1) + 1):
-        for column in range(
-            max(0, first_column - 1), min(columns - 1, last_column + 1) + 1
-        ):
+        for column in range(max(0, first_column - 1), min(columns - 1, last_column + 1) + 1):
             visual_region = _grid_region(column, row, columns, rows)
             visible_tile = first_column <= column <= last_column and first_row <= row <= last_row
             center = (

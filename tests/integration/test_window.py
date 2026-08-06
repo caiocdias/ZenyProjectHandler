@@ -404,8 +404,10 @@ def test_pdf_viewer_navigation_zoom_rotation_and_overlays(qtbot: QtBot, tmp_path
         pytest.importorskip("PySide6.QtCore").Qt.MouseButton.LeftButton,
     )
     qtbot.waitUntil(
-        lambda: viewer._current_transformer is not None
-        and viewer._current_transformer.rotacao_adicional_graus == 90
+        lambda: (
+            viewer._current_transformer is not None
+            and viewer._current_transformer.rotacao_adicional_graus == 90
+        )
     )
     assert viewer.view.scene().items()
 

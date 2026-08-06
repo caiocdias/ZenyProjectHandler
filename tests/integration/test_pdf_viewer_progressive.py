@@ -178,9 +178,11 @@ def _wait_preview(
     rotation: int = 0,
 ) -> None:
     qtbot.waitUntil(
-        lambda: viewer._current_preview is not None
-        and viewer._current_preview.plano.pagina_numero == page
-        and viewer._current_preview.plano.rotacao_adicional_graus == rotation,
+        lambda: (
+            viewer._current_preview is not None
+            and viewer._current_preview.plano.pagina_numero == page
+            and viewer._current_preview.plano.rotacao_adicional_graus == rotation
+        ),
         timeout=5_000,
     )
 

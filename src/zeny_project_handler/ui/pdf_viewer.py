@@ -483,9 +483,7 @@ class PdfViewerWidget(QWidget):
             self._render_queue.retirar_resultados()
             sessions = self._sessions
             self._sessions = ()
-            retired = tuple(
-                session for group in self._retired_sessions for session in group
-            )
+            retired = tuple(session for group in self._retired_sessions for session in group)
             self._retired_sessions.clear()
             _close_sessions((*sessions, *retired))
             self._render_cache.limpar()
@@ -753,10 +751,7 @@ class PdfViewerWidget(QWidget):
             or rendered.plano.dpi_solicitado != request.dpi
             or (
                 (request.previa and not rendered.plano.pagina_inteira)
-                or (
-                    not request.previa
-                    and rendered.plano.recorte_normalizado != request.regiao
-                )
+                or (not request.previa and rendered.plano.recorte_normalizado != request.regiao)
             )
         ):
             self.status_changed.emit("O backend devolveu uma região PDF incompatível")
@@ -863,9 +858,7 @@ class PdfViewerWidget(QWidget):
             max(
                 1,
                 math.ceil(
-                    preview.plano.dpi_efetivo
-                    * self.view.zoom
-                    * self.view.devicePixelRatioF()
+                    preview.plano.dpi_efetivo * self.view.zoom * self.view.devicePixelRatioF()
                 ),
             ),
         )
