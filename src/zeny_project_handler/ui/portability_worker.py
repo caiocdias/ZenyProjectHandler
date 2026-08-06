@@ -14,7 +14,10 @@ from zeny_project_handler.application.errors import (
     ApplicationError,
     PortabilidadeCanceladaError,
 )
-from zeny_project_handler.application.project_portability import ServicoPortabilidadeProjeto
+from zeny_project_handler.application.project_portability import (
+    PlanoImportacaoProjeto,
+    ServicoPortabilidadeProjeto,
+)
 from zeny_project_handler.domain.errors import DomainValidationError
 from zeny_project_handler.logging_config import operation_logger
 
@@ -133,20 +136,18 @@ class PortabilityWorker(QObject):
         raise ValueError("Operação de portabilidade não suportada")
 
     def _import_project(self) -> object:
-        try:
-            return self._service.importar_projeto(
-                self._command.path,
-                progresso=self._emit_progress,
-                cancelado=self._cancellation.is_set,
-            )
-        except Exception as error:
-            if "confirme explicitamente" not in str(error):
-                raise
-        if not self._confirm("replace_project", None):
-            raise PortabilidadeCanceladaError("Importação cancelada antes da substituição")
-        return self._service.importar_projeto(
+        plan: PlanoImportacaoProjeto = self._service.preflight_importacao(
             self._command.path,
-            substituir_existente=True,
+            cancelado=self._cancellation.is_set,
+        )
+        confirmed = not plan.requer_confirmacao
+        if plan.requer_confirmacao:
+            confirmed = self._confirm("replace_project", plan)
+        if not confirmed:
+            raise PortabilidadeCanceladaError("Importação cancelada antes da substituição")
+        return self._service.aplicar_plano_importacao(
+            plan,
+            confirmar_substituicao=confirmed,
             progresso=self._emit_progress,
             cancelado=self._cancellation.is_set,
         )

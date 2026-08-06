@@ -24,6 +24,7 @@ from zeny_project_handler.application.operation_coordinator import (
     TipoOperacao,
 )
 from zeny_project_handler.application.project_portability import (
+    PlanoImportacaoProjeto,
     ResultadoBackupCompleto,
     ResultadoExportacaoProjeto,
     ResultadoImportacaoProjeto,
@@ -331,13 +332,10 @@ class PortabilityPanelWidget(QWidget):
                 worker.resolve_confirmation(False)
             return
         assert worker is not None
-        if kind == "replace_project":
+        if kind == "replace_project" and isinstance(payload, PlanoImportacaoProjeto):
             confirmation_log = operation_logger("portability.import.replace_confirmation")
             title = "Substituir projeto existente"
-            message = (
-                "O pacote possui o mesmo ID de um projeto local. Substituir seus dados e "
-                "arquivos pela versão importada?"
-            )
+            message = _import_confirmation_message(payload)
         elif kind == "degraded_backup" and isinstance(payload, RelatorioIntegridadeProjeto):
             confirmation_log = operation_logger("portability.backup.degraded_confirmation")
             title = "Criar backup com ressalvas"
@@ -473,6 +471,28 @@ def _with_suffix(path: Path, suffix: str) -> Path:
 
 def _is_degraded(state: EstadoIntegridadePacote) -> bool:
     return state is EstadoIntegridadePacote.DEGRADADO
+
+
+def _import_confirmation_message(plan: PlanoImportacaoProjeto) -> str:
+    summary = plan.resumo
+    conflicts: list[str] = []
+    if plan.projeto_existente:
+        conflicts.append("há um projeto local com o mesmo ID")
+    if plan.pasta_destino_existente:
+        conflicts.append("há arquivos na pasta gerenciada desse ID")
+    conflict_text = " e ".join(conflicts)
+    return (
+        "O preflight validou o pacote e detectou que "
+        f"{conflict_text}.\n\n"
+        f"Projeto: {summary.nome}\n"
+        f"ID: {str(summary.projeto_id)[:8]}\n"
+        f"Conteúdo: {summary.quantidade_documentos} PDF(s), "
+        f"{summary.quantidade_fotos} foto(s) e "
+        f"{summary.quantidade_analises} análise(s)\n"
+        f"Fingerprint do plano: {plan.fingerprint[:12]}\n\n"
+        "Substituir os dados e arquivos locais pela versão importada? O pacote e o destino serão "
+        "revalidados antes de qualquer troca."
+    )
 
 
 def _backup_confirmation_message(report: RelatorioIntegridadeProjeto) -> str:
