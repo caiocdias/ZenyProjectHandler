@@ -51,7 +51,6 @@ from zeny_project_handler.ports.pdf import (
     InspecaoPdf,
     LeitorPdfPort,
     OrcamentoRenderizacaoPdf,
-    PaginaPdfRenderizada,
     PlanoRenderizacaoPdf,
     SessaoLeituraPdfPort,
 )
@@ -62,6 +61,7 @@ from .pdf_rendering import (
     ChaveCacheRenderizacao,
     FilaRenderizacao,
     IdentidadeDocumentoRenderizacao,
+    RasterRgbRenderizado,
     ResultadoRenderizacao,
     SolicitacaoRenderizacao,
     TrabalhoRenderizacao,
@@ -741,7 +741,7 @@ class PdfViewerWidget(QWidget):
     def _receber_renderizacao(
         self,
         request: SolicitacaoRenderizacao,
-        rendered: PaginaPdfRenderizada,
+        rendered: RasterRgbRenderizado,
     ) -> None:
         _require_ui_thread()
         if not self._request_is_current(request):
@@ -761,7 +761,7 @@ class PdfViewerWidget(QWidget):
             self.status_changed.emit("O backend devolveu uma região PDF incompatível")
             return
         raster = _RasterEmCache(
-            pixmap=_rendered_to_pixmap(rendered),
+            pixmap=_rgb_to_pixmap(rendered),
             plano=rendered.plano,
         )
         self._render_cache.armazenar(
@@ -1006,7 +1006,7 @@ def _require_ui_thread() -> None:
         raise RuntimeError("QPixmap e widgets do visualizador exigem a thread da interface")
 
 
-def _rendered_to_pixmap(rendered: PaginaPdfRenderizada) -> QPixmap:
+def _rgb_to_pixmap(rendered: RasterRgbRenderizado) -> QPixmap:
     _require_ui_thread()
     image = QImage(
         rendered.dados_rgb,

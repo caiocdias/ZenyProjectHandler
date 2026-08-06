@@ -18,8 +18,8 @@ from zeny_project_handler.logging_config import operation_logger
 from zeny_project_handler.ports.pdf import (
     VIEWER_BYTES_PER_PIXEL_ESTIMATE,
     OrcamentoRenderizacaoPdf,
-    PaginaPdfRenderizada,
     PdfRectangle,
+    PlanoRenderizacaoPdf,
     SessaoLeituraPdfPort,
 )
 
@@ -101,9 +101,22 @@ class TrabalhoRenderizacao:
 
 
 @dataclass(frozen=True, slots=True)
+class RasterRgbRenderizado:
+    """Raster RGB proprietário, seguro para atravessar a fronteira da thread."""
+
+    pagina_numero: int
+    rotacao_adicional_graus: int
+    largura_pixels: int
+    altura_pixels: int
+    stride: int
+    dados_rgb: bytes
+    plano: PlanoRenderizacaoPdf
+
+
+@dataclass(frozen=True, slots=True)
 class ResultadoRenderizacao:
     solicitacao: SolicitacaoRenderizacao
-    pagina: PaginaPdfRenderizada | None = None
+    pagina: RasterRgbRenderizado | None = None
     erro: Exception | None = None
 
     def __post_init__(self) -> None:
@@ -253,9 +266,24 @@ class FilaRenderizacao(QThread):
             if work.cancelamento.cancelado:
                 observation.cancelled()
                 return
+            raster = RasterRgbRenderizado(
+                pagina_numero=rendered.pagina_numero,
+                rotacao_adicional_graus=rendered.rotacao_adicional_graus,
+                largura_pixels=rendered.largura_pixels,
+                altura_pixels=rendered.altura_pixels,
+                stride=rendered.stride,
+                dados_rgb=bytes(rendered.dados_rgb),
+                plano=rendered.plano,
+            )
+            # O Pixmap nativo do PyMuPDF nasceu nesta thread e também deve ser
+            # liberado aqui. Somente o buffer Python proprietário segue para a UI.
+            del rendered
+            if work.cancelamento.cancelado:
+                observation.cancelled()
+                return
             observation.succeeded()
             with self._condition:
-                self._results.append(ResultadoRenderizacao(solicitacao=request, pagina=rendered))
+                self._results.append(ResultadoRenderizacao(solicitacao=request, pagina=raster))
 
 
 def regioes_tiles_priorizadas(
