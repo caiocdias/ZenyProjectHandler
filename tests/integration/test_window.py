@@ -21,6 +21,7 @@ from pytestqt.qtbot import QtBot
 from tests.conftest import ApplicationFactory
 from tests.pdf_fixtures import create_feature_pdf, create_golden_pdf
 
+import zeny_project_handler.adapters.pdf.pymupdf_reader as pdf_reader_module
 from zeny_project_handler import bootstrap
 from zeny_project_handler.adapters.pdf import PyMuPdfReader
 from zeny_project_handler.application.operation_coordinator import TipoOperacao
@@ -402,6 +403,71 @@ def test_pdf_viewer_navigation_zoom_rotation_and_overlays(qtbot: QtBot, tmp_path
         pytest.importorskip("PySide6.QtCore").Qt.MouseButton.LeftButton,
     )
     assert viewer.view.scene().items()
+
+
+@pytest.mark.integration
+def test_pdf_viewer_reuses_verified_identity_across_navigation_and_rotation(
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> None:
+    source = create_feature_pdf(tmp_path / "identidade-estavel.pdf")
+    hash_calls = 0
+
+    def instrumented_hasher(path: Path) -> str:
+        nonlocal hash_calls
+        hash_calls += 1
+        return pdf_reader_module._file_sha256(path)
+
+    viewer = PdfViewerWidget(
+        leitor=PyMuPdfReader(file_hasher=instrumented_hasher),
+        dpi=72,
+    )
+    qtbot.addWidget(viewer)
+
+    assert viewer.carregar_pdf(source)
+    page_selector = viewer.findChild(QSpinBox, "pdfPageSpinBox")
+    assert page_selector is not None
+    page_selector.setValue(2)
+    page_selector.setValue(3)
+    page_selector.setValue(1)
+    qtbot.mouseClick(  # type: ignore[no-untyped-call]
+        viewer.findChild(QPushButton, "pdfRotateButton"),
+        Qt.MouseButton.LeftButton,
+    )
+    qtbot.mouseClick(  # type: ignore[no-untyped-call]
+        viewer.findChild(QPushButton, "pdfZoomInButton"),
+        Qt.MouseButton.LeftButton,
+    )
+
+    assert hash_calls == 1
+
+
+@pytest.mark.integration
+def test_pdf_viewer_closes_sessions_when_switching_document_and_closing(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first = create_golden_pdf(tmp_path / "primeiro.pdf")
+    second = create_feature_pdf(tmp_path / "segundo.pdf")
+    closed_sessions: list[pdf_reader_module.PyMuPdfSession] = []
+    original_close = pdf_reader_module.PyMuPdfSession.fechar
+
+    def track_close(session: pdf_reader_module.PyMuPdfSession) -> None:
+        closed_sessions.append(session)
+        original_close(session)
+
+    monkeypatch.setattr(pdf_reader_module.PyMuPdfSession, "fechar", track_close)
+    viewer = PdfViewerWidget(leitor=PyMuPdfReader(), dpi=72)
+    qtbot.addWidget(viewer)
+
+    assert viewer.carregar_pdf(first)
+    assert viewer.carregar_pdf(second)
+    assert len(closed_sessions) == 1
+
+    viewer.close()
+
+    assert len(closed_sessions) == 2
 
 
 @pytest.mark.integration

@@ -74,6 +74,102 @@ def test_rendering_golden_rgb_rotation_crop_and_thumbnail(tmp_path: Path) -> Non
     assert (thumbnail.largura_pixels, thumbnail.altura_pixels) == (36, 24)
 
 
+def test_verified_session_hashes_once_across_pages_rotations_and_clips(tmp_path: Path) -> None:
+    source = create_feature_pdf(tmp_path / "sessao.pdf")
+    hashed_paths: list[Path] = []
+
+    def instrumented_hasher(path: Path) -> str:
+        hashed_paths.append(path)
+        return reader_module._file_sha256(path)
+
+    reader = PyMuPdfReader(file_hasher=instrumented_hasher)
+    session = reader.abrir_sessao(source)
+    try:
+        first = session.renderizar_pagina(1, dpi=72)
+        second = session.renderizar_pagina(2, dpi=72, rotacao_adicional_graus=90)
+        clipped = session.renderizar_pagina(
+            3,
+            dpi=144,
+            rotacao_adicional_graus=180,
+            recorte_normalizado=(0.25, 0.25, 0.75, 0.75),
+        )
+    finally:
+        session.fechar()
+
+    assert hashed_paths == [source.resolve()]
+    assert first.pagina_numero == 1
+    assert second.pagina_numero == 2
+    assert clipped.pagina_numero == 3
+    with pytest.raises(PdfOrigemAlteradaError, match="encerrada"):
+        session.renderizar_pagina(1, dpi=72)
+
+
+def test_verified_session_invalidates_on_change_and_requires_reinspection(tmp_path: Path) -> None:
+    source = create_golden_pdf(tmp_path / "mutavel.pdf")
+    original = source.read_bytes()
+    hash_calls = 0
+
+    def instrumented_hasher(path: Path) -> str:
+        nonlocal hash_calls
+        hash_calls += 1
+        return reader_module._file_sha256(path)
+
+    reader = PyMuPdfReader(file_hasher=instrumented_hasher)
+    session = reader.abrir_sessao(source)
+    source.write_bytes(original + b"\n% alterado")
+
+    with pytest.raises(PdfOrigemAlteradaError, match="novamente"):
+        session.renderizar_pagina(1, dpi=72)
+    with pytest.raises(PdfOrigemAlteradaError, match="invalidada"):
+        session.renderizar_pagina(1, dpi=72)
+    assert hash_calls == 1
+
+    source.write_bytes(original)
+    replacement = reader.abrir_sessao(source)
+    try:
+        assert replacement.renderizar_pagina(1, dpi=72).dados_rgb
+    finally:
+        replacement.fechar()
+    assert hash_calls == 2
+
+
+def test_verified_session_keeps_no_windows_file_lock_between_uses(tmp_path: Path) -> None:
+    source = create_golden_pdf(tmp_path / "movel.pdf")
+    moved = tmp_path / "movido.pdf"
+    session = PyMuPdfReader().abrir_sessao(source)
+
+    source.replace(moved)
+
+    assert moved.is_file()
+    with pytest.raises(PdfOrigemAlteradaError, match="novamente"):
+        session.renderizar_pagina(1, dpi=72)
+    moved.replace(source)
+
+
+def test_strong_checks_still_hash_at_inspection_and_verification_boundaries(
+    tmp_path: Path,
+) -> None:
+    source = create_golden_pdf(tmp_path / "fronteira.pdf")
+    hash_calls = 0
+
+    def instrumented_hasher(path: Path) -> str:
+        nonlocal hash_calls
+        hash_calls += 1
+        return reader_module._file_sha256(path)
+
+    reader = PyMuPdfReader(file_hasher=instrumented_hasher)
+    inspection = reader.inspecionar(source)
+    reader.verificar_origem(inspection)
+    reader.renderizar_pagina(
+        source,
+        1,
+        dpi=72,
+        sha256_esperado=inspection.documento.sha256,
+    )
+
+    assert hash_calls == 3
+
+
 def test_invalid_corrupt_and_protected_inputs_are_controlled(tmp_path: Path) -> None:
     reader = PyMuPdfReader()
     missing = tmp_path / "ausente.pdf"
