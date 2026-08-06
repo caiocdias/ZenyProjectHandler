@@ -289,15 +289,18 @@ class ProjectPanelWidget(QWidget):
         confirmation = QMessageBox.question(
             self,
             "Excluir projeto",
-            f"Excluir permanentemente o projeto “{session.projeto.nome}” e todos os seus "
-            "dados locais?\n\nOs arquivos PDF originais no disco não serão apagados.",
+            f"Excluir permanentemente o projeto “{session.projeto.nome}”, seu cadastro, "
+            "análises, revisões, fotos e cópias de arquivos mantidas na pasta gerenciada?\n\n"
+            "Os arquivos PDF originais externos permanecem no local de origem e não serão "
+            "apagados.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
         if confirmation != QMessageBox.StandardButton.Yes:
             return
         project_id = session.projeto.id
-        if self._action(lambda: self._service.excluir_projeto(project_id)) is None:
+        result = self._action(lambda: self._service.excluir_projeto(project_id))
+        if result is None:
             return
         self._session = None
         self._settings.remove("last_project_id")
@@ -309,7 +312,15 @@ class ProjectPanelWidget(QWidget):
         self._review_panel.limpar()
         self.atualizar_projetos()
         self._show_empty_state()
-        self.status_changed.emit("Projeto excluído; os PDFs originais foram preservados")
+        if result.limpeza_pendente:
+            self.status_changed.emit(
+                "Projeto excluído e PDFs originais externos preservados; a limpeza da pasta "
+                "gerenciada ficou registrada para nova tentativa"
+            )
+        else:
+            self.status_changed.emit(
+                "Projeto e sua pasta gerenciada excluídos; PDFs originais externos preservados"
+            )
 
     def selecionar_pdfs(self) -> None:
         session = self._session
@@ -420,8 +431,9 @@ class ProjectPanelWidget(QWidget):
             self,
             "Remover PDFs do projeto",
             f"Remover do projeto: {names}?\n\nAnálises, propostas, decisões e elementos "
-            "dependentes dessas folhas também serão removidos. Os arquivos originais no disco "
-            "serão preservados.",
+            "dependentes dessas folhas também serão removidos. Fotos gerenciadas desses "
+            "elementos serão apagadas somente quando nenhuma referência viva usar o mesmo "
+            "conteúdo. Os arquivos PDF originais externos serão preservados.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -435,10 +447,15 @@ class ProjectPanelWidget(QWidget):
         self._activate(result.sessao)
         self._review_panel.limpar()
         self._review_panel.atualizar_projetos()
-        self.status_changed.emit(
+        message = (
             f"{len(result.documentos_removidos)} PDF(s), {result.execucoes_removidas} "
-            f"execução(ões) e {result.elementos_removidos} elemento(s) removidos do projeto"
+            f"execução(ões), {result.elementos_removidos} elemento(s) e "
+            f"{result.arquivos_gerenciados_removidos} foto(s) sem referência removidos; "
+            "PDFs originais externos preservados"
         )
+        if result.limpeza_pendente:
+            message += "; limpeza restante registrada para nova tentativa"
+        self.status_changed.emit(message)
 
     def executar_analise(self) -> None:
         session = self._session

@@ -34,6 +34,7 @@ from zeny_project_handler.application.import_recovery import (
     fingerprint_arquivos_esperados,
     fingerprint_arvore_gerenciada,
 )
+from zeny_project_handler.application.managed_files import GerenciadorArquivosGerenciados
 from zeny_project_handler.application.operation_coordinator import (
     CoordenadorOperacoes,
     TipoOperacao,
@@ -117,6 +118,8 @@ class ResultadoFotoProjeto:
     projeto: Projeto
     foto: FotoElemento | None
     deduplicada: bool = False
+    arquivos_gerenciados_removidos: int = 0
+    limpeza_pendente: bool = False
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -207,6 +210,7 @@ class ServicoPortabilidadeProjeto:
         *,
         diretorio_dados: Path,
         caminho_banco: Path,
+        gerenciador_arquivos: GerenciadorArquivosGerenciados | None = None,
         coordenador: CoordenadorOperacoes | None = None,
         descartar_conexoes: Callable[[], None] | None = None,
         relogio: Callable[[], datetime] | None = None,
@@ -220,6 +224,10 @@ class ServicoPortabilidadeProjeto:
         self._data_directory = diretorio_dados.expanduser().resolve()
         self._database_path = caminho_banco.expanduser().resolve()
         self._managed_root = self._data_directory / "project-files"
+        self._managed_files = gerenciador_arquivos or GerenciadorArquivosGerenciados(
+            self._data_directory,
+            self._all_projects,
+        )
         self._coordinator = coordenador or CoordenadorOperacoes()
         self._dispose_connections = descartar_conexoes or (lambda: None)
         self._clock = relogio or (lambda: datetime.now(UTC))
@@ -377,15 +385,19 @@ class ServicoPortabilidadeProjeto:
             element, fotos=tuple(item for item in element.fotos if item.id != foto_id)
         )
         updated = _replace_element(project, updated_element)
-        self._save_project(updated)
-        if not any(
-            item.caminho_relativo == photo.caminho_relativo
-            for other in updated.elementos
-            for item in other.fotos
-        ):
-            with suppress(OSError):
-                self._managed_path(projeto_id, photo.caminho_relativo).unlink(missing_ok=True)
-        return ResultadoFotoProjeto(projeto=updated, foto=photo)
+        journal = self._managed_files.preparar_coleta_fotos(projeto_id, (photo,))
+        try:
+            self._save_project(updated)
+        except Exception:
+            self._managed_files.cancelar(journal)
+            raise
+        cleanup = self._managed_files.concluir(journal)
+        return ResultadoFotoProjeto(
+            projeto=updated,
+            foto=photo,
+            arquivos_gerenciados_removidos=cleanup.arquivos_removidos,
+            limpeza_pendente=cleanup.pendente,
+        )
 
     def localizar_foto(
         self,
@@ -415,6 +427,7 @@ class ServicoPortabilidadeProjeto:
             raise PortabilidadeProjetoError("Arquivo localizado não corresponde ao hash da foto")
         relative = f"photos/{digest}{_SUPPORTED_PHOTO_MIME[mime_type]}"
         _copy_atomic(source, self._managed_path(projeto_id, relative))
+        journal = self._managed_files.preparar_coleta_fotos(projeto_id, (photo,))
         repaired = replace(
             photo,
             caminho_relativo=relative,
@@ -427,8 +440,18 @@ class ServicoPortabilidadeProjeto:
             fotos=tuple(repaired if item.id == foto_id else item for item in element.fotos),
         )
         updated = _replace_element(project, updated_element)
-        self._save_project(updated)
-        return ResultadoFotoProjeto(projeto=updated, foto=repaired)
+        try:
+            self._save_project(updated)
+        except Exception:
+            self._managed_files.cancelar(journal)
+            raise
+        cleanup = self._managed_files.concluir(journal)
+        return ResultadoFotoProjeto(
+            projeto=updated,
+            foto=repaired,
+            arquivos_gerenciados_removidos=cleanup.arquivos_removidos,
+            limpeza_pendente=cleanup.pendente,
+        )
 
     def verificar_integridade(self, projeto_id: UUID) -> RelatorioIntegridadeProjeto:
         project = self._project(projeto_id)
@@ -1255,6 +1278,10 @@ class ServicoPortabilidadeProjeto:
         if project is None:
             raise ProjetoNaoEncontradoError("Projeto não encontrado")
         return project
+
+    def _all_projects(self) -> tuple[Projeto, ...]:
+        with self._unit_of_work() as work:
+            return work.projetos.listar()
 
     def _save_project(self, project: Projeto) -> None:
         with self._unit_of_work() as work:

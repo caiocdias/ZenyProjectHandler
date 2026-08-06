@@ -53,6 +53,10 @@ class RecuperacaoImportacaoBloqueadaError(PortabilidadeProjetoError):
     """O journal não permite reconciliar a importação sem risco para os dados."""
 
 
+class RecuperacaoLimpezaBloqueadaError(ApplicationError):
+    """Uma tarefa de limpeza não pode ser reconciliada sem risco para os dados."""
+
+
 class PortabilidadeCanceladaError(ApplicationError):
     """A portabilidade foi cancelada antes de uma fronteira de publicação segura."""
 

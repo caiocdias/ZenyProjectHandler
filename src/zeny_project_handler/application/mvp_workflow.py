@@ -31,6 +31,7 @@ from .errors import (
     ProjetoNaoEncontradoError,
 )
 from .interpretation_pipeline import ExecutarPipelineInterpretacao
+from .managed_files import GerenciadorArquivosGerenciados, fotos_removidas
 from .operation_coordinator import CoordenadorOperacoes, TipoOperacao
 from .pdf_import import ImportarPdfsNoProjeto, ResultadoImportacaoPdfs
 
@@ -70,6 +71,18 @@ class ResultadoRemocaoDocumentos:
     documentos_removidos: tuple[str, ...]
     execucoes_removidas: int
     elementos_removidos: int
+    arquivos_gerenciados_removidos: int = 0
+    limpeza_pendente: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class ResultadoExclusaoProjeto:
+    projeto_id: UUID
+    arquivos_gerenciados_removidos: int = 0
+    limpeza_pendente: bool = False
+
+    def __bool__(self) -> bool:
+        return True
 
 
 class ServicoFluxoMvp:
@@ -83,6 +96,7 @@ class ServicoFluxoMvp:
         importador: ImportarPdfsNoProjeto,
         extrator: ExecutarAnaliseDocumento,
         interpretador: ExecutarPipelineInterpretacao,
+        gerenciador_arquivos: GerenciadorArquivosGerenciados,
         coordenador: CoordenadorOperacoes | None = None,
         relogio: Callable[[], datetime] | None = None,
         gerar_id: Callable[[], UUID] = uuid4,
@@ -92,6 +106,7 @@ class ServicoFluxoMvp:
         self._importer = importador
         self._extractor = extrator
         self._interpreter = interpretador
+        self._managed_files = gerenciador_arquivos
         self._coordinator = coordenador or CoordenadorOperacoes()
         self._clock = relogio or (lambda: datetime.now(UTC))
         self._generate_id = gerar_id
@@ -135,16 +150,29 @@ class ServicoFluxoMvp:
             work.commit()
         return self.abrir_projeto(projeto_id)
 
-    def excluir_projeto(self, projeto_id: UUID) -> bool:
+    def excluir_projeto(self, projeto_id: UUID) -> ResultadoExclusaoProjeto:
         with self._coordinator.adquirir(TipoOperacao.EXCLUSAO_PROJETO):
             return self._excluir_projeto(projeto_id)
 
-    def _excluir_projeto(self, projeto_id: UUID) -> bool:
+    def _excluir_projeto(self, projeto_id: UUID) -> ResultadoExclusaoProjeto:
         with self._unit_of_work() as work:
-            if not work.projetos.remover(projeto_id):
+            if work.projetos.obter(projeto_id) is None:
                 raise ProjetoNaoEncontradoError("Projeto não encontrado para exclusão")
-            work.commit()
-        return True
+            journal = self._managed_files.preparar_exclusao_projeto(projeto_id)
+            try:
+                if not work.projetos.remover(projeto_id):
+                    raise ProjetoNaoEncontradoError("Projeto não encontrado para exclusão")
+                work.commit()
+            except Exception:
+                work.rollback()
+                self._managed_files.cancelar(journal)
+                raise
+        cleanup = self._managed_files.concluir(journal)
+        return ResultadoExclusaoProjeto(
+            projeto_id=projeto_id,
+            arquivos_gerenciados_removidos=cleanup.arquivos_removidos,
+            limpeza_pendente=cleanup.pendente,
+        )
 
     def abrir_projeto(self, projeto_id: UUID) -> SessaoProjetoMvp:
         with self._unit_of_work() as work:
@@ -237,13 +265,25 @@ class ServicoFluxoMvp:
             )
             for execution_id in reversed(execution_ids):
                 work.execucoes_analise.remover(execution_id)
-            work.projetos.salvar(updated)
-            work.commit()
+            journal = self._managed_files.preparar_coleta_fotos(
+                projeto_id,
+                fotos_removidas(project, updated),
+            )
+            try:
+                work.projetos.salvar(updated)
+                work.commit()
+            except Exception:
+                work.rollback()
+                self._managed_files.cancelar(journal)
+                raise
+        cleanup = self._managed_files.concluir(journal)
         return ResultadoRemocaoDocumentos(
             sessao=self.abrir_projeto(projeto_id),
             documentos_removidos=tuple(document.nome_arquivo for document in selected),
             execucoes_removidas=len(execution_ids),
             elementos_removidos=len(project.elementos) - len(updated.elementos),
+            arquivos_gerenciados_removidos=cleanup.arquivos_removidos,
+            limpeza_pendente=cleanup.pendente,
         )
 
     def executar_pipeline(

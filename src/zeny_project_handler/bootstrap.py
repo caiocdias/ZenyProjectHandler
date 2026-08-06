@@ -36,12 +36,14 @@ from zeny_project_handler.application.errors import ApplicationError
 from zeny_project_handler.application.human_review import ServicoRevisaoHumana
 from zeny_project_handler.application.import_recovery import RecuperadorImportacaoProjeto
 from zeny_project_handler.application.interpretation_pipeline import ExecutarPipelineInterpretacao
+from zeny_project_handler.application.managed_files import GerenciadorArquivosGerenciados
 from zeny_project_handler.application.mvp_workflow import ServicoFluxoMvp
 from zeny_project_handler.application.operation_coordinator import CoordenadorOperacoes
 from zeny_project_handler.application.pdf_import import ImportarPdfsNoProjeto
 from zeny_project_handler.application.project_portability import ServicoPortabilidadeProjeto
 from zeny_project_handler.config import AppSettings
 from zeny_project_handler.domain.catalog import CatalogoTecnico
+from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler.logging_config import (
     configure_logging,
     install_unhandled_exception_logging,
@@ -125,8 +127,16 @@ def _compose_initialized_application(
     def unit_of_work() -> SqlAlchemyUnitOfWork:
         return SqlAlchemyUnitOfWork(engine)
 
+    def list_projects() -> tuple[Projeto, ...]:
+        with unit_of_work() as work:
+            return work.projetos.listar()
+
     registry = carregar_registro_regras_inicial()
     operation_coordinator = CoordenadorOperacoes()
+    managed_files = GerenciadorArquivosGerenciados(
+        app_settings.data_directory,
+        list_projects,
+    )
     workflow_service = ServicoFluxoMvp(
         unit_of_work,
         catalogo_inicial_id=catalog.id,
@@ -147,6 +157,7 @@ def _compose_initialized_application(
             registry,
             unit_of_work,
         ),
+        gerenciador_arquivos=managed_files,
         coordenador=operation_coordinator,
     )
     window = MainWindow(
@@ -162,6 +173,7 @@ def _compose_initialized_application(
             SqliteBackupManager(),
             diretorio_dados=app_settings.data_directory,
             caminho_banco=app_settings.database_path,
+            gerenciador_arquivos=managed_files,
             coordenador=operation_coordinator,
             descartar_conexoes=engine.dispose,
         ),
@@ -187,6 +199,15 @@ def initialize_local_storage(settings: AppSettings) -> Engine:
                 return work.comprovantes_importacao.obter(operation_id)
 
         recovery.reconciliar(obter_comprovante)
+
+        def listar_projetos() -> tuple[Projeto, ...]:
+            with SqlAlchemyUnitOfWork(engine) as work:
+                return work.projetos.listar()
+
+        GerenciadorArquivosGerenciados(
+            settings.data_directory,
+            listar_projetos,
+        ).reconciliar_pendencias()
     except Exception:
         engine.dispose()
         raise

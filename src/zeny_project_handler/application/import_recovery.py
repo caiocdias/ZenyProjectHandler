@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 import re
 import shutil
@@ -15,10 +14,15 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 from uuid import UUID
 
-from zeny_project_handler._atomic_files import sibling_temporary_file
 from zeny_project_handler.application.errors import RecuperacaoImportacaoBloqueadaError
 from zeny_project_handler.logging_config import operation_logger
 from zeny_project_handler.ports.persistence import ComprovanteCommitImportacao
+
+from .recovery_journal import (
+    read_json_object,
+    validated_relative_path,
+    write_json_object_atomic,
+)
 
 JOURNAL_VERSION = 1
 RECOVERY_DIRECTORY_NAME = ".import-recovery"
@@ -154,15 +158,11 @@ class ArmazenamentoJournalImportacao:
             return None
         if self.journal_path.is_symlink() or not self.journal_path.is_file():
             raise _blocked("o journal não é um arquivo regular")
-        try:
-            if self.journal_path.stat().st_size > _MAX_JOURNAL_BYTES:
-                raise _blocked("o journal excede o limite de tamanho")
-            raw = self.journal_path.read_text(encoding="utf-8")
-            payload = json.loads(raw, object_pairs_hook=_object_without_duplicates)
-        except RecuperacaoImportacaoBloqueadaError:
-            raise
-        except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as error:
-            raise _blocked("o journal está corrompido ou ilegível") from error
+        payload = read_json_object(
+            self.journal_path,
+            max_bytes=_MAX_JOURNAL_BYTES,
+            error=_blocked,
+        )
         return _parse_journal(payload)
 
     def escrever(self, journal: JournalImportacaoProjeto) -> None:
@@ -173,26 +173,12 @@ class ArmazenamentoJournalImportacao:
         payload["project_id"] = str(journal.project_id)
         payload["phase"] = journal.phase.value
         payload["created_at"] = journal.created_at.isoformat()
-        encoded = json.dumps(
+        write_json_object_atomic(
+            self.journal_path,
             payload,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-        if len(encoded) > _MAX_JOURNAL_BYTES:
-            raise _blocked("o journal excede o limite de tamanho")
-        try:
-            with sibling_temporary_file(self.journal_path) as temporary:
-                with temporary.open("wb") as stream:
-                    stream.write(encoded)
-                    stream.flush()
-                    os.fsync(stream.fileno())
-                os.replace(temporary, self.journal_path)
-        except OSError as error:
-            raise RecuperacaoImportacaoBloqueadaError(
-                "Não foi possível publicar atomicamente o journal de importação; "
-                "preserve project-files/.import-recovery e tente iniciar novamente."
-            ) from error
+            max_bytes=_MAX_JOURNAL_BYTES,
+            error=_blocked,
+        )
 
     def remover(self) -> None:
         try:
@@ -630,21 +616,7 @@ def _validate_journal(journal: JournalImportacaoProjeto) -> None:
 
 
 def _validated_relative_path(value: str) -> PurePosixPath:
-    if not value or "\\" in value:
-        raise _blocked("o journal contém caminho relativo inválido")
-    path = PurePosixPath(value)
-    if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
-        raise _blocked("o journal contém caminho fora da raiz gerenciada")
-    return path
-
-
-def _object_without_duplicates(pairs: list[tuple[str, object]]) -> dict[str, object]:
-    result: dict[str, object] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("duplicate journal field")
-        result[key] = value
-    return result
+    return validated_relative_path(value, error=_blocked)
 
 
 def _strict_string(value: object) -> str:
