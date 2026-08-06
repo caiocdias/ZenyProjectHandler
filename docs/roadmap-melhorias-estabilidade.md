@@ -86,7 +86,7 @@ com o corpus completo. Seus resultados não substituem o gate básico.
 | 9. Journal e recuperação de importações interrompidas | CONCLUÍDA | 8 | Banco e arquivos reconciliados após queda |
 | 10. Limpeza segura de arquivos gerenciados | CONCLUÍDA | 6, 9 | Exclusões não deixam fotos órfãs |
 | 11. Identidade verificada da origem por sessão | CONCLUÍDA | 1 | Navegação não recalcula o PDF inteiro |
-| 12. Renderização por orçamento e região | PENDENTE | 11 | Pranchas grandes não exigem raster integral de 600 DPI |
+| 12. Renderização por orçamento e região | CONCLUÍDA | 11 | Pranchas grandes não exigem raster integral de 600 DPI |
 | 13. Visualizador progressivo e assíncrono | PENDENTE | 6, 12 | Zoom detalhado sem congelamento ou resultados obsoletos |
 | 14. Assinatura reprodutível do OCR | PENDENTE | 1 | Cache muda com motor, idioma e configuração |
 | 15. Provisionamento e diagnóstico do português | PENDENTE | 14 | Instalação funcional com `por`, ou erro acionável |
@@ -868,7 +868,8 @@ Crie commits seccionados para as alterações, mantenha na branch main.
 ## Etapa 12 — Renderização por orçamento de pixels e regiões
 
 **Achado original:** 5, parte do backend de visualização.  
-**Estado:** PENDENTE.  
+**Estado:** CONCLUÍDA.
+
 **Arquivos prováveis:** configuração, porta PDF, `adapters/pdf/pymupdf_reader.py`, modelos de raster,
 transformações geométricas e testes golden.
 
@@ -891,6 +892,38 @@ transformações geométricas e testes golden.
 - Goldens comprovam pixels, dimensões, clips e geometrias em 0/90/180/270 graus.
 - Teste sintético A0/A1 prova que a prévia não cria buffer integral de 600 DPI.
 - Resultados do analisador e configurações de OCR permanecem semanticamente idênticos.
+
+### Registro de conclusão — 06/08/2026
+
+- `OrcamentoRenderizacaoPdf` tornou obrigatórios limites independentes de pixels e bytes em toda
+  rasterização visual. `PlanoRenderizacaoPdf` calcula o `IRect` exato da página/clip após escala e
+  rotação, antes de `Page.get_pixmap()`. O pico conservador considera 7 bytes por pixel: 3 do RGB
+  compartilhado por PyMuPDF/QImage e 4 esperados do QPixmap.
+- Páginas integrais que excedem qualquer limite recebem o maior DPI inteiro que caiba em ambos. O
+  teto solicitado continua em 600 DPI; clips normalizados que cabem preservam esse detalhe. A
+  configuração padrão ficou em 8.000.000 pixels e 64 MiB e ganhou as variáveis
+  `ZENY_PDF_RENDER_MAX_PIXELS` e `ZENY_PDF_RENDER_MAX_BYTES`, sem alterar
+  `ZENY_PDF_RENDER_DPI` nem qualquer configuração de análise/OCR.
+- O plano regional registra dimensões da página, dimensões do clip e sua origem no raster
+  rotacionado. `TransformadorCoordenadasPagina` passou a considerar esses valores; goldens
+  assimétricos comprovaram pixels, clips, round-trip e alinhamento nas rotações 0/90/180/270 graus.
+  Um caso adicional preservou `CropBox` com rotação intrínseca e adicional.
+- `PaginaPdfRenderizada` retém o `Pixmap` dono de `samples_mv` e entrega uma `memoryview` ao QImage.
+  Foram removidas as cópias intermediárias para `bytes` e `QImage.copy()`; o resultado permanece vivo
+  até `QPixmap.fromImage()` concluir a conversão na thread da interface.
+- PDFs sintéticos A0/A1 registraram solicitações integrais entre 270 e 550 milhões de pixels a
+  600 DPI sem alocar esses rasters. As prévias reais ficaram em até 120.000 pixels/840.000 bytes de
+  pico estimado, enquanto clips de 1% foram efetivamente rasterizados a 600 DPI.
+- Testes focados finais: `76 passed`. O gate básico canônico aprovou `pip check`, Ruff,
+  `ruff format --check` (`177 files`), Mypy (`177 source files`), `361 passed, 20 deselected`, cobertura
+  `85,17%`, complexidade média A (`3,8449`) e `RESULTADO FINAL: APROVADO`. Permaneceu somente o
+  `PytestCacheWarning` ambiental já conhecido por falta de permissão em `.pytest_cache`; o corpus
+  privado não foi acessado.
+- Commits seccionados: `f264ae7` (`feat(pdf): add budgeted regional rendering`) e `55be25d`
+  (`test(pdf): cover budgeted clips and large sheets`).
+- Limitação remanescente deliberada: a interface desta etapa usa a prévia integral orçada. A
+  composição progressiva/assíncrona dos clips detalhados, a priorização do viewport e o cache LRU
+  limitado por bytes pertencem à Etapa 13.
 
 ### Mensagem para um novo chat do Codex
 

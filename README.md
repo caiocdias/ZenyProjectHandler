@@ -171,14 +171,27 @@ elementos existentes, mesmo quando não há poste catalogado ou coordenada. Não
 item; resultados catalogados são incorporados automaticamente ao projeto e ficam imediatamente
 disponíveis para as etapas seguintes.
 
-A resolução padrão é 600 DPI, o máximo aceito pela configuração do visualizador, evitando que textos
-pequenos de pranchas técnicas fiquem borrados ao ampliar. Ela pode ser reduzida entre 36 e 600 DPI
-antes da inicialização quando houver restrição de memória:
+A resolução solicitada por padrão é 600 DPI, que é o teto de detalhe visual disponível para
+regiões. Ela não obriga a rasterizar uma prancha inteira nessa resolução. Antes de chamar o
+PyMuPDF, o backend calcula dimensões, pixels, bytes RGB e o pico estimado da conversão para
+`QPixmap`. Páginas que cabem nos dois limites usam raster integral; páginas grandes recebem a maior
+prévia integral que caiba, enquanto clips pequenos podem manter os 600 DPI.
+
+Os limites padrão são 8.000.000 pixels e 64 MiB por solicitação. A estimativa de pico usa 7 bytes
+por pixel: 3 do buffer RGB mantido pelo PyMuPDF/QImage e 4 da conversão para QPixmap. Os três valores
+podem ser configurados antes da inicialização; limites de pixels e bytes devem ser inteiros positivos,
+e o DPI deve permanecer entre 36 e 600:
 
 ```powershell
-$env:ZENY_PDF_RENDER_DPI = "400"
+$env:ZENY_PDF_RENDER_DPI = "600"
+$env:ZENY_PDF_RENDER_MAX_PIXELS = "8000000"
+$env:ZENY_PDF_RENDER_MAX_BYTES = "67108864"
 .\ZenyProjectHandler.vbs
 ```
+
+Essas opções pertencem somente ao visualizador. Elas não alteram DPI, seleção de regiões,
+decisões nem resultados do pipeline de análise/OCR. A composição progressiva e assíncrona dos
+clips detalhados no viewport pertence à próxima etapa do visualizador.
 
 O inventário técnico distingue texto, caminhos vetoriais, imagens incorporadas, anotações e seus
 appearance streams, Form XObjects e Optional Content Groups. Uma falha localizada vira diagnóstico

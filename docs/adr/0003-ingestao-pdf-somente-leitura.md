@@ -36,7 +36,9 @@ geometria apenas à largura e altura raster não é suficiente para garantir pos
    validada por hash. O PDF só é anexado ao projeto após inspeção bem-sucedida e o projeto e a
    referência são confirmados na mesma unidade de trabalho.
 8. `PdfGraphicsView` exibe raster RGB e sobreposições na mesma cena. Zoom é uma transformação da
-   visão; rotação gera um novo raster e reaplica as geometrias pela transformação registrada.
+   visão; rotação gera um novo raster e reaplica as geometrias pela transformação registrada. O DPI
+   visual solicitado aceita no máximo 600 e representa teto de detalhe, não resolução integral
+   obrigatória.
 9. A sessão retém somente a inspeção, os metadados verificados e a credencial efêmera. Antes e
    depois de cada rasterização ela faz uma comparação barata desses metadados. Cada uso abre e fecha
    seu próprio `fitz.Document`; nenhum descritor permanece aberto entre usos, e a sessão é invalidada
@@ -44,6 +46,21 @@ geometria apenas à largura e altura raster não é suficiente para garantir pos
 10. Não existe cache global por caminho. O visualizador possui as sessões dos documentos atualmente
     abertos e as encerra ao limpar, substituir ou fechar a interface. Inspeção/importação, análise e
     portabilidade continuam calculando e comparando hashes integrais em suas fronteiras de integridade.
+11. Toda rasterização visual recebe `OrcamentoRenderizacaoPdf`, com limites independentes de pixels e
+    bytes. `PlanoRenderizacaoPdf` calcula, antes de `Page.get_pixmap()`, o `IRect` exato da página e do
+    clip após escala/rotação. O limite de bytes considera pico conservador de 7 bytes por pixel: RGB
+    compartilhado por PyMuPDF/QImage e armazenamento esperado do QPixmap. Se uma página integral não
+    couber, o plano escolhe por busca a maior prévia em DPI inteiro que satisfaça ambos os limites; se
+    nem 1 DPI couber, a solicitação é rejeitada antes da alocação.
+12. Clips usam coordenadas normalizadas canônicas e podem conservar 600 DPI quando cabem no orçamento.
+    O plano devolve dimensões da página, dimensões do clip e sua origem no raster rotacionado.
+    `TransformadorCoordenadasPagina` usa esses dados para manter round-trip e overlays alinhados em
+    raster integral ou regional, inclusive com `CropBox`, rotação intrínseca e rotação adicional.
+13. `PaginaPdfRenderizada` expõe uma `memoryview` de `Pixmap.samples_mv` e retém o `Pixmap` que possui
+    esse buffer. `QImage` apenas o envolve enquanto o resultado está vivo; a cópia intermediária para
+    `bytes` e `QImage.copy()` foi removida. `QPixmap.fromImage()` continua sendo a conversão necessária
+    na thread da interface. O pipeline de análise/OCR não usa esse contrato nem teve seus DPIs ou
+    decisões alterados.
 
 ## Verificação
 
@@ -51,6 +68,11 @@ geometria apenas à largura e altura raster não é suficiente para garantir pos
   as amostras RGB branca/vermelha admitem tolerância máxima de 8 níveis por canal para acomodar
   antialiasing controlado.
 - O round-trip geométrico é exercitado em 72, 144 e 300 DPI e nas rotações 0, 90, 180 e 270 graus.
+- Goldens assimétricos conferem cores, dimensões, origem dos clips e alinhamento normalizado nas
+  rotações adicionais 0, 90, 180 e 270 graus. Um caso separado combina `CropBox` com rotação
+  intrínseca.
+- PDFs sintéticos A0 e A1 registram as dimensões que uma página integral teria a 600 DPI sem criar
+  esse raster. A prévia real permanece sob os dois limites, e um clip de 1% preserva 600 DPI.
 - Um hasher instrumentado comprova um único SHA-256 por sessão ao navegar por páginas, recortes e
   rotações. Alteração, remoção e movimentação da origem invalidam a sessão sem novo hash implícito.
 - O teste de movimentação ocorre com a sessão ainda viva, comprovando no Windows que nenhum handle
@@ -67,6 +89,9 @@ geometria apenas à largura e altura raster não é suficiente para garantir pos
   serão tratados na etapa 10; até lá a ausência ou divergência de hash é reportada sem substituir a
   referência silenciosamente.
 - Inventários podem ser recriados a partir do PDF e não aumentam o payload canônico do projeto.
+- Uma página grande pode aparecer inicialmente com DPI efetivo menor que o teto configurado. O
+  backend regional já fornece clips detalhados; priorização, composição assíncrona e cache limitado
+  de tiles pertencem à etapa progressiva seguinte.
 - Uma sessão invalidada não tenta se recuperar por caminho nem recalcula o hash silenciosamente: o
   chamador precisa abrir e inspecionar a origem novamente.
 - A interface desta etapa abre um PDF avulso. Vincular a importação a um projeto escolhido na

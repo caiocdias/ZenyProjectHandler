@@ -164,10 +164,13 @@ que os reconheça.
   registra Optional Content Groups.
 - Um problema localizado produz `DiagnosticoPdf` com página e `xref` quando disponível. Texto,
   vetores, imagens e renderização válidos continuam utilizáveis.
-- Miniaturas, páginas e recortes são renderizados em RGB. O DPI padrão é 600 e pode ser configurado
-  por `ZENY_PDF_RENDER_DPI` entre 36 e 600.
+- Miniaturas, páginas e recortes são renderizados em RGB. O teto visual padrão é 600 DPI e pode ser
+  configurado por `ZENY_PDF_RENDER_DPI` entre 36 e 600. `ZENY_PDF_RENDER_MAX_PIXELS` e
+  `ZENY_PDF_RENDER_MAX_BYTES` limitam cada solicitação antes da alocação: pranchas grandes usam
+  prévia reduzida e clips pequenos ainda podem usar o teto de detalhe.
 - `TransformadorCoordenadasPagina` converte de forma reversível entre espaço PDF, normalizado,
-  pixels e cena. A interface reaplica sobreposições após rotação usando essa transformação.
+  pixels e cena, incluindo origem/dimensões de clips. A interface reaplica sobreposições após
+  rotação usando essa transformação.
 - A abertura aceita um ou vários PDFs. Todo PDF selecionado no fluxo do projeto é importado
   imediatamente como parte dele, sem uma ação separada de união. A lista de folhas permite arrastar
   qualquer página ou usar **Subir** e **Descer**; essa sequência persistida define a paginação

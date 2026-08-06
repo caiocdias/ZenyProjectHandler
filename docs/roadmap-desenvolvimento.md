@@ -361,8 +361,9 @@ Qualquer geometria registrada no documento aparece na posição correta da pági
 - Inventário: fragmentos de texto, caminhos vetoriais, imagens incorporadas, anotações, referências
   de appearance streams, Form XObjects e Optional Content Groups, com diagnósticos localizados por
   página e `xref`.
-- Renderização: páginas, miniaturas e recortes RGB; DPI configurável por `ZENY_PDF_RENDER_DPI`;
-  golden test com dimensões exatas e tolerância de 8 níveis por canal RGB.
+- Renderização: páginas, miniaturas e recortes RGB; teto de DPI configurável por
+  `ZENY_PDF_RENDER_DPI`; orçamentos independentes de pixels/bytes para prévias e clips; goldens com
+  dimensões exatas e tolerância de 8 níveis por canal RGB.
 - Coordenadas: matrizes PDF/página preservadas no domínio e round-trip PDF, normalizado, pixel e cena
   validado em 72, 144 e 300 DPI e rotações 0, 90, 180 e 270 graus.
 - Interface: `QGraphicsView` com paginação, zoom, ajuste, rotação, arraste e sobreposições alinhadas;
