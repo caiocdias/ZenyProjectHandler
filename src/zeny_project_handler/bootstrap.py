@@ -49,6 +49,7 @@ from zeny_project_handler.logging_config import (
     install_unhandled_exception_logging,
     operation_logger,
 )
+from zeny_project_handler.ports.pdf import OrcamentoRenderizacaoPdf
 from zeny_project_handler.ports.persistence import ComprovanteCommitImportacao
 from zeny_project_handler.ui.main_window import MainWindow
 
@@ -164,6 +165,10 @@ def _compose_initialized_application(
         application_name=app_settings.application_name,
         pdf_reader=reader,
         pdf_render_dpi=app_settings.pdf_render_dpi,
+        pdf_render_budget=OrcamentoRenderizacaoPdf(
+            limite_pixels=app_settings.pdf_render_max_pixels,
+            limite_bytes=app_settings.pdf_render_max_bytes,
+        ),
         review_service=ServicoRevisaoHumana(unit_of_work),
         workflow_service=workflow_service,
         portability_service=ServicoPortabilidadeProjeto(

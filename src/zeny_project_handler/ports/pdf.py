@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 from uuid import UUID
@@ -10,6 +10,8 @@ from uuid import UUID
 from zeny_project_handler.domain.documents import DocumentoProjeto, PaginaDocumento
 
 PdfRectangle = tuple[float, float, float, float]
+RGB_BYTES_PER_PIXEL = 3
+VIEWER_BYTES_PER_PIXEL_ESTIMATE = 7
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,14 +96,86 @@ class InspecaoPdf:
 
 
 @dataclass(frozen=True, slots=True)
-class PaginaPdfRenderizada:
+class OrcamentoRenderizacaoPdf:
+    """Limites independentes para uma rasterização do visualizador."""
+
+    limite_pixels: int
+    limite_bytes: int
+
+    def __post_init__(self) -> None:
+        if self.limite_pixels <= 0:
+            raise ValueError("O orçamento de pixels deve ser positivo")
+        if self.limite_bytes <= 0:
+            raise ValueError("O orçamento de bytes deve ser positivo")
+
+    def comporta(self, *, pixels: int, bytes_estimados: int) -> bool:
+        return pixels <= self.limite_pixels and bytes_estimados <= self.limite_bytes
+
+
+@dataclass(frozen=True, slots=True)
+class PlanoRenderizacaoPdf:
+    """Dimensões decididas antes de o backend alocar o raster."""
+
     pagina_numero: int
+    dpi_solicitado: int
+    dpi_efetivo: int
+    rotacao_adicional_graus: int
+    recorte_normalizado: PdfRectangle
     largura_pixels: int
     altura_pixels: int
+    largura_pagina_pixels: int
+    altura_pagina_pixels: int
+    origem_x_pixels: int
+    origem_y_pixels: int
+    largura_solicitada_pixels: int
+    altura_solicitada_pixels: int
+    bytes_rgb_estimados: int
+    bytes_pico_estimados: int
+
+    @property
+    def quantidade_pixels(self) -> int:
+        return self.largura_pixels * self.altura_pixels
+
+    @property
+    def foi_reduzido(self) -> bool:
+        return self.dpi_efetivo < self.dpi_solicitado
+
+    @property
+    def pagina_inteira(self) -> bool:
+        return self.recorte_normalizado == (0.0, 0.0, 1.0, 1.0)
+
+
+@dataclass(frozen=True, slots=True)
+class PaginaPdfRenderizada:
+    pagina_numero: int
     stride: int
-    dados_rgb: bytes
-    dpi: int
-    rotacao_adicional_graus: int
+    dados_rgb: memoryview
+    plano: PlanoRenderizacaoPdf
+    _dono_buffer: object = field(repr=False, compare=False)
+
+    @property
+    def largura_pixels(self) -> int:
+        return self.plano.largura_pixels
+
+    @property
+    def altura_pixels(self) -> int:
+        return self.plano.altura_pixels
+
+    @property
+    def largura_pagina_pixels(self) -> int:
+        return self.plano.largura_pagina_pixels
+
+    @property
+    def altura_pagina_pixels(self) -> int:
+        return self.plano.altura_pagina_pixels
+
+    @property
+    def dpi(self) -> int:
+        return self.plano.dpi_efetivo
+
+    @property
+    def rotacao_adicional_graus(self) -> int:
+        return self.plano.rotacao_adicional_graus
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,11 +194,22 @@ class SessaoLeituraPdfPort(Protocol):
     @property
     def inspecao(self) -> InspecaoPdf: ...
 
+    def planejar_renderizacao(
+        self,
+        pagina_numero: int,
+        *,
+        dpi: int,
+        orcamento: OrcamentoRenderizacaoPdf,
+        rotacao_adicional_graus: int = 0,
+        recorte_normalizado: PdfRectangle | None = None,
+    ) -> PlanoRenderizacaoPdf: ...
+
     def renderizar_pagina(
         self,
         pagina_numero: int,
         *,
         dpi: int,
+        orcamento: OrcamentoRenderizacaoPdf,
         rotacao_adicional_graus: int = 0,
         recorte_normalizado: PdfRectangle | None = None,
     ) -> PaginaPdfRenderizada: ...
@@ -150,12 +235,26 @@ class LeitorPdfPort(Protocol):
         documento_id: UUID | None = None,
     ) -> InspecaoPdf: ...
 
+    def planejar_renderizacao(
+        self,
+        caminho: Path,
+        pagina_numero: int,
+        *,
+        dpi: int,
+        orcamento: OrcamentoRenderizacaoPdf,
+        rotacao_adicional_graus: int = 0,
+        recorte_normalizado: PdfRectangle | None = None,
+        senha: str | None = None,
+        sha256_esperado: str | None = None,
+    ) -> PlanoRenderizacaoPdf: ...
+
     def renderizar_pagina(
         self,
         caminho: Path,
         pagina_numero: int,
         *,
         dpi: int,
+        orcamento: OrcamentoRenderizacaoPdf,
         rotacao_adicional_graus: int = 0,
         recorte_normalizado: PdfRectangle | None = None,
         senha: str | None = None,

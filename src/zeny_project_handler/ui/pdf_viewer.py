@@ -46,6 +46,7 @@ from zeny_project_handler.logging_config import OperationLogger, operation_logge
 from zeny_project_handler.ports.pdf import (
     InspecaoPdf,
     LeitorPdfPort,
+    OrcamentoRenderizacaoPdf,
     PaginaPdfRenderizada,
     SessaoLeituraPdfPort,
 )
@@ -94,7 +95,9 @@ class PdfGraphicsView(QGraphicsView):
             rendered.altura_pixels,
             rendered.stride,
             QImage.Format.Format_RGB888,
-        ).copy()
+        )
+        if image.isNull():
+            raise ValueError("O buffer RGB do PDF não pôde ser convertido em imagem")
         self._review_items.clear()
         self._review_geometries.clear()
         self._scene.clear()
@@ -237,12 +240,14 @@ class PdfViewerWidget(QWidget):
         *,
         leitor: LeitorPdfPort,
         dpi: int,
+        orcamento: OrcamentoRenderizacaoPdf,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("pdfViewerWidget")
         self._reader = leitor
         self._dpi = dpi
+        self._render_budget = orcamento
         self._inspection: InspecaoPdf | None = None
         self._inspections: tuple[InspecaoPdf, ...] = ()
         self._sessions: tuple[SessaoLeituraPdfPort, ...] = ()
@@ -530,6 +535,7 @@ class PdfViewerWidget(QWidget):
                 rendered = session.renderizar_pagina(
                     page_number,
                     dpi=self._dpi,
+                    orcamento=self._render_budget,
                     rotacao_adicional_graus=self._rotation,
                 )
                 self._finish_render(
@@ -559,9 +565,13 @@ class PdfViewerWidget(QWidget):
         page = inspection.paginas[page_number - 1].pagina
         transformer = TransformadorCoordenadasPagina(
             page,
-            dpi=self._dpi,
+            dpi=rendered.dpi,
             largura_pixels=rendered.largura_pixels,
             altura_pixels=rendered.altura_pixels,
+            largura_pagina_pixels=rendered.largura_pagina_pixels,
+            altura_pagina_pixels=rendered.altura_pagina_pixels,
+            origem_x_pixels=rendered.plano.origem_x_pixels,
+            origem_y_pixels=rendered.plano.origem_y_pixels,
             rotacao_adicional_graus=self._rotation,
         )
         self._current_transformer = transformer
@@ -590,6 +600,7 @@ class PdfViewerWidget(QWidget):
             f"página {page_number}/{len(inspection.paginas)} de "
             f"{inspection.documento.nome_arquivo} - "
             f"{rendered.largura_pixels}x{rendered.altura_pixels}px - "
+            f"{rendered.dpi}/{rendered.plano.dpi_solicitado} DPI - "
             f"{diagnostics} diagnóstico(s)"
         )
         page_id = str(page.id)

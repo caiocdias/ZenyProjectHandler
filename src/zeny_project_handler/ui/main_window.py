@@ -28,7 +28,7 @@ from zeny_project_handler.application.operation_coordinator import (
 )
 from zeny_project_handler.application.project_portability import ServicoPortabilidadeProjeto
 from zeny_project_handler.domain.compliance import RegistroRegrasConformidade
-from zeny_project_handler.ports.pdf import LeitorPdfPort
+from zeny_project_handler.ports.pdf import LeitorPdfPort, OrcamentoRenderizacaoPdf
 
 from .documentation_panel import DocumentationPanelWidget
 from .pdf_viewer import PdfViewerWidget
@@ -317,6 +317,7 @@ class MainWindow(QMainWindow):
         application_name: str,
         pdf_reader: LeitorPdfPort,
         pdf_render_dpi: int,
+        pdf_render_budget: OrcamentoRenderizacaoPdf,
         review_service: ServicoRevisaoHumana | None = None,
         workflow_service: ServicoFluxoMvp | None = None,
         portability_service: ServicoPortabilidadeProjeto | None = None,
@@ -340,7 +341,12 @@ class MainWindow(QMainWindow):
         )
         self._panels_menu = self.menuBar().addMenu("Painéis")
         self._panels_menu.setObjectName("panelsMenu")
-        self.pdf_viewer = PdfViewerWidget(leitor=pdf_reader, dpi=pdf_render_dpi, parent=self)
+        self.pdf_viewer = PdfViewerWidget(
+            leitor=pdf_reader,
+            dpi=pdf_render_dpi,
+            orcamento=pdf_render_budget,
+            parent=self,
+        )
         self.pdf_viewer.status_changed.connect(self.statusBar().showMessage)
         self.setCentralWidget(self.pdf_viewer)
         self.review_panel: ReviewPanelWidget | None = None

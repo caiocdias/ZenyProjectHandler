@@ -63,6 +63,10 @@ class TransformadorCoordenadasPagina:
         dpi: int,
         largura_pixels: int | None = None,
         altura_pixels: int | None = None,
+        largura_pagina_pixels: int | None = None,
+        altura_pagina_pixels: int | None = None,
+        origem_x_pixels: int = 0,
+        origem_y_pixels: int = 0,
         rotacao_adicional_graus: int = 0,
     ) -> None:
         if dpi <= 0:
@@ -76,10 +80,31 @@ class TransformadorCoordenadasPagina:
         height = float(pagina.altura_pontos) * dpi / 72
         if rotacao_adicional_graus in {90, 270}:
             width, height = height, width
-        self.largura_pixels = largura_pixels or max(1, round(width))
-        self.altura_pixels = altura_pixels or max(1, round(height))
+        self.largura_pagina_pixels = (
+            largura_pagina_pixels if largura_pagina_pixels is not None else max(1, round(width))
+        )
+        self.altura_pagina_pixels = (
+            altura_pagina_pixels if altura_pagina_pixels is not None else max(1, round(height))
+        )
+        self.largura_pixels = (
+            largura_pixels if largura_pixels is not None else self.largura_pagina_pixels
+        )
+        self.altura_pixels = (
+            altura_pixels if altura_pixels is not None else self.altura_pagina_pixels
+        )
+        self.origem_x_pixels = origem_x_pixels
+        self.origem_y_pixels = origem_y_pixels
         if self.largura_pixels <= 0 or self.altura_pixels <= 0:
             raise ValueError("Dimensões raster devem ser positivas")
+        if self.largura_pagina_pixels <= 0 or self.altura_pagina_pixels <= 0:
+            raise ValueError("Dimensões da página raster devem ser positivas")
+        if self.origem_x_pixels < 0 or self.origem_y_pixels < 0:
+            raise ValueError("A origem do recorte deve estar dentro da página raster")
+        if (
+            self.origem_x_pixels + self.largura_pixels > self.largura_pagina_pixels
+            or self.origem_y_pixels + self.altura_pixels > self.altura_pagina_pixels
+        ):
+            raise ValueError("O recorte raster deve estar dentro da página raster")
 
     def pdf_para_normalizado(self, point: PontoPlano) -> PontoNormalizado:
         visual = self._pdf_para_visual(point)
@@ -98,14 +123,14 @@ class TransformadorCoordenadasPagina:
     def normalizado_para_pixel(self, point: PontoNormalizado) -> PontoPlano:
         rotated = _rotate_normalized(point, self.rotacao_adicional_graus)
         return PontoPlano(
-            float(rotated.x) * self.largura_pixels,
-            float(rotated.y) * self.altura_pixels,
+            float(rotated.x) * self.largura_pagina_pixels - self.origem_x_pixels,
+            float(rotated.y) * self.altura_pagina_pixels - self.origem_y_pixels,
         )
 
     def pixel_para_normalizado(self, point: PontoPlano) -> PontoNormalizado:
         rendered = _normalized(
-            point.x / self.largura_pixels,
-            point.y / self.altura_pixels,
+            (point.x + self.origem_x_pixels) / self.largura_pagina_pixels,
+            (point.y + self.origem_y_pixels) / self.altura_pagina_pixels,
         )
         return _unrotate_normalized(rendered, self.rotacao_adicional_graus)
 

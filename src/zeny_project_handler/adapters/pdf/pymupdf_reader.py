@@ -17,6 +17,8 @@ import pymupdf
 from zeny_project_handler.domain.documents import VALID_ROTATIONS, DocumentoProjeto, PaginaDocumento
 from zeny_project_handler.domain.values import CaixaPagina
 from zeny_project_handler.ports.pdf import (
+    RGB_BYTES_PER_PIXEL,
+    VIEWER_BYTES_PER_PIXEL_ESTIMATE,
     AnotacaoPdf,
     DiagnosticoPdf,
     FormXObjectPdf,
@@ -26,8 +28,10 @@ from zeny_project_handler.ports.pdf import (
     ImagemIncorporadaPdf,
     InspecaoPdf,
     InventarioPaginaPdf,
+    OrcamentoRenderizacaoPdf,
     PaginaPdfRenderizada,
     PdfRectangle,
+    PlanoRenderizacaoPdf,
     SessaoLeituraPdfPort,
 )
 
@@ -157,6 +161,7 @@ class PyMuPdfReader:
         pagina_numero: int,
         *,
         dpi: int,
+        orcamento: OrcamentoRenderizacaoPdf,
         rotacao_adicional_graus: int = 0,
         recorte_normalizado: PdfRectangle | None = None,
         senha: str | None = None,
@@ -172,6 +177,33 @@ class PyMuPdfReader:
             dpi=dpi,
             rotation=rotacao_adicional_graus,
             normalized_clip=recorte_normalizado,
+            budget=orcamento,
+            password=senha,
+        )
+
+    def planejar_renderizacao(
+        self,
+        caminho: Path,
+        pagina_numero: int,
+        *,
+        dpi: int,
+        orcamento: OrcamentoRenderizacaoPdf,
+        rotacao_adicional_graus: int = 0,
+        recorte_normalizado: PdfRectangle | None = None,
+        senha: str | None = None,
+        sha256_esperado: str | None = None,
+    ) -> PlanoRenderizacaoPdf:
+        source = _validated_path(caminho)
+        _validate_render_parameters(dpi, rotacao_adicional_graus, recorte_normalizado)
+        if sha256_esperado is not None and self._file_hasher(source) != sha256_esperado:
+            raise PdfOrigemAlteradaError("O conteúdo do PDF não corresponde ao hash registrado")
+        return _plan_page(
+            source,
+            pagina_numero,
+            dpi=dpi,
+            rotation=rotacao_adicional_graus,
+            normalized_clip=recorte_normalizado,
+            budget=orcamento,
             password=senha,
         )
 
@@ -181,6 +213,7 @@ class PyMuPdfReader:
         pagina_numero: int,
         *,
         dpi: int = 36,
+        orcamento: OrcamentoRenderizacaoPdf,
         senha: str | None = None,
         sha256_esperado: str | None = None,
     ) -> PaginaPdfRenderizada:
@@ -188,6 +221,7 @@ class PyMuPdfReader:
             caminho,
             pagina_numero,
             dpi=dpi,
+            orcamento=orcamento,
             senha=senha,
             sha256_esperado=sha256_esperado,
         )
@@ -225,11 +259,37 @@ class PyMuPdfSession:
             raise PdfOrigemAlteradaError(self._unavailable_message())
         return self._inspection
 
+    def planejar_renderizacao(
+        self,
+        pagina_numero: int,
+        *,
+        dpi: int,
+        orcamento: OrcamentoRenderizacaoPdf,
+        rotacao_adicional_graus: int = 0,
+        recorte_normalizado: PdfRectangle | None = None,
+    ) -> PlanoRenderizacaoPdf:
+        source, metadata = self._active_source()
+        _validate_render_parameters(dpi, rotacao_adicional_graus, recorte_normalizado)
+        self._verify_metadata(source, metadata)
+        try:
+            return _plan_page(
+                source,
+                pagina_numero,
+                dpi=dpi,
+                rotation=rotacao_adicional_graus,
+                normalized_clip=recorte_normalizado,
+                budget=orcamento,
+                password=self._password,
+            )
+        finally:
+            self._verify_metadata(source, metadata)
+
     def renderizar_pagina(
         self,
         pagina_numero: int,
         *,
         dpi: int,
+        orcamento: OrcamentoRenderizacaoPdf,
         rotacao_adicional_graus: int = 0,
         recorte_normalizado: PdfRectangle | None = None,
     ) -> PaginaPdfRenderizada:
@@ -243,6 +303,7 @@ class PyMuPdfSession:
                 dpi=dpi,
                 rotation=rotacao_adicional_graus,
                 normalized_clip=recorte_normalizado,
+                budget=orcamento,
                 password=self._password,
             )
         finally:
@@ -340,6 +401,7 @@ def _render_page(
     dpi: int,
     rotation: int,
     normalized_clip: PdfRectangle | None,
+    budget: OrcamentoRenderizacaoPdf,
     password: str | None,
 ) -> PaginaPdfRenderizada:
     document = _open_document(source, password)
@@ -347,24 +409,35 @@ def _render_page(
         if not 1 <= page_number <= document.page_count:
             raise PdfPaginaInvalidaError("Número de página fora do documento")
         page = document.load_page(page_number - 1)
-        matrix = pymupdf.Matrix(dpi / 72, dpi / 72).prerotate(  # type: ignore[no-untyped-call]
-            rotation
+        plan = _plan_rendering(
+            page,
+            page_number=page_number,
+            dpi=dpi,
+            rotation=rotation,
+            normalized_clip=normalized_clip,
+            budget=budget,
         )
+        matrix = _render_matrix(plan.dpi_efetivo, rotation)
         pixmap = page.get_pixmap(
             matrix=matrix,
             colorspace=pymupdf.csRGB,
             alpha=False,
-            clip=_normalized_clip(page, normalized_clip),
+            clip=_normalized_clip(page, plan.recorte_normalizado),
             annots=True,
         )
+        if (pixmap.width, pixmap.height) != (plan.largura_pixels, plan.altura_pixels):
+            raise PdfPaginaInvalidaError(
+                "O raster produzido não corresponde ao planejamento de memória"
+            )
+        buffer = cast(memoryview, pixmap.samples_mv)
+        if len(buffer) != pixmap.stride * pixmap.height:
+            raise PdfPaginaInvalidaError("O buffer RGB produzido possui tamanho inesperado")
         return PaginaPdfRenderizada(
             pagina_numero=page_number,
-            largura_pixels=pixmap.width,
-            altura_pixels=pixmap.height,
             stride=pixmap.stride,
-            dados_rgb=bytes(pixmap.samples),
-            dpi=dpi,
-            rotacao_adicional_graus=rotation,
+            dados_rgb=buffer,
+            plano=plan,
+            _dono_buffer=pixmap,
         )
     except PdfPaginaInvalidaError:
         raise
@@ -372,6 +445,145 @@ def _render_page(
         raise PdfPaginaInvalidaError("Não foi possível rasterizar a página solicitada") from error
     finally:
         document.close()
+
+
+def _plan_page(
+    source: Path,
+    page_number: int,
+    *,
+    dpi: int,
+    rotation: int,
+    normalized_clip: PdfRectangle | None,
+    budget: OrcamentoRenderizacaoPdf,
+    password: str | None,
+) -> PlanoRenderizacaoPdf:
+    document = _open_document(source, password)
+    try:
+        if not 1 <= page_number <= document.page_count:
+            raise PdfPaginaInvalidaError("Número de página fora do documento")
+        return _plan_rendering(
+            document.load_page(page_number - 1),
+            page_number=page_number,
+            dpi=dpi,
+            rotation=rotation,
+            normalized_clip=normalized_clip,
+            budget=budget,
+        )
+    except PdfPaginaInvalidaError:
+        raise
+    except Exception as error:
+        raise PdfPaginaInvalidaError(
+            "Não foi possível planejar a rasterização solicitada"
+        ) from error
+    finally:
+        document.close()
+
+
+def _plan_rendering(
+    page: Any,
+    *,
+    page_number: int,
+    dpi: int,
+    rotation: int,
+    normalized_clip: PdfRectangle | None,
+    budget: OrcamentoRenderizacaoPdf,
+) -> PlanoRenderizacaoPdf:
+    canonical_clip = normalized_clip or (0.0, 0.0, 1.0, 1.0)
+    requested = _raster_dimensions(page, dpi, rotation, canonical_clip)
+    if _dimensions_fit_budget(requested[0], requested[1], budget):
+        effective_dpi = dpi
+        effective = requested
+    else:
+        effective_dpi = _largest_dpi_within_budget(
+            page,
+            requested_dpi=dpi,
+            rotation=rotation,
+            normalized_clip=canonical_clip,
+            budget=budget,
+        )
+        effective = _raster_dimensions(page, effective_dpi, rotation, canonical_clip)
+    width, height, page_width, page_height, origin_x, origin_y = effective
+    pixels = width * height
+    return PlanoRenderizacaoPdf(
+        pagina_numero=page_number,
+        dpi_solicitado=dpi,
+        dpi_efetivo=effective_dpi,
+        rotacao_adicional_graus=rotation,
+        recorte_normalizado=canonical_clip,
+        largura_pixels=width,
+        altura_pixels=height,
+        largura_pagina_pixels=page_width,
+        altura_pagina_pixels=page_height,
+        origem_x_pixels=origin_x,
+        origem_y_pixels=origin_y,
+        largura_solicitada_pixels=requested[0],
+        altura_solicitada_pixels=requested[1],
+        bytes_rgb_estimados=pixels * RGB_BYTES_PER_PIXEL,
+        bytes_pico_estimados=pixels * VIEWER_BYTES_PER_PIXEL_ESTIMATE,
+    )
+
+
+def _largest_dpi_within_budget(
+    page: Any,
+    *,
+    requested_dpi: int,
+    rotation: int,
+    normalized_clip: PdfRectangle,
+    budget: OrcamentoRenderizacaoPdf,
+) -> int:
+    minimum_dpi = 1
+    minimum = _raster_dimensions(page, minimum_dpi, rotation, normalized_clip)
+    if not _dimensions_fit_budget(minimum[0], minimum[1], budget):
+        raise PdfPaginaInvalidaError(
+            "O orçamento é insuficiente até para a menor prévia da região solicitada"
+        )
+    lower, upper = minimum_dpi, requested_dpi - 1
+    while lower < upper:
+        candidate = (lower + upper + 1) // 2
+        dimensions = _raster_dimensions(page, candidate, rotation, normalized_clip)
+        if _dimensions_fit_budget(dimensions[0], dimensions[1], budget):
+            lower = candidate
+        else:
+            upper = candidate - 1
+    return lower
+
+
+def _dimensions_fit_budget(
+    width: int,
+    height: int,
+    budget: OrcamentoRenderizacaoPdf,
+) -> bool:
+    pixels = width * height
+    return budget.comporta(
+        pixels=pixels,
+        bytes_estimados=pixels * VIEWER_BYTES_PER_PIXEL_ESTIMATE,
+    )
+
+
+def _raster_dimensions(
+    page: Any,
+    dpi: int,
+    rotation: int,
+    normalized_clip: PdfRectangle,
+) -> tuple[int, int, int, int, int, int]:
+    matrix = _render_matrix(dpi, rotation)
+    page_bounds = (page.rect * matrix).irect
+    clip = _normalized_clip(page, normalized_clip)
+    clip_bounds = (clip * matrix).irect
+    return (
+        int(clip_bounds.width),
+        int(clip_bounds.height),
+        int(page_bounds.width),
+        int(page_bounds.height),
+        int(clip_bounds.x0 - page_bounds.x0),
+        int(clip_bounds.y0 - page_bounds.y0),
+    )
+
+
+def _render_matrix(dpi: int, rotation: int) -> Any:
+    return pymupdf.Matrix(dpi / 72, dpi / 72).prerotate(  # type: ignore[no-untyped-call]
+        rotation
+    )
 
 
 def _open_document(path: Path, password: str | None) -> Any:
@@ -658,8 +870,8 @@ def _validate_render_parameters(
     rotation: int,
     clip: PdfRectangle | None,
 ) -> None:
-    if not 18 <= dpi <= 1200:
-        raise PdfPaginaInvalidaError("DPI deve estar entre 18 e 1200")
+    if not 18 <= dpi <= 600:
+        raise PdfPaginaInvalidaError("DPI visual deve estar entre 18 e 600")
     if rotation not in VALID_ROTATIONS:
         raise PdfPaginaInvalidaError("Rotação deve ser 0, 90, 180 ou 270 graus")
     if clip is not None:
