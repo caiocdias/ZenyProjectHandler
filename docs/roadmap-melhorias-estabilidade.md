@@ -80,7 +80,7 @@ com o corpus completo. Seus resultados não substituem o gate básico.
 | 3. Logging estruturado nas fronteiras | CONCLUÍDA | 1 | Falhas diagnosticáveis sem dados sensíveis |
 | 4. Ciclo de vida de SQLite e ResourceWarnings | CONCLUÍDA | 1 | Engines e conexões sempre encerradas |
 | 5. Backup degradado com confirmação explícita | CONCLUÍDA | 2, 3 | Nenhuma omissão silenciosa de PDF |
-| 6. Coordenador central de operações | PENDENTE | 3, 4 | Operações incompatíveis não concorrem |
+| 6. Coordenador central de operações | CONCLUÍDA | 3, 4 | Operações incompatíveis não concorrem |
 | 7. Portabilidade assíncrona e UI não reentrante | PENDENTE | 6 | UI responsiva, sem `processEvents()` manual |
 | 8. Preflight de substituição antes de mutar arquivos | PENDENTE | 6, 7 | Confirmação ocorre antes da troca física |
 | 9. Journal e recuperação de importações interrompidas | PENDENTE | 8 | Banco e arquivos reconciliados após queda |
@@ -432,7 +432,7 @@ Crie commits seccionados para as alterações, mantenha na branch main.
 ## Etapa 6 — Coordenador central de operações incompatíveis
 
 **Achado original:** 4, parte de coordenação.  
-**Estado:** PENDENTE.  
+**Estado:** CONCLUÍDA.
 **Arquivos prováveis:** novo módulo de aplicação, `bootstrap.py`, `project_panel.py`, serviços de
 análise/portabilidade e testes unitários.
 
@@ -452,6 +452,42 @@ análise/portabilidade e testes unitários.
 - Operações incompatíveis são recusadas antes de qualquer mutação.
 - Falha, cancelamento e exceção liberam o token; testes concorrentes comprovam isso.
 - O coordenador não importa PySide6 nem infraestrutura de persistência.
+
+### Registro de conclusão — 05/08/2026
+
+- Foi adotado um bloqueio global conservador e não bloqueante na camada de aplicação. Análise do
+  projeto, importação de PDFs/projetos, exportação, backup, restauração, exclusão de projeto/PDF/foto
+  e demais alterações expostas pelos mesmos serviços adquirem exclusividade antes de logging,
+  transação, temporário, cópia ou publicação. Preflights somente leitura permanecem livres; a
+  operação mutável revalida o estado depois de adquirir o coordenador.
+- A aquisição retorna um token que também é context manager. A saída normal, exceção e cancelamento
+  passam por `__exit__` e liberam em `finally`. Liberação repetida ou tardia é idempotente e nunca
+  libera um token posterior. O lock interno protege apenas a troca do token ativo e não permanece
+  retido durante o caso de uso; como há um único lock, nenhuma espera e nenhuma aquisição aninhada,
+  não existe ciclo de locks capaz de produzir deadlock. Reentrada acidental é recusada imediatamente.
+- `OperacaoEmAndamentoError` é um erro de aplicação específico, preserva a operação solicitada e a
+  operação ativa e produz uma mensagem amigável para aguardar conclusão ou cancelamento. Como os
+  painéis já tratam erros de aplicação, chamadas atuais e futuras recebem a mesma recusa sem depender
+  de desabilitação de botões.
+- O bootstrap cria exatamente um `CoordenadorOperacoes` e compartilha a instância entre
+  `ServicoFluxoMvp`, `ImportarPdfsNoProjeto` e `ServicoPortabilidadeProjeto`. O worker Qt existente
+  continua chamando `ServicoFluxoMvp.executar_pipeline`; o serviço mantém o token durante toda a
+  extração e interpretação, de modo que o worker também é protegido e uma recusa ocorre antes de
+  qualquer execução de análise persistida.
+- Testes unitários exercitam sucesso, exceção, conflito entre threads, reentrada, mensagem, dupla
+  liberação, token obsoleto e independência de Qt/infraestrutura. Testes de integração comprovam a
+  instância única do bootstrap, recusa no worker e na portabilidade sem mutação do banco/destino,
+  sucesso subsequente, liberação após exceção e liberação após cancelamento cooperativo.
+- Validações concluídas: conjunto focado final (`34 passed`); `pip check`; Ruff completo;
+  `ruff format --check`; Mypy (`167 source files`); e gate básico canônico. O resultado final foi
+  `292 passed, 20 deselected`, cobertura `85,37%`, complexidade média A (`3,9747`) e
+  `RESULTADO FINAL: APROVADO`. O único aviso foi um `PytestCacheWarning` ambiental por falta de
+  permissão para atualizar `.pytest_cache`; não houve `ResourceWarning` nem falha de teste.
+- Limitação deliberada: operações potencialmente compatíveis também são serializadas. A
+  portabilidade continua síncrona na thread da UI e ainda usa `QApplication.processEvents()`; essa
+  responsividade e a desabilitação coordenada dos controles pertencem à Etapa 7.
+- Commits: `d739531` (`feat(application): coordinate incompatible operations`) e `f9f5f32`
+  (`test(application): cover operation coordination`).
 
 ### Mensagem para um novo chat do Codex
 
