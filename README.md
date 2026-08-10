@@ -365,8 +365,9 @@ linha; na ausência de Circular, Duplo T ou Madeira, uma correspondência canôn
 e os demais candidatos permanecem registrados na auditoria. Pares de coordenadas de campo próximos
 ao poste são reconhecidos em texto nativo ou OCR, inclusive quando estão em linhas ou fragmentos
 separados. Leste e norte são pareados uma única vez por fragmento e proximidade, evitando reutilizar
-o mesmo número em pontos vizinhos. Vetores e imagens próximos são vinculados como contexto para
-geometria, cor e proveniência.
+o mesmo número em pontos vizinhos. As coordenadas enriquecem somente elementos vinculados a um
+identificador operacional `P<n>`; sozinhas, não promovem referenciais elétricos a elementos do
+projeto. Vetores e imagens próximos são vinculados como contexto para geometria, cor e proveniência.
 
 Linhas reconhecidas como cabeçalho, como `Dispositivo:`, `Circuito:` e `Projeto:`, continuam
 disponíveis para a inspeção documental, mas não entram no inventário da rede. Nomenclaturas de cabo

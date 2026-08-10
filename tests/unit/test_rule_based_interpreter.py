@@ -970,7 +970,62 @@ def test_unidentified_electrical_references_are_not_project_elements(
     assert result.relacoes == ()
 
 
-def test_coordinate_identifies_pole_and_nearby_structure_without_point_label(
+def test_coordinates_do_not_identify_electrical_references_without_numbered_point(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    request = _request(catalogo_inicial)
+    page_id = request.evidencias[0].pagina_id
+    electrical_references = (
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="unscoped-mt-structure",
+            text="U3",
+            x="0.10",
+            y="0.10",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="unscoped-bt-structure",
+            text="S3R",
+            x="0.10",
+            y="0.11",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="unscoped-pole",
+            text="10-300",
+            x="0.10",
+            y="0.12",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="unscoped-coordinate-east",
+            text="505097",
+            x="0.10",
+            y="0.13",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="unscoped-coordinate-north",
+            text="7754806",
+            x="0.10",
+            y="0.14",
+        ),
+    )
+    request = replace(request, evidencias=electrical_references)
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
+
+    assert result.elementos == ()
+    assert result.relacoes == ()
+
+
+def test_numbered_point_keeps_pole_coordinates_as_auxiliary_attributes(
     catalogo_inicial: CatalogoTecnico,
 ) -> None:
     request = _request(catalogo_inicial)
@@ -984,16 +1039,15 @@ def test_coordinate_identifies_pole_and_nearby_structure_without_point_label(
     )
     request = replace(
         request,
-        evidencias=(request.evidencias[0], request.evidencias[1], coordinate),
+        evidencias=(request.evidencias[0], coordinate, request.evidencias[8]),
     )
 
     result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
 
-    assert {item.categoria for item in result.elementos} == {
-        CategoriaElemento.POSTE,
-        CategoriaElemento.ESTRUTURA_MT,
-    }
-    pole = next(item for item in result.elementos if item.categoria is CategoriaElemento.POSTE)
+    assert len(result.elementos) == 1
+    pole = result.elementos[0]
+    assert pole.categoria is CategoriaElemento.POSTE
+    assert dict(pole.atributos_sugeridos)["identificador_operacional"] == "P1"
     assert dict(pole.atributos_sugeridos)["coordenada_leste"] == 405402
     assert dict(pole.atributos_sugeridos)["coordenada_norte"] == 7804568
 

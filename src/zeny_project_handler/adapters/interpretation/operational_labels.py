@@ -45,15 +45,10 @@ def filtrar_propostas_identificadas(
     *,
     distancia_maxima: float = _MAXIMUM_IDENTIFIER_DISTANCE,
 ) -> tuple[PropostaElemento, ...]:
-    """Mantenha ativos identificados por rótulo ou coordenada de campo."""
+    """Mantenha somente ativos vinculados a um identificador operacional numerado."""
     if distancia_maxima <= 0:
         raise ValueError("Distância máxima do identificador deve ser positiva")
     pole_labels, span_labels = _operational_labels(evidencias)
-    coordinate_poles = tuple(
-        proposal
-        for proposal in propostas
-        if proposal.categoria is CategoriaElemento.POSTE and _has_field_coordinate(proposal)
-    )
     identified: list[PropostaElemento] = []
     for proposal in propostas:
         labels = (
@@ -66,44 +61,7 @@ def filtrar_propostas_identificadas(
         nearest = _nearest_label(proposal, labels, distancia_maxima)
         if nearest is not None:
             identified.append(_with_operational_label(proposal, nearest))
-        elif _has_field_coordinate(proposal) or (
-            proposal.categoria in _POLE_IDENTIFIED_CATEGORIES - {CategoriaElemento.POSTE}
-            and _nearest_coordinate_pole(
-                proposal,
-                coordinate_poles,
-                distancia_maxima,
-            )
-            is not None
-        ):
-            identified.append(proposal)
     return tuple(identified)
-
-
-def _has_field_coordinate(proposal: PropostaElemento) -> bool:
-    attributes = dict(proposal.atributos_sugeridos)
-    return (
-        attributes.get("coordenada_leste") is not None
-        and attributes.get("coordenada_norte") is not None
-    )
-
-
-def _nearest_coordinate_pole(
-    proposal: PropostaElemento,
-    poles: tuple[PropostaElemento, ...],
-    maximum_distance: float,
-) -> PropostaElemento | None:
-    same_page = tuple(
-        pole for pole in poles if pole.geometria.pagina_id == proposal.geometria.pagina_id
-    )
-    nearest = min(
-        same_page,
-        key=lambda pole: _distance_to_geometry(center(pole.geometria), proposal.geometria),
-        default=None,
-    )
-    if nearest is None:
-        return None
-    distance = _distance_to_geometry(center(nearest.geometria), proposal.geometria)
-    return nearest if distance <= maximum_distance else None
 
 
 def _operational_labels(
