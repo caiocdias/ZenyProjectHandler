@@ -341,6 +341,15 @@ O dock **Documentação e conformidade** acompanha o projeto aberto e possui vis
 - o registro ativo de regras, com importação/exportação, ativação, desativação e remoção confirmada
   sem editar arquivos manualmente.
 
+Ao concluir o pipeline, o aplicativo persiste atomicamente uma execução auditável de conformidade
+ligada à sessão semântica e à revisão exata das regras. A aba carrega esse último snapshot, ordena
+possíveis divergências primeiro e mostra valores observados/esperados, fonte, revisão e localização.
+Se o registro ativo mudar, o resultado é marcado como desatualizado sem ser reinterpretado.
+
+O botão **Analisar conformidade** cria uma nova execução explícita a partir dos resultados semânticos
+já persistidos. Essa operação não reabre o PDF e não repete extração ou OCR; execuções anteriores
+permanecem no histórico.
+
 O analisador identifica vãos por uma linha com extremidades associadas ou pelo identificador
 operacional explícito `V<n>-<n>`. O segundo caso mantém o vão revisável mesmo quando uma das
 extremidades ainda não possui poste classificado. O comprimento usa primeiro a anotação próxima ao

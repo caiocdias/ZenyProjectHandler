@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import cast
+from uuid import UUID
 
 import pymupdf
 import pytest
@@ -11,6 +13,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
+    QLabel,
     QLineEdit,
     QListWidget,
     QMessageBox,
@@ -21,9 +24,11 @@ from pytestqt.qtbot import QtBot
 
 from tests.conftest import ApplicationFactory
 from tests.pdf_fixtures import create_golden_pdf
+from zeny_project_handler.adapters.analysis import PyMuPdfDocumentAnalyzer, TesseractCliOcr
 from zeny_project_handler.adapters.catalog import carregar_catalogo_inicial
 from zeny_project_handler.config import AppSettings
 from zeny_project_handler.domain.enums import CategoriaElemento
+from zeny_project_handler.domain.project_metadata import MetadadosProjeto
 from zeny_project_handler.ui.project_panel import ProjectPanelWidget
 
 pytestmark = [
@@ -149,6 +154,14 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
     qtbot.mouseClick(add_pdfs, Qt.MouseButton.LeftButton)
     assert window.pdf_viewer.inspecao is not None
 
+    with panel._service._unit_of_work() as work:
+        project = work.projetos.obter(UUID(str(project_id)))
+        assert project is not None
+        work.projetos.salvar(
+            replace(project, metadados=MetadadosProjeto(tipo_servico="Rede urbana"))
+        )
+        work.commit()
+
     run = panel.findChild(QPushButton, "mvpRunAnalysisButton")
     assert run is not None
     qtbot.mouseClick(run, Qt.MouseButton.LeftButton)
@@ -182,6 +195,32 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
     assert review_project.currentData() == project_id
     assert results.topLevelItemCount() >= 1
 
+    documentation_panel = window.documentation_panel
+    assert documentation_panel is not None
+    compliance_tree = documentation_panel.findChild(QTreeWidget, "complianceFindingsTree")
+    compliance_status = documentation_panel.findChild(QLabel, "complianceExecutionStatusLabel")
+    reapply = documentation_panel.findChild(QPushButton, "complianceAnalyzeButton")
+    assert compliance_tree is not None
+    assert compliance_status is not None
+    assert reapply is not None
+    assert compliance_tree.topLevelItemCount() >= 1
+    divergence = compliance_tree.topLevelItem(0)
+    assert divergence is not None
+    assert divergence.text(0) == "Possível divergência"
+    assert "ausente" in divergence.text(3)
+    assert "presente" in divergence.text(4)
+    assert "Resultado atual" in compliance_status.text()
+
+    def forbidden_call(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("Reaplicar conformidade não pode executar extração ou OCR")
+
+    monkeypatch.setattr(PyMuPdfDocumentAnalyzer, "analisar", forbidden_call)
+    monkeypatch.setattr(TesseractCliOcr, "reconhecer", forbidden_call)
+    previous_count = compliance_tree.topLevelItemCount()
+    qtbot.mouseClick(reapply, Qt.MouseButton.LeftButton)
+    assert compliance_tree.topLevelItemCount() == previous_count
+    assert "Resultado atual" in compliance_status.text()
+
     window.pdf_viewer.ir_para_folha(2)
     assert window.pdf_viewer.folha_atual == 2
     _second_application, reopened = application_factory([], settings=settings)
@@ -193,6 +232,11 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
     assert reopened_combo is not None
     assert reopened_combo.currentData() == project_id
     assert reopened.pdf_viewer.folha_atual == 2
+    reopened_documentation = reopened.documentation_panel
+    assert reopened_documentation is not None
+    reopened_findings = reopened_documentation.findChild(QTreeWidget, "complianceFindingsTree")
+    assert reopened_findings is not None
+    assert reopened_findings.topLevelItemCount() == previous_count
 
     confirmations: list[str] = []
 

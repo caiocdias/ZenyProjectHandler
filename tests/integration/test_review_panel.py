@@ -32,6 +32,10 @@ from zeny_project_handler.adapters.persistence import (
     upgrade_database,
 )
 from zeny_project_handler.application.analysis_regions import RegiaoAnalise
+from zeny_project_handler.application.compliance_analysis import ExecutarAnaliseConformidade
+from zeny_project_handler.application.compliance_registry import (
+    ServicoRegistroRegrasConformidade,
+)
 from zeny_project_handler.application.human_review import ServicoRevisaoHumana
 from zeny_project_handler.domain.analysis import (
     DecisaoRevisao,
@@ -583,11 +587,28 @@ def test_result_visibility_can_hide_a_whole_point_or_one_element(
 def test_documentation_panel_has_own_document_and_compliance_views(
     qtbot: QtBot,
     review_panel_context: tuple[Engine, ReviewPanelWidget, PropostaElemento],
+    tmp_path: Path,
 ) -> None:
-    _engine, review_panel, _proposal = review_panel_context
+    engine, review_panel, _proposal = review_panel_context
+
+    def unit_of_work() -> SqlAlchemyUnitOfWork:
+        return SqlAlchemyUnitOfWork(engine)
+
+    registry_service = ServicoRegistroRegrasConformidade(
+        unit_of_work,
+        diretorio_dados=tmp_path / "compliance-data",
+    )
+    registry_service.inicializar(carregar_registro_conformidade_inicial())
+    analysis_service = ExecutarAnaliseConformidade(
+        unit_of_work,
+        review_panel._service.carregar_sessao_semantica,
+    )
+    project_id = review_panel._service.listar_projetos()[0].projeto_id
+    analysis_service.executar(project_id)
     panel = DocumentationPanelWidget(
         service=review_panel._service,
-        registry=carregar_registro_conformidade_inicial(),
+        registry_service=registry_service,
+        analysis_service=analysis_service,
         viewer=review_panel._viewer,
     )
     qtbot.addWidget(panel)

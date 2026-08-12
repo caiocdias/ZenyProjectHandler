@@ -16,6 +16,7 @@ from zeny_project_handler.domain.analysis import (
 )
 from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.domain.compliance import (
+    ExecucaoConformidade,
     NumeroRegraConformidade,
     RevisaoRegistroConformidade,
 )
@@ -113,6 +114,16 @@ class ComplianceRuleRegistryRepositoryPort(Protocol):
     ) -> tuple[NumeroRegraConformidade, ...]: ...
 
 
+class ComplianceAnalysisRepositoryPort(Protocol):
+    def obter(self, execution_id: UUID) -> ExecucaoConformidade | None: ...
+
+    def obter_ultima(self, project_id: UUID) -> ExecucaoConformidade | None: ...
+
+    def listar_do_projeto(self, project_id: UUID) -> tuple[ExecucaoConformidade, ...]: ...
+
+    def salvar(self, execution: ExecucaoConformidade) -> None: ...
+
+
 class UnitOfWorkPort(Protocol):
     @property
     def catalogos(self) -> CatalogRepositoryPort: ...
@@ -140,6 +151,9 @@ class UnitOfWorkPort(Protocol):
 
     @property
     def registros_conformidade(self) -> ComplianceRuleRegistryRepositoryPort: ...
+
+    @property
+    def execucoes_conformidade(self) -> ComplianceAnalysisRepositoryPort: ...
 
     def __enter__(self) -> Self: ...
 

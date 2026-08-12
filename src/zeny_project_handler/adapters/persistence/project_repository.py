@@ -31,6 +31,7 @@ from .domain_json import dumps_domain, loads_domain
 from .errors import PersistenceConflictError, PersistenceNotFoundError
 from .schema import (
     analysis_runs,
+    compliance_executions,
     confirmed_relations,
     document_sources,
     documents,
@@ -104,6 +105,7 @@ class SqlProjectRepository:
     def remover(self, project_id: UUID) -> bool:
         persisted_id = str(project_id)
         for table in (
+            compliance_executions,
             review_decisions,
             proposal_evidence,
             proposals,

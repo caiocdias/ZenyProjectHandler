@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from zeny_project_handler.application.compliance_analysis import ExecutarAnaliseConformidade
 from zeny_project_handler.application.compliance_registry import (
     ServicoRegistroRegrasConformidade,
 )
@@ -329,6 +330,7 @@ class MainWindow(QMainWindow):
         portability_service: ServicoPortabilidadeProjeto | None = None,
         operation_coordinator: CoordenadorOperacoes | None = None,
         compliance_registry_service: ServicoRegistroRegrasConformidade | None = None,
+        compliance_analysis_service: ExecutarAnaliseConformidade | None = None,
         ui_state_path: Path | None = None,
         startup_ocr_diagnostic: str | None = None,
         parent: QWidget | None = None,
@@ -387,10 +389,11 @@ class MainWindow(QMainWindow):
                 lambda _proposal_id, review_dock=dock: review_dock.raise_()
             )
             right_docks.append(dock)
-            if compliance_registry_service is not None:
+            if compliance_registry_service is not None and compliance_analysis_service is not None:
                 self.documentation_panel = DocumentationPanelWidget(
                     service=review_service,
                     registry_service=compliance_registry_service,
+                    analysis_service=compliance_analysis_service,
                     viewer=self.pdf_viewer,
                     parent=self,
                 )
@@ -424,6 +427,10 @@ class MainWindow(QMainWindow):
             )
             self.project_panel.status_changed.connect(self.statusBar().showMessage)
             self.project_panel.busy_changed.connect(self._refresh_operation_controls)
+            if self.documentation_panel is not None:
+                self.project_panel.project_opened.connect(self.documentation_panel.abrir_projeto)
+                if self.project_panel.projeto_ativo_id is not None:
+                    self.documentation_panel.abrir_projeto(self.project_panel.projeto_ativo_id)
             project_dock = QDockWidget("Fluxo do projeto", self)
             project_dock.setObjectName("projectWorkflowDock")
             project_dock.setAllowedAreas(

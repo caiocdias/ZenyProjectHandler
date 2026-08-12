@@ -18,6 +18,7 @@ from tests.pdf_fixtures import (
 )
 
 from zeny_project_handler.adapters.analysis import JsonAnalysisCache, PyMuPdfDocumentAnalyzer
+from zeny_project_handler.adapters.compliance import carregar_registro_conformidade_inicial
 from zeny_project_handler.adapters.interpretation import (
     InterpretadorRegrasExplicitas,
     carregar_registro_regras_inicial,
@@ -27,6 +28,10 @@ from zeny_project_handler.adapters.persistence import (
     SqlAlchemyUnitOfWork,
     create_sqlite_engine,
     upgrade_database,
+)
+from zeny_project_handler.application.compliance_analysis import ExecutarAnaliseConformidade
+from zeny_project_handler.application.compliance_registry import (
+    ServicoRegistroRegrasConformidade,
 )
 from zeny_project_handler.application.document_analysis import ExecutarAnaliseDocumento
 from zeny_project_handler.application.errors import FluxoMvpCanceladoError
@@ -60,6 +65,16 @@ def _service(
         return SqlAlchemyUnitOfWork(engine)
 
     registry = carregar_registro_regras_inicial()
+    review_service = ServicoRevisaoHumana(unit_of_work)
+    compliance_registry = ServicoRegistroRegrasConformidade(
+        unit_of_work,
+        diretorio_dados=cache_directory.parent,
+    )
+    compliance_registry.inicializar(carregar_registro_conformidade_inicial())
+    compliance_analysis = ExecutarAnaliseConformidade(
+        unit_of_work,
+        review_service.carregar_sessao_semantica,
+    )
 
     def list_projects() -> tuple[Projeto, ...]:
         with unit_of_work() as work:
@@ -82,6 +97,7 @@ def _service(
             registry,
             unit_of_work,
         ),
+        analisador_conformidade=compliance_analysis,
         gerenciador_arquivos=GerenciadorArquivosGerenciados(
             cache_directory.parent,
             list_projects,
@@ -172,6 +188,11 @@ def test_pipeline_uses_a_distinct_ephemeral_password_for_each_document(
 
     assert result.documentos_processados == 2
     assert len(result.execucoes_interpretacao) == 2
+    with SqlAlchemyUnitOfWork(engine) as work:
+        compliance = work.execucoes_conformidade.obter_ultima(created.projeto.id)
+    assert compliance is not None
+    assert compliance.id == result.execucao_conformidade_id
+    assert compliance.execucoes_semanticas_ids == result.execucoes_interpretacao
     engine.dispose()
 
 
@@ -234,6 +255,7 @@ def test_cancel_and_resume_pipeline_reuses_completed_work_without_duplicates(
     repeated = service.executar_pipeline(project.projeto.id)
 
     assert resumed.execucoes_interpretacao == repeated.execucoes_interpretacao
+    assert resumed.execucao_conformidade_id == repeated.execucao_conformidade_id
     assert resumed.documentos_processados == 2
     with SqlAlchemyUnitOfWork(engine) as work:
         runs = work.execucoes_analise.listar_do_projeto(project.projeto.id)

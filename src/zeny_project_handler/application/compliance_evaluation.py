@@ -11,11 +11,14 @@ from zeny_project_handler.domain.catalog import JsonPrimitive
 from zeny_project_handler.domain.compliance import (
     AchadoConformidade,
     AlvoConformidade,
+    AvaliacaoCondicaoConformidade,
     CondicaoConformidade,
     FatoConformidade,
+    GrupoCondicaoConformidade,
     OperadorCondicao,
     QuantificadorCondicao,
     RegistroRegrasConformidade,
+    ResultadoCondicaoConformidade,
     ResultadoConformidade,
 )
 
@@ -43,16 +46,29 @@ def avaliar_regras_conformidade(
             if target.tipo is not rule.escopo:
                 continue
             scoped_facts = tuple(facts_by_target[target.id])
-            applicability = _conditions(rule.aplicabilidade, scoped_facts)
+            applicability, applicability_audit = _conditions(
+                rule.aplicabilidade,
+                scoped_facts,
+                GrupoCondicaoConformidade.APLICABILIDADE,
+            )
             if applicability is _Truth.FALSE:
                 continue
+            exception, exception_audit = _conditions(
+                rule.excecoes,
+                scoped_facts,
+                GrupoCondicaoConformidade.EXCECAO,
+            )
+            requirement, requirement_audit = _conditions(
+                rule.requisitos,
+                scoped_facts,
+                GrupoCondicaoConformidade.REQUISITO,
+            )
+            evaluations = (*applicability_audit, *exception_audit, *requirement_audit)
             if applicability is _Truth.UNKNOWN:
                 result = ResultadoConformidade.NAO_AVALIAVEL
             else:
-                exception = _conditions(rule.excecoes, scoped_facts)
                 if rule.excecoes and exception is _Truth.TRUE:
                     continue
-                requirement = _conditions(rule.requisitos, scoped_facts)
                 result = {
                     _Truth.TRUE: ResultadoConformidade.CONFORME,
                     _Truth.FALSE: ResultadoConformidade.DIVERGENCIA,
@@ -62,17 +78,12 @@ def avaliar_regras_conformidade(
                 dict.fromkeys(
                     evidence_id
                     for fact in scoped_facts
-                    if fact.chave
-                    in {
-                        condition.chave_fato
-                        for condition in (
-                            *rule.aplicabilidade,
-                            *rule.excecoes,
-                            *rule.requisitos,
-                        )
-                    }
+                    if fact.id in {item for audit in evaluations for item in audit.fato_ids}
                     for evidence_id in fact.evidencia_ids
                 )
+            )
+            fact_ids = tuple(
+                dict.fromkeys(item for audit in evaluations for item in audit.fato_ids)
             )
             findings.append(
                 AchadoConformidade(
@@ -82,10 +93,17 @@ def avaliar_regras_conformidade(
                     resultado=result,
                     severidade=rule.severidade,
                     titulo=rule.titulo,
-                    mensagem=_finding_message(result, rule.descricao, target.rotulo),
+                    mensagem=_finding_message(
+                        result,
+                        rule.descricao,
+                        target.rotulo,
+                        evaluations,
+                    ),
                     fonte=rule.fonte,
                     versao_regras=registro.versao,
                     evidencia_ids=evidence_ids,
+                    fato_ids=fact_ids,
+                    avaliacoes_condicoes=evaluations,
                 )
             )
     return tuple(findings)
@@ -94,37 +112,65 @@ def avaliar_regras_conformidade(
 def _conditions(
     conditions: tuple[CondicaoConformidade, ...],
     facts: tuple[FatoConformidade, ...],
-) -> _Truth:
+    group: GrupoCondicaoConformidade,
+) -> tuple[_Truth, tuple[AvaliacaoCondicaoConformidade, ...]]:
     if not conditions:
-        return _Truth.TRUE
-    results = tuple(_condition(condition, facts) for condition in conditions)
+        return _Truth.TRUE, ()
+    evaluated = tuple(
+        _condition(condition, facts, group=group, index=index)
+        for index, condition in enumerate(conditions)
+    )
+    results = tuple(item[0] for item in evaluated)
     if _Truth.FALSE in results:
-        return _Truth.FALSE
-    if _Truth.UNKNOWN in results:
-        return _Truth.UNKNOWN
-    return _Truth.TRUE
+        truth = _Truth.FALSE
+    elif _Truth.UNKNOWN in results:
+        truth = _Truth.UNKNOWN
+    else:
+        truth = _Truth.TRUE
+    return truth, tuple(item[1] for item in evaluated)
 
 
 def _condition(
     condition: CondicaoConformidade,
     facts: tuple[FatoConformidade, ...],
-) -> _Truth:
-    values = tuple(fact.valor for fact in facts if fact.chave == condition.chave_fato)
+    *,
+    group: GrupoCondicaoConformidade,
+    index: int,
+) -> tuple[_Truth, AvaliacaoCondicaoConformidade]:
+    relevant_facts = tuple(fact for fact in facts if fact.chave == condition.chave_fato)
+    values = tuple(fact.valor for fact in relevant_facts)
     if condition.operador is OperadorCondicao.EXISTE:
-        return _truth(bool(values))
-    if condition.operador is OperadorCondicao.AUSENTE:
-        return _truth(not values)
-    if not values:
-        return _Truth.UNKNOWN
-    comparisons = tuple(
-        _compare(value, condition.operador, condition.valores_esperados) for value in values
+        truth = _truth(bool(values))
+    elif condition.operador is OperadorCondicao.AUSENTE:
+        truth = _truth(not values)
+    elif not values:
+        truth = _Truth.UNKNOWN
+    else:
+        comparisons = tuple(
+            _compare(value, condition.operador, condition.valores_esperados) for value in values
+        )
+        known = tuple(item for item in comparisons if item is not _Truth.UNKNOWN)
+        if not known:
+            truth = _Truth.UNKNOWN
+        elif condition.quantificador is QuantificadorCondicao.QUALQUER:
+            truth = _Truth.TRUE if _Truth.TRUE in known else _Truth.FALSE
+        else:
+            truth = _Truth.FALSE if _Truth.FALSE in known else _Truth.TRUE
+    return truth, AvaliacaoCondicaoConformidade(
+        grupo=group,
+        indice=index,
+        chave_fato=condition.chave_fato,
+        operador=condition.operador,
+        quantificador=condition.quantificador,
+        valores_esperados=condition.valores_esperados,
+        valores_observados=values,
+        fato_ids=tuple(item.id for item in relevant_facts),
+        resultado={
+            _Truth.TRUE: ResultadoCondicaoConformidade.ATENDE,
+            _Truth.FALSE: ResultadoCondicaoConformidade.NAO_ATENDE,
+            _Truth.UNKNOWN: ResultadoCondicaoConformidade.DESCONHECIDO,
+        }[truth],
     )
-    known = tuple(item for item in comparisons if item is not _Truth.UNKNOWN)
-    if not known:
-        return _Truth.UNKNOWN
-    if condition.quantificador is QuantificadorCondicao.QUALQUER:
-        return _Truth.TRUE if _Truth.TRUE in known else _Truth.FALSE
-    return _Truth.FALSE if _Truth.FALSE in known else _Truth.TRUE
 
 
 def _compare(
@@ -166,10 +212,43 @@ def _finding_message(
     result: ResultadoConformidade,
     description: str,
     target_label: str,
+    evaluations: tuple[AvaliacaoCondicaoConformidade, ...],
 ) -> str:
     prefix = {
         ResultadoConformidade.CONFORME: "Atende à condição verificável",
         ResultadoConformidade.DIVERGENCIA: "Possível divergência",
         ResultadoConformidade.NAO_AVALIAVEL: "Não avaliável com os fatos disponíveis",
     }[result]
-    return f"{prefix} em {target_label}: {description}"
+    decisive = _decisive_evaluation(result, evaluations)
+    detail = _evaluation_detail(decisive) if decisive is not None else ""
+    return f"{prefix} em {target_label}: {description}{detail}"
+
+
+def _decisive_evaluation(
+    result: ResultadoConformidade,
+    evaluations: tuple[AvaliacaoCondicaoConformidade, ...],
+) -> AvaliacaoCondicaoConformidade | None:
+    expected_result = {
+        ResultadoConformidade.DIVERGENCIA: ResultadoCondicaoConformidade.NAO_ATENDE,
+        ResultadoConformidade.NAO_AVALIAVEL: ResultadoCondicaoConformidade.DESCONHECIDO,
+        ResultadoConformidade.CONFORME: ResultadoCondicaoConformidade.ATENDE,
+    }[result]
+    requirements = tuple(
+        item for item in evaluations if item.grupo is GrupoCondicaoConformidade.REQUISITO
+    )
+    return next(
+        (item for item in requirements if item.resultado is expected_result),
+        next((item for item in evaluations if item.resultado is expected_result), None),
+    )
+
+
+def _evaluation_detail(evaluation: AvaliacaoCondicaoConformidade) -> str:
+    observed = ", ".join(map(str, evaluation.valores_observados)) or "ausente"
+    if evaluation.operador is OperadorCondicao.EXISTE:
+        expected = "presente"
+    elif evaluation.operador is OperadorCondicao.AUSENTE:
+        expected = "ausente"
+    else:
+        expected_values = ", ".join(map(str, evaluation.valores_esperados))
+        expected = f"{evaluation.operador.value.lower()} {expected_values}"
+    return f" Valor observado: {observed}; esperado: {evaluation.chave_fato} {expected}."

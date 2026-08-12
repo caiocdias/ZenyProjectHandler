@@ -17,8 +17,10 @@ from zeny_project_handler.ports.interpretation import ConfiguracaoInterpretacao
 from zeny_project_handler.ports.pdf import ReferenciaFontePdf
 from zeny_project_handler.ports.persistence import UnitOfWorkPort
 
+from .compliance_analysis import ExecutarAnaliseConformidade
 from .document_analysis import ExecutarAnaliseDocumento
 from .errors import (
+    AnaliseConformidadeCanceladaError,
     FluxoMvpCanceladoError,
     InterpretacaoCanceladaError,
     ProjetoNaoEncontradoError,
@@ -57,6 +59,7 @@ class SessaoProjetoMvp:
 class ResultadoFluxoMvp:
     projeto_id: UUID
     execucoes_interpretacao: tuple[UUID, ...]
+    execucao_conformidade_id: UUID
     propostas_geradas: int
     documentos_processados: int
 
@@ -92,6 +95,7 @@ class ServicoFluxoMvp:
         importador: ImportarPdfsNoProjeto,
         extrator: ExecutarAnaliseDocumento,
         interpretador: ExecutarPipelineInterpretacao,
+        analisador_conformidade: ExecutarAnaliseConformidade,
         gerenciador_arquivos: GerenciadorArquivosGerenciados,
         coordenador: CoordenadorOperacoes | None = None,
         relogio: Callable[[], datetime] | None = None,
@@ -102,6 +106,7 @@ class ServicoFluxoMvp:
         self._importer = importador
         self._extractor = extrator
         self._interpreter = interpretador
+        self._compliance_analyzer = analisador_conformidade
         self._managed_files = gerenciador_arquivos
         self._coordinator = coordenador or CoordenadorOperacoes()
         self._clock = relogio or (lambda: datetime.now(UTC))
@@ -318,7 +323,7 @@ class ServicoFluxoMvp:
             raise ValueError("Importe ao menos um PDF antes de executar a análise")
         extraction_config = configuracao_extracao or ConfiguracaoAnaliseDocumento()
         interpretation_config = configuracao_interpretacao or ConfiguracaoInterpretacao()
-        total_steps = len(documents) * 2
+        total_steps = len(documents) * 2 + 1
         interpretation_ids: list[UUID] = []
         proposal_count = 0
         for index, document in enumerate(documents):
@@ -365,10 +370,27 @@ class ServicoFluxoMvp:
                 ) from error
             interpretation_ids.append(interpreted.execucao.id)
             proposal_count += len(interpreted.elementos) + len(interpreted.relacoes)
+        self._ensure_not_cancelled(cancelado)
+        self._progress(
+            progresso,
+            total_steps - 1,
+            total_steps,
+            "Avaliando conformidade com a revisão ativa capturada",
+        )
+        try:
+            compliance_execution = self._compliance_analyzer.executar(
+                projeto_id,
+                cancelado=cancelado,
+            )
+        except AnaliseConformidadeCanceladaError as error:
+            raise FluxoMvpCanceladoError(
+                "Análise cancelada antes de publicar a conformidade; use Retomar análise"
+            ) from error
         self._progress(progresso, total_steps, total_steps, "Análise concluída")
         return ResultadoFluxoMvp(
             projeto_id=projeto_id,
             execucoes_interpretacao=tuple(interpretation_ids),
+            execucao_conformidade_id=compliance_execution.id,
             propostas_geradas=proposal_count,
             documentos_processados=len(documents),
         )

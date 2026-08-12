@@ -24,6 +24,7 @@ from zeny_project_handler.adapters.persistence import (
     create_sqlite_engine,
     upgrade_database,
 )
+from zeny_project_handler.application.compliance_analysis import ExecutarAnaliseConformidade
 from zeny_project_handler.application.compliance_registry import (
     ServicoRegistroRegrasConformidade,
 )
@@ -88,8 +89,13 @@ def _panel(
         diretorio_dados=data,
     )
     registry_service.inicializar(carregar_registro_conformidade_inicial())
+    review_service = ServicoRevisaoHumana(unit_of_work)
     panel = DocumentationPanelWidget(
-        service=ServicoRevisaoHumana(unit_of_work),
+        service=review_service,
+        analysis_service=ExecutarAnaliseConformidade(
+            unit_of_work,
+            review_service.carregar_sessao_semantica,
+        ),
         registry_service=registry_service,
         viewer=cast(PdfViewerWidget, object()),
     )

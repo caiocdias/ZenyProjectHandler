@@ -78,7 +78,7 @@ comissionador comunica um problema, mas **não são fonte normativa suficiente p
 |---|---|---|---|
 | 1. Registro configurável de regras | CONCLUÍDA | - | Importar/remover regras pela interface com revisão persistida |
 | 2. Pesquisa normativa integral e expansão inicial | CONCLUÍDA | 1 | Inventário oficial e regras automatizáveis já incorporadas |
-| 3. Execução e histórico de conformidade | PENDENTE | 1, 2 | Resultado vinculado à análise e à revisão de regras |
+| 3. Execução e histórico de conformidade | CONCLUÍDA | 1, 2 | Resultado vinculado à análise e à revisão de regras |
 | 4. Caixas e setas no visualizador | PENDENTE | 3 | Callouts vermelhos ancorados em geometria rastreável |
 | 5. Visibilidade e sincronização | PENDENTE | 4 | Olho por achado e navegação bidirecional lista/PDF |
 | 6. Primeiro avaliador técnico e aceite ponta a ponta | PENDENTE | 5 | Extensão comprovada sem codificar regras no motor |
@@ -481,3 +481,23 @@ atualiza `docs/catalogo-regras-conformidade.md`. Não copie conteúdo dos PDFs r
   documentados como candidatos dependentes de novos fatos ou revisão humana; normas licenciadas e
   documentos oficiais reservados não foram contornados nem incorporados.
 - **Commit:** `feat(compliance): expand rules from normative review`.
+
+### 2026-08-12 — Etapa 3 concluída
+
+- **Arquivos principais:** execução auditável em `domain/compliance.py`; caso de uso único em
+  `application/compliance_analysis.py`; migração `0007_compliance_executions`, repositório e porta de
+  persistência; composição no pipeline/bootstrap; leitura e reanálise explícita em
+  `ui/documentation_panel.py`.
+- **Comportamento entregue:** revisão ativa capturada no início; snapshot canônico e atômico com
+  condições observadas/esperadas; IDs determinísticos; histórico imutável; rollback integral; última
+  execução recuperada após reinício; divergências primeiro e sinalização de resultado desatualizado.
+- **Testes focados:** domínio, migração, persistência, determinismo, imutabilidade, remoção de regra,
+  rollback por falha/cancelamento, reinício, integração do pipeline e pytest-qt/E2E de reanálise sem
+  PyMuPDF nem OCR — 102 testes focados aprovados.
+- **Gate básico:** `IniciarTestes.bat` aprovado no Python 3.13.14 — 457 testes aprovados, 20 privados
+  excluídos pelo gate, cobertura de 85,65%; Ruff, formatação, Mypy, dependências e complexidade
+  aprovados.
+- **Limitações remanescentes:** caixas, setas, visibilidade por achado e sincronização bidirecional
+  continuam reservadas às Etapas 4 e 5; coleta de campo e novos avaliadores técnicos permanecem na
+  Etapa 6.
+- **Commit:** `feat(compliance): persist compliance analysis results`.

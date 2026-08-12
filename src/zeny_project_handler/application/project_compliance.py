@@ -26,6 +26,7 @@ from zeny_project_handler.domain.compliance import (
     AchadoConformidade,
     AlvoConformidade,
     FatoConformidade,
+    ItemInspecaoDocumental,
     RegistroRegrasConformidade,
     TipoEscopoConformidade,
 )
@@ -84,19 +85,6 @@ _ABNT_PAGE_SIZES = {
     "A3": (842.0, 1191.0),
     "A4": (595.0, 842.0),
 }
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ItemInspecaoDocumental:
-    grupo: str
-    campo: str
-    valor: str
-    estado: str
-    documento_id: UUID
-    pagina_id: UUID | None = None
-    geometria: GeometriaDocumento | None = None
-    evidencia_ids: tuple[UUID, ...] = ()
-    confianca: Decimal | None = None
 
 
 @dataclass(frozen=True, slots=True)

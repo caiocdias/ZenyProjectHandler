@@ -123,9 +123,51 @@ class ServicoRevisaoHumana:
                     )
             return tuple(summaries)
 
+    def listar_projetos_semanticos(self) -> tuple[ResumoProjetoRevisao, ...]:
+        """Liste também sessões concluídas que não produziram propostas."""
+        with self._unit_of_work() as work:
+            summaries: list[ResumoProjetoRevisao] = []
+            for project in work.projetos.listar():
+                executions = self._review_executions(
+                    work,
+                    project,
+                    incluir_sem_propostas=True,
+                )
+                if not executions:
+                    continue
+                proposals = tuple(
+                    proposal
+                    for execution in executions
+                    for proposal in work.propostas.listar_da_execucao(execution.id)
+                )
+                summaries.append(
+                    ResumoProjetoRevisao(
+                        projeto_id=project.id,
+                        nome=project.nome,
+                        propostas_pendentes=sum(
+                            item.estado_revisao
+                            in {EstadoRevisao.PROPOSTA, EstadoRevisao.CONFLITANTE}
+                            for item in proposals
+                        ),
+                    )
+                )
+            return tuple(summaries)
+
     def carregar_sessao(
         self,
         projeto_id: UUID,
+    ) -> SessaoRevisao:
+        return self._carregar_sessao(projeto_id, incluir_sem_propostas=False)
+
+    def carregar_sessao_semantica(self, projeto_id: UUID) -> SessaoRevisao:
+        """Carregue a última sessão semântica mesmo quando ela não gerou propostas."""
+        return self._carregar_sessao(projeto_id, incluir_sem_propostas=True)
+
+    def _carregar_sessao(
+        self,
+        projeto_id: UUID,
+        *,
+        incluir_sem_propostas: bool,
     ) -> SessaoRevisao:
         with self._unit_of_work() as work:
             project = work.projetos.obter(projeto_id)
@@ -134,9 +176,18 @@ class ServicoRevisaoHumana:
             catalog = work.catalogos.obter(project.catalogo_versao_id)
             if catalog is None:
                 raise RevisaoHumanaError("Catálogo do projeto não está disponível")
-            executions = self._review_executions(work, project)
+            executions = self._review_executions(
+                work,
+                project,
+                incluir_sem_propostas=incluir_sem_propostas,
+            )
             if not executions:
-                raise RevisaoHumanaError("Projeto não possui propostas concluídas para revisão")
+                message = (
+                    "Projeto não possui sessão semântica concluída"
+                    if incluir_sem_propostas
+                    else "Projeto não possui propostas concluídas para revisão"
+                )
+                raise RevisaoHumanaError(message)
             proposals = tuple(
                 proposal
                 for execution in executions
@@ -420,6 +471,8 @@ class ServicoRevisaoHumana:
         self,
         work: UnitOfWorkPort,
         project: Projeto,
+        *,
+        incluir_sem_propostas: bool = False,
     ) -> tuple[ExecucaoAnalise, ...]:
         page_to_document = {
             page.id: document.id for document in project.documentos for page in document.paginas
@@ -428,7 +481,10 @@ class ServicoRevisaoHumana:
         latest_without_document: dict[UUID, ExecucaoAnalise] = {}
         for execution in work.execucoes_analise.listar_do_projeto(project.id):
             proposals = work.propostas.listar_da_execucao(execution.id)
-            if execution.estado is not EstadoExecucaoAnalise.CONCLUIDA or not proposals:
+            has_semantic_source = "execucao_extracao_id" in dict(execution.parametros)
+            if execution.estado is not EstadoExecucaoAnalise.CONCLUIDA or (
+                not proposals and not (incluir_sem_propostas and has_semantic_source)
+            ):
                 continue
             source_id = _source_evidence_execution_id(execution)
             source_evidence = work.evidencias.listar_da_execucao(source_id)

@@ -171,21 +171,42 @@ arquivo explica `when`, `unless` e `must` em linguagem humana e conserva IDs rem
 histórico. O JSON nunca contém expressões executáveis: geometria, topologia e cálculos continuam em
 provedores Python compostos explicitamente.
 
+## Execuções auditáveis
+
+`ExecutarAnaliseConformidade` é a única entrada para avaliar regras. O caso de uso captura a revisão
+ativa antes de carregar a sessão semântica mais recente, calcula o resultado e grava uma única
+`ExecucaoConformidade` na mesma transação. O fluxo MVP e a ação explícita da interface chamam esse
+mesmo caso de uso. Falha ou cancelamento reverte o snapshot inteiro.
+
+A tabela `compliance_executions` mantém metadados indexados e um payload JSON canônico com projeto,
+IDs das execuções semânticas de origem, revisão/versão/assinatura das regras, assinatura da sessão,
+horário, alvos, fatos, achados e itens documentais. O payload não copia a evidência bruta: fatos e
+itens conservam seus vínculos de proveniência. Cada achado registra os IDs dos fatos relevantes e o
+resultado observado de cada condição `when`, `unless` e `must`, inclusive operador, valor esperado e
+valor observado. Um trigger impede alteração do snapshot.
+
+O ID deriva deterministicamente das assinaturas da sessão e da revisão. Repetir a mesma entrada é
+idempotente; ativar, remover ou importar regras produz outra assinatura e, portanto, uma nova
+execução sem substituir as anteriores. A reexecução usa somente os resultados semânticos
+persistidos: não abre o PDF, não repete PyMuPDF ou OCR e não modifica a revisão já capturada.
+
 ## Painel de documentação e conformidade
 
 O painel próprio possui três visões:
 
 1. **Documentação:** todos os campos rotulados de cabeçalho e servidão, carimbos e assinaturas, com
    estado e confiança;
-2. **Conformidade:** regras conformes, possíveis divergências e casos não avaliáveis, com a fonte
-   normativa.
+2. **Conformidade:** a última execução persistida, com possíveis divergências primeiro, valores
+   observados/esperados, alvo, fonte normativa, revisão e estado de localização. A ação **Analisar
+   conformidade** reaplica explicitamente a revisão ativa à sessão semântica persistida;
 3. **Regras:** revisão ativa, contagem de regras ativas/inativas, tabela e detalhes, com ações para
    importar, exportar, ativar/desativar e remover. Importação e remoção exigem confirmação; erros
    identificam regra, campo e motivo sem revelar o caminho absoluto do arquivo.
 
-Selecionar um item com página e geometria abre a folha e destaca a evidência ou região. A fase
-seguinte deverá persistir fatos e achados, permitir confirmação humana e comparar projeto com coleta
-de campo sem perder as duas origens.
+Selecionar um item com página e geometria abre a folha e destaca a evidência ou região. Se a
+assinatura ativa divergir daquela usada na última execução, o painel sinaliza **resultado
+desatualizado** e continua mostrando o snapshot antigo até uma reanálise explícita. Confirmação
+humana e comparação entre projeto e coleta de campo permanecem evoluções futuras.
 
 ## Evolução segura
 

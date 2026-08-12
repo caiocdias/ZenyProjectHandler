@@ -87,7 +87,7 @@ Interpretação das próximas instruções do usuário:
 | 9. Gestão do catálogo pela interface | PENDENTE | 2, 7.1 | **Codex:** implementar CRUD, versionamento, importação/exportação e testes. **Humano:** validar que alterações podem ser feitas sem recompilar e sem mudar projetos antigos. |
 | 10. Transporte e recuperação | EM ANDAMENTO | 2, 7.1, 8 | **Codex:** implementação técnica, transporte, recuperação, integração Qt e gates concluídos. **Humano:** executar o roteiro de aceite em outra pasta ou máquina autorizada. |
 | 11. Empacotamento e aceite | PENDENTE | 8, 9, 10 | **Codex:** gerar instalador, diagnóstico, documentação e executar testes E2E, privacidade e benchmark final. **Humano:** realizar o aceite do fluxo completo em uma máquina-alvo limpa e decidir a licença de distribuição do PyMuPDF/MuPDF. |
-| 12. Comissionamento e conformidade | EM ANDAMENTO | 4, 6, 7, 8 | **Codex:** abstração de fatos/regras, scanner documental e painel inicial implementados. O detector de vãos/ângulos foi removido e aguarda uma nova abstração. Falta persistir fatos/achados, ampliar avaliadores técnicos e comparar projeto com campo. **Humano:** aprovar fontes, severidades e critérios antes de promover possíveis divergências. |
+| 12. Comissionamento e conformidade | EM ANDAMENTO | 4, 6, 7, 8 | **Codex:** abstração de fatos/regras, scanner documental, snapshots auditáveis e painel inicial implementados. O detector de ângulos aguarda uma nova abstração. Faltam callouts, ampliar avaliadores técnicos e comparar projeto com campo. **Humano:** aprovar fontes, severidades e critérios antes de promover possíveis divergências. |
 
 Estados permitidos: `PENDENTE`, `EM ANDAMENTO`, `BLOQUEADA` e `CONCLUÍDA`.
 
@@ -1029,7 +1029,10 @@ descumprimento confirmado.
   O comprimento prioriza texto/OCR próximo à linha e usa coordenadas como alternativa, com origem
   explícita. Ângulos ainda dependem de uma abstração futura.
 - ADRs 0011 e 0012 registram respectivamente a arquitetura normativa e a decisão sobre OCR local.
-- Persistência, coleta de campo, validadores criptográficos e promoção de achados permanecem futuros.
+- Execuções de conformidade persistem atomicamente a sessão semântica, a revisão de regras, fatos,
+  itens documentais, achados e avaliações de condições. O histórico é imutável, a interface sinaliza
+  revisão desatualizada e a reanálise explícita não repete extração ou OCR.
+- Coleta de campo, callouts, validadores criptográficos e promoção de achados permanecem futuros.
 
 ## Estratégia global de testes
 

@@ -41,6 +41,10 @@ class RegistroConformidadeError(ApplicationError):
     """A operação sobre o registro de conformidade não pôde ser concluída."""
 
 
+class AnaliseConformidadeCanceladaError(ApplicationError):
+    """A conformidade foi cancelada antes de publicar qualquer snapshot parcial."""
+
+
 class FluxoMvpCanceladoError(ApplicationError):
     """O fluxo operacional foi cancelado em um ponto seguro e pode ser retomado."""
 

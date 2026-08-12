@@ -36,6 +36,8 @@ from zeny_project_handler.domain.catalog import (
 from zeny_project_handler.domain.compliance import (
     AlvoConformidade,
     FatoConformidade,
+    GrupoCondicaoConformidade,
+    ResultadoCondicaoConformidade,
     TipoEscopoConformidade,
 )
 from zeny_project_handler.domain.documents import DocumentoProjeto, PaginaDocumento
@@ -540,6 +542,44 @@ def test_compliance_requires_collision_review_and_honors_documented_span_excepti
     assert by_rule["nd31.equipamento.estrutura-angulo"] == "CONFORME"
     assert by_rule["nd31.equipamento.risco-abalroamento"] == "NAO_AVALIAVEL"
     assert "nd31.vao.urbano-compacto-isolado" not in by_rule
+
+
+def test_finding_keeps_observed_expected_values_and_condition_audit() -> None:
+    target = AlvoConformidade(
+        id=uuid4(),
+        tipo=TipoEscopoConformidade.REGIAO,
+        rotulo="Região urbana",
+    )
+    facts = (
+        _fact(target.id, "rede.contexto_urbano", True),
+        _fact(target.id, "cabo.instalar_tecnologia", "CONVENCIONAL_CA"),
+    )
+
+    findings = avaliar_regras_conformidade(
+        carregar_registro_conformidade_inicial(),
+        (target,),
+        facts,
+    )
+    finding = next(
+        item for item in findings if item.regra_id == "nd31.cabo.convencional-novo-urbano"
+    )
+    requirement = next(
+        item
+        for item in finding.avaliacoes_condicoes
+        if item.grupo is GrupoCondicaoConformidade.REQUISITO
+    )
+
+    assert requirement.valores_observados == ("CONVENCIONAL_CA",)
+    assert requirement.valores_esperados == (
+        "CONVENCIONAL_CA",
+        "CONVENCIONAL_CA_CAA",
+        "CONVENCIONAL_CAA",
+    )
+    assert requirement.resultado is ResultadoCondicaoConformidade.NAO_ATENDE
+    assert requirement.fato_ids == (facts[1].id,)
+    assert finding.fato_ids == (facts[0].id, facts[1].id)
+    assert "Valor observado: CONVENCIONAL_CA" in finding.mensagem
+    assert "esperado: cabo.instalar_tecnologia nao_em" in finding.mensagem
 
 
 def test_unknown_project_context_is_not_reported_as_normative_divergence() -> None:

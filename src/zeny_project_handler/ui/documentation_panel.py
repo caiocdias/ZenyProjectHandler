@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 from zeny_project_handler.adapters.compliance import (
     carregar_registro_conformidade_json_com_avisos,
 )
+from zeny_project_handler.application.compliance_analysis import ExecutarAnaliseConformidade
 from zeny_project_handler.application.compliance_registry import (
     ServicoRegistroRegrasConformidade,
 )
@@ -35,16 +36,16 @@ from zeny_project_handler.application.human_review import (
     ServicoRevisaoHumana,
     SessaoRevisao,
 )
-from zeny_project_handler.application.project_compliance import (
-    ResultadoConformidadeProjeto,
-    analisar_conformidade_projeto,
-)
 from zeny_project_handler.domain.compliance import (
     AlvoConformidade,
+    AvaliacaoCondicaoConformidade,
     CondicaoConformidade,
+    ExecucaoConformidade,
+    GrupoCondicaoConformidade,
     OperadorCondicao,
     RegistroRegrasConformidade,
     RegraConformidade,
+    ResultadoCondicaoConformidade,
     ResultadoConformidade,
 )
 from zeny_project_handler.domain.compliance_facts import fato_conformidade_por_chave
@@ -61,6 +62,7 @@ class DocumentationPanelWidget(QWidget):
         self,
         *,
         service: ServicoRevisaoHumana,
+        analysis_service: ExecutarAnaliseConformidade | None = None,
         registry_service: ServicoRegistroRegrasConformidade | None = None,
         registry: RegistroRegrasConformidade | None = None,
         viewer: PdfViewerWidget,
@@ -69,6 +71,7 @@ class DocumentationPanelWidget(QWidget):
         super().__init__(parent)
         self.setObjectName("documentationCompliancePanel")
         self._service = service
+        self._analysis_service = analysis_service
         self._registry_service = registry_service
         if registry_service is not None:
             self._registry = registry_service.obter_revisao_ativa().registro
@@ -78,7 +81,7 @@ class DocumentationPanelWidget(QWidget):
             raise ValueError("Painel requer um registro de conformidade")
         self._viewer = viewer
         self._session: SessaoRevisao | None = None
-        self._result: ResultadoConformidadeProjeto | None = None
+        self._result: ExecucaoConformidade | None = None
         self._build_ui()
         self.atualizar_projetos()
 
@@ -109,13 +112,37 @@ class DocumentationPanelWidget(QWidget):
         self._documents.itemSelectionChanged.connect(self._navigate_document_item)
         tabs.addTab(self._documents, "Documentação")
 
+        compliance_view = QWidget()
+        compliance_view.setObjectName("complianceExecutionView")
+        compliance_layout = QVBoxLayout(compliance_view)
+        compliance_actions = QHBoxLayout()
+        self._execution_status = QLabel("Nenhuma execução de conformidade persistida")
+        self._execution_status.setObjectName("complianceExecutionStatusLabel")
+        self._execution_status.setWordWrap(True)
+        compliance_actions.addWidget(self._execution_status, 1)
+        self._analyze_compliance = QPushButton("Analisar conformidade")
+        self._analyze_compliance.setObjectName("complianceAnalyzeButton")
+        self._analyze_compliance.clicked.connect(self._analyze_current_compliance)
+        compliance_actions.addWidget(self._analyze_compliance)
+        compliance_layout.addLayout(compliance_actions)
         self._findings = _tree(
             "complianceFindingsTree",
-            ("Resultado", "Severidade", "Regra", "Alvo", "Fonte"),
-            (130, 100, 300, 180, 230),
+            (
+                "Resultado",
+                "Severidade",
+                "Regra",
+                "Observado",
+                "Esperado",
+                "Alvo",
+                "Fonte",
+                "Revisão",
+                "Localização",
+            ),
+            (130, 100, 260, 190, 220, 180, 220, 180, 170),
         )
         self._findings.itemSelectionChanged.connect(self._navigate_finding_item)
-        tabs.addTab(self._findings, "Conformidade")
+        compliance_layout.addWidget(self._findings, 1)
+        tabs.addTab(compliance_view, "Conformidade")
 
         rules_view = QWidget()
         rules_view.setObjectName("complianceRulesView")
@@ -166,6 +193,7 @@ class DocumentationPanelWidget(QWidget):
         note.setWordWrap(True)
         layout.addWidget(note)
         self._project.currentIndexChanged.connect(self._load_selected_project)
+        self._analyze_compliance.setEnabled(False)
         self._populate_rules()
 
     def atualizar_projetos(self) -> None:
@@ -173,7 +201,7 @@ class DocumentationPanelWidget(QWidget):
         self._project.blockSignals(True)
         self._project.clear()
         self._project.addItem("Selecione um projeto analisado", None)
-        for summary in self._service.listar_projetos():
+        for summary in self._service.listar_projetos_semanticos():
             self._project.addItem(summary.nome, str(summary.projeto_id))
         if selected is not None:
             index = self._project.findData(selected)
@@ -191,7 +219,7 @@ class DocumentationPanelWidget(QWidget):
         self._project.blockSignals(True)
         self._project.setCurrentIndex(index)
         self._project.blockSignals(False)
-        self._activate(self._service.carregar_sessao(projeto_id))
+        self._activate(self._service.carregar_sessao_semantica(projeto_id))
 
     def abrir_sessao(self, session: object) -> None:
         if isinstance(session, SessaoRevisao):
@@ -205,26 +233,44 @@ class DocumentationPanelWidget(QWidget):
         self._documents.clear()
         self._findings.clear()
         self._summary.setText("Selecione um projeto analisado")
+        self._execution_status.setText("Nenhuma execução de conformidade persistida")
+        self._analyze_compliance.setEnabled(False)
 
     def _load_selected_project(self) -> None:
         value = self._project.currentData()
         if value is None:
             return
         try:
-            self._activate(self._service.carregar_sessao(UUID(str(value))))
+            self._activate(self._service.carregar_sessao_semantica(UUID(str(value))))
         except (DomainValidationError, ValueError) as error:
             self.status_changed.emit(str(error))
 
     def _activate(self, session: SessaoRevisao) -> None:
         self._session = session
-        self._result = analisar_conformidade_projeto(session, self._registry)
         index = self._project.findData(str(session.projeto.id))
         if index >= 0:
             self._project.blockSignals(True)
             self._project.setCurrentIndex(index)
             self._project.blockSignals(False)
+        self._load_persisted_result()
+
+    def _load_persisted_result(self) -> None:
+        session = self._session
+        service = self._analysis_service
+        self._result = (
+            service.obter_ultima(session.projeto.id)
+            if session is not None and service is not None
+            else None
+        )
         self._populate_documents()
         self._populate_findings()
+        self._analyze_compliance.setEnabled(session is not None and service is not None)
+        if session is None:
+            return
+        if self._result is None:
+            self._summary.setText("Sessão semântica disponível · conformidade ainda não analisada")
+            self._execution_status.setText("Nenhuma execução de conformidade persistida")
+            return
         divergent = sum(
             item.resultado is ResultadoConformidade.DIVERGENCIA for item in self._result.achados
         )
@@ -236,13 +282,36 @@ class DocumentationPanelWidget(QWidget):
             f"{divergent} possível(is) divergência(s) · "
             f"{not_evaluable} regra(s) não avaliável(is)"
         )
+        stale = self._result.assinatura_regras != self._registry.assinatura()
+        state = "Resultado desatualizado" if stale else "Resultado atual"
+        self._execution_status.setText(
+            f"{state} · execução {self._result.id} · regras {self._result.versao_regras} · "
+            f"assinatura {self._result.assinatura_regras[:12]} · "
+            f"{self._result.executada_em.isoformat(timespec='seconds')}"
+        )
+
+    def _analyze_current_compliance(self) -> None:
+        session = self._session
+        service = self._analysis_service
+        if session is None or service is None:
+            return
+        try:
+            self._result = service.executar(session.projeto.id)
+        except (ApplicationError, DomainValidationError, ValueError) as error:
+            self.status_changed.emit(str(error))
+            QMessageBox.warning(self, "Conformidade não concluída", str(error))
+            return
+        self._load_persisted_result()
+        self.status_changed.emit(
+            f"Conformidade analisada com a revisão {self._result.revisao_regras_id}"
+        )
 
     def _populate_documents(self) -> None:
         result = self._result
         session = self._session
+        self._documents.clear()
         if result is None or session is None:
             return
-        self._documents.clear()
         by_document = {item.id: item for item in session.projeto.documentos}
         roots: dict[UUID, QTreeWidgetItem] = {}
         groups: dict[tuple[UUID, str], QTreeWidgetItem] = {}
@@ -274,9 +343,9 @@ class DocumentationPanelWidget(QWidget):
 
     def _populate_findings(self) -> None:
         result = self._result
+        self._findings.clear()
         if result is None:
             return
-        self._findings.clear()
         targets = {item.id: item for item in result.alvos}
         order = {
             ResultadoConformidade.DIVERGENCIA: 0,
@@ -288,20 +357,30 @@ class DocumentationPanelWidget(QWidget):
             key=lambda item: (order[item.resultado], item.regra_id, str(item.alvo_id)),
         ):
             target = targets[finding.alvo_id]
+            observed, expected = _finding_values(finding.avaliacoes_condicoes, finding.resultado)
             row = QTreeWidgetItem(
                 (
                     _result_label(finding.resultado),
                     finding.severidade.value.title(),
                     finding.titulo,
+                    observed,
+                    expected,
                     target.rotulo,
                     f"{finding.fonte.documento} · {finding.fonte.item}",
+                    f"Regras {result.versao_regras} · norma {finding.fonte.revisao}",
+                    _location_label(target),
                 )
             )
             row.setToolTip(2, finding.mensagem)
             row.setToolTip(
-                4,
+                6,
                 f"Revisão {finding.fonte.revisao}"
                 + (f" · página {finding.fonte.pagina}" if finding.fonte.pagina is not None else ""),
+            )
+            row.setToolTip(
+                7,
+                f"Revisão imutável {result.revisao_regras_id} · "
+                f"assinatura {result.assinatura_regras}",
             )
             row.setData(0, Qt.ItemDataRole.UserRole + 2, str(target.id))
             self._findings.addTopLevelItem(row)
@@ -478,7 +557,7 @@ class DocumentationPanelWidget(QWidget):
         self._registry = registry
         self._populate_rules()
         if self._session is not None:
-            self._activate(self._session)
+            self._load_persisted_result()
 
     def _show_rules_error(self, title: str, error: Exception) -> None:
         message = (
@@ -583,6 +662,50 @@ def _result_label(value: ResultadoConformidade) -> str:
         ResultadoConformidade.DIVERGENCIA: "Possível divergência",
         ResultadoConformidade.NAO_AVALIAVEL: "Não avaliável",
     }[value]
+
+
+def _finding_values(
+    evaluations: tuple[AvaliacaoCondicaoConformidade, ...],
+    result: ResultadoConformidade,
+) -> tuple[str, str]:
+    desired = {
+        ResultadoConformidade.DIVERGENCIA: ResultadoCondicaoConformidade.NAO_ATENDE,
+        ResultadoConformidade.NAO_AVALIAVEL: ResultadoCondicaoConformidade.DESCONHECIDO,
+        ResultadoConformidade.CONFORME: ResultadoCondicaoConformidade.ATENDE,
+    }[result]
+    requirements = tuple(
+        item for item in evaluations if item.grupo is GrupoCondicaoConformidade.REQUISITO
+    )
+    selected = tuple(item for item in requirements if item.resultado is desired) or requirements
+    if not selected:
+        selected = tuple(item for item in evaluations if item.resultado is desired)
+    observed = "; ".join(
+        f"{item.chave_fato}: {', '.join(map(str, item.valores_observados)) or 'ausente'}"
+        for item in selected
+    )
+    expected = "; ".join(_expected_condition(item) for item in selected)
+    return observed or "—", expected or "—"
+
+
+def _expected_condition(evaluation: AvaliacaoCondicaoConformidade) -> str:
+    if evaluation.operador is OperadorCondicao.EXISTE:
+        value = "presente"
+    elif evaluation.operador is OperadorCondicao.AUSENTE:
+        value = "ausente"
+    else:
+        value = (
+            f"{evaluation.operador.value.lower()} "
+            f"{', '.join(map(str, evaluation.valores_esperados))}"
+        )
+    return f"{evaluation.chave_fato}: {value}"
+
+
+def _location_label(target: AlvoConformidade) -> str:
+    if target.pagina_id is None:
+        return "Sem localização no PDF"
+    if target.geometria is None:
+        return "Página sem geometria"
+    return "Localizado no PDF"
 
 
 def _condition_list(

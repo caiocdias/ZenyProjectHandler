@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, is_dataclass
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
@@ -57,6 +57,18 @@ class ResultadoConformidade(StrEnum):
     CONFORME = "CONFORME"
     DIVERGENCIA = "DIVERGENCIA"
     NAO_AVALIAVEL = "NAO_AVALIAVEL"
+
+
+class GrupoCondicaoConformidade(StrEnum):
+    APLICABILIDADE = "APLICABILIDADE"
+    EXCECAO = "EXCECAO"
+    REQUISITO = "REQUISITO"
+
+
+class ResultadoCondicaoConformidade(StrEnum):
+    ATENDE = "ATENDE"
+    NAO_ATENDE = "NAO_ATENDE"
+    DESCONHECIDO = "DESCONHECIDO"
 
 
 class TipoValorFato(StrEnum):
@@ -191,6 +203,30 @@ class CondicaoConformidade:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class AvaliacaoCondicaoConformidade:
+    grupo: GrupoCondicaoConformidade
+    indice: int
+    chave_fato: str
+    operador: OperadorCondicao
+    quantificador: QuantificadorCondicao
+    valores_esperados: tuple[JsonPrimitive, ...]
+    valores_observados: tuple[JsonPrimitive, ...]
+    fato_ids: tuple[UUID, ...]
+    resultado: ResultadoCondicaoConformidade
+
+    def __post_init__(self) -> None:
+        if self.indice < 0:
+            raise DomainValidationError("Índice da condição não pode ser negativo")
+        fact_ids = tuple(self.fato_ids)
+        if len(set(fact_ids)) != len(fact_ids):
+            raise DomainValidationError("Avaliação de condição não pode repetir fatos")
+        object.__setattr__(self, "chave_fato", _fact_key(self.chave_fato))
+        object.__setattr__(self, "valores_esperados", tuple(self.valores_esperados))
+        object.__setattr__(self, "valores_observados", tuple(self.valores_observados))
+        object.__setattr__(self, "fato_ids", fact_ids)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class RegraConformidade:
     id: str
     titulo: str
@@ -305,6 +341,39 @@ class NumeroRegraConformidade:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class ItemInspecaoDocumental:
+    grupo: str
+    campo: str
+    valor: str
+    estado: str
+    documento_id: UUID
+    pagina_id: UUID | None = None
+    geometria: GeometriaDocumento | None = None
+    evidencia_ids: tuple[UUID, ...] = ()
+    confianca: Decimal | None = None
+
+    def __post_init__(self) -> None:
+        evidence_ids = tuple(self.evidencia_ids)
+        if len(set(evidence_ids)) != len(evidence_ids):
+            raise DomainValidationError("Item documental não pode repetir evidências")
+        if self.geometria is not None and self.geometria.pagina_id != self.pagina_id:
+            raise DomainValidationError("Geometria documental deve pertencer à página informada")
+        confidence = self.confianca
+        if confidence is not None:
+            confidence = decimal_value(confidence, field_name="confiança documental")
+            if not Decimal(0) <= confidence <= Decimal(1):
+                raise DomainValidationError("Confiança documental deve ficar entre zero e um")
+        object.__setattr__(self, "grupo", required_text(self.grupo, field_name="grupo documental"))
+        object.__setattr__(self, "campo", required_text(self.campo, field_name="campo documental"))
+        object.__setattr__(self, "valor", required_text(self.valor, field_name="valor documental"))
+        object.__setattr__(
+            self, "estado", required_text(self.estado, field_name="estado documental")
+        )
+        object.__setattr__(self, "evidencia_ids", evidence_ids)
+        object.__setattr__(self, "confianca", confidence)
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class AchadoConformidade:
     id: UUID
     regra_id: str
@@ -316,11 +385,16 @@ class AchadoConformidade:
     fonte: FonteNormativa
     versao_regras: str
     evidencia_ids: tuple[UUID, ...] = ()
+    fato_ids: tuple[UUID, ...] = ()
+    avaliacoes_condicoes: tuple[AvaliacaoCondicaoConformidade, ...] = ()
 
     def __post_init__(self) -> None:
         evidence_ids = tuple(self.evidencia_ids)
         if len(set(evidence_ids)) != len(evidence_ids):
             raise DomainValidationError("Achado não pode repetir evidências")
+        fact_ids = tuple(self.fato_ids)
+        if len(set(fact_ids)) != len(fact_ids):
+            raise DomainValidationError("Achado não pode repetir fatos")
         object.__setattr__(self, "regra_id", _rule_identifier(self.regra_id))
         object.__setattr__(self, "titulo", required_text(self.titulo, field_name="título"))
         object.__setattr__(self, "mensagem", required_text(self.mensagem, field_name="mensagem"))
@@ -328,6 +402,75 @@ class AchadoConformidade:
             self, "versao_regras", required_text(self.versao_regras, field_name="versão das regras")
         )
         object.__setattr__(self, "evidencia_ids", evidence_ids)
+        object.__setattr__(self, "fato_ids", fact_ids)
+        object.__setattr__(self, "avaliacoes_condicoes", tuple(self.avaliacoes_condicoes))
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ExecucaoConformidade:
+    id: UUID
+    projeto_id: UUID
+    execucoes_semanticas_ids: tuple[UUID, ...]
+    revisao_regras_id: UUID
+    registro_regras_id: UUID
+    versao_regras: str
+    assinatura_regras: str
+    assinatura_sessao: str
+    versao_metodo: str
+    executada_em: datetime
+    alvos: tuple[AlvoConformidade, ...]
+    fatos: tuple[FatoConformidade, ...]
+    achados: tuple[AchadoConformidade, ...]
+    itens_documentais: tuple[ItemInspecaoDocumental, ...]
+
+    def __post_init__(self) -> None:
+        source_ids = tuple(self.execucoes_semanticas_ids)
+        if not source_ids or len(set(source_ids)) != len(source_ids):
+            raise DomainValidationError("Execução de conformidade exige origens semânticas únicas")
+        for label, signature in (
+            ("assinatura das regras", self.assinatura_regras),
+            ("assinatura da sessão", self.assinatura_sessao),
+        ):
+            if not re.fullmatch(r"[0-9a-f]{64}", signature):
+                raise DomainValidationError(f"{label.capitalize()} é inválida")
+        if self.executada_em.tzinfo is None or self.executada_em.utcoffset() is None:
+            raise DomainValidationError(
+                "Data da execução de conformidade deve possuir fuso horário"
+            )
+        targets = tuple(self.alvos)
+        facts = tuple(self.fatos)
+        findings = tuple(self.achados)
+        target_ids = {item.id for item in targets}
+        fact_ids = {item.id for item in facts}
+        if any(item.alvo_id not in target_ids for item in facts) or any(
+            item.alvo_id not in target_ids for item in findings
+        ):
+            raise DomainValidationError("Fato ou achado referencia alvo ausente do snapshot")
+        if any(item not in fact_ids for finding in findings for item in finding.fato_ids):
+            raise DomainValidationError("Achado referencia fato ausente do snapshot")
+        object.__setattr__(self, "execucoes_semanticas_ids", source_ids)
+        object.__setattr__(
+            self, "versao_regras", required_text(self.versao_regras, field_name="versão das regras")
+        )
+        object.__setattr__(
+            self, "versao_metodo", required_text(self.versao_metodo, field_name="versão do método")
+        )
+        object.__setattr__(self, "alvos", targets)
+        object.__setattr__(self, "fatos", facts)
+        object.__setattr__(self, "achados", findings)
+        object.__setattr__(self, "itens_documentais", tuple(self.itens_documentais))
+
+
+def assinatura_conteudo_conformidade(
+    execucoes_semanticas_ids: tuple[UUID, ...],
+    alvos: tuple[AlvoConformidade, ...],
+    fatos: tuple[FatoConformidade, ...],
+    itens_documentais: tuple[ItemInspecaoDocumental, ...],
+) -> str:
+    """Assine somente a entrada semântica, sem incorporar regras ou horário."""
+    payload = _canonical_value((execucoes_semanticas_ids, alvos, fatos, itens_documentais))
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return sha256(serialized.encode("utf-8")).hexdigest()
 
 
 def _condition_payload(condition: CondicaoConformidade) -> dict[str, object]:
@@ -341,3 +484,24 @@ def _condition_payload(condition: CondicaoConformidade) -> dict[str, object]:
 
 def _json_primitive_payload(value: JsonPrimitive) -> JsonPrimitive | float:
     return float(value) if isinstance(value, Decimal) else value
+
+
+def _canonical_value(value: object) -> object:
+    if isinstance(value, StrEnum):
+        return value.value
+    if isinstance(value, UUID):
+        return str(value)
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if is_dataclass(value) and not isinstance(value, type):
+        return {
+            "$type": value.__class__.__name__,
+            **{item.name: _canonical_value(getattr(value, item.name)) for item in fields(value)},
+        }
+    if isinstance(value, tuple):
+        return [_canonical_value(item) for item in value]
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    raise DomainValidationError(f"Valor de conformidade não serializável: {type(value).__name__}")

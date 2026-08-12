@@ -303,3 +303,25 @@ compliance_rule_numbers = Table(
     Column("number", Integer, nullable=False, unique=True),
     Column("assigned_at", String(40), nullable=False),
 )
+
+compliance_executions = Table(
+    "compliance_executions",
+    metadata,
+    Column("sequence", Integer, primary_key=True, autoincrement=True),
+    Column("id", String(36), nullable=False, unique=True),
+    Column("project_id", String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False),
+    Column(
+        "rule_revision_id",
+        String(36),
+        ForeignKey("compliance_rule_revisions.revision_id", ondelete="RESTRICT"),
+        nullable=False,
+    ),
+    Column("rule_version", String(160), nullable=False),
+    Column("rule_signature", String(64), nullable=False),
+    Column("session_signature", String(64), nullable=False),
+    Column("executed_at", String(40), nullable=False),
+    Column("payload", Text, nullable=False),
+)
+
+Index("ix_compliance_executions_project", compliance_executions.c.project_id)
+Index("ix_compliance_executions_rule_signature", compliance_executions.c.rule_signature)

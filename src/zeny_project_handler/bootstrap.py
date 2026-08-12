@@ -34,6 +34,7 @@ from zeny_project_handler.adapters.persistence import (
     upgrade_database,
 )
 from zeny_project_handler.adapters.portability import ZipProjectArchive
+from zeny_project_handler.application.compliance_analysis import ExecutarAnaliseConformidade
 from zeny_project_handler.application.compliance_registry import (
     ServicoRegistroRegrasConformidade,
 )
@@ -146,6 +147,11 @@ def _compose_initialized_application(
 
     registry = carregar_registro_regras_inicial()
     operation_coordinator = CoordenadorOperacoes()
+    review_service = ServicoRevisaoHumana(unit_of_work)
+    compliance_analysis_service = ExecutarAnaliseConformidade(
+        unit_of_work,
+        review_service.carregar_sessao_semantica,
+    )
     ocr_runtime = inspect_tesseract_runtime(app_settings.data_directory)
     managed_files = GerenciadorArquivosGerenciados(
         app_settings.data_directory,
@@ -172,6 +178,7 @@ def _compose_initialized_application(
             registry,
             unit_of_work,
         ),
+        analisador_conformidade=compliance_analysis_service,
         gerenciador_arquivos=managed_files,
         coordenador=operation_coordinator,
     )
@@ -185,7 +192,7 @@ def _compose_initialized_application(
         ),
         pdf_tile_cache_max_bytes=app_settings.pdf_tile_cache_max_bytes,
         provedor_credenciais_pdf=pdf_credentials,
-        review_service=ServicoRevisaoHumana(unit_of_work),
+        review_service=review_service,
         workflow_service=workflow_service,
         portability_service=ServicoPortabilidadeProjeto(
             unit_of_work,
@@ -200,6 +207,7 @@ def _compose_initialized_application(
         ),
         operation_coordinator=operation_coordinator,
         compliance_registry_service=compliance_service,
+        compliance_analysis_service=compliance_analysis_service,
         ui_state_path=app_settings.data_directory / "ui-state.ini",
         startup_ocr_diagnostic=(
             ocr_runtime.diagnostico.texto_ui if ocr_runtime.diagnostico is not None else None

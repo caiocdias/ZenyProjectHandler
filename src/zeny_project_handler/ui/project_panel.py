@@ -109,6 +109,7 @@ class ProjectPanelWidget(QWidget):
 
     status_changed = Signal(str)
     busy_changed = Signal(bool)
+    project_opened = Signal(object)
 
     def __init__(
         self,
@@ -143,6 +144,10 @@ class ProjectPanelWidget(QWidget):
     @property
     def processando(self) -> bool:
         return self._thread is not None
+
+    @property
+    def projeto_ativo_id(self) -> UUID | None:
+        return self._session.projeto.id if self._session is not None else None
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -766,6 +771,7 @@ class ProjectPanelWidget(QWidget):
         self._updating_page_order = False
         self._update_order_controls()
         self._show_summary(session)
+        self.project_opened.emit(session.projeto.id)
 
     def _show_summary(self, session: SessaoProjetoMvp) -> None:
         summary = session.resumo
