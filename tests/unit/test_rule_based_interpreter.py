@@ -20,6 +20,7 @@ from zeny_project_handler.domain.enums import (
     TipoEvidencia,
     TipoGeometria,
 )
+from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 from zeny_project_handler.ports.interpretation import SolicitacaoInterpretacao
 
 
@@ -968,6 +969,114 @@ def test_unidentified_electrical_references_are_not_project_elements(
 
     assert result.elementos == ()
     assert result.relacoes == ()
+
+
+def test_point_identifier_selects_one_occurrence_and_discards_reference_grounding(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    request = _request(catalogo_inicial)
+    page_id = request.evidencias[0].pagina_id
+    reference_grounding = replace(
+        vector_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="reference-grounding",
+            points=(("0.125", "0.095"), ("0.135", "0.105")),
+        ),
+        conteudo_bruto="ATERRAMENTO",
+        atributos_extraidos=(
+            ("classe_equipamento", "ATERRAMENTO"),
+            ("confianca", Decimal("0.88")),
+            ("origem_simbologia", "SIMBOLOGIA.pdf"),
+            ("reconhecido_por_simbologia", True),
+            ("situacao_projeto_forcada", SituacaoProjeto.EXISTENTE.value),
+        ),
+    )
+    changed_pole = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=page_id,
+        key="changed-pole",
+        text=request.evidencias[0].conteudo_bruto or "11-300",
+        x="0.13",
+        y="0.22",
+        color="#008000",
+    )
+    installed_grounding = replace(
+        reference_grounding,
+        id=uuid4(),
+        geometria=GeometriaDocumento.polilinha(
+            page_id,
+            (
+                PontoNormalizado(Decimal("0.135"), Decimal("0.225")),
+                PontoNormalizado(Decimal("0.145"), Decimal("0.235")),
+            ),
+        ),
+        atributos_extraidos=(
+            ("classe_equipamento", "ATERRAMENTO"),
+            ("confianca", Decimal("0.88")),
+            ("origem_simbologia", "SIMBOLOGIA.pdf"),
+            ("reconhecido_por_simbologia", True),
+            ("situacao_projeto_forcada", SituacaoProjeto.INSTALAR.value),
+        ),
+    )
+    native_label = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=page_id,
+        key="native-point-label-between-occurrences",
+        text="P1",
+        x="0.03",
+        y="0.19",
+    )
+    targeted_label = replace(
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="targeted-point-label-at-project-pole",
+            text="P1",
+            x="0.13",
+            y="0.22",
+        ),
+        tipo=TipoEvidencia.OCR,
+        atributos_extraidos=(
+            ("confianca", Decimal("0.94")),
+            ("motor_ocr", "tesseract-identificador-localizado"),
+        ),
+    )
+    native_only_request = replace(
+        request,
+        evidencias=(
+            reference_grounding,
+            changed_pole,
+            installed_grounding,
+            native_label,
+        ),
+    )
+    interpreter = InterpretadorRegrasExplicitas(request.registro)
+
+    native_only_result = interpreter.interpretar(native_only_request)
+    result = interpreter.interpretar(
+        replace(
+            native_only_request,
+            evidencias=(*native_only_request.evidencias, targeted_label),
+        )
+    )
+
+    assert len(native_only_result.elementos) == 2
+    assert not any(
+        reference_grounding.id in item.evidencia_ids for item in native_only_result.elementos
+    )
+    assert len(result.elementos) == 2
+    assert {item.situacao_projeto for item in result.elementos} == {SituacaoProjeto.INSTALAR}
+    assert all(
+        dict(item.atributos_sugeridos)["identificador_operacional"] == "P1"
+        for item in result.elementos
+    )
+    assert all(
+        dict(item.atributos_sugeridos)["evidencia_identificador_id"]
+        == str(targeted_label.id)
+        for item in result.elementos
+    )
+    assert not any(reference_grounding.id in item.evidencia_ids for item in result.elementos)
 
 
 def test_coordinates_do_not_identify_electrical_references_without_numbered_point(

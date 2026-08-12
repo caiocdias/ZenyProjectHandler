@@ -8,16 +8,26 @@ from dataclasses import dataclass, replace
 from itertools import pairwise
 
 from zeny_project_handler.domain.analysis import EvidenciaDocumento, PropostaElemento
-from zeny_project_handler.domain.enums import CategoriaElemento, TipoEvidencia, TipoGeometria
+from zeny_project_handler.domain.enums import (
+    CategoriaElemento,
+    SituacaoProjeto,
+    TipoEvidencia,
+    TipoGeometria,
+)
 from zeny_project_handler.domain.values import GeometriaDocumento
 
 from .rule_support import center, normalized_text
 
 _MAXIMUM_IDENTIFIER_DISTANCE = 0.14
 _MAXIMUM_TARGETED_IDENTIFIER_DISTANCE = 0.06
+_MAXIMUM_OCCURRENCE_COMPONENT_DISTANCE = 0.10
 _TARGETED_IDENTIFIER_ENGINES = {
     "tesseract-identificador-localizado",
     "tesseract-identificador-vetorial-localizado",
+}
+_TARGETED_IDENTIFIER_ENGINE_PRIORITY = {
+    "tesseract-identificador-localizado": 2,
+    "tesseract-identificador-vetorial-localizado": 1,
 }
 _POLE_IDENTIFIER_PATTERN = re.compile(
     r"(?<![A-Z0-9])(?:(?:POSTE|PONTO)\s+)?P\s*[-.:]?\s*0*(\d{1,4})(?![A-Z0-9])"
@@ -61,7 +71,10 @@ def filtrar_propostas_identificadas(
         nearest = _nearest_label(proposal, labels, distancia_maxima)
         if nearest is not None:
             identified.append(_with_operational_label(proposal, nearest))
-    return tuple(identified)
+    return _select_unique_identifier_occurrences(
+        tuple(identified),
+        (*pole_labels, *span_labels),
+    )
 
 
 def _operational_labels(
@@ -101,7 +114,144 @@ def _operational_labels(
     def key(label: _OperationalLabel) -> tuple[str, str]:
         return label.value, str(label.evidence.id)
 
-    return tuple(sorted(pole_labels, key=key)), tuple(sorted(span_labels, key=key))
+    return (
+        tuple(sorted(_prefer_targeted_labels(pole_labels), key=key)),
+        tuple(sorted(_prefer_targeted_labels(span_labels), key=key)),
+    )
+
+
+def _prefer_targeted_labels(labels: list[_OperationalLabel]) -> tuple[_OperationalLabel, ...]:
+    """Prefira a Ã¢ncora localizada quando o mesmo identificador foi lido mais de uma vez."""
+    grouped: dict[str, list[_OperationalLabel]] = {}
+    for label in labels:
+        grouped.setdefault(label.value, []).append(label)
+    selected: list[_OperationalLabel] = []
+    for value in sorted(grouped):
+        candidates = grouped[value]
+        targeted = tuple(
+            label
+            for label in candidates
+            if _identifier_engine(label) in _TARGETED_IDENTIFIER_ENGINES
+        )
+        if not targeted:
+            selected.extend(candidates)
+            continue
+        best_engine_priority = max(
+            _TARGETED_IDENTIFIER_ENGINE_PRIORITY[_identifier_engine(label)]
+            for label in targeted
+        )
+        selected.extend(
+            label
+            for label in targeted
+            if _TARGETED_IDENTIFIER_ENGINE_PRIORITY[_identifier_engine(label)]
+            == best_engine_priority
+        )
+    return tuple(selected)
+
+
+def _identifier_engine(label: _OperationalLabel) -> str:
+    return str(dict(label.evidence.atributos_extraidos).get("motor_ocr") or "")
+
+
+def _select_unique_identifier_occurrences(
+    proposals: tuple[PropostaElemento, ...],
+    labels: tuple[_OperationalLabel, ...],
+) -> tuple[PropostaElemento, ...]:
+    """Mantenha uma ocorrÃªncia fÃ­sica por identificador de ponto ou vÃ£o do projeto."""
+    grouped: dict[str, list[PropostaElemento]] = {}
+    passthrough: list[PropostaElemento] = []
+    for proposal in proposals:
+        identifier = str(
+            dict(proposal.atributos_sugeridos).get("identificador_operacional") or ""
+        )
+        if not identifier:
+            passthrough.append(proposal)
+            continue
+        grouped.setdefault(identifier, []).append(proposal)
+
+    selected_ids = {proposal.id for proposal in passthrough}
+    labels_by_value: dict[str, tuple[_OperationalLabel, ...]] = {
+        value: tuple(label for label in labels if label.value == value) for value in grouped
+    }
+    for identifier, candidates in grouped.items():
+        components = _occurrence_components(tuple(candidates))
+        winning = max(
+            components,
+            key=lambda component: _occurrence_rank(
+                component,
+                labels_by_value.get(identifier, ()),
+            ),
+        )
+        selected_ids.update(proposal.id for proposal in winning)
+    return tuple(proposal for proposal in proposals if proposal.id in selected_ids)
+
+
+def _occurrence_components(
+    proposals: tuple[PropostaElemento, ...],
+) -> tuple[tuple[PropostaElemento, ...], ...]:
+    remaining = set(range(len(proposals)))
+    components: list[tuple[PropostaElemento, ...]] = []
+    while remaining:
+        pending = [min(remaining)]
+        remaining.remove(pending[0])
+        indexes: list[int] = []
+        while pending:
+            current = pending.pop()
+            indexes.append(current)
+            connected = tuple(
+                index
+                for index in remaining
+                if _proposal_distance(proposals[current], proposals[index])
+                <= _MAXIMUM_OCCURRENCE_COMPONENT_DISTANCE
+            )
+            pending.extend(connected)
+            remaining.difference_update(connected)
+        components.append(tuple(proposals[index] for index in sorted(indexes)))
+    return tuple(components)
+
+
+def _occurrence_rank(
+    proposals: tuple[PropostaElemento, ...],
+    labels: tuple[_OperationalLabel, ...],
+) -> tuple[int, int, int, int, float, float, tuple[str, ...]]:
+    changed = tuple(
+        proposal
+        for proposal in proposals
+        if proposal.situacao_projeto is not SituacaoProjeto.EXISTENTE
+    )
+    poles = tuple(
+        proposal for proposal in proposals if proposal.categoria is CategoriaElemento.POSTE
+    )
+    changed_poles = tuple(
+        proposal
+        for proposal in poles
+        if proposal.situacao_projeto is not SituacaoProjeto.EXISTENTE
+    )
+    label_distance = min(
+        (
+            _distance_to_geometry(center(label.evidence.geometria), proposal.geometria)
+            for proposal in proposals
+            for label in labels
+            if label.evidence.pagina_id == proposal.geometria.pagina_id
+        ),
+        default=math.inf,
+    )
+    confidence = sum(float(proposal.confianca or 0) for proposal in proposals)
+    return (
+        len(changed),
+        len(changed_poles),
+        len(poles),
+        len(proposals),
+        -label_distance,
+        confidence,
+        tuple(sorted(str(proposal.id) for proposal in proposals)),
+    )
+
+
+def _proposal_distance(first: PropostaElemento, second: PropostaElemento) -> float:
+    if first.geometria.pagina_id != second.geometria.pagina_id:
+        return math.inf
+    return math.dist(center(first.geometria), center(second.geometria))
 
 
 def _is_operational_identifier_evidence(
