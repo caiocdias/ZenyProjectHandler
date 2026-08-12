@@ -12,7 +12,8 @@ Ao concluir este ciclo, o usuário deve conseguir, pela aba **Conformidade**:
 2. executar a análise com uma revisão imutável das regras ativas;
 3. ver cada possível divergência com regra, mensagem, alvo, evidências e fonte;
 4. localizar no visualizador uma caixa vermelha com o texto do erro e seta(s) para o alvo;
-5. exibir ou ocultar cada marcação como já ocorre com os identificadores de elementos.
+5. exibir ou ocultar cada marcação como já ocorre com os identificadores de elementos;
+6. consultar um catálogo Markdown incremental que explique todas as regras existentes.
 
 Os PDFs de exemplo mostram predominantemente anotações PDF `FreeTextCallout`: caixa e texto
 vermelhos, uma linha de chamada com ponta de seta e, em alguns casos, mais de uma seta ou apenas a
@@ -33,6 +34,8 @@ comissionador comunica um problema, mas **não são fonte normativa suficiente p
   botões de olho para ocultar região ou elemento.
 - `docs/arquitetura-conformidade.md`, ADR 0011 e o schema em
   `docs/schemas/regras-conformidade.schema.json` são os contratos de referência.
+- `docs/catalogo-regras-conformidade.md` mantém a lista incremental e já documenta as seis regras do
+  seed atual; a Etapa 2 deve reconfirmar integralmente suas fontes e ampliar a cobertura.
 
 ## Decisões e limites para todas as etapas
 
@@ -49,16 +52,22 @@ comissionador comunica um problema, mas **não são fonte normativa suficiente p
 6. Uma regra com chave fora do vocabulário deve ser recusada com diagnóstico claro. Chave conhecida
    cujo provedor ainda está planejado pode ser aceita com aviso e resulta em `NAO_AVALIAVEL`, não em
    reprovação, até que existam fatos suficientes.
-7. Uma marcação só recebe seta quando há página e geometria rastreáveis. Achado sem localização
+7. Toda regra incorporada pelo projeto deve constar em `docs/catalogo-regras-conformidade.md`, com
+   número sequencial estável, ID técnico, explicação do processo de análise, fonte exata, fatos,
+   aplicabilidade, exceções, resultado e estado de automação. Regra alterada ou removida não some do
+   histórico: é marcada como substituída, inativa ou removida. A mesma alteração de código/regras e
+   catálogo deve ocorrer no mesmo commit. Registros importados pelo usuário também devem gerar uma
+   versão Markdown local do catálogo ativo, sem editar silenciosamente os arquivos do repositório.
+8. Uma marcação só recebe seta quando há página e geometria rastreáveis. Achado sem localização
    continua visível na lista com o estado **Sem localização no PDF**; não invente coordenadas.
-8. A suíte pública usa apenas fixtures sintéticas. PDFs e anotações reais de `examples/` permanecem
+9. A suíte pública usa apenas fixtures sintéticas. PDFs e anotações reais de `examples/` permanecem
    fora do Git e só podem participar do gate privado opt-in, sem nomes, texto, imagens, coordenadas ou
    caminhos nos relatórios.
-9. Preserve a separação `domain -> application/ports -> adapters -> ui`, a execução offline, a
+10. Preserve a separação `domain -> application/ports -> adapters -> ui`, a execução offline, a
    cobertura acima de 85,01%, Ruff, formatação e Mypy.
-10. Antes de editar, confira `git status` e preserve alterações alheias. Não use reset ou descarte de
+11. Antes de editar, confira `git status` e preserve alterações alheias. Não use reset ou descarte de
     arquivos do usuário.
-11. Ao finalizar cada etapa, atualize a tabela e o registro de execução deste documento. Execute os
+12. Ao finalizar cada etapa, atualize a tabela e o registro de execução deste documento. Execute os
     testes focados e `.\IniciarTestes.bat`. Se todos os testes e critérios de aceite passarem, faça o
     commit convencional indicado. Se não passarem, não crie o commit e relate a pendência.
 
@@ -67,10 +76,11 @@ comissionador comunica um problema, mas **não são fonte normativa suficiente p
 | Etapa | Estado inicial | Depende de | Entrega principal |
 |---|---|---|---|
 | 1. Registro configurável de regras | PENDENTE | - | Importar/remover regras pela interface com revisão persistida |
-| 2. Execução e histórico de conformidade | PENDENTE | 1 | Resultado vinculado à análise e à revisão de regras |
-| 3. Caixas e setas no visualizador | PENDENTE | 2 | Callouts vermelhos ancorados em geometria rastreável |
-| 4. Visibilidade e sincronização | PENDENTE | 3 | Olho por achado e navegação bidirecional lista/PDF |
-| 5. Primeiro avaliador técnico e aceite ponta a ponta | PENDENTE | 4 | Extensão comprovada sem codificar regras no motor |
+| 2. Pesquisa normativa integral e expansão inicial | PENDENTE | 1 | Inventário oficial e regras automatizáveis já incorporadas |
+| 3. Execução e histórico de conformidade | PENDENTE | 1, 2 | Resultado vinculado à análise e à revisão de regras |
+| 4. Caixas e setas no visualizador | PENDENTE | 3 | Callouts vermelhos ancorados em geometria rastreável |
+| 5. Visibilidade e sincronização | PENDENTE | 4 | Olho por achado e navegação bidirecional lista/PDF |
+| 6. Primeiro avaliador técnico e aceite ponta a ponta | PENDENTE | 5 | Extensão comprovada sem codificar regras no motor |
 
 Estados permitidos: `PENDENTE`, `EM ANDAMENTO`, `BLOQUEADA` e `CONCLUÍDA`.
 
@@ -87,6 +97,9 @@ Estados permitidos: `PENDENTE`, `EM ANDAMENTO`, `BLOQUEADA` e `CONCLUÍDA`.
 - No primeiro uso, criar a revisão ativa a partir do seed empacotado. Não modificar o seed ao editar.
 - Criar porta, repositório SQLAlchemy e serviço de aplicação para consultar a revisão ativa, listar
   histórico, importar/mesclar regras, ativar/desativar e remover uma regra em uma nova revisão.
+- Manter numeração incremental estável por ID de regra e gerar atomicamente, na pasta de dados do
+  usuário, um `catalogo-regras-conformidade.md` legível para cada nova revisão ativa. Novas regras
+  recebem o próximo número; números removidos nunca são reutilizados.
 - Adicionar uma visão **Regras** ao painel de conformidade com tabela, detalhes e botões **Importar**,
   **Exportar**, **Ativar/desativar** e **Remover**. Importação deve mostrar resumo e pedir confirmação
   antes de substituir IDs existentes; remoção também exige confirmação.
@@ -103,6 +116,8 @@ Estados permitidos: `PENDENTE`, `EM ANDAMENTO`, `BLOQUEADA` e `CONCLUÍDA`.
   recusados de forma atômica.
 - Teste `pytest-qt`: importar uma regra sintética, desativá-la, reativá-la, removê-la, exportar o
   registro e reiniciar o painel; o estado persiste e nenhuma etapa exige editar JSON manualmente.
+- O catálogo Markdown local é regenerado em cada revisão, conserva a numeração e descreve em
+  linguagem humana `when`, `unless` e `must`; falha de escrita não deixa arquivo parcial.
 - O painel deixa claro qual revisão está ativa e quantas regras ativas/inativas existem.
 
 ### Prompt para uma sessão limpa do Codex
@@ -116,10 +131,12 @@ git status e preserve alterações não relacionadas.
 
 Entregue um incremento vertical: catálogo das chaves de fatos suportadas e validação semântica;
 snapshot imutável do registro no SQLite com migração, porta/repositório/serviço; seed idempotente; e
-uma visão Regras no painel para importar, exportar, ativar/desativar e remover regras. A importação
-usa o schema JSON existente, mostra um resumo antes da confirmação e cria uma nova revisão ativa.
-Remover nunca apaga revisões históricas. Não execute código vindo do JSON, não normalize condições
-em excesso e não implemente ainda histórico de análises ou callouts no PDF.
+uma visão Regras no painel para importar, exportar, ativar/desativar e remover regras. Mantenha um
+número incremental estável por ID e gere atomicamente no diretório de dados do usuário o arquivo
+catalogo-regras-conformidade.md, explicando o processo de análise de cada regra. A importação usa o
+schema JSON existente, mostra um resumo antes da confirmação e cria uma nova revisão ativa. Remover
+nunca apaga revisões históricas nem reutiliza números. Não execute código vindo do JSON, não
+normalize condições em excesso e não implemente ainda histórico de análises ou callouts no PDF.
 
 Adicione testes unitários, de persistência e pytest-qt para os critérios da etapa. Atualize a
 documentação afetada e o registro da etapa. Execute os testes focados e `.\IniciarTestes.bat`. Se
@@ -127,7 +144,84 @@ todos os testes e critérios de aceite passarem, faça o commit em inglês
 `feat(compliance): add configurable rule registries`. Não faça commit com gate vermelho.
 ```
 
-## Etapa 2 - Execução e histórico de conformidade
+## Etapa 2 - Pesquisa normativa integral e expansão inicial das regras
+
+### Implementar
+
+- Fazer pesquisa web nas fontes primárias e oficiais vigentes. Começar pelo portal oficial de normas
+  técnicas da CEMIG, pelas fontes já citadas no registro ativo e pelos documentos oficiais que elas
+  referenciem diretamente quando essa referência afetar projeto, material, compatibilidade ou
+  comissionamento. Não usar blogs, respostas de fóruns ou resumos comerciais como fonte normativa.
+- Criar `docs/inventario-fontes-normativas.md` com documento, órgão emissor, revisão/data, URL oficial,
+  data de acesso, SHA-256 do arquivo consultado, total de páginas, escopo lido e situação
+  vigente/substituída/indisponível. Se uma norma exigir acesso licenciado, registrar a lacuna e não
+  contornar o acesso.
+- Ler integralmente cada documento incluído no escopo, página por página. Usar extração de texto para
+  busca e índice, mas também renderizar e inspecionar tabelas, diagramas, notas, rodapés e páginas em
+  que a extração falhe. Trechos de busca isolados não bastam para criar regra.
+- Levantar candidatos de todas as famílias relevantes, incluindo presença documental, limites,
+  estruturas, cabos, postes, equipamentos, proteção, aterramento, vãos, ambiente rural/urbano,
+  topologia, cálculo e compatibilidade entre componentes. Para incompatibilidades, registrar os dois
+  lados da combinação e todas as condições que alterem a conclusão.
+- Classificar cada candidato no catálogo como `IMPLEMENTADA`, `PRONTA_PARA_REGRA`, `AGUARDA_FATO`,
+  `REVISAO_HUMANA` ou `DESCARTADA`, sempre com justificativa. Só incorporar automaticamente regras
+  cuja obrigação, aplicabilidade e exceções tenham citação oficial exata e cujos fatos já sejam
+  produzidos com segurança. As demais entram no backlog documentado, nunca como reprovação genérica.
+- Incluir no registro versionado as regras já automatizáveis, inclusive compatibilidades simples que
+  possam ser expressas por `when`/`unless`/`must`. Criar um provedor determinístico pequeno apenas se
+  o fato necessário for direto e o escopo continuar cabendo nesta etapa; cálculos ou visão
+  computacional novos ficam para etapa própria.
+- Atualizar `docs/catalogo-regras-conformidade.md` no mesmo commit. Cada entrada deve explicar
+  “Regra N consiste em...”, processo de análise, fatos observados, condições, exceções, possível erro,
+  fonte exata, estado de automação e testes. Não copiar extensos trechos protegidos da norma.
+
+### Testes e aceite
+
+- O inventário comprova leitura de todas as páginas de cada fonte no escopo e registra claramente
+  documentos inacessíveis, substituídos ou fora de escopo; nenhuma lacuna vira regra presumida.
+- Toda regra incorporada possui documento, revisão, item e página verificáveis na fonte oficial, mais
+  casos sintéticos de conforme, divergência, não avaliável e exceção quando aplicável.
+- Teste automático garante correspondência um-para-um entre IDs das regras incorporadas e entradas
+  ativas do catálogo, além de números sequenciais únicos e nunca reutilizados.
+- Pelo menos uma família de compatibilidade entre elementos é examinada integralmente. Se houver
+  combinação automatizável com os fatos atuais, ela é incluída e testada; caso contrário, o catálogo
+  registra exatamente quais fatos/provedores faltam.
+- URLs, hashes, IDs, contagens e paráfrases podem ser versionados; PDFs normativos baixados e material
+  licenciado só são versionados quando a licença permitir expressamente.
+
+### Prompt para uma sessão limpa do Codex
+
+```text
+Implemente a Etapa 2 de docs/roadmap-analise-conformidades.md sobre a main que contém a Etapa 1. Leia
+integralmente esse roadmap, docs/catalogo-regras-conformidade.md, docs/arquitetura-conformidade.md,
+ADR 0011, o registro ativo, o catálogo técnico e os schemas. Confira git status e preserve trabalho
+alheio.
+
+Esta etapa exige pesquisa web e leitura integral das normas de referência. Use somente fontes
+primárias oficiais: comece pelo portal vigente de normas técnicas da CEMIG, confirme revisão e URL
+de cada fonte já citada e siga referências oficiais diretas relevantes. Baixe cópias de trabalho em
+pasta temporária, registre SHA-256 e total de páginas, extraia texto para indexação e renderize as
+páginas para revisar também tabelas, figuras, notas e conteúdo sem texto. Leia todas as páginas do
+escopo; não crie regra a partir de snippet de busca, comentário dos PDFs de exemplo ou fonte
+secundária. Respeite acesso licenciado e direitos autorais, usando paráfrases curtas no repositório.
+
+Crie docs/inventario-fontes-normativas.md e expanda o catálogo incremental. Pesquise sistematicamente
+presença documental, limites, estruturas, cabos, postes, equipamentos, proteção, aterramento, vãos,
+contexto rural/urbano, topologia, cálculos e compatibilidade entre componentes. Para cada candidato,
+registre citação exata, aplicabilidade, exceções, fatos necessários e estado IMPLEMENTADA,
+PRONTA_PARA_REGRA, AGUARDA_FATO, REVISAO_HUMANA ou DESCARTADA. Incorpore ao registro versionado apenas
+as regras inequívocas e automatizáveis com fatos confiáveis; inclua compatibilidades simples quando
+possível. Não transforme ausência de detector em divergência.
+
+Crie testes sintéticos de conforme, divergência, não avaliável e exceção para cada regra incluída e
+um teste de paridade entre registro e docs/catalogo-regras-conformidade.md. Atualize o registro da
+etapa, rode os testes focados e `.\IniciarTestes.bat`. Se a pesquisa documentada estiver completa no
+escopo declarado e todos os testes/aceites passarem, faça o commit em inglês
+`feat(compliance): expand rules from normative review`. Não faça commit com fonte sem rastreabilidade
+ou gate vermelho.
+```
+
+## Etapa 3 - Execução e histórico de conformidade
 
 ### Implementar
 
@@ -162,7 +256,7 @@ todos os testes e critérios de aceite passarem, faça o commit em inglês
 ### Prompt para uma sessão limpa do Codex
 
 ```text
-Implemente a Etapa 2 de docs/roadmap-analise-conformidades.md sobre a main que contém a Etapa 1. Leia
+Implemente a Etapa 3 de docs/roadmap-analise-conformidades.md sobre a main que contém as Etapas 1 e 2. Leia
 o roadmap, docs/arquitetura-conformidade.md, ADR 0011 e o estado atual de application/mvp_workflow.py,
 application/project_compliance.py, application/compliance_evaluation.py, persistence,
 ui/project_panel.py, ui/documentation_panel.py, bootstrap.py e os testes relacionados. Confira git
@@ -182,7 +276,7 @@ os critérios de aceite estiverem satisfeitos, faça o commit em inglês
 `feat(compliance): persist compliance analysis results`. Não faça commit com gate vermelho.
 ```
 
-## Etapa 3 - Caixas e setas no visualizador
+## Etapa 4 - Caixas e setas no visualizador
 
 ### Implementar
 
@@ -216,7 +310,7 @@ os critérios de aceite estiverem satisfeitos, faça o commit em inglês
 ### Prompt para uma sessão limpa do Codex
 
 ```text
-Implemente a Etapa 3 de docs/roadmap-analise-conformidades.md sobre a main com as Etapas 1 e 2. Leia o
+Implemente a Etapa 4 de docs/roadmap-analise-conformidades.md sobre a main com as Etapas 1 a 3. Leia o
 roadmap, ADR 0003, ADR 0011, application/project_compliance.py, domain/values.py,
 adapters/pdf/coordinates.py, ui/pdf_viewer.py, ui/pdf_rendering.py e os testes do visualizador.
 Confira git status e preserve alterações não relacionadas.
@@ -226,7 +320,7 @@ no visualizador: caixa branca com borda/texto vermelhos e uma ou mais linhas com
 somente geometrias rastreáveis, posicione deterministicamente ao redor do alvo, mantenha tudo dentro
 da página e reduza colisões com um conjunto pequeno de posições candidatas. Garanta texto quebrado e
 legível em A4/A3, retrato/paisagem, zoom, rotação e tiles. Não altere o PDF original e não implemente
-ainda os botões de visibilidade da Etapa 4.
+ainda os botões de visibilidade da Etapa 5.
 
 Adicione testes puros e pytest-qt, produza fixtures sintéticas e faça verificação visual dos renders.
 Atualize a documentação e o registro da etapa. Rode os testes focados e `.\IniciarTestes.bat`. Se
@@ -234,7 +328,7 @@ tudo passar e os critérios de aceite estiverem satisfeitos, faça o commit em i
 `feat(pdf): render compliance callouts`. Não faça commit com gate vermelho.
 ```
 
-## Etapa 4 - Visibilidade e sincronização entre lista e PDF
+## Etapa 5 - Visibilidade e sincronização entre lista e PDF
 
 ### Implementar
 
@@ -262,7 +356,7 @@ tudo passar e os critérios de aceite estiverem satisfeitos, faça o commit em i
 ### Prompt para uma sessão limpa do Codex
 
 ```text
-Implemente a Etapa 4 de docs/roadmap-analise-conformidades.md sobre a main com as Etapas 1 a 3. Leia o
+Implemente a Etapa 5 de docs/roadmap-analise-conformidades.md sobre a main com as Etapas 1 a 4. Leia o
 roadmap e o comportamento atual de ui/review_panel.py, ui/documentation_panel.py, ui/pdf_viewer.py,
 ui/main_window.py e seus testes. Confira git status e preserve trabalho não relacionado.
 
@@ -279,7 +373,7 @@ commit em inglês `feat(ui): control compliance callout visibility`. Não faça 
 vermelho.
 ```
 
-## Etapa 5 - Primeiro avaliador técnico e aceite ponta a ponta
+## Etapa 6 - Primeiro avaliador técnico e aceite ponta a ponta
 
 ### Implementar
 
@@ -313,7 +407,7 @@ vermelho.
 ### Prompt para uma sessão limpa do Codex
 
 ```text
-Implemente a Etapa 5 de docs/roadmap-analise-conformidades.md sobre a main com as Etapas 1 a 4. Leia o
+Implemente a Etapa 6 de docs/roadmap-analise-conformidades.md sobre a main com as Etapas 1 a 5. Leia o
 roadmap, docs/arquitetura-conformidade.md, ADR 0011, application/project_compliance.py,
 application/spans.py, ui/documentation_panel.py, ui/pdf_viewer.py e os testes E2E existentes. Confira
 git status e preserve mudanças alheias.
@@ -335,7 +429,7 @@ vermelho.
 
 ## Definição de pronto do ciclo
 
-O ciclo está tecnicamente pronto quando as cinco etapas estiverem concluídas e o seguinte fluxo
+O ciclo está tecnicamente pronto quando as seis etapas estiverem concluídas e o seguinte fluxo
 funcionar sem terminal:
 
 1. abrir **Documentação e conformidade > Regras** e importar uma regra válida;
@@ -344,9 +438,11 @@ funcionar sem terminal:
 4. selecionar o achado e ver caixa/seta corretamente ancoradas no PDF;
 5. ocultar e exibir a marcação sem afetar os identificadores de elementos;
 6. remover a regra, reanalisar e confirmar que o histórico antigo foi preservado e o resultado novo
-   não contém mais o achado.
+   não contém mais o achado;
+7. abrir o catálogo Markdown e localizar a descrição incremental de cada regra usada na análise.
 
 ## Registro de execução
 
 Ao concluir uma etapa, acrescente uma entrada curta com data, arquivos principais, testes executados,
-resultado do gate, limitações remanescentes e mensagem do commit. Não copie conteúdo dos PDFs reais.
+resultado do gate, limitações remanescentes e mensagem do commit. Toda alteração de regra também
+atualiza `docs/catalogo-regras-conformidade.md`. Não copie conteúdo dos PDFs reais.
