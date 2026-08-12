@@ -34,8 +34,9 @@ comissionador comunica um problema, mas **não são fonte normativa suficiente p
   botões de olho para ocultar região ou elemento.
 - `docs/arquitetura-conformidade.md`, ADR 0011 e o schema em
   `docs/schemas/regras-conformidade.schema.json` são os contratos de referência.
-- `docs/catalogo-regras-conformidade.md` mantém a lista incremental e já documenta as seis regras do
-  seed atual; a Etapa 2 deve reconfirmar integralmente suas fontes e ampliar a cobertura.
+- `docs/catalogo-regras-conformidade.md` mantém a lista incremental das oito entradas do seed; a
+  Etapa 2 confirmou as fontes, inativou a escala até suas exceções terem fatos positivos e incluiu
+  cabo novo urbano e a compatibilidade rural simples entre estrutura e poste.
 
 ## Decisões e limites para todas as etapas
 
@@ -76,7 +77,7 @@ comissionador comunica um problema, mas **não são fonte normativa suficiente p
 | Etapa | Estado inicial | Depende de | Entrega principal |
 |---|---|---|---|
 | 1. Registro configurável de regras | CONCLUÍDA | - | Importar/remover regras pela interface com revisão persistida |
-| 2. Pesquisa normativa integral e expansão inicial | PENDENTE | 1 | Inventário oficial e regras automatizáveis já incorporadas |
+| 2. Pesquisa normativa integral e expansão inicial | CONCLUÍDA | 1 | Inventário oficial e regras automatizáveis já incorporadas |
 | 3. Execução e histórico de conformidade | PENDENTE | 1, 2 | Resultado vinculado à análise e à revisão de regras |
 | 4. Caixas e setas no visualizador | PENDENTE | 3 | Callouts vermelhos ancorados em geometria rastreável |
 | 5. Visibilidade e sincronização | PENDENTE | 4 | Olho por achado e navegação bidirecional lista/PDF |
@@ -459,3 +460,24 @@ atualiza `docs/catalogo-regras-conformidade.md`. Não copie conteúdo dos PDFs r
 - **Limitações remanescentes:** histórico de execuções de conformidade, callouts no PDF e provedores
   de ângulo/vão continuam reservados às Etapas 3, 4 e 6.
 - **Commit:** `feat(compliance): add configurable rule registries`.
+
+### 2026-08-12 — Etapa 2 concluída
+
+- **Fontes e escopo:** portal oficial vigente conferido; ND 2.7, ND 2.9, ND 3.1, ND 4.15 e ND 9.3
+  lidas integralmente, totalizando 493 páginas. URLs, revisões, SHA-256, páginas sem camada textual,
+  referências diretas e limites de acesso estão em `docs/inventario-fontes-normativas.md`.
+- **Arquivos principais:** inventário normativo e catálogo incremental em `docs`; fatos positivos em
+  `domain/compliance_facts.py`; provedores em `application/project_compliance.py`; seed versionado
+  `cemig-normas-distribuicao-2025.3` com oito entradas, sete ativas.
+- **Regras incorporadas:** proibição de cabo convencional em construção urbana nova e
+  incompatibilidade rural inequívoca entre cinco estruturas MT e poste de concreto duplo T. A regra
+  de escala foi inativada até que suas exceções possam ser representadas por fatos confiáveis; a
+  ausência de detector de risco passou a produzir `NAO_AVALIAVEL`.
+- **Testes focados:** conforme, divergência, não avaliável e exceção de contexto para cada regra nova,
+  além da paridade registro/catálogo — 30 testes aprovados.
+- **Gate básico:** `IniciarTestes.bat` aprovado no Python 3.13.14 — 451 testes aprovados, 20 privados
+  excluídos pelo gate, cobertura de 85,48%; Ruff, formatação, Mypy e complexidade aprovados.
+- **Limitações remanescentes:** ângulo, vão, proteção, aterramento, topologia e cálculos permanecem
+  documentados como candidatos dependentes de novos fatos ou revisão humana; normas licenciadas e
+  documentos oficiais reservados não foram contornados nem incorporados.
+- **Commit:** `feat(compliance): expand rules from normative review`.

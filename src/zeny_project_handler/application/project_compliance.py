@@ -15,7 +15,13 @@ from zeny_project_handler.domain.analysis import (
     EvidenciaDocumento,
     PropostaElemento,
 )
-from zeny_project_handler.domain.catalog import JsonPrimitive, TipoCabo, TipoEquipamento
+from zeny_project_handler.domain.catalog import (
+    JsonPrimitive,
+    TipoCabo,
+    TipoEquipamento,
+    TipoEstruturaMt,
+    TipoPoste,
+)
 from zeny_project_handler.domain.compliance import (
     AchadoConformidade,
     AlvoConformidade,
@@ -117,7 +123,9 @@ class _RegionFactContext:
     proposals_by_id: dict[UUID, PropostaElemento]
     technology_options: dict[UUID, str]
     equipment_class_options: dict[UUID, str]
+    post_format_options: dict[UUID, str]
     urban_context: bool
+    rural_context: bool
     text_evidence: tuple[EvidenciaDocumento, ...]
     evidence: tuple[EvidenciaDocumento, ...]
 
@@ -853,8 +861,11 @@ def _region_facts(
         facts.append(_equipment_install_fact(target.id, proposals, context.evidence))
         facts.extend(_equipment_class_facts(target.id, proposals, session, context))
         facts.extend(_urban_context_facts(target.id, context.urban_context))
+        facts.extend(_rural_context_facts(target.id, context.rural_context))
         facts.extend(_risk_facts(target.id, nearby_text))
         facts.extend(_cable_technology_facts(target.id, proposals, session, context))
+        facts.extend(_installed_cable_technology_facts(target.id, proposals, session, context))
+        facts.extend(_structure_post_facts(target.id, proposals, session, context))
     return tuple(facts)
 
 
@@ -865,7 +876,9 @@ def _region_fact_context(session: SessaoRevisao) -> _RegionFactContext:
         },
         technology_options=_catalog_option_codes(session, "tecnologia_rede"),
         equipment_class_options=_catalog_option_codes(session, "classe_equipamento"),
+        post_format_options=_catalog_option_codes(session, "formato_poste"),
         urban_context=_is_urban_context(session),
+        rural_context=_is_rural_context(session),
         text_evidence=tuple(
             item for item in session.evidencias if item.tipo in _TEXT_TYPES and item.conteudo_bruto
         ),
@@ -958,6 +971,23 @@ def _urban_context_facts(
     )
 
 
+def _rural_context_facts(
+    target_id: UUID,
+    rural_context: bool,
+) -> tuple[FatoConformidade, ...]:
+    if not rural_context:
+        return ()
+    return (
+        _fact(
+            target_id,
+            "rede.contexto_rural",
+            True,
+            "tipo de serviço do projeto",
+            confidence=Decimal("1"),
+        ),
+    )
+
+
 def _risk_facts(
     target_id: UUID,
     nearby_text: tuple[EvidenciaDocumento, ...],
@@ -1009,10 +1039,103 @@ def _cable_technology_facts(
     return tuple(facts)
 
 
+def _installed_cable_technology_facts(
+    target_id: UUID,
+    proposals: tuple[PropostaElemento, ...],
+    session: SessaoRevisao,
+    context: _RegionFactContext,
+) -> tuple[FatoConformidade, ...]:
+    facts: list[FatoConformidade] = []
+    for proposal in proposals:
+        if (
+            proposal.categoria is not CategoriaElemento.CABO
+            or proposal.situacao_projeto is not SituacaoProjeto.INSTALAR
+        ):
+            continue
+        catalog_item = (
+            session.catalogo.item_por_id(proposal.tipo_catalogo_sugerido_id)
+            if proposal.tipo_catalogo_sugerido_id is not None
+            else None
+        )
+        if not isinstance(catalog_item, TipoCabo):
+            continue
+        technology = context.technology_options.get(catalog_item.tecnologia_rede_opcao_id)
+        if technology:
+            facts.append(
+                _fact(
+                    target_id,
+                    "cabo.instalar_tecnologia",
+                    technology,
+                    "catálogo do cabo reconhecido como instalação",
+                    evidence=_proposal_evidence(proposal, context.evidence),
+                    confidence=proposal.confianca,
+                )
+            )
+    return tuple(facts)
+
+
+def _structure_post_facts(
+    target_id: UUID,
+    proposals: tuple[PropostaElemento, ...],
+    session: SessaoRevisao,
+    context: _RegionFactContext,
+) -> tuple[FatoConformidade, ...]:
+    structures: list[tuple[PropostaElemento, TipoEstruturaMt]] = []
+    poles: list[tuple[PropostaElemento, TipoPoste]] = []
+    for proposal in proposals:
+        catalog_item = (
+            session.catalogo.item_por_id(proposal.tipo_catalogo_sugerido_id)
+            if proposal.tipo_catalogo_sugerido_id is not None
+            else None
+        )
+        if proposal.situacao_projeto is SituacaoProjeto.INSTALAR and isinstance(
+            catalog_item, TipoEstruturaMt
+        ):
+            structures.append((proposal, catalog_item))
+        if proposal.situacao_projeto is not SituacaoProjeto.REMOVER and isinstance(
+            catalog_item, TipoPoste
+        ):
+            poles.append((proposal, catalog_item))
+
+    if len(structures) != 1 or len(poles) != 1:
+        return ()
+
+    structure_proposal, structure = structures[0]
+    pole_proposal, pole = poles[0]
+    post_format = context.post_format_options.get(pole.formato_opcao_id)
+    if not post_format:
+        return ()
+    return (
+        _fact(
+            target_id,
+            "regiao.estrutura_mt_instalar_codigo",
+            structure.codigo,
+            "catálogo da única estrutura de MT reconhecida como instalação",
+            evidence=_proposal_evidence(structure_proposal, context.evidence),
+            confidence=structure_proposal.confianca,
+        ),
+        _fact(
+            target_id,
+            "regiao.poste_ativo_formato",
+            post_format,
+            "catálogo do único poste reconhecido e não removido",
+            evidence=_proposal_evidence(pole_proposal, context.evidence),
+            confidence=pole_proposal.confianca,
+        ),
+    )
+
+
 def _is_urban_context(session: SessaoRevisao) -> bool:
     metadata = session.projeto.metadados
     return bool(
         metadata and metadata.tipo_servico and "URBAN" in _normalize_text(metadata.tipo_servico)
+    )
+
+
+def _is_rural_context(session: SessaoRevisao) -> bool:
+    metadata = session.projeto.metadados
+    return bool(
+        metadata and metadata.tipo_servico and "RURAL" in _normalize_text(metadata.tipo_servico)
     )
 
 

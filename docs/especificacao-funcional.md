@@ -505,13 +505,14 @@ quando ela está disponível.
   convertida em fatos ou achados normativos. Ângulos continuam sem detector ativo.
 - Evidência, fato normalizado, regra e achado são objetos distintos. Fatos preservam escopo, origem,
   confiança, geometria e evidências.
-- O registro `cemig-nd31-2025.2` é JSON validado, versionado e assinado por SHA-256. `when` define
+- O registro `cemig-normas-distribuicao-2025.3` é JSON validado, versionado e assinado por SHA-256. `when` define
   aplicabilidade, `unless` exige comprovação positiva da exceção e `must` declara requisitos.
 - Cada regra aplicável resulta em `CONFORME`, `DIVERGENCIA` ou `NAO_AVALIAVEL`. A interface apresenta
   divergência automática como **possível divergência**, sujeita a revisão.
-- As regras iniciais verificam numeração, formato, escala, vão urbano de rede compacta/isolada,
-  equipamento em ângulo e avaliação de abalroamento. Contextos rurais e tabelas de estrutura não
-  reutilizam limites urbanos sem os fatos técnicos específicos.
+- As regras iniciais verificam numeração, formato, vão urbano de rede compacta/isolada, equipamento
+  em ângulo, avaliação de abalroamento, cabo novo urbano e uma incompatibilidade rural simples entre
+  estrutura e poste. A regra de escala permanece inativa até suas exceções terem fatos positivos;
+  outros contextos rurais e tabelas de estrutura não reutilizam limites urbanos.
 
 A abstração, o vocabulário inicial e o procedimento para evolução normativa estão em
 [`arquitetura-conformidade.md`](arquitetura-conformidade.md). A decisão de arquitetura está na

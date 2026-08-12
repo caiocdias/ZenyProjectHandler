@@ -1,169 +1,198 @@
 # Catálogo incremental de regras de conformidade
 
-> Fonte humana e auditável das regras de erro conhecidas pelo analisador. Este catálogo começa com o
-> seed atual; a verificação integral das fontes e a expansão normativa pertencem à Etapa 2 de
-> `docs/roadmap-analise-conformidades.md`.
+Fonte humana e auditável das regras distribuídas com o analisador e dos candidatos encontrados na
+revisão normativa. O inventário de documentos, hashes e cobertura de páginas está em
+`docs/inventario-fontes-normativas.md`.
 
 ## Preceito obrigatório
 
-1. Toda regra incorporada, alterada, desativada, substituída ou removida deve ser atualizada aqui no
+1. Regra incorporada, alterada, inativada, substituída ou removida é atualizada neste arquivo no
    mesmo commit do registro e dos testes.
-2. Cada ID técnico recebe um número `Regra N` sequencial e permanente. Números removidos não são
-   apagados nem reutilizados.
-3. Mudança editorial conserva o número e entra no histórico da regra. Mudança normativa que altera a
-   obrigação, a aplicabilidade ou a exceção cria novo ID/número e marca a anterior como substituída.
-4. A descrição deve explicar o processo real de análise, não apenas repetir o título da norma.
-5. Toda entrada informa fonte, fatos, condições, exceções, conclusão possível, estado de automação e
-   testes. Uma citação incompleta não autoriza reprovação automática.
-6. Regras importadas pelo usuário em execução aparecem no catálogo Markdown local gerado a partir da
-   revisão ativa. Este arquivo versionado documenta as regras distribuídas com o produto.
+2. Cada ID técnico recebe um número `Regra N` sequencial e permanente. Números não são apagados nem
+   reutilizados.
+3. A entrada registra fonte oficial, aplicabilidade, exceções, fatos, resultado, automação e testes.
+   Citação incompleta, ambiguidade ou ausência de detector não autorizam divergência.
+4. Mudança normativa de obrigação, aplicabilidade ou exceção cria novo ID. Correção de localizador ou
+   redação que não muda a obrigação permanece no histórico do mesmo ID.
+5. O JSON é declarativo. Geometria, topologia, associação e cálculo ficam em provedores pequenos e
+   testáveis que publicam fatos rastreáveis.
 
-Estados de automação:
+Estados da revisão normativa:
 
-- `OPERACIONAL`: os fatos necessários já são produzidos e a regra pode concluir.
-- `PARCIAL`: apenas alguns contextos ou fatos são produzidos; os demais ficam não avaliáveis.
-- `AGUARDA_FATO`: a regra existe, mas falta um provedor confiável para ao menos um fato essencial.
-- `INATIVA`, `SUBSTITUIDA` ou `REMOVIDA`: preservada somente para histórico/auditoria.
+- `IMPLEMENTADA`: incorporada ao registro versionado e acompanhada por testes;
+- `PRONTA_PARA_REGRA`: obrigação e fatos estão definidos, aguardando incorporação;
+- `AGUARDA_FATO`: a obrigação é relevante, mas falta fato confiável ou associação necessária;
+- `REVISAO_HUMANA`: validade ou aplicabilidade exige juízo técnico/documental;
+- `DESCARTADA`: não deve virar regra nas condições examinadas.
+
+Estados de automação: `OPERACIONAL`, `PARCIAL`, `AGUARDA_FATO`, `INATIVA`, `SUBSTITUIDA` e
+`REMOVIDA`. O estado da revisão e o de automação são independentes.
 
 ## Catálogo local configurável
 
-A Etapa 1 passou a manter no SQLite a numeração permanente por ID técnico e snapshots imutáveis do
-registro. Na primeira execução, as seis regras abaixo recebem os números 1 a 6 a partir do seed. A
-cada importação, ativação, desativação ou remoção, o aplicativo gera atomicamente outro
-`catalogo-regras-conformidade.md` na pasta de dados do usuário. Esse catálogo local inclui regras
-importadas, explica o processo `when`/`unless`/`must` da revisão ativa e conserva como `REMOVIDA`
-toda regra retirada. O arquivo versionado no repositório continua sendo a referência do seed; ele
-não é alterado silenciosamente por ações da interface.
+O SQLite mantém a numeração permanente por ID técnico e snapshots imutáveis do registro. Na
+primeira execução, as oito entradas abaixo recebem os números 1 a 8 a partir do seed. Importação,
+ativação, desativação ou remoção gera atomicamente outro catálogo Markdown na pasta de dados do
+usuário e preserva regras retiradas como `REMOVIDA`. Este arquivo versionado documenta o seed; ações
+da interface não o modificam silenciosamente.
 
 ## Resumo
 
-| Número | ID técnico | Título | Registro | Automação |
-|---|---|---|---|---|
-| Regra 1 | `nd31.desenho.numero-projeto` | Número do projeto com 10 dígitos | ATIVA | OPERACIONAL |
-| Regra 2 | `nd31.desenho.formato` | Formato de folha padronizado | ATIVA | OPERACIONAL |
-| Regra 3 | `nd31.desenho.escala` | Escala urbana de apresentação | ATIVA | OPERACIONAL |
-| Regra 4 | `nd31.equipamento.estrutura-angulo` | Equipamento em estrutura de ângulo | ATIVA | AGUARDA_FATO |
-| Regra 5 | `nd31.equipamento.risco-abalroamento` | Avaliação de risco no ângulo | ATIVA | AGUARDA_FATO |
-| Regra 6 | `nd31.vao.urbano-compacto-isolado` | Vão máximo urbano | ATIVA | AGUARDA_FATO |
+| Número | ID técnico | Título | Registro | Automação | Revisão normativa |
+|---|---|---|---|---|---|
+| Regra 1 | `nd31.desenho.numero-projeto` | Número do projeto com 10 dígitos | ATIVA | OPERACIONAL | IMPLEMENTADA |
+| Regra 2 | `nd31.desenho.formato` | Formato de folha padronizado | ATIVA | OPERACIONAL | IMPLEMENTADA |
+| Regra 3 | `nd31.desenho.escala` | Escala urbana de apresentação | INATIVA | INATIVA | AGUARDA_FATO |
+| Regra 4 | `nd31.equipamento.estrutura-angulo` | Equipamento em estrutura de ângulo | ATIVA | AGUARDA_FATO | IMPLEMENTADA |
+| Regra 5 | `nd31.equipamento.risco-abalroamento` | Avaliação de risco no ângulo | ATIVA | AGUARDA_FATO | IMPLEMENTADA |
+| Regra 6 | `nd31.vao.urbano-compacto-isolado` | Vão máximo urbano | ATIVA | AGUARDA_FATO | IMPLEMENTADA |
+| Regra 7 | `nd31.cabo.convencional-novo-urbano` | Cabo nu convencional em obra nova urbana | ATIVA | OPERACIONAL | IMPLEMENTADA |
+| Regra 8 | `nd93.compatibilidade.estrutura-poste-duplo-t` | Estrutura compacta rural e poste duplo T | ATIVA | OPERACIONAL | IMPLEMENTADA |
 
 ## Regras existentes
 
 ### Regra 1 - Número do projeto com 10 dígitos
 
-- **ID:** `nd31.desenho.numero-projeto`
-- **Processo de análise:** a Regra 1 consiste em verificar, quando o projeto foi identificado como
-  urbano, se existe uma Nota de Serviço válida. O analisador
-  procura a Nota de Serviço/número do projeto no metadado confirmado ou no cabeçalho por texto/OCR.
-  O domínio e o extrator só aceitam o formato de dez dígitos.
-- **Fatos:** `rede.contexto_urbano`; `projeto.nota_servico`.
-- **Condição/erro:** se o contexto urbano for conhecido e o número válido não existir, gera possível
-  divergência. Sem contexto suficiente, retorna não avaliável.
-- **Exceções:** nenhuma registrada.
-- **Fonte registrada no seed:** CEMIG ND-3.1, revisão Jul/2025, “Apresentação do Projeto”, item 2.4,
-  página 88, [URL registrada](https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf).
-  A Etapa 2 deve reconfirmar revisão, item e página na fonte oficial integral.
-- **Testes mínimos:** número válido; número ausente; contexto desconhecido.
+- **ID:** `nd31.desenho.numero-projeto`.
+- **Estado:** `IMPLEMENTADA`; automação `OPERACIONAL`.
+- **Citação exata:** CEMIG ND-3.1, Jul/2025, “Apresentação do Projeto”, item 2.4, página PDF
+  88, [fonte oficial](https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf).
+- **Aplicabilidade:** projeto com contexto urbano positivamente identificado.
+- **Fatos:** `rede.contexto_urbano`; `projeto.nota_servico`. O extrator aceita somente dez dígitos.
+- **Condição:** número válido presente resulta conforme; contexto conhecido sem número válido pode
+  resultar em divergência; contexto desconhecido é não avaliável.
+- **Exceções:** nenhuma na obrigação examinada.
+- **Testes:** presença válida, ausência e contexto desconhecido.
 
 ### Regra 2 - Formato de folha padronizado
 
-- **ID:** `nd31.desenho.formato`
-- **Processo de análise:** a Regra 2 consiste em ler, em projeto urbano, o formato informado no
-  cabeçalho/metadado e, quando necessário, inferir A1-A4 pelas dimensões físicas da página. Compara
-  o valor com o conjunto permitido `A1`, `A2`, `A3` e `A4`.
-- **Fatos:** `rede.contexto_urbano`; `projeto.formato_folha`.
-- **Condição/erro:** formato conhecido fora do conjunto gera possível divergência; formato ausente ou
-  contexto desconhecido gera não avaliável.
-- **Exceções:** nenhuma registrada.
-- **Fonte registrada no seed:** CEMIG ND-3.1, revisão Jul/2025, “Apresentação do Projeto”, item 2.3,
-  página 88, [URL registrada](https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf).
-  A Etapa 2 deve reconfirmar a fonte integral.
-- **Testes mínimos:** cada formato permitido; formato inválido; dado ausente.
+- **ID:** `nd31.desenho.formato`.
+- **Estado:** `IMPLEMENTADA`; automação `OPERACIONAL`.
+- **Citação exata:** CEMIG ND-3.1, Jul/2025, “Apresentação do Projeto”, item 2.3, página PDF
+  88, [fonte oficial](https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf).
+- **Aplicabilidade:** projeto urbano.
+- **Fatos:** `rede.contexto_urbano`; `projeto.formato_folha`, obtido de cabeçalho/metadado ou das
+  dimensões físicas da página.
+- **Condição:** `A1`, `A2`, `A3` ou `A4`; dado ausente é não avaliável.
+- **Exceções:** nenhuma na obrigação examinada.
+- **Testes:** formatos permitidos, formato inválido e dado ausente.
 
 ### Regra 3 - Escala urbana de apresentação
 
-- **ID:** `nd31.desenho.escala`
-- **Processo de análise:** a Regra 3 consiste em extrair, em projeto urbano, a escala do metadado ou
-  cabeçalho e verificar se pertence ao conjunto `1:1000` ou `1:500`.
-- **Fatos:** `rede.contexto_urbano`; `projeto.escala`.
-- **Condição/erro:** escala conhecida fora do conjunto gera possível divergência; escala ausente ou
-  contexto desconhecido gera não avaliável.
-- **Exceções:** o texto do seed menciona casos extraordinários, mas nenhuma exceção declarativa está
-  implementada. Até a revisão integral, esses casos exigem decisão humana.
-- **Fonte registrada no seed:** CEMIG ND-3.1, revisão Jul/2025, “Apresentação do Projeto”, item 2.1,
-  página 88, [URL registrada](https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf).
-  A Etapa 2 deve reconfirmar condições e exceções na fonte integral.
-- **Testes mínimos:** duas escalas aceitas; escala divergente; dado ausente; exceção não presumida.
+- **ID:** `nd31.desenho.escala`.
+- **Estado:** `AGUARDA_FATO`; registro preservado, porém `INATIVA` após a revisão integral.
+- **Citação exata:** CEMIG ND-3.1, Jul/2025, “Apresentação do Projeto”, item 2.1, página PDF
+  88, [fonte oficial](https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf).
+- **Aplicabilidade:** projeto urbano ordinário.
+- **Fatos:** `rede.contexto_urbano`; `projeto.escala`; faltam
+  `projeto.escala_500_caso_extraordinario` e `projeto.escala_orgao_externo_aplicavel`.
+- **Condição:** a regra geral usa 1:1000. A revisão constatou que 1:500 depende de caso urbano
+  extraordinário e que órgãos externos podem determinar outra escala.
+- **Exceções:** caso extraordinário e escala indicada pelo órgão competente precisam de prova
+  positiva. Sem esses fatos, uma divergência automática poderia ser falsa.
+- **Testes antes de reativar:** regra geral, cada exceção, escala inválida e fatos ausentes.
 
 ### Regra 4 - Equipamento em estrutura de ângulo
 
-- **ID:** `nd31.equipamento.estrutura-angulo`
-- **Processo de análise:** a Regra 4 consiste em identificar, em cada região, equipamento a instalar
-  e sua classe. Para equipamento diferente de chave fusível, precisa calcular o ângulo da conexão e
-  verificar se ele é menor ou igual a 30 graus.
+- **ID:** `nd31.equipamento.estrutura-angulo`.
+- **Estado:** `IMPLEMENTADA`; automação `AGUARDA_FATO`.
+- **Citação exata:** CEMIG ND-3.1, Jul/2025, “Dimensionamento Mecânico”, observação j,
+  páginas PDF 66–67, [fonte oficial](https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf).
+- **Aplicabilidade:** equipamento não fusível a instalar em região com conexão reconhecida.
 - **Fatos:** `regiao.equipamento_instalar`; `regiao.equipamento_classe`;
   `conexao.angulo_graus`.
-- **Condição/erro:** equipamento não fusível aplicável com ângulo acima do limite gera possível
-  divergência. Sem ângulo confiável, retorna não avaliável.
-- **Exceções:** chave fusível fica fora da aplicabilidade registrada.
-- **Fonte registrada no seed:** CEMIG ND-3.1, revisão Jul/2025, “Dimensionamento Mecânico”, observação
-  j, página 66, [URL registrada](https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf).
-  A Etapa 2 deve reconfirmar texto, contexto e página.
-- **Automação pendente:** ainda não existe provedor de `conexao.angulo_graus`.
-- **Testes mínimos:** chave fusível; equipamento não fusível até/acima do limite; ângulo ausente.
+- **Condição:** deflexão acima de 30 graus produz possível divergência; ângulo ausente é não
+  avaliável.
+- **Exceções:** chave fusível fica fora da aplicabilidade; até 30 graus depende também da Regra 5.
+- **Testes:** chave fusível, até/acima do limite e ângulo ausente.
 
 ### Regra 5 - Avaliação de risco de abalroamento no ângulo
 
-- **ID:** `nd31.equipamento.risco-abalroamento`
-- **Processo de análise:** a Regra 5 consiste em procurar evidência da avaliação de risco para
-  equipamento não fusível a instalar com deflexão maior que zero e até 30 graus. O analisador usa
-  evidência textual próxima ao equipamento.
-- **Fatos:** `regiao.equipamento_instalar`; `regiao.equipamento_classe`;
-  `conexao.angulo_graus`; `regiao.risco_abalroamento_avaliado`.
-- **Condição/erro:** quando a regra é aplicável e não existe prova da avaliação, gera possível
-  divergência. Sem ângulo confiável, retorna não avaliável.
-- **Exceções:** chave fusível fica fora da aplicabilidade registrada.
-- **Fonte registrada no seed:** CEMIG ND-3.1, revisão Jul/2025, “Dimensionamento Mecânico”, observação
-  j, página 67, [URL registrada](https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf).
-  A Etapa 2 deve reconciliar esta página com a usada pela Regra 4.
-- **Automação pendente:** o fato de risco textual existe, mas o ângulo ainda não é produzido.
-- **Testes mínimos:** avaliação presente/ausente; chave fusível; ângulos fora da faixa; ângulo ausente.
+- **ID:** `nd31.equipamento.risco-abalroamento`.
+- **Estado:** `IMPLEMENTADA`; automação `AGUARDA_FATO`.
+- **Citação exata:** CEMIG ND-3.1, Jul/2025, “Dimensionamento Mecânico”, observação j,
+  páginas PDF 66–67, [fonte oficial](https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf).
+- **Aplicabilidade:** equipamento não fusível a instalar, com deflexão maior que zero e de até 30
+  graus.
+- **Fatos:** os da Regra 4 e `regiao.risco_abalroamento_avaliado`.
+- **Condição:** evidência positiva permite concluir conforme. A falta de evidência publicada é não
+  avaliável, pois não comprova que a avaliação inexiste.
+- **Exceções:** chave fusível e conexões fora da faixa declarada.
+- **Testes:** evidência presente, ausente, chave fusível, faixa e ângulo desconhecido.
 
 ### Regra 6 - Vão máximo de rede compacta ou isolada urbana
 
-- **ID:** `nd31.vao.urbano-compacto-isolado`
-- **Processo de análise:** a Regra 6 consiste em obter, em região urbana com cabo de tecnologia
-  protegida ou isolada, o comprimento do vão e verificar o limite ordinário de 45 metros. Uma exceção
-  só suspende a regra quando suas condições estiverem positivamente demonstradas.
+- **ID:** `nd31.vao.urbano-compacto-isolado`.
+- **Estado:** `IMPLEMENTADA`; automação `AGUARDA_FATO`.
+- **Citação exata:** CEMIG ND-3.1, Jul/2025, “Locação de Postes”, item 3, alíneas b e c,
+  página PDF 27, [fonte oficial](https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf).
+- **Aplicabilidade:** região urbana com cabo protegido ou isolado.
 - **Fatos:** `rede.contexto_urbano`; `cabo.tecnologia`; `vao.comprimento_m`;
   `vao.excecao_45_60_demonstrada`.
-- **Condição/erro:** vão aplicável acima de 45 metros, sem exceção comprovada, gera possível
-  divergência. Comprimento ausente gera não avaliável.
-- **Exceções:** exceção de 45-60 metros somente com evidência positiva; ausência não é tratada como
-  `false` inventado.
-- **Fonte registrada no seed:** CEMIG ND-3.1, revisão Jul/2025, “Locação de Postes”, item 3, alíneas b
-  e c, página 26,
-  [URL registrada](https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf). A Etapa 2
-  deve reconfirmar tecnologia, contexto e condições da exceção.
-- **Automação pendente:** `detectar_vaos` já calcula comprimentos, mas ainda não publica o fato para a
-  região; isso está previsto na Etapa 6.
-- **Testes mínimos:** comprimento abaixo/no/acima do limite; tecnologia não aplicável; exceção
-  comprovada; comprimento ausente.
+- **Condição:** limite ordinário de 45 m. Sem comprimento rastreável, o resultado é não avaliável.
+- **Exceções:** 45–60 m somente com contexto periférico/baixa densidade ou chácaras, perfil favorável
+  e demais condições positivamente demonstradas.
+- **Histórico:** localizador corrigido de página 26 para 27 em 12/08/2026, sem mudar a obrigação.
+- **Testes:** abaixo/no/acima do limite, tecnologia não aplicável, exceção e comprimento ausente.
 
-## Modelo para a próxima regra
+### Regra 7 - Cabo nu convencional em obra nova urbana
 
-```text
-### Regra N - Título humano
+- **ID:** `nd31.cabo.convencional-novo-urbano`.
+- **Estado:** `IMPLEMENTADA`; automação `OPERACIONAL`.
+- **Citação exata:** CEMIG ND-3.1, Jul/2025, “Tipos de Rede e Critérios de Aplicação”, item
+  1.1.3, página PDF 18, [fonte oficial](https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf).
+- **Aplicabilidade:** cabo catalogado como instalação em região urbana confirmada.
+- **Fatos:** `rede.contexto_urbano`; `cabo.instalar_tecnologia`. O fato novo mantém a situação da
+  proposta associada à tecnologia, sem misturar cabo existente e cabo novo da mesma região.
+- **Condição:** qualquer instalação com tecnologia `CONVENCIONAL_CA`, `CONVENCIONAL_CA_CAA` ou
+  `CONVENCIONAL_CAA` produz possível divergência; protegida ou isolada resulta conforme.
+- **Exceções:** reparo com cabo nu. Propostas `EXISTENTE` ou `REMOVER` não publicam o fato de
+  instalação; contexto não urbano fica fora da regra.
+- **Testes:** conforme, divergência, tecnologia ausente e contexto não urbano/reparo.
 
-- ID:
-- Estado no registro:
-- Estado de automação:
-- Processo de análise:
-- Fatos:
-- Aplicabilidade:
-- Condição/erro:
-- Exceções:
-- Fonte oficial: documento, revisão, item, página e URL.
-- Evidência/localização esperada no PDF:
-- Testes mínimos: conforme, divergência, não avaliável e exceções.
-- Histórico: data, revisão anterior/substituída e motivo.
-```
+### Regra 8 - Estrutura compacta rural incompatível com poste duplo T
+
+- **ID:** `nd93.compatibilidade.estrutura-poste-duplo-t`.
+- **Estado:** `IMPLEMENTADA`; automação `OPERACIONAL` no pareamento inequívoco.
+- **Citação exata:** CEMIG ND-9.3, Set/2021, “Instalações Básicas de Rede Compacta em Áreas
+  Rurais”, seção “Estruturas”, nota 2, página PDF 43,
+  [fonte oficial](https://www.cemig.com.br/wp-content/uploads/2025/10/ND-9.3-programa-minas-trifasico.pdf).
+- **Aplicabilidade:** região rural confirmada com exatamente uma estrutura MT a instalar de código
+  `CE1`, `CE1S`, `CEJ1`, `CEJ2` ou `CEM4` e exatamente um poste não removido.
+- **Fatos:** `rede.contexto_rural`; `regiao.estrutura_mt_instalar_codigo`;
+  `regiao.poste_ativo_formato`.
+- **Condição:** formato `DUPLO_T` produz possível divergência; outro formato resulta conforme.
+- **Exceções:** estrutura fora da lista, contexto não rural ou associação ambígua. Ambiguidade não
+  publica os fatos de compatibilidade e retorna não avaliável.
+- **Testes:** poste circular, poste duplo T, poste ausente/ambíguo e contexto não rural.
+
+## Matriz de candidatos da revisão integral
+
+Os localizadores abaixo são citações bibliográficas exatas; as descrições são paráfrases curtas. Um
+candidato `IMPLEMENTADA` aponta para a regra correspondente. Os demais não produzem divergência.
+
+| Candidato e tema | Citação exata | Aplicabilidade | Exceções/condições | Fatos necessários | Estado |
+|---|---|---|---|---|---|
+| `DOC-01` conjunto documental | ND-3.1 Jul/2025, Apresentação do Projeto, item 1, p. 88 | todo projeto urbano | complementares somente quando cabíveis | desenho, relação de materiais/orçamento, memória elétrica e mecânica, tipo de complemento | AGUARDA_FATO |
+| `DOC-02` detalhes do desenho | ND-3.1 Jul/2025, Apresentação do Projeto, itens 2.5–2.7, pp. 88–93 | conforme o tipo de obra e travessia | detalhes variam por instalação e órgão | campos estruturados, geometria, travessia, validade e autoria | REVISAO_HUMANA |
+| `LIM-01` escala e suas exceções | ND-3.1 Jul/2025, Apresentação do Projeto, item 2.1, p. 88 | projeto urbano | caso extraordinário ou escala de órgão competente | escala, tipo do caso, órgão e determinação documental | AGUARDA_FATO |
+| `POST-01` comprimento mínimo em expansão | ND-3.1 Jul/2025, Dimensionamento Mecânico, item 1.2, p. 59 | poste novo em projeto de expansão | situações que exigem poste maior; instalações sem previsão de MT têm arranjo próprio | tipo de projeto, poste associado, altura, previsão MT e situação especial | AGUARDA_FATO |
+| `STRUCT-01` escolha por esforço/ângulo | ND-3.1 Jul/2025, Dimensionamento Mecânico, item 2 e tabelas 22–33, pp. 70–78 | estrutura urbana dimensionada | rede, cabo, seção, tensão, direção e ancoragem alteram a tabela | estrutura, pares de vãos, ângulos, cabo, poste, vento e esforços | AGUARDA_FATO |
+| `CABLE-01` cabo nu em instalação urbana | ND-3.1 Jul/2025, Tipos de Rede, item 1.1.3, p. 18 | obra nova urbana | reparo | contexto e tecnologia por proposta de instalação | IMPLEMENTADA — Regra 7 |
+| `EQUIP-01` equipamento em ângulo | ND-3.1 Jul/2025, Dimensionamento Mecânico, observação j, pp. 66–67 | equipamento não fusível a instalar | chave fusível; até 30° exige avaliação de abalroamento | classe, situação, conexão, ângulo e avaliação | IMPLEMENTADA — Regras 4 e 5 |
+| `PROT-01` proteção de transformador e elo | ND-3.1 Jul/2025, Dimensionamento Elétrico, item 2.2.7 e Tabela 8, pp. 48–51; ND-4.15 Nov/2017, capítulos 5–8, pp. 20–74 | rede MT e dispositivo especificados | filosofia, carga, inrush, curto e coordenação mudam o ajuste | topologia, potência, tensão, correntes, curvas, dispositivos a montante/jusante | AGUARDA_FATO |
+| `GROUND-01` aterramento urbano | ND-3.1 Jul/2025, Dimensionamento Elétrico, item 7, p. 57 | neutro, rede compacta/isolada e equipamentos conforme o caso | para-raios e pontos já existentes alteram o arranjo | continuidade, distância acumulada, hastes, mensageiro, neutro, equipamento e conexão | AGUARDA_FATO |
+| `SPAN-U01` vão urbano compacto/isolado | ND-3.1 Jul/2025, Locação de Postes, item 3, p. 27 | rede urbana protegida/isolada | faixa 45–60 m com fatos positivos | contexto, tecnologia, comprimento, perfil e exceção | IMPLEMENTADA — Regra 6 |
+| `SPAN-R01` vãos rurais | ND-9.3 Set/2021, Projetos de RDP Compactas em Áreas Rurais, seção “Vão”, itens 1–5 e Tabelas 2–3, pp. 24–25 | rede rural compacta | travessia, topografia, compartilhamento e análise técnica | cabo/seção, poste/altura/resistência, relevo, ângulo, compartilhamento e cálculo mecânico | AGUARDA_FATO |
+| `RURAL-01` contexto e traçado | ND-9.3 Set/2021, capítulos 5–7, pp. 19–40 | projeto do Programa Minas Trifásico | urbano, faixa de domínio, licenciamento e planejamento alteram o fluxo | classificação rural/urbana, traçado, servidão, relevo, vento, demanda e autorizações | REVISAO_HUMANA |
+| `COMP-01` estruturas compactas e poste duplo T | ND-9.3 Set/2021, capítulo 8, “Estruturas”, nota 2, p. 43 | estrutura compacta indicada em região rural | códigos fora da lista e associação ambígua | contexto, estrutura instalada e formato do poste associado | IMPLEMENTADA — Regra 8 |
+| `COMP-02` matriz estrutura–cabo | ND-2.7 Nov/2016, capítulos 3–10, pp. 27–121; ND-2.9 Jun/2016, capítulos 3–12, pp. 19–114 | instalação isolada ou compacta específica | desenhos, nível, fase, seção, derivação, transição e equipamento | IDs normativos, relação elemento–região e matriz oficial normalizada | AGUARDA_FATO |
+| `TOPO-01` coordenação e seletividade | ND-4.15 Nov/2017, capítulos 5–8, pp. 20–74 | sistema MT com proteção em série | filosofia e dispositivos variam por alimentador | grafo elétrico, correntes de falta/carga, curvas, ajustes e sequência operacional | REVISAO_HUMANA |
+| `CALC-01` queda de tensão | ND-3.1 Jul/2025, Dimensionamento Elétrico, item 3 e tabelas 10–14, pp. 52–55 | circuito dimensionado | limite depende de subestação AT/MT e cenário de carga/geração | topologia, demanda, distância, condutor, transformador, tensão e cenário | AGUARDA_FATO |
+| `ABS-01` reprovar por ausência de carimbo, assinatura visual ou símbolo não detectado | ND-3.1 Jul/2025, Apresentação do Projeto, pp. 88–93 | não estabelecida de forma universal pelo detector | autenticidade, formato e exigência contratual variam | seria necessário provar obrigação e cobertura do detector | DESCARTADA |
+
+## Regra para futuras incorporações
+
+Uma entrada `AGUARDA_FATO` só avança após o fato preservar unidade, situação, alvo, associação e
+proveniência. Depois são exigidos casos sintéticos de conforme, divergência, não avaliável e cada
+exceção aplicável, além da paridade automática entre este catálogo e o registro.

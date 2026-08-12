@@ -99,7 +99,12 @@ O incremento atual deriva:
 - todos os pares rotulados do quadro de servidão, além da menção a servidão/faixa de domínio;
 - candidatos a carimbo em anotações PDF `Stamp`, sem afirmar autenticidade;
 - campos PDF `/Sig`, distinguindo campo preenchido, campo vazio e mero rótulo visual;
-- tecnologia do cabo e classe do equipamento resolvidas pelo catálogo;
+- tecnologia de todos os cabos e, separadamente, tecnologia dos cabos a instalar, preservando a
+  situação da proposta;
+- contexto urbano ou rural somente quando confirmado pelo tipo de serviço;
+- código da estrutura MT a instalar e formato do poste associado quando a região contém um único
+  par inequívoco;
+- classe do equipamento resolvida pelo catálogo;
 - notas próximas que demonstrem avaliação de abalroamento.
 
 A análise semântica também produz a projeção `VaoDetectado` quando uma polilinha de cabo possui
@@ -112,28 +117,35 @@ detector ativo.
 
 ## Regras normativas iniciais
 
-O registro `cemig-nd31-2025.2` começa pequeno e conservador:
+O registro `cemig-normas-distribuicao-2025.3` permanece pequeno e conservador após a revisão
+integral da Etapa 2:
 
 | Tema | Fatos necessários | Resultado possível |
 |---|---|---|
 | Número do projeto | NS de 10 dígitos | presença ou possível divergência |
 | Formato | A1, A2, A3 ou A4 | conforme, divergência ou não avaliável |
-| Escala | 1:1000 ou 1:500 | candidato; exceções de órgãos externos exigem contexto futuro |
+| Escala | escala, caso extraordinário e eventual órgão competente | regra inativa até as exceções terem fatos positivos |
 | Equipamento em ângulo | equipamento, classe e ângulo | acima de 30° diverge; chave fusível é exceção |
 | Risco de abalroamento | equipamento não fusível, ângulo até 30° e nota de avaliação | presença obrigatória |
 | Vão urbano compacto/isolado | contexto, tecnologia e comprimento | máximo ordinário de 45 m |
 | Exceção de vão | área periférica/baixa densidade/chácaras e perfil favorável | suspende a regra ordinária |
+| Cabo novo urbano | contexto e tecnologia da proposta `INSTALAR` | cabo nu convencional diverge; reparo não é reclassificado |
+| Estrutura/poste rural | contexto, código da estrutura e formato do único poste associado | CE1/CE1S/CEJ1/CEJ2/CEM4 divergem em duplo T |
 
 A ND-3.1 trata redes urbanas. Limites de redes rurais não devem reutilizar essas regras: a ND-9.3,
 por exemplo, contém tabelas dependentes de cabo, altura e resistência do poste. A mesma cautela vale
 para os ângulos admissíveis das estruturas, que variam com modalidade de rede, tensão, seção,
 estrutura e direção da deflexão.
 
-Fontes oficiais consultadas:
+O inventário de fontes, hashes, páginas e decisões está em
+`docs/inventario-fontes-normativas.md`. Fontes oficiais lidas integralmente:
 
 - [página de normas técnicas de redes de distribuição da CEMIG](https://www.cemig.com.br/normas-tecnicas/normas-tecnicas-de-redes-de-distribuicao/);
+- [ND-2.7 — Instalações Básicas de Redes de Distribuição Aéreas Isoladas, Nov/2016](https://www.cemig.com.br/wp-content/uploads/2025/10/nd_2_7-1.pdf);
+- [ND-2.9 — Instalações Básicas de Redes de Distribuição Compactas, Jun/2016](https://www.cemig.com.br/wp-content/uploads/2025/10/ND_2-9-Instalacoes_Basicas_RD_Compactas.pdf);
 - [ND-3.1 — Projetos de Redes de Distribuição Aéreas Urbanas, Jul/2025](https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf);
-- [ND-9.3 — Programa Minas Trifásico](https://www.cemig.com.br/wp-content/uploads/2022/03/ND-9.3-programa-minas-trifasico.pdf).
+- [ND-4.15 — Proteção de Sobrecorrentes, Nov/2017](https://www.cemig.com.br/wp-content/uploads/2025/10/nd_4_15_000001p.pdf);
+- [ND-9.3 — Programa Minas Trifásico, Set/2021](https://www.cemig.com.br/wp-content/uploads/2025/10/ND-9.3-programa-minas-trifasico.pdf).
 
 ## Registro configurável e catálogo de fatos
 

@@ -6,6 +6,8 @@ from decimal import Decimal
 from pathlib import Path
 from uuid import UUID, uuid4, uuid5
 
+import pytest
+
 from zeny_project_handler.adapters.catalog import carregar_catalogo_inicial
 from zeny_project_handler.adapters.compliance import (
     JsonComplianceRuleRegistry,
@@ -25,7 +27,12 @@ from zeny_project_handler.domain.analysis import (
     OrigemObjetoPdf,
     PropostaElemento,
 )
-from zeny_project_handler.domain.catalog import JsonPrimitive, TipoCabo
+from zeny_project_handler.domain.catalog import (
+    JsonPrimitive,
+    TipoCabo,
+    TipoEstruturaMt,
+    TipoPoste,
+)
 from zeny_project_handler.domain.compliance import (
     AlvoConformidade,
     FatoConformidade,
@@ -69,6 +76,8 @@ def test_initial_compliance_registry_is_stable_and_externalizable() -> None:
         "nd31.desenho.numero-projeto",
         "nd31.equipamento.estrutura-angulo",
         "nd31.vao.urbano-compacto-isolado",
+        "nd31.cabo.convencional-novo-urbano",
+        "nd93.compatibilidade.estrutura-poste-duplo-t",
     }
 
 
@@ -261,6 +270,7 @@ def test_region_facts_preserve_semantic_order_and_deterministic_ids() -> None:
         "rede.contexto_urbano",
         "regiao.risco_abalroamento_avaliado",
         "cabo.tecnologia",
+        "cabo.instalar_tecnologia",
     ]
     assert len({fact.id for fact in first}) == len(first)
     assert next(
@@ -272,7 +282,236 @@ def test_region_facts_preserve_semantic_order_and_deterministic_ids() -> None:
         True,
         True,
         "PROTEGIDA",
+        "PROTEGIDA",
     ]
+
+
+def test_installation_cable_fact_does_not_reclassify_existing_cable_as_new_work() -> None:
+    session = _session_with_document_controls()
+    cable = next(
+        item
+        for item in session.propostas
+        if isinstance(item, PropostaElemento) and item.categoria is CategoriaElemento.CABO
+    )
+    session = replace(
+        session,
+        propostas=tuple(
+            replace(item, situacao_projeto=SituacaoProjeto.EXISTENTE)
+            if isinstance(item, PropostaElemento) and item.id == cable.id
+            else item
+            for item in session.propostas
+        ),
+    )
+    region = session.regioes[0]
+    target = AlvoConformidade(
+        id=uuid5(region.id, "characterization:region"),
+        tipo=TipoEscopoConformidade.REGIAO,
+        rotulo="Região caracterizada",
+        referencia_id=region.id,
+        pagina_id=region.pagina_id,
+        geometria=region.geometria,
+    )
+
+    facts = _region_facts(session, region_targets={region.id: target})
+
+    assert any(item.chave == "cabo.tecnologia" for item in facts)
+    assert all(item.chave != "cabo.instalar_tecnologia" for item in facts)
+
+
+def test_region_facts_publish_unambiguous_rural_structure_post_compatibility() -> None:
+    session = _session_with_document_controls()
+    catalog = session.catalogo
+    page_id = session.projeto.documentos[0].paginas[0].id
+    execution = session.execucoes[0]
+    structure_item = next(
+        item
+        for item in catalog.itens_ativos(CategoriaElemento.ESTRUTURA_MT)
+        if isinstance(item, TipoEstruturaMt) and item.codigo == "CE1"
+    )
+    double_t_option = next(
+        option.id
+        for group in catalog.grupos_opcao
+        if group.chave == "formato_poste"
+        for option in group.opcoes
+        if option.codigo == "DUPLO_T"
+    )
+    pole_item = next(
+        item
+        for item in catalog.itens_ativos(CategoriaElemento.POSTE)
+        if isinstance(item, TipoPoste) and item.formato_opcao_id == double_t_option
+    )
+    structure_evidence = _text_evidence(execution.id, page_id, "CE1", "0.30", "0.32")
+    pole_evidence = _text_evidence(execution.id, page_id, "POSTE DUPLO T", "0.31", "0.32")
+    structure = PropostaElemento(
+        id=uuid4(),
+        execucao_id=execution.id,
+        categoria=CategoriaElemento.ESTRUTURA_MT,
+        situacao_projeto=SituacaoProjeto.INSTALAR,
+        estado_revisao=EstadoRevisao.CONFIRMADA,
+        evidencia_ids=(structure_evidence.id,),
+        geometria=GeometriaDocumento.ponto(
+            page_id,
+            PontoNormalizado(Decimal("0.30"), Decimal("0.32")),
+        ),
+        tipo_catalogo_sugerido_id=structure_item.id,
+        codigo_observado=structure_item.codigo,
+        confianca=Decimal("0.99"),
+    )
+    pole = PropostaElemento(
+        id=uuid4(),
+        execucao_id=execution.id,
+        categoria=CategoriaElemento.POSTE,
+        situacao_projeto=SituacaoProjeto.EXISTENTE,
+        estado_revisao=EstadoRevisao.CONFIRMADA,
+        evidencia_ids=(pole_evidence.id,),
+        geometria=GeometriaDocumento.ponto(
+            page_id,
+            PontoNormalizado(Decimal("0.31"), Decimal("0.32")),
+        ),
+        tipo_catalogo_sugerido_id=pole_item.id,
+        codigo_observado=pole_item.codigo,
+        confianca=Decimal("0.99"),
+    )
+    region = replace(session.regioes[0], elemento_ids=(structure.id, pole.id))
+    session = replace(
+        session,
+        projeto=replace(
+            session.projeto,
+            metadados=MetadadosProjeto(tipo_servico="Rede rural"),
+        ),
+        propostas=(structure, pole),
+        regioes=(region,),
+        evidencias=(*session.evidencias, structure_evidence, pole_evidence),
+    )
+    target = AlvoConformidade(
+        id=uuid5(region.id, "characterization:region"),
+        tipo=TipoEscopoConformidade.REGIAO,
+        rotulo="Região rural caracterizada",
+        referencia_id=region.id,
+        pagina_id=region.pagina_id,
+        geometria=region.geometria,
+    )
+
+    facts = _region_facts(session, region_targets={region.id: target})
+
+    assert {(item.chave, item.valor) for item in facts} >= {
+        ("rede.contexto_rural", True),
+        ("regiao.estrutura_mt_instalar_codigo", "CE1"),
+        ("regiao.poste_ativo_formato", "DUPLO_T"),
+    }
+
+    second_pole = replace(pole, id=uuid4())
+    ambiguous_region = replace(
+        region,
+        elemento_ids=(structure.id, pole.id, second_pole.id),
+    )
+    ambiguous_session = replace(
+        session,
+        propostas=(structure, pole, second_pole),
+        regioes=(ambiguous_region,),
+    )
+    ambiguous_target = replace(
+        target,
+        referencia_id=ambiguous_region.id,
+        pagina_id=ambiguous_region.pagina_id,
+        geometria=ambiguous_region.geometria,
+    )
+
+    ambiguous_facts = _region_facts(
+        ambiguous_session,
+        region_targets={ambiguous_region.id: ambiguous_target},
+    )
+
+    assert all(
+        item.chave not in {"regiao.estrutura_mt_instalar_codigo", "regiao.poste_ativo_formato"}
+        for item in ambiguous_facts
+    )
+
+
+@pytest.mark.parametrize(
+    ("rule_id", "fact_values", "expected"),
+    [
+        (
+            "nd31.cabo.convencional-novo-urbano",
+            (("rede.contexto_urbano", True), ("cabo.instalar_tecnologia", "PROTEGIDA")),
+            "CONFORME",
+        ),
+        (
+            "nd31.cabo.convencional-novo-urbano",
+            (
+                ("rede.contexto_urbano", True),
+                ("cabo.instalar_tecnologia", "CONVENCIONAL_CA"),
+            ),
+            "DIVERGENCIA",
+        ),
+        (
+            "nd31.cabo.convencional-novo-urbano",
+            (("rede.contexto_urbano", True),),
+            "NAO_AVALIAVEL",
+        ),
+        (
+            "nd31.cabo.convencional-novo-urbano",
+            (
+                ("rede.contexto_urbano", False),
+                ("cabo.instalar_tecnologia", "CONVENCIONAL_CA"),
+            ),
+            None,
+        ),
+        (
+            "nd93.compatibilidade.estrutura-poste-duplo-t",
+            (
+                ("rede.contexto_rural", True),
+                ("regiao.estrutura_mt_instalar_codigo", "CE1"),
+                ("regiao.poste_ativo_formato", "CIRCULAR"),
+            ),
+            "CONFORME",
+        ),
+        (
+            "nd93.compatibilidade.estrutura-poste-duplo-t",
+            (
+                ("rede.contexto_rural", True),
+                ("regiao.estrutura_mt_instalar_codigo", "CEM4"),
+                ("regiao.poste_ativo_formato", "DUPLO_T"),
+            ),
+            "DIVERGENCIA",
+        ),
+        (
+            "nd93.compatibilidade.estrutura-poste-duplo-t",
+            (
+                ("rede.contexto_rural", True),
+                ("regiao.estrutura_mt_instalar_codigo", "CEJ2"),
+            ),
+            "NAO_AVALIAVEL",
+        ),
+        (
+            "nd93.compatibilidade.estrutura-poste-duplo-t",
+            (
+                ("rede.contexto_rural", False),
+                ("regiao.estrutura_mt_instalar_codigo", "CE1"),
+                ("regiao.poste_ativo_formato", "DUPLO_T"),
+            ),
+            None,
+        ),
+    ],
+)
+def test_new_normative_rules_cover_conformity_divergence_unknown_and_context_exception(
+    rule_id: str,
+    fact_values: tuple[tuple[str, JsonPrimitive], ...],
+    expected: str | None,
+) -> None:
+    target = AlvoConformidade(
+        id=uuid4(),
+        tipo=TipoEscopoConformidade.REGIAO,
+        rotulo="Região sintética",
+    )
+    findings = avaliar_regras_conformidade(
+        carregar_registro_conformidade_inicial(),
+        (target,),
+        tuple(_fact(target.id, key, value) for key, value in fact_values),
+    )
+    finding = next((item for item in findings if item.regra_id == rule_id), None)
+
+    assert (finding.resultado.value if finding else None) == expected
 
 
 def test_compliance_requires_collision_review_and_honors_documented_span_exception() -> None:
@@ -299,7 +538,7 @@ def test_compliance_requires_collision_review_and_honors_documented_span_excepti
     by_rule = {item.regra_id: item.resultado.value for item in findings}
 
     assert by_rule["nd31.equipamento.estrutura-angulo"] == "CONFORME"
-    assert by_rule["nd31.equipamento.risco-abalroamento"] == "DIVERGENCIA"
+    assert by_rule["nd31.equipamento.risco-abalroamento"] == "NAO_AVALIAVEL"
     assert "nd31.vao.urbano-compacto-isolado" not in by_rule
 
 
@@ -316,7 +555,7 @@ def test_unknown_project_context_is_not_reported_as_normative_divergence() -> No
         (),
     )
 
-    assert len(findings) == 3
+    assert len(findings) == 2
     assert {item.resultado.value for item in findings} == {"NAO_AVALIAVEL"}
 
 

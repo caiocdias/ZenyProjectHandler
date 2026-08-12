@@ -114,7 +114,11 @@ def test_decimal_expected_value_remains_a_schema_number_on_export() -> None:
     payload = _seed_payload()
     rules = payload["rules"]
     assert isinstance(rules, list)
-    span_rule = rules[-1]
+    span_rule = next(
+        item
+        for item in rules
+        if isinstance(item, dict) and item.get("id") == "nd31.vao.urbano-compacto-isolado"
+    )
     assert isinstance(span_rule, dict)
     must = span_rule["must"]
     assert isinstance(must, list)
@@ -128,7 +132,11 @@ def test_decimal_expected_value_remains_a_schema_number_on_export() -> None:
 
     exported_rules = exported["rules"]
     assert isinstance(exported_rules, list)
-    exported_span = exported_rules[-1]
+    exported_span = next(
+        item
+        for item in exported_rules
+        if isinstance(item, dict) and item.get("id") == "nd31.vao.urbano-compacto-isolado"
+    )
     assert isinstance(exported_span, dict)
     exported_must = exported_span["must"]
     assert isinstance(exported_must, list)

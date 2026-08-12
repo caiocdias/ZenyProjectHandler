@@ -2,7 +2,7 @@
   "schema_version": 1,
   "registry": {
     "id": "710c56ea-8586-5cdd-a272-f885ab93ac73",
-    "version": "cemig-nd31-2025.2"
+    "version": "cemig-normas-distribuicao-2025.3"
   },
   "rules": [
     {
@@ -93,7 +93,7 @@
           "expected": ["1:1000", "1:500"]
         }
       ],
-      "enabled": true
+      "enabled": false
     },
     {
       "id": "nd31.equipamento.estrutura-angulo",
@@ -171,8 +171,8 @@
       "must": [
         {
           "fact": "regiao.risco_abalroamento_avaliado",
-          "operator": "EXISTE",
-          "expected": []
+          "operator": "IGUAL",
+          "expected": [true]
         }
       ],
       "enabled": true
@@ -187,7 +187,7 @@
         "document": "CEMIG ND-3.1",
         "revision": "Jul/2025",
         "item": "Locação de Postes, 3, alíneas b e c",
-        "page": 26,
+        "page": 27,
         "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
       },
       "when": [
@@ -215,6 +215,74 @@
           "fact": "vao.comprimento_m",
           "operator": "MENOR_OU_IGUAL",
           "expected": [45]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.cabo.convencional-novo-urbano",
+      "title": "Cabo nu convencional em obra nova urbana",
+      "description": "Cabos nus convencionais não devem compor instalação nova em área urbana; reparos não são publicados como instalação nova por este provedor.",
+      "scope": "REGIAO",
+      "severity": "ERRO",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Tipos de Rede e Critérios de Aplicação, 1.1.3",
+        "page": 18,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "rede.contexto_urbano",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "cabo.instalar_tecnologia",
+          "operator": "NAO_EM",
+          "expected": ["CONVENCIONAL_CA", "CONVENCIONAL_CA_CAA", "CONVENCIONAL_CAA"],
+          "quantifier": "TODOS"
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd93.compatibilidade.estrutura-poste-duplo-t",
+      "title": "Estrutura compacta rural incompatível com poste duplo T",
+      "description": "Em área rural, estruturas CE1, CE1S, CEJ1, CEJ2 e CEM4 a instalar não podem ser associadas a poste de concreto duplo T.",
+      "scope": "REGIAO",
+      "severity": "ERRO",
+      "source": {
+        "document": "CEMIG ND-9.3",
+        "revision": "Set/2021",
+        "item": "Instalações Básicas de Rede Compacta em Áreas Rurais, Estruturas, nota 2",
+        "page": 43,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND-9.3-programa-minas-trifasico.pdf"
+      },
+      "when": [
+        {
+          "fact": "rede.contexto_rural",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "regiao.estrutura_mt_instalar_codigo",
+          "operator": "EM",
+          "expected": ["CE1", "CE1S", "CEJ1", "CEJ2", "CEM4"],
+          "quantifier": "QUALQUER"
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "regiao.poste_ativo_formato",
+          "operator": "NAO_EM",
+          "expected": ["DUPLO_T"],
+          "quantifier": "TODOS"
         }
       ],
       "enabled": true

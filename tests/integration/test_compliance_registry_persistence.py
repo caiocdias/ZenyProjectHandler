@@ -179,11 +179,11 @@ def test_export_is_schema_compatible_and_revision_rows_are_not_duplicated(tmp_pa
     upgrade_database(engine)
     service = _service(engine, tmp_path / "data", _Clock())
     service.inicializar(carregar_registro_conformidade_inicial())
-    service.definir_regra_ativa("nd31.desenho.escala", ativa=False)
+    service.definir_regra_ativa("nd31.desenho.formato", ativa=False)
     exported = service.exportar(tmp_path / "out" / "registry.json")
 
     loaded = registro_conformidade_de_dict(json.loads(exported.read_text(encoding="utf-8")))
-    assert not next(item for item in loaded.regras if item.id == "nd31.desenho.escala").ativa
+    assert not next(item for item in loaded.regras if item.id == "nd31.desenho.formato").ativa
     with engine.connect() as connection:
         count = connection.scalar(select(func.count()).select_from(compliance_rule_revisions))
     assert count == 2

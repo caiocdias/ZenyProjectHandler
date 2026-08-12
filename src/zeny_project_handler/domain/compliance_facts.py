@@ -74,6 +74,13 @@ CATALOGO_FATOS_CONFORMIDADE = (
         "Indica contexto urbano confirmado para o projeto ou região.",
     ),
     _fact(
+        "rede.contexto_rural",
+        _REGION,
+        TipoValorFato.BOOLEANO,
+        _BOOLEANO,
+        "Indica contexto rural confirmado para a região.",
+    ),
+    _fact(
         "projeto.nota_servico",
         _PROJECT,
         TipoValorFato.TEXTO,
@@ -205,6 +212,27 @@ CATALOGO_FATOS_CONFORMIDADE = (
         TipoValorFato.TEXTO,
         _TEXTO,
         "Tecnologia catalogada do cabo reconhecido na região.",
+    ),
+    _fact(
+        "cabo.instalar_tecnologia",
+        _REGION,
+        TipoValorFato.TEXTO,
+        _TEXTO,
+        "Tecnologia catalogada de cada cabo reconhecido como instalação na região.",
+    ),
+    _fact(
+        "regiao.estrutura_mt_instalar_codigo",
+        _REGION,
+        TipoValorFato.TEXTO,
+        _TEXTO,
+        "Código da única estrutura de MT reconhecida como instalação na região.",
+    ),
+    _fact(
+        "regiao.poste_ativo_formato",
+        _REGION,
+        TipoValorFato.TEXTO,
+        _TEXTO,
+        "Formato do único poste reconhecido e não marcado para remoção na região.",
     ),
     _fact(
         "conexao.angulo_graus",
