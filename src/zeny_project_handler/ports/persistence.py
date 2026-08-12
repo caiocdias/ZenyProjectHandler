@@ -15,6 +15,10 @@ from zeny_project_handler.domain.analysis import (
     ReferenciaProposta,
 )
 from zeny_project_handler.domain.catalog import CatalogoTecnico
+from zeny_project_handler.domain.compliance import (
+    NumeroRegraConformidade,
+    RevisaoRegistroConformidade,
+)
 from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler.ports.pdf import FontePdfRepositoryPort
 
@@ -87,6 +91,28 @@ class ReviewDecisionRepositoryPort(Protocol):
     def salvar(self, decision: DecisaoRevisao) -> None: ...
 
 
+class ComplianceRuleRegistryRepositoryPort(Protocol):
+    def obter_ativa(self) -> RevisaoRegistroConformidade | None: ...
+
+    def obter_por_assinatura(self, assinatura: str) -> RevisaoRegistroConformidade | None: ...
+
+    def listar_revisoes(self) -> tuple[RevisaoRegistroConformidade, ...]: ...
+
+    def salvar_ativa(
+        self,
+        revisao: RevisaoRegistroConformidade,
+    ) -> RevisaoRegistroConformidade: ...
+
+    def listar_numeros(self) -> tuple[NumeroRegraConformidade, ...]: ...
+
+    def reservar_numeros(
+        self,
+        regra_ids: tuple[str, ...],
+        *,
+        atribuido_em: datetime,
+    ) -> tuple[NumeroRegraConformidade, ...]: ...
+
+
 class UnitOfWorkPort(Protocol):
     @property
     def catalogos(self) -> CatalogRepositoryPort: ...
@@ -111,6 +137,9 @@ class UnitOfWorkPort(Protocol):
 
     @property
     def comprovantes_importacao(self) -> ComprovanteCommitImportacaoRepositoryPort: ...
+
+    @property
+    def registros_conformidade(self) -> ComplianceRuleRegistryRepositoryPort: ...
 
     def __enter__(self) -> Self: ...
 

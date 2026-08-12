@@ -25,6 +25,16 @@ Estados de automação:
 - `AGUARDA_FATO`: a regra existe, mas falta um provedor confiável para ao menos um fato essencial.
 - `INATIVA`, `SUBSTITUIDA` ou `REMOVIDA`: preservada somente para histórico/auditoria.
 
+## Catálogo local configurável
+
+A Etapa 1 passou a manter no SQLite a numeração permanente por ID técnico e snapshots imutáveis do
+registro. Na primeira execução, as seis regras abaixo recebem os números 1 a 6 a partir do seed. A
+cada importação, ativação, desativação ou remoção, o aplicativo gera atomicamente outro
+`catalogo-regras-conformidade.md` na pasta de dados do usuário. Esse catálogo local inclui regras
+importadas, explica o processo `when`/`unless`/`must` da revisão ativa e conserva como `REMOVIDA`
+toda regra retirada. O arquivo versionado no repositório continua sendo a referência do seed; ele
+não é alterado silenciosamente por ações da interface.
+
 ## Resumo
 
 | Número | ID técnico | Título | Registro | Automação |

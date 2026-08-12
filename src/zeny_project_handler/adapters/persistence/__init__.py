@@ -8,6 +8,7 @@ from .backup import (
     restore_atomic_backup,
     rewrite_backup_pdf_sources,
 )
+from .compliance_registry_repository import SqlComplianceRuleRegistryRepository
 from .database import (
     create_sqlite_engine,
     current_database_revision,
@@ -20,6 +21,7 @@ from .unit_of_work import SqlAlchemyUnitOfWork
 __all__ = [
     "DATABASE_FILE_NAME",
     "SqlAlchemyUnitOfWork",
+    "SqlComplianceRuleRegistryRepository",
     "SqliteBackupManager",
     "SqlitePortableProjectDatabase",
     "create_atomic_backup",

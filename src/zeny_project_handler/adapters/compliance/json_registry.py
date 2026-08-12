@@ -20,7 +20,10 @@ from zeny_project_handler.domain.compliance import (
     SeveridadeConformidade,
     TipoEscopoConformidade,
 )
+from zeny_project_handler.domain.compliance_facts import validar_semantica_registro
 from zeny_project_handler.domain.errors import DomainValidationError
+
+from .schema_validation import validar_schema_registro
 
 SEED_PACKAGE = "zeny_project_handler.adapters.compliance.data"
 SEED_FILE_NAME = "regras_conformidade_v1.json"
@@ -37,6 +40,14 @@ class JsonComplianceRuleRegistry:
 
 
 def registro_conformidade_de_dict(payload: dict[str, Any]) -> RegistroRegrasConformidade:
+    result, _warnings = registro_conformidade_e_avisos_de_dict(payload)
+    return result
+
+
+def registro_conformidade_e_avisos_de_dict(
+    payload: dict[str, Any],
+) -> tuple[RegistroRegrasConformidade, tuple[str, ...]]:
+    payload = validar_schema_registro(payload)
     registry = _object(payload.get("registry"), field_name="registry")
     try:
         registry_id = UUID(str(registry.get("id")))
@@ -46,19 +57,43 @@ def registro_conformidade_de_dict(payload: dict[str, Any]) -> RegistroRegrasConf
         _rule(_object(item, field_name="rule"))
         for item in _list(payload.get("rules"), field_name="rules")
     )
-    return RegistroRegrasConformidade(
+    result = RegistroRegrasConformidade(
         id=registry_id,
         versao=str(registry.get("version", "")),
         versao_schema=int(payload.get("schema_version", 0)),
         regras=rules,
     )
+    return result, validar_semantica_registro(result)
 
 
 def carregar_registro_conformidade_json(path: Path) -> RegistroRegrasConformidade:
+    registry, _warnings = carregar_registro_conformidade_json_com_avisos(path)
+    return registry
+
+
+def carregar_registro_conformidade_json_com_avisos(
+    path: Path,
+) -> tuple[RegistroRegrasConformidade, tuple[str, ...]]:
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise DomainValidationError(f"Não foi possível carregar regras: {path}") from error
+        content = path.read_text(encoding="utf-8")
+    except OSError as error:
+        raise DomainValidationError("Não foi possível ler o arquivo de regras") from error
+    try:
+        payload = json.loads(content)
+    except json.JSONDecodeError as error:
+        raise DomainValidationError(
+            f"JSON de regras inválido na linha {error.lineno}, coluna {error.colno}"
+        ) from error
+    return registro_conformidade_e_avisos_de_dict(_object(payload, field_name="root"))
+
+
+def carregar_registro_conformidade_texto(content: str) -> RegistroRegrasConformidade:
+    try:
+        payload = json.loads(content)
+    except json.JSONDecodeError as error:
+        raise DomainValidationError(
+            f"JSON de regras inválido na linha {error.lineno}, coluna {error.colno}"
+        ) from error
     return registro_conformidade_de_dict(_object(payload, field_name="root"))
 
 
@@ -71,35 +106,46 @@ def carregar_registro_conformidade_inicial() -> RegistroRegrasConformidade:
     return registro_conformidade_de_dict(_object(payload, field_name="root"))
 
 
+def registro_conformidade_para_dict(
+    registro: RegistroRegrasConformidade,
+) -> dict[str, object]:
+    return registro.para_dict()
+
+
 def _rule(data: dict[str, Any]) -> RegraConformidade:
     source = _object(data.get("source"), field_name="source")
-    return RegraConformidade(
-        id=str(data.get("id", "")),
-        titulo=str(data.get("title", "")),
-        descricao=str(data.get("description", "")),
-        escopo=TipoEscopoConformidade(str(data.get("scope"))),
-        severidade=SeveridadeConformidade(str(data.get("severity"))),
-        fonte=FonteNormativa(
-            documento=str(source.get("document", "")),
-            revisao=str(source.get("revision", "")),
-            item=str(source.get("item", "")),
-            pagina=(int(source["page"]) if source.get("page") is not None else None),
-            url=(str(source["url"]) if source.get("url") else None),
-        ),
-        aplicabilidade=tuple(
-            _condition(_object(item, field_name="when condition"))
-            for item in _list(data.get("when", []), field_name="when")
-        ),
-        excecoes=tuple(
-            _condition(_object(item, field_name="unless condition"))
-            for item in _list(data.get("unless", []), field_name="unless")
-        ),
-        requisitos=tuple(
-            _condition(_object(item, field_name="must condition"))
-            for item in _list(data.get("must"), field_name="must")
-        ),
-        ativa=bool(data.get("enabled", True)),
-    )
+    rule_id = str(data.get("id", ""))
+    try:
+        return RegraConformidade(
+            id=rule_id,
+            titulo=str(data.get("title", "")),
+            descricao=str(data.get("description", "")),
+            escopo=TipoEscopoConformidade(str(data.get("scope"))),
+            severidade=SeveridadeConformidade(str(data.get("severity"))),
+            fonte=FonteNormativa(
+                documento=str(source.get("document", "")),
+                revisao=str(source.get("revision", "")),
+                item=str(source.get("item", "")),
+                pagina=(int(source["page"]) if source.get("page") is not None else None),
+                url=(str(source["url"]) if source.get("url") else None),
+            ),
+            aplicabilidade=_conditions(data.get("when", []), "when"),
+            excecoes=_conditions(data.get("unless", []), "unless"),
+            requisitos=_conditions(data.get("must"), "must"),
+            ativa=bool(data.get("enabled", True)),
+        )
+    except (DomainValidationError, ValueError) as error:
+        raise DomainValidationError(f"Regra '{rule_id}': {error}") from error
+
+
+def _conditions(value: object, group: str) -> tuple[CondicaoConformidade, ...]:
+    result: list[CondicaoConformidade] = []
+    for index, item in enumerate(_list(value, field_name=group)):
+        try:
+            result.append(_condition(_object(item, field_name=f"{group}[{index}]")))
+        except (DomainValidationError, ValueError) as error:
+            raise DomainValidationError(f"campo {group}[{index}]: {error}") from error
+    return tuple(result)
 
 
 def _condition(data: dict[str, Any]) -> CondicaoConformidade:

@@ -59,7 +59,7 @@ def test_migrations_upgrade_empty_database_and_previous_revision(tmp_path: Path)
     upgrade_database(engine)
     upgrade_database(engine)
 
-    assert current_database_revision(engine) == "0005_import_commits"
+    assert current_database_revision(engine) == "0006_compliance_rule_registry"
     assert "updated_at" in {column["name"] for column in inspect(engine).get_columns("projects")}
     assert "ix_elements_project" in {
         index["name"] for index in inspect(engine).get_indexes("elements")
@@ -73,11 +73,13 @@ def test_migrations_upgrade_empty_database_and_previous_revision(tmp_path: Path)
     assert "ix_import_commits_project" in {
         index["name"] for index in inspect(engine).get_indexes("import_commits")
     }
+    assert "compliance_rule_revisions" in inspect(engine).get_table_names()
+    assert "compliance_rule_numbers" in inspect(engine).get_table_names()
     with engine.connect() as connection:
         trigger_count = connection.scalar(
             text("SELECT COUNT(*) FROM sqlite_master WHERE type='trigger'")
         )
-    assert trigger_count == 5
+    assert trigger_count == 9
     engine.dispose()
 
 

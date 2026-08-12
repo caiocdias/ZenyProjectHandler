@@ -75,7 +75,7 @@ comissionador comunica um problema, mas **não são fonte normativa suficiente p
 
 | Etapa | Estado inicial | Depende de | Entrega principal |
 |---|---|---|---|
-| 1. Registro configurável de regras | PENDENTE | - | Importar/remover regras pela interface com revisão persistida |
+| 1. Registro configurável de regras | CONCLUÍDA | - | Importar/remover regras pela interface com revisão persistida |
 | 2. Pesquisa normativa integral e expansão inicial | PENDENTE | 1 | Inventário oficial e regras automatizáveis já incorporadas |
 | 3. Execução e histórico de conformidade | PENDENTE | 1, 2 | Resultado vinculado à análise e à revisão de regras |
 | 4. Caixas e setas no visualizador | PENDENTE | 3 | Callouts vermelhos ancorados em geometria rastreável |
@@ -446,3 +446,16 @@ funcionar sem terminal:
 Ao concluir uma etapa, acrescente uma entrada curta com data, arquivos principais, testes executados,
 resultado do gate, limitações remanescentes e mensagem do commit. Toda alteração de regra também
 atualiza `docs/catalogo-regras-conformidade.md`. Não copie conteúdo dos PDFs reais.
+
+### 2026-08-12 — Etapa 1 concluída
+
+- **Arquivos principais:** catálogo de fatos em `domain/compliance_facts.py`; validação JSON em
+  `adapters/compliance`; serviço em `application/compliance_registry.py`; migração e repositório em
+  `adapters/persistence`; visão **Regras** em `ui/documentation_panel.py`.
+- **Testes focados:** validação semântica/schema, snapshots e migração, seed idempotente, assinatura,
+  numeração permanente, publicação atômica e fluxo pytest-qt de importar, desativar, reativar,
+  remover, exportar e reiniciar — 33 testes aprovados.
+- **Gate básico:** `IniciarTestes.bat` aprovado; corpus privado não acessado.
+- **Limitações remanescentes:** histórico de execuções de conformidade, callouts no PDF e provedores
+  de ângulo/vão continuam reservados às Etapas 3, 4 e 6.
+- **Commit:** `feat(compliance): add configurable rule registries`.

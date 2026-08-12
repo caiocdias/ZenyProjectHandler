@@ -1072,8 +1072,7 @@ def test_point_identifier_selects_one_occurrence_and_discards_reference_groundin
         for item in result.elementos
     )
     assert all(
-        dict(item.atributos_sugeridos)["evidencia_identificador_id"]
-        == str(targeted_label.id)
+        dict(item.atributos_sugeridos)["evidencia_identificador_id"] == str(targeted_label.id)
         for item in result.elementos
     )
     assert not any(reference_grounding.id in item.evidencia_ids for item in result.elementos)

@@ -137,8 +137,7 @@ def _prefer_targeted_labels(labels: list[_OperationalLabel]) -> tuple[_Operation
             selected.extend(candidates)
             continue
         best_engine_priority = max(
-            _TARGETED_IDENTIFIER_ENGINE_PRIORITY[_identifier_engine(label)]
-            for label in targeted
+            _TARGETED_IDENTIFIER_ENGINE_PRIORITY[_identifier_engine(label)] for label in targeted
         )
         selected.extend(
             label
@@ -161,9 +160,7 @@ def _select_unique_identifier_occurrences(
     grouped: dict[str, list[PropostaElemento]] = {}
     passthrough: list[PropostaElemento] = []
     for proposal in proposals:
-        identifier = str(
-            dict(proposal.atributos_sugeridos).get("identificador_operacional") or ""
-        )
+        identifier = str(dict(proposal.atributos_sugeridos).get("identificador_operacional") or "")
         if not identifier:
             passthrough.append(proposal)
             continue
@@ -223,9 +220,7 @@ def _occurrence_rank(
         proposal for proposal in proposals if proposal.categoria is CategoriaElemento.POSTE
     )
     changed_poles = tuple(
-        proposal
-        for proposal in poles
-        if proposal.situacao_projeto is not SituacaoProjeto.EXISTENTE
+        proposal for proposal in poles if proposal.situacao_projeto is not SituacaoProjeto.EXISTENTE
     )
     label_distance = min(
         (

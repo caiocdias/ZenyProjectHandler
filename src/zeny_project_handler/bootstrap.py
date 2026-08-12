@@ -34,6 +34,9 @@ from zeny_project_handler.adapters.persistence import (
     upgrade_database,
 )
 from zeny_project_handler.adapters.portability import ZipProjectArchive
+from zeny_project_handler.application.compliance_registry import (
+    ServicoRegistroRegrasConformidade,
+)
 from zeny_project_handler.application.document_analysis import ExecutarAnaliseDocumento
 from zeny_project_handler.application.errors import ApplicationError
 from zeny_project_handler.application.human_review import ServicoRevisaoHumana
@@ -132,6 +135,11 @@ def _compose_initialized_application(
     def unit_of_work() -> SqlAlchemyUnitOfWork:
         return SqlAlchemyUnitOfWork(engine)
 
+    compliance_service = ServicoRegistroRegrasConformidade(
+        unit_of_work,
+        diretorio_dados=app_settings.data_directory,
+    )
+
     def list_projects() -> tuple[Projeto, ...]:
         with unit_of_work() as work:
             return work.projetos.listar()
@@ -191,7 +199,7 @@ def _compose_initialized_application(
             descartar_conexoes=engine.dispose,
         ),
         operation_coordinator=operation_coordinator,
-        compliance_registry=carregar_registro_conformidade_inicial(),
+        compliance_registry_service=compliance_service,
         ui_state_path=app_settings.data_directory / "ui-state.ini",
         startup_ocr_diagnostic=(
             ocr_runtime.diagnostico.texto_ui if ocr_runtime.diagnostico is not None else None
@@ -222,6 +230,11 @@ def initialize_local_storage(settings: AppSettings) -> Engine:
     engine = create_sqlite_engine(settings.database_path)
     try:
         upgrade_database(engine)
+        compliance_service = ServicoRegistroRegrasConformidade(
+            lambda: SqlAlchemyUnitOfWork(engine),
+            diretorio_dados=settings.data_directory,
+        )
+        compliance_service.inicializar(carregar_registro_conformidade_inicial())
         recovery = RecuperadorImportacaoProjeto(settings.data_directory)
 
         def obter_comprovante(operation_id: UUID) -> ComprovanteCommitImportacao | None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 from hashlib import sha256
@@ -56,6 +57,40 @@ class ResultadoConformidade(StrEnum):
     CONFORME = "CONFORME"
     DIVERGENCIA = "DIVERGENCIA"
     NAO_AVALIAVEL = "NAO_AVALIAVEL"
+
+
+class TipoValorFato(StrEnum):
+    TEXTO = "TEXTO"
+    NUMERO = "NUMERO"
+    INTEIRO = "INTEIRO"
+    BOOLEANO = "BOOLEANO"
+
+
+class DisponibilidadeProvedorFato(StrEnum):
+    DISPONIVEL = "DISPONIVEL"
+    PLANEJADO = "PLANEJADO"
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class DefinicaoFatoConformidade:
+    chave: str
+    escopos: frozenset[TipoEscopoConformidade]
+    tipo_valor: TipoValorFato
+    operadores: frozenset[OperadorCondicao]
+    descricao: str
+    disponibilidade: DisponibilidadeProvedorFato
+
+    def __post_init__(self) -> None:
+        if not self.escopos:
+            raise DomainValidationError("Fato deve declarar ao menos um escopo")
+        if not self.operadores:
+            raise DomainValidationError("Fato deve declarar ao menos um operador")
+        object.__setattr__(self, "chave", _fact_key(self.chave))
+        object.__setattr__(
+            self,
+            "descricao",
+            required_text(self.descricao, field_name="descrição do fato"),
+        )
 
 
 def _rule_identifier(value: str) -> str:
@@ -199,10 +234,12 @@ class RegistroRegrasConformidade:
         object.__setattr__(self, "regras", rules)
 
     def assinatura(self) -> str:
-        payload = {
-            "id": str(self.id),
-            "version": self.versao,
-            "schema": self.versao_schema,
+        return sha256(self.json_canonico().encode("utf-8")).hexdigest()
+
+    def para_dict(self) -> dict[str, object]:
+        return {
+            "schema_version": self.versao_schema,
+            "registry": {"id": str(self.id), "version": self.versao},
             "rules": [
                 {
                     "id": rule.id,
@@ -225,8 +262,46 @@ class RegistroRegrasConformidade:
                 for rule in self.regras
             ],
         }
-        canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-        return sha256(canonical.encode("utf-8")).hexdigest()
+
+    def json_canonico(self) -> str:
+        return json.dumps(
+            self.para_dict(),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class RevisaoRegistroConformidade:
+    id: UUID
+    registro: RegistroRegrasConformidade
+    assinatura: str
+    json_canonico: str
+    criada_em: datetime
+    ativa: bool
+
+    def __post_init__(self) -> None:
+        if self.assinatura != self.registro.assinatura():
+            raise DomainValidationError("Assinatura da revisão de regras é inválida")
+        if self.json_canonico != self.registro.json_canonico():
+            raise DomainValidationError("JSON canônico da revisão de regras é inválido")
+        if self.criada_em.tzinfo is None or self.criada_em.utcoffset() is None:
+            raise DomainValidationError("Data da revisão de regras deve possuir fuso horário")
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class NumeroRegraConformidade:
+    regra_id: str
+    numero: int
+    atribuido_em: datetime
+
+    def __post_init__(self) -> None:
+        if self.numero < 1:
+            raise DomainValidationError("Número da regra deve ser positivo")
+        if self.atribuido_em.tzinfo is None or self.atribuido_em.utcoffset() is None:
+            raise DomainValidationError("Data de atribuição da regra deve possuir fuso horário")
+        object.__setattr__(self, "regra_id", _rule_identifier(self.regra_id))
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -259,9 +334,10 @@ def _condition_payload(condition: CondicaoConformidade) -> dict[str, object]:
     return {
         "fact": condition.chave_fato,
         "operator": condition.operador.value,
-        "expected": [
-            str(value) if isinstance(value, Decimal) else value
-            for value in condition.valores_esperados
-        ],
+        "expected": [_json_primitive_payload(value) for value in condition.valores_esperados],
         "quantifier": condition.quantificador.value,
     }
+
+
+def _json_primitive_payload(value: JsonPrimitive) -> JsonPrimitive | float:
+    return float(value) if isinstance(value, Decimal) else value

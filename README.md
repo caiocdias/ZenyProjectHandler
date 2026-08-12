@@ -338,6 +338,8 @@ O dock **Documentação e conformidade** acompanha o projeto aberto e possui vis
 - todos os pares `rótulo: informação` encontrados no cabeçalho e no quadro de servidão, além de
   candidatos a carimbo e indícios/campos de assinatura;
 - regras conformes, possíveis divergências e casos não avaliáveis, sempre com fonte normativa.
+- o registro ativo de regras, com importação/exportação, ativação, desativação e remoção confirmada
+  sem editar arquivos manualmente.
 
 O analisador identifica vãos por uma linha com extremidades associadas ou pelo identificador
 operacional explícito `V<n>-<n>`. O segundo caso mantém o vão revisável mesmo quando uma das
@@ -347,7 +349,9 @@ identificador original e a fonte da medida. Ângulos ainda não são derivados. 
 não considera um carimbo ou rótulo de assinatura como prova de autenticidade. Cada informação vira
 um fato com origem, confiança, geometria e evidências.
 Regras ficam em um registro JSON versionado com condições de aplicabilidade, exceções comprovadas e
-requisitos. A arquitetura e os limites estão detalhados em
+requisitos. O SQLite preserva revisões imutáveis e números permanentes por ID; cada mudança também
+gera atomicamente um catálogo Markdown explicativo na pasta de dados do usuário. A arquitetura e os
+limites estão detalhados em
 [`docs/arquitetura-conformidade.md`](docs/arquitetura-conformidade.md).
 
 O Unlimited-OCR foi avaliado como possível segunda passagem local para layouts difíceis. A

@@ -135,14 +135,41 @@ Fontes oficiais consultadas:
 - [ND-3.1 — Projetos de Redes de Distribuição Aéreas Urbanas, Jul/2025](https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf);
 - [ND-9.3 — Programa Minas Trifásico](https://www.cemig.com.br/wp-content/uploads/2022/03/ND-9.3-programa-minas-trifasico.pdf).
 
+## Registro configurável e catálogo de fatos
+
+O vocabulário aceito pelo registro é explícito em
+`domain/compliance_facts.py`. Cada chave declara os escopos em que pode ser observada, o tipo do
+valor, os operadores permitidos, a descrição e se o provedor já está disponível ou apenas
+planejado. A importação primeiro valida o schema JSON público e depois essa semântica. Chave
+desconhecida, escopo incompatível, operador inválido ou valor de tipo incorreto recusam o arquivo
+inteiro. Uma chave conhecida com provedor planejado é aceita com aviso e continua produzindo
+`NAO_AVALIAVEL` enquanto o fato não existir.
+
+O SQLite guarda cada configuração como um único snapshot JSON canônico em
+`compliance_rule_revisions`, com ID próprio da revisão, ID e versão informados pelo registro,
+assinatura SHA-256, data e indicador da revisão ativa. O conteúdo é protegido contra alteração e
+remoção por triggers; somente o indicador ativo pode mudar. Assinaturas já existentes são
+reutilizadas em vez de duplicadas. A tabela `compliance_rule_numbers` atribui uma sequência
+permanente por ID técnico e não permite atualizar, apagar ou reutilizar números.
+
+O seed empacotado só é usado para inicializar um banco sem revisão ativa. Importar mescla regras por
+ID, e ativar, desativar ou remover produz outro snapshot sem editar o seed. A cada revisão ativa, o
+aplicativo publica atomicamente `catalogo-regras-conformidade.md` na pasta de dados do usuário. O
+arquivo explica `when`, `unless` e `must` em linguagem humana e conserva IDs removidos como
+histórico. O JSON nunca contém expressões executáveis: geometria, topologia e cálculos continuam em
+provedores Python compostos explicitamente.
+
 ## Painel de documentação e conformidade
 
-O painel próprio possui duas visões:
+O painel próprio possui três visões:
 
 1. **Documentação:** todos os campos rotulados de cabeçalho e servidão, carimbos e assinaturas, com
    estado e confiança;
 2. **Conformidade:** regras conformes, possíveis divergências e casos não avaliáveis, com a fonte
    normativa.
+3. **Regras:** revisão ativa, contagem de regras ativas/inativas, tabela e detalhes, com ações para
+   importar, exportar, ativar/desativar e remover. Importação e remoção exigem confirmação; erros
+   identificam regra, campo e motivo sem revelar o caminho absoluto do arquivo.
 
 Selecionar um item com página e geometria abre a folha e destaca a evidência ou região. A fase
 seguinte deverá persistir fatos e achados, permitir confirmação humana e comparar projeto com coleta

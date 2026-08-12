@@ -20,6 +20,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from zeny_project_handler.application.compliance_registry import (
+    ServicoRegistroRegrasConformidade,
+)
 from zeny_project_handler.application.human_review import ServicoRevisaoHumana
 from zeny_project_handler.application.mvp_workflow import ServicoFluxoMvp
 from zeny_project_handler.application.operation_coordinator import (
@@ -28,7 +31,6 @@ from zeny_project_handler.application.operation_coordinator import (
 )
 from zeny_project_handler.application.pdf_credentials import ProvedorCredenciaisPdfMemoria
 from zeny_project_handler.application.project_portability import ServicoPortabilidadeProjeto
-from zeny_project_handler.domain.compliance import RegistroRegrasConformidade
 from zeny_project_handler.ports.pdf import LeitorPdfPort, OrcamentoRenderizacaoPdf
 
 from .documentation_panel import DocumentationPanelWidget
@@ -326,7 +328,7 @@ class MainWindow(QMainWindow):
         workflow_service: ServicoFluxoMvp | None = None,
         portability_service: ServicoPortabilidadeProjeto | None = None,
         operation_coordinator: CoordenadorOperacoes | None = None,
-        compliance_registry: RegistroRegrasConformidade | None = None,
+        compliance_registry_service: ServicoRegistroRegrasConformidade | None = None,
         ui_state_path: Path | None = None,
         startup_ocr_diagnostic: str | None = None,
         parent: QWidget | None = None,
@@ -385,10 +387,10 @@ class MainWindow(QMainWindow):
                 lambda _proposal_id, review_dock=dock: review_dock.raise_()
             )
             right_docks.append(dock)
-            if compliance_registry is not None:
+            if compliance_registry_service is not None:
                 self.documentation_panel = DocumentationPanelWidget(
                     service=review_service,
-                    registry=compliance_registry,
+                    registry_service=compliance_registry_service,
                     viewer=self.pdf_viewer,
                     parent=self,
                 )

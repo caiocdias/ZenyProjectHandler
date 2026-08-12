@@ -5,6 +5,7 @@ from sqlalchemy import (
     Column,
     ForeignKey,
     ForeignKeyConstraint,
+    Index,
     Integer,
     MetaData,
     String,
@@ -273,4 +274,32 @@ import_commits = Table(
     Column("plan_sha256", String(64), nullable=False),
     Column("files_sha256", String(64), nullable=False),
     Column("committed_at", String(40), nullable=False),
+)
+
+compliance_rule_revisions = Table(
+    "compliance_rule_revisions",
+    metadata,
+    Column("revision_id", String(36), primary_key=True),
+    Column("registry_id", String(36), nullable=False),
+    Column("registry_version", String(160), nullable=False),
+    Column("schema_version", Integer, nullable=False),
+    Column("signature", String(64), nullable=False, unique=True),
+    Column("canonical_json", Text, nullable=False),
+    Column("created_at", String(40), nullable=False),
+    Column("active", Boolean, nullable=False),
+)
+
+Index(
+    "uq_compliance_rule_revisions_active",
+    compliance_rule_revisions.c.active,
+    unique=True,
+    sqlite_where=compliance_rule_revisions.c.active.is_(True),
+)
+
+compliance_rule_numbers = Table(
+    "compliance_rule_numbers",
+    metadata,
+    Column("rule_id", String(240), primary_key=True),
+    Column("number", Integer, nullable=False, unique=True),
+    Column("assigned_at", String(40), nullable=False),
 )

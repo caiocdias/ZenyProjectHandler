@@ -37,6 +37,10 @@ class RevisaoHumanaError(ApplicationError):
     """A revisão solicitada viola o estado atual ou exige dados adicionais."""
 
 
+class RegistroConformidadeError(ApplicationError):
+    """A operação sobre o registro de conformidade não pôde ser concluída."""
+
+
 class FluxoMvpCanceladoError(ApplicationError):
     """O fluxo operacional foi cancelado em um ponto seguro e pode ser retomado."""
 
