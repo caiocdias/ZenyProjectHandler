@@ -32,6 +32,12 @@ from zeny_project_handler.application.human_review import ServicoRevisaoHumana
 from zeny_project_handler.ui.documentation_panel import DocumentationPanelWidget
 from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
 
+
+class _ViewerStub:
+    def definir_callouts_conformidade(self, _callouts: tuple[object, ...]) -> None:
+        pass
+
+
 pytestmark = pytest.mark.integration
 
 
@@ -97,7 +103,7 @@ def _panel(
             review_service.carregar_sessao_semantica,
         ),
         registry_service=registry_service,
-        viewer=cast(PdfViewerWidget, object()),
+        viewer=cast(PdfViewerWidget, _ViewerStub()),
     )
     qtbot.addWidget(panel)
     panel.show()

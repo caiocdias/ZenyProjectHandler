@@ -88,6 +88,29 @@ def create_large_format_pdf(path: Path, *, width_points: float, height_points: f
     return path
 
 
+def create_callout_formats_pdf(path: Path) -> Path:
+    """Crie A4/A3 em retrato/paisagem com alvos assimétricos para os callouts."""
+    document = pymupdf.open()
+    try:
+        formats = (
+            (595.0, 842.0, "A4 RETRATO"),
+            (842.0, 595.0, "A4 PAISAGEM"),
+            (842.0, 1191.0, "A3 RETRATO"),
+            (1191.0, 842.0, "A3 PAISAGEM"),
+        )
+        for width, height, label in formats:
+            page = document.new_page(width=width, height=height)
+            page.draw_rect(page.rect, color=(1, 1, 1), fill=(1, 1, 1))
+            page.insert_text((24, 32), label, fontsize=12)
+            target = pymupdf.Point(width * 0.46, height * 0.56)
+            page.draw_circle(target, 8, color=(0.1, 0.1, 0.1), fill=(0.1, 0.1, 0.1))
+            page.insert_text((target.x + 12, target.y + 4), "ALVO", fontsize=9)
+        document.save(path)
+    finally:
+        document.close()
+    return path
+
+
 def create_catalog_pdf(path: Path, code: str) -> Path:
     document = pymupdf.open()
     try:

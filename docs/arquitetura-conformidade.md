@@ -190,6 +190,28 @@ idempotente; ativar, remover ou importar regras produz outra assinatura e, porta
 execução sem substituir as anteriores. A reexecução usa somente os resultados semânticos
 persistidos: não abre o PDF, não repete PyMuPDF ou OCR e não modifica a revisão já capturada.
 
+## Projeção e camada visual de callouts
+
+`application/compliance_callouts.py` converte somente achados `DIVERGENCIA` localizáveis em uma
+projeção sem Qt. Cada entrada conserva o ID do achado, página, texto quebrado, caixa sugerida e uma ou
+mais âncoras com tipo de origem, ID de referência e geometria completa. A seleção da geometria segue
+uma precedência explícita: fatos que participaram da decisão, evidências referenciadas pelo achado e,
+por último, o alvo. A primeira fonte disponível determina a página; geometrias de outras páginas não
+são misturadas. Uma ausência de página ou geometria rastreável não produz coordenadas artificiais.
+
+O posicionamento trabalha em pontos físicos e volta a coordenadas normalizadas. Um conjunto pequeno
+e ordenado de candidatos ao redor do alvo é contido nas margens da folha e pontuado pela interseção
+com o alvo e com caixas já ocupadas. Assim, entradas iguais geram o mesmo layout e uma colisão só é
+aceita quando todos os candidatos válidos colidem. Largura, quebra de linha, altura e margens usam
+medidas físicas, mantendo a tipografia proporcional em A4/A3, retrato ou paisagem.
+
+`PdfGraphicsView` materializa a projeção em uma camada vetorial própria, acima de prévia e tiles e
+separada dos sublinhados de revisão e do contorno temporário. A caixa tem fundo branco, borda e texto
+vermelhos; cada âncora recebe uma linha com ponta aberta. A camada é recriada ao trocar página ou
+transformador, enquanto zoom e redimensionamento usam a transformação da cena. Ela não entra no
+cache raster, não abre nem grava o PDF e ainda não possui os controles de visibilidade reservados à
+Etapa 5.
+
 ## Painel de documentação e conformidade
 
 O painel próprio possui três visões:

@@ -188,6 +188,12 @@ elementos existentes, mesmo quando não há poste catalogado ou coordenada. Não
 item; resultados catalogados são incorporados automaticamente ao projeto e ficam imediatamente
 disponíveis para as etapas seguintes.
 
+Possíveis divergências com geometria rastreável aparecem em uma camada independente como caixas
+brancas de texto vermelho e linhas com seta aberta para os fatos, evidências ou alvos que sustentam a
+localização. As caixas são posicionadas deterministicamente dentro da folha e reduzem colisões entre
+si. Achados sem geometria continuam na lista como **Sem localização no PDF**. Essa apresentação é
+somente da cena gráfica: não altera o PDF e não participa do raster ou do cache de tiles.
+
 A resolução solicitada por padrão é 600 DPI, que é o teto de detalhe visual disponível para
 regiões. Ela não obriga a rasterizar uma prancha inteira nessa resolução. O visualizador produz uma
 prévia integral limitada e, fora da thread da interface, solicita tiles detalhados apenas para o

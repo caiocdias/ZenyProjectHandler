@@ -1,0 +1,429 @@
+"""Projeção determinística de divergências localizáveis para callouts do visualizador."""
+
+from __future__ import annotations
+
+import textwrap
+from dataclasses import dataclass
+from decimal import Decimal
+from enum import StrEnum
+from uuid import UUID
+
+from zeny_project_handler.domain.analysis import EvidenciaDocumento
+from zeny_project_handler.domain.compliance import (
+    AchadoConformidade,
+    AlvoConformidade,
+    ExecucaoConformidade,
+    FatoConformidade,
+    GrupoCondicaoConformidade,
+    ResultadoCondicaoConformidade,
+    ResultadoConformidade,
+)
+from zeny_project_handler.domain.documents import PaginaDocumento
+from zeny_project_handler.domain.values import (
+    GeometriaDocumento,
+    PontoNormalizado,
+    decimal_value,
+    required_text,
+)
+
+_MARGEM_PAGINA_PONTOS = 12.0
+_DISTANCIA_ALVO_PONTOS = 14.0
+_LARGURA_MINIMA_PONTOS = 156.0
+_LARGURA_MAXIMA_PONTOS = 252.0
+_ALTURA_MINIMA_PONTOS = 42.0
+_PREENCHIMENTO_HORIZONTAL_PONTOS = 14.0
+_PREENCHIMENTO_VERTICAL_PONTOS = 11.0
+_LARGURA_CARACTERE_PONTOS = 5.4
+_ALTURA_LINHA_PONTOS = 13.0
+
+
+class OrigemAncoraCallout(StrEnum):
+    """Origem rastreável usada para localizar um callout."""
+
+    FATO = "FATO"
+    EVIDENCIA = "EVIDENCIA"
+    ALVO = "ALVO"
+
+
+@dataclass(frozen=True, slots=True)
+class RetanguloCallout:
+    """Retângulo normalizado e contido na página."""
+
+    esquerda: Decimal
+    topo: Decimal
+    direita: Decimal
+    base: Decimal
+
+    def __post_init__(self) -> None:
+        left = decimal_value(self.esquerda, field_name="esquerda")
+        top = decimal_value(self.topo, field_name="topo")
+        right = decimal_value(self.direita, field_name="direita")
+        bottom = decimal_value(self.base, field_name="base")
+        if not Decimal(0) <= left < right <= Decimal(1):
+            raise ValueError("A caixa do callout deve caber horizontalmente na página")
+        if not Decimal(0) <= top < bottom <= Decimal(1):
+            raise ValueError("A caixa do callout deve caber verticalmente na página")
+        object.__setattr__(self, "esquerda", left)
+        object.__setattr__(self, "topo", top)
+        object.__setattr__(self, "direita", right)
+        object.__setattr__(self, "base", bottom)
+
+    @property
+    def largura(self) -> Decimal:
+        return self.direita - self.esquerda
+
+    @property
+    def altura(self) -> Decimal:
+        return self.base - self.topo
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class AncoraCallout:
+    """Ponto de chamada derivado de uma geometria e de sua proveniência."""
+
+    origem: OrigemAncoraCallout
+    referencia_id: UUID
+    geometria: GeometriaDocumento
+    ponto: PontoNormalizado
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class CalloutConformidade:
+    """Projeção sem Qt de uma possível divergência localizável."""
+
+    id: UUID
+    pagina_id: UUID
+    texto: str
+    caixa_sugerida: RetanguloCallout
+    ancoras: tuple[AncoraCallout, ...]
+
+    def __post_init__(self) -> None:
+        anchors = tuple(self.ancoras)
+        if not anchors:
+            raise ValueError("Callout deve possuir ao menos uma âncora")
+        if any(item.geometria.pagina_id != self.pagina_id for item in anchors):
+            raise ValueError("Âncoras do callout devem pertencer à página informada")
+        object.__setattr__(self, "texto", required_text(self.texto, field_name="texto do callout"))
+        object.__setattr__(self, "ancoras", anchors)
+
+
+@dataclass(frozen=True, slots=True)
+class _RetanguloPontos:
+    esquerda: float
+    topo: float
+    direita: float
+    base: float
+
+    @property
+    def largura(self) -> float:
+        return self.direita - self.esquerda
+
+    @property
+    def altura(self) -> float:
+        return self.base - self.topo
+
+
+@dataclass(frozen=True, slots=True)
+class _GeometriaRastreavel:
+    origem: OrigemAncoraCallout
+    referencia_id: UUID
+    geometria: GeometriaDocumento
+
+
+def projetar_callouts_conformidade(
+    execucao: ExecucaoConformidade,
+    *,
+    evidencias: tuple[EvidenciaDocumento, ...],
+    paginas: tuple[PaginaDocumento, ...],
+) -> tuple[CalloutConformidade, ...]:
+    """Converta somente divergências com geometria rastreável em callouts estáveis."""
+    pages_by_id = {item.id: item for item in paginas}
+    facts_by_id = {item.id: item for item in execucao.fatos}
+    evidence_by_id = {item.id: item for item in evidencias}
+    targets_by_id = {item.id: item for item in execucao.alvos}
+    occupied_by_page: dict[UUID, list[RetanguloCallout]] = {}
+    projected: list[CalloutConformidade] = []
+    divergent = sorted(
+        (item for item in execucao.achados if item.resultado is ResultadoConformidade.DIVERGENCIA),
+        key=lambda item: str(item.id),
+    )
+    for finding in divergent:
+        target = targets_by_id[finding.alvo_id]
+        traceable = _geometrias_do_achado(
+            finding,
+            facts_by_id=facts_by_id,
+            evidence_by_id=evidence_by_id,
+            target=target,
+            page_ids=frozenset(pages_by_id),
+        )
+        if not traceable:
+            continue
+        page_id = traceable[0].geometria.pagina_id
+        page = pages_by_id[page_id]
+        anchors = _ancoras_unicas(traceable)
+        raw_text = f"{finding.titulo}: {finding.mensagem}"
+        width, height, wrapped_text = _dimensoes_texto(raw_text, page)
+        anchor_bounds = _limites_geometrias_pontos(
+            tuple(item.geometria for item in traceable),
+            page,
+        )
+        suggested = _posicionar_caixa(
+            page,
+            anchor_bounds=anchor_bounds,
+            width=width,
+            height=height,
+            occupied=tuple(occupied_by_page.get(page_id, ())),
+        )
+        occupied_by_page.setdefault(page_id, []).append(suggested)
+        projected.append(
+            CalloutConformidade(
+                id=finding.id,
+                pagina_id=page_id,
+                texto=wrapped_text,
+                caixa_sugerida=suggested,
+                ancoras=anchors,
+            )
+        )
+    return tuple(projected)
+
+
+def ponto_conexao_callout(
+    caixa: RetanguloCallout,
+    ancora: PontoNormalizado,
+) -> PontoNormalizado:
+    """Encontre na borda da caixa o início da linha voltada para a âncora."""
+    center_x = (caixa.esquerda + caixa.direita) / 2
+    center_y = (caixa.topo + caixa.base) / 2
+    dx = ancora.x - center_x
+    dy = ancora.y - center_y
+    if caixa.esquerda <= ancora.x <= caixa.direita and caixa.topo <= ancora.y <= caixa.base:
+        distances = (
+            (ancora.x - caixa.esquerda, PontoNormalizado(caixa.esquerda, ancora.y)),
+            (caixa.direita - ancora.x, PontoNormalizado(caixa.direita, ancora.y)),
+            (ancora.y - caixa.topo, PontoNormalizado(ancora.x, caixa.topo)),
+            (caixa.base - ancora.y, PontoNormalizado(ancora.x, caixa.base)),
+        )
+        return min(distances, key=lambda item: item[0])[1]
+    half_width = caixa.largura / 2
+    half_height = caixa.altura / 2
+    horizontal_ratio = abs(dx) / half_width if dx else Decimal(0)
+    vertical_ratio = abs(dy) / half_height if dy else Decimal(0)
+    if horizontal_ratio >= vertical_ratio:
+        x = caixa.direita if dx > 0 else caixa.esquerda
+        scale = (x - center_x) / dx
+        return PontoNormalizado(x, center_y + dy * scale)
+    y = caixa.base if dy > 0 else caixa.topo
+    scale = (y - center_y) / dy
+    return PontoNormalizado(center_x + dx * scale, y)
+
+
+def _geometrias_do_achado(
+    finding: AchadoConformidade,
+    *,
+    facts_by_id: dict[UUID, FatoConformidade],
+    evidence_by_id: dict[UUID, EvidenciaDocumento],
+    target: AlvoConformidade,
+    page_ids: frozenset[UUID],
+) -> tuple[_GeometriaRastreavel, ...]:
+    fact_ids = _ids_fatos_decisivos(finding)
+    facts = tuple(facts_by_id.get(item) for item in fact_ids)
+    fact_geometries = tuple(
+        _GeometriaRastreavel(OrigemAncoraCallout.FATO, fact.id, fact.geometria)
+        for fact in facts
+        if fact is not None and fact.geometria is not None and fact.geometria.pagina_id in page_ids
+    )
+    fact_evidence_ids = tuple(
+        evidence_id for fact in facts if fact is not None for evidence_id in fact.evidencia_ids
+    )
+    evidence_ids = tuple(dict.fromkeys((*fact_evidence_ids, *finding.evidencia_ids)))
+    evidence_geometries = tuple(
+        _GeometriaRastreavel(OrigemAncoraCallout.EVIDENCIA, evidence.id, evidence.geometria)
+        for evidence_id in evidence_ids
+        if (evidence := evidence_by_id.get(evidence_id)) is not None
+        and evidence.geometria.pagina_id in page_ids
+    )
+    target_geometries = (
+        (
+            _GeometriaRastreavel(
+                OrigemAncoraCallout.ALVO,
+                target.id,
+                target.geometria,
+            ),
+        )
+        if target.geometria is not None and target.geometria.pagina_id in page_ids
+        else ()
+    )
+    for tier in (fact_geometries, evidence_geometries, target_geometries):
+        if tier:
+            selected_page = tier[0].geometria.pagina_id
+            return tuple(item for item in tier if item.geometria.pagina_id == selected_page)
+    return ()
+
+
+def _ids_fatos_decisivos(finding: AchadoConformidade) -> tuple[UUID, ...]:
+    decisive = tuple(
+        fact_id
+        for evaluation in finding.avaliacoes_condicoes
+        if evaluation.grupo is GrupoCondicaoConformidade.REQUISITO
+        and evaluation.resultado is ResultadoCondicaoConformidade.NAO_ATENDE
+        for fact_id in evaluation.fato_ids
+    )
+    return tuple(dict.fromkeys(decisive or finding.fato_ids))
+
+
+def _ancoras_unicas(
+    geometries: tuple[_GeometriaRastreavel, ...],
+) -> tuple[AncoraCallout, ...]:
+    result: list[AncoraCallout] = []
+    seen: set[tuple[UUID, tuple[PontoNormalizado, ...]]] = set()
+    for item in geometries:
+        identity = (item.geometria.pagina_id, item.geometria.pontos)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        xs = tuple(point.x for point in item.geometria.pontos)
+        ys = tuple(point.y for point in item.geometria.pontos)
+        result.append(
+            AncoraCallout(
+                origem=item.origem,
+                referencia_id=item.referencia_id,
+                geometria=item.geometria,
+                ponto=PontoNormalizado((min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2),
+            )
+        )
+    return tuple(result)
+
+
+def _dimensoes_texto(text: str, page: PaginaDocumento) -> tuple[float, float, str]:
+    page_width = float(page.largura_pontos)
+    page_height = float(page.altura_pontos)
+    available_width = max(1.0, page_width - 2 * _MARGEM_PAGINA_PONTOS)
+    available_height = max(1.0, page_height - 2 * _MARGEM_PAGINA_PONTOS)
+    width = min(
+        available_width,
+        max(_LARGURA_MINIMA_PONTOS, min(_LARGURA_MAXIMA_PONTOS, page_width * 0.36)),
+    )
+    wrapped, line_count = _quebrar_texto(text, width)
+    height = max(
+        _ALTURA_MINIMA_PONTOS,
+        2 * _PREENCHIMENTO_VERTICAL_PONTOS + line_count * _ALTURA_LINHA_PONTOS,
+    )
+    if height > available_height * 0.45 and width < min(available_width, _LARGURA_MAXIMA_PONTOS):
+        width = min(available_width, _LARGURA_MAXIMA_PONTOS)
+        wrapped, line_count = _quebrar_texto(text, width)
+        height = max(
+            _ALTURA_MINIMA_PONTOS,
+            2 * _PREENCHIMENTO_VERTICAL_PONTOS + line_count * _ALTURA_LINHA_PONTOS,
+        )
+    return width, min(height, available_height), wrapped
+
+
+def _quebrar_texto(text: str, width_points: float) -> tuple[str, int]:
+    normalized = " ".join(text.split())
+    usable = max(1.0, width_points - 2 * _PREENCHIMENTO_HORIZONTAL_PONTOS)
+    limit = max(12, int(usable / _LARGURA_CARACTERE_PONTOS))
+    lines = textwrap.wrap(
+        normalized,
+        width=limit,
+        break_long_words=True,
+        break_on_hyphens=False,
+    ) or [normalized]
+    return "\n".join(lines), len(lines)
+
+
+def _limites_geometrias_pontos(
+    geometries: tuple[GeometriaDocumento, ...],
+    page: PaginaDocumento,
+) -> _RetanguloPontos:
+    xs = tuple(float(point.x) for item in geometries for point in item.pontos)
+    ys = tuple(float(point.y) for item in geometries for point in item.pontos)
+    width = float(page.largura_pontos)
+    height = float(page.altura_pontos)
+    return _RetanguloPontos(min(xs) * width, min(ys) * height, max(xs) * width, max(ys) * height)
+
+
+def _posicionar_caixa(
+    page: PaginaDocumento,
+    *,
+    anchor_bounds: _RetanguloPontos,
+    width: float,
+    height: float,
+    occupied: tuple[RetanguloCallout, ...],
+) -> RetanguloCallout:
+    page_width = float(page.largura_pontos)
+    page_height = float(page.altura_pontos)
+    center_x = (anchor_bounds.esquerda + anchor_bounds.direita) / 2
+    center_y = (anchor_bounds.topo + anchor_bounds.base) / 2
+    gap = _DISTANCIA_ALVO_PONTOS
+    raw_candidates = (
+        (anchor_bounds.direita + gap, center_y - height / 2),
+        (anchor_bounds.esquerda - gap - width, center_y - height / 2),
+        (center_x - width / 2, anchor_bounds.topo - gap - height),
+        (center_x - width / 2, anchor_bounds.base + gap),
+        (anchor_bounds.direita + gap, anchor_bounds.topo - gap - height),
+        (anchor_bounds.direita + gap, anchor_bounds.base + gap),
+        (anchor_bounds.esquerda - gap - width, anchor_bounds.topo - gap - height),
+        (anchor_bounds.esquerda - gap - width, anchor_bounds.base + gap),
+        (anchor_bounds.direita + gap, _MARGEM_PAGINA_PONTOS),
+        (anchor_bounds.esquerda - gap - width, _MARGEM_PAGINA_PONTOS),
+        (anchor_bounds.direita + gap, page_height - _MARGEM_PAGINA_PONTOS - height),
+        (anchor_bounds.esquerda - gap - width, page_height - _MARGEM_PAGINA_PONTOS - height),
+    )
+    candidates = tuple(
+        _contained_rect(x, y, width, height, page_width=page_width, page_height=page_height)
+        for x, y in raw_candidates
+    )
+    occupied_points = tuple(
+        _RetanguloPontos(
+            float(item.esquerda) * page_width,
+            float(item.topo) * page_height,
+            float(item.direita) * page_width,
+            float(item.base) * page_height,
+        )
+        for item in occupied
+    )
+    _index, selected = min(
+        enumerate(candidates),
+        key=lambda pair: (
+            _collision_score(pair[1], anchor_bounds, occupied_points),
+            pair[0],
+        ),
+    )
+    return RetanguloCallout(
+        Decimal(str(selected.esquerda / page_width)),
+        Decimal(str(selected.topo / page_height)),
+        Decimal(str(selected.direita / page_width)),
+        Decimal(str(selected.base / page_height)),
+    )
+
+
+def _contained_rect(
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+    *,
+    page_width: float,
+    page_height: float,
+) -> _RetanguloPontos:
+    max_x = max(_MARGEM_PAGINA_PONTOS, page_width - _MARGEM_PAGINA_PONTOS - width)
+    max_y = max(_MARGEM_PAGINA_PONTOS, page_height - _MARGEM_PAGINA_PONTOS - height)
+    left = min(max_x, max(_MARGEM_PAGINA_PONTOS, x))
+    top = min(max_y, max(_MARGEM_PAGINA_PONTOS, y))
+    return _RetanguloPontos(left, top, left + width, top + height)
+
+
+def _collision_score(
+    candidate: _RetanguloPontos,
+    anchor: _RetanguloPontos,
+    occupied: tuple[_RetanguloPontos, ...],
+) -> float:
+    anchor_overlap = _intersection_area(candidate, anchor)
+    callout_overlap = sum(_intersection_area(candidate, item) for item in occupied)
+    return anchor_overlap + 2 * callout_overlap
+
+
+def _intersection_area(left: _RetanguloPontos, right: _RetanguloPontos) -> float:
+    width = max(0.0, min(left.direita, right.direita) - max(left.esquerda, right.esquerda))
+    height = max(0.0, min(left.base, right.base) - max(left.topo, right.topo))
+    return width * height

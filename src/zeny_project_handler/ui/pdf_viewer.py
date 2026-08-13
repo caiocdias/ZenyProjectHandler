@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import math
+import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 from uuid import UUID
 
-from PySide6.QtCore import QEvent, QPointF, Qt, QThread, QTimer, Signal
+from PySide6.QtCore import QEvent, QPointF, QRectF, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import (
     QBrush,
     QCloseEvent,
     QColor,
+    QFont,
+    QFontDatabase,
+    QFontInfo,
     QImage,
     QPainter,
     QPainterPath,
@@ -26,9 +30,12 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
+    QGraphicsItem,
     QGraphicsPathItem,
     QGraphicsPixmapItem,
+    QGraphicsRectItem,
     QGraphicsScene,
+    QGraphicsTextItem,
     QGraphicsView,
     QHBoxLayout,
     QLabel,
@@ -41,6 +48,10 @@ from PySide6.QtWidgets import (
 
 from zeny_project_handler.adapters.pdf.coordinates import PontoPlano, TransformadorCoordenadasPagina
 from zeny_project_handler.adapters.pdf.errors import PdfError, PdfOrigemAlteradaError
+from zeny_project_handler.application.compliance_callouts import (
+    CalloutConformidade,
+    ponto_conexao_callout,
+)
 from zeny_project_handler.application.pdf_credentials import (
     IdentidadeCredencialPdf,
     ProvedorCredenciaisPdfMemoria,
@@ -75,6 +86,8 @@ from .pdf_rendering import (
     regioes_tiles_priorizadas,
 )
 
+_FONTE_CALLOUT_REGISTRO_TENTADO = False
+
 
 @dataclass(frozen=True, slots=True)
 class _RasterEmCache:
@@ -88,6 +101,13 @@ class _ResultadoAberturaSessoes:
     identidades: frozenset[IdentidadeCredencialPdf] = frozenset()
     mensagem_interrupcao: str | None = None
     cancelada: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class _GraficosCallout:
+    caixa: QGraphicsRectItem
+    texto: QGraphicsTextItem
+    linhas: tuple[QGraphicsPathItem, ...]
 
 
 class ReviewLinkItem(QGraphicsPathItem):
@@ -117,10 +137,14 @@ class PdfGraphicsView(QGraphicsView):
         self._review_items: dict[str, QGraphicsPathItem] = {}
         self._review_geometries: dict[str, GeometriaDocumento] = {}
         self._review_transformer: TransformadorCoordenadasPagina | None = None
+        self._callout_layer: QGraphicsRectItem | None = None
+        self._callout_items: dict[str, _GraficosCallout] = {}
         self._zoom = 1.0
         self.setBackgroundBrush(QBrush(QColor("#3b3d40")))
         self.setRenderHints(
-            QPainter.RenderHint.Antialiasing | QPainter.RenderHint.SmoothPixmapTransform
+            QPainter.RenderHint.Antialiasing
+            | QPainter.RenderHint.TextAntialiasing
+            | QPainter.RenderHint.SmoothPixmapTransform
         )
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
@@ -135,6 +159,8 @@ class PdfGraphicsView(QGraphicsView):
         self._review_geometries.clear()
         self._tile_items.clear()
         self._overlay_items.clear()
+        self._callout_layer = None
+        self._callout_items.clear()
         self._scene.clear()
         self._pixmap_item = self._scene.addPixmap(pixmap)
         self._pixmap_item.setZValue(0)
@@ -170,6 +196,8 @@ class PdfGraphicsView(QGraphicsView):
         self._review_transformer = None
         self._tile_items.clear()
         self._overlay_items.clear()
+        self._callout_layer = None
+        self._callout_items.clear()
         self._scene.clear()
         self._pixmap_item = None
 
@@ -198,6 +226,39 @@ class PdfGraphicsView(QGraphicsView):
             item = self._scene.addPath(path, pen)
             item.setZValue(10)
             self._overlay_items.append(item)
+
+    def definir_callouts_conformidade(
+        self,
+        callouts: tuple[CalloutConformidade, ...],
+        transformer: TransformadorCoordenadasPagina,
+    ) -> None:
+        """Reconstrua a camada vetorial de callouts sem tocar no raster ou nos links."""
+        self._remover_camada_callouts()
+        if self._pixmap_item is None:
+            return
+        layer = QGraphicsRectItem(self._scene.sceneRect())
+        layer.setPen(QPen(Qt.PenStyle.NoPen))
+        layer.setBrush(QBrush(Qt.BrushStyle.NoBrush))
+        layer.setFlag(QGraphicsItem.GraphicsItemFlag.ItemClipsChildrenToShape)
+        layer.setZValue(30)
+        self._scene.addItem(layer)
+        self._callout_layer = layer
+        for callout in callouts:
+            if callout.pagina_id != transformer.pagina.id:
+                continue
+            self._callout_items[str(callout.id)] = _criar_graficos_callout(
+                callout,
+                transformer,
+                layer,
+                zoom=self._zoom,
+            )
+
+    def _remover_camada_callouts(self) -> None:
+        layer = self._callout_layer
+        self._callout_items.clear()
+        self._callout_layer = None
+        if layer is not None and layer.scene() is self._scene:
+            self._scene.removeItem(layer)
 
     def definir_propostas_revisao(
         self,
@@ -376,6 +437,7 @@ class PdfViewerWidget(QWidget):
         self._overlays: tuple[tuple[PontoNormalizado, ...], ...] = ()
         self._review_proposals: tuple[PropostaElemento, ...] = ()
         self._review_link_geometries: dict[str, GeometriaDocumento] = {}
+        self._compliance_callouts: tuple[CalloutConformidade, ...] = ()
         self._current_transformer: TransformadorCoordenadasPagina | None = None
         self._last_page_id: str | None = None
         self._build_ui()
@@ -482,6 +544,7 @@ class PdfViewerWidget(QWidget):
         self._overlays = ()
         self._review_proposals = ()
         self._review_link_geometries = {}
+        self._compliance_callouts = ()
         self._current_transformer = None
         self._last_page_id = None
         self._page.blockSignals(True)
@@ -651,6 +714,7 @@ class PdfViewerWidget(QWidget):
         self._overlays = ()
         self._review_proposals = ()
         self._review_link_geometries = {}
+        self._compliance_callouts = ()
         self._last_page_id = None
         self._project_pages = project_pages
         self._inspection = inspections[0]
@@ -684,6 +748,14 @@ class PdfViewerWidget(QWidget):
                 self._current_transformer,
                 self._review_link_geometries,
             )
+
+    def definir_callouts_conformidade(
+        self,
+        callouts: tuple[CalloutConformidade, ...],
+    ) -> None:
+        self._compliance_callouts = callouts
+        if self._current_transformer is not None:
+            self.view.definir_callouts_conformidade(callouts, self._current_transformer)
 
     def selecionar_proposta(self, proposal_id: str) -> None:
         self.view.selecionar_proposta(proposal_id)
@@ -864,6 +936,7 @@ class PdfViewerWidget(QWidget):
             transformer,
             self._review_link_geometries,
         )
+        self.view.definir_callouts_conformidade(self._compliance_callouts, transformer)
         diagnostics = len(inspection.paginas[page_number - 1].diagnosticos)
         project_page_number = self._page.value()
         self.status_changed.emit(
@@ -982,6 +1055,11 @@ class PdfViewerWidget(QWidget):
             return
         self._cancel_current_rendering()
         self.view.limpar_tiles()
+        if self._current_transformer is not None:
+            self.view.definir_callouts_conformidade(
+                self._compliance_callouts,
+                self._current_transformer,
+            )
         self._detail_timer.start()
 
     def _viewport_changed(self) -> None:
@@ -1170,6 +1248,127 @@ def _review_color(state: EstadoRevisao, *, alpha: int = 255) -> QColor:
     }
     red, green, blue = colors[state]
     return QColor(red, green, blue, alpha)
+
+
+def _criar_graficos_callout(
+    callout: CalloutConformidade,
+    transformer: TransformadorCoordenadasPagina,
+    layer: QGraphicsRectItem,
+    *,
+    zoom: float,
+) -> _GraficosCallout:
+    color = QColor("#c62828")
+    box = callout.caixa_sugerida
+    top_left = transformer.normalizado_para_pixel(PontoNormalizado(box.esquerda, box.topo))
+    top_right = transformer.normalizado_para_pixel(PontoNormalizado(box.direita, box.topo))
+    bottom_left = transformer.normalizado_para_pixel(PontoNormalizado(box.esquerda, box.base))
+    box_width = math.hypot(top_right.x - top_left.x, top_right.y - top_left.y)
+    box_height = math.hypot(bottom_left.x - top_left.x, bottom_left.y - top_left.y)
+    angle = math.degrees(math.atan2(top_right.y - top_left.y, top_right.x - top_left.x))
+    rectangle = QGraphicsRectItem(QRectF(0, 0, box_width, box_height), layer)
+    pen = QPen(color, 2)
+    pen.setCosmetic(True)
+    rectangle.setPen(pen)
+    rectangle.setBrush(QBrush(QColor("white")))
+    rectangle.setData(0, str(callout.id))
+    rectangle.setPos(top_left.x, top_left.y)
+    rectangle.setRotation(angle)
+    rectangle.setZValue(1)
+    text_item = QGraphicsTextItem(layer)
+    text_item.setDefaultTextColor(color)
+    text_item.document().setDocumentMargin(0)
+    points_width = float(box.largura) * float(transformer.pagina.largura_pontos)
+    pixels_per_point = box_width / points_width
+    padding = max(2.0, 6.0 * pixels_per_point)
+    available_width = max(1.0, box_width - 2 * padding)
+    available_height = max(1.0, box_height - 2 * padding)
+    minimum_scene_pixels = max(1, math.ceil(7.0 / zoom))
+    for font_points in (10.5, 10.0, 9.5, 9.0):
+        font = _fonte_callout(max(minimum_scene_pixels, round(font_points * pixels_per_point)))
+        text_item.setFont(font)
+        text_item.setPlainText(callout.texto)
+        text_item.setTextWidth(available_width)
+        if text_item.boundingRect().height() <= available_height:
+            break
+    radians = math.radians(angle)
+    text_item.setPos(
+        top_left.x + math.cos(radians) * padding - math.sin(radians) * padding,
+        top_left.y + math.sin(radians) * padding + math.cos(radians) * padding,
+    )
+    text_item.setRotation(angle)
+    text_item.setData(0, str(callout.id))
+    text_item.setZValue(2)
+    tooltip = callout.texto.replace("\n", " ")
+    rectangle.setToolTip(tooltip)
+    text_item.setToolTip(tooltip)
+    scene_bounds = layer.rect()
+    arrow_pen = QPen(color, 2)
+    arrow_pen.setCosmetic(True)
+    lines: list[QGraphicsPathItem] = []
+    for anchor in callout.ancoras:
+        connection = ponto_conexao_callout(box, anchor.ponto)
+        start = transformer.normalizado_para_pixel(connection)
+        end = transformer.normalizado_para_pixel(anchor.ponto)
+        path = _caminho_seta_aberta(start, end, pixels_per_point, scene_bounds)
+        line = QGraphicsPathItem(path, layer)
+        line.setPen(arrow_pen)
+        line.setData(0, str(callout.id))
+        line.setToolTip(tooltip)
+        lines.append(line)
+    return _GraficosCallout(rectangle, text_item, tuple(lines))
+
+
+def _caminho_seta_aberta(
+    start: PontoPlano,
+    end: PontoPlano,
+    pixels_per_point: float,
+    page_bounds: QRectF,
+) -> QPainterPath:
+    path = QPainterPath(QPointF(start.x, start.y))
+    path.lineTo(end.x, end.y)
+    backward_x = start.x - end.x
+    backward_y = start.y - end.y
+    length = math.hypot(backward_x, backward_y)
+    if length <= 1e-9:
+        return path
+    backward_x /= length
+    backward_y /= length
+    wing_length = max(5.0, 8.0 * pixels_per_point)
+    angle = math.radians(28)
+    cosine = math.cos(angle)
+    sine = math.sin(angle)
+    for direction in (-1.0, 1.0):
+        wing_x = end.x + wing_length * (backward_x * cosine - direction * backward_y * sine)
+        wing_y = end.y + wing_length * (direction * backward_x * sine + backward_y * cosine)
+        wing = _conter_ponto_pagina(wing_x, wing_y, page_bounds)
+        path.moveTo(end.x, end.y)
+        path.lineTo(wing)
+    return path
+
+
+def _conter_ponto_pagina(x: float, y: float, bounds: QRectF) -> QPointF:
+    return QPointF(
+        min(bounds.right(), max(bounds.left(), x)),
+        min(bounds.bottom(), max(bounds.top(), y)),
+    )
+
+
+def _fonte_callout(pixel_size: int) -> QFont:
+    global _FONTE_CALLOUT_REGISTRO_TENTADO
+
+    family = "Arial"
+    font = QFont(family)
+    font.setPixelSize(pixel_size)
+    if QFontInfo(font).exactMatch() or _FONTE_CALLOUT_REGISTRO_TENTADO:
+        return font
+    _FONTE_CALLOUT_REGISTRO_TENTADO = True
+    windows_directory = os.environ.get("WINDIR", r"C:\Windows")
+    font_path = Path(windows_directory) / "Fonts" / "arial.ttf"
+    if font_path.is_file():
+        QFontDatabase.addApplicationFont(str(font_path))
+        font = QFont(family)
+        font.setPixelSize(pixel_size)
+    return font
 
 
 def _align_persisted_document(

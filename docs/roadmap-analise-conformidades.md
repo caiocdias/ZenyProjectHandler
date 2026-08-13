@@ -79,7 +79,7 @@ comissionador comunica um problema, mas **não são fonte normativa suficiente p
 | 1. Registro configurável de regras | CONCLUÍDA | - | Importar/remover regras pela interface com revisão persistida |
 | 2. Pesquisa normativa integral e expansão inicial | CONCLUÍDA | 1 | Inventário oficial e regras automatizáveis já incorporadas |
 | 3. Execução e histórico de conformidade | CONCLUÍDA | 1, 2 | Resultado vinculado à análise e à revisão de regras |
-| 4. Caixas e setas no visualizador | PENDENTE | 3 | Callouts vermelhos ancorados em geometria rastreável |
+| 4. Caixas e setas no visualizador | CONCLUÍDA | 3 | Callouts vermelhos ancorados em geometria rastreável |
 | 5. Visibilidade e sincronização | PENDENTE | 4 | Olho por achado e navegação bidirecional lista/PDF |
 | 6. Primeiro avaliador técnico e aceite ponta a ponta | PENDENTE | 5 | Extensão comprovada sem codificar regras no motor |
 
@@ -501,3 +501,21 @@ atualiza `docs/catalogo-regras-conformidade.md`. Não copie conteúdo dos PDFs r
   continuam reservadas às Etapas 4 e 5; coleta de campo e novos avaliadores técnicos permanecem na
   Etapa 6.
 - **Commit:** `feat(compliance): persist compliance analysis results`.
+
+### 2026-08-12 — Etapa 4 concluída
+
+- **Arquivos principais:** projeção sem Qt em `application/compliance_callouts.py`; camada vetorial
+  independente em `ui/pdf_viewer.py`; integração dos resultados persistidos em
+  `ui/documentation_panel.py`; fixtures e testes sintéticos em `tests`.
+- **Comportamento entregue:** somente divergências com proveniência rastreável produzem callout;
+  fatos decisivos, suas evidências e o alvo formam a precedência; caixas contidas e posicionadas por
+  candidatos determinísticos reduzem colisões; texto quebrado, fundo branco, borda/texto vermelhos e
+  setas abertas permanecem alinhados em zoom, rotação, troca de página e tiles, sem alterar o PDF.
+- **Testes e inspeção visual:** 82 testes focados aprovados; renders sintéticos A4/A3 em retrato e
+  paisagem inspecionados com texto legível, caixas contidas e duas setas abertas alinhadas ao alvo.
+- **Gate básico:** `IniciarTestes.bat` aprovado no Python 3.13.14 — 466 testes aprovados, 20 privados
+  excluídos pelo gate, cobertura de 85,88%; Ruff, formatação, Mypy, dependências e complexidade
+  aprovados.
+- **Limitações remanescentes:** visibilidade por achado, realce e sincronização bidirecional
+  lista/PDF continuam reservados à Etapa 5; novos provedores técnicos permanecem na Etapa 6.
+- **Commit:** `feat(pdf): render compliance callouts`.

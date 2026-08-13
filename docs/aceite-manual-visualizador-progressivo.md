@@ -34,6 +34,22 @@ nome do arquivo, caminho absoluto, conteúdo, coordenadas ou imagens da prancha.
 8. Inicie um zoom que ainda esteja refinando a imagem e feche a janela. O processo deve encerrar sem
    aviso de `QThread`, travamento ou janela reaparecendo.
 
+## Callouts de conformidade
+
+Os testes públicos geram quatro folhas inteiramente sintéticas — A4 e A3, em retrato e paisagem — e
+salvam capturas temporárias da cena. Para o aceite visual, confirme em cada formato:
+
+1. caixa integralmente branca e contida na folha, com borda e texto vermelhos legíveis;
+2. quebra de texto sem corte e proporção tipográfica equivalente entre os formatos;
+3. uma ou mais linhas chegando ao alvo sintético, cada qual com ponta de seta aberta;
+4. ausência de sobreposição quando existe uma posição candidata livre;
+5. alinhamento do alvo depois de zoom, redimensionamento, tiles, rotações 0°/90°/180°/270° e troca
+   de página;
+6. coexistência com o sublinhado de elemento, sem mudança no PDF nem no cache raster.
+
+Um achado sintético sem geometria deve continuar na lista como **Sem localização no PDF** e não pode
+criar item na camada gráfica. Os controles de exibir/ocultar por achado não fazem parte deste aceite.
+
 ## Invalidação controlada
 
 Em uma cópia temporária autorizada, abra o PDF, altere ou substitua o arquivo fora do aplicativo e
@@ -49,5 +65,6 @@ Registre apenas data, versão/commit, classe aproximada da prancha (A0/A1), esca
 - texto pequeno nítido ao ampliar, sem reduzir o teto visual;
 - ausência de resultados antigos após página, rotação, zoom ou DPR;
 - overlays alinhados e links clicáveis nas quatro rotações;
+- callouts contidos, legíveis, ancorados e independentes dos links/tiles;
 - memória estabilizada, sem crescimento proporcional ao raster integral de 600 DPI;
 - invalidação da origem e fechamento limpos.

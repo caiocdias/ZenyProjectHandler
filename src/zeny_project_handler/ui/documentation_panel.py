@@ -28,6 +28,10 @@ from zeny_project_handler.adapters.compliance import (
     carregar_registro_conformidade_json_com_avisos,
 )
 from zeny_project_handler.application.compliance_analysis import ExecutarAnaliseConformidade
+from zeny_project_handler.application.compliance_callouts import (
+    CalloutConformidade,
+    projetar_callouts_conformidade,
+)
 from zeny_project_handler.application.compliance_registry import (
     ServicoRegistroRegrasConformidade,
 )
@@ -82,6 +86,7 @@ class DocumentationPanelWidget(QWidget):
         self._viewer = viewer
         self._session: SessaoRevisao | None = None
         self._result: ExecucaoConformidade | None = None
+        self._callouts: tuple[CalloutConformidade, ...] = ()
         self._build_ui()
         self.atualizar_projetos()
 
@@ -230,6 +235,8 @@ class DocumentationPanelWidget(QWidget):
     def limpar(self) -> None:
         self._session = None
         self._result = None
+        self._callouts = ()
+        self._viewer.definir_callouts_conformidade(())
         self._documents.clear()
         self._findings.clear()
         self._summary.setText("Selecione um projeto analisado")
@@ -262,6 +269,21 @@ class DocumentationPanelWidget(QWidget):
             if session is not None and service is not None
             else None
         )
+        pages = (
+            tuple(page for document in session.projeto.documentos for page in document.paginas)
+            if session is not None
+            else ()
+        )
+        self._callouts = (
+            projetar_callouts_conformidade(
+                self._result,
+                evidencias=session.evidencias,
+                paginas=pages,
+            )
+            if self._result is not None and session is not None
+            else ()
+        )
+        self._viewer.definir_callouts_conformidade(self._callouts)
         self._populate_documents()
         self._populate_findings()
         self._analyze_compliance.setEnabled(session is not None and service is not None)
@@ -347,6 +369,7 @@ class DocumentationPanelWidget(QWidget):
         if result is None:
             return
         targets = {item.id: item for item in result.alvos}
+        localized_findings = {item.id for item in self._callouts}
         order = {
             ResultadoConformidade.DIVERGENCIA: 0,
             ResultadoConformidade.NAO_AVALIAVEL: 1,
@@ -368,7 +391,7 @@ class DocumentationPanelWidget(QWidget):
                     target.rotulo,
                     f"{finding.fonte.documento} · {finding.fonte.item}",
                     f"Regras {result.versao_regras} · norma {finding.fonte.revisao}",
-                    _location_label(target),
+                    _location_label(target, projected=finding.id in localized_findings),
                 )
             )
             row.setToolTip(2, finding.mensagem)
@@ -700,7 +723,9 @@ def _expected_condition(evaluation: AvaliacaoCondicaoConformidade) -> str:
     return f"{evaluation.chave_fato}: {value}"
 
 
-def _location_label(target: AlvoConformidade) -> str:
+def _location_label(target: AlvoConformidade, *, projected: bool = False) -> str:
+    if projected:
+        return "Localizado no PDF"
     if target.pagina_id is None:
         return "Sem localização no PDF"
     if target.geometria is None:

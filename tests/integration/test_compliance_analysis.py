@@ -47,6 +47,12 @@ from zeny_project_handler.domain.values import (
 from zeny_project_handler.ui.documentation_panel import DocumentationPanelWidget
 from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
 
+
+class _ViewerStub:
+    def definir_callouts_conformidade(self, _callouts: tuple[object, ...]) -> None:
+        pass
+
+
 pytestmark = pytest.mark.integration
 
 _NOW = datetime(2026, 8, 12, 15, tzinfo=UTC)
@@ -308,7 +314,7 @@ def test_panel_loads_latest_marks_stale_and_reapplies_without_ocr(
         service=review_service,
         registry_service=registry_service,
         analysis_service=service,
-        viewer=cast(PdfViewerWidget, object()),
+        viewer=cast(PdfViewerWidget, _ViewerStub()),
     )
     qtbot.addWidget(panel)
     panel.show()
