@@ -97,6 +97,11 @@ class _OperationalFrame:
         )
 
 
+def _semantic_page_pixmap(page: Any, **options: Any) -> Any:
+    """Rasterize apenas o conteúdo do projeto, sem comentários PDF sobrepostos."""
+    return page.get_pixmap(**{**options, "annots": False})
+
+
 @dataclass(frozen=True, slots=True)
 class _RectifiedRegion:
     raster: PaginaRasterOcr
@@ -1305,11 +1310,11 @@ def _rectified_frame_region(
         max(point[0] for point in corners) + 1,
         max(point[1] for point in corners) + 1,
     )
-    pixmap = page.get_pixmap(
+    pixmap = _semantic_page_pixmap(
+        page,
         dpi=dpi,
         colorspace=pymupdf.csRGB,
         alpha=False,
-        annots=True,
         clip=clip,
     )
     source = Image.frombytes("RGB", (pixmap.width, pixmap.height), bytes(pixmap.samples))
@@ -1545,11 +1550,11 @@ def _render_bounds(
 ) -> Any:
     left, top, right, bottom = bounds
     page_rect = page.rect
-    return page.get_pixmap(
+    return _semantic_page_pixmap(
+        page,
         dpi=dpi,
         colorspace=pymupdf.csRGB,
         alpha=False,
-        annots=True,
         clip=pymupdf.Rect(
             page_rect.x0 + float(left) * page_rect.width,
             page_rect.y0 + float(top) * page_rect.height,
@@ -1848,11 +1853,11 @@ def _extract_ocr_region(
         page_rect.x0 + float(right) * page_rect.width,
         page_rect.y0 + float(bottom) * page_rect.height,
     )
-    pixmap = page.get_pixmap(
+    pixmap = _semantic_page_pixmap(
+        page,
         dpi=dpi,
         colorspace=pymupdf.csRGB,
         alpha=False,
-        annots=True,
         clip=clip,
     )
     raster = PaginaRasterOcr(

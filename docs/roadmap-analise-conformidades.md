@@ -8,7 +8,8 @@
 
 Ao concluir este ciclo, o usuário deve conseguir, pela aba **Conformidade**:
 
-1. importar, ativar, desativar ou remover regras antes de analisar, sem alterar o código;
+1. importar ou exportar regras antes de analisar, sem oferecer remoção, ativação ou desativação
+   individual na interface;
 2. executar a análise com uma revisão imutável das regras ativas;
 3. ver cada possível divergência com regra, mensagem, alvo, evidências e fonte;
 4. localizar no visualizador uma caixa vermelha com o texto do erro e seta(s) para o alvo;
@@ -43,8 +44,9 @@ comissionador comunica um problema, mas **não são fonte normativa suficiente p
 1. O PDF original permanece somente leitura. Caixas e setas são uma camada do visualizador; exportar
    um novo PDF anotado não faz parte deste ciclo.
 2. O SQLite é canônico. O JSON continua como seed e formato de importação/exportação.
-3. Cada alteração de regras cria uma revisão imutável. “Remover” significa retirar da nova revisão
-   ativa; revisões usadas em análises anteriores continuam recuperáveis.
+3. Cada importação que altere regras cria uma revisão imutável. O estado `enabled` permanece parte do
+   formato importável, mas IDs omitidos são preservados e o usuário não possui comando para remover,
+   ativar ou desativar uma regra individualmente.
 4. A análise captura a assinatura e a versão das regras no início. Alterar regras nunca reinterpreta
    silenciosamente um resultado antigo.
 5. Arquivos de regras só declaram condições do vocabulário suportado. Nunca execute Python,
@@ -55,8 +57,8 @@ comissionador comunica um problema, mas **não são fonte normativa suficiente p
    reprovação, até que existam fatos suficientes.
 7. Toda regra incorporada pelo projeto deve constar em `docs/catalogo-regras-conformidade.md`, com
    número sequencial estável, ID técnico, explicação do processo de análise, fonte exata, fatos,
-   aplicabilidade, exceções, resultado e estado de automação. Regra alterada ou removida não some do
-   histórico: é marcada como substituída, inativa ou removida. A mesma alteração de código/regras e
+   aplicabilidade, exceções, resultado e estado de automação. Regra alterada não some do histórico:
+   é marcada como substituída ou inativa. A mesma alteração de código/regras e
    catálogo deve ocorrer no mesmo commit. Registros importados pelo usuário também devem gerar uma
    versão Markdown local do catálogo ativo, sem editar silenciosamente os arquivos do repositório.
 8. Uma marcação só recebe seta quando há página e geometria rastreáveis. Achado sem localização
@@ -76,7 +78,7 @@ comissionador comunica um problema, mas **não são fonte normativa suficiente p
 
 | Etapa | Estado inicial | Depende de | Entrega principal |
 |---|---|---|---|
-| 1. Registro configurável de regras | CONCLUÍDA | - | Importar/remover regras pela interface com revisão persistida |
+| 1. Registro configurável de regras | CONCLUÍDA | - | Importar/exportar regras pela interface com revisão persistida |
 | 2. Pesquisa normativa integral e expansão inicial | CONCLUÍDA | 1 | Inventário oficial e regras automatizáveis já incorporadas |
 | 3. Execução e histórico de conformidade | CONCLUÍDA | 1, 2 | Resultado vinculado à análise e à revisão de regras |
 | 4. Caixas e setas no visualizador | CONCLUÍDA | 3 | Callouts vermelhos ancorados em geometria rastreável |
@@ -97,13 +99,13 @@ Estados permitidos: `PENDENTE`, `EM ANDAMENTO`, `BLOQUEADA` e `CONCLUÍDA`.
   tabelas nesta etapa.
 - No primeiro uso, criar a revisão ativa a partir do seed empacotado. Não modificar o seed ao editar.
 - Criar porta, repositório SQLAlchemy e serviço de aplicação para consultar a revisão ativa, listar
-  histórico, importar/mesclar regras, ativar/desativar e remover uma regra em uma nova revisão.
+  histórico e importar/mesclar ou exportar regras em revisões imutáveis.
 - Manter numeração incremental estável por ID de regra e gerar atomicamente, na pasta de dados do
   usuário, um `catalogo-regras-conformidade.md` legível para cada nova revisão ativa. Novas regras
-  recebem o próximo número; números removidos nunca são reutilizados.
-- Adicionar uma visão **Regras** ao painel de conformidade com tabela, detalhes e botões **Importar**,
-  **Exportar**, **Ativar/desativar** e **Remover**. Importação deve mostrar resumo e pedir confirmação
-  antes de substituir IDs existentes; remoção também exige confirmação.
+  recebem o próximo número; números nunca são reutilizados.
+- Adicionar uma visão **Regras** ao painel de conformidade com tabela, detalhes e somente os botões
+  **Importar** e **Exportar**. Importação deve mostrar resumo e pedir confirmação antes de substituir
+  IDs existentes; IDs omitidos no arquivo continuam na revisão ativa.
 - Aceitar pela interface o mesmo formato versionado de
   `docs/schemas/regras-conformidade.schema.json`. Mensagens de erro devem apontar regra, campo e
   motivo sem incluir o caminho absoluto do arquivo.
@@ -115,8 +117,9 @@ Estados permitidos: `PENDENTE`, `EM ANDAMENTO`, `BLOQUEADA` e `CONCLUÍDA`.
   anterior.
 - Chave desconhecida, ID duplicado, operador incompatível e valor com tipo incorreto são
   recusados de forma atômica.
-- Teste `pytest-qt`: importar uma regra sintética, desativá-la, reativá-la, removê-la, exportar o
-  registro e reiniciar o painel; o estado persiste e nenhuma etapa exige editar JSON manualmente.
+- Teste `pytest-qt`: importar uma regra sintética, importar o mesmo ID com outro estado `enabled`,
+  omitir IDs em outra importação, exportar o registro e reiniciar o painel; o estado persiste, IDs
+  omitidos continuam presentes e não existem controles individuais de remoção/ativação.
 - O catálogo Markdown local é regenerado em cada revisão, conserva a numeração e descreve em
   linguagem humana `when`, `unless` e `must`; falha de escrita não deixa arquivo parcial.
 - O painel deixa claro qual revisão está ativa e quantas regras ativas/inativas existem.
@@ -132,11 +135,12 @@ git status e preserve alterações não relacionadas.
 
 Entregue um incremento vertical: catálogo das chaves de fatos suportadas e validação semântica;
 snapshot imutável do registro no SQLite com migração, porta/repositório/serviço; seed idempotente; e
-uma visão Regras no painel para importar, exportar, ativar/desativar e remover regras. Mantenha um
+uma visão Regras no painel somente para importar e exportar regras. Mantenha um
 número incremental estável por ID e gere atomicamente no diretório de dados do usuário o arquivo
 catalogo-regras-conformidade.md, explicando o processo de análise de cada regra. A importação usa o
-schema JSON existente, mostra um resumo antes da confirmação e cria uma nova revisão ativa. Remover
-nunca apaga revisões históricas nem reutiliza números. Não execute código vindo do JSON, não
+schema JSON existente, mostra um resumo antes da confirmação e cria uma nova revisão ativa. Não
+ofereça comandos para remover, ativar ou desativar uma regra; omissões na importação preservam os
+IDs ativos e números nunca são reutilizados. Não execute código vindo do JSON, não
 normalize condições em excesso e não implemente ainda histórico de análises ou callouts no PDF.
 
 Adicione testes unitários, de persistência e pytest-qt para os critérios da etapa. Atualize a
@@ -241,13 +245,14 @@ ou gate vermelho.
 - Fazer a aba **Conformidade** ler a última execução persistida. Exibir possíveis divergências
   primeiro e incluir resultado, severidade, texto específico com valor observado/esperado quando
   houver, alvo, fonte, versão das regras e estado de localização.
-- Sinalizar resultado desatualizado quando a assinatura ativa for diferente da assinatura usada;
-  somente uma ação explícita gera uma nova execução.
+- Sinalizar resultado desatualizado quando a assinatura ativa ou a versão do método for diferente da
+  usada; somente uma ação explícita gera uma nova execução.
 
 ### Testes e aceite
 
 - A mesma entrada e revisão produzem IDs e payload determinísticos; nova revisão mantém o histórico.
-- Regra removida não aparece na nova execução, mas continua no snapshot anterior.
+- Regra desativada por um JSON importado não aparece na nova execução, mas continua no snapshot
+  anterior; omitir seu ID em uma importação não a remove.
 - Falha/cancelamento faz rollback completo. Reabrir o aplicativo recupera a última execução.
 - Teste de integração do fluxo: uma fixture sintética divergente conclui a análise, atualiza o painel
   automaticamente e mostra mensagem observada/esperada; casos conforme e não avaliável continuam
@@ -392,7 +397,9 @@ vermelho.
   implementar/testar provedor se necessário -> importar regra declarativa -> executar análise ->
   calibrar apenas na partição privada de desenvolvimento.
 - Criar um cenário E2E sintético que use a interface para importar regra, analisar, ver o erro e o
-  callout, ocultar/exibir, remover a regra, reaplicar e confirmar que o novo resultado não a contém.
+  callout, ocultar/exibir, reiniciar, importar uma segunda versão com `enabled=false` e reaplicar. O
+  novo resultado não contém o achado, o histórico anterior é preservado e não existem controles
+  individuais de ativação, desativação ou remoção.
 
 ### Testes e aceite
 
@@ -417,9 +424,12 @@ Crie um contrato explícito e pequeno para provedores de fatos e extraia o neces
 monolítico sem alterar resultados atuais. Implemente como primeiro provedor especializado o fato
 vao.comprimento_m usando detectar_vaos, preservando origem, evidência, região, página e geometria.
 Exceção só existe com prova positiva. Faça a regra de vão atual atravessar o fluxo completo e crie um
-E2E sintético: importar regra, analisar, listar divergência, mostrar callout, ocultar/exibir, remover
-regra, reaplicar e confirmar sua ausência; reinicie a aplicação para provar persistência. Não derive
-novas normas dos comentários dos PDFs reais e não implemente ângulo ou cálculo mecânico nesta etapa.
+E2E sintético: importar regra, analisar, listar divergência, mostrar callout, ocultar/exibir e
+confirmar que a regra e o resultado sobrevivem ao reinício. Depois, importe o mesmo ID com
+`enabled=false`, reaplique e confirme a ausência no resultado novo e a preservação do snapshot
+anterior. Prove também que não existem controles individuais de ativação, desativação ou remoção.
+Não derive novas normas dos comentários dos PDFs reais e não implemente ângulo ou cálculo
+mecânico nesta etapa.
 
 Atualize a documentação com a receita para futuras famílias de fatos e o registro da etapa. Execute
 testes focados, E2E e `.\IniciarTestes.bat`. Rode `.\IniciarTestesPrivados.bat` apenas se o ambiente
@@ -438,8 +448,9 @@ funcionar sem terminal:
 3. encontrar a possível divergência com explicação e fonte na aba **Conformidade**;
 4. selecionar o achado e ver caixa/seta corretamente ancoradas no PDF;
 5. ocultar e exibir a marcação sem afetar os identificadores de elementos;
-6. remover a regra, reanalisar e confirmar que o histórico antigo foi preservado e o resultado novo
-   não contém mais o achado;
+6. importar uma segunda versão da regra com `enabled=false`, reanalisar e confirmar que o snapshot
+   anterior foi preservado e o resultado novo não contém mais o achado, sem comandos individuais de
+   remoção, ativação ou desativação;
 7. abrir o catálogo Markdown e localizar a descrição incremental de cada regra usada na análise.
 
 ## Registro de execução
@@ -454,8 +465,9 @@ atualiza `docs/catalogo-regras-conformidade.md`. Não copie conteúdo dos PDFs r
   `adapters/compliance`; serviço em `application/compliance_registry.py`; migração e repositório em
   `adapters/persistence`; visão **Regras** em `ui/documentation_panel.py`.
 - **Testes focados:** validação semântica/schema, snapshots e migração, seed idempotente, assinatura,
-  numeração permanente, publicação atômica e fluxo pytest-qt de importar, desativar, reativar,
-  remover, exportar e reiniciar — 33 testes aprovados.
+  numeração permanente, publicação atômica e fluxo pytest-qt de importar, substituir um mesmo ID,
+  preservar omitidos, exportar e reiniciar — 33 testes aprovados no marco original; a revisão de
+  13/08/2026 acrescentou as defesas contra remoção.
 - **Gate básico:** `IniciarTestes.bat` aprovado; corpus privado não acessado.
 - **Limitações remanescentes:** histórico de execuções de conformidade, callouts no PDF e provedores
   de ângulo/vão continuam reservados às Etapas 3, 4 e 6.
@@ -468,7 +480,8 @@ atualiza `docs/catalogo-regras-conformidade.md`. Não copie conteúdo dos PDFs r
   referências diretas e limites de acesso estão em `docs/inventario-fontes-normativas.md`.
 - **Arquivos principais:** inventário normativo e catálogo incremental em `docs`; fatos positivos em
   `domain/compliance_facts.py`; provedores em `application/project_compliance.py`; seed versionado
-  `cemig-normas-distribuicao-2025.3` com oito entradas, sete ativas.
+  `cemig-normas-distribuicao-2025.3` com oito entradas, sete ativas naquele marco; a salvaguarda da
+  Regra 6 passou o seed para `2025.4` na revisão de 13/08/2026.
 - **Regras incorporadas:** proibição de cabo convencional em construção urbana nova e
   incompatibilidade rural inequívoca entre cinco estruturas MT e poste de concreto duplo T. A regra
   de escala foi inativada até que suas exceções possam ser representadas por fatos confiáveis; a
@@ -491,7 +504,7 @@ atualiza `docs/catalogo-regras-conformidade.md`. Não copie conteúdo dos PDFs r
 - **Comportamento entregue:** revisão ativa capturada no início; snapshot canônico e atômico com
   condições observadas/esperadas; IDs determinísticos; histórico imutável; rollback integral; última
   execução recuperada após reinício; divergências primeiro e sinalização de resultado desatualizado.
-- **Testes focados:** domínio, migração, persistência, determinismo, imutabilidade, remoção de regra,
+- **Testes focados:** domínio, migração, persistência, determinismo, imutabilidade, revisão de regra,
   rollback por falha/cancelamento, reinício, integração do pipeline e pytest-qt/E2E de reanálise sem
   PyMuPDF nem OCR — 102 testes focados aprovados.
 - **Gate básico:** `IniciarTestes.bat` aprovado no Python 3.13.14 — 457 testes aprovados, 20 privados
@@ -535,6 +548,10 @@ atualiza `docs/catalogo-regras-conformidade.md`. Não copie conteúdo dos PDFs r
 - **Gate básico:** `IniciarTestes.bat` aprovado no Python 3.13.14 — 470 testes aprovados, 20 privados
   excluídos pelo gate, cobertura de 86,04%; Ruff, formatação, Mypy, dependências e complexidade
   aprovados. O corpus privado não foi acessado.
+- **Limites do aceite:** não existe filtro de achados; somente a ordenação foi implementada e
+  testada. A navegação real com renderização assíncrona entre páginas não possui um único E2E que
+  percorra lista → viewer → callout → lista → dock; esses elos foram cobertos separadamente e, em
+  parte, com stubs.
 - **Limitações remanescentes:** o primeiro provedor técnico de vão e o aceite ponta a ponta de
   extensão de regras continuam reservados à Etapa 6.
 - **Commit:** `feat(ui): control compliance callout visibility`.
@@ -547,21 +564,78 @@ atualiza `docs/catalogo-regras-conformidade.md`. Não copie conteúdo dos PDFs r
   `tests/e2e/test_span_compliance_ui.py`.
 - **Comportamento entregue:** `vao.comprimento_m` preserva a origem da medida, as evidências, a região,
   a página e a geometria do rótulo ou do cabo. Medidas por coordenadas conservam as evidências dos
-  postes. `vao.excecao_45_60_demonstrada` só é publicado quando um marcador positivo referencia uma
-  evidência existente na mesma página; ausência nunca vira `false`.
+  postes. Após a revisão complementar, `vao.excecao_45_60_demonstrada` só é publicado na faixa acima
+  de 45 m e até 60 m, quando um marcador positivo referencia evidência existente na mesma página;
+  ausência nunca vira `false` e não autoriza divergência nessa faixa.
 - **Aceite ponta a ponta:** a interface importa uma regra sintética, analisa o vão divergente, lista o
   resultado, materializa o callout, reinicia e recupera regra/resultado, oculta e exibe a marcação,
-  remove a regra, reaplica a conformidade e confirma sua ausência no novo snapshot sem apagar o
-  histórico anterior.
+  importa o mesmo ID com `enabled=false`, reaplica a conformidade e confirma sua ausência no novo
+  snapshot sem apagar o histórico anterior.
 - **Testes focados:** 70 testes de conformidade e E2E aprovados; medida anotada, coordenadas, ausência,
   exceção positiva, região/página, conforme/divergência/não avaliável e ciclo E2E com reinício estão
   cobertos.
 - **Gate básico:** `IniciarTestes.bat` aprovado no Python 3.13.14 — 482 testes aprovados, 20 privados
   excluídos pelo gate, cobertura de 86,18%; Ruff, formatação, Mypy, dependências e complexidade
   aprovados.
-- **Gate privado:** não executado; o ambiente autorizado completo não foi confirmado e nenhum conteúdo
-  do corpus privado foi acessado.
+- **Gate privado:** indisponível para os cinco arquivos iniciais, pois eles não correspondem às
+  entradas/hashes do manifesto privado registrado. Sem manifesto válido, o gate opt-in não constitui
+  aceite e nenhum dado identificável deve ser incluído em relatório.
+- **Limites do aceite:** o E2E sintético injeta diretamente no banco a sessão semântica, o cabo, a
+  evidência, a proposta e a decisão; portanto não valida extração/interpretação reais do PDF. A
+  exceção positiva é exercitada por fixture, mas ainda não existe produtor real de
+  `excecao_45_60_demonstrada`/`evidencia_excecao_45_60_id` no fluxo normal.
 - **Limitações remanescentes:** não há provedor de ângulo nem cálculo mecânico. Exceções de vão exigem
-  evidência positiva estruturada; texto livre e comentários de PDFs não são promovidos por este
-  provedor.
+  evidência positiva estruturada; comentários de PDFs não são fonte normativa nem podem ser
+  promovidos a fatos técnicos do desenho.
 - **Commit:** `feat(compliance): add span compliance provider`.
+
+### 2026-08-13 — Revisão complementar das Etapas 5 e 6
+
+- **Amostra inicial revisada:** cinco PDFs, seis páginas e quatro projetos de rede, com 20 anotações
+  textuais `FreeText` de comissionamento. Um dos projetos também contém portadores `Square` de texto
+  técnico AutoCAD SHX, que pertencem ao desenho e não são comentários. Um arquivo é acadêmico e fica
+  corretamente fora do domínio de projetos de rede. Este registro conserva apenas contagens
+  agregadas, sem nomes, textos, imagens, coordenadas ou caminhos dos arquivos.
+- **Valor e limite dos comentários:** as anotações mostram como revisores comunicam lacunas, mas não
+  constituem fonte normativa. Nenhum dos 20 comentários possui cobertura operacional integral pelas
+  oito regras atuais (`0/20`); assim, a revisão não converteu seu conteúdo em novas obrigações
+  automáticas.
+- **Problemas encontrados:** conteúdo e aparência de anotações podiam contaminar a interpretação do
+  desenho e originar propostas técnicas; uma medida de altura nominal `H.N` foi aceita como
+  comprimento de vão; e o pipeline ignorava classificações urbana/rural literais presentes no
+  cabeçalho quando `metadados.tipo_servico` estava vazio. A primeira tentativa de correção também
+  mostrou que filtrar toda anotação apagaria os portadores SHX e que aceitar a palavra “rural” ou
+  “urbana” em qualquer texto ativaria regras indevidamente. Houve ainda comprimentos
+  ausentes/duplicados, associações ambíguas e elementos sem classificação suficiente para publicar
+  tecnologia de cabo.
+- **Correções implementadas e cobertas sinteticamente:** comentários de revisão e suas aparências são
+  excluídos da interpretação, das regiões e dos fatos técnicos; anotações `Stamp` permanecem apenas
+  como candidatas a evidência de controle documental, enquanto `Square` marcado como
+  `AutoCAD SHX Text` é preservado; o OCR semântico usa `annots=False`; `H.N`, altura, engastamento,
+  área e capacidade não entram na heurística de vão; servidão e rótulos de assinatura não nascem de
+  `FreeText` de revisão; contexto só vem de metadado confirmado ou valor integral em campo permitido
+  e rotulado do cabeçalho, rejeitando token solto, negação, nome próprio e conflito. A versão do
+  método subiu para 3 e passa a invalidar resultados antigos.
+- **Regra 6 e atualização:** automação `PARCIAL`. Até 45 m e acima de 60 m a aplicabilidade é
+  resolvida pelo comprimento; acima de 45 m e até 60 m, a falta de prova positiva da exceção produz
+  `NAO_AVALIAVEL`. Marcador fora da faixa não elimina divergência acima de 60 m. O seed `2025.4`
+  migra apenas uma Regra 6 ainda idêntica ao seed oficial `2025.3`, preservando regras adicionais e
+  sem sobrescrever uma Regra 6 personalizada.
+- **Catálogo:** coerência desenho↔orçamento/materiais/potência/fases, cabo BT de tronco, cabo coberto
+  rural, simbologia de poste e PRODR/fotos foram registrados apenas como candidatos
+  `REVISAO_HUMANA`. As observações também reforçam `DOC-01/02`, `POST-01`, `STRUCT-01`, `GROUND-01`,
+  `SPAN-R01`, `COMP-02`, `PROT-01` e `TOPO-01`; ajuste genérico de ramal e notas curtas/ambíguas
+  continuam em revisão humana. Nenhum localizador ou obrigação foi inventado.
+- **Revisão da Etapa 5:** ordenação, visibilidade individual/em lote e sincronização bidirecional
+  permanecem cobertas, mas ainda não existe filtro de achados nem um único E2E com renderização
+  assíncrona real que percorra toda a sequência lista → página → callout → lista → dock.
+- **Revisão da Etapa 6:** o E2E continua sintético e injeta a sessão semântica; não prova a extração
+  real dos PDFs. Não existe produtor real da prova excepcional acima de 45 m e até 60 m, nem provedor de ângulo ou
+  cálculo mecânico. Por isso, a faixa excepcional e os novos candidatos permanecem conservadores.
+- **Verificação desta revisão:** 130 testes públicos focados aprovados. O gate básico final aprovou
+  512 testes, excluiu 20 privados, alcançou 86,39% de cobertura e passou em Ruff, formatação, Mypy,
+  integridade das dependências e complexidade. A inspeção e o replay local dos cinco PDFs foram
+  diagnósticos somente leitura, não expectativas derivadas do corpus.
+- **Gate privado:** os cinco arquivos não correspondem ao manifesto privado autorizado; portanto o
+  gate opt-in não foi usado como aceite. Novos candidatos exigem fonte oficial exata antes de qualquer
+  automação.

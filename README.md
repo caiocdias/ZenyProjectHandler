@@ -152,8 +152,14 @@ ID abreviado e a classificação e exige confirmação específica. Cancelar nã
 temporários. Ao prosseguir, a UI informa que o backup foi **criado com ressalvas**; o manifesto
 registra a omissão e, quando existe uma referência externa original, o snapshot a mantém sem
 inventar uma cópia recuperável. A restauração ainda exige integridade física de todos os itens
-declarados e informa as limitações de um backup degradado. Publicação, restauração e rollback
-continuam atômicos.
+declarados e informa as limitações de um backup degradado. A publicação de cada arquivo é atômica;
+a restauração conjunta usa compensação para exceções capturadas, mas ainda não possui journal durável
+contra encerramento abrupto entre banco e anexos. Ao restaurar, o registro de regras do backup permanece como base, mas todo ID
+presente na revisão ativa anterior e ausente do backup é reaplicado antes de liberar a operação.
+IDs coincidentes mantêm o conteúdo restaurado, salvo a migração de segurança de uma Regra 6 oficial
+legada; se a reconciliação falhar, banco, arquivos e catálogo voltam ao estado anterior. Ao combinar
+backups de bancos independentes, o ID técnico permanece, mas uma colisão entre sequências locais pode
+atribuir outro número de exibição.
 
 ## Visualização e origem dos PDFs
 
@@ -346,8 +352,9 @@ O dock **Documentação e conformidade** acompanha o projeto aberto e possui vis
 - todos os pares `rótulo: informação` encontrados no cabeçalho e no quadro de servidão, além de
   candidatos a carimbo e indícios/campos de assinatura;
 - regras conformes, possíveis divergências e casos não avaliáveis, sempre com fonte normativa.
-- o registro ativo de regras, com importação/exportação, ativação, desativação e remoção confirmada
-  sem editar arquivos manualmente.
+- o registro ativo de regras, com importação e exportação. Não há controles para ativar,
+  desativar ou remover regras individualmente; o estado `enabled` pode mudar somente por um JSON
+  importado e IDs omitidos no arquivo permanecem na revisão ativa.
 
 Ao concluir o pipeline, o aplicativo persiste atomicamente uma execução auditável de conformidade
 ligada à sessão semântica e à revisão exata das regras. A aba carrega esse último snapshot, ordena
@@ -356,7 +363,8 @@ Selecionar uma linha abre e centraliza o callout realçado; clicar na caixa ou s
 e traz o dock para frente. A ocultação temporária sobrevive à navegação e à ordenação, mas é
 reiniciada ao trocar projeto ou execução. Achados sem callout permanecem listados com olho
 desabilitado e diagnóstico. Se o registro ativo mudar, o resultado é marcado como desatualizado sem
-ser reinterpretado.
+ser reinterpretado. Mudanças na versão do próprio método de conformidade também invalidam o
+snapshot anterior.
 
 O botão **Analisar conformidade** cria uma nova execução explícita a partir dos resultados semânticos
 já persistidos. Essa operação não reabre o PDF e não repete extração ou OCR; execuções anteriores
@@ -369,11 +377,19 @@ cabo e, quando ela não existe, a distância entre as coordenadas dos postes; a 
 identificador original e a fonte da medida. Ângulos ainda não são derivados. O scanner documental
 não considera um carimbo ou rótulo de assinatura como prova de autenticidade. Cada informação vira
 um fato com origem, confiança, geometria e evidências.
+
+Comentários de revisão PDF não podem originar elementos, regiões ou fatos técnicos; portadores
+`AutoCAD SHX Text` do próprio desenho são preservados. Contexto urbano/rural só é aceito por
+metadado confirmado ou campo permitido e rotulado do cabeçalho. Na Regra 6, vãos acima de 45 m e até
+60 m ficam não avaliáveis sem prova positiva da exceção; acima de 60 m, um marcador de exceção
+indevido não suprime a possível divergência.
 Regras ficam em um registro JSON versionado com condições de aplicabilidade, exceções comprovadas e
-requisitos. O SQLite preserva revisões imutáveis e números permanentes por ID; cada mudança também
-gera atomicamente um catálogo Markdown explicativo na pasta de dados do usuário. A arquitetura e os
+requisitos. O SQLite preserva revisões imutáveis e números permanentes por ID dentro da linhagem do
+banco; cada mudança também gera atomicamente um catálogo Markdown explicativo na pasta de dados do usuário. A arquitetura e os
 limites estão detalhados em
 [`docs/arquitetura-conformidade.md`](docs/arquitetura-conformidade.md).
+Ao atualizar o seed `2025.3` para `2025.4`, somente a Regra 6 ainda idêntica à versão oficial anterior
+é migrada; IDs adicionais e regras personalizadas são preservados.
 
 O Unlimited-OCR foi avaliado como possível segunda passagem local para layouts difíceis. A
 integração recomendada, caso o benchmark justifique, é diretamente por `MotorOcrPort` contra um

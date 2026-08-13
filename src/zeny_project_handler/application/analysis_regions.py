@@ -24,6 +24,7 @@ from zeny_project_handler.domain.values import (
 )
 
 from .coordinate_pairs import detectar_pares_coordenadas
+from .document_zones import evidencias_sem_anotacoes_de_revisao
 
 _DEFAULT_REGION_DISTANCE = 0.10
 _COORDINATE_REGION_DISTANCE = 0.18
@@ -85,9 +86,10 @@ def agrupar_regioes_da_analise(
     """Derive regiões estáveis sem transformar os resultados em um grafo."""
     if distancia_maxima <= 0:
         raise ValueError("Distância máxima de uma região deve ser positiva")
+    project_evidence = evidencias_sem_anotacoes_de_revisao(evidencias)
     elements = tuple(item for item in propostas if isinstance(item, PropostaElemento))
     relations = tuple(item for item in propostas if isinstance(item, PropostaRelacao))
-    point_anchors = _point_anchors(evidencias)
+    point_anchors = _point_anchors(project_evidence)
     point_labels = _assign_point_labels(elements, point_anchors)
     components = _spatial_components(elements, distancia_maxima, point_labels)
     element_regions = tuple(
@@ -99,7 +101,7 @@ def agrupar_regioes_da_analise(
     )
     if not preliminary:
         return ()
-    coordinate_candidates = _coordinate_candidates(evidencias)
+    coordinate_candidates = _coordinate_candidates(project_evidence)
     assigned_coordinates = _assign_coordinates(preliminary, coordinate_candidates)
     regions = tuple(
         RegiaoAnalise(

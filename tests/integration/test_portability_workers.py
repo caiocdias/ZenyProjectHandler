@@ -341,6 +341,37 @@ def test_worker_keeps_gui_responsive_and_reports_monotonic_success_once(
     assert any(message.startswith("Projeto exportado para") for message in statuses)
 
 
+def test_worker_and_thread_are_destroyed_before_the_panel_is_reused(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runs = tuple(ControlledRun() for _index in range(8))
+    coordinator = CoordenadorOperacoes()
+    service = ControlledPortabilityService(coordinator, *runs)
+    panel = _panel(qtbot, service)
+
+    for index, run in enumerate(runs):
+        _start_export(qtbot, monkeypatch, panel, tmp_path / f"lifecycle-{index}.zphproj")
+        qtbot.waitUntil(run.entered.is_set)
+        worker = panel._worker
+        thread = panel._thread
+        assert worker is not None and thread is not None
+        worker_destroyed = Event()
+        thread_destroyed = Event()
+        worker.destroyed.connect(worker_destroyed.set)
+        thread.destroyed.connect(thread_destroyed.set)
+
+        run.release.set()
+        qtbot.waitUntil(lambda: not panel.processando)
+        qtbot.waitUntil(worker_destroyed.is_set)
+        qtbot.waitUntil(thread_destroyed.is_set)
+
+        assert panel._worker is None
+        assert panel._thread is None
+        assert coordinator.operacao_em_andamento is None
+
+
 def test_worker_failure_restores_controls_and_coordinator_exactly_once(
     qtbot: QtBot,
     tmp_path: Path,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import NAMESPACE_URL, UUID, uuid5
@@ -21,6 +21,7 @@ from zeny_project_handler.domain.analysis import (
     DecisaoRevisao,
     EvidenciaDocumento,
     ExecucaoAnalise,
+    OrigemObjetoPdf,
     PropostaElemento,
 )
 from zeny_project_handler.domain.catalog import CatalogoTecnico, JsonPrimitive, TipoCabo
@@ -34,6 +35,7 @@ from zeny_project_handler.domain.enums import (
     SituacaoProjeto,
     TipoDecisaoRevisao,
     TipoEvidencia,
+    TipoOrigemPdf,
 )
 from zeny_project_handler.domain.project import Cabo, PontoRede, Poste, Projeto
 from zeny_project_handler.domain.project_metadata import MetadadosProjeto
@@ -76,6 +78,7 @@ def test_annotated_length_preserves_origin_evidence_region_page_and_label_geomet
     assert fact.geometria == fixture.length_evidence.geometria
     assert target.referencia_id == fixture.region_id
     assert target.pagina_id == fixture.page_id
+    assert all(item.chave != "vao.aplicabilidade_excecao_45_60_resolvida" for item in facts)
 
 
 def test_coordinate_length_preserves_endpoint_evidence_and_cable_geometry() -> None:
@@ -102,6 +105,33 @@ def test_missing_length_does_not_publish_a_measurement() -> None:
     assert all(item.chave != "vao.comprimento_m" for item in facts)
 
 
+def test_review_annotation_from_legacy_session_does_not_publish_span_measurement() -> None:
+    fixture = _span_fixture(
+        length=Decimal("52"),
+        origin=OrigemComprimentoVao.ANOTACAO_DESENHO,
+    )
+    review_evidence = replace(
+        fixture.length_evidence,
+        origem_pdf=OrigemObjetoPdf(
+            tipo=TipoOrigemPdf.ANOTACAO,
+            numero_objeto=52,
+            indice_anotacao=0,
+            subtipo_anotacao="FreeText",
+        ),
+    )
+    session = replace(
+        fixture.session,
+        evidencias=tuple(
+            review_evidence if item.id == review_evidence.id else item
+            for item in fixture.session.evidencias
+        ),
+    )
+
+    facts = prover_fatos_vaos(ContextoProvedorFatos(session, _targets(session)))
+
+    assert all(item.chave != "vao.comprimento_m" for item in facts)
+
+
 @pytest.mark.parametrize(
     ("positive", "with_evidence", "expected"),
     (
@@ -124,8 +154,12 @@ def test_span_exception_requires_positive_flag_and_traceable_evidence(
 
     facts = prover_fatos_vaos(ContextoProvedorFatos(fixture.session, _targets(fixture.session)))
     exceptions = tuple(item for item in facts if item.chave == "vao.excecao_45_60_demonstrada")
+    applicability = tuple(
+        item for item in facts if item.chave == "vao.aplicabilidade_excecao_45_60_resolvida"
+    )
 
     assert bool(exceptions) is expected
+    assert bool(applicability) is expected
     if exceptions:
         assert exceptions[0].valor is True
         assert exceptions[0].evidencia_ids == (fixture.exception_evidence.id,)
@@ -136,10 +170,15 @@ def test_span_exception_requires_positive_flag_and_traceable_evidence(
     ("length", "coordinates", "exception", "expected"),
     (
         (Decimal("40"), False, False, "CONFORME"),
-        (Decimal("52"), False, False, "DIVERGENCIA"),
+        (Decimal("45"), False, False, "CONFORME"),
+        (Decimal("52"), False, False, "NAO_AVALIAVEL"),
+        (Decimal("60"), False, False, "NAO_AVALIAVEL"),
         (None, False, False, "NAO_AVALIAVEL"),
         (Decimal("52"), False, True, None),
-        (None, True, False, "DIVERGENCIA"),
+        (Decimal("60"), False, True, None),
+        (None, True, False, "NAO_AVALIAVEL"),
+        (Decimal("61"), False, False, "DIVERGENCIA"),
+        (Decimal("61"), False, True, "DIVERGENCIA"),
     ),
 )
 def test_current_span_rule_crosses_the_complete_provider_and_evaluation_flow(

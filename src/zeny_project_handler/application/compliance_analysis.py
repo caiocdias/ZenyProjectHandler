@@ -18,7 +18,7 @@ from .errors import AnaliseConformidadeCanceladaError, RegistroConformidadeError
 from .human_review import SessaoRevisao
 from .project_compliance import analisar_conformidade_projeto
 
-VERSAO_METODO_CONFORMIDADE = "2"
+VERSAO_METODO_CONFORMIDADE = "3"
 
 
 class ExecutarAnaliseConformidade:
@@ -101,7 +101,10 @@ class ExecutarAnaliseConformidade:
 
     def resultado_desatualizado(self, execution: ExecucaoConformidade) -> bool:
         revision = self._capture_active_revision()
-        return execution.assinatura_regras != revision.assinatura
+        return (
+            execution.versao_metodo != VERSAO_METODO_CONFORMIDADE
+            or execution.assinatura_regras != revision.assinatura
+        )
 
     def _capture_active_revision(self) -> RevisaoRegistroConformidade:
         with self._unit_of_work() as work:

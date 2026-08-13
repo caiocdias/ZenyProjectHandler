@@ -29,6 +29,10 @@ from zeny_project_handler.ports.persistence import UnitOfWorkPort
 from .errors import RegistroConformidadeError
 
 CATALOGO_REGRAS_FILE_NAME = "catalogo-regras-conformidade.md"
+_LEGACY_BUNDLED_VERSION = "cemig-normas-distribuicao-2025.3"
+_SAFE_BUNDLED_VERSION = "cemig-normas-distribuicao-2025.4"
+_SPAN_RULE_ID = "nd31.vao.urbano-compacto-isolado"
+_SPAN_SAFEGUARD_FACT = "vao.aplicabilidade_excecao_45_60_resolvida"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -38,6 +42,7 @@ class ResumoImportacaoRegras:
     novos_ids: tuple[str, ...]
     substituidos_ids: tuple[str, ...]
     inalterados_ids: tuple[str, ...]
+    omitidos_preservados_ids: tuple[str, ...]
 
     @property
     def total_importado(self) -> int:
@@ -50,6 +55,7 @@ class ResumoImportacaoRegras:
             f"Novas: {len(self.novos_ids)}",
             f"IDs existentes substituídos: {len(self.substituidos_ids)}",
             f"Inalteradas: {len(self.inalterados_ids)}",
+            f"IDs atuais omitidos e preservados: {len(self.omitidos_preservados_ids)}",
         ]
         if self.avisos:
             lines.extend(("", "Avisos:", *(f"• {item}" for item in self.avisos)))
@@ -65,11 +71,15 @@ class ServicoRegistroRegrasConformidade:
         diretorio_dados: Path,
         relogio: Callable[[], datetime] | None = None,
         gerador_id: Callable[[], UUID] | None = None,
+        seed: RegistroRegrasConformidade | None = None,
     ) -> None:
         self._unit_of_work = unidade_de_trabalho
         self._data_directory = diretorio_dados.expanduser().resolve()
         self._clock = relogio or (lambda: datetime.now(UTC))
         self._id_generator = gerador_id or uuid4
+        if seed is not None:
+            validar_semantica_registro(seed)
+        self._seed = seed
 
     @property
     def caminho_catalogo(self) -> Path:
@@ -80,20 +90,60 @@ class ServicoRegistroRegrasConformidade:
         seed: RegistroRegrasConformidade,
     ) -> RevisaoRegistroConformidade:
         validar_semantica_registro(seed)
+        self._seed = seed
         with self._unit_of_work() as work:
             current = work.registros_conformidade.obter_ativa()
         if current is None:
             return self._persistir(seed)
+        migrated_registry = _migrate_legacy_bundled_span_rule(current.registro, seed)
+        if migrated_registry is not None:
+            return self._persistir(migrated_registry)
         if not self.caminho_catalogo.is_file():
             self._regenerar_catalogo_atual()
         return current
 
     def obter_revisao_ativa(self) -> RevisaoRegistroConformidade:
-        with self._unit_of_work() as work:
-            revision = work.registros_conformidade.obter_ativa()
+        revision = self.obter_revisao_ativa_opcional()
         if revision is None:
             raise RegistroConformidadeError("Registro de regras ainda não foi inicializado")
         return revision
+
+    def obter_revisao_ativa_opcional(self) -> RevisaoRegistroConformidade | None:
+        with self._unit_of_work() as work:
+            return work.registros_conformidade.obter_ativa()
+
+    def reconciliar_apos_restauracao(
+        self,
+        registro_preservado: RegistroRegrasConformidade | None,
+    ) -> RevisaoRegistroConformidade | None:
+        """Preserve IDs locais ausentes sem sobrescrever o conteúdo restaurado."""
+        if registro_preservado is not None:
+            validar_semantica_registro(registro_preservado)
+        restored = self.obter_revisao_ativa_opcional()
+        if restored is None:
+            if registro_preservado is None:
+                return None
+            return self._persistir(registro_preservado)
+        restored_registry = restored.registro
+        if self._seed is not None:
+            migrated = _migrate_legacy_bundled_span_rule(restored_registry, self._seed)
+            if migrated is not None:
+                restored_registry = migrated
+        preserved_rules = registro_preservado.regras if registro_preservado is not None else ()
+        restored_ids = {item.id for item in restored_registry.regras}
+        missing = tuple(item for item in preserved_rules if item.id not in restored_ids)
+        if not missing and restored_registry is restored.registro:
+            self.republicar_catalogo_ativo()
+            return restored
+        reconciled = replace(
+            restored_registry,
+            regras=(*restored_registry.regras, *missing),
+        )
+        return self._persistir(reconciled)
+
+    def republicar_catalogo_ativo(self) -> None:
+        """Sincronize a projeção Markdown com a revisão ativa persistida."""
+        self._regenerar_catalogo_atual()
 
     def listar_historico(self) -> tuple[RevisaoRegistroConformidade, ...]:
         with self._unit_of_work() as work:
@@ -112,6 +162,7 @@ class ServicoRegistroRegrasConformidade:
         semantic_warnings = validar_semantica_registro(registro)
         current = self.obter_revisao_ativa().registro
         current_by_id = {item.id: item for item in current.regras}
+        imported_ids = {item.id for item in registro.regras}
         new: list[str] = []
         replaced_ids: list[str] = []
         unchanged: list[str] = []
@@ -129,6 +180,9 @@ class ServicoRegistroRegrasConformidade:
             novos_ids=tuple(new),
             substituidos_ids=tuple(replaced_ids),
             inalterados_ids=tuple(unchanged),
+            omitidos_preservados_ids=tuple(
+                item.id for item in current.regras if item.id not in imported_ids
+            ),
         )
 
     def importar(self, resumo: ResumoImportacaoRegras) -> RevisaoRegistroConformidade:
@@ -144,34 +198,6 @@ class ServicoRegistroRegrasConformidade:
             regras=merged,
         )
         return self._persistir(registry)
-
-    def definir_regra_ativa(
-        self,
-        regra_id: str,
-        *,
-        ativa: bool,
-    ) -> RevisaoRegistroConformidade:
-        current = self.obter_revisao_ativa().registro
-        found = False
-        rules: list[RegraConformidade] = []
-        for rule in current.regras:
-            if rule.id == regra_id:
-                found = True
-                rules.append(replace(rule, ativa=ativa))
-            else:
-                rules.append(rule)
-        if not found:
-            raise RegistroConformidadeError(f"Regra '{regra_id}' não existe na revisão ativa")
-        return self._persistir(replace(current, regras=tuple(rules)))
-
-    def remover_regra(self, regra_id: str) -> RevisaoRegistroConformidade:
-        current = self.obter_revisao_ativa().registro
-        rules = tuple(item for item in current.regras if item.id != regra_id)
-        if len(rules) == len(current.regras):
-            raise RegistroConformidadeError(f"Regra '{regra_id}' não existe na revisão ativa")
-        if not rules:
-            raise RegistroConformidadeError("O registro ativo deve conservar ao menos uma regra")
-        return self._persistir(replace(current, regras=rules))
 
     def exportar(self, destination: Path) -> Path:
         registry = self.obter_revisao_ativa().registro
@@ -226,6 +252,42 @@ class ServicoRegistroRegrasConformidade:
             ) from error
 
 
+def _migrate_legacy_bundled_span_rule(
+    current: RegistroRegrasConformidade,
+    seed: RegistroRegrasConformidade,
+) -> RegistroRegrasConformidade | None:
+    """Upgrade only an unchanged bundled Rule 6, preserving custom rules and edits."""
+    if seed.versao != _SAFE_BUNDLED_VERSION:
+        return None
+    replacement = next((item for item in seed.regras if item.id == _SPAN_RULE_ID), None)
+    if replacement is None:
+        return None
+    safeguards = tuple(
+        item for item in replacement.aplicabilidade if item.chave_fato == _SPAN_SAFEGUARD_FACT
+    )
+    if len(safeguards) != 1:
+        return None
+    legacy_rule = replace(
+        replacement,
+        aplicabilidade=tuple(
+            item for item in replacement.aplicabilidade if item.chave_fato != _SPAN_SAFEGUARD_FACT
+        ),
+    )
+    existing = next((item for item in current.regras if item.id == _SPAN_RULE_ID), None)
+    if existing != legacy_rule:
+        return None
+    version = (
+        seed.versao
+        if current.versao == _LEGACY_BUNDLED_VERSION
+        else f"{current.versao}+seguranca-vao-2025.4"
+    )
+    return replace(
+        current,
+        versao=version,
+        regras=tuple(replacement if item.id == _SPAN_RULE_ID else item for item in current.regras),
+    )
+
+
 def renderizar_catalogo_markdown(
     active: RevisaoRegistroConformidade,
     numbers: tuple[NumeroRegraConformidade, ...],
@@ -248,8 +310,8 @@ def renderizar_catalogo_markdown(
         f"- Regras ativas: {active_count}",
         f"- Regras inativas: {len(current) - active_count}",
         "",
-        "Os números são permanentes por ID técnico. IDs removidos permanecem neste catálogo e seus "
-        "números nunca são reutilizados.",
+        "Os números são permanentes por ID técnico e nunca são reutilizados. Importações "
+        "que omitam IDs da revisão ativa preservam essas regras.",
         "",
         "## Resumo",
         "",
@@ -344,7 +406,7 @@ def _condition_text(condition: CondicaoConformidade) -> str:
 
 def _rule_state(rule: RegraConformidade | None) -> str:
     if rule is None:
-        return "REMOVIDA"
+        return "AUSENTE EM REVISÃO LEGADA"
     return "ATIVA" if rule.ativa else "INATIVA"
 
 

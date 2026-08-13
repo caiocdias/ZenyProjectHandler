@@ -611,6 +611,19 @@ class PdfViewerWidget(QWidget):
         self.view.limpar_selecao_callout()
         self._credential_resolver.provedor.limpar()
 
+    def preparar_para_restauracao(self, timeout_ms: int) -> bool:
+        """Libere sessões PDF antes de substituir arquivos; nunca espere sem limite."""
+        _require_ui_thread()
+        if self._closed:
+            return True
+        self._cancel_current_rendering()
+        if not self._render_queue.cancelar_e_aguardar_ociosa(timeout_ms):
+            return False
+        self._render_queue.retirar_resultados()
+        self._liberar_sessoes_apos_renderizacao()
+        self.limpar()
+        return True
+
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - API Qt
         self.encerrar()
         super().closeEvent(event)

@@ -1,3 +1,4 @@
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 from threading import Event
@@ -79,6 +80,47 @@ def test_main_window_smoke(
     )
     assert window.statusBar().currentMessage() == "Pronto para abrir um PDF"
     assert settings.database_path.is_file()
+
+
+@pytest.mark.integration
+def test_restore_signal_refreshes_the_cached_compliance_registry(
+    qtbot: QtBot,
+    tmp_path: Path,
+    application_factory: ApplicationFactory,
+) -> None:
+    settings = AppSettings(data_directory=tmp_path / "restored-rules-window")
+    _application, window = application_factory([], settings=settings)
+    qtbot.addWidget(window)
+    documentation = window.documentation_panel
+    portability = window.portability_panel
+    assert documentation is not None and portability is not None
+    registry_service = documentation._registry_service
+    assert registry_service is not None
+    current = registry_service.obter_revisao_ativa().registro
+    assert portability._service._compliance_registry is registry_service
+    assert registry_service._seed == current
+    custom_rule = replace(
+        current.regras[0],
+        id="fixture.restauracao.regra-na-interface",
+        titulo="Regra reconciliada depois do backup",
+    )
+    imported = replace(
+        current,
+        versao="fixture-restauracao-ui",
+        regras=(*current.regras, custom_rule),
+    )
+    registry_service.importar(registry_service.preparar_importacao(imported))
+    assert all(item.id != custom_rule.id for item in documentation._registry.regras)
+
+    portability.data_restored.emit()
+
+    assert any(item.id == custom_rule.id for item in documentation._registry.regras)
+    displayed_ids: set[str] = set()
+    for index in range(documentation._rules.topLevelItemCount()):
+        item = documentation._rules.topLevelItem(index)
+        assert item is not None
+        displayed_ids.add(str(item.data(0, Qt.ItemDataRole.UserRole)))
+    assert custom_rule.id in displayed_ids
 
 
 @pytest.mark.integration

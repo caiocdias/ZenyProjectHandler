@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
@@ -19,12 +20,16 @@ from zeny_project_handler.adapters.persistence import (
     create_sqlite_engine,
     upgrade_database,
 )
+from zeny_project_handler.adapters.persistence.errors import PersistenceConflictError
 from zeny_project_handler.adapters.persistence.schema import compliance_rule_revisions
 from zeny_project_handler.application.compliance_registry import (
     ServicoRegistroRegrasConformidade,
 )
 from zeny_project_handler.application.errors import RegistroConformidadeError
-from zeny_project_handler.domain.compliance import RegistroRegrasConformidade
+from zeny_project_handler.domain.compliance import (
+    RegistroRegrasConformidade,
+    RevisaoRegistroConformidade,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -50,8 +55,10 @@ def _service(
     )
 
 
-def _registry_with_synthetic_rule() -> RegistroRegrasConformidade:
-    payload = deepcopy(carregar_registro_conformidade_inicial().para_dict())
+def _registry_with_synthetic_rule(
+    base: RegistroRegrasConformidade | None = None,
+) -> RegistroRegrasConformidade:
+    payload = deepcopy((base or carregar_registro_conformidade_inicial()).para_dict())
     registry = payload["registry"]
     assert isinstance(registry, dict)
     registry["id"] = str(uuid4())
@@ -87,6 +94,37 @@ def _registry_with_synthetic_rule() -> RegistroRegrasConformidade:
     return registro_conformidade_de_dict(payload)
 
 
+def _legacy_bundled_registry(seed: RegistroRegrasConformidade) -> RegistroRegrasConformidade:
+    current_span = next(
+        item for item in seed.regras if item.id == "nd31.vao.urbano-compacto-isolado"
+    )
+    legacy_span = replace(
+        current_span,
+        aplicabilidade=tuple(
+            item
+            for item in current_span.aplicabilidade
+            if item.chave_fato != "vao.aplicabilidade_excecao_45_60_resolvida"
+        ),
+    )
+    return replace(
+        seed,
+        versao="cemig-normas-distribuicao-2025.3",
+        regras=tuple(legacy_span if item.id == legacy_span.id else item for item in seed.regras),
+    )
+
+
+def _registry_with_rule_enabled(rule_id: str, *, enabled: bool) -> RegistroRegrasConformidade:
+    payload = deepcopy(carregar_registro_conformidade_inicial().para_dict())
+    registry = payload["registry"]
+    rules = payload["rules"]
+    assert isinstance(registry, dict) and isinstance(rules, list)
+    registry["id"] = str(uuid4())
+    registry["version"] = f"enabled-{rule_id}-{enabled}"
+    rule = next(item for item in rules if isinstance(item, dict) and item.get("id") == rule_id)
+    rule["enabled"] = enabled
+    return registro_conformidade_de_dict(payload)
+
+
 def test_seed_is_idempotent_and_real_changes_preserve_immutable_history(tmp_path: Path) -> None:
     engine = create_sqlite_engine(tmp_path / "registry.sqlite3")
     upgrade_database(engine)
@@ -118,7 +156,63 @@ def test_seed_is_idempotent_and_real_changes_preserve_immutable_history(tmp_path
     engine.dispose()
 
 
-def test_removal_preserves_revision_and_never_reuses_stable_rule_number(tmp_path: Path) -> None:
+def test_startup_migrates_only_unchanged_legacy_span_rule_and_preserves_custom_rules(
+    tmp_path: Path,
+) -> None:
+    engine = create_sqlite_engine(tmp_path / "seed-migration.sqlite3")
+    upgrade_database(engine)
+    service = _service(engine, tmp_path / "data", _Clock())
+    safe_seed = carregar_registro_conformidade_inicial()
+    legacy_seed = _legacy_bundled_registry(safe_seed)
+    service.inicializar(legacy_seed)
+    customized = service.importar(
+        service.preparar_importacao(_registry_with_synthetic_rule(legacy_seed))
+    )
+
+    migrated = service.inicializar(safe_seed)
+
+    assert migrated.id != customized.id
+    assert any(item.id == "fixture.projeto.circuito" for item in migrated.registro.regras)
+    assert next(
+        item for item in migrated.registro.regras if item.id == "nd31.vao.urbano-compacto-isolado"
+    ) == next(item for item in safe_seed.regras if item.id == "nd31.vao.urbano-compacto-isolado")
+    assert migrated.registro.versao.endswith("+seguranca-vao-2025.4")
+    assert len(service.listar_historico()) == 3
+    engine.dispose()
+
+
+def test_startup_does_not_overwrite_a_custom_legacy_span_rule(tmp_path: Path) -> None:
+    engine = create_sqlite_engine(tmp_path / "custom-seed-migration.sqlite3")
+    upgrade_database(engine)
+    service = _service(engine, tmp_path / "data", _Clock())
+    safe_seed = carregar_registro_conformidade_inicial()
+    legacy_seed = _legacy_bundled_registry(safe_seed)
+    legacy_span = next(
+        item for item in legacy_seed.regras if item.id == "nd31.vao.urbano-compacto-isolado"
+    )
+    custom_span = replace(legacy_span, titulo="Limite de vão personalizado")
+    custom_registry = replace(
+        legacy_seed,
+        id=uuid4(),
+        versao="custom-span-rule",
+        regras=tuple(
+            custom_span if item.id == custom_span.id else item for item in legacy_seed.regras
+        ),
+    )
+    initial = service.inicializar(custom_registry)
+
+    after_restart = service.inicializar(safe_seed)
+
+    assert after_restart == initial
+    assert (
+        next(item for item in after_restart.registro.regras if item.id == custom_span.id)
+        == custom_span
+    )
+    assert len(service.listar_historico()) == 1
+    engine.dispose()
+
+
+def test_import_omission_preserves_rules_and_stable_numbers(tmp_path: Path) -> None:
     engine = create_sqlite_engine(tmp_path / "numbers.sqlite3")
     upgrade_database(engine)
     service = _service(engine, tmp_path / "data", _Clock())
@@ -126,22 +220,37 @@ def test_removal_preserves_revision_and_never_reuses_stable_rule_number(tmp_path
     imported = service.importar(service.preparar_importacao(_registry_with_synthetic_rule()))
     before = {item.regra_id: item.numero for item in service.listar_numeros()}
 
-    removed = service.remover_regra("fixture.projeto.circuito")
-    assert all(item.id != "fixture.projeto.circuito" for item in removed.registro.regras)
-    assert any(
-        item.id == imported.id
-        and any(rule.id == "fixture.projeto.circuito" for rule in item.registro.regras)
-        for item in service.listar_historico()
-    )
+    omitted_from_file = carregar_registro_conformidade_inicial()
+    merged = service.importar(service.preparar_importacao(omitted_from_file))
+
+    assert imported.id != merged.id
+    assert any(rule.id == "fixture.projeto.circuito" for rule in merged.registro.regras)
+    assert not hasattr(service, "remover_regra")
+    assert not hasattr(service, "definir_regra_ativa")
     catalog = service.caminho_catalogo.read_text(encoding="utf-8")
     assert f"Regra {before['fixture.projeto.circuito']}" in catalog
-    assert "REMOVIDA" in catalog
+    assert "Importações que omitam IDs da revisão ativa preservam essas regras" in catalog
     assert "when:" in catalog and "unless:" in catalog and "must:" in catalog
 
-    reimported = service.importar(service.preparar_importacao(_registry_with_synthetic_rule()))
     after = {item.regra_id: item.numero for item in service.listar_numeros()}
-    assert reimported.registro.regras[-1].id == "fixture.projeto.circuito"
     assert after["fixture.projeto.circuito"] == before["fixture.projeto.circuito"]
+
+    forbidden_registry = carregar_registro_conformidade_inicial()
+    forbidden_revision = RevisaoRegistroConformidade(
+        id=uuid4(),
+        registro=forbidden_registry,
+        assinatura=forbidden_registry.assinatura(),
+        json_canonico=forbidden_registry.json_canonico(),
+        criada_em=datetime(2026, 8, 12, 13, tzinfo=UTC),
+        ativa=True,
+    )
+    with (
+        pytest.raises(PersistenceConflictError, match="não pode remover IDs"),
+        SqlAlchemyUnitOfWork(engine) as work,
+    ):
+        work.registros_conformidade.salvar_ativa(forbidden_revision)
+        work.commit()
+    assert service.obter_revisao_ativa().id == merged.id
     engine.dispose()
 
 
@@ -179,7 +288,11 @@ def test_export_is_schema_compatible_and_revision_rows_are_not_duplicated(tmp_pa
     upgrade_database(engine)
     service = _service(engine, tmp_path / "data", _Clock())
     service.inicializar(carregar_registro_conformidade_inicial())
-    service.definir_regra_ativa("nd31.desenho.formato", ativa=False)
+    service.importar(
+        service.preparar_importacao(
+            _registry_with_rule_enabled("nd31.desenho.formato", enabled=False)
+        )
+    )
     exported = service.exportar(tmp_path / "out" / "registry.json")
 
     loaded = registro_conformidade_de_dict(json.loads(exported.read_text(encoding="utf-8")))

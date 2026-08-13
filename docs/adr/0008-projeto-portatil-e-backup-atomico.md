@@ -90,8 +90,14 @@ adulterado; copiar apenas o SQLite deixaria os PDFs externos fora do backup.
   `PERMANECE_EXTERNO` deixa no snapshot a referência canônica já existente e não inventa um caminho
   gerenciado para uma cópia ausente; `OMITIDO` informa que não há origem registrada ou que um anexo
   de exportação não foi incluído.
-- Publicar pacote e banco restaurado por substituição atômica. Validar o SQLite temporário antes da
-  troca e restaurar banco e arquivos anteriores se uma etapa posterior falhar.
+- Publicar pacote e cada arquivo restaurado por substituição atômica. Validar o SQLite temporário
+  antes da troca e compensar banco e arquivos anteriores se uma etapa posterior lançar exceção. A
+  sequência multi-recurso ainda não possui journal durável contra encerramento abrupto.
+- Antes da troca, capturar o registro ativo de regras. Depois de restaurar o SQLite e ainda sob o
+  mesmo rollback, usar o registro do backup como base e reaplicar somente IDs locais ausentes, sem
+  sobrescrever IDs coincidentes nem descartar IDs adicionais restaurados. A única atualização
+  automática imediata é a migração de segurança da Regra 6 oficial legada. Falha nessa reconciliação
+  restaura também banco, arquivos gerenciados e catálogo de regras anteriores.
 - Separar limitações declaradas pela origem da integridade física do pacote recebido. Mesmo um
   backup `DEGRADADO` precisa ter manifesto, snapshot e todos os arquivos declarados íntegros para ser
   restaurado; o resultado da restauração expõe as omissões sem tratá-las como corrupção do ZIP.

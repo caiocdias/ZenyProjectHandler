@@ -210,6 +210,22 @@ class FilaRenderizacao(QThread):
             self._queue.clear()
             self._condition.notify_all()
 
+    def cancelar_e_aguardar_ociosa(self, timeout_ms: int) -> bool:
+        """Cancele trabalhos e espere, com limite, a rasterização ativa liberar a sessão."""
+        if timeout_ms < 0:
+            raise ValueError("O tempo limite para liberar a renderização não pode ser negativo")
+        with self._condition:
+            if self._active_cancellation is not None:
+                self._active_cancellation.cancelar()
+            for _priority, _sequence, work in self._queue:
+                work.cancelamento.cancelar()
+            self._queue.clear()
+            self._condition.notify_all()
+            return self._condition.wait_for(
+                lambda: not self._active and not self._queue,
+                timeout=timeout_ms / 1000,
+            )
+
     def esta_ociosa(self) -> bool:
         with self._condition:
             return not self._active and not self._queue
@@ -228,14 +244,18 @@ class FilaRenderizacao(QThread):
                 if self._stopping:
                     self._active = False
                     self._active_cancellation = None
+                    self._condition.notify_all()
                     break
                 _priority, _sequence, work = heapq.heappop(self._queue)
                 self._active = True
                 self._active_cancellation = work.cancelamento
-            self._executar(work)
-            with self._condition:
-                self._active = False
-                self._active_cancellation = None
+            try:
+                self._executar(work)
+            finally:
+                with self._condition:
+                    self._active = False
+                    self._active_cancellation = None
+                    self._condition.notify_all()
 
     def _executar(self, work: TrabalhoRenderizacao) -> None:
         if work.cancelamento.cancelado:

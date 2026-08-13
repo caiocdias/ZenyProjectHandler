@@ -426,8 +426,9 @@ sintéticas; a partição de teste privada não foi usada para criá-las.
 - O backup completo usa `.zphbackup` e executa preflight sem efeitos colaterais antes de criar o
   snapshot. PDFs externos íntegros recebem cópias recuperáveis e referências reescritas. PDF ausente,
   alterado ou ilegível exige confirmação explícita; se aceito, o backup fica `DEGRADADO`, registra a
-  omissão e preserva no snapshot a referência externa existente. A publicação do pacote e a
-  substituição do banco restaurado são atômicas.
+  omissão e preserva no snapshot a referência externa existente. A publicação do pacote e cada
+  substituição individual são atômicas; a restauração conjunta compensa exceções capturadas, mas
+  ainda não dispõe de journal durável contra encerramento abrupto entre banco e anexos.
 - O painel **Portabilidade e recuperação** oferece somente exportar e importar projetos e criar e
   restaurar backups, sempre com progresso, destino explícito e confirmação para substituições ou
   backup degradado. Detalhes de integridade mostram IDs abreviados, nunca nomes ou caminhos privados.
@@ -490,7 +491,9 @@ quando ela está disponível.
 ## Documentação e conformidade
 
 - O painel **Documentação e conformidade** é independente dos resultados semânticos e possui as abas
-  **Documentação** e **Conformidade**.
+  **Documentação**, **Conformidade** e **Regras**. A última oferece somente **Importar** e
+  **Exportar**; não há comando individual de remoção, ativação ou desativação, e IDs omitidos por uma
+  importação são preservados.
 - O cabeçalho lista todos os pares textuais `rótulo: informação` da zona de título, incluindo campos
   não previstos no vocabulário inicial e campos sem valor. Nota de Serviço/número do projeto,
   escala, formato, número da folha, data e circuito também alimentam fatos normalizados; o formato
@@ -501,12 +504,16 @@ quando ela está disponível.
 - Anotações PDF `Stamp` na zona documental são apenas candidatos a carimbo. Campos `/Sig`
   preenchidos, campos vazios e rótulos visuais de assinatura são distinguidos; a validade
   criptográfica e a autenticidade gráfica não são afirmadas.
-- A projeção de vãos e comprimentos já está disponível nos resultados semânticos, mas ainda não é
-  convertida em fatos ou achados normativos. Ângulos continuam sem detector ativo.
+- A projeção de vãos e comprimentos publica fatos rastreáveis e alimenta a Regra 6. Até 45 m é a
+  faixa ordinária; acima de 60 m pode produzir possível divergência. Entre 45 m e 60 m, a ausência
+  de prova positiva das condições excepcionais resulta em `NAO_AVALIAVEL`. Ângulos continuam sem
+  detector ativo.
 - Evidência, fato normalizado, regra e achado são objetos distintos. Fatos preservam escopo, origem,
   confiança, geometria e evidências.
-- O registro `cemig-normas-distribuicao-2025.3` é JSON validado, versionado e assinado por SHA-256. `when` define
-  aplicabilidade, `unless` exige comprovação positiva da exceção e `must` declara requisitos.
+- O registro `cemig-normas-distribuicao-2025.4` é JSON validado, versionado e assinado por SHA-256.
+  `when` define aplicabilidade, `unless` exige comprovação positiva da exceção e `must` declara
+  requisitos. Na inicialização, somente uma Regra 6 ainda idêntica ao seed oficial `2025.3` recebe a
+  salvaguarda nova; regras personalizadas e IDs adicionais não são sobrescritos nem removidos.
 - Cada regra aplicável resulta em `CONFORME`, `DIVERGENCIA` ou `NAO_AVALIAVEL`. A interface apresenta
   divergência automática como **possível divergência**, sujeita a revisão.
 - As regras iniciais verificam numeração, formato, vão urbano de rede compacta/isolada, equipamento
@@ -537,12 +544,11 @@ e [ND 2.7](https://www.cemig.com.br/wp-content/uploads/2025/10/nd_2_7-1.pdf).
 
 O pipeline ainda não classifica uma forma vetorial isolada sem texto ou OCR: caminhos de glifos,
 carimbos e símbolos do AutoCAD são visualmente semelhantes e uma regra geométrica simples geraria
-falsos positivos. Os limiares ainda precisam do conjunto formal anotado e do consenso humano da
-Etapa 5; a verificação exploratória apenas comprovou que todos os dez PDFs locais atuais passaram a
-gerar ao menos uma proposta de poste. As regiões são derivadas automaticamente dos resultados do
-pipeline. A conformidade atual é derivada durante a leitura da sessão e ainda não persiste fatos,
-achados ou confirmações humanas. Servidão, carimbos, assinaturas e exceções normativas continuam
-dependentes de revisão quando a evidência automática não é conclusiva.
+falsos positivos. Regiões são derivadas automaticamente dos resultados do pipeline, e execuções de
+conformidade persistem fatos, achados, proveniência e a versão do método sem alterar o PDF. Comentários
+de revisão são excluídos da semântica, mas portadores técnicos `AutoCAD SHX Text` são preservados.
+Servidão, carimbos, assinaturas, exceções normativas e as lacunas percebidas nos PDFs de
+comissionamento continuam dependentes de revisão quando a evidência automática não é conclusiva.
 Resultados sem tipo de catálogo resolvido permanecem apenas na trilha auditável. A importação, a
 extração, a interpretação, a inspeção dos resultados e a portabilidade estão
 integradas à interface do MVP, mas as Etapas 7, 7.1, 8 e 10 continuam aguardando o aceite humano em

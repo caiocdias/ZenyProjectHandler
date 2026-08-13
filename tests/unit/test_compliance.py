@@ -241,6 +241,40 @@ def test_document_control_facts_preserve_branch_order_ids_and_provenance() -> No
     )
 
 
+def test_review_comment_does_not_create_servitude_or_signature_facts() -> None:
+    session = _session_with_document_controls()
+    document = session.projeto.documentos[0]
+    execution = session.execucoes[0]
+    page_id = document.paginas[0].id
+    review_comment = replace(
+        _text_evidence(
+            execution.id,
+            page_id,
+            "SERVIDÃO RESPONSÁVEL TÉCNICO",
+            "0.75",
+            "0.90",
+        ),
+        origem_pdf=OrigemObjetoPdf(
+            tipo=TipoOrigemPdf.ANOTACAO,
+            numero_objeto=88,
+            indice_anotacao=0,
+            subtipo_anotacao="FreeText",
+        ),
+    )
+
+    facts, items = _document_control_facts(
+        document,
+        uuid5(document.id, "characterization:document"),
+        (review_comment,),
+    )
+
+    assert all(
+        item.chave not in {"documento.servidao_mencionada", "documento.assinatura_pdf_preenchida"}
+        for item in facts
+    )
+    assert all(review_comment.id not in item.evidencia_ids for item in items)
+
+
 def test_region_facts_preserve_semantic_order_and_deterministic_ids() -> None:
     session = _session_with_document_controls()
     region = session.regioes[0]
@@ -286,6 +320,149 @@ def test_region_facts_preserve_semantic_order_and_deterministic_ids() -> None:
         "PROTEGIDA",
         "PROTEGIDA",
     ]
+
+
+@pytest.mark.parametrize(
+    ("label", "expected_key"),
+    (
+        ("Bairro: ÁREA RURAL", "rede.contexto_rural"),
+        ("Localização: Área urbana", "rede.contexto_urbano"),
+        ("Contexto: Urbano", "rede.contexto_urbano"),
+    ),
+)
+def test_explicit_header_area_publishes_network_context_without_metadata(
+    label: str,
+    expected_key: str,
+) -> None:
+    session = _session_with_document_controls()
+    execution = session.execucoes[0]
+    page_id = session.projeto.documentos[0].paginas[0].id
+    context_evidence = _text_evidence(execution.id, page_id, label, "0.45", "0.90")
+    session = replace(
+        session,
+        projeto=replace(session.projeto, metadados=None),
+        evidencias=(*session.evidencias, context_evidence),
+    )
+    region = session.regioes[0]
+    target = AlvoConformidade(
+        id=uuid5(region.id, "characterization:region"),
+        tipo=TipoEscopoConformidade.REGIAO,
+        rotulo="Região com contexto explícito",
+        referencia_id=region.id,
+        pagina_id=region.pagina_id,
+        geometria=region.geometria,
+    )
+
+    facts = _region_facts(session, region_targets={region.id: target})
+    context_fact = next(item for item in facts if item.chave == expected_key)
+
+    assert context_fact.valor is True
+    assert context_fact.origem == "classificação explícita no cabeçalho do projeto"
+    assert context_fact.confianca == Decimal("0.95")
+    assert context_fact.evidencia_ids == (context_evidence.id,)
+    opposite_key = (
+        "rede.contexto_urbano" if expected_key == "rede.contexto_rural" else "rede.contexto_rural"
+    )
+    assert all(item.chave != opposite_key for item in facts)
+
+
+@pytest.mark.parametrize("text", ("RURAL", "ÁREA URBANA"))
+def test_unlabeled_context_text_outside_header_does_not_activate_rules(text: str) -> None:
+    session = _session_with_document_controls()
+    execution = session.execucoes[0]
+    page_id = session.projeto.documentos[0].paginas[0].id
+    loose_text = _text_evidence(execution.id, page_id, text, "0.45", "0.35")
+    session = replace(
+        session,
+        projeto=replace(session.projeto, metadados=None),
+        evidencias=(*session.evidencias, loose_text),
+    )
+    region = session.regioes[0]
+    target = AlvoConformidade(
+        id=uuid5(region.id, "characterization:region"),
+        tipo=TipoEscopoConformidade.REGIAO,
+        rotulo="Região sem campo de contexto",
+        referencia_id=region.id,
+        pagina_id=region.pagina_id,
+        geometria=region.geometria,
+    )
+
+    facts = _region_facts(session, region_targets={region.id: target})
+
+    assert all(item.chave not in {"rede.contexto_urbano", "rede.contexto_rural"} for item in facts)
+
+
+@pytest.mark.parametrize("label", ("Contexto: Não urbana", "Bairro: Jardim Rural"))
+def test_ambiguous_labeled_header_value_does_not_activate_context(label: str) -> None:
+    session = _session_with_document_controls()
+    execution = session.execucoes[0]
+    page_id = session.projeto.documentos[0].paginas[0].id
+    header = _text_evidence(execution.id, page_id, label, "0.45", "0.90")
+    session = replace(
+        session,
+        projeto=replace(session.projeto, metadados=None),
+        evidencias=(*session.evidencias, header),
+    )
+    region = session.regioes[0]
+    target = AlvoConformidade(
+        id=uuid5(region.id, "characterization:region"),
+        tipo=TipoEscopoConformidade.REGIAO,
+        rotulo="Região com contexto ambíguo",
+        referencia_id=region.id,
+        pagina_id=region.pagina_id,
+        geometria=region.geometria,
+    )
+
+    facts = _region_facts(session, region_targets={region.id: target})
+
+    assert all(item.chave not in {"rede.contexto_urbano", "rede.contexto_rural"} for item in facts)
+
+
+def test_conflicting_or_review_annotation_context_is_not_published() -> None:
+    session = _session_with_document_controls()
+    execution = session.execucoes[0]
+    page_id = session.projeto.documentos[0].paginas[0].id
+    rural_header = _text_evidence(
+        execution.id,
+        page_id,
+        "Bairro: ÁREA RURAL",
+        "0.45",
+        "0.90",
+    )
+    conflicting_session = replace(
+        session,
+        evidencias=(*session.evidencias, rural_header),
+    )
+    review_annotation = replace(
+        rural_header,
+        id=uuid4(),
+        origem_pdf=OrigemObjetoPdf(
+            tipo=TipoOrigemPdf.ANOTACAO,
+            numero_objeto=77,
+            indice_anotacao=0,
+            subtipo_anotacao="FreeText",
+        ),
+    )
+    annotation_only_session = replace(
+        session,
+        projeto=replace(session.projeto, metadados=None),
+        evidencias=(*session.evidencias, review_annotation),
+    )
+    region = session.regioes[0]
+    target = AlvoConformidade(
+        id=uuid5(region.id, "characterization:region"),
+        tipo=TipoEscopoConformidade.REGIAO,
+        rotulo="Região sem contexto inequívoco",
+        referencia_id=region.id,
+        pagina_id=region.pagina_id,
+        geometria=region.geometria,
+    )
+
+    for candidate_session in (conflicting_session, annotation_only_session):
+        facts = _region_facts(candidate_session, region_targets={region.id: target})
+        assert all(
+            item.chave not in {"rede.contexto_urbano", "rede.contexto_rural"} for item in facts
+        )
 
 
 def test_installation_cable_fact_does_not_reclassify_existing_cable_as_new_work() -> None:
@@ -529,6 +706,7 @@ def test_compliance_requires_collision_review_and_honors_documented_span_excepti
         _fact(target.id, "rede.contexto_urbano", True),
         _fact(target.id, "cabo.tecnologia", "PROTEGIDA"),
         _fact(target.id, "vao.comprimento_m", Decimal("52")),
+        _fact(target.id, "vao.aplicabilidade_excecao_45_60_resolvida", True),
         _fact(target.id, "vao.excecao_45_60_demonstrada", True),
     )
 

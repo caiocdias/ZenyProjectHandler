@@ -445,6 +445,7 @@ class MainWindow(QMainWindow):
         if portability_service is not None:
             self.portability_panel = PortabilityPanelWidget(
                 service=portability_service,
+                preparar_restauracao=lambda: self.pdf_viewer.preparar_para_restauracao(1_000),
                 parent=self,
             )
             self.portability_panel.status_changed.connect(self.statusBar().showMessage)
@@ -522,6 +523,7 @@ class MainWindow(QMainWindow):
             self.review_panel.limpar()
         if self.documentation_panel is not None:
             self.documentation_panel.limpar()
+            self.documentation_panel.atualizar_regras()
         self._refresh_data_panels()
 
     @Slot(object)
@@ -540,6 +542,7 @@ class MainWindow(QMainWindow):
         if self.portability_panel is not None:
             self.portability_panel.setEnabled(not project_busy)
             self.portability_panel.set_global_operation(self._coordinator_operation)
+        self.pdf_viewer.setEnabled(not portability_busy)
         if self.review_panel is not None:
             self.review_panel.setEnabled(not busy)
         if self.documentation_panel is not None:

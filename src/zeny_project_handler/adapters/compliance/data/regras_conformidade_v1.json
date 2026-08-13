@@ -2,7 +2,7 @@
   "schema_version": 1,
   "registry": {
     "id": "710c56ea-8586-5cdd-a272-f885ab93ac73",
-    "version": "cemig-normas-distribuicao-2025.3"
+    "version": "cemig-normas-distribuicao-2025.4"
   },
   "rules": [
     {
@@ -201,6 +201,11 @@
           "operator": "EM",
           "expected": ["PROTEGIDA", "ISOLADA"],
           "quantifier": "QUALQUER"
+        },
+        {
+          "fact": "vao.aplicabilidade_excecao_45_60_resolvida",
+          "operator": "IGUAL",
+          "expected": [true]
         }
       ],
       "unless": [

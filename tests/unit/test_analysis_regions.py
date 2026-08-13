@@ -10,6 +10,7 @@ import pytest
 from zeny_project_handler.application.analysis_regions import agrupar_regioes_da_analise
 from zeny_project_handler.domain.analysis import (
     EvidenciaDocumento,
+    OrigemObjetoPdf,
     PropostaElemento,
     PropostaRelacao,
 )
@@ -19,6 +20,7 @@ from zeny_project_handler.domain.enums import (
     EstadoRevisao,
     SituacaoProjeto,
     TipoEvidencia,
+    TipoOrigemPdf,
 )
 from zeny_project_handler.domain.values import (
     CaixaPagina,
@@ -347,3 +349,21 @@ def test_preserves_recognized_point_without_associated_elements() -> None:
     assert regions[0].rotulo_ponto == "P11"
     assert regions[0].elemento_ids == ()
     assert regions[0].geometria == p11_anchor.geometria
+
+    review_anchor = replace(
+        p11_anchor,
+        id=uuid4(),
+        origem_pdf=OrigemObjetoPdf(
+            tipo=TipoOrigemPdf.ANOTACAO,
+            numero_objeto=11,
+            indice_anotacao=0,
+            subtipo_anotacao="FreeText",
+        ),
+    )
+    review_regions = agrupar_regioes_da_analise(
+        (),
+        (review_anchor,),
+        (_document(page_id),),
+    )
+
+    assert review_regions == ()

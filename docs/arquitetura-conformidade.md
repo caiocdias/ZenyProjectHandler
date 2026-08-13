@@ -118,12 +118,15 @@ determinística da promoção é apenas o fallback. Uma anotação conserva a ev
 rótulo; uma medida por coordenadas conserva as evidências dos postes e usa a geometria do cabo. Se
 não houver comprimento, região inequívoca ou página coerente, nenhum valor é inventado. A exceção
 `vao.excecao_45_60_demonstrada` só existe quando um marcador booleano positivo aponta para uma
-evidência rastreável na mesma página. Ângulos e cálculo mecânico continuam sem detector ativo.
+evidência rastreável na mesma página e o comprimento está acima de 45 m e até 60 m. O fato
+`vao.aplicabilidade_excecao_45_60_resolvida` é publicado fora dessa faixa ou junto da prova positiva;
+dentro dela, a falta de prova mantém a regra não avaliável. Ângulos e cálculo mecânico continuam sem
+detector ativo.
 
 ## Regras normativas iniciais
 
-O registro `cemig-normas-distribuicao-2025.3` permanece pequeno e conservador após a revisão
-integral da Etapa 2:
+O registro `cemig-normas-distribuicao-2025.4` permanece pequeno e conservador após a revisão
+integral e a salvaguarda da faixa excepcional da Regra 6:
 
 | Tema | Fatos necessários | Resultado possível |
 |---|---|---|
@@ -132,8 +135,8 @@ integral da Etapa 2:
 | Escala | escala, caso extraordinário e eventual órgão competente | regra inativa até as exceções terem fatos positivos |
 | Equipamento em ângulo | equipamento, classe e ângulo | acima de 30° diverge; chave fusível é exceção |
 | Risco de abalroamento | equipamento não fusível, ângulo até 30° e nota de avaliação | presença obrigatória |
-| Vão urbano compacto/isolado | contexto, tecnologia e comprimento | máximo ordinário de 45 m |
-| Exceção de vão | área periférica/baixa densidade/chácaras e perfil favorável | suspende a regra ordinária |
+| Vão urbano compacto/isolado | contexto, tecnologia, comprimento e aplicabilidade da exceção resolvida | até 45 m conforme; acima de 60 m possível divergência |
+| Exceção de vão | área periférica/baixa densidade/chácaras, perfil favorável e evidência positiva | acima de 45 m e até 60 m fica não avaliável sem prova; com prova suspende a regra ordinária |
 | Cabo novo urbano | contexto e tecnologia da proposta `INSTALAR` | cabo nu convencional diverge; reparo não é reclassificado |
 | Estrutura/poste rural | contexto, código da estrutura e formato do único poste associado | CE1/CE1S/CEJ1/CEJ2/CEM4 divergem em duplo T |
 
@@ -167,14 +170,29 @@ O SQLite guarda cada configuração como um único snapshot JSON canônico em
 assinatura SHA-256, data e indicador da revisão ativa. O conteúdo é protegido contra alteração e
 remoção por triggers; somente o indicador ativo pode mudar. Assinaturas já existentes são
 reutilizadas em vez de duplicadas. A tabela `compliance_rule_numbers` atribui uma sequência
-permanente por ID técnico e não permite atualizar, apagar ou reutilizar números.
+permanente por ID técnico dentro da linhagem daquele banco e não permite atualizar, apagar ou
+reutilizar números.
 
-O seed empacotado só é usado para inicializar um banco sem revisão ativa. Importar mescla regras por
-ID, e ativar, desativar ou remover produz outro snapshot sem editar o seed. A cada revisão ativa, o
-aplicativo publica atomicamente `catalogo-regras-conformidade.md` na pasta de dados do usuário. O
-arquivo explica `when`, `unless` e `must` em linguagem humana e conserva IDs removidos como
-histórico. O JSON nunca contém expressões executáveis: geometria, topologia e cálculos continuam em
-provedores Python compostos explicitamente.
+O seed empacotado inicializa bancos sem revisão ativa. Na atualização `2025.3` → `2025.4`, o serviço
+substitui somente a Regra 6 que ainda seja exatamente igual à versão oficial anterior; regras
+adicionais são preservadas e qualquer edição do usuário nessa regra impede a migração automática.
+Importar mescla regras por ID e produz outro snapshot sem editar o seed. O usuário não dispõe de operação individual de
+ativação, desativação ou remoção: o estado declarativo `enabled` só muda quando o ID correspondente
+vem em um JSON importado, e omitir um ID do arquivo preserva a regra corrente. A cada revisão ativa,
+o aplicativo publica atomicamente `catalogo-regras-conformidade.md` na pasta de dados do usuário. O
+arquivo explica `when`, `unless` e `must` em linguagem humana; eventuais ausências criadas por versões
+legadas continuam identificáveis no histórico. O JSON nunca contém expressões executáveis: geometria,
+topologia e cálculos continuam em provedores Python compostos explicitamente.
+
+Como defesa adicional, `SqlComplianceRuleRegistryRepository.salvar_ativa` recusa qualquer snapshot
+novo cujo conjunto de IDs não contenha todos os IDs da revisão corrente. A restrição não reescreve
+snapshots legados e complementa os triggers que proíbem alterar ou apagar revisões já persistidas.
+Uma restauração de backup captura antes da troca a revisão ativa e, ainda dentro do bloco coberto
+pelo rollback de banco e arquivos, acrescenta ao registro restaurado todo ID local ausente. Conteúdo
+restaurado vence para IDs coincidentes, exceto pela migração imediata da Regra 6 oficial legada;
+IDs adicionais do backup também permanecem. A numeração é estável dentro da mesma linhagem de banco;
+ao combinar históricos independentes, colisões podem exigir novos números sem alterar os IDs. A mesma etapa
+republica o catálogo Markdown, e qualquer falha restaura o snapshot e a projeção anteriores.
 
 ## Provedores de fatos por família
 
@@ -188,6 +206,17 @@ O bootstrap compõe explicitamente a família regional existente e a família de
 recebe essa tupla e o orquestrador aplica os provedores antes do avaliador declarativo. Assim, uma
 nova família acrescenta fatos sem incluir condições normativas em Python e sem alterar o motor de
 `when`/`unless`/`must`. Chamadas diretas usam a mesma composição padrão determinística.
+
+Comentários PDF (`ANOTACAO`) e os objetos de sua aparência (`APARENCIA_ANOTACAO`) permanecem
+persistidos como material de auditoria, mas são retirados antes de interpretar elementos, agrupar
+pontos/coordenadas e derivar fatos técnicos. Portadores `Square` identificados pelos metadados como
+`AutoCAD SHX Text` são conteúdo técnico do desenho e permanecem disponíveis; não são confundidos
+com comentários. A rasterização do OCR semântico usa `annots=False`, evitando reintroduzir
+visualmente os comentários, enquanto o conteúdo SHX nativo continua na extração. Sessões legadas
+deixam de publicar fatos quando a proposta referencia comentário de revisão. O contexto urbano/rural
+só é publicado por valor literal integral em `metadados.tipo_servico` ou em campo permitido e
+rotulado do cabeçalho; token solto, negação, nome próprio, conflito, ausência e comentário mantêm a
+regra não avaliável.
 
 ## Execuções auditáveis
 
@@ -204,9 +233,12 @@ resultado observado de cada condição `when`, `unless` e `must`, inclusive oper
 valor observado. Um trigger impede alteração do snapshot.
 
 O ID deriva deterministicamente das assinaturas da sessão e da revisão. Repetir a mesma entrada é
-idempotente; ativar, remover ou importar regras produz outra assinatura e, portanto, uma nova
-execução sem substituir as anteriores. A reexecução usa somente os resultados semânticos
+idempotente; importar conteúdo ou estado diferente das regras produz outra assinatura e, portanto,
+uma nova execução sem substituir as anteriores. A reexecução usa somente os resultados semânticos
 persistidos: não abre o PDF, não repete PyMuPDF ou OCR e não modifica a revisão já capturada.
+Mudanças no próprio método de extração de fatos e avaliação também incrementam
+`VERSAO_METODO_CONFORMIDADE`; uma execução com versão anterior é marcada como desatualizada mesmo
+quando a assinatura das regras permanece igual.
 
 ## Projeção e camada visual de callouts
 
@@ -248,9 +280,10 @@ O painel próprio possui três visões:
    ações **Exibir todos** e **Ocultar todos** afetam somente achados localizáveis. O olho de um achado
    sem geometria fica desabilitado com diagnóstico acessível. A ação **Analisar conformidade**
    reaplica explicitamente a revisão ativa à sessão semântica persistida;
-3. **Regras:** revisão ativa, contagem de regras ativas/inativas, tabela e detalhes, com ações para
-   importar, exportar, ativar/desativar e remover. Importação e remoção exigem confirmação; erros
-   identificam regra, campo e motivo sem revelar o caminho absoluto do arquivo.
+3. **Regras:** revisão ativa, contagem de regras ativas/inativas, tabela e detalhes, com apenas as
+   ações **Importar** e **Exportar**. A importação exige confirmação; erros identificam regra, campo e
+   motivo sem revelar o caminho absoluto do arquivo. Não existem comandos de ativação, desativação
+   ou remoção individual no painel nem no serviço de aplicação.
 
 Selecionar um achado localizável abre a folha e centraliza seu callout realçado. Clicar na caixa ou
 seta seleciona a linha correspondente, abre a visão **Conformidade** e eleva o dock. Itens documentais

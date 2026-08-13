@@ -33,6 +33,11 @@ _LENGTH_WITH_UNIT_PATTERN = re.compile(
     r"(?<![A-Z0-9.,])(\d{1,4}(?:[.,]\d{1,2})?)"
     r"\s*M(?:ETRO|ETROS)?(?![A-Z0-9])"
 )
+_NON_SPAN_MEASUREMENT_PATTERN = re.compile(
+    r"(?:^|[^A-Z0-9])(?:"
+    r"H\.?\s*N\.?|ALTURA(?:\s+NOMINAL)?|ENGASTAMENTO|AREA|CAPACIDADE"
+    r")\s*[:=.-]?\s*\d{1,4}(?:[.,]\d{1,2})?\s*M(?:ETRO|ETROS)?(?![A-Z0-9])"
+)
 _POINT_IDENTIFIER_PATTERN = re.compile(r"^P(\d{1,4})$")
 _SPAN_IDENTIFIER_PATTERN = re.compile(r"^V(\d{1,4})-(\d{1,4})$")
 
@@ -423,6 +428,8 @@ def _comprimento_do_texto(texto: str) -> Decimal | None:
     normalizado = normalized_text(texto)
     correspondencia = _LABELED_LENGTH_PATTERN.search(normalizado)
     if correspondencia is None:
+        if _NON_SPAN_MEASUREMENT_PATTERN.search(normalizado) is not None:
+            return None
         correspondencia = _LENGTH_WITH_UNIT_PATTERN.search(normalizado)
     if correspondencia is None:
         return None

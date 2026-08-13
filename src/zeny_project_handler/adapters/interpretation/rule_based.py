@@ -5,7 +5,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import replace
 
-from zeny_project_handler.application.document_zones import evidencias_sem_cabecalho
+from zeny_project_handler.application.document_zones import (
+    evidencias_sem_anotacoes_de_revisao,
+    evidencias_sem_cabecalho,
+)
 from zeny_project_handler.domain.analysis import (
     DiagnosticoAnalise,
     EvidenciaDocumento,
@@ -34,7 +37,7 @@ from .span_rules import associar_tracados_de_cabos
 
 class InterpretadorRegrasExplicitas:
     nome = "regras-explicitas-cemig"
-    versao = "16.0"
+    versao = "17.0"
 
     def __init__(
         self,
@@ -61,7 +64,9 @@ class InterpretadorRegrasExplicitas:
         cancellation = cancelado or (lambda: False)
         project_request = replace(
             solicitacao,
-            evidencias=evidencias_sem_cabecalho(solicitacao.evidencias),
+            evidencias=evidencias_sem_cabecalho(
+                evidencias_sem_anotacoes_de_revisao(solicitacao.evidencias)
+            ),
         )
         proposals: list[PropostaElemento] = []
         diagnostics: list[DiagnosticoAnalise] = []

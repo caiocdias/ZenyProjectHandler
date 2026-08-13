@@ -12,6 +12,7 @@ from zeny_project_handler.adapters.interpretation import (
     carregar_registro_regras_inicial,
 )
 from zeny_project_handler.adapters.interpretation.rule_based import AnalisadorEstruturaMt
+from zeny_project_handler.domain.analysis import OrigemObjetoPdf
 from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.domain.enums import (
     CategoriaElemento,
@@ -19,6 +20,7 @@ from zeny_project_handler.domain.enums import (
     SituacaoProjeto,
     TipoEvidencia,
     TipoGeometria,
+    TipoOrigemPdf,
 )
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 from zeny_project_handler.ports.interpretation import SolicitacaoInterpretacao
@@ -217,6 +219,121 @@ def test_cable_length_annotation_is_attached_to_the_detected_line(
     assert attributes["comprimento_origem"] == "anotacao_desenho"
     assert attributes["evidencia_comprimento_id"] == str(annotation.id)
     assert annotation.id in cable.evidencia_ids
+
+
+@pytest.mark.parametrize(
+    "text",
+    (
+        "H.N=6,3m",
+        "Altura nominal: 11 m",
+        "Engastamento 1,6 m",
+        "Área: 20 m",
+    ),
+)
+def test_post_and_area_measurements_are_not_attached_as_span_lengths(
+    catalogo_inicial: CatalogoTecnico,
+    text: str,
+) -> None:
+    request = _request(catalogo_inicial)
+    measurement = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=request.evidencias[0].pagina_id,
+        key=f"non-span-measurement-{text}",
+        text=text,
+        x="0.45",
+        y="0.42",
+    )
+    request = replace(request, evidencias=(*request.evidencias, measurement))
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
+
+    cable = next(item for item in result.elementos if item.categoria is CategoriaElemento.CABO)
+    assert "comprimento_m" not in dict(cable.atributos_sugeridos)
+
+
+def test_native_review_annotations_do_not_create_project_elements_or_lengths(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    request = _request(catalogo_inicial)
+    page_id = request.evidencias[0].pagina_id
+    review_comment = replace(
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="commissioner-review-comment",
+            text="Vão: 137 m",
+            x="0.45",
+            y="0.42",
+        ),
+        origem_pdf=OrigemObjetoPdf(
+            tipo=TipoOrigemPdf.ANOTACAO,
+            numero_objeto=123,
+            indice_anotacao=0,
+            subtipo_anotacao="FreeText",
+        ),
+    )
+    review_appearance = replace(
+        vector_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="commissioner-review-appearance",
+            points=(("0.10", "0.10"), ("0.80", "0.80")),
+            color="#FF0000",
+        ),
+        origem_pdf=OrigemObjetoPdf(
+            tipo=TipoOrigemPdf.APARENCIA_ANOTACAO,
+            numero_objeto=124,
+            indice_anotacao=0,
+            subtipo_anotacao="FreeText",
+        ),
+    )
+    request = replace(
+        request,
+        evidencias=(*request.evidencias, review_comment, review_appearance),
+    )
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
+
+    assert all(review_comment.id not in item.evidencia_ids for item in result.elementos)
+    assert all(review_appearance.id not in item.evidencia_ids for item in result.elementos)
+    cable = next(item for item in result.elementos if item.categoria is CategoriaElemento.CABO)
+    assert "comprimento_m" not in dict(cable.atributos_sugeridos)
+
+
+def test_autocad_shx_annotation_is_preserved_as_technical_drawing_content(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    request = _request(catalogo_inicial)
+    page_id = request.evidencias[0].pagina_id
+    technical_label = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=page_id,
+        key="autocad-shx-span-label",
+        text="V1-2=52 m",
+        x="0.45",
+        y="0.42",
+    )
+    technical_label = replace(
+        technical_label,
+        origem_pdf=OrigemObjetoPdf(
+            tipo=TipoOrigemPdf.ANOTACAO,
+            numero_objeto=125,
+            indice_anotacao=0,
+            subtipo_anotacao="Square",
+        ),
+        atributos_extraidos=(
+            *technical_label.atributos_extraidos,
+            ("titulo", "AutoCAD SHX Text"),
+            ("anotacao_tecnica", True),
+        ),
+    )
+    request = replace(request, evidencias=(*request.evidencias, technical_label))
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
+
+    cable = next(item for item in result.elementos if item.categoria is CategoriaElemento.CABO)
+    assert dict(cable.atributos_sugeridos)["comprimento_m"] == Decimal("52")
+    assert technical_label.id in cable.evidencia_ids
 
 
 def test_cable_uses_solid_path_between_same_situation_poles(

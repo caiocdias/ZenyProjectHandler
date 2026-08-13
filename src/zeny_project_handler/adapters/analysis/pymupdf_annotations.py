@@ -41,6 +41,7 @@ def _extract_annotations(
         if geometry is None:
             continue
         info = _annotation_info(page, xref)
+        technical_annotation = _is_technical_annotation(subtype, info)
         content = _optional_string(info.get("content"))
         evidence_type = TipoEvidencia.TEXTO if content else TipoEvidencia.VETOR
         candidates.append(
@@ -64,6 +65,7 @@ def _extract_annotations(
                     campo_formulario=_optional_string(field_name),
                     tipo_campo_formulario=field_type,
                     campo_formulario_preenchido=field_has_value,
+                    anotacao_tecnica=technical_annotation,
                 ),
             )
         )
@@ -79,6 +81,7 @@ def _extract_annotations(
                     root_name=appearance_name,
                     geometry=geometry,
                     max_depth=max_depth,
+                    technical_annotation=technical_annotation,
                 )
             )
     return tuple(candidates)
@@ -119,6 +122,18 @@ def _annotation_info(page: Any, xref: int) -> dict[str, Any]:
     return cast(dict[str, Any], annotation.info or {}) if annotation is not None else {}
 
 
+def _is_technical_annotation(subtype: str, info: dict[str, Any]) -> bool:
+    """Preserve AutoCAD SHX carriers, which are drawing content rather than review notes."""
+    if subtype.casefold() != "square":
+        return False
+    metadata = " ".join(
+        value
+        for key in ("title", "subject", "name")
+        if (value := _optional_string(info.get(key))) is not None
+    ).casefold()
+    return "autocad" in metadata and "shx" in metadata
+
+
 def _appearance_roots(document: Any, annotation_xref: int) -> tuple[tuple[int, str], ...]:
     _kind, raw = document.xref_get_key(annotation_xref, "AP")
     value = str(raw)
@@ -139,6 +154,7 @@ def _walk_appearance(
     root_name: str,
     geometry: GeometriaNormalizada,
     max_depth: int,
+    technical_annotation: bool,
 ) -> tuple[CandidatoEvidenciaDocumento, ...]:
     candidates: list[CandidatoEvidenciaDocumento] = []
     queue: list[tuple[int, str | None, int]] = [(root_xref, root_name, 0)]
@@ -173,6 +189,7 @@ def _walk_appearance(
                         subtipo_objeto=subtype or "desconhecido",
                         tamanho_stream=len(stream),
                         geometria_aproximada=True,
+                        anotacao_tecnica=technical_annotation,
                     ),
                 )
             )

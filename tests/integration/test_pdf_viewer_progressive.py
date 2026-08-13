@@ -388,3 +388,28 @@ def test_closing_stops_render_thread_and_closes_verified_sessions(
     assert not viewer._render_queue.isRunning()
     assert all(session.closed for session in reader.sessions)
     assert viewer._render_cache.bytes_usados == 0
+
+
+@pytest.mark.integration
+def test_restore_preparation_is_bounded_and_only_closes_sessions_after_render_releases(
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> None:
+    source = create_feature_pdf(tmp_path / "restauracao-com-render-bloqueado.pdf")
+    reader = _ControlledReader(block_first=True)
+    viewer = _viewer(qtbot, cast(LeitorPdfPort, reader), dpi=72, budget=TEST_RENDER_BUDGET)
+
+    assert viewer.carregar_pdf(source)
+    assert reader.entered.wait(timeout=1)
+
+    assert not viewer.preparar_para_restauracao(timeout_ms=10)
+    assert viewer.inspecao is not None
+    assert not reader.sessions[0].closed
+
+    reader.release.set()
+
+    assert viewer.preparar_para_restauracao(timeout_ms=1_000)
+    assert viewer._render_queue.esta_ociosa()
+    assert viewer.inspecao is None
+    assert all(session.closed for session in reader.sessions)
+    assert viewer._render_cache.bytes_usados == 0

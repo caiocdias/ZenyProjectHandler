@@ -12,6 +12,7 @@ from sqlalchemy import Engine, inspect
 from tests.factories import complete_analysis, complete_project
 from tests.pdf_fixtures import create_golden_pdf
 
+from zeny_project_handler.adapters.compliance import carregar_registro_conformidade_inicial
 from zeny_project_handler.adapters.pdf import PyMuPdfReader
 from zeny_project_handler.adapters.persistence import (
     SqlAlchemyUnitOfWork,
@@ -22,6 +23,9 @@ from zeny_project_handler.adapters.persistence import (
 )
 from zeny_project_handler.adapters.persistence.errors import PersistenceError
 from zeny_project_handler.adapters.portability import ZipProjectArchive
+from zeny_project_handler.application.compliance_registry import (
+    ServicoRegistroRegrasConformidade,
+)
 from zeny_project_handler.application.errors import (
     OperacaoEmAndamentoError,
     PlanoImportacaoObsoletoError,
@@ -40,6 +44,10 @@ from zeny_project_handler.application.project_portability import ServicoPortabil
 from zeny_project_handler.bootstrap import initialize_local_storage
 from zeny_project_handler.config import AppSettings
 from zeny_project_handler.domain.catalog import CatalogoTecnico
+from zeny_project_handler.domain.compliance import (
+    RegistroRegrasConformidade,
+    RegraConformidade,
+)
 from zeny_project_handler.domain.portability import EstadoIntegridadePacote
 from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler.ports.pdf import ReferenciaFontePdf
@@ -110,6 +118,7 @@ def _service(
     dispose_connections: Callable[[], None] | None = None,
     coordinator: CoordenadorOperacoes | None = None,
     inject_import_failure: Callable[[PontoFalhaImportacao], None] | None = None,
+    compliance_registry: ServicoRegistroRegrasConformidade | None = None,
 ) -> ServicoPortabilidadeProjeto:
     return ServicoPortabilidadeProjeto(
         lambda: SqlAlchemyUnitOfWork(engine),
@@ -121,6 +130,59 @@ def _service(
         coordenador=coordinator,
         descartar_conexoes=dispose_connections or engine.dispose,
         injetar_falha_importacao=inject_import_failure,
+        registro_conformidade=compliance_registry,
+    )
+
+
+def _compliance_registry(
+    data: Path,
+    engine: Engine,
+) -> ServicoRegistroRegrasConformidade:
+    return ServicoRegistroRegrasConformidade(
+        lambda: SqlAlchemyUnitOfWork(engine),
+        diretorio_dados=data,
+    )
+
+
+def _registry_after_backup() -> tuple[
+    RegistroRegrasConformidade,
+    RegistroRegrasConformidade,
+    RegraConformidade,
+    RegraConformidade,
+    RegraConformidade,
+]:
+    seed = carregar_registro_conformidade_inicial()
+    restored_rule = seed.regras[0]
+    changed_rule = replace(restored_rule, titulo="Conteúdo posterior ao backup")
+    custom_rule = replace(
+        restored_rule,
+        id="fixture.restauracao.regra-preservada",
+        titulo="Regra local preservada",
+    )
+    current = replace(
+        seed,
+        versao="estado-posterior-ao-backup",
+        regras=(changed_rule, *seed.regras[1:], custom_rule),
+    )
+    return seed, current, restored_rule, changed_rule, custom_rule
+
+
+def _legacy_bundled_registry(
+    seed: RegistroRegrasConformidade,
+) -> RegistroRegrasConformidade:
+    span_rule = next(item for item in seed.regras if item.id == "nd31.vao.urbano-compacto-isolado")
+    legacy_span = replace(
+        span_rule,
+        aplicabilidade=tuple(
+            condition
+            for condition in span_rule.aplicabilidade
+            if condition.chave_fato != "vao.aplicabilidade_excecao_45_60_resolvida"
+        ),
+    )
+    return replace(
+        seed,
+        versao="cemig-normas-distribuicao-2025.3",
+        regras=tuple(legacy_span if item.id == legacy_span.id else item for item in seed.regras),
     )
 
 
@@ -585,6 +647,9 @@ def test_full_backup_restores_database_and_managed_files(
     upgrade_database(engine)
     project, pdf_source = _project_with_real_pdf(tmp_path, catalogo_inicial)
     _persist_complete_project(engine, catalogo_inicial, project, pdf_source)
+    registry_service = _compliance_registry(data, engine)
+    seed, current_registry, restored_rule, changed_rule, custom_rule = _registry_after_backup()
+    registry_service.inicializar(seed)
     dispose_calls = 0
 
     def dispose_connections() -> None:
@@ -592,12 +657,29 @@ def test_full_backup_restores_database_and_managed_files(
         dispose_calls += 1
         engine.dispose()
 
-    service = _service(data, engine, dispose_connections)
+    service = _service(
+        data,
+        engine,
+        dispose_connections,
+        compliance_registry=registry_service,
+    )
     photo_path = _create_png(tmp_path / "backup-photo.png")
     attached = service.anexar_foto(project.id, project.elementos[0].id, photo_path)
     backup = service.criar_backup(tmp_path / "backup.zphbackup")
     assert backup.estado_integridade is EstadoIntegridadePacote.INTEGRO
     assert backup.manifesto.versao_formato == 2
+
+    current_revision = registry_service.importar(
+        registry_service.preparar_importacao(current_registry)
+    )
+    ids_before_restore = {item.id for item in current_revision.registro.regras}
+    numbers_before_restore = {
+        item.regra_id: item.numero for item in registry_service.listar_numeros()
+    }
+    assert (
+        next(item for item in current_revision.registro.regras if item.id == changed_rule.id)
+        == changed_rule
+    )
 
     with SqlAlchemyUnitOfWork(engine) as work:
         work.projetos.salvar(replace(attached.projeto, nome="Estado posterior"))
@@ -624,6 +706,24 @@ def test_full_backup_restores_database_and_managed_files(
     assert restored_source is not None
     assert restored_source.caminho_canonico.is_file()
     assert restored_source.caminho_canonico.is_relative_to(data / "project-files")
+    reconciled = registry_service.obter_revisao_ativa()
+    reconciled_by_id = {item.id: item for item in reconciled.registro.regras}
+    assert reconciled.id != current_revision.id
+    assert ids_before_restore <= set(reconciled_by_id)
+    assert reconciled_by_id[restored_rule.id] == restored_rule
+    assert reconciled_by_id[custom_rule.id] == custom_rule
+    assert set(reconciled_by_id) == {
+        *(item.id for item in seed.regras),
+        custom_rule.id,
+    }
+    numbers_after_restore = {
+        item.regra_id: item.numero for item in registry_service.listar_numeros()
+    }
+    assert numbers_after_restore[custom_rule.id] == numbers_before_restore[custom_rule.id]
+    catalog = registry_service.caminho_catalogo.read_text(encoding="utf-8")
+    assert custom_rule.titulo in catalog
+    assert restored_rule.titulo in catalog
+    assert changed_rule.titulo not in catalog
     assert dispose_calls == 1
     engine.dispose()
     assert not tuple(data.glob(".z-*"))
@@ -640,6 +740,36 @@ def test_full_backup_restores_database_and_managed_files(
         ]
         assert all(record.levelno == logging.INFO for record in records)
         assert len({getattr(record, "correlation_id", None) for record in records}) == 1
+
+
+def test_restore_immediately_migrates_the_unchanged_legacy_bundled_span_rule(
+    tmp_path: Path,
+) -> None:
+    data = tmp_path / "legacy-rule-restore"
+    engine = create_sqlite_engine(data / "zeny-project-handler.sqlite3")
+    try:
+        upgrade_database(engine)
+        registry_service = _compliance_registry(data, engine)
+        safe_seed = carregar_registro_conformidade_inicial()
+        legacy_seed = _legacy_bundled_registry(safe_seed)
+        registry_service.inicializar(legacy_seed)
+        service = _service(data, engine, compliance_registry=registry_service)
+        backup = service.criar_backup(tmp_path / "legacy-rules.zphbackup")
+
+        registry_service.inicializar(safe_seed)
+        service.restaurar_backup(backup.caminho)
+
+        restored = registry_service.obter_revisao_ativa().registro
+        span_rule = next(
+            item for item in restored.regras if item.id == "nd31.vao.urbano-compacto-isolado"
+        )
+        assert restored.versao == "cemig-normas-distribuicao-2025.4"
+        assert any(
+            item.chave_fato == "vao.aplicabilidade_excecao_45_60_resolvida"
+            for item in span_rule.aplicabilidade
+        )
+    finally:
+        engine.dispose()
 
 
 def test_backup_preflight_is_side_effect_free_and_classifies_pdf_problems(
@@ -800,6 +930,69 @@ def test_restore_disposes_connections_again_before_rollback(
     database_path.replace(moved_database)
     moved_database.unlink()
     assert not moved_database.exists()
+
+
+def test_restore_rolls_back_database_assets_and_catalog_when_rule_reconciliation_fails(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data = tmp_path / "rule-reconciliation-rollback-data"
+    database_path = data / "zeny-project-handler.sqlite3"
+    engine = create_sqlite_engine(database_path)
+    try:
+        upgrade_database(engine)
+        project, pdf_source = _project_with_real_pdf(tmp_path, catalogo_inicial)
+        _persist_complete_project(engine, catalogo_inicial, project, pdf_source)
+        registry_service = _compliance_registry(data, engine)
+        seed, current_registry, _restored_rule, _changed_rule, custom_rule = (
+            _registry_after_backup()
+        )
+        registry_service.inicializar(seed)
+        service = _service(data, engine, compliance_registry=registry_service)
+        backup = service.criar_backup(tmp_path / "rule-reconciliation-rollback.zphbackup")
+
+        current_revision = registry_service.importar(
+            registry_service.preparar_importacao(current_registry)
+        )
+        post_backup_project = replace(project, nome="Estado posterior ao backup")
+        with SqlAlchemyUnitOfWork(engine) as work:
+            work.projetos.salvar(post_backup_project)
+            work.commit()
+        managed_marker = data / "project-files" / "post-backup.txt"
+        managed_marker.parent.mkdir(parents=True, exist_ok=True)
+        managed_marker.write_text("estado posterior", encoding="utf-8")
+        catalog_before = registry_service.caminho_catalogo.read_bytes()
+        assert managed_marker.is_file()
+
+        real_reconcile = registry_service.reconciliar_apos_restauracao
+
+        def reconcile_then_fail(registry):  # type: ignore[no-untyped-def]
+            real_reconcile(registry)
+            raise RuntimeError("falha simulada depois da reconciliação")
+
+        monkeypatch.setattr(
+            registry_service,
+            "reconciliar_apos_restauracao",
+            reconcile_then_fail,
+        )
+
+        with pytest.raises(RuntimeError, match="falha simulada depois da reconciliação"):
+            service.restaurar_backup(backup.caminho)
+
+        with SqlAlchemyUnitOfWork(engine) as work:
+            project_after_failure = work.projetos.obter(project.id)
+        assert project_after_failure == post_backup_project
+        assert managed_marker.read_text(encoding="utf-8") == "estado posterior"
+        assert registry_service.obter_revisao_ativa() == current_revision
+        assert any(
+            item.id == custom_rule.id
+            for item in registry_service.obter_revisao_ativa().registro.regras
+        )
+        assert registry_service.caminho_catalogo.read_bytes() == catalog_before
+        assert not tuple(data.glob(".z-*"))
+    finally:
+        engine.dispose()
 
 
 def test_portability_refuses_conflict_before_mutating_and_releases_after_success(

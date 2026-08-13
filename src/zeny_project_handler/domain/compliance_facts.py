@@ -250,6 +250,13 @@ CATALOGO_FATOS_CONFORMIDADE = (
         "Comprimento rastreável do vão, em metros.",
     ),
     _fact(
+        "vao.aplicabilidade_excecao_45_60_resolvida",
+        _REGION,
+        TipoValorFato.BOOLEANO,
+        _BOOLEANO,
+        "Indica que a aplicabilidade da faixa excepcional de 45 m a 60 m foi resolvida.",
+    ),
+    _fact(
         "vao.excecao_45_60_demonstrada",
         _REGION,
         TipoValorFato.BOOLEANO,

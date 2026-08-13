@@ -194,14 +194,6 @@ class DocumentationPanelWidget(QWidget):
         self._export_rules.setObjectName("complianceRulesExportButton")
         self._export_rules.clicked.connect(self._export_registry)
         actions.addWidget(self._export_rules)
-        self._toggle_rule = QPushButton("Ativar/desativar")
-        self._toggle_rule.setObjectName("complianceRulesToggleButton")
-        self._toggle_rule.clicked.connect(self._toggle_selected_rule)
-        actions.addWidget(self._toggle_rule)
-        self._remove_rule = QPushButton("Remover")
-        self._remove_rule.setObjectName("complianceRulesRemoveButton")
-        self._remove_rule.clicked.connect(self._remove_selected_rule)
-        actions.addWidget(self._remove_rule)
         actions.addStretch(1)
         rules_layout.addLayout(actions)
         self._rules = _tree(
@@ -245,6 +237,12 @@ class DocumentationPanelWidget(QWidget):
         self._project.blockSignals(False)
         if self._project.currentData() is not None:
             self._load_selected_project()
+
+    def atualizar_regras(self) -> None:
+        service = self._registry_service
+        if service is None:
+            return
+        self._refresh_registry(service.obter_revisao_ativa().registro)
 
     def abrir_projeto(self, projeto_id: UUID) -> None:
         self.atualizar_projetos()
@@ -579,19 +577,13 @@ class DocumentationPanelWidget(QWidget):
         enabled = service is not None
         self._import_rules.setEnabled(enabled)
         self._export_rules.setEnabled(enabled)
-        self._toggle_rule.setEnabled(False)
-        self._remove_rule.setEnabled(False)
         self._rule_details.clear()
 
     def _show_rule_details(self) -> None:
         rule = self._selected_rule()
-        enabled = rule is not None and self._registry_service is not None
-        self._toggle_rule.setEnabled(enabled)
-        self._remove_rule.setEnabled(enabled)
         if rule is None:
             self._rule_details.clear()
             return
-        self._toggle_rule.setText("Desativar" if rule.ativa else "Ativar")
         source = f"{rule.fonte.documento} · {rule.fonte.revisao} · {rule.fonte.item}"
         if rule.fonte.pagina is not None:
             source += f" · página {rule.fonte.pagina}"
@@ -670,41 +662,6 @@ class DocumentationPanelWidget(QWidget):
             self._show_rules_error("Exportação não concluída", error)
             return
         QMessageBox.information(self, "Exportação concluída", "Registro ativo exportado.")
-
-    def _toggle_selected_rule(self) -> None:
-        service = self._registry_service
-        rule = self._selected_rule()
-        if service is None or not isinstance(rule, RegraConformidade):
-            return
-        try:
-            revision = service.definir_regra_ativa(rule.id, ativa=not rule.ativa)
-        except (ApplicationError, DomainValidationError, OSError) as error:
-            self._show_rules_error("Alteração não concluída", error)
-            return
-        self._refresh_registry(revision.registro)
-        self.status_changed.emit(f"Regra {rule.id} {'ativada' if not rule.ativa else 'desativada'}")
-
-    def _remove_selected_rule(self) -> None:
-        service = self._registry_service
-        rule = self._selected_rule()
-        if service is None or not isinstance(rule, RegraConformidade):
-            return
-        confirmation = QMessageBox.question(
-            self,
-            "Remover regra",
-            f"Remover '{rule.id}' da próxima revisão ativa? O histórico será preservado.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if confirmation != QMessageBox.StandardButton.Yes:
-            return
-        try:
-            revision = service.remover_regra(rule.id)
-        except (ApplicationError, DomainValidationError, OSError) as error:
-            self._show_rules_error("Remoção não concluída", error)
-            return
-        self._refresh_registry(revision.registro)
-        self.status_changed.emit(f"Regra {rule.id} removida da revisão ativa")
 
     def _refresh_registry(self, registry: RegistroRegrasConformidade) -> None:
         self._registry = registry

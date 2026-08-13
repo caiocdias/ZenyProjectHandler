@@ -141,6 +141,7 @@ def _compose_initialized_application(
     compliance_service = ServicoRegistroRegrasConformidade(
         unit_of_work,
         diretorio_dados=app_settings.data_directory,
+        seed=carregar_registro_conformidade_inicial(),
     )
 
     def list_projects() -> tuple[Projeto, ...]:
@@ -207,6 +208,7 @@ def _compose_initialized_application(
             gerenciador_arquivos=managed_files,
             coordenador=operation_coordinator,
             descartar_conexoes=engine.dispose,
+            registro_conformidade=compliance_service,
         ),
         operation_coordinator=operation_coordinator,
         compliance_registry_service=compliance_service,

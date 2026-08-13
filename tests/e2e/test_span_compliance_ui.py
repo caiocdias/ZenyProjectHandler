@@ -15,6 +15,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
+    QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
@@ -68,6 +69,7 @@ def test_span_rule_full_ui_cycle_survives_restart(
     settings = AppSettings(data_directory=tmp_path / "data", pdf_render_dpi=72)
     source = _span_pdf(tmp_path / "vao-sintetico.pdf")
     imported_rules = _span_rule_file(tmp_path / "regra-vao.json")
+    disabled_rules = _span_rule_file(tmp_path / "regra-vao-inativa.json", enabled=False)
     application, window = application_factory([], settings=settings)
     qtbot.addWidget(window)
     window.show()
@@ -115,8 +117,10 @@ def test_span_rule_full_ui_cycle_survives_restart(
     assert finding_id in {item.id for item in window.pdf_viewer._compliance_callouts}
     current_rule_finding = _finding_row(findings, _CURRENT_SPAN_RULE_TITLE)
     current_rule_finding_id = UUID(str(current_rule_finding.data(0, Qt.ItemDataRole.UserRole + 3)))
-    assert current_rule_finding.text(0) == "Possível divergência"
-    assert current_rule_finding_id in {item.id for item in window.pdf_viewer._compliance_callouts}
+    assert current_rule_finding.text(0) == "Não avaliável"
+    assert current_rule_finding_id not in {
+        item.id for item in window.pdf_viewer._compliance_callouts
+    }
     qtbot.waitUntil(
         lambda: str(finding_id) in window.pdf_viewer.view._callout_items,
         timeout=10_000,
@@ -140,13 +144,24 @@ def test_span_rule_full_ui_cycle_survives_restart(
     reopened_rules = reopened_documentation.findChild(QTreeWidget, "complianceRulesTree")
     reopened_findings = reopened_documentation.findChild(QTreeWidget, "complianceFindingsTree")
     reopened_tabs = reopened_documentation.findChild(QTabWidget, "documentationTabs")
+    toggle_button = reopened_documentation.findChild(
+        QPushButton,
+        "complianceRulesToggleButton",
+    )
     remove_button = reopened_documentation.findChild(
         QPushButton,
         "complianceRulesRemoveButton",
     )
+    import_button = reopened_documentation.findChild(
+        QPushButton,
+        "complianceRulesImportButton",
+    )
     reanalyze = reopened_documentation.findChild(QPushButton, "complianceAnalyzeButton")
+    status = reopened_documentation.findChild(QLabel, "complianceExecutionStatusLabel")
     assert reopened_rules is not None and reopened_findings is not None
-    assert reopened_tabs is not None and remove_button is not None and reanalyze is not None
+    assert reopened_tabs is not None
+    assert toggle_button is None and remove_button is None
+    assert import_button is not None and reanalyze is not None and status is not None
 
     _rule_row(reopened_rules, _RULE_ID)
     reopened_finding = _finding_row(reopened_findings, _RULE_TITLE)
@@ -165,8 +180,16 @@ def test_span_rule_full_ui_cycle_survives_restart(
 
     reopened_tabs.setCurrentIndex(2)
     reopened_rules.setCurrentItem(_rule_row(reopened_rules, _RULE_ID))
-    qtbot.mouseClick(remove_button, Qt.MouseButton.LeftButton)
-    assert _RULE_ID not in _rule_ids(reopened_rules)
+    assert _RULE_ID in _rule_ids(reopened_rules)
+    monkeypatch.setattr(
+        QFileDialog,
+        "getOpenFileName",
+        lambda *_args, **_kwargs: (str(disabled_rules), ""),
+    )
+    qtbot.mouseClick(import_button, Qt.MouseButton.LeftButton)
+    assert _rule_row(reopened_rules, _RULE_ID).text(1) == "Inativa"
+    assert "Resultado desatualizado" in status.text()
+
     reopened_tabs.setCurrentIndex(1)
     qtbot.mouseClick(reanalyze, Qt.MouseButton.LeftButton)
     assert all(
@@ -181,7 +204,8 @@ def test_span_rule_full_ui_cycle_survives_restart(
     history = analysis_service.listar_historico(project_id)
     assert history == (first_execution, latest)
     assert any(item.regra_id == _RULE_ID for item in history[0].achados)
-    assert "O histórico será preservado" in confirmations[-1]
+    assert "IDs existentes substituídos: 1" in confirmations[-1]
+    assert "IDs atuais omitidos e preservados: 8" in confirmations[-1]
 
 
 def _create_project_with_pdf(
@@ -326,13 +350,13 @@ def _persist_span_semantic_session(panel: object, project_id: UUID) -> None:
         work.commit()
 
 
-def _span_rule_file(path: Path) -> Path:
+def _span_rule_file(path: Path, *, enabled: bool = True) -> Path:
     payload = deepcopy(carregar_registro_conformidade_inicial().para_dict())
     registry = payload["registry"]
     rules = payload["rules"]
     assert isinstance(registry, dict) and isinstance(rules, list)
     registry["id"] = str(_id("registry"))
-    registry["version"] = "fixture-e2e-span-1"
+    registry["version"] = f"fixture-e2e-span-{'active' if enabled else 'inactive'}-1"
     rules[:] = [
         {
             "id": _RULE_ID,
@@ -360,7 +384,7 @@ def _span_rule_file(path: Path) -> Path:
                 {"fact": "vao.excecao_45_60_demonstrada", "operator": "EXISTE", "expected": []}
             ],
             "must": [{"fact": "vao.comprimento_m", "operator": "MENOR_OU_IGUAL", "expected": [45]}],
-            "enabled": True,
+            "enabled": enabled,
         }
     ]
     path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")

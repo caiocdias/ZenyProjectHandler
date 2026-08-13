@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from uuid import UUID, uuid5
 
 from zeny_project_handler.domain.analysis import EvidenciaDocumento, PropostaElemento
@@ -14,19 +15,27 @@ from zeny_project_handler.domain.enums import CategoriaElemento, OrigemComprimen
 from zeny_project_handler.domain.values import GeometriaDocumento
 
 from .compliance_fact_providers import ContextoProvedorFatos, criar_fato_conformidade
+from .document_zones import evidencia_eh_anotacao_de_revisao
 from .spans import VaoDetectado, detectar_vaos
 
 _EXCEPTION_FLAG = "excecao_45_60_demonstrada"
 _EXCEPTION_EVIDENCE_ID = "evidencia_excecao_45_60_id"
 _LENGTH_EVIDENCE_ID = "evidencia_comprimento_id"
+_ORDINARY_MAX_LENGTH = Decimal("45")
+_EXCEPTION_MAX_LENGTH = Decimal("60")
 
 
 def prover_fatos_vaos(contexto: ContextoProvedorFatos) -> tuple[FatoConformidade, ...]:
     """Publique medidas e somente exceções com evidência positiva explícita."""
     session = contexto.sessao
-    proposals = {item.id: item for item in session.propostas if isinstance(item, PropostaElemento)}
-    proposals_by_element = _proposals_by_confirmed_element(contexto, proposals)
     evidence_by_id = {item.id: item for item in session.evidencias}
+    proposals = {
+        item.id: item
+        for item in session.propostas
+        if isinstance(item, PropostaElemento)
+        and not _proposal_uses_review_annotation(item, evidence_by_id)
+    }
+    proposals_by_element = _proposals_by_confirmed_element(contexto, proposals)
     targets_by_region = {
         item.referencia_id: item
         for item in contexto.alvos
@@ -57,11 +66,33 @@ def prover_fatos_vaos(contexto: ContextoProvedorFatos) -> tuple[FatoConformidade
                     geometria=_measurement_geometry(span, evidence),
                 )
             )
-        exception_evidence = _positive_exception_evidence(
+        candidate_exception_evidence = _positive_exception_evidence(
             proposal,
             evidence_by_id,
             page_id=region_target.pagina_id,
         )
+        exception_evidence = (
+            candidate_exception_evidence
+            if span.comprimento_m is not None
+            and _ORDINARY_MAX_LENGTH < span.comprimento_m <= _EXCEPTION_MAX_LENGTH
+            else ()
+        )
+        if span.comprimento_m is not None and _exception_applicability_resolved(
+            span.comprimento_m,
+            exception_evidence,
+        ):
+            applicability_evidence = tuple(dict.fromkeys((*evidence, *exception_evidence)))
+            facts.append(
+                criar_fato_conformidade(
+                    region_target.id,
+                    "vao.aplicabilidade_excecao_45_60_resolvida",
+                    True,
+                    "faixa excepcional resolvida por comprimento ou evidência positiva",
+                    evidencias=applicability_evidence,
+                    confianca=proposal.confianca,
+                    geometria=_measurement_geometry(span, evidence),
+                )
+            )
         if exception_evidence:
             facts.append(
                 criar_fato_conformidade(
@@ -77,6 +108,15 @@ def prover_fatos_vaos(contexto: ContextoProvedorFatos) -> tuple[FatoConformidade
     return tuple(facts)
 
 
+def _exception_applicability_resolved(
+    length: Decimal,
+    exception_evidence: tuple[EvidenciaDocumento, ...],
+) -> bool:
+    return (
+        length <= _ORDINARY_MAX_LENGTH or length > _EXCEPTION_MAX_LENGTH or bool(exception_evidence)
+    )
+
+
 def _proposals_by_confirmed_element(
     contexto: ContextoProvedorFatos,
     proposals: dict[UUID, PropostaElemento],
@@ -90,6 +130,17 @@ def _proposals_by_confirmed_element(
         result.setdefault(uuid5(proposal.id, "elemento-confirmado"), proposal)
         result.setdefault(proposal.id, proposal)
     return result
+
+
+def _proposal_uses_review_annotation(
+    proposal: PropostaElemento,
+    evidence_by_id: dict[UUID, EvidenciaDocumento],
+) -> bool:
+    return any(
+        evidencia_eh_anotacao_de_revisao(evidence)
+        for evidence_id in proposal.evidencia_ids
+        if (evidence := evidence_by_id.get(evidence_id)) is not None
+    )
 
 
 def _span_proposal(
@@ -197,6 +248,10 @@ def _evidence_from_attribute(
     except (TypeError, ValueError):
         return ()
     evidence = evidence_by_id.get(evidence_id)
-    if evidence is None or evidence.pagina_id != page_id:
+    if (
+        evidence is None
+        or evidence.pagina_id != page_id
+        or evidencia_eh_anotacao_de_revisao(evidence)
+    ):
         return ()
     return (evidence,)

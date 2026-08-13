@@ -331,3 +331,47 @@ def test_cancelled_portability_dialogs_are_correlated_without_running_service(
         ]
         assert len({getattr(record, "correlation_id", None) for record in records}) == 1
     engine.dispose()
+
+
+def test_restore_does_not_start_while_the_viewer_cannot_release_the_pdf(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine, service = _service(tmp_path / "restore-preflight")
+    backup = tmp_path / "selected.zphbackup"
+    prepared: list[bool] = []
+
+    def refuse_restore_preparation() -> bool:
+        prepared.append(True)
+        return False
+
+    panel = PortabilityPanelWidget(
+        service=service,
+        preparar_restauracao=refuse_restore_preparation,
+    )
+    qtbot.addWidget(panel)
+    monkeypatch.setattr(
+        QFileDialog,
+        "getOpenFileName",
+        lambda *_args, **_kwargs: (str(backup), "Backup Zeny (*.zphbackup)"),
+    )
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *_args, **_kwargs: QMessageBox.StandardButton.Yes,
+    )
+    warnings: list[str] = []
+    monkeypatch.setattr(
+        QMessageBox,
+        "warning",
+        lambda _parent, _title, message: warnings.append(str(message)),
+    )
+
+    panel.restaurar_backup()
+
+    assert prepared == [True]
+    assert not panel.processando
+    assert panel._thread is None
+    assert warnings and "PDF ainda está em uso" in warnings[0]
+    engine.dispose()

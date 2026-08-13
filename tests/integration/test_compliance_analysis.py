@@ -1,6 +1,8 @@
 # mypy: disable-error-code="no-untyped-call"
 from __future__ import annotations
 
+from copy import deepcopy
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -15,7 +17,10 @@ from sqlalchemy import Engine, update
 from sqlalchemy.exc import IntegrityError
 
 from zeny_project_handler.adapters.analysis import PyMuPdfDocumentAnalyzer, TesseractCliOcr
-from zeny_project_handler.adapters.compliance import carregar_registro_conformidade_inicial
+from zeny_project_handler.adapters.compliance import (
+    carregar_registro_conformidade_inicial,
+    registro_conformidade_de_dict,
+)
 from zeny_project_handler.adapters.persistence import (
     SqlAlchemyUnitOfWork,
     create_sqlite_engine,
@@ -58,6 +63,24 @@ class _ViewerStub(QObject):
 pytestmark = pytest.mark.integration
 
 _NOW = datetime(2026, 8, 12, 15, tzinfo=UTC)
+
+
+def _import_rule_state(
+    service: ServicoRegistroRegrasConformidade,
+    rule_id: str,
+    *,
+    enabled: bool,
+) -> None:
+    payload = deepcopy(service.obter_revisao_ativa().registro.para_dict())
+    registry = payload["registry"]
+    rules = payload["rules"]
+    assert isinstance(registry, dict) and isinstance(rules, list)
+    registry["id"] = str(uuid4())
+    registry["version"] = f"fixture-{rule_id}-{enabled}"
+    rule = next(item for item in rules if isinstance(item, dict) and item.get("id") == rule_id)
+    rule["enabled"] = enabled
+    imported = registro_conformidade_de_dict(payload)
+    service.importar(service.preparar_importacao(imported))
 
 
 def _page(width: str, height: str) -> PaginaDocumento:
@@ -151,7 +174,7 @@ def _prepare_context(
         relogio=lambda: _NOW,
     )
     registry_service.inicializar(carregar_registro_conformidade_inicial())
-    registry_service.definir_regra_ativa("nd31.desenho.escala", ativa=True)
+    _import_rule_state(registry_service, "nd31.desenho.escala", enabled=True)
     review_service = ServicoRevisaoHumana(unit_of_work)
     analysis_service = ExecutarAnaliseConformidade(
         unit_of_work,
@@ -194,7 +217,7 @@ def test_execution_is_deterministic_preserves_history_and_survives_restart(
             .values(rule_version="revisao-adulterada")
         )
 
-    registry_service.remover_regra("nd31.desenho.numero-projeto")
+    _import_rule_state(registry_service, "nd31.desenho.numero-projeto", enabled=False)
     second = service.executar(project_id)
     history = service.listar_historico(project_id)
 
@@ -204,6 +227,7 @@ def test_execution_is_deterministic_preserves_history_and_survives_restart(
     assert all(item.regra_id != "nd31.desenho.numero-projeto" for item in second.achados)
     assert service.resultado_desatualizado(first)
     assert not service.resultado_desatualizado(second)
+    assert service.resultado_desatualizado(replace(second, versao_metodo="2"))
 
     database_path = tmp_path / "compliance.sqlite3"
     engine.dispose()
@@ -238,7 +262,7 @@ def test_active_rule_revision_is_captured_before_loading_the_semantic_session(
     review_service = ServicoRevisaoHumana(unit_of_work)
 
     def load_after_registry_changes(identifier: UUID) -> SessaoRevisao:
-        registry_service.remover_regra("nd31.desenho.numero-projeto")
+        _import_rule_state(registry_service, "nd31.desenho.numero-projeto", enabled=False)
         return review_service.carregar_sessao_semantica(identifier)
 
     service = ExecutarAnaliseConformidade(
@@ -326,9 +350,10 @@ def test_panel_loads_latest_marks_stale_and_reapplies_without_ocr(
     rules = panel.findChild(QTreeWidget, "complianceRulesTree")
     status = panel.findChild(QLabel, "complianceExecutionStatusLabel")
     toggle = panel.findChild(QPushButton, "complianceRulesToggleButton")
+    remove = panel.findChild(QPushButton, "complianceRulesRemoveButton")
     analyze = panel.findChild(QPushButton, "complianceAnalyzeButton")
     assert findings is not None and rules is not None and status is not None
-    assert toggle is not None and analyze is not None
+    assert toggle is None and remove is None and analyze is not None
     first_row = findings.topLevelItem(0)
     assert first_row is not None
     assert first_row.text(0) == "Possível divergência"
@@ -345,7 +370,8 @@ def test_panel_loads_latest_marks_stale_and_reapplies_without_ocr(
         and item.text(3) == "nd31.desenho.numero-projeto"
     )
     rules.setCurrentItem(number_rule)
-    qtbot.mouseClick(toggle, Qt.MouseButton.LeftButton)
+    _import_rule_state(registry_service, "nd31.desenho.numero-projeto", enabled=False)
+    panel._refresh_registry(registry_service.obter_revisao_ativa().registro)
 
     assert "Resultado desatualizado" in status.text()
     assert service.listar_historico(project_id) == (first,)

@@ -7,10 +7,14 @@ from collections import defaultdict
 from uuid import UUID
 
 from zeny_project_handler.domain.analysis import EvidenciaDocumento
-from zeny_project_handler.domain.enums import TipoEvidencia
+from zeny_project_handler.domain.enums import TipoEvidencia, TipoOrigemPdf
 from zeny_project_handler.domain.values import GeometriaDocumento
 
 _SEMANTIC_TEXT_TYPES = {TipoEvidencia.TEXTO, TipoEvidencia.OCR}
+_REVIEW_ANNOTATION_ORIGINS = {
+    TipoOrigemPdf.ANOTACAO,
+    TipoOrigemPdf.APARENCIA_ANOTACAO,
+}
 _HEADER_LABEL_PATTERN = re.compile(
     r"(?:^|\s)(?:"
     r"APROVACAO|APROVADO\s+POR|CIRCUITO|CLIENTE|CONTRATADA|DATA|DESENHISTA|"
@@ -22,6 +26,34 @@ _HEADER_LABEL_PATTERN = re.compile(
 _ROW_VERTICAL_TOLERANCE = 0.008
 _ROW_LEFT_TOLERANCE = 0.012
 _ROW_RIGHT_REACH = 0.36
+
+
+def evidencias_sem_anotacoes_de_revisao(
+    evidencias: tuple[EvidenciaDocumento, ...],
+) -> tuple[EvidenciaDocumento, ...]:
+    """Separe o conteúdo do projeto das anotações sobrepostas ao PDF.
+
+    Comentários e suas aparências continuam persistidos para auditoria e para a
+    documentação, mas não podem originar elementos técnicos do desenho.
+    """
+    return tuple(item for item in evidencias if not evidencia_eh_anotacao_de_revisao(item))
+
+
+def evidencia_eh_anotacao_de_revisao(evidencia: EvidenciaDocumento) -> bool:
+    """Identifique comentários PDF sem apagar portadores técnicos AutoCAD SHX."""
+    if evidencia.origem_pdf.tipo not in _REVIEW_ANNOTATION_ORIGINS:
+        return False
+    attributes = dict(evidencia.atributos_extraidos)
+    if attributes.get("anotacao_tecnica") is True:
+        return False
+    metadata = " ".join(
+        str(attributes.get(key, "")) for key in ("titulo", "assunto", "nome")
+    ).casefold()
+    return not (
+        (evidencia.origem_pdf.subtipo_anotacao or "").casefold() == "square"
+        and "autocad" in metadata
+        and "shx" in metadata
+    )
 
 
 def evidencias_sem_cabecalho(

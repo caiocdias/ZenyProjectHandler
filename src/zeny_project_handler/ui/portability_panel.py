@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from threading import Event
 from uuid import UUID, uuid4
@@ -55,12 +56,14 @@ class PortabilityPanelWidget(QWidget):
         *,
         service: ServicoPortabilidadeProjeto,
         coordinator: CoordenadorOperacoes | None = None,
+        preparar_restauracao: Callable[[], bool] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("portabilityPanel")
         self._service = service
         self._coordinator = coordinator or service.coordenador
+        self._preparar_restauracao = preparar_restauracao or (lambda: True)
         self._thread: QThread | None = None
         self._worker: PortabilityWorker | None = None
         self._cancellation: Event | None = None
@@ -231,6 +234,14 @@ class PortabilityPanelWidget(QWidget):
             confirmation_log.cancelled()
             return
         confirmation_log.succeeded()
+        if not self._preparar_restauracao():
+            message = (
+                "A restauração não foi iniciada porque o PDF ainda está em uso. "
+                "Aguarde a renderização terminar e tente novamente."
+            )
+            self.status_changed.emit(message)
+            QMessageBox.warning(self, "Restauração não iniciada", message)
+            return
         self._start_operation(PortabilityCommand(PortabilityOperation.RESTORE, Path(name)))
 
     def set_global_operation(self, operation: TipoOperacao | None) -> None:
@@ -253,10 +264,7 @@ class PortabilityPanelWidget(QWidget):
         if thread is None or not thread.isRunning():
             return True
         self.cancelar_operacao()
-        finished = thread.wait(max(0, timeout_ms))
-        if finished and self._execution_id is not None:
-            self._finalize_execution(self._execution_id)
-        return finished
+        return thread.wait(max(0, timeout_ms))
 
     def _start_operation(self, command: PortabilityCommand) -> None:
         if self._reject_reentry():
@@ -265,7 +273,6 @@ class PortabilityPanelWidget(QWidget):
         cancellation = Event()
         thread = QThread(self)
         thread.setObjectName(f"portability-{command.operation.value}-{execution_id[:8]}")
-        thread.setProperty("execution_id", execution_id)
         worker = PortabilityWorker(
             self._service,
             command,
@@ -279,9 +286,10 @@ class PortabilityPanelWidget(QWidget):
         worker.succeeded.connect(self._operation_succeeded)
         worker.failed.connect(self._operation_failed)
         worker.finished.connect(self._worker_finished)
-        worker.finished.connect(worker.deleteLater)
         worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)
-        thread.finished.connect(self._thread_stopped)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.destroyed.connect(self._thread_stopped)
         self._thread = thread
         self._worker = worker
         self._cancellation = cancellation
@@ -428,20 +436,14 @@ class PortabilityPanelWidget(QWidget):
         self._apply_action_state()
         self.busy_changed.emit(False)
 
-    @Slot()
-    def _thread_stopped(self) -> None:
-        sender = self.sender()
-        if not isinstance(sender, QThread):
-            return
-        thread = sender
-        execution_id = str(thread.property("execution_id"))
-        if self._thread is thread:
-            self._thread = None
-            self._worker = None
-        if execution_id == self._execution_id:
+    @Slot(object)
+    def _thread_stopped(self, _destroyed_thread: object | None = None) -> None:
+        execution_id = self._execution_id
+        self._thread = None
+        self._worker = None
+        if execution_id is not None:
             self._finalize_execution(execution_id)
         self._apply_action_state()
-        thread.deleteLater()
 
     def _apply_action_state(self) -> None:
         thread_running = self._thread is not None and self._thread.isRunning()

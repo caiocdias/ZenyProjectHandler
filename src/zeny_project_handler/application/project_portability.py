@@ -19,6 +19,9 @@ from zeny_project_handler._atomic_files import (
     sibling_temporary_directory,
     sibling_temporary_file,
 )
+from zeny_project_handler.application.compliance_registry import (
+    ServicoRegistroRegrasConformidade,
+)
 from zeny_project_handler.application.errors import (
     ApplicationError,
     PlanoImportacaoObsoletoError,
@@ -216,6 +219,7 @@ class ServicoPortabilidadeProjeto:
         relogio: Callable[[], datetime] | None = None,
         gerar_id: Callable[[], UUID] = uuid4,
         injetar_falha_importacao: FailureInjectionCallback | None = None,
+        registro_conformidade: ServicoRegistroRegrasConformidade | None = None,
     ) -> None:
         self._unit_of_work = unidade_de_trabalho
         self._archive = arquivo_portatil
@@ -234,6 +238,10 @@ class ServicoPortabilidadeProjeto:
         self._new_id = gerar_id
         self._import_recovery = RecuperadorImportacaoProjeto(self._data_directory)
         self._inject_import_failure = injetar_falha_importacao
+        self._compliance_registry = registro_conformidade or ServicoRegistroRegrasConformidade(
+            unidade_de_trabalho,
+            diretorio_dados=self._data_directory,
+        )
 
     @property
     def coordenador(self) -> CoordenadorOperacoes:
@@ -950,6 +958,10 @@ class ServicoPortabilidadeProjeto:
             if database_entry is None:
                 raise PortabilidadeProjetoError("Backup não possui snapshot do banco")
             restored_database = extracted.diretorio / PurePosixPath(database_entry.caminho_relativo)
+            previous_revision = self._compliance_registry.obter_revisao_ativa_opcional()
+            preserved_registry = (
+                previous_revision.registro if previous_revision is not None else None
+            )
             notify(2, 4, "Preservando estado atual para reversão")
             recovery_database = self._backup.criar_snapshot(
                 self._database_path, temporary / "recovery.sqlite3"
@@ -977,12 +989,17 @@ class ServicoPortabilidadeProjeto:
                             os.replace(self._managed_root, old_assets)
                         os.replace(staging, self._managed_root)
                         self._backup.restaurar_snapshot(restored_database, self._database_path)
+                        self._compliance_registry.reconciliar_apos_restauracao(
+                            preserved_registry,
+                        )
                     except Exception:
                         self._dispose_connections()
                         self._backup.restaurar_snapshot(recovery_database, self._database_path)
                         shutil.rmtree(self._managed_root, ignore_errors=True)
                         if old_assets.exists():
                             os.replace(old_assets, self._managed_root)
+                        with suppress(Exception):
+                            self._compliance_registry.republicar_catalogo_ativo()
                         raise
             except OSError as error:
                 raise PortabilidadeProjetoError(

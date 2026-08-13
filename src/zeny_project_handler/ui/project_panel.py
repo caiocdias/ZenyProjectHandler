@@ -545,7 +545,9 @@ class ProjectPanelWidget(QWidget):
         worker.completed.connect(self._pipeline_completed)
         worker.failed.connect(self._pipeline_failed)
         worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)
-        thread.finished.connect(self._pipeline_finished)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.destroyed.connect(self._pipeline_finished)
         self._thread = thread
         self._worker = worker
         self._run.setText("Análise em andamento…")
@@ -689,13 +691,8 @@ class ProjectPanelWidget(QWidget):
         if not cancelled:
             QMessageBox.warning(self, title, message)
 
-    @Slot()
-    def _pipeline_finished(self) -> None:
-        thread = self._thread
-        if thread is not None:
-            thread.deleteLater()
-        if self._worker is not None:
-            self._worker.deleteLater()
+    @Slot(object)
+    def _pipeline_finished(self, _destroyed_thread: object | None = None) -> None:
         self._thread = None
         self._worker = None
         self._cancellation = None

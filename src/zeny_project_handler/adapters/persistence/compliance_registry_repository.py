@@ -61,8 +61,17 @@ class SqlComplianceRuleRegistryRepository:
     ) -> RevisaoRegistroConformidade:
         if not revisao.ativa:
             raise PersistenceConflictError("Nova revisão de regras deve ser ativa")
-        stored = self.obter_por_assinatura(revisao.assinatura)
         current = self.obter_ativa()
+        if current is not None:
+            current_ids = {item.id for item in current.registro.regras}
+            revision_ids = {item.id for item in revisao.registro.regras}
+            missing_ids = current_ids - revision_ids
+            if missing_ids:
+                formatted_ids = ", ".join(sorted(missing_ids))
+                raise PersistenceConflictError(
+                    f"Nova revisão de regras não pode remover IDs da revisão ativa: {formatted_ids}"
+                )
+        stored = self.obter_por_assinatura(revisao.assinatura)
         if current is not None and current.assinatura == revisao.assinatura:
             return current
         self._session.execute(

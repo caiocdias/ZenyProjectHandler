@@ -129,7 +129,7 @@ def _rule_ids(tree: QTreeWidget) -> tuple[str, ...]:
     return tuple(result)
 
 
-def test_rules_view_import_toggle_remove_export_and_restart(
+def test_rules_view_only_imports_exports_and_survives_restart(
     qtbot: QtBot,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -167,32 +167,25 @@ def test_rules_view_import_toggle_remove_export_and_restart(
     export_button = panel.findChild(QPushButton, "complianceRulesExportButton")
     assert tree is not None
     assert import_button is not None
-    assert toggle_button is not None
-    assert remove_button is not None
+    assert toggle_button is None
+    assert remove_button is None
     assert export_button is not None
 
     qtbot.mouseClick(import_button, Qt.MouseButton.LeftButton)  # type: ignore[no-untyped-call]
-    imported_row = _row(tree, "fixture.ui.circuito")
-    tree.setCurrentItem(imported_row)
-    qtbot.mouseClick(toggle_button, Qt.MouseButton.LeftButton)  # type: ignore[no-untyped-call]
-    assert _row(tree, "fixture.ui.circuito").text(1) == "Inativa"
-
-    tree.setCurrentItem(_row(tree, "fixture.ui.circuito"))
-    qtbot.mouseClick(toggle_button, Qt.MouseButton.LeftButton)  # type: ignore[no-untyped-call]
     assert _row(tree, "fixture.ui.circuito").text(1) == "Ativa"
+    assert "nd31.desenho.numero-projeto" in _rule_ids(tree)
 
     stable_number = {item.regra_id: item.numero for item in service.listar_numeros()}[
         "fixture.ui.circuito"
     ]
-    tree.setCurrentItem(_row(tree, "fixture.ui.circuito"))
-    qtbot.mouseClick(remove_button, Qt.MouseButton.LeftButton)  # type: ignore[no-untyped-call]
-    assert "fixture.ui.circuito" not in _rule_ids(tree)
     qtbot.mouseClick(export_button, Qt.MouseButton.LeftButton)  # type: ignore[no-untyped-call]
 
     exported = json.loads(exported_file.read_text(encoding="utf-8"))
-    assert all(item["id"] != "fixture.ui.circuito" for item in exported["rules"])
+    exported_ids = {item["id"] for item in exported["rules"]}
+    assert "fixture.ui.circuito" in exported_ids
+    assert "nd31.desenho.numero-projeto" in exported_ids
     assert "IDs existentes substituídos: 0" in confirmations[0]
-    assert "O histórico será preservado" in confirmations[-1]
+    assert "IDs atuais omitidos e preservados: 8" in confirmations[0]
     assert f"Regra {stable_number}" in service.caminho_catalogo.read_text(encoding="utf-8")
 
     panel.close()
@@ -200,6 +193,6 @@ def test_rules_view_import_toggle_remove_export_and_restart(
     reopened, reopened_service, reopened_engine = _panel(qtbot, database, data)
     reopened_tree = reopened.findChild(QTreeWidget, "complianceRulesTree")
     assert reopened_tree is not None
-    assert "fixture.ui.circuito" not in _rule_ids(reopened_tree)
-    assert len(reopened_service.listar_historico()) >= 4
+    assert "fixture.ui.circuito" in _rule_ids(reopened_tree)
+    assert len(reopened_service.listar_historico()) == 2
     reopened_engine.dispose()

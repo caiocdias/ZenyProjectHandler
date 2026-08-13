@@ -180,6 +180,16 @@ class FakeEquipmentMarkerOcr:
         )
 
 
+class _RecordingPixmapPage:
+    def __init__(self) -> None:
+        self.options: dict[str, object] = {}
+        self.result = object()
+
+    def get_pixmap(self, **options: object) -> object:
+        self.options = options
+        return self.result
+
+
 def _request(path: Path) -> SolicitacaoAnaliseDocumento:
     inspection = PyMuPdfReader().inspecionar(path)
     project_id = uuid4()
@@ -218,6 +228,16 @@ def test_real_and_fake_analyzers_follow_the_same_contract(tmp_path: Path) -> Non
     )
 
 
+def test_semantic_ocr_raster_never_includes_pdf_annotations() -> None:
+    page = _RecordingPixmapPage()
+
+    result = ocr_module._semantic_page_pixmap(page, dpi=300, annots=True)
+
+    assert result is page.result
+    assert page.options["annots"] is False
+    assert page.options["dpi"] == 300
+
+
 def test_native_extraction_preserves_geometry_provenance_and_properties(tmp_path: Path) -> None:
     request = _request(create_analysis_pdf(tmp_path / "features.pdf"))
     ocr = FakeOcr()
@@ -251,6 +271,13 @@ def test_native_extraction_preserves_geometry_provenance_and_properties(tmp_path
         if item.origem_pdf.tipo is TipoOrigemPdf.ANOTACAO
     }
     assert {"Stamp", "FreeText", "Square", "Text", "Popup"} <= annotation_subtypes
+    shx_evidence = tuple(
+        item for item in result.evidencias if item.origem_pdf.subtipo_anotacao == "Square"
+    )
+    assert shx_evidence
+    assert all(
+        dict(item.atributos_extraidos).get("anotacao_tecnica") is True for item in shx_evidence
+    )
     assert any(
         item.tipo is TipoEvidencia.IMAGEM
         and item.origem_pdf.tipo is TipoOrigemPdf.APARENCIA_ANOTACAO
