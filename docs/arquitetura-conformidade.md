@@ -209,8 +209,15 @@ medidas físicas, mantendo a tipografia proporcional em A4/A3, retrato ou paisag
 separada dos sublinhados de revisão e do contorno temporário. A caixa tem fundo branco, borda e texto
 vermelhos; cada âncora recebe uma linha com ponta aberta. A camada é recriada ao trocar página ou
 transformador, enquanto zoom e redimensionamento usam a transformação da cena. Ela não entra no
-cache raster, não abre nem grava o PDF e ainda não possui os controles de visibilidade reservados à
-Etapa 5.
+cache raster e não abre nem grava o PDF. A camada mantém seleção e visibilidade próprias: ocultar um
+callout não altera sublinhados de elementos, tiles ou contorno temporário, e ocultar um elemento não
+altera callouts.
+
+A interface conserva um conjunto temporário de IDs de achados ocultos para o par projeto/execução.
+Trocar de folha ou ordenar a lista preserva esse conjunto; trocar de projeto ou carregar outra
+execução o reinicia. O viewer recebe somente os callouts visíveis. A seleção programática realça e
+centraliza sem reemitir o sinal; somente o clique na caixa, no texto ou na seta emite a seleção de
+volta à lista, evitando ciclos.
 
 ## Painel de documentação e conformidade
 
@@ -219,16 +226,20 @@ O painel próprio possui três visões:
 1. **Documentação:** todos os campos rotulados de cabeçalho e servidão, carimbos e assinaturas, com
    estado e confiança;
 2. **Conformidade:** a última execução persistida, com possíveis divergências primeiro, valores
-   observados/esperados, alvo, fonte normativa, revisão e estado de localização. A ação **Analisar
-   conformidade** reaplica explicitamente a revisão ativa à sessão semântica persistida;
+   observados/esperados, alvo, fonte normativa, revisão, estado de localização e olho por callout. As
+   ações **Exibir todos** e **Ocultar todos** afetam somente achados localizáveis. O olho de um achado
+   sem geometria fica desabilitado com diagnóstico acessível. A ação **Analisar conformidade**
+   reaplica explicitamente a revisão ativa à sessão semântica persistida;
 3. **Regras:** revisão ativa, contagem de regras ativas/inativas, tabela e detalhes, com ações para
    importar, exportar, ativar/desativar e remover. Importação e remoção exigem confirmação; erros
    identificam regra, campo e motivo sem revelar o caminho absoluto do arquivo.
 
-Selecionar um item com página e geometria abre a folha e destaca a evidência ou região. Se a
-assinatura ativa divergir daquela usada na última execução, o painel sinaliza **resultado
-desatualizado** e continua mostrando o snapshot antigo até uma reanálise explícita. Confirmação
-humana e comparação entre projeto e coleta de campo permanecem evoluções futuras.
+Selecionar um achado localizável abre a folha e centraliza seu callout realçado. Clicar na caixa ou
+seta seleciona a linha correspondente, abre a visão **Conformidade** e eleva o dock. Itens documentais
+continuam destacando a evidência ou região. Se a assinatura ativa divergir daquela usada na última
+execução, o painel sinaliza **resultado desatualizado** e continua mostrando o snapshot antigo até
+uma reanálise explícita. Confirmação humana e comparação entre projeto e coleta de campo permanecem
+evoluções futuras.
 
 ## Evolução segura
 

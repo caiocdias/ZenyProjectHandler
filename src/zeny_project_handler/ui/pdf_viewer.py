@@ -119,10 +119,20 @@ class ReviewLinkItem(QGraphicsPathItem):
         return stroker.createStroke(self.path())
 
 
+class CalloutLinkItem(QGraphicsPathItem):
+    """Seta de callout com área de clique confortável em qualquer zoom."""
+
+    def shape(self) -> QPainterPath:
+        stroker = QPainterPathStroker()
+        stroker.setWidth(14)
+        return stroker.createStroke(self.path())
+
+
 class PdfGraphicsView(QGraphicsView):
     """Cena raster com zoom suave e sobreposições em coordenadas normalizadas."""
 
     proposta_selecionada = Signal(str)
+    callout_selecionado = Signal(str)
     viewport_alterado = Signal()
     zoom_alterado = Signal(float)
 
@@ -139,6 +149,7 @@ class PdfGraphicsView(QGraphicsView):
         self._review_transformer: TransformadorCoordenadasPagina | None = None
         self._callout_layer: QGraphicsRectItem | None = None
         self._callout_items: dict[str, _GraficosCallout] = {}
+        self._selected_callout_id: str | None = None
         self._zoom = 1.0
         self.setBackgroundBrush(QBrush(QColor("#3b3d40")))
         self.setRenderHints(
@@ -148,7 +159,7 @@ class PdfGraphicsView(QGraphicsView):
         )
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
-        self._scene.selectionChanged.connect(self._emit_selected_proposal)
+        self._scene.selectionChanged.connect(self._emit_selected_item)
 
     @property
     def zoom(self) -> float:
@@ -252,6 +263,7 @@ class PdfGraphicsView(QGraphicsView):
                 layer,
                 zoom=self._zoom,
             )
+        self._atualizar_realce_callouts()
 
     def _remover_camada_callouts(self) -> None:
         layer = self._callout_layer
@@ -297,6 +309,7 @@ class PdfGraphicsView(QGraphicsView):
             )
             item.setData(0, key)
             item.setData(1, proposal.estado_revisao.value)
+            item.setData(2, "review_proposal")
             self._review_items[key] = item
             self._review_geometries[key] = proposal.geometria
 
@@ -307,6 +320,18 @@ class PdfGraphicsView(QGraphicsView):
         self._scene.clearSelection()
         item.setSelected(True)
         self.centerOn(item)
+
+    def selecionar_callout(self, callout_id: str) -> None:
+        """Realce e centralize sem reemitir a seleção programática."""
+        self._selected_callout_id = callout_id
+        self._atualizar_realce_callouts()
+        graphics = self._callout_items.get(callout_id)
+        if graphics is not None:
+            self.centerOn(graphics.caixa)
+
+    def limpar_selecao_callout(self) -> None:
+        self._selected_callout_id = None
+        self._atualizar_realce_callouts()
 
     def geometria_proposta(self, proposal_id: str) -> GeometriaDocumento | None:
         item = self._review_items.get(proposal_id)
@@ -327,18 +352,43 @@ class PdfGraphicsView(QGraphicsView):
             pontos=tuple(normalized_points),
         )
 
-    def _emit_selected_proposal(self) -> None:
+    def _emit_selected_item(self) -> None:
         selected = self._scene.selectedItems()
-        selected_id = str(selected[0].data(0)) if selected and selected[0].data(0) else None
+        selected_item = selected[0] if selected else None
+        selected_id = (
+            str(selected_item.data(0))
+            if selected_item is not None and selected_item.data(0)
+            else None
+        )
+        selected_kind = selected_item.data(2) if selected_item is not None else None
         for key, item in self._review_items.items():
             item.setPen(
                 _review_link_pen(
                     EstadoRevisao(str(item.data(1))),
-                    selected=key == selected_id,
+                    selected=selected_kind == "review_proposal" and key == selected_id,
                 )
             )
-        if selected and selected[0].data(0):
-            self.proposta_selecionada.emit(str(selected[0].data(0)))
+        if selected_kind == "compliance_callout" and selected_id is not None:
+            self._selected_callout_id = selected_id
+            self._atualizar_realce_callouts()
+            self.callout_selecionado.emit(selected_id)
+        elif selected_kind == "review_proposal" and selected_id is not None:
+            self.proposta_selecionada.emit(selected_id)
+
+    def _atualizar_realce_callouts(self) -> None:
+        for callout_id, graphics in self._callout_items.items():
+            selected = callout_id == self._selected_callout_id
+            color = QColor("#8e0000" if selected else "#c62828")
+            pen = QPen(color, 3.2 if selected else 2.0)
+            pen.setCosmetic(True)
+            graphics.caixa.setPen(pen)
+            graphics.caixa.setBrush(QBrush(QColor("#fff3e0") if selected else QColor("white")))
+            graphics.caixa.setZValue(4 if selected else 1)
+            graphics.texto.setDefaultTextColor(color)
+            graphics.texto.setZValue(5 if selected else 2)
+            for line in graphics.linhas:
+                line.setPen(pen)
+                line.setZValue(3 if selected else 0)
 
     def definir_zoom(self, value: float) -> None:
         self._zoom = min(16.0, max(0.05, value))
@@ -400,6 +450,7 @@ class PdfViewerWidget(QWidget):
     status_changed = Signal(str)
     page_changed = Signal(str)
     proposal_selected = Signal(str)
+    compliance_callout_selected = Signal(str)
 
     def __init__(
         self,
@@ -438,6 +489,7 @@ class PdfViewerWidget(QWidget):
         self._review_proposals: tuple[PropostaElemento, ...] = ()
         self._review_link_geometries: dict[str, GeometriaDocumento] = {}
         self._compliance_callouts: tuple[CalloutConformidade, ...] = ()
+        self._selected_compliance_callout_id: str | None = None
         self._current_transformer: TransformadorCoordenadasPagina | None = None
         self._last_page_id: str | None = None
         self._build_ui()
@@ -508,6 +560,7 @@ class PdfViewerWidget(QWidget):
         layout.addWidget(self._metadata)
         self.view = PdfGraphicsView()
         self.view.proposta_selecionada.connect(self.proposal_selected)
+        self.view.callout_selecionado.connect(self._callout_selected)
         layout.addWidget(self.view, 1)
 
     def selecionar_pdf(self) -> None:
@@ -545,6 +598,7 @@ class PdfViewerWidget(QWidget):
         self._review_proposals = ()
         self._review_link_geometries = {}
         self._compliance_callouts = ()
+        self._selected_compliance_callout_id = None
         self._current_transformer = None
         self._last_page_id = None
         self._page.blockSignals(True)
@@ -554,6 +608,7 @@ class PdfViewerWidget(QWidget):
         self._page.blockSignals(False)
         self._metadata.setText("Projeto sem PDF importado")
         self.view.limpar()
+        self.view.limpar_selecao_callout()
         self._credential_resolver.provedor.limpar()
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - API Qt
@@ -715,10 +770,12 @@ class PdfViewerWidget(QWidget):
         self._review_proposals = ()
         self._review_link_geometries = {}
         self._compliance_callouts = ()
+        self._selected_compliance_callout_id = None
         self._last_page_id = None
         self._project_pages = project_pages
         self._inspection = inspections[0]
         self._rotation = 0
+        self.view.limpar_selecao_callout()
         self._page.blockSignals(True)
         self._page.setRange(1, len(self._project_pages))
         self._page.setValue(1)
@@ -754,8 +811,24 @@ class PdfViewerWidget(QWidget):
         callouts: tuple[CalloutConformidade, ...],
     ) -> None:
         self._compliance_callouts = callouts
+        visible_ids = {str(item.id) for item in callouts}
+        if self._selected_compliance_callout_id not in visible_ids:
+            self._selected_compliance_callout_id = None
+            self.view.limpar_selecao_callout()
         if self._current_transformer is not None:
             self.view.definir_callouts_conformidade(callouts, self._current_transformer)
+            if self._selected_compliance_callout_id is not None:
+                self.view.selecionar_callout(self._selected_compliance_callout_id)
+
+    def selecionar_callout(self, callout_id: str) -> None:
+        if all(str(item.id) != callout_id for item in self._compliance_callouts):
+            return
+        self._selected_compliance_callout_id = callout_id
+        self.view.selecionar_callout(callout_id)
+
+    def _callout_selected(self, callout_id: str) -> None:
+        self._selected_compliance_callout_id = callout_id
+        self.compliance_callout_selected.emit(callout_id)
 
     def selecionar_proposta(self, proposal_id: str) -> None:
         self.view.selecionar_proposta(proposal_id)
@@ -937,6 +1010,8 @@ class PdfViewerWidget(QWidget):
             self._review_link_geometries,
         )
         self.view.definir_callouts_conformidade(self._compliance_callouts, transformer)
+        if self._selected_compliance_callout_id is not None:
+            self.view.selecionar_callout(self._selected_compliance_callout_id)
         diagnostics = len(inspection.paginas[page_number - 1].diagnosticos)
         project_page_number = self._page.value()
         self.status_changed.emit(
@@ -1060,6 +1135,8 @@ class PdfViewerWidget(QWidget):
                 self._compliance_callouts,
                 self._current_transformer,
             )
+            if self._selected_compliance_callout_id is not None:
+                self.view.selecionar_callout(self._selected_compliance_callout_id)
         self._detail_timer.start()
 
     def _viewport_changed(self) -> None:
@@ -1271,6 +1348,9 @@ def _criar_graficos_callout(
     rectangle.setPen(pen)
     rectangle.setBrush(QBrush(QColor("white")))
     rectangle.setData(0, str(callout.id))
+    rectangle.setData(2, "compliance_callout")
+    rectangle.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
+    rectangle.setCursor(Qt.CursorShape.PointingHandCursor)
     rectangle.setPos(top_left.x, top_left.y)
     rectangle.setRotation(angle)
     rectangle.setZValue(1)
@@ -1297,6 +1377,9 @@ def _criar_graficos_callout(
     )
     text_item.setRotation(angle)
     text_item.setData(0, str(callout.id))
+    text_item.setData(2, "compliance_callout")
+    text_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
+    text_item.setCursor(Qt.CursorShape.PointingHandCursor)
     text_item.setZValue(2)
     tooltip = callout.texto.replace("\n", " ")
     rectangle.setToolTip(tooltip)
@@ -1310,9 +1393,12 @@ def _criar_graficos_callout(
         start = transformer.normalizado_para_pixel(connection)
         end = transformer.normalizado_para_pixel(anchor.ponto)
         path = _caminho_seta_aberta(start, end, pixels_per_point, scene_bounds)
-        line = QGraphicsPathItem(path, layer)
+        line = CalloutLinkItem(path, layer)
         line.setPen(arrow_pen)
         line.setData(0, str(callout.id))
+        line.setData(2, "compliance_callout")
+        line.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
+        line.setCursor(Qt.CursorShape.PointingHandCursor)
         line.setToolTip(tooltip)
         lines.append(line)
     return _GraficosCallout(rectangle, text_item, tuple(lines))

@@ -80,7 +80,7 @@ comissionador comunica um problema, mas **não são fonte normativa suficiente p
 | 2. Pesquisa normativa integral e expansão inicial | CONCLUÍDA | 1 | Inventário oficial e regras automatizáveis já incorporadas |
 | 3. Execução e histórico de conformidade | CONCLUÍDA | 1, 2 | Resultado vinculado à análise e à revisão de regras |
 | 4. Caixas e setas no visualizador | CONCLUÍDA | 3 | Callouts vermelhos ancorados em geometria rastreável |
-| 5. Visibilidade e sincronização | PENDENTE | 4 | Olho por achado e navegação bidirecional lista/PDF |
+| 5. Visibilidade e sincronização | CONCLUÍDA | 4 | Olho por achado e navegação bidirecional lista/PDF |
 | 6. Primeiro avaliador técnico e aceite ponta a ponta | PENDENTE | 5 | Extensão comprovada sem codificar regras no motor |
 
 Estados permitidos: `PENDENTE`, `EM ANDAMENTO`, `BLOQUEADA` e `CONCLUÍDA`.
@@ -519,3 +519,22 @@ atualiza `docs/catalogo-regras-conformidade.md`. Não copie conteúdo dos PDFs r
 - **Limitações remanescentes:** visibilidade por achado, realce e sincronização bidirecional
   lista/PDF continuam reservados à Etapa 5; novos provedores técnicos permanecem na Etapa 6.
 - **Commit:** `feat(pdf): render compliance callouts`.
+
+### 2026-08-12 — Etapa 5 concluída
+
+- **Arquivos principais:** estado e controles por achado em `ui/documentation_panel.py`; seleção,
+  realce e clique vetorial em `ui/pdf_viewer.py`; elevação do dock em `ui/main_window.py`; ícone de
+  olho compartilhado em `ui/visibility.py`.
+- **Comportamento entregue:** olho individual, **Exibir todos** e **Ocultar todos** afetam somente
+  callouts localizáveis; a ocultação temporária persiste em navegação e ordenação e reinicia ao
+  trocar projeto ou execução; achados sem geometria mantêm controle desabilitado e diagnóstico
+  acessível; lista e caixa/seta sincronizam seleção nos dois sentidos sem ciclos de sinais.
+- **Testes focados:** projeção, painel, viewer, janela principal, persistência e regras — 48 testes
+  aprovados, incluindo dois erros na mesma página, independência das camadas, lote, tooltip, nome
+  acessível, troca de página/projeto/execução, ordenação, caixa, seta e elevação do dock.
+- **Gate básico:** `IniciarTestes.bat` aprovado no Python 3.13.14 — 470 testes aprovados, 20 privados
+  excluídos pelo gate, cobertura de 86,04%; Ruff, formatação, Mypy, dependências e complexidade
+  aprovados. O corpus privado não foi acessado.
+- **Limitações remanescentes:** o primeiro provedor técnico de vão e o aceite ponta a ponta de
+  extensão de regras continuam reservados à Etapa 6.
+- **Commit:** `feat(ui): control compliance callout visibility`.

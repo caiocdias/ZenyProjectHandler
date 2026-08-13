@@ -8,8 +8,7 @@ from functools import partial
 from typing import TypeVar
 from uuid import UUID
 
-from PySide6.QtCore import QRectF, Qt, Signal
-from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -67,6 +66,7 @@ from zeny_project_handler.domain.project import (
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 
 from .pdf_viewer import PdfViewerWidget
+from .visibility import visibility_icon
 
 T = TypeVar("T")
 
@@ -595,7 +595,7 @@ class ReviewPanelWidget(QWidget):
         button.setObjectName(object_name)
         button.setCheckable(True)
         button.setChecked(visible)
-        button.setIcon(_visibility_icon(visible))
+        button.setIcon(visibility_icon(visible))
         button.setToolTip(tooltip)
         button.setAccessibleName(tooltip)
         button.toggled.connect(toggled)
@@ -662,7 +662,7 @@ class ReviewPanelWidget(QWidget):
             button.blockSignals(True)
             button.setEnabled(enabled)
             button.setChecked(visible)
-            button.setIcon(_visibility_icon(visible))
+            button.setIcon(visibility_icon(visible))
             button.setToolTip(tooltip)
             button.setAccessibleName(tooltip)
             button.blockSignals(False)
@@ -678,7 +678,7 @@ class ReviewPanelWidget(QWidget):
             button.blockSignals(True)
             button.setEnabled(enabled)
             button.setChecked(visible)
-            button.setIcon(_visibility_icon(visible))
+            button.setIcon(visibility_icon(visible))
             button.setToolTip(tooltip)
             button.setAccessibleName(tooltip)
             button.blockSignals(False)
@@ -1223,27 +1223,6 @@ class ReviewPanelWidget(QWidget):
         index = combo.findData(value)
         if index >= 0:
             combo.setCurrentIndex(index)
-
-
-def _visibility_icon(visible: bool) -> QIcon:
-    pixmap = QPixmap(20, 20)
-    pixmap.fill(Qt.GlobalColor.transparent)
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    pen = QPen(QColor("#2f5f8f"), 1.8)
-    pen.setCosmetic(True)
-    painter.setPen(pen)
-    painter.setBrush(Qt.BrushStyle.NoBrush)
-    painter.drawEllipse(QRectF(2.0, 5.0, 16.0, 10.0))
-    painter.setBrush(QColor("#2f5f8f"))
-    painter.drawEllipse(QRectF(8.0, 8.0, 4.0, 4.0))
-    if not visible:
-        slash = QPen(QColor("#a33a3a"), 2.2)
-        slash.setCosmetic(True)
-        painter.setPen(slash)
-        painter.drawLine(3, 3, 17, 17)
-    painter.end()
-    return QIcon(pixmap)
 
 
 def _coordinate_spin(name: str) -> QDoubleSpinBox:

@@ -5,6 +5,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QColor
 from pytestqt.qtbot import QtBot
 from tests.pdf_fixtures import TEST_RENDER_BUDGET, create_callout_formats_pdf
@@ -56,6 +57,57 @@ def test_callout_layer_draws_box_text_open_arrows_and_coexists_with_review_links
     assert viewer.view._callout_layer is not None
     assert viewer.view._callout_layer.zValue() == 30
     assert viewer.view._review_items[str(proposal.id)].zValue() == 20
+
+    viewer.definir_callouts_conformidade(())
+    assert str(proposal.id) in viewer.view._review_items
+    viewer.definir_callouts_conformidade((callout,))
+    viewer.definir_propostas_revisao(())
+    assert str(callout.id) in viewer.view._callout_items
+
+
+@pytest.mark.integration
+def test_callout_box_and_arrow_emit_only_user_selection_and_are_highlighted(
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> None:
+    source = create_callout_formats_pdf(tmp_path / "selecao-callout.pdf")
+    viewer = _viewer(qtbot, dpi=144, budget=TEST_RENDER_BUDGET)
+    assert viewer.carregar_pdf(source)
+    _wait_preview(qtbot, viewer)
+    assert viewer.inspecao is not None
+    page = viewer.inspecao.documento.paginas[0]
+    callout = _callout(page.id, float(page.largura_pontos), float(page.altura_pontos), "selection")
+    viewer.definir_callouts_conformidade((callout,))
+    graphics = viewer.view._callout_items[str(callout.id)]
+    selected: list[str] = []
+    proposals: list[str] = []
+    viewer.compliance_callout_selected.connect(selected.append)
+    viewer.proposal_selected.connect(proposals.append)
+
+    viewer.selecionar_callout(str(callout.id))
+    assert selected == []
+    assert graphics.caixa.pen().color() == QColor("#8e0000")
+    assert graphics.caixa.pen().widthF() == pytest.approx(3.2)
+
+    box_center = viewer.view.mapFromScene(graphics.caixa.mapToScene(graphics.caixa.rect().center()))
+    with qtbot.waitSignal(viewer.compliance_callout_selected, timeout=1_000):
+        qtbot.mouseClick(  # type: ignore[no-untyped-call]
+            viewer.view.viewport(),
+            Qt.MouseButton.LeftButton,
+            pos=QPoint(box_center.x(), box_center.y()),
+        )
+    assert selected == [str(callout.id)]
+
+    arrow = graphics.linhas[0]
+    arrow_center = viewer.view.mapFromScene(arrow.mapToScene(arrow.path().pointAtPercent(0.5)))
+    with qtbot.waitSignal(viewer.compliance_callout_selected, timeout=1_000):
+        qtbot.mouseClick(  # type: ignore[no-untyped-call]
+            viewer.view.viewport(),
+            Qt.MouseButton.LeftButton,
+            pos=QPoint(arrow_center.x(), arrow_center.y()),
+        )
+    assert selected == [str(callout.id), str(callout.id)]
+    assert proposals == []
 
 
 @pytest.mark.integration

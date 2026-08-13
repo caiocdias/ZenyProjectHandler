@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from decimal import Decimal
+from functools import partial
 from pathlib import Path
 from uuid import UUID
 
@@ -18,6 +20,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTabWidget,
     QTextBrowser,
+    QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -57,6 +60,7 @@ from zeny_project_handler.domain.errors import DomainValidationError
 from zeny_project_handler.domain.values import GeometriaDocumento
 
 from .pdf_viewer import PdfViewerWidget
+from .visibility import visibility_icon
 
 
 class DocumentationPanelWidget(QWidget):
@@ -87,7 +91,12 @@ class DocumentationPanelWidget(QWidget):
         self._session: SessaoRevisao | None = None
         self._result: ExecucaoConformidade | None = None
         self._callouts: tuple[CalloutConformidade, ...] = ()
+        self._hidden_finding_ids: set[UUID] = set()
+        self._finding_visibility_buttons: dict[UUID, QToolButton] = {}
+        self._visibility_context: tuple[UUID, UUID | None] | None = None
+        self._syncing_finding_selection = False
         self._build_ui()
+        self._viewer.compliance_callout_selected.connect(self._select_finding_id)
         self.atualizar_projetos()
 
     def _build_ui(self) -> None:
@@ -109,6 +118,7 @@ class DocumentationPanelWidget(QWidget):
 
         tabs = QTabWidget()
         tabs.setObjectName("documentationTabs")
+        self._tabs = tabs
         self._documents = _tree(
             "documentationTree",
             ("Grupo / documento", "Campo", "Valor", "Estado", "Confiança"),
@@ -119,6 +129,7 @@ class DocumentationPanelWidget(QWidget):
 
         compliance_view = QWidget()
         compliance_view.setObjectName("complianceExecutionView")
+        self._compliance_view = compliance_view
         compliance_layout = QVBoxLayout(compliance_view)
         compliance_actions = QHBoxLayout()
         self._execution_status = QLabel("Nenhuma execução de conformidade persistida")
@@ -130,6 +141,23 @@ class DocumentationPanelWidget(QWidget):
         self._analyze_compliance.clicked.connect(self._analyze_current_compliance)
         compliance_actions.addWidget(self._analyze_compliance)
         compliance_layout.addLayout(compliance_actions)
+        visibility_actions = QHBoxLayout()
+        self._show_all_findings = QPushButton("Exibir todos")
+        self._show_all_findings.setObjectName("complianceShowAllCalloutsButton")
+        self._show_all_findings.setToolTip("Exibir todos os achados localizáveis no PDF")
+        self._show_all_findings.clicked.connect(
+            lambda: self._set_all_findings_visible(visible=True)
+        )
+        visibility_actions.addWidget(self._show_all_findings)
+        self._hide_all_findings = QPushButton("Ocultar todos")
+        self._hide_all_findings.setObjectName("complianceHideAllCalloutsButton")
+        self._hide_all_findings.setToolTip("Ocultar todos os achados localizáveis no PDF")
+        self._hide_all_findings.clicked.connect(
+            lambda: self._set_all_findings_visible(visible=False)
+        )
+        visibility_actions.addWidget(self._hide_all_findings)
+        visibility_actions.addStretch(1)
+        compliance_layout.addLayout(visibility_actions)
         self._findings = _tree(
             "complianceFindingsTree",
             (
@@ -142,8 +170,9 @@ class DocumentationPanelWidget(QWidget):
                 "Fonte",
                 "Revisão",
                 "Localização",
+                "Exibir",
             ),
-            (130, 100, 260, 190, 220, 180, 220, 180, 170),
+            (130, 100, 260, 190, 220, 180, 220, 180, 170, 70),
         )
         self._findings.itemSelectionChanged.connect(self._navigate_finding_item)
         compliance_layout.addWidget(self._findings, 1)
@@ -199,6 +228,8 @@ class DocumentationPanelWidget(QWidget):
         layout.addWidget(note)
         self._project.currentIndexChanged.connect(self._load_selected_project)
         self._analyze_compliance.setEnabled(False)
+        self._show_all_findings.setEnabled(False)
+        self._hide_all_findings.setEnabled(False)
         self._populate_rules()
 
     def atualizar_projetos(self) -> None:
@@ -236,12 +267,16 @@ class DocumentationPanelWidget(QWidget):
         self._session = None
         self._result = None
         self._callouts = ()
+        self._hidden_finding_ids.clear()
+        self._finding_visibility_buttons.clear()
+        self._visibility_context = None
         self._viewer.definir_callouts_conformidade(())
         self._documents.clear()
         self._findings.clear()
         self._summary.setText("Selecione um projeto analisado")
         self._execution_status.setText("Nenhuma execução de conformidade persistida")
         self._analyze_compliance.setEnabled(False)
+        self._sync_finding_visibility_buttons()
 
     def _load_selected_project(self) -> None:
         value = self._project.currentData()
@@ -264,11 +299,20 @@ class DocumentationPanelWidget(QWidget):
     def _load_persisted_result(self) -> None:
         session = self._session
         service = self._analysis_service
-        self._result = (
+        result = (
             service.obter_ultima(session.projeto.id)
             if session is not None and service is not None
             else None
         )
+        context = (
+            (session.projeto.id, result.id if result is not None else None)
+            if session is not None
+            else None
+        )
+        if context != self._visibility_context:
+            self._hidden_finding_ids.clear()
+            self._visibility_context = context
+        self._result = result
         pages = (
             tuple(page for document in session.projeto.documentos for page in document.paginas)
             if session is not None
@@ -283,7 +327,7 @@ class DocumentationPanelWidget(QWidget):
             if self._result is not None and session is not None
             else ()
         )
-        self._viewer.definir_callouts_conformidade(self._callouts)
+        self._update_visible_callouts()
         self._populate_documents()
         self._populate_findings()
         self._analyze_compliance.setEnabled(session is not None and service is not None)
@@ -366,7 +410,9 @@ class DocumentationPanelWidget(QWidget):
     def _populate_findings(self) -> None:
         result = self._result
         self._findings.clear()
+        self._finding_visibility_buttons.clear()
         if result is None:
+            self._sync_finding_visibility_buttons()
             return
         targets = {item.id: item for item in result.alvos}
         localized_findings = {item.id for item in self._callouts}
@@ -392,6 +438,7 @@ class DocumentationPanelWidget(QWidget):
                     f"{finding.fonte.documento} · {finding.fonte.item}",
                     f"Regras {result.versao_regras} · norma {finding.fonte.revisao}",
                     _location_label(target, projected=finding.id in localized_findings),
+                    "",
                 )
             )
             row.setToolTip(2, finding.mensagem)
@@ -406,7 +453,90 @@ class DocumentationPanelWidget(QWidget):
                 f"assinatura {result.assinatura_regras}",
             )
             row.setData(0, Qt.ItemDataRole.UserRole + 2, str(target.id))
+            row.setData(0, Qt.ItemDataRole.UserRole + 3, str(finding.id))
             self._findings.addTopLevelItem(row)
+            localized = finding.id in localized_findings
+            tooltip = _finding_visibility_tooltip(
+                visible=finding.id not in self._hidden_finding_ids,
+                localized=localized,
+                result=finding.resultado,
+            )
+            button = self._visibility_button(
+                visible=localized and finding.id not in self._hidden_finding_ids,
+                tooltip=tooltip,
+                toggled=partial(self._set_finding_visible, finding.id),
+            )
+            button.setEnabled(localized)
+            button.setProperty("findingId", str(finding.id))
+            self._finding_visibility_buttons[finding.id] = button
+            self._findings.setItemWidget(row, 9, button)
+        self._sync_finding_visibility_buttons()
+
+    def _visibility_button(
+        self,
+        *,
+        visible: bool,
+        tooltip: str,
+        toggled: Callable[[bool], None],
+    ) -> QToolButton:
+        button = QToolButton(self._findings)
+        button.setObjectName("complianceFindingVisibilityButton")
+        button.setCheckable(True)
+        button.setChecked(visible)
+        button.setIcon(visibility_icon(visible))
+        button.setToolTip(tooltip)
+        button.setAccessibleName(tooltip)
+        button.toggled.connect(toggled)
+        return button
+
+    def _set_finding_visible(self, finding_id: UUID, visible: bool) -> None:
+        if all(item.id != finding_id for item in self._callouts):
+            return
+        if visible:
+            self._hidden_finding_ids.discard(finding_id)
+        else:
+            self._hidden_finding_ids.add(finding_id)
+        self._sync_finding_visibility_buttons()
+        self._update_visible_callouts()
+
+    def _set_all_findings_visible(self, *, visible: bool) -> None:
+        localized_ids = {item.id for item in self._callouts}
+        if visible:
+            self._hidden_finding_ids.difference_update(localized_ids)
+        else:
+            self._hidden_finding_ids.update(localized_ids)
+        self._sync_finding_visibility_buttons()
+        self._update_visible_callouts()
+
+    def _sync_finding_visibility_buttons(self) -> None:
+        localized_ids = {item.id for item in self._callouts}
+        results_by_id = (
+            {item.id: item.resultado for item in self._result.achados}
+            if self._result is not None
+            else {}
+        )
+        for finding_id, button in self._finding_visibility_buttons.items():
+            localized = finding_id in localized_ids
+            visible = localized and finding_id not in self._hidden_finding_ids
+            tooltip = _finding_visibility_tooltip(
+                visible=visible,
+                localized=localized,
+                result=results_by_id.get(finding_id),
+            )
+            button.blockSignals(True)
+            button.setEnabled(localized)
+            button.setChecked(visible)
+            button.setIcon(visibility_icon(visible))
+            button.setToolTip(tooltip)
+            button.setAccessibleName(tooltip)
+            button.blockSignals(False)
+        self._show_all_findings.setEnabled(bool(localized_ids & self._hidden_finding_ids))
+        self._hide_all_findings.setEnabled(bool(localized_ids - self._hidden_finding_ids))
+
+    def _update_visible_callouts(self) -> None:
+        self._viewer.definir_callouts_conformidade(
+            tuple(item for item in self._callouts if item.id not in self._hidden_finding_ids)
+        )
 
     def _populate_rules(self) -> None:
         self._rules.clear()
@@ -597,7 +727,16 @@ class DocumentationPanelWidget(QWidget):
     def _navigate_finding_item(self) -> None:
         selected = self._findings.selectedItems()
         result = self._result
-        if not selected or result is None:
+        if not selected or result is None or self._syncing_finding_selection:
+            return
+        finding_id = selected[0].data(0, Qt.ItemDataRole.UserRole + 3)
+        callout = next(
+            (item for item in self._callouts if str(item.id) == str(finding_id)),
+            None,
+        )
+        if callout is not None:
+            self._navigate(callout.pagina_id, None)
+            self._viewer.selecionar_callout(str(callout.id))
             return
         target_id = selected[0].data(0, Qt.ItemDataRole.UserRole + 2)
         target = next(
@@ -606,6 +745,24 @@ class DocumentationPanelWidget(QWidget):
         )
         if target is not None:
             self._navigate_target(target)
+
+    def _select_finding_id(self, finding_id: str) -> None:
+        if self._syncing_finding_selection:
+            return
+        for index in range(self._findings.topLevelItemCount()):
+            item = self._findings.topLevelItem(index)
+            if item is None or str(item.data(0, Qt.ItemDataRole.UserRole + 3)) != finding_id:
+                continue
+            self._syncing_finding_selection = True
+            signals_were_blocked = self._findings.blockSignals(True)
+            try:
+                self._tabs.setCurrentWidget(self._compliance_view)
+                self._findings.setCurrentItem(item)
+                self._findings.scrollToItem(item)
+            finally:
+                self._findings.blockSignals(signals_were_blocked)
+                self._syncing_finding_selection = False
+            return
 
     def _navigate_selected(self, tree: QTreeWidget) -> None:
         selected = tree.selectedItems()
@@ -729,8 +886,21 @@ def _location_label(target: AlvoConformidade, *, projected: bool = False) -> str
     if target.pagina_id is None:
         return "Sem localização no PDF"
     if target.geometria is None:
-        return "Página sem geometria"
+        return "Sem localização no PDF"
     return "Localizado no PDF"
+
+
+def _finding_visibility_tooltip(
+    *,
+    visible: bool,
+    localized: bool,
+    result: ResultadoConformidade | None,
+) -> str:
+    if not localized:
+        if result is not ResultadoConformidade.DIVERGENCIA:
+            return "Sem callout no PDF: somente possíveis divergências recebem marcação"
+        return "Sem localização no PDF: o achado não possui callout com geometria rastreável"
+    return "Ocultar este achado no PDF" if visible else "Exibir este achado no PDF"
 
 
 def _condition_list(

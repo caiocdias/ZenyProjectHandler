@@ -66,6 +66,10 @@ def test_main_window_smoke(
     assert window.project_panel is not None
     assert window.portability_panel is not None
     assert window.documentation_panel is not None
+    review_dock.raise_()
+    qtbot.waitUntil(window.review_panel.isVisible)
+    window.pdf_viewer.compliance_callout_selected.emit("finding-sintetico")
+    qtbot.waitUntil(window.documentation_panel.isVisible)
     workflow_coordinator = window.project_panel._service._coordinator
     assert workflow_coordinator is window.project_panel._service._importer._coordenador
     assert workflow_coordinator is window.portability_panel._service._coordinator

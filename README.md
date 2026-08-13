@@ -192,7 +192,9 @@ Possíveis divergências com geometria rastreável aparecem em uma camada indepe
 brancas de texto vermelho e linhas com seta aberta para os fatos, evidências ou alvos que sustentam a
 localização. As caixas são posicionadas deterministicamente dentro da folha e reduzem colisões entre
 si. Achados sem geometria continuam na lista como **Sem localização no PDF**. Essa apresentação é
-somente da cena gráfica: não altera o PDF e não participa do raster ou do cache de tiles.
+somente da cena gráfica: não altera o PDF e não participa do raster ou do cache de tiles. Cada achado
+localizável possui um olho próprio, além das ações **Exibir todos** e **Ocultar todos**; esses
+controles não afetam os identificadores de elementos nem o contorno temporário.
 
 A resolução solicitada por padrão é 600 DPI, que é o teto de detalhe visual disponível para
 regiões. Ela não obriga a rasterizar uma prancha inteira nessa resolução. O visualizador produz uma
@@ -350,7 +352,11 @@ O dock **Documentação e conformidade** acompanha o projeto aberto e possui vis
 Ao concluir o pipeline, o aplicativo persiste atomicamente uma execução auditável de conformidade
 ligada à sessão semântica e à revisão exata das regras. A aba carrega esse último snapshot, ordena
 possíveis divergências primeiro e mostra valores observados/esperados, fonte, revisão e localização.
-Se o registro ativo mudar, o resultado é marcado como desatualizado sem ser reinterpretado.
+Selecionar uma linha abre e centraliza o callout realçado; clicar na caixa ou seta seleciona a linha
+e traz o dock para frente. A ocultação temporária sobrevive à navegação e à ordenação, mas é
+reiniciada ao trocar projeto ou execução. Achados sem callout permanecem listados com olho
+desabilitado e diagnóstico. Se o registro ativo mudar, o resultado é marcado como desatualizado sem
+ser reinterpretado.
 
 O botão **Analisar conformidade** cria uma nova execução explícita a partir dos resultados semânticos
 já persistidos. Essa operação não reabre o PDF e não repete extração ou OCR; execuções anteriores

@@ -7,7 +7,7 @@ from typing import cast
 from uuid import uuid4
 
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtWidgets import (
     QFileDialog,
     QMessageBox,
@@ -33,7 +33,9 @@ from zeny_project_handler.ui.documentation_panel import DocumentationPanelWidget
 from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
 
 
-class _ViewerStub:
+class _ViewerStub(QObject):
+    compliance_callout_selected = Signal(str)
+
     def definir_callouts_conformidade(self, _callouts: tuple[object, ...]) -> None:
         pass
 

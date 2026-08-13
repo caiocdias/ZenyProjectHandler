@@ -410,6 +410,9 @@ class MainWindow(QMainWindow):
                 self._register_dock(documentation_dock)
                 self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, documentation_dock)
                 self.review_panel.session_changed.connect(self.documentation_panel.abrir_sessao)
+                self.pdf_viewer.compliance_callout_selected.connect(
+                    lambda _finding_id, target=documentation_dock: target.raise_()
+                )
                 right_docks.append(documentation_dock)
         if (
             workflow_service is not None
