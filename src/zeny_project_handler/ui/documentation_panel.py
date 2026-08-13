@@ -30,7 +30,10 @@ from PySide6.QtWidgets import (
 from zeny_project_handler.adapters.compliance import (
     carregar_registro_conformidade_json_com_avisos,
 )
-from zeny_project_handler.application.compliance_analysis import ExecutarAnaliseConformidade
+from zeny_project_handler.application.compliance_analysis import (
+    ExecutarAnaliseConformidade,
+    resultado_conformidade_desatualizado,
+)
 from zeny_project_handler.application.compliance_callouts import (
     CalloutConformidade,
     projetar_callouts_conformidade,
@@ -101,6 +104,8 @@ class DocumentationPanelWidget(QWidget):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
         project_row = QHBoxLayout()
         self._project = QComboBox()
         self._project.setObjectName("documentationProjectCombo")
@@ -113,6 +118,7 @@ class DocumentationPanelWidget(QWidget):
 
         self._summary = QLabel("Selecione um projeto analisado")
         self._summary.setObjectName("documentationSummaryLabel")
+        self._summary.setProperty("role", "summary")
         self._summary.setWordWrap(True)
         layout.addWidget(self._summary)
 
@@ -138,6 +144,7 @@ class DocumentationPanelWidget(QWidget):
         compliance_actions.addWidget(self._execution_status, 1)
         self._analyze_compliance = QPushButton("Analisar conformidade")
         self._analyze_compliance.setObjectName("complianceAnalyzeButton")
+        self._analyze_compliance.setProperty("role", "primary")
         self._analyze_compliance.clicked.connect(self._analyze_current_compliance)
         compliance_actions.addWidget(self._analyze_compliance)
         compliance_layout.addLayout(compliance_actions)
@@ -216,6 +223,7 @@ class DocumentationPanelWidget(QWidget):
             "permanece como “não avaliável” e exige revisão humana."
         )
         note.setObjectName("documentationAuditNotice")
+        note.setProperty("role", "hint")
         note.setWordWrap(True)
         layout.addWidget(note)
         self._project.currentIndexChanged.connect(self._load_selected_project)
@@ -346,7 +354,10 @@ class DocumentationPanelWidget(QWidget):
             f"{divergent} possível(is) divergência(s) · "
             f"{not_evaluable} regra(s) não avaliável(is)"
         )
-        stale = self._result.assinatura_regras != self._registry.assinatura()
+        stale = resultado_conformidade_desatualizado(
+            self._result,
+            self._registry.assinatura(),
+        )
         state = "Resultado desatualizado" if stale else "Resultado atual"
         self._execution_status.setText(
             f"{state} · execução {self._result.id} · regras {self._result.versao_regras} · "

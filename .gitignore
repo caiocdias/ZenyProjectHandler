@@ -10,8 +10,7 @@ htmlcov/
 build/
 dist/
 *.log
-relatorio-testes.txt
-relatorio-testes-privados.txt
+relatorio-testes*.txt
 
 # Dados locais e projetos do usuário não pertencem ao repositório.
 .local/
@@ -21,5 +20,5 @@ relatorio-testes-privados.txt
 *.sqlite3-wal
 backups/
 tmp/
-examples/**/*.pdf
-evaluation/annotations/
+examples/**
+!examples/README.md

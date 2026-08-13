@@ -33,7 +33,7 @@ determinístico e um serviço OCR e introduziria protocolo, orquestração e out
   geometria confiável, usá-la somente como evidência textual de página ou como segunda passagem para
   cabeçalhos e layouts difíceis.
 - Manter fallback e comparação com texto nativo e Tesseract. O modelo só poderá substituir uma etapa
-  depois de benchmark na partição de desenvolvimento autorizada.
+  depois de avaliação local reproduzível e regressões sintéticas para os campos críticos.
 - Usar MCP apenas se, no futuro, o OCR for deliberadamente exposto como ferramenta para um agente,
   fora do caminho determinístico de extração.
 
@@ -49,7 +49,8 @@ O benchmark deve medir separadamente:
 - estabilidade em recortes, página inteira e múltiplas páginas;
 - operação offline, licença e reprodutibilidade da versão/quantização.
 
-O conjunto de teste congelado não pode orientar prompt, limiar ou seleção de modelo.
+Os PDFs locais podem revelar lacunas, mas não devem fixar sozinhos prompt, limiar ou seleção de
+modelo. Casos decisivos precisam de uma referência revisável ou fixture sintética.
 
 ## Consequências
 

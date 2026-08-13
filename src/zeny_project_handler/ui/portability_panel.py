@@ -68,7 +68,6 @@ class PortabilityPanelWidget(QWidget):
         self._worker: PortabilityWorker | None = None
         self._cancellation: Event | None = None
         self._execution_id: str | None = None
-        self._worker_finished_id: str | None = None
         self._operation: PortabilityOperation | None = None
         self._global_operation: TipoOperacao | None = None
         self._last_progress = 0.0
@@ -81,15 +80,18 @@ class PortabilityPanelWidget(QWidget):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
         self._project = QComboBox()
         self._project.setObjectName("portabilityProjectCombo")
         layout.addWidget(self._project)
 
-        package_box = QGroupBox("Transporte e recuperação")
+        package_box = QGroupBox("Projetos e backup")
         package_layout = QVBoxLayout(package_box)
         project_actions = QHBoxLayout()
         self._export = QPushButton("Exportar projeto")
         self._export.setObjectName("portabilityExportButton")
+        self._export.setProperty("role", "primary")
         self._export.clicked.connect(self.exportar_projeto)
         project_actions.addWidget(self._export)
         self._import = QPushButton("Importar projeto")
@@ -104,11 +106,13 @@ class PortabilityPanelWidget(QWidget):
         backup_actions.addWidget(self._backup)
         self._restore = QPushButton("Restaurar backup")
         self._restore.setObjectName("portabilityRestoreButton")
+        self._restore.setProperty("role", "danger")
         self._restore.clicked.connect(self.restaurar_backup)
         backup_actions.addWidget(self._restore)
         package_layout.addLayout(backup_actions)
         self._cancel = QPushButton("Cancelar operação")
         self._cancel.setObjectName("portabilityCancelButton")
+        self._cancel.setProperty("role", "danger")
         self._cancel.clicked.connect(self.cancelar_operacao)
         package_layout.addWidget(self._cancel)
         self._progress = QProgressBar()
@@ -285,7 +289,6 @@ class PortabilityPanelWidget(QWidget):
         worker.confirmation_required.connect(self._confirmation_required)
         worker.succeeded.connect(self._operation_succeeded)
         worker.failed.connect(self._operation_failed)
-        worker.finished.connect(self._worker_finished)
         worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)
         thread.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
@@ -294,7 +297,6 @@ class PortabilityPanelWidget(QWidget):
         self._worker = worker
         self._cancellation = cancellation
         self._execution_id = execution_id
-        self._worker_finished_id = None
         self._operation = command.operation
         self._last_progress = 0.0
         self._progress.setRange(0, 0)
@@ -419,17 +421,10 @@ class PortabilityPanelWidget(QWidget):
         if not cancelled:
             QMessageBox.warning(self, "Ação não concluída", message)
 
-    @Slot(str)
-    def _worker_finished(self, execution_id: str) -> None:
-        if execution_id != self._execution_id:
-            return
-        self._worker_finished_id = execution_id
-
     def _finalize_execution(self, execution_id: str) -> None:
         if execution_id != self._execution_id:
             return
         self._execution_id = None
-        self._worker_finished_id = None
         self._operation = None
         self._cancellation = None
         self._reset_progress()

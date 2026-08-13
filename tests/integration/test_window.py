@@ -50,6 +50,7 @@ def test_main_window_smoke(
     window.show()
 
     assert application.applicationName() == "Zeny Project Handler"
+    assert 'QPushButton[role="primary"]' in application.styleSheet()
     assert window.windowTitle() == "Zeny Project Handler"
     assert window.centralWidget().objectName() == "pdfViewerWidget"
     review_dock = window.findChild(QDockWidget, "humanReviewDock")
@@ -57,9 +58,13 @@ def test_main_window_smoke(
     portability_dock = window.findChild(QDockWidget, "projectPortabilityDock")
     documentation_dock = window.findChild(QDockWidget, "documentationComplianceDock")
     assert review_dock is not None
-    assert window.findChild(QDockWidget, "projectWorkflowDock") is not None
+    assert review_dock.windowTitle() == "Resultados"
+    project_dock = window.findChild(QDockWidget, "projectWorkflowDock")
+    assert project_dock is not None
+    assert project_dock.windowTitle() == "Projeto"
     assert graph_dock is None
     assert portability_dock is not None
+    assert portability_dock.windowTitle() == "Importar, exportar e backup"
     assert documentation_dock is not None
     assert documentation_dock in window.tabifiedDockWidgets(review_dock)
     assert portability_dock in window.tabifiedDockWidgets(review_dock)
@@ -67,6 +72,10 @@ def test_main_window_smoke(
     assert window.project_panel is not None
     assert window.portability_panel is not None
     assert window.documentation_panel is not None
+    run_analysis = window.findChild(QPushButton, "mvpRunAnalysisButton")
+    assert run_analysis is not None
+    assert run_analysis.text() == "Analisar projeto"
+    assert run_analysis.property("role") == "primary"
     review_dock.raise_()
     qtbot.waitUntil(window.review_panel.isVisible)
     window.pdf_viewer.compliance_callout_selected.emit("finding-sintetico")
@@ -78,7 +87,7 @@ def test_main_window_smoke(
         window.project_panel._service._managed_files
         is window.portability_panel._service._managed_files
     )
-    assert window.statusBar().currentMessage() == "Pronto para abrir um PDF"
+    assert window.statusBar().currentMessage() == "Pronto"
     assert settings.database_path.is_file()
 
 

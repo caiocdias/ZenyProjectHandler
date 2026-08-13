@@ -1,1114 +1,148 @@
 classDiagram
 direction LR
 
-namespace ModuloDocumento {
+namespace DominioProjeto {
+    class Projeto {
+        +UUID id
+        +String nome
+        +DocumentoProjeto[] documentos
+        +ElementoProjeto[] elementos
+        +PontoRede[] pontos
+    }
     class DocumentoProjeto {
         +UUID id
         +String nomeArquivo
         +String sha256
-        +Integer tamanhoBytes
-        +String versaoPdf
-        +String produtor
+        +PaginaDocumento[] paginas
     }
-
     class PaginaDocumento {
         +UUID id
         +Integer numero
-        +Decimal larguraPontos
-        +Decimal alturaPontos
-        +Integer rotacaoGraus
-        +Decimal[6] matrizPdfParaPagina
-        +Decimal[6] matrizRotacaoPagina
+        +Dimensoes dimensoes
+        +Integer rotacao
     }
-
-    class CaixaPagina {
-        +Decimal xMin
-        +Decimal yMin
-        +Decimal xMax
-        +Decimal yMax
-    }
-
-    class GeometriaDocumento {
-        +UUID paginaId
-        +TipoGeometria tipo
-    }
-
-    class PontoNormalizado {
-        +Decimal x
-        +Decimal y
-    }
-
-    class TipoGeometria {
-        <<enumeration>>
-        PONTO
-        CAIXA
-        POLILINHA
-        POLIGONO
-    }
-
-    class OrigemComprimentoVao {
-        <<enumeration>>
-        ANOTACAO_DESENHO
-        COORDENADAS
-        INFORMADO
-    }
-}
-
-namespace ModuloProjeto {
-    class Projeto {
-        +UUID id
-        +String nome
-        +UUID catalogoVersaoId
-        +Instant criadoEm
-        +UUID[] ordemLeituraPaginas
-    }
-
-    class MetadadosProjeto {
-        +String notaServico
-        +String circuito
-        +String municipio
-        +String bairro
-        +String tipoServico
-        +String escala
-        +String formatoFolha
-        +String numeroFolha
-        +Date dataProjeto
-        +Boolean impactoAmbiental
-        +String dispositivoSeccionamento
-        +JsonObject atributosExtras
-    }
-
-    class ContatoSolicitante {
-        +String nome
-        +String telefone
-        <<dadoSensivel>>
-    }
-
-    class CoordenadaCampo {
-        +Decimal leste
-        +Decimal norte
-        +String sistemaReferencia
-        +String zona
-        +Decimal altitudeM
-    }
-
     class ElementoProjeto {
-        <<abstract>>
         +UUID id
-        +UUID tipoCatalogoId
         +SituacaoProjeto situacao
-        +String referenciaDesenho
-        +String codigoObservado
-        +String identificadorOperacional
+        +GeometriaDocumento geometria
     }
-
     class Poste
-
-    class EstruturaMt {
-        +UUID posteId
-        +UUID[] pontosFixadosIds
-    }
-
-    class EstruturaBt {
-        +UUID posteId
-        +UUID[] pontosFixadosIds
-    }
-
-    class Cabo {
-        +UUID pontoOrigemId
-        +UUID pontoDestinoId
-        +Decimal? comprimentoM
-        +OrigemComprimentoVao? origemComprimento
-        +UUID[] postesApoioIds
-        +UUID[] pontosIntermediariosIds
-    }
-
-    class Equipamento {
-        +UUID posteId
-    }
-
-    class PontoRede {
-        +UUID id
-        +UUID? posteId
-        +String nome
-        +NivelRede nivelRede
-        +UUID nivelTensaoOpcaoId
-        +UUID configuracaoFasesOpcaoId
-        +TipoPontoRede tipo
-    }
-
-    class TerminalEquipamento {
-        +UUID id
-        +UUID equipamentoId
-        +String nome
-        +NivelRede nivelRede
-        +UUID nivelTensaoOpcaoId
-        +UUID configuracaoFasesOpcaoId
-        +UUID pontoRedeId
-    }
-
-    class ConexaoInternaEquipamento {
-        +UUID id
-        +UUID equipamentoId
-        +UUID terminalOrigemId
-        +UUID terminalDestinoId
-        +EstadoConexao estado
-    }
-
-    class FotoElemento {
-        +UUID id
-        +String caminhoRelativo
-        +String legenda
-        +String sha256
-        +String tipoMime
-        +Integer tamanhoBytes
-    }
-
-    class VinculoObra {
-        +UUID id
-        +TipoVinculoObra tipo
-        +UUID elementoOrigemId
-        +UUID elementoDestinoId
-        +String observacao
-    }
-
-    class RelacaoConfirmada {
-        +UUID id
-        +String tipoRelacao
-        +UUID origemId
-        +UUID destinoId
-    }
-
-    class RegistroRevisaoManual {
-        +UUID id
-        +TipoAcaoRevisaoManual acao
-        +UUID referenciaCriadaId
-        +String revisor
-        +Instant realizadaEm
-        +String motivo
-    }
-
-    class TipoAcaoRevisaoManual {
-        <<enumeration>>
-        CRIAR_ELEMENTO
-        CRIAR_RELACAO
-    }
-
-    class SituacaoProjeto {
-        <<enumeration>>
-        EXISTENTE
-        INSTALAR
-        REMOVER
-    }
-
-    class NivelRede {
-        <<enumeration>>
-        MT
-        BT
-    }
-
-    class TipoPontoRede {
-        <<enumeration>>
-        POSTE
-        DERIVACAO
-        CONEXAO
-        ENTREGA
-        CAIXA_PASSAGEM
-        TRANSICAO
-        OUTRO
-    }
-
-    class TipoVinculoObra {
-        <<enumeration>>
-        REALOCACAO
-        SUBSTITUICAO
-    }
-
-    class EstadoConexao {
-        <<enumeration>>
-        CONECTADA
-        DESCONECTADA
-        DESCONHECIDA
-    }
+    class EstruturaMt
+    class EstruturaBt
+    class Cabo
+    class Equipamento
+    class PontoRede
+    class VaoDetectado
 }
 
-namespace ModuloAnalise {
-    class ExecucaoAnalise {
-        +UUID id
-        +UUID projetoId
-        +String metodo
-        +String versaoMetodo
-        +JsonObject parametros
-        +EstadoExecucaoAnalise estado
-        +Instant iniciadaEm
-        +Instant finalizadaEm
-        +String erro
-    }
-
-    class DiagnosticoAnalise {
-        +String codigo
-        +String mensagem
-        +String extrator
-        +Integer paginaNumero
-        +Integer objetoXref
-    }
-
-    class EvidenciaDocumento {
-        +UUID id
-        +UUID execucaoId
-        +UUID paginaId
-        +TipoEvidencia tipo
-        +String metodo
-        +String versaoMetodo
-        +JsonObject parametros
-        +String conteudoBruto
-        +JsonObject atributosExtraidos
-        +Instant criadaEm
-    }
-
-    class OrigemObjetoPdf {
-        +TipoOrigemPdf tipo
-        +Integer numeroObjeto
-        +Integer indiceAnotacao
-        +String subtipoAnotacao
-        +String nomeRecurso
-    }
-
-    class ArtefatoExtraido {
-        +String caminhoRelativo
-        +String sha256
-        +String mimeType
-        +Integer tamanhoBytes
-    }
-
-    class AnalisadorDocumentoPort {
-        <<interface>>
-        +analisar(SolicitacaoAnaliseDocumento) ResultadoAnaliseDocumento
-    }
-
-    class MotorOcrPort {
-        <<interface>>
-        +reconhecer(PaginaRasterOcr) TrechoTextoOcr[]
-    }
-
-    class CacheAnaliseDocumentoPort {
-        <<interface>>
-        +obter(String chave)
-        +salvar(String chave, ExtracaoDocumentoNormalizada)
-    }
-
-    class PyMuPdfDocumentAnalyzer {
-        <<adapter>>
-    }
-
-    class JsonAnalysisCache {
-        <<adapter>>
-    }
-
-    class ExecutarAnaliseDocumento {
-        +executar(UUID projetoId, UUID documentoId)
-    }
-
-    class PropostaElemento {
-        +UUID id
-        +UUID execucaoId
-        +CategoriaElemento categoria
-        +SituacaoProjeto situacaoProjeto
-        +EstadoRevisao estadoRevisao
-        +UUID tipoCatalogoSugeridoId
-        +String codigoObservado
-        +JsonObject atributosSugeridos
-        +Decimal confianca
-        +String justificativa
-    }
-
-    class PropostaRelacao {
-        +UUID id
-        +UUID execucaoId
-        +UUID origemReferenciaId
-        +UUID destinoReferenciaId
-        +String tipoRelacao
-        +EstadoRevisao estadoRevisao
-        +Decimal confianca
-        +String justificativa
-    }
-
-    class VaoDetectado {
-        +UUID id
-        +UUID caboId
-        +UUID posteOrigemId
-        +UUID posteDestinoId
-        +Decimal? comprimentoM
-        +OrigemComprimentoVao? origemComprimento
-    }
-
-    class DetectarVaos {
-        +detectar(Projeto) VaoDetectado[]
-    }
-
-    class DecisaoRevisao {
-        +UUID id
-        +UUID propostaId
-        +TipoDecisaoRevisao decisao
-        +String revisor
-        +Instant decididaEm
-        +UUID elementoConfirmadoId
-        +UUID relacaoConfirmadaId
-        +String motivo
-    }
-
-    class EstadoRevisao {
-        <<enumeration>>
-        PROPOSTA
-        CONFIRMADA
-        REJEITADA
-        CONFLITANTE
-    }
-
-    class TipoEvidencia {
-        <<enumeration>>
-        TEXTO
-        VETOR
-        IMAGEM
-        OCR
-    }
-
-    class TipoOrigemPdf {
-        <<enumeration>>
-        CONTEUDO_PAGINA
-        ANOTACAO
-        APARENCIA_ANOTACAO
-        FORM_XOBJECT
-    }
-}
-
-namespace ModuloInterpretacao {
-    class RegistroRegrasInterpretacao {
-        +UUID id
-        +String versao
-        +Integer versaoSchema
-        +assinatura() String
-    }
-
-    class RegraReconhecimento {
-        +String id
-        +CategoriaElemento categoria
-        +TipoEvidencia[] tiposEvidencia
-        +String estrategia
-        +Decimal confiancaBase
-        +Decimal distanciaContextoMaxima
-        +Boolean ativa
-    }
-
-    class RegraRelacaoInterpretacao {
-        +String id
-        +CategoriaElemento categoriaOrigem
-        +CategoriaElemento categoriaDestino
-        +String tipoRelacao
-        +String estrategia
-        +Decimal distanciaMaxima
-        +Decimal confianca
-        +Boolean ativa
-    }
-
-    class ConfiguracaoInterpretacao {
-        +CategoriaElemento[] categoriasHabilitadas
-        +Decimal confiancaMinima
-        +Boolean gerarRelacoes
-        +Integer maximoPropostas
-        +assinatura() String
-    }
-
-    class AnalisadorCategoriaPort {
-        <<interface>>
-        +analisar(SolicitacaoInterpretacao, RegraReconhecimento)
-    }
-
-    class InterpretadorEvidenciasPort {
-        <<interface>>
-        +interpretar(SolicitacaoInterpretacao) ResultadoInterpretacao
-    }
-
-    class RepositorioRegrasInterpretacaoPort {
-        <<interface>>
-        +carregar() RegistroRegrasInterpretacao
-    }
-
-    class JsonRuleRegistry {
-        <<adapter>>
-    }
-
-    class AnalisadorPoste
-    class AnalisadorEstruturaMt
-    class AnalisadorEstruturaBt
-    class AnalisadorCabo
-    class AnalisadorEquipamento
-
-    class InterpretadorRegrasExplicitas {
-        <<adapter>>
-    }
-
-    class ExecutarPipelineInterpretacao {
-        +executar(UUID projetoId, UUID execucaoExtracaoId)
-    }
-
-    class InterpretadorRegrasAvaliacao {
-        <<adapter>>
-    }
-}
-
-namespace ModuloCatalogo {
+namespace Catalogo {
     class CatalogoTecnico {
         +UUID id
-        +Integer versao
-        +Integer versaoSchema
-        +StatusCatalogo status
-        +Instant criadoEm
-        +Instant publicadoEm
+        +String versao
+        +ItemCatalogo[] itens
     }
-
-    class FonteCatalogo {
-        +String nomeArquivo
-        +String sha256
-        +String planilha
-        +Instant importadoEm
-    }
-
     class ItemCatalogo {
-        <<abstract>>
         +UUID id
         +String codigo
-        +String descricao
-        +Boolean ativo
-        +Integer linhaOrigem
-        +JsonObject atributosExtras
-    }
-
-    class TipoPoste {
-        +Decimal alturaM
-        +Integer resistenciaDan
-        +UUID formatoOpcaoId
-    }
-
-    class TipoEstruturaMt {
-        +UUID configuracaoFasesOpcaoId
-        +UUID tecnologiaRedeOpcaoId
-        +Boolean ancoragem
-        +String expressaoCabosOriginal
-    }
-
-    class TipoEstruturaBt {
-        +UUID tecnologiaRedeOpcaoId
-        +Boolean ancoragem
-        +String expressaoCabosOriginal
-    }
-
-    class TipoCabo {
-        +UUID configuracaoFasesOpcaoId
-        +UUID tecnologiaRedeOpcaoId
-        +UUID nivelTensaoOpcaoId
-        +Decimal fatorCondenacao
-        +String referenciaCondutor
-    }
-
-    class TipoEquipamento {
-        +UUID configuracaoFasesOpcaoId
-        +UUID classeEquipamentoOpcaoId
-    }
-
-    class CompatibilidadeEstruturaCabo {
-        +UUID id
-        +UUID tipoEstruturaId
-        +UUID tipoCaboId
-        +String expressaoOrigem
-    }
-
-    class GrupoOpcao {
-        +UUID id
-        +String chave
-        +String nome
-        +Integer ordem
-    }
-
-    class OpcaoCatalogo {
-        +UUID id
-        +String codigo
-        +String rotulo
-        +Boolean ativo
-        +Integer ordem
-    }
-
-    class RegraSimbologia {
-        +UUID id
-        +CategoriaElemento categoriaElemento
-        +SituacaoProjeto situacaoProjeto
-        +String icone
-        +String cor
-        +String padraoTraco
-        +String rotulo
-    }
-
-    class AssinaturaSimbologia {
-        +UUID id
-        +CategoriaElemento? categoriaElemento
-        +SituacaoProjeto situacaoProjeto
-        +String cor
-        +Integer toleranciaCor
-        +String? padraoTraco
-        +Integer prioridade
-        +String origem
-    }
-
-    class AvisoImportacao {
-        +String codigo
-        +String mensagem
         +CategoriaElemento categoria
-        +String valor
-        +Integer[] linhasOrigem
-        +String resolucao
     }
-
-    class StatusCatalogo {
-        <<enumeration>>
-        RASCUNHO
-        PUBLICADO
-        ARQUIVADO
-    }
-
-    class CategoriaElemento {
-        <<enumeration>>
-        POSTE
-        ESTRUTURA_MT
-        ESTRUTURA_BT
-        CABO
-        EQUIPAMENTO
-    }
+    class CompatibilidadeEstruturaCabo
 }
 
-namespace ModuloPersistencia {
-    class SqlAlchemyUnitOfWork {
-        +commit()
-        +rollback()
-    }
-
-    class SqlCatalogRepository {
-        +salvar(CatalogoTecnico)
-        +obter(UUID) CatalogoTecnico
-    }
-
-    class SqlProjectRepository {
-        +salvar(Projeto)
-        +obter(UUID) Projeto
-        +remover(UUID)
-    }
-
-    class SqlDocumentRepository {
-        <<projecaoLeitura>>
-    }
-
-    class SqlElementRepository {
-        <<projecaoLeitura>>
-    }
-
-    class SqlAnalysisRunRepository
-    class SqlEvidenceRepository
-    class SqlProposalRepository
-    class SqlReviewDecisionRepository
-
-    class SqlPdfSourceRepository {
-        +salvar(ReferenciaFontePdf)
-        +obter(UUID) ReferenciaFontePdf
-    }
-
-    class MigracoesAlembic {
-        +upgrade(revisao)
-    }
-
-    class BackupAtomico {
-        +criar(origem, destino)
-    }
-}
-
-namespace ModuloIngestaoPdf {
-    class LeitorPdfPort {
-        <<interface>>
-        +inspecionar(Path) InspecaoPdf
-        +renderizarPagina(Path, numero, dpi) PaginaPdfRenderizada
-        +verificarOrigem(InspecaoPdf)
-    }
-
-    class PyMuPdfReader {
-        <<adapter>>
-    }
-
-    class InspecaoPdf {
-        +Path caminhoOrigem
-        +Integer tamanhoBytes
-        +Integer modificadoEmNs
-        +String adaptador
-    }
-
-    class InventarioPaginaPdf {
-        +FragmentoTextoPdf[] textos
-        +GraficoVetorialPdf[] vetores
-        +ImagemIncorporadaPdf[] imagens
-        +AnotacaoPdf[] anotacoes
-        +FormXObjectPdf[] formsXObjects
-    }
-
-    class DiagnosticoPdf {
-        +String codigo
-        +String mensagem
-        +Integer paginaNumero
-        +Integer objetoXref
-    }
-
-    class GrupoConteudoOpcionalPdf
-
-    class PaginaPdfRenderizada {
-        +Integer larguraPixels
-        +Integer alturaPixels
-        +Integer stride
-        +Bytes dadosRgb
-        +Integer dpi
-    }
-
-    class ReferenciaFontePdf {
-        +UUID documentoId
-        +UUID projetoId
-        +Path caminhoCanonico
-        +String sha256
-        +Integer tamanhoBytes
-        +Integer modificadoEmNs
-    }
-
-    class TransformadorCoordenadasPagina {
-        +pdfParaNormalizado()
-        +normalizadoParaPdf()
-        +normalizadoParaPixel()
-        +normalizadoParaCena()
-    }
-
-    class ImportarPdfNoProjeto {
-        +executar(UUID projetoId, Path origem)
-    }
-
-    class PdfViewerWidget
-    class PdfGraphicsView
-}
-
-namespace ModuloAvaliacao {
-    class ManifestoAvaliacao {
-        +String conjuntoId
+namespace Analise {
+    class ExecucaoAnalise {
+        +UUID id
+        +EstadoExecucaoAnalise estado
+        +String metodo
         +String versao
-        +EstadoConjuntoAvaliacao estado
-        +Instant congeladoEm
     }
-
-    class AmostraAvaliacao {
-        +String idAnonimo
-        +String sha256
-        +ParticaoAvaliacao particao
-        +String escala
-        +String formato
-        +String orientacao
-        +String qualidade
-        +String densidade
-        +Boolean duplaAnotacao
+    class EvidenciaDocumento {
+        +UUID id
+        +TipoEvidencia tipo
+        +GeometriaDocumento geometria
+        +OrigemObjetoPdf origem
     }
-
-    class AnotacaoAmostra {
-        +String id
-        +PapelAnotacao papel
-        +EstadoAnotacao estado
-        +String anotadorId
-        +String revisorId
-    }
-
-    class RotuloElementoAvaliacao {
-        +String id
+    class PropostaElemento {
+        +UUID id
         +CategoriaElemento categoria
-        +SituacaoProjeto situacao
-        +String codigoCatalogo
-    }
-
-    class GeometriaAvaliacao {
-        +Integer paginaNumero
-        +TipoGeometria tipo
-    }
-
-    class RotuloRelacaoAvaliacao {
-        +String id
-        +String origemId
-        +String destinoId
-        +String tipoRelacao
-        +Boolean direcionada
-    }
-
-    class CriteriosRegressaoAvaliacao {
-        +String versao
-        +EstadoCriteriosAvaliacao estado
-        +Decimal taxaFalhasMaxima
-        +Decimal latenciaP95Maxima
-        +Integer memoriaPythonMaxima
-    }
-
-    class JsonEvaluationDataset
-    class RepositorioConjuntoAvaliacaoPort
-    class AuditarConjuntoAvaliacao
-    class ExecutarBenchmarkAvaliacao
-    class InterpretadorAvaliacaoPort
-    class RelatorioBenchmarkAvaliacao
-}
-
-namespace ModuloRegioesAnalise {
-    class RegiaoAnalise {
-        <<derivado>>
-        +UUID id
-        +UUID paginaId
-        +GeometriaDocumento geometria
-        +UUID[] elementoIds
-        +UUID[] vinculoIds
-        +CoordenadaCampo coordenada
-    }
-
-    class AgruparRegioesDaAnalise {
-        <<servico>>
-        +agrupar(propostas, evidencias, documentos) RegiaoAnalise[]
-    }
-}
-
-namespace ModuloPortabilidade {
-    class ManifestoProjetoPortatil {
-        +Integer versaoFormato
-        +UUID projetoId
-        +UUID catalogoId
-        +Instant criadoEm
-        +ArquivoPacoteProjeto[] arquivos
-    }
-
-    class ArquivoPacoteProjeto {
-        +String caminhoRelativo
-        +String tipoMime
-        +Integer tamanhoBytes
-        +String sha256
-    }
-
-    class ConteudoBancoProjetoPortatil {
-        +Projeto projeto
-        +CatalogoTecnico catalogo
-        +ExecucaoAnalise[] execucoes
-        +EvidenciaDocumento[] evidencias
-        +DecisaoRevisao[] decisoes
-    }
-
-    class RelatorioIntegridadeProjeto {
-        +UUID projetoId
-        +ProblemaIntegridadeProjeto[] problemas
-        +Boolean integro
-        +Boolean utilizavel
-    }
-
-    class ProblemaIntegridadeProjeto {
-        +String codigo
-        +String caminhoRelativo
-        +String mensagem
-        +Boolean critico
-    }
-
-    class ZipProjectArchive {
-        <<adapter>>
-        +criarAtomico(destino, manifesto, arquivos)
-        +extrairValidado(origem)
-    }
-
-    class SqlitePortableProjectDatabase {
-        <<adapter>>
-        +criar(conteudo, destino)
-        +carregar(origem)
-    }
-
-    class ServicoPortabilidadeProjeto {
-        +anexarFoto()
-        +localizarFoto()
-        +localizarPdf()
-        +exportarProjeto()
-        +importarProjeto()
-        +criarBackup()
-        +restaurarBackup()
-        +verificarIntegridade()
-    }
-}
-
-namespace ModuloConformidade {
-    class AlvoConformidade {
-        +UUID id
-        +TipoEscopoConformidade tipo
-        +UUID referenciaId
-        +UUID paginaId
-        +GeometriaDocumento geometria
-    }
-
-    class FatoConformidade {
-        <<derivado>>
-        +UUID id
-        +UUID alvoId
-        +String chave
-        +JsonPrimitive valor
-        +String origem
-        +UUID[] evidenciaIds
         +Decimal confianca
     }
-
-    class RegistroRegrasConformidade {
-        +UUID id
-        +String versao
-        +Integer versaoSchema
-        +assinatura() String
-    }
-
-    class RegraConformidade {
-        +String id
-        +String titulo
-        +TipoEscopoConformidade escopo
-        +SeveridadeConformidade severidade
-        +Boolean ativa
-    }
-
-    class CondicaoConformidade {
-        +String chaveFato
-        +OperadorCondicao operador
-        +JsonPrimitive[] valoresEsperados
-        +QuantificadorCondicao quantificador
-    }
-
-    class FonteNormativa {
-        +String documento
-        +String revisao
-        +String item
-        +Integer pagina
-        +String url
-    }
-
-    class AchadoConformidade {
-        <<derivado>>
-        +UUID id
-        +String regraId
-        +UUID alvoId
-        +ResultadoConformidade resultado
-        +String versaoRegras
-        +UUID[] evidenciaIds
-    }
-
-    class AnalisarConformidadeProjeto {
-        <<servico>>
-        +analisar(sessao, registro) ResultadoConformidadeProjeto
-    }
-
-    class ResultadoConformidadeProjeto {
-        +AlvoConformidade[] alvos
-        +FatoConformidade[] fatos
-        +AchadoConformidade[] achados
-    }
+    class PropostaRelacao
+    class DecisaoRevisao
+    class RegiaoAnalise
 }
 
-DocumentoProjeto "1" *-- "1..*" PaginaDocumento : paginas
-PaginaDocumento "1" *-- "2" CaixaPagina : mediaBox_e_cropBox
-GeometriaDocumento "1" *-- "1..*" PontoNormalizado : pontos
-GeometriaDocumento --> PaginaDocumento : localizadaEm
-GeometriaDocumento --> TipoGeometria : possui
+namespace Conformidade {
+    class RegistroRegrasConformidade {
+        +String versao
+        +RegraConformidade[] regras
+    }
+    class RegraConformidade {
+        +String id
+        +CondicaoConformidade[] aplicabilidade
+        +CondicaoConformidade[] excecoes
+        +CondicaoConformidade[] requisitos
+    }
+    class FatoConformidade
+    class ExecucaoConformidade
+    class AchadoConformidade
+    class CalloutConformidade
+}
 
+namespace Aplicacao {
+    class ServicoFluxoMvp
+    class ServicoRevisaoHumana
+    class ExecutarPipelineInterpretacao
+    class ExecutarAnaliseConformidade
+    class ServicoPortabilidadeProjeto
+    class CoordenadorOperacoes
+}
+
+namespace Infraestrutura {
+    class PyMuPdfReader
+    class PyMuPdfDocumentAnalyzer
+    class TesseractCliOcr
+    class SqlAlchemyUnitOfWork
+    class ZipProjectArchive
+}
+
+Projeto "1" *-- "0..*" DocumentoProjeto
+DocumentoProjeto "1" *-- "1..*" PaginaDocumento
+Projeto "1" *-- "0..*" ElementoProjeto
+Projeto "1" *-- "0..*" PontoRede
 ElementoProjeto <|-- Poste
 ElementoProjeto <|-- EstruturaMt
 ElementoProjeto <|-- EstruturaBt
 ElementoProjeto <|-- Cabo
 ElementoProjeto <|-- Equipamento
+Projeto --> CatalogoTecnico : usa versão
+ElementoProjeto --> ItemCatalogo : tipado por
+CatalogoTecnico *-- ItemCatalogo
+CatalogoTecnico *-- CompatibilidadeEstruturaCabo
 
-Projeto "1" *-- "0..*" DocumentoProjeto : documentos
-Projeto "1" *-- "0..*" ElementoProjeto : elementosConfirmados
-Projeto "1" *-- "0..*" PontoRede : pontos
-Projeto "1" *-- "0..*" TerminalEquipamento : terminais
-Projeto "1" *-- "0..1" MetadadosProjeto : metadadosTecnicos
-Projeto "1" *-- "0..1" ContatoSolicitante : dadosSensiveis
-Projeto "1" *-- "0..*" VinculoObra : movimentacoesESubstituicoes
-Projeto "1" *-- "0..*" RelacaoConfirmada : relacoesRevisadas
-Projeto "1" *-- "0..*" RegistroRevisaoManual : auditoriaManual
-ElementoProjeto "1" *-- "0..*" FotoElemento : fotos
-ElementoProjeto --> GeometriaDocumento : geometria
-ElementoProjeto --> SituacaoProjeto : situacaoDeObra
-ElementoProjeto --> CoordenadaCampo : coordenadaOpcional
+ExecucaoAnalise *-- EvidenciaDocumento
+ExecucaoAnalise *-- PropostaElemento
+ExecucaoAnalise *-- PropostaRelacao
+PropostaElemento --> EvidenciaDocumento : fundamentada por
+PropostaRelacao --> EvidenciaDocumento : fundamentada por
+DecisaoRevisao --> PropostaElemento : confirma ou corrige
+RegiaoAnalise --> PropostaElemento : agrupa
+VaoDetectado --> Cabo : deriva de
 
-Poste "1" --> "0..*" EstruturaMt : suporta
-Poste "1" --> "0..*" EstruturaBt : suporta
-Poste "1" --> "0..*" Equipamento : recebe
-Poste "0..1" --> "0..*" PontoRede : podeOferecer
-EstruturaMt "0..1" --> "0..*" PontoRede : fixaMT
-EstruturaBt "0..1" --> "0..*" PontoRede : fixaBT
-Cabo "0..*" --> "2" PontoRede : conecta
-Cabo "0..*" --> "0..*" PontoRede : percursoIntermediario
-Cabo "0..*" --> "0..*" Poste : apoiosIntermediarios
-Cabo --> OrigemComprimentoVao : provenienciaDaMedida
-DetectarVaos --> Projeto : derivaDe
-DetectarVaos ..> VaoDetectado : produz
-VaoDetectado --> Cabo : trechoReconhecido
-VaoDetectado --> Poste : origemEDestino
-PontoRede "0..*" --> "0..1" CoordenadaCampo : coordenadaOpcional
-PontoRede --> TipoPontoRede : papelEletrico
-Equipamento "1" *-- "1..*" TerminalEquipamento : possui
-Equipamento "1" *-- "0..*" ConexaoInternaEquipamento : continuidadeInterna
-TerminalEquipamento "0..*" --> "0..1" PontoRede : conectadoA
-VinculoObra "0..*" --> "1" ElementoProjeto : origemRetirada
-VinculoObra "0..*" --> "1" ElementoProjeto : destinoInstalacao
+RegistroRegrasConformidade *-- RegraConformidade
+ExecutarAnaliseConformidade --> FatoConformidade : reúne
+ExecutarAnaliseConformidade --> RegistroRegrasConformidade : aplica
+ExecutarAnaliseConformidade --> ExecucaoConformidade : persiste
+ExecucaoConformidade *-- AchadoConformidade
+AchadoConformidade --> CalloutConformidade : projeta no PDF
 
-Projeto "1" --> "0..*" ExecucaoAnalise : analisadoPor
-ExecucaoAnalise "1" *-- "0..*" EvidenciaDocumento : produz
-ExecucaoAnalise "1" *-- "0..*" DiagnosticoAnalise : registra
-ExecucaoAnalise "1" *-- "0..*" PropostaElemento : propoe
-ExecucaoAnalise "1" *-- "0..*" PropostaRelacao : propoe
-EvidenciaDocumento --> GeometriaDocumento : geometria
-EvidenciaDocumento "1" *-- "1" OrigemObjetoPdf : provenienciaPdf
-EvidenciaDocumento "1" *-- "0..1" ArtefatoExtraido : binarioDerivado
-PropostaElemento --> GeometriaDocumento : geometria
-PropostaElemento "0..*" --> "1..*" EvidenciaDocumento : fundamentadaEm
-PropostaRelacao "0..*" --> "1..*" EvidenciaDocumento : fundamentadaEm
-DecisaoRevisao --> PropostaElemento : revisa
-DecisaoRevisao --> PropostaRelacao : revisa
-DecisaoRevisao --> ElementoProjeto : podeConfirmar
-DecisaoRevisao --> RelacaoConfirmada : podeConfirmar
-RegistroRevisaoManual --> TipoAcaoRevisaoManual : tipoDeCriacao
-
-CatalogoTecnico "1" *-- "1" FonteCatalogo : proveniencia
-CatalogoTecnico "1" *-- "0..*" ItemCatalogo : itens
-CatalogoTecnico "1" *-- "1..*" GrupoOpcao : grupos
-CatalogoTecnico "1" *-- "0..*" CompatibilidadeEstruturaCabo : compatibilidades
-CatalogoTecnico "1" *-- "15" RegraSimbologia : apresentacaoCanonica
-CatalogoTecnico "1" *-- "0..*" AssinaturaSimbologia : reconhecimentoVisual
-CatalogoTecnico "1" *-- "0..*" AvisoImportacao : avisos
-GrupoOpcao "1" *-- "1..*" OpcaoCatalogo : opcoes
-
-ItemCatalogo <|-- TipoPoste
-ItemCatalogo <|-- TipoEstruturaMt
-ItemCatalogo <|-- TipoEstruturaBt
-ItemCatalogo <|-- TipoCabo
-ItemCatalogo <|-- TipoEquipamento
-TipoEstruturaMt "1" -- "0..*" CompatibilidadeEstruturaCabo : estrutura
-TipoEstruturaBt "1" -- "0..*" CompatibilidadeEstruturaCabo : estrutura
-TipoCabo "1" -- "0..*" CompatibilidadeEstruturaCabo : cabo
-TipoPoste ..> OpcaoCatalogo : formato
-TipoEstruturaMt ..> OpcaoCatalogo : fases_e_tecnologia
-TipoEstruturaBt ..> OpcaoCatalogo : tecnologia
-TipoCabo ..> OpcaoCatalogo : fases_tecnologia_tensao
-TipoEquipamento ..> OpcaoCatalogo : fases_e_classe
-
-SqlAlchemyUnitOfWork *-- SqlCatalogRepository
-SqlAlchemyUnitOfWork *-- SqlProjectRepository
-SqlAlchemyUnitOfWork *-- SqlDocumentRepository
-SqlAlchemyUnitOfWork *-- SqlElementRepository
-SqlAlchemyUnitOfWork *-- SqlAnalysisRunRepository
-SqlAlchemyUnitOfWork *-- SqlEvidenceRepository
-SqlAlchemyUnitOfWork *-- SqlProposalRepository
-SqlAlchemyUnitOfWork *-- SqlReviewDecisionRepository
-SqlAlchemyUnitOfWork *-- SqlPdfSourceRepository
-SqlCatalogRepository ..> CatalogoTecnico : reidrata
-SqlProjectRepository ..> Projeto : reidrata
-SqlDocumentRepository ..> DocumentoProjeto : projeta
-SqlElementRepository ..> ElementoProjeto : projeta
-SqlAnalysisRunRepository ..> ExecucaoAnalise : persiste
-SqlEvidenceRepository ..> EvidenciaDocumento : persiste
-SqlProposalRepository ..> PropostaElemento : persiste
-SqlProposalRepository ..> PropostaRelacao : persiste
-SqlReviewDecisionRepository ..> DecisaoRevisao : persiste
-SqlPdfSourceRepository ..> ReferenciaFontePdf : persiste
-MigracoesAlembic ..> SqlAlchemyUnitOfWork : preparaSchema
-BackupAtomico ..> SqlAlchemyUnitOfWork : protegeBanco
-ManifestoProjetoPortatil "1" *-- "1..*" ArquivoPacoteProjeto : declara
-RelatorioIntegridadeProjeto "1" *-- "0..*" ProblemaIntegridadeProjeto : apresenta
-ConteudoBancoProjetoPortatil --> Projeto : transporta
-ConteudoBancoProjetoPortatil --> CatalogoTecnico : preserva
-ZipProjectArchive ..> ManifestoProjetoPortatil : valida
-SqlitePortableProjectDatabase ..> ConteudoBancoProjetoPortatil : materializa
-ServicoPortabilidadeProjeto ..> ZipProjectArchive : empacota
-ServicoPortabilidadeProjeto ..> SqlitePortableProjectDatabase : isolaBanco
-ServicoPortabilidadeProjeto ..> BackupAtomico : recupera
-
-LeitorPdfPort <|.. PyMuPdfReader
-PyMuPdfReader ..> InspecaoPdf : produz
-PyMuPdfReader ..> PaginaPdfRenderizada : rasterizaRgb
-InspecaoPdf *-- DocumentoProjeto : metadadosCanonicos
-InspecaoPdf *-- InventarioPaginaPdf : paginas
-InspecaoPdf *-- GrupoConteudoOpcionalPdf : ocgs
-InventarioPaginaPdf *-- PaginaDocumento : pagina
-InventarioPaginaPdf *-- DiagnosticoPdf : diagnosticosLocalizados
-TransformadorCoordenadasPagina --> PaginaDocumento : usaMatrizes
-ImportarPdfNoProjeto --> LeitorPdfPort : validaAntesDaTransacao
-ImportarPdfNoProjeto --> SqlAlchemyUnitOfWork : persisteAtomicamente
-ImportarPdfNoProjeto --> ReferenciaFontePdf : registraOrigem
-PdfViewerWidget --> LeitorPdfPort : inspecionaERenderiza
-PdfViewerWidget *-- PdfGraphicsView : exibe
-PdfGraphicsView --> TransformadorCoordenadasPagina : posicionaSobreposicoes
-
-AnalisadorDocumentoPort <|.. PyMuPdfDocumentAnalyzer
-CacheAnaliseDocumentoPort <|.. JsonAnalysisCache
-PyMuPdfDocumentAnalyzer --> CacheAnaliseDocumentoPort : reutilizaDerivados
-PyMuPdfDocumentAnalyzer --> MotorOcrPort : usaCondicionalmente
-PyMuPdfDocumentAnalyzer ..> EvidenciaDocumento : materializa
-ExecutarAnaliseDocumento --> AnalisadorDocumentoPort : executa
-ExecutarAnaliseDocumento --> SqlAlchemyUnitOfWork : persisteAtomicamente
-
-RegistroRegrasInterpretacao "1" *-- "5" RegraReconhecimento : reconhecimento
-RegistroRegrasInterpretacao "1" *-- "0..*" RegraRelacaoInterpretacao : relacoes
-AnalisadorCategoriaPort <|.. AnalisadorPoste
-AnalisadorCategoriaPort <|.. AnalisadorEstruturaMt
-AnalisadorCategoriaPort <|.. AnalisadorEstruturaBt
-AnalisadorCategoriaPort <|.. AnalisadorCabo
-AnalisadorCategoriaPort <|.. AnalisadorEquipamento
-InterpretadorEvidenciasPort <|.. InterpretadorRegrasExplicitas
-RepositorioRegrasInterpretacaoPort <|.. JsonRuleRegistry
-JsonRuleRegistry ..> RegistroRegrasInterpretacao : carrega
-InterpretadorRegrasExplicitas *-- AnalisadorCategoriaPort : analisadores
-InterpretadorRegrasExplicitas --> RegistroRegrasInterpretacao : aplica
-InterpretadorRegrasExplicitas --> CatalogoTecnico : consulta
-InterpretadorRegrasExplicitas --> EvidenciaDocumento : combina
-InterpretadorRegrasExplicitas ..> PropostaElemento : produz
-InterpretadorRegrasExplicitas ..> PropostaRelacao : produz
-ExecutarPipelineInterpretacao --> InterpretadorEvidenciasPort : executa
-ExecutarPipelineInterpretacao --> ConfiguracaoInterpretacao : configura
-ExecutarPipelineInterpretacao --> SqlAlchemyUnitOfWork : persisteAtomicamente
-InterpretadorRegrasAvaliacao --> PyMuPdfDocumentAnalyzer : extrai
-InterpretadorRegrasAvaliacao --> InterpretadorRegrasExplicitas : interpreta
-InterpretadorRegrasAvaliacao ..> InterpretadorAvaliacaoPort : implementa
-
-ManifestoAvaliacao "1" *-- "2..*" AmostraAvaliacao : particiona
-AnotacaoAmostra "1" *-- "0..*" RotuloElementoAvaliacao : rotula
-AnotacaoAmostra "1" *-- "0..*" RotuloRelacaoAvaliacao : relaciona
-RotuloElementoAvaliacao "1" *-- "1" GeometriaAvaliacao : posiciona
-RepositorioConjuntoAvaliacaoPort <|.. JsonEvaluationDataset
-AuditarConjuntoAvaliacao --> RepositorioConjuntoAvaliacaoPort : verificaCongelamento
-ExecutarBenchmarkAvaliacao --> RepositorioConjuntoAvaliacaoPort : carregaReferencia
-ExecutarBenchmarkAvaliacao --> InterpretadorAvaliacaoPort : avalia
-ExecutarBenchmarkAvaliacao ..> RelatorioBenchmarkAvaliacao : produz
-ExecutarBenchmarkAvaliacao --> CriteriosRegressaoAvaliacao : aplicaLimites
-
-Projeto "0..*" --> "1" CatalogoTecnico : usaVersao
-ElementoProjeto "0..*" --> "1" ItemCatalogo : tipadoPor
-PontoRede ..> OpcaoCatalogo : tensao_e_fases
-TerminalEquipamento ..> OpcaoCatalogo : tensao_e_fases
-
-AgruparRegioesDaAnalise --> PropostaElemento : agrupaPorGeometria
-AgruparRegioesDaAnalise --> PropostaRelacao : preservaVinculos
-AgruparRegioesDaAnalise --> EvidenciaDocumento : encontraCoordenadas
-AgruparRegioesDaAnalise ..> RegiaoAnalise : produz
-RegiaoAnalise --> PaginaDocumento : localiza
-RegiaoAnalise ..> CoordenadaCampo : informa
-
-RegistroRegrasConformidade "1" *-- "1..*" RegraConformidade : versiona
-RegraConformidade "1" *-- "1" FonteNormativa : fundamentadaEm
-RegraConformidade "1" *-- "1..*" CondicaoConformidade : when_unless_must
-FatoConformidade --> AlvoConformidade : descreve
-FatoConformidade "0..*" --> "0..*" EvidenciaDocumento : fundamentadoEm
-AchadoConformidade --> AlvoConformidade : avalia
-AchadoConformidade --> RegraConformidade : aplica
-AchadoConformidade "0..*" --> "0..*" EvidenciaDocumento : explica
-AnalisarConformidadeProjeto --> RegiaoAnalise : usaAgrupamentos
-AnalisarConformidadeProjeto --> RegistroRegrasConformidade : aplica
-AnalisarConformidadeProjeto ..> ResultadoConformidadeProjeto : produz
+ServicoFluxoMvp --> PyMuPdfReader
+ServicoFluxoMvp --> PyMuPdfDocumentAnalyzer
+ServicoFluxoMvp --> ExecutarPipelineInterpretacao
+ServicoFluxoMvp --> ExecutarAnaliseConformidade
+ServicoRevisaoHumana --> SqlAlchemyUnitOfWork
+ServicoPortabilidadeProjeto --> ZipProjectArchive
+ServicoPortabilidadeProjeto --> SqlAlchemyUnitOfWork
+PyMuPdfDocumentAnalyzer --> TesseractCliOcr : fallback condicional
+ServicoFluxoMvp --> CoordenadorOperacoes
+ServicoPortabilidadeProjeto --> CoordenadorOperacoes

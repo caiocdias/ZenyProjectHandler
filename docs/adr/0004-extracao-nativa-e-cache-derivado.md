@@ -82,8 +82,8 @@ derivado do PDF e não deve competir com o original como fonte canônica.
 
 ## Consequências
 
-- A etapa 5 pode construir um conjunto de avaliação diretamente sobre evidências estáveis, sem
-  depender de widgets ou detalhes do PyMuPDF.
+- O smoke dos exemplos e as regressões sintéticas podem consumir evidências estáveis sem depender de
+  widgets ou detalhes do PyMuPDF.
 - O cache pode crescer e será tratado como dado temporário; ele não participa de backup nem de
   portabilidade do projeto.
 - Tesseract continua substituível por outro mecanismo que implemente a mesma consulta de capacidade;

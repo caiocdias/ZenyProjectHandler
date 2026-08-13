@@ -62,6 +62,7 @@ from zeny_project_handler.logging_config import (
 from zeny_project_handler.ports.pdf import OrcamentoRenderizacaoPdf
 from zeny_project_handler.ports.persistence import ComprovanteCommitImportacao
 from zeny_project_handler.ui.main_window import MainWindow
+from zeny_project_handler.ui.theme import aplicar_tema
 
 
 class _EngineLifetime:
@@ -131,6 +132,7 @@ def _compose_initialized_application(
 
     application.setApplicationName(app_settings.application_name)
     application.setOrganizationName(app_settings.organization_name)
+    aplicar_tema(application)
 
     catalog = _ensure_initial_catalog(engine)
     reader = PyMuPdfReader()

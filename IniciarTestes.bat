@@ -15,8 +15,7 @@ set "PYTEST_BASETEMP=!PYTEST_TEMP_ROOT!\zph-basic-!RANDOM!"
 >> "%REPORT_FILE%" echo Data: %DATE% %TIME%
 >> "%REPORT_FILE%" echo Diretório: %CD%
 
->> "%REPORT_FILE%" echo Escopo: gate basico offline; corpus privado explicitamente excluido.
->> "%REPORT_FILE%" echo Gate privado complementar: IniciarTestesPrivados.bat
+>> "%REPORT_FILE%" echo Escopo: gate padrao offline com testes publicos e sinteticos.
 
 if not exist "%PYTEST_TEMP_ROOT%" mkdir "%PYTEST_TEMP_ROOT%" >nul 2>&1
 if not exist "%PYTEST_TEMP_ROOT%" (
@@ -52,9 +51,9 @@ call :run_section "TIPAGEM ESTÁTICA - MYPY" "python -m mypy"
 >> "%REPORT_FILE%" echo.
 >> "%REPORT_FILE%" echo ============================================================
 >> "%REPORT_FILE%" echo TESTES PUBLICOS E COBERTURA
->> "%REPORT_FILE%" echo Comando: python -m pytest -m "not private_samples" --cov
+>> "%REPORT_FILE%" echo Comando: python -m pytest --cov
 >> "%REPORT_FILE%" echo ============================================================
-python -m pytest -m "not private_samples" --basetemp="!PYTEST_BASETEMP!" ^
+python -m pytest --basetemp="!PYTEST_BASETEMP!" ^
     --cov --cov-report=term-missing --cov-fail-under=85.01 >> "%REPORT_FILE%" 2>&1
 set "SECTION_EXIT_CODE=!ERRORLEVEL!"
 >> "%REPORT_FILE%" echo Codigo de saida: !SECTION_EXIT_CODE!
@@ -71,22 +70,9 @@ set "SECTION_EXIT_CODE=!ERRORLEVEL!"
 if not "!SECTION_EXIT_CODE!"=="0" set "SUITE_STATUS=1"
 
 >> "%REPORT_FILE%" echo.
->> "%REPORT_FILE%" echo ============================================================
->> "%REPORT_FILE%" echo RELATORIO DE HOTSPOTS D
->> "%REPORT_FILE%" echo Comando: python -m radon cc src -s -a -n D
->> "%REPORT_FILE%" echo ============================================================
-python -m radon cc src -s -a -n D >> "%REPORT_FILE%" 2>&1
-set "SECTION_EXIT_CODE=!ERRORLEVEL!"
->> "%REPORT_FILE%" echo Codigo de saida: !SECTION_EXIT_CODE!
-if not "!SECTION_EXIT_CODE!"=="0" set "SUITE_STATUS=1"
-
-call :run_section "ÍNDICE DE MANUTENIBILIDADE" "python -m radon mi src -s"
-call :run_section "MÉTRICAS BRUTAS DO CÓDIGO" "python -m radon raw src -s"
-
->> "%REPORT_FILE%" echo.
 if "!SUITE_STATUS!"=="0" (
     >> "%REPORT_FILE%" echo RESULTADO FINAL: APROVADO
-    >> "%REPORT_FILE%" echo O corpus privado nao foi acessado por este gate.
+    >> "%REPORT_FILE%" echo O gate usou somente testes publicos e fixtures sinteticas.
     >> "%REPORT_FILE%" echo Cobertura mínima obrigatória: superior a 85%%.
 ) else (
     >> "%REPORT_FILE%" echo RESULTADO FINAL: REPROVADO

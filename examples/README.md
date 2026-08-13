@@ -1,18 +1,21 @@
-# Amostras locais de projetos
+# Exemplos locais
 
-Esta pasta pode receber PDFs reais para testes locais. Os arquivos `*.pdf` são ignorados pelo Git
-porque podem conter dados pessoais, coordenadas e fotografias.
+Use esta pasta para qualquer PDF que ajude numa verificação exploratória. Todo o conteúdo abaixo de
+`examples/` é local e ignorado pelo Git; somente este guia pertence ao repositório. Não há manifesto,
+lista fixa, divisão de corpus ou requisito de completar um conjunto específico.
 
-O arquivo `../evaluation/manifesto-amostras.json` registra somente identificadores anônimos, hashes,
-partição e características técnicas. Para localizar uma amostra, calcule o SHA-256 do PDF local e
-compare com o manifesto. Nomes de arquivos, nomes de clientes, telefones e coordenadas não devem ser
-incluídos no manifesto, em logs ou em relatórios versionados.
+O gate padrão usa apenas fixtures sintéticas e funciona igual com a pasta vazia ou cheia. Para
+exercitar, sob demanda, todos os PDFs locais encontrados também em subpastas, execute:
 
-As amostras reais serão usadas inicialmente como corpus de smoke/regressão. Fixtures sintéticas
-continuam necessárias para cenários ausentes, como PDF multipágina, rotacionado, protegido,
-corrompido, escaneado e com `CropBox` diferente de `MediaBox`.
+```powershell
+.\.venv\Scripts\python.exe scripts\smoke_examples.py
+```
 
-O gate básico (`..\IniciarTestes.bat`) ignora integralmente esta pasta. Em um ambiente autorizado,
-o gate privado deve ser acionado de forma explícita com `..\IniciarTestesPrivados.bat`; ele compara
-as amostras locais ao manifesto por tamanho e SHA-256 e falha claramente se o conjunto requerido
-estiver ausente ou divergente. Os arquivos continuam locais e não devem ser adicionados ao Git.
+O smoke inspeciona, renderiza a primeira página, extrai evidências nativas e executa o interpretador.
+Ele não habilita OCR, não grava relatório e verifica que tamanho e data de modificação da origem não
+mudaram. A ausência de PDFs é um resultado válido; uma falha em um arquivo não impede a inspeção dos
+demais e faz o comando terminar com código diferente de zero.
+
+Resultados observados em arquivos reais são diagnósticos locais. Uma garantia permanente deve ser
+representada por uma fixture sintética pública e determinística. Regras técnicas só podem nascer de
+fonte normativa identificada, nunca apenas de comentários ou padrões vistos nesses PDFs.

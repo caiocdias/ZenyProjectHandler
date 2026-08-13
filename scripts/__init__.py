@@ -1,0 +1,1 @@
+"""Utilitários locais do repositório."""

@@ -216,6 +216,10 @@ class ServicoRegistroRegrasConformidade:
             ativa=True,
         )
         try:
+            try:
+                previous_catalog = self.caminho_catalogo.read_bytes()
+            except FileNotFoundError:
+                previous_catalog = None
             with self._unit_of_work() as work:
                 numbers = work.registros_conformidade.reservar_numeros(
                     tuple(item.id for item in registry.regras),
@@ -227,7 +231,14 @@ class ServicoRegistroRegrasConformidade:
                     self.caminho_catalogo,
                     renderizar_catalogo_markdown(persisted, numbers, history),
                 )
-                work.commit()
+                try:
+                    work.commit()
+                except BaseException:
+                    if previous_catalog is None:
+                        self.caminho_catalogo.unlink(missing_ok=True)
+                    else:
+                        _write_atomic_bytes(self.caminho_catalogo, previous_catalog)
+                    raise
                 return persisted
         except OSError as error:
             raise RegistroConformidadeError(
@@ -422,11 +433,15 @@ def _markdown(value: str) -> str:
 
 
 def _write_atomic_text(destination: Path, content: str) -> Path:
+    return _write_atomic_bytes(destination, content.encode("utf-8"))
+
+
+def _write_atomic_bytes(destination: Path, content: bytes) -> Path:
     target = destination.expanduser().resolve()
     target.parent.mkdir(parents=True, exist_ok=True)
     with sibling_temporary_file(target) as temporary:
         with temporary.open("wb") as stream:
-            stream.write(content.encode("utf-8"))
+            stream.write(content)
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(temporary, target)

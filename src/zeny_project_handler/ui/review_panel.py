@@ -103,6 +103,8 @@ class ReviewPanelWidget(QWidget):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
         project_row = QHBoxLayout()
         self._project = QComboBox()
         self._project.setObjectName("reviewProjectCombo")
@@ -142,6 +144,7 @@ class ReviewPanelWidget(QWidget):
             "clique em qualquer elemento para localizá-lo no PDF."
         )
         guidance.setObjectName("analysisResultsGuidance")
+        guidance.setProperty("role", "hint")
         guidance.setWordWrap(True)
         elements_layout.addWidget(guidance)
 
@@ -189,6 +192,7 @@ class ReviewPanelWidget(QWidget):
             "e, na ausência dela, a distância entre coordenadas."
         )
         spans_guidance.setObjectName("spanResultsGuidance")
+        spans_guidance.setProperty("role", "hint")
         spans_guidance.setWordWrap(True)
         spans_layout.addWidget(spans_guidance)
         self._span_table = QTableWidget(0, 9)
@@ -218,7 +222,7 @@ class ReviewPanelWidget(QWidget):
         self._results_tabs.addTab(spans_page, "Vãos")
         layout.addWidget(self._results_tabs, 1)
 
-        editor = QGroupBox("Correção excepcional")
+        editor = QGroupBox("Revisar identificação")
         editor.setObjectName("reviewDecisionEditor")
         self._editor_form = QFormLayout(editor)
         form = self._editor_form
@@ -284,11 +288,13 @@ class ReviewPanelWidget(QWidget):
         decision_row = QHBoxLayout()
         self._accept = QPushButton("Confirmar identificação")
         self._accept.setObjectName("reviewAcceptButton")
+        self._accept.setProperty("role", "primary")
         self._accept.clicked.connect(self.aceitar_selecionada)
         self._accept.hide()
         decision_row.addWidget(self._accept)
         self._reject = QPushButton("Não é este elemento")
         self._reject.setObjectName("reviewRejectButton")
+        self._reject.setProperty("role", "danger")
         self._reject.clicked.connect(self.rejeitar_selecionada)
         self._reject.hide()
         decision_row.addWidget(self._reject)

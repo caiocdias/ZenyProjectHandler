@@ -393,3 +393,35 @@ def test_panel_loads_latest_marks_stale_and_reapplies_without_ocr(
         assert item.text(2) != "Número do projeto com 10 dígitos"
     panel.close()
     engine.dispose()
+
+
+def test_panel_marks_a_previous_compliance_method_as_stale(
+    qtbot: QtBot,
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine, project_id, service, registry_service = _prepare_context(
+        tmp_path,
+        catalogo_inicial,
+    )
+    legacy_execution = replace(service.executar(project_id), versao_metodo="2")
+    monkeypatch.setattr(service, "obter_ultima", lambda _project_id: legacy_execution)
+
+    def unit_of_work() -> SqlAlchemyUnitOfWork:
+        return SqlAlchemyUnitOfWork(engine)
+
+    panel = DocumentationPanelWidget(
+        service=ServicoRevisaoHumana(unit_of_work),
+        registry_service=registry_service,
+        analysis_service=service,
+        viewer=cast(PdfViewerWidget, _ViewerStub()),
+    )
+    qtbot.addWidget(panel)
+    panel.abrir_projeto(project_id)
+
+    status = panel.findChild(QLabel, "complianceExecutionStatusLabel")
+    assert status is not None
+    assert "Resultado desatualizado" in status.text()
+    panel.close()
+    engine.dispose()

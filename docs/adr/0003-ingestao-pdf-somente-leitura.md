@@ -101,10 +101,8 @@ geometria apenas à largura e altura raster não é suficiente para garantir pos
   thread e as sessões. O planejamento puro também prova prioridade e conversão visual-canônica.
 - O teste de movimentação ocorre com a sessão ainda viva, comprovando no Windows que nenhum handle
   persistente bloqueia backup, restauração ou substituição do arquivo.
-- As nove amostras formais privadas são endereçadas exclusivamente pelos hashes do manifesto.
-  PDFs exploratórios adicionais em `examples/` são descobertos e identificados apenas pelo hash em
-  smoke tests locais somente leitura, sem exigir inclusão no manifesto. Nomes e conteúdo sensível
-  não entram nos testes versionados.
+- PDFs em `examples/` são descobertos dinamicamente pelo smoke opcional somente leitura. Todo o
+  conteúdo local da pasta, exceto seu README, permanece fora do Git.
 
 ## Consequências
 

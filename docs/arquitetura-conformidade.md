@@ -309,8 +309,9 @@ Para adicionar uma regra ou uma nova família de fatos:
    positiva sem modificar `compliance_evaluation.py`;
 7. executar a análise e verificar snapshot, explicação, callout e persistência com fixtures
    sintéticas;
-8. calibrar somente na partição privada de desenvolvimento do conjunto autorizado e promover para
-   uso decisório apenas depois dos limites de erro e do aceite humano.
+8. conferir o comportamento nos exemplos locais dinâmicos e transformar regressões observadas em
+   fixtures sintéticas mínimas; o uso decisório continua condicionado a limites de erro conhecidos e
+   revisão humana proporcional ao risco.
 
 Uma atualização normativa nunca reinterpreta silenciosamente uma execução antiga. O achado preserva
 a versão do registro usada; uma reavaliação explícita gera achados com a nova assinatura.

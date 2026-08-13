@@ -1,8 +1,6 @@
-import json
+import subprocess
 import tomllib
 from pathlib import Path
-
-import pytest
 
 PROJECT_ROOT = Path(__file__).parents[2]
 
@@ -85,19 +83,17 @@ def test_launcher_activates_venv_and_runs_application() -> None:
     assert "%*" in launcher_script
 
 
-def test_quality_script_enforces_coverage_and_records_metrics() -> None:
+def test_quality_script_enforces_the_relevant_quality_gates() -> None:
     quality_script = script_text("IniciarTestes.bat")
     configuration = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
     assert "relatorio-testes.txt" in quality_script
     assert "python -m pytest" in quality_script
     assert "--cov" in quality_script
-    assert "not private_samples" in quality_script
-    assert "corpus privado explicitamente excluido" in quality_script
+    assert "private_samples" not in quality_script
     assert "python scripts\\complexity_gate.py src" in quality_script
-    assert "radon cc src -s -a -n D" in quality_script
-    assert "radon mi" in quality_script
-    assert "radon raw" in quality_script
+    assert "radon mi" not in quality_script
+    assert "radon raw" not in quality_script
     assert configuration["tool"]["coverage"]["report"]["fail_under"] > 85
     warning_filters = configuration["tool"]["pytest"]["ini_options"]["filterwarnings"]
     assert "error::ResourceWarning" in warning_filters
@@ -107,49 +103,27 @@ def test_quality_script_enforces_coverage_and_records_metrics() -> None:
     )
 
 
-def test_private_gate_is_opt_in_and_private_modules_declare_the_marker() -> None:
-    private_script = script_text("IniciarTestesPrivados.bat")
+def test_quality_gate_has_no_private_corpus_branch() -> None:
     configuration = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     registered_markers = configuration["tool"]["pytest"]["ini_options"]["markers"]
-    private_test_modules = tuple((PROJECT_ROOT / "tests" / "private_samples").glob("test_*.py"))
 
-    assert "-m private_samples" in private_script
-    assert "--maxfail=1" in private_script
-    assert "relatorio-testes-privados.txt" in private_script
-    assert any(marker.startswith("private_samples:") for marker in registered_markers)
-    assert private_test_modules
-    for path in private_test_modules:
-        source = path.read_text(encoding="utf-8")
-        assert "pytest.mark.private_samples" in source, f"Marcador ausente em {path.name}"
-        assert "pytest.skip" not in source, f"Skip mascara pré-condição em {path.name}"
+    assert not (PROJECT_ROOT / "IniciarTestesPrivados.bat").exists()
+    assert not tuple((PROJECT_ROOT / "tests" / "private_samples").glob("test_*.py"))
+    assert not any(marker.startswith("private_samples:") for marker in registered_markers)
 
 
-def test_private_gate_precondition_fails_clearly_without_the_corpus(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from tests.private_samples import test_real_pdf_samples as private_samples
-
-    monkeypatch.setattr(private_samples, "EXAMPLES_DIRECTORY", tmp_path)
-    private_samples._pdf_inventory.cache_clear()
-    try:
-        with pytest.raises(AssertionError, match="Corpus privado ausente ou inválido"):
-            private_samples.test_private_corpus_is_complete_and_authentic()
-    finally:
-        private_samples._pdf_inventory.cache_clear()
-
-
-def test_real_pdf_samples_are_ignored_and_have_an_anonymous_manifest() -> None:
+def test_examples_are_local_only_and_never_part_of_the_quality_gate() -> None:
     ignore_rules = script_text(".gitignore")
-    manifest_path = PROJECT_ROOT / "evaluation" / "manifesto-amostras.json"
-    manifest_text = manifest_path.read_text(encoding="utf-8")
-    manifest = json.loads(manifest_text)
-    samples = manifest["samples"]
+    quality_script = script_text("IniciarTestes.bat")
+    tracked = subprocess.run(
+        ["git", "ls-files", "--", "examples"],
+        cwd=PROJECT_ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.splitlines()
 
-    assert "examples/**/*.pdf" in ignore_rules
-    assert "evaluation/annotations/" in ignore_rules
-    assert manifest["sensitive_source_files"] is True
-    assert manifest["pdf_count"] == len(samples) == 9
-    assert {sample["split"] for sample in samples} == {"DESENVOLVIMENTO", "TESTE"}
-    assert len({sample["id"] for sample in samples}) == len(samples)
-    assert all(len(sample["sha256"]) == 64 for sample in samples)
-    assert "file_name" not in manifest_text
+    assert "examples/**" in ignore_rules
+    assert "!examples/README.md" in ignore_rules
+    assert tracked == ["examples/README.md"]
+    assert "examples" not in quality_script.casefold()

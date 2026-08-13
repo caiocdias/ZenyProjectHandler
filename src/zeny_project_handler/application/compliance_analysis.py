@@ -21,6 +21,18 @@ from .project_compliance import analisar_conformidade_projeto
 VERSAO_METODO_CONFORMIDADE = "3"
 
 
+def resultado_conformidade_desatualizado(
+    execution: ExecucaoConformidade,
+    active_rules_signature: str,
+) -> bool:
+    """Compare o resultado com o método e o registro atualmente exibidos."""
+
+    return (
+        execution.versao_metodo != VERSAO_METODO_CONFORMIDADE
+        or execution.assinatura_regras != active_rules_signature
+    )
+
+
 class ExecutarAnaliseConformidade:
     """Capture regras, avalie a sessão semântica e publique um snapshot atômico."""
 
@@ -101,10 +113,7 @@ class ExecutarAnaliseConformidade:
 
     def resultado_desatualizado(self, execution: ExecucaoConformidade) -> bool:
         revision = self._capture_active_revision()
-        return (
-            execution.versao_metodo != VERSAO_METODO_CONFORMIDADE
-            or execution.assinatura_regras != revision.assinatura
-        )
+        return resultado_conformidade_desatualizado(execution, revision.assinatura)
 
     def _capture_active_revision(self) -> RevisaoRegistroConformidade:
         with self._unit_of_work() as work:

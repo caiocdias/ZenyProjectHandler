@@ -149,13 +149,19 @@ def _condition(
         comparisons = tuple(
             _compare(value, condition.operador, condition.valores_esperados) for value in values
         )
-        known = tuple(item for item in comparisons if item is not _Truth.UNKNOWN)
-        if not known:
+        if condition.quantificador is QuantificadorCondicao.QUALQUER:
+            if _Truth.TRUE in comparisons:
+                truth = _Truth.TRUE
+            elif _Truth.UNKNOWN in comparisons:
+                truth = _Truth.UNKNOWN
+            else:
+                truth = _Truth.FALSE
+        elif _Truth.FALSE in comparisons:
+            truth = _Truth.FALSE
+        elif _Truth.UNKNOWN in comparisons:
             truth = _Truth.UNKNOWN
-        elif condition.quantificador is QuantificadorCondicao.QUALQUER:
-            truth = _Truth.TRUE if _Truth.TRUE in known else _Truth.FALSE
         else:
-            truth = _Truth.FALSE if _Truth.FALSE in known else _Truth.TRUE
+            truth = _Truth.TRUE
     return truth, AvaliacaoCondicaoConformidade(
         grupo=group,
         indice=index,

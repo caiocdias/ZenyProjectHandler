@@ -350,7 +350,7 @@ class MainWindow(QMainWindow):
             | QMainWindow.DockOption.AllowTabbedDocks
             | QMainWindow.DockOption.AnimatedDocks
         )
-        self._panels_menu = self.menuBar().addMenu("Painéis")
+        self._panels_menu = self.menuBar().addMenu("Exibir")
         self._panels_menu.setObjectName("panelsMenu")
         credential_resolver = ResolvedorCredenciaisPdf(
             provedor_credenciais_pdf or ProvedorCredenciaisPdfMemoria()
@@ -377,7 +377,7 @@ class MainWindow(QMainWindow):
                 parent=self,
             )
             self.review_panel.status_changed.connect(self.statusBar().showMessage)
-            dock = QDockWidget("Resultados da análise", self)
+            dock = QDockWidget("Resultados", self)
             dock.setObjectName("humanReviewDock")
             dock.setAllowedAreas(
                 Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
@@ -434,7 +434,7 @@ class MainWindow(QMainWindow):
                 self.project_panel.project_opened.connect(self.documentation_panel.abrir_projeto)
                 if self.project_panel.projeto_ativo_id is not None:
                     self.documentation_panel.abrir_projeto(self.project_panel.projeto_ativo_id)
-            project_dock = QDockWidget("Fluxo do projeto", self)
+            project_dock = QDockWidget("Projeto", self)
             project_dock.setObjectName("projectWorkflowDock")
             project_dock.setAllowedAreas(
                 Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
@@ -452,7 +452,7 @@ class MainWindow(QMainWindow):
             self.portability_panel.data_changed.connect(self._refresh_data_panels)
             self.portability_panel.data_restored.connect(self._refresh_after_restore)
             self.portability_panel.busy_changed.connect(self._refresh_operation_controls)
-            portability_dock = QDockWidget("Portabilidade e recuperação", self)
+            portability_dock = QDockWidget("Importar, exportar e backup", self)
             portability_dock.setObjectName("projectPortabilityDock")
             portability_dock.setAllowedAreas(
                 Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
@@ -486,7 +486,7 @@ class MainWindow(QMainWindow):
             self.ocr_diagnostic_button.setAutoRaise(True)
             self.ocr_diagnostic_button.clicked.connect(self._show_startup_ocr_diagnostic)
             self.statusBar().addPermanentWidget(self.ocr_diagnostic_button)
-        self.statusBar().showMessage("Pronto para abrir um PDF")
+        self.statusBar().showMessage("Pronto")
 
     @Slot()
     def _show_startup_ocr_diagnostic(self) -> None:

@@ -8,8 +8,8 @@ Aceita em 21/07/2026.
 
 A extração nativa produz evidências auditáveis, mas não deve criar elementos confirmados. A
 interpretação precisa evoluir sem acoplar domínio, PDF, persistência ou interface e deve poder ser
-cancelada e retomada sem duplicar propostas. O conjunto de avaliação ainda não está congelado, logo
-os limiares atuais não podem ser tratados como baseline definitivo.
+cancelada e retomada sem duplicar propostas. Os exemplos locais são exploratórios e dinâmicos; os
+limiares precisam permanecer conservadores e cobertos por regressões sintéticas.
 
 ## Decisão
 
@@ -25,12 +25,11 @@ os limiares atuais não podem ser tratados como baseline definitivo.
   compatibilidade estrutura-cabo. Toda conclusão permanece como proposta revisável.
 - Persistir início, término, estado, versão, parâmetros, diagnósticos e erro fatal. Resultados só são
   publicados atomicamente ao concluir a execução.
-- Expor um adaptador sem persistência para o benchmark usar exatamente o pipeline real.
 
 ## Consequências
 
 Novas estratégias podem ser adicionadas sem alterar entidades confirmadas ou a interface. Uma falha
 de analisador vira diagnóstico localizado; falha fatal e cancelamento permanecem retomáveis e
-auditáveis. O reconhecimento exclusivamente visual por forma ou imagem fica para novas regras,
-depois de anotação humana e baseline congelado. Os limites atuais são iniciais e não comprovam a
-qualidade sobre projetos reais.
+auditáveis. O reconhecimento exclusivamente visual por forma ou imagem fica para novas regras depois
+de evidência técnica suficiente. Os limites atuais são iniciais e não comprovam, sozinhos, a
+qualidade sobre todos os projetos reais.

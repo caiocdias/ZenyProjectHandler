@@ -37,7 +37,9 @@ from zeny_project_handler.domain.compliance import (
     AlvoConformidade,
     FatoConformidade,
     GrupoCondicaoConformidade,
+    QuantificadorCondicao,
     ResultadoCondicaoConformidade,
+    ResultadoConformidade,
     TipoEscopoConformidade,
 )
 from zeny_project_handler.domain.documents import DocumentoProjeto, PaginaDocumento
@@ -758,6 +760,63 @@ def test_finding_keeps_observed_expected_values_and_condition_audit() -> None:
     assert finding.fato_ids == (facts[0].id, facts[1].id)
     assert "Valor observado: CONVENCIONAL_CA" in finding.mensagem
     assert "esperado: cabo.instalar_tecnologia nao_em" in finding.mensagem
+
+
+@pytest.mark.parametrize(
+    ("quantifier", "known_length", "expected"),
+    [
+        (QuantificadorCondicao.QUALQUER, Decimal("40"), ResultadoConformidade.CONFORME),
+        (
+            QuantificadorCondicao.QUALQUER,
+            Decimal("50"),
+            ResultadoConformidade.NAO_AVALIAVEL,
+        ),
+        (
+            QuantificadorCondicao.TODOS,
+            Decimal("40"),
+            ResultadoConformidade.NAO_AVALIAVEL,
+        ),
+        (QuantificadorCondicao.TODOS, Decimal("50"), ResultadoConformidade.DIVERGENCIA),
+    ],
+)
+def test_condition_quantifiers_preserve_unknown_values(
+    quantifier: QuantificadorCondicao,
+    known_length: Decimal,
+    expected: ResultadoConformidade,
+) -> None:
+    seed = carregar_registro_conformidade_inicial()
+    span_rule = next(item for item in seed.regras if item.id == "nd31.vao.urbano-compacto-isolado")
+    requirement = replace(span_rule.requisitos[0], quantificador=quantifier)
+    registry = replace(seed, regras=(replace(span_rule, requisitos=(requirement,)),))
+    target = AlvoConformidade(
+        id=uuid4(),
+        tipo=TipoEscopoConformidade.REGIAO,
+        rotulo="VÃ£o com leitura parcial",
+    )
+    facts = (
+        _fact(target.id, "rede.contexto_urbano", True),
+        _fact(target.id, "cabo.tecnologia", "PROTEGIDA"),
+        _fact(target.id, "vao.aplicabilidade_excecao_45_60_resolvida", True),
+        _fact(target.id, "vao.comprimento_m", known_length),
+        _fact(target.id, "vao.comprimento_m", "ilegÃ­vel"),
+    )
+
+    finding = avaliar_regras_conformidade(registry, (target,), facts)[0]
+    requirement_audit = next(
+        item
+        for item in finding.avaliacoes_condicoes
+        if item.grupo is GrupoCondicaoConformidade.REQUISITO
+    )
+
+    assert finding.resultado is expected
+    assert (
+        requirement_audit.resultado
+        is {
+            ResultadoConformidade.CONFORME: ResultadoCondicaoConformidade.ATENDE,
+            ResultadoConformidade.DIVERGENCIA: ResultadoCondicaoConformidade.NAO_ATENDE,
+            ResultadoConformidade.NAO_AVALIAVEL: ResultadoCondicaoConformidade.DESCONHECIDO,
+        }[expected]
+    )
 
 
 def test_unknown_project_context_is_not_reported_as_normative_divergence() -> None:

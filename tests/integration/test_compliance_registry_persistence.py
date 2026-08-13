@@ -283,6 +283,34 @@ def test_catalog_write_failure_rolls_back_and_preserves_previous_file(
     engine.dispose()
 
 
+def test_database_commit_failure_restores_previous_catalog_projection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine = create_sqlite_engine(tmp_path / "commit-atomic.sqlite3")
+    upgrade_database(engine)
+    service = _service(engine, tmp_path / "data", _Clock())
+    initial = service.inicializar(carregar_registro_conformidade_inicial())
+    previous_catalog = service.caminho_catalogo.read_bytes()
+    import_summary = service.preparar_importacao(_registry_with_synthetic_rule())
+
+    def fail_commit(_work: SqlAlchemyUnitOfWork) -> None:
+        raise RuntimeError("interrupted commit")
+
+    monkeypatch.setattr(SqlAlchemyUnitOfWork, "commit", fail_commit)
+
+    with pytest.raises(RuntimeError, match="interrupted commit"):
+        service.importar(import_summary)
+
+    assert service.obter_revisao_ativa() == initial
+    assert service.listar_historico() == (initial,)
+    assert service.caminho_catalogo.read_bytes() == previous_catalog
+    assert not any(
+        item.name.startswith(".z-") for item in service.caminho_catalogo.parent.iterdir()
+    )
+    engine.dispose()
+
+
 def test_export_is_schema_compatible_and_revision_rows_are_not_duplicated(tmp_path: Path) -> None:
     engine = create_sqlite_engine(tmp_path / "export.sqlite3")
     upgrade_database(engine)

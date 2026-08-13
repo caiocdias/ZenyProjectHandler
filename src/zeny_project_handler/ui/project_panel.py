@@ -1,4 +1,4 @@
-"""Painel operacional para usar o aplicativo como um MVP completo."""
+"""Painel operacional do projeto."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QFileDialog,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -151,6 +152,8 @@ class ProjectPanelWidget(QWidget):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
         self._project_box = QGroupBox("Projeto")
         project_layout = QVBoxLayout(self._project_box)
         self._projects = QComboBox()
@@ -160,23 +163,26 @@ class ProjectPanelWidget(QWidget):
         self._name.setObjectName("mvpProjectNameEdit")
         self._name.setPlaceholderText("Nome do projeto")
         project_layout.addWidget(self._name)
-        project_actions = QHBoxLayout()
+        project_actions = QGridLayout()
+        project_actions.setHorizontalSpacing(8)
+        project_actions.setVerticalSpacing(8)
         create = QPushButton("Criar")
         create.setObjectName("mvpCreateProjectButton")
         create.clicked.connect(self.criar_projeto)
-        project_actions.addWidget(create)
+        project_actions.addWidget(create, 0, 0)
         open_button = QPushButton("Abrir")
         open_button.setObjectName("mvpOpenProjectButton")
         open_button.clicked.connect(self.abrir_selecionado)
-        project_actions.addWidget(open_button)
+        project_actions.addWidget(open_button, 0, 1)
         rename = QPushButton("Renomear")
         rename.setObjectName("mvpRenameProjectButton")
         rename.clicked.connect(self.renomear_projeto)
-        project_actions.addWidget(rename)
+        project_actions.addWidget(rename, 1, 0)
         delete_project = QPushButton("Excluir projeto")
         delete_project.setObjectName("mvpDeleteProjectButton")
+        delete_project.setProperty("role", "danger")
         delete_project.clicked.connect(self.excluir_projeto)
-        project_actions.addWidget(delete_project)
+        project_actions.addWidget(delete_project, 1, 1)
         project_layout.addLayout(project_actions)
         layout.addWidget(self._project_box)
 
@@ -191,6 +197,7 @@ class ProjectPanelWidget(QWidget):
             "Os PDFs originais não são modificados."
         )
         order_help.setObjectName("mvpPageOrderHelp")
+        order_help.setProperty("role", "hint")
         order_help.setWordWrap(True)
         document_layout.addWidget(order_help)
         self._pages = QListWidget()
@@ -211,8 +218,10 @@ class ProjectPanelWidget(QWidget):
         self._move_down.clicked.connect(lambda: self._move_selected_page(1))
         order_actions.addWidget(self._move_down)
         document_layout.addLayout(order_actions)
-        remove_documents = QPushButton("Remover PDF(s) das páginas selecionadas")
+        remove_documents = QPushButton("Remover selecionados")
         remove_documents.setObjectName("mvpRemovePdfsButton")
+        remove_documents.setProperty("role", "danger")
+        remove_documents.setToolTip("Remover do projeto os PDFs das páginas selecionadas")
         remove_documents.clicked.connect(self.remover_pdfs)
         document_layout.addWidget(remove_documents)
         layout.addWidget(self._document_box)
@@ -221,6 +230,7 @@ class ProjectPanelWidget(QWidget):
         analysis_layout = QVBoxLayout(analysis_box)
         self._summary = QLabel("Crie ou abra um projeto para começar")
         self._summary.setObjectName("mvpProjectSummaryLabel")
+        self._summary.setProperty("role", "summary")
         self._summary.setWordWrap(True)
         analysis_layout.addWidget(self._summary)
         self._progress = QProgressBar()
@@ -229,20 +239,23 @@ class ProjectPanelWidget(QWidget):
         self._progress.setValue(0)
         analysis_layout.addWidget(self._progress)
         analysis_actions = QHBoxLayout()
-        self._run = QPushButton("Executar análise completa")
+        self._run = QPushButton("Analisar projeto")
         self._run.setObjectName("mvpRunAnalysisButton")
+        self._run.setProperty("role", "primary")
         self._run.clicked.connect(self.executar_analise)
         analysis_actions.addWidget(self._run)
         self._cancel = QPushButton("Cancelar")
         self._cancel.setObjectName("mvpCancelAnalysisButton")
+        self._cancel.setProperty("role", "danger")
         self._cancel.setEnabled(False)
         self._cancel.clicked.connect(self.cancelar_analise)
         analysis_actions.addWidget(self._cancel)
         analysis_layout.addLayout(analysis_actions)
         layout.addWidget(analysis_box)
 
-        guide = QPushButton("Como validar este MVP")
+        guide = QPushButton("Como usar")
         guide.setObjectName("mvpAcceptanceGuideButton")
+        guide.setProperty("role", "quiet")
         guide.clicked.connect(self.exibir_guia_aceite)
         layout.addWidget(guide)
         layout.addStretch(1)
@@ -696,7 +709,7 @@ class ProjectPanelWidget(QWidget):
         self._thread = None
         self._worker = None
         self._cancellation = None
-        self._run.setText("Retomar / executar análise")
+        self._run.setText("Analisar novamente")
         self._pages.setDragEnabled(True)
         self._apply_operation_state()
         self.busy_changed.emit(False)
@@ -715,11 +728,11 @@ class ProjectPanelWidget(QWidget):
     def exibir_guia_aceite(self) -> None:
         QMessageBox.information(
             self,
-            "Roteiro de aceite do MVP",
+            "Como usar o projeto",
             "1. Crie ou abra um projeto.\n"
             "2. Selecione um ou vários PDFs e adicione-os ao projeto.\n"
             "3. Execute a análise e acompanhe o progresso.\n"
-            "4. Confira os vínculos no painel Resultados da análise.\n"
+            "4. Confira os vínculos no painel Resultados.\n"
             "5. Clique nos itens para conferir os sublinhados no PDF.\n"
             "6. Feche e reabra o aplicativo e confira se o trabalho foi preservado.",
         )

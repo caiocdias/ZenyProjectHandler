@@ -205,7 +205,7 @@ candidato `IMPLEMENTADA` aponta para a regra correspondente. Os demais não prod
 
 ### Lacunas observadas nos exemplos de comissionamento
 
-A revisão agregada dos cinco PDFs iniciais encontrou famílias recorrentes que ainda não possuem
+Uma revisão local pontual de agosto de 2026 encontrou famílias recorrentes que ainda não possuem
 cobertura operacional. Os comentários de comissionamento servem apenas para priorizar investigação:
 não são fonte normativa, não comprovam uma obrigação universal e não autorizam criar divergências.
 Por isso, os candidatos abaixo permanecem em `REVISAO_HUMANA` até que uma fonte oficial, seu

@@ -127,7 +127,8 @@ As expressões textuais de cabos aceitos pelas estruturas foram normalizadas em 
   situações de obra, totalizando 15 regras.
 - Assinaturas de reconhecimento visual são separadas das regras de apresentação e podem ser
   múltiplas por situação, com categoria opcional, tolerância de cor, padrão de traço opcional,
-  prioridade e origem. O seed contém cinco assinaturas iniciais extraídas do corpus real: preto para
+  prioridade e origem. O seed contém cinco assinaturas iniciais extraídas de projetos observados
+  localmente: preto para
   existente, dois verdes para instalar e dois vermelhos para remover. Traço não é usado isoladamente
   para inferir situação.
 
@@ -318,46 +319,17 @@ que os reconheça.
 - Início, fim, estado, configuração, versões, diagnósticos e falha fatal são persistidos. Ao concluir,
   resultados catalogados, relações resolvidas e decisões automáticas são publicados atomicamente no
   projeto; a mesma execução pode ser reaberta sem duplicar entidades.
-- `InterpretadorRegrasAvaliacao` executa leitura, extração e interpretação sem persistência para que o
-  benchmark meça exatamente o pipeline real.
+## Exemplos locais
 
-## Amostras reais e privacidade
+Todo conteúdo de `examples/`, exceto o README da pasta, é ignorado pelo Git. Os arquivos são recursos
+locais e dinâmicos: podem ser incluídos, substituídos ou removidos sem manifesto, hash versionado ou
+partição formal.
 
-Todos os PDFs locais em `examples/` são ignorados pelo Git. Nove deles compõem o conjunto formal
-atual; o arquivo `evaluation/manifesto-amostras.json` contém apenas seus IDs anônimos, hashes e
-características técnicas. PDFs adicionais podem ser colocados nessa pasta a qualquer momento como
-amostras exploratórias: eles participam automaticamente do smoke test local somente leitura, sem
-precisar entrar no manifesto. Nomes de arquivos, nomes de clientes, telefones, coordenadas e
-fotografias não são versionados.
-
-O corpus cobre A3/A4, retrato/paisagem, iText, AutoCAD, Microsoft Print to PDF, texto, vetores,
-imagens, anotações `Stamp`, `Popup`, `FreeText`, `Square`, appearance streams e Optional Content
-Groups. Uma amostra possui texto de anotação malformado e outra contém imagens visíveis apenas em
-appearance streams. Esses casos serão obrigatórios nos testes das etapas de ingestão e extração.
-
-## Conjunto de avaliação semântica
-
-- `ManifestoAvaliacao` separa amostras de desenvolvimento e teste por hash, sem nomes de arquivo.
-- `AnotacaoAmostra` registra elementos, categoria, situação, geometria normalizada e relações. Os
-  papéis `PRIMARIA`, `SECUNDARIA` e `CONSENSO` distinguem rotulagem independente de adjudicação.
-- Uma anotação congelada deve ser de consenso, possuir revisor pseudônimo e referenciar somente
-  páginas e elementos existentes na amostra correspondente.
-- Amostras marcadas para dupla anotação medem divergência de contagem, categoria, situação,
-  geometria e relações antes da adjudicação.
-- O pareamento de pontos usa distância normalizada; caixas e polígonos usam IoU da caixa envolvente;
-  polilinhas usam distância simétrica aos segmentos. A associação é um-para-um e determinística.
-- O benchmark registra precisão, recall e F1 por classe, relações, falhas de extração, latência p95 e
-  pico de memória rastreada pelo Python. A medição não inclui toda memória nativa de bibliotecas C.
-- A assinatura semântica inclui conjunto, critérios, interpretador, regras, configuração e contagens,
-  mas exclui latência e memória para permanecer reproduzível entre execuções equivalentes.
-- O teste final é recusado enquanto manifesto ou critérios não estiverem congelados/aprovados.
-- A auditoria impede o congelamento sem consenso de todas as amostras, cobertura das cinco classes,
-  dupla anotação exigida e diversidade mínima de escala, formato, orientação, qualidade e densidade.
-
-O corpus atual satisfaz formato, orientação, qualidade e densidade, mas todas as amostras declaram a
-mesma escala. Ele permanece em preparação até a inclusão autorizada de outra escala e a conclusão da
-revisão humana. As regras iniciais foram construídas somente com catálogo, contratos e fixtures
-sintéticas; a partição de teste privada não foi usada para criá-las.
+O script `scripts/smoke_examples.py` percorre os PDFs presentes somente quando solicitado e verifica
+abertura,
+renderização, extração, interpretação e preservação do arquivo. Ele não fixa contagens por documento.
+Quando um projeto real expõe uma regressão, o caso mínimo é reproduzido em uma fixture sintética no
+gate padrão. Comentários do PDF ajudam a priorizar capacidades, mas não substituem fontes normativas.
 
 ## Persistência local
 
@@ -429,13 +401,13 @@ sintéticas; a partição de teste privada não foi usada para criá-las.
   omissão e preserva no snapshot a referência externa existente. A publicação do pacote e cada
   substituição individual são atômicas; a restauração conjunta compensa exceções capturadas, mas
   ainda não dispõe de journal durável contra encerramento abrupto entre banco e anexos.
-- O painel **Portabilidade e recuperação** oferece somente exportar e importar projetos e criar e
+- O painel **Importar, exportar e backup** oferece somente exportar e importar projetos e criar e
   restaurar backups, sempre com progresso, destino explícito e confirmação para substituições ou
   backup degradado. Detalhes de integridade mostram IDs abreviados, nunca nomes ou caminhos privados.
 
 ## Fluxo operacional do MVP pela interface
 
-- O painel **Fluxo do projeto** lista, cria, abre e renomeia projetos no SQLite. Em uma instalação
+- O painel **Projeto** lista, cria, abre e renomeia projetos no SQLite. Em uma instalação
   vazia, o catálogo inicial publicado é persistido automaticamente antes da criação do primeiro
   projeto.
 - Um ou vários PDFs podem ser selecionados e importados imediatamente no projeto. Cada arquivo é
@@ -450,7 +422,7 @@ sintéticas; a partição de teste privada não foi usada para criá-las.
   evidências, propostas, decisões e elementos confirmados cuja geometria ou dependências pertençam às
   folhas removidas; documentos e resultados independentes permanecem válidos. Fotos desses
   elementos são coletadas depois do commit somente quando seu digest não possui referência viva.
-- **Executar análise completa** processa todos os documentos do projeto fora da thread da interface,
+- **Analisar projeto** processa todos os documentos do projeto fora da thread da interface,
   apresenta progresso e encadeia extração, interpretação, promoção automática e abertura dos
   resultados relacionados. Um preflight síncrono resolve ou cancela credenciais protegidas antes de
   construir a thread de trabalho.
@@ -477,7 +449,7 @@ associados à região mais próxima e podem vir de um único texto ou de fragmen
 norte podem estar separados por espaço, quebra de linha, dois-pontos ou barra e não são reutilizados
 em outro par.
 
-O painel **Resultados da análise** apresenta um resumo por situação de obra e, abaixo, cada elemento
+O painel **Resultados** apresenta um resumo por situação de obra e, abaixo, cada elemento
 com catálogo e vínculos internos. Selecionar a região destaca sua área; selecionar um elemento abre
 a página correspondente e realça seu sublinhado no PDF. A coluna **Exibir** oferece ícones de olho
 no nível da região e de cada elemento; ocultar muda somente as sobreposições da sessão visual e não
