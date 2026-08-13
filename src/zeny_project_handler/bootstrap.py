@@ -48,7 +48,9 @@ from zeny_project_handler.application.mvp_workflow import ServicoFluxoMvp
 from zeny_project_handler.application.operation_coordinator import CoordenadorOperacoes
 from zeny_project_handler.application.pdf_credentials import ProvedorCredenciaisPdfMemoria
 from zeny_project_handler.application.pdf_import import ImportarPdfsNoProjeto
+from zeny_project_handler.application.project_compliance import prover_fatos_regionais
 from zeny_project_handler.application.project_portability import ServicoPortabilidadeProjeto
+from zeny_project_handler.application.span_compliance import prover_fatos_vaos
 from zeny_project_handler.config import AppSettings
 from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.domain.project import Projeto
@@ -151,6 +153,7 @@ def _compose_initialized_application(
     compliance_analysis_service = ExecutarAnaliseConformidade(
         unit_of_work,
         review_service.carregar_sessao_semantica,
+        provedores_fatos=(prover_fatos_regionais, prover_fatos_vaos),
     )
     ocr_runtime = inspect_tesseract_runtime(app_settings.data_directory)
     managed_files = GerenciadorArquivosGerenciados(

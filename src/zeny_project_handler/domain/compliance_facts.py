@@ -248,7 +248,6 @@ CATALOGO_FATOS_CONFORMIDADE = (
         TipoValorFato.NUMERO,
         _NUMERO,
         "Comprimento rastreável do vão, em metros.",
-        available=False,
     ),
     _fact(
         "vao.excecao_45_60_demonstrada",
@@ -256,7 +255,6 @@ CATALOGO_FATOS_CONFORMIDADE = (
         TipoValorFato.BOOLEANO,
         _BOOLEANO,
         "Indica demonstração positiva da exceção de vão entre 45 m e 60 m.",
-        available=False,
     ),
 )
 

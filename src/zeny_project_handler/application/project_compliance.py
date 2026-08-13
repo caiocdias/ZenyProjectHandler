@@ -39,6 +39,13 @@ from zeny_project_handler.domain.enums import (
 )
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 
+from .compliance_fact_providers import (
+    ContextoProvedorFatos,
+    ProvedorFatosConformidade,
+    criar_fato_conformidade,
+)
+from .span_compliance import prover_fatos_vaos
+
 _TEXT_TYPES = {TipoEvidencia.TEXTO, TipoEvidencia.OCR}
 _NEARBY_TEXT_DISTANCE = 0.035
 _REGION_TEXT_DISTANCE = 0.08
@@ -129,6 +136,8 @@ class ResultadoConformidadeProjeto:
 def analisar_conformidade_projeto(
     sessao: SessaoRevisao,
     registro: RegistroRegrasConformidade,
+    *,
+    provedores_fatos: tuple[ProvedorFatosConformidade, ...] | None = None,
 ) -> ResultadoConformidadeProjeto:
     targets = _targets(sessao)
     project_target = next(item for item in targets if item.tipo is TipoEscopoConformidade.PROJETO)
@@ -136,9 +145,6 @@ def analisar_conformidade_projeto(
         item.referencia_id: item
         for item in targets
         if item.tipo is TipoEscopoConformidade.DOCUMENTO
-    }
-    region_targets = {
-        item.referencia_id: item for item in targets if item.tipo is TipoEscopoConformidade.REGIAO
     }
     facts: list[FatoConformidade] = []
     items: list[ItemInspecaoDocumental] = []
@@ -232,12 +238,10 @@ def analisar_conformidade_projeto(
                 )
             )
 
-    facts.extend(
-        _region_facts(
-            sessao,
-            region_targets=region_targets,
-        )
-    )
+    provider_context = ContextoProvedorFatos(sessao=sessao, alvos=targets)
+    providers = provedores_fatos if provedores_fatos is not None else provedores_fatos_padrao()
+    for provider in providers:
+        facts.extend(provider(provider_context))
     unique_facts = _deduplicate_facts(tuple(facts))
     findings = avaliar_regras_conformidade(registro, targets, unique_facts)
     return ResultadoConformidadeProjeto(
@@ -857,6 +861,21 @@ def _region_facts(
     return tuple(facts)
 
 
+def prover_fatos_regionais(contexto: ContextoProvedorFatos) -> tuple[FatoConformidade, ...]:
+    """Adapte a família regional existente ao contrato explícito de provedores."""
+    targets = {
+        item.referencia_id: item
+        for item in contexto.alvos
+        if item.tipo is TipoEscopoConformidade.REGIAO
+    }
+    return _region_facts(contexto.sessao, region_targets=targets)
+
+
+def provedores_fatos_padrao() -> tuple[ProvedorFatosConformidade, ...]:
+    """Composição determinística usada fora do bootstrap e em testes diretos."""
+    return (prover_fatos_regionais, prover_fatos_vaos)
+
+
 def _region_fact_context(session: SessaoRevisao) -> _RegionFactContext:
     return _RegionFactContext(
         proposals_by_id={
@@ -1174,17 +1193,14 @@ def _fact(
     confidence: Decimal | None = None,
     geometry: GeometriaDocumento | None = None,
 ) -> FatoConformidade:
-    evidence_ids = tuple(dict.fromkeys(item.id for item in evidence))
-    identity = f"{key}:{value}:{origin}:{','.join(map(str, evidence_ids))}"
-    return FatoConformidade(
-        id=uuid5(target_id, identity),
-        alvo_id=target_id,
-        chave=key,
-        valor=value,
-        origem=origin,
-        evidencia_ids=evidence_ids,
+    return criar_fato_conformidade(
+        target_id,
+        key,
+        value,
+        origin,
+        evidencias=evidence,
         confianca=confidence,
-        geometria=geometry or (evidence[0].geometria if evidence else None),
+        geometria=geometry,
     )
 
 

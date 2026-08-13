@@ -111,9 +111,14 @@ A análise semântica também produz a projeção `VaoDetectado` quando uma poli
 relações `CONECTA` com dois postes distintos. A medida anotada junto à linha tem precedência; sem
 anotação, usa-se a distância euclidiana entre as coordenadas dos postes. `Cabo` preserva o valor e a
 origem `ANOTACAO_DESENHO`, `COORDENADAS` ou `INFORMADO`, e a aba **Vãos** expõe essa proveniência.
-Essa projeção foi desenhada para alimentar futuramente fatos `vao.comprimento_m`; o scanner
-normativo ainda não publica o fato nem avalia regras de vão automaticamente. Ângulos continuam sem
-detector ativo.
+
+O provedor especializado de vãos consome essa projeção e publica `vao.comprimento_m` na região da
+proposta que originou o cabo confirmado. A ligação usa a decisão de revisão; a identidade
+determinística da promoção é apenas o fallback. Uma anotação conserva a evidência e a geometria do
+rótulo; uma medida por coordenadas conserva as evidências dos postes e usa a geometria do cabo. Se
+não houver comprimento, região inequívoca ou página coerente, nenhum valor é inventado. A exceção
+`vao.excecao_45_60_demonstrada` só existe quando um marcador booleano positivo aponta para uma
+evidência rastreável na mesma página. Ângulos e cálculo mecânico continuam sem detector ativo.
 
 ## Regras normativas iniciais
 
@@ -170,6 +175,19 @@ aplicativo publica atomicamente `catalogo-regras-conformidade.md` na pasta de da
 arquivo explica `when`, `unless` e `must` em linguagem humana e conserva IDs removidos como
 histórico. O JSON nunca contém expressões executáveis: geometria, topologia e cálculos continuam em
 provedores Python compostos explicitamente.
+
+## Provedores de fatos por família
+
+`application/compliance_fact_providers.py` define somente dois elementos compartilhados:
+`ContextoProvedorFatos`, com a sessão semântica e seus alvos, e o protocolo chamável
+`ProvedorFatosConformidade`, que devolve uma tupla de fatos. O helper de criação mantém identidade e
+proveniência consistentes. Não há busca em diretórios, importação por nome ou descoberta dinâmica de
+plugins.
+
+O bootstrap compõe explicitamente a família regional existente e a família de vãos. O caso de uso
+recebe essa tupla e o orquestrador aplica os provedores antes do avaliador declarativo. Assim, uma
+nova família acrescenta fatos sem incluir condições normativas em Python e sem alterar o motor de
+`when`/`unless`/`must`. Chamadas diretas usam a mesma composição padrão determinística.
 
 ## Execuções auditáveis
 
@@ -243,15 +261,23 @@ evoluções futuras.
 
 ## Evolução segura
 
-Para adicionar uma regra:
+Para adicionar uma regra ou uma nova família de fatos:
 
 1. confirmar a revisão vigente e registrar documento, item, página e URL;
 2. declarar o contexto sem transformar regra urbana em regra universal;
-3. identificar os fatos necessários, suas unidades e a evidência capaz de comprová-los;
-4. implementar primeiro o extrator ou avaliador especializado;
-5. adicionar a regra versionada e casos sintéticos de conforme, divergência, exceção e dado ausente;
-6. calibrar somente na partição de desenvolvimento do conjunto autorizado;
-7. promover para uso decisório apenas depois dos limites de erro e do aceite humano.
+3. definir a chave, escopo, tipo, operadores e disponibilidade em `domain/compliance_facts.py`, com
+   unidade na chave quando aplicável;
+4. identificar a origem e as evidências capazes de provar o fato; ausência de detector ou de prova
+   positiva deve omitir o fato, nunca publicar uma negação presumida;
+5. implementar uma função ou classe determinística que satisfaça `ProvedorFatosConformidade`, testar
+   valor, origem, evidência, alvo, página, geometria e dado ausente, e adicioná-la explicitamente à
+   composição do bootstrap;
+6. importar a regra declarativa versionada e exercitar conforme, divergência, não avaliável e exceção
+   positiva sem modificar `compliance_evaluation.py`;
+7. executar a análise e verificar snapshot, explicação, callout e persistência com fixtures
+   sintéticas;
+8. calibrar somente na partição privada de desenvolvimento do conjunto autorizado e promover para
+   uso decisório apenas depois dos limites de erro e do aceite humano.
 
 Uma atualização normativa nunca reinterpreta silenciosamente uma execução antiga. O achado preserva
 a versão do registro usada; uma reavaliação explícita gera achados com a nova assinatura.

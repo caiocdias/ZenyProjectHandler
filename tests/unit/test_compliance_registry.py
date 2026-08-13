@@ -46,11 +46,11 @@ def test_fact_catalog_covers_current_and_planned_seed_vocabulary() -> None:
         DisponibilidadeProvedorFato.DISPONIVEL
     )
     assert definitions["vao.comprimento_m"].disponibilidade is (
-        DisponibilidadeProvedorFato.PLANEJADO
+        DisponibilidadeProvedorFato.DISPONIVEL
     )
     warnings = validar_semantica_registro(registry)
     assert any("conexao.angulo_graus" in item for item in warnings)
-    assert any("vao.comprimento_m" in item for item in warnings)
+    assert all("vao.comprimento_m" not in item for item in warnings)
 
 
 @pytest.mark.parametrize(

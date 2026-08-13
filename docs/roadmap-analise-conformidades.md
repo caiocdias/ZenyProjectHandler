@@ -81,7 +81,7 @@ comissionador comunica um problema, mas **não são fonte normativa suficiente p
 | 3. Execução e histórico de conformidade | CONCLUÍDA | 1, 2 | Resultado vinculado à análise e à revisão de regras |
 | 4. Caixas e setas no visualizador | CONCLUÍDA | 3 | Callouts vermelhos ancorados em geometria rastreável |
 | 5. Visibilidade e sincronização | CONCLUÍDA | 4 | Olho por achado e navegação bidirecional lista/PDF |
-| 6. Primeiro avaliador técnico e aceite ponta a ponta | PENDENTE | 5 | Extensão comprovada sem codificar regras no motor |
+| 6. Primeiro avaliador técnico e aceite ponta a ponta | CONCLUÍDA | 5 | Extensão comprovada sem codificar regras no motor |
 
 Estados permitidos: `PENDENTE`, `EM ANDAMENTO`, `BLOQUEADA` e `CONCLUÍDA`.
 
@@ -538,3 +538,30 @@ atualiza `docs/catalogo-regras-conformidade.md`. Não copie conteúdo dos PDFs r
 - **Limitações remanescentes:** o primeiro provedor técnico de vão e o aceite ponta a ponta de
   extensão de regras continuam reservados à Etapa 6.
 - **Commit:** `feat(ui): control compliance callout visibility`.
+
+### 2026-08-13 — Etapa 6 concluída
+
+- **Arquivos principais:** contrato pequeno em `application/compliance_fact_providers.py`; composição
+  explícita no bootstrap; provedor especializado em `application/span_compliance.py` sobre
+  `detectar_vaos`; disponibilidade atualizada em `domain/compliance_facts.py`; E2E sintético em
+  `tests/e2e/test_span_compliance_ui.py`.
+- **Comportamento entregue:** `vao.comprimento_m` preserva a origem da medida, as evidências, a região,
+  a página e a geometria do rótulo ou do cabo. Medidas por coordenadas conservam as evidências dos
+  postes. `vao.excecao_45_60_demonstrada` só é publicado quando um marcador positivo referencia uma
+  evidência existente na mesma página; ausência nunca vira `false`.
+- **Aceite ponta a ponta:** a interface importa uma regra sintética, analisa o vão divergente, lista o
+  resultado, materializa o callout, reinicia e recupera regra/resultado, oculta e exibe a marcação,
+  remove a regra, reaplica a conformidade e confirma sua ausência no novo snapshot sem apagar o
+  histórico anterior.
+- **Testes focados:** 70 testes de conformidade e E2E aprovados; medida anotada, coordenadas, ausência,
+  exceção positiva, região/página, conforme/divergência/não avaliável e ciclo E2E com reinício estão
+  cobertos.
+- **Gate básico:** `IniciarTestes.bat` aprovado no Python 3.13.14 — 482 testes aprovados, 20 privados
+  excluídos pelo gate, cobertura de 86,18%; Ruff, formatação, Mypy, dependências e complexidade
+  aprovados.
+- **Gate privado:** não executado; o ambiente autorizado completo não foi confirmado e nenhum conteúdo
+  do corpus privado foi acessado.
+- **Limitações remanescentes:** não há provedor de ângulo nem cálculo mecânico. Exceções de vão exigem
+  evidência positiva estruturada; texto livre e comentários de PDFs não são promovidos por este
+  provedor.
+- **Commit:** `feat(compliance): add span compliance provider`.

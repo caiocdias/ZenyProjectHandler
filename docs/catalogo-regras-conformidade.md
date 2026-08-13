@@ -45,7 +45,7 @@ da interface não o modificam silenciosamente.
 | Regra 3 | `nd31.desenho.escala` | Escala urbana de apresentação | INATIVA | INATIVA | AGUARDA_FATO |
 | Regra 4 | `nd31.equipamento.estrutura-angulo` | Equipamento em estrutura de ângulo | ATIVA | AGUARDA_FATO | IMPLEMENTADA |
 | Regra 5 | `nd31.equipamento.risco-abalroamento` | Avaliação de risco no ângulo | ATIVA | AGUARDA_FATO | IMPLEMENTADA |
-| Regra 6 | `nd31.vao.urbano-compacto-isolado` | Vão máximo urbano | ATIVA | AGUARDA_FATO | IMPLEMENTADA |
+| Regra 6 | `nd31.vao.urbano-compacto-isolado` | Vão máximo urbano | ATIVA | OPERACIONAL | IMPLEMENTADA |
 | Regra 7 | `nd31.cabo.convencional-novo-urbano` | Cabo nu convencional em obra nova urbana | ATIVA | OPERACIONAL | IMPLEMENTADA |
 | Regra 8 | `nd93.compatibilidade.estrutura-poste-duplo-t` | Estrutura compacta rural e poste duplo T | ATIVA | OPERACIONAL | IMPLEMENTADA |
 
@@ -132,8 +132,14 @@ da interface não o modificam silenciosamente.
 - **Condição:** limite ordinário de 45 m. Sem comprimento rastreável, o resultado é não avaliável.
 - **Exceções:** 45–60 m somente com contexto periférico/baixa densidade ou chácaras, perfil favorável
   e demais condições positivamente demonstradas.
+- **Processo automático:** `detectar_vaos` fornece a medida já materializada no cabo. O provedor liga
+  o cabo confirmado à região pela decisão de revisão, conserva `ANOTACAO_DESENHO`, `COORDENADAS` ou
+  `INFORMADO`, ancora anotação no rótulo e coordenadas na geometria do cabo. A exceção só é publicada
+  com indicador positivo e evidência existente na mesma página; ausência não publica `false`.
 - **Histórico:** localizador corrigido de página 26 para 27 em 12/08/2026, sem mudar a obrigação.
-- **Testes:** abaixo/no/acima do limite, tecnologia não aplicável, exceção e comprimento ausente.
+- **Testes:** medida anotada, medida por coordenadas, abaixo/acima do limite, tecnologia não
+  aplicável, exceção positiva, comprimento ausente, região/página/geometria e E2E com callout e
+  persistência.
 
 ### Regra 7 - Cabo nu convencional em obra nova urbana
 
