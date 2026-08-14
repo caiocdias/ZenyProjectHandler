@@ -179,7 +179,7 @@ def test_bootstrapped_analysis_worker_refuses_restore_conflict_before_mutation(
     assert panel is not None
     service = panel._service
     coordinator = service._coordinator
-    created = service.criar_projeto("Projeto para recusa no worker")
+    created = service.criar_projeto("0000000182")
     source = create_golden_pdf(tmp_path / "worker-source.pdf")
     service.importar_pdfs(created.projeto.id, (source,))
     worker = _PipelineWorker(

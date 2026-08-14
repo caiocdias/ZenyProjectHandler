@@ -2,7 +2,7 @@
   "schema_version": 1,
   "registry": {
     "id": "710c56ea-8586-5cdd-a272-f885ab93ac73",
-    "version": "cemig-normas-distribuicao-2025.4"
+    "version": "cemig-normas-distribuicao-2025.5"
   },
   "rules": [
     {
@@ -288,6 +288,86 @@
           "operator": "NAO_EM",
           "expected": ["DUPLO_T"],
           "quantifier": "TODOS"
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.transformador.poste-existente-30-75",
+      "title": "Poste existente para transformador trifásico de 30 a 75 kVA",
+      "description": "Na parcela verificável da observação t, transformadores trifásicos de 30, 45 ou 75 kVA a instalar em posteação existente exigem poste de formato admitido e capacidade nominal mínima de 300 daN; material PRFV e engastamento permanecem fora desta verificação.",
+      "scope": "REGIAO",
+      "severity": "ERRO",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Dimensionamento Mecânico, 1.3.2, observação t",
+        "page": 67,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "regiao.transformador_trifasico_poste_existente_avaliavel",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "regiao.transformador_potencia_kva",
+          "operator": "EM",
+          "expected": [30, 45, 75]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "regiao.poste_transformador_resistencia_dan",
+          "operator": "MAIOR_OU_IGUAL",
+          "expected": [300]
+        },
+        {
+          "fact": "regiao.poste_transformador_formato",
+          "operator": "EM",
+          "expected": ["DUPLO_T", "CIRCULAR"]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.transformador.poste-existente-150-300",
+      "title": "Poste existente para transformador trifásico de 150 ou 300 kVA",
+      "description": "Na parcela verificável da observação t, transformadores trifásicos de 150 ou 300 kVA a instalar em posteação existente exigem poste de seção circular e capacidade nominal mínima de 600 daN; material PRFV e engastamento permanecem fora desta verificação.",
+      "scope": "REGIAO",
+      "severity": "ERRO",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Dimensionamento Mecânico, 1.3.2, observação t",
+        "page": 67,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "regiao.transformador_trifasico_poste_existente_avaliavel",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "regiao.transformador_potencia_kva",
+          "operator": "EM",
+          "expected": [150, 300]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "regiao.poste_transformador_resistencia_dan",
+          "operator": "MAIOR_OU_IGUAL",
+          "expected": [600]
+        },
+        {
+          "fact": "regiao.poste_transformador_formato",
+          "operator": "EM",
+          "expected": ["CIRCULAR"]
         }
       ],
       "enabled": true

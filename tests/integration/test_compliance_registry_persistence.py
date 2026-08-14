@@ -109,7 +109,17 @@ def _legacy_bundled_registry(seed: RegistroRegrasConformidade) -> RegistroRegras
     return replace(
         seed,
         versao="cemig-normas-distribuicao-2025.3",
-        regras=tuple(legacy_span if item.id == legacy_span.id else item for item in seed.regras),
+        regras=tuple(
+            legacy_span if item.id == legacy_span.id else item for item in seed.regras[:8]
+        ),
+    )
+
+
+def _safe_2025_4_registry(seed: RegistroRegrasConformidade) -> RegistroRegrasConformidade:
+    return replace(
+        seed,
+        versao="cemig-normas-distribuicao-2025.4",
+        regras=seed.regras[:8],
     )
 
 
@@ -176,7 +186,12 @@ def test_startup_migrates_only_unchanged_legacy_span_rule_and_preserves_custom_r
     assert next(
         item for item in migrated.registro.regras if item.id == "nd31.vao.urbano-compacto-isolado"
     ) == next(item for item in safe_seed.regras if item.id == "nd31.vao.urbano-compacto-isolado")
-    assert migrated.registro.versao.endswith("+seguranca-vao-2025.4")
+    assert migrated.registro.versao.endswith("+seguranca-vao-2025.4+adicoes-2025.5")
+    assert {item.id for item in safe_seed.regras[-2:]} <= {
+        item.id for item in migrated.registro.regras
+    }
+    assert len(service.listar_historico()) == 3
+    assert service.inicializar(safe_seed) == migrated
     assert len(service.listar_historico()) == 3
     engine.dispose()
 
@@ -203,12 +218,70 @@ def test_startup_does_not_overwrite_a_custom_legacy_span_rule(tmp_path: Path) ->
 
     after_restart = service.inicializar(safe_seed)
 
-    assert after_restart == initial
+    assert after_restart.id != initial.id
     assert (
         next(item for item in after_restart.registro.regras if item.id == custom_span.id)
         == custom_span
     )
-    assert len(service.listar_historico()) == 1
+    assert {item.id for item in safe_seed.regras[-2:]} <= {
+        item.id for item in after_restart.registro.regras
+    }
+    assert after_restart.registro.versao.endswith("+adicoes-2025.5")
+    assert len(service.listar_historico()) == 2
+    engine.dispose()
+
+
+def test_startup_adds_2025_5_rules_without_changing_existing_or_colliding_ids(
+    tmp_path: Path,
+) -> None:
+    engine = create_sqlite_engine(tmp_path / "additive-seed-migration.sqlite3")
+    upgrade_database(engine)
+    service = _service(engine, tmp_path / "data", _Clock())
+    seed = carregar_registro_conformidade_inicial()
+    old = _safe_2025_4_registry(seed)
+    colliding = replace(seed.regras[8], titulo="Regra local com ID futuro")
+    customized = replace(
+        old,
+        id=uuid4(),
+        versao="custom-2025.4",
+        regras=(*old.regras, colliding),
+    )
+    initial = service.inicializar(customized)
+
+    migrated = service.inicializar(seed)
+
+    migrated_by_id = {item.id: item for item in migrated.registro.regras}
+    assert migrated.id != initial.id
+    assert migrated_by_id[colliding.id] == colliding
+    assert migrated_by_id[seed.regras[9].id] == seed.regras[9]
+    assert tuple(migrated.registro.regras[:8]) == old.regras
+    assert migrated.registro.versao.endswith("+adicoes-2025.5")
+    numbers = {item.regra_id: item.numero for item in service.listar_numeros()}
+    assert numbers[colliding.id] == 9
+    assert numbers[seed.regras[9].id] == 10
+    assert service.inicializar(seed) == migrated
+    assert len(service.listar_historico()) == 2
+    engine.dispose()
+
+
+def test_startup_upgrades_unchanged_2025_4_registry_to_exact_2025_5_seed(
+    tmp_path: Path,
+) -> None:
+    engine = create_sqlite_engine(tmp_path / "official-seed-migration.sqlite3")
+    upgrade_database(engine)
+    service = _service(engine, tmp_path / "data", _Clock())
+    seed = carregar_registro_conformidade_inicial()
+    old = _safe_2025_4_registry(seed)
+    initial = service.inicializar(old)
+
+    migrated = service.inicializar(seed)
+
+    assert migrated.id != initial.id
+    assert migrated.registro.id == old.id
+    assert migrated.registro.regras == seed.regras
+    assert migrated.registro.versao == "cemig-normas-distribuicao-2025.5"
+    assert service.inicializar(seed) == migrated
+    assert len(service.listar_historico()) == 2
     engine.dispose()
 
 

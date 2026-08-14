@@ -8,6 +8,11 @@ partição e características técnicas. Para localizar uma amostra, calcule o S
 compare com o manifesto. Nomes de arquivos, nomes de clientes, telefones e coordenadas não devem ser
 incluídos no manifesto, em logs ou em relatórios versionados.
 
+O manifesto, e não a contagem desta pasta, define o corpus formal. Na auditoria de 14/08/2026, os
+dez PDFs locais tinham hashes distintos entre si e nenhum correspondia aos nove hashes formais;
+eles devem ser tratados como amostras exploratórias até aprovação e atualização explícita do
+manifesto.
+
 As amostras reais serão usadas inicialmente como corpus de smoke/regressão. Fixtures sintéticas
 continuam necessárias para cenários ausentes, como PDF multipágina, rotacionado, protegido,
 corrompido, escaneado e com `CropBox` diferente de `MediaBox`.

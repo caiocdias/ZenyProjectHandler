@@ -47,6 +47,7 @@ from zeny_project_handler.application.pdf_import import ImportarPdfsNoProjeto
 from zeny_project_handler.domain.analysis import DecisaoRevisao, PropostaElemento
 from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.domain.enums import CategoriaElemento, SituacaoProjeto
+from zeny_project_handler.domain.errors import DomainValidationError
 from zeny_project_handler.domain.project import FotoElemento, Poste, Projeto
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 
@@ -139,12 +140,37 @@ def _first_automatic_decision(
     return decision
 
 
+def test_project_identifier_is_a_user_supplied_ten_digit_service_note(
+    workflow: tuple[Engine, ServicoFluxoMvp],
+) -> None:
+    engine, service = workflow
+
+    for invalid in (
+        "",
+        "123456789",
+        "12345678901",
+        "12345A7890",
+        "\uff11\uff12\uff13\uff14\uff15\uff16\uff17\uff18\uff19\uff10",
+    ):
+        with pytest.raises(DomainValidationError, match=r"Número da NS.*10 dígitos"):
+            service.criar_projeto(invalid)
+
+    created = service.criar_projeto("0012345678")
+    assert created.projeto.nome == "0012345678"
+
+    with pytest.raises(DomainValidationError, match=r"Número da NS.*10 dígitos"):
+        service.alterar_numero_ns(created.projeto.id, "123")
+    updated = service.alterar_numero_ns(created.projeto.id, "0098765432")
+    assert updated.projeto.nome == "0098765432"
+    engine.dispose()
+
+
 def test_multiple_pdf_import_is_atomic_and_preserves_order(
     workflow: tuple[Engine, ServicoFluxoMvp],
     tmp_path: Path,
 ) -> None:
     engine, service = workflow
-    project = service.criar_projeto("Projeto com folhas")
+    project = service.criar_projeto("0000000147")
     first = create_feature_pdf(tmp_path / "folha-01.pdf")
     second = create_golden_pdf(tmp_path / "folha-02.pdf")
     corrupt = tmp_path / "corrompido.pdf"
@@ -173,7 +199,7 @@ def test_pipeline_uses_a_distinct_ephemeral_password_for_each_document(
     tmp_path: Path,
 ) -> None:
     engine, service = workflow
-    created = service.criar_projeto("Projeto protegido")
+    created = service.criar_projeto("0000000176")
     first = create_protected_pdf(tmp_path / "protegido-a.pdf", "senha-a")
     second = create_protected_pdf(tmp_path / "protegido-b.pdf", "senha-b")
     first_import = service.importar_pdfs(created.projeto.id, (first,), senha="senha-a")
@@ -201,7 +227,7 @@ def test_project_page_order_can_interleave_pdfs_and_is_persisted(
     tmp_path: Path,
 ) -> None:
     engine, service = workflow
-    created = service.criar_projeto("Projeto reordenável")
+    created = service.criar_projeto("0000000204")
     first = create_feature_pdf(tmp_path / "primeira.pdf")
     second = create_golden_pdf(tmp_path / "segunda.pdf")
     service.importar_pdfs(created.projeto.id, (first, second))
@@ -234,7 +260,7 @@ def test_cancel_and_resume_pipeline_reuses_completed_work_without_duplicates(
     tmp_path: Path,
 ) -> None:
     engine, service = workflow
-    project = service.criar_projeto("Projeto retomável")
+    project = service.criar_projeto("0000000237")
     first = create_feature_pdf(tmp_path / "primeira.pdf")
     second = create_golden_pdf(tmp_path / "segunda.pdf")
     service.importar_pdfs(project.projeto.id, (first, second))
@@ -280,7 +306,7 @@ def test_cancelled_analysis_releases_shared_coordinator(
         tmp_path / "coordinated-cache",
         coordinator,
     )
-    project = service.criar_projeto("Projeto cancelado coordenado")
+    project = service.criar_projeto("0000000283")
     source = create_golden_pdf(tmp_path / "cancelado.pdf")
     service.importar_pdfs(project.projeto.id, (source,))
 
@@ -298,7 +324,7 @@ def test_review_session_consolidates_latest_results_from_every_pdf(
     catalogo_inicial: CatalogoTecnico,
 ) -> None:
     engine, service = workflow
-    created = service.criar_projeto("Projeto consolidado")
+    created = service.criar_projeto("0000000301")
     code = catalogo_inicial.itens_ativos(CategoriaElemento.POSTE)[0].codigo
     first = create_catalog_pdf(tmp_path / "primeiro.pdf", code)
     second = create_catalog_pdf(tmp_path / "segundo.pdf", code)
@@ -330,7 +356,7 @@ def test_remove_pdf_prunes_only_dependent_data_and_project_can_be_deleted(
     catalogo_inicial: CatalogoTecnico,
 ) -> None:
     engine, service = workflow
-    created = service.criar_projeto("Projeto removível")
+    created = service.criar_projeto("0000000333")
     catalog_code = catalogo_inicial.itens_ativos(CategoriaElemento.POSTE)[0].codigo
     first = create_catalog_pdf(tmp_path / "remover.pdf", catalog_code)
     second = create_golden_pdf(tmp_path / "preservar.pdf")
@@ -393,7 +419,7 @@ def test_delete_project_with_confirmed_review_removes_dependents_in_safe_order(
     catalogo_inicial: CatalogoTecnico,
 ) -> None:
     engine, service = workflow
-    created = service.criar_projeto("Projeto com aceite")
+    created = service.criar_projeto("0000000396")
     catalog_code = catalogo_inicial.itens_ativos(CategoriaElemento.POSTE)[0].codigo
     source = create_catalog_pdf(tmp_path / "projeto-revisado.pdf", catalog_code)
     service.importar_pdfs(created.projeto.id, (source,))
@@ -424,7 +450,7 @@ def test_delete_project_restores_tombstone_when_database_commit_rolls_back(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     engine, service = workflow
-    created = service.criar_projeto("Projeto com rollback")
+    created = service.criar_projeto("0000000427")
     managed_root = tmp_path / "project-files" / str(created.projeto.id)
     managed_root.mkdir(parents=True)
     managed_file = managed_root / "rollback.bin"

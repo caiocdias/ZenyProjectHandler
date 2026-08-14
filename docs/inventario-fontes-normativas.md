@@ -1,7 +1,8 @@
 # Inventário de fontes normativas da análise de conformidade
 
-Auditoria realizada em 12 de agosto de 2026 para a Etapa 2 do roadmap de conformidades. O ponto de
-partida foi o [portal vigente de normas técnicas de redes de distribuição da CEMIG](https://www.cemig.com.br/normas-tecnicas/normas-tecnicas-de-redes-de-distribuicao/).
+Auditoria integral realizada em 12 de agosto de 2026 para a Etapa 2 do roadmap de conformidades,
+com revisão complementar dirigida em 14 de agosto de 2026. O ponto de partida foi o
+[portal vigente de normas técnicas de redes de distribuição da CEMIG](https://www.cemig.com.br/normas-tecnicas/normas-tecnicas-de-redes-de-distribuicao/).
 Somente documentos publicados pela CEMIG e referências primárias oficiais foram considerados.
 
 ## Escopo integral declarado
@@ -27,6 +28,27 @@ ND-4.15, páginas 2, 4 e 6; ND-9.3, páginas 4, 16, 18, 20, 58 e 60. A ND-3.1 n�
 na extração. Páginas com pouco texto, desenhos ou tabelas foram revisadas visualmente mesmo quando a
 extração não estava vazia.
 
+## Revisão complementar dirigida — 14 de agosto de 2026
+
+A nova leva local de projetos comissionados motivou uma busca dirigida pelas obrigações rurais e
+urbanas sugeridas pelos comentários. Esta revisão não amplia retroativamente o escopo integral de
+493 páginas: ela registra exatamente as páginas adicionais lidas por texto e imagem, em cópias
+temporárias fora do Git.
+
+| Documento | Órgão emissor | Revisão | URL oficial | Acesso | Páginas do PDF | SHA-256 da cópia de trabalho | Escopo adicional lido | Situação |
+|---|---|---|---|---|---:|---|---|---|
+| ND-2.2 — Instalações Básicas de Redes de Distribuição Aéreas Rurais | CEMIG Distribuição | Out/2016 | [PDF oficial](https://www.cemig.com.br/wp-content/uploads/2025/10/nd_2_2.pdf) | 14/08/2026 | 196 | `483805ecbda3d540de7301825617d34e24c324690cc794e72f5a5de7d1ed6f82` | páginas PDF 14–15, 25, 68–69, 144 e 173–174; texto e imagem | vigente no portal; revisão dirigida, não integral |
+| ND-3.1 — Projetos de Redes de Distribuição Aéreas Urbanas | CEMIG Distribuição | Jul/2025 | [PDF oficial](https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf) | 14/08/2026 | 111 | `ea43a729d3edd5896201b292f6fa385071a3f9d980fa0d82653ef5c637e89b77` | páginas PDF 57–60 e 66–67 revalidadas por texto e imagem | vigente no portal; já pertencente ao escopo integral |
+
+A ND-2.2 confirmou obrigações delimitadas para uso do PRORDR, derivações com tração de RDR,
+alternativa com condutor CA e tração de RDU, dimensionamento e escolha de estais, e orientação de
+poste duplo T. A ND-3.1 confirmou critérios de aterramento, tipo e reaproveitamento de postes,
+cálculo de esforços e resistência de postes com equipamentos. A observação t da página 67 sustenta
+as Regras 9 e 10 apenas no subconjunto em que código, fase, situações, associação, resistência e
+formato são positivamente resolvidos; material PRFV e engastamento permanecem fora da conclusão.
+Os demais localizadores e fatos necessários estão no catálogo incremental; nenhum comentário do
+corpus foi tratado como fonte.
+
 ## Confirmação das fontes já citadas
 
 - A ND-3.1 do registro continua publicada no endereço de outubro de 2025, com revisão Jul/2025. Os
@@ -38,13 +60,13 @@ extração não estava vazia.
 ## Referências oficiais diretas seguidas
 
 As referências abaixo foram localizadas a partir das normas do escopo e do próprio portal. As cinco
-fontes da primeira tabela foram lidas integralmente. As demais delimitam dependências futuras e não
-sustentam regra nova nesta etapa.
+fontes da primeira tabela foram lidas integralmente. As demais delimitam dependências futuras; a
+única exceção nesta revisão é o recorte dirigido e explicitamente rastreado da ND-2.2.
 
-| Referência | Situação em 12/08/2026 | Decisão nesta etapa |
+| Referência | Situação na última consulta | Decisão nesta etapa |
 |---|---|---|
 | [ND-2.1 — instalações urbanas](https://www.cemig.com.br/wp-content/uploads/2025/10/nd-2-1-instalacoes-basicas-de-redes-de-distribuicao-aereas-urbanas.pdf) | listada no portal oficial | Fora do escopo integral; necessária para aprofundar rede convencional, posteação e afastamentos antes de novas regras |
-| [ND-2.2 — instalações rurais](https://www.cemig.com.br/wp-content/uploads/2025/10/nd_2_2.pdf) | listada no portal oficial | Fora do escopo integral; dependência futura para aterramento e estaiamento rural |
+| [ND-2.2 — instalações rurais](https://www.cemig.com.br/wp-content/uploads/2025/10/nd_2_2.pdf) | listada no portal oficial; páginas selecionadas revisadas em 14/08/2026 | Continua fora do escopo integral; as obrigações localizadas na revisão dirigida sustentam apenas os candidatos explicitamente citados no catálogo |
 | [ND-2.4 — instalações urbanas em 23,1 kV](https://www.cemig.com.br/wp-content/uploads/2025/10/nd-2-4-instalacoes-basicas-de-redes-de-distribuicao-aereas-urbanas-23-1-kv.pdf) | listada no portal oficial | Fora do escopo integral; nenhuma regra criada |
 | [ND-2.10 — rede compacta 23,1 kV](https://www.cemig.com.br/wp-content/uploads/2025/10/nd2_10.pdf) | listada no portal oficial | Fora do escopo integral; necessária antes de generalizar matrizes de estruturas compactas |
 | [ND-2.13 — linhas e redes rurais 34,5 kV](https://www.cemig.com.br/wp-content/uploads/2025/10/nd-2.13_instalacoes-basicas-linhas-e-redes-de-rdr-345-kV-1.pdf) | listada no portal oficial | Fora do escopo integral; nenhuma regra criada |

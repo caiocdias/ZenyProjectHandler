@@ -9,13 +9,21 @@ from datetime import date
 from zeny_project_handler.domain.catalog import ExtraAttributes
 from zeny_project_handler.domain.errors import DomainValidationError
 
-NOTA_SERVICO_PATTERN = re.compile(r"^\d{10}$")
+NOTA_SERVICO_PATTERN = re.compile(r"^[0-9]{10}$")
 ESCALA_PATTERN = re.compile(r"^1:\d+$")
 
 
 def _optional_text(value: str | None) -> str | None:
     normalized = value.strip() if value else None
     return normalized or None
+
+
+def normalizar_numero_ns(value: str) -> str:
+    """Normalize e valide a NS informada pelo usuário sem perder zeros à esquerda."""
+    normalized = value.strip()
+    if not NOTA_SERVICO_PATTERN.fullmatch(normalized):
+        raise DomainValidationError("Número da NS deve conter exatamente 10 dígitos")
+    return normalized
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -36,8 +44,8 @@ class MetadadosProjeto:
     def __post_init__(self) -> None:
         service_note = _optional_text(self.nota_servico)
         scale = _optional_text(self.escala)
-        if service_note is not None and not NOTA_SERVICO_PATTERN.fullmatch(service_note):
-            raise DomainValidationError("Nota de serviço deve conter 10 dígitos")
+        if service_note is not None:
+            service_note = normalizar_numero_ns(service_note)
         if scale is not None and not ESCALA_PATTERN.fullmatch(scale):
             raise DomainValidationError("Escala deve usar o formato 1:n")
         extras = tuple(sorted(self.atributos_extras, key=lambda item: item[0]))

@@ -46,6 +46,7 @@ from .pdf_viewer import PdfViewerWidget
 from .review_panel import ReviewPanelWidget
 
 T = TypeVar("T")
+_NUMERO_NS_INPUT_MASK = "0000000000;_"
 
 
 class _PipelineWorker(QObject):
@@ -156,10 +157,16 @@ class ProjectPanelWidget(QWidget):
         self._projects = QComboBox()
         self._projects.setObjectName("mvpProjectCombo")
         project_layout.addWidget(self._projects)
-        self._name = QLineEdit()
-        self._name.setObjectName("mvpProjectNameEdit")
-        self._name.setPlaceholderText("Nome do projeto")
-        project_layout.addWidget(self._name)
+        service_note_label = QLabel("Número da NS")
+        service_note_label.setObjectName("mvpProjectServiceNoteLabel")
+        project_layout.addWidget(service_note_label)
+        self._service_note = QLineEdit()
+        self._service_note.setObjectName("mvpProjectNameEdit")
+        self._service_note.setInputMask(_NUMERO_NS_INPUT_MASK)
+        self._service_note.setPlaceholderText("Número da NS")
+        self._service_note.setToolTip("Informe os 10 dígitos do número da NS")
+        self._service_note.setAccessibleName("Número da NS")
+        project_layout.addWidget(self._service_note)
         project_actions = QHBoxLayout()
         create = QPushButton("Criar")
         create.setObjectName("mvpCreateProjectButton")
@@ -169,9 +176,9 @@ class ProjectPanelWidget(QWidget):
         open_button.setObjectName("mvpOpenProjectButton")
         open_button.clicked.connect(self.abrir_selecionado)
         project_actions.addWidget(open_button)
-        rename = QPushButton("Renomear")
+        rename = QPushButton("Alterar NS")
         rename.setObjectName("mvpRenameProjectButton")
-        rename.clicked.connect(self.renomear_projeto)
+        rename.clicked.connect(self.alterar_numero_ns)
         project_actions.addWidget(rename)
         delete_project = QPushButton("Excluir projeto")
         delete_project.setObjectName("mvpDeleteProjectButton")
@@ -263,14 +270,14 @@ class ProjectPanelWidget(QWidget):
                 self.abrir_selecionado()
 
     def criar_projeto(self) -> None:
-        name = self._name.text().strip()
-        if not name:
-            self._warn("Informe um nome para criar o projeto")
+        numero_ns = self._service_note.text()
+        if not self._service_note.hasAcceptableInput():
+            self._warn("Informe o número da NS com exatamente 10 dígitos")
             return
-        session = self._action(lambda: self._service.criar_projeto(name))
+        session = self._action(lambda: self._service.criar_projeto(numero_ns))
         if session is None:
             return
-        self._name.clear()
+        self._service_note.clear()
         self.atualizar_projetos()
         self._select_and_activate(session)
         self.status_changed.emit("Projeto criado e pronto para receber PDFs")
@@ -283,15 +290,15 @@ class ProjectPanelWidget(QWidget):
         if session is not None:
             self._activate(session)
 
-    def renomear_projeto(self) -> None:
+    def alterar_numero_ns(self) -> None:
         value = self._projects.currentData()
-        name = self._name.text().strip()
-        if value is None or not name:
-            self._warn("Selecione o projeto e informe o novo nome")
+        numero_ns = self._service_note.text()
+        if value is None or not self._service_note.hasAcceptableInput():
+            self._warn("Selecione o projeto e informe o número da NS com exatamente 10 dígitos")
             return
-        session = self._action(lambda: self._service.renomear_projeto(UUID(str(value)), name))
+        session = self._action(lambda: self._service.alterar_numero_ns(UUID(str(value)), numero_ns))
         if session is not None:
-            self._name.clear()
+            self._service_note.clear()
             self.atualizar_projetos()
             self._select_and_activate(session)
             self._review_panel.atualizar_projetos()

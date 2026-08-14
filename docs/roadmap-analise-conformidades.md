@@ -35,7 +35,7 @@ comissionador comunica um problema, mas **não são fonte normativa suficiente p
   botões de olho para ocultar região ou elemento.
 - `docs/arquitetura-conformidade.md`, ADR 0011 e o schema em
   `docs/schemas/regras-conformidade.schema.json` são os contratos de referência.
-- `docs/catalogo-regras-conformidade.md` mantém a lista incremental das oito entradas do seed; a
+- `docs/catalogo-regras-conformidade.md` mantém a lista incremental das dez entradas do seed; a
   Etapa 2 confirmou as fontes, inativou a escala até suas exceções terem fatos positivos e incluiu
   cabo novo urbano e a compatibilidade rural simples entre estrutura e poste.
 
@@ -639,3 +639,45 @@ atualiza `docs/catalogo-regras-conformidade.md`. Não copie conteúdo dos PDFs r
 - **Gate privado:** os cinco arquivos não correspondem ao manifesto privado autorizado; portanto o
   gate opt-in não foi usado como aceite. Novos candidatos exigem fonte oficial exata antes de qualquer
   automação.
+
+### 2026-08-14 — Revisão da nova leva de PDFs comissionados
+
+- **Escopo local:** dez PDFs de uma página, 51 anotações `FreeText` e leitura visual completa. Como
+  os PDFs são ignorados pelo Git, a nova leva não é demonstrável por histórico; a correspondência
+  exata das 20 anotações anteriores sustenta a inferência de seis folhas novas e 31 comentários
+  adicionais. O registro mantém somente contagens agregadas.
+- **Corpus formal:** os dez hashes locais são distintos entre si e nenhum corresponde aos nove
+  hashes de `evaluation/manifesto-amostras.json`. As folhas permanecem exploratórias; o manifesto e
+  o gate privado não foram alterados nem usados como aceite.
+- **Revisão normativa dirigida:** a ND-2.2 Out/2016 foi consultada por texto e imagem nas páginas PDF
+  14–15, 25, 68–69, 144 e 173–174; as páginas 57–60 e 66–67 da ND-3.1 Jul/2025 foram revalidadas.
+  URL oficial, acesso, páginas e SHA-256 estão em `docs/inventario-fontes-normativas.md`.
+- **Candidatos acrescentados:** `POST-TYPE-U01`, `RURAL-PRODR-01`, `RURAL-DERIV-01`,
+  `RURAL-STAY-01` e `POST-ORIENT-R01` permanecem `AGUARDA_FATO`. `POST-EQUIP-U01` passou a
+  `PARCIAL`: seus dois subconjuntos de transformador em posteação existente originaram as Regras 9
+  e 10. `DOC-GD-01`, `COER-CAMPO-01` e `TOPO-DES-01` entraram como
+  `REVISAO_HUMANA`. A indicação isolada de aterramento a cada 250 m foi recusada porque a ND-3.1
+  vigente estabelece aproximadamente 200 m para o neutro urbano.
+- **Oito regras preexistentes:** nenhuma obrigação foi alterada. Foram documentadas as limitações de
+  escala global da Regra 3, associação de múltiplos vãos/exceções da Regra 6, situação por trecho da
+  Regra 7 e escopo estrito da Regra 8. Regras 4 e 5 continuam sem provedor de ângulo; grandes vãos
+  rurais não podem ativar a Regra 6 urbana.
+- **Registro ativo:** o JSON passou a `2025.5` com as Regras 9 e 10. O provedor exige contexto urbano,
+  transformador trifásico a instalar com código exato, poste existente positivamente identificado,
+  uma relação confirmada e cardinalidade regional 1:1. Potência, resistência e formato permanecem
+  correlacionados; formato canônico inferido não sustenta conformidade. Os demais candidatos ainda
+  dependem de cálculo, tração, estai, documentos externos, estado de campo ou orientação. A versão
+  do método de conformidade passou a `4`, invalidando explicitamente os snapshots anteriores.
+- **Verificação:** o teste focado de paridade do catálogo aprovou `1/1`. O gate básico offline
+  aprovou 525 testes, excluiu 20 privados, alcançou 86,46% de cobertura e passou em integridade das
+  dependências, Ruff, formatação, Mypy e complexidade. Houve apenas aviso não bloqueante de cache do
+  Pytest por permissão local.
+- **Reavaliação topológica:** foram recusadas as formulações “toda derivação trifásica exige poste
+  11 m/300 daN” e “todo vão rural CA novo tem máximo de 80 m”. A ND-2.2 condiciona os 80 m à
+  alternativa sem estai contrário, com tração RDU e dimensionamento para vento máximo; a topologia
+  existente não prova essas condições. Cabos e vãos conectados continuam fatos diagnósticos, não
+  atalhos para uma obrigação mais ampla.
+- **Migração:** bancos `2025.4` recebem somente os dois IDs oficiais ausentes. Conteúdo local com ID
+  coincidente, Regras 1–8 e IDs personalizados são preservados; o mesmo vale após restauração, com
+  merge local anterior às adições oficiais.
+- **Commit:** não criado; mensagem sugerida: `feat(compliance): add existing-post transformer rules`.

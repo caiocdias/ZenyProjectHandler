@@ -48,6 +48,13 @@ def test_fact_catalog_covers_current_and_planned_seed_vocabulary() -> None:
     assert definitions["vao.comprimento_m"].disponibilidade is (
         DisponibilidadeProvedorFato.DISPONIVEL
     )
+    assert (
+        definitions["regiao.transformador_trifasico_poste_existente_avaliavel"].disponibilidade
+        is DisponibilidadeProvedorFato.DISPONIVEL
+    )
+    assert definitions["regiao.poste_transformador_resistencia_dan"].disponibilidade is (
+        DisponibilidadeProvedorFato.DISPONIVEL
+    )
     warnings = validar_semantica_registro(registry)
     assert any("conexao.angulo_graus" in item for item in warnings)
     assert all("vao.comprimento_m" not in item for item in warnings)

@@ -185,7 +185,7 @@ def test_rules_view_only_imports_exports_and_survives_restart(
     assert "fixture.ui.circuito" in exported_ids
     assert "nd31.desenho.numero-projeto" in exported_ids
     assert "IDs existentes substituídos: 0" in confirmations[0]
-    assert "IDs atuais omitidos e preservados: 8" in confirmations[0]
+    assert "IDs atuais omitidos e preservados: 10" in confirmations[0]
     assert f"Regra {stable_number}" in service.caminho_catalogo.read_text(encoding="utf-8")
 
     panel.close()

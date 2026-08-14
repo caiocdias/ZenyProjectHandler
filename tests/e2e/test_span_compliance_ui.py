@@ -205,7 +205,7 @@ def test_span_rule_full_ui_cycle_survives_restart(
     assert history == (first_execution, latest)
     assert any(item.regra_id == _RULE_ID for item in history[0].achados)
     assert "IDs existentes substituídos: 1" in confirmations[-1]
-    assert "IDs atuais omitidos e preservados: 8" in confirmations[-1]
+    assert "IDs atuais omitidos e preservados: 10" in confirmations[-1]
 
 
 def _create_project_with_pdf(
@@ -221,7 +221,7 @@ def _create_project_with_pdf(
     project_combo = panel.findChild(QComboBox, "mvpProjectCombo")
     assert name is not None and create is not None and add_pdf is not None
     assert project_combo is not None
-    name.setText("Projeto E2E de vão")
+    name.setText("0000000224")
     qtbot.mouseClick(create, Qt.MouseButton.LeftButton)
     monkeypatch.setattr(
         QFileDialog,

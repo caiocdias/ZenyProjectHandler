@@ -235,6 +235,36 @@ CATALOGO_FATOS_CONFORMIDADE = (
         "Formato do único poste reconhecido e não marcado para remoção na região.",
     ),
     _fact(
+        "regiao.transformador_trifasico_poste_existente_avaliavel",
+        _REGION,
+        TipoValorFato.BOOLEANO,
+        _BOOLEANO,
+        "Indica associação urbana inequívoca entre transformador trifásico a instalar "
+        "e poste existente com situação comprovada pela simbologia.",
+    ),
+    _fact(
+        "regiao.transformador_potencia_kva",
+        _REGION,
+        TipoValorFato.INTEIRO,
+        _NUMERO,
+        "Potência nominal do transformador, normalizada de um código catalogado exato.",
+    ),
+    _fact(
+        "regiao.poste_transformador_resistencia_dan",
+        _REGION,
+        TipoValorFato.INTEIRO,
+        _NUMERO,
+        "Resistência nominal do poste inequivocamente associado ao transformador, em daN.",
+    ),
+    _fact(
+        "regiao.poste_transformador_formato",
+        _REGION,
+        TipoValorFato.TEXTO,
+        _TEXTO,
+        "Formato explicitamente reconhecido do poste associado ao transformador; "
+        "não é publicado quando o catálogo escolheu um formato canônico.",
+    ),
+    _fact(
         "conexao.angulo_graus",
         _REGION,
         TipoValorFato.NUMERO,

@@ -29,10 +29,14 @@ from zeny_project_handler.ports.persistence import UnitOfWorkPort
 from .errors import RegistroConformidadeError
 
 CATALOGO_REGRAS_FILE_NAME = "catalogo-regras-conformidade.md"
-_LEGACY_BUNDLED_VERSION = "cemig-normas-distribuicao-2025.3"
 _SAFE_BUNDLED_VERSION = "cemig-normas-distribuicao-2025.4"
+_CURRENT_BUNDLED_VERSION = "cemig-normas-distribuicao-2025.5"
 _SPAN_RULE_ID = "nd31.vao.urbano-compacto-isolado"
 _SPAN_SAFEGUARD_FACT = "vao.aplicabilidade_excecao_45_60_resolvida"
+_BUNDLED_ADDITION_IDS = (
+    "nd31.transformador.poste-existente-30-75",
+    "nd31.transformador.poste-existente-150-300",
+)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -95,7 +99,7 @@ class ServicoRegistroRegrasConformidade:
             current = work.registros_conformidade.obter_ativa()
         if current is None:
             return self._persistir(seed)
-        migrated_registry = _migrate_legacy_bundled_span_rule(current.registro, seed)
+        migrated_registry = _upgrade_bundled_registry(current.registro, seed)
         if migrated_registry is not None:
             return self._persistir(migrated_registry)
         if not self.caminho_catalogo.is_file():
@@ -125,21 +129,22 @@ class ServicoRegistroRegrasConformidade:
                 return None
             return self._persistir(registro_preservado)
         restored_registry = restored.registro
-        if self._seed is not None:
-            migrated = _migrate_legacy_bundled_span_rule(restored_registry, self._seed)
-            if migrated is not None:
-                restored_registry = migrated
         preserved_rules = registro_preservado.regras if registro_preservado is not None else ()
         restored_ids = {item.id for item in restored_registry.regras}
         missing = tuple(item for item in preserved_rules if item.id not in restored_ids)
+        if missing:
+            restored_registry = replace(
+                restored_registry,
+                regras=(*restored_registry.regras, *missing),
+            )
+        if self._seed is not None:
+            migrated = _upgrade_bundled_registry(restored_registry, self._seed)
+            if migrated is not None:
+                restored_registry = migrated
         if not missing and restored_registry is restored.registro:
             self.republicar_catalogo_ativo()
             return restored
-        reconciled = replace(
-            restored_registry,
-            regras=(*restored_registry.regras, *missing),
-        )
-        return self._persistir(reconciled)
+        return self._persistir(restored_registry)
 
     def republicar_catalogo_ativo(self) -> None:
         """Sincronize a projeção Markdown com a revisão ativa persistida."""
@@ -252,40 +257,66 @@ class ServicoRegistroRegrasConformidade:
             ) from error
 
 
-def _migrate_legacy_bundled_span_rule(
+def _upgrade_bundled_registry(
     current: RegistroRegrasConformidade,
     seed: RegistroRegrasConformidade,
 ) -> RegistroRegrasConformidade | None:
-    """Upgrade only an unchanged bundled Rule 6, preserving custom rules and edits."""
-    if seed.versao != _SAFE_BUNDLED_VERSION:
+    """Aplique correções seletivas e somente adições oficiais, preservando customizações."""
+    if seed.versao not in {_SAFE_BUNDLED_VERSION, _CURRENT_BUNDLED_VERSION}:
         return None
+    candidate = current
+    safeguard_changed = False
     replacement = next((item for item in seed.regras if item.id == _SPAN_RULE_ID), None)
-    if replacement is None:
-        return None
-    safeguards = tuple(
-        item for item in replacement.aplicabilidade if item.chave_fato == _SPAN_SAFEGUARD_FACT
-    )
-    if len(safeguards) != 1:
-        return None
-    legacy_rule = replace(
-        replacement,
-        aplicabilidade=tuple(
-            item for item in replacement.aplicabilidade if item.chave_fato != _SPAN_SAFEGUARD_FACT
-        ),
-    )
-    existing = next((item for item in current.regras if item.id == _SPAN_RULE_ID), None)
-    if existing != legacy_rule:
-        return None
-    version = (
-        seed.versao
-        if current.versao == _LEGACY_BUNDLED_VERSION
-        else f"{current.versao}+seguranca-vao-2025.4"
-    )
-    return replace(
-        current,
-        versao=version,
-        regras=tuple(replacement if item.id == _SPAN_RULE_ID else item for item in current.regras),
-    )
+    if replacement is not None:
+        safeguards = tuple(
+            item for item in replacement.aplicabilidade if item.chave_fato == _SPAN_SAFEGUARD_FACT
+        )
+        legacy_rule = replace(
+            replacement,
+            aplicabilidade=tuple(
+                item
+                for item in replacement.aplicabilidade
+                if item.chave_fato != _SPAN_SAFEGUARD_FACT
+            ),
+        )
+        existing = next((item for item in candidate.regras if item.id == _SPAN_RULE_ID), None)
+        if len(safeguards) == 1 and existing == legacy_rule:
+            candidate = replace(
+                candidate,
+                regras=tuple(
+                    replacement if item.id == _SPAN_RULE_ID else item for item in candidate.regras
+                ),
+            )
+            safeguard_changed = True
+
+    additions_changed = False
+    if seed.versao == _CURRENT_BUNDLED_VERSION:
+        seed_by_id = {item.id: item for item in seed.regras}
+        current_ids = {item.id for item in candidate.regras}
+        additions = tuple(
+            seed_by_id[rule_id]
+            for rule_id in _BUNDLED_ADDITION_IDS
+            if rule_id in seed_by_id and rule_id not in current_ids
+        )
+        if additions:
+            candidate = replace(candidate, regras=(*candidate.regras, *additions))
+            additions_changed = True
+
+    if candidate.regras == seed.regras:
+        candidate = replace(candidate, versao=seed.versao)
+    elif safeguard_changed or additions_changed:
+        version = current.versao
+        if safeguard_changed:
+            version = _version_with_tag(version, "seguranca-vao-2025.4")
+        if additions_changed:
+            version = _version_with_tag(version, "adicoes-2025.5")
+        candidate = replace(candidate, versao=version)
+    return candidate if candidate != current else None
+
+
+def _version_with_tag(version: str, tag: str) -> str:
+    parts = version.split("+")
+    return version if tag in parts[1:] else f"{version}+{tag}"
 
 
 def renderizar_catalogo_markdown(

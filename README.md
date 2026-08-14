@@ -390,6 +390,9 @@ limites estão detalhados em
 [`docs/arquitetura-conformidade.md`](docs/arquitetura-conformidade.md).
 Ao atualizar o seed `2025.3` para `2025.4`, somente a Regra 6 ainda idêntica à versão oficial anterior
 é migrada; IDs adicionais e regras personalizadas são preservados.
+Na atualização `2025.4` para `2025.5`, somente os IDs oficiais ausentes das duas regras de
+transformador em posteação existente são anexados. Colisões conservam a definição local e reiniciar
+o aplicativo não cria outra revisão.
 
 O Unlimited-OCR foi avaliado como possível segunda passagem local para layouts difíceis. A
 integração recomendada, caso o benchmark justifique, é diretamente por `MotorOcrPort` contra um

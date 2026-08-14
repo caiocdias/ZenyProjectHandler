@@ -79,7 +79,10 @@ def test_user_can_reorder_project_pdfs_and_reopen_in_reading_order(
     name = panel.findChild(QLineEdit, "mvpProjectNameEdit")
     create = panel.findChild(QPushButton, "mvpCreateProjectButton")
     assert name is not None and create is not None
-    name.setText("Projeto ordenado")
+    assert name.inputMask() == "0000000000;_"
+    assert name.placeholderText() == "Número da NS"
+    name.setText("0000000082")
+    assert name.hasAcceptableInput()
     qtbot.mouseClick(create, Qt.MouseButton.LeftButton)
     project_combo = panel.findChild(QComboBox, "mvpProjectCombo")
     assert project_combo is not None
@@ -136,7 +139,7 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
     name = panel.findChild(QLineEdit, "mvpProjectNameEdit")
     create = panel.findChild(QPushButton, "mvpCreateProjectButton")
     assert name is not None and create is not None
-    name.setText("Projeto MVP")
+    name.setText("0000000139")
     qtbot.mouseClick(create, Qt.MouseButton.LeftButton)
     project_combo = panel.findChild(QComboBox, "mvpProjectCombo")
     assert project_combo is not None

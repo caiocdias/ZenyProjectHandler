@@ -323,12 +323,14 @@ que os reconheça.
 
 ## Amostras reais e privacidade
 
-Todos os PDFs locais em `examples/` são ignorados pelo Git. Nove deles compõem o conjunto formal
-atual; o arquivo `evaluation/manifesto-amostras.json` contém apenas seus IDs anônimos, hashes e
-características técnicas. PDFs adicionais podem ser colocados nessa pasta a qualquer momento como
-amostras exploratórias: eles participam automaticamente do smoke test local somente leitura, sem
-precisar entrar no manifesto. Nomes de arquivos, nomes de clientes, telefones, coordenadas e
-fotografias não são versionados.
+Todos os PDFs locais em `examples/` são ignorados pelo Git. O conjunto formal é definido pelos nove
+hashes de `evaluation/manifesto-amostras.json`, e não pela quantidade de arquivos presentes na
+pasta. PDFs adicionais podem ser colocados ali a qualquer momento como amostras exploratórias: eles
+participam do smoke test local somente leitura, mas não do gate privado até serem aprovados e
+incluídos no manifesto. Na auditoria de 14/08/2026, os dez PDFs então presentes tinham hashes
+distintos entre si e nenhum correspondia aos nove hashes formais; portanto todos permaneceram
+exploratórios. Nomes de arquivos, nomes de clientes, telefones, coordenadas e fotografias não são
+versionados.
 
 O corpus cobre A3/A4, retrato/paisagem, iText, AutoCAD, Microsoft Print to PDF, texto, vetores,
 imagens, anotações `Stamp`, `Popup`, `FreeText`, `Square`, appearance streams e Optional Content
@@ -435,7 +437,9 @@ sintéticas; a partição de teste privada não foi usada para criá-las.
 
 ## Fluxo operacional do MVP pela interface
 
-- O painel **Fluxo do projeto** lista, cria, abre e renomeia projetos no SQLite. Em uma instalação
+- O painel **Fluxo do projeto** lista, cria e abre projetos no SQLite. Na criação, o usuário informa
+  obrigatoriamente o número da NS com 10 dígitos; esse número identifica o projeto na interface e
+  pode ser corrigido pela ação **Alterar NS**. Em uma instalação
   vazia, o catálogo inicial publicado é persistido automaticamente antes da criação do primeiro
   projeto.
 - Um ou vários PDFs podem ser selecionados e importados imediatamente no projeto. Cada arquivo é
@@ -510,16 +514,21 @@ quando ela está disponível.
   detector ativo.
 - Evidência, fato normalizado, regra e achado são objetos distintos. Fatos preservam escopo, origem,
   confiança, geometria e evidências.
-- O registro `cemig-normas-distribuicao-2025.4` é JSON validado, versionado e assinado por SHA-256.
+- O registro `cemig-normas-distribuicao-2025.5` é JSON validado, versionado e assinado por SHA-256.
   `when` define aplicabilidade, `unless` exige comprovação positiva da exceção e `must` declara
   requisitos. Na inicialização, somente uma Regra 6 ainda idêntica ao seed oficial `2025.3` recebe a
-  salvaguarda nova; regras personalizadas e IDs adicionais não são sobrescritos nem removidos.
+  salvaguarda nova. A migração aditiva seguinte anexa somente os IDs oficiais ausentes das Regras 9
+  e 10; regras personalizadas, colisões de ID e as definições existentes não são sobrescritas nem
+  removidas.
 - Cada regra aplicável resulta em `CONFORME`, `DIVERGENCIA` ou `NAO_AVALIAVEL`. A interface apresenta
   divergência automática como **possível divergência**, sujeita a revisão.
 - As regras iniciais verificam numeração, formato, vão urbano de rede compacta/isolada, equipamento
   em ângulo, avaliação de abalroamento, cabo novo urbano e uma incompatibilidade rural simples entre
-  estrutura e poste. A regra de escala permanece inativa até suas exceções terem fatos positivos;
-  outros contextos rurais e tabelas de estrutura não reutilizam limites urbanos.
+  estrutura e poste. Também verificam os mínimos representáveis de formato e resistência para
+  transformadores trifásicos de 30/45/75 kVA e 150/300 kVA a instalar em posteação urbana existente,
+  somente com associação 1:1 e simbologia positiva. A regra de escala permanece inativa até suas
+  exceções terem fatos positivos; outros contextos rurais e tabelas de estrutura não reutilizam
+  limites urbanos.
 
 A abstração, o vocabulário inicial e o procedimento para evolução normativa estão em
 [`arquitetura-conformidade.md`](arquitetura-conformidade.md). A decisão de arquitetura está na
