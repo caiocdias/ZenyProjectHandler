@@ -31,7 +31,10 @@ from zeny_project_handler.adapters.persistence.compliance_analysis_repository im
 )
 from zeny_project_handler.adapters.persistence.domain_json import dumps_domain
 from zeny_project_handler.adapters.persistence.schema import compliance_executions
-from zeny_project_handler.application.compliance_analysis import ExecutarAnaliseConformidade
+from zeny_project_handler.application.compliance_analysis import (
+    VERSAO_METODO_CONFORMIDADE,
+    ExecutarAnaliseConformidade,
+)
 from zeny_project_handler.application.compliance_registry import (
     ServicoRegistroRegrasConformidade,
 )
@@ -196,14 +199,16 @@ def test_execution_is_deterministic_preserves_history_and_survives_restart(
     first = service.executar(project_id)
     repeated = service.executar(project_id)
 
+    assert VERSAO_METODO_CONFORMIDADE == "6"
+    assert first.versao_metodo == VERSAO_METODO_CONFORMIDADE
     assert repeated.id == first.id
     assert dumps_domain(repeated) == dumps_domain(first)
     assert len(service.listar_historico(project_id)) == 1
     by_result = {item.resultado.value for item in first.achados}
-    assert by_result == {"CONFORME", "DIVERGENCIA", "NAO_AVALIAVEL"}
-    divergent = next(item for item in first.achados if item.resultado.value == "DIVERGENCIA")
+    assert by_result == {"CONFORME", "DIVERGENCIA"}
+    divergent = next(item for item in first.achados if item.regra_id == "nd31.desenho.escala")
     assert "Valor observado: ausente" in divergent.mensagem
-    assert "esperado: projeto.nota_servico presente" in divergent.mensagem
+    assert "esperado: projeto.escala em 1:1000, 1:500" in divergent.mensagem
     assert divergent.avaliacoes_condicoes
     assert len(divergent.fato_ids) == 1
 
@@ -217,14 +222,14 @@ def test_execution_is_deterministic_preserves_history_and_survives_restart(
             .values(rule_version="revisao-adulterada")
         )
 
-    _import_rule_state(registry_service, "nd31.desenho.numero-projeto", enabled=False)
+    _import_rule_state(registry_service, "nd31.desenho.escala", enabled=False)
     second = service.executar(project_id)
     history = service.listar_historico(project_id)
 
     assert second.id != first.id
     assert history == (first, second)
-    assert any(item.regra_id == "nd31.desenho.numero-projeto" for item in first.achados)
-    assert all(item.regra_id != "nd31.desenho.numero-projeto" for item in second.achados)
+    assert any(item.regra_id == "nd31.desenho.escala" for item in first.achados)
+    assert all(item.regra_id != "nd31.desenho.escala" for item in second.achados)
     assert service.resultado_desatualizado(first)
     assert not service.resultado_desatualizado(second)
     assert service.resultado_desatualizado(replace(second, versao_metodo="2"))
@@ -262,7 +267,7 @@ def test_active_rule_revision_is_captured_before_loading_the_semantic_session(
     review_service = ServicoRevisaoHumana(unit_of_work)
 
     def load_after_registry_changes(identifier: UUID) -> SessaoRevisao:
-        _import_rule_state(registry_service, "nd31.desenho.numero-projeto", enabled=False)
+        _import_rule_state(registry_service, "nd31.desenho.escala", enabled=False)
         return review_service.carregar_sessao_semantica(identifier)
 
     service = ExecutarAnaliseConformidade(
@@ -275,7 +280,7 @@ def test_active_rule_revision_is_captured_before_loading_the_semantic_session(
 
     assert execution.revisao_regras_id == captured_revision.id
     assert execution.assinatura_regras == captured_revision.assinatura
-    assert any(item.regra_id == "nd31.desenho.numero-projeto" for item in execution.achados)
+    assert any(item.regra_id == "nd31.desenho.escala" for item in execution.achados)
     assert service.resultado_desatualizado(execution)
     engine.dispose()
 
@@ -356,7 +361,7 @@ def test_panel_loads_latest_marks_stale_and_reapplies_without_ocr(
     assert toggle is None and remove is None and analyze is not None
     first_row = findings.topLevelItem(0)
     assert first_row is not None
-    assert first_row.text(0) == "Possível divergência"
+    assert first_row.text(0) == "Divergência"
     assert "ausente" in first_row.text(3)
     assert "presente" in first_row.text(4)
     assert "CEMIG ND-3.1" in first_row.text(6)

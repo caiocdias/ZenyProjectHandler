@@ -23,13 +23,20 @@ def _seed_payload() -> dict[str, object]:
 def _first_condition(payload: dict[str, object]) -> dict[str, object]:
     rules = payload["rules"]
     assert isinstance(rules, list)
-    rule = rules[0]
-    assert isinstance(rule, dict)
-    conditions = rule["when"]
-    assert isinstance(conditions, list)
-    condition = conditions[0]
-    assert isinstance(condition, dict)
-    return condition
+    for rule in rules:
+        if not isinstance(rule, dict):
+            continue
+        conditions = rule.get("when")
+        if not isinstance(conditions, list):
+            continue
+        for condition in conditions:
+            if (
+                isinstance(condition, dict)
+                and condition.get("fact") == "rede.contexto_urbano"
+                and condition.get("operator") == "IGUAL"
+            ):
+                return condition
+    raise AssertionError("O catálogo não contém a condição booleana usada pelo teste")
 
 
 def test_fact_catalog_covers_current_and_planned_seed_vocabulary() -> None:
@@ -48,9 +55,49 @@ def test_fact_catalog_covers_current_and_planned_seed_vocabulary() -> None:
     assert definitions["vao.comprimento_m"].disponibilidade is (
         DisponibilidadeProvedorFato.DISPONIVEL
     )
+    assert (
+        definitions["regiao.transformador_trifasico_poste_existente_avaliavel"].disponibilidade
+        is DisponibilidadeProvedorFato.DISPONIVEL
+    )
+    assert definitions["regiao.poste_transformador_resistencia_dan"].disponibilidade is (
+        DisponibilidadeProvedorFato.DISPONIVEL
+    )
+    assert definitions["conexao.angulo_graus"].disponibilidade is (
+        DisponibilidadeProvedorFato.DISPONIVEL
+    )
     warnings = validar_semantica_registro(registry)
-    assert any("conexao.angulo_graus" in item for item in warnings)
+    assert not any("conexao.angulo_graus" in item for item in warnings)
     assert all("vao.comprimento_m" not in item for item in warnings)
+
+
+def test_official_2025_6_seed_contains_the_complete_additive_rule_set() -> None:
+    registry = carregar_registro_conformidade_inicial()
+    expected_additions = {
+        "nd31.desenho.numero-folha",
+        "nd31.desenho.data-projeto",
+        "nd31.desenho.circuito",
+        "nd31.poste.urbano-altura-minima",
+        "nd31.poste.urbano-formato-circular",
+        "nd31.equipamento.poste-novo-altura",
+        "nd31.equipamento.poste-novo-resistencia",
+        "catalogo.compatibilidade.estrutura-cabo",
+        "nd31.transformador.chave-fusivel",
+        "nd31.transformador.para-raios-bt",
+        "nd31.transformador.para-raios-mt",
+        "nd31.transformador.aterramento",
+        "pacote.coerencia.transformador-potencia",
+        "pacote.coerencia.fases",
+        "pacote.coerencia.codigo",
+        "pacote.coerencia.circuito",
+        "pacote.documentacao.gd",
+        "pacote.documentacao.prordr-fotos",
+        "nd31.rede.neutro-aterramento-200m",
+        "nd31.rede.compacta-aterramento-temporario-160m",
+    }
+
+    assert registry.versao == "cemig-normas-distribuicao-2025.6"
+    assert len(registry.regras) == 39
+    assert expected_additions <= {item.id for item in registry.regras}
 
 
 @pytest.mark.parametrize(

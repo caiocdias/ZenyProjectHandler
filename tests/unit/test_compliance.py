@@ -51,7 +51,7 @@ from zeny_project_handler.domain.enums import (
     TipoEvidencia,
     TipoOrigemPdf,
 )
-from zeny_project_handler.domain.project import Projeto
+from zeny_project_handler.domain.project import Poste, Projeto
 from zeny_project_handler.domain.project_metadata import MetadadosProjeto
 from zeny_project_handler.domain.values import (
     CaixaPagina,
@@ -96,16 +96,230 @@ def test_project_compliance_extracts_header_without_deriving_spans_or_angles() -
     findings = {item.regra_id: item.resultado.value for item in result.achados}
 
     assert ("projeto.nota_servico", "1234567890") in facts
+    assert ("projeto.nota_servico_cabecalho", "1234567890") in facts
+    assert all(key != "projeto.nota_servico_divergencia" for key, _value in facts)
     assert ("projeto.escala", "1:1000") in facts
     assert ("projeto.formato_folha", "A4") in facts
     assert all(key not in {"vao.comprimento_m", "conexao.angulo_graus"} for key, _value in facts)
     assert findings["nd31.desenho.numero-projeto"] == "CONFORME"
-    assert findings["nd31.equipamento.estrutura-angulo"] == "NAO_AVALIAVEL"
-    assert findings["nd31.vao.urbano-compacto-isolado"] == "NAO_AVALIAVEL"
+    assert "nd31.equipamento.estrutura-angulo" not in findings
+    assert "nd31.vao.urbano-compacto-isolado" not in findings
     assert any(
-        item.grupo == "Assinaturas" and item.estado == "REQUER_REVISAO_VISUAL"
+        item.grupo == "Assinaturas" and item.estado == "IDENTIFICADO"
         for item in result.itens_documentais
     )
+
+
+def test_project_service_note_rule_alerts_when_pdf_header_differs_from_project_name() -> None:
+    session = _session_with_document_controls()
+    body_reference = _text_evidence(
+        session.execucoes[0].id,
+        session.projeto.documentos[0].paginas[0].id,
+        "REFERÊNCIA NO CORPO — NS: 0987654321",
+        "0.45",
+        "0.20",
+    )
+    session = replace(
+        session,
+        projeto=replace(session.projeto, nome="0987654321"),
+        evidencias=(*session.evidencias, body_reference),
+    )
+
+    result = analisar_conformidade_projeto(
+        session,
+        carregar_registro_conformidade_inicial(),
+    )
+
+    finding = next(
+        item for item in result.achados if item.regra_id == "nd31.desenho.numero-projeto"
+    )
+    facts = {(item.chave, item.valor) for item in result.fatos}
+    header_evidence = next(
+        item for item in session.evidencias if "NS:" in (item.conteudo_bruto or "")
+    )
+    divergence_fact = next(
+        item for item in result.fatos if item.chave == "projeto.nota_servico_divergencia"
+    )
+    assert ("projeto.nota_servico", "0987654321") in facts
+    assert ("projeto.nota_servico_cabecalho", "1234567890") in facts
+    assert ("projeto.nota_servico_cabecalho", "0987654321") not in facts
+    assert (
+        "projeto.nota_servico_divergencia",
+        "cabeçalho PDF: 1234567890; nome do projeto: 0987654321",
+    ) in facts
+    assert finding.resultado is ResultadoConformidade.DIVERGENCIA
+    assert "igual à NS usada como nome do projeto" in finding.mensagem
+    assert "cabeçalho PDF: 1234567890" in finding.mensagem
+    assert "nome do projeto: 0987654321" in finding.mensagem
+    assert header_evidence.id in finding.evidencia_ids
+    assert divergence_fact.id in finding.fato_ids
+    assert divergence_fact.geometria == header_evidence.geometria
+
+
+def test_project_service_note_ignores_divergent_ns_reference_in_drawing_body() -> None:
+    session = _session_with_document_controls()
+    body_reference = _text_evidence(
+        session.execucoes[0].id,
+        session.projeto.documentos[0].paginas[0].id,
+        "NOTA DE CAMPO — NS: 0987654321",
+        "0.45",
+        "0.20",
+    )
+    session = replace(session, evidencias=(*session.evidencias, body_reference))
+
+    result = analisar_conformidade_projeto(
+        session,
+        carregar_registro_conformidade_inicial(),
+    )
+
+    facts = {(item.chave, item.valor) for item in result.fatos}
+    assert ("projeto.nota_servico_cabecalho", "1234567890") in facts
+    assert ("projeto.nota_servico_cabecalho", "0987654321") not in facts
+    assert all(item.chave != "projeto.nota_servico_divergencia" for item in result.fatos)
+    finding = next(
+        item for item in result.achados if item.regra_id == "nd31.desenho.numero-projeto"
+    )
+    assert finding.resultado is ResultadoConformidade.CONFORME
+
+
+@pytest.mark.parametrize(
+    ("identifiers", "expected_sequence", "expected_result"),
+    (
+        (("P1", "P2", "P3"), True, ResultadoConformidade.CONFORME),
+        (("P1", "P3", "P4"), False, ResultadoConformidade.DIVERGENCIA),
+    ),
+)
+def test_project_automation_evaluates_document_pack_and_post_sequence(
+    identifiers: tuple[str, ...],
+    expected_sequence: bool,
+    expected_result: ResultadoConformidade,
+) -> None:
+    session = _session_with_document_controls()
+    page_id = session.projeto.documentos[0].paginas[0].id
+    execution_id = session.execucoes[0].id
+    pole_type = next(
+        item
+        for item in session.catalogo.itens_ativos(CategoriaElemento.POSTE)
+        if isinstance(item, TipoPoste)
+    )
+    poles = tuple(
+        Poste(
+            id=uuid4(),
+            tipo_catalogo_id=pole_type.id,
+            situacao=SituacaoProjeto.EXISTENTE,
+            identificador_operacional=identifier,
+            geometria=GeometriaDocumento.ponto(
+                page_id,
+                PontoNormalizado(Decimal("0.20") + Decimal(index) / 10, Decimal("0.45")),
+            ),
+        )
+        for index, identifier in enumerate(identifiers)
+    )
+    package_evidence = _text_evidence(
+        execution_id,
+        page_id,
+        "RELAÇÃO DE MATERIAIS E ORÇAMENTO · MEMÓRIA DE CÁLCULO",
+        "0.50",
+        "0.80",
+    )
+    session = replace(
+        session,
+        projeto=replace(session.projeto, elementos=poles),
+        evidencias=(*session.evidencias, package_evidence),
+    )
+
+    result = analisar_conformidade_projeto(
+        session,
+        carregar_registro_conformidade_inicial(),
+    )
+    facts = {item.chave: item.valor for item in result.fatos}
+    findings = {item.regra_id: item.resultado for item in result.achados}
+
+    assert facts["projeto.relacao_materiais_orcamento_identificada"] is True
+    assert facts["projeto.memoria_calculo_identificada"] is True
+    assert facts["projeto.postes_total"] == 3
+    assert facts["projeto.postes_numeracao_sequencial"] is expected_sequence
+    assert findings["nd31.documentacao.relacao-materiais-orcamento"] is (
+        ResultadoConformidade.CONFORME
+    )
+    assert findings["nd31.documentacao.memoria-calculo"] is ResultadoConformidade.CONFORME
+    assert findings["nd31.desenho.numeracao-postes"] is expected_result
+
+
+def test_rural_and_topological_rules_are_deterministic() -> None:
+    project_target = AlvoConformidade(
+        id=uuid4(),
+        tipo=TipoEscopoConformidade.PROJETO,
+        rotulo="Projeto rural",
+    )
+    region_target = AlvoConformidade(
+        id=uuid4(),
+        tipo=TipoEscopoConformidade.REGIAO,
+        rotulo="Região rural",
+    )
+    divergent_facts = (
+        _fact(project_target.id, "rede.contexto_rural", True),
+        _fact(project_target.id, "projeto.extensao_rede_instalar_avaliada", True),
+        _fact(project_target.id, "projeto.extensao_rede_instalar_m", Decimal("350")),
+        _fact(project_target.id, "projeto.prordr_identificado", False),
+        _fact(project_target.id, "projeto.rede_compacta_extensao_m", Decimal("600")),
+        _fact(project_target.id, "projeto.rede_compacta_maior_componente_m", Decimal("600")),
+        _fact(project_target.id, "projeto.rede_compacta_ancoragem_avaliada", True),
+        _fact(project_target.id, "projeto.rede_compacta_ancoragem_suficiente", False),
+        _fact(region_target.id, "rede.contexto_rural", True),
+        _fact(region_target.id, "vao.comprimento_m", Decimal("100")),
+        _fact(region_target.id, "cabo.instalar_tecnologia", "CONVENCIONAL_CA"),
+        _fact(region_target.id, "regiao.transformador_instalar", True),
+        _fact(
+            region_target.id,
+            "regiao.poste_equipamento_instalar_resistencia_dan",
+            Decimal("300"),
+        ),
+        _fact(region_target.id, "regiao.poste_equipamento_instalar_formato", "DUPLO_T"),
+        _fact(region_target.id, "regiao.transicao_rede", True),
+        _fact(region_target.id, "conexao.angulo_graus", Decimal("20")),
+        _fact(region_target.id, "regiao.para_raios_mt_requerido", True),
+        _fact(region_target.id, "regiao.para_raios_mt_requisito_presente", False),
+    )
+    corrected_values = {
+        "projeto.prordr_identificado": True,
+        "projeto.rede_compacta_ancoragem_suficiente": True,
+        "cabo.instalar_tecnologia": "CONVENCIONAL_CAA",
+        "regiao.poste_equipamento_instalar_resistencia_dan": Decimal("600"),
+        "regiao.poste_equipamento_instalar_formato": "CIRCULAR",
+        "conexao.angulo_graus": Decimal("0"),
+        "regiao.para_raios_mt_requisito_presente": True,
+    }
+    corrected_facts = tuple(
+        replace(item, valor=corrected_values.get(item.chave, item.valor))
+        for item in divergent_facts
+    )
+    rule_ids = {
+        "nd22.projeto.prordr-acima-300",
+        "nd22.cabo.rural-vao-maior-80-caa",
+        "nd93.transformador.poste-novo-rural",
+        "nd93.rede.transicao-sem-angulo",
+        "nd31.rede.para-raios-mt-fim-transicao",
+        "nd93.rede.compacta-ancoragem-500m",
+    }
+
+    divergent = avaliar_regras_conformidade(
+        carregar_registro_conformidade_inicial(),
+        (project_target, region_target),
+        divergent_facts,
+    )
+    corrected = avaliar_regras_conformidade(
+        carregar_registro_conformidade_inicial(),
+        (project_target, region_target),
+        corrected_facts,
+    )
+
+    assert {
+        item.regra_id for item in divergent if item.resultado is ResultadoConformidade.DIVERGENCIA
+    } >= rule_ids
+    assert {
+        item.regra_id for item in corrected if item.resultado is ResultadoConformidade.CONFORME
+    } >= rule_ids
 
 
 def test_documentation_lists_every_labeled_header_and_servitude_value() -> None:
@@ -232,7 +446,7 @@ def test_document_control_facts_preserve_branch_order_ids_and_provenance() -> No
     ]
     assert [(item.grupo, item.estado) for item in items] == [
         ("Servidão", "IDENTIFICADO"),
-        ("Carimbos e selos", "REQUER_REVISAO_VISUAL"),
+        ("Carimbos e selos", "IDENTIFICADO"),
         ("Assinaturas", "ASSINATURA_PDF_PRESENTE"),
     ]
     assert items[0].evidencia_ids == (servitude_field.id,)
@@ -309,6 +523,7 @@ def test_region_facts_preserve_semantic_order_and_deterministic_ids() -> None:
         "regiao.risco_abalroamento_avaliado",
         "cabo.tecnologia",
         "cabo.instalar_tecnologia",
+        "regiao.transformador_trifasico_poste_existente_avaliavel",
     ]
     assert len({fact.id for fact in first}) == len(first)
     assert next(
@@ -321,6 +536,7 @@ def test_region_facts_preserve_semantic_order_and_deterministic_ids() -> None:
         True,
         "PROTEGIDA",
         "PROTEGIDA",
+        False,
     ]
 
 
@@ -628,7 +844,7 @@ def test_region_facts_publish_unambiguous_rural_structure_post_compatibility() -
         (
             "nd31.cabo.convencional-novo-urbano",
             (("rede.contexto_urbano", True),),
-            "NAO_AVALIAVEL",
+            None,
         ),
         (
             "nd31.cabo.convencional-novo-urbano",
@@ -662,7 +878,7 @@ def test_region_facts_publish_unambiguous_rural_structure_post_compatibility() -
                 ("rede.contexto_rural", True),
                 ("regiao.estrutura_mt_instalar_codigo", "CEJ2"),
             ),
-            "NAO_AVALIAVEL",
+            "DIVERGENCIA",
         ),
         (
             "nd93.compatibilidade.estrutura-poste-duplo-t",
@@ -675,7 +891,7 @@ def test_region_facts_publish_unambiguous_rural_structure_post_compatibility() -
         ),
     ],
 )
-def test_new_normative_rules_cover_conformity_divergence_unknown_and_context_exception(
+def test_new_normative_rules_cover_conformity_divergence_and_context_exception(
     rule_id: str,
     fact_values: tuple[tuple[str, JsonPrimitive], ...],
     expected: str | None,
@@ -720,7 +936,7 @@ def test_compliance_requires_collision_review_and_honors_documented_span_excepti
     by_rule = {item.regra_id: item.resultado.value for item in findings}
 
     assert by_rule["nd31.equipamento.estrutura-angulo"] == "CONFORME"
-    assert by_rule["nd31.equipamento.risco-abalroamento"] == "NAO_AVALIAVEL"
+    assert by_rule["nd31.equipamento.risco-abalroamento"] == "DIVERGENCIA"
     assert "nd31.vao.urbano-compacto-isolado" not in by_rule
 
 
@@ -763,23 +979,89 @@ def test_finding_keeps_observed_expected_values_and_condition_audit() -> None:
 
 
 @pytest.mark.parametrize(
+    ("group", "invalid_value", "expected"),
+    (
+        (GrupoCondicaoConformidade.APLICABILIDADE, None, None),
+        (GrupoCondicaoConformidade.EXCECAO, None, ResultadoConformidade.CONFORME),
+        (GrupoCondicaoConformidade.REQUISITO, None, ResultadoConformidade.DIVERGENCIA),
+        (GrupoCondicaoConformidade.APLICABILIDADE, "ilegível", None),
+        (
+            GrupoCondicaoConformidade.EXCECAO,
+            "ilegível",
+            ResultadoConformidade.CONFORME,
+        ),
+        (
+            GrupoCondicaoConformidade.REQUISITO,
+            "ilegível",
+            ResultadoConformidade.DIVERGENCIA,
+        ),
+    ),
+)
+def test_missing_or_invalid_comparisons_are_false_in_every_condition_group(
+    group: GrupoCondicaoConformidade,
+    invalid_value: str | None,
+    expected: ResultadoConformidade | None,
+) -> None:
+    seed = carregar_registro_conformidade_inicial()
+    span_rule = next(item for item in seed.regras if item.id == "nd31.vao.urbano-compacto-isolado")
+    comparison = span_rule.requisitos[0]
+    baseline_requirement = span_rule.excecoes[0]
+    rule = replace(
+        span_rule,
+        aplicabilidade=((comparison,) if group is GrupoCondicaoConformidade.APLICABILIDADE else ()),
+        excecoes=((comparison,) if group is GrupoCondicaoConformidade.EXCECAO else ()),
+        requisitos=(
+            (comparison,)
+            if group is GrupoCondicaoConformidade.REQUISITO
+            else (baseline_requirement,)
+        ),
+    )
+    registry = replace(seed, regras=(rule,))
+    target = AlvoConformidade(
+        id=uuid4(),
+        tipo=TipoEscopoConformidade.REGIAO,
+        rotulo="Vão sem valor comparável",
+    )
+    facts = (
+        *(
+            (_fact(target.id, baseline_requirement.chave_fato, True),)
+            if group is not GrupoCondicaoConformidade.REQUISITO
+            else ()
+        ),
+        *(
+            (_fact(target.id, comparison.chave_fato, invalid_value),)
+            if invalid_value is not None
+            else ()
+        ),
+    )
+
+    findings = avaliar_regras_conformidade(registry, (target,), facts)
+
+    assert (findings[0].resultado if findings else None) is expected
+    if findings:
+        evaluation = findings[0].avaliacoes_condicoes[0]
+        assert evaluation.grupo is group
+        assert evaluation.resultado is ResultadoCondicaoConformidade.NAO_ATENDE
+
+
+@pytest.mark.parametrize(
     ("quantifier", "known_length", "expected"),
     [
         (QuantificadorCondicao.QUALQUER, Decimal("40"), ResultadoConformidade.CONFORME),
         (
             QuantificadorCondicao.QUALQUER,
             Decimal("50"),
-            ResultadoConformidade.NAO_AVALIAVEL,
+            ResultadoConformidade.DIVERGENCIA,
         ),
         (
             QuantificadorCondicao.TODOS,
             Decimal("40"),
-            ResultadoConformidade.NAO_AVALIAVEL,
+            ResultadoConformidade.DIVERGENCIA,
         ),
         (QuantificadorCondicao.TODOS, Decimal("50"), ResultadoConformidade.DIVERGENCIA),
     ],
 )
-def test_condition_quantifiers_preserve_unknown_values(
+def test_condition_quantifiers_treat_invalid_values_as_false(
     quantifier: QuantificadorCondicao,
     known_length: Decimal,
     expected: ResultadoConformidade,
@@ -814,12 +1096,11 @@ def test_condition_quantifiers_preserve_unknown_values(
         is {
             ResultadoConformidade.CONFORME: ResultadoCondicaoConformidade.ATENDE,
             ResultadoConformidade.DIVERGENCIA: ResultadoCondicaoConformidade.NAO_ATENDE,
-            ResultadoConformidade.NAO_AVALIAVEL: ResultadoCondicaoConformidade.DESCONHECIDO,
         }[expected]
     )
 
 
-def test_unknown_project_context_is_not_reported_as_normative_divergence() -> None:
+def test_missing_project_context_does_not_activate_normative_rules() -> None:
     target = AlvoConformidade(
         id=uuid4(),
         tipo=TipoEscopoConformidade.PROJETO,
@@ -832,8 +1113,7 @@ def test_unknown_project_context_is_not_reported_as_normative_divergence() -> No
         (),
     )
 
-    assert len(findings) == 2
-    assert {item.resultado.value for item in findings} == {"NAO_AVALIAVEL"}
+    assert findings == ()
 
 
 def _fact(target_id: UUID, key: str, value: JsonPrimitive) -> FatoConformidade:
@@ -867,7 +1147,7 @@ def _session_with_document_controls() -> SessaoRevisao:
     )
     project = Projeto(
         id=uuid4(),
-        nome="Projeto urbano",
+        nome="1234567890",
         catalogo_versao_id=catalog.id,
         criado_em=datetime(2026, 7, 23, 12, tzinfo=UTC),
         documentos=(document,),

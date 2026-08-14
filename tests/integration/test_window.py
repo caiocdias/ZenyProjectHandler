@@ -8,10 +8,12 @@ import pytest
 from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, Qt
 from PySide6.QtGui import QMouseEvent
 from PySide6.QtWidgets import (
+    QApplication,
     QDockWidget,
     QFileDialog,
     QFrame,
     QLabel,
+    QLineEdit,
     QMenu,
     QMessageBox,
     QPushButton,
@@ -89,6 +91,60 @@ def test_main_window_smoke(
     )
     assert window.statusBar().currentMessage() == "Pronto"
     assert settings.database_path.is_file()
+
+
+@pytest.mark.integration
+def test_service_note_is_plain_numeric_field_with_predictable_clipboard_shortcuts(
+    qtbot: QtBot,
+    tmp_path: Path,
+    application_factory: ApplicationFactory,
+) -> None:
+    _application, window = application_factory(
+        [],
+        settings=AppSettings(data_directory=tmp_path / "service-note-clipboard"),
+    )
+    qtbot.addWidget(window)
+    window.show()
+    field = window.findChild(QLineEdit, "mvpProjectNameEdit")
+    assert field is not None
+    assert field.inputMask() == ""
+    assert field.maxLength() == 10
+    assert field.text() == ""
+    clipboard = QApplication.clipboard()
+    previous_clipboard_text = clipboard.text()
+    try:
+        qtbot.keyClicks(field, "12a34")  # type: ignore[no-untyped-call]
+        assert field.text() == "1234"
+        assert not field.hasAcceptableInput()
+
+        field.clear()
+        qtbot.keyClicks(field, "1234567890123")  # type: ignore[no-untyped-call]
+        assert field.text() == "1234567890"
+        assert field.hasAcceptableInput()
+
+        field.setText("98")
+        field.setCursorPosition(1)
+        clipboard.setText("NS 000.000.024-7")
+        qtbot.keyClick(  # type: ignore[no-untyped-call]
+            field,
+            Qt.Key.Key_V,
+            Qt.KeyboardModifier.ControlModifier,
+        )
+
+        assert field.text() == "0000000247"
+        assert field.hasAcceptableInput()
+
+        field.selectAll()
+        clipboard.clear()
+        qtbot.keyClick(  # type: ignore[no-untyped-call]
+            field,
+            Qt.Key.Key_C,
+            Qt.KeyboardModifier.ControlModifier,
+        )
+
+        assert clipboard.text() == "0000000247"
+    finally:
+        clipboard.setText(previous_clipboard_text)
 
 
 @pytest.mark.integration
@@ -188,7 +244,7 @@ def test_bootstrapped_analysis_worker_refuses_restore_conflict_before_mutation(
     assert panel is not None
     service = panel._service
     coordinator = service._coordinator
-    created = service.criar_projeto("Projeto para recusa no worker")
+    created = service.criar_projeto("0000000182")
     source = create_golden_pdf(tmp_path / "worker-source.pdf")
     service.importar_pdfs(created.projeto.id, (source,))
     worker = _PipelineWorker(

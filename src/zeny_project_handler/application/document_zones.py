@@ -26,6 +26,7 @@ _HEADER_LABEL_PATTERN = re.compile(
 _ROW_VERTICAL_TOLERANCE = 0.008
 _ROW_LEFT_TOLERANCE = 0.012
 _ROW_RIGHT_REACH = 0.36
+_HEADER_ZONE_MIN_CENTER_Y = 0.76
 
 
 def evidencias_sem_anotacoes_de_revisao(
@@ -54,6 +55,20 @@ def evidencia_eh_anotacao_de_revisao(evidencia: EvidenciaDocumento) -> bool:
         and "autocad" in metadata
         and "shx" in metadata
     )
+
+
+def evidencia_esta_na_zona_de_cabecalho(evidencia: EvidenciaDocumento) -> bool:
+    """Identifique a faixa física reservada ao cabeçalho/carimbo da prancha.
+
+    As geometrias do documento usam ``y`` normalizado de cima para baixo. O
+    cabeçalho dos modelos de prancha fica na faixa inferior; usar o centro da
+    evidência nos últimos 24% da folha impede que referências ``NS:`` no corpo
+    do desenho sejam confundidas com o número oficial do projeto. A largura não
+    é restringida porque o carimbo pode se expandir para a esquerda em formatos
+    e orientações diferentes.
+    """
+    _left, top, _right, bottom = _bounds(evidencia.geometria)
+    return (top + bottom) / 2 >= _HEADER_ZONE_MIN_CENTER_Y
 
 
 def evidencias_sem_cabecalho(

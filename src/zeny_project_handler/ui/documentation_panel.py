@@ -58,7 +58,6 @@ from zeny_project_handler.domain.compliance import (
     ResultadoCondicaoConformidade,
     ResultadoConformidade,
 )
-from zeny_project_handler.domain.compliance_facts import fato_conformidade_por_chave
 from zeny_project_handler.domain.errors import DomainValidationError
 from zeny_project_handler.domain.values import GeometriaDocumento
 
@@ -179,7 +178,7 @@ class DocumentationPanelWidget(QWidget):
                 "Localização",
                 "Exibir",
             ),
-            (130, 100, 260, 190, 220, 180, 220, 180, 170, 70),
+            (130, 100, 260, 190, 220, 180, 220, 180, 170, 105),
         )
         self._findings.itemSelectionChanged.connect(self._navigate_finding_item)
         compliance_layout.addWidget(self._findings, 1)
@@ -219,8 +218,8 @@ class DocumentationPanelWidget(QWidget):
         layout.addWidget(tabs, 1)
 
         note = QLabel(
-            "Divergências são candidatas auditáveis. Ausência de contexto ou baixa confiança "
-            "permanece como “não avaliável” e exige revisão humana."
+            "As regras são avaliadas automaticamente com a simbologia, a topologia, os vãos "
+            "e os dados extraídos. Requisito aplicável ausente é indicado como divergência."
         )
         note.setObjectName("documentationAuditNotice")
         note.setProperty("role", "hint")
@@ -346,13 +345,13 @@ class DocumentationPanelWidget(QWidget):
         divergent = sum(
             item.resultado is ResultadoConformidade.DIVERGENCIA for item in self._result.achados
         )
-        not_evaluable = sum(
-            item.resultado is ResultadoConformidade.NAO_AVALIAVEL for item in self._result.achados
+        conforming = sum(
+            item.resultado is ResultadoConformidade.CONFORME for item in self._result.achados
         )
         self._summary.setText(
             f"{len(self._result.itens_documentais)} controles documentais · "
-            f"{divergent} possível(is) divergência(s) · "
-            f"{not_evaluable} regra(s) não avaliável(is)"
+            f"{divergent} divergência(s) · "
+            f"{conforming} regra(s) conforme(s)"
         )
         stale = resultado_conformidade_desatualizado(
             self._result,
@@ -472,6 +471,7 @@ class DocumentationPanelWidget(QWidget):
             )
             button = self._visibility_button(
                 visible=localized and finding.id not in self._hidden_finding_ids,
+                localized=localized,
                 tooltip=tooltip,
                 toggled=partial(self._set_finding_visible, finding.id),
             )
@@ -485,6 +485,7 @@ class DocumentationPanelWidget(QWidget):
         self,
         *,
         visible: bool,
+        localized: bool = True,
         tooltip: str,
         toggled: Callable[[bool], None],
     ) -> QToolButton:
@@ -492,14 +493,17 @@ class DocumentationPanelWidget(QWidget):
         button.setObjectName("complianceFindingVisibilityButton")
         button.setCheckable(True)
         button.setChecked(visible)
+        button.setText(_finding_visibility_button_text(visible, localized=localized))
         button.setIcon(visibility_icon(visible))
+        button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         button.setToolTip(tooltip)
         button.setAccessibleName(tooltip)
         button.toggled.connect(toggled)
         return button
 
     def _set_finding_visible(self, finding_id: UUID, visible: bool) -> None:
-        if all(item.id != finding_id for item in self._callouts):
+        callout = next((item for item in self._callouts if item.id == finding_id), None)
+        if callout is None:
             return
         if visible:
             self._hidden_finding_ids.discard(finding_id)
@@ -507,6 +511,9 @@ class DocumentationPanelWidget(QWidget):
             self._hidden_finding_ids.add(finding_id)
         self._sync_finding_visibility_buttons()
         self._update_visible_callouts()
+        if visible:
+            self._navigate(callout.pagina_id, None)
+            self._viewer.selecionar_callout(str(callout.id))
 
     def _set_all_findings_visible(self, *, visible: bool) -> None:
         localized_ids = {item.id for item in self._callouts}
@@ -535,6 +542,7 @@ class DocumentationPanelWidget(QWidget):
             button.blockSignals(True)
             button.setEnabled(localized)
             button.setChecked(visible)
+            button.setText(_finding_visibility_button_text(visible, localized=localized))
             button.setIcon(visibility_icon(visible))
             button.setToolTip(tooltip)
             button.setAccessibleName(tooltip)
@@ -556,12 +564,6 @@ class DocumentationPanelWidget(QWidget):
             else {rule.id: index for index, rule in enumerate(self._registry.regras, start=1)}
         )
         for rule in sorted(self._registry.regras, key=lambda item: number_by_id[item.id]):
-            conditions = (*rule.aplicabilidade, *rule.excecoes, *rule.requisitos)
-            planned = any(
-                definition is not None and definition.disponibilidade.value == "PLANEJADO"
-                for condition in conditions
-                if (definition := fato_conformidade_por_chave(condition.chave_fato)) is not None
-            )
             row = QTreeWidgetItem(
                 (
                     f"Regra {number_by_id[rule.id]}",
@@ -569,7 +571,7 @@ class DocumentationPanelWidget(QWidget):
                     rule.titulo,
                     rule.id,
                     rule.escopo.value.title(),
-                    "Planejado" if planned else "Disponível",
+                    "Automático",
                 )
             )
             row.setData(0, Qt.ItemDataRole.UserRole, rule.id)
@@ -807,7 +809,7 @@ def _status_label(value: str) -> str:
 def _result_label(value: ResultadoConformidade) -> str:
     return {
         ResultadoConformidade.CONFORME: "Conforme",
-        ResultadoConformidade.DIVERGENCIA: "Possível divergência",
+        ResultadoConformidade.DIVERGENCIA: "Divergência",
         ResultadoConformidade.NAO_AVALIAVEL: "Não avaliável",
     }[value]
 
@@ -869,6 +871,12 @@ def _finding_visibility_tooltip(
             return "Sem callout no PDF: somente possíveis divergências recebem marcação"
         return "Sem localização no PDF: o achado não possui callout com geometria rastreável"
     return "Ocultar este achado no PDF" if visible else "Exibir este achado no PDF"
+
+
+def _finding_visibility_button_text(visible: bool, *, localized: bool = True) -> str:
+    if not localized:
+        return "Sem local"
+    return "Ocultar" if visible else "Exibir"
 
 
 def _condition_list(

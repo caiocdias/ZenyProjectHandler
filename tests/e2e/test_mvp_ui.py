@@ -79,7 +79,12 @@ def test_user_can_reorder_project_pdfs_and_reopen_in_reading_order(
     name = panel.findChild(QLineEdit, "mvpProjectNameEdit")
     create = panel.findChild(QPushButton, "mvpCreateProjectButton")
     assert name is not None and create is not None
-    name.setText("Projeto ordenado")
+    assert name.inputMask() == ""
+    assert name.maxLength() == 10
+    assert name.validator() is not None
+    assert name.placeholderText() == "Número da NS"
+    name.setText("0000000082")
+    assert name.hasAcceptableInput()
     qtbot.mouseClick(create, Qt.MouseButton.LeftButton)
     project_combo = panel.findChild(QComboBox, "mvpProjectCombo")
     assert project_combo is not None
@@ -136,7 +141,7 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
     name = panel.findChild(QLineEdit, "mvpProjectNameEdit")
     create = panel.findChild(QPushButton, "mvpCreateProjectButton")
     assert name is not None and create is not None
-    name.setText("Projeto MVP")
+    name.setText("0000000139")
     qtbot.mouseClick(create, Qt.MouseButton.LeftButton)
     project_combo = panel.findChild(QComboBox, "mvpProjectCombo")
     assert project_combo is not None
@@ -206,7 +211,7 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
     assert compliance_tree.topLevelItemCount() >= 1
     divergence = compliance_tree.topLevelItem(0)
     assert divergence is not None
-    assert divergence.text(0) == "Possível divergência"
+    assert divergence.text(0) == "Divergência"
     assert "ausente" in divergence.text(3)
     assert "presente" in divergence.text(4)
     assert "Resultado atual" in compliance_status.text()

@@ -626,4 +626,4 @@ def test_documentation_panel_has_own_document_and_compliance_views(
     document_root = documents.topLevelItem(0)
     assert document_root is not None
     assert document_root.childCount() >= 3
-    assert findings.topLevelItemCount() >= 3
+    assert findings.topLevelItemCount() >= 2

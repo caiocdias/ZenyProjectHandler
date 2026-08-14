@@ -116,6 +116,11 @@ def test_finding_eyes_batch_actions_sorting_and_missing_geometry_are_independent
     localized_rows = tuple(_finding_row(tree, item.id) for item in panel._callouts)
     localized_buttons = tuple(_visibility_button(tree, row) for row in localized_rows)
     assert all(button.isEnabled() and button.isChecked() for button in localized_buttons)
+    assert all(button.text() == "Ocultar" for button in localized_buttons)
+    assert all(
+        button.toolButtonStyle() is Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+        for button in localized_buttons
+    )
     assert all(button.toolTip() == "Ocultar este achado no PDF" for button in localized_buttons)
     assert all(button.accessibleName() == button.toolTip() for button in localized_buttons)
 
@@ -125,6 +130,7 @@ def test_finding_eyes_batch_actions_sorting_and_missing_geometry_are_independent
     assert unlocated_row.text(8) == "Sem localização no PDF"
     assert not unlocated_button.isEnabled()
     assert not unlocated_button.isChecked()
+    assert unlocated_button.text() == "Sem local"
     assert unlocated_button.toolTip().startswith("Sem localização no PDF:")
     assert unlocated_button.accessibleName() == unlocated_button.toolTip()
 
@@ -132,6 +138,7 @@ def test_finding_eyes_batch_actions_sorting_and_missing_geometry_are_independent
     localized_buttons[0].click()
     assert {item.id for item in viewer.callouts} == {second_id}
     assert not localized_buttons[0].isChecked()
+    assert localized_buttons[0].text() == "Exibir"
     assert localized_buttons[1].isChecked()
 
     tree.setSortingEnabled(True)
@@ -155,6 +162,37 @@ def test_finding_eyes_batch_actions_sorting_and_missing_geometry_are_independent
     assert {item.id for item in visible_callouts} == localized_ids
     assert first_id != second_id
     assert tuple(viewer.overlays) == overlay_state
+
+
+def test_showing_callout_without_selecting_row_navigates_to_its_page_and_selects_it(
+    qtbot: QtBot,
+) -> None:
+    panel, viewer, first_session, _second_session, _execution, _analysis = _panel(
+        qtbot,
+        second_page=True,
+    )
+    panel.abrir_projeto(first_session.projeto.id)
+    tree = panel.findChild(QTreeWidget, "complianceFindingsTree")
+    assert tree is not None
+    second_page = first_session.projeto.documentos[0].paginas[1]
+    callout = next(item for item in panel._callouts if item.pagina_id == second_page.id)
+    row = _finding_row(tree, callout.id)
+    button = _visibility_button(tree, row)
+    tree.clearSelection()
+    assert tree.selectedItems() == []
+
+    button.click()
+    assert callout.id not in {item.id for item in viewer.callouts}
+    assert button.text() == "Exibir"
+    assert viewer.page_visits == []
+    assert viewer.selected_callouts == []
+
+    button.click()
+    assert callout.id in {item.id for item in viewer.callouts}
+    assert button.text() == "Ocultar"
+    assert viewer.page_visits == [2]
+    assert viewer.selected_callouts == [str(callout.id)]
+    assert tree.selectedItems() == []
 
 
 def test_hidden_state_survives_navigation_and_resets_for_project_or_execution(
@@ -216,6 +254,8 @@ def test_list_and_callout_selection_sync_without_signal_cycles(qtbot: QtBot) -> 
 
 def _panel(
     qtbot: QtBot,
+    *,
+    second_page: bool = False,
 ) -> tuple[
     DocumentationPanelWidget,
     _ViewerStub,
@@ -225,7 +265,11 @@ def _panel(
     _AnalysisServiceStub,
 ]:
     registry = carregar_registro_conformidade_inicial()
-    first_session, first_execution = _session_and_execution("project-a", registry.assinatura())
+    first_session, first_execution = _session_and_execution(
+        "project-a",
+        registry.assinatura(),
+        second_page=second_page,
+    )
     second_session, second_execution = _session_and_execution("project-b", registry.assinatura())
     review = _ReviewServiceStub((first_session, second_session))
     analysis = _AnalysisServiceStub((first_execution, second_execution))
@@ -244,14 +288,17 @@ def _panel(
 def _session_and_execution(
     key: str,
     registry_signature: str,
+    *,
+    second_page: bool = False,
 ) -> tuple[SessaoRevisao, ExecucaoConformidade]:
     catalog = carregar_catalogo_inicial()
     page = _page(key)
+    additional_page = _page(f"{key}-additional", number=2) if second_page else None
     document = DocumentoProjeto(
         id=_id(f"document-{key}"),
         nome_arquivo=f"{key}.pdf",
         sha256=("a" if key == "project-a" else "b") * 64,
-        paginas=(page,),
+        paginas=(page,) if additional_page is None else (page, additional_page),
         tamanho_bytes=100,
     )
     project = Projeto(
@@ -266,9 +313,10 @@ def _session_and_execution(
     findings: list[AchadoConformidade] = []
     for index, point in enumerate(("0.25", "0.65", None)):
         target_id = _id(f"{key}-target-{index}")
+        geometry_page = additional_page if index == 0 and additional_page is not None else page
         geometry = (
             GeometriaDocumento.ponto(
-                page.id,
+                geometry_page.id,
                 PontoNormalizado(Decimal(point), Decimal("0.50")),
             )
             if point is not None
@@ -279,7 +327,7 @@ def _session_and_execution(
                 id=target_id,
                 tipo=TipoEscopoConformidade.REGIAO,
                 rotulo=f"Alvo {index}",
-                pagina_id=page.id if geometry is not None else None,
+                pagina_id=geometry_page.id if geometry is not None else None,
                 geometria=geometry,
             )
         )
@@ -341,13 +389,13 @@ def _session_and_execution(
     return session, execution
 
 
-def _page(key: str) -> PaginaDocumento:
+def _page(key: str, *, number: int = 1) -> PaginaDocumento:
     width = Decimal("595")
     height = Decimal("842")
     box = CaixaPagina(Decimal(0), Decimal(0), width, height)
     return PaginaDocumento(
         id=_id(f"page-{key}"),
-        numero=1,
+        numero=number,
         largura_pontos=width,
         altura_pontos=height,
         rotacao_graus=0,

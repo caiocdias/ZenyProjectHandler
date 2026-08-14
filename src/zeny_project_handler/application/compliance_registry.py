@@ -29,10 +29,73 @@ from zeny_project_handler.ports.persistence import UnitOfWorkPort
 from .errors import RegistroConformidadeError
 
 CATALOGO_REGRAS_FILE_NAME = "catalogo-regras-conformidade.md"
-_LEGACY_BUNDLED_VERSION = "cemig-normas-distribuicao-2025.3"
 _SAFE_BUNDLED_VERSION = "cemig-normas-distribuicao-2025.4"
+_PREVIOUS_BUNDLED_VERSION = "cemig-normas-distribuicao-2025.5"
+_CURRENT_BUNDLED_VERSION = "cemig-normas-distribuicao-2025.6"
 _SPAN_RULE_ID = "nd31.vao.urbano-compacto-isolado"
 _SPAN_SAFEGUARD_FACT = "vao.aplicabilidade_excecao_45_60_resolvida"
+_SERVICE_NOTE_RULE_ID = "nd31.desenho.numero-projeto"
+_SCALE_RULE_ID = "nd31.desenho.escala"
+_ANGLE_RULE_ID = "nd31.equipamento.estrutura-angulo"
+_CABLE_INSTALL_RULE_ID = "nd31.cabo.convencional-novo-urbano"
+_TRANSFORMER_30_75_RULE_ID = "nd31.transformador.poste-existente-30-75"
+_TRANSFORMER_150_300_RULE_ID = "nd31.transformador.poste-existente-150-300"
+_BUNDLED_2025_5_ADDITION_IDS = (
+    "nd31.transformador.poste-existente-30-75",
+    "nd31.transformador.poste-existente-150-300",
+)
+_BUNDLED_2025_5_RULE_IDS = (
+    "nd31.desenho.numero-projeto",
+    "nd31.desenho.formato",
+    "nd31.desenho.escala",
+    "nd31.equipamento.estrutura-angulo",
+    "nd31.equipamento.risco-abalroamento",
+    "nd31.vao.urbano-compacto-isolado",
+    "nd31.cabo.convencional-novo-urbano",
+    "nd93.compatibilidade.estrutura-poste-duplo-t",
+    *_BUNDLED_2025_5_ADDITION_IDS,
+)
+_BUNDLED_2025_6_ADDITION_IDS = (
+    "nd31.desenho.numero-folha",
+    "nd31.desenho.data-projeto",
+    "nd31.desenho.circuito",
+    "nd31.poste.urbano-altura-minima",
+    "nd31.poste.urbano-formato-circular",
+    "nd31.equipamento.poste-novo-altura",
+    "nd31.equipamento.poste-novo-resistencia",
+    "catalogo.compatibilidade.estrutura-cabo",
+    "nd31.transformador.chave-fusivel",
+    "nd31.transformador.para-raios-bt",
+    "nd31.transformador.para-raios-mt",
+    "nd31.transformador.aterramento",
+    "nd31.documentacao.relacao-materiais-orcamento",
+    "nd31.documentacao.memoria-calculo",
+    "nd31.desenho.numeracao-postes",
+    "nd22.projeto.prordr-acima-300",
+    "nd22.cabo.rural-vao-maior-80-caa",
+    "nd93.transformador.poste-novo-rural",
+    "nd93.rede.transicao-sem-angulo",
+    "nd31.rede.para-raios-mt-fim-transicao",
+    "nd93.rede.compacta-ancoragem-500m",
+    "pacote.coerencia.transformador-potencia",
+    "pacote.coerencia.fases",
+    "pacote.coerencia.codigo",
+    "pacote.coerencia.circuito",
+    "pacote.documentacao.gd",
+    "pacote.documentacao.prordr-fotos",
+    "nd31.rede.neutro-aterramento-200m",
+    "nd31.rede.compacta-aterramento-temporario-160m",
+)
+_TRANSFORMER_30_75_DESCRIPTION_2025_5 = (
+    "Na parcela verificável da observação t, transformadores trifásicos de 30, 45 ou 75 kVA "
+    "a instalar em posteação existente exigem poste de formato admitido e capacidade nominal "
+    "mínima de 300 daN; material PRFV e engastamento permanecem fora desta verificação."
+)
+_TRANSFORMER_150_300_DESCRIPTION_2025_5 = (
+    "Na parcela verificável da observação t, transformadores trifásicos de 150 ou 300 kVA a "
+    "instalar em posteação existente exigem poste de seção circular e capacidade nominal mínima "
+    "de 600 daN; material PRFV e engastamento permanecem fora desta verificação."
+)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -95,7 +158,7 @@ class ServicoRegistroRegrasConformidade:
             current = work.registros_conformidade.obter_ativa()
         if current is None:
             return self._persistir(seed)
-        migrated_registry = _migrate_legacy_bundled_span_rule(current.registro, seed)
+        migrated_registry = _upgrade_bundled_registry(current.registro, seed)
         if migrated_registry is not None:
             return self._persistir(migrated_registry)
         if not self.caminho_catalogo.is_file():
@@ -125,21 +188,22 @@ class ServicoRegistroRegrasConformidade:
                 return None
             return self._persistir(registro_preservado)
         restored_registry = restored.registro
-        if self._seed is not None:
-            migrated = _migrate_legacy_bundled_span_rule(restored_registry, self._seed)
-            if migrated is not None:
-                restored_registry = migrated
         preserved_rules = registro_preservado.regras if registro_preservado is not None else ()
         restored_ids = {item.id for item in restored_registry.regras}
         missing = tuple(item for item in preserved_rules if item.id not in restored_ids)
+        if missing:
+            restored_registry = replace(
+                restored_registry,
+                regras=(*restored_registry.regras, *missing),
+            )
+        if self._seed is not None:
+            migrated = _upgrade_bundled_registry(restored_registry, self._seed)
+            if migrated is not None:
+                restored_registry = migrated
         if not missing and restored_registry is restored.registro:
             self.republicar_catalogo_ativo()
             return restored
-        reconciled = replace(
-            restored_registry,
-            regras=(*restored_registry.regras, *missing),
-        )
-        return self._persistir(reconciled)
+        return self._persistir(restored_registry)
 
     def republicar_catalogo_ativo(self) -> None:
         """Sincronize a projeção Markdown com a revisão ativa persistida."""
@@ -263,40 +327,217 @@ class ServicoRegistroRegrasConformidade:
             ) from error
 
 
-def _migrate_legacy_bundled_span_rule(
+def _upgrade_bundled_registry(
     current: RegistroRegrasConformidade,
     seed: RegistroRegrasConformidade,
 ) -> RegistroRegrasConformidade | None:
-    """Upgrade only an unchanged bundled Rule 6, preserving custom rules and edits."""
-    if seed.versao != _SAFE_BUNDLED_VERSION:
+    """Aplique correções seletivas e somente adições oficiais, preservando customizações."""
+    if seed.versao not in {
+        _SAFE_BUNDLED_VERSION,
+        _PREVIOUS_BUNDLED_VERSION,
+        _CURRENT_BUNDLED_VERSION,
+    }:
         return None
+    candidate = current
+    safeguard_changed = False
     replacement = next((item for item in seed.regras if item.id == _SPAN_RULE_ID), None)
-    if replacement is None:
-        return None
-    safeguards = tuple(
-        item for item in replacement.aplicabilidade if item.chave_fato == _SPAN_SAFEGUARD_FACT
+    if replacement is not None:
+        safeguards = tuple(
+            item for item in replacement.aplicabilidade if item.chave_fato == _SPAN_SAFEGUARD_FACT
+        )
+        legacy_rule = replace(
+            replacement,
+            aplicabilidade=tuple(
+                item
+                for item in replacement.aplicabilidade
+                if item.chave_fato != _SPAN_SAFEGUARD_FACT
+            ),
+        )
+        existing = next((item for item in candidate.regras if item.id == _SPAN_RULE_ID), None)
+        if len(safeguards) == 1 and existing == legacy_rule:
+            candidate = replace(
+                candidate,
+                regras=tuple(
+                    replacement if item.id == _SPAN_RULE_ID else item for item in candidate.regras
+                ),
+            )
+            safeguard_changed = True
+
+    service_note_changed = False
+    service_note_replacement = next(
+        (item for item in seed.regras if item.id == _SERVICE_NOTE_RULE_ID),
+        None,
     )
-    if len(safeguards) != 1:
-        return None
-    legacy_rule = replace(
+    if service_note_replacement is not None:
+        legacy_service_note_rule = _legacy_service_note_rule(service_note_replacement)
+        existing_service_note_rule = next(
+            (item for item in candidate.regras if item.id == _SERVICE_NOTE_RULE_ID),
+            None,
+        )
+        if (
+            service_note_replacement != legacy_service_note_rule
+            and existing_service_note_rule == legacy_service_note_rule
+        ):
+            candidate = replace(
+                candidate,
+                regras=tuple(
+                    service_note_replacement if item.id == _SERVICE_NOTE_RULE_ID else item
+                    for item in candidate.regras
+                ),
+            )
+            service_note_changed = True
+
+    additions_2025_5_changed = False
+    if seed.versao in {_PREVIOUS_BUNDLED_VERSION, _CURRENT_BUNDLED_VERSION}:
+        candidate, additions_2025_5_changed = _add_missing_bundled_rules(
+            candidate,
+            seed,
+            _BUNDLED_2025_5_ADDITION_IDS,
+        )
+
+    updates_2025_6_changed = False
+    additions_2025_6_changed = False
+    if seed.versao == _CURRENT_BUNDLED_VERSION:
+        candidate, updates_2025_6_changed = _replace_unchanged_2025_5_rules(
+            candidate,
+            seed,
+        )
+        candidate, additions_2025_6_changed = _add_missing_bundled_rules(
+            candidate,
+            seed,
+            _BUNDLED_2025_6_ADDITION_IDS,
+        )
+
+    if candidate.regras == seed.regras:
+        candidate = replace(candidate, versao=seed.versao)
+    elif any(
+        (
+            safeguard_changed,
+            additions_2025_5_changed,
+            service_note_changed,
+            updates_2025_6_changed,
+            additions_2025_6_changed,
+        )
+    ):
+        version = current.versao
+        if safeguard_changed:
+            version = _version_with_tag(version, "seguranca-vao-2025.4")
+        if additions_2025_5_changed:
+            version = _version_with_tag(version, "adicoes-2025.5")
+        if service_note_changed:
+            version = _version_with_tag(version, "comparacao-ns-cabecalho")
+        if updates_2025_6_changed:
+            version = _version_with_tag(version, "atualizacao-2025.6")
+        if additions_2025_6_changed:
+            version = _version_with_tag(version, "adicoes-2025.6")
+        candidate = replace(candidate, versao=version)
+    return candidate if candidate != current else None
+
+
+def _legacy_service_note_rule(replacement: RegraConformidade) -> RegraConformidade:
+    return replace(
         replacement,
-        aplicabilidade=tuple(
-            item for item in replacement.aplicabilidade if item.chave_fato != _SPAN_SAFEGUARD_FACT
+        titulo="Número do projeto com 10 dígitos",
+        descricao="O desenho deve informar o número do projeto/Nota de Serviço com 10 dígitos.",
+        aplicabilidade=(
+            CondicaoConformidade(
+                chave_fato="rede.contexto_urbano",
+                operador=OperadorCondicao.IGUAL,
+                valores_esperados=(True,),
+            ),
+        ),
+        requisitos=(
+            CondicaoConformidade(
+                chave_fato="projeto.nota_servico",
+                operador=OperadorCondicao.EXISTE,
+            ),
         ),
     )
-    existing = next((item for item in current.regras if item.id == _SPAN_RULE_ID), None)
-    if existing != legacy_rule:
-        return None
-    version = (
-        seed.versao
-        if current.versao == _LEGACY_BUNDLED_VERSION
-        else f"{current.versao}+seguranca-vao-2025.4"
+
+
+def _add_missing_bundled_rules(
+    current: RegistroRegrasConformidade,
+    seed: RegistroRegrasConformidade,
+    rule_ids: tuple[str, ...],
+) -> tuple[RegistroRegrasConformidade, bool]:
+    seed_by_id = {item.id: item for item in seed.regras}
+    current_ids = {item.id for item in current.regras}
+    additions = tuple(
+        seed_by_id[rule_id]
+        for rule_id in rule_ids
+        if rule_id in seed_by_id and rule_id not in current_ids
     )
-    return replace(
-        current,
-        versao=version,
-        regras=tuple(replacement if item.id == _SPAN_RULE_ID else item for item in current.regras),
+    if not additions:
+        return current, False
+    return replace(current, regras=(*current.regras, *additions)), True
+
+
+def _replace_unchanged_2025_5_rules(
+    current: RegistroRegrasConformidade,
+    seed: RegistroRegrasConformidade,
+) -> tuple[RegistroRegrasConformidade, bool]:
+    previous_by_id = _bundled_2025_5_rules(seed)
+    seed_by_id = {item.id: item for item in seed.regras}
+    changed = False
+    updated: list[RegraConformidade] = []
+    for existing in current.regras:
+        previous = previous_by_id.get(existing.id)
+        replacement = seed_by_id.get(existing.id)
+        if previous is not None and replacement is not None and existing == previous:
+            updated.append(replacement)
+            changed = changed or replacement != existing
+        else:
+            updated.append(existing)
+    if not changed:
+        return current, False
+    return replace(current, regras=tuple(updated)), True
+
+
+def _bundled_2025_5_rules(
+    seed: RegistroRegrasConformidade,
+) -> dict[str, RegraConformidade]:
+    seed_by_id = {item.id: item for item in seed.regras}
+    if not set(_BUNDLED_2025_5_RULE_IDS) <= seed_by_id.keys():
+        return {}
+    previous = {rule_id: seed_by_id[rule_id] for rule_id in _BUNDLED_2025_5_RULE_IDS}
+    previous[_SERVICE_NOTE_RULE_ID] = _legacy_service_note_rule(previous[_SERVICE_NOTE_RULE_ID])
+    previous[_SCALE_RULE_ID] = replace(previous[_SCALE_RULE_ID], ativa=False)
+    previous[_ANGLE_RULE_ID] = replace(
+        previous[_ANGLE_RULE_ID],
+        aplicabilidade=tuple(
+            condition
+            for condition in previous[_ANGLE_RULE_ID].aplicabilidade
+            if not (
+                condition.chave_fato == "conexao.angulo_graus"
+                and condition.operador is OperadorCondicao.EXISTE
+            )
+        ),
     )
+    previous[_CABLE_INSTALL_RULE_ID] = replace(
+        previous[_CABLE_INSTALL_RULE_ID],
+        aplicabilidade=tuple(
+            condition
+            for condition in previous[_CABLE_INSTALL_RULE_ID].aplicabilidade
+            if not (
+                condition.chave_fato == "cabo.instalar_tecnologia"
+                and condition.operador is OperadorCondicao.EXISTE
+            )
+        ),
+    )
+    previous[_TRANSFORMER_30_75_RULE_ID] = replace(
+        previous[_TRANSFORMER_30_75_RULE_ID],
+        descricao=_TRANSFORMER_30_75_DESCRIPTION_2025_5,
+    )
+    previous[_TRANSFORMER_150_300_RULE_ID] = replace(
+        previous[_TRANSFORMER_150_300_RULE_ID],
+        descricao=_TRANSFORMER_150_300_DESCRIPTION_2025_5,
+    )
+    return previous
+
+
+def _version_with_tag(version: str, tag: str) -> str:
+    parts = version.split("+")
+    return version if tag in parts[1:] else f"{version}+{tag}"
 
 
 def renderizar_catalogo_markdown(
@@ -381,8 +622,8 @@ def _render_rule(
         f"no escopo {rule.escopo.value}. Primeiro, o analisador verifica when: {when}. Depois, "
         f"confirma unless: {unless}. Se a regra continuar aplicável, verifica must: {must}.",
         f"- **Fatos observados:** {', '.join(f'`{_markdown(item)}`' for item in facts)}.",
-        "- **Resultado:** requisito conhecido e atendido resulta em CONFORME; contradição resulta "
-        "em possível DIVERGÊNCIA; fato necessário ausente resulta em NÃO AVALIÁVEL.",
+        "- **Resultado:** requisito atendido resulta em CONFORME; requisito ausente, inválido ou "
+        "contraditório resulta em DIVERGÊNCIA.",
         f"- **Fonte registrada:** {_markdown(source)}.",
         "",
     ]

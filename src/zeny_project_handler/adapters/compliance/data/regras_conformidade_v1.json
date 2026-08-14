@@ -2,13 +2,13 @@
   "schema_version": 1,
   "registry": {
     "id": "710c56ea-8586-5cdd-a272-f885ab93ac73",
-    "version": "cemig-normas-distribuicao-2025.4"
+    "version": "cemig-normas-distribuicao-2025.6"
   },
   "rules": [
     {
       "id": "nd31.desenho.numero-projeto",
-      "title": "Número do projeto com 10 dígitos",
-      "description": "O desenho deve informar o número do projeto/Nota de Serviço com 10 dígitos.",
+      "title": "NS do cabeçalho corresponde ao projeto",
+      "description": "A NS de 10 dígitos informada no cabeçalho do PDF deve ser igual à NS usada como nome do projeto.",
       "scope": "PROJETO",
       "severity": "ERRO",
       "source": {
@@ -20,16 +20,16 @@
       },
       "when": [
         {
-          "fact": "rede.contexto_urbano",
-          "operator": "IGUAL",
-          "expected": [true]
+          "fact": "projeto.nota_servico_cabecalho",
+          "operator": "EXISTE",
+          "expected": []
         }
       ],
       "unless": [],
       "must": [
         {
-          "fact": "projeto.nota_servico",
-          "operator": "EXISTE",
+          "fact": "projeto.nota_servico_divergencia",
+          "operator": "AUSENTE",
           "expected": []
         }
       ],
@@ -93,7 +93,7 @@
           "expected": ["1:1000", "1:500"]
         }
       ],
-      "enabled": false
+      "enabled": true
     },
     {
       "id": "nd31.equipamento.estrutura-angulo",
@@ -119,6 +119,11 @@
           "operator": "NAO_EM",
           "expected": ["CHAVE_FUSIVEL"],
           "quantifier": "QUALQUER"
+        },
+        {
+          "fact": "conexao.angulo_graus",
+          "operator": "EXISTE",
+          "expected": []
         }
       ],
       "unless": [],
@@ -242,6 +247,11 @@
           "fact": "rede.contexto_urbano",
           "operator": "IGUAL",
           "expected": [true]
+        },
+        {
+          "fact": "cabo.instalar_tecnologia",
+          "operator": "EXISTE",
+          "expected": []
         }
       ],
       "unless": [],
@@ -288,6 +298,1092 @@
           "operator": "NAO_EM",
           "expected": ["DUPLO_T"],
           "quantifier": "TODOS"
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.transformador.poste-existente-30-75",
+      "title": "Poste existente para transformador trifásico de 30 a 75 kVA",
+      "description": "Transformadores trifásicos de 30, 45 ou 75 kVA a instalar em posteação existente exigem poste de formato admitido e capacidade nominal mínima de 300 daN.",
+      "scope": "REGIAO",
+      "severity": "ERRO",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Dimensionamento Mecânico, 1.3.2, observação t",
+        "page": 67,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "regiao.transformador_trifasico_poste_existente_avaliavel",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "regiao.transformador_potencia_kva",
+          "operator": "EM",
+          "expected": [30, 45, 75]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "regiao.poste_transformador_resistencia_dan",
+          "operator": "MAIOR_OU_IGUAL",
+          "expected": [300]
+        },
+        {
+          "fact": "regiao.poste_transformador_formato",
+          "operator": "EM",
+          "expected": ["DUPLO_T", "CIRCULAR"]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.transformador.poste-existente-150-300",
+      "title": "Poste existente para transformador trifásico de 150 ou 300 kVA",
+      "description": "Transformadores trifásicos de 150 ou 300 kVA a instalar em posteação existente exigem poste de seção circular e capacidade nominal mínima de 600 daN.",
+      "scope": "REGIAO",
+      "severity": "ERRO",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Dimensionamento Mecânico, 1.3.2, observação t",
+        "page": 67,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "regiao.transformador_trifasico_poste_existente_avaliavel",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "regiao.transformador_potencia_kva",
+          "operator": "EM",
+          "expected": [150, 300]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "regiao.poste_transformador_resistencia_dan",
+          "operator": "MAIOR_OU_IGUAL",
+          "expected": [600]
+        },
+        {
+          "fact": "regiao.poste_transformador_formato",
+          "operator": "EM",
+          "expected": ["CIRCULAR"]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.desenho.numero-folha",
+      "title": "Número da folha informado",
+      "description": "O desenho do projeto deve identificar o número da folha ou prancha no cabeçalho.",
+      "scope": "PROJETO",
+      "severity": "ALERTA",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Apresentação do Projeto, 2.5",
+        "page": 89,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "rede.contexto_urbano",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "projeto.numero_folha",
+          "operator": "EXISTE",
+          "expected": []
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.desenho.data-projeto",
+      "title": "Data do projeto informada",
+      "description": "O cabeçalho do desenho deve informar a data do projeto.",
+      "scope": "PROJETO",
+      "severity": "ALERTA",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Apresentação do Projeto, 2.5",
+        "page": 89,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "rede.contexto_urbano",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "projeto.data_projeto",
+          "operator": "EXISTE",
+          "expected": []
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.desenho.circuito",
+      "title": "Circuito ou alimentador informado",
+      "description": "O desenho deve identificar o circuito ou alimentador ao qual o projeto se refere.",
+      "scope": "PROJETO",
+      "severity": "ALERTA",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Apresentação do Projeto, 2.5.2",
+        "page": 89,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "rede.contexto_urbano",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "projeto.circuito",
+          "operator": "EXISTE",
+          "expected": []
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.poste.urbano-altura-minima",
+      "title": "Poste urbano novo com altura mínima",
+      "description": "Postes novos em projeto urbano devem possuir altura nominal mínima de 11 m.",
+      "scope": "REGIAO",
+      "severity": "ERRO",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Dimensionamento Mecânico, Posteação, 1.2",
+        "page": 59,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "rede.contexto_urbano",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "regiao.poste_instalar_altura_m",
+          "operator": "EXISTE",
+          "expected": []
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "regiao.poste_instalar_altura_m",
+          "operator": "MAIOR_OU_IGUAL",
+          "expected": [11],
+          "quantifier": "TODOS"
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.poste.urbano-formato-circular",
+      "title": "Poste urbano novo de seção circular",
+      "description": "Postes novos em expansão, reforma ou substituição urbana devem usar seção circular.",
+      "scope": "REGIAO",
+      "severity": "ERRO",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Dimensionamento Mecânico, Posteação, 1.1",
+        "page": 58,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "rede.contexto_urbano",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "regiao.poste_instalar_formato",
+          "operator": "EXISTE",
+          "expected": []
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "regiao.poste_instalar_formato",
+          "operator": "IGUAL",
+          "expected": ["CIRCULAR"],
+          "quantifier": "TODOS"
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.equipamento.poste-novo-altura",
+      "title": "Poste novo com equipamento acima de 11 m",
+      "description": "Poste novo que recebe transformador, chave, religador, capacitor ou regulador deve possuir altura superior a 11 m.",
+      "scope": "REGIAO",
+      "severity": "ERRO",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Dimensionamento Mecânico, Posteação, 1.2, alínea d",
+        "page": 59,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "rede.contexto_urbano",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "regiao.poste_equipamento_instalar_altura_m",
+          "operator": "EXISTE",
+          "expected": []
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "regiao.poste_equipamento_instalar_altura_m",
+          "operator": "MAIOR",
+          "expected": [11],
+          "quantifier": "TODOS"
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.equipamento.poste-novo-resistencia",
+      "title": "Poste novo com equipamento de 600 daN",
+      "description": "Equipamentos em poste novo devem ser projetados em poste com resistência nominal mínima de 600 daN.",
+      "scope": "REGIAO",
+      "severity": "ERRO",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Dimensionamento Mecânico, observação r",
+        "page": 67,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "rede.contexto_urbano",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "regiao.poste_equipamento_instalar_resistencia_dan",
+          "operator": "EXISTE",
+          "expected": []
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "regiao.poste_equipamento_instalar_resistencia_dan",
+          "operator": "MAIOR_OU_IGUAL",
+          "expected": [600],
+          "quantifier": "TODOS"
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "catalogo.compatibilidade.estrutura-cabo",
+      "title": "Estrutura compatível com o cabo",
+      "description": "Cada estrutura reconhecida deve admitir o tipo de cabo associado segundo a matriz técnica do catálogo.",
+      "scope": "REGIAO",
+      "severity": "ERRO",
+      "source": {
+        "document": "CEMIG ND-2.7 / ND-2.9",
+        "revision": "Nov/2016 / Jun/2016",
+        "item": "Estruturas padronizadas e cabos aplicáveis",
+        "page": 27,
+        "url": "https://www.cemig.com.br/normas-tecnicas/normas-tecnicas-de-redes-de-distribuicao/"
+      },
+      "when": [
+        {
+          "fact": "regiao.estrutura_cabo_avaliada",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "regiao.estrutura_cabo_incompativel",
+          "operator": "IGUAL",
+          "expected": [false]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.transformador.chave-fusivel",
+      "title": "Chave fusível no transformador",
+      "description": "Transformador convencional em rede nua ou compacta deve possuir chave fusível associada.",
+      "scope": "REGIAO",
+      "severity": "CRITICA",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Dimensionamento Elétrico, 2.2.7",
+        "page": 49,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "regiao.transformador_instalar",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "cabo.tecnologia",
+          "operator": "EM",
+          "expected": ["CONVENCIONAL_CA", "CONVENCIONAL_CA_CAA", "CONVENCIONAL_CAA", "PROTEGIDA"],
+          "quantifier": "QUALQUER"
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "regiao.chave_fusivel_presente",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.transformador.para-raios-bt",
+      "title": "Para-raios de BT no transformador",
+      "description": "Todo transformador deve possuir para-raios de baixa tensão representado no projeto.",
+      "scope": "REGIAO",
+      "severity": "CRITICA",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Dimensionamento Elétrico, 1.6, alínea a",
+        "page": 40,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "regiao.transformador_instalar",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "regiao.para_raios_bt_presente",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.transformador.para-raios-mt",
+      "title": "Para-raios de MT no transformador",
+      "description": "Transformador em rede nua ou compacta deve possuir para-raios de média tensão representado no projeto.",
+      "scope": "REGIAO",
+      "severity": "CRITICA",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Dimensionamento Elétrico, 2.2.8, alínea a",
+        "page": 51,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "regiao.transformador_instalar",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "cabo.tecnologia",
+          "operator": "EM",
+          "expected": ["CONVENCIONAL_CA", "CONVENCIONAL_CA_CAA", "CONVENCIONAL_CAA", "PROTEGIDA"],
+          "quantifier": "QUALQUER"
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "regiao.transformador_para_raios_mt_presente",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.transformador.aterramento",
+      "title": "Aterramento no transformador",
+      "description": "Transformador e seus dispositivos de proteção devem possuir aterramento representado no projeto.",
+      "scope": "REGIAO",
+      "severity": "CRITICA",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Dimensionamento Elétrico, 7, alínea g",
+        "page": 57,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "regiao.transformador_instalar",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "regiao.aterramento_presente",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.documentacao.relacao-materiais-orcamento",
+      "title": "Relação de materiais e orçamento identificada",
+      "description": "O pacote do projeto urbano deve conter relação de materiais e orçamento identificáveis.",
+      "scope": "PROJETO",
+      "severity": "ERRO",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Apresentação do Projeto, itens 1 e 2.6",
+        "page": 90,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "rede.contexto_urbano",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "projeto.relacao_materiais_orcamento_identificada",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.documentacao.memoria-calculo",
+      "title": "Memória de cálculo identificada",
+      "description": "O pacote do projeto urbano deve conter documentação ou memória de cálculo elétrico e mecânico identificável.",
+      "scope": "PROJETO",
+      "severity": "ERRO",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Apresentação do Projeto, item 1",
+        "page": 88,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "rede.contexto_urbano",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "projeto.memoria_calculo_identificada",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.desenho.numeracao-postes",
+      "title": "Postes numerados de P1 a Pn",
+      "description": "Os postes ativos do desenho devem possuir numeração única e sequencial começando em P1.",
+      "scope": "PROJETO",
+      "severity": "ERRO",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Apresentação do Projeto, 2.5.2",
+        "page": 90,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "rede.contexto_urbano",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "projeto.postes_total",
+          "operator": "MAIOR",
+          "expected": [0]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "projeto.postes_numeracao_sequencial",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd22.projeto.prordr-acima-300",
+      "title": "PRORDR em extensão rural acima de 300 m",
+      "description": "Projeto rural com extensão de rede a instalar acima de 300 m deve identificar o uso do PRORDR.",
+      "scope": "PROJETO",
+      "severity": "ERRO",
+      "source": {
+        "document": "CEMIG ND-2.2",
+        "revision": "Out/2016",
+        "item": "Introdução, nota geral 4",
+        "page": 14,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/nd_2_2.pdf"
+      },
+      "when": [
+        {
+          "fact": "rede.contexto_rural",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "projeto.extensao_rede_instalar_avaliada",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "projeto.extensao_rede_instalar_m",
+          "operator": "MAIOR",
+          "expected": [300]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "projeto.prordr_identificado",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd22.cabo.rural-vao-maior-80-caa",
+      "title": "Cabo CAA em vão rural acima de 80 m",
+      "description": "Vão rural convencional acima de 80 m não se enquadra na exceção para cabo CA e deve usar cabo CAA.",
+      "scope": "REGIAO",
+      "severity": "ERRO",
+      "source": {
+        "document": "CEMIG ND-2.2",
+        "revision": "Out/2016",
+        "item": "Introdução, nota geral 3",
+        "page": 14,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/nd_2_2.pdf"
+      },
+      "when": [
+        {
+          "fact": "rede.contexto_rural",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "vao.comprimento_m",
+          "operator": "MAIOR",
+          "expected": [80]
+        },
+        {
+          "fact": "cabo.instalar_tecnologia",
+          "operator": "EM",
+          "expected": ["CONVENCIONAL_CA", "CONVENCIONAL_CA_CAA", "CONVENCIONAL_CAA"],
+          "quantifier": "QUALQUER"
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "cabo.instalar_tecnologia",
+          "operator": "IGUAL",
+          "expected": ["CONVENCIONAL_CAA"],
+          "quantifier": "TODOS"
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd93.transformador.poste-novo-rural",
+      "title": "Poste novo rural de transformador",
+      "description": "Poste novo associado a transformador rural deve ter no mínimo 600 daN e não ser de concreto duplo T.",
+      "scope": "REGIAO",
+      "severity": "ERRO",
+      "source": {
+        "document": "CEMIG ND-9.3",
+        "revision": "Set/2021",
+        "item": "Capítulo 7, nota 16",
+        "page": 41,
+        "url": "https://www.cemig.com.br/normas-tecnicas/normas-tecnicas-de-redes-de-distribuicao/"
+      },
+      "when": [
+        {
+          "fact": "rede.contexto_rural",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "regiao.transformador_instalar",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "regiao.poste_equipamento_instalar_resistencia_dan",
+          "operator": "EXISTE",
+          "expected": []
+        },
+        {
+          "fact": "regiao.poste_equipamento_instalar_formato",
+          "operator": "EXISTE",
+          "expected": []
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "regiao.poste_equipamento_instalar_resistencia_dan",
+          "operator": "MAIOR_OU_IGUAL",
+          "expected": [600],
+          "quantifier": "TODOS"
+        },
+        {
+          "fact": "regiao.poste_equipamento_instalar_formato",
+          "operator": "NAO_EM",
+          "expected": ["DUPLO_T"],
+          "quantifier": "TODOS"
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd93.rede.transicao-sem-angulo",
+      "title": "Transição de rede sem deflexão",
+      "description": "Estrutura de transição entre rede convencional e compacta não deve apresentar ângulo de deflexão horizontal ou vertical.",
+      "scope": "REGIAO",
+      "severity": "ERRO",
+      "source": {
+        "document": "CEMIG ND-9.3",
+        "revision": "Set/2021",
+        "item": "Capítulo 7, nota 10",
+        "page": 41,
+        "url": "https://www.cemig.com.br/normas-tecnicas/normas-tecnicas-de-redes-de-distribuicao/"
+      },
+      "when": [
+        {
+          "fact": "regiao.transicao_rede",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "conexao.angulo_graus",
+          "operator": "EXISTE",
+          "expected": []
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "conexao.angulo_graus",
+          "operator": "MENOR_OU_IGUAL",
+          "expected": [1],
+          "quantifier": "TODOS"
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.rede.para-raios-mt-fim-transicao",
+      "title": "Para-raios MT em fim ou transição de rede",
+      "description": "Fim de rede MT e transição entre rede convencional e compacta devem possuir para-raios de média tensão representado.",
+      "scope": "REGIAO",
+      "severity": "CRITICA",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Dimensionamento Elétrico, 2.2.8",
+        "page": 51,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "regiao.para_raios_mt_requerido",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "regiao.para_raios_mt_requisito_presente",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd93.rede.compacta-ancoragem-500m",
+      "title": "Ancoragem periódica da rede compacta",
+      "description": "Trechos longos de rede compacta rural devem intercalar estruturas de ancoragem em intervalos aproximados de 500 m.",
+      "scope": "PROJETO",
+      "severity": "ALERTA",
+      "source": {
+        "document": "CEMIG ND-9.3",
+        "revision": "Set/2021",
+        "item": "Capítulo 7, nota 17",
+        "page": 41,
+        "url": "https://www.cemig.com.br/normas-tecnicas/normas-tecnicas-de-redes-de-distribuicao/"
+      },
+      "when": [
+        {
+          "fact": "rede.contexto_rural",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "projeto.rede_compacta_ancoragem_avaliada",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "projeto.rede_compacta_maior_componente_m",
+          "operator": "MAIOR",
+          "expected": [500]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "projeto.rede_compacta_ancoragem_suficiente",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "pacote.coerencia.transformador-potencia",
+      "title": "Potência do transformador coerente entre desenho e orçamento",
+      "description": "Quando desenho e relação de materiais/orçamento informam potências de transformador, os conjuntos de valores devem coincidir.",
+      "scope": "PROJETO",
+      "severity": "ERRO",
+      "source": {
+        "document": "Controle de coerência do pacote documental",
+        "revision": "2025.6",
+        "item": "Transformador: potência entre documentos",
+        "page": null,
+        "url": null
+      },
+      "when": [
+        {
+          "fact": "projeto.coerencia_potencia_transformador_avaliada",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "projeto.coerencia_potencia_transformador",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "pacote.coerencia.fases",
+      "title": "Fases coerentes entre desenho e orçamento",
+      "description": "Quando desenho e relação de materiais/orçamento informam configurações de fases, os conjuntos de valores devem coincidir.",
+      "scope": "PROJETO",
+      "severity": "ERRO",
+      "source": {
+        "document": "Controle de coerência do pacote documental",
+        "revision": "2025.6",
+        "item": "Configuração de fases entre documentos",
+        "page": null,
+        "url": null
+      },
+      "when": [
+        {
+          "fact": "projeto.coerencia_fases_avaliada",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "projeto.coerencia_fases",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "pacote.coerencia.codigo",
+      "title": "Código técnico coerente entre desenho e orçamento",
+      "description": "Quando desenho e relação de materiais/orçamento informam códigos técnicos explícitos, os conjuntos de valores devem coincidir.",
+      "scope": "PROJETO",
+      "severity": "ERRO",
+      "source": {
+        "document": "Controle de coerência do pacote documental",
+        "revision": "2025.6",
+        "item": "Código técnico entre documentos",
+        "page": null,
+        "url": null
+      },
+      "when": [
+        {
+          "fact": "projeto.coerencia_codigo_avaliada",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "projeto.coerencia_codigo",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "pacote.coerencia.circuito",
+      "title": "Circuito coerente entre desenho e orçamento",
+      "description": "Quando desenho e relação de materiais/orçamento informam circuitos ou alimentadores, os conjuntos de valores devem coincidir.",
+      "scope": "PROJETO",
+      "severity": "ERRO",
+      "source": {
+        "document": "Controle de coerência do pacote documental",
+        "revision": "2025.6",
+        "item": "Circuito ou alimentador entre documentos",
+        "page": null,
+        "url": null
+      },
+      "when": [
+        {
+          "fact": "projeto.coerencia_circuito_avaliada",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "projeto.coerencia_circuito",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "pacote.documentacao.gd",
+      "title": "Documentação de acesso para geração distribuída",
+      "description": "Pacote que identifica geração distribuída deve conter parecer, orçamento, formulário de acesso ou relatório de comissionamento identificável.",
+      "scope": "PROJETO",
+      "severity": "ALERTA",
+      "source": {
+        "document": "Controle documental do projeto",
+        "revision": "2025.6",
+        "item": "Documentos de acesso e conexão de GD",
+        "page": null,
+        "url": null
+      },
+      "when": [
+        {
+          "fact": "projeto.geracao_distribuida_identificada",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "projeto.documentacao_gd_identificada",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "pacote.documentacao.prordr-fotos",
+      "title": "Registro fotográfico no pacote PRORDR",
+      "description": "Projeto rural acima de 300 m que identifica PRORDR deve conter registro ou relatório fotográfico identificável.",
+      "scope": "PROJETO",
+      "severity": "ALERTA",
+      "source": {
+        "document": "Controle documental do projeto",
+        "revision": "2025.6",
+        "item": "Pacote PRORDR e registro fotográfico",
+        "page": null,
+        "url": null
+      },
+      "when": [
+        {
+          "fact": "rede.contexto_rural",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "projeto.extensao_rede_instalar_avaliada",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "projeto.extensao_rede_instalar_m",
+          "operator": "MAIOR",
+          "expected": [300]
+        },
+        {
+          "fact": "projeto.prordr_identificado",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "projeto.registro_fotografico_identificado",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.rede.neutro-aterramento-200m",
+      "title": "Aterramento periódico do neutro",
+      "description": "Componentes urbanos do neutro com mais de 200 m devem possuir aterramentos distribuídos em intervalos aproximados de 200 m.",
+      "scope": "PROJETO",
+      "severity": "ERRO",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Dimensionamento Elétrico, item 7",
+        "page": 57,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "rede.contexto_urbano",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "projeto.neutro_aterramento_periodico_avaliado",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "projeto.neutro_maior_componente_m",
+          "operator": "MAIOR",
+          "expected": [200]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "projeto.neutro_aterramento_periodico_suficiente",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd31.rede.compacta-aterramento-temporario-160m",
+      "title": "Pontos periódicos de aterramento temporário da rede compacta",
+      "description": "Rede compacta urbana com mais de 160 m deve representar pontos para aterramento temporário em intervalos aproximados de 160 m.",
+      "scope": "PROJETO",
+      "severity": "ALERTA",
+      "source": {
+        "document": "CEMIG ND-3.1",
+        "revision": "Jul/2025",
+        "item": "Dimensionamento Elétrico, item 7",
+        "page": 57,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf"
+      },
+      "when": [
+        {
+          "fact": "rede.contexto_urbano",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "projeto.rede_compacta_aterramento_temporario_avaliado",
+          "operator": "IGUAL",
+          "expected": [true]
+        },
+        {
+          "fact": "projeto.rede_compacta_maior_componente_m",
+          "operator": "MAIOR",
+          "expected": [160]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "projeto.rede_compacta_aterramento_temporario_suficiente",
+          "operator": "IGUAL",
+          "expected": [true]
         }
       ],
       "enabled": true

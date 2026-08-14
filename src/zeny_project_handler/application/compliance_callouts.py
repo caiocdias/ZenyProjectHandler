@@ -28,6 +28,7 @@ from zeny_project_handler.domain.values import (
 
 _MARGEM_PAGINA_PONTOS = 12.0
 _DISTANCIA_ALVO_PONTOS = 14.0
+_MARGEM_CONTEUDO_PONTOS = 5.0
 _LARGURA_MINIMA_PONTOS = 156.0
 _LARGURA_MAXIMA_PONTOS = 252.0
 _ALTURA_MINIMA_PONTOS = 42.0
@@ -89,7 +90,7 @@ class AncoraCallout:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class CalloutConformidade:
-    """Projeção sem Qt de uma possível divergência localizável."""
+    """Projeção sem Qt de uma divergência localizável."""
 
     id: UUID
     pagina_id: UUID
@@ -141,6 +142,11 @@ def projetar_callouts_conformidade(
     facts_by_id = {item.id: item for item in execucao.fatos}
     evidence_by_id = {item.id: item for item in evidencias}
     targets_by_id = {item.id: item for item in execucao.alvos}
+    important_content_by_page = _conteudo_importante_por_pagina(
+        execucao,
+        evidencias=evidencias,
+        paginas=pages_by_id,
+    )
     occupied_by_page: dict[UUID, list[RetanguloCallout]] = {}
     projected: list[CalloutConformidade] = []
     divergent = sorted(
@@ -173,6 +179,7 @@ def projetar_callouts_conformidade(
             width=width,
             height=height,
             occupied=tuple(occupied_by_page.get(page_id, ())),
+            important_content=important_content_by_page.get(page_id, ()),
         )
         occupied_by_page.setdefault(page_id, []).append(suggested)
         projected.append(
@@ -342,6 +349,37 @@ def _limites_geometrias_pontos(
     return _RetanguloPontos(min(xs) * width, min(ys) * height, max(xs) * width, max(ys) * height)
 
 
+def _conteudo_importante_por_pagina(
+    execution: ExecucaoConformidade,
+    *,
+    evidencias: tuple[EvidenciaDocumento, ...],
+    paginas: dict[UUID, PaginaDocumento],
+) -> dict[UUID, tuple[_RetanguloPontos, ...]]:
+    """Mapeie conteúdo conhecido para que caixas prefiram espaços livres da folha."""
+    geometries = (
+        *(item.geometria for item in evidencias),
+        *(item.geometria for item in execution.fatos if item.geometria is not None),
+        *(item.geometria for item in execution.alvos if item.geometria is not None),
+    )
+    unique: dict[UUID, dict[tuple[PontoNormalizado, ...], GeometriaDocumento]] = {}
+    for geometry in geometries:
+        if geometry.pagina_id not in paginas:
+            continue
+        unique.setdefault(geometry.pagina_id, {}).setdefault(geometry.pontos, geometry)
+    return {
+        page_id: tuple(
+            _expandir_retangulo(
+                _limites_geometrias_pontos((geometry,), paginas[page_id]),
+                _MARGEM_CONTEUDO_PONTOS,
+                page_width=float(paginas[page_id].largura_pontos),
+                page_height=float(paginas[page_id].altura_pontos),
+            )
+            for geometry in page_geometries.values()
+        )
+        for page_id, page_geometries in unique.items()
+    }
+
+
 def _posicionar_caixa(
     page: PaginaDocumento,
     *,
@@ -349,6 +387,7 @@ def _posicionar_caixa(
     width: float,
     height: float,
     occupied: tuple[RetanguloCallout, ...],
+    important_content: tuple[_RetanguloPontos, ...],
 ) -> RetanguloCallout:
     page_width = float(page.largura_pontos)
     page_height = float(page.altura_pontos)
@@ -369,9 +408,22 @@ def _posicionar_caixa(
         (anchor_bounds.direita + gap, page_height - _MARGEM_PAGINA_PONTOS - height),
         (anchor_bounds.esquerda - gap - width, page_height - _MARGEM_PAGINA_PONTOS - height),
     )
+    grid_candidates = tuple(
+        (x, y)
+        for x in _distributed_positions(
+            _MARGEM_PAGINA_PONTOS,
+            page_width - _MARGEM_PAGINA_PONTOS - width,
+        )
+        for y in _distributed_positions(
+            _MARGEM_PAGINA_PONTOS,
+            page_height - _MARGEM_PAGINA_PONTOS - height,
+        )
+    )
     candidates = tuple(
-        _contained_rect(x, y, width, height, page_width=page_width, page_height=page_height)
-        for x, y in raw_candidates
+        dict.fromkeys(
+            _contained_rect(x, y, width, height, page_width=page_width, page_height=page_height)
+            for x, y in (*raw_candidates, *grid_candidates)
+        )
     )
     occupied_points = tuple(
         _RetanguloPontos(
@@ -382,10 +434,21 @@ def _posicionar_caixa(
         )
         for item in occupied
     )
+    protected_anchor = _expandir_retangulo(
+        anchor_bounds,
+        _MARGEM_CONTEUDO_PONTOS,
+        page_width=page_width,
+        page_height=page_height,
+    )
     _index, selected = min(
         enumerate(candidates),
         key=lambda pair: (
-            _collision_score(pair[1], anchor_bounds, occupied_points),
+            _collision_score(
+                pair[1],
+                protected_anchor,
+                occupied_points,
+                important_content,
+            ),
             pair[0],
         ),
     )
@@ -395,6 +458,13 @@ def _posicionar_caixa(
         Decimal(str(selected.direita / page_width)),
         Decimal(str(selected.base / page_height)),
     )
+
+
+def _distributed_positions(start: float, end: float, *, divisions: int = 6) -> tuple[float, ...]:
+    if end <= start:
+        return (start,)
+    interval = (end - start) / divisions
+    return tuple(start + interval * index for index in range(divisions + 1))
 
 
 def _contained_rect(
@@ -417,10 +487,44 @@ def _collision_score(
     candidate: _RetanguloPontos,
     anchor: _RetanguloPontos,
     occupied: tuple[_RetanguloPontos, ...],
-) -> float:
-    anchor_overlap = _intersection_area(candidate, anchor)
-    callout_overlap = sum(_intersection_area(candidate, item) for item in occupied)
-    return anchor_overlap + 2 * callout_overlap
+    important_content: tuple[_RetanguloPontos, ...],
+) -> tuple[int, float, float, int, float, int, int]:
+    anchor_overlaps = _positive_intersections(candidate, (anchor,))
+    callout_overlaps = _positive_intersections(candidate, occupied)
+    content_overlaps = _positive_intersections(candidate, important_content)
+    return (
+        int(bool(anchor_overlaps)),
+        sum(anchor_overlaps),
+        sum(content_overlaps),
+        int(bool(callout_overlaps)),
+        sum(callout_overlaps),
+        len(content_overlaps),
+        len(callout_overlaps),
+    )
+
+
+def _positive_intersections(
+    candidate: _RetanguloPontos,
+    obstacles: tuple[_RetanguloPontos, ...],
+) -> tuple[float, ...]:
+    return tuple(
+        area for obstacle in obstacles if (area := _intersection_area(candidate, obstacle)) > 0
+    )
+
+
+def _expandir_retangulo(
+    rectangle: _RetanguloPontos,
+    margin: float,
+    *,
+    page_width: float,
+    page_height: float,
+) -> _RetanguloPontos:
+    return _RetanguloPontos(
+        max(0.0, rectangle.esquerda - margin),
+        max(0.0, rectangle.topo - margin),
+        min(page_width, rectangle.direita + margin),
+        min(page_height, rectangle.base + margin),
+    )
 
 
 def _intersection_area(left: _RetanguloPontos, right: _RetanguloPontos) -> float:

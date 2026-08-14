@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from decimal import Decimal
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -47,7 +48,9 @@ def test_callout_layer_draws_box_text_open_arrows_and_coexists_with_review_links
     viewer.definir_propostas_revisao((proposal,))
 
     graphics = viewer.view._callout_items[str(callout.id)]
-    assert graphics.caixa.brush().color() == QColor("white")
+    background = graphics.caixa.brush().color()
+    assert background.name() == QColor("white").name()
+    assert background.alpha() == 205
     assert graphics.caixa.pen().color() == QColor("#c62828")
     assert graphics.texto.defaultTextColor() == QColor("#c62828")
     assert graphics.texto.toPlainText() == callout.texto
@@ -88,6 +91,7 @@ def test_callout_box_and_arrow_emit_only_user_selection_and_are_highlighted(
     assert selected == []
     assert graphics.caixa.pen().color() == QColor("#8e0000")
     assert graphics.caixa.pen().widthF() == pytest.approx(3.2)
+    assert graphics.caixa.brush().color().alpha() == 205
 
     box_center = viewer.view.mapFromScene(graphics.caixa.mapToScene(graphics.caixa.rect().center()))
     with qtbot.waitSignal(viewer.compliance_callout_selected, timeout=1_000):
@@ -181,6 +185,57 @@ def test_synthetic_a4_a3_portrait_landscape_callout_renders_are_saved(
         renders.append(output)
 
     assert len(renders) == 4
+
+
+@pytest.mark.integration
+def test_multipage_callout_visual_qa_captures_show_hide_and_correct_page(
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> None:
+    output_directory = _qa_output_directory(tmp_path)
+    source = create_callout_formats_pdf(output_directory / "callout-multipagina-fixture.pdf")
+    viewer = _viewer(qtbot, dpi=144, budget=TEST_RENDER_BUDGET)
+    assert viewer.carregar_pdf(source)
+    _wait_preview(qtbot, viewer)
+    assert viewer.inspecao is not None
+    pages = viewer.inspecao.documento.paginas
+    callouts = tuple(
+        _callout(page.id, float(page.largura_pontos), float(page.altura_pontos), str(index))
+        for index, page in enumerate(pages, start=1)
+    )
+
+    viewer.definir_callouts_conformidade(callouts)
+    assert set(viewer.view._callout_items) == {str(callouts[0].id)}
+    first_graphics = viewer.view._callout_items[str(callouts[0].id)]
+    assert first_graphics.caixa.brush().color().alpha() == 205
+    assert first_graphics.texto.defaultTextColor() == QColor("#c62828")
+    assert first_graphics.caixa.pen().color() == QColor("#c62828")
+    assert first_graphics.linhas
+    _save_viewport(viewer, output_directory / "callout-pagina-1-visivel.png")
+
+    viewer.definir_callouts_conformidade(callouts[1:])
+    assert viewer.view._callout_items == {}
+    _save_viewport(viewer, output_directory / "callout-pagina-1-oculto.png")
+
+    viewer.definir_callouts_conformidade(callouts)
+    assert set(viewer.view._callout_items) == {str(callouts[0].id)}
+    viewer.ir_para_folha(2)
+    _wait_preview(qtbot, viewer, page=2)
+    assert set(viewer.view._callout_items) == {str(callouts[1].id)}
+    _assert_anchor_aligned(viewer, callouts[1])
+    _save_viewport(viewer, output_directory / "callout-pagina-2-visivel.png")
+
+
+def _qa_output_directory(tmp_path: Path) -> Path:
+    configured = os.environ.get("ZENY_CALLOUT_QA_DIR")
+    output_directory = Path(configured) if configured else tmp_path
+    output_directory.mkdir(parents=True, exist_ok=True)
+    return output_directory
+
+
+def _save_viewport(viewer: PdfViewerWidget, output: Path) -> None:
+    assert viewer.view.grab().save(str(output), "PNG")
+    assert output.stat().st_size > 1_000
 
 
 def _viewer(qtbot: QtBot, *, dpi: int, budget: OrcamentoRenderizacaoPdf) -> PdfViewerWidget:

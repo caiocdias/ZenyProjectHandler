@@ -55,7 +55,7 @@ def test_distinct_passwords_are_reused_in_session_and_never_leak_to_artifacts(
     window.show()
     panel = window.project_panel
     assert isinstance(panel, ProjectPanelWidget)
-    _create_project(qtbot, panel, "Protegidos")
+    _create_project(qtbot, panel, "0000000058")
     monkeypatch.setattr(
         QFileDialog,
         "getOpenFileNames",
@@ -132,7 +132,7 @@ def test_wrong_password_limit_and_cancel_produce_partial_import_summary(
     qtbot.addWidget(window)
     panel = window.project_panel
     assert isinstance(panel, ProjectPanelWidget)
-    _create_project(qtbot, panel, "Importação parcial")
+    _create_project(qtbot, panel, "0000000135")
     monkeypatch.setattr(
         QFileDialog,
         "getOpenFileNames",

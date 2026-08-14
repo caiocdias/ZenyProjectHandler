@@ -78,7 +78,11 @@ def test_annotated_length_preserves_origin_evidence_region_page_and_label_geomet
     assert fact.geometria == fixture.length_evidence.geometria
     assert target.referencia_id == fixture.region_id
     assert target.pagina_id == fixture.page_id
-    assert all(item.chave != "vao.aplicabilidade_excecao_45_60_resolvida" for item in facts)
+    applicability = next(
+        item for item in facts if item.chave == "vao.aplicabilidade_excecao_45_60_resolvida"
+    )
+    assert applicability.valor is True
+    assert applicability.evidencia_ids == (fixture.length_evidence.id,)
 
 
 def test_coordinate_length_preserves_endpoint_evidence_and_cable_geometry() -> None:
@@ -132,6 +136,30 @@ def test_review_annotation_from_legacy_session_does_not_publish_span_measurement
     assert all(item.chave != "vao.comprimento_m" for item in facts)
 
 
+def test_rejected_cable_proposal_does_not_publish_span_measurement() -> None:
+    fixture = _span_fixture(
+        length=Decimal("52"),
+        origin=OrigemComprimentoVao.ANOTACAO_DESENHO,
+    )
+    rejected_cable = replace(
+        next(
+            item for item in fixture.session.propostas if item.categoria is CategoriaElemento.CABO
+        ),
+        estado_revisao=EstadoRevisao.REJEITADA,
+    )
+    session = replace(
+        fixture.session,
+        propostas=tuple(
+            rejected_cable if item.id == rejected_cable.id else item
+            for item in fixture.session.propostas
+        ),
+    )
+
+    facts = prover_fatos_vaos(ContextoProvedorFatos(session, _targets(session)))
+
+    assert all(item.chave != "vao.comprimento_m" for item in facts)
+
+
 @pytest.mark.parametrize(
     ("positive", "with_evidence", "expected"),
     (
@@ -159,7 +187,8 @@ def test_span_exception_requires_positive_flag_and_traceable_evidence(
     )
 
     assert bool(exceptions) is expected
-    assert bool(applicability) is expected
+    assert len(applicability) == 1
+    assert applicability[0].valor is True
     if exceptions:
         assert exceptions[0].valor is True
         assert exceptions[0].evidencia_ids == (fixture.exception_evidence.id,)
@@ -171,12 +200,12 @@ def test_span_exception_requires_positive_flag_and_traceable_evidence(
     (
         (Decimal("40"), False, False, "CONFORME"),
         (Decimal("45"), False, False, "CONFORME"),
-        (Decimal("52"), False, False, "NAO_AVALIAVEL"),
-        (Decimal("60"), False, False, "NAO_AVALIAVEL"),
-        (None, False, False, "NAO_AVALIAVEL"),
+        (Decimal("52"), False, False, "DIVERGENCIA"),
+        (Decimal("60"), False, False, "DIVERGENCIA"),
+        (None, False, False, None),
         (Decimal("52"), False, True, None),
         (Decimal("60"), False, True, None),
-        (None, True, False, "NAO_AVALIAVEL"),
+        (None, True, False, "DIVERGENCIA"),
         (Decimal("61"), False, False, "DIVERGENCIA"),
         (Decimal("61"), False, True, "DIVERGENCIA"),
     ),

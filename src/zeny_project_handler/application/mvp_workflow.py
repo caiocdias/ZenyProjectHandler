@@ -12,6 +12,7 @@ from zeny_project_handler.domain.analysis import ExecucaoAnalise
 from zeny_project_handler.domain.documents import DocumentoProjeto
 from zeny_project_handler.domain.enums import EstadoExecucaoAnalise, EstadoRevisao
 from zeny_project_handler.domain.project import Projeto
+from zeny_project_handler.domain.project_metadata import normalizar_numero_ns
 from zeny_project_handler.ports.analysis import ConfiguracaoAnaliseDocumento
 from zeny_project_handler.ports.interpretation import ConfiguracaoInterpretacao
 from zeny_project_handler.ports.pdf import ReferenciaFontePdf
@@ -120,14 +121,15 @@ class ServicoFluxoMvp:
         with self._unit_of_work() as work:
             return tuple(self._summary(work, project) for project in work.projetos.listar())
 
-    def criar_projeto(self, nome: str) -> SessaoProjetoMvp:
+    def criar_projeto(self, numero_ns: str) -> SessaoProjetoMvp:
         with self._coordinator.adquirir(TipoOperacao.ALTERACAO_PROJETO):
-            return self._criar_projeto(nome)
+            return self._criar_projeto(numero_ns)
 
-    def _criar_projeto(self, nome: str) -> SessaoProjetoMvp:
+    def _criar_projeto(self, numero_ns: str) -> SessaoProjetoMvp:
+        numero_ns = normalizar_numero_ns(numero_ns)
         project = Projeto(
             id=self._generate_id(),
-            nome=nome,
+            nome=numero_ns,
             catalogo_versao_id=self._initial_catalog_id,
             criado_em=self._aware_now(),
         )
@@ -138,18 +140,23 @@ class ServicoFluxoMvp:
             work.commit()
         return self.abrir_projeto(project.id)
 
-    def renomear_projeto(self, projeto_id: UUID, nome: str) -> SessaoProjetoMvp:
+    def alterar_numero_ns(self, projeto_id: UUID, numero_ns: str) -> SessaoProjetoMvp:
         with self._coordinator.adquirir(TipoOperacao.ALTERACAO_PROJETO):
-            return self._renomear_projeto(projeto_id, nome)
+            return self._alterar_numero_ns(projeto_id, numero_ns)
 
-    def _renomear_projeto(self, projeto_id: UUID, nome: str) -> SessaoProjetoMvp:
+    def _alterar_numero_ns(self, projeto_id: UUID, numero_ns: str) -> SessaoProjetoMvp:
+        numero_ns = normalizar_numero_ns(numero_ns)
         with self._unit_of_work() as work:
             project = work.projetos.obter(projeto_id)
             if project is None:
-                raise ProjetoNaoEncontradoError("Projeto não encontrado para renomear")
-            work.projetos.salvar(replace(project, nome=nome))
+                raise ProjetoNaoEncontradoError("Projeto não encontrado para alterar a NS")
+            work.projetos.salvar(replace(project, nome=numero_ns))
             work.commit()
         return self.abrir_projeto(projeto_id)
+
+    def renomear_projeto(self, projeto_id: UUID, nome: str) -> SessaoProjetoMvp:
+        """Mantenha compatibilidade interna redirecionando para o identificador por NS."""
+        return self.alterar_numero_ns(projeto_id, nome)
 
     def excluir_projeto(self, projeto_id: UUID) -> ResultadoExclusaoProjeto:
         with self._coordinator.adquirir(TipoOperacao.EXCLUSAO_PROJETO):

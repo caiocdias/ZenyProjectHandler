@@ -26,7 +26,6 @@ from zeny_project_handler.domain.compliance import (
 class _Truth(Enum):
     TRUE = 1
     FALSE = 0
-    UNKNOWN = -1
 
 
 def avaliar_regras_conformidade(
@@ -64,16 +63,13 @@ def avaliar_regras_conformidade(
                 GrupoCondicaoConformidade.REQUISITO,
             )
             evaluations = (*applicability_audit, *exception_audit, *requirement_audit)
-            if applicability is _Truth.UNKNOWN:
-                result = ResultadoConformidade.NAO_AVALIAVEL
-            else:
-                if rule.excecoes and exception is _Truth.TRUE:
-                    continue
-                result = {
-                    _Truth.TRUE: ResultadoConformidade.CONFORME,
-                    _Truth.FALSE: ResultadoConformidade.DIVERGENCIA,
-                    _Truth.UNKNOWN: ResultadoConformidade.NAO_AVALIAVEL,
-                }[requirement]
+            if rule.excecoes and exception is _Truth.TRUE:
+                continue
+            result = (
+                ResultadoConformidade.CONFORME
+                if requirement is _Truth.TRUE
+                else ResultadoConformidade.DIVERGENCIA
+            )
             evidence_ids = tuple(
                 dict.fromkeys(
                     evidence_id
@@ -121,12 +117,7 @@ def _conditions(
         for index, condition in enumerate(conditions)
     )
     results = tuple(item[0] for item in evaluated)
-    if _Truth.FALSE in results:
-        truth = _Truth.FALSE
-    elif _Truth.UNKNOWN in results:
-        truth = _Truth.UNKNOWN
-    else:
-        truth = _Truth.TRUE
+    truth = _Truth.FALSE if _Truth.FALSE in results else _Truth.TRUE
     return truth, tuple(item[1] for item in evaluated)
 
 
@@ -144,22 +135,15 @@ def _condition(
     elif condition.operador is OperadorCondicao.AUSENTE:
         truth = _truth(not values)
     elif not values:
-        truth = _Truth.UNKNOWN
+        truth = _Truth.FALSE
     else:
         comparisons = tuple(
             _compare(value, condition.operador, condition.valores_esperados) for value in values
         )
         if condition.quantificador is QuantificadorCondicao.QUALQUER:
-            if _Truth.TRUE in comparisons:
-                truth = _Truth.TRUE
-            elif _Truth.UNKNOWN in comparisons:
-                truth = _Truth.UNKNOWN
-            else:
-                truth = _Truth.FALSE
+            truth = _Truth.TRUE if _Truth.TRUE in comparisons else _Truth.FALSE
         elif _Truth.FALSE in comparisons:
             truth = _Truth.FALSE
-        elif _Truth.UNKNOWN in comparisons:
-            truth = _Truth.UNKNOWN
         else:
             truth = _Truth.TRUE
     return truth, AvaliacaoCondicaoConformidade(
@@ -174,7 +158,6 @@ def _condition(
         resultado={
             _Truth.TRUE: ResultadoCondicaoConformidade.ATENDE,
             _Truth.FALSE: ResultadoCondicaoConformidade.NAO_ATENDE,
-            _Truth.UNKNOWN: ResultadoCondicaoConformidade.DESCONHECIDO,
         }[truth],
     )
 
@@ -198,7 +181,7 @@ def _compare(
         actual_number = Decimal(str(actual))
         expected_number = Decimal(str(expected[0]))
     except (InvalidOperation, ValueError):
-        return _Truth.UNKNOWN
+        return _Truth.FALSE
     if operator is OperadorCondicao.MENOR:
         return _truth(actual_number < expected_number)
     if operator is OperadorCondicao.MENOR_OU_IGUAL:
@@ -207,7 +190,7 @@ def _compare(
         return _truth(actual_number > expected_number)
     if operator is OperadorCondicao.MAIOR_OU_IGUAL:
         return _truth(actual_number >= expected_number)
-    return _Truth.UNKNOWN
+    return _Truth.FALSE
 
 
 def _truth(value: bool) -> _Truth:
@@ -222,7 +205,7 @@ def _finding_message(
 ) -> str:
     prefix = {
         ResultadoConformidade.CONFORME: "Atende à condição verificável",
-        ResultadoConformidade.DIVERGENCIA: "Possível divergência",
+        ResultadoConformidade.DIVERGENCIA: "Divergência",
         ResultadoConformidade.NAO_AVALIAVEL: "Não avaliável com os fatos disponíveis",
     }[result]
     decisive = _decisive_evaluation(result, evaluations)

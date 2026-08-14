@@ -8,9 +8,11 @@ from threading import Event
 from typing import TypeVar
 from uuid import UUID
 
-from PySide6.QtCore import QObject, QSettings, Qt, QThread, QTimer, Signal, Slot
+from PySide6.QtCore import QObject, QRegularExpression, QSettings, Qt, QThread, QTimer, Signal, Slot
+from PySide6.QtGui import QKeyEvent, QKeySequence, QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QComboBox,
     QFileDialog,
     QGridLayout,
@@ -47,6 +49,34 @@ from .pdf_viewer import PdfViewerWidget
 from .review_panel import ReviewPanelWidget
 
 T = TypeVar("T")
+_NUMERO_NS_PATTERN = r"[0-9]{10}"
+
+
+class _NumeroNsLineEdit(QLineEdit):
+    """Campo numérico simples com atalhos de clipboard previsíveis."""
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802 - API Qt
+        if event.matches(QKeySequence.StandardKey.Copy):
+            selected_digits = "".join(
+                character
+                for character in self.selectedText()
+                if character.isascii() and character.isdigit()
+            )
+            if selected_digits:
+                QApplication.clipboard().setText(selected_digits)
+            event.accept()
+            return
+        if event.matches(QKeySequence.StandardKey.Paste):
+            pasted_digits = "".join(
+                character
+                for character in QApplication.clipboard().text()
+                if character.isascii() and character.isdigit()
+            )
+            if pasted_digits:
+                self.setText(pasted_digits[: self.maxLength()])
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
 
 class _PipelineWorker(QObject):
@@ -159,10 +189,22 @@ class ProjectPanelWidget(QWidget):
         self._projects = QComboBox()
         self._projects.setObjectName("mvpProjectCombo")
         project_layout.addWidget(self._projects)
-        self._name = QLineEdit()
-        self._name.setObjectName("mvpProjectNameEdit")
-        self._name.setPlaceholderText("Nome do projeto")
-        project_layout.addWidget(self._name)
+        service_note_label = QLabel("Número da NS")
+        service_note_label.setObjectName("mvpProjectServiceNoteLabel")
+        project_layout.addWidget(service_note_label)
+        self._service_note = _NumeroNsLineEdit()
+        self._service_note.setObjectName("mvpProjectNameEdit")
+        self._service_note.setMaxLength(10)
+        self._service_note.setValidator(
+            QRegularExpressionValidator(
+                QRegularExpression(_NUMERO_NS_PATTERN),
+                self._service_note,
+            )
+        )
+        self._service_note.setPlaceholderText("Número da NS")
+        self._service_note.setToolTip("Informe os 10 dígitos do número da NS")
+        self._service_note.setAccessibleName("Número da NS")
+        project_layout.addWidget(self._service_note)
         project_actions = QGridLayout()
         project_actions.setHorizontalSpacing(8)
         project_actions.setVerticalSpacing(8)
@@ -174,9 +216,9 @@ class ProjectPanelWidget(QWidget):
         open_button.setObjectName("mvpOpenProjectButton")
         open_button.clicked.connect(self.abrir_selecionado)
         project_actions.addWidget(open_button, 0, 1)
-        rename = QPushButton("Renomear")
+        rename = QPushButton("Alterar NS")
         rename.setObjectName("mvpRenameProjectButton")
-        rename.clicked.connect(self.renomear_projeto)
+        rename.clicked.connect(self.alterar_numero_ns)
         project_actions.addWidget(rename, 1, 0)
         delete_project = QPushButton("Excluir projeto")
         delete_project.setObjectName("mvpDeleteProjectButton")
@@ -276,14 +318,14 @@ class ProjectPanelWidget(QWidget):
                 self.abrir_selecionado()
 
     def criar_projeto(self) -> None:
-        name = self._name.text().strip()
-        if not name:
-            self._warn("Informe um nome para criar o projeto")
+        numero_ns = self._service_note.text()
+        if not self._service_note.hasAcceptableInput():
+            self._warn("Informe o número da NS com exatamente 10 dígitos")
             return
-        session = self._action(lambda: self._service.criar_projeto(name))
+        session = self._action(lambda: self._service.criar_projeto(numero_ns))
         if session is None:
             return
-        self._name.clear()
+        self._service_note.clear()
         self.atualizar_projetos()
         self._select_and_activate(session)
         self.status_changed.emit("Projeto criado e pronto para receber PDFs")
@@ -296,15 +338,15 @@ class ProjectPanelWidget(QWidget):
         if session is not None:
             self._activate(session)
 
-    def renomear_projeto(self) -> None:
+    def alterar_numero_ns(self) -> None:
         value = self._projects.currentData()
-        name = self._name.text().strip()
-        if value is None or not name:
-            self._warn("Selecione o projeto e informe o novo nome")
+        numero_ns = self._service_note.text()
+        if value is None or not self._service_note.hasAcceptableInput():
+            self._warn("Selecione o projeto e informe o número da NS com exatamente 10 dígitos")
             return
-        session = self._action(lambda: self._service.renomear_projeto(UUID(str(value)), name))
+        session = self._action(lambda: self._service.alterar_numero_ns(UUID(str(value)), numero_ns))
         if session is not None:
-            self._name.clear()
+            self._service_note.clear()
             self.atualizar_projetos()
             self._select_and_activate(session)
             self._review_panel.atualizar_projetos()

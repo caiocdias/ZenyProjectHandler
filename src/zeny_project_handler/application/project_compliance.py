@@ -33,10 +33,12 @@ from zeny_project_handler.domain.compliance import (
 from zeny_project_handler.domain.documents import DocumentoProjeto, PaginaDocumento
 from zeny_project_handler.domain.enums import (
     CategoriaElemento,
+    EstadoRevisao,
     SituacaoProjeto,
     TipoEvidencia,
     TipoOrigemPdf,
 )
+from zeny_project_handler.domain.project import ElementoProjetoType, Equipamento, Poste
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 
 from .compliance_fact_providers import (
@@ -44,11 +46,14 @@ from .compliance_fact_providers import (
     ProvedorFatosConformidade,
     criar_fato_conformidade,
 )
+from .document_compliance import prover_fatos_documentais
 from .document_zones import (
     evidencia_eh_anotacao_de_revisao,
+    evidencia_esta_na_zona_de_cabecalho,
     evidencias_sem_anotacoes_de_revisao,
 )
 from .span_compliance import prover_fatos_vaos
+from .topology_compliance import medir_extensao_rede_instalar, prover_fatos_topologicos
 
 _TEXT_TYPES = {TipoEvidencia.TEXTO, TipoEvidencia.OCR}
 _NEARBY_TEXT_DISTANCE = 0.035
@@ -66,7 +71,6 @@ _KNOWN_DOCUMENT_LABEL_PATTERN = re.compile(
     r")\s*:",
     re.IGNORECASE,
 )
-_HEADER_ZONE_TOP = 0.76
 _CONTEXT_FIELD_LABELS = {
     "AREA",
     "BAIRRO",
@@ -108,6 +112,8 @@ _ABNT_PAGE_SIZES = {
     "A3": (842.0, 1191.0),
     "A4": (595.0, 842.0),
 }
+_TRANSFORMER_POWER_PATTERN = re.compile(r"^-3-(30|45|75|150|300)$")
+_POLE_IDENTIFIER_PATTERN = re.compile(r"P0*([1-9][0-9]*)")
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,12 +147,28 @@ class _NetworkContext:
 @dataclass(frozen=True, slots=True)
 class _RegionFactContext:
     proposals_by_id: dict[UUID, PropostaElemento]
+    confirmed_elements_by_proposal: dict[UUID, ElementoProjetoType]
     technology_options: dict[UUID, str]
     equipment_class_options: dict[UUID, str]
+    phase_options: dict[UUID, str]
     post_format_options: dict[UUID, str]
     network_context: _NetworkContext
     text_evidence: tuple[EvidenciaDocumento, ...]
     evidence: tuple[EvidenciaDocumento, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _TransformerCandidate:
+    proposal: PropostaElemento
+    element: Equipamento
+    power_kva: int
+
+
+@dataclass(frozen=True, slots=True)
+class _TransformerPostPair:
+    transformer: _TransformerCandidate
+    pole_proposal: PropostaElemento
+    pole: Poste
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -189,6 +211,17 @@ def analisar_conformidade_projeto(
             _fact(
                 project_target.id,
                 "rede.contexto_urbano",
+                True,
+                network_context.origin,
+                evidence=network_context.evidence,
+                confidence=network_context.confidence,
+            )
+        )
+    elif network_context.rural:
+        facts.append(
+            _fact(
+                project_target.id,
+                "rede.contexto_rural",
                 True,
                 network_context.origin,
                 evidence=network_context.evidence,
@@ -241,8 +274,48 @@ def analisar_conformidade_projeto(
         facts.extend(document_facts)
         items.extend(document_items)
 
+    project_service_note = sessao.projeto.nome.strip()
+    if re.fullmatch(r"[0-9]{10}", project_service_note):
+        facts.append(
+            _fact(
+                project_target.id,
+                "projeto.nota_servico",
+                project_service_note,
+                "NS usada como nome do projeto",
+                confidence=Decimal("1"),
+            )
+        )
+
     for key in _FIELD_LABELS:
         values = detected_values.get(key, ())
+        if key == "nota_servico":
+            for value, value_evidence in values:
+                header_evidence = (value_evidence,) if value_evidence is not None else ()
+                facts.append(
+                    _fact(
+                        project_target.id,
+                        "projeto.nota_servico_cabecalho",
+                        value,
+                        "texto/OCR do cabeçalho PDF",
+                        evidence=header_evidence,
+                        confidence=Decimal("0.86"),
+                    )
+                )
+                if value != project_service_note:
+                    facts.append(
+                        _fact(
+                            project_target.id,
+                            "projeto.nota_servico_divergencia",
+                            f"cabeçalho PDF: {value}; nome do projeto: {project_service_note}",
+                            (
+                                f"comparação da NS do cabeçalho {value} com a NS "
+                                f"do projeto {project_service_note}"
+                            ),
+                            evidence=header_evidence,
+                            confidence=Decimal("0.86"),
+                        )
+                    )
+            continue
         if key in metadata_values:
             facts.append(
                 _fact(
@@ -264,6 +337,8 @@ def analisar_conformidade_projeto(
                     confidence=Decimal("0.86"),
                 )
             )
+
+    facts.extend(_project_automation_facts(sessao, project_target.id))
 
     provider_context = ContextoProvedorFatos(sessao=sessao, alvos=targets)
     providers = provedores_fatos if provedores_fatos is not None else provedores_fatos_padrao()
@@ -349,6 +424,137 @@ def _metadata_values(session: SessaoRevisao) -> dict[str, str]:
     return {key: value for key, value in result.items() if value is not None}
 
 
+def _project_automation_facts(
+    session: SessaoRevisao,
+    target_id: UUID,
+) -> tuple[FatoConformidade, ...]:
+    """Materialize verificações globais já decidíveis pelo conteúdo e pelo modelo confirmado."""
+    text_evidence = tuple(
+        item
+        for item in evidencias_sem_anotacoes_de_revisao(session.evidencias)
+        if item.tipo in _TEXT_TYPES and item.conteudo_bruto
+    )
+    normalized_evidence = tuple(
+        (item, _normalize_text(item.conteudo_bruto or "")) for item in text_evidence
+    )
+    file_text = " ".join(
+        _normalize_text(document.nome_arquivo) for document in session.projeto.documentos
+    )
+    full_text = " ".join((file_text, *(text for _item, text in normalized_evidence)))
+
+    material_evidence = tuple(
+        item
+        for item, text in normalized_evidence
+        if "RELACAO DE MATERIA" in text or "ORCAMENTO" in text
+    )
+    has_materials = "RELACAO DE MATERIA" in full_text and "ORCAMENTO" in full_text
+    memory_evidence = tuple(
+        item
+        for item, text in normalized_evidence
+        if "MEMORIA DE CALCULO" in text or "CALCULO ELETRICO" in text or "CALCULO MECANICO" in text
+    )
+    has_memory = "MEMORIA DE CALCULO" in full_text or (
+        "CALCULO ELETRICO" in full_text and "CALCULO MECANICO" in full_text
+    )
+
+    facts: list[FatoConformidade] = [
+        _fact(
+            target_id,
+            "projeto.relacao_materiais_orcamento_identificada",
+            has_materials,
+            "nome e conteúdo textual dos PDFs do projeto",
+            evidence=material_evidence,
+            confidence=Decimal("0.90"),
+        ),
+        _fact(
+            target_id,
+            "projeto.memoria_calculo_identificada",
+            has_memory,
+            "nome e conteúdo textual dos PDFs do projeto",
+            evidence=memory_evidence,
+            confidence=Decimal("0.90"),
+        ),
+    ]
+
+    poles = tuple(
+        item
+        for item in session.projeto.elementos
+        if isinstance(item, Poste) and item.situacao is not SituacaoProjeto.REMOVER
+    )
+    if poles:
+        numbers: list[int] = []
+        for pole in poles:
+            identifier = pole.identificador_operacional or pole.referencia_desenho or ""
+            match = _POLE_IDENTIFIER_PATTERN.fullmatch(_normalize_text(identifier))
+            if match is not None:
+                numbers.append(int(match.group(1)))
+        sequential = (
+            len(numbers) == len(poles)
+            and len(set(numbers)) == len(numbers)
+            and sorted(numbers) == list(range(1, len(poles) + 1))
+        )
+        geometry = next((item.geometria for item in poles if item.geometria is not None), None)
+        facts.extend(
+            (
+                _fact(
+                    target_id,
+                    "projeto.postes_total",
+                    len(poles),
+                    "postes ativos do modelo confirmado",
+                    confidence=Decimal("1"),
+                    geometry=geometry,
+                ),
+                _fact(
+                    target_id,
+                    "projeto.postes_numeracao_sequencial",
+                    sequential,
+                    "identificadores operacionais dos postes ativos",
+                    confidence=Decimal("1"),
+                    geometry=geometry,
+                ),
+            )
+        )
+
+    extension_m, extension_complete, extension_geometry = medir_extensao_rede_instalar(
+        session.projeto
+    )
+    if extension_m is not None:
+        facts.append(
+            _fact(
+                target_id,
+                "projeto.extensao_rede_instalar_m",
+                extension_m,
+                "soma deduplicada dos percursos de cabos a instalar",
+                confidence=Decimal("1"),
+                geometry=extension_geometry,
+            )
+        )
+        facts.append(
+            _fact(
+                target_id,
+                "projeto.extensao_rede_instalar_avaliada",
+                extension_complete,
+                "cobertura dos comprimentos dos percursos de cabos a instalar",
+                confidence=Decimal("1"),
+                geometry=extension_geometry,
+            )
+        )
+    prordr_evidence = tuple(
+        item for item, text in normalized_evidence if "PRORDR" in text or "PRODR" in text
+    )
+    facts.append(
+        _fact(
+            target_id,
+            "projeto.prordr_identificado",
+            bool(prordr_evidence),
+            "conteúdo textual dos PDFs do projeto",
+            evidence=prordr_evidence,
+            confidence=Decimal("0.92"),
+        )
+    )
+    return tuple(facts)
+
+
 def _extract_document_fields(
     evidence: tuple[EvidenciaDocumento, ...],
 ) -> dict[str, list[tuple[str, EvidenciaDocumento]]]:
@@ -356,11 +562,15 @@ def _extract_document_fields(
         item for item in evidence if item.tipo in _TEXT_TYPES and item.conteudo_bruto
     )
     searchable = _searchable_texts(text_evidence)
+    searchable_header = _searchable_texts(
+        tuple(item for item in text_evidence if evidencia_esta_na_zona_de_cabecalho(item))
+    )
     found: dict[str, list[tuple[str, EvidenciaDocumento]]] = {}
     seen: set[tuple[str, str, UUID]] = set()
-    for text, anchor in searchable:
-        normalized = _normalize_text(text)
-        for key, pattern in _FIELD_PATTERNS.items():
+    for key, pattern in _FIELD_PATTERNS.items():
+        candidates = searchable_header if key == "nota_servico" else searchable
+        for text, anchor in candidates:
+            normalized = _normalize_text(text)
             for match in pattern.finditer(normalized):
                 value = match.group(1).replace(" ", "")
                 if key == "escala":
@@ -406,7 +616,7 @@ def _header_labeled_fields(
         for item in evidence
         if item.tipo in _TEXT_TYPES
         and item.conteudo_bruto
-        and _center(item.geometria)[1] >= _HEADER_ZONE_TOP
+        and evidencia_esta_na_zona_de_cabecalho(item)
     )
     return _extract_labeled_fields(candidates)
 
@@ -730,9 +940,9 @@ def _servitude_items(
             valor=(
                 f"{len(servitude)} menção(ões) localizada(s), sem campos rotulados"
                 if servitude
-                else "Nenhuma menção localizada; aplicabilidade ainda não determinada"
+                else "Nenhuma menção localizada"
             ),
-            estado="REQUER_REVISAO_VISUAL" if servitude else "NAO_AVALIAVEL",
+            estado="IDENTIFICADO" if servitude else "NAO_IDENTIFICADO",
             documento_id=document.id,
             pagina_id=servitude[0].pagina_id if servitude else None,
             geometria=servitude[0].geometria if servitude else None,
@@ -780,7 +990,7 @@ def _stamp_item(
             if stamps
             else "Nenhum candidato localizado"
         ),
-        estado="REQUER_REVISAO_VISUAL" if stamps else "NAO_IDENTIFICADO",
+        estado="IDENTIFICADO" if stamps else "NAO_IDENTIFICADO",
         documento_id=document.id,
         pagina_id=stamps[0].pagina_id if stamps else None,
         geometria=stamps[0].geometria if stamps else None,
@@ -847,7 +1057,7 @@ def _signature_item(
         estado=(
             "ASSINATURA_PDF_PRESENTE"
             if signatures.signed_fields
-            else ("REQUER_REVISAO_VISUAL" if combined else "NAO_IDENTIFICADO")
+            else ("IDENTIFICADO" if combined else "NAO_IDENTIFICADO")
         ),
         documento_id=document.id,
         pagina_id=combined[0].pagina_id if combined else None,
@@ -886,6 +1096,7 @@ def _region_facts(
         facts.extend(_cable_technology_facts(target.id, proposals, session, context))
         facts.extend(_installed_cable_technology_facts(target.id, proposals, session, context))
         facts.extend(_structure_post_facts(target.id, proposals, session, context))
+        facts.extend(_existing_post_transformer_facts(target.id, proposals, session, context))
     return tuple(facts)
 
 
@@ -901,22 +1112,38 @@ def prover_fatos_regionais(contexto: ContextoProvedorFatos) -> tuple[FatoConform
 
 def provedores_fatos_padrao() -> tuple[ProvedorFatosConformidade, ...]:
     """Composição determinística usada fora do bootstrap e em testes diretos."""
-    return (prover_fatos_regionais, prover_fatos_vaos)
+    return (
+        prover_fatos_documentais,
+        prover_fatos_regionais,
+        prover_fatos_vaos,
+        prover_fatos_topologicos,
+    )
 
 
 def _region_fact_context(session: SessaoRevisao) -> _RegionFactContext:
     review_evidence_ids = {
         item.id for item in session.evidencias if evidencia_eh_anotacao_de_revisao(item)
     }
+    proposals_by_id = {
+        item.id: item
+        for item in session.propostas
+        if isinstance(item, PropostaElemento)
+        and item.estado_revisao is not EstadoRevisao.REJEITADA
+        and not review_evidence_ids.intersection(item.evidencia_ids)
+    }
+    confirmed_by_id = {item.id: item for item in session.projeto.elementos}
+    confirmed_elements_by_proposal = {
+        decision.proposta_id: confirmed_by_id[decision.elemento_confirmado_id]
+        for decision in session.decisoes
+        if decision.proposta_id in proposals_by_id
+        and decision.elemento_confirmado_id in confirmed_by_id
+    }
     return _RegionFactContext(
-        proposals_by_id={
-            item.id: item
-            for item in session.propostas
-            if isinstance(item, PropostaElemento)
-            and not review_evidence_ids.intersection(item.evidencia_ids)
-        },
+        proposals_by_id=proposals_by_id,
+        confirmed_elements_by_proposal=confirmed_elements_by_proposal,
         technology_options=_catalog_option_codes(session, "tecnologia_rede"),
         equipment_class_options=_catalog_option_codes(session, "classe_equipamento"),
+        phase_options=_catalog_option_codes(session, "configuracao_fases"),
         post_format_options=_catalog_option_codes(session, "formato_poste"),
         network_context=_network_context(session),
         text_evidence=tuple(
@@ -1026,16 +1253,18 @@ def _risk_facts(
     nearby_text: tuple[EvidenciaDocumento, ...],
 ) -> tuple[FatoConformidade, ...]:
     risk_evidence = _risk_assessment_evidence(nearby_text)
-    if not risk_evidence:
-        return ()
     return (
         _fact(
             target_id,
             "regiao.risco_abalroamento_avaliado",
-            True,
-            "nota textual próxima ao equipamento",
+            bool(risk_evidence),
+            (
+                "nota textual próxima ao equipamento"
+                if risk_evidence
+                else "ausência de nota de avaliação na região do equipamento"
+            ),
             evidence=risk_evidence,
-            confidence=Decimal("0.82"),
+            confidence=Decimal("0.82") if risk_evidence else Decimal("1"),
         ),
     )
 
@@ -1156,6 +1385,231 @@ def _structure_post_facts(
             confidence=pole_proposal.confianca,
         ),
     )
+
+
+def _existing_post_transformer_facts(
+    target_id: UUID,
+    proposals: tuple[PropostaElemento, ...],
+    session: SessaoRevisao,
+    context: _RegionFactContext,
+) -> tuple[FatoConformidade, ...]:
+    """Correlacione somente um transformador e um poste confirmados na mesma região."""
+    equipment_proposals = tuple(
+        item for item in proposals if item.categoria is CategoriaElemento.EQUIPAMENTO
+    )
+    candidates = _transformer_candidates(equipment_proposals, session, context)
+    applicability_evidence = _proposals_evidence(equipment_proposals, context.evidence)
+    if context.network_context.rural or not candidates:
+        return _transformer_applicability_facts(
+            target_id,
+            value=False,
+            origin="aplicabilidade resolvida por contexto, situação e catálogo confirmados",
+            evidence=applicability_evidence,
+            confidence=Decimal("0.98"),
+        )
+    if not context.network_context.urban or len(candidates) != 1:
+        return ()
+
+    pair = _confirmed_transformer_post_pair(candidates[0], proposals, session, context)
+    if pair is None:
+        return ()
+    if pair.pole.situacao is not SituacaoProjeto.EXISTENTE:
+        return _transformer_applicability_facts(
+            target_id,
+            value=False,
+            origin="o equipamento confirmado não está associado a poste existente",
+            evidence=tuple(
+                dict.fromkeys(
+                    (
+                        *applicability_evidence,
+                        *_proposal_evidence(pair.pole_proposal, context.evidence),
+                    )
+                )
+            ),
+            confidence=_combined_confidence(
+                pair.transformer.proposal.confianca,
+                pair.pole_proposal.confianca,
+            ),
+        )
+    return _transformer_post_facts(target_id, pair, session, context)
+
+
+def _transformer_candidates(
+    proposals: tuple[PropostaElemento, ...],
+    session: SessaoRevisao,
+    context: _RegionFactContext,
+) -> tuple[_TransformerCandidate, ...]:
+    candidates: list[_TransformerCandidate] = []
+    for proposal in proposals:
+        element = context.confirmed_elements_by_proposal.get(proposal.id)
+        if not isinstance(element, Equipamento):
+            continue
+        catalog_item = session.catalogo.item_por_id(element.tipo_catalogo_id)
+        if not isinstance(catalog_item, TipoEquipamento):
+            continue
+        candidate = _transformer_candidate(proposal, element, catalog_item, context)
+        if candidate is not None:
+            candidates.append(candidate)
+    return tuple(candidates)
+
+
+def _transformer_candidate(
+    proposal: PropostaElemento,
+    element: Equipamento,
+    catalog_item: TipoEquipamento,
+    context: _RegionFactContext,
+) -> _TransformerCandidate | None:
+    power_match = _TRANSFORMER_POWER_PATTERN.fullmatch(catalog_item.codigo)
+    equipment_class = context.equipment_class_options.get(catalog_item.classe_equipamento_opcao_id)
+    phase = context.phase_options.get(catalog_item.configuracao_fases_opcao_id)
+    if (
+        element.situacao is not SituacaoProjeto.INSTALAR
+        or equipment_class != "TRANSFORMADOR"
+        or phase != "TRIFASICA"
+        or power_match is None
+    ):
+        return None
+    return _TransformerCandidate(proposal, element, int(power_match.group(1)))
+
+
+def _proposals_evidence(
+    proposals: tuple[PropostaElemento, ...],
+    evidence: tuple[EvidenciaDocumento, ...],
+) -> tuple[EvidenciaDocumento, ...]:
+    combined = tuple(
+        item for proposal in proposals for item in _proposal_evidence(proposal, evidence)
+    )
+    return tuple(dict.fromkeys(combined))
+
+
+def _transformer_applicability_facts(
+    target_id: UUID,
+    *,
+    value: bool,
+    origin: str,
+    evidence: tuple[EvidenciaDocumento, ...],
+    confidence: Decimal | None,
+) -> tuple[FatoConformidade, ...]:
+    return (
+        _fact(
+            target_id,
+            "regiao.transformador_trifasico_poste_existente_avaliavel",
+            value,
+            origin,
+            evidence=evidence,
+            confidence=confidence,
+        ),
+    )
+
+
+def _confirmed_transformer_post_pair(
+    transformer: _TransformerCandidate,
+    proposals: tuple[PropostaElemento, ...],
+    session: SessaoRevisao,
+    context: _RegionFactContext,
+) -> _TransformerPostPair | None:
+    related = tuple(
+        relation
+        for relation in session.projeto.relacoes_confirmadas
+        if relation.tipo_relacao == "INSTALADO_EM" and relation.origem_id == transformer.element.id
+    )
+    if len(related) != 1 or related[0].destino_id != transformer.element.poste_id:
+        return None
+    pole = next(
+        (
+            item
+            for item in session.projeto.elementos
+            if item.id == related[0].destino_id and isinstance(item, Poste)
+        ),
+        None,
+    )
+    if pole is None:
+        return None
+    pole_proposals = tuple(
+        item
+        for item in proposals
+        if item.categoria is CategoriaElemento.POSTE
+        and context.confirmed_elements_by_proposal.get(item.id) == pole
+    )
+    if len(pole_proposals) != 1:
+        return None
+    pole_proposal = pole_proposals[0]
+    if context.confirmed_elements_by_proposal.get(pole_proposal.id) != pole:
+        return None
+    return _TransformerPostPair(transformer, pole_proposal, pole)
+
+
+def _transformer_post_facts(
+    target_id: UUID,
+    pair: _TransformerPostPair,
+    session: SessaoRevisao,
+    context: _RegionFactContext,
+) -> tuple[FatoConformidade, ...]:
+    equipment_proposal = pair.transformer.proposal
+    pole_proposal = pair.pole_proposal
+
+    pole_evidence = _proposal_evidence(pair.pole_proposal, context.evidence)
+    equipment_evidence = _proposal_evidence(equipment_proposal, context.evidence)
+    pair_evidence = tuple(
+        dict.fromkeys((*equipment_evidence, *pole_evidence, *context.network_context.evidence))
+    )
+    confidence = _combined_confidence(
+        equipment_proposal.confianca,
+        pole_proposal.confianca,
+        context.network_context.confidence,
+    )
+    facts: list[FatoConformidade] = [
+        _fact(
+            target_id,
+            "regiao.transformador_trifasico_poste_existente_avaliavel",
+            True,
+            "relação confirmada 1:1 entre transformador e poste na região",
+            evidence=pair_evidence,
+            confidence=confidence,
+            geometry=equipment_proposal.geometria,
+        ),
+        _fact(
+            target_id,
+            "regiao.transformador_potencia_kva",
+            pair.transformer.power_kva,
+            "código exato do transformador no catálogo técnico",
+            evidence=equipment_evidence,
+            confidence=equipment_proposal.confianca,
+            geometry=equipment_proposal.geometria,
+        ),
+    ]
+    pole_type = session.catalogo.item_por_id(pair.pole.tipo_catalogo_id)
+    if isinstance(pole_type, TipoPoste):
+        facts.append(
+            _fact(
+                target_id,
+                "regiao.poste_transformador_resistencia_dan",
+                pole_type.resistencia_dan,
+                "tipo do poste confirmado e associado ao transformador",
+                evidence=pole_evidence,
+                confidence=pole_proposal.confianca,
+                geometry=pole_proposal.geometria,
+            )
+        )
+        post_format = context.post_format_options.get(pole_type.formato_opcao_id)
+        if post_format:
+            facts.append(
+                _fact(
+                    target_id,
+                    "regiao.poste_transformador_formato",
+                    post_format,
+                    "formato canônico do tipo de poste confirmado",
+                    evidence=pole_evidence,
+                    confidence=pole_proposal.confianca,
+                    geometry=pole_proposal.geometria,
+                )
+            )
+    return tuple(facts)
+
+
+def _combined_confidence(*values: Decimal | None) -> Decimal | None:
+    known = tuple(item for item in values if item is not None)
+    return min(known) if len(known) == len(values) else None
 
 
 def _network_context(session: SessaoRevisao) -> _NetworkContext:
@@ -1299,7 +1753,7 @@ def _signature_summary(
     if fields:
         return f"{len(fields)} campo(s) PDF /Sig vazio(s)"
     if labels:
-        return f"{len(labels)} rótulo(s) textual(is); assinatura gráfica requer revisão visual"
+        return f"{len(labels)} rótulo(s) textual(is); assinatura identificada pelo desenho"
     return "Nenhum campo ou rótulo localizado"
 
 

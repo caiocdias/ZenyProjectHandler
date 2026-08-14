@@ -7,6 +7,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 import pytest
 
+from zeny_project_handler.application import compliance_callouts as callout_layout
 from zeny_project_handler.application.compliance_callouts import (
     OrigemAncoraCallout,
     ponto_conexao_callout,
@@ -203,6 +204,76 @@ def test_connector_starts_on_box_border_for_outside_and_colliding_anchor() -> No
     )
     inside = ponto_conexao_callout(callout.caixa_sugerida, center)
     assert _on_border(inside, callout.caixa_sugerida)
+
+
+def test_projection_moves_box_away_from_known_pdf_content() -> None:
+    page = _page("content-aware", width=Decimal("595"), height=Decimal("842"))
+    anchor = GeometriaDocumento.ponto(page.id, _point("0.5", "0.5"))
+    execution, evidence = _execution((page,), fact_geometries=(anchor,))
+    baseline = projetar_callouts_conformidade(
+        execution,
+        evidencias=evidence,
+        paginas=(page,),
+    )[0]
+    blocked = baseline.caixa_sugerida
+    blocking_geometry = GeometriaDocumento.caixa(
+        page.id,
+        PontoNormalizado(blocked.esquerda, blocked.topo),
+        PontoNormalizado(blocked.direita, blocked.base),
+    )
+    blocking_evidence = EvidenciaDocumento(
+        id=_id("blocking-content"),
+        execucao_id=_id("semantic-execution"),
+        pagina_id=page.id,
+        tipo=TipoEvidencia.TEXTO,
+        geometria=blocking_geometry,
+        metodo="fixture-callout",
+        versao_metodo="1",
+        parametros=(),
+        conteudo_bruto="conteúdo importante da folha",
+        criada_em=datetime(2026, 8, 12, 12, tzinfo=UTC),
+    )
+
+    moved = projetar_callouts_conformidade(
+        execution,
+        evidencias=(*evidence, blocking_evidence),
+        paginas=(page,),
+    )[0]
+
+    assert moved.caixa_sugerida != blocked
+    assert _intersection_area(moved.caixa_sugerida, blocked) == 0
+
+
+def test_collision_score_prefers_less_important_area_over_fewer_obstacles() -> None:
+    rectangle = callout_layout._RetanguloPontos
+    over_one_large_region = rectangle(0.0, 0.0, 10.0, 10.0)
+    over_two_tiny_regions = rectangle(20.0, 0.0, 30.0, 10.0)
+    over_target = rectangle(40.0, 0.0, 50.0, 10.0)
+    target = rectangle(40.0, 0.0, 50.0, 10.0)
+    important_content = (
+        rectangle(0.0, 0.0, 9.0, 10.0),
+        rectangle(20.0, 0.0, 21.0, 1.0),
+        rectangle(29.0, 9.0, 30.0, 10.0),
+    )
+    occupied = (rectangle(0.0, 0.0, 10.0, 10.0),)
+    candidates = (over_one_large_region, over_two_tiny_regions, over_target)
+
+    _index, selected = min(
+        enumerate(candidates),
+        key=lambda pair: (
+            callout_layout._collision_score(
+                pair[1],
+                target,
+                occupied,
+                important_content,
+            ),
+            pair[0],
+        ),
+    )
+
+    assert selected is over_two_tiny_regions
+    assert callout_layout._intersection_area(selected, target) == 0
+    assert all(callout_layout._intersection_area(selected, item) == 0 for item in occupied)
 
 
 def _execution(

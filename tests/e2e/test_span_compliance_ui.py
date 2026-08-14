@@ -104,25 +104,27 @@ def test_span_rule_full_ui_cycle_survives_restart(
     tabs.setCurrentIndex(2)
     qtbot.mouseClick(import_button, Qt.MouseButton.LeftButton)
     imported_row = _rule_row(rules, _RULE_ID)
-    assert imported_row.text(5) == "Disponível"
+    assert imported_row.text(5) == "Automático"
     tabs.setCurrentIndex(1)
     qtbot.mouseClick(analyze, Qt.MouseButton.LeftButton)
 
     finding = _finding_row(findings, _RULE_TITLE)
     finding_id = UUID(str(finding.data(0, Qt.ItemDataRole.UserRole + 3)))
-    assert finding.text(0) == "Possível divergência"
+    assert finding.text(0) == "Divergência"
     assert "52" in finding.text(3)
     assert "45" in finding.text(4)
     assert finding.text(8) == "Localizado no PDF"
     assert finding_id in {item.id for item in window.pdf_viewer._compliance_callouts}
     current_rule_finding = _finding_row(findings, _CURRENT_SPAN_RULE_TITLE)
     current_rule_finding_id = UUID(str(current_rule_finding.data(0, Qt.ItemDataRole.UserRole + 3)))
-    assert current_rule_finding.text(0) == "Não avaliável"
-    assert current_rule_finding_id not in {
-        item.id for item in window.pdf_viewer._compliance_callouts
-    }
+    assert current_rule_finding.text(0) == "Divergência"
+    assert current_rule_finding_id in {item.id for item in window.pdf_viewer._compliance_callouts}
     qtbot.waitUntil(
         lambda: str(finding_id) in window.pdf_viewer.view._callout_items,
+        timeout=10_000,
+    )
+    qtbot.waitUntil(
+        lambda: str(current_rule_finding_id) in window.pdf_viewer.view._callout_items,
         timeout=10_000,
     )
 
@@ -205,7 +207,7 @@ def test_span_rule_full_ui_cycle_survives_restart(
     assert history == (first_execution, latest)
     assert any(item.regra_id == _RULE_ID for item in history[0].achados)
     assert "IDs existentes substituídos: 1" in confirmations[-1]
-    assert "IDs atuais omitidos e preservados: 8" in confirmations[-1]
+    assert "IDs atuais omitidos e preservados: 39" in confirmations[-1]
 
 
 def _create_project_with_pdf(
@@ -221,7 +223,7 @@ def _create_project_with_pdf(
     project_combo = panel.findChild(QComboBox, "mvpProjectCombo")
     assert name is not None and create is not None and add_pdf is not None
     assert project_combo is not None
-    name.setText("Projeto E2E de vão")
+    name.setText("0000000224")
     qtbot.mouseClick(create, Qt.MouseButton.LeftButton)
     monkeypatch.setattr(
         QFileDialog,

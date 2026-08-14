@@ -125,8 +125,9 @@ detector ativo.
 
 ## Regras normativas iniciais
 
-O registro `cemig-normas-distribuicao-2025.4` permanece pequeno e conservador após a revisão
-integral e a salvaguarda da faixa excepcional da Regra 6:
+O registro `cemig-normas-distribuicao-2025.5` permanece pequeno e conservador após a revisão
+integral, a salvaguarda da faixa excepcional da Regra 6 e a promoção dos dois subconjuntos
+inequívocos de transformador em posteação existente:
 
 | Tema | Fatos necessários | Resultado possível |
 |---|---|---|
@@ -139,6 +140,8 @@ integral e a salvaguarda da faixa excepcional da Regra 6:
 | Exceção de vão | área periférica/baixa densidade/chácaras, perfil favorável e evidência positiva | acima de 45 m e até 60 m fica não avaliável sem prova; com prova suspende a regra ordinária |
 | Cabo novo urbano | contexto e tecnologia da proposta `INSTALAR` | cabo nu convencional diverge; reparo não é reclassificado |
 | Estrutura/poste rural | contexto, código da estrutura e formato do único poste associado | CE1/CE1S/CEJ1/CEJ2/CEM4 divergem em duplo T |
+| Transformador trifásico 30/45/75 kVA em posteação existente | contexto, potência catalogada, situação explícita, relação 1:1, resistência e formato não inferido | mínimo 300 daN; DT ou circular no subconjunto representável |
+| Transformador trifásico 150/300 kVA em posteação existente | os mesmos fatos correlacionados | mínimo 600 daN e seção circular no subconjunto representável |
 
 A ND-3.1 trata redes urbanas. Limites de redes rurais não devem reutilizar essas regras: a ND-9.3,
 por exemplo, contém tabelas dependentes de cabo, altura e resistência do poste. A mesma cautela vale
@@ -176,6 +179,11 @@ reutilizar números.
 O seed empacotado inicializa bancos sem revisão ativa. Na atualização `2025.3` → `2025.4`, o serviço
 substitui somente a Regra 6 que ainda seja exatamente igual à versão oficial anterior; regras
 adicionais são preservadas e qualquer edição do usuário nessa regra impede a migração automática.
+Na atualização `2025.4` → `2025.5`, uma lista explícita acrescenta somente os IDs oficiais das
+Regras 9 e 10 que ainda não existam. Uma definição local com o mesmo ID vence e nenhuma Regra 1–8
+nem ID personalizado é reescrito. O procedimento é idempotente; o rótulo `2025.5` só é usado quando
+a sequência resultante coincide exatamente com o seed, caso contrário a versão conserva a
+proveniência com `+adicoes-2025.5`.
 Importar mescla regras por ID e produz outro snapshot sem editar o seed. O usuário não dispõe de operação individual de
 ativação, desativação ou remoção: o estado declarativo `enabled` só muda quando o ID correspondente
 vem em um JSON importado, e omitir um ID do arquivo preserva a regra corrente. A cada revisão ativa,
@@ -189,7 +197,9 @@ novo cujo conjunto de IDs não contenha todos os IDs da revisão corrente. A res
 snapshots legados e complementa os triggers que proíbem alterar ou apagar revisões já persistidas.
 Uma restauração de backup captura antes da troca a revisão ativa e, ainda dentro do bloco coberto
 pelo rollback de banco e arquivos, acrescenta ao registro restaurado todo ID local ausente. Conteúdo
-restaurado vence para IDs coincidentes, exceto pela migração imediata da Regra 6 oficial legada;
+restaurado vence para IDs coincidentes, exceto pela migração imediata da Regra 6 oficial legada.
+Primeiro são recuperados os IDs locais ausentes e só depois são anexados IDs oficiais novos ainda
+ausentes, evitando que uma adição oficial esconda uma definição local pós-backup com o mesmo ID.
 IDs adicionais do backup também permanecem. A numeração é estável dentro da mesma linhagem de banco;
 ao combinar históricos independentes, colisões podem exigir novos números sem alterar os IDs. A mesma etapa
 republica o catálogo Markdown, e qualquer falha restaura o snapshot e a projeção anteriores.

@@ -325,11 +325,51 @@ Todo conteúdo de `examples/`, exceto o README da pasta, é ignorado pelo Git. O
 locais e dinâmicos: podem ser incluídos, substituídos ou removidos sem manifesto, hash versionado ou
 partição formal.
 
+<<<<<<< HEAD
 O script `scripts/smoke_examples.py` percorre os PDFs presentes somente quando solicitado e verifica
 abertura,
 renderização, extração, interpretação e preservação do arquivo. Ele não fixa contagens por documento.
 Quando um projeto real expõe uma regressão, o caso mínimo é reproduzido em uma fixture sintética no
 gate padrão. Comentários do PDF ajudam a priorizar capacidades, mas não substituem fontes normativas.
+=======
+Todos os PDFs locais em `examples/` são ignorados pelo Git. O conjunto formal é definido pelos nove
+hashes de `evaluation/manifesto-amostras.json`, e não pela quantidade de arquivos presentes na
+pasta. PDFs adicionais podem ser colocados ali a qualquer momento como amostras exploratórias: eles
+participam do smoke test local somente leitura, mas não do gate privado até serem aprovados e
+incluídos no manifesto. Na auditoria de 14/08/2026, os dez PDFs então presentes tinham hashes
+distintos entre si e nenhum correspondia aos nove hashes formais; portanto todos permaneceram
+exploratórios. Nomes de arquivos, nomes de clientes, telefones, coordenadas e fotografias não são
+versionados.
+
+O corpus cobre A3/A4, retrato/paisagem, iText, AutoCAD, Microsoft Print to PDF, texto, vetores,
+imagens, anotações `Stamp`, `Popup`, `FreeText`, `Square`, appearance streams e Optional Content
+Groups. Uma amostra possui texto de anotação malformado e outra contém imagens visíveis apenas em
+appearance streams. Esses casos serão obrigatórios nos testes das etapas de ingestão e extração.
+
+## Conjunto de avaliação semântica
+
+- `ManifestoAvaliacao` separa amostras de desenvolvimento e teste por hash, sem nomes de arquivo.
+- `AnotacaoAmostra` registra elementos, categoria, situação, geometria normalizada e relações. Os
+  papéis `PRIMARIA`, `SECUNDARIA` e `CONSENSO` distinguem rotulagem independente de adjudicação.
+- Uma anotação congelada deve ser de consenso, possuir revisor pseudônimo e referenciar somente
+  páginas e elementos existentes na amostra correspondente.
+- Amostras marcadas para dupla anotação medem divergência de contagem, categoria, situação,
+  geometria e relações antes da adjudicação.
+- O pareamento de pontos usa distância normalizada; caixas e polígonos usam IoU da caixa envolvente;
+  polilinhas usam distância simétrica aos segmentos. A associação é um-para-um e determinística.
+- O benchmark registra precisão, recall e F1 por classe, relações, falhas de extração, latência p95 e
+  pico de memória rastreada pelo Python. A medição não inclui toda memória nativa de bibliotecas C.
+- A assinatura semântica inclui conjunto, critérios, interpretador, regras, configuração e contagens,
+  mas exclui latência e memória para permanecer reproduzível entre execuções equivalentes.
+- O teste final é recusado enquanto manifesto ou critérios não estiverem congelados/aprovados.
+- A auditoria impede o congelamento sem consenso de todas as amostras, cobertura das cinco classes,
+  dupla anotação exigida e diversidade mínima de escala, formato, orientação, qualidade e densidade.
+
+O corpus atual satisfaz formato, orientação, qualidade e densidade, mas todas as amostras declaram a
+mesma escala. Ele permanece em preparação até a inclusão autorizada de outra escala e a conclusão da
+revisão humana. As regras iniciais foram construídas somente com catálogo, contratos e fixtures
+sintéticas; a partição de teste privada não foi usada para criá-las.
+>>>>>>> 51a97e2ba161a5914a20d6988ea9270393104e55
 
 ## Persistência local
 
@@ -407,7 +447,13 @@ gate padrão. Comentários do PDF ajudam a priorizar capacidades, mas não subst
 
 ## Fluxo operacional do MVP pela interface
 
+<<<<<<< HEAD
 - O painel **Projeto** lista, cria, abre e renomeia projetos no SQLite. Em uma instalação
+=======
+- O painel **Fluxo do projeto** lista, cria e abre projetos no SQLite. Na criação, o usuário informa
+  obrigatoriamente o número da NS com 10 dígitos; esse número identifica o projeto na interface e
+  pode ser corrigido pela ação **Alterar NS**. Em uma instalação
+>>>>>>> 51a97e2ba161a5914a20d6988ea9270393104e55
   vazia, o catálogo inicial publicado é persistido automaticamente antes da criação do primeiro
   projeto.
 - Um ou vários PDFs podem ser selecionados e importados imediatamente no projeto. Cada arquivo é
@@ -482,16 +528,21 @@ quando ela está disponível.
   detector ativo.
 - Evidência, fato normalizado, regra e achado são objetos distintos. Fatos preservam escopo, origem,
   confiança, geometria e evidências.
-- O registro `cemig-normas-distribuicao-2025.4` é JSON validado, versionado e assinado por SHA-256.
+- O registro `cemig-normas-distribuicao-2025.5` é JSON validado, versionado e assinado por SHA-256.
   `when` define aplicabilidade, `unless` exige comprovação positiva da exceção e `must` declara
   requisitos. Na inicialização, somente uma Regra 6 ainda idêntica ao seed oficial `2025.3` recebe a
-  salvaguarda nova; regras personalizadas e IDs adicionais não são sobrescritos nem removidos.
+  salvaguarda nova. A migração aditiva seguinte anexa somente os IDs oficiais ausentes das Regras 9
+  e 10; regras personalizadas, colisões de ID e as definições existentes não são sobrescritas nem
+  removidas.
 - Cada regra aplicável resulta em `CONFORME`, `DIVERGENCIA` ou `NAO_AVALIAVEL`. A interface apresenta
   divergência automática como **possível divergência**, sujeita a revisão.
 - As regras iniciais verificam numeração, formato, vão urbano de rede compacta/isolada, equipamento
   em ângulo, avaliação de abalroamento, cabo novo urbano e uma incompatibilidade rural simples entre
-  estrutura e poste. A regra de escala permanece inativa até suas exceções terem fatos positivos;
-  outros contextos rurais e tabelas de estrutura não reutilizam limites urbanos.
+  estrutura e poste. Também verificam os mínimos representáveis de formato e resistência para
+  transformadores trifásicos de 30/45/75 kVA e 150/300 kVA a instalar em posteação urbana existente,
+  somente com associação 1:1 e simbologia positiva. A regra de escala permanece inativa até suas
+  exceções terem fatos positivos; outros contextos rurais e tabelas de estrutura não reutilizam
+  limites urbanos.
 
 A abstração, o vocabulário inicial e o procedimento para evolução normativa estão em
 [`arquitetura-conformidade.md`](arquitetura-conformidade.md). A decisão de arquitetura está na

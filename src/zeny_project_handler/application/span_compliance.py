@@ -11,7 +11,11 @@ from zeny_project_handler.domain.compliance import (
     FatoConformidade,
     TipoEscopoConformidade,
 )
-from zeny_project_handler.domain.enums import CategoriaElemento, OrigemComprimentoVao
+from zeny_project_handler.domain.enums import (
+    CategoriaElemento,
+    EstadoRevisao,
+    OrigemComprimentoVao,
+)
 from zeny_project_handler.domain.values import GeometriaDocumento
 
 from .compliance_fact_providers import ContextoProvedorFatos, criar_fato_conformidade
@@ -26,13 +30,14 @@ _EXCEPTION_MAX_LENGTH = Decimal("60")
 
 
 def prover_fatos_vaos(contexto: ContextoProvedorFatos) -> tuple[FatoConformidade, ...]:
-    """Publique medidas e somente exceções com evidência positiva explícita."""
+    """Publique medidas e avalie todo vão cujo comprimento esteja disponível."""
     session = contexto.sessao
     evidence_by_id = {item.id: item for item in session.evidencias}
     proposals = {
         item.id: item
         for item in session.propostas
         if isinstance(item, PropostaElemento)
+        and item.estado_revisao is not EstadoRevisao.REJEITADA
         and not _proposal_uses_review_annotation(item, evidence_by_id)
     }
     proposals_by_element = _proposals_by_confirmed_element(contexto, proposals)
@@ -77,10 +82,7 @@ def prover_fatos_vaos(contexto: ContextoProvedorFatos) -> tuple[FatoConformidade
             and _ORDINARY_MAX_LENGTH < span.comprimento_m <= _EXCEPTION_MAX_LENGTH
             else ()
         )
-        if span.comprimento_m is not None and _exception_applicability_resolved(
-            span.comprimento_m,
-            exception_evidence,
-        ):
+        if span.comprimento_m is not None:
             applicability_evidence = tuple(dict.fromkeys((*evidence, *exception_evidence)))
             facts.append(
                 criar_fato_conformidade(
@@ -106,15 +108,6 @@ def prover_fatos_vaos(contexto: ContextoProvedorFatos) -> tuple[FatoConformidade
                 )
             )
     return tuple(facts)
-
-
-def _exception_applicability_resolved(
-    length: Decimal,
-    exception_evidence: tuple[EvidenciaDocumento, ...],
-) -> bool:
-    return (
-        length <= _ORDINARY_MAX_LENGTH or length > _EXCEPTION_MAX_LENGTH or bool(exception_evidence)
-    )
 
 
 def _proposals_by_confirmed_element(
