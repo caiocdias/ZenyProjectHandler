@@ -1393,15 +1393,12 @@ def _criar_graficos_callout(
     pixels_per_point = box_width / points_width
     padding = max(2.0, 6.0 * pixels_per_point)
     available_width = max(1.0, box_width - 2 * padding)
-    available_height = max(1.0, box_height - 2 * padding)
     minimum_scene_pixels = max(1, math.ceil(7.0 / zoom))
-    for font_points in (10.5, 10.0, 9.5, 9.0):
-        font = _fonte_callout(max(minimum_scene_pixels, round(font_points * pixels_per_point)))
-        text_item.setFont(font)
-        text_item.setPlainText(callout.texto)
-        text_item.setTextWidth(available_width)
-        if text_item.boundingRect().height() <= available_height:
-            break
+    font_points = float(callout.tamanho_fonte_pontos)
+    font = _fonte_callout(max(minimum_scene_pixels, round(font_points * pixels_per_point)))
+    text_item.setFont(font)
+    text_item.setPlainText(callout.texto)
+    text_item.setTextWidth(available_width)
     radians = math.radians(angle)
     text_item.setPos(
         top_left.x + math.cos(radians) * padding - math.sin(radians) * padding,

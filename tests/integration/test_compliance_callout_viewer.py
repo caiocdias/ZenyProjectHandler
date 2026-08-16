@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-from uuid import UUID, uuid4
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 import pytest
 from PySide6.QtCore import QPoint, Qt
@@ -17,8 +18,25 @@ from zeny_project_handler.application.compliance_callouts import (
     CalloutConformidade,
     OrigemAncoraCallout,
     RetanguloCallout,
+    projetar_callouts_conformidade,
 )
 from zeny_project_handler.domain.analysis import PropostaElemento
+from zeny_project_handler.domain.compliance import (
+    AchadoConformidade,
+    AlvoConformidade,
+    AvaliacaoCondicaoConformidade,
+    ExecucaoConformidade,
+    FatoConformidade,
+    FonteNormativa,
+    GrupoCondicaoConformidade,
+    OperadorCondicao,
+    QuantificadorCondicao,
+    ResultadoCondicaoConformidade,
+    ResultadoConformidade,
+    SeveridadeConformidade,
+    TipoEscopoConformidade,
+)
+from zeny_project_handler.domain.documents import PaginaDocumento
 from zeny_project_handler.domain.enums import CategoriaElemento, EstadoRevisao, SituacaoProjeto
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 from zeny_project_handler.ports.pdf import OrcamentoRenderizacaoPdf
@@ -120,6 +138,7 @@ def test_callout_anchor_survives_zoom_resize_rotation_tiles_and_page_changes(
     tmp_path: Path,
 ) -> None:
     source = create_callout_formats_pdf(tmp_path / "transformacoes-callout.pdf")
+    original_pdf = source.read_bytes()
     viewer = _viewer(qtbot, dpi=600, budget=TILED_BUDGET)
     assert viewer.carregar_pdf(source)
     _wait_preview(qtbot, viewer)
@@ -131,6 +150,7 @@ def test_callout_anchor_survives_zoom_resize_rotation_tiles_and_page_changes(
     )
     viewer.definir_callouts_conformidade(callouts)
     _assert_anchor_aligned(viewer, callouts[0])
+    _assert_text_fits(viewer, callouts[0])
 
     viewer.view.definir_zoom(0.1)
     graphics = viewer.view._callout_items[str(callouts[0].id)]
@@ -139,22 +159,27 @@ def test_callout_anchor_survives_zoom_resize_rotation_tiles_and_page_changes(
     viewer.view.definir_zoom(4.0)
     qtbot.waitUntil(lambda: bool(viewer.view._tile_items), timeout=10_000)
     _assert_anchor_aligned(viewer, callouts[0])
+    _assert_text_fits(viewer, callouts[0])
     viewer.resize(1024, 720)
     qtbot.wait(20)
     _assert_anchor_aligned(viewer, callouts[0])
+    _assert_text_fits(viewer, callouts[0])
 
     for rotation in (90, 180, 270, 0):
         viewer._rotate_page()
         _wait_preview(qtbot, viewer, rotation=rotation)
         _assert_anchor_aligned(viewer, callouts[0])
+        _assert_text_fits(viewer, callouts[0])
 
     viewer.ir_para_folha(2)
     _wait_preview(qtbot, viewer, page=2)
     assert set(viewer.view._callout_items) == {str(callouts[1].id)}
     _assert_anchor_aligned(viewer, callouts[1])
+    _assert_text_fits(viewer, callouts[1])
     viewer.ir_para_folha(1)
     _wait_preview(qtbot, viewer, page=1)
     assert set(viewer.view._callout_items) == {str(callouts[0].id)}
+    assert source.read_bytes() == original_pdf
 
 
 @pytest.mark.integration
@@ -162,7 +187,8 @@ def test_synthetic_a4_a3_portrait_landscape_callout_renders_are_saved(
     qtbot: QtBot,
     tmp_path: Path,
 ) -> None:
-    source = create_callout_formats_pdf(tmp_path / "inspecao-visual-callouts.pdf")
+    output_directory = _qa_output_directory(tmp_path)
+    source = create_callout_formats_pdf(output_directory / "inspecao-visual-callouts.pdf")
     viewer = _viewer(qtbot, dpi=144, budget=TEST_RENDER_BUDGET)
     assert viewer.carregar_pdf(source)
     _wait_preview(qtbot, viewer)
@@ -179,12 +205,58 @@ def test_synthetic_a4_a3_portrait_landscape_callout_renders_are_saved(
         viewer.ir_para_folha(page_number)
         _wait_preview(qtbot, viewer, page=page_number)
         _assert_anchor_aligned(viewer, callout)
-        output = tmp_path / f"callout-formato-{page_number}.png"
+        output = output_directory / f"callout-formato-{page_number}.png"
         assert viewer.view.grab().save(str(output), "PNG")
         assert output.stat().st_size > 10_000
         renders.append(output)
 
     assert len(renders) == 4
+
+
+@pytest.mark.integration
+def test_dense_projected_callouts_fit_at_minimum_font_and_save_visual_qa(
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> None:
+    output_directory = _qa_output_directory(tmp_path)
+    source = create_callout_formats_pdf(output_directory / "callout-denso-fixture.pdf")
+    viewer = _viewer(qtbot, dpi=144, budget=TEST_RENDER_BUDGET)
+    assert viewer.carregar_pdf(source)
+    _wait_preview(qtbot, viewer)
+    assert viewer.inspecao is not None
+    page = viewer.inspecao.documento.paginas[0]
+    callouts = _projected_dense_callouts(page, count=10)
+    assert len(callouts) == 10
+    assert all(
+        _normalized_intersection_area(left.caixa_sugerida, right.caixa_sugerida) == 0
+        for index, left in enumerate(callouts)
+        for right in callouts[index + 1 :]
+    )
+
+    minimum_font_callouts = _projected_dense_callouts(
+        page,
+        count=11,
+        long_text=True,
+    )
+    assert len(minimum_font_callouts) == 11
+    assert {item.tamanho_fonte_pontos for item in minimum_font_callouts} == {Decimal("9")}
+    assert all(
+        _normalized_intersection_area(left.caixa_sugerida, right.caixa_sugerida) == 0
+        for index, left in enumerate(minimum_font_callouts)
+        for right in minimum_font_callouts[index + 1 :]
+    )
+    viewer.view.definir_zoom(1.0)
+    viewer.definir_callouts_conformidade(minimum_font_callouts)
+    for callout in minimum_font_callouts:
+        _assert_text_fits(viewer, callout)
+        graphics = viewer.view._callout_items[str(callout.id)]
+        assert graphics.texto.font().pixelSize() * viewer.view.zoom >= 7.0
+    viewer.definir_callouts_conformidade(callouts)
+    viewer.resize(1400, 1000)
+    viewer.view.ajustar_pagina()
+    qtbot.wait(20)
+    output = output_directory / "callout-denso-10-p2.png"
+    _save_viewport(viewer, output)
 
 
 @pytest.mark.integration
@@ -305,6 +377,135 @@ def _callout(
         caixa_sugerida=box,
         ancoras=anchors,
     )
+
+
+def _projected_dense_callouts(
+    page: PaginaDocumento,
+    *,
+    count: int,
+    long_text: bool = False,
+) -> tuple[CalloutConformidade, ...]:
+    target_id = _dense_id("target-p2")
+    target = AlvoConformidade(
+        id=target_id,
+        tipo=TipoEscopoConformidade.REGIAO,
+        rotulo="P2",
+        pagina_id=page.id,
+        geometria=GeometriaDocumento.ponto(
+            page.id,
+            PontoNormalizado(Decimal("0.50"), Decimal("0.50")),
+        ),
+    )
+    facts: list[FatoConformidade] = []
+    findings: list[AchadoConformidade] = []
+    presentation: dict[UUID, str] = {}
+    for index in range(count):
+        point = PontoNormalizado(
+            Decimal("0.18") + Decimal(index % 5) * Decimal("0.16"),
+            Decimal("0.30") + Decimal(index // 5) * Decimal("0.34"),
+        )
+        geometry = GeometriaDocumento.ponto(page.id, point)
+        fact_id = _dense_id(f"fact-{index}")
+        finding_id = _dense_id(f"finding-{index}")
+        facts.append(
+            FatoConformidade(
+                id=fact_id,
+                alvo_id=target_id,
+                chave="fixture.valor",
+                valor=False,
+                origem="fixture densa P2",
+                geometria=geometry,
+            )
+        )
+        evaluation = AvaliacaoCondicaoConformidade(
+            grupo=GrupoCondicaoConformidade.REQUISITO,
+            indice=0,
+            chave_fato="fixture.valor",
+            operador=OperadorCondicao.IGUAL,
+            quantificador=QuantificadorCondicao.TODOS,
+            valores_esperados=(True,),
+            valores_observados=(False,),
+            fato_ids=(fact_id,),
+            resultado=ResultadoCondicaoConformidade.NAO_ATENDE,
+        )
+        findings.append(
+            AchadoConformidade(
+                id=finding_id,
+                regra_id=f"fixture.densa-{index}",
+                alvo_id=target_id,
+                resultado=ResultadoConformidade.DIVERGENCIA,
+                severidade=SeveridadeConformidade.ERRO,
+                titulo=f"Divergência densa {index}",
+                mensagem="Valor observado não atende ao requisito sintético.",
+                fonte=FonteNormativa(
+                    documento="Norma sintética",
+                    revisao="1",
+                    item="P2",
+                ),
+                versao_regras="fixture-1",
+                fato_ids=(fact_id,),
+                avaliacoes_condicoes=(evaluation,),
+            )
+        )
+        presentation[finding_id] = (
+            "Poste P2. " + "texto longo " * 22
+            if long_text
+            else f"Poste P2 - divergência {index}. Observado: Não. Esperado: igual a Sim."
+        )
+    execution = ExecucaoConformidade(
+        id=_dense_id("execution"),
+        projeto_id=_dense_id("project"),
+        execucoes_semanticas_ids=(_dense_id("semantic"),),
+        revisao_regras_id=_dense_id("revision"),
+        registro_regras_id=_dense_id("registry"),
+        versao_regras="fixture-1",
+        assinatura_regras="a" * 64,
+        assinatura_sessao="b" * 64,
+        versao_metodo="1",
+        executada_em=datetime(2026, 8, 16, 12, tzinfo=UTC),
+        alvos=(target,),
+        fatos=tuple(facts),
+        achados=tuple(findings),
+        itens_documentais=(),
+    )
+    return projetar_callouts_conformidade(
+        execution,
+        evidencias=(),
+        paginas=(page,),
+        textos_apresentacao=presentation,
+    )
+
+
+def _assert_text_fits(viewer: PdfViewerWidget, callout: CalloutConformidade) -> None:
+    graphics = viewer.view._callout_items[str(callout.id)]
+    transformer = viewer._current_transformer
+    assert transformer is not None
+    box_width = graphics.caixa.rect().width()
+    box_height = graphics.caixa.rect().height()
+    width_points = float(callout.caixa_sugerida.largura) * float(transformer.pagina.largura_pontos)
+    pixels_per_point = box_width / width_points
+    padding = max(2.0, 6.0 * pixels_per_point)
+    assert graphics.texto.boundingRect().width() <= box_width - 2 * padding + 0.5
+    assert graphics.texto.boundingRect().height() <= box_height - 2 * padding + 0.5
+
+
+def _normalized_intersection_area(
+    left: RetanguloCallout,
+    right: RetanguloCallout,
+) -> Decimal:
+    width = max(
+        Decimal(0),
+        min(left.direita, right.direita) - max(left.esquerda, right.esquerda),
+    )
+    height = max(
+        Decimal(0),
+        min(left.base, right.base) - max(left.topo, right.topo),
+    )
+    return width * height
+
+
+def _dense_id(value: str) -> UUID:
+    return uuid5(NAMESPACE_URL, f"callout-dense-render:{value}")
 
 
 def _proposal(page_id: UUID) -> PropostaElemento:

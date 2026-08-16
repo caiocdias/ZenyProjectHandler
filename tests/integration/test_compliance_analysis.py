@@ -204,6 +204,10 @@ def test_execution_is_deterministic_preserves_history_and_survives_restart(
     assert repeated.id == first.id
     assert dumps_domain(repeated) == dumps_domain(first)
     assert len(service.listar_historico(project_id)) == 1
+    persisted = service.obter_ultima(project_id)
+    assert persisted is not None
+    assert "projeto.documentacao_gd_identificada" in {item.chave for item in persisted.fatos}
+    assert "projeto.documentacao_gd_identificada" in dumps_domain(persisted)
     by_result = {item.resultado.value for item in first.achados}
     assert by_result == {"CONFORME", "DIVERGENCIA"}
     divergent = next(item for item in first.achados if item.regra_id == "nd31.desenho.escala")
@@ -362,8 +366,8 @@ def test_panel_loads_latest_marks_stale_and_reapplies_without_ocr(
     first_row = findings.topLevelItem(0)
     assert first_row is not None
     assert first_row.text(0) == "Divergência"
-    assert "ausente" in first_row.text(3)
-    assert "presente" in first_row.text(4)
+    assert "ausente" in first_row.text(3).casefold()
+    assert "presente" in first_row.text(4).casefold()
     assert "CEMIG ND-3.1" in first_row.text(6)
     assert first.versao_regras in first_row.text(7)
     assert first_row.text(8) == "Sem localização no PDF"
@@ -372,7 +376,7 @@ def test_panel_loads_latest_marks_stale_and_reapplies_without_ocr(
         item
         for index in range(rules.topLevelItemCount())
         if (item := rules.topLevelItem(index)) is not None
-        and item.text(3) == "nd31.desenho.numero-projeto"
+        and item.data(0, Qt.ItemDataRole.UserRole) == "nd31.desenho.numero-projeto"
     )
     rules.setCurrentItem(number_rule)
     _import_rule_state(registry_service, "nd31.desenho.numero-projeto", enabled=False)

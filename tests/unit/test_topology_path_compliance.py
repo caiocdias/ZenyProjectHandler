@@ -214,6 +214,17 @@ def _provider_session(
         )
         for index, pole_id in enumerate(pole_ids)
     )
+    pole_geometries = {pole.id: pole.geometria for pole in poles}
+
+    def pole_geometry(pole_id: UUID) -> GeometriaDocumento:
+        geometry = pole_geometries[pole_id]
+        assert geometry is not None
+        return geometry
+
+    def point_pole_id(point: PontoRede) -> UUID:
+        assert point.poste_id is not None
+        return point.poste_id
+
     remapped_points = tuple(
         PontoRede(
             id=point.id,
@@ -222,11 +233,17 @@ def _provider_session(
             nivel_rede=point.nivel_rede,
             nivel_tensao_opcao_id=point.nivel_tensao_opcao_id,
             configuracao_fases_opcao_id=point.configuracao_fases_opcao_id,
-            geometria=next(pole.geometria for pole in poles if pole.id == point.poste_id),
+            geometria=pole_geometry(point_pole_id(point)),
         )
         for point in points.values()
     )
     point_map = {item.id: item for item in remapped_points}
+
+    def point_position(point_id: UUID) -> PontoNormalizado:
+        geometry = point_map[point_id].geometria
+        assert geometry is not None
+        return geometry.pontos[0]
+
     remapped_cables = tuple(
         Cabo(
             id=cable.id,
@@ -235,8 +252,8 @@ def _provider_session(
             geometria=GeometriaDocumento.polilinha(
                 page.id,
                 (
-                    point_map[cable.ponto_origem_id].geometria.pontos[0],
-                    point_map[cable.ponto_destino_id].geometria.pontos[0],
+                    point_position(cable.ponto_origem_id),
+                    point_position(cable.ponto_destino_id),
                 ),
             ),
             ponto_origem_id=cable.ponto_origem_id,
@@ -257,7 +274,7 @@ def _provider_session(
                 id=_id("anchor"),
                 tipo_catalogo_id=anchor_type.id,
                 situacao=SituacaoProjeto.INSTALAR,
-                geometria=poles[1].geometria,
+                geometria=pole_geometry(poles[1].id),
                 poste_id=poles[1].id,
             ),
         )
@@ -292,7 +309,7 @@ def _provider_session(
         execucao_id=execution.id,
         pagina_id=page.id,
         tipo=TipoEvidencia.TEXTO,
-        geometria=poles[1].geometria,
+        geometria=pole_geometry(poles[1].id),
         metodo="fixture",
         versao_metodo="1",
         parametros=(),
@@ -308,7 +325,7 @@ def _provider_session(
                 situacao_projeto=SituacaoProjeto.INSTALAR,
                 estado_revisao=EstadoRevisao.PROPOSTA,
                 evidencia_ids=(evidence.id,),
-                geometria=poles[1].geometria,
+                geometria=pole_geometry(poles[1].id),
                 atributos_sugeridos=(
                     ("classe_equipamento", "ATERRAMENTO"),
                     ("reconhecido_por_simbologia", True),

@@ -36,6 +36,7 @@ where = ["src"]
 "zeny_project_handler.adapters.catalog.data" = ["*.json"]
 "zeny_project_handler.adapters.compliance.data" = ["*.json"]
 "zeny_project_handler.adapters.interpretation.data" = ["*.json"]
+"zeny_project_handler.assets" = ["*.png", "*.ico"]
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers"

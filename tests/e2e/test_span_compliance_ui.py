@@ -104,7 +104,7 @@ def test_span_rule_full_ui_cycle_survives_restart(
     tabs.setCurrentIndex(2)
     qtbot.mouseClick(import_button, Qt.MouseButton.LeftButton)
     imported_row = _rule_row(rules, _RULE_ID)
-    assert imported_row.text(5) == "Automático"
+    assert imported_row.text(4) == "Automático"
     tabs.setCurrentIndex(1)
     qtbot.mouseClick(analyze, Qt.MouseButton.LeftButton)
 
@@ -426,14 +426,14 @@ def _protected_cable(catalog: object) -> TipoCabo:
 def _rule_row(tree: QTreeWidget, rule_id: str) -> QTreeWidgetItem:
     for index in range(tree.topLevelItemCount()):
         item = tree.topLevelItem(index)
-        if item is not None and item.text(3) == rule_id:
+        if item is not None and item.data(0, Qt.ItemDataRole.UserRole) == rule_id:
             return item
     raise AssertionError(f"Regra ausente: {rule_id}")
 
 
 def _rule_ids(tree: QTreeWidget) -> tuple[str, ...]:
     return tuple(
-        item.text(3)
+        str(item.data(0, Qt.ItemDataRole.UserRole))
         for index in range(tree.topLevelItemCount())
         if (item := tree.topLevelItem(index)) is not None
     )

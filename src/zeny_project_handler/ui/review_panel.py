@@ -66,6 +66,7 @@ from zeny_project_handler.domain.project import (
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 
 from .pdf_viewer import PdfViewerWidget
+from .table_word_wrap import TableWordWrapController
 from .visibility import visibility_icon
 
 T = TypeVar("T")
@@ -169,6 +170,12 @@ class ReviewPanelWidget(QWidget):
         for column, width in enumerate((190, 105, 185, 260, 260, 70)):
             header.resizeSection(column, width)
         header.setStretchLastSection(False)
+        self._elements_word_wrap = TableWordWrapController(
+            self._tree,
+            button_name="analysisElementsWordWrapButton",
+        )
+        filter_row.addStretch(1)
+        filter_row.addWidget(self._elements_word_wrap.button)
         elements_layout.addWidget(self._tree, 1)
 
         self._table = QTableWidget(0, 4)
@@ -218,6 +225,14 @@ class ReviewPanelWidget(QWidget):
         span_header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         span_header.setSectionResizeMode(7, QHeaderView.ResizeMode.Stretch)
         span_header.setStretchLastSection(False)
+        self._spans_word_wrap = TableWordWrapController(
+            self._span_table,
+            button_name="analysisSpansWordWrapButton",
+        )
+        span_actions = QHBoxLayout()
+        span_actions.addStretch(1)
+        span_actions.addWidget(self._spans_word_wrap.button)
+        spans_layout.addLayout(span_actions)
         spans_layout.addWidget(self._span_table, 1)
         self._results_tabs.addTab(spans_page, "Vãos")
         layout.addWidget(self._results_tabs, 1)
@@ -331,6 +346,7 @@ class ReviewPanelWidget(QWidget):
         self._project.currentIndexChanged.connect(self._load_selected_project)
         self._category_filter.currentIndexChanged.connect(self._refresh_proposals)
         self._state_filter.currentIndexChanged.connect(self._refresh_proposals)
+        self._results_tabs.currentChanged.connect(self._refresh_visible_word_wrap)
         self._tree.itemSelectionChanged.connect(self._select_tree_proposal)
         self._table.itemSelectionChanged.connect(self._select_table_proposal)
         self._span_table.itemSelectionChanged.connect(self._select_span)
@@ -376,6 +392,8 @@ class ReviewPanelWidget(QWidget):
         self._tree.clear()
         self._table.setRowCount(0)
         self._span_table.setRowCount(0)
+        self._elements_word_wrap.refresh()
+        self._spans_word_wrap.refresh()
         self._viewer.definir_propostas_revisao(())
         self.session_changed.emit(None)
 
@@ -457,6 +475,7 @@ class ReviewPanelWidget(QWidget):
                     cell.setData(Qt.ItemDataRole.UserRole, str(proposal.id))
                 self._table.setItem(row, column, cell)
         self._update_review_overlays(filtered)
+        self._elements_word_wrap.refresh()
 
     def _refresh_spans(self) -> None:
         session = self._session
@@ -464,6 +483,7 @@ class ReviewPanelWidget(QWidget):
         self._span_table.setRowCount(0)
         self._span_visibility_buttons.clear()
         if session is None:
+            self._spans_word_wrap.refresh()
             return
         elements = {item.id: item for item in session.projeto.elementos}
         for index, span in enumerate(self._spans, start=1):
@@ -516,6 +536,12 @@ class ReviewPanelWidget(QWidget):
                 span_button.setProperty("proposalId", str(proposal_id))
             self._span_visibility_buttons[span.id] = span_button
             self._span_table.setCellWidget(row, 8, span_button)
+        self._spans_word_wrap.refresh()
+
+    def _refresh_visible_word_wrap(self, index: int) -> None:
+        controllers = (self._elements_word_wrap, self._spans_word_wrap)
+        if 0 <= index < len(controllers):
+            controllers[index].refresh()
 
     def _select_span(self) -> None:
         selected = self._span_table.selectedItems()

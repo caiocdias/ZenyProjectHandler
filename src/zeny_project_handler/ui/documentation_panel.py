@@ -36,6 +36,7 @@ from zeny_project_handler.application.compliance_analysis import (
 )
 from zeny_project_handler.application.compliance_callouts import (
     CalloutConformidade,
+    LayoutCalloutsImpossivelError,
     projetar_callouts_conformidade,
 )
 from zeny_project_handler.application.compliance_registry import (
@@ -48,20 +49,23 @@ from zeny_project_handler.application.human_review import (
 )
 from zeny_project_handler.domain.compliance import (
     AlvoConformidade,
-    AvaliacaoCondicaoConformidade,
-    CondicaoConformidade,
     ExecucaoConformidade,
-    GrupoCondicaoConformidade,
-    OperadorCondicao,
     RegistroRegrasConformidade,
     RegraConformidade,
-    ResultadoCondicaoConformidade,
     ResultadoConformidade,
 )
 from zeny_project_handler.domain.errors import DomainValidationError
 from zeny_project_handler.domain.values import GeometriaDocumento
 
+from .compliance_presentation import (
+    formatar_alvo,
+    formatar_escopo,
+    formatar_lista_condicoes,
+    formatar_texto_achado,
+    formatar_valores_achado,
+)
 from .pdf_viewer import PdfViewerWidget
+from .table_word_wrap import TableWordWrapController
 from .visibility import visibility_icon
 
 
@@ -130,7 +134,19 @@ class DocumentationPanelWidget(QWidget):
             (170, 210, 260, 160, 90),
         )
         self._documents.itemSelectionChanged.connect(self._navigate_document_item)
-        tabs.addTab(self._documents, "Documentação")
+        self._documents_word_wrap = TableWordWrapController(
+            self._documents,
+            button_name="documentationWordWrapButton",
+        )
+        documents_view = QWidget()
+        documents_layout = QVBoxLayout(documents_view)
+        documents_layout.setContentsMargins(0, 0, 0, 0)
+        documents_actions = QHBoxLayout()
+        documents_actions.addStretch(1)
+        documents_actions.addWidget(self._documents_word_wrap.button)
+        documents_layout.addLayout(documents_actions)
+        documents_layout.addWidget(self._documents, 1)
+        tabs.addTab(documents_view, "Documentação")
 
         compliance_view = QWidget()
         compliance_view.setObjectName("complianceExecutionView")
@@ -180,6 +196,11 @@ class DocumentationPanelWidget(QWidget):
             ),
             (130, 100, 260, 190, 220, 180, 220, 180, 170, 105),
         )
+        self._findings_word_wrap = TableWordWrapController(
+            self._findings,
+            button_name="complianceFindingsWordWrapButton",
+        )
+        visibility_actions.addWidget(self._findings_word_wrap.button)
         self._findings.itemSelectionChanged.connect(self._navigate_finding_item)
         compliance_layout.addWidget(self._findings, 1)
         tabs.addTab(compliance_view, "Conformidade")
@@ -204,9 +225,14 @@ class DocumentationPanelWidget(QWidget):
         rules_layout.addLayout(actions)
         self._rules = _tree(
             "complianceRulesTree",
-            ("Número", "Estado", "Título", "ID técnico", "Escopo", "Provedor"),
-            (85, 90, 260, 260, 100, 130),
+            ("Número", "Estado", "Título", "Escopo", "Provedor"),
+            (85, 90, 300, 110, 130),
         )
+        self._rules_word_wrap = TableWordWrapController(
+            self._rules,
+            button_name="complianceRulesWordWrapButton",
+        )
+        actions.addWidget(self._rules_word_wrap.button)
         self._rules.itemSelectionChanged.connect(self._show_rule_details)
         rules_layout.addWidget(self._rules, 1)
         self._rule_details = QTextBrowser()
@@ -226,6 +252,7 @@ class DocumentationPanelWidget(QWidget):
         note.setWordWrap(True)
         layout.addWidget(note)
         self._project.currentIndexChanged.connect(self._load_selected_project)
+        self._tabs.currentChanged.connect(self._refresh_visible_word_wrap)
         self._analyze_compliance.setEnabled(False)
         self._show_all_findings.setEnabled(False)
         self._hide_all_findings.setEnabled(False)
@@ -278,6 +305,8 @@ class DocumentationPanelWidget(QWidget):
         self._viewer.definir_callouts_conformidade(())
         self._documents.clear()
         self._findings.clear()
+        self._documents_word_wrap.refresh()
+        self._findings_word_wrap.refresh()
         self._summary.setText("Selecione um projeto analisado")
         self._execution_status.setText("Nenhuma execução de conformidade persistida")
         self._analyze_compliance.setEnabled(False)
@@ -323,15 +352,24 @@ class DocumentationPanelWidget(QWidget):
             if session is not None
             else ()
         )
-        self._callouts = (
-            projetar_callouts_conformidade(
-                self._result,
-                evidencias=session.evidencias,
-                paginas=pages,
-            )
-            if self._result is not None and session is not None
-            else ()
-        )
+        presentation_texts: dict[UUID, str] = {}
+        if self._result is not None:
+            targets = {item.id: item for item in self._result.alvos}
+            presentation_texts = {
+                finding.id: formatar_texto_achado(finding, targets[finding.alvo_id])
+                for finding in self._result.achados
+            }
+        self._callouts = ()
+        if self._result is not None and session is not None:
+            try:
+                self._callouts = projetar_callouts_conformidade(
+                    self._result,
+                    evidencias=session.evidencias,
+                    paginas=pages,
+                    textos_apresentacao=presentation_texts,
+                )
+            except LayoutCalloutsImpossivelError as error:
+                self.status_changed.emit(str(error))
         self._update_visible_callouts()
         self._populate_documents()
         self._populate_findings()
@@ -359,8 +397,7 @@ class DocumentationPanelWidget(QWidget):
         )
         state = "Resultado desatualizado" if stale else "Resultado atual"
         self._execution_status.setText(
-            f"{state} · execução {self._result.id} · regras {self._result.versao_regras} · "
-            f"assinatura {self._result.assinatura_regras[:12]} · "
+            f"{state} · regras {self._result.versao_regras} · "
             f"{self._result.executada_em.isoformat(timespec='seconds')}"
         )
 
@@ -377,7 +414,7 @@ class DocumentationPanelWidget(QWidget):
             return
         self._load_persisted_result()
         self.status_changed.emit(
-            f"Conformidade analisada com a revisão {self._result.revisao_regras_id}"
+            f"Conformidade analisada com as regras {self._result.versao_regras}"
         )
 
     def _populate_documents(self) -> None:
@@ -385,6 +422,7 @@ class DocumentationPanelWidget(QWidget):
         session = self._session
         self._documents.clear()
         if result is None or session is None:
+            self._documents_word_wrap.refresh()
             return
         by_document = {item.id: item for item in session.projeto.documentos}
         roots: dict[UUID, QTreeWidgetItem] = {}
@@ -414,6 +452,7 @@ class DocumentationPanelWidget(QWidget):
             _set_navigation_data(child, item.pagina_id, item.geometria)
             group.addChild(child)
         self._documents.expandAll()
+        self._documents_word_wrap.refresh()
 
     def _populate_findings(self) -> None:
         result = self._result
@@ -421,6 +460,7 @@ class DocumentationPanelWidget(QWidget):
         self._finding_visibility_buttons.clear()
         if result is None:
             self._sync_finding_visibility_buttons()
+            self._findings_word_wrap.refresh()
             return
         targets = {item.id: item for item in result.alvos}
         localized_findings = {item.id for item in self._callouts}
@@ -434,7 +474,12 @@ class DocumentationPanelWidget(QWidget):
             key=lambda item: (order[item.resultado], item.regra_id, str(item.alvo_id)),
         ):
             target = targets[finding.alvo_id]
-            observed, expected = _finding_values(finding.avaliacoes_condicoes, finding.resultado)
+            observed, expected = formatar_valores_achado(
+                finding.avaliacoes_condicoes,
+                finding.resultado,
+            )
+            target_label = formatar_alvo(target)
+            presentation_text = formatar_texto_achado(finding, target)
             row = QTreeWidgetItem(
                 (
                     _result_label(finding.resultado),
@@ -442,14 +487,17 @@ class DocumentationPanelWidget(QWidget):
                     finding.titulo,
                     observed,
                     expected,
-                    target.rotulo,
+                    target_label,
                     f"{finding.fonte.documento} · {finding.fonte.item}",
                     f"Regras {result.versao_regras} · norma {finding.fonte.revisao}",
                     _location_label(target, projected=finding.id in localized_findings),
                     "",
                 )
             )
-            row.setToolTip(2, finding.mensagem)
+            row.setToolTip(2, presentation_text)
+            row.setToolTip(3, observed)
+            row.setToolTip(4, expected)
+            row.setToolTip(5, target_label)
             row.setToolTip(
                 6,
                 f"Revisão {finding.fonte.revisao}"
@@ -457,8 +505,7 @@ class DocumentationPanelWidget(QWidget):
             )
             row.setToolTip(
                 7,
-                f"Revisão imutável {result.revisao_regras_id} · "
-                f"assinatura {result.assinatura_regras}",
+                f"Regras {result.versao_regras} · norma {finding.fonte.revisao}",
             )
             row.setData(0, Qt.ItemDataRole.UserRole + 2, str(target.id))
             row.setData(0, Qt.ItemDataRole.UserRole + 3, str(finding.id))
@@ -480,6 +527,7 @@ class DocumentationPanelWidget(QWidget):
             self._finding_visibility_buttons[finding.id] = button
             self._findings.setItemWidget(row, 9, button)
         self._sync_finding_visibility_buttons()
+        self._findings_word_wrap.refresh()
 
     def _visibility_button(
         self,
@@ -569,8 +617,7 @@ class DocumentationPanelWidget(QWidget):
                     f"Regra {number_by_id[rule.id]}",
                     "Ativa" if rule.ativa else "Inativa",
                     rule.titulo,
-                    rule.id,
-                    rule.escopo.value.title(),
+                    formatar_escopo(rule.escopo),
                     "Automático",
                 )
             )
@@ -580,7 +627,7 @@ class DocumentationPanelWidget(QWidget):
         inactive_count = len(self._registry.regras) - active_count
         if service is not None:
             revision = service.obter_revisao_ativa()
-            revision_text = f"Revisão ativa {revision.id} · versão {revision.registro.versao}"
+            revision_text = f"Revisão ativa · versão {revision.registro.versao}"
         else:
             revision_text = f"Registro empacotado · versão {self._registry.versao}"
         self._rules_summary.setText(
@@ -591,6 +638,16 @@ class DocumentationPanelWidget(QWidget):
         self._import_rules.setEnabled(enabled)
         self._export_rules.setEnabled(enabled)
         self._rule_details.clear()
+        self._rules_word_wrap.refresh()
+
+    def _refresh_visible_word_wrap(self, index: int) -> None:
+        controllers = (
+            self._documents_word_wrap,
+            self._findings_word_wrap,
+            self._rules_word_wrap,
+        )
+        if 0 <= index < len(controllers):
+            controllers[index].refresh()
 
     def _show_rule_details(self) -> None:
         rule = self._selected_rule()
@@ -606,11 +663,13 @@ class DocumentationPanelWidget(QWidget):
                     rule.titulo,
                     rule.descricao,
                     "",
-                    f"ID: {rule.id}",
                     f"Fonte: {source}",
-                    f"when: {_condition_list(rule.aplicabilidade, 'sem condição')}",
-                    f"unless: {_condition_list(rule.excecoes, 'sem exceção')}",
-                    f"must: {_condition_list(rule.requisitos, 'sem requisito')}",
+                    "Aplicável quando: "
+                    + formatar_lista_condicoes(rule.aplicabilidade, vazio="sempre"),
+                    "Exceto quando: "
+                    + formatar_lista_condicoes(rule.excecoes, vazio="sem exceção"),
+                    "Deve atender: "
+                    + formatar_lista_condicoes(rule.requisitos, vazio="sem requisito"),
                 )
             )
         )
@@ -655,7 +714,9 @@ class DocumentationPanelWidget(QWidget):
             self._show_rules_error("Importação não concluída", error)
             return
         self._refresh_registry(revision.registro)
-        self.status_changed.emit(f"Revisão ativa de regras atualizada: {revision.id}")
+        self.status_changed.emit(
+            f"Revisão ativa de regras atualizada para {revision.registro.versao}"
+        )
 
     def _export_registry(self) -> None:
         service = self._registry_service
@@ -814,42 +875,6 @@ def _result_label(value: ResultadoConformidade) -> str:
     }[value]
 
 
-def _finding_values(
-    evaluations: tuple[AvaliacaoCondicaoConformidade, ...],
-    result: ResultadoConformidade,
-) -> tuple[str, str]:
-    desired = {
-        ResultadoConformidade.DIVERGENCIA: ResultadoCondicaoConformidade.NAO_ATENDE,
-        ResultadoConformidade.NAO_AVALIAVEL: ResultadoCondicaoConformidade.DESCONHECIDO,
-        ResultadoConformidade.CONFORME: ResultadoCondicaoConformidade.ATENDE,
-    }[result]
-    requirements = tuple(
-        item for item in evaluations if item.grupo is GrupoCondicaoConformidade.REQUISITO
-    )
-    selected = tuple(item for item in requirements if item.resultado is desired) or requirements
-    if not selected:
-        selected = tuple(item for item in evaluations if item.resultado is desired)
-    observed = "; ".join(
-        f"{item.chave_fato}: {', '.join(map(str, item.valores_observados)) or 'ausente'}"
-        for item in selected
-    )
-    expected = "; ".join(_expected_condition(item) for item in selected)
-    return observed or "—", expected or "—"
-
-
-def _expected_condition(evaluation: AvaliacaoCondicaoConformidade) -> str:
-    if evaluation.operador is OperadorCondicao.EXISTE:
-        value = "presente"
-    elif evaluation.operador is OperadorCondicao.AUSENTE:
-        value = "ausente"
-    else:
-        value = (
-            f"{evaluation.operador.value.lower()} "
-            f"{', '.join(map(str, evaluation.valores_esperados))}"
-        )
-    return f"{evaluation.chave_fato}: {value}"
-
-
 def _location_label(target: AlvoConformidade, *, projected: bool = False) -> str:
     if projected:
         return "Localizado no PDF"
@@ -877,30 +902,3 @@ def _finding_visibility_button_text(visible: bool, *, localized: bool = True) ->
     if not localized:
         return "Sem local"
     return "Ocultar" if visible else "Exibir"
-
-
-def _condition_list(
-    conditions: tuple[CondicaoConformidade, ...],
-    empty: str,
-) -> str:
-    if not conditions:
-        return empty
-    labels = {
-        OperadorCondicao.EXISTE: "existe",
-        OperadorCondicao.AUSENTE: "ausente",
-        OperadorCondicao.IGUAL: "igual a",
-        OperadorCondicao.DIFERENTE: "diferente de",
-        OperadorCondicao.MENOR: "menor que",
-        OperadorCondicao.MENOR_OU_IGUAL: "menor ou igual a",
-        OperadorCondicao.MAIOR: "maior que",
-        OperadorCondicao.MAIOR_OU_IGUAL: "maior ou igual a",
-        OperadorCondicao.EM: "em",
-        OperadorCondicao.NAO_EM: "não em",
-        OperadorCondicao.CONTEM: "contém",
-    }
-    rendered = []
-    for condition in conditions:
-        expected = ", ".join(str(item) for item in condition.valores_esperados)
-        suffix = f" [{expected}]" if expected else ""
-        rendered.append(f"{condition.chave_fato} {labels[condition.operador]}{suffix}")
-    return "; ".join(rendered)

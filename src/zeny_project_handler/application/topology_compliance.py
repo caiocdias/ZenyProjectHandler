@@ -6,20 +6,25 @@ import math
 import re
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Protocol
 from uuid import UUID
 
 from zeny_project_handler.domain.analysis import EvidenciaDocumento, PropostaElemento
 from zeny_project_handler.domain.catalog import (
+    ItemCatalogoType,
     JsonPrimitive,
     TipoCabo,
     TipoEquipamento,
     TipoEstruturaMt,
     TipoPoste,
 )
-from zeny_project_handler.domain.compliance import FatoConformidade, TipoEscopoConformidade
+from zeny_project_handler.domain.compliance import (
+    AlvoConformidade,
+    FatoConformidade,
+    TipoEscopoConformidade,
+)
 from zeny_project_handler.domain.enums import (
     CategoriaElemento,
     EstadoRevisao,
@@ -28,6 +33,7 @@ from zeny_project_handler.domain.enums import (
 )
 from zeny_project_handler.domain.project import (
     Cabo,
+    ElementoProjetoType,
     Equipamento,
     EstruturaBt,
     EstruturaMt,
@@ -37,7 +43,9 @@ from zeny_project_handler.domain.project import (
 )
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 
+from .analysis_regions import RegiaoAnalise
 from .compliance_fact_providers import ContextoProvedorFatos, criar_fato_conformidade
+from .human_review import SessaoRevisao
 
 _ORIGEM = "TOPOLOGIA_E_SIMBOLOGIA"
 _INCIDENT_ENDPOINT_DISTANCE = 0.02
@@ -77,6 +85,678 @@ class _PathAssessment:
     complete: bool
 
 
+@dataclass(frozen=True, slots=True)
+class _TopologyState:
+    session: SessaoRevisao
+    proposals: dict[UUID, PropostaElemento]
+    confirmed: dict[UUID, ElementoProjetoType]
+    by_proposal: dict[UUID, ElementoProjetoType]
+    evidence: dict[UUID, EvidenciaDocumento]
+    items: dict[UUID, ItemCatalogoType]
+    option_codes: dict[UUID, str]
+    points: dict[UUID, PontoRede]
+    pole_types: dict[UUID, TipoPoste]
+    compatible: set[tuple[UUID, UUID]]
+    page_sizes: dict[UUID, tuple[Decimal, Decimal]]
+    geometric_cables: tuple[PropostaElemento, ...]
+    region_targets: dict[UUID | None, AlvoConformidade]
+    project_target: AlvoConformidade | None
+
+
+@dataclass(frozen=True, slots=True)
+class _TopologyAssociations:
+    incident: dict[UUID, list[Cabo]]
+    proposal_poles: dict[UUID, UUID]
+    classes_by_pole: dict[UUID, dict[str, list[PropostaElemento]]]
+    grounded_poles: set[UUID]
+
+
+@dataclass(slots=True)
+class _TopologyFactCollector:
+    state: _TopologyState
+    result: list[FatoConformidade] = field(default_factory=list)
+
+    def evidence_for(self, *proposals: PropostaElemento) -> tuple[EvidenciaDocumento, ...]:
+        evidence_ids = dict.fromkeys(
+            item for proposal in proposals for item in proposal.evidencia_ids
+        )
+        return tuple(
+            self.state.evidence[item_id]
+            for item_id in evidence_ids
+            if item_id in self.state.evidence
+        )
+
+    def equipment_class(self, proposal: PropostaElemento) -> str:
+        attributes = dict(proposal.atributos_sugeridos)
+        raw = (
+            attributes.get("classe_equipamento")
+            if attributes.get("reconhecido_por_simbologia") is True
+            else None
+        )
+        catalog_item = (
+            self.state.items.get(proposal.tipo_catalogo_sugerido_id)
+            if proposal.tipo_catalogo_sugerido_id is not None
+            else None
+        )
+        if isinstance(catalog_item, TipoEquipamento):
+            raw = self.state.option_codes.get(catalog_item.classe_equipamento_opcao_id, raw)
+        return _normalize_class(raw)
+
+    def cable_technology(self, cable: Cabo | PropostaElemento) -> str:
+        catalog_item = self._cable_catalog_item(cable)
+        if not isinstance(catalog_item, TipoCabo):
+            return ""
+        return self.state.option_codes.get(catalog_item.tecnologia_rede_opcao_id, "")
+
+    def cable_level(self, cable: Cabo | PropostaElemento) -> str:
+        catalog_item = self._cable_catalog_item(cable)
+        if not isinstance(catalog_item, TipoCabo):
+            return ""
+        return self.state.option_codes.get(catalog_item.nivel_tensao_opcao_id, "")
+
+    def add(
+        self,
+        target_id: UUID,
+        key: str,
+        value: JsonPrimitive,
+        proposals: tuple[PropostaElemento, ...] = (),
+        geometry: GeometriaDocumento | None = None,
+    ) -> None:
+        self.result.append(
+            criar_fato_conformidade(
+                target_id,
+                key,
+                value,
+                _ORIGEM,
+                evidencias=self.evidence_for(*proposals),
+                geometria=geometry,
+            )
+        )
+
+    def _cable_catalog_item(self, cable: Cabo | PropostaElemento) -> ItemCatalogoType | None:
+        catalog_id = (
+            cable.tipo_catalogo_id if isinstance(cable, Cabo) else cable.tipo_catalogo_sugerido_id
+        )
+        return self.state.items.get(catalog_id) if catalog_id is not None else None
+
+
+def _build_topology_state(context: ContextoProvedorFatos) -> _TopologyState:
+    session = context.sessao
+    proposals = {
+        proposal.id: proposal
+        for proposal in session.propostas
+        if isinstance(proposal, PropostaElemento)
+        and proposal.estado_revisao is not EstadoRevisao.REJEITADA
+    }
+    confirmed = {element.id: element for element in session.projeto.elementos}
+    by_proposal = {
+        decision.proposta_id: confirmed[decision.elemento_confirmado_id]
+        for decision in session.decisoes
+        if decision.elemento_confirmado_id in confirmed
+    }
+    items = {item.id: item for item in session.catalogo.itens}
+    option_codes = {
+        option.id: option.codigo
+        for group in session.catalogo.grupos_opcao
+        for option in group.opcoes
+    }
+    page_sizes = {
+        page.id: (page.largura_pontos, page.altura_pontos)
+        for document in session.projeto.documentos
+        for page in document.paginas
+    }
+    geometric_cables = tuple(
+        proposal
+        for proposal in proposals.values()
+        if proposal.categoria is CategoriaElemento.CABO
+        and proposal.situacao_projeto is not SituacaoProjeto.REMOVER
+        and not isinstance(by_proposal.get(proposal.id), Cabo)
+    )
+    return _TopologyState(
+        session=session,
+        proposals=proposals,
+        confirmed=confirmed,
+        by_proposal=by_proposal,
+        evidence={item.id: item for item in session.evidencias},
+        items=items,
+        option_codes=option_codes,
+        points={point.id: point for point in session.projeto.pontos_rede},
+        pole_types={
+            item.id: item for item in session.catalogo.itens if isinstance(item, TipoPoste)
+        },
+        compatible={
+            (item.tipo_estrutura_id, item.tipo_cabo_id)
+            for item in session.catalogo.compatibilidades
+        },
+        page_sizes=page_sizes,
+        geometric_cables=geometric_cables,
+        region_targets={
+            target.referencia_id: target
+            for target in context.alvos
+            if target.tipo is TipoEscopoConformidade.REGIAO
+        },
+        project_target=next(
+            (target for target in context.alvos if target.tipo is TipoEscopoConformidade.PROJETO),
+            None,
+        ),
+    )
+
+
+def _build_topology_associations(
+    state: _TopologyState,
+    facts: _TopologyFactCollector,
+) -> _TopologyAssociations:
+    incident: dict[UUID, list[Cabo]] = defaultdict(list)
+    for element in state.confirmed.values():
+        if isinstance(element, Cabo) and element.situacao is not SituacaoProjeto.REMOVER:
+            for point_id in (element.ponto_origem_id, element.ponto_destino_id):
+                point = state.points.get(point_id)
+                if point and point.poste_id:
+                    incident[point.poste_id].append(element)
+    proposal_poles = _associate_proposals_to_poles(
+        tuple(state.proposals.values()),
+        state.by_proposal,
+        tuple(item for item in state.confirmed.values() if isinstance(item, Poste)),
+        state.page_sizes,
+    )
+    classes_by_pole: dict[UUID, dict[str, list[PropostaElemento]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+    for proposal in state.proposals.values():
+        pole_id = proposal_poles.get(proposal.id)
+        equipment_class = facts.equipment_class(proposal)
+        if (
+            pole_id is not None
+            and equipment_class
+            and proposal.situacao_projeto is not SituacaoProjeto.REMOVER
+        ):
+            classes_by_pole[pole_id][equipment_class].append(proposal)
+    return _TopologyAssociations(
+        incident=incident,
+        proposal_poles=proposal_poles,
+        classes_by_pole=classes_by_pole,
+        grounded_poles={
+            pole_id for pole_id, classes in classes_by_pole.items() if classes.get("ATERRAMENTO")
+        },
+    )
+
+
+def _add_project_topology_facts(
+    state: _TopologyState,
+    facts: _TopologyFactCollector,
+    associations: _TopologyAssociations,
+) -> None:
+    active_cables = tuple(
+        element
+        for element in state.confirmed.values()
+        if isinstance(element, Cabo) and element.situacao is not SituacaoProjeto.REMOVER
+    )
+    compact_cables = tuple(
+        cable for cable in active_cables if facts.cable_technology(cable) == "PROTEGIDA"
+    )
+    anchor_poles = {
+        element.poste_id
+        for element in state.confirmed.values()
+        if isinstance(element, EstruturaMt)
+        and element.situacao is not SituacaoProjeto.REMOVER
+        and isinstance(
+            (catalog_item := state.items.get(element.tipo_catalogo_id)),
+            TipoEstruturaMt,
+        )
+        and catalog_item.ancoragem
+    }
+    neutral_cables = tuple(
+        element
+        for element in active_cables
+        if isinstance(
+            (catalog_item := state.items.get(element.tipo_catalogo_id)),
+            TipoCabo,
+        )
+        and _is_neutral_cable(catalog_item)
+    )
+    _add_compact_network_facts(
+        facts,
+        compact_cables,
+        _assess_paths(compact_cables, state.points, anchor_poles),
+    )
+    _add_grounding_path_facts(
+        facts,
+        associations,
+        compact_cables,
+        _assess_paths(compact_cables, state.points, associations.grounded_poles),
+        component_key=None,
+        assessment_key="projeto.rede_compacta_aterramento_temporario_avaliado",
+        maximum_key="projeto.rede_compacta_maior_trecho_sem_aterramento_m",
+        sufficient_key="projeto.rede_compacta_aterramento_temporario_suficiente",
+        interval_m=_COMPACT_TEMP_GROUNDING_INTERVAL_M,
+    )
+    _add_grounding_path_facts(
+        facts,
+        associations,
+        neutral_cables,
+        _assess_paths(neutral_cables, state.points, associations.grounded_poles),
+        component_key="projeto.neutro_maior_componente_m",
+        assessment_key="projeto.neutro_aterramento_periodico_avaliado",
+        maximum_key="projeto.neutro_maior_trecho_sem_aterramento_m",
+        sufficient_key="projeto.neutro_aterramento_periodico_suficiente",
+        interval_m=_NEUTRAL_GROUNDING_INTERVAL_M,
+    )
+
+
+def _add_compact_network_facts(
+    facts: _TopologyFactCollector,
+    cables: tuple[Cabo, ...],
+    assessment: _PathAssessment | None,
+) -> None:
+    target = facts.state.project_target
+    if target is None or assessment is None:
+        return
+    geometry = next((item.geometria for item in cables if item.geometria is not None), None)
+    facts.add(
+        target.id, "projeto.rede_compacta_extensao_m", assessment.total_length_m, geometry=geometry
+    )
+    facts.add(
+        target.id,
+        "projeto.rede_compacta_maior_componente_m",
+        assessment.largest_component_m,
+        geometry=geometry,
+    )
+    facts.add(
+        target.id,
+        "projeto.rede_compacta_ancoragem_avaliada",
+        assessment.complete,
+        geometry=geometry,
+    )
+    if assessment.complete and assessment.maximum_uninterrupted_m is not None:
+        interval_geometry = assessment.maximum_uninterrupted_geometry or geometry
+        facts.add(
+            target.id,
+            "projeto.rede_compacta_maior_trecho_sem_ancoragem_m",
+            assessment.maximum_uninterrupted_m,
+            geometry=interval_geometry,
+        )
+        facts.add(
+            target.id,
+            "projeto.rede_compacta_ancoragem_suficiente",
+            assessment.maximum_uninterrupted_m <= _ANCHOR_INTERVAL_M,
+            geometry=interval_geometry,
+        )
+
+
+def _add_grounding_path_facts(
+    facts: _TopologyFactCollector,
+    associations: _TopologyAssociations,
+    cables: tuple[Cabo, ...],
+    assessment: _PathAssessment | None,
+    *,
+    component_key: str | None,
+    assessment_key: str,
+    maximum_key: str,
+    sufficient_key: str,
+    interval_m: Decimal,
+) -> None:
+    target = facts.state.project_target
+    if target is None or assessment is None:
+        return
+    geometry = next((item.geometria for item in cables if item.geometria is not None), None)
+    grounding = tuple(
+        proposal
+        for pole_id in associations.grounded_poles
+        for proposal in associations.classes_by_pole[pole_id]["ATERRAMENTO"]
+    )
+    if component_key is not None:
+        facts.add(target.id, component_key, assessment.largest_component_m, grounding, geometry)
+    facts.add(target.id, assessment_key, assessment.complete, grounding, geometry)
+    if assessment.complete and assessment.maximum_uninterrupted_m is not None:
+        interval_geometry = assessment.maximum_uninterrupted_geometry or geometry
+        facts.add(
+            target.id,
+            maximum_key,
+            assessment.maximum_uninterrupted_m,
+            grounding,
+            interval_geometry,
+        )
+        facts.add(
+            target.id,
+            sufficient_key,
+            assessment.maximum_uninterrupted_m <= interval_m,
+            grounding,
+            interval_geometry,
+        )
+
+
+def _add_region_topology_facts(
+    state: _TopologyState,
+    facts: _TopologyFactCollector,
+    associations: _TopologyAssociations,
+    region: RegiaoAnalise,
+) -> None:
+    target = state.region_targets.get(region.id)
+    if target is None:
+        return
+    region_proposals = tuple(
+        state.proposals[item_id] for item_id in region.elemento_ids if item_id in state.proposals
+    )
+    region_elements = tuple(
+        state.by_proposal[proposal.id]
+        for proposal in region_proposals
+        if proposal.id in state.by_proposal
+    )
+    _add_installed_pole_facts(state, facts, target.id, region_proposals)
+    equipment_proposals = tuple(
+        proposal
+        for proposal in region_proposals
+        if proposal.categoria is CategoriaElemento.EQUIPAMENTO
+    )
+    region_poles = tuple(
+        (proposal, confirmed)
+        for proposal in region_proposals
+        if isinstance((confirmed := state.by_proposal.get(proposal.id)), Poste)
+    )
+    required_mt_poles = _add_region_connection_facts(
+        state,
+        facts,
+        associations,
+        target.id,
+        region_poles,
+    )
+    transformer_poles = _add_transformer_facts(
+        state,
+        facts,
+        associations,
+        target.id,
+        equipment_proposals,
+    )
+    _add_region_protection_facts(
+        facts,
+        associations,
+        target.id,
+        region_poles,
+        transformer_poles,
+        required_mt_poles,
+    )
+    _add_structure_compatibility_facts(
+        state,
+        facts,
+        associations,
+        target.id,
+        region_elements,
+    )
+
+
+def _add_installed_pole_facts(
+    state: _TopologyState,
+    facts: _TopologyFactCollector,
+    target_id: UUID,
+    proposals: tuple[PropostaElemento, ...],
+) -> None:
+    installed_poles = tuple(
+        (proposal, confirmed)
+        for proposal in proposals
+        if proposal.situacao_projeto is SituacaoProjeto.INSTALAR
+        and isinstance((confirmed := state.by_proposal.get(proposal.id)), Poste)
+    )
+    for proposal, pole in installed_poles:
+        pole_type = state.pole_types.get(pole.tipo_catalogo_id)
+        if pole_type is None:
+            continue
+        facts.add(target_id, "regiao.poste_instalar_altura_m", pole_type.altura_m, (proposal,))
+        facts.add(
+            target_id,
+            "regiao.poste_instalar_resistencia_dan",
+            pole_type.resistencia_dan,
+            (proposal,),
+        )
+        facts.add(
+            target_id,
+            "regiao.poste_instalar_formato",
+            state.option_codes[pole_type.formato_opcao_id],
+            (proposal,),
+        )
+
+
+def _add_region_connection_facts(
+    state: _TopologyState,
+    facts: _TopologyFactCollector,
+    associations: _TopologyAssociations,
+    target_id: UUID,
+    region_poles: tuple[tuple[PropostaElemento, Poste], ...],
+) -> set[UUID]:
+    required_mt_poles: set[UUID] = set()
+    for pole_proposal, pole in region_poles:
+        candidates = _cable_candidates_for_pole(state, associations, pole)
+        geometric_evidence = tuple(
+            candidate for candidate in candidates if isinstance(candidate, PropostaElemento)
+        )
+        transition, angles = _connection_assessment(state, facts, pole, candidates)
+        for angle in sorted(angles):
+            facts.add(
+                target_id,
+                "conexao.angulo_graus",
+                angle,
+                (pole_proposal, *geometric_evidence),
+                pole.geometria,
+            )
+        if transition:
+            facts.add(
+                target_id,
+                "regiao.transicao_rede",
+                True,
+                (pole_proposal, *geometric_evidence),
+                pole.geometria,
+            )
+        incident_mt = tuple(
+            candidate for candidate in candidates if facts.cable_level(candidate) == "MT"
+        )
+        if transition or len(incident_mt) == 1:
+            required_mt_poles.add(pole.id)
+            facts.add(
+                target_id,
+                "regiao.para_raios_mt_requerido",
+                True,
+                (pole_proposal, *geometric_evidence),
+                pole.geometria,
+            )
+    return required_mt_poles
+
+
+def _cable_candidates_for_pole(
+    state: _TopologyState,
+    associations: _TopologyAssociations,
+    pole: Poste,
+) -> list[Cabo | PropostaElemento]:
+    candidates: list[Cabo | PropostaElemento] = list(associations.incident.get(pole.id, ()))
+    identities = {_cable_candidate_identity(candidate) for candidate in candidates}
+    for candidate in sorted(state.geometric_cables, key=lambda item: str(item.id)):
+        identity = _cable_candidate_identity(candidate)
+        if identity not in identities and _endpoint_is_near(pole.geometria, candidate.geometria):
+            identities.add(identity)
+            candidates.append(candidate)
+    return candidates
+
+
+def _connection_assessment(
+    state: _TopologyState,
+    facts: _TopologyFactCollector,
+    pole: Poste,
+    candidates: list[Cabo | PropostaElemento],
+) -> tuple[bool, set[Decimal]]:
+    transition_pairs = tuple(
+        (first, second)
+        for first_index, first in enumerate(candidates)
+        for second in candidates[first_index + 1 :]
+        if facts.cable_level(first) == facts.cable_level(second) == "MT"
+        and _is_transition_pair(
+            facts.cable_technology(first),
+            facts.cable_technology(second),
+        )
+    )
+    if transition_pairs:
+        angles = {
+            angle
+            for first, second in transition_pairs
+            if (
+                angle := _deflection_angle(
+                    pole.geometria,
+                    (first, second),
+                    page_sizes=state.page_sizes,
+                )
+            )
+            is not None
+        }
+        return True, angles
+    angles = {
+        angle
+        for level in {facts.cable_level(item) for item in candidates}
+        if level
+        for angle in _deflection_angles(
+            pole.geometria,
+            tuple(item for item in candidates if facts.cable_level(item) == level),
+            page_sizes=state.page_sizes,
+        )
+    }
+    return False, angles
+
+
+def _add_transformer_facts(
+    state: _TopologyState,
+    facts: _TopologyFactCollector,
+    associations: _TopologyAssociations,
+    target_id: UUID,
+    equipment_proposals: tuple[PropostaElemento, ...],
+) -> set[UUID]:
+    transformer_proposals = tuple(
+        proposal
+        for proposal in equipment_proposals
+        if facts.equipment_class(proposal) == "TRANSFORMADOR"
+        and proposal.situacao_projeto is SituacaoProjeto.INSTALAR
+    )
+    transformer_poles = {
+        pole_id
+        for proposal in transformer_proposals
+        if (pole_id := associations.proposal_poles.get(proposal.id)) is not None
+    }
+    for proposal in equipment_proposals:
+        if facts.equipment_class(proposal) != "TRANSFORMADOR":
+            continue
+        if proposal.situacao_projeto is not SituacaoProjeto.INSTALAR:
+            continue
+        pole_id = associations.proposal_poles.get(proposal.id)
+        associated_pole = state.confirmed.get(pole_id) if pole_id is not None else None
+        pole_type = (
+            state.pole_types.get(associated_pole.tipo_catalogo_id)
+            if isinstance(associated_pole, Poste)
+            else None
+        )
+        if (
+            pole_type is None
+            or not isinstance(associated_pole, Poste)
+            or associated_pole.situacao is not SituacaoProjeto.INSTALAR
+        ):
+            continue
+        facts.add(
+            target_id,
+            "regiao.poste_equipamento_instalar_altura_m",
+            pole_type.altura_m,
+            (proposal,),
+        )
+        facts.add(
+            target_id,
+            "regiao.poste_equipamento_instalar_resistencia_dan",
+            pole_type.resistencia_dan,
+            (proposal,),
+        )
+        facts.add(
+            target_id,
+            "regiao.poste_equipamento_instalar_formato",
+            state.option_codes[pole_type.formato_opcao_id],
+            (proposal,),
+        )
+    facts.add(
+        target_id,
+        "regiao.transformador_instalar",
+        bool(transformer_proposals),
+        transformer_proposals,
+    )
+    return transformer_poles
+
+
+def _add_region_protection_facts(
+    facts: _TopologyFactCollector,
+    associations: _TopologyAssociations,
+    target_id: UUID,
+    region_poles: tuple[tuple[PropostaElemento, Poste], ...],
+    transformer_poles: set[UUID],
+    required_mt_poles: set[UUID],
+) -> None:
+    requirements = (
+        (
+            "chave_fusivel_presente",
+            {"CHAVE_FUSIVEL", "CHAVE_FUSIVEL_REPETIDORA"},
+            transformer_poles,
+        ),
+        ("para_raios_mt_presente", {"PARA_RAIOS_MT"}, transformer_poles | required_mt_poles),
+        ("transformador_para_raios_mt_presente", {"PARA_RAIOS_MT"}, transformer_poles),
+        ("para_raios_mt_requisito_presente", {"PARA_RAIOS_MT"}, required_mt_poles),
+        ("para_raios_bt_presente", {"PARA_RAIOS_BT"}, transformer_poles),
+        ("aterramento_presente", {"ATERRAMENTO"}, transformer_poles),
+    )
+    for key, accepted_classes, applicable_poles in requirements:
+        matching = tuple(
+            proposal
+            for pole_id in applicable_poles
+            for class_code in accepted_classes
+            for proposal in associations.classes_by_pole[pole_id].get(class_code, ())
+        )
+        geometry = _geometria_poste_sem_protecao(
+            region_poles,
+            associations.classes_by_pole,
+            applicable_poles,
+            accepted_classes,
+        )
+        present = bool(applicable_poles) and all(
+            any(
+                associations.classes_by_pole[pole_id].get(class_code)
+                for class_code in accepted_classes
+            )
+            for pole_id in applicable_poles
+        )
+        facts.add(target_id, f"regiao.{key}", present, matching, geometry)
+
+
+def _add_structure_compatibility_facts(
+    state: _TopologyState,
+    facts: _TopologyFactCollector,
+    associations: _TopologyAssociations,
+    target_id: UUID,
+    region_elements: tuple[ElementoProjetoType, ...],
+) -> None:
+    structures = tuple(
+        element for element in region_elements if isinstance(element, (EstruturaMt, EstruturaBt))
+    )
+    pairs = tuple(
+        (structure, cable)
+        for structure in structures
+        for cable in associations.incident.get(structure.poste_id, ())
+        if _structure_uses_cable(structure, cable, state.points)
+        and (
+            structure.situacao is SituacaoProjeto.INSTALAR
+            or cable.situacao is SituacaoProjeto.INSTALAR
+        )
+    )
+    if not pairs:
+        return
+    facts.add(target_id, "regiao.estrutura_cabo_avaliada", True)
+    facts.add(
+        target_id,
+        "regiao.estrutura_cabo_incompativel",
+        any(
+            (structure.tipo_catalogo_id, cable.tipo_catalogo_id) not in state.compatible
+            for structure, cable in pairs
+        ),
+    )
+
+
 def medir_extensao_rede_instalar(
     projeto: Projeto,
 ) -> tuple[Decimal | None, bool, GeometriaDocumento | None]:
@@ -97,495 +777,42 @@ def medir_extensao_rede_instalar(
     return (length if measured else None), complete, geometry
 
 
-def prover_fatos_topologicos(contexto: ContextoProvedorFatos) -> tuple[FatoConformidade, ...]:
-    """Publique fatos objetivos sem depender de confirmação manual adicional."""
-    sessao = contexto.sessao
-    proposals = {
-        p.id: p
-        for p in sessao.propostas
-        if isinstance(p, PropostaElemento) and p.estado_revisao is not EstadoRevisao.REJEITADA
+def _geometria_poste_sem_protecao(
+    region_poles: Iterable[tuple[PropostaElemento, Poste]],
+    classes_by_pole: Mapping[UUID, Mapping[str, list[PropostaElemento]]],
+    applicable_poles: set[UUID],
+    accepted_classes: set[str],
+) -> GeometriaDocumento | None:
+    geometries = {
+        pole.id: pole_proposal.geometria or pole.geometria for pole_proposal, pole in region_poles
     }
-    confirmed = {e.id: e for e in sessao.projeto.elementos}
-    by_proposal = {
-        d.proposta_id: confirmed[d.elemento_confirmado_id]
-        for d in sessao.decisoes
-        if d.elemento_confirmado_id in confirmed
-    }
-    evidence = {e.id: e for e in sessao.evidencias}
-    items = {i.id: i for i in sessao.catalogo.itens}
-    option_codes = {o.id: o.codigo for g in sessao.catalogo.grupos_opcao for o in g.opcoes}
-    points = {p.id: p for p in sessao.projeto.pontos_rede}
-    pole_types = {i.id: i for i in sessao.catalogo.itens if isinstance(i, TipoPoste)}
-    compatible = {(c.tipo_estrutura_id, c.tipo_cabo_id) for c in sessao.catalogo.compatibilidades}
-    page_sizes = {
-        page.id: (page.largura_pontos, page.altura_pontos)
-        for document in sessao.projeto.documentos
-        for page in document.paginas
-    }
-    geometric_cables = tuple(
-        proposal
-        for proposal in proposals.values()
-        if proposal.categoria is CategoriaElemento.CABO
-        and proposal.situacao_projeto is not SituacaoProjeto.REMOVER
-        and not isinstance(by_proposal.get(proposal.id), Cabo)
+    missing = tuple(
+        sorted(
+            (
+                pole_id
+                for pole_id in applicable_poles
+                if not any(classes_by_pole[pole_id].get(code) for code in accepted_classes)
+            ),
+            key=str,
+        )
     )
-    region_targets = {
-        a.referencia_id: a for a in contexto.alvos if a.tipo is TipoEscopoConformidade.REGIAO
-    }
-    project_target = next(
-        (a for a in contexto.alvos if a.tipo is TipoEscopoConformidade.PROJETO),
+    representatives = missing or tuple(sorted(applicable_poles, key=str))
+    return next(
+        (geometries[pole_id] for pole_id in representatives if geometries.get(pole_id) is not None),
         None,
     )
-    result: list[FatoConformidade] = []
 
-    def ev(*props: PropostaElemento) -> tuple[EvidenciaDocumento, ...]:
-        ids = dict.fromkeys(i for p in props for i in p.evidencia_ids)
-        return tuple(evidence[i] for i in ids if i in evidence)
 
-    def equipment_class(prop: PropostaElemento) -> str:
-        attributes = dict(prop.atributos_sugeridos)
-        raw = (
-            attributes.get("classe_equipamento")
-            if attributes.get("reconhecido_por_simbologia") is True
-            else None
-        )
-        catalog_item = (
-            items.get(prop.tipo_catalogo_sugerido_id)
-            if prop.tipo_catalogo_sugerido_id is not None
-            else None
-        )
-        if isinstance(catalog_item, TipoEquipamento):
-            raw = option_codes.get(catalog_item.classe_equipamento_opcao_id, raw)
-        return _normalize_class(raw)
+def prover_fatos_topologicos(contexto: ContextoProvedorFatos) -> tuple[FatoConformidade, ...]:
+    """Publique fatos objetivos sem depender de confirmação manual adicional."""
+    state = _build_topology_state(contexto)
+    facts = _TopologyFactCollector(state)
+    associations = _build_topology_associations(state, facts)
+    _add_project_topology_facts(state, facts, associations)
 
-    def cable_technology(cable: Cabo | PropostaElemento) -> str:
-        catalog_id = (
-            cable.tipo_catalogo_id if isinstance(cable, Cabo) else cable.tipo_catalogo_sugerido_id
-        )
-        catalog_item = items.get(catalog_id) if catalog_id is not None else None
-        if not isinstance(catalog_item, TipoCabo):
-            return ""
-        return option_codes.get(catalog_item.tecnologia_rede_opcao_id, "")
-
-    def cable_level(cable: Cabo | PropostaElemento) -> str:
-        catalog_id = (
-            cable.tipo_catalogo_id if isinstance(cable, Cabo) else cable.tipo_catalogo_sugerido_id
-        )
-        catalog_item = items.get(catalog_id) if catalog_id is not None else None
-        if not isinstance(catalog_item, TipoCabo):
-            return ""
-        return option_codes.get(catalog_item.nivel_tensao_opcao_id, "")
-
-    def add(
-        target_id: UUID,
-        key: str,
-        value: JsonPrimitive,
-        props: tuple[PropostaElemento, ...] = (),
-        geometry: GeometriaDocumento | None = None,
-    ) -> None:
-        result.append(
-            criar_fato_conformidade(
-                target_id, key, value, _ORIGEM, evidencias=ev(*props), geometria=geometry
-            )
-        )
-
-    incident: dict[UUID, list[Cabo]] = defaultdict(list)
-    for element in confirmed.values():
-        if isinstance(element, Cabo) and element.situacao is not SituacaoProjeto.REMOVER:
-            for point_id in (element.ponto_origem_id, element.ponto_destino_id):
-                point = points.get(point_id)
-                if point and point.poste_id:
-                    incident[point.poste_id].append(element)
-
-    proposal_poles = _associate_proposals_to_poles(
-        tuple(proposals.values()),
-        by_proposal,
-        tuple(item for item in confirmed.values() if isinstance(item, Poste)),
-        page_sizes,
-    )
-    classes_by_pole: dict[UUID, dict[str, list[PropostaElemento]]] = defaultdict(
-        lambda: defaultdict(list)
-    )
-    for proposal in proposals.values():
-        pole_id = proposal_poles.get(proposal.id)
-        equipment_class_code = equipment_class(proposal)
-        if (
-            pole_id is not None
-            and equipment_class_code
-            and proposal.situacao_projeto is not SituacaoProjeto.REMOVER
-        ):
-            classes_by_pole[pole_id][equipment_class_code].append(proposal)
-    grounded_poles = {
-        pole_id for pole_id, classes in classes_by_pole.items() if classes.get("ATERRAMENTO")
-    }
-
-    active_cables = tuple(
-        element
-        for element in confirmed.values()
-        if isinstance(element, Cabo) and element.situacao is not SituacaoProjeto.REMOVER
-    )
-    compact_cables = tuple(
-        element for element in active_cables if cable_technology(element) == "PROTEGIDA"
-    )
-    anchor_poles = {
-        element.poste_id
-        for element in confirmed.values()
-        if isinstance(element, EstruturaMt)
-        and element.situacao is not SituacaoProjeto.REMOVER
-        and isinstance((catalog_item := items.get(element.tipo_catalogo_id)), TipoEstruturaMt)
-        and catalog_item.ancoragem
-    }
-    compact_assessment = _assess_paths(compact_cables, points, anchor_poles)
-    compact_grounding = _assess_paths(compact_cables, points, grounded_poles)
-    neutral_cables = tuple(
-        element
-        for element in active_cables
-        if isinstance((catalog_item := items.get(element.tipo_catalogo_id)), TipoCabo)
-        and _is_neutral_cable(catalog_item)
-    )
-    neutral_grounding = _assess_paths(neutral_cables, points, grounded_poles)
-    if project_target is not None and compact_assessment is not None:
-        geometry = next(
-            (item.geometria for item in compact_cables if item.geometria is not None),
-            None,
-        )
-        add(
-            project_target.id,
-            "projeto.rede_compacta_extensao_m",
-            compact_assessment.total_length_m,
-            geometry=geometry,
-        )
-        add(
-            project_target.id,
-            "projeto.rede_compacta_maior_componente_m",
-            compact_assessment.largest_component_m,
-            geometry=geometry,
-        )
-        add(
-            project_target.id,
-            "projeto.rede_compacta_ancoragem_avaliada",
-            compact_assessment.complete,
-            geometry=geometry,
-        )
-        if compact_assessment.complete and compact_assessment.maximum_uninterrupted_m is not None:
-            interval_geometry = compact_assessment.maximum_uninterrupted_geometry or geometry
-            add(
-                project_target.id,
-                "projeto.rede_compacta_maior_trecho_sem_ancoragem_m",
-                compact_assessment.maximum_uninterrupted_m,
-                geometry=interval_geometry,
-            )
-            add(
-                project_target.id,
-                "projeto.rede_compacta_ancoragem_suficiente",
-                compact_assessment.maximum_uninterrupted_m <= _ANCHOR_INTERVAL_M,
-                geometry=interval_geometry,
-            )
-    if project_target is not None and compact_grounding is not None:
-        geometry = next(
-            (item.geometria for item in compact_cables if item.geometria is not None),
-            None,
-        )
-        ground_evidence = tuple(
-            proposal
-            for pole_id in grounded_poles
-            for proposal in classes_by_pole[pole_id]["ATERRAMENTO"]
-        )
-        add(
-            project_target.id,
-            "projeto.rede_compacta_aterramento_temporario_avaliado",
-            compact_grounding.complete,
-            ground_evidence,
-            geometry,
-        )
-        if compact_grounding.complete and compact_grounding.maximum_uninterrupted_m is not None:
-            interval_geometry = compact_grounding.maximum_uninterrupted_geometry or geometry
-            add(
-                project_target.id,
-                "projeto.rede_compacta_maior_trecho_sem_aterramento_m",
-                compact_grounding.maximum_uninterrupted_m,
-                ground_evidence,
-                interval_geometry,
-            )
-            add(
-                project_target.id,
-                "projeto.rede_compacta_aterramento_temporario_suficiente",
-                compact_grounding.maximum_uninterrupted_m <= _COMPACT_TEMP_GROUNDING_INTERVAL_M,
-                ground_evidence,
-                interval_geometry,
-            )
-    if project_target is not None and neutral_grounding is not None:
-        geometry = next(
-            (item.geometria for item in neutral_cables if item.geometria is not None),
-            None,
-        )
-        ground_evidence = tuple(
-            proposal
-            for pole_id in grounded_poles
-            for proposal in classes_by_pole[pole_id]["ATERRAMENTO"]
-        )
-        add(
-            project_target.id,
-            "projeto.neutro_maior_componente_m",
-            neutral_grounding.largest_component_m,
-            ground_evidence,
-            geometry,
-        )
-        add(
-            project_target.id,
-            "projeto.neutro_aterramento_periodico_avaliado",
-            neutral_grounding.complete,
-            ground_evidence,
-            geometry,
-        )
-        if neutral_grounding.complete and neutral_grounding.maximum_uninterrupted_m is not None:
-            interval_geometry = neutral_grounding.maximum_uninterrupted_geometry or geometry
-            add(
-                project_target.id,
-                "projeto.neutro_maior_trecho_sem_aterramento_m",
-                neutral_grounding.maximum_uninterrupted_m,
-                ground_evidence,
-                interval_geometry,
-            )
-            add(
-                project_target.id,
-                "projeto.neutro_aterramento_periodico_suficiente",
-                neutral_grounding.maximum_uninterrupted_m <= _NEUTRAL_GROUNDING_INTERVAL_M,
-                ground_evidence,
-                interval_geometry,
-            )
-
-    for region in sessao.regioes:
-        target = region_targets.get(region.id)
-        if target is None:
-            continue
-        region_props = tuple(proposals[i] for i in region.elemento_ids if i in proposals)
-        region_elements = tuple(by_proposal[p.id] for p in region_props if p.id in by_proposal)
-
-        installed_poles = [
-            (p, e)
-            for p in region_props
-            if p.situacao_projeto is SituacaoProjeto.INSTALAR
-            and isinstance((e := by_proposal.get(p.id)), Poste)
-        ]
-        for prop, pole in installed_poles:
-            pole_type = pole_types.get(pole.tipo_catalogo_id)
-            if pole_type:
-                add(target.id, "regiao.poste_instalar_altura_m", pole_type.altura_m, (prop,))
-                add(
-                    target.id,
-                    "regiao.poste_instalar_resistencia_dan",
-                    pole_type.resistencia_dan,
-                    (prop,),
-                )
-                add(
-                    target.id,
-                    "regiao.poste_instalar_formato",
-                    option_codes[pole_type.formato_opcao_id],
-                    (prop,),
-                )
-
-        equipment_props = tuple(
-            p for p in region_props if p.categoria is CategoriaElemento.EQUIPAMENTO
-        )
-        region_poles: list[tuple[PropostaElemento, Poste]] = []
-        for proposal in region_props:
-            confirmed_element = by_proposal.get(proposal.id)
-            if isinstance(confirmed_element, Poste):
-                region_poles.append((proposal, confirmed_element))
-        required_mt_poles: set[UUID] = set()
-        for pole_proposal, pole in region_poles:
-            cable_candidates: list[Cabo | PropostaElemento] = list(incident.get(pole.id, ()))
-            identities = {_cable_candidate_identity(candidate) for candidate in cable_candidates}
-            for candidate in sorted(geometric_cables, key=lambda item: str(item.id)):
-                identity = _cable_candidate_identity(candidate)
-                if identity not in identities and _endpoint_is_near(
-                    pole.geometria, candidate.geometria
-                ):
-                    identities.add(identity)
-                    cable_candidates.append(candidate)
-            geometric_evidence = tuple(
-                candidate
-                for candidate in cable_candidates
-                if isinstance(candidate, PropostaElemento)
-            )
-            transition_pairs = tuple(
-                (first, second)
-                for first_index, first in enumerate(cable_candidates)
-                for second in cable_candidates[first_index + 1 :]
-                if cable_level(first) == cable_level(second) == "MT"
-                and _is_transition_pair(
-                    cable_technology(first),
-                    cable_technology(second),
-                )
-            )
-            transition = bool(transition_pairs)
-            if transition:
-                angles = {
-                    angle
-                    for first, second in transition_pairs
-                    if (
-                        angle := _deflection_angle(
-                            pole.geometria,
-                            (first, second),
-                            page_sizes=page_sizes,
-                        )
-                    )
-                    is not None
-                }
-            else:
-                angles = {
-                    angle
-                    for level in {cable_level(item) for item in cable_candidates}
-                    if level
-                    for angle in _deflection_angles(
-                        pole.geometria,
-                        tuple(item for item in cable_candidates if cable_level(item) == level),
-                        page_sizes=page_sizes,
-                    )
-                }
-            for angle in sorted(angles):
-                add(
-                    target.id,
-                    "conexao.angulo_graus",
-                    angle,
-                    (pole_proposal, *geometric_evidence),
-                    pole.geometria,
-                )
-            if transition:
-                add(
-                    target.id,
-                    "regiao.transicao_rede",
-                    True,
-                    (pole_proposal, *geometric_evidence),
-                    pole.geometria,
-                )
-            incident_mt = tuple(cable for cable in cable_candidates if cable_level(cable) == "MT")
-            line_end_mt = len(incident_mt) == 1
-            if transition or line_end_mt:
-                required_mt_poles.add(pole.id)
-                add(
-                    target.id,
-                    "regiao.para_raios_mt_requerido",
-                    True,
-                    (pole_proposal, *geometric_evidence),
-                    pole.geometria,
-                )
-
-        transformer_props = tuple(
-            prop
-            for prop in equipment_props
-            if equipment_class(prop) == "TRANSFORMADOR"
-            and prop.situacao_projeto is SituacaoProjeto.INSTALAR
-        )
-        transformer_poles = {
-            pole_id
-            for prop in transformer_props
-            if (pole_id := proposal_poles.get(prop.id)) is not None
-        }
-        for prop in equipment_props:
-            normalized_class = equipment_class(prop)
-            if (
-                normalized_class == "TRANSFORMADOR"
-                and prop.situacao_projeto is SituacaoProjeto.INSTALAR
-                and (associated_pole_id := proposal_poles.get(prop.id)) is not None
-            ):
-                associated_pole = confirmed.get(associated_pole_id)
-                pole_type = (
-                    pole_types.get(associated_pole.tipo_catalogo_id)
-                    if isinstance(associated_pole, Poste)
-                    else None
-                )
-                if (
-                    pole_type
-                    and isinstance(associated_pole, Poste)
-                    and associated_pole.situacao is SituacaoProjeto.INSTALAR
-                ):
-                    add(
-                        target.id,
-                        "regiao.poste_equipamento_instalar_altura_m",
-                        pole_type.altura_m,
-                        (prop,),
-                    )
-                    add(
-                        target.id,
-                        "regiao.poste_equipamento_instalar_resistencia_dan",
-                        pole_type.resistencia_dan,
-                        (prop,),
-                    )
-                    add(
-                        target.id,
-                        "regiao.poste_equipamento_instalar_formato",
-                        option_codes[pole_type.formato_opcao_id],
-                        (prop,),
-                    )
-
-        add(
-            target.id,
-            "regiao.transformador_instalar",
-            bool(transformer_props),
-            transformer_props,
-        )
-        for key, accepted, applicable_poles in (
-            (
-                "chave_fusivel_presente",
-                {"CHAVE_FUSIVEL", "CHAVE_FUSIVEL_REPETIDORA"},
-                transformer_poles,
-            ),
-            (
-                "para_raios_mt_presente",
-                {"PARA_RAIOS_MT"},
-                transformer_poles | required_mt_poles,
-            ),
-            (
-                "transformador_para_raios_mt_presente",
-                {"PARA_RAIOS_MT"},
-                transformer_poles,
-            ),
-            (
-                "para_raios_mt_requisito_presente",
-                {"PARA_RAIOS_MT"},
-                required_mt_poles,
-            ),
-            ("para_raios_bt_presente", {"PARA_RAIOS_BT"}, transformer_poles),
-            ("aterramento_presente", {"ATERRAMENTO"}, transformer_poles),
-        ):
-            matching = tuple(
-                proposal
-                for pole_id in applicable_poles
-                for class_code in accepted
-                for proposal in classes_by_pole[pole_id].get(class_code, ())
-            )
-            add(
-                target.id,
-                f"regiao.{key}",
-                bool(applicable_poles)
-                and all(
-                    any(classes_by_pole[pole_id].get(class_code) for class_code in accepted)
-                    for pole_id in applicable_poles
-                ),
-                matching,
-            )
-
-        structures = [e for e in region_elements if isinstance(e, (EstruturaMt, EstruturaBt))]
-        pairs = [
-            (structure, cable)
-            for structure in structures
-            for cable in incident.get(structure.poste_id, ())
-            if _structure_uses_cable(structure, cable, points)
-            and (
-                structure.situacao is SituacaoProjeto.INSTALAR
-                or cable.situacao is SituacaoProjeto.INSTALAR
-            )
-        ]
-        if pairs:
-            add(target.id, "regiao.estrutura_cabo_avaliada", True)
-            add(
-                target.id,
-                "regiao.estrutura_cabo_incompativel",
-                any((s.tipo_catalogo_id, c.tipo_catalogo_id) not in compatible for s, c in pairs),
-            )
-    return tuple(result)
+    for region in state.session.regioes:
+        _add_region_topology_facts(state, facts, associations, region)
+    return tuple(facts.result)
 
 
 def _deflection_angle(

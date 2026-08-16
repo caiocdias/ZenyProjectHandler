@@ -24,9 +24,14 @@ from zeny_project_handler.application.human_review import (
 from zeny_project_handler.domain.compliance import (
     AchadoConformidade,
     AlvoConformidade,
+    AvaliacaoCondicaoConformidade,
     ExecucaoConformidade,
     FatoConformidade,
     FonteNormativa,
+    GrupoCondicaoConformidade,
+    OperadorCondicao,
+    QuantificadorCondicao,
+    ResultadoCondicaoConformidade,
     ResultadoConformidade,
     SeveridadeConformidade,
     TipoEscopoConformidade,
@@ -252,6 +257,48 @@ def test_list_and_callout_selection_sync_without_signal_cycles(qtbot: QtBot) -> 
     assert second_id not in {item.id for item in viewer.callouts}
 
 
+def test_friendly_fact_text_is_shared_by_cells_tooltips_targets_and_callouts(
+    qtbot: QtBot,
+) -> None:
+    panel, viewer, session, _second_session, execution, _analysis = _panel(qtbot)
+    panel.abrir_projeto(session.projeto.id)
+    tree = panel.findChild(QTreeWidget, "complianceFindingsTree")
+    assert tree is not None
+    technical_keys = (
+        "projeto.documentacao_gd_identificada",
+        "regiao.chave_fusivel_presente",
+    )
+    relevant_findings = tuple(
+        item
+        for item in execution.achados
+        if item.avaliacoes_condicoes and item.avaliacoes_condicoes[0].chave_fato in technical_keys
+    )
+
+    assert len(relevant_findings) == 2
+    visible_texts: list[str] = []
+    for finding in relevant_findings:
+        row = _finding_row(tree, finding.id)
+        visible_texts.extend(row.text(column) for column in range(tree.columnCount()))
+        visible_texts.extend(row.toolTip(column) for column in range(tree.columnCount()))
+        assert row.data(0, Qt.ItemDataRole.UserRole + 3) == str(finding.id)
+        assert "Não" in row.text(3)
+        assert "igual a Sim" in row.text(4)
+
+    assert "Projeto Expansão solar" in visible_texts
+    assert "Poste P2" in visible_texts
+    assert all(key not in "\n".join(visible_texts) for key in technical_keys)
+    assert viewer.callouts
+    assert all(key not in callout.texto for callout in viewer.callouts for key in technical_keys)
+    for finding in relevant_findings:
+        row = _finding_row(tree, finding.id)
+        callout = next(item for item in viewer.callouts if item.id == finding.id)
+        assert row.toolTip(2).replace(" ", "") == callout.texto.replace("\n", "").replace(" ", "")
+
+    navigated = relevant_findings[0]
+    tree.setCurrentItem(_finding_row(tree, navigated.id))
+    assert viewer.selected_callouts[-1] == str(navigated.id)
+
+
 def _panel(
     qtbot: QtBot,
     *,
@@ -322,11 +369,22 @@ def _session_and_execution(
             if point is not None
             else None
         )
+        fact_key = (
+            "projeto.documentacao_gd_identificada"
+            if index == 0
+            else "regiao.chave_fusivel_presente"
+            if index == 1
+            else "fixture.valor"
+        )
+        target_type = (
+            TipoEscopoConformidade.PROJETO if index == 0 else TipoEscopoConformidade.REGIAO
+        )
+        target_label = "Expansão solar" if index == 0 else "P2" if index == 1 else "Alvo 2"
         targets.append(
             AlvoConformidade(
                 id=target_id,
-                tipo=TipoEscopoConformidade.REGIAO,
-                rotulo=f"Alvo {index}",
+                tipo=target_type,
+                rotulo=target_label,
                 pagina_id=geometry_page.id if geometry is not None else None,
                 geometria=geometry,
             )
@@ -336,21 +394,52 @@ def _session_and_execution(
             FatoConformidade(
                 id=fact_id,
                 alvo_id=target_id,
-                chave="fixture.valor",
-                valor=f"observado-{index}",
+                chave=fact_key,
+                valor=False if index < 2 else f"observado-{index}",
                 origem="fixture sintética",
                 geometria=geometry,
             )
         )
+        evaluations = (
+            (
+                AvaliacaoCondicaoConformidade(
+                    grupo=GrupoCondicaoConformidade.REQUISITO,
+                    indice=0,
+                    chave_fato=fact_key,
+                    operador=OperadorCondicao.IGUAL,
+                    quantificador=QuantificadorCondicao.TODOS,
+                    valores_esperados=(True,),
+                    valores_observados=(False,),
+                    fato_ids=(fact_id,),
+                    resultado=ResultadoCondicaoConformidade.NAO_ATENDE,
+                ),
+            )
+            if index < 2
+            else ()
+        )
+        rule_id = (
+            "pacote.documentacao.gd"
+            if index == 0
+            else "nd31.transformador.chave-fusivel"
+            if index == 1
+            else "fixture.regra-2"
+        )
+        title = (
+            "Documentação de acesso para geração distribuída"
+            if index == 0
+            else "Chave fusível no transformador"
+            if index == 1
+            else "Divergência 2"
+        )
         findings.append(
             AchadoConformidade(
                 id=_id(f"{key}-finding-{index}"),
-                regra_id=f"fixture.regra-{index}",
+                regra_id=rule_id,
                 alvo_id=target_id,
                 resultado=ResultadoConformidade.DIVERGENCIA,
                 severidade=SeveridadeConformidade.ERRO,
-                titulo=f"Divergência {index}",
-                mensagem="Valor observado não atende ao requisito sintético.",
+                titulo=title,
+                mensagem=f"Valor observado em {fact_key} não atende ao requisito sintético.",
                 fonte=FonteNormativa(
                     documento="Norma sintética",
                     revisao="1",
@@ -358,6 +447,7 @@ def _session_and_execution(
                 ),
                 versao_regras="fixture-1",
                 fato_ids=(fact_id,),
+                avaliacoes_condicoes=evaluations,
             )
         )
     execution = ExecucaoConformidade(

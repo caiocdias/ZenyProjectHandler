@@ -212,8 +212,8 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
     divergence = compliance_tree.topLevelItem(0)
     assert divergence is not None
     assert divergence.text(0) == "Divergência"
-    assert "ausente" in divergence.text(3)
-    assert "presente" in divergence.text(4)
+    assert "ausente" in divergence.text(3).casefold()
+    assert "presente" in divergence.text(4).casefold()
     assert "Resultado atual" in compliance_status.text()
 
     def forbidden_call(*_args: object, **_kwargs: object) -> object:

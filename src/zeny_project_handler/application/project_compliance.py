@@ -429,6 +429,18 @@ def _project_automation_facts(
     target_id: UUID,
 ) -> tuple[FatoConformidade, ...]:
     """Materialize verificações globais já decidíveis pelo conteúdo e pelo modelo confirmado."""
+    return (
+        *_project_document_presence_facts(session, target_id),
+        *_project_pole_facts(session, target_id),
+        *_project_extension_facts(session, target_id),
+        _project_prordr_fact(session, target_id),
+    )
+
+
+def _project_document_presence_facts(
+    session: SessaoRevisao,
+    target_id: UUID,
+) -> tuple[FatoConformidade, ...]:
     text_evidence = tuple(
         item
         for item in evidencias_sem_anotacoes_de_revisao(session.evidencias)
@@ -456,8 +468,7 @@ def _project_automation_facts(
     has_memory = "MEMORIA DE CALCULO" in full_text or (
         "CALCULO ELETRICO" in full_text and "CALCULO MECANICO" in full_text
     )
-
-    facts: list[FatoConformidade] = [
+    return (
         _fact(
             target_id,
             "projeto.relacao_materiais_orcamento_identificada",
@@ -474,85 +485,97 @@ def _project_automation_facts(
             evidence=memory_evidence,
             confidence=Decimal("0.90"),
         ),
-    ]
+    )
 
+
+def _project_prordr_fact(session: SessaoRevisao, target_id: UUID) -> FatoConformidade:
+    prordr_evidence = tuple(
+        item
+        for item in evidencias_sem_anotacoes_de_revisao(session.evidencias)
+        if item.tipo in _TEXT_TYPES
+        and item.conteudo_bruto
+        and any(value in _normalize_text(item.conteudo_bruto) for value in ("PRORDR", "PRODR"))
+    )
+    return _fact(
+        target_id,
+        "projeto.prordr_identificado",
+        bool(prordr_evidence),
+        "conteúdo textual dos PDFs do projeto",
+        evidence=prordr_evidence,
+        confidence=Decimal("0.92"),
+    )
+
+
+def _project_pole_facts(
+    session: SessaoRevisao,
+    target_id: UUID,
+) -> tuple[FatoConformidade, ...]:
     poles = tuple(
         item
         for item in session.projeto.elementos
         if isinstance(item, Poste) and item.situacao is not SituacaoProjeto.REMOVER
     )
-    if poles:
-        numbers: list[int] = []
-        for pole in poles:
-            identifier = pole.identificador_operacional or pole.referencia_desenho or ""
-            match = _POLE_IDENTIFIER_PATTERN.fullmatch(_normalize_text(identifier))
-            if match is not None:
-                numbers.append(int(match.group(1)))
-        sequential = (
-            len(numbers) == len(poles)
-            and len(set(numbers)) == len(numbers)
-            and sorted(numbers) == list(range(1, len(poles) + 1))
-        )
-        geometry = next((item.geometria for item in poles if item.geometria is not None), None)
-        facts.extend(
-            (
-                _fact(
-                    target_id,
-                    "projeto.postes_total",
-                    len(poles),
-                    "postes ativos do modelo confirmado",
-                    confidence=Decimal("1"),
-                    geometry=geometry,
-                ),
-                _fact(
-                    target_id,
-                    "projeto.postes_numeracao_sequencial",
-                    sequential,
-                    "identificadores operacionais dos postes ativos",
-                    confidence=Decimal("1"),
-                    geometry=geometry,
-                ),
-            )
-        )
+    if not poles:
+        return ()
+    numbers: list[int] = []
+    for pole in poles:
+        identifier = pole.identificador_operacional or pole.referencia_desenho or ""
+        match = _POLE_IDENTIFIER_PATTERN.fullmatch(_normalize_text(identifier))
+        if match is not None:
+            numbers.append(int(match.group(1)))
+    sequential = (
+        len(numbers) == len(poles)
+        and len(set(numbers)) == len(numbers)
+        and sorted(numbers) == list(range(1, len(poles) + 1))
+    )
+    geometry = next((item.geometria for item in poles if item.geometria is not None), None)
+    return (
+        _fact(
+            target_id,
+            "projeto.postes_total",
+            len(poles),
+            "postes ativos do modelo confirmado",
+            confidence=Decimal("1"),
+            geometry=geometry,
+        ),
+        _fact(
+            target_id,
+            "projeto.postes_numeracao_sequencial",
+            sequential,
+            "identificadores operacionais dos postes ativos",
+            confidence=Decimal("1"),
+            geometry=geometry,
+        ),
+    )
 
+
+def _project_extension_facts(
+    session: SessaoRevisao,
+    target_id: UUID,
+) -> tuple[FatoConformidade, ...]:
     extension_m, extension_complete, extension_geometry = medir_extensao_rede_instalar(
         session.projeto
     )
-    if extension_m is not None:
-        facts.append(
-            _fact(
-                target_id,
-                "projeto.extensao_rede_instalar_m",
-                extension_m,
-                "soma deduplicada dos percursos de cabos a instalar",
-                confidence=Decimal("1"),
-                geometry=extension_geometry,
-            )
-        )
-        facts.append(
-            _fact(
-                target_id,
-                "projeto.extensao_rede_instalar_avaliada",
-                extension_complete,
-                "cobertura dos comprimentos dos percursos de cabos a instalar",
-                confidence=Decimal("1"),
-                geometry=extension_geometry,
-            )
-        )
-    prordr_evidence = tuple(
-        item for item, text in normalized_evidence if "PRORDR" in text or "PRODR" in text
-    )
-    facts.append(
+    if extension_m is None:
+        return ()
+    return (
         _fact(
             target_id,
-            "projeto.prordr_identificado",
-            bool(prordr_evidence),
-            "conteúdo textual dos PDFs do projeto",
-            evidence=prordr_evidence,
-            confidence=Decimal("0.92"),
-        )
+            "projeto.extensao_rede_instalar_m",
+            extension_m,
+            "soma deduplicada dos percursos de cabos a instalar",
+            confidence=Decimal("1"),
+            geometry=extension_geometry,
+        ),
+        _fact(
+            target_id,
+            "projeto.extensao_rede_instalar_avaliada",
+            extension_complete,
+            "cobertura dos comprimentos dos percursos de cabos a instalar",
+            confidence=Decimal("1"),
+            geometry=extension_geometry,
+        ),
     )
-    return tuple(facts)
 
 
 def _extract_document_fields(

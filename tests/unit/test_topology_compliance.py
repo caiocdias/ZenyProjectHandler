@@ -146,7 +146,8 @@ def test_transformer_protection_must_be_on_the_transformer_pole() -> None:
     page_id = fixture.session.projeto.documentos[0].paginas[0].id
     moved = tuple(
         replace(item, geometria=_geometry_point(page_id, 0.1, 0.5))
-        if dict(item.atributos_sugeridos).get("classe_equipamento") == "PARA_RAIOS_MT"
+        if isinstance(item, PropostaElemento)
+        and dict(item.atributos_sugeridos).get("classe_equipamento") == "PARA_RAIOS_MT"
         else item
         for item in fixture.session.propostas
     )
@@ -156,6 +157,42 @@ def test_transformer_protection_must_be_on_the_transformer_pole() -> None:
 
     assert facts["regiao.transformador_para_raios_mt_presente"] is False
     assert facts["regiao.para_raios_mt_presente"] is False
+
+
+def test_missing_fuse_fact_keeps_specific_p2_post_geometry_instead_of_region() -> None:
+    fixture = _fixture(compatible=True)
+    session = fixture.session
+    fuse = next(
+        item
+        for item in session.propostas
+        if isinstance(item, PropostaElemento)
+        and dict(item.atributos_sugeridos).get("classe_equipamento") == "CHAVE FUSIVEL"
+    )
+    proposals = tuple(item for item in session.propostas if item.id != fuse.id)
+    region = replace(
+        session.regioes[0],
+        elemento_ids=tuple(item for item in session.regioes[0].elemento_ids if item != fuse.id),
+        rotulo_ponto="P2",
+    )
+    target = replace(fixture.target, rotulo="P2")
+    fixture = replace(
+        fixture,
+        session=replace(session, propostas=proposals, regioes=(region,)),
+        target=target,
+    )
+
+    facts = prover_fatos_topologicos(ContextoProvedorFatos(fixture.session, (fixture.target,)))
+    fuse_fact = next(item for item in facts if item.chave == "regiao.chave_fusivel_presente")
+    transformer = next(item for item in session.projeto.elementos if isinstance(item, Equipamento))
+    post = next(
+        item
+        for item in session.projeto.elementos
+        if isinstance(item, Poste) and item.id == transformer.poste_id
+    )
+
+    assert fuse_fact.valor is False
+    assert fuse_fact.geometria == post.geometria
+    assert fuse_fact.geometria != fixture.target.geometria
 
 
 def test_transformer_and_line_end_protection_are_correlated_separately() -> None:
@@ -215,7 +252,8 @@ def test_rejected_symbol_does_not_satisfy_topological_rule() -> None:
     fixture = _fixture(compatible=True)
     rejected = tuple(
         replace(item, estado_revisao=EstadoRevisao.REJEITADA)
-        if dict(item.atributos_sugeridos).get("classe_equipamento") == "ATERRAMENTO"
+        if isinstance(item, PropostaElemento)
+        and dict(item.atributos_sugeridos).get("classe_equipamento") == "ATERRAMENTO"
         else item
         for item in fixture.session.propostas
     )
@@ -237,7 +275,8 @@ def test_plain_text_equipment_label_does_not_count_as_symbol() -> None:
                 if attribute[0] != "reconhecido_por_simbologia"
             ),
         )
-        if dict(item.atributos_sugeridos).get("classe_equipamento") == "ATERRAMENTO"
+        if isinstance(item, PropostaElemento)
+        and dict(item.atributos_sugeridos).get("classe_equipamento") == "ATERRAMENTO"
         else item
         for item in fixture.session.propostas
     )
@@ -304,7 +343,8 @@ def test_geometric_cable_complements_confirmed_topology_for_mt_transition() -> N
     )
     proposals = tuple(
         replace(item, tipo_catalogo_sugerido_id=conventional.id)
-        if item.categoria is CategoriaElemento.CABO
+        if isinstance(item, PropostaElemento)
+        and item.categoria is CategoriaElemento.CABO
         and any(
             decision.proposta_id == item.id
             and decision.elemento_confirmado_id in confirmed_cable_ids
@@ -359,7 +399,9 @@ def test_single_geometric_mt_cable_is_recognized_as_line_end() -> None:
     cable_elements = tuple(item for item in session.projeto.elementos if isinstance(item, Cabo))
     cable_element_ids = {item.id for item in cable_elements}
     cable_proposals = tuple(
-        item for item in session.propostas if item.categoria is CategoriaElemento.CABO
+        item
+        for item in session.propostas
+        if isinstance(item, PropostaElemento) and item.categoria is CategoriaElemento.CABO
     )
     kept_proposal = replace(cable_proposals[0], tipo_catalogo_sugerido_id=mt_cable.id)
     removed_proposal_ids = {item.id for item in cable_proposals[1:]}

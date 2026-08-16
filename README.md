@@ -137,6 +137,13 @@ Documentos mantidos:
 Histórico detalhado de implementação, comandos já executados e prompts antigos pertencem ao Git, não
 aos documentos vivos.
 
+## Identidade visual
+
+O ícone próprio do aplicativo está versionado em PNG e ICO multirresolução dentro de
+`src/zeny_project_handler/assets/`. O desenho original foi gerado com OpenAI ImageGen para o projeto
+em 16/08/2026; não deriva de asset ou marca de terceiros. O ICO foi produzido offline a partir do
+mesmo PNG com Pillow.
+
 ## Limites atuais
 
 <<<<<<< HEAD

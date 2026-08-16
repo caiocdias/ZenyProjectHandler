@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QMessageBox,
     QPushButton,
+    QTextBrowser,
     QTreeWidget,
     QTreeWidgetItem,
 )
@@ -115,7 +116,7 @@ def _panel(
 def _row(tree: QTreeWidget, rule_id: str) -> QTreeWidgetItem:
     for index in range(tree.topLevelItemCount()):
         item = tree.topLevelItem(index)
-        if item is not None and item.text(3) == rule_id:
+        if item is not None and item.data(0, Qt.ItemDataRole.UserRole) == rule_id:
             return item
     raise AssertionError(f"Regra não encontrada: {rule_id}")
 
@@ -125,8 +126,48 @@ def _rule_ids(tree: QTreeWidget) -> tuple[str, ...]:
     for index in range(tree.topLevelItemCount()):
         item = tree.topLevelItem(index)
         if item is not None:
-            result.append(item.text(3))
+            result.append(str(item.data(0, Qt.ItemDataRole.UserRole)))
     return tuple(result)
+
+
+def test_rule_ids_stay_internal_and_details_use_the_fact_catalog(
+    qtbot: QtBot, tmp_path: Path
+) -> None:
+    panel, _service, engine = _panel(qtbot, tmp_path / "details.sqlite3", tmp_path / "data")
+    tree = panel.findChild(QTreeWidget, "complianceRulesTree")
+    details = panel.findChild(QTextBrowser, "complianceRuleDetails")
+    assert tree is not None and details is not None
+    assert tuple(tree.headerItem().text(index) for index in range(tree.columnCount())) == (
+        "Número",
+        "Estado",
+        "Título",
+        "Escopo",
+        "Provedor",
+    )
+    cases = (
+        ("pacote.documentacao.gd", "projeto.documentacao_gd_identificada"),
+        ("nd31.transformador.chave-fusivel", "regiao.chave_fusivel_presente"),
+    )
+
+    for rule_id, technical_key in cases:
+        row = _row(tree, rule_id)
+        assert row.data(0, Qt.ItemDataRole.UserRole) == rule_id
+        assert all(rule_id not in row.text(column) for column in range(tree.columnCount()))
+        tree.setCurrentItem(row)
+        rendered = details.toPlainText()
+        assert "Aplicável quando:" in rendered
+        assert "Exceto quando:" in rendered
+        assert "Deve atender:" in rendered
+        assert "igual a Sim" in rendered
+        assert rule_id not in rendered
+        assert technical_key not in rendered
+        assert "when:" not in rendered
+        assert "unless:" not in rendered
+        assert "must:" not in rendered
+        assert "ID:" not in rendered
+
+    panel.close()
+    engine.dispose()
 
 
 def test_rules_view_only_imports_exports_and_survives_restart(
@@ -184,6 +225,8 @@ def test_rules_view_only_imports_exports_and_survives_restart(
     exported_ids = {item["id"] for item in exported["rules"]}
     assert "fixture.ui.circuito" in exported_ids
     assert "nd31.desenho.numero-projeto" in exported_ids
+    imported_rule = next(item for item in exported["rules"] if item["id"] == "fixture.ui.circuito")
+    assert imported_rule["must"][0]["fact"] == "projeto.circuito"
     assert "IDs existentes substituídos: 0" in confirmations[0]
     assert "IDs atuais omitidos e preservados: 39" in confirmations[0]
     assert f"Regra {stable_number}" in service.caminho_catalogo.read_text(encoding="utf-8")

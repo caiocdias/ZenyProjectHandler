@@ -9,7 +9,9 @@ import pytest
 
 from zeny_project_handler.application import compliance_callouts as callout_layout
 from zeny_project_handler.application.compliance_callouts import (
+    CalloutConformidade,
     OrigemAncoraCallout,
+    RetanguloCallout,
     ponto_conexao_callout,
     projetar_callouts_conformidade,
 )
@@ -48,14 +50,26 @@ def test_projection_is_contained_wrapped_deterministic_and_reduces_collisions(
 ) -> None:
     page = _page("layout", width=width, height=height)
     anchor = GeometriaDocumento.ponto(page.id, _point("0.5", "0.5"))
+    message = ("Mensagem sintética longa " * 12).strip()
     execution, evidence = _execution(
         (page,),
         fact_geometries=(anchor, anchor, anchor),
-        message=("Mensagem sintética longa " * 12).strip(),
+        message=message,
     )
+    presentation = {item.id: f"{item.titulo}: {message}" for item in execution.achados}
 
-    first = projetar_callouts_conformidade(execution, evidencias=evidence, paginas=(page,))
-    repeated = projetar_callouts_conformidade(execution, evidencias=evidence, paginas=(page,))
+    first = projetar_callouts_conformidade(
+        execution,
+        evidencias=evidence,
+        paginas=(page,),
+        textos_apresentacao=presentation,
+    )
+    repeated = projetar_callouts_conformidade(
+        execution,
+        evidencias=evidence,
+        paginas=(page,),
+        textos_apresentacao=presentation,
+    )
 
     assert first == repeated
     assert len(first) == 3
@@ -71,6 +85,239 @@ def test_projection_is_contained_wrapped_deterministic_and_reduces_collisions(
         for index, left in enumerate(first)
         for right in first[index + 1 :]
     )
+
+
+def test_projection_uses_only_the_supplied_presentation_text() -> None:
+    page = _page("friendly-text", width=Decimal("595"), height=Decimal("842"))
+    geometry = GeometriaDocumento.ponto(page.id, _point("0.5", "0.5"))
+    execution, evidence = _execution((page,), fact_geometries=(geometry,))
+    finding = execution.achados[0]
+    friendly = "Chave fusível — Poste P2. Observado: Não. Esperado: Sim."
+
+    projected = projetar_callouts_conformidade(
+        execution,
+        evidencias=evidence,
+        paginas=(page,),
+        textos_apresentacao={finding.id: friendly},
+    )
+
+    assert projected[0].texto.replace("\n", " ") == friendly
+    assert finding.mensagem not in projected[0].texto
+
+
+@pytest.mark.parametrize("count", (2, 5, 10))
+def test_dense_page_has_no_overlaps_stays_contained_and_is_repeatable(count: int) -> None:
+    page = _page("dense", width=Decimal("595"), height=Decimal("842"))
+    geometries = tuple(
+        GeometriaDocumento.ponto(
+            page.id,
+            PontoNormalizado(
+                Decimal("0.46") + Decimal(index % 2) * Decimal("0.08"),
+                Decimal("0.44") + Decimal(index // 2) * Decimal("0.025"),
+            ),
+        )
+        for index in range(count)
+    )
+    execution, evidence = _execution((page,), fact_geometries=geometries)
+    presentation = {
+        item.id: (f"Divergência {index}: valor observado incompatível com o requisito sintético.")
+        for index, item in enumerate(execution.achados)
+    }
+
+    first = projetar_callouts_conformidade(
+        execution,
+        evidencias=evidence,
+        paginas=(page,),
+        textos_apresentacao=presentation,
+    )
+    repeated = projetar_callouts_conformidade(
+        execution,
+        evidencias=evidence,
+        paginas=(page,),
+        textos_apresentacao=presentation,
+    )
+
+    assert first == repeated
+    assert len(first) == count
+    _assert_valid_layout(first)
+    assert all(item.tamanho_fonte_pontos >= Decimal("9") for item in first)
+
+
+def test_dense_long_text_uses_predefined_smaller_geometry_without_clipping() -> None:
+    page = _page("dense-long", width=Decimal("595"), height=Decimal("842"))
+    anchor = GeometriaDocumento.ponto(page.id, _point("0.50", "0.50"))
+    execution, evidence = _execution(
+        (page,),
+        fact_geometries=tuple(anchor for _index in range(10)),
+    )
+    presentation = {
+        item.id: f"Divergência {index}: " + "texto sintético longo " * 14
+        for index, item in enumerate(execution.achados)
+    }
+
+    projected = projetar_callouts_conformidade(
+        execution,
+        evidencias=evidence,
+        paginas=(page,),
+        textos_apresentacao=presentation,
+    )
+
+    _assert_valid_layout(projected)
+    assert all(item.tamanho_fonte_pontos < Decimal("10.5") for item in projected)
+    for item in projected:
+        box_height = item.caixa_sugerida.altura * page.altura_pontos
+        required_height = max(
+            Decimal("42"),
+            Decimal("22")
+            + Decimal(len(item.texto.splitlines())) * item.tamanho_fonte_pontos * Decimal("1.28"),
+        )
+        assert box_height + Decimal("0.001") >= required_height
+
+
+@pytest.mark.parametrize(
+    ("width", "height"),
+    (
+        (Decimal("595"), Decimal("842")),
+        (Decimal("842"), Decimal("595")),
+        (Decimal("842"), Decimal("1191")),
+        (Decimal("1191"), Decimal("842")),
+    ),
+)
+def test_a4_a3_portrait_landscape_support_edges_long_text_and_occupied_areas(
+    width: Decimal,
+    height: Decimal,
+) -> None:
+    page = _page(f"formats-{width}-{height}", width=width, height=height)
+    points = (
+        _point("0.015", "0.50"),
+        _point("0.985", "0.50"),
+        _point("0.50", "0.015"),
+        _point("0.50", "0.985"),
+    )
+    geometries = tuple(GeometriaDocumento.ponto(page.id, point) for point in points)
+    occupied = tuple(
+        GeometriaDocumento.caixa(
+            page.id,
+            PontoNormalizado(
+                max(Decimal(0), point.x - Decimal("0.04")),
+                max(Decimal(0), point.y - Decimal("0.025")),
+            ),
+            PontoNormalizado(
+                min(Decimal(1), point.x + Decimal("0.04")),
+                min(Decimal(1), point.y + Decimal("0.025")),
+            ),
+        )
+        for point in points
+    )
+    execution, evidence = _execution(
+        (page,),
+        fact_geometries=geometries,
+        evidence_geometries=occupied,
+    )
+    presentation = {
+        item.id: (
+            "Texto curto."
+            if index % 2 == 0
+            else "Texto longo de divergência que precisa permanecer totalmente legível na caixa. "
+            * 3
+        )
+        for index, item in enumerate(execution.achados)
+    }
+
+    projected = projetar_callouts_conformidade(
+        execution,
+        evidencias=evidence,
+        paginas=(page,),
+        textos_apresentacao=presentation,
+    )
+
+    assert len(projected) == 4
+    _assert_valid_layout(projected)
+    assert {item.ancoras[0].ponto for item in projected} == set(points)
+
+
+def test_projection_orders_findings_spatially_instead_of_by_uuid_or_input_order() -> None:
+    page = _page("spatial-order", width=Decimal("595"), height=Decimal("842"))
+    points = (_point("0.80", "0.80"), _point("0.70", "0.20"), _point("0.20", "0.20"))
+    execution, evidence = _execution(
+        (page,),
+        fact_geometries=tuple(GeometriaDocumento.ponto(page.id, point) for point in points),
+    )
+    reversed_execution = replace(
+        execution,
+        fatos=tuple(reversed(execution.fatos)),
+        achados=tuple(reversed(execution.achados)),
+    )
+
+    first = projetar_callouts_conformidade(execution, evidencias=evidence, paginas=(page,))
+    repeated = projetar_callouts_conformidade(
+        reversed_execution,
+        evidencias=evidence,
+        paginas=(page,),
+    )
+
+    assert first == repeated
+    assert tuple(item.ancoras[0].ponto for item in first) == (
+        _point("0.20", "0.20"),
+        _point("0.70", "0.20"),
+        _point("0.80", "0.80"),
+    )
+
+
+def test_point_target_p2_is_the_only_traceable_location_and_receives_arrow() -> None:
+    page = _page("p2", width=Decimal("595"), height=Decimal("842"))
+    p2 = GeometriaDocumento.ponto(page.id, _point("0.73", "0.41"))
+    execution, evidence = _execution(
+        (page,),
+        fact_geometries=(None,),
+        target_geometry=p2,
+    )
+    execution = replace(
+        execution,
+        alvos=(replace(execution.alvos[0], rotulo="P2"),),
+    )
+
+    projected = projetar_callouts_conformidade(
+        execution,
+        evidencias=evidence,
+        paginas=(page,),
+    )
+
+    assert len(projected) == 1
+    assert projected[0].pagina_id == page.id
+    assert projected[0].ancoras[0].origem is OrigemAncoraCallout.ALVO
+    assert projected[0].ancoras[0].ponto == p2.pontos[0]
+    assert ponto_conexao_callout(projected[0].caixa_sugerida, p2.pontos[0]) != p2.pontos[0]
+
+
+def test_specific_decisive_point_is_not_hidden_by_broad_decisive_region() -> None:
+    page = _page("specific-point", width=Decimal("595"), height=Decimal("842"))
+    broad = GeometriaDocumento.caixa(
+        page.id,
+        _point("0.10", "0.10"),
+        _point("0.90", "0.90"),
+    )
+    p2 = GeometriaDocumento.ponto(page.id, _point("0.25", "0.35"))
+    execution, evidence = _execution((page,), fact_geometries=(broad, p2))
+    finding = replace(
+        execution.achados[0],
+        fato_ids=tuple(item.id for item in execution.fatos),
+        avaliacoes_condicoes=(
+            replace(
+                execution.achados[0].avaliacoes_condicoes[0],
+                fato_ids=tuple(item.id for item in execution.fatos),
+            ),
+        ),
+    )
+    execution = replace(execution, achados=(finding,))
+
+    projected = projetar_callouts_conformidade(
+        execution,
+        evidencias=evidence,
+        paginas=(page,),
+    )
+
+    assert tuple(item.ponto for item in projected[0].ancoras) == (p2.pontos[0],)
 
 
 def test_projection_prioritizes_decisive_facts_and_keeps_only_the_selected_page() -> None:
@@ -400,9 +647,20 @@ def _id(value: str) -> UUID:
     return uuid5(NAMESPACE_URL, f"compliance-callout:{value}")
 
 
-def _intersection_area(left: object, right: object) -> Decimal:
-    from zeny_project_handler.application.compliance_callouts import RetanguloCallout
+def _assert_valid_layout(callouts: tuple[CalloutConformidade, ...]) -> None:
+    assert all(
+        Decimal(0) <= item.caixa_sugerida.esquerda < item.caixa_sugerida.direita <= Decimal(1)
+        and Decimal(0) <= item.caixa_sugerida.topo < item.caixa_sugerida.base <= Decimal(1)
+        for item in callouts
+    )
+    assert all(
+        _intersection_area(left.caixa_sugerida, right.caixa_sugerida) == 0
+        for index, left in enumerate(callouts)
+        for right in callouts[index + 1 :]
+    )
 
+
+def _intersection_area(left: object, right: object) -> Decimal:
     assert isinstance(left, RetanguloCallout)
     assert isinstance(right, RetanguloCallout)
     width = max(Decimal(0), min(left.direita, right.direita) - max(left.esquerda, right.esquerda))
@@ -411,8 +669,6 @@ def _intersection_area(left: object, right: object) -> Decimal:
 
 
 def _on_border(point: PontoNormalizado, rectangle: object) -> bool:
-    from zeny_project_handler.application.compliance_callouts import RetanguloCallout
-
     assert isinstance(rectangle, RetanguloCallout)
     return (
         point.x in {rectangle.esquerda, rectangle.direita}

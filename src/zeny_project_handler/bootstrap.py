@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from typing import cast
 from uuid import UUID
 
+from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication
 from sqlalchemy import Engine
 
@@ -63,8 +64,9 @@ from zeny_project_handler.logging_config import (
 )
 from zeny_project_handler.ports.pdf import OrcamentoRenderizacaoPdf
 from zeny_project_handler.ports.persistence import ComprovanteCommitImportacao
+from zeny_project_handler.ui.application_icon import carregar_icone_aplicacao
 from zeny_project_handler.ui.main_window import MainWindow
-from zeny_project_handler.ui.theme import aplicar_tema
+from zeny_project_handler.ui.theme import THEME_SETTING_KEY, Tema, aplicar_tema
 
 
 class _EngineLifetime:
@@ -134,7 +136,12 @@ def _compose_initialized_application(
 
     application.setApplicationName(app_settings.application_name)
     application.setOrganizationName(app_settings.organization_name)
-    aplicar_tema(application)
+    application_icon = carregar_icone_aplicacao()
+    application.setWindowIcon(application_icon)
+    ui_state_path = app_settings.data_directory / "ui-state.ini"
+    ui_settings = QSettings(str(ui_state_path), QSettings.Format.IniFormat)
+    saved_theme = ui_settings.value(THEME_SETTING_KEY, Tema.CLARO.value)
+    initial_theme = aplicar_tema(application, str(saved_theme))
 
     catalog = _ensure_initial_catalog(engine)
     reader = PyMuPdfReader()
@@ -222,7 +229,9 @@ def _compose_initialized_application(
         operation_coordinator=operation_coordinator,
         compliance_registry_service=compliance_service,
         compliance_analysis_service=compliance_analysis_service,
-        ui_state_path=app_settings.data_directory / "ui-state.ini",
+        ui_state_path=ui_state_path,
+        initial_theme=initial_theme,
+        window_icon=application_icon,
         startup_ocr_diagnostic=(
             ocr_runtime.diagnostico.texto_ui if ocr_runtime.diagnostico is not None else None
         ),

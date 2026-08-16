@@ -5,8 +5,19 @@ from itertools import pairwise
 from pathlib import Path
 from time import monotonic
 
-from PySide6.QtCore import QEvent, QObject, QPoint, QRect, Qt, QTimer, Signal, Slot
-from PySide6.QtGui import QCloseEvent, QGuiApplication, QMouseEvent
+from PySide6.QtCore import (
+    QEvent,
+    QObject,
+    QPoint,
+    QPointF,
+    QRect,
+    QSettings,
+    Qt,
+    QTimer,
+    Signal,
+    Slot,
+)
+from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QGuiApplication, QIcon, QMouseEvent
 from PySide6.QtWidgets import (
     QApplication,
     QDockWidget,
@@ -34,12 +45,14 @@ from zeny_project_handler.application.pdf_credentials import ProvedorCredenciais
 from zeny_project_handler.application.project_portability import ServicoPortabilidadeProjeto
 from zeny_project_handler.ports.pdf import LeitorPdfPort, OrcamentoRenderizacaoPdf
 
+from .application_icon import carregar_icone_aplicacao
 from .documentation_panel import DocumentationPanelWidget
 from .pdf_credentials import ResolvedorCredenciaisPdf
 from .pdf_viewer import PdfViewerWidget
 from .portability_panel import PortabilityPanelWidget
 from .project_panel import ProjectPanelWidget
 from .review_panel import ReviewPanelWidget
+from .theme import THEME_SETTING_KEY, Tema, aplicar_tema
 
 _CLOSE_WAIT_MS = 300
 
@@ -332,6 +345,8 @@ class MainWindow(QMainWindow):
         compliance_registry_service: ServicoRegistroRegrasConformidade | None = None,
         compliance_analysis_service: ExecutarAnaliseConformidade | None = None,
         ui_state_path: Path | None = None,
+        initial_theme: Tema = Tema.CLARO,
+        window_icon: QIcon | None = None,
         startup_ocr_diagnostic: str | None = None,
         parent: QWidget | None = None,
     ) -> None:
@@ -340,9 +355,16 @@ class MainWindow(QMainWindow):
         self._operation_bridge: _OperationStateBridge | None = None
         self._coordinator_operation: TipoOperacao | None = None
         self._startup_ocr_diagnostic = startup_ocr_diagnostic
+        self._theme = initial_theme
+        self._ui_settings = (
+            QSettings(str(ui_state_path), QSettings.Format.IniFormat)
+            if ui_state_path is not None
+            else None
+        )
         self.ocr_diagnostic_button: QToolButton | None = None
         self.setObjectName("mainWindow")
         self.setWindowTitle(application_name)
+        self.setWindowIcon(window_icon or carregar_icone_aplicacao())
         self.resize(1400, 900)
         self.setDockNestingEnabled(True)
         self.setDockOptions(
@@ -352,6 +374,8 @@ class MainWindow(QMainWindow):
         )
         self._panels_menu = self.menuBar().addMenu("Exibir")
         self._panels_menu.setObjectName("panelsMenu")
+        self._build_theme_menu()
+        self._panels_menu.addSeparator()
         credential_resolver = ResolvedorCredenciaisPdf(
             provedor_credenciais_pdf or ProvedorCredenciaisPdfMemoria()
         )
@@ -487,6 +511,55 @@ class MainWindow(QMainWindow):
             self.ocr_diagnostic_button.clicked.connect(self._show_startup_ocr_diagnostic)
             self.statusBar().addPermanentWidget(self.ocr_diagnostic_button)
         self.statusBar().showMessage("Pronto")
+
+    def _build_theme_menu(self) -> None:
+        self._theme_menu = self._panels_menu.addMenu("Tema")
+        self._theme_menu.setObjectName("themeMenu")
+        self._theme_actions = QActionGroup(self)
+        self._theme_actions.setExclusive(True)
+        self._light_theme_action = QAction("Claro", self)
+        self._light_theme_action.setObjectName("lightThemeAction")
+        self._light_theme_action.setCheckable(True)
+        self._light_theme_action.setChecked(self._theme is Tema.CLARO)
+        self._light_theme_action.triggered.connect(self._select_light_theme)
+        self._theme_actions.addAction(self._light_theme_action)
+        self._theme_menu.addAction(self._light_theme_action)
+        self._dark_theme_action = QAction("Escuro", self)
+        self._dark_theme_action.setObjectName("darkThemeAction")
+        self._dark_theme_action.setCheckable(True)
+        self._dark_theme_action.setChecked(self._theme is Tema.ESCURO)
+        self._dark_theme_action.triggered.connect(self._select_dark_theme)
+        self._theme_actions.addAction(self._dark_theme_action)
+        self._theme_menu.addAction(self._dark_theme_action)
+
+    @Slot(bool)
+    def _select_light_theme(self, checked: bool) -> None:
+        if checked:
+            self._select_theme(Tema.CLARO)
+
+    @Slot(bool)
+    def _select_dark_theme(self, checked: bool) -> None:
+        if checked:
+            self._select_theme(Tema.ESCURO)
+
+    def _select_theme(self, theme: Tema) -> None:
+        application = QApplication.instance()
+        if not isinstance(application, QApplication):
+            return
+        visible_center = self.pdf_viewer.view.mapToScene(
+            self.pdf_viewer.view.viewport().rect().center()
+        )
+        self._theme = aplicar_tema(application, theme)
+        self._restore_pdf_view_center(visible_center)
+        QTimer.singleShot(0, self, lambda: self._restore_pdf_view_center(visible_center))
+        if self._ui_settings is not None:
+            self._ui_settings.setValue(THEME_SETTING_KEY, self._theme.value)
+            self._ui_settings.sync()
+
+    def _restore_pdf_view_center(self, center: QPointF) -> None:
+        if not self.pdf_viewer.view.sceneRect().isEmpty():
+            self.pdf_viewer.view.centerOn(center)
+            self.pdf_viewer.view.viewport().update()
 
     @Slot()
     def _show_startup_ocr_diagnostic(self) -> None:

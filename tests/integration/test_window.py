@@ -3,10 +3,11 @@ from decimal import Decimal
 from pathlib import Path
 from threading import Event
 from unittest.mock import Mock
+from uuid import uuid4
 
 import pytest
-from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, Qt
-from PySide6.QtGui import QMouseEvent
+from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QSettings, Qt
+from PySide6.QtGui import QAction, QColor, QImage, QMouseEvent, QPalette
 from PySide6.QtWidgets import (
     QApplication,
     QDockWidget,
@@ -31,14 +32,21 @@ from zeny_project_handler.adapters.analysis.tesseract_runtime import (
     RuntimeTesseract,
 )
 from zeny_project_handler.adapters.pdf import PyMuPdfReader
+from zeny_project_handler.application.compliance_callouts import (
+    AncoraCallout,
+    CalloutConformidade,
+    OrigemAncoraCallout,
+    RetanguloCallout,
+)
 from zeny_project_handler.application.operation_coordinator import TipoOperacao
 from zeny_project_handler.bootstrap import _EngineLifetime, run
 from zeny_project_handler.config import AppSettings
-from zeny_project_handler.domain.values import PontoNormalizado
+from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 from zeny_project_handler.ports.pdf import InspecaoPdf
 from zeny_project_handler.ui.main_window import _DockTitleBar
 from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
 from zeny_project_handler.ui.project_panel import _PipelineWorker
+from zeny_project_handler.ui.theme import THEME_SETTING_KEY, Tema
 
 
 @pytest.mark.integration
@@ -52,8 +60,27 @@ def test_main_window_smoke(
     window.show()
 
     assert application.applicationName() == "Zeny Project Handler"
+    assert not application.windowIcon().isNull()
     assert 'QPushButton[role="primary"]' in application.styleSheet()
     assert window.windowTitle() == "Zeny Project Handler"
+    assert not window.windowIcon().isNull()
+    expected_icon_sizes = {
+        (16, 16),
+        (24, 24),
+        (32, 32),
+        (48, 48),
+        (64, 64),
+        (128, 128),
+        (256, 256),
+    }
+    application_icon_sizes = {
+        (size.width(), size.height()) for size in application.windowIcon().availableSizes()
+    }
+    window_icon_sizes = {
+        (size.width(), size.height()) for size in window.windowIcon().availableSizes()
+    }
+    assert expected_icon_sizes <= application_icon_sizes
+    assert expected_icon_sizes <= window_icon_sizes
     assert window.centralWidget().objectName() == "pdfViewerWidget"
     review_dock = window.findChild(QDockWidget, "humanReviewDock")
     graph_dock = window.findChild(QDockWidget, "projectGraphDock")
@@ -91,6 +118,198 @@ def test_main_window_smoke(
     )
     assert window.statusBar().currentMessage() == "Pronto"
     assert settings.database_path.is_file()
+
+
+@pytest.mark.integration
+def test_theme_menu_switches_immediately_and_is_restored_before_window_is_shown(
+    qtbot: QtBot,
+    tmp_path: Path,
+    application_factory: ApplicationFactory,
+) -> None:
+    settings = AppSettings(data_directory=tmp_path / "remembered-theme")
+    application, window = application_factory([], settings=settings)
+    qtbot.addWidget(window)
+    light_action = window.findChild(QAction, "lightThemeAction")
+    dark_action = window.findChild(QAction, "darkThemeAction")
+    assert light_action is not None and dark_action is not None
+    assert light_action.text() == "Claro" and light_action.isCheckable()
+    assert dark_action.text() == "Escuro" and dark_action.isCheckable()
+    assert light_action.isChecked()
+    light_window_color = application.palette().color(QPalette.ColorRole.Window)
+
+    dark_action.trigger()
+
+    assert dark_action.isChecked()
+    assert application.property("zenyTheme") == Tema.ESCURO.value
+    assert application.palette().color(QPalette.ColorRole.Window) != light_window_color
+    ui_settings = QSettings(
+        str(settings.data_directory / "ui-state.ini"),
+        QSettings.Format.IniFormat,
+    )
+    assert ui_settings.value(THEME_SETTING_KEY) == Tema.ESCURO.value
+
+    window.close()
+    application.processEvents()
+    restored_application, restored_window = application_factory([], settings=settings)
+    qtbot.addWidget(restored_window)
+    restored_dark_action = restored_window.findChild(QAction, "darkThemeAction")
+
+    assert not restored_window.isVisible()
+    assert restored_application.property("zenyTheme") == Tema.ESCURO.value
+    assert restored_dark_action is not None and restored_dark_action.isChecked()
+    assert restored_application.palette().color(QPalette.ColorRole.Window) == QColor("#111827")
+
+
+@pytest.mark.integration
+def test_invalid_saved_theme_uses_light_without_overwriting_the_ini(
+    qtbot: QtBot,
+    tmp_path: Path,
+    application_factory: ApplicationFactory,
+) -> None:
+    settings = AppSettings(data_directory=tmp_path / "invalid-theme")
+    settings.data_directory.mkdir(parents=True)
+    ui_state_path = settings.data_directory / "ui-state.ini"
+    ui_settings = QSettings(str(ui_state_path), QSettings.Format.IniFormat)
+    ui_settings.setValue(THEME_SETTING_KEY, "ultravioleta")
+    ui_settings.setValue("fixture/preserved", "sentinela")
+    ui_settings.sync()
+
+    application, window = application_factory([], settings=settings)
+    qtbot.addWidget(window)
+    light_action = window.findChild(QAction, "lightThemeAction")
+
+    assert not window.isVisible()
+    assert light_action is not None and light_action.isChecked()
+    assert application.property("zenyTheme") == Tema.CLARO.value
+    assert application.palette().color(QPalette.ColorRole.Window) == QColor("#f4f7fb")
+    reloaded = QSettings(str(ui_state_path), QSettings.Format.IniFormat)
+    assert reloaded.value(THEME_SETTING_KEY) == "ultravioleta"
+    assert reloaded.value("fixture/preserved") == "sentinela"
+
+
+@pytest.mark.integration
+def test_theme_switch_preserves_project_pdf_callout_zoom_selection_and_wrap_toggles(
+    qtbot: QtBot,
+    tmp_path: Path,
+    application_factory: ApplicationFactory,
+) -> None:
+    settings = AppSettings(data_directory=tmp_path / "theme-state")
+    application, window = application_factory([], settings=settings)
+    qtbot.addWidget(window)
+    window.show()
+    assert window.project_panel is not None
+    created = window.project_panel._service.criar_projeto("0000000417")
+    window.project_panel.atualizar_projetos()
+    window.project_panel._select_and_activate(created)
+    source = create_golden_pdf(tmp_path / "theme-state.pdf")
+    assert window.pdf_viewer.carregar_pdf(source)
+    qtbot.waitUntil(lambda: window.pdf_viewer._current_preview is not None)
+    inspection = window.pdf_viewer.inspecao
+    assert inspection is not None
+    page = inspection.documento.paginas[0]
+    point = PontoNormalizado(Decimal("0.50"), Decimal("0.50"))
+    callout = CalloutConformidade(
+        id=uuid4(),
+        pagina_id=page.id,
+        texto="Divergência sintética preservada durante a troca de tema.",
+        caixa_sugerida=RetanguloCallout(
+            Decimal("0.60"),
+            Decimal("0.08"),
+            Decimal("0.96"),
+            Decimal("0.22"),
+        ),
+        ancoras=(
+            AncoraCallout(
+                origem=OrigemAncoraCallout.FATO,
+                referencia_id=uuid4(),
+                geometria=GeometriaDocumento.ponto(page.id, point),
+                ponto=point,
+            ),
+        ),
+    )
+    window.pdf_viewer.definir_callouts_conformidade((callout,))
+    window.pdf_viewer.selecionar_callout(str(callout.id))
+    window.pdf_viewer.view.definir_zoom(1.75)
+    wrap_buttons = tuple(
+        button
+        for name in (
+            "analysisElementsWordWrapButton",
+            "analysisSpansWordWrapButton",
+            "documentationWordWrapButton",
+            "complianceFindingsWordWrapButton",
+            "complianceRulesWordWrapButton",
+        )
+        if (button := window.findChild(QToolButton, name)) is not None
+    )
+    assert len(wrap_buttons) == 5
+    for button in wrap_buttons:
+        button.setChecked(True)
+    qtbot.wait(100)
+    application.processEvents()
+    graphics = window.pdf_viewer.view._callout_items[str(callout.id)]
+    pixmap_item = window.pdf_viewer.view._pixmap_item
+    assert pixmap_item is not None
+    pixmap_key = pixmap_item.pixmap().cacheKey()
+    view_transform = window.pdf_viewer.view.transform()
+    visible_center = window.pdf_viewer.view.mapToScene(
+        window.pdf_viewer.view.viewport().rect().center()
+    )
+    callout_scene_rect = graphics.caixa.sceneBoundingRect()
+    assert (
+        window.pdf_viewer.view.mapToScene(window.pdf_viewer.view.viewport().rect())
+        .boundingRect()
+        .intersects(callout_scene_rect)
+    )
+    page_selector = window.findChild(QSpinBox, "pdfPageSpinBox")
+    assert page_selector is not None
+    page_number = page_selector.value()
+    dark_action = window.findChild(QAction, "darkThemeAction")
+    assert dark_action is not None
+
+    dark_action.trigger()
+    application.processEvents()
+
+    assert window.project_panel.projeto_ativo_id == created.projeto.id
+    assert window.pdf_viewer.view.zoom == pytest.approx(1.75)
+    assert window.pdf_viewer.view._selected_callout_id == str(callout.id)
+    assert window.pdf_viewer.view._callout_items[str(callout.id)] is graphics
+    assert graphics.caixa.pen().color() == QColor("#8e0000")
+    assert graphics.caixa.brush().color().name() == QColor("#fff3e0").name()
+    assert window.pdf_viewer.view.backgroundBrush().color() == QColor("#3b3d40")
+    assert window.pdf_viewer.view._pixmap_item is pixmap_item
+    assert pixmap_item.pixmap().cacheKey() == pixmap_key
+    assert window.pdf_viewer.view.transform() == view_transform
+    restored_center = window.pdf_viewer.view.mapToScene(
+        window.pdf_viewer.view.viewport().rect().center()
+    )
+    assert restored_center.x() == pytest.approx(visible_center.x(), abs=30.0)
+    assert restored_center.y() == pytest.approx(visible_center.y(), abs=30.0)
+    assert (
+        window.pdf_viewer.view.mapToScene(window.pdf_viewer.view.viewport().rect())
+        .boundingRect()
+        .intersects(callout_scene_rect)
+    )
+    callout_view_rect = window.pdf_viewer.view.mapFromScene(callout_scene_rect).boundingRect()
+    assert (
+        _red_pixel_count(
+            window.pdf_viewer.view.viewport().grab().toImage(),
+            callout_view_rect,
+        )
+        > 20
+    )
+    assert page_selector.value() == page_number
+    assert all(button.isChecked() for button in wrap_buttons)
+
+
+def _red_pixel_count(image: QImage, rect: QRect) -> int:
+    clipped = rect.intersected(image.rect())
+    count = 0
+    for y in range(clipped.top(), clipped.bottom() + 1):
+        for x in range(clipped.left(), clipped.right() + 1):
+            color = image.pixelColor(x, y)
+            if color.red() > 100 and color.green() < 80 and color.blue() < 80:
+                count += 1
+    return count
 
 
 @pytest.mark.integration

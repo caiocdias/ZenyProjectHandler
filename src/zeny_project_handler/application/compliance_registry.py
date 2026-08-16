@@ -338,54 +338,8 @@ def _upgrade_bundled_registry(
         _CURRENT_BUNDLED_VERSION,
     }:
         return None
-    candidate = current
-    safeguard_changed = False
-    replacement = next((item for item in seed.regras if item.id == _SPAN_RULE_ID), None)
-    if replacement is not None:
-        safeguards = tuple(
-            item for item in replacement.aplicabilidade if item.chave_fato == _SPAN_SAFEGUARD_FACT
-        )
-        legacy_rule = replace(
-            replacement,
-            aplicabilidade=tuple(
-                item
-                for item in replacement.aplicabilidade
-                if item.chave_fato != _SPAN_SAFEGUARD_FACT
-            ),
-        )
-        existing = next((item for item in candidate.regras if item.id == _SPAN_RULE_ID), None)
-        if len(safeguards) == 1 and existing == legacy_rule:
-            candidate = replace(
-                candidate,
-                regras=tuple(
-                    replacement if item.id == _SPAN_RULE_ID else item for item in candidate.regras
-                ),
-            )
-            safeguard_changed = True
-
-    service_note_changed = False
-    service_note_replacement = next(
-        (item for item in seed.regras if item.id == _SERVICE_NOTE_RULE_ID),
-        None,
-    )
-    if service_note_replacement is not None:
-        legacy_service_note_rule = _legacy_service_note_rule(service_note_replacement)
-        existing_service_note_rule = next(
-            (item for item in candidate.regras if item.id == _SERVICE_NOTE_RULE_ID),
-            None,
-        )
-        if (
-            service_note_replacement != legacy_service_note_rule
-            and existing_service_note_rule == legacy_service_note_rule
-        ):
-            candidate = replace(
-                candidate,
-                regras=tuple(
-                    service_note_replacement if item.id == _SERVICE_NOTE_RULE_ID else item
-                    for item in candidate.regras
-                ),
-            )
-            service_note_changed = True
+    candidate, safeguard_changed = _upgrade_span_safeguard(current, seed)
+    candidate, service_note_changed = _upgrade_service_note_rule(candidate, seed)
 
     additions_2025_5_changed = False
     if seed.versao in {_PREVIOUS_BUNDLED_VERSION, _CURRENT_BUNDLED_VERSION}:
@@ -408,30 +362,109 @@ def _upgrade_bundled_registry(
             _BUNDLED_2025_6_ADDITION_IDS,
         )
 
-    if candidate.regras == seed.regras:
-        candidate = replace(candidate, versao=seed.versao)
-    elif any(
-        (
-            safeguard_changed,
-            additions_2025_5_changed,
-            service_note_changed,
-            updates_2025_6_changed,
-            additions_2025_6_changed,
-        )
-    ):
-        version = current.versao
-        if safeguard_changed:
-            version = _version_with_tag(version, "seguranca-vao-2025.4")
-        if additions_2025_5_changed:
-            version = _version_with_tag(version, "adicoes-2025.5")
-        if service_note_changed:
-            version = _version_with_tag(version, "comparacao-ns-cabecalho")
-        if updates_2025_6_changed:
-            version = _version_with_tag(version, "atualizacao-2025.6")
-        if additions_2025_6_changed:
-            version = _version_with_tag(version, "adicoes-2025.6")
-        candidate = replace(candidate, versao=version)
+    candidate = _upgrade_registry_version(
+        current,
+        candidate,
+        seed,
+        safeguard_changed=safeguard_changed,
+        additions_2025_5_changed=additions_2025_5_changed,
+        service_note_changed=service_note_changed,
+        updates_2025_6_changed=updates_2025_6_changed,
+        additions_2025_6_changed=additions_2025_6_changed,
+    )
     return candidate if candidate != current else None
+
+
+def _upgrade_span_safeguard(
+    current: RegistroRegrasConformidade,
+    seed: RegistroRegrasConformidade,
+) -> tuple[RegistroRegrasConformidade, bool]:
+    replacement = next((item for item in seed.regras if item.id == _SPAN_RULE_ID), None)
+    if replacement is None:
+        return current, False
+    safeguards = tuple(
+        item for item in replacement.aplicabilidade if item.chave_fato == _SPAN_SAFEGUARD_FACT
+    )
+    legacy_rule = replace(
+        replacement,
+        aplicabilidade=tuple(
+            item for item in replacement.aplicabilidade if item.chave_fato != _SPAN_SAFEGUARD_FACT
+        ),
+    )
+    existing = next((item for item in current.regras if item.id == _SPAN_RULE_ID), None)
+    if len(safeguards) != 1 or existing != legacy_rule:
+        return current, False
+    return (
+        replace(
+            current,
+            regras=tuple(
+                replacement if item.id == _SPAN_RULE_ID else item for item in current.regras
+            ),
+        ),
+        True,
+    )
+
+
+def _upgrade_service_note_rule(
+    current: RegistroRegrasConformidade,
+    seed: RegistroRegrasConformidade,
+) -> tuple[RegistroRegrasConformidade, bool]:
+    service_note_replacement = next(
+        (item for item in seed.regras if item.id == _SERVICE_NOTE_RULE_ID),
+        None,
+    )
+    if service_note_replacement is None:
+        return current, False
+    legacy_service_note_rule = _legacy_service_note_rule(service_note_replacement)
+    existing_service_note_rule = next(
+        (item for item in current.regras if item.id == _SERVICE_NOTE_RULE_ID),
+        None,
+    )
+    if (
+        service_note_replacement == legacy_service_note_rule
+        or existing_service_note_rule != legacy_service_note_rule
+    ):
+        return current, False
+    return (
+        replace(
+            current,
+            regras=tuple(
+                service_note_replacement if item.id == _SERVICE_NOTE_RULE_ID else item
+                for item in current.regras
+            ),
+        ),
+        True,
+    )
+
+
+def _upgrade_registry_version(
+    current: RegistroRegrasConformidade,
+    candidate: RegistroRegrasConformidade,
+    seed: RegistroRegrasConformidade,
+    *,
+    safeguard_changed: bool,
+    additions_2025_5_changed: bool,
+    service_note_changed: bool,
+    updates_2025_6_changed: bool,
+    additions_2025_6_changed: bool,
+) -> RegistroRegrasConformidade:
+    if candidate.regras == seed.regras:
+        return replace(candidate, versao=seed.versao)
+    tags = tuple(
+        tag
+        for changed, tag in (
+            (safeguard_changed, "seguranca-vao-2025.4"),
+            (additions_2025_5_changed, "adicoes-2025.5"),
+            (service_note_changed, "comparacao-ns-cabecalho"),
+            (updates_2025_6_changed, "atualizacao-2025.6"),
+            (additions_2025_6_changed, "adicoes-2025.6"),
+        )
+        if changed
+    )
+    version = current.versao
+    for tag in tags:
+        version = _version_with_tag(version, tag)
+    return replace(candidate, versao=version) if tags else candidate
 
 
 def _legacy_service_note_rule(replacement: RegraConformidade) -> RegraConformidade:

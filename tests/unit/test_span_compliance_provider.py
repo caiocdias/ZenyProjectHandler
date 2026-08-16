@@ -143,7 +143,9 @@ def test_rejected_cable_proposal_does_not_publish_span_measurement() -> None:
     )
     rejected_cable = replace(
         next(
-            item for item in fixture.session.propostas if item.categoria is CategoriaElemento.CABO
+            item
+            for item in fixture.session.propostas
+            if isinstance(item, PropostaElemento) and item.categoria is CategoriaElemento.CABO
         ),
         estado_revisao=EstadoRevisao.REJEITADA,
     )

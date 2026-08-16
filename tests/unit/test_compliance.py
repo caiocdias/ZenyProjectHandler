@@ -281,7 +281,7 @@ def test_rural_and_topological_rules_are_deterministic() -> None:
         _fact(region_target.id, "regiao.para_raios_mt_requerido", True),
         _fact(region_target.id, "regiao.para_raios_mt_requisito_presente", False),
     )
-    corrected_values = {
+    corrected_values: dict[str, JsonPrimitive] = {
         "projeto.prordr_identificado": True,
         "projeto.rede_compacta_ancoragem_suficiente": True,
         "cabo.instalar_tecnologia": "CONVENCIONAL_CAA",

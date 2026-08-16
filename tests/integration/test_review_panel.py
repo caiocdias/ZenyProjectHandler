@@ -4,6 +4,7 @@ from collections.abc import Iterator
 from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
+from functools import partial
 from pathlib import Path
 from uuid import uuid4
 
@@ -12,12 +13,15 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QComboBox,
     QGroupBox,
+    QHeaderView,
     QLabel,
     QPushButton,
     QTableWidget,
+    QTableWidgetItem,
     QTabWidget,
     QToolButton,
     QTreeWidget,
+    QTreeWidgetItem,
 )
 from pytestqt.qtbot import QtBot
 from sqlalchemy import Engine
@@ -61,6 +65,64 @@ from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
 from zeny_project_handler.ui.review_panel import ReviewPanelWidget, _proposal_label
 
 pytestmark = pytest.mark.integration
+
+_LONG_CELL_TEXT = (
+    "Texto longo de resultado que deve permanecer totalmente visível quando a coluna fica "
+    "estreita e precisa ocupar várias linhas sem reticências"
+)
+
+
+def _assert_word_wrap_control(button: QToolButton) -> None:
+    assert button.text() == "Quebrar linhas"
+    assert button.isCheckable()
+    assert button.toolTip()
+    assert button.accessibleName() == "Quebrar linhas"
+    assert button.focusPolicy() is not Qt.FocusPolicy.NoFocus
+
+
+def _has_valid_size_hint(item: QTreeWidgetItem) -> bool:
+    return item.sizeHint(0).isValid()
+
+
+def _exercise_tree_word_wrap(
+    qtbot: QtBot,
+    *,
+    tree: QTreeWidget,
+    toggle: QToolButton,
+    item: QTreeWidgetItem,
+    column: int,
+    embedded_column: int | None = None,
+) -> int:
+    tree.header().resizeSection(column, 180)
+    item.setText(column, _LONG_CELL_TEXT)
+    tree.setCurrentItem(item)
+    qtbot.waitUntil(lambda: tree.visualItemRect(item).height() > 0)
+    compact_height = tree.visualItemRect(item).height()
+    embedded = tree.itemWidget(item, embedded_column) if embedded_column is not None else None
+
+    toggle.click()
+
+    qtbot.waitUntil(lambda: item.sizeHint(0).height() > compact_height)
+    wrapped_height = item.sizeHint(0).height()
+    assert tree.wordWrap()
+    assert tree.textElideMode() is Qt.TextElideMode.ElideNone
+    assert not tree.uniformRowHeights()
+    assert tree.currentItem() is item
+    if embedded_column is not None:
+        assert tree.itemWidget(item, embedded_column) is embedded
+
+    tree.header().resizeSection(column, 80)
+    qtbot.waitUntil(lambda: item.sizeHint(0).height() > wrapped_height)
+    toggle.click()
+
+    qtbot.waitUntil(lambda: not item.sizeHint(0).isValid())
+    qtbot.waitUntil(lambda: tree.visualItemRect(item).height() <= compact_height)
+    assert tree.uniformRowHeights()
+    assert tree.textElideMode() is not Qt.TextElideMode.ElideNone
+    assert tree.currentItem() is item
+    if embedded_column is not None:
+        assert tree.itemWidget(item, embedded_column) is embedded
+    return compact_height
 
 
 @pytest.fixture
@@ -388,6 +450,103 @@ def test_results_panel_has_span_tab_with_situation_cable_and_length_source(
     assert visibility.property("spanId") in {str(item) for item in panel._hidden_span_ids}
 
 
+def test_review_tables_toggle_word_wrap_and_keep_interactions_after_reload(
+    qtbot: QtBot,
+    review_panel_context: tuple[Engine, ReviewPanelWidget, PropostaElemento],
+) -> None:
+    _engine, panel, proposal = review_panel_context
+    project_combo = panel.findChild(QComboBox, "reviewProjectCombo")
+    tabs = panel.findChild(QTabWidget, "analysisResultTabs")
+    tree = panel.findChild(QTreeWidget, "analysisRelationshipTree")
+    spans = panel.findChild(QTableWidget, "analysisSpanTable")
+    elements_toggle = panel.findChild(QToolButton, "analysisElementsWordWrapButton")
+    spans_toggle = panel.findChild(QToolButton, "analysisSpansWordWrapButton")
+    assert project_combo is not None and tabs is not None
+    assert tree is not None and spans is not None
+    assert elements_toggle is not None and spans_toggle is not None
+    _assert_word_wrap_control(elements_toggle)
+    _assert_word_wrap_control(spans_toggle)
+
+    project_combo.setCurrentIndex(1)
+    region = tree.topLevelItem(0)
+    assert region is not None
+    item = next(
+        region.child(index)
+        for index in range(region.childCount())
+        if region.child(index).data(0, Qt.ItemDataRole.UserRole) == str(proposal.id)
+    )
+    item.setText(4, _LONG_CELL_TEXT)
+    tree.header().resizeSection(4, 180)
+    tree.setCurrentItem(item)
+    visibility = tree.itemWidget(item, 5)
+    compact_tree_height = tree.visualItemRect(item).height()
+
+    elements_toggle.click()
+
+    qtbot.waitUntil(lambda: item.sizeHint(0).height() > compact_tree_height)
+    first_wrapped_height = item.sizeHint(0).height()
+    assert tree.wordWrap()
+    assert tree.textElideMode() is Qt.TextElideMode.ElideNone
+    assert not tree.uniformRowHeights()
+    assert tree.currentItem() is item
+    assert tree.itemWidget(item, 5) is visibility
+
+    tree.header().resizeSection(4, 80)
+    qtbot.waitUntil(lambda: item.sizeHint(0).height() > first_wrapped_height)
+    panel._refresh_proposals()
+    reloaded_region = tree.topLevelItem(0)
+    assert reloaded_region is not None
+    reloaded_item = next(
+        reloaded_region.child(index)
+        for index in range(reloaded_region.childCount())
+        if reloaded_region.child(index).data(0, Qt.ItemDataRole.UserRole) == str(proposal.id)
+    )
+    qtbot.waitUntil(lambda: reloaded_item.sizeHint(0).height() > compact_tree_height)
+    assert elements_toggle.isChecked()
+    tree.setCurrentItem(reloaded_item)
+
+    elements_toggle.click()
+
+    qtbot.waitUntil(lambda: not reloaded_item.sizeHint(0).isValid())
+    assert tree.uniformRowHeights()
+    assert tree.textElideMode() is not Qt.TextElideMode.ElideNone
+    assert tree.currentItem() is reloaded_item
+
+    assert panel._session is not None
+    panel._session = replace(panel._session, projeto=complete_project(panel._session.catalogo))
+    panel._refresh_spans()
+    tabs.setCurrentIndex(1)
+    assert spans.rowCount() == 1
+    spans.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)
+    spans.setColumnWidth(4, 90)
+    cable_cell = spans.item(0, 4)
+    assert isinstance(cable_cell, QTableWidgetItem)
+    cable_cell.setText(_LONG_CELL_TEXT)
+    spans.selectRow(0)
+    span_visibility = spans.cellWidget(0, 8)
+    compact_span_height = spans.rowHeight(0)
+
+    spans_toggle.click()
+
+    qtbot.waitUntil(lambda: spans.rowHeight(0) > compact_span_height)
+    assert spans.wordWrap()
+    assert spans.textElideMode() is Qt.TextElideMode.ElideNone
+    assert spans.currentRow() == 0
+    assert spans.cellWidget(0, 8) is span_visibility
+
+    panel._refresh_spans()
+    qtbot.waitUntil(lambda: spans.rowHeight(0) > compact_span_height)
+    assert spans_toggle.isChecked()
+    assert isinstance(spans.cellWidget(0, 8), QToolButton)
+
+    spans.selectRow(0)
+    spans_toggle.click()
+
+    qtbot.waitUntil(lambda: spans.rowHeight(0) <= compact_span_height)
+    assert spans.textElideMode() is not Qt.TextElideMode.ElideNone
+    assert spans.currentRow() == 0
+
+
 def test_span_visibility_button_hides_matching_cable_overlay(
     qtbot: QtBot,
     review_panel_context: tuple[Engine, ReviewPanelWidget, PropostaElemento],
@@ -627,3 +786,114 @@ def test_documentation_panel_has_own_document_and_compliance_views(
     assert document_root is not None
     assert document_root.childCount() >= 3
     assert findings.topLevelItemCount() >= 2
+
+
+def test_documentation_tables_toggle_word_wrap_and_recalculate_after_reload(
+    qtbot: QtBot,
+    review_panel_context: tuple[Engine, ReviewPanelWidget, PropostaElemento],
+    tmp_path: Path,
+) -> None:
+    engine, review_panel, _proposal = review_panel_context
+
+    def unit_of_work() -> SqlAlchemyUnitOfWork:
+        return SqlAlchemyUnitOfWork(engine)
+
+    registry_service = ServicoRegistroRegrasConformidade(
+        unit_of_work,
+        diretorio_dados=tmp_path / "wrap-compliance-data",
+    )
+    registry_service.inicializar(carregar_registro_conformidade_inicial())
+    analysis_service = ExecutarAnaliseConformidade(
+        unit_of_work,
+        review_panel._service.carregar_sessao_semantica,
+    )
+    project_id = review_panel._service.listar_projetos()[0].projeto_id
+    analysis_service.executar(project_id)
+    panel = DocumentationPanelWidget(
+        service=review_panel._service,
+        registry_service=registry_service,
+        analysis_service=analysis_service,
+        viewer=review_panel._viewer,
+    )
+    qtbot.addWidget(panel)
+    panel.show()
+
+    project = panel.findChild(QComboBox, "documentationProjectCombo")
+    tabs = panel.findChild(QTabWidget, "documentationTabs")
+    documents = panel.findChild(QTreeWidget, "documentationTree")
+    findings = panel.findChild(QTreeWidget, "complianceFindingsTree")
+    rules = panel.findChild(QTreeWidget, "complianceRulesTree")
+    documents_toggle = panel.findChild(QToolButton, "documentationWordWrapButton")
+    findings_toggle = panel.findChild(QToolButton, "complianceFindingsWordWrapButton")
+    rules_toggle = panel.findChild(QToolButton, "complianceRulesWordWrapButton")
+    assert project is not None and tabs is not None
+    assert documents is not None and findings is not None and rules is not None
+    assert documents_toggle is not None
+    assert findings_toggle is not None
+    assert rules_toggle is not None
+    for toggle in (documents_toggle, findings_toggle, rules_toggle):
+        _assert_word_wrap_control(toggle)
+
+    project.setCurrentIndex(1)
+    document_root = documents.topLevelItem(0)
+    finding = findings.topLevelItem(0)
+    rule = rules.topLevelItem(0)
+    assert document_root is not None and document_root.childCount()
+    document_group = document_root.child(0)
+    assert document_group is not None and document_group.childCount()
+    document_item = document_group.child(0)
+    assert document_item is not None and finding is not None and rule is not None
+
+    tabs.setCurrentIndex(0)
+    _exercise_tree_word_wrap(
+        qtbot,
+        tree=documents,
+        toggle=documents_toggle,
+        item=document_item,
+        column=2,
+    )
+    tabs.setCurrentIndex(1)
+    _exercise_tree_word_wrap(
+        qtbot,
+        tree=findings,
+        toggle=findings_toggle,
+        item=finding,
+        column=2,
+        embedded_column=9,
+    )
+    tabs.setCurrentIndex(2)
+    _exercise_tree_word_wrap(
+        qtbot,
+        tree=rules,
+        toggle=rules_toggle,
+        item=rule,
+        column=2,
+    )
+
+    for tree, toggle in (
+        (documents, documents_toggle),
+        (findings, findings_toggle),
+        (rules, rules_toggle),
+    ):
+        tree.header().resizeSection(2, 80)
+        toggle.click()
+    panel._load_persisted_result()
+    panel._populate_rules()
+
+    for index, (tree, toggle) in enumerate(
+        (
+            (documents, documents_toggle),
+            (findings, findings_toggle),
+            (rules, rules_toggle),
+        )
+    ):
+        tabs.setCurrentIndex(index)
+        item = tree.topLevelItem(0)
+        assert item is not None
+        qtbot.waitUntil(partial(_has_valid_size_hint, item))
+        assert toggle.isChecked()
+        assert tree.textElideMode() is Qt.TextElideMode.ElideNone
+        assert not tree.uniformRowHeights()
+    reloaded_finding = findings.topLevelItem(0)
+    assert reloaded_finding is not None
+    assert isinstance(findings.itemWidget(reloaded_finding, 9), QToolButton)
