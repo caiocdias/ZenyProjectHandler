@@ -14,6 +14,7 @@ from pytestqt.qtbot import QtBot
 
 from zeny_project_handler.adapters.catalog import carregar_catalogo_inicial
 from zeny_project_handler.adapters.compliance import carregar_registro_conformidade_inicial
+from zeny_project_handler.adapters.pdf.errors import PdfError
 from zeny_project_handler.application.compliance_analysis import ExecutarAnaliseConformidade
 from zeny_project_handler.application.compliance_callouts import CalloutConformidade
 from zeny_project_handler.application.human_review import (
@@ -74,6 +75,11 @@ class _ViewerStub(QObject):
         geometries: tuple[tuple[PontoNormalizado, ...], ...],
     ) -> None:
         self.overlays.append(geometries)
+
+
+class _FailingVisualMapperViewerStub(_ViewerStub):
+    def mapear_ocupacao_visual(self, _pagina_ids: frozenset[UUID]) -> dict[UUID, object]:
+        raise PdfError("falha sintética no mapa visual")
 
 
 class _ReviewServiceStub:
@@ -229,6 +235,21 @@ def test_hidden_state_survives_navigation_and_resets_for_project_or_execution(
     assert hidden_id in {item.id for item in viewer.callouts}
 
 
+def test_visual_mapping_failure_keeps_previously_localized_callouts(qtbot: QtBot) -> None:
+    panel, viewer, session, _second_session, _execution, _analysis = _panel(
+        qtbot,
+        viewer=_FailingVisualMapperViewerStub(),
+    )
+    statuses: list[str] = []
+    panel.status_changed.connect(statuses.append)
+
+    panel.abrir_projeto(session.projeto.id)
+
+    assert len(panel._callouts) == 2
+    assert viewer.callouts == panel._callouts
+    assert statuses[-1] == "falha sintética no mapa visual"
+
+
 def test_list_and_callout_selection_sync_without_signal_cycles(qtbot: QtBot) -> None:
     panel, viewer, first_session, _second_session, _execution, _analysis = _panel(qtbot)
     panel.abrir_projeto(first_session.projeto.id)
@@ -303,6 +324,7 @@ def _panel(
     qtbot: QtBot,
     *,
     second_page: bool = False,
+    viewer: _ViewerStub | None = None,
 ) -> tuple[
     DocumentationPanelWidget,
     _ViewerStub,
@@ -320,7 +342,7 @@ def _panel(
     second_session, second_execution = _session_and_execution("project-b", registry.assinatura())
     review = _ReviewServiceStub((first_session, second_session))
     analysis = _AnalysisServiceStub((first_execution, second_execution))
-    viewer = _ViewerStub()
+    viewer = viewer or _ViewerStub()
     panel = DocumentationPanelWidget(
         service=cast(ServicoRevisaoHumana, review),
         analysis_service=cast(ExecutarAnaliseConformidade, analysis),

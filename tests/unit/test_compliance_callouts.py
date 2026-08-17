@@ -15,6 +15,7 @@ from zeny_project_handler.application.compliance_callouts import (
     ponto_conexao_callout,
     projetar_callouts_conformidade,
 )
+from zeny_project_handler.application.visual_occupancy import MapaOcupacaoVisual
 from zeny_project_handler.domain.analysis import EvidenciaDocumento
 from zeny_project_handler.domain.compliance import (
     AchadoConformidade,
@@ -518,6 +519,38 @@ def test_projection_moves_box_away_from_known_pdf_content() -> None:
 
     assert moved.caixa_sugerida != blocked
     assert _intersection_area(moved.caixa_sugerida, blocked) == 0
+
+
+def test_visual_layout_falls_back_without_losing_previously_localized_callouts() -> None:
+    page = _page("visual-fallback", width=Decimal("595"), height=Decimal("842"))
+    anchor = GeometriaDocumento.ponto(page.id, _point("0.5", "0.5"))
+    execution, evidence = _execution(
+        (page,),
+        fact_geometries=(anchor, anchor),
+    )
+    baseline = projetar_callouts_conformidade(
+        execution,
+        evidencias=evidence,
+        paginas=(page,),
+    )
+    fully_occupied = MapaOcupacaoVisual(
+        pagina_id=page.id,
+        largura_pixels=100,
+        altura_pixels=100,
+        colunas=1,
+        linhas=1,
+        lado_celula_pixels=100,
+        celulas_ocupadas=b"\x01",
+    )
+
+    projected = projetar_callouts_conformidade(
+        execution,
+        evidencias=evidence,
+        paginas=(page,),
+        mapas_ocupacao_visual={page.id: fully_occupied},
+    )
+
+    assert projected == baseline
 
 
 def test_collision_score_prefers_less_important_area_over_fewer_obstacles() -> None:

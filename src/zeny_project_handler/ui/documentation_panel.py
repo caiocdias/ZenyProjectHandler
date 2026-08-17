@@ -369,6 +369,9 @@ class DocumentationPanelWidget(QWidget):
                     paginas=pages,
                     textos_apresentacao=presentation_texts,
                 )
+                # Preserve o layout determinístico já disponível caso a
+                # rasterização usada apenas para refiná-lo falhe.
+                self._callouts = initial_callouts
                 visual_mapper = getattr(self._viewer, "mapear_ocupacao_visual", None)
                 visual_maps = (
                     visual_mapper(frozenset(item.pagina_id for item in initial_callouts))

@@ -314,13 +314,19 @@ def _posicionar_pagina(
         important_content=important_content,
         visual_occupancy=visual_occupancy,
     )
-    if compact is None:
-        reason = (
-            "não possui espaço totalmente branco suficiente para todos os callouts"
-            if visual_occupancy is not None
-            else "não comporta todos os callouts no tamanho mínimo legível"
+    if compact is None and visual_occupancy is not None:
+        # O mapa raster é apenas uma melhoria de posicionamento. Uma folha sem
+        # área totalmente branca suficiente não pode transformar achados que já
+        # eram localizáveis em achados sem localização.
+        return _posicionar_pagina(
+            requests,
+            important_content=important_content,
+            visual_occupancy=None,
         )
-        raise LayoutCalloutsImpossivelError(f"A página {page.numero} {reason}")
+    if compact is None:
+        raise LayoutCalloutsImpossivelError(
+            f"A página {page.numero} não comporta todos os callouts no tamanho mínimo legível"
+        )
     return compact
 
 
