@@ -45,8 +45,10 @@ _WINDOWS_PATH_PATTERN = re.compile(
     r"(?i)(?<![\w:])[A-Z]:[\\/](?:[^\\/\r\n\"']+[\\/])*[^\r\n\"',;)]*"
 )
 _POSIX_PATH_PATTERN = re.compile(r"(?<![:\w])/(?:[^/\r\n\"']+/)*[^\r\n\"',;)]*")
+_BEARER_PATTERN = re.compile(r"(?i)\bbearer\s+[^\s,;}\]]+")
 _SECRET_PATTERN = re.compile(
-    r"(?i)\b(password|senha|secret|token|conte[uú]do|content|texto|text|"
+    r"(?i)\b(authorization|proxy-authorization|password|senha|secret|token|"
+    r"conte[uú]do|content|texto|text|"
     r"coordenadas?|coordinates?|fotos?|photos?)\b\s*[:=]\s*"
     r"(?:\"[^\"]*\"|'[^']*'|[^,;\s}\]]+)"
 )
@@ -56,6 +58,7 @@ _correlation_id: ContextVar[str | None] = ContextVar("logging_correlation_id", d
 def _redact_text(value: str) -> str:
     redacted = _WINDOWS_PATH_PATTERN.sub("<redacted-path>", value)
     redacted = _POSIX_PATH_PATTERN.sub("<redacted-path>", redacted)
+    redacted = _BEARER_PATTERN.sub("Bearer <redacted>", redacted)
     return _SECRET_PATTERN.sub(lambda match: f"{match.group(1)}=<redacted>", redacted)
 
 

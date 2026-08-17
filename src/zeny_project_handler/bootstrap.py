@@ -6,7 +6,6 @@ import sys
 from collections.abc import Callable, Sequence
 from subprocess import list2cmdline
 from typing import cast
-from uuid import UUID
 
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication
@@ -21,7 +20,6 @@ from zeny_project_handler.adapters.analysis.tesseract_runtime import (
     RuntimeTesseract,
     inspect_tesseract_runtime,
 )
-from zeny_project_handler.adapters.catalog import carregar_catalogo_inicial
 from zeny_project_handler.adapters.compliance import carregar_registro_conformidade_inicial
 from zeny_project_handler.adapters.interpretation import (
     InterpretadorRegrasExplicitas,
@@ -32,8 +30,6 @@ from zeny_project_handler.adapters.persistence import (
     SqlAlchemyUnitOfWork,
     SqliteBackupManager,
     SqlitePortableProjectDatabase,
-    create_sqlite_engine,
-    upgrade_database,
 )
 from zeny_project_handler.adapters.portability import ZipProjectArchive
 from zeny_project_handler.application.compliance_analysis import ExecutarAnaliseConformidade
@@ -44,7 +40,6 @@ from zeny_project_handler.application.document_analysis import ExecutarAnaliseDo
 from zeny_project_handler.application.document_compliance import prover_fatos_documentais
 from zeny_project_handler.application.errors import ApplicationError
 from zeny_project_handler.application.human_review import ServicoRevisaoHumana
-from zeny_project_handler.application.import_recovery import RecuperadorImportacaoProjeto
 from zeny_project_handler.application.interpretation_pipeline import ExecutarPipelineInterpretacao
 from zeny_project_handler.application.managed_files import GerenciadorArquivosGerenciados
 from zeny_project_handler.application.mvp_workflow import ServicoFluxoMvp
@@ -55,8 +50,13 @@ from zeny_project_handler.application.project_compliance import prover_fatos_reg
 from zeny_project_handler.application.project_portability import ServicoPortabilidadeProjeto
 from zeny_project_handler.application.span_compliance import prover_fatos_vaos
 from zeny_project_handler.application.topology_compliance import prover_fatos_topologicos
+from zeny_project_handler.composition import (
+    ensure_initial_catalog,
+)
+from zeny_project_handler.composition import (
+    initialize_local_storage as initialize_local_storage,
+)
 from zeny_project_handler.config import AppSettings
-from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler.logging_config import (
     configure_logging,
@@ -64,7 +64,6 @@ from zeny_project_handler.logging_config import (
     operation_logger,
 )
 from zeny_project_handler.ports.pdf import OrcamentoRenderizacaoPdf
-from zeny_project_handler.ports.persistence import ComprovanteCommitImportacao
 from zeny_project_handler.ui.application_icon import (
     carregar_icone_aplicacao,
     materializar_icone_aplicacao,
@@ -152,7 +151,7 @@ def _compose_initialized_application(
     saved_theme = ui_settings.value(THEME_SETTING_KEY, Tema.CLARO.value)
     initial_theme = aplicar_tema(application, str(saved_theme))
 
-    catalog = _ensure_initial_catalog(engine)
+    catalog = ensure_initial_catalog(engine)
     reader = PyMuPdfReader()
 
     def unit_of_work() -> SqlAlchemyUnitOfWork:
@@ -284,47 +283,6 @@ def _ocr_engine(runtime: RuntimeTesseract) -> TesseractCliOcr | None:
 
 def _nao_fazer_nada() -> None:
     pass
-
-
-def initialize_local_storage(settings: AppSettings) -> Engine:
-    """Migre e reconcilie o estado local antes de expor qualquer operação."""
-    engine = create_sqlite_engine(settings.database_path)
-    try:
-        upgrade_database(engine)
-        compliance_service = ServicoRegistroRegrasConformidade(
-            lambda: SqlAlchemyUnitOfWork(engine),
-            diretorio_dados=settings.data_directory,
-        )
-        compliance_service.inicializar(carregar_registro_conformidade_inicial())
-        recovery = RecuperadorImportacaoProjeto(settings.data_directory)
-
-        def obter_comprovante(operation_id: UUID) -> ComprovanteCommitImportacao | None:
-            with SqlAlchemyUnitOfWork(engine) as work:
-                return work.comprovantes_importacao.obter(operation_id)
-
-        recovery.reconciliar(obter_comprovante)
-
-        def listar_projetos() -> tuple[Projeto, ...]:
-            with SqlAlchemyUnitOfWork(engine) as work:
-                return work.projetos.listar()
-
-        GerenciadorArquivosGerenciados(
-            settings.data_directory,
-            listar_projetos,
-        ).reconciliar_pendencias()
-    except Exception:
-        engine.dispose()
-        raise
-    return engine
-
-
-def _ensure_initial_catalog(engine: Engine) -> CatalogoTecnico:
-    catalog = carregar_catalogo_inicial()
-    with SqlAlchemyUnitOfWork(engine) as work:
-        if work.catalogos.obter(catalog.id) is None:
-            work.catalogos.salvar(catalog)
-            work.commit()
-    return catalog
 
 
 def run(

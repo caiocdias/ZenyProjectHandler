@@ -104,6 +104,25 @@ def test_formatter_redacts_messages_without_evaluating_repr_or_extra() -> None:
     assert "document_id" not in payload
 
 
+def test_formatter_redacts_authorization_and_bearer_credentials() -> None:
+    record = logging.LogRecord(
+        name="zeny_project_handler.test",
+        level=logging.WARNING,
+        pathname=__file__,
+        lineno=10,
+        msg=("Authorization: Bearer segredo-do-servidor; proxy-authorization=Bearer outro-segredo"),
+        args=(),
+        exc_info=None,
+    )
+
+    formatted = JsonFormatter().format(record)
+
+    assert "segredo-do-servidor" not in formatted
+    assert "outro-segredo" not in formatted
+    assert "Bearer <redacted>" not in formatted
+    assert "authorization=<redacted>" in formatted.casefold()
+
+
 def test_operation_events_have_levels_correlation_and_safe_traceback() -> None:
     stream = io.StringIO()
     logger = logging.Logger("zeny_project_handler.test", level=logging.DEBUG)
