@@ -67,6 +67,7 @@ from zeny_project_handler.ports.persistence import ComprovanteCommitImportacao
 from zeny_project_handler.ui.application_icon import carregar_icone_aplicacao
 from zeny_project_handler.ui.main_window import MainWindow
 from zeny_project_handler.ui.theme import THEME_SETTING_KEY, Tema, aplicar_tema
+from zeny_project_handler.windows_app_identity import configurar_identidade_aplicativo_windows
 
 
 class _EngineLifetime:
@@ -130,6 +131,7 @@ def _compose_initialized_application(
     arguments = list(argv) if argv is not None else list(sys.argv)
     existing_application = QApplication.instance()
     if existing_application is None:
+        configurar_identidade_aplicativo_windows()
         application = QApplication(arguments)
     else:
         application = cast(QApplication, existing_application)
