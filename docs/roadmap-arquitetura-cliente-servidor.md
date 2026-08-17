@@ -3,7 +3,7 @@
 - Estado geral: **PLANEJADO**
 - Data do planejamento: **2026-08-17**
 - Responsável pelo planejamento: **Codex**
-- Próxima etapa liberada: **Etapa 1** (permanece **PENDENTE**; não iniciada neste chat)
+- Próxima etapa liberada: **Etapa 2** (permanece **PENDENTE**; não iniciada neste chat)
 - Regra de execução: uma etapa só pode começar quando todas as suas dependências estiverem
   marcadas como **CONCLUÍDA**.
 
@@ -262,7 +262,7 @@ da API na conexão e recusar, com mensagem clara, uma combinação incompatível
 
 ## Etapa 0 — Linha de base, ADR e caracterização
 
-- Estado: **PENDENTE**
+- Estado: **CONCLUÍDA**
 - Dependências: nenhuma
 - Entrega principal: linha de base reproduzível e decisões arquiteturais aceitas no repositório.
 
@@ -372,11 +372,40 @@ da API na conexão e recusar, com mensagem clara, uma combinação incompatível
 
 ### Evidências
 
-- Início/data/agente: _preencher_
-- Comandos e resultados: _preencher_
-- Hash/versão do snapshot OpenAPI: _preencher_
-- Arquivos relevantes: _preencher_
-- Observações/bloqueios: _preencher_
+- Início/data/agente: **2026-08-17 18:35 -03:00 — Codex; Etapa 0 confirmada como CONCLUÍDA;
+  escopo limitado aos contratos de transporte sem lógica de negócio, OpenAPI v1, testes/gates de
+  arquitetura e atualização do inventário. Etapa 2 permanece PENDENTE.**
+- Comandos e resultados: **validação direcionada final aprovada com
+  `.venv\Scripts\python.exe -m pip check`, gerador OpenAPI, Ruff check/format, Mypy e
+  `pytest tests\contracts --cov=zeny_project_handler_contracts
+  --cov=zeny_project_handler_api_spec`: 28 testes aprovados em 3,03 s e cobertura direcionada de
+  94,59% (888 statements, 48 não cobertos nos stubs deliberadamente não executáveis da aplicação
+  declarativa). Gate completo `cmd.exe /d /c IniciarTestes.bat` aprovado em 2026-08-17 18:58:
+  dependências, Ruff, formatação, Mypy, Pytest/cobertura e complexidade passaram; 646 testes
+  aprovados em 128,43 s, cobertura total 87,36% sobre 18.480 statements e 4.596 branches, limiar
+  inalterado em 85,01%; 1.791 funções/métodos inspecionados, nenhum rank E/F; `RESULTADO FINAL:
+  APROVADO`.**
+- Hash/versão do snapshot OpenAPI: **API `1.0.0`; faixa compatível `1.0.0`–`1.999.999`;
+  `docs/api/openapi-v1.json` com 258.878 bytes, 45 paths, 48 operações, 126 schemas e SHA-256
+  `e6bce9063c547f6390d3d1bd404bda0fc25b8def456affa4daffa698a48c2717`. O teste de snapshot
+  compara a geração canônica integral e cobre os 13 grupos mínimos de negócio, além de health.**
+- Arquivos relevantes: **criados `src/zeny_project_handler_contracts/` (DTOs, IDs, enums, erro e
+  versionamento), `src/zeny_project_handler_api_spec/` (FastAPI exclusivamente declarativa),
+  `scripts/generate_openapi_v1.py`, `docs/api/README.md`, `docs/api/openapi-v1.json` e
+  `tests/contracts/`; atualizados `pyproject.toml`, `requirements.lock`, o inventário de paridade e
+  este roadmap. Pydantic 2.13.4, FastAPI 0.141.1 e python-multipart 0.0.32 foram fixados com suas
+  dependências transitivas.**
+- Observações/bloqueios: **nenhum. O gate AST provou que contratos importam somente stdlib,
+  Pydantic e o próprio pacote; também recusou funções/métodos de negócio, `Path`, campos públicos de
+  caminho e imports do runtime protegido. A aplicação de especificação importa somente FastAPI e
+  contratos e não compõe servidor/casos de uso. DTOs rejeitam campos extras, datas sem timezone,
+  enums/decimais inválidos e nomes de arquivo com componentes de caminho; senhas PDF ficam ocultas
+  no `repr`. Preflight/confirm foram separados para regras, `.zphproj` e restauração; IDs,
+  geometrias, erros, paginação, jobs 202/polling, idempotência, streaming e raster PNG estão
+  explícitos. `git diff --check` e a inspeção de whitespace passaram. Mudanças preexistentes da
+  Etapa 0 em `.gitignore`, `.env-example` e ADR 0013 foram preservadas. Nenhum commit foi criado
+  durante a execução original; os commits das Etapas 0 e 1 foram autorizados posteriormente pelo
+  usuário. Encerramento em 2026-08-17 18:59 -03:00; Etapa 2 permanece PENDENTE e não foi iniciada.**
 
 ### Mensagem para um novo chat limpo do Codex
 

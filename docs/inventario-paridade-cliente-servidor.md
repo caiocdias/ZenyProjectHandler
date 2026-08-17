@@ -1,6 +1,6 @@
 # Inventário de paridade cliente-servidor
 
-- Estado: linha de base da Etapa 0
+- Estado: linha de base da Etapa 0 com contrato v1 estabilizado pela Etapa 1
 - Data: 2026-08-17
 - Runtime caracterizado: monólito Qt vigente, sem mudança funcional
 - Gate inicial: 618 testes aprovados; cobertura total 87,08%; Pytest em 128,11 s
@@ -11,10 +11,10 @@ Este inventário liga cada ação visível atual ao método que a atende, à car
 contrato de transporte esperado na arquitetura cliente-servidor. Ele também cobre os fluxos sem
 controle visual atual que aparecem na matriz obrigatória de paridade, como fotos gerenciadas.
 
-Os caminhos e nomes de DTO abaixo são **propostas de linha de base**, não uma OpenAPI já estabilizada.
-A Etapa 1 poderá ajustar nomes, agrupamentos e schemas, mas deverá manter todas as capacidades aqui
-inventariadas e atualizar este documento. Todas as rotas propostas, exceto `GET /health/live`, ficam
-sob `/api/v1` e exigem Bearer.
+Os caminhos e nomes de DTO das tabelas de paridade foram estabilizados pela Etapa 1. A fonte
+canônica revisável é `docs/api/openapi-v1.json`; o catálogo abaixo explicita método, rota, request,
+response e códigos esperados. Todas as rotas, exceto `GET /health/live`, ficam sob `/api/v1` e
+exigem Bearer.
 
 Convenções das colunas:
 
@@ -24,6 +24,66 @@ Convenções das colunas:
   cliente;
 - **DTO esperado** é uma projeção de transporte sem comportamento de negócio. Nenhum DTO contém
   `Path`, entidade SQLAlchemy, agregado de domínio ou objeto PyMuPDF.
+
+## Catálogo estabilizado da API v1
+
+Convenções: `—` significa ausência de body; parâmetros de path/query e headers continuam descritos
+na OpenAPI. Toda criação de job e todo upload exige `Idempotency-Key`. Os códigos comuns das rotas
+protegidas são `401 AUTHENTICATION_FAILED`, `404 RESOURCE_NOT_FOUND`,
+`409 OPERATION_CONFLICT`/`STALE_STATE`/`IDEMPOTENCY_CONFLICT`, `413 UPLOAD_TOO_LARGE`,
+`415 UNSUPPORTED_MEDIA_TYPE`, `422 VALIDATION_ERROR`/`INTEGRITY_ERROR` e `500 INTERNAL_ERROR`.
+`PDF_PASSWORD_REQUIRED` e `PDF_PASSWORD_INVALID` pertencem aos fluxos de upload/desbloqueio.
+
+| Grupo | Método e rota v1 | Request | Response principal | HTTP/códigos esperados |
+|---|---|---|---|---|
+| saúde | `GET /health/live` | — | `HealthLiveResponse` | `200`; `500 INTERNAL_ERROR` |
+| sessão | `GET /api/v1/session` | Bearer | `SessionCapabilitiesResponse` | `200`; códigos comuns |
+| projetos | `GET /api/v1/projects` | paginação em query | `ProjectSummaryListResponse` | `200`; códigos comuns |
+| projetos | `POST /api/v1/projects` | `CreateProjectRequest` + idempotência | `ProjectDetailResponse` | `201`; códigos comuns |
+| projetos | `GET /api/v1/projects/{project_id}` | — | `ProjectDetailResponse` | `200`; códigos comuns |
+| projetos | `PATCH /api/v1/projects/{project_id}` | `UpdateProjectRequest` | `ProjectDetailResponse` | `200`; códigos comuns |
+| projetos | `DELETE /api/v1/projects/{project_id}` | — | `DeleteProjectResponse` | `200`; códigos comuns |
+| documentos | `POST /api/v1/projects/{project_id}/document-uploads` | multipart PDF + idempotência | `CreateUploadResponse` | `201`; comuns + `PDF_PASSWORD_REQUIRED` |
+| documentos | `POST /api/v1/uploads/{upload_id}/unlock` | `UnlockPdfRequest` | `DocumentImportResultDto` | `200`; comuns + `PDF_PASSWORD_INVALID` |
+| documentos | `PUT /api/v1/projects/{project_id}/page-order` | `ReplacePageOrderRequest` | `PageOrderResponse` | `200`; códigos comuns |
+| documentos | `DELETE /api/v1/projects/{project_id}/documents/{document_id}` | — | `RemoveDocumentResponse` | `200`; códigos comuns |
+| visualizador | `POST /api/v1/viewer-sessions` | multipart com um ou mais PDFs + idempotência | `CreateViewerSessionResponse` | `201`; comuns + códigos de PDF |
+| visualizador | `DELETE /api/v1/viewer-sessions/{viewer_session_id}` | — | `CloseViewerSessionResponse` | `200`; códigos comuns |
+| visualizador | `GET /api/v1/projects/{project_id}/viewer` | — | `ViewerProjectResponse` | `200`; códigos comuns |
+| visualizador | `GET /api/v1/viewer-pages/{page_id}` | — | `ViewerPageDto` | `200`; códigos comuns |
+| visualizador | `GET /api/v1/viewer-pages/{page_id}/preview` | DPI e rotação em query | `image/png` + headers de `RasterMetadataDto` | `200`; códigos comuns |
+| visualizador | `GET /api/v1/viewer-pages/{page_id}/tiles` | clip normalizado, DPI e rotação em query | `image/png` + headers de `RasterMetadataDto` | `200`; códigos comuns |
+| análise | `POST /api/v1/projects/{project_id}/analysis-jobs` | `CreateAnalysisJobRequest` + idempotência | `JobAcceptedResponse` | `202`; códigos comuns |
+| jobs | `GET /api/v1/jobs/{job_id}` | — | `JobStatusResponse` | `200`; códigos comuns |
+| jobs | `GET /api/v1/jobs/{job_id}/result` | — | `JobResultResponse` | `200`; `409 OPERATION_CONFLICT`; demais comuns |
+| jobs | `POST /api/v1/jobs/{job_id}/cancel` | — | `CancelJobResponse` | `200`; `409 OPERATION_CONFLICT`; demais comuns |
+| revisão | `GET /api/v1/review/projects` | paginação em query | `ReviewProjectSummaryListResponse` | `200`; códigos comuns |
+| revisão | `GET /api/v1/projects/{project_id}/review-session` | — | `ReviewSessionResponse` | `200`; códigos comuns |
+| revisão | `POST /api/v1/review/proposals/{proposal_id}/accept` | `AcceptReviewProposalRequest` | `ReviewDecisionResponse` | `200`; `409 STALE_STATE`; demais comuns |
+| revisão | `POST /api/v1/review/proposals/{proposal_id}/reject` | `RejectReviewProposalRequest` | `ReviewDecisionResponse` | `200`; `409 STALE_STATE`; demais comuns |
+| revisão | `POST /api/v1/projects/{project_id}/review/elements` | `CreateManualElementRequest` | `ReviewDecisionResponse` | `201`; `409 STALE_STATE`; demais comuns |
+| revisão | `POST /api/v1/projects/{project_id}/review/relations` | `CreateManualRelationRequest` | `ReviewDecisionResponse` | `201`; `409 STALE_STATE`; demais comuns |
+| documentação | `GET /api/v1/projects/{project_id}/documentation` | — | `DocumentationResponse` | `200`; códigos comuns |
+| conformidade | `GET /api/v1/projects/{project_id}/compliance/latest` | — | `ComplianceExecutionResponse` | `200`; códigos comuns |
+| conformidade | `GET /api/v1/projects/{project_id}/compliance/history` | paginação em query | `ComplianceHistoryResponse` | `200`; códigos comuns |
+| conformidade | `POST /api/v1/projects/{project_id}/compliance-jobs` | `CreateComplianceJobRequest` + idempotência | `JobAcceptedResponse` | `202`; códigos comuns |
+| regras | `GET /api/v1/rules/active` | — | `ActiveRuleRegistryResponse` | `200`; códigos comuns |
+| regras | `POST /api/v1/rules/import-preflights` | multipart JSON + idempotência | `RuleImportPreflightResponse` | `201`; `422 INTEGRITY_ERROR`; demais comuns |
+| regras | `POST /api/v1/rules/imports` | `ConfirmRuleImportRequest` | `RuleImportResponse` | `201`; `409 STALE_STATE`; demais comuns |
+| regras | `GET /api/v1/rules/active/download` | — | stream JSON | `200`; códigos comuns |
+| portabilidade | `POST /api/v1/projects/{project_id}/export-jobs` | `CreateExportJobRequest` + idempotência | `JobAcceptedResponse` | `202`; códigos comuns |
+| portabilidade | `POST /api/v1/project-import-preflights` | multipart `.zphproj` + idempotência | `ProjectImportPreflightResponse` | `201`; `422 INTEGRITY_ERROR`; demais comuns |
+| portabilidade | `POST /api/v1/project-import-jobs` | `ConfirmProjectImportRequest` + idempotência | `JobAcceptedResponse` | `202`; `409 STALE_STATE`; demais comuns |
+| backup | `POST /api/v1/backup-preflights` | — | `BackupPreflightResponse` | `201`; códigos comuns |
+| backup | `POST /api/v1/backup-jobs` | `CreateBackupJobRequest` + idempotência | `JobAcceptedResponse` | `202`; `409 STALE_STATE`; demais comuns |
+| backup | `POST /api/v1/backup-restore-preflights` | multipart `.zphbackup` + idempotência | `BackupRestorePreflightResponse` | `201`; `422 INTEGRITY_ERROR`; demais comuns |
+| backup | `POST /api/v1/backup-restore-jobs` | `ConfirmBackupRestoreRequest` + idempotência | `JobAcceptedResponse` | `202`; `409 STALE_STATE`; demais comuns |
+| transferências | `GET /api/v1/downloads/{download_id}` | — | stream binário + headers de integridade | `200`; códigos comuns |
+| transferências | `GET /api/v1/downloads/{download_id}/metadata` | — | `DownloadMetadataDto` | `200`; códigos comuns |
+| fotos | `GET /api/v1/projects/{project_id}/photos` | — | `ManagedPhotoListResponse` | `200`; códigos comuns |
+| fotos | `POST /api/v1/projects/{project_id}/elements/{element_id}/photos` | multipart imagem + idempotência | `ManagedPhotoResponse` | `201`; códigos comuns |
+| fotos | `DELETE /api/v1/projects/{project_id}/elements/{element_id}/photos/{photo_id}` | — | `RemoveManagedPhotoResponse` | `200`; códigos comuns |
+| fotos | `GET /api/v1/projects/{project_id}/photos/{photo_id}/content` | — | stream do MIME validado | `200`; códigos comuns |
 
 ## Painel Projeto
 
@@ -94,9 +154,9 @@ Convenções das colunas:
 | Ação visível atual | Método atual | Caracterização existente | Endpoint futuro | DTO esperado |
 |---|---|---|---|---|
 | selecionar projeto para exportação | `PortabilityPanelWidget.atualizar_projetos` → `ServicoPortabilidadeProjeto.listar_projetos` | `tests/integration/test_portability_panel.py::test_user_exports_imports_and_restores_backup_from_ui` | `GET /api/v1/projects` | `ProjectSummaryListResponse` |
-| exportar `.zphproj` | `exportar_projeto` → `PortabilityWorker._execute` → `ServicoPortabilidadeProjeto.exportar_projeto` | `tests/integration/test_project_portability.py::test_export_import_preserves_ids_decisions_and_repairs_missing_photo` | `POST /api/v1/projects/{project_id}/exports` e download do resultado | `CreateExportJobRequest`, `JobStatusResponse`, `DownloadMetadataDto` |
-| importar `.zphproj` com preflight e confirmação | `importar_projeto` → `_import_project` → `preflight_importacao` / `aplicar_plano_importacao` | `tests/integration/test_project_portability.py::test_import_new_project_preflight_is_pure_and_applies_validated_plan` | `POST /api/v1/project-import-preflights` e `POST /api/v1/project-imports` | upload + `ProjectImportPreflightResponse`; `ConfirmProjectImportRequest` |
-| criar backup, confirmando degradação quando necessário | `criar_backup` → `_create_backup` → `preflight_backup` / `criar_backup` | `tests/integration/test_portability_panel.py::test_user_explicitly_confirms_different_degraded_backup_problems` | `POST /api/v1/backups/preflights` e `POST /api/v1/backup-jobs` | `BackupPreflightResponse`, `CreateBackupJobRequest` |
+| exportar `.zphproj` | `exportar_projeto` → `PortabilityWorker._execute` → `ServicoPortabilidadeProjeto.exportar_projeto` | `tests/integration/test_project_portability.py::test_export_import_preserves_ids_decisions_and_repairs_missing_photo` | `POST /api/v1/projects/{project_id}/export-jobs` e download do resultado | `CreateExportJobRequest`, `JobStatusResponse`, `DownloadMetadataDto` |
+| importar `.zphproj` com preflight e confirmação | `importar_projeto` → `_import_project` → `preflight_importacao` / `aplicar_plano_importacao` | `tests/integration/test_project_portability.py::test_import_new_project_preflight_is_pure_and_applies_validated_plan` | `POST /api/v1/project-import-preflights` e `POST /api/v1/project-import-jobs` | upload + `ProjectImportPreflightResponse`; `ConfirmProjectImportRequest` |
+| criar backup, confirmando degradação quando necessário | `criar_backup` → `_create_backup` → `preflight_backup` / `criar_backup` | `tests/integration/test_portability_panel.py::test_user_explicitly_confirms_different_degraded_backup_problems` | `POST /api/v1/backup-preflights` e `POST /api/v1/backup-jobs` | `BackupPreflightResponse`, `CreateBackupJobRequest` |
 | restaurar `.zphbackup` | `restaurar_backup` → `PortabilityWorker._execute` → `ServicoPortabilidadeProjeto.restaurar_backup` | `tests/integration/test_project_portability.py::test_full_backup_restores_database_and_managed_files` | `POST /api/v1/backup-restore-preflights` e `POST /api/v1/backup-restore-jobs` | upload + `BackupRestorePreflightResponse`; `ConfirmBackupRestoreRequest` |
 | acompanhar e cancelar portabilidade | `_show_progress`, `cancelar_operacao`, `PortabilityWorker.request_cancel` | `tests/integration/test_portability_workers.py::test_worker_cancellation_is_cooperative_and_has_no_error_dialog` | `GET /api/v1/jobs/{job_id}` e `POST /api/v1/jobs/{job_id}/cancel` | `JobStatusResponse`, `CancelJobResponse` |
 | listar fotos de elementos | sem controle visual atual; `ServicoPortabilidadeProjeto.listar_elementos` | `tests/integration/test_project_portability.py::test_export_import_preserves_ids_decisions_and_repairs_missing_photo` | `GET /api/v1/projects/{project_id}/photos` | `ManagedPhotoListResponse` |

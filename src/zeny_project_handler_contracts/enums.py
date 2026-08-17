@@ -1,0 +1,116 @@
+"""Enums estáveis do contrato v1."""
+
+from enum import StrEnum
+
+
+class ProjectState(StrEnum):
+    CREATED = "CREATED"
+    READY = "READY"
+    ANALYZING = "ANALYZING"
+    ERROR = "ERROR"
+
+
+class UploadState(StrEnum):
+    RECEIVING = "RECEIVING"
+    PREFLIGHT_READY = "PREFLIGHT_READY"
+    PASSWORD_REQUIRED = "PASSWORD_REQUIRED"
+    IMPORTED = "IMPORTED"
+    REJECTED = "REJECTED"
+    EXPIRED = "EXPIRED"
+
+
+class JobKind(StrEnum):
+    ANALYSIS = "ANALYSIS"
+    COMPLIANCE = "COMPLIANCE"
+    PROJECT_EXPORT = "PROJECT_EXPORT"
+    PROJECT_IMPORT = "PROJECT_IMPORT"
+    BACKUP_CREATE = "BACKUP_CREATE"
+    BACKUP_RESTORE = "BACKUP_RESTORE"
+
+
+class JobStatus(StrEnum):
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    WAITING_CONFIRMATION = "WAITING_CONFIRMATION"
+    CANCELLING = "CANCELLING"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class IssueSeverity(StrEnum):
+    INFO = "INFO"
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+
+
+class IntegrityState(StrEnum):
+    INTACT = "INTACT"
+    DEGRADED = "DEGRADED"
+    INVALID = "INVALID"
+
+
+class OcrStatus(StrEnum):
+    AVAILABLE = "AVAILABLE"
+    UNAVAILABLE = "UNAVAILABLE"
+    DEGRADED = "DEGRADED"
+
+
+class ElementCategory(StrEnum):
+    POLE = "POLE"
+    MV_STRUCTURE = "MV_STRUCTURE"
+    LV_STRUCTURE = "LV_STRUCTURE"
+    CABLE = "CABLE"
+    EQUIPMENT = "EQUIPMENT"
+
+
+class ElementSituation(StrEnum):
+    EXISTING = "EXISTING"
+    INSTALL = "INSTALL"
+    REMOVE = "REMOVE"
+
+
+class ReviewState(StrEnum):
+    PENDING = "PENDING"
+    ACCEPTED = "ACCEPTED"
+    ADJUSTED = "ADJUSTED"
+    REJECTED = "REJECTED"
+
+
+class ReviewDecision(StrEnum):
+    ACCEPT = "ACCEPT"
+    ADJUST = "ADJUST"
+    REJECT = "REJECT"
+    CREATE_MANUAL = "CREATE_MANUAL"
+
+
+class SpanLengthSource(StrEnum):
+    DRAWING_LABEL = "DRAWING_LABEL"
+    COORDINATE_DISTANCE = "COORDINATE_DISTANCE"
+    UNAVAILABLE = "UNAVAILABLE"
+
+
+class DocumentationFieldStatus(StrEnum):
+    PRESENT = "PRESENT"
+    ABSENT = "ABSENT"
+    UNCERTAIN = "UNCERTAIN"
+
+
+class ComplianceStatus(StrEnum):
+    COMPLIANT = "COMPLIANT"
+    DIVERGENCE = "DIVERGENCE"
+    NOT_EVALUABLE = "NOT_EVALUABLE"
+
+
+class ComplianceTargetScope(StrEnum):
+    PROJECT = "PROJECT"
+    DOCUMENT = "DOCUMENT"
+    PAGE = "PAGE"
+    REGION = "REGION"
+    ELEMENT = "ELEMENT"
+
+
+class PreflightDisposition(StrEnum):
+    READY = "READY"
+    CONFIRMATION_REQUIRED = "CONFIRMATION_REQUIRED"
+    REJECTED = "REJECTED"
