@@ -1,0 +1,37 @@
+services:
+  server:
+    image: zeny-project-handler-server:dev
+    build:
+      context: .
+      target: runtime
+    environment:
+      ZENY_SERVER_PASSWORD: "${ZENY_SERVER_PASSWORD:?defina ZENY_SERVER_PASSWORD no .env}"
+      ZENY_SERVER_HOST: "0.0.0.0"
+      ZENY_SERVER_PORT: "8000"
+      ZENY_SERVER_DATA_DIR: "/data"
+      ZENY_SERVER_LOG_LEVEL: "${ZENY_SERVER_LOG_LEVEL:-INFO}"
+      ZENY_SERVER_UPLOAD_MAX_BYTES: "${ZENY_SERVER_UPLOAD_MAX_BYTES:-268435456}"
+      ZENY_SERVER_RENDER_DPI: "${ZENY_SERVER_RENDER_DPI:-600}"
+      ZENY_SERVER_RENDER_MAX_PIXELS: "${ZENY_SERVER_RENDER_MAX_PIXELS:-8000000}"
+      ZENY_SERVER_RENDER_MAX_BYTES: "${ZENY_SERVER_RENDER_MAX_BYTES:-67108864}"
+    ports:
+      - "${ZENY_SERVER_PORT:-8000}:8000"
+    volumes:
+      - zeny-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=2).read()
+      interval: 5s
+      timeout: 3s
+      start_period: 20s
+      retries: 12
+    restart: unless-stopped
+    stop_grace_period: 30s
+
+volumes:
+  zeny-data:

@@ -3,7 +3,7 @@
 - Estado geral: **PLANEJADO**
 - Data do planejamento: **2026-08-17**
 - Responsável pelo planejamento: **Codex**
-- Próxima etapa liberada: **Etapa 2** (permanece **PENDENTE**; não iniciada neste chat)
+- Próxima etapa liberada: **Etapa 3** (permanece **PENDENTE**; não iniciada neste chat)
 - Regra de execução: uma etapa só pode começar quando todas as suas dependências estiverem
   marcadas como **CONCLUÍDA**.
 
@@ -418,7 +418,7 @@ da API na conexão e recusar, com mensagem clara, uma combinação incompatível
 
 ## Etapa 2 — Servidor base, autenticação e Docker
 
-- Estado: **PENDENTE**
+- Estado: **CONCLUÍDA**
 - Dependências: Etapa 1 **CONCLUÍDA**
 - Entrega principal: container autenticado que inicializa a fonte de dados sem depender de Qt.
 
@@ -455,12 +455,50 @@ da API na conexão e recusar, com mensagem clara, uma combinação incompatível
 
 ### Evidências
 
-- Início/data/agente: _preencher_
-- ID/tag e tamanho da imagem: _preencher_
-- Resultado dos testes 401/200/healthcheck: _preencher_
-- Prova de volume e ausência do `.env`: _preencher_
-- Comandos/gates: _preencher_
-- Observações/bloqueios: _preencher_
+- Início/data/agente: **2026-08-17 19:08 -03:00 — Codex; Etapas 0 e 1 confirmadas como
+  CONCLUÍDAS; escopo limitado ao servidor base sem Qt, configuração fail-closed, autenticação,
+  health/prontidão, composição Docker/Compose, locks reproduzíveis, lifecycle, testes e gates da
+  Etapa 2. Segredo exclusivamente injetado em runtime; Etapa 3 permanece PENDENTE.**
+- ID/tag e tamanho da imagem: **`zeny-project-handler-server:dev`, ID
+  `sha256:14c192cd354851ff253f296c062b2680d7bc962336238bffed827a1193e02e95`,
+  173.388.404 bytes, criada em 2026-08-17 22:25:50 UTC por
+  `docker compose build --no-cache`. Base resolvida como
+  `python:3.13.7-slim-bookworm@sha256:adafcc17694d715c905b4c7bebd96907a1fd5cf183395f0ebc4d3428bd22d92d`.**
+- Resultado dos testes 401/200/healthcheck: **Compose subiu e o container ficou `healthy`;
+  `GET /health/live` retornou 200 e exatamente `{"live":true}`. `GET /api/v1/session` retornou a
+  mesma resposta genérica 401, código `AUTHENTICATION_FAILED` e `WWW-Authenticate: Bearer` tanto
+  sem header quanto com senha errada; com a senha runtime retornou 200, `ready=true`, API `1.0.0`
+  e OCR `AVAILABLE`. A imagem encerrou com exit 1 nos três casos fail-closed: senha ausente, vazia
+  e igual ao placeholder. Os 48 testes direcionados de servidor/contrato passaram em 12,60 s com
+  cobertura combinada de 95,18%.**
+- Prova de volume e ausência do `.env`: **o marcador `/data/.etapa2-volume-marker`, gravado pelo
+  UID não-root 10001, permaneceu após `restart` e após `up -d --force-recreate`; o container mudou
+  de `f6fed2b4c465...` para `e6daf255b2f1...` e voltou a `healthy`. A imagem tem zero arquivo
+  `.env` em `/app`/site-packages, `PySide6` não está instalado, `pip check` não encontrou quebra,
+  `Config.Env` e o histórico não possuem `ZENY_SERVER_PASSWORD` nem o valor runtime. O tar completo
+  de 173.407.744 bytes foi pesquisado byte a byte pelo valor real sem exibi-lo e não houve
+  ocorrência; ele foi removido depois da inspeção. Logs também não contêm a senha. `.env` segue
+  ignorado e `.env-example` segue versionável.**
+- Comandos/gates: **`docker compose config --quiet`, `docker compose build --no-cache`,
+  `docker compose up -d`, provas HTTP com `Invoke-WebRequest`, três `docker run` fail-closed,
+  restart/recreate e inspeções por `docker inspect`, `docker history`, `docker image save`, `rg` e
+  execução interna. Dependências, Ruff, formato e Mypy passaram; regressão ampliada com basetemp
+  curto: 101 aprovados em 27,92 s. Gate final `cmd.exe /d /c IniciarTestes.bat` aprovado em
+  2026-08-17 19:32 -03:00: 667 testes em 114,45 s, 87,30% sobre 18.750 statements e 4.620
+  branches, limiar inalterado em 85,01%; 1.820 funções/métodos sem rank E/F; `RESULTADO FINAL:
+  APROVADO`. `git diff --check` também passou.**
+- Observações/bloqueios: **nenhum. A primeira regressão ampliada, sem `--basetemp`, excedeu o
+  limite de caminho temporário do Windows em testes de portabilidade; a repetição válida sob
+  `C:\tmp\zph-stage2-directed` aprovou os 101 testes. Foi criado o pacote
+  `zeny_project_handler_server`; a inicialização/reconciliação compartilhada saiu do bootstrap Qt
+  para `zeny_project_handler/composition.py`; o servidor não importa Qt/UI/bootstrap desktop;
+  shutdown para de aceitar/cancela jobs antes de descartar o engine; logs correlacionam requests
+  sem registrar headers. `requirements-server.lock`, `requirements-client.lock` e
+  `requirements-development.lock` separam dependências fixadas, e o lock do servidor não inclui
+  toolkit Qt. Docker Desktop precisou ser iniciado em segundo plano; o serviço Windows não pôde
+  ser aberto diretamente, sem impacto depois que o daemon ficou disponível. Encerramento em
+  2026-08-17 19:33 -03:00. Etapa 3 permanece PENDENTE, não foi iniciada e nenhum commit foi
+  criado.**
 
 ### Mensagem para um novo chat limpo do Codex
 
