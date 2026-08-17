@@ -531,7 +531,6 @@ class DocumentationPanelWidget(QWidget):
             tooltip = _finding_visibility_tooltip(
                 visible=finding.id not in self._hidden_finding_ids,
                 localized=localized,
-                result=finding.resultado,
             )
             button = self._visibility_button(
                 visible=localized and finding.id not in self._hidden_finding_ids,
@@ -591,18 +590,12 @@ class DocumentationPanelWidget(QWidget):
 
     def _sync_finding_visibility_buttons(self) -> None:
         localized_ids = {item.id for item in self._callouts}
-        results_by_id = (
-            {item.id: item.resultado for item in self._result.achados}
-            if self._result is not None
-            else {}
-        )
         for finding_id, button in self._finding_visibility_buttons.items():
             localized = finding_id in localized_ids
             visible = localized and finding_id not in self._hidden_finding_ids
             tooltip = _finding_visibility_tooltip(
                 visible=visible,
                 localized=localized,
-                result=results_by_id.get(finding_id),
             )
             button.blockSignals(True)
             button.setEnabled(localized)
@@ -906,12 +899,9 @@ def _finding_visibility_tooltip(
     *,
     visible: bool,
     localized: bool,
-    result: ResultadoConformidade | None,
 ) -> str:
     if not localized:
-        if result is not ResultadoConformidade.DIVERGENCIA:
-            return "Sem callout no PDF: somente possíveis divergências recebem marcação"
-        return "Sem localização no PDF: o achado não possui callout com geometria rastreável"
+        return "Sem localização no PDF: o resultado não possui geometria rastreável"
     return "Ocultar este achado no PDF" if visible else "Exibir este achado no PDF"
 
 

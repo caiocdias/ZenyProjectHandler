@@ -169,7 +169,8 @@ corresponde ao estado ativo. O snapshot antigo continua visível até uma reaná
 
 ## Callouts e interface
 
-`application/compliance_callouts.py` converte somente divergências localizáveis em projeções sem Qt.
+`application/compliance_callouts.py` converte resultados localizáveis em projeções sem Qt,
+independentemente de serem conformes, divergentes ou não avaliáveis.
 A geometria é escolhida, em ordem, entre fatos participantes, evidências referenciadas e alvo. Uma
 ausência real de página ou geometria não recebe coordenadas inventadas.
 
@@ -177,9 +178,9 @@ O posicionador calcula caixas próximas às âncoras, respeita as margens da fol
 de modo determinístico. Texto, largura, margens e pontas de seta usam medidas físicas para manter
 legibilidade entre formatos e orientações.
 
-`PdfGraphicsView` desenha caixa branca, borda/texto vermelhos e setas numa camada vetorial separada
-da prévia, dos tiles, dos sublinhados de elementos e do contorno temporário. Zoom e rotação não
-rasterizam o callout nem modificam o PDF.
+`PdfGraphicsView` desenha caixa branca, borda/texto coloridos conforme o resultado e setas numa
+camada vetorial separada da prévia, dos tiles, dos sublinhados de elementos e do contorno
+temporário. Zoom e rotação não rasterizam o callout nem modificam o PDF.
 
 Na aba **Conformidade**:
 

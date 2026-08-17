@@ -177,7 +177,8 @@ O domínio e a interface reconhecem `CONFORME`, `DIVERGENCIA` e `NAO_AVALIAVEL`.
 emite os dois primeiros para alvos aplicáveis e não cria achado quando alguma condição `when` falha.
 Dentro de uma regra aplicável, requisito ausente conta como não atendido; por isso o registro inclui
 fatos de guarda sempre que a ausência significa “escopo ainda não caracterizado”, e não violação.
-Somente divergências com geometria rastreável recebem callout.
+Todo resultado com geometria rastreável recebe callout, inclusive resultados conformes e não
+avaliáveis. A cor da marcação distingue o resultado sem alterar o PDF.
 
 Uma execução de conformidade guarda a assinatura da sessão semântica, da revisão das regras e do
 método. Alterar regras ou incrementar o método marca o snapshot anterior como desatualizado; a

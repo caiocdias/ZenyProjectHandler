@@ -63,6 +63,7 @@ from zeny_project_handler.application.visual_occupancy import (
 )
 from zeny_project_handler.config import DEFAULT_PDF_TILE_CACHE_MAX_BYTES
 from zeny_project_handler.domain.analysis import PropostaElemento
+from zeny_project_handler.domain.compliance import ResultadoConformidade
 from zeny_project_handler.domain.documents import DocumentoProjeto
 from zeny_project_handler.domain.enums import EstadoRevisao, TipoGeometria
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
@@ -113,6 +114,7 @@ class _GraficosCallout:
     caixa: QGraphicsRectItem
     texto: QGraphicsTextItem
     linhas: tuple[QGraphicsPathItem, ...]
+    resultado: ResultadoConformidade
 
 
 class ReviewLinkItem(QGraphicsPathItem):
@@ -383,12 +385,10 @@ class PdfGraphicsView(QGraphicsView):
     def _atualizar_realce_callouts(self) -> None:
         for callout_id, graphics in self._callout_items.items():
             selected = callout_id == self._selected_callout_id
-            color = QColor("#8e0000" if selected else "#c62828")
+            color, background = _cores_callout(graphics.resultado, selecionado=selected)
             pen = QPen(color, 3.2 if selected else 2.0)
             pen.setCosmetic(True)
             graphics.caixa.setPen(pen)
-            background = QColor("#fff3e0") if selected else QColor("white")
-            background.setAlpha(205)
             graphics.caixa.setBrush(QBrush(background))
             graphics.caixa.setZValue(4 if selected else 1)
             graphics.texto.setDefaultTextColor(color)
@@ -1405,7 +1405,7 @@ def _criar_graficos_callout(
     *,
     zoom: float,
 ) -> _GraficosCallout:
-    color = QColor("#c62828")
+    color, background = _cores_callout(callout.resultado, selecionado=False)
     box = callout.caixa_sugerida
     top_left = transformer.normalizado_para_pixel(PontoNormalizado(box.esquerda, box.topo))
     top_right = transformer.normalizado_para_pixel(PontoNormalizado(box.direita, box.topo))
@@ -1417,8 +1417,6 @@ def _criar_graficos_callout(
     pen = QPen(color, 2)
     pen.setCosmetic(True)
     rectangle.setPen(pen)
-    background = QColor("white")
-    background.setAlpha(205)
     rectangle.setBrush(QBrush(background))
     rectangle.setData(0, str(callout.id))
     rectangle.setData(2, "compliance_callout")
@@ -1471,7 +1469,29 @@ def _criar_graficos_callout(
         line.setCursor(Qt.CursorShape.PointingHandCursor)
         line.setToolTip(tooltip)
         lines.append(line)
-    return _GraficosCallout(rectangle, text_item, tuple(lines))
+    return _GraficosCallout(rectangle, text_item, tuple(lines), callout.resultado)
+
+
+def _cores_callout(
+    resultado: ResultadoConformidade,
+    *,
+    selecionado: bool,
+) -> tuple[QColor, QColor]:
+    foregrounds = {
+        ResultadoConformidade.DIVERGENCIA: ("#c62828", "#8e0000"),
+        ResultadoConformidade.CONFORME: ("#2e7d32", "#1b5e20"),
+        ResultadoConformidade.NAO_AVALIAVEL: ("#8d6e00", "#5f4b00"),
+    }
+    selected_backgrounds = {
+        ResultadoConformidade.DIVERGENCIA: "#fff3e0",
+        ResultadoConformidade.CONFORME: "#e8f5e9",
+        ResultadoConformidade.NAO_AVALIAVEL: "#fff8e1",
+    }
+    regular, highlighted = foregrounds[resultado]
+    foreground = QColor(highlighted if selecionado else regular)
+    background = QColor(selected_backgrounds[resultado] if selecionado else "white")
+    background.setAlpha(205)
+    return foreground, background
 
 
 def _caminho_seta_aberta(

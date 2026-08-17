@@ -175,6 +175,38 @@ def test_finding_eyes_batch_actions_sorting_and_missing_geometry_are_independent
     assert tuple(viewer.overlays) == overlay_state
 
 
+def test_conforming_finding_with_geometry_has_callout_and_visibility_control(
+    qtbot: QtBot,
+) -> None:
+    panel, viewer, session, _second_session, execution, analysis = _panel(qtbot)
+    finding = execution.achados[0]
+    conforming = replace(
+        finding,
+        resultado=ResultadoConformidade.CONFORME,
+        avaliacoes_condicoes=tuple(
+            replace(item, resultado=ResultadoCondicaoConformidade.ATENDE)
+            for item in finding.avaliacoes_condicoes
+        ),
+    )
+    analysis.latest[session.projeto.id] = replace(
+        execution,
+        achados=(conforming, *execution.achados[1:]),
+    )
+
+    panel.abrir_projeto(session.projeto.id)
+
+    tree = panel.findChild(QTreeWidget, "complianceFindingsTree")
+    assert tree is not None
+    row = _finding_row(tree, conforming.id)
+    button = _visibility_button(tree, row)
+    callout = next(item for item in panel._callouts if item.id == conforming.id)
+    assert row.text(8) == "Localizado no PDF"
+    assert button.isEnabled()
+    assert button.text() == "Ocultar"
+    assert callout.resultado is ResultadoConformidade.CONFORME
+    assert callout in viewer.callouts
+
+
 def test_showing_callout_without_selecting_row_navigates_to_its_page_and_selects_it(
     qtbot: QtBot,
 ) -> None:

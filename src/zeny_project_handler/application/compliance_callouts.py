@@ -1,4 +1,4 @@
-"""Projeção determinística de divergências localizáveis para callouts do visualizador."""
+"""Projeção determinística de resultados localizáveis para callouts do visualizador."""
 
 from __future__ import annotations
 
@@ -120,7 +120,7 @@ class AncoraCallout:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class CalloutConformidade:
-    """Projeção sem Qt de uma divergência localizável."""
+    """Projeção sem Qt de um resultado de conformidade localizável."""
 
     id: UUID
     pagina_id: UUID
@@ -128,6 +128,7 @@ class CalloutConformidade:
     caixa_sugerida: RetanguloCallout
     ancoras: tuple[AncoraCallout, ...]
     tamanho_fonte_pontos: Decimal = Decimal("10.5")
+    resultado: ResultadoConformidade = ResultadoConformidade.DIVERGENCIA
 
     def __post_init__(self) -> None:
         anchors = tuple(self.ancoras)
@@ -194,7 +195,7 @@ def projetar_callouts_conformidade(
     textos_apresentacao: Mapping[UUID, str] | None = None,
     mapas_ocupacao_visual: Mapping[UUID, MapaOcupacaoVisual] | None = None,
 ) -> tuple[CalloutConformidade, ...]:
-    """Converta somente divergências com geometria rastreável em callouts estáveis."""
+    """Converta resultados com geometria rastreável em callouts estáveis."""
     pages_by_id = {item.id: item for item in paginas}
     facts_by_id = {item.id: item for item in execucao.fatos}
     evidence_by_id = {item.id: item for item in evidencias}
@@ -205,10 +206,7 @@ def projetar_callouts_conformidade(
         paginas=pages_by_id,
     )
     requests_by_page: dict[UUID, list[_PedidoCallout]] = defaultdict(list)
-    divergent = tuple(
-        item for item in execucao.achados if item.resultado is ResultadoConformidade.DIVERGENCIA
-    )
-    for finding in divergent:
+    for finding in execucao.achados:
         target = targets_by_id[finding.alvo_id]
         traceable = _geometrias_do_achado(
             finding,
@@ -267,6 +265,7 @@ def projetar_callouts_conformidade(
             caixa_sugerida=item.caixa,
             ancoras=item.pedido.ancoras,
             tamanho_fonte_pontos=Decimal(str(item.tamanho_fonte_pontos)),
+            resultado=item.pedido.finding.resultado,
         )
         for item in positioned
     )

@@ -427,6 +427,49 @@ def test_projection_falls_back_to_referenced_evidence_then_target_and_omits_unlo
     assert projetar_callouts_conformidade(unlocated, evidencias=(), paginas=(page,)) == ()
 
 
+def test_projection_keeps_all_traceable_results_regardless_of_compliance_status() -> None:
+    page = _page("all-results", width=Decimal("595"), height=Decimal("842"))
+    geometry = GeometriaDocumento.ponto(page.id, _point("0.5", "0.5"))
+    execution, evidence = _execution((page,), fact_geometries=(geometry,))
+    divergence = execution.achados[0]
+    conforming = replace(
+        divergence,
+        id=_id("conforming-finding"),
+        regra_id="fixture.conforme",
+        resultado=ResultadoConformidade.CONFORME,
+        avaliacoes_condicoes=tuple(
+            replace(item, resultado=ResultadoCondicaoConformidade.ATENDE)
+            for item in divergence.avaliacoes_condicoes
+        ),
+    )
+    not_evaluable = replace(
+        divergence,
+        id=_id("not-evaluable-finding"),
+        regra_id="fixture.nao-avaliavel",
+        resultado=ResultadoConformidade.NAO_AVALIAVEL,
+        avaliacoes_condicoes=tuple(
+            replace(item, resultado=ResultadoCondicaoConformidade.DESCONHECIDO)
+            for item in divergence.avaliacoes_condicoes
+        ),
+    )
+    execution = replace(
+        execution,
+        achados=(divergence, conforming, not_evaluable),
+    )
+
+    projected = projetar_callouts_conformidade(
+        execution,
+        evidencias=evidence,
+        paginas=(page,),
+    )
+
+    assert {item.id: item.resultado for item in projected} == {
+        divergence.id: ResultadoConformidade.DIVERGENCIA,
+        conforming.id: ResultadoConformidade.CONFORME,
+        not_evaluable.id: ResultadoConformidade.NAO_AVALIAVEL,
+    }
+
+
 def test_projection_ignores_context_fact_geometry_before_decisive_fact_evidence() -> None:
     context_page = _page("contexto", width=Decimal("595"), height=Decimal("842"))
     decisive_page = _page(

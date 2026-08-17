@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -136,6 +137,46 @@ def test_callout_box_and_arrow_emit_only_user_selection_and_are_highlighted(
         )
     assert selected == [str(callout.id), str(callout.id)]
     assert proposals == []
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("result", "regular_color", "selected_color", "selected_background"),
+    (
+        (ResultadoConformidade.DIVERGENCIA, "#c62828", "#8e0000", "#fff3e0"),
+        (ResultadoConformidade.CONFORME, "#2e7d32", "#1b5e20", "#e8f5e9"),
+        (ResultadoConformidade.NAO_AVALIAVEL, "#8d6e00", "#5f4b00", "#fff8e1"),
+    ),
+)
+def test_callout_color_identifies_compliance_result(
+    qtbot: QtBot,
+    tmp_path: Path,
+    result: ResultadoConformidade,
+    regular_color: str,
+    selected_color: str,
+    selected_background: str,
+) -> None:
+    source = create_callout_formats_pdf(tmp_path / f"cor-{result.value}.pdf")
+    viewer = _viewer(qtbot, dpi=144, budget=TEST_RENDER_BUDGET)
+    assert viewer.carregar_pdf(source)
+    _wait_preview(qtbot, viewer)
+    assert viewer.inspecao is not None
+    page = viewer.inspecao.documento.paginas[0]
+    callout = replace(
+        _callout(page.id, float(page.largura_pontos), float(page.altura_pontos), result.value),
+        resultado=result,
+    )
+
+    viewer.definir_callouts_conformidade((callout,))
+
+    graphics = viewer.view._callout_items[str(callout.id)]
+    assert graphics.caixa.pen().color() == QColor(regular_color)
+    assert graphics.texto.defaultTextColor() == QColor(regular_color)
+
+    viewer.selecionar_callout(str(callout.id))
+    assert graphics.caixa.pen().color() == QColor(selected_color)
+    assert graphics.texto.defaultTextColor() == QColor(selected_color)
+    assert graphics.caixa.brush().color().name() == QColor(selected_background).name()
 
 
 @pytest.mark.integration
