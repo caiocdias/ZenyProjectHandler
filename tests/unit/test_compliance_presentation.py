@@ -3,11 +3,19 @@ from __future__ import annotations
 from decimal import Decimal
 from uuid import uuid4
 
+from zeny_project_handler.domain.catalog import JsonPrimitive
 from zeny_project_handler.domain.compliance import (
+    AchadoConformidade,
     AlvoConformidade,
+    AvaliacaoCondicaoConformidade,
     CondicaoConformidade,
+    FonteNormativa,
+    GrupoCondicaoConformidade,
     OperadorCondicao,
     QuantificadorCondicao,
+    ResultadoCondicaoConformidade,
+    ResultadoConformidade,
+    SeveridadeConformidade,
     TipoEscopoConformidade,
 )
 from zeny_project_handler.ui.compliance_presentation import (
@@ -15,6 +23,7 @@ from zeny_project_handler.ui.compliance_presentation import (
     formatar_condicao,
     formatar_operador,
     formatar_quantificador,
+    formatar_texto_achado,
     formatar_valor_fato,
     rotulo_fato_conformidade,
 )
@@ -87,4 +96,84 @@ def test_targets_receive_natural_scope_labels_without_uppercase_enumerations() -
         "Página 2 · Documento desenho.pdf",
         "Poste P2",
         "Estrutura MT CE1",
+    )
+
+
+def test_callout_explains_missing_boolean_requirement_in_project_language() -> None:
+    target = AlvoConformidade(
+        id=uuid4(),
+        tipo=TipoEscopoConformidade.REGIAO,
+        rotulo="P2",
+    )
+    finding = _finding(
+        target,
+        title="Chave fusível no transformador",
+        fact="regiao.chave_fusivel_presente",
+        operator=OperadorCondicao.IGUAL,
+        observed=(False,),
+        expected=(True,),
+    )
+
+    assert formatar_texto_achado(finding, target) == (
+        "Poste P2 - Chave fusível no transformador. "
+        "Requisito não atendido: presença de chave fusível."
+    )
+
+
+def test_callout_explains_numeric_limit_without_operator_or_quantifier_jargon() -> None:
+    target = AlvoConformidade(
+        id=uuid4(),
+        tipo=TipoEscopoConformidade.REGIAO,
+        rotulo="P3",
+    )
+    finding = _finding(
+        target,
+        title="Poste urbano novo com altura mínima",
+        fact="regiao.poste_instalar_altura_m",
+        operator=OperadorCondicao.MAIOR_OU_IGUAL,
+        observed=(Decimal("10"),),
+        expected=(11,),
+    )
+
+    text = formatar_texto_achado(finding, target)
+
+    assert text == (
+        "Poste P3 - Poste urbano novo com altura mínima. "
+        "Altura do poste a instalar: encontrado 10 m; mínimo exigido 11 m."
+    )
+    assert "MAIOR_OU_IGUAL" not in text
+    assert "todos os valores" not in text
+
+
+def _finding(
+    target: AlvoConformidade,
+    *,
+    title: str,
+    fact: str,
+    operator: OperadorCondicao,
+    observed: tuple[JsonPrimitive, ...],
+    expected: tuple[JsonPrimitive, ...],
+) -> AchadoConformidade:
+    evaluation = AvaliacaoCondicaoConformidade(
+        grupo=GrupoCondicaoConformidade.REQUISITO,
+        indice=0,
+        chave_fato=fact,
+        operador=operator,
+        quantificador=QuantificadorCondicao.TODOS,
+        valores_esperados=expected,
+        valores_observados=observed,
+        fato_ids=(),
+        resultado=ResultadoCondicaoConformidade.NAO_ATENDE,
+    )
+    return AchadoConformidade(
+        id=uuid4(),
+        regra_id="fixture.callout-natural",
+        alvo_id=target.id,
+        resultado=ResultadoConformidade.DIVERGENCIA,
+        severidade=SeveridadeConformidade.ERRO,
+        titulo=title,
+        mensagem="Mensagem técnica que não deve ser necessária para entender o callout.",
+        fonte=FonteNormativa(documento="Norma", revisao="1", item="1"),
+        versao_regras="1",
+        avaliacoes_condicoes=(evaluation,),
     )

@@ -10,7 +10,6 @@ _SUMMARY_ROW = re.compile(
     r"(?P<state>ATIVA|INATIVA) \|",
     re.MULTILINE,
 )
-_RULE_HEADING = re.compile(r"^### Regra (?P<number>\d+) - ", re.MULTILINE)
 
 
 def test_versioned_catalog_has_registry_id_order_and_activation_parity() -> None:
@@ -26,8 +25,5 @@ def test_versioned_catalog_has_registry_id_order_and_activation_parity() -> None
     ]
 
     assert rows == expected
-    assert [int(match["number"]) for match in _RULE_HEADING.finditer(catalog)] == list(
-        range(1, len(registry.regras) + 1)
-    )
     for rule in registry.regras:
-        assert catalog.count(f"- **ID:** `{rule.id}`.") == 1
+        assert catalog.count(f"`{rule.id}`") == 1

@@ -1,580 +1,263 @@
-# Especificação funcional — domínio do projeto de rede
+# Especificação funcional
 
-## Objetivo e escopo
+Este documento descreve o comportamento vigente do Zeny Project Handler. Decisões de arquitetura e
+seu histórico ficam nos [ADRs](adr); detalhes exclusivos do motor de conformidade ficam em
+[arquitetura-conformidade.md](arquitetura-conformidade.md).
 
-O domínio representa os elementos confirmados de um projeto de expansão da rede de distribuição da CEMIG e mantém separadas as evidências e propostas produzidas por análises automáticas. As classes principais continuam sendo `Poste`, `EstruturaMt`, `EstruturaBt`, `Cabo` e `Equipamento`.
+## Escopo do produto
 
-O diagrama completo está em [`modelo-entidades.mmd`](./modelo-entidades.mmd). A implementação correspondente está em `src/zeny_project_handler/domain` e não depende de Qt, banco de dados, leitor de PDF ou biblioteca de visão computacional.
+O aplicativo desktop mantém projetos de expansão da rede de distribuição, importa referências a
+folhas PDF, extrai e interpreta evidências do desenho, permite revisão humana e avalia regras de
+conformidade. Todas as conclusões automáticas conservam a versão do método, a origem e a evidência
+que as sustentam.
 
-## Documento e coordenadas
+Estado versionado relevante:
 
-- `PaginaDocumento` também guarda as seis componentes das matrizes públicas PDF -> página e de
-  rotação intrínseca. Isso preserva a transformação exata mesmo com origem deslocada, `CropBox`
-  diferente de `MediaBox` ou página girada.
-- A coordenada normalizada canônica tem origem no canto superior esquerdo da página visual. Zoom,
-  DPI e rotação adicional são estados de apresentação e não alteram a geometria salva.
+| Componente | Versão atual |
+|---|---|
+| Pacote Python | `0.1.0` |
+| Catálogo técnico | `2` |
+| Registro de interpretação | `1.3.0` |
+| Registro de conformidade distribuído | `cemig-normas-distribuicao-2025.6` |
+| Método de conformidade | `6` |
+| Migração SQLite mais recente | `0007_compliance_executions` |
 
-- `Projeto` contém zero ou mais `DocumentoProjeto`; o documento preserva nome, SHA-256, tamanho,
-  versão PDF, produtor e páginas.
-- `PaginaDocumento` preserva dimensões, rotação, `MediaBox` e `CropBox`.
-- `GeometriaDocumento` referencia uma página e representa ponto, caixa, polilinha ou polígono em
-  coordenadas normalizadas de 0 a 1.
-- Pontos e caixas devem permanecer dentro da página. Caixas têm área positiva, polilinhas possuem
-  ao menos dois pontos e polígonos ao menos três pontos distintos.
-- `CoordenadaCampo` preserva coordenadas georreferenciadas separadamente da posição gráfica no
-  PDF. O sistema de referência e a zona permanecem explícitos; o programa não os presume.
-- `Cabo` usa polilinha estruturada e pode registrar um percurso ordenado por pontos de rede, além de
-  postes usados apenas como apoio intermediário.
+## Modelo de domínio
 
-## Elementos confirmados e relações
+`Projeto` é o agregado persistido. Ele reúne:
 
-- Todo `ElementoProjeto` possui identificador, item do catálogo, `SituacaoProjeto`, geometria opcional e lista de fotos.
-- `MetadadosProjeto` registra os campos técnicos comuns do desenho: Nota de Serviço, circuito,
-  município, bairro, tipo de serviço, escala, formato, folha, data, impacto ambiental e dispositivo
-  de seccionamento. A Nota de Serviço, quando conhecida, possui 10 dígitos.
-- `ContatoSolicitante` mantém nome e telefone em um objeto separado, classificado como dado
-  sensível e proibido em logs e manifestos versionados.
-- `SituacaoProjeto` descreve exclusivamente a obra: `EXISTENTE`, `INSTALAR` ou `REMOVER`.
-- `Poste` suporta estruturas MT/BT, equipamentos e pontos de rede.
-- `PontoRede` representa o papel elétrico `POSTE`, `DERIVACAO`, `CONEXAO`, `ENTREGA`,
-  `CAIXA_PASSAGEM`, `TRANSICAO` ou `OUTRO`. Somente o primeiro exige um poste; os demais podem
-  existir fora dele e possuir geometria e coordenada próprias.
-- `EstruturaMt` só fixa pontos MT; `EstruturaBt` só fixa pontos BT. O ponto precisa estar no mesmo poste da estrutura.
-- Cada `Cabo` conecta duas extremidades distintas do mesmo projeto e pode registrar pontos
-  intermediários ordenados. Derivações devem possuir seu próprio ponto para preservar a topologia
-  confirmada do projeto.
-- `Equipamento` possui `TerminalEquipamento`. Transformadores, chaves e outros dispositivos representam continuidade ou seccionamento por `ConexaoInternaEquipamento`.
-- Terminais conectados a pontos devem possuir o mesmo nível de rede e as mesmas opções catalogadas de tensão e fases.
-- `VinculoObra` associa uma retirada a uma instalação da mesma categoria. `REALOCACAO` também
-  exige o mesmo tipo catalogado; `SUBSTITUICAO` permite mudança de tipo.
-- Fotos usam caminhos relativos internos ao projeto; caminhos absolutos ou com `..` são inválidos.
+- documentos e páginas na ordem de leitura escolhida;
+- elementos confirmados: `Poste`, `EstruturaMt`, `EstruturaBt`, `Cabo` e `Equipamento`;
+- relações confirmadas entre elementos;
+- pontos de rede, terminais e conexões internas quando disponíveis;
+- registros de revisão manual e fotos gerenciadas associadas a elementos.
 
-As regiões do PDF são projeções espaciais dos resultados, não uma nova fonte de dados. Elas agrupam
-elementos e vínculos próximos na mesma folha sem produzir nós ou arestas.
+Cada elemento possui ID, item do catálogo quando classificado, situação `EXISTENTE`, `INSTALAR` ou
+`REMOVER`, geometria opcional e proveniência. Referências internas são validadas pelo agregado: não
+podem apontar para outro projeto, documento ou página.
 
-## Análise, propostas e revisão
+O diagrama resumido está em [modelo-entidades.mmd](modelo-entidades.mmd). O domínio fica em
+`src/zeny_project_handler/domain` e não depende de Qt, SQLAlchemy, PyMuPDF ou Tesseract.
 
-Resultados automáticos alimentam diretamente as etapas seguintes:
+## Projetos e documentos
 
-1. `ExecucaoAnalise` registra método, versão, parâmetros, duração, estado, eventual erro fatal e
-   diagnósticos de falhas parciais por extrator, página e objeto PDF.
-2. `EvidenciaDocumento` registra página, geometria, tipo (`TEXTO`, `VETOR`, `IMAGEM` ou `OCR`),
-   método, versão, parâmetros, atributos extraídos e conteúdo bruto.
-3. `OrigemObjetoPdf` diferencia conteúdo de página, anotação, appearance stream de anotação e Form
-   XObject, preservando número do objeto, índice, subtipo e nome do recurso quando disponíveis.
-4. `ArtefatoExtraido` referencia binários derivados por caminho relativo, SHA-256, MIME type e
-   tamanho. O PDF original continua sendo a fonte imutável.
-5. `PropostaElemento` e `PropostaRelacao` referenciam suas evidências e podem registrar confiança e
-   justificativa. Uma proposta de elemento também preserva o código observado e atributos sugeridos,
-   mesmo quando nenhum item do catálogo corresponde.
-6. Resultados catalogados são promovidos automaticamente ao projeto. `DecisaoRevisao` preserva esse
-   aceite automático e continua registrando correções excepcionais quando houver intervenção humana.
-7. `ServicoRevisaoHumana` carrega a análise como uma coleção de regiões de ocorrência. Cada região
-   reúne os elementos próximos, os vínculos semânticos, a página, a geometria envolvente e eventual
-   coordenada encontrada em texto nativo ou OCR.
-8. `RelacaoConfirmada` preserva tipo e extremidades já confirmadas. Elementos e relações criados
-   manualmente registram autor, data e motivo opcional em `RegistroRevisaoManual`.
-9. O PDF exibe um sublinhado clicável por proposta de elemento. Para cabos, o sublinhado acompanha
-   a caixa e a inclinação do texto classificador, sem se estender pelo traçado do vão. O clique traz
-   a aba lateral de resultados para frente, abre a folha correta e seleciona o item dentro de sua
-   região. A lista apresenta coordenada, acontecimentos de instalação/retirada/existência, catálogo
-   e vínculos sem exigir confirmação item a item.
+- Um projeto é criado a partir de uma NS normalizada e pode ter a NS alterada depois.
+- Um ou vários PDFs podem ser adicionados na mesma seleção.
+- Conteúdo duplicado, identificado por hash, não pode entrar duas vezes no mesmo projeto.
+- A ordem de leitura é uma sequência de páginas persistida e pode intercalar páginas de PDFs
+  diferentes.
+- Remover um PDF elimina do projeto as páginas e os resultados dependentes, mas preserva o arquivo
+  externo original.
+- Excluir o projeto remove seus dados e arquivos pertencentes à área gerenciada, também preservando
+  origens externas.
 
-`EstadoRevisao` é independente de `SituacaoProjeto`. Por exemplo, uma proposta ainda não revisada pode indicar corretamente que o símbolo representa um poste a remover.
+O fluxo normal não copia nem altera o PDF escolhido. Ele persiste a referência canônica, tamanho,
+SHA-256, metadados e páginas. Um PDF importado de pacote pode apontar para a cópia publicada na área
+gerenciada.
 
-## Catálogo técnico configurável
+## PDFs protegidos
 
-Os valores da planilha são itens reutilizáveis e não enums da linguagem. O seed inicial, distribuído como JSON versionado, foi extraído de `NOMENCLATURAS.xlsx`, aba `Planilha1`, SHA-256 `4ba9bd5cb284f6d18c3ee000a6064061d0d814bd23ec29d8630c2b15e58f8867`.
-O catálogo publicado v2 mantém essa origem como base e incorpora as correções de nomenclatura
-recebidas em 27/07/2026.
+PDFs protegidos solicitam senha individualmente. Cada arquivo admite até três tentativas; cancelar
+pula apenas o arquivo atual numa seleção múltipla.
 
-| Categoria | Linhas preservadas | Itens ativos |
-|---|---:|---:|
-| Postes | 38 | 38 |
-| Estruturas MT | 51 | 50 |
-| Estruturas BT | 13 | 13 |
-| Cabos | 72 | 72 |
-| Equipamentos | 25 | 25 |
+A senha correta é indexada pela identidade verificável da origem e permanece apenas em memória.
+Ela é descartada ao trocar ou limpar o conjunto visual, fechar o aplicativo ou quando tamanho,
+modificação ou hash da origem deixam de corresponder. Senhas não entram no banco, cache, logs,
+pacotes, backups nem estado da interface.
 
-O seed contém 199 itens, dos quais 198 estão ativos. Os valores controlados são organizados em cinco grupos editáveis:
+## Visualização
 
-- formato de poste;
-- configuração de fases;
-- tecnologia de rede;
-- nível de tensão;
-- classe de equipamento.
+O visualizador central oferece paginação, zoom, rotação e navegação entre as folhas do projeto. Uma
+prévia integral limitada é complementada por tiles de detalhe solicitados conforme o viewport. A
+fila antiga é cancelada quando página, zoom, rotação, DPR ou origem mudam.
 
-As expressões textuais de cabos aceitos pelas estruturas foram normalizadas em 332 relações explícitas `CompatibilidadeEstruturaCabo`, preservando também a expressão original e a linha de origem.
+Os padrões são 600 DPI como teto de detalhe, 8.000.000 pixels e 64 MiB por solicitação e 128 MiB de
+cache visual. Esses limites são configuráveis pelas variáveis descritas no README e não alteram o
+pipeline de análise.
 
-### Tratamentos de importação
+Sublinhos de elementos, contornos temporários e callouts de conformidade são camadas vetoriais
+independentes. Nenhuma delas é escrita no PDF original.
 
-- As duas ocorrências idênticas de `CEM4`, nas linhas 40 e 46, são preservadas. A primeira fica ativa, a segunda inativa e um `AvisoImportacao` registra a resolução.
-- O valor `-` em fator de condenação vira `nulo`, nunca zero.
-- Códigos originais de estruturas, cabos e equipamentos são preservados sem alteração.
-- Postes, que não possuíam código, recebem código determinístico formado por altura, resistência e formato.
-- IDs do seed são determinísticos; importar novamente a mesma origem produz as mesmas identidades.
+## Extração documental
 
-## Versionamento e imutabilidade
+`PyMuPdfDocumentAnalyzer` produz execuções e evidências auditáveis a partir de:
 
-- O formato JSON atual usa `schema_version = 2`, aceita leitura do schema 1 e rejeita versões
-  desconhecidas.
-- O catálogo inicial está `PUBLICADO` e é imutável.
-- Uma edição começa com `criar_rascunho`, que gera nova identidade e incrementa a versão sem alterar a anterior.
-- Apenas rascunhos aceitam troca de itens.
-- Códigos ativos são únicos dentro de cada categoria. Duplicatas inativas podem permanecer para auditoria e leitura histórica.
-- Projetos referenciam uma versão específica do catálogo. Itens desativados não desaparecem de projetos antigos.
-- Há uma regra de apresentação canônica para cada combinação das cinco categorias e das três
-  situações de obra, totalizando 15 regras.
-- Assinaturas de reconhecimento visual são separadas das regras de apresentação e podem ser
-  múltiplas por situação, com categoria opcional, tolerância de cor, padrão de traço opcional,
-  prioridade e origem. O seed contém cinco assinaturas iniciais extraídas de projetos observados
-  localmente: preto para
-  existente, dois verdes para instalar e dois vermelhos para remover. Traço não é usado isoladamente
-  para inferir situação.
+- texto nativo, com fonte, tamanho, rotação e geometria;
+- desenhos vetoriais, comandos e cores;
+- imagens incorporadas;
+- anotações e appearance streams;
+- Form XObjects e grupos de conteúdo opcionais;
+- OCR local, quando a página ou uma região precisa de reconhecimento raster.
 
-Valores observados nas amostras, mas ausentes da planilha, não são incluídos silenciosamente no seed.
-Entre eles estão `S3N`, religador `560A`, `3#240(240) AL`, `ABx1-150` e `ABCN-120(70)`. A análise
-mantém esses códigos como propostas não mapeadas até que o usuário publique uma versão de catálogo
-que os reconheça.
+Coordenadas são normalizadas no espaço visual da página com a rotação intrínseca aplicada. Objetos
+sem geometria exata são identificados como aproximação e continuam rastreáveis por seus metadados
+PDF.
 
-## Validações funcionais implementadas
+Falhas localizadas viram diagnósticos e não descartam recursos extraídos com sucesso. O resultado
+pode ser reconstruído pelo hash e pela assinatura real do extrator. O cache JSON em
+`cache/analysis` é derivado e descartável.
 
-1. IDs são únicos dentro de cada agregado.
-2. Datas de domínio possuem fuso horário.
-3. Itens apontam apenas para opções do grupo correto.
-4. Compatibilidades ligam estruturas e cabos ativos, sem pares duplicados.
-5. Elementos de projeto apontam para itens da categoria correta e para a versão de catálogo usada pelo projeto.
-6. Geometrias apontam para páginas pertencentes ao projeto.
-7. Estruturas, pontos, equipamentos, terminais, percursos de cabos, vínculos de obra e conexões
-   internas não podem referenciar entidades externas ao agregado.
-8. Catálogos publicados não podem ser alterados silenciosamente.
-9. Vínculos de realocação e substituição sempre ligam uma retirada a uma instalação da mesma
-   categoria; realocações preservam o tipo.
-10. Catálogos schema v2 possuem assinaturas visuais para todas as situações e não aceitam
-    assinaturas duplicadas.
-11. Serialização seguida de desserialização preserva integralmente o domínio.
+Comentários de revisão PDF são preservados para auditoria, mas não originam elementos, regiões ou
+fatos técnicos. Portadores identificados como `AutoCAD SHX Text` permanecem conteúdo do desenho e
+não são filtrados como comentários.
 
-## Ingestão e visualização PDF
+## OCR
 
-- `LeitorPdfPort` isola a aplicação da biblioteca concreta. `PyMuPdfReader` é o adaptador inicial e
-  abre a origem somente para leitura.
-- A inspeção calcula SHA-256, tamanho, data de modificação, versão/produtor e dimensões das páginas.
-  O hash e os metadados do arquivo são conferidos novamente antes do commit de uma importação.
-- Cada página recebe inventários independentes de fragmentos de texto, caminhos vetoriais, imagens
-  incorporadas, anotações, referências de appearance streams e Form XObjects. O documento também
-  registra Optional Content Groups.
-- Um problema localizado produz `DiagnosticoPdf` com página e `xref` quando disponível. Texto,
-  vetores, imagens e renderização válidos continuam utilizáveis.
-- Miniaturas, páginas e recortes são renderizados em RGB. O teto visual padrão é 600 DPI e pode ser
-  configurado por `ZENY_PDF_RENDER_DPI` entre 36 e 600. `ZENY_PDF_RENDER_MAX_PIXELS` e
-  `ZENY_PDF_RENDER_MAX_BYTES` limitam cada solicitação antes da alocação: pranchas grandes usam
-  prévia reduzida e clips pequenos ainda podem usar o teto de detalhe.
-- A prévia é composta com tiles detalhados assíncronos do viewport e de uma margem. Solicitações
-  carregam geração, identidade verificada do documento, página, rotação, zoom, DPR e região; uma
-  resposta divergente ou obsoleta não altera a cena. Cancelamento ocorre entre tiles, sem bloquear
-  navegação, e nenhuma conversão para `QPixmap` ou mutação gráfica sai da thread da interface.
-- O cache visual é LRU limitado por bytes por `ZENY_PDF_TILE_CACHE_MAX_BYTES` (128 MiB por padrão).
-  A chave usa UUID, SHA-256, tamanho e `mtime` da sessão verificada, além de toda identidade visual;
-  trocar o conjunto de documentos ou detectar alteração da origem limpa o cache.
-- `TransformadorCoordenadasPagina` converte de forma reversível entre espaço PDF, normalizado,
-  pixels e cena, incluindo origem/dimensões de clips. A interface reaplica sobreposições após
-  rotação usando essa transformação; tiles permanecem sob overlays e links de revisão clicáveis.
-- A abertura aceita um ou vários PDFs. Todo PDF selecionado no fluxo do projeto é importado
-  imediatamente como parte dele, sem uma ação separada de união. A interface confirma cada arquivo
-  em sua própria transação para preservar os anteriores quando um item posterior é cancelado ou
-  falha. A lista de folhas permite arrastar qualquer página ou usar **Subir** e **Descer**; essa
-  sequência persistida define a paginação contínua e pode intercalar páginas de arquivos diferentes.
-  Nenhum PDF original é concatenado ou modificado.
-- A origem local é registrada em `document_sources`, fora do payload de domínio. Projeto,
-  documento e referência de cada arquivo são gravados na mesma transação; entrada inválida,
-  corrompida, duplicada ou alterada não deixa aquele arquivo parcialmente importado.
-- PDFs protegidos usam um provedor estritamente em memória, indexado por SHA-256, tamanho e `mtime`.
-  O diálogo é mascarado, diferencia ausência de senha de senha incorreta e aceita no máximo três
-  senhas digitadas por documento. Cancelar pula somente o item atual na importação múltipla. Troca de
-  identidade, limpeza, fechamento e reinício invalidam a reutilização.
-- Visualização e análise reutilizam a credencial somente durante a sessão. A análise valida todos os
-  documentos na thread principal antes de criar o worker; nenhuma thread de trabalho abre modal.
-  Senhas não integram entidades, parâmetros persistidos, cache, log, manifesto, backup, `QSettings`
-  ou exceções.
-- O inventário é derivado e recriável. `AnalisadorDocumentoPort` normaliza esse material como
-  `EvidenciaDocumento` sem depender da interface.
+O Tesseract é um adaptador opcional e local. Sua assinatura inclui a versão real do executável,
+idiomas selecionados, hashes dos arquivos `traineddata`, perfis, pré-processamento e parâmetros de
+reconhecimento. Instalações equivalentes em caminhos diferentes produzem a mesma identidade.
 
-## Extração de evidências
+O analisador decide quando aplicar OCR geral ou localizado. Há tratamentos específicos para
+identificadores operacionais `P<n>` e `V<n>-<n>`, caixas de nomenclatura, rótulos inclinados de rede,
+comprimentos e símbolos vetoriais. A falta ou falha do Tesseract desativa somente o OCR e gera um
+diagnóstico; texto e recursos nativos continuam disponíveis.
 
-- `PyMuPdfDocumentAnalyzer` é o primeiro adaptador do contrato. Texto é extraído por span com quad,
-  fonte, tamanho, cor, opacidade e rotação; vetores preservam comandos e estilo; imagens preservam
-  ocorrência visual, transformação, hash e recurso.
-- Anotações e suas aparências são fontes explícitas. O analisador percorre referências indiretas e
-  Form XObjects com limite de profundidade e proteção contra ciclos, incluindo imagens que não estão
-  no primeiro nível de recursos da página.
-- As geometrias são salvas no espaço normalizado canônico da página. Recursos internos de uma
-  aparência que não expõem transformação própria usam os limites da anotação e recebem
-  `geometria_aproximada = true`.
-- Cada extrator falha isoladamente. `DiagnosticoAnalise` é persistido junto da execução sem descartar
-  texto, vetores, imagens ou anotações válidos obtidos por outros extratores.
-- OCR permanece desacoplado por `MotorOcrPort`. O adaptador local Tesseract é descoberto no `PATH`,
-  no local padrão do Windows ou por `ZENY_TESSERACT_PATH`; nenhum documento é enviado à rede.
-  A inicialização só o habilita quando `tesseract --list-langs` confirma `por`, selecionando
-  `por+eng` quando ambos existem. Dados portugueses provisionados ficam em pasta gravável do
-  aplicativo ou em `ZENY_TESSDATA_DIR`, com checksum fixado; `TESSDATA_PREFIX` é restrito aos
-  subprocessos necessários.
-- O OCR é acionado quando há menos de 20 caracteres nativos, quando uma ocorrência raster ocupa ao
-  menos 10% da página ou quando há pelo menos 1.000 caminhos vetoriais. O terceiro caso cobre textos
-  plotados como contornos pelo AutoCAD mesmo quando o carimbo ainda contém texto nativo pesquisável.
-- Páginas vetoriais densas são reconhecidas em nove blocos sobrepostos a 450 DPI. Marcadores azuis
-  contidos em círculos vetoriais vermelhos recebem uma passagem localizada a 1200 DPI, com isolamento
-  de cor e correção da inclinação antes da leitura do identificador operacional. Glifos azuis
-  convertidos em contornos são agrupados por geometria e reconhecidos como `P<n>` ou `V<n>-<n>`,
-  inclusive quando inclinados. Identificadores reconhecidos formam regiões revisáveis mesmo quando
-  ainda não possuem um elemento associado.
-- Caixas vetoriais verdes próximas ao marcador são segmentadas individualmente, têm a borda e as
-  outras cores removidas e recebem OCR de linha única a 1200 DPI. A leitura localizada substitui o
-  resultado geral quando ambos ocupam a mesma posição. Na ausência dessas caixas, o bloco escuro
-  imediatamente abaixo do marcador recebe OCR localizado em modo uniforme.
-- Caixas lineares verdes que acompanham a rede são retificadas por transformação afim e recebem OCR
-  a 1800 DPI com alfabeto técnico. Essa passagem preserva códigos de cabo e pontuação como
-  `CM-50(3/8")`, `N- (1N2)` e `ABN-16(16)`. Uma máscara separada recupera os comprimentos escuros
-  laterais no mesmo eixo.
-- Caixas vinho com nomenclaturas de equipamento são retificadas no próprio eixo a 1800 DPI, inclusive
-  quando inclinadas. A imagem é corrigida verticalmente, a borda é removida e somente os glifos
-  neutros seguem ao OCR. Traços vinho sobre uma nomenclatura geram recorte equivalente sem o traço.
-  As evidências resultantes registram explicitamente `INSTALAR` para o conteúdo da caixa e `REMOVER`
-  para o conteúdo riscado.
-- Equipamentos representados apenas por vetores são comparados às assinaturas da `SIMBOLOGIA.pdf`.
-  O detector reconhece aterramento pela haste e três barras graduadas, para-raios MT pela sequência
-  ampliada de barras e para-raios BT pela haste, corpo e diagonal. As proporções e os ângulos tornam
-  a leitura tolerante à rotação e às variações usuais de escala; preto, verde e vermelho definem
-  respectivamente `EXISTENTE`, `INSTALAR` e `REMOVER`.
-- Quando a página possui texto nativo suficiente, imagens menores com área normalizada de pelo menos
-  0,25% e resolução útil recebem OCR somente em seu recorte. As caixas retornadas pelo motor são
-  transformadas novamente para as coordenadas normalizadas da página.
-- O cache derivado fica em `cache/analysis` na pasta de dados. Sua chave combina hash do PDF,
-  configuração e versão do analisador; a identidade da extração persistida usa a mesma versão.
-  Conteúdo ausente, inválido ou produzido por uma versão anterior é refeito a partir do original.
-- `ExecutarAnaliseDocumento` valida a referência do PDF, registra execução concluída ou falha fatal e
-  persiste todas as evidências válidas em uma transação.
+## Interpretação semântica
 
-## Pipeline modular de interpretação
+O registro `regras_interpretacao_v1.json`, hoje na versão `1.3.0`, possui cinco regras de
+reconhecimento por categoria e sete regras de relação. O pipeline:
 
-- `RegistroRegrasInterpretacao` versiona regras de reconhecimento e relação e produz uma assinatura
-  SHA-256 canônica. O schema atual é 1 e pode ser carregado do recurso embarcado ou de um JSON
-  externo validado.
-- Existem analisadores independentes para poste, estrutura MT, estrutura BT, cabo e equipamento. A
-  correspondência delimitada com códigos ativos continua sendo a evidência mais específica.
-- Somente postes, estruturas e equipamentos próximos de um identificador operacional `P<n>` entram
-  nos resultados do projeto. Cabos exigem um identificador de vão `V<n>-<n>`. Os demais códigos
-  reconhecidos no desenho permanecem apenas como referências elétricas e não geram propostas,
-  relações ou elementos confirmados. O identificador e sua evidência são preservados na auditoria.
-- O analisador de postes também interpreta a nomenclatura `altura-resistência` usada nos projetos,
-  aceitando separadores `-`, `/`, `:`, `x`, espaço ou quebra de linha e sufixos opcionais `m` e
-  `daN`. Uma combinação como `11-300` consulta os postes do catálogo; sem formato explícito,
-  seleciona deterministicamente o tipo canônico e preserva todos os candidatos na auditoria.
-- Coordenadas de campo com seis a oito algarismos são combinadas por proximidade com o poste. O
-  par pode estar no mesmo fragmento ou em fragmentos separados por quebra de linha, `:`, `/` ou
-  outros delimitadores, vindo tanto de texto pesquisável quanto de OCR de página escaneada. Cada
-  ocorrência numérica participa de no máximo um par, com preferência pela ordem dentro do mesmo
-  fragmento e depois pela distância gráfica.
-- Frases como `POSTE CIRCULAR`, `TRANSFORMADOR`, `CHAVE FACA`, `CHAVE FUSÍVEL` e
-  `CHAVE FUSÍVEL REPETIDORA` geram propostas de classe sem inventar um tipo exato. Acentos,
-  sublinhados, espaços em torno de separadores e variantes de hífen são normalizados antes da busca.
-- Evidências simbólicas de `ATERRAMENTO`, `PARA RAIOS MT` e `PARA RAIOS BT` geram propostas de
-  equipamento com confiança 0,88, tipo legível no painel e situação explícita. A legenda não contém
-  modelo, corrente ou capacidade; por isso a proposta permanece não catalogada e conflitante para
-  revisão, preservando os índices dos vetores e `SIMBOLOGIA.pdf` como origem.
-- Linhas rotuladas do cabeçalho, incluindo `Dispositivo:`, `Circuito:`, `Projeto:` e campos
-  adjacentes na mesma linha, são retiradas da interpretação de elementos e continuam disponíveis
-  para a análise documental.
-- Nomenclaturas de cabo das famílias `ABCN`, `ABN`, `BN` e `AN` são mantidas para revisão mesmo
-  quando o código exato não está no catálogo. Nesse caso não se inventa um tipo: a proposta fica
-  conflitante, não catalogada e preserva a situação de obra obtida da cor.
-- Nomenclaturas de equipamento no formato corrente-tensão-capacidade aceitam `-`, `/` e `:` como
-  separadores. O valor é convertido para a forma canônica do catálogo; uma nomenclatura válida sem
-  correspondência publicada permanece como proposta conflitante e não catalogada.
-- Evidências vetoriais e de imagem próximas são agregadas à proposta como contexto. Para cabos, uma
-  polilinha próxima substitui a caixa do texto como geometria sugerida. Imagens não são classificadas
-  isoladamente nesta versão.
-- Textos como `Vão: 42,5 m`, `Comprimento 42.5 m` ou `42,5 m` próximos ao interior da polilinha são
-  candidatos a comprimento do vão. Rótulos genéricos nas extremidades do cabo são excluídos para não
-  confundir dimensões de postes com comprimento; a evidência especializada de comprimento retificado
-  usa o eixo do rótulo linear e não sofre essa exclusão.
-- `AssinaturaSimbologia` classifica `EXISTENTE`, `INSTALAR` e `REMOVER` por cor e tolerância. Sem uma
-  assinatura inequívoca, o resultado usa `EXISTENTE` com confiança conservadora e registra essa
-  inferência na trilha auditável.
-- Uma caixa vetorial vinho (`qu` ou `re`) tem precedência sobre a cor do texto: qualquer elemento
-  semanticamente reconhecido cujo centro esteja dentro da caixa é `INSTALAR`. A regra é comum às
-  cinco categorias e preserva a caixa como evidência da decisão.
-- Relações `INSTALADA_EM`, `INSTALADO_EM`, `CONECTA` e `SUPORTADO_POR` são propostas por centro,
-  extremidade ou proximidade combinada com `CompatibilidadeEstruturaCabo`. Estruturas e equipamentos
-  escolhem primeiro um poste com a mesma situação de obra, evitando vincular instalações novas a um
-  poste que será retirado apenas porque ele está graficamente mais perto.
-- Um `VaoDetectado` normalmente exige que as extremidades do cabo sejam resolvidas para postes
-  distintos. Quando há um identificador explícito `V<n>-<n>`, o trecho permanece revisável mesmo se
-  uma extremidade ainda não tiver poste classificado. Cabos diferentes com o mesmo identificador
-  compartilham o traçado do trecho. A anotação do desenho tem precedência sobre o cálculo euclidiano
-  entre coordenadas; o valor e sua origem permanecem no `Cabo` promovido.
-- IDs UUID5 combinam projeto, extração, interpretador, registro e configuração. Repetir uma execução
-  concluída reutiliza o resultado; retomar uma cancelada usa a mesma identidade sem duplicação.
-- A extração e a interpretação são execuções auditáveis distintas. Propostas semânticas podem
-  referenciar evidências de uma extração anterior do mesmo projeto, mas nunca de outro projeto.
-- Início, fim, estado, configuração, versões, diagnósticos e falha fatal são persistidos. Ao concluir,
-  resultados catalogados, relações resolvidas e decisões automáticas são publicados atomicamente no
-  projeto; a mesma execução pode ser reaberta sem duplicar entidades.
-## Exemplos locais
+1. filtra conteúdo que não pode fundamentar resultado técnico;
+2. reconhece códigos e nomenclaturas contra os 199 itens do catálogo técnico;
+3. associa cor e convenção gráfica à situação do elemento;
+4. cria `PropostaElemento` e `PropostaRelacao` com confiança, justificativa e evidências;
+5. promove deterministicamente resultados catalogados e relações resolvíveis ao projeto;
+6. conserva propostas ambíguas ou não catalogadas para revisão.
 
-Todo conteúdo de `examples/`, exceto o README da pasta, é ignorado pelo Git. Os arquivos são recursos
-locais e dinâmicos: podem ser incluídos, substituídos ou removidos sem manifesto, hash versionado ou
-partição formal.
+Postes aceitam código do catálogo e nomenclaturas de altura e resistência. Estruturas, cabos e
+equipamentos usam analisadores próprios. Identificadores de ponto e coordenadas próximas enriquecem
+o contexto, mas coordenadas isoladas não criam um elemento elétrico.
 
-<<<<<<< HEAD
-O script `scripts/smoke_examples.py` percorre os PDFs presentes somente quando solicitado e verifica
-abertura,
-renderização, extração, interpretação e preservação do arquivo. Ele não fixa contagens por documento.
-Quando um projeto real expõe uma regressão, o caso mínimo é reproduzido em uma fixture sintética no
-gate padrão. Comentários do PDF ajudam a priorizar capacidades, mas não substituem fontes normativas.
-=======
-Todos os PDFs locais em `examples/` são ignorados pelo Git. O conjunto formal é definido pelos nove
-hashes de `evaluation/manifesto-amostras.json`, e não pela quantidade de arquivos presentes na
-pasta. PDFs adicionais podem ser colocados ali a qualquer momento como amostras exploratórias: eles
-participam do smoke test local somente leitura, mas não do gate privado até serem aprovados e
-incluídos no manifesto. Na auditoria de 14/08/2026, os dez PDFs então presentes tinham hashes
-distintos entre si e nenhum correspondia aos nove hashes formais; portanto todos permaneceram
-exploratórios. Nomes de arquivos, nomes de clientes, telefones, coordenadas e fotografias não são
-versionados.
+Uma execução concluída é idempotente para o mesmo projeto, extração, catálogo, registro e
+configuração. Cancelamento ou falha não publica um conjunto parcial como concluído.
 
-O corpus cobre A3/A4, retrato/paisagem, iText, AutoCAD, Microsoft Print to PDF, texto, vetores,
-imagens, anotações `Stamp`, `Popup`, `FreeText`, `Square`, appearance streams e Optional Content
-Groups. Uma amostra possui texto de anotação malformado e outra contém imagens visíveis apenas em
-appearance streams. Esses casos serão obrigatórios nos testes das etapas de ingestão e extração.
+## Promoção e revisão humana
 
-## Conjunto de avaliação semântica
+Resultados catalogados são promovidos automaticamente, sem perder a proposta e a decisão que
+originaram a entidade. O painel de resultados permite:
 
-- `ManifestoAvaliacao` separa amostras de desenvolvimento e teste por hash, sem nomes de arquivo.
-- `AnotacaoAmostra` registra elementos, categoria, situação, geometria normalizada e relações. Os
-  papéis `PRIMARIA`, `SECUNDARIA` e `CONSENSO` distinguem rotulagem independente de adjudicação.
-- Uma anotação congelada deve ser de consenso, possuir revisor pseudônimo e referenciar somente
-  páginas e elementos existentes na amostra correspondente.
-- Amostras marcadas para dupla anotação medem divergência de contagem, categoria, situação,
-  geometria e relações antes da adjudicação.
-- O pareamento de pontos usa distância normalizada; caixas e polígonos usam IoU da caixa envolvente;
-  polilinhas usam distância simétrica aos segmentos. A associação é um-para-um e determinística.
-- O benchmark registra precisão, recall e F1 por classe, relações, falhas de extração, latência p95 e
-  pico de memória rastreada pelo Python. A medição não inclui toda memória nativa de bibliotecas C.
-- A assinatura semântica inclui conjunto, critérios, interpretador, regras, configuração e contagens,
-  mas exclui latência e memória para permanecer reproduzível entre execuções equivalentes.
-- O teste final é recusado enquanto manifesto ou critérios não estiverem congelados/aprovados.
-- A auditoria impede o congelamento sem consenso de todas as amostras, cobertura das cinco classes,
-  dupla anotação exigida e diversidade mínima de escala, formato, orientação, qualidade e densidade.
+- navegar por regiões, elementos, relações e vãos;
+- localizar a geometria correspondente no PDF;
+- aceitar ou corrigir uma proposta;
+- rejeitar uma proposta;
+- criar elemento ou relação manual;
+- ocultar temporariamente uma região, um elemento ou um vão no visualizador.
 
-O corpus atual satisfaz formato, orientação, qualidade e densidade, mas todas as amostras declaram a
-mesma escala. Ele permanece em preparação até a inclusão autorizada de outra escala e a conclusão da
-revisão humana. As regras iniciais foram construídas somente com catálogo, contratos e fixtures
-sintéticas; a partição de teste privada não foi usada para criá-las.
->>>>>>> 51a97e2ba161a5914a20d6988ea9270393104e55
+Revisões persistem a autoria, o instante, a decisão, o conteúdo anterior e o conteúdo confirmado.
+Uma proposta de outro projeto ou uma referência incompatível é recusada.
 
-## Persistência local
+## Regiões e vãos
 
-- SQLite é a fonte canônica e fica em `zeny-project-handler.sqlite3` dentro da pasta local da
-  aplicação, substituível por `ZENY_DATA_DIR`.
-- A aplicação executa as migrações Alembic antes de abrir a janela. Bancos vazios e bancos na revisão
-  anterior são atualizados para a revisão corrente.
-- O mapeamento é híbrido: tabelas e chaves estrangeiras preservam identidades e relações críticas;
-  payloads JSON canônicos preservam o agregado completo sem acoplar o domínio ao SQLAlchemy.
-- Projetos e catálogos são agregados de escrita. Documentos e elementos são projeções sincronizadas
-  na mesma transação; evidências, propostas e decisões possuem repositórios auditáveis.
-- A tabela `document_sources` guarda o caminho local e a impressão verificável do PDF separadamente
-  do agregado; sua linha acompanha o ciclo de vida do documento por chave estrangeira.
-- Uma unidade de trabalho exige `commit` explícito. Sair sem commit ou por uma exceção executa
-  rollback e fecha a sessão.
-- Projetos somente usam catálogos publicados. Uma versão publicada não pode ser alterada ou removida,
-  e versões antigas continuam legíveis pelos projetos que as referenciam.
-- A desativação de item ocorre em nova versão de catálogo; o item permanece no histórico com
-  `ativo = false`.
-- O backup usa um snapshot consistente do SQLite, valida a integridade do arquivo temporário e só
-  então o publica por substituição atômica no mesmo diretório de destino.
+`RegiaoAnalise` é uma projeção derivada e determinística que agrupa propostas próximas na mesma
+página. Ela pode reunir itens existentes, a instalar e a remover, relações e coordenadas UTM. Não é
+persistida como uma segunda fonte de verdade.
 
-## Transporte e recuperação
-
-- Um pacote de projeto usa a extensão `.zphproj`. O formato 1 permanece legível e novas criações usam
-  o formato 2. Seu manifesto assinado declara projeto, catálogo, arquivos, tamanhos, tipos, hashes
-  SHA-256, estado de integridade e eventuais omissões por identificadores seguros.
-- O pacote contém um SQLite restrito ao projeto, seus PDFs disponíveis e resultados auditáveis da
-  análise. O banco continua sendo a fonte canônica.
-- Entradas do arquivo compactado devem possuir caminhos relativos seguros. Caminhos absolutos ou com
-  travessia, duplicatas, links simbólicos, conteúdo criptografado e arquivos não declarados são
-  recusados antes da aplicação dos dados.
-- Tamanho, tipo e SHA-256 são validados internamente durante exportação, importação, backup e
-  restauração. O relatório da origem permanece separado de problemas físicos do pacote recebido.
-- Exportar e importar preserva IDs, catálogo, execuções, evidências, propostas, decisões de revisão e
-  o conjunto confirmado. A substituição de um projeto já existente é explícita e as trocas de banco
-  e arquivos possuem compensação em caso de falha.
-- A importação começa por um preflight sem escrita no estado local. O resultado contém resumo,
-  integridade, identidade do pacote e fingerprint do projeto/pasta alvo. Quando há conflito, a UI
-  confirma esse plano antes de iniciar a aplicação. A aplicação adquire o coordenador de operações,
-  revalida pacote, SQLite portátil e estado alvo e recusa planos obsoletos antes de staging,
-  `.previous`, publicação de arquivos ou escrita no SQLite local.
-- A aplicação confirmada publica atomicamente um journal de formato 1 sob
-  `project-files/.import-recovery`. Ele contém apenas identidade, fase e caminhos POSIX relativos
-  derivados dos UUIDs. A mesma transação dos dados importados persiste um comprovante com os hashes
-  de pacote, plano e árvore publicada.
-- Depois das migrações e antes de liberar catálogo, serviços ou UI, o bootstrap reconcilia qualquer
-  journal pendente. Comprovante compatível conclui a publicação e limpa o estado anterior; ausência
-  de comprovante restaura a árvore anterior. Nova interrupção pode repetir a reconciliação sem mudar
-  o resultado final.
-- Journal inválido, caminho fora do namespace reservado, recibo divergente, link/junção ou estado
-  ambíguo bloqueia novas operações com orientação para preservar os resíduos e usar backup ou
-  suporte. Nenhuma dessas condições autoriza excluir um caminho inferido ou não comprovado. Logs de
-  recuperação expõem somente operação, fase, ação, versão e IDs seguros.
-- A política de exclusão de arquivos gerenciados é única para o fluxo do projeto e para fotos. Ela
-  aceita somente caminhos relativos contidos em `project-files/<project-id>`, recusa links e confere
-  o SHA-256 antes de apagar um blob. Referências PDF externas nunca são candidatas à limpeza.
-- Excluir um projeto publica uma tarefa em `project-files/.cleanup-recovery`, move sua raiz por rename
-  para um tombstone na mesma raiz gerenciada e só remove a árvore depois do commit SQLite. Exceção e
-  rollback restauram o rename. Após uma interrupção, projeto ainda presente no banco prova rollback;
-  projeto ausente prova que a limpeza pode continuar.
-- Remover documento, elemento dependente ou foto registra previamente os blobs candidatos, confirma
-  a alteração no banco e recalcula os digests vivos. Um digest compartilhado permanece enquanto
-  houver referência. Falha posterior ao commit mantém o journal, produz status de limpeza pendente e
-  é tentada novamente pelo bootstrap; não desfaz nem oculta a mutação já confirmada.
-- O backup completo usa `.zphbackup` e executa preflight sem efeitos colaterais antes de criar o
-  snapshot. PDFs externos íntegros recebem cópias recuperáveis e referências reescritas. PDF ausente,
-  alterado ou ilegível exige confirmação explícita; se aceito, o backup fica `DEGRADADO`, registra a
-  omissão e preserva no snapshot a referência externa existente. A publicação do pacote e cada
-  substituição individual são atômicas; a restauração conjunta compensa exceções capturadas, mas
-  ainda não dispõe de journal durável contra encerramento abrupto entre banco e anexos.
-- O painel **Importar, exportar e backup** oferece somente exportar e importar projetos e criar e
-  restaurar backups, sempre com progresso, destino explícito e confirmação para substituições ou
-  backup degradado. Detalhes de integridade mostram IDs abreviados, nunca nomes ou caminhos privados.
-
-## Fluxo operacional do MVP pela interface
-
-<<<<<<< HEAD
-- O painel **Projeto** lista, cria, abre e renomeia projetos no SQLite. Em uma instalação
-=======
-- O painel **Fluxo do projeto** lista, cria e abre projetos no SQLite. Na criação, o usuário informa
-  obrigatoriamente o número da NS com 10 dígitos; esse número identifica o projeto na interface e
-  pode ser corrigido pela ação **Alterar NS**. Em uma instalação
->>>>>>> 51a97e2ba161a5914a20d6988ea9270393104e55
-  vazia, o catálogo inicial publicado é persistido automaticamente antes da criação do primeiro
-  projeto.
-- Um ou vários PDFs podem ser selecionados e importados imediatamente no projeto. Cada arquivo é
-  confirmado separadamente e a interface apresenta um resumo de adicionados, cancelados, senhas
-  esgotadas e demais falhas. O usuário pode reordenar qualquer página por arraste ou pelos controles
-  **Subir** e **Descer**; a sequência persistida define a paginação lógica, enquanto cada arquivo e
-  sua referência verificável continuam independentes.
-- Projetos podem ser excluídos após confirmação explícita. A exclusão remove banco, análises,
-  revisões, fotos e cópias internas da pasta gerenciada, preservando todos os arquivos PDF originais
-  externos no sistema de arquivos.
-- Um ou vários PDFs importados podem ser removidos seletivamente. A mesma transação elimina execuções,
-  evidências, propostas, decisões e elementos confirmados cuja geometria ou dependências pertençam às
-  folhas removidas; documentos e resultados independentes permanecem válidos. Fotos desses
-  elementos são coletadas depois do commit somente quando seu digest não possui referência viva.
-- **Analisar projeto** processa todos os documentos do projeto fora da thread da interface,
-  apresenta progresso e encadeia extração, interpretação, promoção automática e abertura dos
-  resultados relacionados. Um preflight síncrono resolve ou cancela credenciais protegidas antes de
-  construir a thread de trabalho.
-- O usuário pode solicitar cancelamento. Resultados completos são preservados e a retomada reutiliza
-  identidades determinísticas, sem duplicar execuções, evidências ou propostas.
-- O painel apresenta documentos, folhas, estados das execuções, identificações automáticas e
-  exceções. Os resultados consolidam a análise mais recente de cada PDF do projeto; regiões da folha
-  formam os itens-pai e todos os elementos e vínculos próximos aparecem como filhos clicáveis.
-- O último projeto e a última folha são restaurados por estado local da interface. Os dados canônicos
-  permanecem no SQLite; `ui-state.ini` guarda somente preferências de navegação reproduzíveis.
-- Falhas de PDF ou pipeline são convertidas em mensagens visíveis e acionáveis. Nenhum fluxo de uso
-  ou aceite requer terminal, fixture, edição de JSON ou acesso direto ao banco.
-
-## Agrupamento por regiões do PDF
-
-O agrupamento é uma projeção derivada e reproduzível da análise, nunca uma nova fonte de verdade.
-Elementos suficientemente próximos na mesma página pertencem à mesma região, independentemente de
-existir um poste reconhecido. Geometrias distantes continuam em regiões separadas mesmo que uma
-regra semântica tenha proposto um vínculo entre elas.
-
-Cada região usa identidade determinística baseada na página e nos elementos que contém. A ordem de
-exibição segue a sequência persistida de páginas e a posição de leitura na folha. Pares UTM são
-associados à região mais próxima e podem vir de um único texto ou de fragmentos distintos. Leste e
-norte podem estar separados por espaço, quebra de linha, dois-pontos ou barra e não são reutilizados
-em outro par.
-
-O painel **Resultados** apresenta um resumo por situação de obra e, abaixo, cada elemento
-com catálogo e vínculos internos. Selecionar a região destaca sua área; selecionar um elemento abre
-a página correspondente e realça seu sublinhado no PDF. A coluna **Exibir** oferece ícones de olho
-no nível da região e de cada elemento; ocultar muda somente as sobreposições da sessão visual e não
-remove a proposta nem sua auditoria.
-
-A aba **Vãos** lista o identificador operacional original, poste de origem, poste de destino, cabo,
-comprimento, fonte da medida e folha. Uma extremidade ainda não classificada aparece vazia sem
-eliminar o vão. Selecionar um vão navega até a folha e reutiliza a proposta do cabo como realce
-quando ela está disponível.
+`VaoDetectado` é derivado quando um cabo liga dois postes distintos ou quando o desenho fornece um
+identificador operacional inequívoco. A medida usa, nesta ordem, o comprimento informado no
+desenho e a distância entre coordenadas compatíveis dos postes. A origem da medida e as evidências
+permanecem registradas; um comprimento não é inventado quando nenhuma fonte é suficiente.
 
 ## Documentação e conformidade
 
-- O painel **Documentação e conformidade** é independente dos resultados semânticos e possui as abas
-  **Documentação**, **Conformidade** e **Regras**. A última oferece somente **Importar** e
-  **Exportar**; não há comando individual de remoção, ativação ou desativação, e IDs omitidos por uma
-  importação são preservados.
-- O cabeçalho lista todos os pares textuais `rótulo: informação` da zona de título, incluindo campos
-  não previstos no vocabulário inicial e campos sem valor. Nota de Serviço/número do projeto,
-  escala, formato, número da folha, data e circuito também alimentam fatos normalizados; o formato
-  pode ser inferido das dimensões físicas A1 a A4.
-- Ao localizar o quadro **Servidão**, o scanner lista todos os seus pares `rótulo: informação`, por
-  exemplo solicitante, extensão, início e final. A ausência do quadro permanece não avaliável
-  enquanto a aplicabilidade não for conhecida.
-- Anotações PDF `Stamp` na zona documental são apenas candidatos a carimbo. Campos `/Sig`
-  preenchidos, campos vazios e rótulos visuais de assinatura são distinguidos; a validade
-  criptográfica e a autenticidade gráfica não são afirmadas.
-- A projeção de vãos e comprimentos publica fatos rastreáveis e alimenta a Regra 6. Até 45 m é a
-  faixa ordinária; acima de 60 m pode produzir possível divergência. Entre 45 m e 60 m, a ausência
-  de prova positiva das condições excepcionais resulta em `NAO_AVALIAVEL`. Ângulos continuam sem
-  detector ativo.
-- Evidência, fato normalizado, regra e achado são objetos distintos. Fatos preservam escopo, origem,
-  confiança, geometria e evidências.
-- O registro `cemig-normas-distribuicao-2025.5` é JSON validado, versionado e assinado por SHA-256.
-  `when` define aplicabilidade, `unless` exige comprovação positiva da exceção e `must` declara
-  requisitos. Na inicialização, somente uma Regra 6 ainda idêntica ao seed oficial `2025.3` recebe a
-  salvaguarda nova. A migração aditiva seguinte anexa somente os IDs oficiais ausentes das Regras 9
-  e 10; regras personalizadas, colisões de ID e as definições existentes não são sobrescritas nem
-  removidas.
-- Cada regra aplicável resulta em `CONFORME`, `DIVERGENCIA` ou `NAO_AVALIAVEL`. A interface apresenta
-  divergência automática como **possível divergência**, sujeita a revisão.
-- As regras iniciais verificam numeração, formato, vão urbano de rede compacta/isolada, equipamento
-  em ângulo, avaliação de abalroamento, cabo novo urbano e uma incompatibilidade rural simples entre
-  estrutura e poste. Também verificam os mínimos representáveis de formato e resistência para
-  transformadores trifásicos de 30/45/75 kVA e 150/300 kVA a instalar em posteação urbana existente,
-  somente com associação 1:1 e simbologia positiva. A regra de escala permanece inativa até suas
-  exceções terem fatos positivos; outros contextos rurais e tabelas de estrutura não reutilizam
-  limites urbanos.
+O painel **Documentação e conformidade** possui três abas:
 
-A abstração, o vocabulário inicial e o procedimento para evolução normativa estão em
-[`arquitetura-conformidade.md`](arquitetura-conformidade.md). A decisão de arquitetura está na
-[`ADR 0011`](adr/0011-conformidade-baseada-em-fatos.md).
+1. **Documentação** lista campos rotulados do cabeçalho e da servidão, candidatos a carimbo e campos
+   de assinatura. Presença visual ou campo PDF preenchido não prova autenticidade.
+2. **Conformidade** mostra a última execução persistida, com divergências primeiro, valores
+   observados e esperados, alvo, fonte, revisão e localização. Callouts podem ser exibidos ou
+   ocultados sem afetar as outras camadas.
+3. **Regras** mostra a revisão ativa e permite importar ou exportar o JSON. Não existe remoção nem
+   ativação individual pela interface.
 
-## Fundamentação normativa
+O seed contém 39 regras habilitadas. A lista normativa completa está em
+[catalogo-regras-conformidade.md](catalogo-regras-conformidade.md), e o desenho do motor está em
+[arquitetura-conformidade.md](arquitetura-conformidade.md).
 
-- A ND 3.1 vigente define expansão, reforma, reforço, modificação, manutenção e desativação como
-  finalidades de projeto; exige dados georreferenciados e detalhamento de postes, vãos, equipamentos,
-  cabos, pontos de entrega e caixas subterrâneas.
-- A mesma norma estabelece que uma substituição não prevista seja tratada como uma retirada e uma
-  instalação, origem do modelo `VinculoObra`.
-- A ND 2.7 descreve derivações, junções, acessórios e terminais capazes de conectar cabos a outros
-  cabos ou equipamentos, fundamento para `PontoRede` não depender sempre de um poste.
+O domínio e a interface reconhecem `CONFORME`, `DIVERGENCIA` e `NAO_AVALIAVEL`. O avaliador atual
+emite os dois primeiros para alvos aplicáveis e não cria achado quando alguma condição `when` falha.
+Dentro de uma regra aplicável, requisito ausente conta como não atendido; por isso o registro inclui
+fatos de guarda sempre que a ausência significa “escopo ainda não caracterizado”, e não violação.
+Somente divergências com geometria rastreável recebem callout.
 
-Fontes públicas oficiais: [normas de redes de distribuição da CEMIG](https://www.cemig.com.br/normas-tecnicas/normas-tecnicas-de-redes-de-distribuicao/),
-[ND 3.1/2025](https://www.cemig.com.br/wp-content/uploads/2025/10/ND_3_1_2025.pdf),
-[IT-EO-008 — Simbologia EO](https://www.cemig.com.br/wp-content/uploads/2025/10/IT-EO-008_Simbologia_EO.pdf)
-e [ND 2.7](https://www.cemig.com.br/wp-content/uploads/2025/10/nd_2_7-1.pdf).
+Uma execução de conformidade guarda a assinatura da sessão semântica, da revisão das regras e do
+método. Alterar regras ou incrementar o método marca o snapshot anterior como desatualizado; a
+reanálise é sempre explícita e cria ou reutiliza a execução idempotente correspondente.
 
-## Limites desta etapa
+## Registro de regras
 
-O pipeline ainda não classifica uma forma vetorial isolada sem texto ou OCR: caminhos de glifos,
-carimbos e símbolos do AutoCAD são visualmente semelhantes e uma regra geométrica simples geraria
-falsos positivos. Regiões são derivadas automaticamente dos resultados do pipeline, e execuções de
-conformidade persistem fatos, achados, proveniência e a versão do método sem alterar o PDF. Comentários
-de revisão são excluídos da semântica, mas portadores técnicos `AutoCAD SHX Text` são preservados.
-Servidão, carimbos, assinaturas, exceções normativas e as lacunas percebidas nos PDFs de
-comissionamento continuam dependentes de revisão quando a evidência automática não é conclusiva.
-Resultados sem tipo de catálogo resolvido permanecem apenas na trilha auditável. A importação, a
-extração, a interpretação, a inspeção dos resultados e a portabilidade estão
-integradas à interface do MVP, mas as Etapas 7, 7.1, 8 e 10 continuam aguardando o aceite humano em
-um projeto autorizado.
+O SQLite mantém revisões imutáveis do registro e números permanentes por ID técnico. Importar um
+JSON:
 
-Como referência normativa geral, permanecem aplicáveis as [normas técnicas públicas de redes de distribuição da CEMIG](https://www.cemig.com.br/normas-tecnicas/normas-tecnicas-de-redes-de-distribuicao/), especialmente as famílias ND 2.x e ND 3.1 já levantadas para o projeto.
+- valida schema, tipos, operadores, escopos e vocabulário de fatos;
+- mescla regras por ID;
+- preserva todos os IDs atuais omitidos no arquivo;
+- cria uma nova revisão assinada sem alterar o seed empacotado;
+- republica um catálogo Markdown da revisão ativa na pasta de dados.
+
+Na inicialização, atualizações oficiais são aplicadas seletivamente: definições locais modificadas e
+IDs personalizados são preservados. A restauração de backup também reconcilia IDs locais ausentes
+antes de liberar o registro restaurado.
+
+## Persistência e recuperação
+
+O banco SQLite fica, por padrão, em `%LOCALAPPDATA%\ZenyProjectHandler`. Alembic aplica as migrações
+na inicialização. Entidades de domínio são serializadas por repositórios; modelos SQLAlchemy não são
+usados como domínio.
+
+Snapshots de análise, interpretação, decisões, conformidade e revisões de regras preservam
+identidade e versão. Dados grandes e pesquisáveis possuem colunas próprias; os agregados completos
+são mantidos em JSON canônico quando isso evita duplicar o modelo no schema relacional.
+
+Publicações de arquivos usam temporário irmão, `fsync` quando disponível e substituição atômica. A
+importação de projeto e a exclusão/limpeza de arquivos gerenciados mantêm journals reconciliados no
+bootstrap. Estado corrompido ou ambíguo bloqueia a inicialização em vez de autorizar uma limpeza por
+inferência.
+
+## Portabilidade e backup
+
+`.zphproj` é um ZIP verificável para um projeto. `.zphbackup` contém um snapshot do ambiente local.
+Pacotes novos usam manifesto de formato 2 com caminhos relativos, tipos, tamanhos, SHA-256, estado
+de integridade e omissões declaradas.
+
+A importação possui preflight somente leitura e aplicação posterior à confirmação. O plano inclui a
+identidade do pacote e do destino; qualquer mudança entre inspeção e aplicação exige novo preflight.
+IDs, análises, propostas, revisões e resultados são preservados.
+
+Antes do backup, todas as origens PDF são classificadas. Backup íntegro prossegue diretamente;
+origens ausentes, alteradas ou ilegíveis exigem confirmação e geram pacote `DEGRADADO`. A restauração
+de um pacote degradado ainda exige integridade de tudo que o manifesto declara.
+
+A troca de cada arquivo é atômica e exceções capturadas disparam compensação. A restauração conjunta
+de SQLite e árvore gerenciada não possui journal durável contra queda abrupta entre os recursos.
+
+## Interface e concorrência
+
+Análise, importação, exportação, backup e restauração executam fora da thread da interface e expõem
+progresso e cancelamento cooperativo. Um coordenador global impede operações destrutivas ou
+incompatíveis simultâneas. Objetos Qt visuais permanecem na thread principal.
+
+Os painéis **Projeto**, **Resultados**, **Documentação e conformidade** e
+**Importar, exportar e backup** podem ser movidos, desacoplados e restaurados. Tema, geometria e
+estado dos docks ficam em `ui-state.ini` na pasta de dados.
+
+## Exemplos e qualidade
+
+`examples/` é uma bancada local dinâmica. Tudo abaixo dela, exceto seu README, é ignorado pelo Git.
+Não existe manifesto de corpus ou gate privado. O gate padrão depende apenas de testes e fixtures
+sintéticas versionadas.
+
+`scripts/smoke_examples.py` percorre opcionalmente os PDFs locais, abre, renderiza, extrai,
+interpreta e confirma que a origem não foi alterada. Um comportamento permanente observado nesses
+arquivos deve virar uma fixture sintética. Comentários de comissionamento podem orientar
+investigação, mas não substituem fonte normativa.
+
+## Limites atuais
+
+- Não há instalador para execução sem Python nem artefato de distribuição assinado.
+- Reconhecimento visual pode permanecer ambíguo; a interface conserva o resultado para revisão em
+  vez de forçar uma classificação.
+- Cálculos elétricos e mecânicos completos e verificações dependentes de fontes restritas não são
+  executados sem todos os fatos e referências necessários.
+- Carimbo, rótulo ou campo de assinatura não comprova autoria ou autenticidade.
+- Não existe integração ativa com serviços externos de OCR, nuvem ou IA; o pipeline funciona
+  localmente com PyMuPDF e Tesseract.

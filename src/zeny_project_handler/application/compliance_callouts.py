@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 import textwrap
 from collections import defaultdict
 from collections.abc import Mapping
@@ -20,6 +21,7 @@ from zeny_project_handler.domain.compliance import (
     GrupoCondicaoConformidade,
     ResultadoCondicaoConformidade,
     ResultadoConformidade,
+    TipoEscopoConformidade,
 )
 from zeny_project_handler.domain.documents import PaginaDocumento
 from zeny_project_handler.domain.values import (
@@ -29,18 +31,22 @@ from zeny_project_handler.domain.values import (
     required_text,
 )
 
-_MARGEM_PAGINA_PONTOS = 12.0
-_DISTANCIA_ALVO_PONTOS = 14.0
+from .visual_occupancy import MapaOcupacaoVisual
+
+_MARGEM_PAGINA_PONTOS = 8.0
+_DISTANCIA_ALVO_PONTOS = 10.0
 _MARGEM_CONTEUDO_PONTOS = 5.0
-_LARGURA_MINIMA_PONTOS = 156.0
-_LARGURA_MINIMA_FAIXA_PONTOS = 120.0
-_LARGURA_MAXIMA_PONTOS = 252.0
-_ALTURA_MINIMA_PONTOS = 42.0
-_PREENCHIMENTO_HORIZONTAL_PONTOS = 14.0
-_PREENCHIMENTO_VERTICAL_PONTOS = 11.0
+_LARGURA_MINIMA_PONTOS = 138.0
+_LARGURA_MINIMA_FAIXA_PONTOS = 108.0
+_LARGURA_MAXIMA_PONTOS = 228.0
+_ALTURA_MINIMA_PONTOS = 36.0
+_PREENCHIMENTO_HORIZONTAL_PONTOS = 12.0
+_PREENCHIMENTO_VERTICAL_PONTOS = 9.0
 _ESPACO_ENTRE_CAIXAS_PONTOS = 6.0
-_FONTE_MINIMA_PONTOS = 9.0
-_FONTE_PADRAO_PONTOS = 10.5
+_MARGEM_ESPACO_BRANCO_PONTOS = 8.0
+_FONTE_MINIMA_PONTOS = 8.5
+_FONTE_PADRAO_PONTOS = 9.5
+_ROTULO_PONTO = re.compile(r"^P\s*\d+[A-Z]?$", re.IGNORECASE)
 
 
 class LayoutCalloutsImpossivelError(ValueError):
@@ -55,10 +61,10 @@ class _VariacaoCaixa:
 
 
 _VARIACOES_CAIXA = (
-    _VariacaoCaixa(_FONTE_PADRAO_PONTOS, 0.36, _LARGURA_MAXIMA_PONTOS),
-    _VariacaoCaixa(10.0, 0.42, 294.0),
-    _VariacaoCaixa(9.5, 0.33, 228.0),
-    _VariacaoCaixa(_FONTE_MINIMA_PONTOS, 0.29, 210.0),
+    _VariacaoCaixa(_FONTE_PADRAO_PONTOS, 0.33, _LARGURA_MAXIMA_PONTOS),
+    _VariacaoCaixa(9.0, 0.38, 264.0),
+    _VariacaoCaixa(8.75, 0.30, 210.0),
+    _VariacaoCaixa(_FONTE_MINIMA_PONTOS, 0.27, 192.0),
 )
 
 
@@ -186,6 +192,7 @@ def projetar_callouts_conformidade(
     evidencias: tuple[EvidenciaDocumento, ...],
     paginas: tuple[PaginaDocumento, ...],
     textos_apresentacao: Mapping[UUID, str] | None = None,
+    mapas_ocupacao_visual: Mapping[UUID, MapaOcupacaoVisual] | None = None,
 ) -> tuple[CalloutConformidade, ...]:
     """Converta somente divergências com geometria rastreável em callouts estáveis."""
     pages_by_id = {item.id: item for item in paginas}
@@ -249,6 +256,7 @@ def projetar_callouts_conformidade(
             _posicionar_pagina(
                 requests,
                 important_content=important_content_by_page.get(page_id, ()),
+                visual_occupancy=(mapas_ocupacao_visual or {}).get(page_id),
             )
         )
     return tuple(
@@ -268,6 +276,7 @@ def _posicionar_pagina(
     requests: tuple[_PedidoCallout, ...],
     *,
     important_content: tuple[_RetanguloPontos, ...],
+    visual_occupancy: MapaOcupacaoVisual | None,
 ) -> tuple[_CalloutPosicionado, ...]:
     page = requests[0].page
     for variation in _VARIACOES_CAIXA:
@@ -285,6 +294,7 @@ def _posicionar_pagina(
                 height=height,
                 occupied=tuple(occupied),
                 important_content=important_content,
+                visual_occupancy=visual_occupancy,
             )
             if suggested is None:
                 break
@@ -302,11 +312,15 @@ def _posicionar_pagina(
     compact = _distribuir_em_faixa_interna(
         requests,
         important_content=important_content,
+        visual_occupancy=visual_occupancy,
     )
     if compact is None:
-        raise LayoutCalloutsImpossivelError(
-            f"A página {page.numero} não comporta todos os callouts no tamanho mínimo legível"
+        reason = (
+            "não possui espaço totalmente branco suficiente para todos os callouts"
+            if visual_occupancy is not None
+            else "não comporta todos os callouts no tamanho mínimo legível"
         )
+        raise LayoutCalloutsImpossivelError(f"A página {page.numero} {reason}")
     return compact
 
 
@@ -376,6 +390,15 @@ def _geometrias_do_achado(
         if target.geometria is not None and target.geometria.pagina_id in page_ids
         else ()
     )
+    # P1, P2, P3 etc. representam regiões consolidadas do desenho. Nesses
+    # alvos, uma geometria pontual de fato pode pertencer apenas a um símbolo
+    # auxiliar; a seta deve terminar na região nomeada que o projetista vê.
+    if (
+        target.tipo is TipoEscopoConformidade.REGIAO
+        and _ROTULO_PONTO.fullmatch(target.rotulo.strip())
+        and target_geometries
+    ):
+        return target_geometries
     for tier in (fact_geometries, evidence_geometries, target_geometries):
         if tier:
             selected_page = tier[0].geometria.pagina_id
@@ -522,6 +545,7 @@ def _distribuir_em_faixa_interna(
     requests: tuple[_PedidoCallout, ...],
     *,
     important_content: tuple[_RetanguloPontos, ...],
+    visual_occupancy: MapaOcupacaoVisual | None,
 ) -> tuple[_CalloutPosicionado, ...] | None:
     page = requests[0].page
     page_width = float(page.largura_pontos)
@@ -581,10 +605,31 @@ def _distribuir_em_faixa_interna(
                 column_count * column_width + (column_count - 1) * _ESPACO_ENTRE_CAIXAS_PONTOS
             )
             horizontal_starts = (
+                _conter_inicio_faixa(
+                    sum(
+                        (item.limites_ancora.esquerda + item.limites_ancora.direita) / 2
+                        for item in requests
+                    )
+                    / len(requests)
+                    - strip_width / 2,
+                    strip_width,
+                    page_width,
+                ),
+                (page_width - strip_width) / 2,
                 _MARGEM_PAGINA_PONTOS,
                 page_width - _MARGEM_PAGINA_PONTOS - strip_width,
             )
             vertical_starts = (
+                _conter_inicio_faixa(
+                    sum(
+                        (item.limites_ancora.topo + item.limites_ancora.base) / 2
+                        for item in requests
+                    )
+                    / len(requests)
+                    - used_height / 2,
+                    used_height,
+                    page_height,
+                ),
                 _MARGEM_PAGINA_PONTOS,
                 _MARGEM_PAGINA_PONTOS + (available_height - used_height) / 2,
                 page_height - _MARGEM_PAGINA_PONTOS - used_height,
@@ -602,6 +647,11 @@ def _distribuir_em_faixa_interna(
                     rectangles = tuple(
                         _retangulo_normalizado_em_pontos(item.caixa, page) for item in candidate
                     )
+                    if visual_occupancy is not None and not all(
+                        _retangulo_em_espaco_branco(rectangle, page, visual_occupancy)
+                        for rectangle in rectangles
+                    ):
+                        continue
                     content_area = sum(
                         _intersection_area(rectangle, content)
                         for rectangle in rectangles
@@ -615,6 +665,11 @@ def _distribuir_em_faixa_interna(
     if candidates:
         return min(candidates, key=lambda item: item[0])[1]
     return None
+
+
+def _conter_inicio_faixa(start: float, size: float, page_size: float) -> float:
+    maximum = page_size - _MARGEM_PAGINA_PONTOS - size
+    return min(maximum, max(_MARGEM_PAGINA_PONTOS, start))
 
 
 def _materializar_faixa(
@@ -653,6 +708,7 @@ def _posicionar_caixa(
     height: float,
     occupied: tuple[RetanguloCallout, ...],
     important_content: tuple[_RetanguloPontos, ...],
+    visual_occupancy: MapaOcupacaoVisual | None,
 ) -> RetanguloCallout | None:
     page_width = float(page.largura_pontos)
     page_height = float(page.altura_pontos)
@@ -731,6 +787,10 @@ def _posicionar_caixa(
         (index, candidate)
         for index, candidate in enumerate(candidates)
         if not _positive_intersections(candidate, occupied_points)
+        and (
+            visual_occupancy is None
+            or _retangulo_em_espaco_branco(candidate, page, visual_occupancy)
+        )
     )
     if not collision_free:
         return None
@@ -748,6 +808,25 @@ def _posicionar_caixa(
         ),
     )
     return _retangulo_pontos_normalizado(selected, page_width, page_height)
+
+
+def _retangulo_em_espaco_branco(
+    rectangle: _RetanguloPontos,
+    page: PaginaDocumento,
+    visual_occupancy: MapaOcupacaoVisual,
+) -> bool:
+    expanded = _expandir_retangulo(
+        rectangle,
+        _MARGEM_ESPACO_BRANCO_PONTOS,
+        page_width=float(page.largura_pontos),
+        page_height=float(page.altura_pontos),
+    )
+    return visual_occupancy.regiao_totalmente_branca(
+        expanded.esquerda / float(page.largura_pontos),
+        expanded.topo / float(page.altura_pontos),
+        expanded.direita / float(page.largura_pontos),
+        expanded.base / float(page.altura_pontos),
+    )
 
 
 def _distributed_positions(start: float, end: float, *, divisions: int = 6) -> tuple[float, ...]:

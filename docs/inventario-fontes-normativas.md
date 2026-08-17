@@ -1,7 +1,7 @@
 # Inventário de fontes normativas da análise de conformidade
 
-Auditoria integral realizada em 12 de agosto de 2026 para a Etapa 2 do roadmap de conformidades,
-com revisão complementar dirigida em 14 de agosto de 2026. O ponto de partida foi o
+Auditoria integral realizada em 12 de agosto de 2026, com revisão complementar dirigida em 14 de
+agosto de 2026. O ponto de partida foi o
 [portal vigente de normas técnicas de redes de distribuição da CEMIG](https://www.cemig.com.br/normas-tecnicas/normas-tecnicas-de-redes-de-distribuicao/).
 Somente documentos publicados pela CEMIG e referências primárias oficiais foram considerados.
 
@@ -60,8 +60,8 @@ corpus foi tratado como fonte.
 ## Referências oficiais diretas seguidas
 
 As referências abaixo foram localizadas a partir das normas do escopo e do próprio portal. As cinco
-fontes da primeira tabela foram lidas integralmente. As demais delimitam dependências futuras; a
-única exceção nesta revisão é o recorte dirigido e explicitamente rastreado da ND-2.2.
+fontes da primeira tabela foram lidas integralmente. As demais delimitam fontes ainda não cobertas;
+a única exceção nesta revisão é o recorte dirigido e explicitamente rastreado da ND-2.2.
 
 | Referência | Situação na última consulta | Decisão nesta etapa |
 |---|---|---|

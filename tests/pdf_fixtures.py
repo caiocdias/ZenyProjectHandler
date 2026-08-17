@@ -104,7 +104,31 @@ def create_callout_formats_pdf(path: Path) -> Path:
             page.insert_text((24, 32), label, fontsize=12)
             target = pymupdf.Point(width * 0.46, height * 0.56)
             page.draw_circle(target, 8, color=(0.1, 0.1, 0.1), fill=(0.1, 0.1, 0.1))
-            page.insert_text((target.x + 12, target.y + 4), "ALVO", fontsize=9)
+            page.insert_text((target.x + 12, target.y + 4), "P2", fontsize=9)
+        document.save(path)
+    finally:
+        document.close()
+    return path
+
+
+def create_callout_header_pdf(path: Path) -> Path:
+    """Crie uma folha cujo cabeçalho visual disputa a posição mais próxima de P2."""
+    width = 595.0
+    height = 842.0
+    document = pymupdf.open()
+    try:
+        page = document.new_page(width=width, height=height)
+        page.draw_rect(page.rect, color=(1, 1, 1), fill=(1, 1, 1))
+        header = pymupdf.Rect(width * 0.58, height * 0.34, width * 0.96, height * 0.76)
+        page.draw_rect(header, color=(0.2, 0.2, 0.2), fill=(0.94, 0.94, 0.94), width=1)
+        for row in range(1, 7):
+            y = header.y0 + header.height * row / 7
+            page.draw_line((header.x0, y), (header.x1, y), color=(0.35, 0.35, 0.35))
+        page.insert_text((header.x0 + 10, header.y0 + 22), "CABECALHO DO PROJETO", fontsize=10)
+        page.insert_text((header.x0 + 10, header.y0 + 62), "NS / FOLHA / ESCALA", fontsize=8)
+        target = pymupdf.Point(width * 0.46, height * 0.56)
+        page.draw_circle(target, 8, color=(0.1, 0.1, 0.1), fill=(0.1, 0.1, 0.1))
+        page.insert_text((target.x + 12, target.y + 4), "P2", fontsize=9)
         document.save(path)
     finally:
         document.close()

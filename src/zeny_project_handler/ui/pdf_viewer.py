@@ -57,6 +57,10 @@ from zeny_project_handler.application.pdf_credentials import (
     ProvedorCredenciaisPdfMemoria,
     identificar_origem_pdf,
 )
+from zeny_project_handler.application.visual_occupancy import (
+    MapaOcupacaoVisual,
+    detectar_ocupacao_visual_rgb,
+)
 from zeny_project_handler.config import DEFAULT_PDF_TILE_CACHE_MAX_BYTES
 from zeny_project_handler.domain.analysis import PropostaElemento
 from zeny_project_handler.domain.documents import DocumentoProjeto
@@ -87,6 +91,7 @@ from .pdf_rendering import (
 )
 
 _FONTE_CALLOUT_REGISTRO_TENTADO = False
+_DPI_MAPA_OCUPACAO = 48
 
 
 @dataclass(frozen=True, slots=True)
@@ -492,6 +497,7 @@ class PdfViewerWidget(QWidget):
         self._review_link_geometries: dict[str, GeometriaDocumento] = {}
         self._compliance_callouts: tuple[CalloutConformidade, ...] = ()
         self._selected_compliance_callout_id: str | None = None
+        self._visual_occupancy_cache: dict[UUID, MapaOcupacaoVisual] = {}
         self._current_transformer: TransformadorCoordenadasPagina | None = None
         self._last_page_id: str | None = None
         self._build_ui()
@@ -616,6 +622,7 @@ class PdfViewerWidget(QWidget):
         self._review_link_geometries = {}
         self._compliance_callouts = ()
         self._selected_compliance_callout_id = None
+        self._visual_occupancy_cache.clear()
         self._current_transformer = None
         self._last_page_id = None
         self._page.blockSignals(True)
@@ -801,6 +808,7 @@ class PdfViewerWidget(QWidget):
         self._review_link_geometries = {}
         self._compliance_callouts = ()
         self._selected_compliance_callout_id = None
+        self._visual_occupancy_cache.clear()
         self._last_page_id = None
         self._project_pages = project_pages
         self._inspection = inspections[0]
@@ -849,6 +857,39 @@ class PdfViewerWidget(QWidget):
             self.view.definir_callouts_conformidade(callouts, self._current_transformer)
             if self._selected_compliance_callout_id is not None:
                 self.view.selecionar_callout(self._selected_compliance_callout_id)
+
+    def mapear_ocupacao_visual(
+        self,
+        pagina_ids: frozenset[UUID],
+    ) -> dict[UUID, MapaOcupacaoVisual]:
+        """Rasterize as páginas pedidas e detecte espaços realmente brancos."""
+        if not pagina_ids:
+            return {}
+        result: dict[UUID, MapaOcupacaoVisual] = {}
+        for inspection, session, page_number in self._project_pages:
+            page = inspection.paginas[page_number - 1].pagina
+            if page.id not in pagina_ids:
+                continue
+            cached = self._visual_occupancy_cache.get(page.id)
+            if cached is None:
+                rendered = session.renderizar_pagina(
+                    page_number,
+                    dpi=_DPI_MAPA_OCUPACAO,
+                    orcamento=self._render_budget,
+                )
+                cached = detectar_ocupacao_visual_rgb(
+                    page.id,
+                    largura_pixels=rendered.largura_pixels,
+                    altura_pixels=rendered.altura_pixels,
+                    stride=rendered.stride,
+                    dados_rgb=rendered.dados_rgb,
+                )
+                self._visual_occupancy_cache[page.id] = cached
+            result[page.id] = cached
+        missing = pagina_ids - result.keys()
+        if missing:
+            raise PdfError("Não foi possível gerar o mapa visual de todas as páginas com callouts")
+        return result
 
     def selecionar_callout(self, callout_id: str) -> None:
         if all(str(item.id) != callout_id for item in self._compliance_callouts):

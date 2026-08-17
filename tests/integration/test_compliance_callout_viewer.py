@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -10,7 +11,11 @@ import pytest
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QColor
 from pytestqt.qtbot import QtBot
-from tests.pdf_fixtures import TEST_RENDER_BUDGET, create_callout_formats_pdf
+from tests.pdf_fixtures import (
+    TEST_RENDER_BUDGET,
+    create_callout_formats_pdf,
+    create_callout_header_pdf,
+)
 
 from zeny_project_handler.adapters.pdf import PyMuPdfReader
 from zeny_project_handler.application.compliance_callouts import (
@@ -20,6 +25,7 @@ from zeny_project_handler.application.compliance_callouts import (
     RetanguloCallout,
     projetar_callouts_conformidade,
 )
+from zeny_project_handler.application.visual_occupancy import MapaOcupacaoVisual
 from zeny_project_handler.domain.analysis import PropostaElemento
 from zeny_project_handler.domain.compliance import (
     AchadoConformidade,
@@ -214,6 +220,44 @@ def test_synthetic_a4_a3_portrait_landscape_callout_renders_are_saved(
 
 
 @pytest.mark.integration
+def test_computer_vision_rejects_header_and_places_callout_on_white_space(
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> None:
+    output_directory = _qa_output_directory(tmp_path)
+    source = create_callout_header_pdf(output_directory / "callout-cabecalho-fixture.pdf")
+    viewer = _viewer(qtbot, dpi=144, budget=TEST_RENDER_BUDGET)
+    assert viewer.carregar_pdf(source)
+    _wait_preview(qtbot, viewer)
+    assert viewer.inspecao is not None
+    page = viewer.inspecao.documento.paginas[0]
+
+    without_vision = _projected_dense_callouts(page, count=1)[0]
+    assert without_vision.caixa_sugerida.direita > Decimal("0.58")
+
+    visual_maps = viewer.mapear_ocupacao_visual(frozenset({page.id}))
+    callout = _projected_dense_callouts(
+        page,
+        count=1,
+        visual_maps=visual_maps,
+    )[0]
+    box = callout.caixa_sugerida
+    assert box.direita < Decimal("0.58")
+    assert visual_maps[page.id].regiao_totalmente_branca(
+        float(box.esquerda),
+        float(box.topo),
+        float(box.direita),
+        float(box.base),
+    )
+
+    viewer.definir_callouts_conformidade((callout,))
+    viewer.resize(1400, 1000)
+    viewer.view.ajustar_pagina()
+    qtbot.wait(20)
+    _save_viewport(viewer, output_directory / "callout-cabecalho-espaco-branco.png")
+
+
+@pytest.mark.integration
 def test_dense_projected_callouts_fit_at_minimum_font_and_save_visual_qa(
     qtbot: QtBot,
     tmp_path: Path,
@@ -239,7 +283,10 @@ def test_dense_projected_callouts_fit_at_minimum_font_and_save_visual_qa(
         long_text=True,
     )
     assert len(minimum_font_callouts) == 11
-    assert {item.tamanho_fonte_pontos for item in minimum_font_callouts} == {Decimal("9")}
+    assert all(
+        Decimal("8.5") <= item.tamanho_fonte_pontos <= Decimal("9")
+        for item in minimum_font_callouts
+    )
     assert all(
         _normalized_intersection_area(left.caixa_sugerida, right.caixa_sugerida) == 0
         for index, left in enumerate(minimum_font_callouts)
@@ -384,6 +431,7 @@ def _projected_dense_callouts(
     *,
     count: int,
     long_text: bool = False,
+    visual_maps: Mapping[UUID, MapaOcupacaoVisual] | None = None,
 ) -> tuple[CalloutConformidade, ...]:
     target_id = _dense_id("target-p2")
     target = AlvoConformidade(
@@ -393,7 +441,7 @@ def _projected_dense_callouts(
         pagina_id=page.id,
         geometria=GeometriaDocumento.ponto(
             page.id,
-            PontoNormalizado(Decimal("0.50"), Decimal("0.50")),
+            PontoNormalizado(Decimal("0.46"), Decimal("0.56")),
         ),
     )
     facts: list[FatoConformidade] = []
@@ -450,7 +498,10 @@ def _projected_dense_callouts(
         presentation[finding_id] = (
             "Poste P2. " + "texto longo " * 22
             if long_text
-            else f"Poste P2 - divergência {index}. Observado: Não. Esperado: igual a Sim."
+            else (
+                f"Poste P2 - divergência {index}. "
+                "Requisito não atendido: presença de chave fusível."
+            )
         )
     execution = ExecucaoConformidade(
         id=_dense_id("execution"),
@@ -473,6 +524,7 @@ def _projected_dense_callouts(
         evidencias=(),
         paginas=(page,),
         textos_apresentacao=presentation,
+        mapas_ocupacao_visual=visual_maps,
     )
 
 

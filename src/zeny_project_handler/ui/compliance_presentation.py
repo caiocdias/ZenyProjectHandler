@@ -143,12 +143,14 @@ def formatar_texto_achado(
     achado: AchadoConformidade,
     alvo: AlvoConformidade,
 ) -> str:
-    """Use no tooltip e no callout exatamente os valores mostrados na tabela."""
-    observed, expected = formatar_valores_achado(
+    """Explique o problema em linguagem de projeto, sem reproduzir a regra interna."""
+    evaluations = _avaliacoes_decisivas(
         achado.avaliacoes_condicoes,
         achado.resultado,
     )
-    return f"{achado.titulo} — {formatar_alvo(alvo)}. Observado: {observed}. Esperado: {expected}."
+    details = " ".join(_formatar_diagnostico(item) for item in evaluations)
+    header = f"{formatar_alvo(alvo)} - {achado.titulo}."
+    return f"{header} {details}" if details else header
 
 
 def _avaliacoes_decisivas(
@@ -180,6 +182,52 @@ def _formatar_esperado(avaliacao: AvaliacaoCondicaoConformidade) -> str:
     values = _formatar_valores(avaliacao.chave_fato, avaliacao.valores_esperados)
     quantifier = formatar_quantificador(avaliacao.quantificador)
     return f"{label}: {operator} {values} ({quantifier})"
+
+
+def _formatar_diagnostico(avaliacao: AvaliacaoCondicaoConformidade) -> str:
+    """Converta a comparação formal em uma instrução curta para o projetista."""
+    label = rotulo_fato_conformidade(avaliacao.chave_fato).rstrip(".")
+    lower_label = label[:1].lower() + label[1:]
+    observed = avaliacao.valores_observados
+    expected = avaliacao.valores_esperados
+
+    if avaliacao.operador is OperadorCondicao.EXISTE and not observed:
+        return f"Informação ausente: {lower_label}."
+    if avaliacao.operador is OperadorCondicao.AUSENTE and observed:
+        return f"Informação indevida no projeto: {lower_label}."
+    if (
+        avaliacao.operador is OperadorCondicao.IGUAL
+        and expected == (True,)
+        and (not observed or all(value is False for value in observed))
+    ):
+        return f"Requisito não atendido: {lower_label}."
+    if (
+        avaliacao.operador is OperadorCondicao.IGUAL
+        and expected == (False,)
+        and any(value is True for value in observed)
+    ):
+        return f"Situação não permitida: {lower_label}."
+
+    found = _formatar_valores(avaliacao.chave_fato, observed)
+    required = _formatar_exigencia(avaliacao)
+    return f"{label}: encontrado {found}; {required}."
+
+
+def _formatar_exigencia(avaliacao: AvaliacaoCondicaoConformidade) -> str:
+    values = _formatar_valores(avaliacao.chave_fato, avaliacao.valores_esperados)
+    return {
+        OperadorCondicao.IGUAL: f"exigido {values}",
+        OperadorCondicao.DIFERENTE: f"exigido valor diferente de {values}",
+        OperadorCondicao.MENOR: f"exigido abaixo de {values}",
+        OperadorCondicao.MENOR_OU_IGUAL: f"máximo permitido {values}",
+        OperadorCondicao.MAIOR: f"exigido acima de {values}",
+        OperadorCondicao.MAIOR_OU_IGUAL: f"mínimo exigido {values}",
+        OperadorCondicao.EM: f"permitido {values}",
+        OperadorCondicao.NAO_EM: f"não permitido {values}",
+        OperadorCondicao.CONTEM: f"deve conter {values}",
+        OperadorCondicao.EXISTE: "deve estar informado",
+        OperadorCondicao.AUSENTE: "deve estar ausente",
+    }[avaliacao.operador]
 
 
 def _formatar_valores(chave: str, valores: tuple[JsonPrimitive, ...]) -> str:

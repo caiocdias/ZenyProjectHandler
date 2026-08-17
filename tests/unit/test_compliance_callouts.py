@@ -167,8 +167,8 @@ def test_dense_long_text_uses_predefined_smaller_geometry_without_clipping() -> 
     for item in projected:
         box_height = item.caixa_sugerida.altura * page.altura_pontos
         required_height = max(
-            Decimal("42"),
-            Decimal("22")
+            Decimal("36"),
+            Decimal("18")
             + Decimal(len(item.texto.splitlines())) * item.tamanho_fonte_pontos * Decimal("1.28"),
         )
         assert box_height + Decimal("0.001") >= required_height
@@ -288,6 +288,35 @@ def test_point_target_p2_is_the_only_traceable_location_and_receives_arrow() -> 
     assert projected[0].ancoras[0].origem is OrigemAncoraCallout.ALVO
     assert projected[0].ancoras[0].ponto == p2.pontos[0]
     assert ponto_conexao_callout(projected[0].caixa_sugerida, p2.pontos[0]) != p2.pontos[0]
+
+
+def test_named_point_target_uses_p2_region_instead_of_auxiliary_fact_geometry() -> None:
+    page = _page("p2-region", width=Decimal("595"), height=Decimal("842"))
+    auxiliary_symbol = GeometriaDocumento.ponto(page.id, _point("0.15", "0.20"))
+    p2_region = GeometriaDocumento.caixa(
+        page.id,
+        _point("0.64", "0.36"),
+        _point("0.76", "0.48"),
+    )
+    execution, evidence = _execution(
+        (page,),
+        fact_geometries=(auxiliary_symbol,),
+        target_geometry=p2_region,
+    )
+    execution = replace(
+        execution,
+        alvos=(replace(execution.alvos[0], rotulo="P2"),),
+    )
+
+    projected = projetar_callouts_conformidade(
+        execution,
+        evidencias=evidence,
+        paginas=(page,),
+    )
+
+    assert projected[0].ancoras[0].origem is OrigemAncoraCallout.ALVO
+    assert projected[0].ancoras[0].geometria == p2_region
+    assert projected[0].ancoras[0].ponto == _point("0.70", "0.42")
 
 
 def test_specific_decisive_point_is_not_hidden_by_broad_decisive_region() -> None:

@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 from zeny_project_handler.adapters.compliance import (
     carregar_registro_conformidade_json_com_avisos,
 )
+from zeny_project_handler.adapters.pdf.errors import PdfError
 from zeny_project_handler.application.compliance_analysis import (
     ExecutarAnaliseConformidade,
     resultado_conformidade_desatualizado,
@@ -362,13 +363,26 @@ class DocumentationPanelWidget(QWidget):
         self._callouts = ()
         if self._result is not None and session is not None:
             try:
-                self._callouts = projetar_callouts_conformidade(
+                initial_callouts = projetar_callouts_conformidade(
                     self._result,
                     evidencias=session.evidencias,
                     paginas=pages,
                     textos_apresentacao=presentation_texts,
                 )
-            except LayoutCalloutsImpossivelError as error:
+                visual_mapper = getattr(self._viewer, "mapear_ocupacao_visual", None)
+                visual_maps = (
+                    visual_mapper(frozenset(item.pagina_id for item in initial_callouts))
+                    if callable(visual_mapper)
+                    else {}
+                )
+                self._callouts = projetar_callouts_conformidade(
+                    self._result,
+                    evidencias=session.evidencias,
+                    paginas=pages,
+                    textos_apresentacao=presentation_texts,
+                    mapas_ocupacao_visual=visual_maps,
+                )
+            except (LayoutCalloutsImpossivelError, PdfError) as error:
                 self.status_changed.emit(str(error))
         self._update_visible_callouts()
         self._populate_documents()
