@@ -1,0 +1,1015 @@
+# Roadmap da migração para arquitetura cliente-servidor
+
+- Estado geral: **PLANEJADO**
+- Data do planejamento: **2026-08-17**
+- Responsável pelo planejamento: **Codex**
+- Próxima etapa liberada: **Etapa 1** (permanece **PENDENTE**; não iniciada neste chat)
+- Regra de execução: uma etapa só pode começar quando todas as suas dependências estiverem
+  marcadas como **CONCLUÍDA**.
+
+## Objetivo final
+
+Transformar o Zeny Project Handler em dois artefatos independentes:
+
+1. um cliente Windows magro, responsável somente pela interface Qt, interação com arquivos locais,
+   apresentação, cache visual descartável e comunicação HTTP;
+2. um servidor executado em um container Docker, responsável por domínio, casos de uso, regras,
+   análise de PDF, OCR, renderização, conformidade, persistência, arquivos gerenciados, operações
+   longas e recuperação.
+
+Ao final, todas as funcionalidades visíveis da aplicação atual devem continuar disponíveis. O
+cliente distribuído não pode conter a lógica interna, os seeds de catálogo/regras, adaptadores de
+persistência, PyMuPDF, Tesseract, SQLAlchemy ou código dos casos de uso.
+
+## Como manter este roadmap
+
+### Estados permitidos
+
+Cada etapa deve usar exatamente um destes estados:
+
+- **PENDENTE**: ainda não iniciada e sem impedimento conhecido;
+- **EM DESENVOLVIMENTO**: existe um chat trabalhando ativamente na etapa;
+- **EM VALIDAÇÃO**: implementação pronta, mas falta comprovar algum critério de aceite;
+- **CONCLUÍDA**: todos os critérios e gates foram comprovados e as evidências foram registradas;
+- **BLOQUEADA POR ERRO**: um erro impede progresso seguro; o bloco de evidências deve conter causa,
+  comando que reproduz e ação necessária;
+- **CANCELADA**: decisão explícita do responsável pelo produto; não usar para falha técnica.
+
+Ao iniciar uma etapa, o agente deve alterar seu estado para **EM DESENVOLVIMENTO** e registrar data
+e escopo. Antes de finalizar, deve passar por **EM VALIDAÇÃO**. Só deve marcar **CONCLUÍDA** depois de
+executar todos os testes exigidos. Se houver falha que não possa ser resolvida no escopo, deve marcar
+**BLOQUEADA POR ERRO** e não iniciar a etapa seguinte.
+
+### Regras obrigatórias para todo chat de execução
+
+1. Ler este documento inteiro, o `README.md`, a especificação funcional e os ADRs relevantes.
+2. Conferir `git status --short` e preservar mudanças do usuário.
+3. Confirmar que as dependências da etapa estão **CONCLUÍDA**.
+4. Mudar somente a etapa atual para **EM DESENVOLVIMENTO** antes de editar código.
+5. Não reduzir funcionalidades, cobertura, validações de integridade ou auditabilidade para fazer a
+   migração passar.
+6. Criar testes para todo contrato ou comportamento novo e adaptar testes existentes sem apagá-los
+   apenas porque exercitam a arquitetura antiga.
+7. Não iniciar a etapa seguinte no mesmo chat.
+8. Registrar, no fim da etapa, comandos executados, resultados, cobertura, limitações e arquivos
+   relevantes no bloco **Evidências**.
+9. Executar `IniciarTestes.bat` no encerramento de toda etapa. A partir da Etapa 2, executar também
+   os gates específicos de servidor/contrato; a partir da Etapa 9, executar os gates dos artefatos
+   cliente e servidor.
+10. Não criar commit ou publicar artefato remoto salvo se a mensagem do usuário pedir isso
+    explicitamente.
+
+## Diagnóstico da arquitetura atual
+
+O bootstrap em `src/zeny_project_handler/bootstrap.py` compõe, dentro do mesmo processo Qt:
+
+- SQLite/Alembic e unidades de trabalho;
+- catálogo técnico e registro de regras;
+- PyMuPDF, cache de análise e Tesseract;
+- pipelines de extração, interpretação, promoção e conformidade;
+- revisão humana, portabilidade, backup e recuperação;
+- leitor e renderizador progressivo de PDF;
+- coordenador global de operações;
+- `MainWindow` e todos os painéis.
+
+A interface importa diretamente tipos de `application`, `domain`, `ports` e adaptadores concretos.
+Além de chamar serviços, ela ainda deriva regiões/vãos, valida arquivos, abre sessões PyMuPDF e
+executa a fila de renderização local. Portanto, apenas colocar os serviços atuais atrás de HTTP não
+é suficiente: os modelos enviados à interface também precisam ser substituídos por DTOs de
+apresentação e toda decisão de negócio deve permanecer no servidor.
+
+O relatório de qualidade existente registra 502 testes aprovados e cobertura de 86,39%. A Etapa 0
+deve gerar uma nova linha de base antes de qualquer alteração estrutural.
+
+## Arquitetura-alvo obrigatória
+
+```mermaid
+flowchart LR
+    subgraph C["Cliente Windows — artefato independente"]
+        UI["Widgets Qt e diálogos"]
+        PRES["Apresentação, viewport e cache visual"]
+        HTTP["Gateway HTTP + DTOs de transporte"]
+        UISTATE["ui-state.ini e URL do servidor"]
+        UI --> PRES --> HTTP
+        UI --> UISTATE
+    end
+
+    subgraph S["Container Docker — fonte principal"]
+        AUTH["Autenticação Bearer"]
+        API["API REST /api/v1"]
+        JOBS["Jobs, progresso e cancelamento"]
+        APP["Casos de uso e coordenador"]
+        DOMAIN["Domínio, catálogos e regras"]
+        ADAPTERS["PyMuPDF, OCR, ZIP e persistência"]
+        DATA["Volume /data: SQLite, PDFs, cache e logs"]
+        AUTH --> API --> JOBS --> APP --> DOMAIN
+        APP --> ADAPTERS --> DATA
+    end
+
+    HTTP -- "JSON, uploads e downloads binários" --> AUTH
+```
+
+### Fronteira do cliente
+
+Pode permanecer no cliente:
+
+- PySide6, widgets, tema, ícone, identidade da janela e atalhos;
+- seleção local de arquivos e escolha do destino de downloads;
+- serialização de requisições, mensagens de erro seguras e DTOs sem comportamento de negócio;
+- planejamento do viewport, composição de `QImage/QPixmap`, overlays já calculados pelo servidor e
+  cache LRU descartável de raster recebido;
+- estado puramente visual (`ui-state.ini`), URL do servidor e preferências não sensíveis;
+- senha do servidor e senhas de PDF apenas em memória durante a sessão.
+
+Não pode estar no artefato do cliente:
+
+- `domain`, `application`, `ports` de negócio ou adaptadores do servidor;
+- SQLAlchemy, Alembic, SQLite de negócio, PyMuPDF ou Tesseract;
+- JSONs de catálogo, interpretação ou conformidade;
+- avaliação de regras, interpretação, detecção de regiões/vãos ou geração de callouts;
+- abertura, validação, hashing ou renderização de PDF como regra da aplicação;
+- código de backup, importação, recuperação ou manipulação de arquivos gerenciados.
+
+### Fronteira do servidor
+
+O servidor é a única fonte de verdade. Ele deve:
+
+- armazenar SQLite, PDFs enviados, fotos, pacotes temporários, cache, journals e logs em `/data`;
+- copiar uploads para armazenamento gerenciado; nunca tentar abrir um caminho do Windows recebido
+  no JSON;
+- usar um único processo worker enquanto o coordenador de operações e credenciais permanecerem em
+  memória, evitando coordenação inconsistente entre workers;
+- responder DTOs próprios da API, sem serializar entidades SQLAlchemy ou agregados internos
+  diretamente;
+- manter operações mutáveis idempotentes quando houver risco de repetição por falha de rede;
+- devolver conflitos como HTTP 409 e erros de domínio em envelope estável, sem traceback;
+- executar renderização, OCR, interpretação, conformidade e portabilidade dentro do container.
+
+### Autenticação simples definida para este projeto
+
+- O segredo vem exclusivamente de `ZENY_SERVER_PASSWORD`.
+- Docker Compose lê `.env` e injeta o valor no container em **runtime**. `.env` deve estar no
+  `.gitignore` e no `.dockerignore`; não usar `ARG`, `ENV` com valor real ou `COPY .env` no
+  `Dockerfile`.
+- `.env-example` é versionado com placeholder e orientação.
+- O cliente apresenta URL e senha num diálogo de conexão, testa a sessão e mantém a senha somente
+  em memória. A URL pode ser lembrada; a senha não.
+- Toda rota protegida recebe `Authorization: Bearer <senha>`.
+- Comparar o segredo em tempo constante (`hmac.compare_digest`). Senha ausente, vazia ou igual ao
+  placeholder deve impedir a inicialização do servidor.
+- Falta ou erro de senha retorna 401 com a mesma resposta genérica e `WWW-Authenticate: Bearer`.
+- `GET /health/live` pode ser público, mas só informa que o processo está vivo. Diagnósticos,
+  versão, prontidão, OCR e dados ficam em rota autenticada.
+- Não registrar `Authorization`, senha do servidor ou senha de PDF.
+
+Este esquema é deliberadamente simples para uma rede local confiável. Em HTTP puro, a senha pode
+ser observada por alguém com acesso ao tráfego. Se a rede deixar de ser confiável, TLS por proxy
+reverso ou VPN passa a ser requisito antes da exposição. A imagem Docker protege a lógica contra os
+clientes da API, mas não contra alguém com acesso administrativo ao host Docker ou à própria
+imagem.
+
+### Contrato HTTP mínimo a ser estabilizado
+
+Todas as rotas, exceto `GET /health/live`, ficam sob `/api/v1` e exigem Bearer. A lista abaixo é o
+escopo funcional; nomes finais devem ser fixados na especificação OpenAPI da Etapa 1.
+
+| Grupo | Operações obrigatórias |
+|---|---|
+| sessão | validar senha, versão/capacidades, prontidão e diagnóstico OCR |
+| projetos | listar, criar, abrir/detalhar, alterar NS e excluir |
+| documentos | upload por streaming, preflight, desbloqueio de PDF, ordenação e remoção |
+| visualizador | sessão temporária para PDF avulso, metadados de páginas, prévia e tiles |
+| jobs | criar, consultar, observar progresso, obter resultado e cancelar |
+| análise | iniciar pipeline completo e refletir operação global |
+| revisão | listar sessões/propostas/regiões/vãos, aceitar, ajustar, rejeitar e criar manualmente |
+| documentação | campos documentais, navegação e evidências normalizadas |
+| conformidade | última execução, histórico, executar análise, resultados e callouts |
+| regras | revisão ativa, números, preflight/importação confirmada e download do JSON |
+| portabilidade | preflight/importação de `.zphproj`, exportação e download |
+| backup | preflight/criação/download e upload/preflight/restauração confirmada |
+| fotos | listar, anexar, remover e baixar fotos gerenciadas já suportadas pelo serviço atual |
+
+Requisitos transversais do contrato:
+
+- envelope de erro: `code`, `message`, `correlation_id` e `details` opcional seguro;
+- datas ISO-8601 com timezone, UUIDs em texto, decimais em texto quando precisão importar;
+- upload/download em streaming, limites configuráveis e nomes de arquivo saneados;
+- `Idempotency-Key` em criação de job/upload e ausência de retry automático para mutações;
+- resposta 202 para jobs; polling limitado no cliente (valor inicial entre 250 e 500 ms);
+- raster como `image/png` ou outro formato sem perda aprovado pelo teste visual, com metadados em
+  headers/DTO; nunca enviar objetos PyMuPDF;
+- OpenAPI versionada e testada contra snapshot;
+- nenhuma rota aceita caminho de arquivo do cliente ou destino arbitrário do servidor.
+
+## Artefatos oficiais de release e separação física
+
+A separação não será considerada concluída apenas porque cliente e servidor usam processos
+diferentes no repositório de desenvolvimento. A release precisa produzir entregas físicas distintas
+e destinadas a públicos distintos:
+
+### Pacote entregue aos usuários do cliente
+
+- `ZenyProjectHandler-Client-<versao>-win-x64.zip`, autocontido e executável sem Python instalado;
+- opcionalmente, um instalador Windows com a mesma composição, quando a ferramenta de empacotamento
+  e eventual certificado estiverem disponíveis;
+- `LEIA-ME-CLIENTE.md`, com instalação, URL do servidor, conexão, atualização e remoção;
+- nenhum fonte, wheel, módulo, seed, dependência ou configuração pertencente ao servidor;
+- nenhuma senha predefinida. A senha é digitada no primeiro acesso e mantida somente em memória.
+
+### Kit entregue somente ao administrador do servidor
+
+- `ZenyProjectHandler-Server-<versao>.oci.tar`, imagem OCI/Docker exportada e identificada também por
+  digest, ou referência imutável equivalente em registry privado;
+- `compose.release.yaml` usando `image:` e digest/tag de release, sem `build:` e sem exigir o
+  repositório ou código-fonte na máquina de produção;
+- `.env-example`, scripts documentados de carga da imagem, start, stop, health, atualização,
+  backup e rollback;
+- `LEIA-ME-SERVIDOR.md`, incluindo volume, porta LAN, firewall e troca de senha.
+
+### Manifesto comum da release
+
+- `RELEASE_NOTES.md` com versão do cliente, servidor, API, schema e migração;
+- `SHA256SUMS.txt` cobrindo todos os arquivos distribuídos;
+- `release-manifest.json` com nomes, tamanhos, SHA-256, versão mínima/máxima compatível da API e
+  digest da imagem;
+- SBOM/lista de dependências separada para cliente e servidor;
+- evidência de teste em uma máquina Windows limpa para o cliente e em um host Docker limpo para o
+  servidor.
+
+O bundle final deve poder ser montado em `dist/release/<versao>/` por um único comando reproduzível.
+Esse diretório é saída de build e não deve ser versionado. O cliente deve validar a compatibilidade
+da API na conexão e recusar, com mensagem clara, uma combinação incompatível.
+
+## Inventário de paridade funcional
+
+| Funcionalidade atual | Dono final | Prova mínima de paridade |
+|---|---|---|
+| criar/abrir/alterar NS/excluir projeto | servidor | teste API + fluxo Qt real |
+| selecionar e importar múltiplos PDFs | seleção no cliente; conteúdo no servidor | upload streaming, hash e reabertura após apagar a cópia local |
+| senha de PDF, três tentativas e descarte seguro | diálogo cliente; validação/memória no servidor | testes de senha correta/incorreta, reinício e ausência em logs/banco |
+| reordenar páginas e remover documentos | servidor | ordem persistida após reinício do container |
+| PDF avulso no visualizador | servidor com sessão temporária | upload temporário, render, expiração e limpeza |
+| zoom, rotação, prévia, tiles e paginação | UI + render do servidor | comparação visual/dimensional e cancelamento de pedidos obsoletos |
+| análise, OCR, interpretação e promoção | servidor | mesmo resultado de fixture e progresso/cancelamento por job |
+| regiões, elementos, relações e vãos | servidor | DTO de sessão e testes de paridade com projeção atual |
+| revisão humana e criações manuais | servidor | decisões persistidas e conflitos seguros entre clientes |
+| documentação, conformidade e callouts | servidor; desenho do overlay no cliente | snapshots equivalentes e navegação até evidência |
+| importar/exportar regras | upload/download; validação no servidor | preflight, confirmação, revisão ativa e round trip JSON |
+| `.zphproj`, `.zphbackup` e recuperação | servidor; seletor/download no cliente | round trip por rede, degradação e restauração após reinício |
+| fotos gerenciadas | servidor | upload/download/hash e associação preservada |
+| tema, docks e geometria da janela | cliente | restauração local independente do volume do servidor |
+| coordenação global, progresso e cancelamento | servidor | dois clientes, conflito 409, progresso monotônico e cancelamento |
+
+## Etapa 0 — Linha de base, ADR e caracterização
+
+- Estado: **PENDENTE**
+- Dependências: nenhuma
+- Entrega principal: linha de base reproduzível e decisões arquiteturais aceitas no repositório.
+
+### Escopo
+
+1. Executar o gate atual sem mudanças funcionais e registrar quantidade de testes, cobertura, tempo
+   e ambiente.
+2. Criar `docs/adr/0013-arquitetura-cliente-servidor.md` com a arquitetura-alvo deste roadmap,
+   incluindo fronteiras, autenticação, armazenamento gerenciado, worker único, jobs, limitações de
+   HTTP na LAN e consequência de o container ser a fonte principal.
+3. Criar `docs/inventario-paridade-cliente-servidor.md` ligando cada ação visível da UI ao método
+   atual, testes existentes, futuro endpoint e DTO esperado.
+4. Adicionar testes de caracterização somente onde um comportamento crítico ainda não estiver
+   coberto, especialmente ordem de folhas, PDFs protegidos, cancelamento, regras e portabilidade.
+5. Validar que `.env` está ignorado, `.env-example` não contém segredo real e documentar que o
+   segredo será injetado em runtime.
+6. Registrar no ADR que uploads novos passam a ser cópias gerenciadas no servidor. A referência a
+   caminhos externos do Windows não atravessa a nova fronteira.
+
+### Critérios de aceite e comprovação
+
+- `git check-ignore .env` retorna `.env` e `git check-ignore .env-example` não a ignora.
+- `IniciarTestes.bat` termina com `RESULTADO FINAL: APROVADO` sem reduzir o limiar de 85,01%.
+- O inventário cobre todos os itens da tabela de paridade e aponta ao menos um teste por fluxo.
+- O ADR possui estado, contexto, decisão, consequências, riscos e alternativas rejeitadas.
+- Nenhuma lógica ou dependência de execução muda nesta etapa.
+
+### Evidências
+
+- Início/data/agente: **2026-08-17 — Codex; dependências confirmadas: nenhuma; escopo limitado à
+  linha de base, ADR 0013, inventário de paridade, caracterização necessária e validação de
+  `.env`/`.env-example`.**
+- Estado do gate inicial: **APROVADO em 2026-08-17 18:15:56 (execução válida fora do sandbox):
+  `pip check`, Ruff lint, Ruff format, Mypy, Pytest/cobertura e complexidade E/F passaram;
+  `RESULTADO FINAL: APROVADO`. Uma tentativa anterior dentro do sandbox foi inválida porque o
+  executável-base da `.venv` no WindowsApps recebeu “Acesso negado” (código 103 em todas as
+  seções); o mesmo `cmd.exe /d /c IniciarTestes.bat` foi repetido com autorização fora do sandbox.**
+- Testes/cobertura/tempo: **linha de base inicial: 618 aprovados, 87,08%, Pytest 128,11 s. Gate
+  final em 2026-08-17 18:25:01: 618 aprovados, 87,07%, Pytest 108,96 s, limiar inalterado em
+  85,01%; 17.592 statements, 4.596 branches; 1.742 funções/métodos inspecionados e nenhum rank
+  E/F. Ambiente: Microsoft Windows 10.0.26200.9168 x64, Python 3.13.14, pytest 8.4.2,
+  pytest-cov 7.1.0, PySide6/Qt 6.11.1, PowerShell 7.6.4; `git` HEAD `86ad29daea6a`.**
+- Arquivos criados ou alterados: **criados
+  `docs/adr/0013-arquitetura-cliente-servidor.md` e
+  `docs/inventario-paridade-cliente-servidor.md`; alterado somente este roadmap pela Etapa 0.
+  Nenhum diff em `src/`, `tests/`, `pyproject.toml`, locks, setup, launchers ou gate. As mudanças
+  preexistentes do usuário em `.gitignore`, `.env-example` e no roadmap foram preservadas.**
+- Observações/bloqueios: **nenhum bloqueio. `git check-ignore .env` retornou `.env` (exit 0) e
+  `git check-ignore .env-example` não a ignorou (exit 1); o exemplo contém apenas
+  `ZENY_SERVER_PASSWORD=troque-por-uma-senha-longa-e-aleatoria`, e o ADR determina injeção em
+  runtime. O inventário cobre as 15 linhas da matriz, referencia 49 node IDs pytest existentes e
+  registra endpoint/DTO esperado por ação. Ordem de folhas, PDFs protegidos, cancelamento, regras e
+  portabilidade já tinham caracterização específica aprovada; portanto nenhum teste redundante foi
+  adicionado. Validações finais: `cmd.exe /d /c IniciarTestes.bat`, checks de ignore/placeholder,
+  verificação automática das referências pytest, das seções do ADR e de whitespace. A variação de
+  0,01 ponto percentual entre as duas medições não decorre de mudança de código e ambas superam o
+  gate. Limitações de HTTP na LAN, worker único e acesso administrativo à imagem estão registradas
+  no ADR. Etapa 1 não iniciada e nenhum commit criado.**
+
+### Mensagem para um novo chat limpo do Codex
+
+> Implemente somente a **Etapa 0 — Linha de base, ADR e caracterização** do arquivo
+> `docs/roadmap-arquitetura-cliente-servidor.md`. Leia o roadmap inteiro antes de editar, confirme
+> que a etapa não tem dependências pendentes, altere seu estado para EM DESENVOLVIMENTO e siga todo
+> o escopo e os critérios de aceite. Preserve funcionalidades e mudanças existentes do usuário.
+> Execute o gate completo, registre as evidências no próprio roadmap e só marque a etapa como
+> CONCLUÍDA se todas as comprovações passarem. Não comece a Etapa 1 e não faça commit.
+
+## Etapa 1 — Contratos de transporte e especificação da API v1
+
+- Estado: **CONCLUÍDA**
+- Dependências: Etapa 0 **CONCLUÍDA**
+- Entrega principal: contratos estáveis, sem comportamento de negócio, e OpenAPI v1 revisável.
+
+### Escopo
+
+1. Criar o pacote `zeny_project_handler_contracts`, dependente apenas de stdlib e Pydantic, com os
+   DTOs, enums e envelopes de erro necessários a todos os grupos listados no contrato mínimo.
+2. DTOs devem ser projeções de transporte, não cópias comportamentais do domínio. Não incluir
+   avaliação, derivação de região/vão, validação normativa ou acesso a arquivos.
+3. Definir versão da API, política de compatibilidade, códigos de erro, paginação quando aplicável,
+   UUID/data/decimal, metadados de raster, jobs, confirmações e idempotência.
+4. Criar uma aplicação FastAPI mínima apenas para gerar a especificação e salvar o snapshot em
+   `docs/api/openapi-v1.json`.
+5. Criar testes de serialização ida/volta, rejeição de campos inválidos, estabilidade de enums e
+   snapshot OpenAPI.
+6. Adicionar gate de arquitetura que proíba o pacote de contratos de importar PySide6, domínio,
+   aplicação, adaptadores, SQLAlchemy, PyMuPDF ou Tesseract.
+7. Atualizar o inventário da Etapa 0 com rota, método HTTP, request, response e códigos esperados.
+
+### Decisões que não podem ficar implícitas
+
+- Separar preflight de confirmação para regras, projeto portátil e restauração de backup.
+- Distinguir `document_id`, `page_id`, `upload_id`, `viewer_session_id`, `job_id` e
+  `correlation_id`.
+- Representar geometria normalizada no contrato sem expor classes internas.
+- Prever `PDF_PASSWORD_REQUIRED`, `PDF_PASSWORD_INVALID`, `OPERATION_CONFLICT`, `STALE_STATE`,
+  `UPLOAD_TOO_LARGE`, `INTEGRITY_ERROR` e `AUTHENTICATION_FAILED`.
+- O contrato não aceita `Path` nem caminho canônico do servidor em requests/responses públicos.
+
+### Critérios de aceite e comprovação
+
+- Testes do pacote de contratos passam isoladamente.
+- O snapshot OpenAPI cobre todos os grupos mínimos e falha se houver mudança não revisada.
+- `rg`/teste AST prova que contratos não importam código protegido.
+- `IniciarTestes.bat` permanece aprovado.
+
+### Evidências
+
+- Início/data/agente: _preencher_
+- Comandos e resultados: _preencher_
+- Hash/versão do snapshot OpenAPI: _preencher_
+- Arquivos relevantes: _preencher_
+- Observações/bloqueios: _preencher_
+
+### Mensagem para um novo chat limpo do Codex
+
+> Implemente somente a **Etapa 1 — Contratos de transporte e especificação da API v1** descrita em
+> `docs/roadmap-arquitetura-cliente-servidor.md`. Leia o documento inteiro, confirme a Etapa 0 como
+> CONCLUÍDA, mude a Etapa 1 para EM DESENVOLVIMENTO e implemente DTOs sem lógica de negócio, a
+> OpenAPI versionada e os gates de arquitetura. Rode os testes direcionados e `IniciarTestes.bat`,
+> registre evidências e marque CONCLUÍDA apenas se todos os critérios passarem. Não inicie a Etapa 2
+> e não faça commit.
+
+## Etapa 2 — Servidor base, autenticação e Docker
+
+- Estado: **PENDENTE**
+- Dependências: Etapa 1 **CONCLUÍDA**
+- Entrega principal: container autenticado que inicializa a fonte de dados sem depender de Qt.
+
+### Escopo
+
+1. Criar `zeny_project_handler_server` com composição própria. Extrair do bootstrap atual uma
+   composição de serviços reutilizável sem importar PySide6; o bootstrap Qt não pode ser carregado
+   pelo servidor.
+2. Implementar configurações de servidor e validação fail-closed de `ZENY_SERVER_PASSWORD`, host,
+   porta, `/data`, nível de log e limites de upload/renderização.
+3. Implementar middleware/dependência Bearer com comparação em tempo constante, resposta 401
+   uniforme e redaction de segredos.
+4. Implementar `GET /health/live` público e uma rota autenticada de sessão/prontidão com versão da
+   API, capacidades e diagnóstico OCR seguro.
+5. Criar `Dockerfile` multi-stage, `.dockerignore`, `compose.yaml` e healthcheck. Instalar Tesseract
+   e português no estágio runtime Linux, executar como usuário não-root e montar volume em `/data`.
+6. O Compose deve usar o `.env` local criado para desenvolvimento, mas a imagem não pode conter o
+   arquivo. Fixar um único worker Uvicorn nesta fase.
+7. Separar locks de dependências em servidor, cliente e desenvolvimento, preservando versões
+   reproduzíveis.
+8. Configurar shutdown ordenado de jobs/engine e correlação de logs por request sem registrar
+   headers sensíveis.
+
+### Critérios de aceite e comprovação
+
+- Servidor sem senha, com senha vazia ou placeholder não inicia.
+- `GET /health/live` responde sem senha e não revela configuração; rota de sessão retorna 401 sem
+  senha e com senha errada, e 200 com senha correta.
+- `docker compose build --no-cache` e `docker compose up -d` concluem; healthcheck fica healthy.
+- Reiniciar/recriar o container preserva um marcador gravado no volume `/data`.
+- Inspeção da imagem prova ausência de `.env` e ausência de PySide6.
+- Testes unitários cobrem autenticação, redaction, config e lifecycle.
+- `IniciarTestes.bat` permanece aprovado.
+
+### Evidências
+
+- Início/data/agente: _preencher_
+- ID/tag e tamanho da imagem: _preencher_
+- Resultado dos testes 401/200/healthcheck: _preencher_
+- Prova de volume e ausência do `.env`: _preencher_
+- Comandos/gates: _preencher_
+- Observações/bloqueios: _preencher_
+
+### Mensagem para um novo chat limpo do Codex
+
+> Implemente somente a **Etapa 2 — Servidor base, autenticação e Docker** de
+> `docs/roadmap-arquitetura-cliente-servidor.md`. Leia tudo, confirme as Etapas 0 e 1 como
+> CONCLUÍDAS, marque a Etapa 2 EM DESENVOLVIMENTO e respeite a decisão de segredo injetado em
+> runtime, nunca no build. Crie servidor sem dependência Qt, Docker/Compose, autenticação, health e
+> testes. Comprove build, healthcheck, 401/200, persistência do volume e ausência de segredo na
+> imagem; rode `IniciarTestes.bat`, registre evidências e só então marque CONCLUÍDA. Não inicie a
+> Etapa 3 e não faça commit.
+
+## Etapa 3 — API de projetos, documentos e armazenamento gerenciado
+
+- Estado: **PENDENTE**
+- Dependências: Etapa 2 **CONCLUÍDA**
+- Entrega principal: o servidor passa a possuir projetos e PDFs recebidos pela rede.
+
+### Escopo
+
+1. Implementar endpoints de listar/criar/abrir/alterar NS/excluir projetos e mapear erros do domínio
+   para o envelope da API.
+2. Implementar upload multipart por streaming, com limite configurável, temporário seguro, hash,
+   tamanho, saneamento do nome e publicação atômica em área gerenciada do servidor.
+3. Nunca aceitar ou retornar caminho local absoluto. O cliente envia bytes e nome de exibição; o
+   servidor escolhe todo caminho físico.
+4. Adaptar o fluxo de importação para que um PDF enviado seja fonte gerenciada. Garantir rollback
+   se banco ou publicação falhar e limpeza de uploads abandonados.
+5. Implementar fluxo de PDF protegido: upload/preflight retorna código e `upload_id`; o desbloqueio
+   recebe senha, respeita três tentativas, mantém credencial apenas em memória e finaliza a
+   importação. Após restart, documentos protegidos podem pedir desbloqueio novamente.
+6. Implementar ordem de páginas, remoção de documentos, detalhes de fontes e endpoints de fotos
+   gerenciadas.
+7. Usar `Idempotency-Key` para impedir duplicação após repetição de upload/criação por falha de
+   rede. Não fazer retry cego de mutações.
+8. Cobrir dois clientes concorrentes, duplicidade por hash, path traversal, upload excedente,
+   desconexão no meio do stream e senha ausente em banco/logs.
+
+### Critérios de aceite e comprovação
+
+- Todos os fluxos de projeto/documento funcionam por ASGI/HTTP sem instanciar `MainWindow`.
+- Um PDF importado continua abrindo depois que o arquivo original no cliente é apagado.
+- Reinício do container preserva projeto, documento e ordem.
+- Nenhum JSON público contém caminho físico de `/data` ou do Windows.
+- PDFs protegidos mantêm a política atual e nenhum segredo aparece em banco, cache ou logs.
+- Testes de falha provam ausência de arquivos órfãos ou estado parcial publicado.
+- Gates de contrato, servidor e `IniciarTestes.bat` passam.
+
+### Evidências
+
+- Início/data/agente: _preencher_
+- Rotas implementadas: _preencher_
+- Testes de upload/restart/idempotência/senha: _preencher_
+- Inspeção de logs e banco: _preencher_
+- Comandos/gates: _preencher_
+- Observações/bloqueios: _preencher_
+
+### Mensagem para um novo chat limpo do Codex
+
+> Implemente somente a **Etapa 3 — API de projetos, documentos e armazenamento gerenciado** do
+> roadmap `docs/roadmap-arquitetura-cliente-servidor.md`. Leia o roadmap inteiro, valide que a Etapa
+> 2 está CONCLUÍDA e marque a atual EM DESENVOLVIMENTO. Implemente as rotas, uploads por streaming,
+> arquivos gerenciados, idempotência e PDFs protegidos sem aceitar caminhos do cliente. Faça testes
+> de falha, restart e ausência de segredos, rode todos os gates, registre evidências e só marque
+> CONCLUÍDA se os critérios forem comprovados. Não inicie a Etapa 4 e não faça commit.
+
+## Etapa 4 — Visualizador remoto de PDF
+
+- Estado: **PENDENTE**
+- Dependências: Etapa 3 **CONCLUÍDA**
+- Entrega principal: toda abertura e renderização de PDF ocorre no servidor; o Qt apenas apresenta.
+
+### Escopo
+
+1. Criar endpoints de metadados, prévia e tiles para documentos de projeto, com orçamento atual de
+   pixels/bytes, rotação, recorte normalizado, DPI e respostas canceláveis/descartáveis.
+2. Criar sessão temporária autenticada para o recurso atual de abrir PDF avulso. O cliente faz
+   upload; o servidor define TTL, limite e limpeza. O encerramento explícito deve apagar a sessão.
+3. Manter verificação de identidade/integridade no servidor e códigos próprios para origem alterada,
+   senha necessária e sessão expirada.
+4. Criar no cliente um gateway HTTP assíncrono/worker Qt que solicite raster, descarte respostas de
+   geração antiga e alimente `QImage/QPixmap`. O cliente pode manter cálculo de viewport e cache LRU
+   visual, mas não abrir PDF nem usar PyMuPDF.
+5. Migrar `pdf_viewer.py` e `pdf_rendering.py` para contratos de transporte. Geometrias, overlays e
+   callouts devem vir prontos/normalizados do servidor; no cliente permanece apenas desenho e
+   interação visual.
+6. Tratar timeout, servidor indisponível, 401 durante sessão, tile atrasado, cancelamento e retry
+   apenas de leituras idempotentes.
+7. Adicionar comparação com fixtures da renderização atual: dimensões, rotação, recorte, limites e
+   tolerância visual documentada.
+
+### Critérios de aceite e comprovação
+
+- Visualizador de projeto e PDF avulso mantêm paginação, zoom, rotação, prévia e tiles.
+- Nenhuma execução do cliente importa `fitz`, `pymupdf` ou abre o PDF para renderizar/inspecionar.
+- Troca rápida de página/zoom não aplica resposta obsoleta.
+- Fechar sessão avulsa limpa o arquivo; TTL também limpa sessão abandonada.
+- Senha de PDF é solicitada sem persistência ou log.
+- Testes visuais/dimensionais e gates completos passam.
+
+### Evidências
+
+- Início/data/agente: _preencher_
+- Comparação de raster e tolerâncias: _preencher_
+- Testes de corrida/cancelamento/TTL: _preencher_
+- Prova de ausência de PyMuPDF no caminho do cliente: _preencher_
+- Comandos/gates: _preencher_
+- Observações/bloqueios: _preencher_
+
+### Mensagem para um novo chat limpo do Codex
+
+> Implemente somente a **Etapa 4 — Visualizador remoto de PDF** de
+> `docs/roadmap-arquitetura-cliente-servidor.md`. Leia o arquivo inteiro, confira as dependências,
+> marque a etapa EM DESENVOLVIMENTO e mova abertura/renderização para o servidor, mantendo no
+> cliente somente apresentação, viewport e cache visual. Preserve PDF avulso, senha, paginação,
+> zoom, rotação, prévia, tiles e cancelamento de respostas antigas. Execute testes de paridade e
+> todos os gates, registre evidências e só marque CONCLUÍDA se passar. Não inicie a Etapa 5 e não
+> faça commit.
+
+## Etapa 5 — Jobs remotos e painel de projetos
+
+- Estado: **PENDENTE**
+- Dependências: Etapa 4 **CONCLUÍDA**
+- Entrega principal: CRUD, importação e pipeline do painel Projeto usam exclusivamente a API.
+
+### Escopo
+
+1. Criar gerenciador de jobs no servidor para pipeline e futuras operações longas. Estados mínimos:
+   `QUEUED`, `RUNNING`, `WAITING_CONFIRMATION`, `CANCELLING`, `SUCCEEDED`, `FAILED`, `CANCELLED`.
+2. Implementar criação idempotente, consulta, progresso monotônico, resultado seguro, cancelamento
+   cooperativo, retenção limitada e operação global observável por todos os clientes.
+3. Mapear o `CoordenadorOperacoes` para conflitos HTTP 409. Como o estado é em memória, manter um
+   worker de servidor; documentar comportamento de restart e usar journals existentes para
+   reconciliação.
+4. Migrar `ProjectPanelWidget` para gateway/DTO HTTP: lista, criação, abertura, NS, exclusão, seleção
+   e upload de PDFs, ordenação, remoção, análise, progresso e cancelamento.
+5. Substituir `_PipelineWorker` por worker de rede/polling. Nenhum caso de uso, leitor PDF ou
+   coordenador local é injetado no painel.
+6. Preservar mensagens e confirmações. Erros inesperados mostram mensagem segura com
+   `correlation_id`, enquanto traceback permanece apenas no servidor.
+7. Testar dois clientes: um inicia análise, o outro enxerga bloqueio/progresso; cancelamento não
+   publica execução parcial.
+
+### Critérios de aceite e comprovação
+
+- O painel Projeto não importa `application`, `domain`, adaptadores ou ports do servidor.
+- Todo o fluxo MVP atual passa por um servidor real em teste.
+- Progresso nunca retrocede; cancelar chega a ponto seguro e libera a operação global.
+- Repetir criação de job com a mesma chave não executa duas vezes.
+- Restart durante operação resulta em estado recuperável e não deixa sucesso falso.
+- Gates direcionados e `IniciarTestes.bat` passam.
+
+### Evidências
+
+- Início/data/agente: _preencher_
+- Matriz de estados de job testada: _preencher_
+- Teste com dois clientes/restart: _preencher_
+- Import graph do painel: _preencher_
+- Comandos/gates: _preencher_
+- Observações/bloqueios: _preencher_
+
+### Mensagem para um novo chat limpo do Codex
+
+> Implemente somente a **Etapa 5 — Jobs remotos e painel de projetos** do roadmap
+> `docs/roadmap-arquitetura-cliente-servidor.md`. Leia tudo, confirme a Etapa 4 CONCLUÍDA, marque a
+> atual EM DESENVOLVIMENTO e implemente jobs, polling, cancelamento, idempotência e coordenação
+> global no servidor. Migre integralmente o painel Projeto para o gateway HTTP sem imports de
+> lógica protegida. Teste dois clientes e restart, rode os gates, registre evidências e só marque
+> CONCLUÍDA se todos os critérios passarem. Não inicie a Etapa 6 e não faça commit.
+
+## Etapa 6 — Resultados e revisão humana remotos
+
+- Estado: **PENDENTE**
+- Dependências: Etapa 5 **CONCLUÍDA**
+- Entrega principal: o painel Resultados recebe projeções prontas e persiste revisões pela API.
+
+### Escopo
+
+1. Criar endpoints/DTOs para lista de projetos semânticos, sessão de revisão, catálogo necessário à
+   edição, regiões, propostas, relações, elementos confirmados, vãos e evidências de navegação.
+2. Calcular no servidor tudo que hoje vem de `analysis_regions`, `spans`, domínio e helpers de
+   negócio do painel. DTOs devem trazer rótulos/valores necessários ou dados puros cuja formatação
+   seja exclusivamente visual.
+3. Implementar aceitar/ajustar/rejeitar proposta, criar elemento manual e criar relação manual.
+   Revalidar projeto/proposta no servidor e retornar 409 para estado obsoleto ou decisão duplicada.
+4. Migrar `ReviewPanelWidget` para o gateway e remover imports de código protegido, preservando
+   filtros, seleção, navegação, edição, visibilidade e overlays.
+5. Manter autoria, motivo, timestamp, proveniência e auditabilidade exatamente como hoje.
+6. Testar duas sessões concorrentes, referências entre projetos, catálogo inválido, proposta já
+   decidida e recarga após decisão.
+
+### Critérios de aceite e comprovação
+
+- Fluxos de revisão atual passam por HTTP com persistência após restart.
+- Regiões/vãos da mesma fixture são equivalentes à linha de base da Etapa 0.
+- O cliente não importa domínio, `human_review`, `analysis_regions` ou `spans`.
+- Navegação até página/geometria e camadas de visibilidade permanecem funcionais.
+- Testes de conflito e todos os gates passam.
+
+### Evidências
+
+- Início/data/agente: _preencher_
+- Comparação de regiões/vãos/revisões: _preencher_
+- Testes de concorrência e restart: _preencher_
+- Import graph do painel: _preencher_
+- Comandos/gates: _preencher_
+- Observações/bloqueios: _preencher_
+
+### Mensagem para um novo chat limpo do Codex
+
+> Implemente somente a **Etapa 6 — Resultados e revisão humana remotos** de
+> `docs/roadmap-arquitetura-cliente-servidor.md`. Leia o roadmap inteiro, confirme a dependência,
+> marque a etapa EM DESENVOLVIMENTO e migre sessão, regiões, vãos, propostas e decisões para API e
+> DTOs. Nenhuma derivação de negócio deve permanecer no cliente. Preserve todos os fluxos visuais e
+> de auditoria, teste conflitos/restart, rode os gates, registre evidências e só então marque
+> CONCLUÍDA. Não inicie a Etapa 7 e não faça commit.
+
+## Etapa 7 — Documentação, conformidade, regras e callouts remotos
+
+- Estado: **PENDENTE**
+- Dependências: Etapa 6 **CONCLUÍDA**
+- Entrega principal: inspeção e motor de conformidade ficam integralmente no servidor.
+
+### Escopo
+
+1. Implementar endpoints para dados documentais, última execução/histórico de conformidade,
+   execução como job, resultados, estado desatualizado e callouts normalizados.
+2. Implementar revisão ativa/números de regras, download JSON, upload/preflight e confirmação da
+   importação. Parsing, schema, semântica, merge e publicação de catálogo ficam no servidor.
+3. Migrar `DocumentationPanelWidget` e apresentação de conformidade para DTOs. O cliente pode
+   formatar texto/cores e desenhar/mover caixas, mas não avaliar regras, localizar alvos ou compilar
+   callouts.
+4. Preservar seleção cruzada entre achado e viewer, visibilidade independente das camadas e posição
+   manual do callout durante a sessão aberta.
+5. Garantir que seeds de regras e catálogo Markdown não entrem no artefato do cliente. A API só
+   envia o conteúdo necessário à tela/exportação autorizada.
+6. Testar 39 regras habilitadas da linha de base, snapshots, reanálise explícita, registro customizado,
+   export/import e estado desatualizado.
+
+### Critérios de aceite e comprovação
+
+- Resultados da fixture de conformidade são semanticamente iguais à linha de base.
+- O painel não importa adaptadores de conformidade, domínio ou casos de uso.
+- Importação exige preflight e confirmação; cancelar não cria revisão.
+- Download do registro faz round trip válido sem expor caminho físico.
+- Callouts e navegação funcionam sobre raster remoto.
+- Testes das 39 regras e todos os gates passam.
+
+### Evidências
+
+- Início/data/agente: _preencher_
+- Paridade de snapshots/39 regras: _preencher_
+- Testes de registro/callouts: _preencher_
+- Import graph e inspeção de dados do cliente: _preencher_
+- Comandos/gates: _preencher_
+- Observações/bloqueios: _preencher_
+
+### Mensagem para um novo chat limpo do Codex
+
+> Implemente somente a **Etapa 7 — Documentação, conformidade, regras e callouts remotos** do
+> arquivo `docs/roadmap-arquitetura-cliente-servidor.md`. Leia-o inteiro, confirme a Etapa 6
+> CONCLUÍDA, marque a atual EM DESENVOLVIMENTO e mova inspeção, regras, conformidade e compilação de
+> callouts para o servidor. Migre o painel para DTOs, preserve navegação/visibilidade/importação e
+> comprove paridade das 39 regras. Rode todos os gates, registre evidências e só marque CONCLUÍDA se
+> passar. Não inicie a Etapa 8 e não faça commit.
+
+## Etapa 8 — Portabilidade, backup e transferências remotas
+
+- Estado: **PENDENTE**
+- Dependências: Etapa 7 **CONCLUÍDA**
+- Entrega principal: pacotes são processados no servidor e transferidos como streams pelo cliente.
+
+### Escopo
+
+1. Criar jobs/endpoints para preflight, exportação, importação, backup e restauração, preservando
+   confirmações de substituição e pacote degradado.
+2. Para exportar/backup, o servidor gera pacote em temporário gerenciado e fornece download
+   autenticado de uso limitado; o cliente escolhe destino e grava de forma atômica localmente.
+3. Para importar/restaurar, o cliente faz upload streaming; o servidor valida, devolve preflight e
+   só aplica após confirmação vinculada ao fingerprint. Mudança entre preflight e aplicação exige
+   novo preflight.
+4. Migrar `PortabilityPanelWidget`/worker para API, polling e transferência. O cliente não manipula
+   ZIP, SQLite ou árvore gerenciada.
+5. Preservar cancelamento, progresso, integridade, omissões, journals, compensação e reconciliação
+   de regras após restauração.
+6. Limitar tamanho, sanear nome, bloquear path traversal e limpar uploads/downloads expirados.
+7. Testar desconexão durante upload/download, cancelamento, corrupção, pacote degradado, conflito de
+   ID, restauração, restart e download repetido conforme política definida.
+
+### Critérios de aceite e comprovação
+
+- `.zphproj` e `.zphbackup` fazem round trip cliente-servidor sem caminho compartilhado.
+- Hash/tamanho do arquivo salvo no cliente conferem com metadados do servidor.
+- Interromper transferência não publica destino parcial nem deixa temporários sem política de TTL.
+- Preflight/confirm/fingerprint preservam as garantias atuais.
+- Painel/worker não importam portabilidade de domínio/aplicação nem adaptador ZIP.
+- Gates direcionados e completos passam.
+
+### Evidências
+
+- Início/data/agente: _preencher_
+- Hashes e round trips: _preencher_
+- Testes de interrupção/corrupção/restart: _preencher_
+- Import graph do painel: _preencher_
+- Comandos/gates: _preencher_
+- Observações/bloqueios: _preencher_
+
+### Mensagem para um novo chat limpo do Codex
+
+> Implemente somente a **Etapa 8 — Portabilidade, backup e transferências remotas** do roadmap
+> `docs/roadmap-arquitetura-cliente-servidor.md`. Leia todo o documento, confirme a Etapa 7
+> CONCLUÍDA, marque a atual EM DESENVOLVIMENTO e implemente uploads/downloads e jobs no servidor com
+> preflight/confirm/fingerprint. Migre o painel sem ZIP/SQLite/lógica local e prove round trip,
+> integridade, cancelamento, falha de rede e restart. Rode os gates, registre evidências e só marque
+> CONCLUÍDA se tudo passar. Não inicie a Etapa 9 e não faça commit.
+
+## Etapa 9 — Bootstrap, autenticação e artefato do cliente magro
+
+- Estado: **PENDENTE**
+- Dependências: Etapa 8 **CONCLUÍDA**
+- Entrega principal: cliente independente, incapaz de executar a lógica protegida localmente.
+
+### Escopo
+
+1. Criar pacote/manifesto de build independente `zeny_project_handler_client` contendo UI, gateway,
+   contratos e assets necessários. O pacote do servidor/core não pode ser dependência runtime.
+2. Mover/adaptar bootstrap e entry point do cliente. Remover inicialização de SQLite, Alembic,
+   catálogo, Tesseract, PyMuPDF, serviços e arquivos gerenciados.
+3. Implementar diálogo inicial de conexão com URL e senha. Validar na rota de sessão antes de
+   construir painéis de dados; permitir tentar novamente e encerrar com mensagem clara.
+4. Persistir apenas a URL e preferências visuais. Senha do servidor e senhas PDF ficam em memória e
+   são apagadas ao encerrar. Não oferecer opção de salvar senha nesta versão.
+5. Tratar desconexão/401 globalmente: bloquear ações, preservar UI segura e permitir reconectar sem
+   reiniciar quando possível.
+6. Dividir locks/setup: o setup do cliente instala somente dependências do cliente; Docker instala
+   somente servidor. Atualizar `.bat`/`.vbs` mantendo abertura sem console e diagnóstico útil.
+7. Criar build verificável do cliente: wheel interno para testes e bundle Windows x64 autocontido,
+   executável sem Python instalado. O ZIP portátil é obrigatório; instalador é adicional. Gerar
+   manifesto do conteúdo e SBOM/lista de dependências.
+8. Adicionar gate de arquitetura/artefato que falha se o cliente contiver/importar `domain`,
+   `application`, `adapters`, `ports` de negócio, SQLAlchemy, Alembic, PyMuPDF, Tesseract, seeds JSON
+   ou banco SQLite da aplicação.
+
+### Critérios de aceite e comprovação
+
+- Cliente abre com servidor disponível e senha correta; senha errada não carrega dados; reconexão
+  funciona após restart do servidor.
+- Cliente continua restaurando tema, docks e geometria localmente.
+- Wheel/bundle do cliente passa pela inspeção negativa de código/dependências protegidas.
+- O ZIP portátil abre numa máquina Windows limpa sem Python e contém somente componentes permitidos
+  ao cliente.
+- Executar o cliente sem servidor não cria SQLite, cache de análise ou arquivos de projeto.
+- `ZENY_CLIENT_SERVER_URL` serve como padrão de desenvolvimento, mas a senha não é obtida de
+  `.env` no artefato final.
+- Testes do cliente e todos os gates passam.
+
+### Evidências
+
+- Início/data/agente: _preencher_
+- Caminho/hash/tamanho do artefato cliente: _preencher_
+- Manifesto/SBOM e inspeção negativa: _preencher_
+- Testes 401/reconexão/ausência de dados locais: _preencher_
+- Comandos/gates: _preencher_
+- Observações/bloqueios: _preencher_
+
+### Mensagem para um novo chat limpo do Codex
+
+> Implemente somente a **Etapa 9 — Bootstrap, autenticação e artefato do cliente magro** descrita em
+> `docs/roadmap-arquitetura-cliente-servidor.md`. Leia tudo, confirme a Etapa 8 CONCLUÍDA, marque a
+> atual EM DESENVOLVIMENTO e produza o pacote cliente independente com diálogo URL/senha e
+> reconexão. Remova todo bootstrap/lógica/dependência de servidor do runtime cliente e crie gate que
+> inspeciona o artefato. Atualize os launchers, rode testes e gates, registre hashes/evidências e só
+> marque CONCLUÍDA se passar. Não inicie a Etapa 10 e não faça commit.
+
+## Etapa 10 — Migração de dados, operação e endurecimento do servidor
+
+- Estado: **PENDENTE**
+- Dependências: Etapa 9 **CONCLUÍDA**
+- Entrega principal: procedimento seguro e reproduzível para levar a fonte local ao volume Docker.
+
+### Escopo
+
+1. Definir e testar cutover: antes de substituir a versão monolítica, criar `.zphbackup` íntegro;
+   iniciar o servidor com volume novo; enviar o backup pelo cliente; executar preflight; confirmar
+   restauração; comparar projetos, documentos, análises, revisões, regras e hashes.
+2. Tratar origens externas ausentes/alteradas com a mesma confirmação de backup degradado. Não
+   montar caminhos arbitrários do Windows dentro do container como solução permanente.
+3. Criar documentação de instalação, atualização, rollback, troca de senha, endereço LAN, firewall,
+   volume, backup antes de upgrade, logs, healthcheck e recuperação.
+4. Criar estratégia de versão/migração do volume. Upgrade deve executar Alembic uma vez antes de
+   ficar ready; falha de migração impede readiness e não inicia atendimento de negócio.
+5. Endurecer imagem: usuário não-root, base fixada, somente arquivos runtime, permissões mínimas,
+   healthcheck, shutdown, limites e `.env` fora da imagem. Documentar que porta HTTP deve ficar
+   restrita à LAN confiável.
+6. Testar restart, recreate, atualização de imagem, rollback suportado, falta de OCR, volume sem
+   permissão, banco corrompido, senha trocada e dois clientes.
+7. Atualizar README, especificação funcional e ADRs que ficaram superados. Remover instruções que
+   afirmem execução da lógica local.
+
+### Critérios de aceite e comprovação
+
+- Migração ensaiada sobre fixture/backup representativo mantém IDs, hashes, ordens, snapshots,
+  decisões e revisão ativa.
+- Dados sobrevivem a `docker compose down` seguido de `up`; o procedimento não usa `down -v`.
+- Upgrade incompatível falha fechado e preserva volume para recuperação.
+- Documentação permite instalar cliente/servidor numa máquina limpa e conectar outra máquina da
+  LAN sem consultar o código.
+- Nenhum segredo entra na imagem, logs, documentação ou Git.
+- Todos os gates passam.
+
+### Evidências
+
+- Início/data/agente: _preencher_
+- Relatório de migração e comparação: _preencher_
+- Testes de lifecycle/upgrade/rollback: _preencher_
+- Inspeção de imagem/segredos/permissões: _preencher_
+- Documentos atualizados: _preencher_
+- Comandos/gates: _preencher_
+- Observações/bloqueios: _preencher_
+
+### Mensagem para um novo chat limpo do Codex
+
+> Implemente somente a **Etapa 10 — Migração de dados, operação e endurecimento do servidor** de
+> `docs/roadmap-arquitetura-cliente-servidor.md`. Leia o roadmap inteiro, confirme a Etapa 9
+> CONCLUÍDA, marque a atual EM DESENVOLVIMENTO e implemente/ensaie cutover por backup, lifecycle do
+> volume, migrações fail-closed, hardening e documentação operacional. Não use caminho Windows
+> compartilhado como fonte permanente e nunca coloque segredo na imagem. Rode todos os testes e
+> gates, registre evidências e só marque CONCLUÍDA se passar. Não inicie a Etapa 11 e não faça
+> commit.
+
+## Etapa 11 — Paridade final, auditoria de isolamento e aceite
+
+- Estado: **PENDENTE**
+- Dependências: Etapa 10 **CONCLUÍDA**
+- Entrega principal: prova final de que a aplicação preserva funções e respeita a separação.
+
+### Escopo
+
+1. Executar matriz completa de paridade da Etapa 0 usando cliente empacotado e servidor construído
+   da imagem, não imports internos nem servidor em processo.
+2. Criar E2E real para: autenticação; projeto; múltiplos PDFs; PDF protegido; análise/cancelamento;
+   viewer; revisão; conformidade; regras; `.zphproj`; `.zphbackup`; fotos; restart; dois clientes.
+3. Fazer auditoria automatizada e manual do artefato cliente, imagem, OpenAPI, logs, banco e tráfego
+   para ausência de lógica/segredos indevidos.
+4. Remover adaptadores locais de transição, caminhos mortos, flags temporárias e testes exclusivos
+   do bootstrap monolítico. Não remover testes de comportamento: convertê-los para a nova fronteira.
+5. Executar análise de dependências, lint, formatação, mypy, cobertura, complexidade, testes do
+   contrato, cliente, servidor, Docker e E2E.
+6. Atualizar este roadmap e preencher as evidências da auditoria. O Estado geral ainda não deve ser
+   marcado como **CONCLUÍDO**: isso pertence à Etapa 12, depois da montagem da release oficial.
+
+### Critérios de aceite globais
+
+- Todas as linhas do inventário de paridade possuem teste aprovado e evidência.
+- Cobertura continua acima de 85,01%; nenhuma função/método rank E/F; lint, format e mypy passam.
+- Cliente empacotado não contém nem depende da lógica protegida listada neste documento.
+- Servidor é funcional a partir de imagem + `.env` + volume vazio, e preserva dados em volume
+  existente.
+- Toda rota de negócio recusa senha ausente/incorreta e aceita a correta.
+- Operações, dados e renderização funcionam com cliente e servidor em máquinas/processos distintos,
+  sem filesystem compartilhado.
+- Nenhuma senha aparece em Git, imagem, banco, cache, pacote exportado, backup ou logs.
+- README e especificação funcional descrevem somente o comportamento vigente.
+
+### Evidências
+
+- Início/data/agente: _preencher_
+- Matriz final de paridade: _preencher_
+- Quantidade de testes/cobertura/complexidade: _preencher_
+- Hashes dos artefatos cliente e servidor: _preencher_
+- Relatório de isolamento e busca de segredos: _preencher_
+- Relatório E2E em processos/máquinas distintas: _preencher_
+- Pendências conhecidas aceitas pelo responsável: _preencher ou “nenhuma”_
+
+### Mensagem para um novo chat limpo do Codex
+
+> Execute somente a **Etapa 11 — Paridade final, auditoria de isolamento e aceite** de
+> `docs/roadmap-arquitetura-cliente-servidor.md`. Leia o roadmap inteiro, confirme todas as etapas
+> anteriores como CONCLUÍDAS e marque a Etapa 11 EM DESENVOLVIMENTO. Rode a matriz completa com o
+> cliente empacotado e o servidor Docker realmente separados, crie/corrija os E2E necessários,
+> remova apenas código transitório e audite artefatos/segredos/imports. Execute todos os gates,
+> registre evidências detalhadas e só marque a etapa como CONCLUÍDA se todos os critérios globais
+> forem comprovados. Mantenha o Estado geral PLANEJADO até a Etapa 12, não inicie a Etapa 12 e não
+> faça commit.
+
+## Etapa 12 — Montagem e validação da release separada
+
+- Estado: **PENDENTE**
+- Dependências: Etapa 11 **CONCLUÍDA**
+- Entrega principal: dois pacotes distribuíveis e fisicamente separados, sem necessidade de
+  compartilhar o repositório com usuários ou com o host de produção.
+
+### Escopo
+
+1. Criar um comando/script de release que receba uma versão SemVer e produza
+   `dist/release/<versao>/` a partir de checkout limpo.
+2. Gerar o ZIP Windows x64 autocontido do cliente com entry point gráfico, assets e contratos. Ele
+   não pode conter o pacote core/servidor, código-fonte protegido, seeds, `.env`, testes ou
+   dependências exclusivas do servidor.
+3. Construir a imagem final do servidor sem componentes Qt/cliente, identificá-la com versão e
+   digest e exportá-la como OCI/Docker tar para instalação sem código-fonte. Produzir
+   `compose.release.yaml` que referencia a imagem, nunca um contexto de build.
+4. Gerar os dois guias de entrega, release notes, SBOMs separados, `release-manifest.json` e
+   `SHA256SUMS.txt`. Não incluir `.env` real nem senha padrão.
+5. Implementar/verificar negociação de compatibilidade: cliente e servidor informam suas versões e
+   faixa de API; combinação incompatível é recusada antes de carregar dados.
+6. Testar o cliente em Windows limpo, sem Python, sem checkout e sem Docker local. Testar o kit do
+   servidor em host Docker limpo, carregando a imagem tar, criando `.env`, subindo Compose e
+   persistindo dados após recreate.
+7. Testar o procedimento real de distribuição: usuário final recebe somente o pacote cliente;
+   administrador recebe somente o kit servidor. Confirmar que nenhum dos dois precisa do repositório
+   para executar sua função.
+8. Executar novamente gates de qualidade, E2E e inspeção de artefatos sobre os arquivos exatos da
+   release. Só depois preencher todas as evidências e mudar o Estado geral para **CONCLUÍDO**.
+
+### Estrutura mínima esperada
+
+```text
+dist/release/<versao>/
+├── client/
+│   ├── ZenyProjectHandler-Client-<versao>-win-x64.zip
+│   ├── LEIA-ME-CLIENTE.md
+│   └── client-sbom.json
+├── server/
+│   ├── ZenyProjectHandler-Server-<versao>.oci.tar
+│   ├── compose.release.yaml
+│   ├── .env-example
+│   ├── LEIA-ME-SERVIDOR.md
+│   └── server-sbom.json
+├── RELEASE_NOTES.md
+├── release-manifest.json
+└── SHA256SUMS.txt
+```
+
+### Critérios de aceite e comprovação
+
+- Um único comando reproduz a estrutura acima a partir de checkout limpo.
+- O cliente roda sem Python e conecta a um servidor em outra máquina/processo.
+- O host servidor roda somente com engine Docker, kit de release e senha definida pelo administrador;
+  não recebe o repositório.
+- `compose.release.yaml` não possui `build:` e a imagem não contém `.env`, PySide6 ou fontes do
+  cliente.
+- A inspeção do ZIP cliente não encontra lógica/dependências/seeds do servidor.
+- Todos os hashes do manifesto conferem e o digest registrado identifica a imagem testada.
+- Testes de compatibilidade aceitam versões suportadas e recusam versões incompatíveis.
+- O E2E final é executado sobre os artefatos empacotados, não sobre `python -m` no checkout.
+
+### Evidências
+
+- Início/data/agente: _preencher_
+- Versão da release: _preencher_
+- Comando reproduzível: _preencher_
+- Caminhos/tamanhos/SHA-256 dos pacotes: _preencher_
+- Digest da imagem: _preencher_
+- Relatório de Windows/host Docker limpos: _preencher_
+- Inspeção negativa dos dois artefatos: _preencher_
+- Resultado dos gates/E2E: _preencher_
+- Observações/bloqueios: _preencher_
+
+### Mensagem para um novo chat limpo do Codex
+
+> Implemente somente a **Etapa 12 — Montagem e validação da release separada** de
+> `docs/roadmap-arquitetura-cliente-servidor.md`. Leia o roadmap inteiro, confirme a Etapa 11
+> CONCLUÍDA e marque a Etapa 12 EM DESENVOLVIMENTO. Crie um build reproduzível que entregue o ZIP
+> cliente Windows autocontido e, separadamente, o kit servidor com imagem OCI, Compose sem build,
+> documentação, SBOMs, manifesto e hashes. Teste os artefatos exatos sem checkout/Python no cliente
+> e sem código-fonte no host Docker. Audite a separação, rode todos os gates/E2E, registre evidências
+> e só então marque a etapa e o Estado geral como CONCLUÍDOS. Não faça commit.
+
+## Checklist de encerramento do programa
+
+- [ ] Etapas 0 a 12 estão **CONCLUÍDAS** e com evidências.
+- [ ] Cliente distribuível contém apenas UI, rede, contratos e assets permitidos.
+- [ ] Servidor Docker contém toda a lógica e usa volume persistente.
+- [ ] Release contém pacote cliente e kit servidor separados, reproduzíveis e com hashes.
+- [ ] Senha é obrigatória, injetada em runtime e mantida em memória pelo cliente.
+- [ ] Uploads substituem qualquer dependência de caminhos locais do cliente.
+- [ ] Jobs suportam progresso, conflito, cancelamento e restart seguro.
+- [ ] Todas as funcionalidades da linha de base possuem paridade comprovada.
+- [ ] Migração e rollback foram ensaiados.
+- [ ] Documentação operacional e funcional está atualizada.
+- [ ] Gates de qualidade, segurança, contrato, artefato e E2E estão aprovados.

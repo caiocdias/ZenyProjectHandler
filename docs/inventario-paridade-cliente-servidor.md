@@ -1,0 +1,153 @@
+# Inventário de paridade cliente-servidor
+
+- Estado: linha de base da Etapa 0
+- Data: 2026-08-17
+- Runtime caracterizado: monólito Qt vigente, sem mudança funcional
+- Gate inicial: 618 testes aprovados; cobertura total 87,08%; Pytest em 128,11 s
+
+## Finalidade e convenções
+
+Este inventário liga cada ação visível atual ao método que a atende, à caracterização existente e ao
+contrato de transporte esperado na arquitetura cliente-servidor. Ele também cobre os fluxos sem
+controle visual atual que aparecem na matriz obrigatória de paridade, como fotos gerenciadas.
+
+Os caminhos e nomes de DTO abaixo são **propostas de linha de base**, não uma OpenAPI já estabilizada.
+A Etapa 1 poderá ajustar nomes, agrupamentos e schemas, mas deverá manter todas as capacidades aqui
+inventariadas e atualizar este documento. Todas as rotas propostas, exceto `GET /health/live`, ficam
+sob `/api/v1` e exigem Bearer.
+
+Convenções das colunas:
+
+- **Ação atual / método atual** identifica o slot Qt e o caso de uso ou helper chamado hoje;
+- **Caracterização existente** aponta ao menos um teste pytest que comprova o fluxo;
+- **Endpoint futuro** descreve a fronteira esperada; `nenhum` significa estado puramente visual no
+  cliente;
+- **DTO esperado** é uma projeção de transporte sem comportamento de negócio. Nenhum DTO contém
+  `Path`, entidade SQLAlchemy, agregado de domínio ou objeto PyMuPDF.
+
+## Painel Projeto
+
+| Ação visível atual | Método atual | Caracterização existente | Endpoint futuro | DTO esperado |
+|---|---|---|---|---|
+| listar e selecionar projeto | `ProjectPanelWidget.atualizar_projetos` → `ServicoFluxoMvp.listar_projetos` | `tests/e2e/test_mvp_ui.py::test_user_can_create_import_analyze_review_and_reopen_from_ui` | `GET /api/v1/projects` | `ProjectSummaryListResponse` com `ProjectSummaryDto` |
+| criar projeto por NS | `ProjectPanelWidget.criar_projeto` → `ServicoFluxoMvp.criar_projeto` | `tests/integration/test_mvp_workflow.py::test_project_identifier_is_a_user_supplied_ten_digit_service_note` | `POST /api/v1/projects` | `CreateProjectRequest` → `ProjectDetailResponse` |
+| abrir/detalhar projeto | `ProjectPanelWidget.abrir_selecionado` → `ServicoFluxoMvp.abrir_projeto` | `tests/e2e/test_mvp_ui.py::test_user_can_create_import_analyze_review_and_reopen_from_ui` | `GET /api/v1/projects/{project_id}` | `ProjectDetailResponse` |
+| alterar NS | `ProjectPanelWidget.alterar_numero_ns` → `ServicoFluxoMvp.alterar_numero_ns` | `tests/integration/test_mvp_workflow.py::test_project_identifier_is_a_user_supplied_ten_digit_service_note` | `PATCH /api/v1/projects/{project_id}` | `UpdateProjectRequest` → `ProjectDetailResponse` |
+| excluir projeto após confirmação | `ProjectPanelWidget.excluir_projeto` → `ServicoFluxoMvp.excluir_projeto` | `tests/integration/test_mvp_workflow.py::test_delete_project_with_confirmed_review_removes_dependents_in_safe_order` | `DELETE /api/v1/projects/{project_id}` | `DeleteProjectResponse` com contagens de limpeza |
+| selecionar e adicionar vários PDFs | `ProjectPanelWidget.selecionar_pdfs` / `_importar_selecao` → `ServicoFluxoMvp.importar_pdfs` | `tests/integration/test_mvp_workflow.py::test_multiple_pdf_import_is_atomic_and_preserves_order` | `POST /api/v1/projects/{project_id}/document-uploads` | multipart + `CreateUploadResponse`/`DocumentImportResultDto`; `Idempotency-Key` |
+| informar senha de cada PDF, repetir até três vezes ou pular o arquivo | `ResolvedorCredenciaisPdf.executar` / `ProjectPanelWidget._acao_importacao_pdf` | `tests/integration/test_protected_pdf_ui.py::test_wrong_password_limit_and_cancel_produce_partial_import_summary` | `POST /api/v1/uploads/{upload_id}/unlock` | `UnlockPdfRequest` → `DocumentImportResultDto` ou erro `PDF_PASSWORD_*` |
+| arrastar folha, subir ou descer e persistir ordem | `_move_selected_page`, `_page_order_changed`, `_persist_page_order` → `ServicoFluxoMvp.reordenar_paginas` | `tests/e2e/test_mvp_ui.py::test_user_can_reorder_project_pdfs_and_reopen_in_reading_order` | `PUT /api/v1/projects/{project_id}/page-order` | `ReplacePageOrderRequest` → `PageOrderResponse` |
+| remover PDFs das folhas selecionadas | `ProjectPanelWidget.remover_pdfs` → `ServicoFluxoMvp.remover_documentos` | `tests/integration/test_mvp_workflow.py::test_remove_pdf_prunes_only_dependent_data_and_project_can_be_deleted` | `DELETE /api/v1/projects/{project_id}/documents/{document_id}` | `RemoveDocumentResponse` |
+| iniciar análise completa | `ProjectPanelWidget.executar_analise` / `_PipelineWorker.run` → `ServicoFluxoMvp.executar_pipeline` | `tests/e2e/test_mvp_ui.py::test_user_can_create_import_analyze_review_and_reopen_from_ui` | `POST /api/v1/projects/{project_id}/analysis-jobs` | `CreateAnalysisJobRequest` → `JobAcceptedResponse` (202) |
+| acompanhar progresso e cancelar análise | `_update_progress`, `cancelar_analise` e token `Event` | `tests/integration/test_mvp_workflow.py::test_cancel_and_resume_pipeline_reuses_completed_work_without_duplicates` | `GET /api/v1/jobs/{job_id}` e `POST /api/v1/jobs/{job_id}/cancel` | `JobStatusResponse`, `CancelJobResponse` |
+| abrir “Como usar” | `ProjectPanelWidget.exibir_guia_aceite` | `tests/integration/test_window.py::test_main_window_smoke` | nenhum; conteúdo estático do cliente | nenhum DTO de negócio |
+
+## Visualizador de PDF
+
+| Ação visível atual | Método atual | Caracterização existente | Endpoint futuro | DTO esperado |
+|---|---|---|---|---|
+| abrir um ou mais PDFs avulsos | `PdfViewerWidget.selecionar_pdf` / `carregar_pdf` | `tests/integration/test_window.py::test_pdf_viewer_opens_selected_files_as_one_ordered_project` | `POST /api/v1/viewer-sessions` e upload(s) da sessão | `CreateViewerSessionResponse`, `ViewerDocumentDto` |
+| abrir folhas do projeto na ordem persistida | `PdfViewerWidget.carregar_projeto` / `_ordered_project_pages` | `tests/integration/test_window.py::test_pdf_viewer_follows_page_order_across_different_files` | `GET /api/v1/projects/{project_id}/viewer` | `ViewerProjectResponse` com `ViewerPageDto` |
+| anterior, próxima e número da folha | `_change_page`, `ir_para_folha`, `_render_current_page` | `tests/integration/test_window.py::test_pdf_viewer_navigation_zoom_rotation_and_overlays` | `GET /api/v1/viewer-pages/{page_id}` | `ViewerPageDto` |
+| reduzir, ampliar e ajustar à página | `_zoom_out`, `_zoom_in`, `_fit_page`; `PdfGraphicsView.definir_zoom` | `tests/integration/test_window.py::test_pdf_viewer_navigation_zoom_rotation_and_overlays` | nenhum para o estado visual; raster usa as rotas abaixo | `ViewportState` local, não transportado como regra de negócio |
+| girar a visualização 90° | `_rotate_page` | `tests/integration/test_pdf_viewer_progressive.py::test_rotated_overlays_remain_aligned_and_review_link_is_clickable` | parâmetro de leitura em `GET /api/v1/viewer-pages/{page_id}/preview` e `/tiles` | `RasterRequestParams`/headers de raster |
+| receber prévia e tiles conforme viewport | `_request_raster`, `_schedule_viewport_tiles`, `FilaRenderizacao` e `CacheLruBytes` | `tests/integration/test_pdf_viewer_progressive.py::test_rendering_is_responsive_and_never_rasterizes_on_ui_thread` | `GET /api/v1/viewer-pages/{page_id}/preview` e `GET /api/v1/viewer-pages/{page_id}/tiles` | `image/png` + `RasterMetadataDto` |
+| descartar resultado obsoleto ao trocar página/zoom/origem | `_request_is_current`, `_cancel_current_rendering` | `tests/integration/test_pdf_viewer_progressive.py::test_old_page_result_is_discarded_after_out_of_order_navigation` | cancelamento/abandono de request de leitura; sem mutação | `generation` local e `RasterMetadataDto` correlacionável |
+| clicar em overlay de revisão ou callout | `PdfGraphicsView.definir_propostas_revisao`, `selecionar_proposta`, `selecionar_callout` | `tests/integration/test_compliance_callout_viewer.py::test_callout_layer_draws_box_text_open_arrows_and_coexists_with_review_links` | overlays vêm nas projeções de revisão/conformidade | `ReviewOverlayDto`, `ComplianceCalloutDto` |
+| arrastar caixa de callout na sessão aberta | `CalloutBoxItem.itemChange` / `PdfViewerWidget._callout_moved` | `tests/integration/test_compliance_callout_viewer.py::test_callout_box_drag_keeps_anchor_fixed_updates_arrow_and_preserves_position` | nenhum para posição visual efêmera nesta versão | `CalloutVisualState` local |
+| fechar/limpar sessão avulsa | `PdfViewerWidget.limpar`, `encerrar`, `_close_sessions` | `tests/integration/test_pdf_viewer_progressive.py::test_closing_stops_render_thread_and_closes_verified_sessions` | `DELETE /api/v1/viewer-sessions/{viewer_session_id}` | `CloseViewerSessionResponse` |
+
+## Painel Resultados e revisão humana
+
+| Ação visível atual | Método atual | Caracterização existente | Endpoint futuro | DTO esperado |
+|---|---|---|---|---|
+| atualizar lista e abrir projeto analisado | `ReviewPanelWidget.atualizar_projetos` / `abrir_projeto` → `ServicoRevisaoHumana.listar_projetos` / `carregar_sessao` | `tests/integration/test_review_panel.py::test_results_panel_groups_relationships_and_links_elements_to_pdf` | `GET /api/v1/review/projects` e `GET /api/v1/projects/{project_id}/review-session` | `ReviewProjectSummaryListResponse`, `ReviewSessionResponse` |
+| filtrar localmente por classe e estado | `_refresh_proposals` / `_filtered_proposals` | `tests/integration/test_review_panel.py::test_review_tables_toggle_word_wrap_and_keep_interactions_after_reload` | nenhum; filtro sobre a projeção carregada | campos `category` e `review_state` em `ReviewProposalDto` |
+| ver regiões, elementos e relações | `_populate_result_tree` e `_region_label` | `tests/integration/test_review_panel.py::test_results_panel_groups_relationships_and_links_elements_to_pdf` | `GET /api/v1/projects/{project_id}/review-session` | `AnalysisRegionDto`, `ReviewProposalDto`, `ReviewRelationDto` |
+| ver vãos e origem do comprimento | `_refresh_spans` | `tests/integration/test_review_panel.py::test_results_panel_has_span_tab_with_situation_cable_and_length_source` | mesma sessão de revisão | `DetectedSpanDto` |
+| selecionar item e navegar até evidência no PDF | `_select_tree_proposal`, `_select_span`, `_select_proposal_id` | `tests/integration/test_review_panel.py::test_results_panel_groups_relationships_and_links_elements_to_pdf` | metadados de navegação na sessão; raster pelo visualizador | `EvidenceNavigationDto` |
+| mostrar/ocultar região, elemento ou vão | `_set_region_visible`, `_set_element_visible`, `_set_span_visible` | `tests/integration/test_review_panel.py::test_result_visibility_can_hide_a_whole_point_or_one_element` | nenhum; visibilidade é estado visual local | IDs e geometrias normalizadas nos DTOs de revisão |
+| aceitar ou ajustar elemento/relação | `aceitar_selecionada` → `confirmar_elemento` / `confirmar_relacao` | `tests/integration/test_human_review.py::test_accept_adjust_reject_and_reopen_preserve_immutable_history` | `POST /api/v1/review/proposals/{proposal_id}/accept` | `AcceptReviewProposalRequest` → `ReviewDecisionResponse` |
+| rejeitar proposta | `rejeitar_selecionada` → `ServicoRevisaoHumana.rejeitar` | `tests/integration/test_human_review.py::test_accept_adjust_reject_and_reopen_preserve_immutable_history` | `POST /api/v1/review/proposals/{proposal_id}/reject` | `RejectReviewProposalRequest` → `ReviewDecisionResponse` |
+| criar elemento manual | `criar_elemento_manual` → `ServicoRevisaoHumana.criar_elemento_manual` | `tests/integration/test_human_review.py::test_confirm_relation_and_manual_creations_are_persisted_with_author` | `POST /api/v1/projects/{project_id}/review/elements` | `CreateManualElementRequest` → `ReviewDecisionResponse` |
+| criar relação manual | `criar_relacao_manual` → `ServicoRevisaoHumana.criar_relacao_manual` | `tests/integration/test_human_review.py::test_confirm_relation_and_manual_creations_are_persisted_with_author` | `POST /api/v1/projects/{project_id}/review/relations` | `CreateManualRelationRequest` → `ReviewDecisionResponse` |
+| alternar quebra de linha das tabelas | `TableWordWrapController` nos elementos e vãos | `tests/integration/test_review_panel.py::test_review_tables_toggle_word_wrap_and_keep_interactions_after_reload` | nenhum | estado visual local |
+
+## Painel Documentação, conformidade e regras
+
+| Ação visível atual | Método atual | Caracterização existente | Endpoint futuro | DTO esperado |
+|---|---|---|---|---|
+| selecionar projeto analisado | `DocumentationPanelWidget.abrir_projeto` → `ServicoRevisaoHumana.carregar_sessao_semantica` | `tests/integration/test_review_panel.py::test_documentation_panel_has_own_document_and_compliance_views` | `GET /api/v1/projects/{project_id}/documentation` | `DocumentationResponse` com `DocumentFieldDto` |
+| ver campos documentais e navegar à evidência | `_populate_documents`, `_navigate_document_item` | `tests/integration/test_review_panel.py::test_documentation_panel_has_own_document_and_compliance_views` | mesma rota de documentação | `DocumentFieldDto`, `EvidenceNavigationDto` |
+| carregar a última conformidade e indicar resultado desatualizado | `_load_persisted_result` → `ExecutarAnaliseConformidade.obter_ultima` | `tests/integration/test_compliance_analysis.py::test_panel_loads_latest_marks_stale_and_reapplies_without_ocr` | `GET /api/v1/projects/{project_id}/compliance/latest` | `ComplianceExecutionResponse` |
+| consultar histórico auditável | sem controle dedicado hoje; `ExecutarAnaliseConformidade.listar_historico` já existe | `tests/integration/test_compliance_analysis.py::test_execution_is_deterministic_preserves_history_and_survives_restart` | `GET /api/v1/projects/{project_id}/compliance/history` | `ComplianceHistoryResponse` |
+| analisar conformidade explicitamente | `_analyze_current_compliance` → `ExecutarAnaliseConformidade.executar` | `tests/integration/test_compliance_analysis.py::test_panel_loads_latest_marks_stale_and_reapplies_without_ocr` | `POST /api/v1/projects/{project_id}/compliance-jobs` | `CreateComplianceJobRequest` → `JobAcceptedResponse` |
+| selecionar achado e navegar ao alvo/callout | `_navigate_finding_item`, `_select_finding_id` | `tests/integration/test_compliance_callout_viewer.py::test_multipage_callout_visual_qa_captures_show_hide_and_correct_page` | achados e callouts na resposta de conformidade | `ComplianceFindingDto`, `ComplianceCalloutDto` |
+| exibir/ocultar um ou todos os callouts | `_set_finding_visible`, `_set_all_findings_visible` | `tests/integration/test_compliance_visibility.py::test_hidden_state_survives_navigation_and_resets_for_project_or_execution` | nenhum; visibilidade e posição manual são locais | IDs de callout na projeção; estado visual local |
+| ver revisão ativa, números, estado e detalhes das regras | `atualizar_regras`, `_populate_rules`, `_show_rule_details` → `obter_revisao_ativa` | `tests/integration/test_compliance_rules_panel.py::test_rule_ids_stay_internal_and_details_use_the_fact_catalog` | `GET /api/v1/rules/active` | `ActiveRuleRegistryResponse`, `RuleSummaryDto`, `RuleDetailDto` |
+| importar JSON com preflight e confirmação | `_import_registry` → loader JSON, `preparar_importacao`, `importar` | `tests/integration/test_compliance_rules_panel.py::test_rules_view_only_imports_exports_and_survives_restart` | `POST /api/v1/rules/import-preflights` e `POST /api/v1/rules/imports` | upload + `RuleImportPreflightResponse`; `ConfirmRuleImportRequest` |
+| exportar revisão ativa | `_export_registry` → `ServicoRegistroRegrasConformidade.exportar` | `tests/integration/test_compliance_rules_panel.py::test_rules_view_only_imports_exports_and_survives_restart` | `GET /api/v1/rules/active/download` | download JSON + `DownloadMetadataDto` |
+| alternar quebra de linha nas três abas | `TableWordWrapController` | `tests/integration/test_review_panel.py::test_documentation_tables_toggle_word_wrap_and_recalculate_after_reload` | nenhum | estado visual local |
+
+## Painel Portabilidade, backup e fotos
+
+| Ação visível atual | Método atual | Caracterização existente | Endpoint futuro | DTO esperado |
+|---|---|---|---|---|
+| selecionar projeto para exportação | `PortabilityPanelWidget.atualizar_projetos` → `ServicoPortabilidadeProjeto.listar_projetos` | `tests/integration/test_portability_panel.py::test_user_exports_imports_and_restores_backup_from_ui` | `GET /api/v1/projects` | `ProjectSummaryListResponse` |
+| exportar `.zphproj` | `exportar_projeto` → `PortabilityWorker._execute` → `ServicoPortabilidadeProjeto.exportar_projeto` | `tests/integration/test_project_portability.py::test_export_import_preserves_ids_decisions_and_repairs_missing_photo` | `POST /api/v1/projects/{project_id}/exports` e download do resultado | `CreateExportJobRequest`, `JobStatusResponse`, `DownloadMetadataDto` |
+| importar `.zphproj` com preflight e confirmação | `importar_projeto` → `_import_project` → `preflight_importacao` / `aplicar_plano_importacao` | `tests/integration/test_project_portability.py::test_import_new_project_preflight_is_pure_and_applies_validated_plan` | `POST /api/v1/project-import-preflights` e `POST /api/v1/project-imports` | upload + `ProjectImportPreflightResponse`; `ConfirmProjectImportRequest` |
+| criar backup, confirmando degradação quando necessário | `criar_backup` → `_create_backup` → `preflight_backup` / `criar_backup` | `tests/integration/test_portability_panel.py::test_user_explicitly_confirms_different_degraded_backup_problems` | `POST /api/v1/backups/preflights` e `POST /api/v1/backup-jobs` | `BackupPreflightResponse`, `CreateBackupJobRequest` |
+| restaurar `.zphbackup` | `restaurar_backup` → `PortabilityWorker._execute` → `ServicoPortabilidadeProjeto.restaurar_backup` | `tests/integration/test_project_portability.py::test_full_backup_restores_database_and_managed_files` | `POST /api/v1/backup-restore-preflights` e `POST /api/v1/backup-restore-jobs` | upload + `BackupRestorePreflightResponse`; `ConfirmBackupRestoreRequest` |
+| acompanhar e cancelar portabilidade | `_show_progress`, `cancelar_operacao`, `PortabilityWorker.request_cancel` | `tests/integration/test_portability_workers.py::test_worker_cancellation_is_cooperative_and_has_no_error_dialog` | `GET /api/v1/jobs/{job_id}` e `POST /api/v1/jobs/{job_id}/cancel` | `JobStatusResponse`, `CancelJobResponse` |
+| listar fotos de elementos | sem controle visual atual; `ServicoPortabilidadeProjeto.listar_elementos` | `tests/integration/test_project_portability.py::test_export_import_preserves_ids_decisions_and_repairs_missing_photo` | `GET /api/v1/projects/{project_id}/photos` | `ManagedPhotoListResponse` |
+| anexar/localizar foto | sem controle visual atual; `anexar_foto` / `localizar_foto` | `tests/integration/test_project_portability.py::test_export_import_preserves_ids_decisions_and_repairs_missing_photo` | `POST /api/v1/projects/{project_id}/elements/{element_id}/photos` | multipart + `ManagedPhotoResponse` |
+| remover foto | sem controle visual atual; `remover_foto` | `tests/integration/test_project_portability.py::test_export_import_preserves_ids_decisions_and_repairs_missing_photo` | `DELETE /api/v1/projects/{project_id}/elements/{element_id}/photos/{photo_id}` | `RemoveManagedPhotoResponse` |
+| baixar foto | sem controle visual e sem ação pública dedicada hoje; conteúdo participa de portabilidade/backup | mesmo teste de round trip acima comprova hash e associação | `GET /api/v1/projects/{project_id}/photos/{photo_id}/content` | stream do MIME validado + `DownloadMetadataDto` |
+
+## Janela, preferências locais, sessão e coordenação
+
+| Ação visível atual | Método atual | Caracterização existente | Endpoint futuro | DTO esperado |
+|---|---|---|---|---|
+| alternar tema claro/escuro | `MainWindow._select_light_theme`, `_select_dark_theme`, `_select_theme` → `QSettings` | `tests/integration/test_window.py::test_theme_menu_switches_immediately_and_is_restored_before_window_is_shown` | nenhum | `ui-state.ini` local |
+| mover, desacoplar, reacoplar, maximizar, minimizar, fechar e reabrir painéis | `_DockTitleBar` e `MainWindow._register_dock` | `tests/integration/test_window.py::test_floating_panel_has_window_controls_and_can_be_reopened` | nenhum | geometria/estado de docks local |
+| restaurar tema, geometria, docks e última folha | bootstrap/MainWindow/ProjectPanel com `QSettings` | `tests/integration/test_window.py::test_theme_switch_preserves_project_pdf_callout_zoom_selection_and_wrap_toggles` | nenhum | `ui-state.ini` local; senha nunca incluída |
+| consultar orientação de OCR indisponível | `MainWindow._show_startup_ocr_diagnostic` | `tests/integration/test_window.py::test_startup_exposes_actionable_portuguese_ocr_remediation` | diagnóstico protegido em `GET /api/v1/session` | `SessionCapabilitiesResponse` com diagnóstico seguro |
+| observar conflito global e bloqueio de ações | `_OperationStateBridge`, `set_global_operation`, `CoordenadorOperacoes.adquirir` | `tests/unit/test_operation_coordinator.py::test_conflict_and_reentry_are_refused_immediately_with_friendly_message` | HTTP 409 e estado global nos jobs | `ErrorEnvelope` (`OPERATION_CONFLICT`) e `GlobalOperationDto` |
+| conectar por URL e senha | não existe no monólito; ação será criada na Etapa 9 | ainda sem teste de UI; contrato/autenticação será caracterizado nas Etapas 1–2 e UI na Etapa 9 | `GET /api/v1/session`; `GET /health/live` público | `SessionCapabilitiesResponse`; erro `AUTHENTICATION_FAILED` |
+
+## Cobertura explícita da matriz de paridade do roadmap
+
+| Item obrigatório da matriz | Linhas deste inventário | Prova atual mínima |
+|---|---|---|
+| criar/abrir/alterar NS/excluir projeto | Painel Projeto, linhas 1–5 | `tests/integration/test_mvp_workflow.py::test_project_identifier_is_a_user_supplied_ten_digit_service_note`; `::test_delete_project_with_confirmed_review_removes_dependents_in_safe_order` |
+| selecionar e importar múltiplos PDFs | Painel Projeto, linha 6 | `tests/integration/test_mvp_workflow.py::test_multiple_pdf_import_is_atomic_and_preserves_order` |
+| senha de PDF, três tentativas e descarte seguro | Painel Projeto, linha 7 | `tests/integration/test_protected_pdf_ui.py::test_distinct_passwords_are_reused_in_session_and_never_leak_to_artifacts`; `::test_wrong_password_limit_and_cancel_produce_partial_import_summary` |
+| reordenar páginas e remover documentos | Painel Projeto, linhas 8–9 | `tests/e2e/test_mvp_ui.py::test_user_can_reorder_project_pdfs_and_reopen_in_reading_order`; `tests/integration/test_mvp_workflow.py::test_remove_pdf_prunes_only_dependent_data_and_project_can_be_deleted` |
+| PDF avulso no visualizador | Visualizador, linhas 1 e 10 | `tests/integration/test_window.py::test_pdf_viewer_opens_selected_files_as_one_ordered_project`; `tests/integration/test_pdf_viewer_progressive.py::test_closing_stops_render_thread_and_closes_verified_sessions` |
+| zoom, rotação, prévia, tiles e paginação | Visualizador, linhas 3–7 | `tests/integration/test_window.py::test_pdf_viewer_navigation_zoom_rotation_and_overlays`; `tests/integration/test_pdf_viewer_progressive.py::test_old_page_result_is_discarded_after_out_of_order_navigation` |
+| análise, OCR, interpretação e promoção | Painel Projeto, linha 10 | `tests/e2e/test_mvp_ui.py::test_user_can_create_import_analyze_review_and_reopen_from_ui`; `tests/integration/test_interpretation_pipeline.py::test_pipeline_persists_cross_run_provenance_and_reuses_completed_result` |
+| regiões, elementos, relações e vãos | Resultados, linhas 3–4 | `tests/integration/test_review_panel.py::test_results_panel_groups_relationships_and_links_elements_to_pdf`; `::test_results_panel_has_span_tab_with_situation_cable_and_length_source` |
+| revisão humana e criações manuais | Resultados, linhas 7–10 | `tests/integration/test_human_review.py::test_accept_adjust_reject_and_reopen_preserve_immutable_history`; `::test_confirm_relation_and_manual_creations_are_persisted_with_author` |
+| documentação, conformidade e callouts | Documentação, linhas 1–7 | `tests/integration/test_compliance_analysis.py::test_panel_loads_latest_marks_stale_and_reapplies_without_ocr`; `tests/integration/test_compliance_callout_viewer.py::test_callout_anchor_survives_zoom_resize_rotation_tiles_and_page_changes` |
+| importar/exportar regras | Documentação, linhas 8–10 | `tests/integration/test_compliance_rules_panel.py::test_rules_view_only_imports_exports_and_survives_restart`; `tests/unit/test_compliance_catalog_parity.py::test_versioned_catalog_has_registry_id_order_and_activation_parity` |
+| `.zphproj`, `.zphbackup` e recuperação | Portabilidade, linhas 2–5 | `tests/integration/test_project_portability.py::test_bootstrap_reconciles_each_import_crash_boundary_idempotently`; `::test_full_backup_restores_database_and_managed_files` |
+| fotos gerenciadas | Portabilidade, linhas 7–10 | `tests/integration/test_project_portability.py::test_export_import_preserves_ids_decisions_and_repairs_missing_photo` |
+| tema, docks e geometria da janela | Janela, linhas 1–3 | `tests/integration/test_window.py::test_theme_switch_preserves_project_pdf_callout_zoom_selection_and_wrap_toggles`; `::test_floating_panel_has_window_controls_and_can_be_reopened` |
+| coordenação global, progresso e cancelamento | Projeto linha 11, Portabilidade linha 6 e Janela linha 5 | `tests/integration/test_mvp_workflow.py::test_cancelled_analysis_releases_shared_coordinator`; `tests/integration/test_portability_workers.py::test_worker_cancellation_is_cooperative_and_has_no_error_dialog`; `tests/unit/test_operation_coordinator.py::test_conflict_and_reentry_are_refused_immediately_with_friendly_message` |
+
+## Auditoria dos pontos críticos de caracterização
+
+O escopo da Etapa 0 permite adicionar testes apenas quando um comportamento crítico ainda não estiver
+coberto. A inspeção dos testes e o gate inicial confirmaram cobertura específica:
+
+| Ponto crítico | Caracterização encontrada | Conclusão da Etapa 0 |
+|---|---|---|
+| ordem de folhas | E2E de reordenação e reabertura; integração de ordem intercalada entre PDFs | coberto; nenhum teste novo necessário |
+| PDFs protegidos | senhas distintas, reuso em memória, ausência em artefatos, três tentativas e cancelamento parcial | coberto; nenhum teste novo necessário |
+| cancelamento | análise cancelada/retomada sem duplicação, rollback de conformidade, cancelamento cooperativo de portabilidade e liberação do coordenador | coberto; nenhum teste novo necessário |
+| regras | paridade de IDs/ordem/ativação do seed, validação semântica, import/export e persistência após restart | coberto; nenhum teste novo necessário |
+| portabilidade | preflight puro, confirmação, fingerprint obsoleto, round trip, corrupção, degradação, backup/restore, journals e crashes | coberto; nenhum teste novo necessário |
+
+Como não foi identificada lacuna nesses comportamentos, a Etapa 0 não altera testes, lógica nem
+dependências de execução. As novas lacunas introduzidas pela fronteira HTTP — autenticação, DTOs,
+streaming, idempotência, jobs e processos separados — pertencem explicitamente às etapas posteriores.
