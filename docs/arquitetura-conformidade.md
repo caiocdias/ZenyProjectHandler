@@ -169,8 +169,9 @@ corresponde ao estado ativo. O snapshot antigo continua visível até uma reaná
 
 ## Callouts e interface
 
-`application/compliance_callouts.py` converte resultados localizáveis em projeções sem Qt,
-independentemente de serem conformes, divergentes ou não avaliáveis.
+`application/compliance_callouts.py` converte somente divergências localizáveis em projeções sem Qt.
+Resultados conformes e não avaliáveis permanecem no snapshot auditável, mas não são apresentados
+como problemas de comissionamento nem recebem callout.
 A geometria é escolhida, em ordem, entre fatos participantes, evidências referenciadas e alvo. Uma
 ausência real de página ou geometria não recebe coordenadas inventadas.
 
@@ -189,7 +190,7 @@ ocultar/exibir, zoom, rotação e troca de página não desfaçam o ajuste manua
 
 Na aba **Conformidade**:
 
-- divergências aparecem antes dos demais resultados;
+- somente divergências aparecem na lista de problemas;
 - selecionar a linha abre e centraliza o callout;
 - clicar na caixa ou seta seleciona o achado correspondente;
 - o olho individual e **Exibir todos/Ocultar todos** afetam somente callouts localizáveis;

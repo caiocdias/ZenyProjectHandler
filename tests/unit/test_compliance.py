@@ -156,6 +156,38 @@ def test_project_service_note_rule_alerts_when_pdf_header_differs_from_project_n
     assert divergence_fact.geometria == header_evidence.geometria
 
 
+def test_project_service_note_rule_accepts_full_project_number_header_label() -> None:
+    session = _session_with_document_controls()
+    header = session.evidencias[0]
+    session = replace(
+        session,
+        projeto=replace(session.projeto, nome="0987654321"),
+        evidencias=(
+            replace(
+                header,
+                conteudo_bruto=(
+                    "NÚMERO DO PROJETO: 1234567890 ESCALA: 1:1000 FORMATO: A4 RESPONSÁVEL TÉCNICO"
+                ),
+            ),
+            *session.evidencias[1:],
+        ),
+    )
+
+    result = analisar_conformidade_projeto(
+        session,
+        carregar_registro_conformidade_inicial(),
+    )
+
+    finding = next(
+        item for item in result.achados if item.regra_id == "nd31.desenho.numero-projeto"
+    )
+    assert finding.resultado is ResultadoConformidade.DIVERGENCIA
+    assert any(
+        item.chave == "projeto.nota_servico_cabecalho" and item.valor == "1234567890"
+        for item in result.fatos
+    )
+
+
 def test_project_service_note_ignores_divergent_ns_reference_in_drawing_body() -> None:
     session = _session_with_document_controls()
     body_reference = _text_evidence(

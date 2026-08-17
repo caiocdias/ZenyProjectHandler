@@ -66,6 +66,14 @@ def test_missing_application_icon_has_clear_diagnostic(
 
 
 @pytest.mark.integration
+def test_application_icon_can_be_materialized_for_the_windows_shell(tmp_path: Path) -> None:
+    destination = application_icon.materializar_icone_aplicacao(tmp_path)
+
+    assert destination == tmp_path / APPLICATION_ICON_ICO
+    assert destination.read_bytes() == _asset_payload(APPLICATION_ICON_ICO)
+
+
+@pytest.mark.integration
 def test_temporary_wheel_installs_both_icon_assets(tmp_path: Path) -> None:
     source = tmp_path / "wheel-source"
     shutil.copytree(PROJECT_ROOT / "src", source / "src")

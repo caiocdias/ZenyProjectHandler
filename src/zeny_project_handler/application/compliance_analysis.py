@@ -18,7 +18,7 @@ from .errors import AnaliseConformidadeCanceladaError, RegistroConformidadeError
 from .human_review import SessaoRevisao
 from .project_compliance import analisar_conformidade_projeto
 
-VERSAO_METODO_CONFORMIDADE = "6"
+VERSAO_METODO_CONFORMIDADE = "7"
 
 
 def resultado_conformidade_desatualizado(

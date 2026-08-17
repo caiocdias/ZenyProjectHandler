@@ -85,7 +85,9 @@ _CONTEXT_FIELD_LABELS = {
 _CONTEXT_VALUE_PATTERN = re.compile(r"(?:(?:AREA|REDE|ZONA)\s+)?(URBAN[AO]|RURAL)")
 _FIELD_PATTERNS = {
     "nota_servico": re.compile(
-        r"\b(?:NOTA\s+DE\s+SERVICO|N[Oº°.]?\s*(?:DO\s+)?PROJETO|NS)"
+        r"\b(?:NOTA\s+DE\s+SERVICO|"
+        r"NUMERO\s+(?:(?:DA\s+)?NOTA\s+DE\s+SERVICO|DA\s+NS|DO\s+PROJETO)|"
+        r"N[Oº°.]?\s*(?:DA\s+NS|(?:DO\s+)?PROJETO)|NS)"
         r"\s*[:=.-]?\s*(\d{10})\b"
     ),
     "escala": re.compile(r"\bESCALA\s*[:=.-]?\s*(1\s*:\s*\d{2,6})\b"),
@@ -784,7 +786,15 @@ def _rightward_field_value(
 def _canonical_header_key(label: str) -> str | None:
     normalized = _normalize_text(label).strip(" .")
     aliases = {
-        "nota_servico": ("NOTA DE SERVICO", "NUMERO DO PROJETO", "N DO PROJETO", "NS"),
+        "nota_servico": (
+            "NOTA DE SERVICO",
+            "NUMERO DA NOTA DE SERVICO",
+            "NUMERO DA NS",
+            "NUMERO DO PROJETO",
+            "N DA NS",
+            "N DO PROJETO",
+            "NS",
+        ),
         "escala": ("ESCALA",),
         "formato_folha": ("FORMATO", "FORMATO DA FOLHA"),
         "numero_folha": ("FOLHA", "NUMERO DA FOLHA", "PRANCHA"),

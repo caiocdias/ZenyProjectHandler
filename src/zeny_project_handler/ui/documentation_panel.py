@@ -167,14 +167,14 @@ class DocumentationPanelWidget(QWidget):
         visibility_actions = QHBoxLayout()
         self._show_all_findings = QPushButton("Exibir todos")
         self._show_all_findings.setObjectName("complianceShowAllCalloutsButton")
-        self._show_all_findings.setToolTip("Exibir todos os achados localizáveis no PDF")
+        self._show_all_findings.setToolTip("Exibir todos os problemas localizáveis no PDF")
         self._show_all_findings.clicked.connect(
             lambda: self._set_all_findings_visible(visible=True)
         )
         visibility_actions.addWidget(self._show_all_findings)
         self._hide_all_findings = QPushButton("Ocultar todos")
         self._hide_all_findings.setObjectName("complianceHideAllCalloutsButton")
-        self._hide_all_findings.setToolTip("Ocultar todos os achados localizáveis no PDF")
+        self._hide_all_findings.setToolTip("Ocultar todos os problemas localizáveis no PDF")
         self._hide_all_findings.clicked.connect(
             lambda: self._set_all_findings_visible(visible=False)
         )
@@ -481,14 +481,13 @@ class DocumentationPanelWidget(QWidget):
             return
         targets = {item.id: item for item in result.alvos}
         localized_findings = {item.id for item in self._callouts}
-        order = {
-            ResultadoConformidade.DIVERGENCIA: 0,
-            ResultadoConformidade.NAO_AVALIAVEL: 1,
-            ResultadoConformidade.CONFORME: 2,
-        }
         for finding in sorted(
-            result.achados,
-            key=lambda item: (order[item.resultado], item.regra_id, str(item.alvo_id)),
+            (
+                item
+                for item in result.achados
+                if item.resultado is ResultadoConformidade.DIVERGENCIA
+            ),
+            key=lambda item: (item.regra_id, str(item.alvo_id)),
         ):
             target = targets[finding.alvo_id]
             observed, expected = formatar_valores_achado(

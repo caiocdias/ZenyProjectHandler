@@ -427,7 +427,7 @@ def test_projection_falls_back_to_referenced_evidence_then_target_and_omits_unlo
     assert projetar_callouts_conformidade(unlocated, evidencias=(), paginas=(page,)) == ()
 
 
-def test_projection_keeps_all_traceable_results_regardless_of_compliance_status() -> None:
+def test_projection_keeps_only_traceable_divergences() -> None:
     page = _page("all-results", width=Decimal("595"), height=Decimal("842"))
     geometry = GeometriaDocumento.ponto(page.id, _point("0.5", "0.5"))
     execution, evidence = _execution((page,), fact_geometries=(geometry,))
@@ -463,11 +463,9 @@ def test_projection_keeps_all_traceable_results_regardless_of_compliance_status(
         paginas=(page,),
     )
 
-    assert {item.id: item.resultado for item in projected} == {
-        divergence.id: ResultadoConformidade.DIVERGENCIA,
-        conforming.id: ResultadoConformidade.CONFORME,
-        not_evaluable.id: ResultadoConformidade.NAO_AVALIAVEL,
-    }
+    assert tuple((item.id, item.resultado) for item in projected) == (
+        (divergence.id, ResultadoConformidade.DIVERGENCIA),
+    )
 
 
 def test_projection_ignores_context_fact_geometry_before_decisive_fact_evidence() -> None:

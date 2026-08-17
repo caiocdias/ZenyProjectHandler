@@ -175,7 +175,7 @@ def test_finding_eyes_batch_actions_sorting_and_missing_geometry_are_independent
     assert tuple(viewer.overlays) == overlay_state
 
 
-def test_conforming_finding_with_geometry_has_callout_and_visibility_control(
+def test_only_divergences_are_listed_as_problems_and_projected_on_pdf(
     qtbot: QtBot,
 ) -> None:
     panel, viewer, session, _second_session, execution, analysis = _panel(qtbot)
@@ -188,23 +188,38 @@ def test_conforming_finding_with_geometry_has_callout_and_visibility_control(
             for item in finding.avaliacoes_condicoes
         ),
     )
+    second_finding = execution.achados[1]
+    not_evaluable = replace(
+        second_finding,
+        resultado=ResultadoConformidade.NAO_AVALIAVEL,
+        avaliacoes_condicoes=tuple(
+            replace(item, resultado=ResultadoCondicaoConformidade.DESCONHECIDO)
+            for item in second_finding.avaliacoes_condicoes
+        ),
+    )
     analysis.latest[session.projeto.id] = replace(
         execution,
-        achados=(conforming, *execution.achados[1:]),
+        achados=(conforming, not_evaluable, *execution.achados[2:]),
     )
 
     panel.abrir_projeto(session.projeto.id)
 
     tree = panel.findChild(QTreeWidget, "complianceFindingsTree")
     assert tree is not None
-    row = _finding_row(tree, conforming.id)
-    button = _visibility_button(tree, row)
-    callout = next(item for item in panel._callouts if item.id == conforming.id)
-    assert row.text(8) == "Localizado no PDF"
-    assert button.isEnabled()
-    assert button.text() == "Ocultar"
-    assert callout.resultado is ResultadoConformidade.CONFORME
-    assert callout in viewer.callouts
+    listed_ids = {
+        UUID(str(item.data(0, Qt.ItemDataRole.UserRole + 3)))
+        for index in range(tree.topLevelItemCount())
+        if (item := tree.topLevelItem(index)) is not None
+    }
+    problem_ids = {
+        item.id
+        for item in execution.achados[2:]
+        if item.resultado is ResultadoConformidade.DIVERGENCIA
+    }
+    non_problem_ids = {conforming.id, not_evaluable.id}
+    assert listed_ids == problem_ids
+    assert non_problem_ids.isdisjoint(item.id for item in panel._callouts)
+    assert non_problem_ids.isdisjoint(item.id for item in viewer.callouts)
 
 
 def test_showing_callout_without_selecting_row_navigates_to_its_page_and_selects_it(

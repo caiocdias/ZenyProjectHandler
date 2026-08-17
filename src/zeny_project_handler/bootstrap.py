@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from subprocess import list2cmdline
 from typing import cast
 from uuid import UUID
 
@@ -64,10 +65,16 @@ from zeny_project_handler.logging_config import (
 )
 from zeny_project_handler.ports.pdf import OrcamentoRenderizacaoPdf
 from zeny_project_handler.ports.persistence import ComprovanteCommitImportacao
-from zeny_project_handler.ui.application_icon import carregar_icone_aplicacao
+from zeny_project_handler.ui.application_icon import (
+    carregar_icone_aplicacao,
+    materializar_icone_aplicacao,
+)
 from zeny_project_handler.ui.main_window import MainWindow
 from zeny_project_handler.ui.theme import THEME_SETTING_KEY, Tema, aplicar_tema
-from zeny_project_handler.windows_app_identity import configurar_identidade_aplicativo_windows
+from zeny_project_handler.windows_app_identity import (
+    configurar_identidade_aplicativo_windows,
+    configurar_identidade_janela_windows,
+)
 
 
 class _EngineLifetime:
@@ -238,7 +245,24 @@ def _compose_initialized_application(
             ocr_runtime.diagnostico.texto_ui if ocr_runtime.diagnostico is not None else None
         ),
     )
-    window.set_resource_cleanup(lifetime.dispose)
+    limpar_identidade_janela: Callable[[], None] = _nao_fazer_nada
+    if application.platformName() == "windows":
+        icon_path = materializar_icone_aplicacao(app_settings.data_directory)
+        relaunch_command = list2cmdline([sys.executable, "-m", "zeny_project_handler"])
+        limpar_identidade_janela = configurar_identidade_janela_windows(
+            int(window.winId()),
+            icon_path=icon_path,
+            relaunch_command=relaunch_command,
+            application_name=app_settings.application_name,
+        )
+
+    def release_resources() -> None:
+        try:
+            limpar_identidade_janela()
+        finally:
+            lifetime.dispose()
+
+    window.set_resource_cleanup(release_resources)
     application.aboutToQuit.connect(lifetime.dispose)
     window.destroyed.connect(lifetime.dispose)
     return application, window
@@ -256,6 +280,10 @@ def _ocr_engine(runtime: RuntimeTesseract) -> TesseractCliOcr | None:
         language="+".join(runtime.idiomas_selecionados),
         tessdata_directory=tessdata_directory,
     )
+
+
+def _nao_fazer_nada() -> None:
+    pass
 
 
 def initialize_local_storage(settings: AppSettings) -> Engine:

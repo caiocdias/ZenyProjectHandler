@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from importlib.resources import files
+from pathlib import Path
 
 from PySide6.QtCore import QBuffer, QByteArray, QIODevice
 from PySide6.QtGui import QIcon, QImageReader, QPixmap
@@ -12,18 +13,23 @@ from zeny_project_handler.assets import APPLICATION_ICON_ICO
 _ASSET_PACKAGE = "zeny_project_handler.assets"
 
 
+def materializar_icone_aplicacao(diretorio: Path) -> Path:
+    """Disponibilize o ICO em caminho estável para o shell do Windows."""
+    payload = _ler_payload_icone()
+    destino = diretorio / APPLICATION_ICON_ICO
+    try:
+        atual = destino.read_bytes()
+    except FileNotFoundError:
+        atual = None
+    if atual != payload:
+        destino.parent.mkdir(parents=True, exist_ok=True)
+        destino.write_bytes(payload)
+    return destino
+
+
 def carregar_icone_aplicacao() -> QIcon:
     """Leia todos os frames do ICO pelo pacote, inclusive dentro de um wheel."""
-    try:
-        payload = files(_ASSET_PACKAGE).joinpath(APPLICATION_ICON_ICO).read_bytes()
-    except (FileNotFoundError, OSError) as error:
-        raise RuntimeError(
-            f"Não foi possível ler o ícone empacotado {_ASSET_PACKAGE}/{APPLICATION_ICON_ICO}."
-        ) from error
-    if not payload:
-        raise RuntimeError(
-            f"O ícone empacotado {_ASSET_PACKAGE}/{APPLICATION_ICON_ICO} está vazio."
-        )
+    payload = _ler_payload_icone()
 
     buffer = QBuffer()
     buffer.setData(QByteArray(payload))
@@ -56,3 +62,17 @@ def carregar_icone_aplicacao() -> QIcon:
     if icon.isNull():
         raise RuntimeError("O ícone empacotado foi lido, mas resultou em um QIcon nulo.")
     return icon
+
+
+def _ler_payload_icone() -> bytes:
+    try:
+        payload = files(_ASSET_PACKAGE).joinpath(APPLICATION_ICON_ICO).read_bytes()
+    except (FileNotFoundError, OSError) as error:
+        raise RuntimeError(
+            f"Não foi possível ler o ícone empacotado {_ASSET_PACKAGE}/{APPLICATION_ICON_ICO}."
+        ) from error
+    if not payload:
+        raise RuntimeError(
+            f"O ícone empacotado {_ASSET_PACKAGE}/{APPLICATION_ICON_ICO} está vazio."
+        )
+    return payload

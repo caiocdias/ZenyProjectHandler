@@ -195,7 +195,7 @@ def projetar_callouts_conformidade(
     textos_apresentacao: Mapping[UUID, str] | None = None,
     mapas_ocupacao_visual: Mapping[UUID, MapaOcupacaoVisual] | None = None,
 ) -> tuple[CalloutConformidade, ...]:
-    """Converta resultados com geometria rastreável em callouts estáveis."""
+    """Converta divergências com geometria rastreável em callouts estáveis."""
     pages_by_id = {item.id: item for item in paginas}
     facts_by_id = {item.id: item for item in execucao.fatos}
     evidence_by_id = {item.id: item for item in evidencias}
@@ -207,6 +207,8 @@ def projetar_callouts_conformidade(
     )
     requests_by_page: dict[UUID, list[_PedidoCallout]] = defaultdict(list)
     for finding in execucao.achados:
+        if finding.resultado is not ResultadoConformidade.DIVERGENCIA:
+            continue
         target = targets_by_id[finding.alvo_id]
         traceable = _geometrias_do_achado(
             finding,
