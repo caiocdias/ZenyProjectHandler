@@ -178,7 +178,9 @@ emite os dois primeiros para alvos aplicáveis e não cria achado quando alguma 
 Dentro de uma regra aplicável, requisito ausente conta como não atendido; por isso o registro inclui
 fatos de guarda sempre que a ausência significa “escopo ainda não caracterizado”, e não violação.
 Todo resultado com geometria rastreável recebe callout, inclusive resultados conformes e não
-avaliáveis. A cor da marcação distingue o resultado sem alterar o PDF.
+avaliáveis. A cor da marcação distingue o resultado sem alterar o PDF. O usuário pode arrastar a
+caixa dentro da folha; a âncora permanece fixa e a seta é recalculada durante o movimento. A posição
+manual é preservada enquanto o mesmo projeto permanece aberto.
 
 Uma execução de conformidade guarda a assinatura da sessão semântica, da revisão das regras e do
 método. Alterar regras ou incrementar o método marca o snapshot anterior como desatualizado; a

@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
     QGraphicsPixmapItem,
     QGraphicsRectItem,
     QGraphicsScene,
+    QGraphicsSceneMouseEvent,
     QGraphicsTextItem,
     QGraphicsView,
     QHBoxLayout,
@@ -50,6 +51,7 @@ from zeny_project_handler.adapters.pdf.coordinates import PontoPlano, Transforma
 from zeny_project_handler.adapters.pdf.errors import PdfError, PdfOrigemAlteradaError
 from zeny_project_handler.application.compliance_callouts import (
     CalloutConformidade,
+    RetanguloCallout,
     ponto_conexao_callout,
 )
 from zeny_project_handler.application.pdf_credentials import (
@@ -111,7 +113,7 @@ class _ResultadoAberturaSessoes:
 
 @dataclass(frozen=True, slots=True)
 class _GraficosCallout:
-    caixa: QGraphicsRectItem
+    caixa: CalloutBoxItem
     texto: QGraphicsTextItem
     linhas: tuple[QGraphicsPathItem, ...]
     resultado: ResultadoConformidade
@@ -135,11 +137,81 @@ class CalloutLinkItem(QGraphicsPathItem):
         return stroker.createStroke(self.path())
 
 
+class CalloutBoxItem(QGraphicsRectItem):
+    """Caixa arrastável, contida na página e com atualização vetorial ao mover."""
+
+    def __init__(self, rectangle: QRectF, parent: QGraphicsItem) -> None:
+        super().__init__(rectangle, parent)
+        self._drag_bounds = QRectF()
+        self._position_changed: Callable[[], None] | None = None
+        self._drag_finished: Callable[[], None] | None = None
+
+    def habilitar_arraste(
+        self,
+        *,
+        limites: QRectF,
+        posicao_alterada: Callable[[], None],
+        arraste_concluido: Callable[[], None],
+    ) -> None:
+        self._drag_bounds = QRectF(limites)
+        self._position_changed = posicao_alterada
+        self._drag_finished = arraste_concluido
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges)
+        self.setCursor(Qt.CursorShape.OpenHandCursor)
+
+    def itemChange(  # noqa: N802 - API Qt
+        self,
+        change: QGraphicsItem.GraphicsItemChange,
+        value: object,
+    ) -> object:
+        if (
+            change is QGraphicsItem.GraphicsItemChange.ItemPositionChange
+            and self._position_changed is not None
+            and isinstance(value, QPointF)
+        ):
+            value = self._posicao_contida(value)
+        result = super().itemChange(change, value)
+        if (
+            change is QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged
+            and self._position_changed is not None
+        ):
+            self._position_changed()
+        return result
+
+    def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:  # noqa: N802 - API Qt
+        self.setCursor(Qt.CursorShape.ClosedHandCursor)
+        super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event: QGraphicsSceneMouseEvent) -> None:  # noqa: N802 - API Qt
+        super().mouseReleaseEvent(event)
+        self.setCursor(Qt.CursorShape.OpenHandCursor)
+        if self._drag_finished is not None:
+            self._drag_finished()
+
+    def _posicao_contida(self, proposed: QPointF) -> QPointF:
+        current_bounds = self.mapRectToParent(self.rect())
+        delta = proposed - self.pos()
+        desired = current_bounds.translated(delta)
+        correction_x = 0.0
+        correction_y = 0.0
+        if desired.left() < self._drag_bounds.left():
+            correction_x = self._drag_bounds.left() - desired.left()
+        elif desired.right() > self._drag_bounds.right():
+            correction_x = self._drag_bounds.right() - desired.right()
+        if desired.top() < self._drag_bounds.top():
+            correction_y = self._drag_bounds.top() - desired.top()
+        elif desired.bottom() > self._drag_bounds.bottom():
+            correction_y = self._drag_bounds.bottom() - desired.bottom()
+        return proposed + QPointF(correction_x, correction_y)
+
+
 class PdfGraphicsView(QGraphicsView):
     """Cena raster com zoom suave e sobreposições em coordenadas normalizadas."""
 
     proposta_selecionada = Signal(str)
     callout_selecionado = Signal(str)
+    callout_movido = Signal(str, object)
     viewport_alterado = Signal()
     zoom_alterado = Signal(float)
 
@@ -269,6 +341,10 @@ class PdfGraphicsView(QGraphicsView):
                 transformer,
                 layer,
                 zoom=self._zoom,
+                callout_movido=lambda callout_id, box: self.callout_movido.emit(
+                    callout_id,
+                    box,
+                ),
             )
         self._atualizar_realce_callouts()
 
@@ -496,6 +572,7 @@ class PdfViewerWidget(QWidget):
         self._review_proposals: tuple[PropostaElemento, ...] = ()
         self._review_link_geometries: dict[str, GeometriaDocumento] = {}
         self._compliance_callouts: tuple[CalloutConformidade, ...] = ()
+        self._callout_position_overrides: dict[str, RetanguloCallout] = {}
         self._selected_compliance_callout_id: str | None = None
         self._visual_occupancy_cache: dict[UUID, MapaOcupacaoVisual] = {}
         self._current_transformer: TransformadorCoordenadasPagina | None = None
@@ -584,6 +661,7 @@ class PdfViewerWidget(QWidget):
         self.view = PdfGraphicsView()
         self.view.proposta_selecionada.connect(self.proposal_selected)
         self.view.callout_selecionado.connect(self._callout_selected)
+        self.view.callout_movido.connect(self._callout_moved)
         layout.addWidget(self.view, 1)
 
     def selecionar_pdf(self) -> None:
@@ -621,6 +699,7 @@ class PdfViewerWidget(QWidget):
         self._review_proposals = ()
         self._review_link_geometries = {}
         self._compliance_callouts = ()
+        self._callout_position_overrides.clear()
         self._selected_compliance_callout_id = None
         self._visual_occupancy_cache.clear()
         self._current_transformer = None
@@ -807,6 +886,7 @@ class PdfViewerWidget(QWidget):
         self._review_proposals = ()
         self._review_link_geometries = {}
         self._compliance_callouts = ()
+        self._callout_position_overrides.clear()
         self._selected_compliance_callout_id = None
         self._visual_occupancy_cache.clear()
         self._last_page_id = None
@@ -848,13 +928,23 @@ class PdfViewerWidget(QWidget):
         self,
         callouts: tuple[CalloutConformidade, ...],
     ) -> None:
-        self._compliance_callouts = callouts
+        positioned = tuple(
+            replace(
+                item,
+                caixa_sugerida=self._callout_position_overrides.get(
+                    str(item.id),
+                    item.caixa_sugerida,
+                ),
+            )
+            for item in callouts
+        )
+        self._compliance_callouts = positioned
         visible_ids = {str(item.id) for item in callouts}
         if self._selected_compliance_callout_id not in visible_ids:
             self._selected_compliance_callout_id = None
             self.view.limpar_selecao_callout()
         if self._current_transformer is not None:
-            self.view.definir_callouts_conformidade(callouts, self._current_transformer)
+            self.view.definir_callouts_conformidade(positioned, self._current_transformer)
             if self._selected_compliance_callout_id is not None:
                 self.view.selecionar_callout(self._selected_compliance_callout_id)
 
@@ -900,6 +990,17 @@ class PdfViewerWidget(QWidget):
     def _callout_selected(self, callout_id: str) -> None:
         self._selected_compliance_callout_id = callout_id
         self.compliance_callout_selected.emit(callout_id)
+
+    def _callout_moved(self, callout_id: str, box: object) -> None:
+        if not isinstance(box, RetanguloCallout):
+            return
+        if all(str(item.id) != callout_id for item in self._compliance_callouts):
+            return
+        self._callout_position_overrides[callout_id] = box
+        self._compliance_callouts = tuple(
+            replace(item, caixa_sugerida=box) if str(item.id) == callout_id else item
+            for item in self._compliance_callouts
+        )
 
     def selecionar_proposta(self, proposal_id: str) -> None:
         self.view.selecionar_proposta(proposal_id)
@@ -1404,6 +1505,7 @@ def _criar_graficos_callout(
     layer: QGraphicsRectItem,
     *,
     zoom: float,
+    callout_movido: Callable[[str, RetanguloCallout], None],
 ) -> _GraficosCallout:
     color, background = _cores_callout(callout.resultado, selecionado=False)
     box = callout.caixa_sugerida
@@ -1413,7 +1515,7 @@ def _criar_graficos_callout(
     box_width = math.hypot(top_right.x - top_left.x, top_right.y - top_left.y)
     box_height = math.hypot(bottom_left.x - top_left.x, bottom_left.y - top_left.y)
     angle = math.degrees(math.atan2(top_right.y - top_left.y, top_right.x - top_left.x))
-    rectangle = QGraphicsRectItem(QRectF(0, 0, box_width, box_height), layer)
+    rectangle = CalloutBoxItem(QRectF(0, 0, box_width, box_height), layer)
     pen = QPen(color, 2)
     pen.setCosmetic(True)
     rectangle.setPen(pen)
@@ -1421,11 +1523,10 @@ def _criar_graficos_callout(
     rectangle.setData(0, str(callout.id))
     rectangle.setData(2, "compliance_callout")
     rectangle.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
-    rectangle.setCursor(Qt.CursorShape.PointingHandCursor)
     rectangle.setPos(top_left.x, top_left.y)
     rectangle.setRotation(angle)
     rectangle.setZValue(1)
-    text_item = QGraphicsTextItem(layer)
+    text_item = QGraphicsTextItem(rectangle)
     text_item.setDefaultTextColor(color)
     text_item.document().setDocumentMargin(0)
     points_width = float(box.largura) * float(transformer.pagina.largura_pontos)
@@ -1438,30 +1539,20 @@ def _criar_graficos_callout(
     text_item.setFont(font)
     text_item.setPlainText(callout.texto)
     text_item.setTextWidth(available_width)
-    radians = math.radians(angle)
-    text_item.setPos(
-        top_left.x + math.cos(radians) * padding - math.sin(radians) * padding,
-        top_left.y + math.sin(radians) * padding + math.cos(radians) * padding,
-    )
-    text_item.setRotation(angle)
+    text_item.setPos(padding, padding)
     text_item.setData(0, str(callout.id))
     text_item.setData(2, "compliance_callout")
-    text_item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
-    text_item.setCursor(Qt.CursorShape.PointingHandCursor)
-    text_item.setZValue(2)
-    tooltip = callout.texto.replace("\n", " ")
+    text_item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+    text_item.setZValue(1)
+    tooltip = f"{callout.texto.replace(chr(10), ' ')} · Arraste a caixa para reposicioná-la"
     rectangle.setToolTip(tooltip)
     text_item.setToolTip(tooltip)
     scene_bounds = layer.rect()
     arrow_pen = QPen(color, 2)
     arrow_pen.setCosmetic(True)
     lines: list[QGraphicsPathItem] = []
-    for anchor in callout.ancoras:
-        connection = ponto_conexao_callout(box, anchor.ponto)
-        start = transformer.normalizado_para_pixel(connection)
-        end = transformer.normalizado_para_pixel(anchor.ponto)
-        path = _caminho_seta_aberta(start, end, pixels_per_point, scene_bounds)
-        line = CalloutLinkItem(path, layer)
+    for _anchor in callout.ancoras:
+        line = CalloutLinkItem(QPainterPath(), layer)
         line.setPen(arrow_pen)
         line.setData(0, str(callout.id))
         line.setData(2, "compliance_callout")
@@ -1469,7 +1560,65 @@ def _criar_graficos_callout(
         line.setCursor(Qt.CursorShape.PointingHandCursor)
         line.setToolTip(tooltip)
         lines.append(line)
-    return _GraficosCallout(rectangle, text_item, tuple(lines), callout.resultado)
+    line_tuple = tuple(lines)
+
+    def current_box() -> RetanguloCallout:
+        return _caixa_callout_normalizada(rectangle, transformer)
+
+    def update_arrows() -> None:
+        _atualizar_setas_callout(
+            line_tuple,
+            current_box(),
+            callout,
+            transformer,
+            pixels_per_point=pixels_per_point,
+            scene_bounds=scene_bounds,
+        )
+
+    update_arrows()
+    rectangle.habilitar_arraste(
+        limites=scene_bounds,
+        posicao_alterada=update_arrows,
+        arraste_concluido=lambda: callout_movido(str(callout.id), current_box()),
+    )
+    return _GraficosCallout(rectangle, text_item, line_tuple, callout.resultado)
+
+
+def _caixa_callout_normalizada(
+    rectangle: CalloutBoxItem,
+    transformer: TransformadorCoordenadasPagina,
+) -> RetanguloCallout:
+    corners = tuple(
+        transformer.pixel_para_normalizado(PontoPlano(point.x(), point.y()))
+        for point in (
+            rectangle.mapToScene(rectangle.rect().topLeft()),
+            rectangle.mapToScene(rectangle.rect().topRight()),
+            rectangle.mapToScene(rectangle.rect().bottomLeft()),
+            rectangle.mapToScene(rectangle.rect().bottomRight()),
+        )
+    )
+    return RetanguloCallout(
+        min(item.x for item in corners),
+        min(item.y for item in corners),
+        max(item.x for item in corners),
+        max(item.y for item in corners),
+    )
+
+
+def _atualizar_setas_callout(
+    lines: tuple[QGraphicsPathItem, ...],
+    box: RetanguloCallout,
+    callout: CalloutConformidade,
+    transformer: TransformadorCoordenadasPagina,
+    *,
+    pixels_per_point: float,
+    scene_bounds: QRectF,
+) -> None:
+    for line, anchor in zip(lines, callout.ancoras, strict=True):
+        connection = ponto_conexao_callout(box, anchor.ponto)
+        start = transformer.normalizado_para_pixel(connection)
+        end = transformer.normalizado_para_pixel(anchor.ponto)
+        line.setPath(_caminho_seta_aberta(start, end, pixels_per_point, scene_bounds))
 
 
 def _cores_callout(

@@ -182,6 +182,11 @@ legibilidade entre formatos e orientações.
 camada vetorial separada da prévia, dos tiles, dos sublinhados de elementos e do contorno
 temporário. Zoom e rotação não rasterizam o callout nem modificam o PDF.
 
+As caixas são itens gráficos arrastáveis e contidos nos limites da folha. Durante o arraste, somente
+a caixa muda de posição: a âncora normalizada continua fixa e o caminho da seta é reconstruído da
+borda da caixa até essa âncora. O visualizador mantém overrides de posição em memória para que
+ocultar/exibir, zoom, rotação e troca de página não desfaçam o ajuste manual.
+
 Na aba **Conformidade**:
 
 - divergências aparecem antes dos demais resultados;

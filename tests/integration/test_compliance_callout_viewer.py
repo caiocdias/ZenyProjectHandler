@@ -140,6 +140,63 @@ def test_callout_box_and_arrow_emit_only_user_selection_and_are_highlighted(
 
 
 @pytest.mark.integration
+def test_callout_box_drag_keeps_anchor_fixed_updates_arrow_and_preserves_position(
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> None:
+    source = create_callout_formats_pdf(tmp_path / "arraste-callout.pdf")
+    viewer = _viewer(qtbot, dpi=144, budget=TEST_RENDER_BUDGET)
+    assert viewer.carregar_pdf(source)
+    _wait_preview(qtbot, viewer)
+    assert viewer.inspecao is not None
+    page = viewer.inspecao.documento.paginas[0]
+    callout = _callout(page.id, float(page.largura_pontos), float(page.altura_pontos), "drag")
+    viewer.definir_callouts_conformidade((callout,))
+    graphics = viewer.view._callout_items[str(callout.id)]
+    original_position = graphics.caixa.pos()
+    original_box = callout.caixa_sugerida
+    original_path = graphics.linhas[0].path()
+    original_start = original_path.elementAt(0)
+    fixed_tip = original_path.elementAt(1)
+    box_center = viewer.view.mapFromScene(graphics.caixa.mapToScene(graphics.caixa.rect().center()))
+    target = box_center + QPoint(-110, 70)
+
+    qtbot.mousePress(  # type: ignore[no-untyped-call]
+        viewer.view.viewport(),
+        Qt.MouseButton.LeftButton,
+        pos=box_center,
+    )
+    qtbot.mouseMove(viewer.view.viewport(), pos=target, delay=20)  # type: ignore[no-untyped-call]
+    qtbot.mouseRelease(  # type: ignore[no-untyped-call]
+        viewer.view.viewport(),
+        Qt.MouseButton.LeftButton,
+        pos=target,
+    )
+    qtbot.wait(20)
+
+    moved_path = graphics.linhas[0].path()
+    moved_start = moved_path.elementAt(0)
+    moved_tip = moved_path.elementAt(1)
+    assert graphics.caixa.pos() != original_position
+    assert (moved_start.x, moved_start.y) != pytest.approx((original_start.x, original_start.y))
+    assert (moved_tip.x, moved_tip.y) == pytest.approx((fixed_tip.x, fixed_tip.y))
+    moved_box = viewer._compliance_callouts[0].caixa_sugerida
+    assert moved_box != original_box
+    assert Decimal(0) <= moved_box.esquerda < moved_box.direita <= Decimal(1)
+    assert Decimal(0) <= moved_box.topo < moved_box.base <= Decimal(1)
+
+    viewer.definir_callouts_conformidade(())
+    viewer.definir_callouts_conformidade((callout,))
+    assert viewer._compliance_callouts[0].caixa_sugerida == moved_box
+
+    viewer.ir_para_folha(2)
+    _wait_preview(qtbot, viewer, page=2)
+    viewer.ir_para_folha(1)
+    _wait_preview(qtbot, viewer, page=1)
+    assert viewer._compliance_callouts[0].caixa_sugerida == moved_box
+
+
+@pytest.mark.integration
 @pytest.mark.parametrize(
     ("result", "regular_color", "selected_color", "selected_background"),
     (
