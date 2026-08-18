@@ -48,6 +48,7 @@ from zeny_project_handler.ports.pdf import LeitorPdfPort, OrcamentoRenderizacaoP
 from .application_icon import carregar_icone_aplicacao
 from .documentation_panel import DocumentationPanelWidget
 from .pdf_credentials import ResolvedorCredenciaisPdf
+from .pdf_gateway import PdfViewerGateway
 from .pdf_viewer import PdfViewerWidget
 from .portability_panel import PortabilityPanelWidget
 from .project_panel import ProjectPanelWidget
@@ -334,6 +335,7 @@ class MainWindow(QMainWindow):
         *,
         application_name: str,
         pdf_reader: LeitorPdfPort,
+        pdf_viewer_gateway: PdfViewerGateway,
         pdf_render_dpi: int,
         pdf_render_budget: OrcamentoRenderizacaoPdf,
         pdf_tile_cache_max_bytes: int,
@@ -380,11 +382,11 @@ class MainWindow(QMainWindow):
             provedor_credenciais_pdf or ProvedorCredenciaisPdfMemoria()
         )
         self.pdf_viewer = PdfViewerWidget(
-            leitor=pdf_reader,
+            gateway=pdf_viewer_gateway,
             dpi=pdf_render_dpi,
-            orcamento=pdf_render_budget,
+            limite_pixels_tile=pdf_render_budget.limite_pixels,
             cache_limite_bytes=pdf_tile_cache_max_bytes,
-            resolvedor_credenciais=credential_resolver,
+            limpar_credenciais_efemeras=credential_resolver.provedor.limpar,
             parent=self,
         )
         self.pdf_viewer.status_changed.connect(self.statusBar().showMessage)

@@ -13,15 +13,12 @@ from uuid import UUID
 
 from PySide6.QtCore import QThread
 
-from zeny_project_handler.adapters.pdf.errors import PdfError
 from zeny_project_handler.logging_config import operation_logger
-from zeny_project_handler.ports.pdf import (
-    VIEWER_BYTES_PER_PIXEL_ESTIMATE,
-    OrcamentoRenderizacaoPdf,
-    PdfRectangle,
-    PlanoRenderizacaoPdf,
-    SessaoLeituraPdfPort,
-)
+from zeny_project_handler_contracts.common import NormalizedBoxDto
+
+from .pdf_gateway import PdfViewerGateway, ViewerGatewayError
+
+PdfRectangle = tuple[float, float, float, float]
 
 K = TypeVar("K", bound=Hashable)
 V = TypeVar("V")
@@ -29,12 +26,30 @@ V = TypeVar("V")
 
 @dataclass(frozen=True, slots=True)
 class IdentidadeDocumentoRenderizacao:
-    """Identidade forte da sessão, complementada pelos metadados verificados."""
+    """Identidade de transporte usada somente para invalidar o cache visual."""
 
     documento_id: UUID
     sha256: str
     tamanho_bytes: int
-    modificado_em_ns: int
+
+
+@dataclass(frozen=True, slots=True)
+class PlanoRasterRemoto:
+    dpi_solicitado: int
+    dpi_efetivo: int
+    rotacao_adicional_graus: int
+    recorte_normalizado: PdfRectangle
+    largura_pixels: int
+    altura_pixels: int
+    largura_pagina_pixels: int
+    altura_pagina_pixels: int
+    origem_x_pixels: int
+    origem_y_pixels: int
+    reduzido: bool
+
+    @property
+    def pagina_inteira(self) -> bool:
+        return self.recorte_normalizado == (0.0, 0.0, 1.0, 1.0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,29 +109,28 @@ class CancelamentoRenderizacao:
 @dataclass(frozen=True, slots=True)
 class TrabalhoRenderizacao:
     solicitacao: SolicitacaoRenderizacao
-    sessao: SessaoLeituraPdfPort
-    orcamento: OrcamentoRenderizacaoPdf
+    pagina_id: UUID
+    gateway: PdfViewerGateway
     prioridade: int
     cancelamento: CancelamentoRenderizacao
 
 
 @dataclass(frozen=True, slots=True)
-class RasterRgbRenderizado:
-    """Raster RGB proprietário, seguro para atravessar a fronteira da thread."""
+class RasterPngRenderizado:
+    """PNG remoto proprietário, ainda sem objetos visuais Qt."""
 
-    pagina_numero: int
+    pagina_id: UUID
     rotacao_adicional_graus: int
     largura_pixels: int
     altura_pixels: int
-    stride: int
-    dados_rgb: bytes
-    plano: PlanoRenderizacaoPdf
+    dados_png: bytes
+    plano: PlanoRasterRemoto
 
 
 @dataclass(frozen=True, slots=True)
 class ResultadoRenderizacao:
     solicitacao: SolicitacaoRenderizacao
-    pagina: RasterRgbRenderizado | None = None
+    pagina: RasterPngRenderizado | None = None
     erro: Exception | None = None
 
     def __post_init__(self) -> None:
@@ -268,36 +282,51 @@ class FilaRenderizacao(QThread):
         with observation.context():
             observation.started()
             try:
-                rendered = work.sessao.renderizar_pagina(
-                    request.pagina,
-                    dpi=request.dpi,
-                    orcamento=work.orcamento,
-                    rotacao_adicional_graus=request.rotacao,
-                    recorte_normalizado=None if request.previa else request.regiao,
-                )
+                if request.previa:
+                    rendered = work.gateway.render_preview(
+                        work.pagina_id,
+                        dpi=request.dpi,
+                        rotation=request.rotacao,
+                    )
+                else:
+                    rendered = work.gateway.render_tile(
+                        work.pagina_id,
+                        dpi=request.dpi,
+                        rotation=request.rotacao,
+                        clip=_normalized_box(request.regiao),
+                    )
             except Exception as error:
                 if work.cancelamento.cancelado:
                     observation.cancelled()
                     return
-                observation.failed(error, expected=isinstance(error, PdfError))
+                observation.failed(error, expected=isinstance(error, ViewerGatewayError))
                 with self._condition:
                     self._results.append(ResultadoRenderizacao(solicitacao=request, erro=error))
                 return
             if work.cancelamento.cancelado:
                 observation.cancelled()
                 return
-            raster = RasterRgbRenderizado(
-                pagina_numero=rendered.pagina_numero,
-                rotacao_adicional_graus=rendered.rotacao_adicional_graus,
-                largura_pixels=rendered.largura_pixels,
-                altura_pixels=rendered.altura_pixels,
-                stride=rendered.stride,
-                dados_rgb=bytes(rendered.dados_rgb),
-                plano=rendered.plano,
+            metadata = rendered.metadata
+            raster = RasterPngRenderizado(
+                pagina_id=metadata.page_id.root,
+                rotacao_adicional_graus=metadata.rotation_degrees,
+                largura_pixels=metadata.pixel_width,
+                altura_pixels=metadata.pixel_height,
+                dados_png=rendered.png,
+                plano=PlanoRasterRemoto(
+                    dpi_solicitado=metadata.requested_dpi,
+                    dpi_efetivo=metadata.effective_dpi,
+                    rotacao_adicional_graus=metadata.rotation_degrees,
+                    recorte_normalizado=_box_tuple(metadata.clip),
+                    largura_pixels=metadata.pixel_width,
+                    altura_pixels=metadata.pixel_height,
+                    largura_pagina_pixels=metadata.page_pixel_width,
+                    altura_pagina_pixels=metadata.page_pixel_height,
+                    origem_x_pixels=metadata.origin_x_pixels,
+                    origem_y_pixels=metadata.origin_y_pixels,
+                    reduzido=metadata.reduced,
+                ),
             )
-            # O Pixmap nativo do PyMuPDF nasceu nesta thread e também deve ser
-            # liberado aqui. Somente o buffer Python proprietário segue para a UI.
-            del rendered
             if work.cancelamento.cancelado:
                 observation.cancelled()
                 return
@@ -314,17 +343,14 @@ def regioes_tiles_priorizadas(
     dpi_detalhe: int,
     viewport_normalizado: PdfRectangle,
     rotacao: int,
-    orcamento: OrcamentoRenderizacaoPdf,
+    limite_pixels_tile: int,
 ) -> tuple[tuple[int, PdfRectangle], ...]:
     """Planeje apenas viewport e uma margem de um tile, com visíveis primeiro."""
     if min(largura_pagina_pixels, altura_pagina_pixels, dpi_previa, dpi_detalhe) <= 0:
         raise ValueError("Dimensões e DPIs de tiles devem ser positivos")
     target_width = max(1, round(largura_pagina_pixels * dpi_detalhe / dpi_previa))
     target_height = max(1, round(altura_pagina_pixels * dpi_detalhe / dpi_previa))
-    pixel_capacity = min(
-        orcamento.limite_pixels,
-        orcamento.limite_bytes // VIEWER_BYTES_PER_PIXEL_ESTIMATE,
-    )
+    pixel_capacity = limite_pixels_tile
     if pixel_capacity <= 0:
         raise ValueError("O orçamento não comporta nem um pixel do visualizador")
     edge = max(1, math.isqrt(pixel_capacity) - 2)
@@ -407,3 +433,23 @@ def _clamped_rectangle(region: PdfRectangle) -> PdfRectangle:
 
 def _rounded_rectangle(region: PdfRectangle) -> PdfRectangle:
     return tuple(round(value, 12) for value in region)  # type: ignore[return-value]
+
+
+def _normalized_box(region: PdfRectangle) -> NormalizedBoxDto:
+    x0, y0, x1, y1 = region
+    return NormalizedBoxDto(
+        x=_decimal_text(x0),
+        y=_decimal_text(y0),
+        width=_decimal_text(x1 - x0),
+        height=_decimal_text(y1 - y0),
+    )
+
+
+def _box_tuple(box: NormalizedBoxDto) -> PdfRectangle:
+    x = float(box.x)
+    y = float(box.y)
+    return x, y, x + float(box.width), y + float(box.height)
+
+
+def _decimal_text(value: float) -> str:
+    return format(value, ".12g")

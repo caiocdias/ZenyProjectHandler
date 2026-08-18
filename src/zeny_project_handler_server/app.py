@@ -13,7 +13,12 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import JsonValue
 from starlette.middleware.base import RequestResponseEndpoint
 
-from zeny_project_handler.adapters.pdf.errors import PdfArquivoInvalidoError
+from zeny_project_handler.adapters.pdf.errors import (
+    PdfArquivoInvalidoError,
+    PdfOrigemAlteradaError,
+    PdfPaginaInvalidaError,
+    PdfProtegidoError,
+)
 from zeny_project_handler.adapters.persistence.errors import PersistenceConflictError
 from zeny_project_handler.application.errors import (
     DocumentoDuplicadoError,
@@ -30,6 +35,7 @@ from zeny_project_handler.logging_config import (
 )
 from zeny_project_handler_contracts import API_V1_PREFIX, API_VERSION
 from zeny_project_handler_contracts.base import CorrelationId
+from zeny_project_handler_contracts.common import NormalizedBoxDto
 from zeny_project_handler_contracts.documents import (
     CreateUploadResponse,
     DocumentImportResultDto,
@@ -52,6 +58,14 @@ from zeny_project_handler_contracts.projects import (
     UpdateProjectRequest,
 )
 from zeny_project_handler_contracts.session import HealthLiveResponse, SessionCapabilitiesResponse
+from zeny_project_handler_contracts.viewer import (
+    CloseViewerSessionResponse,
+    CreateViewerSessionResponse,
+    UnlockViewerPdfResponse,
+    ViewerDocumentDto,
+    ViewerPageDto,
+    ViewerProjectResponse,
+)
 from zeny_project_handler_server.api_errors import ApiError
 from zeny_project_handler_server.auth import (
     BEARER_CHALLENGE,
@@ -66,6 +80,7 @@ from zeny_project_handler_server.composition import (
 )
 from zeny_project_handler_server.config import ServerSettings
 from zeny_project_handler_server.project_api import ManagedDownload, ProjectApiService
+from zeny_project_handler_server.viewer_api import ViewerApiService, ViewerRaster
 
 CORRELATION_HEADER = "X-Correlation-ID"
 
@@ -334,6 +349,125 @@ def create_app(
     ) -> RemoveDocumentResponse:
         return _project_api(request).remove_document(project_id, document_id)
 
+    @application.post(
+        f"{API_V1_PREFIX}/viewer-sessions",
+        status_code=status.HTTP_201_CREATED,
+        response_model=CreateViewerSessionResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def create_viewer_session(
+        request: Request,
+        files: list[UploadFile],
+        idempotency_key: str = Header(alias="Idempotency-Key", min_length=1, max_length=200),
+    ) -> CreateViewerSessionResponse:
+        service = _viewer_api(request)
+        received = await service.receive_uploads(files)
+        return service.create_session(received, idempotency_key)
+
+    @application.delete(
+        f"{API_V1_PREFIX}/viewer-sessions/{{viewer_session_id}}",
+        response_model=CloseViewerSessionResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def close_viewer_session(
+        request: Request,
+        viewer_session_id: UUID,
+    ) -> CloseViewerSessionResponse:
+        return _viewer_api(request).close_session(viewer_session_id)
+
+    @application.post(
+        f"{API_V1_PREFIX}/viewer-sessions/{{viewer_session_id}}/uploads/{{upload_id}}/unlock",
+        response_model=UnlockViewerPdfResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def unlock_viewer_session_pdf(
+        request: Request,
+        viewer_session_id: UUID,
+        upload_id: UUID,
+        payload: UnlockPdfRequest,
+    ) -> UnlockViewerPdfResponse:
+        return _viewer_api(request).unlock_session_pdf(
+            viewer_session_id,
+            upload_id,
+            payload.password,
+        )
+
+    @application.post(
+        f"{API_V1_PREFIX}/viewer-documents/{{document_id}}/unlock",
+        response_model=ViewerDocumentDto,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def unlock_viewer_project_document(
+        request: Request,
+        document_id: UUID,
+        payload: UnlockPdfRequest,
+    ) -> ViewerDocumentDto:
+        return _viewer_api(request).unlock_project_document(document_id, payload.password)
+
+    @application.get(
+        f"{API_V1_PREFIX}/projects/{{project_id}}/viewer",
+        response_model=ViewerProjectResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def get_project_viewer(request: Request, project_id: UUID) -> ViewerProjectResponse:
+        return _viewer_api(request).get_project(project_id)
+
+    @application.get(
+        f"{API_V1_PREFIX}/viewer-pages/{{page_id}}",
+        response_model=ViewerPageDto,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def get_viewer_page(request: Request, page_id: UUID) -> ViewerPageDto:
+        return _viewer_api(request).get_page(page_id)
+
+    @application.get(
+        f"{API_V1_PREFIX}/viewer-pages/{{page_id}}/preview",
+        response_class=Response,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def get_viewer_page_preview(
+        request: Request,
+        page_id: UUID,
+        dpi: int = Query(default=96, ge=1, le=600),
+        rotation: int = Query(default=0, ge=0, le=270, multiple_of=90),
+    ) -> Response:
+        return _raster_response(
+            _viewer_api(request).render_preview(page_id, dpi=dpi, rotation=rotation)
+        )
+
+    @application.get(
+        f"{API_V1_PREFIX}/viewer-pages/{{page_id}}/tiles",
+        response_class=Response,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def get_viewer_page_tile(
+        request: Request,
+        page_id: UUID,
+        x: str = Query(pattern=r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$"),
+        y: str = Query(pattern=r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$"),
+        width: str = Query(pattern=r"^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$"),
+        height: str = Query(pattern=r"^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$"),
+        dpi: int = Query(default=600, ge=1, le=600),
+        rotation: int = Query(default=0, ge=0, le=270, multiple_of=90),
+    ) -> Response:
+        clip = NormalizedBoxDto(x=x, y=y, width=width, height=height)
+        return _raster_response(
+            _viewer_api(request).render_tile(
+                page_id,
+                dpi=dpi,
+                rotation=rotation,
+                clip=clip,
+            )
+        )
+
     @application.get(
         f"{API_V1_PREFIX}/projects/{{project_id}}/photos",
         response_model=ManagedPhotoListResponse,
@@ -406,6 +540,13 @@ def _project_api(request: Request) -> ProjectApiService:
     return service
 
 
+def _viewer_api(request: Request) -> ViewerApiService:
+    service = _runtime(request).viewer_api
+    if service is None:
+        raise ApiError(503, ErrorCode.OPERATION_CONFLICT, "O visualizador não está disponível.")
+    return service
+
+
 def _error_response(
     request: Request,
     *,
@@ -441,6 +582,28 @@ def _mapped_error(error: Exception) -> ApiError | None:
             ErrorCode.UNSUPPORTED_MEDIA_TYPE,
             "O arquivo enviado não é um PDF válido.",
         )
+    if isinstance(error, PdfProtegidoError):
+        return ApiError(
+            409,
+            (
+                ErrorCode.PDF_PASSWORD_INVALID
+                if error.senha_fornecida
+                else ErrorCode.PDF_PASSWORD_REQUIRED
+            ),
+            (
+                "A senha informada para o PDF está incorreta."
+                if error.senha_fornecida
+                else "O PDF é protegido e requer uma senha."
+            ),
+        )
+    if isinstance(error, PdfOrigemAlteradaError):
+        return ApiError(
+            409,
+            ErrorCode.PDF_SOURCE_CHANGED,
+            "A origem PDF mudou desde a abertura da sessão.",
+        )
+    if isinstance(error, PdfPaginaInvalidaError):
+        return ApiError(422, ErrorCode.VALIDATION_ERROR, str(error))
     if isinstance(error, (DomainValidationError, PortabilidadeProjetoError, ValueError)):
         return ApiError(422, ErrorCode.VALIDATION_ERROR, str(error))
     return None
@@ -460,5 +623,29 @@ def _stream_download(download: ManagedDownload) -> StreamingResponse:
             "Content-Disposition": f'attachment; filename="{download.display_name}"',
             "Content-Length": str(download.size_bytes),
             "Digest": f"sha-256={digest}",
+        },
+    )
+
+
+def _raster_response(raster: ViewerRaster) -> Response:
+    metadata = raster.metadata
+    clip = metadata.clip
+    return Response(
+        content=raster.png,
+        media_type=metadata.content_type,
+        headers={
+            "X-Zeny-Page-Id": str(metadata.page_id.root),
+            "X-Zeny-Pixel-Width": str(metadata.pixel_width),
+            "X-Zeny-Pixel-Height": str(metadata.pixel_height),
+            "X-Zeny-Page-Pixel-Width": str(metadata.page_pixel_width),
+            "X-Zeny-Page-Pixel-Height": str(metadata.page_pixel_height),
+            "X-Zeny-Origin-X": str(metadata.origin_x_pixels),
+            "X-Zeny-Origin-Y": str(metadata.origin_y_pixels),
+            "X-Zeny-Requested-Dpi": str(metadata.requested_dpi),
+            "X-Zeny-Effective-Dpi": str(metadata.effective_dpi),
+            "X-Zeny-Rotation": str(metadata.rotation_degrees),
+            "X-Zeny-Clip": f"{clip.x},{clip.y},{clip.width},{clip.height}",
+            "X-Zeny-Reduced": "true" if metadata.reduced else "false",
+            "Cache-Control": "private, no-store",
         },
     )

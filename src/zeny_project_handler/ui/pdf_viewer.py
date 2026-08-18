@@ -5,9 +5,12 @@ from __future__ import annotations
 import math
 import os
 from collections.abc import Callable, Mapping
+from contextlib import suppress
 from dataclasses import dataclass, replace
+from decimal import Decimal
 from pathlib import Path
-from uuid import UUID
+from typing import Protocol, cast
+from uuid import UUID, uuid4
 
 from PySide6.QtCore import QEvent, QPointF, QRectF, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import (
@@ -39,7 +42,9 @@ from PySide6.QtWidgets import (
     QGraphicsTextItem,
     QGraphicsView,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPushButton,
     QSpinBox,
@@ -47,17 +52,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from zeny_project_handler.adapters.pdf.coordinates import PontoPlano, TransformadorCoordenadasPagina
-from zeny_project_handler.adapters.pdf.errors import PdfError, PdfOrigemAlteradaError
 from zeny_project_handler.application.compliance_callouts import (
     CalloutConformidade,
     RetanguloCallout,
     ponto_conexao_callout,
-)
-from zeny_project_handler.application.pdf_credentials import (
-    IdentidadeCredencialPdf,
-    ProvedorCredenciaisPdfMemoria,
-    identificar_origem_pdf,
 )
 from zeny_project_handler.application.visual_occupancy import (
     MapaOcupacaoVisual,
@@ -66,27 +64,26 @@ from zeny_project_handler.application.visual_occupancy import (
 from zeny_project_handler.config import DEFAULT_PDF_TILE_CACHE_MAX_BYTES
 from zeny_project_handler.domain.analysis import PropostaElemento
 from zeny_project_handler.domain.compliance import ResultadoConformidade
-from zeny_project_handler.domain.documents import DocumentoProjeto
 from zeny_project_handler.domain.enums import EstadoRevisao, TipoGeometria
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 from zeny_project_handler.logging_config import OperationLogger, operation_logger
-from zeny_project_handler.ports.pdf import (
-    InspecaoPdf,
-    LeitorPdfPort,
-    OrcamentoRenderizacaoPdf,
-    PlanoRenderizacaoPdf,
-    ReferenciaFontePdf,
-    SessaoLeituraPdfPort,
+from zeny_project_handler_contracts.base import DocumentId, PageId
+from zeny_project_handler_contracts.errors import ErrorCode
+from zeny_project_handler_contracts.viewer import (
+    CreateViewerSessionResponse,
+    ViewerDocumentDto,
+    ViewerPageDto,
 )
 
-from .pdf_credentials import EstadoResolucaoCredencialPdf, ResolvedorCredenciaisPdf
+from .pdf_gateway import PdfViewerGateway, ViewerGatewayError
 from .pdf_rendering import (
     CacheLruBytes,
     CancelamentoRenderizacao,
     ChaveCacheRenderizacao,
     FilaRenderizacao,
     IdentidadeDocumentoRenderizacao,
-    RasterRgbRenderizado,
+    PlanoRasterRemoto,
+    RasterPngRenderizado,
     ResultadoRenderizacao,
     SolicitacaoRenderizacao,
     TrabalhoRenderizacao,
@@ -98,17 +95,50 @@ _DPI_MAPA_OCUPACAO = 48
 
 
 @dataclass(frozen=True, slots=True)
-class _RasterEmCache:
-    pixmap: QPixmap
-    plano: PlanoRenderizacaoPdf
+class PontoPlano:
+    x: float
+    y: float
+
+
+class TransformadorViewport:
+    """Converta somente coordenadas normalizadas do contrato para o raster remoto."""
+
+    def __init__(self, page: ViewerPageDto, plan: PlanoRasterRemoto) -> None:
+        self.pagina = page
+        self.dpi = plan.dpi_efetivo
+        self.rotacao_adicional_graus = plan.rotacao_adicional_graus
+        self.largura_pixels = plan.largura_pixels
+        self.altura_pixels = plan.altura_pixels
+        self.largura_pagina_pixels = plan.largura_pagina_pixels
+        self.altura_pagina_pixels = plan.altura_pagina_pixels
+        self.origem_x_pixels = plan.origem_x_pixels
+        self.origem_y_pixels = plan.origem_y_pixels
+
+    def normalizado_para_pixel(self, point: PontoNormalizado) -> PontoPlano:
+        x, y = _rotate_normalized(float(point.x), float(point.y), self.rotacao_adicional_graus)
+        return PontoPlano(
+            x * self.largura_pagina_pixels - self.origem_x_pixels,
+            y * self.altura_pagina_pixels - self.origem_y_pixels,
+        )
+
+    def pixel_para_normalizado(self, point: PontoPlano) -> PontoNormalizado:
+        x = (point.x + self.origem_x_pixels) / self.largura_pagina_pixels
+        y = (point.y + self.origem_y_pixels) / self.altura_pagina_pixels
+        x, y = _unrotate_normalized(x, y, self.rotacao_adicional_graus)
+        return PontoNormalizado(Decimal(str(x)), Decimal(str(y)))
 
 
 @dataclass(frozen=True, slots=True)
-class _ResultadoAberturaSessoes:
-    sessoes: tuple[SessaoLeituraPdfPort, ...] = ()
-    identidades: frozenset[IdentidadeCredencialPdf] = frozenset()
-    mensagem_interrupcao: str | None = None
-    cancelada: bool = False
+class _RasterEmCache:
+    pixmap: QPixmap
+    plano: PlanoRasterRemoto
+
+
+@dataclass(frozen=True, slots=True)
+class _PaginaProjetoRemota:
+    documento: ViewerDocumentDto
+    pagina: ViewerPageDto
+    pagina_remota_id: UUID
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,7 +255,7 @@ class PdfGraphicsView(QGraphicsView):
         self._overlay_items: list[QGraphicsPathItem] = []
         self._review_items: dict[str, QGraphicsPathItem] = {}
         self._review_geometries: dict[str, GeometriaDocumento] = {}
-        self._review_transformer: TransformadorCoordenadasPagina | None = None
+        self._review_transformer: TransformadorViewport | None = None
         self._callout_layer: QGraphicsRectItem | None = None
         self._callout_items: dict[str, _GraficosCallout] = {}
         self._selected_callout_id: str | None = None
@@ -262,8 +292,8 @@ class PdfGraphicsView(QGraphicsView):
         key: ChaveCacheRenderizacao,
         pixmap: QPixmap,
         *,
-        plano: PlanoRenderizacaoPdf,
-        plano_previa: PlanoRenderizacaoPdf,
+        plano: PlanoRasterRemoto,
+        plano_previa: PlanoRasterRemoto,
     ) -> None:
         if self._pixmap_item is None or key in self._tile_items:
             return
@@ -294,7 +324,7 @@ class PdfGraphicsView(QGraphicsView):
     def definir_sobreposicoes(
         self,
         geometries: tuple[tuple[PontoNormalizado, ...], ...],
-        transformer: TransformadorCoordenadasPagina,
+        transformer: TransformadorViewport,
     ) -> None:
         if self._pixmap_item is None:
             return
@@ -320,7 +350,7 @@ class PdfGraphicsView(QGraphicsView):
     def definir_callouts_conformidade(
         self,
         callouts: tuple[CalloutConformidade, ...],
-        transformer: TransformadorCoordenadasPagina,
+        transformer: TransformadorViewport,
     ) -> None:
         """Reconstrua a camada vetorial de callouts sem tocar no raster ou nos links."""
         self._remover_camada_callouts()
@@ -334,7 +364,7 @@ class PdfGraphicsView(QGraphicsView):
         self._scene.addItem(layer)
         self._callout_layer = layer
         for callout in callouts:
-            if callout.pagina_id != transformer.pagina.id:
+            if callout.pagina_id != transformer.pagina.page_id.root:
                 continue
             self._callout_items[str(callout.id)] = _criar_graficos_callout(
                 callout,
@@ -358,7 +388,7 @@ class PdfGraphicsView(QGraphicsView):
     def definir_propostas_revisao(
         self,
         proposals: tuple[PropostaElemento, ...],
-        transformer: TransformadorCoordenadasPagina,
+        transformer: TransformadorViewport,
         link_geometries: Mapping[str, GeometriaDocumento] | None = None,
     ) -> None:
         signals_were_blocked = self._scene.blockSignals(True)
@@ -538,21 +568,19 @@ class PdfViewerWidget(QWidget):
     def __init__(
         self,
         *,
-        leitor: LeitorPdfPort,
+        gateway: PdfViewerGateway,
         dpi: int,
-        orcamento: OrcamentoRenderizacaoPdf,
+        limite_pixels_tile: int,
         cache_limite_bytes: int = DEFAULT_PDF_TILE_CACHE_MAX_BYTES,
-        resolvedor_credenciais: ResolvedorCredenciaisPdf | None = None,
+        limpar_credenciais_efemeras: Callable[[], None] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("pdfViewerWidget")
-        self._reader = leitor
-        self._credential_resolver = resolvedor_credenciais or ResolvedorCredenciaisPdf(
-            ProvedorCredenciaisPdfMemoria()
-        )
+        self._gateway = gateway
+        self._limpar_credenciais_efemeras = limpar_credenciais_efemeras or (lambda: None)
         self._dpi = dpi
-        self._render_budget = orcamento
+        self._tile_max_pixels = limite_pixels_tile
         self._render_cache: CacheLruBytes[ChaveCacheRenderizacao, _RasterEmCache] = CacheLruBytes(
             cache_limite_bytes
         )
@@ -560,13 +588,13 @@ class PdfViewerWidget(QWidget):
         self._generation = 0
         self._render_cancellation = CancelamentoRenderizacao()
         self._scheduled_requests: set[ChaveCacheRenderizacao] = set()
-        self._retired_sessions: list[tuple[SessaoLeituraPdfPort, ...]] = []
+        self._viewer_session_id: UUID | None = None
+        self._retired_session_ids: list[UUID] = []
         self._current_preview: _RasterEmCache | None = None
         self._closed = False
-        self._inspection: InspecaoPdf | None = None
-        self._inspections: tuple[InspecaoPdf, ...] = ()
-        self._sessions: tuple[SessaoLeituraPdfPort, ...] = ()
-        self._project_pages: tuple[tuple[InspecaoPdf, SessaoLeituraPdfPort, int], ...] = ()
+        self._inspection: ViewerDocumentDto | None = None
+        self._inspections: tuple[ViewerDocumentDto, ...] = ()
+        self._project_pages: tuple[_PaginaProjetoRemota, ...] = ()
         self._rotation = 0
         self._overlays: tuple[tuple[PontoNormalizado, ...], ...] = ()
         self._review_proposals: tuple[PropostaElemento, ...] = ()
@@ -575,7 +603,7 @@ class PdfViewerWidget(QWidget):
         self._callout_position_overrides: dict[str, RetanguloCallout] = {}
         self._selected_compliance_callout_id: str | None = None
         self._visual_occupancy_cache: dict[UUID, MapaOcupacaoVisual] = {}
-        self._current_transformer: TransformadorCoordenadasPagina | None = None
+        self._current_transformer: TransformadorViewport | None = None
         self._last_page_id: str | None = None
         self._build_ui()
         self._detail_timer = QTimer(self)
@@ -589,11 +617,11 @@ class PdfViewerWidget(QWidget):
         self.view.viewport_alterado.connect(self._viewport_changed)
 
     @property
-    def inspecao(self) -> InspecaoPdf | None:
+    def inspecao(self) -> ViewerDocumentDto | None:
         return self._inspection
 
     @property
-    def inspecoes(self) -> tuple[InspecaoPdf, ...]:
+    def inspecoes(self) -> tuple[ViewerDocumentDto, ...]:
         """Documentos abertos, na ordem das folhas do projeto."""
         return self._inspections
 
@@ -682,16 +710,15 @@ class PdfViewerWidget(QWidget):
             self.carregar_projeto(paths)
 
     def carregar_pdf(self, path: Path, *, password: str | None = None) -> bool:
-        if password is not None:
-            self._credential_resolver.provedor.guardar(identificar_origem_pdf(path), password)
-        return self.carregar_projeto((path,))
+        return self.carregar_projeto((path,), senha_inicial=password)
 
     def limpar(self) -> None:
         self._cancel_current_rendering()
         self._render_cache.limpar()
         self._current_preview = None
-        self._retire_sessions(self._sessions)
-        self._sessions = ()
+        if self._viewer_session_id is not None:
+            self._retire_session(self._viewer_session_id)
+            self._viewer_session_id = None
         self._inspection = None
         self._inspections = ()
         self._project_pages = ()
@@ -712,7 +739,7 @@ class PdfViewerWidget(QWidget):
         self._metadata.setText("Projeto sem PDF importado")
         self.view.limpar()
         self.view.limpar_selecao_callout()
-        self._credential_resolver.provedor.limpar()
+        self._limpar_credenciais_efemeras()
 
     def preparar_para_restauracao(self, timeout_ms: int) -> bool:
         """Libere sessões PDF antes de substituir arquivos; nunca espere sem limite."""
@@ -742,13 +769,14 @@ class PdfViewerWidget(QWidget):
             if self._render_queue.isRunning():
                 self._render_queue.wait()
             self._render_queue.retirar_resultados()
-            sessions = self._sessions
-            self._sessions = ()
-            retired = tuple(session for group in self._retired_sessions for session in group)
-            self._retired_sessions.clear()
-            _close_sessions((*sessions, *retired))
+            session_ids = tuple(self._retired_session_ids)
+            if self._viewer_session_id is not None:
+                session_ids = (self._viewer_session_id, *session_ids)
+            self._viewer_session_id = None
+            self._retired_session_ids.clear()
+            _close_remote_sessions(self._gateway, session_ids)
             self._render_cache.limpar()
-            self._credential_resolver.provedor.limpar()
+            self._limpar_credenciais_efemeras()
 
     def ir_para_folha(self, numero: int) -> None:
         if not self._project_pages:
@@ -759,11 +787,13 @@ class PdfViewerWidget(QWidget):
         self,
         paths: tuple[Path, ...],
         *,
-        documentos: tuple[DocumentoProjeto, ...] | None = None,
-        fontes: tuple[ReferenciaFontePdf, ...] | None = None,
+        documentos: tuple[object, ...] | None = None,
+        fontes: tuple[object, ...] | None = None,
         ordem_paginas: tuple[UUID, ...] | None = None,
+        senha_inicial: str | None = None,
+        senhas_iniciais: tuple[str | None, ...] | None = None,
     ) -> bool:
-        """Valide todos os PDFs antes de substituir o projeto atualmente exibido."""
+        """Envie PDFs ao servidor antes de substituir o projeto atualmente exibido."""
         observation = operation_logger("pdf.viewer.open")
         with observation.context():
             observation.started(item_count=len(paths))
@@ -776,6 +806,8 @@ class PdfViewerWidget(QWidget):
                     documentos=documentos,
                     fontes=fontes,
                     ordem_paginas=ordem_paginas,
+                    senha_inicial=senha_inicial,
+                    senhas_iniciais=senhas_iniciais,
                     observation=observation,
                 )
             except Exception as error:
@@ -786,11 +818,25 @@ class PdfViewerWidget(QWidget):
         self,
         paths: tuple[Path, ...],
         *,
-        documentos: tuple[DocumentoProjeto, ...] | None,
-        fontes: tuple[ReferenciaFontePdf, ...] | None,
+        documentos: tuple[object, ...] | None,
+        fontes: tuple[object, ...] | None,
         ordem_paginas: tuple[UUID, ...] | None,
+        senha_inicial: str | None,
+        senhas_iniciais: tuple[str | None, ...] | None,
         observation: OperationLogger,
     ) -> bool:
+        canonical_paths = tuple(str(path.resolve()).casefold() for path in paths)
+        if len(set(canonical_paths)) != len(canonical_paths):
+            duplicate_error = ValueError("A seleção contém um PDF duplicado")
+            observation.failed(duplicate_error, expected=True)
+            self._open_warning(str(duplicate_error))
+            return False
+        missing = next((path for path in paths if not path.is_file()), None)
+        if missing is not None:
+            missing_error = FileNotFoundError(f"O PDF selecionado não existe: {missing.name}")
+            observation.failed(missing_error, expected=True)
+            self._open_warning(str(missing_error))
+            return False
         if documentos is not None and len(documentos) != len(paths):
             error = ValueError(
                 "A quantidade de fontes PDF não corresponde aos documentos persistidos"
@@ -804,65 +850,126 @@ class PdfViewerWidget(QWidget):
             self._open_warning(str(error))
             return False
         try:
-            opening = _open_verified_sessions(
-                self._reader,
+            created = self._gateway.create_session(
                 paths,
-                parent=self,
-                resolvedor=self._credential_resolver,
-                documents=documentos,
-                sources=fontes,
+                idempotency_key=f"viewer-{uuid4()}",
             )
-        except PdfError as error:
+            response = self._unlock_pending_uploads(
+                created,
+                senha_inicial=senha_inicial,
+                senhas_iniciais=senhas_iniciais,
+            )
+        except ViewerGatewayError as error:
             observation.failed(error, expected=True)
             self.status_changed.emit(str(error))
             QMessageBox.warning(self, "Não foi possível abrir o PDF", str(error))
             return False
-        if opening.mensagem_interrupcao is not None:
-            if opening.cancelada:
-                observation.cancelled()
-            else:
-                observation.failed(ValueError(opening.mensagem_interrupcao), expected=True)
-            self._open_warning(opening.mensagem_interrupcao)
+        except OSError as error:
+            observation.failed(error, expected=True)
+            self._open_warning("Não foi possível ler o PDF selecionado para envio ao servidor")
             return False
-        sessions = opening.sessoes
-        inspections = tuple(session.inspecao for session in sessions)
-        if documentos is not None:
-            try:
-                inspections = tuple(
-                    _align_persisted_document(inspection, document)
-                    for inspection, document in zip(inspections, documentos, strict=True)
-                )
-            except ValueError as error:
-                _close_sessions(sessions)
-                observation.failed(error, expected=True)
-                self._open_warning(str(error))
-                return False
+        if response is None:
+            observation.cancelled()
+            return False
         try:
-            project_pages = _ordered_project_pages(inspections, sessions, ordem_paginas)
+            inspections, project_pages = _temporary_project_model(
+                response.documents,
+                persisted_documents=documentos,
+                reading_order=ordem_paginas,
+            )
         except ValueError as error:
-            _close_sessions(sessions)
+            self._gateway.close_session(response.viewer_session_id.root)
             observation.failed(error, expected=True)
             self._open_warning(str(error))
             return False
-        hashes = [inspection.documento.sha256 for inspection in inspections]
-        if len(set(hashes)) != len(hashes):
-            _close_sessions(sessions)
-            message = "A seleção contém arquivos PDF com conteúdo duplicado"
-            observation.failed(ValueError(message), expected=True)
-            self.status_changed.emit(message)
-            QMessageBox.warning(self, "Não foi possível abrir os arquivos", message)
-            return False
         self._activate_project(
             inspections,
-            sessions=sessions,
             project_pages=project_pages,
+            viewer_session_id=response.viewer_session_id.root,
         )
-        self._credential_resolver.provedor.reter(set(opening.identidades))
         observation.succeeded(
             item_count=len(inspections),
-            document_ids=tuple(item.documento.id for item in inspections),
+            document_ids=tuple(item.document_id.root for item in inspections),
         )
         return True
+
+    def carregar_projeto_remoto(self, project_id: UUID) -> bool:
+        """Abra metadados e páginas gerenciadas sem receber qualquer caminho do cliente."""
+        try:
+            response = self._gateway.get_project(project_id)
+        except ViewerGatewayError as error:
+            self._open_warning(str(error))
+            return False
+        pages = tuple(
+            _PaginaProjetoRemota(
+                documento=next(
+                    item for item in response.documents if item.document_id == page.document_id
+                ),
+                pagina=page,
+                pagina_remota_id=page.page_id.root,
+            )
+            for page in response.pages
+        )
+        self._activate_project(
+            response.documents,
+            project_pages=pages,
+            viewer_session_id=None,
+        )
+        return True
+
+    def _unlock_pending_uploads(
+        self,
+        response: CreateViewerSessionResponse,
+        *,
+        senha_inicial: str | None,
+        senhas_iniciais: tuple[str | None, ...] | None,
+    ) -> CreateViewerSessionResponse | None:
+        current = response
+        fallback_initial = senha_inicial
+        initial_by_position = senhas_iniciais or ()
+        attempted_positions: set[int] = set()
+        while current.pending_uploads:
+            pending = current.pending_uploads[0]
+            password = None
+            if pending.position not in attempted_positions:
+                attempted_positions.add(pending.position)
+                if pending.position < len(initial_by_position):
+                    password = initial_by_position[pending.position]
+            if password is None and fallback_initial is not None:
+                password = fallback_initial
+                fallback_initial = None
+            if password is None:
+                password, accepted = QInputDialog.getText(
+                    self,
+                    "Senha do PDF",
+                    f"{pending.display_name}\nInforme a senha para continuar.",
+                    QLineEdit.EchoMode.Password,
+                )
+                if not accepted:
+                    self._gateway.close_session(current.viewer_session_id.root)
+                    self.status_changed.emit("A abertura do PDF protegido foi cancelada")
+                    return None
+            try:
+                unlocked = self._gateway.unlock_session_pdf(
+                    current.viewer_session_id.root,
+                    pending.upload_id.root,
+                    password,
+                )
+            except ViewerGatewayError as error:
+                if error.code is ErrorCode.PDF_PASSWORD_INVALID:
+                    raw_remaining = (error.details or {}).get("password_attempts_remaining", 0)
+                    remaining = int(raw_remaining) if isinstance(raw_remaining, (int, str)) else 0
+                    if remaining > 0:
+                        continue
+                self._gateway.close_session(current.viewer_session_id.root)
+                raise
+            current = CreateViewerSessionResponse(
+                viewer_session_id=unlocked.viewer_session_id,
+                documents=unlocked.documents,
+                pending_uploads=unlocked.pending_uploads,
+                expires_at=unlocked.expires_at,
+            )
+        return current
 
     def _open_warning(self, message: str) -> None:
         self.status_changed.emit(message)
@@ -870,18 +977,18 @@ class PdfViewerWidget(QWidget):
 
     def _activate_project(
         self,
-        inspections: tuple[InspecaoPdf, ...],
+        inspections: tuple[ViewerDocumentDto, ...],
         *,
-        sessions: tuple[SessaoLeituraPdfPort, ...],
-        project_pages: tuple[tuple[InspecaoPdf, SessaoLeituraPdfPort, int], ...],
+        project_pages: tuple[_PaginaProjetoRemota, ...],
+        viewer_session_id: UUID | None,
     ) -> None:
-        previous_sessions = self._sessions
+        previous_session_id = self._viewer_session_id
         self._cancel_current_rendering()
         self._render_cache.limpar()
         self._current_preview = None
         self.view.limpar()
         self._inspections = inspections
-        self._sessions = sessions
+        self._viewer_session_id = viewer_session_id
         self._overlays = ()
         self._review_proposals = ()
         self._review_link_geometries = {}
@@ -891,16 +998,18 @@ class PdfViewerWidget(QWidget):
         self._visual_occupancy_cache.clear()
         self._last_page_id = None
         self._project_pages = project_pages
-        self._inspection = inspections[0]
+        self._inspection = inspections[0] if inspections else None
         self._rotation = 0
         self.view.limpar_selecao_callout()
         self._page.blockSignals(True)
-        self._page.setRange(1, len(self._project_pages))
+        self._page.setRange(1, max(1, len(self._project_pages)))
         self._page.setValue(1)
-        self._page.setEnabled(True)
+        self._page.setEnabled(bool(self._project_pages))
         self._page.blockSignals(False)
-        self._retire_sessions(previous_sessions)
-        self._render_current_page()
+        if previous_session_id is not None:
+            self._retire_session(previous_session_id)
+        if project_pages:
+            self._render_current_page()
 
     def definir_sobreposicoes(self, geometries: tuple[tuple[PontoNormalizado, ...], ...]) -> None:
         self._overlays = geometries
@@ -956,29 +1065,40 @@ class PdfViewerWidget(QWidget):
         if not pagina_ids:
             return {}
         result: dict[UUID, MapaOcupacaoVisual] = {}
-        for inspection, session, page_number in self._project_pages:
-            page = inspection.paginas[page_number - 1].pagina
-            if page.id not in pagina_ids:
+        for context in self._project_pages:
+            page_id = context.pagina.page_id.root
+            if page_id not in pagina_ids:
                 continue
-            cached = self._visual_occupancy_cache.get(page.id)
+            cached = self._visual_occupancy_cache.get(page_id)
             if cached is None:
-                rendered = session.renderizar_pagina(
-                    page_number,
+                rendered = self._gateway.render_preview(
+                    context.pagina_remota_id,
                     dpi=_DPI_MAPA_OCUPACAO,
-                    orcamento=self._render_budget,
+                    rotation=0,
                 )
+                image = QImage.fromData(rendered.png).convertToFormat(QImage.Format.Format_RGB888)
+                if image.isNull():
+                    raise ViewerGatewayError(
+                        ErrorCode.INTEGRITY_ERROR,
+                        "O raster remoto não pôde ser decodificado.",
+                    )
+                bits = image.bits()
+                rgb = bytes(bits[: image.sizeInBytes()])
                 cached = detectar_ocupacao_visual_rgb(
-                    page.id,
-                    largura_pixels=rendered.largura_pixels,
-                    altura_pixels=rendered.altura_pixels,
-                    stride=rendered.stride,
-                    dados_rgb=rendered.dados_rgb,
+                    page_id,
+                    largura_pixels=image.width(),
+                    altura_pixels=image.height(),
+                    stride=image.bytesPerLine(),
+                    dados_rgb=memoryview(rgb),
                 )
-                self._visual_occupancy_cache[page.id] = cached
-            result[page.id] = cached
+                self._visual_occupancy_cache[page_id] = cached
+            result[page_id] = cached
         missing = pagina_ids - result.keys()
         if missing:
-            raise PdfError("Não foi possível gerar o mapa visual de todas as páginas com callouts")
+            raise ViewerGatewayError(
+                ErrorCode.RESOURCE_NOT_FOUND,
+                "Não foi possível gerar o mapa visual de todas as páginas com callouts.",
+            )
         return result
 
     def selecionar_callout(self, callout_id: str) -> None:
@@ -1012,39 +1132,45 @@ class PdfViewerWidget(QWidget):
         if not self._project_pages:
             return
         project_page_number = self._page.value()
-        inspection, session, page_number = self._project_pages[project_page_number - 1]
-        self._inspection = inspection
+        context = self._project_pages[project_page_number - 1]
+        document = context.documento
+        page = context.pagina
+        self._inspection = document
         self._cancel_current_rendering()
         self._current_preview = None
         self._current_transformer = None
         self.view.limpar()
-        self._update_metadata(inspection)
-        page_id = str(inspection.paginas[page_number - 1].pagina.id)
+        self._update_metadata(document)
+        page_id = str(page.page_id.root)
         if page_id != self._last_page_id:
             self._last_page_id = page_id
             self.page_changed.emit(page_id)
         request = self._new_request(
-            inspection,
-            page_number=page_number,
+            document,
+            page=page,
             region=(0.0, 0.0, 1.0, 1.0),
             dpi=self._dpi,
             preview=True,
         )
-        self._request_raster(request, session=session, priority=-2_000_000)
+        self._request_raster(
+            request,
+            page_id=context.pagina_remota_id,
+            priority=-2_000_000,
+        )
 
     def _new_request(
         self,
-        inspection: InspecaoPdf,
+        document: ViewerDocumentDto,
         *,
-        page_number: int,
+        page: ViewerPageDto,
         region: tuple[float, float, float, float],
         dpi: int,
         preview: bool,
     ) -> SolicitacaoRenderizacao:
         return SolicitacaoRenderizacao(
             geracao=self._generation,
-            documento=_render_document_identity(inspection),
-            pagina=page_number,
+            documento=_render_document_identity(document),
+            pagina=page.source_page_number,
             rotacao=self._rotation,
             zoom=_stable_scale(self.view.zoom),
             device_pixel_ratio=_stable_scale(self.view.devicePixelRatioF()),
@@ -1057,7 +1183,7 @@ class PdfViewerWidget(QWidget):
         self,
         request: SolicitacaoRenderizacao,
         *,
-        session: SessaoLeituraPdfPort,
+        page_id: UUID,
         priority: int,
     ) -> None:
         if request.chave_cache in self._scheduled_requests:
@@ -1070,8 +1196,8 @@ class PdfViewerWidget(QWidget):
         submitted = self._render_queue.enviar(
             TrabalhoRenderizacao(
                 solicitacao=request,
-                sessao=session,
-                orcamento=self._render_budget,
+                pagina_id=page_id,
+                gateway=self._gateway,
                 prioridade=priority,
                 cancelamento=self._render_cancellation,
             )
@@ -1097,7 +1223,7 @@ class PdfViewerWidget(QWidget):
     def _receber_renderizacao(
         self,
         request: SolicitacaoRenderizacao,
-        rendered: RasterRgbRenderizado,
+        rendered: RasterPngRenderizado,
     ) -> None:
         _require_ui_thread()
         if not self._request_is_current(request):
@@ -1106,18 +1232,21 @@ class PdfViewerWidget(QWidget):
             return
         self._scheduled_requests.discard(request.chave_cache)
         if (
-            rendered.pagina_numero != request.pagina
+            rendered.pagina_id != self._current_page_context().pagina_remota_id
             or rendered.rotacao_adicional_graus != request.rotacao
             or rendered.plano.dpi_solicitado != request.dpi
             or (
                 (request.previa and not rendered.plano.pagina_inteira)
-                or (not request.previa and rendered.plano.recorte_normalizado != request.regiao)
+                or (
+                    not request.previa
+                    and not _same_region(rendered.plano.recorte_normalizado, request.regiao)
+                )
             )
         ):
             self.status_changed.emit("O backend devolveu uma região PDF incompatível")
             return
         raster = _RasterEmCache(
-            pixmap=_rgb_to_pixmap(rendered),
+            pixmap=_png_to_pixmap(rendered),
             plano=rendered.plano,
         )
         self._render_cache.armazenar(
@@ -1155,25 +1284,16 @@ class PdfViewerWidget(QWidget):
         if not raster.plano.pagina_inteira:
             self.status_changed.emit("A prévia do PDF não corresponde à página inteira")
             return
-        inspection, _session, page_number = self._current_page_context()
+        context = self._current_page_context()
+        document = context.documento
+        page = context.pagina
         self._current_preview = raster
         signals_blocked = self.view.blockSignals(True)
         try:
             self.view.definir_previa(raster.pixmap)
         finally:
             self.view.blockSignals(signals_blocked)
-        page = inspection.paginas[page_number - 1].pagina
-        transformer = TransformadorCoordenadasPagina(
-            page,
-            dpi=raster.plano.dpi_efetivo,
-            largura_pixels=raster.plano.largura_pixels,
-            altura_pixels=raster.plano.altura_pixels,
-            largura_pagina_pixels=raster.plano.largura_pagina_pixels,
-            altura_pagina_pixels=raster.plano.altura_pagina_pixels,
-            origem_x_pixels=raster.plano.origem_x_pixels,
-            origem_y_pixels=raster.plano.origem_y_pixels,
-            rotacao_adicional_graus=request.rotacao,
-        )
+        transformer = TransformadorViewport(page, raster.plano)
         self._current_transformer = transformer
         self.view.definir_sobreposicoes(self._overlays, transformer)
         self.view.definir_propostas_revisao(
@@ -1184,32 +1304,30 @@ class PdfViewerWidget(QWidget):
         self.view.definir_callouts_conformidade(self._compliance_callouts, transformer)
         if self._selected_compliance_callout_id is not None:
             self.view.selecionar_callout(self._selected_compliance_callout_id)
-        diagnostics = len(inspection.paginas[page_number - 1].diagnosticos)
         project_page_number = self._page.value()
         self.status_changed.emit(
             f"Folha {project_page_number}/{len(self._project_pages)} - "
-            f"página {page_number}/{len(inspection.paginas)} de "
-            f"{inspection.documento.nome_arquivo} - "
+            f"página {page.source_page_number}/{document.page_count} de "
+            f"{document.display_name} - "
             f"{raster.plano.largura_pixels}x{raster.plano.altura_pixels}px - "
-            f"{raster.plano.dpi_efetivo}/{raster.plano.dpi_solicitado} DPI - "
-            f"{diagnostics} diagnóstico(s)"
+            f"{raster.plano.dpi_efetivo}/{raster.plano.dpi_solicitado} DPI"
         )
         self._cancel_current_rendering()
         self._detail_timer.start()
 
-    def _update_metadata(self, inspection: InspecaoPdf) -> None:
+    def _update_metadata(self, document: ViewerDocumentDto) -> None:
         if len(self._inspections) == 1:
             self._metadata.setText(
-                f"{inspection.documento.nome_arquivo}  |  "
-                f"{len(inspection.paginas)} página(s)  |  "
-                f"SHA-256 {inspection.documento.sha256[:12]}…"
+                f"{document.display_name}  |  "
+                f"{document.page_count} página(s)  |  "
+                f"SHA-256 {document.sha256[:12]}…"
             )
         else:
-            document_position = self._inspections.index(inspection) + 1
+            document_position = self._inspections.index(document) + 1
             self._metadata.setText(
                 f"Projeto: {len(self._inspections)} PDFs, "
                 f"{len(self._project_pages)} folhas  |  "
-                f"Arquivo {document_position}: {inspection.documento.nome_arquivo}"
+                f"Arquivo {document_position}: {document.display_name}"
             )
 
     def _schedule_viewport_tiles(self) -> None:
@@ -1227,7 +1345,9 @@ class PdfViewerWidget(QWidget):
         )
         if target_dpi <= preview.plano.dpi_efetivo:
             return
-        inspection, session, page_number = self._current_page_context()
+        context = self._current_page_context()
+        document = context.documento
+        page = context.pagina
         for priority, region in regioes_tiles_priorizadas(
             largura_pagina_pixels=preview.plano.largura_pagina_pixels,
             altura_pagina_pixels=preview.plano.altura_pagina_pixels,
@@ -1235,16 +1355,20 @@ class PdfViewerWidget(QWidget):
             dpi_detalhe=target_dpi,
             viewport_normalizado=self.view.viewport_normalizado(),
             rotacao=self._rotation,
-            orcamento=self._render_budget,
+            limite_pixels_tile=self._tile_max_pixels,
         ):
             request = self._new_request(
-                inspection,
-                page_number=page_number,
+                document,
+                page=page,
                 region=region,
                 dpi=target_dpi,
                 preview=False,
             )
-            self._request_raster(request, session=session, priority=priority)
+            self._request_raster(
+                request,
+                page_id=context.pagina_remota_id,
+                priority=priority,
+            )
 
     def _receber_falha_renderizacao(
         self,
@@ -1255,17 +1379,53 @@ class PdfViewerWidget(QWidget):
         if not self._request_is_current(request):
             return
         self._scheduled_requests.discard(request.chave_cache)
-        if isinstance(error, PdfOrigemAlteradaError):
+        if (
+            isinstance(error, ViewerGatewayError)
+            and error.code is ErrorCode.PDF_PASSWORD_REQUIRED
+            and self._viewer_session_id is None
+        ):
+            self._unlock_current_project_document()
+            return
+        if isinstance(error, ViewerGatewayError) and error.code in {
+            ErrorCode.PDF_SOURCE_CHANGED,
+            ErrorCode.VIEWER_SESSION_EXPIRED,
+        }:
             self.limpar()
         self.status_changed.emit(str(error))
+
+    def _unlock_current_project_document(self) -> None:
+        context = self._current_page_context()
+        for attempt in range(1, 4):
+            password, accepted = QInputDialog.getText(
+                self,
+                "Senha do PDF",
+                f"{context.documento.display_name}\nTentativa {attempt} de 3",
+                QLineEdit.EchoMode.Password,
+            )
+            if not accepted:
+                self.status_changed.emit("O desbloqueio do PDF foi cancelado")
+                return
+            try:
+                self._gateway.unlock_project_document(
+                    context.documento.document_id.root,
+                    password,
+                )
+            except ViewerGatewayError as error:
+                if error.code is ErrorCode.PDF_PASSWORD_INVALID:
+                    continue
+                self.status_changed.emit(str(error))
+                return
+            self._render_current_page()
+            return
+        self.status_changed.emit("O limite de 3 tentativas de senha do PDF foi atingido")
 
     def _request_is_current(self, request: SolicitacaoRenderizacao) -> bool:
         if self._closed or request.geracao != self._generation or not self._project_pages:
             return False
-        inspection, _session, page_number = self._current_page_context()
+        context = self._current_page_context()
         return (
-            request.documento == _render_document_identity(inspection)
-            and request.pagina == page_number
+            request.documento == _render_document_identity(context.documento)
+            and request.pagina == context.pagina.source_page_number
             and request.rotacao == self._rotation
             and request.zoom == _stable_scale(self.view.zoom)
             and request.device_pixel_ratio == _stable_scale(self.view.devicePixelRatioF())
@@ -1274,16 +1434,16 @@ class PdfViewerWidget(QWidget):
     def _request_needs_replacement(self, request: SolicitacaoRenderizacao) -> bool:
         if self._closed or request.geracao != self._generation or not self._project_pages:
             return False
-        inspection, _session, page_number = self._current_page_context()
+        context = self._current_page_context()
         return (
-            request.documento == _render_document_identity(inspection)
-            and request.pagina == page_number
+            request.documento == _render_document_identity(context.documento)
+            and request.pagina == context.pagina.source_page_number
             and request.rotacao == self._rotation
         )
 
     def _current_page_context(
         self,
-    ) -> tuple[InspecaoPdf, SessaoLeituraPdfPort, int]:
+    ) -> _PaginaProjetoRemota:
         return self._project_pages[self._page.value() - 1]
 
     def _cancel_current_rendering(self) -> None:
@@ -1320,18 +1480,15 @@ class PdfViewerWidget(QWidget):
         self._cancel_current_rendering()
         self._detail_timer.start()
 
-    def _retire_sessions(self, sessions: tuple[SessaoLeituraPdfPort, ...]) -> None:
-        if not sessions:
-            return
+    def _retire_session(self, session_id: UUID) -> None:
         if self._render_queue.esta_ociosa():
-            _close_sessions(sessions)
+            _close_remote_sessions(self._gateway, (session_id,))
             return
-        self._retired_sessions.append(sessions)
+        self._retired_session_ids.append(session_id)
 
     def _liberar_sessoes_apos_renderizacao(self) -> None:
-        retired, self._retired_sessions = self._retired_sessions, []
-        for sessions in retired:
-            _close_sessions(sessions)
+        retired, self._retired_session_ids = self._retired_session_ids, []
+        _close_remote_sessions(self._gateway, tuple(retired))
 
     def _change_page(self, offset: int) -> None:
         self._page.setValue(self._page.value() + offset)
@@ -1353,17 +1510,42 @@ class PdfViewerWidget(QWidget):
         self._render_current_page()
 
 
-def _render_document_identity(inspection: InspecaoPdf) -> IdentidadeDocumentoRenderizacao:
+def _render_document_identity(document: ViewerDocumentDto) -> IdentidadeDocumentoRenderizacao:
     return IdentidadeDocumentoRenderizacao(
-        documento_id=inspection.documento.id,
-        sha256=inspection.documento.sha256,
-        tamanho_bytes=inspection.tamanho_bytes,
-        modificado_em_ns=inspection.modificado_em_ns,
+        documento_id=document.document_id.root,
+        sha256=document.sha256,
+        tamanho_bytes=document.size_bytes,
     )
 
 
 def _stable_scale(value: float) -> float:
     return round(value, 6)
+
+
+def _same_region(first: tuple[float, ...], second: tuple[float, ...]) -> bool:
+    return len(first) == len(second) and all(
+        math.isclose(left, right, abs_tol=1e-10) for left, right in zip(first, second, strict=True)
+    )
+
+
+def _rotate_normalized(x: float, y: float, rotation: int) -> tuple[float, float]:
+    if rotation == 90:
+        return 1 - y, x
+    if rotation == 180:
+        return 1 - x, 1 - y
+    if rotation == 270:
+        return y, 1 - x
+    return x, y
+
+
+def _unrotate_normalized(x: float, y: float, rotation: int) -> tuple[float, float]:
+    if rotation == 90:
+        return y, 1 - x
+    if rotation == 180:
+        return 1 - x, 1 - y
+    if rotation == 270:
+        return 1 - y, x
+    return x, y
 
 
 def _require_ui_thread() -> None:
@@ -1372,17 +1554,13 @@ def _require_ui_thread() -> None:
         raise RuntimeError("QPixmap e widgets do visualizador exigem a thread da interface")
 
 
-def _rgb_to_pixmap(rendered: RasterRgbRenderizado) -> QPixmap:
+def _png_to_pixmap(rendered: RasterPngRenderizado) -> QPixmap:
     _require_ui_thread()
-    image = QImage(
-        rendered.dados_rgb,
-        rendered.largura_pixels,
-        rendered.altura_pixels,
-        rendered.stride,
-        QImage.Format.Format_RGB888,
-    )
+    image = QImage.fromData(rendered.dados_png)
     if image.isNull():
-        raise ValueError("O buffer RGB do PDF não pôde ser convertido em imagem")
+        raise ValueError("O PNG remoto do PDF não pôde ser convertido em imagem")
+    if image.width() != rendered.largura_pixels or image.height() != rendered.altura_pixels:
+        raise ValueError("As dimensões do PNG remoto divergem dos metadados")
     return QPixmap.fromImage(image)
 
 
@@ -1391,101 +1569,87 @@ def _pixmap_size_bytes(pixmap: QPixmap) -> int:
     return pixmap.width() * pixmap.height() * bytes_per_pixel
 
 
-def _ordered_project_pages(
-    inspections: tuple[InspecaoPdf, ...],
-    sessions: tuple[SessaoLeituraPdfPort, ...],
-    reading_order: tuple[UUID, ...] | None,
-) -> tuple[tuple[InspecaoPdf, SessaoLeituraPdfPort, int], ...]:
-    page_by_id = {
-        page.id: (inspection, session, page.numero)
-        for inspection, session in zip(inspections, sessions, strict=True)
-        for page in inspection.documento.paginas
-    }
-    if reading_order is None:
-        return tuple(
-            (inspection, session, page.numero)
-            for inspection, session in zip(inspections, sessions, strict=True)
-            for page in inspection.documento.paginas
-        )
-    if len(reading_order) != len(page_by_id) or set(reading_order) != set(page_by_id):
-        raise ValueError("A ordem de leitura não corresponde às páginas dos PDFs abertos")
-    return tuple(page_by_id[page_id] for page_id in reading_order)
+class _PersistedPage(Protocol):
+    id: UUID
 
 
-def _open_verified_sessions(
-    reader: LeitorPdfPort,
-    paths: tuple[Path, ...],
+class _PersistedDocument(Protocol):
+    id: UUID
+    nome_arquivo: str
+    sha256: str
+    tamanho_bytes: int | None
+    paginas: tuple[_PersistedPage, ...]
+
+
+def _temporary_project_model(
+    remote_documents: tuple[ViewerDocumentDto, ...],
     *,
-    parent: QWidget,
-    resolvedor: ResolvedorCredenciaisPdf,
-    documents: tuple[DocumentoProjeto, ...] | None,
-    sources: tuple[ReferenciaFontePdf, ...] | None,
-) -> _ResultadoAberturaSessoes:
-    sessions: list[SessaoLeituraPdfPort] = []
-    identities: set[IdentidadeCredencialPdf] = set()
-    try:
-        for index, path in enumerate(paths):
-            persisted = documents[index] if documents is not None else None
-            source = sources[index] if sources is not None else None
-            suggested_identity = (
-                IdentidadeCredencialPdf.da_fonte(source) if source is not None else None
+    persisted_documents: tuple[object, ...] | None,
+    reading_order: tuple[UUID, ...] | None,
+) -> tuple[tuple[ViewerDocumentDto, ...], tuple[_PaginaProjetoRemota, ...]]:
+    if persisted_documents is None:
+        contexts = tuple(
+            sorted(
+                (
+                    _PaginaProjetoRemota(document, page, page.page_id.root)
+                    for document in remote_documents
+                    for page in document.pages
+                ),
+                key=lambda item: item.pagina.reading_order,
             )
-
-            result = resolvedor.executar(
-                parent=parent,
-                caminho=path,
-                identidade_sugerida=suggested_identity,
-                acao=_session_action(reader, path, persisted),
-            )
-            if result.estado is not EstadoResolucaoCredencialPdf.SUCESSO:
-                _close_sessions(tuple(sessions))
-                if result.estado is EstadoResolucaoCredencialPdf.CANCELADA:
-                    message = (
-                        f"A abertura foi cancelada em {path.name} após {len(sessions)} PDF(s) "
-                        "validados; a visualização anterior foi preservada"
-                    )
-                    return _ResultadoAberturaSessoes(
-                        mensagem_interrupcao=message,
-                        cancelada=True,
-                    )
-                message = (
-                    f"O limite de 3 tentativas de senha foi atingido em {path.name}; "
-                    "a visualização anterior foi preservada"
-                )
-                return _ResultadoAberturaSessoes(mensagem_interrupcao=message)
-            session = result.valor
-            assert session is not None
-            sessions.append(session)
-            if result.identidade is not None:
-                identities.add(result.identidade)
-    except BaseException:
-        _close_sessions(tuple(sessions))
-        raise
-    return _ResultadoAberturaSessoes(
-        sessoes=tuple(sessions),
-        identidades=frozenset(identities),
-    )
-
-
-def _session_action(
-    reader: LeitorPdfPort,
-    path: Path,
-    persisted: DocumentoProjeto | None,
-) -> Callable[[str | None], SessaoLeituraPdfPort]:
-    def open_session(password: str | None) -> SessaoLeituraPdfPort:
-        return reader.abrir_sessao(
-            path,
-            senha=password,
-            documento_id=persisted.id if persisted is not None else None,
-            sha256_esperado=persisted.sha256 if persisted is not None else None,
         )
+        return remote_documents, contexts
+    persisted = cast(tuple[_PersistedDocument, ...], persisted_documents)
+    if len(persisted) != len(remote_documents):
+        raise ValueError("A quantidade de PDFs remotos diverge do projeto")
+    displayed_documents: list[ViewerDocumentDto] = []
+    by_page_id: dict[UUID, _PaginaProjetoRemota] = {}
+    for remote, local in zip(remote_documents, persisted, strict=True):
+        if remote.sha256 != local.sha256:
+            raise ValueError(f"O conteúdo de {local.nome_arquivo} foi alterado desde a importação")
+        if len(remote.pages) != len(local.paginas):
+            raise ValueError(f"A paginação de {local.nome_arquivo} não corresponde ao projeto")
+        displayed_pages = tuple(
+            remote_page.model_copy(
+                update={
+                    "page_id": PageId(local_page.id),
+                    "document_id": DocumentId(local.id),
+                }
+            )
+            for remote_page, local_page in zip(remote.pages, local.paginas, strict=True)
+        )
+        displayed = remote.model_copy(
+            update={
+                "document_id": DocumentId(local.id),
+                "display_name": local.nome_arquivo,
+                "size_bytes": local.tamanho_bytes or remote.size_bytes,
+                "pages": displayed_pages,
+            }
+        )
+        displayed_documents.append(displayed)
+        for remote_page, displayed_page in zip(remote.pages, displayed_pages, strict=True):
+            by_page_id[displayed_page.page_id.root] = _PaginaProjetoRemota(
+                displayed,
+                displayed_page,
+                remote_page.page_id.root,
+            )
+    expected_order = (
+        reading_order
+        if reading_order is not None
+        else tuple(
+            item.pagina.page_id.root
+            for item in sorted(by_page_id.values(), key=lambda value: value.pagina.reading_order)
+        )
+    )
+    if len(expected_order) != len(by_page_id) or set(expected_order) != set(by_page_id):
+        raise ValueError("A ordem de leitura não corresponde às páginas dos PDFs abertos")
+    return tuple(displayed_documents), tuple(by_page_id[page_id] for page_id in expected_order)
 
-    return open_session
 
-
-def _close_sessions(sessions: tuple[SessaoLeituraPdfPort, ...]) -> None:
-    for session in sessions:
-        session.fechar()
+def _close_remote_sessions(gateway: PdfViewerGateway, session_ids: tuple[UUID, ...]) -> None:
+    for session_id in session_ids:
+        with suppress(ViewerGatewayError):
+            gateway.close_session(session_id)
 
 
 def _review_color(state: EstadoRevisao, *, alpha: int = 255) -> QColor:
@@ -1501,7 +1665,7 @@ def _review_color(state: EstadoRevisao, *, alpha: int = 255) -> QColor:
 
 def _criar_graficos_callout(
     callout: CalloutConformidade,
-    transformer: TransformadorCoordenadasPagina,
+    transformer: TransformadorViewport,
     layer: QGraphicsRectItem,
     *,
     zoom: float,
@@ -1529,7 +1693,7 @@ def _criar_graficos_callout(
     text_item = QGraphicsTextItem(rectangle)
     text_item.setDefaultTextColor(color)
     text_item.document().setDocumentMargin(0)
-    points_width = float(box.largura) * float(transformer.pagina.largura_pontos)
+    points_width = float(box.largura) * float(transformer.pagina.width_points)
     pixels_per_point = box_width / points_width
     padding = max(2.0, 6.0 * pixels_per_point)
     available_width = max(1.0, box_width - 2 * padding)
@@ -1586,7 +1750,7 @@ def _criar_graficos_callout(
 
 def _caixa_callout_normalizada(
     rectangle: CalloutBoxItem,
-    transformer: TransformadorCoordenadasPagina,
+    transformer: TransformadorViewport,
 ) -> RetanguloCallout:
     corners = tuple(
         transformer.pixel_para_normalizado(PontoPlano(point.x(), point.y()))
@@ -1609,7 +1773,7 @@ def _atualizar_setas_callout(
     lines: tuple[QGraphicsPathItem, ...],
     box: RetanguloCallout,
     callout: CalloutConformidade,
-    transformer: TransformadorCoordenadasPagina,
+    transformer: TransformadorViewport,
     *,
     pixels_per_point: float,
     scene_bounds: QRectF,
@@ -1696,24 +1860,6 @@ def _fonte_callout(pixel_size: int) -> QFont:
     return font
 
 
-def _align_persisted_document(
-    inspection: InspecaoPdf,
-    persisted: DocumentoProjeto,
-) -> InspecaoPdf:
-    if inspection.documento.sha256 != persisted.sha256:
-        raise ValueError(f"O conteúdo de {persisted.nome_arquivo} foi alterado desde a importação")
-    if len(inspection.paginas) != len(persisted.paginas):
-        raise ValueError(f"A paginação de {persisted.nome_arquivo} não corresponde ao projeto")
-    return replace(
-        inspection,
-        documento=persisted,
-        paginas=tuple(
-            replace(inventory, pagina=page)
-            for inventory, page in zip(inspection.paginas, persisted.paginas, strict=True)
-        ),
-    )
-
-
 def _review_link_pen(state: EstadoRevisao, *, selected: bool = False) -> QPen:
     pen = QPen(QColor("#0078d4") if selected else _review_color(state), 5 if selected else 3)
     pen.setCosmetic(True)
@@ -1724,7 +1870,7 @@ def _review_link_pen(state: EstadoRevisao, *, selected: bool = False) -> QPen:
 
 def _review_link_path(
     geometry: GeometriaDocumento,
-    transformer: TransformadorCoordenadasPagina,
+    transformer: TransformadorViewport,
 ) -> QPainterPath:
     pixels = tuple(transformer.normalizado_para_pixel(point) for point in geometry.pontos)
     if geometry.tipo is TipoGeometria.POLIGONO and len(pixels) == 4:

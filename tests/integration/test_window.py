@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 from pytestqt.qtbot import QtBot
 from tests.conftest import ApplicationFactory
 from tests.pdf_fixtures import TEST_RENDER_BUDGET, create_feature_pdf, create_golden_pdf
+from tests.viewer_gateway import LocalTestPdfViewerGateway
 
 import zeny_project_handler.adapters.pdf.pymupdf_reader as pdf_reader_module
 from zeny_project_handler import bootstrap
@@ -42,11 +43,22 @@ from zeny_project_handler.application.operation_coordinator import TipoOperacao
 from zeny_project_handler.bootstrap import _EngineLifetime, run
 from zeny_project_handler.config import AppSettings
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
-from zeny_project_handler.ports.pdf import InspecaoPdf
 from zeny_project_handler.ui.main_window import _DockTitleBar
+from zeny_project_handler.ui.pdf_gateway import PdfViewerGateway
 from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
 from zeny_project_handler.ui.project_panel import _PipelineWorker
 from zeny_project_handler.ui.theme import THEME_SETTING_KEY, Tema
+
+
+def _pdf_viewer(gateway: PdfViewerGateway | None = None) -> PdfViewerWidget:
+    return PdfViewerWidget(
+        gateway=gateway or LocalTestPdfViewerGateway(budget=TEST_RENDER_BUDGET),
+        dpi=72,
+        limite_pixels_tile=min(
+            TEST_RENDER_BUDGET.limite_pixels,
+            TEST_RENDER_BUDGET.limite_bytes // 7,
+        ),
+    )
 
 
 @pytest.mark.integration
@@ -206,11 +218,11 @@ def test_theme_switch_preserves_project_pdf_callout_zoom_selection_and_wrap_togg
     qtbot.waitUntil(lambda: window.pdf_viewer._current_preview is not None)
     inspection = window.pdf_viewer.inspecao
     assert inspection is not None
-    page = inspection.documento.paginas[0]
+    page = inspection.pages[0]
     point = PontoNormalizado(Decimal("0.50"), Decimal("0.50"))
     callout = CalloutConformidade(
         id=uuid4(),
-        pagina_id=page.id,
+        pagina_id=page.page_id.root,
         texto="Divergência sintética preservada durante a troca de tema.",
         caixa_sugerida=RetanguloCallout(
             Decimal("0.60"),
@@ -222,7 +234,7 @@ def test_theme_switch_preserves_project_pdf_callout_zoom_selection_and_wrap_togg
             AncoraCallout(
                 origem=OrigemAncoraCallout.FATO,
                 referencia_id=uuid4(),
-                geometria=GeometriaDocumento.ponto(page.id, point),
+                geometria=GeometriaDocumento.ponto(page.page_id.root, point),
                 ponto=point,
             ),
         ),
@@ -749,7 +761,7 @@ def test_engine_lifetime_disposes_once_and_bootstrap_failure_disposes(
 @pytest.mark.integration
 def test_pdf_viewer_navigation_zoom_rotation_and_overlays(qtbot: QtBot, tmp_path: Path) -> None:
     source = create_feature_pdf(tmp_path / "interface.pdf")
-    viewer = PdfViewerWidget(leitor=PyMuPdfReader(), dpi=72, orcamento=TEST_RENDER_BUDGET)
+    viewer = _pdf_viewer()
     qtbot.addWidget(viewer)
     viewer.resize(800, 600)
     viewer.show()
@@ -802,10 +814,11 @@ def test_pdf_viewer_reuses_verified_identity_across_navigation_and_rotation(
         hash_calls += 1
         return pdf_reader_module._file_sha256(path)
 
-    viewer = PdfViewerWidget(
-        leitor=PyMuPdfReader(file_hasher=instrumented_hasher),
-        dpi=72,
-        orcamento=TEST_RENDER_BUDGET,
+    viewer = _pdf_viewer(
+        LocalTestPdfViewerGateway(
+            budget=TEST_RENDER_BUDGET,
+            reader=PyMuPdfReader(file_hasher=instrumented_hasher),
+        )
     )
     qtbot.addWidget(viewer)
 
@@ -843,7 +856,12 @@ def test_pdf_viewer_closes_sessions_when_switching_document_and_closing(
         original_close(session)
 
     monkeypatch.setattr(pdf_reader_module.PyMuPdfSession, "fechar", track_close)
-    viewer = PdfViewerWidget(leitor=PyMuPdfReader(), dpi=72, orcamento=TEST_RENDER_BUDGET)
+    viewer = _pdf_viewer(
+        LocalTestPdfViewerGateway(
+            budget=TEST_RENDER_BUDGET,
+            reader=PyMuPdfReader(),
+        )
+    )
     qtbot.addWidget(viewer)
 
     assert viewer.carregar_pdf(first)
@@ -885,7 +903,7 @@ def test_pdf_viewer_reports_controlled_open_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    viewer = PdfViewerWidget(leitor=PyMuPdfReader(), dpi=72, orcamento=TEST_RENDER_BUDGET)
+    viewer = _pdf_viewer()
     qtbot.addWidget(viewer)
     messages: list[str] = []
     monkeypatch.setattr(
@@ -908,7 +926,7 @@ def test_pdf_viewer_opens_selected_files_as_one_ordered_project(
 ) -> None:
     first = create_feature_pdf(tmp_path / "folha-01.pdf")
     second = create_golden_pdf(tmp_path / "folha-02.pdf")
-    viewer = PdfViewerWidget(leitor=PyMuPdfReader(), dpi=72, orcamento=TEST_RENDER_BUDGET)
+    viewer = _pdf_viewer()
     qtbot.addWidget(viewer)
     viewer.show()
     monkeypatch.setattr(
@@ -919,18 +937,18 @@ def test_pdf_viewer_opens_selected_files_as_one_ordered_project(
 
     viewer.selecionar_pdf()
 
-    inspections: tuple[InspecaoPdf, ...] = viewer.inspecoes
-    assert [item.documento.nome_arquivo for item in inspections] == [
+    inspections = viewer.inspecoes
+    assert [item.display_name for item in inspections] == [
         "folha-01.pdf",
         "folha-02.pdf",
     ]
     assert viewer.findChild(QPushButton, "mergePdfsIntoProjectButton") is None
     page_selector = viewer.findChild(QSpinBox, "pdfPageSpinBox")
     assert page_selector is not None
-    assert page_selector.maximum() == sum(len(item.paginas) for item in inspections)
+    assert page_selector.maximum() == sum(len(item.pages) for item in inspections)
     page_selector.setValue(page_selector.maximum())
     assert viewer.inspecao is not None
-    assert viewer.inspecao.documento.nome_arquivo == "folha-02.pdf"
+    assert viewer.inspecao.display_name == "folha-02.pdf"
     metadata = viewer.findChild(QLabel, "pdfMetadataLabel")
     assert metadata is not None
     assert "Projeto: 2 PDFs" in metadata.text()
@@ -950,7 +968,12 @@ def test_pdf_viewer_follows_page_order_across_different_files(
     )
     first_page, second_page, third_page = documents[0].paginas
     fourth_page = documents[1].paginas[0]
-    viewer = PdfViewerWidget(leitor=reader, dpi=72, orcamento=TEST_RENDER_BUDGET)
+    viewer = _pdf_viewer(
+        LocalTestPdfViewerGateway(
+            budget=TEST_RENDER_BUDGET,
+            reader=reader,
+        )
+    )
     qtbot.addWidget(viewer)
 
     loaded = viewer.carregar_projeto(
@@ -961,10 +984,10 @@ def test_pdf_viewer_follows_page_order_across_different_files(
 
     assert loaded
     assert viewer.inspecao is not None
-    assert viewer.inspecao.documento.nome_arquivo == "folha-02.pdf"
+    assert viewer.inspecao.display_name == "folha-02.pdf"
     viewer.ir_para_folha(2)
     assert viewer.inspecao is not None
-    assert viewer.inspecao.documento.nome_arquivo == "folha-01.pdf"
+    assert viewer.inspecao.display_name == "folha-01.pdf"
 
 
 @pytest.mark.integration
@@ -975,7 +998,7 @@ def test_pdf_viewer_keeps_current_project_when_one_selected_file_is_invalid(
 ) -> None:
     current = create_feature_pdf(tmp_path / "atual.pdf")
     another = create_golden_pdf(tmp_path / "outra.pdf")
-    viewer = PdfViewerWidget(leitor=PyMuPdfReader(), dpi=72, orcamento=TEST_RENDER_BUDGET)
+    viewer = _pdf_viewer()
     qtbot.addWidget(viewer)
     viewer.carregar_pdf(current)
     original_inspections = viewer.inspecoes

@@ -75,6 +75,8 @@ from zeny_project_handler_contracts.session import HealthLiveResponse, SessionCa
 from zeny_project_handler_contracts.viewer import (
     CloseViewerSessionResponse,
     CreateViewerSessionResponse,
+    UnlockViewerPdfResponse,
+    ViewerDocumentDto,
     ViewerPageDto,
     ViewerProjectResponse,
 )
@@ -85,6 +87,7 @@ ERROR_RESPONSES: Responses = {
     401: {"model": ErrorEnvelope, "description": "Credencial Bearer ausente ou inválida."},
     404: {"model": ErrorEnvelope, "description": "Recurso não encontrado."},
     409: {"model": ErrorEnvelope, "description": "Conflito de operação ou estado obsoleto."},
+    410: {"model": ErrorEnvelope, "description": "Sessão temporária do visualizador expirada."},
     413: {"model": ErrorEnvelope, "description": "Upload acima do limite configurado."},
     415: {"model": ErrorEnvelope, "description": "Tipo de mídia não suportado."},
     422: {"model": ErrorEnvelope, "description": "Request inválido para o contrato v1."},
@@ -95,9 +98,15 @@ RASTER_HEADERS: dict[str, dict[str, Any]] = {
     "X-Zeny-Page-Id": {"schema": {"type": "string", "format": "uuid"}},
     "X-Zeny-Pixel-Width": {"schema": {"type": "integer", "minimum": 1}},
     "X-Zeny-Pixel-Height": {"schema": {"type": "integer", "minimum": 1}},
-    "X-Zeny-Dpi": {"schema": {"type": "integer", "minimum": 1, "maximum": 600}},
+    "X-Zeny-Page-Pixel-Width": {"schema": {"type": "integer", "minimum": 1}},
+    "X-Zeny-Page-Pixel-Height": {"schema": {"type": "integer", "minimum": 1}},
+    "X-Zeny-Origin-X": {"schema": {"type": "integer", "minimum": 0}},
+    "X-Zeny-Origin-Y": {"schema": {"type": "integer", "minimum": 0}},
+    "X-Zeny-Requested-Dpi": {"schema": {"type": "integer", "minimum": 1, "maximum": 600}},
+    "X-Zeny-Effective-Dpi": {"schema": {"type": "integer", "minimum": 1, "maximum": 600}},
     "X-Zeny-Rotation": {"schema": {"type": "integer", "enum": [0, 90, 180, 270]}},
     "X-Zeny-Clip": {"schema": {"type": "string"}},
+    "X-Zeny-Reduced": {"schema": {"type": "boolean"}},
 }
 RASTER_RESPONSES: Responses = {
     200: {
@@ -294,6 +303,35 @@ async def create_viewer_session(
     responses=ERROR_RESPONSES,
 )
 async def close_viewer_session(viewer_session_id: UUID) -> CloseViewerSessionResponse:
+    raise NotImplementedError("Aplicação exclusiva para geração da OpenAPI.")
+
+
+@protected.post(
+    "/viewer-sessions/{viewer_session_id}/uploads/{upload_id}/unlock",
+    tags=["viewer"],
+    operation_id="unlockViewerSessionPdf",
+    response_model=UnlockViewerPdfResponse,
+    responses=ERROR_RESPONSES,
+)
+async def unlock_viewer_session_pdf(
+    viewer_session_id: UUID,
+    upload_id: UUID,
+    request: UnlockPdfRequest,
+) -> UnlockViewerPdfResponse:
+    raise NotImplementedError("Aplicação exclusiva para geração da OpenAPI.")
+
+
+@protected.post(
+    "/viewer-documents/{document_id}/unlock",
+    tags=["viewer"],
+    operation_id="unlockViewerProjectDocument",
+    response_model=ViewerDocumentDto,
+    responses=ERROR_RESPONSES,
+)
+async def unlock_viewer_project_document(
+    document_id: UUID,
+    request: UnlockPdfRequest,
+) -> ViewerDocumentDto:
     raise NotImplementedError("Aplicação exclusiva para geração da OpenAPI.")
 
 

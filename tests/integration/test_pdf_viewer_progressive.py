@@ -4,15 +4,14 @@ from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 from threading import Event, get_ident
-from typing import cast
 from uuid import UUID, uuid4
 
 import pytest
 from PySide6.QtCore import QPoint, Qt, QTimer
 from pytestqt.qtbot import QtBot
 from tests.pdf_fixtures import TEST_RENDER_BUDGET, create_feature_pdf, create_golden_pdf
+from tests.viewer_gateway import LocalTestPdfViewerGateway
 
-from zeny_project_handler.adapters.pdf import PyMuPdfReader
 from zeny_project_handler.domain.analysis import PropostaElemento
 from zeny_project_handler.domain.enums import (
     CategoriaElemento,
@@ -20,17 +19,23 @@ from zeny_project_handler.domain.enums import (
     SituacaoProjeto,
 )
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
-from zeny_project_handler.ports.pdf import (
-    InspecaoPdf,
-    LeitorPdfPort,
-    OrcamentoRenderizacaoPdf,
-    PaginaPdfRenderizada,
+from zeny_project_handler.ports.pdf import OrcamentoRenderizacaoPdf
+from zeny_project_handler.ui.pdf_gateway import PdfViewerGateway, RemoteRaster
+from zeny_project_handler.ui.pdf_rendering import (
+    CacheLruBytes,
     PdfRectangle,
-    PlanoRenderizacaoPdf,
-    SessaoLeituraPdfPort,
+    regioes_tiles_priorizadas,
 )
-from zeny_project_handler.ui.pdf_rendering import CacheLruBytes, regioes_tiles_priorizadas
 from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
+from zeny_project_handler_contracts.common import NormalizedBoxDto
+from zeny_project_handler_contracts.viewer import (
+    CloseViewerSessionResponse,
+    CreateViewerSessionResponse,
+    UnlockViewerPdfResponse,
+    ViewerDocumentDto,
+    ViewerPageDto,
+    ViewerProjectResponse,
+)
 
 SMALL_TILE_BUDGET = OrcamentoRenderizacaoPdf(
     limite_pixels=40_000,
@@ -47,121 +52,122 @@ class _RenderCall:
     thread_id: int
 
 
-class _ControlledSession:
-    def __init__(
-        self,
-        inner: SessaoLeituraPdfPort,
-        *,
-        block_first: bool,
-        entered: Event,
-        release: Event,
-    ) -> None:
-        self._inner = inner
+class _ControlledGateway:
+    def __init__(self, *, block_first: bool = False) -> None:
+        self._delegate = LocalTestPdfViewerGateway(budget=TEST_RENDER_BUDGET)
         self._block_first = block_first
-        self._entered = entered
-        self._release = release
+        self.entered = Event()
+        self.release = Event()
         self.calls: list[_RenderCall] = []
-        self.closed = False
+        self.created_session_ids: list[UUID] = []
+        self.closed_session_ids: list[UUID] = []
+        self._page_numbers: dict[UUID, int] = {}
 
-    @property
-    def inspecao(self) -> InspecaoPdf:
-        return self._inner.inspecao
-
-    def planejar_renderizacao(
+    def create_session(
         self,
-        pagina_numero: int,
+        paths: tuple[Path, ...],
+        *,
+        idempotency_key: str,
+    ) -> CreateViewerSessionResponse:
+        response = self._delegate.create_session(paths, idempotency_key=idempotency_key)
+        self.created_session_ids.append(response.viewer_session_id.root)
+        for document in response.documents:
+            for page in document.pages:
+                self._page_numbers[page.page_id.root] = page.source_page_number
+        return response
+
+    def unlock_session_pdf(
+        self,
+        session_id: UUID,
+        upload_id: UUID,
+        password: str,
+    ) -> UnlockViewerPdfResponse:
+        response = self._delegate.unlock_session_pdf(session_id, upload_id, password)
+        for document in response.documents:
+            for page in document.pages:
+                self._page_numbers[page.page_id.root] = page.source_page_number
+        return response
+
+    def close_session(self, session_id: UUID) -> CloseViewerSessionResponse:
+        response = self._delegate.close_session(session_id)
+        if response.closed:
+            self.closed_session_ids.append(session_id)
+        return response
+
+    def get_project(self, project_id: UUID) -> ViewerProjectResponse:
+        return self._delegate.get_project(project_id)
+
+    def get_page(self, page_id: UUID) -> ViewerPageDto:
+        return self._delegate.get_page(page_id)
+
+    def unlock_project_document(
+        self,
+        document_id: UUID,
+        password: str,
+    ) -> ViewerDocumentDto:
+        return self._delegate.unlock_project_document(document_id, password)
+
+    def render_preview(self, page_id: UUID, *, dpi: int, rotation: int) -> RemoteRaster:
+        self._record(page_id, dpi=dpi, rotation=rotation, region=None)
+        return self._delegate.render_preview(page_id, dpi=dpi, rotation=rotation)
+
+    def render_tile(
+        self,
+        page_id: UUID,
         *,
         dpi: int,
-        orcamento: OrcamentoRenderizacaoPdf,
-        rotacao_adicional_graus: int = 0,
-        recorte_normalizado: PdfRectangle | None = None,
-    ) -> PlanoRenderizacaoPdf:
-        return self._inner.planejar_renderizacao(
-            pagina_numero,
+        rotation: int,
+        clip: NormalizedBoxDto,
+    ) -> RemoteRaster:
+        x = float(clip.x)
+        y = float(clip.y)
+        region = (x, y, x + float(clip.width), y + float(clip.height))
+        self._record(page_id, dpi=dpi, rotation=rotation, region=region)
+        return self._delegate.render_tile(
+            page_id,
             dpi=dpi,
-            orcamento=orcamento,
-            rotacao_adicional_graus=rotacao_adicional_graus,
-            recorte_normalizado=recorte_normalizado,
+            rotation=rotation,
+            clip=clip,
         )
 
-    def renderizar_pagina(
+    def close(self) -> None:
+        self._delegate.close()
+
+    def _record(
         self,
-        pagina_numero: int,
+        page_id: UUID,
         *,
         dpi: int,
-        orcamento: OrcamentoRenderizacaoPdf,
-        rotacao_adicional_graus: int = 0,
-        recorte_normalizado: PdfRectangle | None = None,
-    ) -> PaginaPdfRenderizada:
+        rotation: int,
+        region: PdfRectangle | None,
+    ) -> None:
         self.calls.append(
             _RenderCall(
-                pagina=pagina_numero,
+                pagina=self._page_numbers[page_id],
                 dpi=dpi,
-                rotacao=rotacao_adicional_graus,
-                regiao=recorte_normalizado,
+                rotacao=rotation,
+                regiao=region,
                 thread_id=get_ident(),
             )
         )
         if self._block_first and len(self.calls) == 1:
-            self._entered.set()
-            if not self._release.wait(timeout=5):
+            self.entered.set()
+            if not self.release.wait(timeout=5):
                 raise RuntimeError("O teste não liberou a rasterização controlada")
-        return self._inner.renderizar_pagina(
-            pagina_numero,
-            dpi=dpi,
-            orcamento=orcamento,
-            rotacao_adicional_graus=rotacao_adicional_graus,
-            recorte_normalizado=recorte_normalizado,
-        )
-
-    def fechar(self) -> None:
-        self.closed = True
-        self._inner.fechar()
-
-
-class _ControlledReader:
-    def __init__(self, *, block_first: bool = False) -> None:
-        self._delegate = PyMuPdfReader()
-        self._block_first = block_first
-        self.entered = Event()
-        self.release = Event()
-        self.sessions: list[_ControlledSession] = []
-
-    def abrir_sessao(
-        self,
-        caminho: Path,
-        *,
-        senha: str | None = None,
-        documento_id: UUID | None = None,
-        sha256_esperado: str | None = None,
-    ) -> SessaoLeituraPdfPort:
-        session = _ControlledSession(
-            self._delegate.abrir_sessao(
-                caminho,
-                senha=senha,
-                documento_id=documento_id,
-                sha256_esperado=sha256_esperado,
-            ),
-            block_first=self._block_first and not self.sessions,
-            entered=self.entered,
-            release=self.release,
-        )
-        self.sessions.append(session)
-        return session
 
 
 def _viewer(
     qtbot: QtBot,
-    reader: LeitorPdfPort,
+    gateway: PdfViewerGateway,
     *,
     dpi: int = 600,
     budget: OrcamentoRenderizacaoPdf = SMALL_TILE_BUDGET,
     cache_limit: int = 128 * 1024 * 1024,
 ) -> PdfViewerWidget:
     viewer = PdfViewerWidget(
-        leitor=reader,
+        gateway=gateway,
         dpi=dpi,
-        orcamento=budget,
+        limite_pixels_tile=min(budget.limite_pixels, budget.limite_bytes // 7),
         cache_limite_bytes=cache_limit,
     )
     qtbot.addWidget(viewer)
@@ -180,7 +186,7 @@ def _wait_preview(
     qtbot.waitUntil(
         lambda: (
             viewer._current_preview is not None
-            and viewer._current_preview.plano.pagina_numero == page
+            and viewer.folha_atual == page
             and viewer._current_preview.plano.rotacao_adicional_graus == rotation
         ),
         timeout=5_000,
@@ -193,21 +199,21 @@ def test_rendering_is_responsive_and_never_rasterizes_on_ui_thread(
     tmp_path: Path,
 ) -> None:
     source = create_feature_pdf(tmp_path / "responsivo.pdf")
-    reader = _ControlledReader(block_first=True)
-    viewer = _viewer(qtbot, cast(LeitorPdfPort, reader), dpi=72, budget=TEST_RENDER_BUDGET)
+    gateway = _ControlledGateway(block_first=True)
+    viewer = _viewer(qtbot, gateway, dpi=72, budget=TEST_RENDER_BUDGET)
     ui_thread = get_ident()
     event_loop_ran: list[bool] = []
 
     assert viewer.carregar_pdf(source)
-    assert reader.entered.wait(timeout=1)
+    assert gateway.entered.wait(timeout=1)
     QTimer.singleShot(0, lambda: event_loop_ran.append(True))
 
     qtbot.waitUntil(lambda: bool(event_loop_ran))
     assert viewer.view.scene().items() == []
-    reader.release.set()
+    gateway.release.set()
     _wait_preview(qtbot, viewer)
 
-    assert reader.sessions[0].calls[0].thread_id != ui_thread
+    assert gateway.calls[0].thread_id != ui_thread
 
 
 @pytest.mark.integration
@@ -216,30 +222,31 @@ def test_old_page_result_is_discarded_after_out_of_order_navigation(
     tmp_path: Path,
 ) -> None:
     source = create_feature_pdf(tmp_path / "fora-de-sequencia.pdf")
-    reader = _ControlledReader(block_first=True)
-    viewer = _viewer(qtbot, cast(LeitorPdfPort, reader), dpi=72, budget=TEST_RENDER_BUDGET)
+    gateway = _ControlledGateway(block_first=True)
+    viewer = _viewer(qtbot, gateway, dpi=72, budget=TEST_RENDER_BUDGET)
 
     assert viewer.carregar_pdf(source)
-    assert reader.entered.wait(timeout=1)
+    assert gateway.entered.wait(timeout=1)
     viewer.ir_para_folha(2)
-    reader.release.set()
+    gateway.release.set()
     _wait_preview(qtbot, viewer, page=2)
 
-    assert [call.pagina for call in reader.sessions[0].calls[:2]] == [1, 2]
+    assert [call.pagina for call in gateway.calls[:2]] == [1, 2]
     assert viewer._current_preview is not None
-    assert viewer._current_preview.plano.pagina_numero == 2
+    assert viewer.folha_atual == 2
     assert viewer._current_transformer is not None
-    assert viewer._current_transformer.pagina.numero == 2
+    assert viewer._current_transformer.pagina.source_page_number == 2
 
 
 @pytest.mark.integration
-def test_document_exchange_and_source_change_clear_the_tile_cache(
+def test_document_exchange_clears_cache_and_upload_copy_isolated_from_client_source(
     qtbot: QtBot,
     tmp_path: Path,
 ) -> None:
     first = create_feature_pdf(tmp_path / "primeiro.pdf")
     second = create_golden_pdf(tmp_path / "segundo.pdf")
-    viewer = _viewer(qtbot, PyMuPdfReader())
+    gateway = LocalTestPdfViewerGateway()
+    viewer = _viewer(qtbot, gateway)
 
     assert viewer.carregar_pdf(first)
     _wait_preview(qtbot, viewer)
@@ -251,9 +258,9 @@ def test_document_exchange_and_source_change_clear_the_tile_cache(
     second.write_bytes(second.read_bytes() + b"\n")
     viewer.view.definir_zoom(4.0)
 
-    qtbot.waitUntil(lambda: viewer.inspecao is None, timeout=5_000)
-    assert viewer._render_cache.bytes_usados == 0
-    assert viewer.view.scene().items() == []
+    qtbot.waitUntil(lambda: viewer._render_queue.esta_ociosa(), timeout=5_000)
+    assert viewer.inspecao is not None
+    assert viewer._render_cache.bytes_usados > 0
 
 
 def test_byte_lru_evicts_least_recently_used_entry_at_exact_limit() -> None:
@@ -279,13 +286,17 @@ def test_viewer_cache_never_exceeds_configured_byte_limit(
 ) -> None:
     source = create_feature_pdf(tmp_path / "cache-limitado.pdf")
     cache_limit = 180_000
-    viewer = _viewer(qtbot, PyMuPdfReader(), cache_limit=cache_limit)
+    viewer = _viewer(
+        qtbot,
+        LocalTestPdfViewerGateway(budget=SMALL_TILE_BUDGET),
+        cache_limit=cache_limit,
+    )
 
     assert viewer.carregar_pdf(source)
     _wait_preview(qtbot, viewer)
     viewer.view.definir_zoom(4.0)
     qtbot.waitUntil(
-        lambda: viewer._render_queue.esta_ociosa() and len(viewer._render_cache) >= 1,
+        lambda: len(viewer._render_cache) >= 1,
         timeout=10_000,
     )
 
@@ -305,7 +316,7 @@ def test_tile_priority_and_rotation_map_viewport_back_to_canonical_region() -> N
         dpi_detalhe=200,
         viewport_normalizado=(0.0, 0.0, 0.4, 0.4),
         rotacao=90,
-        orcamento=budget,
+        limite_pixels_tile=min(budget.limite_pixels, budget.limite_bytes // 7),
     )
 
     assert planned[0] == (5_000, (0.0, 0.5, 0.5, 1.0))
@@ -319,11 +330,16 @@ def test_rotated_overlays_remain_aligned_and_review_link_is_clickable(
     tmp_path: Path,
 ) -> None:
     source = create_feature_pdf(tmp_path / "rotacao-overlay.pdf")
-    viewer = _viewer(qtbot, PyMuPdfReader(), dpi=72, budget=TEST_RENDER_BUDGET)
+    viewer = _viewer(
+        qtbot,
+        LocalTestPdfViewerGateway(budget=TEST_RENDER_BUDGET),
+        dpi=72,
+        budget=TEST_RENDER_BUDGET,
+    )
     assert viewer.carregar_pdf(source)
     _wait_preview(qtbot, viewer)
     assert viewer.inspecao is not None
-    page_id = viewer.inspecao.documento.paginas[0].id
+    page_id = viewer.inspecao.pages[0].page_id.root
     geometry = GeometriaDocumento.polilinha(
         page_id,
         (
@@ -376,17 +392,17 @@ def test_closing_stops_render_thread_and_closes_verified_sessions(
     tmp_path: Path,
 ) -> None:
     source = create_feature_pdf(tmp_path / "fechamento.pdf")
-    reader = _ControlledReader(block_first=True)
-    viewer = _viewer(qtbot, cast(LeitorPdfPort, reader))
+    gateway = _ControlledGateway(block_first=True)
+    viewer = _viewer(qtbot, gateway)
 
     assert viewer.carregar_pdf(source)
-    assert reader.entered.wait(timeout=1)
+    assert gateway.entered.wait(timeout=1)
     assert not viewer._render_queue.esta_ociosa()
-    reader.release.set()
+    gateway.release.set()
     viewer.close()
 
     assert not viewer._render_queue.isRunning()
-    assert all(session.closed for session in reader.sessions)
+    assert gateway.closed_session_ids == gateway.created_session_ids
     assert viewer._render_cache.bytes_usados == 0
 
 
@@ -396,20 +412,20 @@ def test_restore_preparation_is_bounded_and_only_closes_sessions_after_render_re
     tmp_path: Path,
 ) -> None:
     source = create_feature_pdf(tmp_path / "restauracao-com-render-bloqueado.pdf")
-    reader = _ControlledReader(block_first=True)
-    viewer = _viewer(qtbot, cast(LeitorPdfPort, reader), dpi=72, budget=TEST_RENDER_BUDGET)
+    gateway = _ControlledGateway(block_first=True)
+    viewer = _viewer(qtbot, gateway, dpi=72, budget=TEST_RENDER_BUDGET)
 
     assert viewer.carregar_pdf(source)
-    assert reader.entered.wait(timeout=1)
+    assert gateway.entered.wait(timeout=1)
 
     assert not viewer.preparar_para_restauracao(timeout_ms=10)
     assert viewer.inspecao is not None
-    assert not reader.sessions[0].closed
+    assert not gateway.closed_session_ids
 
-    reader.release.set()
+    gateway.release.set()
 
     assert viewer.preparar_para_restauracao(timeout_ms=1_000)
     assert viewer._render_queue.esta_ociosa()
     assert viewer.inspecao is None
-    assert all(session.closed for session in reader.sessions)
+    assert gateway.closed_session_ids == gateway.created_session_ids
     assert viewer._render_cache.bytes_usados == 0

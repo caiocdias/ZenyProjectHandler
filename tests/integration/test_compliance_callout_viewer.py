@@ -17,8 +17,8 @@ from tests.pdf_fixtures import (
     create_callout_formats_pdf,
     create_callout_header_pdf,
 )
+from tests.viewer_gateway import LocalTestPdfViewerGateway
 
-from zeny_project_handler.adapters.pdf import PyMuPdfReader
 from zeny_project_handler.application.compliance_callouts import (
     AncoraCallout,
     CalloutConformidade,
@@ -45,9 +45,10 @@ from zeny_project_handler.domain.compliance import (
 )
 from zeny_project_handler.domain.documents import PaginaDocumento
 from zeny_project_handler.domain.enums import CategoriaElemento, EstadoRevisao, SituacaoProjeto
-from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
+from zeny_project_handler.domain.values import CaixaPagina, GeometriaDocumento, PontoNormalizado
 from zeny_project_handler.ports.pdf import OrcamentoRenderizacaoPdf
 from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
+from zeny_project_handler_contracts.viewer import ViewerPageDto
 
 TILED_BUDGET = OrcamentoRenderizacaoPdf(
     limite_pixels=200_000,
@@ -65,9 +66,14 @@ def test_callout_layer_draws_box_text_open_arrows_and_coexists_with_review_links
     assert viewer.carregar_pdf(source)
     _wait_preview(qtbot, viewer)
     assert viewer.inspecao is not None
-    page = viewer.inspecao.documento.paginas[0]
-    callout = _callout(page.id, float(page.largura_pontos), float(page.altura_pontos), "primeiro")
-    proposal = _proposal(page.id)
+    page = viewer.inspecao.pages[0]
+    callout = _callout(
+        page.page_id.root,
+        float(page.width_points),
+        float(page.height_points),
+        "primeiro",
+    )
+    proposal = _proposal(page.page_id.root)
 
     viewer.definir_callouts_conformidade((callout,))
     viewer.definir_propostas_revisao((proposal,))
@@ -103,8 +109,13 @@ def test_callout_box_and_arrow_emit_only_user_selection_and_are_highlighted(
     assert viewer.carregar_pdf(source)
     _wait_preview(qtbot, viewer)
     assert viewer.inspecao is not None
-    page = viewer.inspecao.documento.paginas[0]
-    callout = _callout(page.id, float(page.largura_pontos), float(page.altura_pontos), "selection")
+    page = viewer.inspecao.pages[0]
+    callout = _callout(
+        page.page_id.root,
+        float(page.width_points),
+        float(page.height_points),
+        "selection",
+    )
     viewer.definir_callouts_conformidade((callout,))
     graphics = viewer.view._callout_items[str(callout.id)]
     selected: list[str] = []
@@ -149,8 +160,13 @@ def test_callout_box_drag_keeps_anchor_fixed_updates_arrow_and_preserves_positio
     assert viewer.carregar_pdf(source)
     _wait_preview(qtbot, viewer)
     assert viewer.inspecao is not None
-    page = viewer.inspecao.documento.paginas[0]
-    callout = _callout(page.id, float(page.largura_pontos), float(page.altura_pontos), "drag")
+    page = viewer.inspecao.pages[0]
+    callout = _callout(
+        page.page_id.root,
+        float(page.width_points),
+        float(page.height_points),
+        "drag",
+    )
     viewer.definir_callouts_conformidade((callout,))
     graphics = viewer.view._callout_items[str(callout.id)]
     original_position = graphics.caixa.pos()
@@ -218,9 +234,14 @@ def test_callout_color_identifies_compliance_result(
     assert viewer.carregar_pdf(source)
     _wait_preview(qtbot, viewer)
     assert viewer.inspecao is not None
-    page = viewer.inspecao.documento.paginas[0]
+    page = viewer.inspecao.pages[0]
     callout = replace(
-        _callout(page.id, float(page.largura_pontos), float(page.altura_pontos), result.value),
+        _callout(
+            page.page_id.root,
+            float(page.width_points),
+            float(page.height_points),
+            result.value,
+        ),
         resultado=result,
     )
 
@@ -247,9 +268,14 @@ def test_callout_anchor_survives_zoom_resize_rotation_tiles_and_page_changes(
     assert viewer.carregar_pdf(source)
     _wait_preview(qtbot, viewer)
     assert viewer.inspecao is not None
-    pages = viewer.inspecao.documento.paginas
+    pages = viewer.inspecao.pages
     callouts = tuple(
-        _callout(page.id, float(page.largura_pontos), float(page.altura_pontos), str(index))
+        _callout(
+            page.page_id.root,
+            float(page.width_points),
+            float(page.height_points),
+            str(index),
+        )
         for index, page in enumerate(pages, start=1)
     )
     viewer.definir_callouts_conformidade(callouts)
@@ -297,9 +323,14 @@ def test_synthetic_a4_a3_portrait_landscape_callout_renders_are_saved(
     assert viewer.carregar_pdf(source)
     _wait_preview(qtbot, viewer)
     assert viewer.inspecao is not None
-    pages = viewer.inspecao.documento.paginas
+    pages = viewer.inspecao.pages
     callouts = tuple(
-        _callout(page.id, float(page.largura_pontos), float(page.altura_pontos), str(index))
+        _callout(
+            page.page_id.root,
+            float(page.width_points),
+            float(page.height_points),
+            str(index),
+        )
         for index, page in enumerate(pages, start=1)
     )
     viewer.definir_callouts_conformidade(callouts)
@@ -328,12 +359,12 @@ def test_computer_vision_rejects_header_and_places_callout_on_white_space(
     assert viewer.carregar_pdf(source)
     _wait_preview(qtbot, viewer)
     assert viewer.inspecao is not None
-    page = viewer.inspecao.documento.paginas[0]
+    page = viewer.inspecao.pages[0]
 
     without_vision = _projected_dense_callouts(page, count=1)[0]
     assert without_vision.caixa_sugerida.direita > Decimal("0.58")
 
-    visual_maps = viewer.mapear_ocupacao_visual(frozenset({page.id}))
+    visual_maps = viewer.mapear_ocupacao_visual(frozenset({page.page_id.root}))
     callout = _projected_dense_callouts(
         page,
         count=1,
@@ -341,7 +372,7 @@ def test_computer_vision_rejects_header_and_places_callout_on_white_space(
     )[0]
     box = callout.caixa_sugerida
     assert box.direita < Decimal("0.58")
-    assert visual_maps[page.id].regiao_totalmente_branca(
+    assert visual_maps[page.page_id.root].regiao_totalmente_branca(
         float(box.esquerda),
         float(box.topo),
         float(box.direita),
@@ -366,7 +397,7 @@ def test_dense_projected_callouts_fit_at_minimum_font_and_save_visual_qa(
     assert viewer.carregar_pdf(source)
     _wait_preview(qtbot, viewer)
     assert viewer.inspecao is not None
-    page = viewer.inspecao.documento.paginas[0]
+    page = viewer.inspecao.pages[0]
     callouts = _projected_dense_callouts(page, count=10)
     assert len(callouts) == 10
     assert all(
@@ -415,9 +446,14 @@ def test_multipage_callout_visual_qa_captures_show_hide_and_correct_page(
     assert viewer.carregar_pdf(source)
     _wait_preview(qtbot, viewer)
     assert viewer.inspecao is not None
-    pages = viewer.inspecao.documento.paginas
+    pages = viewer.inspecao.pages
     callouts = tuple(
-        _callout(page.id, float(page.largura_pontos), float(page.altura_pontos), str(index))
+        _callout(
+            page.page_id.root,
+            float(page.width_points),
+            float(page.height_points),
+            str(index),
+        )
         for index, page in enumerate(pages, start=1)
     )
 
@@ -457,9 +493,9 @@ def _save_viewport(viewer: PdfViewerWidget, output: Path) -> None:
 
 def _viewer(qtbot: QtBot, *, dpi: int, budget: OrcamentoRenderizacaoPdf) -> PdfViewerWidget:
     viewer = PdfViewerWidget(
-        leitor=PyMuPdfReader(),
+        gateway=LocalTestPdfViewerGateway(budget=budget),
         dpi=dpi,
-        orcamento=budget,
+        limite_pixels_tile=min(budget.limite_pixels, budget.limite_bytes // 7),
     )
     qtbot.addWidget(viewer)
     viewer.resize(900, 700)
@@ -477,7 +513,7 @@ def _wait_preview(
     qtbot.waitUntil(
         lambda: (
             viewer._current_preview is not None
-            and viewer._current_preview.plano.pagina_numero == page
+            and viewer.folha_atual == page
             and viewer._current_preview.plano.rotacao_adicional_graus == rotation
         ),
         timeout=10_000,
@@ -525,12 +561,24 @@ def _callout(
 
 
 def _projected_dense_callouts(
-    page: PaginaDocumento,
+    remote_page: ViewerPageDto,
     *,
     count: int,
     long_text: bool = False,
     visual_maps: Mapping[UUID, MapaOcupacaoVisual] | None = None,
 ) -> tuple[CalloutConformidade, ...]:
+    width = Decimal(remote_page.width_points)
+    height = Decimal(remote_page.height_points)
+    box = CaixaPagina(Decimal(0), Decimal(0), width, height)
+    page = PaginaDocumento(
+        id=remote_page.page_id.root,
+        numero=remote_page.source_page_number,
+        largura_pontos=width,
+        altura_pontos=height,
+        rotacao_graus=remote_page.intrinsic_rotation_degrees,
+        media_box=box,
+        crop_box=box,
+    )
     target_id = _dense_id("target-p2")
     target = AlvoConformidade(
         id=target_id,
@@ -632,7 +680,7 @@ def _assert_text_fits(viewer: PdfViewerWidget, callout: CalloutConformidade) -> 
     assert transformer is not None
     box_width = graphics.caixa.rect().width()
     box_height = graphics.caixa.rect().height()
-    width_points = float(callout.caixa_sugerida.largura) * float(transformer.pagina.largura_pontos)
+    width_points = float(callout.caixa_sugerida.largura) * float(transformer.pagina.width_points)
     pixels_per_point = box_width / width_points
     padding = max(2.0, 6.0 * pixels_per_point)
     assert graphics.texto.boundingRect().width() <= box_width - 2 * padding + 0.5

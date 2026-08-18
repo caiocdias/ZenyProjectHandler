@@ -25,6 +25,7 @@ from zeny_project_handler_contracts.session import (
 )
 from zeny_project_handler_server.config import ServerSettings
 from zeny_project_handler_server.project_api import ProjectApiService
+from zeny_project_handler_server.viewer_api import ViewerApiService
 
 SERVER_CAPABILITIES = (
     "authenticated-session",
@@ -33,6 +34,8 @@ SERVER_CAPABILITIES = (
     "managed-projects",
     "managed-document-uploads",
     "managed-photos",
+    "remote-pdf-viewer",
+    "temporary-viewer-sessions",
 )
 
 
@@ -60,6 +63,9 @@ class ServerRuntimeProtocol(Protocol):
     @property
     def project_api(self) -> ProjectApiService | None: ...
 
+    @property
+    def viewer_api(self) -> ViewerApiService | None: ...
+
     def close(self) -> None: ...
 
 
@@ -71,6 +77,7 @@ class ServerRuntime:
     ocr: RuntimeTesseract
     jobs: JobLifecycle
     project_api: ProjectApiService | None = None
+    viewer_api: ViewerApiService | None = None
     _closed: bool = False
 
     def session_capabilities(self) -> SessionCapabilitiesResponse:
@@ -99,8 +106,12 @@ class ServerRuntime:
             self.jobs.cancel_and_wait()
         finally:
             try:
-                if self.project_api is not None:
-                    self.project_api.close()
+                try:
+                    if self.viewer_api is not None:
+                        self.viewer_api.close()
+                finally:
+                    if self.project_api is not None:
+                        self.project_api.close()
             finally:
                 self.core.close()
 
@@ -128,11 +139,28 @@ def compose_server_runtime(settings: ServerSettings) -> ServerRuntime:
     except BaseException:
         core.close()
         raise
+    try:
+        viewer_api = ViewerApiService(
+            engine=core.engine,
+            data_directory=settings.data_directory,
+            upload_max_bytes=settings.upload_max_bytes,
+            render_dpi=settings.render_dpi,
+            render_max_pixels=settings.render_max_pixels,
+            render_max_bytes=settings.render_max_bytes,
+            session_ttl_seconds=settings.viewer_session_ttl_seconds,
+            maximum_files=settings.viewer_max_files,
+            credentials=project_api.pdf_credentials,
+        )
+    except BaseException:
+        project_api.close()
+        core.close()
+        raise
     return ServerRuntime(
         core=core,
         ocr=ocr,
         jobs=_IdleJobLifecycle(),
         project_api=project_api,
+        viewer_api=viewer_api,
     )
 
 

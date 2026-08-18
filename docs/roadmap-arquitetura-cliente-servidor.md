@@ -3,7 +3,7 @@
 - Estado geral: **PLANEJADO**
 - Data do planejamento: **2026-08-17**
 - Responsável pelo planejamento: **Codex**
-- Próxima etapa liberada: **Etapa 4** (**PENDENTE**; não iniciada neste chat)
+- Próxima etapa liberada: **Etapa 5** (**PENDENTE**; não iniciada neste chat)
 - Regra de execução: uma etapa só pode começar quando todas as suas dependências estiverem
   marcadas como **CONCLUÍDA**.
 
@@ -609,7 +609,7 @@ da API na conexão e recusar, com mensagem clara, uma combinação incompatível
 
 ## Etapa 4 — Visualizador remoto de PDF
 
-- Estado: **PENDENTE**
+- Estado: **CONCLUÍDA**
 - Dependências: Etapa 3 **CONCLUÍDA**
 - Entrega principal: toda abertura e renderização de PDF ocorre no servidor; o Qt apenas apresenta.
 
@@ -643,12 +643,53 @@ da API na conexão e recusar, com mensagem clara, uma combinação incompatível
 
 ### Evidências
 
-- Início/data/agente: _preencher_
-- Comparação de raster e tolerâncias: _preencher_
-- Testes de corrida/cancelamento/TTL: _preencher_
-- Prova de ausência de PyMuPDF no caminho do cliente: _preencher_
-- Comandos/gates: _preencher_
-- Observações/bloqueios: _preencher_
+- Início/data/agente: **2026-08-18 13:06 -03:00 — Codex; roadmap, README, especificação
+  funcional e ADRs 0003, 0004 e 0013 lidos integralmente; Etapa 3 confirmada como CONCLUÍDA;
+  escopo limitado ao visualizador remoto, sessões temporárias para PDF avulso, senha efêmera,
+  raster de prévia/tiles, integração Qt, paridade visual, corridas/cancelamento e gates da Etapa 4.
+  Etapa 5 permanece PENDENTE e não será iniciada.**
+- Validação/data/agente: **2026-08-18 14:02 -03:00 — Codex; conclusão autorizada somente após
+  os testes direcionados, o gate completo e a imagem Docker reconstruída com o código final terem
+  sido aprovados.**
+- Comparação de raster e tolerâncias: **`test_standalone_viewer_raster_parity_rotation_tiles_and_explicit_cleanup`
+  comparou a prévia remota PNG a 72 DPI e rotação de 90° com a linha de base local: dimensões
+  idênticas e igualdade byte a byte do RGB, portanto sem tolerância visual. O mesmo teste validou
+  tile a 144 DPI/270°, clip normalizado, origem e dimensões declaradas nos cabeçalhos. Os 11 testes
+  direcionados de callouts/janela preservaram alinhamento em zoom, resize, rotação, tiles, troca de
+  página, navegação e capturas A4/A3.**
+- Testes de corrida/cancelamento/TTL: **os 9 testes de
+  `tests/integration/test_pdf_viewer_progressive.py` comprovaram render fora da thread Qt,
+  descarte de resposta antiga após navegação fora de ordem, isolamento da cópia enviada, LRU por
+  bytes, prioridade/transformação de tiles, sobreposições rotacionadas, encerramento de worker e
+  liberação ordenada de sessões. Os testes do servidor comprovaram fechamento explícito, limpeza
+  por TTL com resposta 410, três tentativas de senha sem persistência do segredo, fonte gerenciada,
+  detecção de alteração e nova autenticação de PDF protegido após restart.**
+- Prova de ausência de PyMuPDF no caminho do cliente: **o gate AST
+  `tests/unit/test_pdf_viewer_remote_boundary.py` impede `fitz`, `pymupdf`, adaptadores e portas de
+  PDF nos módulos do visualizador, transporte e renderização do cliente. O ciclo HTTP real em
+  `tests/integration/test_pdf_viewer_http_gateway.py` abriu dois PDFs por multipart, desbloqueou o
+  protegido, consultou página e recebeu prévia/tile por socket Uvicorn autenticado; também provou
+  retry somente para leitura idempotente. PyMuPDF ficou no servidor e em doubles/fixtures de teste;
+  no cliente permanecem apresentação, viewport, transformações e cache de `QPixmap`.**
+- Comandos/gates: **baterias direcionadas aprovadas: servidor/configuração 18 testes;
+  progressivo 9; callouts/paridade visual 11; HTTP real + fronteira AST 3; regressão de senha 2.
+  `docker compose config --quiet` passou com senha injetada em runtime. `IniciarTestes.bat` final,
+  em 2026-08-18 13:58 -03:00, terminou com `RESULTADO FINAL: APROVADO`: Python 3.13.14,
+  `pip check`, Ruff lint/formatação, Mypy em 254 arquivos, 698 testes aprovados em 86,50 s,
+  cobertura 86,91% contra mínimo 85,01% e 2.041 funções/métodos sem complexidade E/F. A imagem
+  final foi reconstruída sem cache e validada em contêiner efêmero: digest
+  `sha256:8d2692e3bb1b055e162abb3ab3c89770d6afefee352f93aebb690ef1ef0e2685`, 173.531.651 bytes,
+  `/health/live` com `live=true` e sessão autenticada `ready=true` com as capacidades
+  `remote-pdf-viewer` e `temporary-viewer-sessions`.**
+- Observações/bloqueios: **conclusão em 2026-08-18 14:02 -03:00, sem bloqueios. A primeira
+  execução do gate completo revelou formatação e uma regressão na reutilização de senha do projeto;
+  ambas foram corrigidas, a credencial efêmera voltou a ser associada à identidade/posição correta
+  e a execução final passou integralmente. O único aviso foi a impossibilidade não bloqueante de
+  atualizar `.pytest_cache` no sandbox. Sessões avulsas são cópias gerenciadas com TTL e fechamento
+  explícito; pedidos de raster antigos são invalidados por geração/cancelamento no cliente; senha
+  não entra em DTO público, disco ou log. Foram atualizados contratos/OpenAPI, servidor/gateway,
+  visualizador Qt, testes, README, especificação funcional, Compose e este roadmap. O contêiner
+  efêmero foi removido; Etapa 5 permanece PENDENTE e não foi iniciada; nenhum commit foi criado.**
 
 ### Mensagem para um novo chat limpo do Codex
 

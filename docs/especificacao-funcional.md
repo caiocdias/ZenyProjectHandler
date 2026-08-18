@@ -67,9 +67,16 @@ pacotes, backups nem estado da interface.
 
 ## Visualização
 
-O visualizador central oferece paginação, zoom, rotação e navegação entre as folhas do projeto. Uma
-prévia integral limitada é complementada por tiles de detalhe solicitados conforme o viewport. A
-fila antiga é cancelada quando página, zoom, rotação, DPR ou origem mudam.
+O visualizador central oferece paginação, zoom, rotação e navegação entre as folhas do projeto. A
+abertura, a verificação de identidade e a rasterização ocorrem no servidor autenticado. O cliente Qt
+recebe metadados e PNGs, apresenta uma prévia integral limitada e solicita tiles de detalhe conforme
+o viewport. A fila antiga é cancelada quando página, zoom, rotação, DPR ou origem mudam; qualquer
+resposta pertencente a uma geração anterior é descartada.
+
+Um PDF avulso é enviado para uma sessão temporária do servidor, limitada em quantidade e tamanho.
+Atividade renova o TTL; encerramento explícito ou expiração fecha o leitor e apaga a cópia. O
+cliente conserva somente pixmaps no cache LRU visual e não usa PyMuPDF para abrir, inspecionar ou
+renderizar o documento.
 
 Os padrões são 600 DPI como teto de detalhe, 8.000.000 pixels e 64 MiB por solicitação e 128 MiB de
 cache visual. Esses limites são configuráveis pelas variáveis descritas no README e não alteram o

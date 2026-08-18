@@ -175,6 +175,11 @@ class ProjectApiService:
     def close(self) -> None:
         self._credentials.limpar()
 
+    @property
+    def pdf_credentials(self) -> ProvedorCredenciaisPdfMemoria:
+        """Compartilhe somente o cofre efêmero com o visualizador do mesmo worker."""
+        return self._credentials
+
     def list_projects(self, *, limit: int, offset: int) -> ProjectSummaryListResponse:
         snapshots = self._all_snapshots()
         items = tuple(self._project_summary(item) for item in snapshots[offset : offset + limit])

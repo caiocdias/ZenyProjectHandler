@@ -328,6 +328,7 @@ def test_enum_values_are_stable() -> None:
             "PDF_PASSWORD_REQUIRED",
             "PDF_PASSWORD_INVALID",
             "PDF_SOURCE_CHANGED",
+            "VIEWER_SESSION_EXPIRED",
             "OPERATION_CONFLICT",
             "STALE_STATE",
             "UPLOAD_TOO_LARGE",

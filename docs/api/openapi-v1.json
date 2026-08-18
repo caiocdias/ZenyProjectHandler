@@ -1076,6 +1076,14 @@
             "title": "Expires At",
             "type": "string"
           },
+          "pending_uploads": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ViewerPendingUploadDto"
+            },
+            "title": "Pending Uploads",
+            "type": "array"
+          },
           "viewer_session_id": {
             "$ref": "#/components/schemas/ViewerSessionId"
           }
@@ -1581,6 +1589,7 @@
           "PDF_PASSWORD_REQUIRED",
           "PDF_PASSWORD_INVALID",
           "PDF_SOURCE_CHANGED",
+          "VIEWER_SESSION_EXPIRED",
           "OPERATION_CONFLICT",
           "STALE_STATE",
           "UPLOAD_TOO_LARGE",
@@ -3333,6 +3342,41 @@
         "title": "UnlockPdfRequest",
         "type": "object"
       },
+      "UnlockViewerPdfResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/ViewerDocumentDto"
+            },
+            "title": "Documents",
+            "type": "array"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "pending_uploads": {
+            "items": {
+              "$ref": "#/components/schemas/ViewerPendingUploadDto"
+            },
+            "title": "Pending Uploads",
+            "type": "array"
+          },
+          "viewer_session_id": {
+            "$ref": "#/components/schemas/ViewerSessionId"
+          }
+        },
+        "required": [
+          "viewer_session_id",
+          "documents",
+          "pending_uploads",
+          "expires_at"
+        ],
+        "title": "UnlockViewerPdfResponse",
+        "type": "object"
+      },
       "UpdateProjectRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3397,11 +3441,23 @@
             },
             "title": "Pages",
             "type": "array"
+          },
+          "sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Sha256",
+            "type": "string"
+          },
+          "size_bytes": {
+            "minimum": 1.0,
+            "title": "Size Bytes",
+            "type": "integer"
           }
         },
         "required": [
           "document_id",
           "display_name",
+          "size_bytes",
+          "sha256",
           "page_count",
           "pages"
         ],
@@ -3457,6 +3513,41 @@
           "intrinsic_rotation_degrees"
         ],
         "title": "ViewerPageDto",
+        "type": "object"
+      },
+      "ViewerPendingUploadDto": {
+        "additionalProperties": false,
+        "properties": {
+          "display_name": {
+            "description": "Nome de exibição saneado, sem componentes de caminho.",
+            "maxLength": 255,
+            "minLength": 1,
+            "pattern": "^[^/\\\\\\x00]+$",
+            "title": "Display Name",
+            "type": "string"
+          },
+          "password_attempts_remaining": {
+            "maximum": 3.0,
+            "minimum": 0.0,
+            "title": "Password Attempts Remaining",
+            "type": "integer"
+          },
+          "position": {
+            "minimum": 0.0,
+            "title": "Position",
+            "type": "integer"
+          },
+          "upload_id": {
+            "$ref": "#/components/schemas/UploadId"
+          }
+        },
+        "required": [
+          "upload_id",
+          "display_name",
+          "position",
+          "password_attempts_remaining"
+        ],
+        "title": "ViewerPendingUploadDto",
         "type": "object"
       },
       "ViewerProjectResponse": {
@@ -3588,6 +3679,16 @@
             },
             "description": "Conflito de operação ou estado obsoleto."
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
           "413": {
             "content": {
               "application/json": {
@@ -3684,6 +3785,16 @@
               }
             },
             "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
           },
           "413": {
             "content": {
@@ -3804,6 +3915,16 @@
             },
             "description": "Conflito de operação ou estado obsoleto."
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
           "413": {
             "content": {
               "application/json": {
@@ -3923,6 +4044,16 @@
               }
             },
             "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
           },
           "413": {
             "content": {
@@ -4051,6 +4182,16 @@
             },
             "description": "Conflito de operação ou estado obsoleto."
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
           "413": {
             "content": {
               "application/json": {
@@ -4160,6 +4301,16 @@
               }
             },
             "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
           },
           "413": {
             "content": {
@@ -4271,6 +4422,16 @@
             },
             "description": "Conflito de operação ou estado obsoleto."
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
           "413": {
             "content": {
               "application/json": {
@@ -4379,6 +4540,16 @@
             },
             "description": "Conflito de operação ou estado obsoleto."
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
           "413": {
             "content": {
               "application/json": {
@@ -4486,6 +4657,16 @@
               }
             },
             "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
           },
           "413": {
             "content": {
@@ -4606,6 +4787,16 @@
             },
             "description": "Conflito de operação ou estado obsoleto."
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
           "413": {
             "content": {
               "application/json": {
@@ -4725,6 +4916,16 @@
               }
             },
             "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
           },
           "413": {
             "content": {
@@ -4847,6 +5048,16 @@
             },
             "description": "Conflito de operação ou estado obsoleto."
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
           "413": {
             "content": {
               "application/json": {
@@ -4964,6 +5175,16 @@
             },
             "description": "Conflito de operação ou estado obsoleto."
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
           "413": {
             "content": {
               "application/json": {
@@ -5072,6 +5293,16 @@
             },
             "description": "Conflito de operação ou estado obsoleto."
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
           "413": {
             "content": {
               "application/json": {
@@ -5177,6 +5408,16 @@
               }
             },
             "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
           },
           "413": {
             "content": {
@@ -5293,6 +5534,16 @@
               }
             },
             "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
           },
           "413": {
             "content": {
@@ -5423,6 +5674,16 @@
             },
             "description": "Conflito de operação ou estado obsoleto."
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
           "413": {
             "content": {
               "application/json": {
@@ -5552,6 +5813,16 @@
               }
             },
             "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
           },
           "413": {
             "content": {
@@ -5685,6 +5956,16 @@
             },
             "description": "Conflito de operação ou estado obsoleto."
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
           "413": {
             "content": {
               "application/json": {
@@ -5792,6 +6073,16 @@
               }
             },
             "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
           },
           "413": {
             "content": {
@@ -5922,6 +6213,16 @@
             },
             "description": "Conflito de operação ou estado obsoleto."
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
           "413": {
             "content": {
               "application/json": {
@@ -6029,6 +6330,16 @@
               }
             },
             "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
           },
           "413": {
             "content": {
@@ -6147,6 +6458,16 @@
               }
             },
             "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
           },
           "413": {
             "content": {
@@ -6287,6 +6608,16 @@
             },
             "description": "Conflito de operação ou estado obsoleto."
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
           "413": {
             "content": {
               "application/json": {
@@ -6414,6 +6745,16 @@
               }
             },
             "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
           },
           "413": {
             "content": {
@@ -6544,6 +6885,16 @@
             },
             "description": "Conflito de operação ou estado obsoleto."
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
           "413": {
             "content": {
               "application/json": {
@@ -6663,6 +7014,16 @@
             },
             "description": "Conflito de operação ou estado obsoleto."
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
           "413": {
             "content": {
               "application/json": {
@@ -6770,6 +7131,16 @@
               }
             },
             "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
           },
           "413": {
             "content": {
@@ -6908,6 +7279,16 @@
             },
             "description": "Conflito de operação ou estado obsoleto."
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
           "413": {
             "content": {
               "application/json": {
@@ -7015,6 +7396,16 @@
               }
             },
             "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
           },
           "413": {
             "content": {
@@ -7134,6 +7525,16 @@
             },
             "description": "Conflito de operação ou estado obsoleto."
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
           "413": {
             "content": {
               "application/json": {
@@ -7252,6 +7653,16 @@
             },
             "description": "Conflito de operação ou estado obsoleto."
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
           "413": {
             "content": {
               "application/json": {
@@ -7359,6 +7770,16 @@
               }
             },
             "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
           },
           "413": {
             "content": {
@@ -7481,6 +7902,16 @@
             },
             "description": "Conflito de operação ou estado obsoleto."
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
           "413": {
             "content": {
               "application/json": {
@@ -7598,6 +8029,16 @@
               }
             },
             "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
           },
           "413": {
             "content": {
@@ -7717,6 +8158,16 @@
             },
             "description": "Conflito de operação ou estado obsoleto."
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
           "413": {
             "content": {
               "application/json": {
@@ -7812,6 +8263,16 @@
               }
             },
             "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
           },
           "413": {
             "content": {
@@ -7909,6 +8370,16 @@
               }
             },
             "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
           },
           "413": {
             "content": {
@@ -8029,6 +8500,16 @@
             },
             "description": "Conflito de operação ou estado obsoleto."
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
           "413": {
             "content": {
               "application/json": {
@@ -8135,6 +8616,16 @@
             },
             "description": "Conflito de operação ou estado obsoleto."
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
           "413": {
             "content": {
               "application/json": {
@@ -8230,6 +8721,16 @@
               }
             },
             "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
           },
           "413": {
             "content": {
@@ -8349,6 +8850,16 @@
             },
             "description": "Conflito de operação ou estado obsoleto."
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
           "413": {
             "content": {
               "application/json": {
@@ -8398,6 +8909,134 @@
         "summary": "Unlock Pdf Upload",
         "tags": [
           "documents"
+        ]
+      }
+    },
+    "/api/v1/viewer-documents/{document_id}/unlock": {
+      "post": {
+        "operationId": "unlockViewerProjectDocument",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "document_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Document Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnlockPdfRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViewerDocumentDto"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Credencial Bearer ausente ou inválida."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Recurso não encontrado."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Upload acima do limite configurado."
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Tipo de mídia não suportado."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request inválido para o contrato v1."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Erro interno seguro e correlacionável."
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Unlock Viewer Project Document",
+        "tags": [
+          "viewer"
         ]
       }
     },
@@ -8456,6 +9095,16 @@
               }
             },
             "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
           },
           "413": {
             "content": {
@@ -8566,10 +9215,22 @@
                   "type": "string"
                 }
               },
-              "X-Zeny-Dpi": {
+              "X-Zeny-Effective-Dpi": {
                 "schema": {
                   "maximum": 600,
                   "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "X-Zeny-Origin-X": {
+                "schema": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "X-Zeny-Origin-Y": {
+                "schema": {
+                  "minimum": 0,
                   "type": "integer"
                 }
               },
@@ -8577,6 +9238,18 @@
                 "schema": {
                   "format": "uuid",
                   "type": "string"
+                }
+              },
+              "X-Zeny-Page-Pixel-Height": {
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "X-Zeny-Page-Pixel-Width": {
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
                 }
               },
               "X-Zeny-Pixel-Height": {
@@ -8587,6 +9260,18 @@
               },
               "X-Zeny-Pixel-Width": {
                 "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "X-Zeny-Reduced": {
+                "schema": {
+                  "type": "boolean"
+                }
+              },
+              "X-Zeny-Requested-Dpi": {
+                "schema": {
+                  "maximum": 600,
                   "minimum": 1,
                   "type": "integer"
                 }
@@ -8633,6 +9318,16 @@
               }
             },
             "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
           },
           "413": {
             "content": {
@@ -8783,10 +9478,22 @@
                   "type": "string"
                 }
               },
-              "X-Zeny-Dpi": {
+              "X-Zeny-Effective-Dpi": {
                 "schema": {
                   "maximum": 600,
                   "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "X-Zeny-Origin-X": {
+                "schema": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "X-Zeny-Origin-Y": {
+                "schema": {
+                  "minimum": 0,
                   "type": "integer"
                 }
               },
@@ -8794,6 +9501,18 @@
                 "schema": {
                   "format": "uuid",
                   "type": "string"
+                }
+              },
+              "X-Zeny-Page-Pixel-Height": {
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "X-Zeny-Page-Pixel-Width": {
+                "schema": {
+                  "minimum": 1,
+                  "type": "integer"
                 }
               },
               "X-Zeny-Pixel-Height": {
@@ -8804,6 +9523,18 @@
               },
               "X-Zeny-Pixel-Width": {
                 "schema": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "X-Zeny-Reduced": {
+                "schema": {
+                  "type": "boolean"
+                }
+              },
+              "X-Zeny-Requested-Dpi": {
+                "schema": {
+                  "maximum": 600,
                   "minimum": 1,
                   "type": "integer"
                 }
@@ -8850,6 +9581,16 @@
               }
             },
             "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
           },
           "413": {
             "content": {
@@ -8970,6 +9711,16 @@
             },
             "description": "Conflito de operação ou estado obsoleto."
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
           "413": {
             "content": {
               "application/json": {
@@ -9078,6 +9829,16 @@
             },
             "description": "Conflito de operação ou estado obsoleto."
           },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
           "413": {
             "content": {
               "application/json": {
@@ -9125,6 +9886,144 @@
           }
         ],
         "summary": "Close Viewer Session",
+        "tags": [
+          "viewer"
+        ]
+      }
+    },
+    "/api/v1/viewer-sessions/{viewer_session_id}/uploads/{upload_id}/unlock": {
+      "post": {
+        "operationId": "unlockViewerSessionPdf",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "viewer_session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Viewer Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "upload_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Upload Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnlockPdfRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnlockViewerPdfResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Credencial Bearer ausente ou inválida."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Recurso não encontrado."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Upload acima do limite configurado."
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Tipo de mídia não suportado."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request inválido para o contrato v1."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Erro interno seguro e correlacionável."
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Unlock Viewer Session Pdf",
         "tags": [
           "viewer"
         ]

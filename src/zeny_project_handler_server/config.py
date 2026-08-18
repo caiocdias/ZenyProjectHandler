@@ -23,6 +23,8 @@ UPLOAD_MAX_BYTES_ENVIRONMENT_VARIABLE = "ZENY_SERVER_UPLOAD_MAX_BYTES"
 RENDER_DPI_ENVIRONMENT_VARIABLE = "ZENY_SERVER_RENDER_DPI"
 RENDER_MAX_PIXELS_ENVIRONMENT_VARIABLE = "ZENY_SERVER_RENDER_MAX_PIXELS"
 RENDER_MAX_BYTES_ENVIRONMENT_VARIABLE = "ZENY_SERVER_RENDER_MAX_BYTES"
+VIEWER_SESSION_TTL_ENVIRONMENT_VARIABLE = "ZENY_SERVER_VIEWER_SESSION_TTL_SECONDS"
+VIEWER_MAX_FILES_ENVIRONMENT_VARIABLE = "ZENY_SERVER_VIEWER_MAX_FILES"
 
 PASSWORD_PLACEHOLDER = "troque-por-uma-senha-longa-e-aleatoria"
 DEFAULT_HOST = "0.0.0.0"
@@ -30,6 +32,8 @@ DEFAULT_PORT = 8000
 DEFAULT_DATA_DIRECTORY = Path("/data")
 DEFAULT_UPLOAD_MAX_BYTES = 256 * 1024 * 1024
 DEFAULT_RENDER_DPI = 600
+DEFAULT_VIEWER_SESSION_TTL_SECONDS = 15 * 60
+DEFAULT_VIEWER_MAX_FILES = 20
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +49,8 @@ class ServerSettings:
     render_dpi: int = DEFAULT_RENDER_DPI
     render_max_pixels: int = DEFAULT_PDF_RENDER_MAX_PIXELS
     render_max_bytes: int = DEFAULT_PDF_RENDER_MAX_BYTES
+    viewer_session_ttl_seconds: int = DEFAULT_VIEWER_SESSION_TTL_SECONDS
+    viewer_max_files: int = DEFAULT_VIEWER_MAX_FILES
 
     def __post_init__(self) -> None:
         if not self.password.strip() or self.password.strip() == PASSWORD_PLACEHOLDER:
@@ -65,6 +71,11 @@ class ServerSettings:
         _require_positive(self.upload_max_bytes, UPLOAD_MAX_BYTES_ENVIRONMENT_VARIABLE)
         _require_positive(self.render_max_pixels, RENDER_MAX_PIXELS_ENVIRONMENT_VARIABLE)
         _require_positive(self.render_max_bytes, RENDER_MAX_BYTES_ENVIRONMENT_VARIABLE)
+        _require_positive(
+            self.viewer_session_ttl_seconds,
+            VIEWER_SESSION_TTL_ENVIRONMENT_VARIABLE,
+        )
+        _require_positive(self.viewer_max_files, VIEWER_MAX_FILES_ENVIRONMENT_VARIABLE)
         object.__setattr__(self, "host", normalized_host)
         object.__setattr__(self, "log_level", normalized_level)
         object.__setattr__(
@@ -117,6 +128,16 @@ class ServerSettings:
                 values,
                 RENDER_MAX_BYTES_ENVIRONMENT_VARIABLE,
                 DEFAULT_PDF_RENDER_MAX_BYTES,
+            ),
+            viewer_session_ttl_seconds=_integer_setting(
+                values,
+                VIEWER_SESSION_TTL_ENVIRONMENT_VARIABLE,
+                DEFAULT_VIEWER_SESSION_TTL_SECONDS,
+            ),
+            viewer_max_files=_integer_setting(
+                values,
+                VIEWER_MAX_FILES_ENVIRONMENT_VARIABLE,
+                DEFAULT_VIEWER_MAX_FILES,
             ),
         )
 

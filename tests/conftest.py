@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Iterator, Sequence
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 import pytest
 
@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
     from zeny_project_handler.config import AppSettings
     from zeny_project_handler.ui.main_window import MainWindow
+    from zeny_project_handler.ui.pdf_gateway import PdfViewerGateway
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -50,6 +51,7 @@ class ApplicationFactory(Protocol):
         argv: Sequence[str] | None = None,
         *,
         settings: AppSettings | None = None,
+        pdf_viewer_gateway: PdfViewerGateway | None = None,
     ) -> tuple[QApplication, MainWindow]: ...
 
 
@@ -57,15 +59,25 @@ class ApplicationFactory(Protocol):
 def application_factory() -> Iterator[ApplicationFactory]:
     """Componha janelas e descarte seus engines antes da coleta do pytest."""
     created: list[tuple[QApplication, MainWindow]] = []
+    gateways: list[Any] = []
 
     def create(
         argv: Sequence[str] | None = None,
         *,
         settings: AppSettings | None = None,
+        pdf_viewer_gateway: PdfViewerGateway | None = None,
     ) -> tuple[QApplication, MainWindow]:
+        from tests.viewer_gateway import LocalTestPdfViewerGateway
         from zeny_project_handler.bootstrap import create_application
 
-        result = create_application(argv, settings=settings)
+        gateway = pdf_viewer_gateway or LocalTestPdfViewerGateway()
+        if isinstance(gateway, LocalTestPdfViewerGateway):
+            gateways.append(gateway)
+        result = create_application(
+            argv,
+            settings=settings,
+            pdf_viewer_gateway=gateway,
+        )
         created.append(result)
         return result
 
@@ -76,3 +88,17 @@ def application_factory() -> Iterator[ApplicationFactory]:
             window.close()
             window.release_resources()
             application.processEvents()
+        for gateway in gateways:
+            gateway.close()
+
+
+@pytest.fixture
+def pdf_viewer_gateway() -> Iterator[PdfViewerGateway]:
+    """Forneça um servidor em memória que mantém o limite UI/DTO dos testes Qt."""
+    from tests.viewer_gateway import LocalTestPdfViewerGateway
+
+    gateway = LocalTestPdfViewerGateway()
+    try:
+        yield gateway
+    finally:
+        gateway.close()

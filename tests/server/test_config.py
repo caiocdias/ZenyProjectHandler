@@ -28,6 +28,8 @@ def test_server_settings_load_supported_runtime_values(tmp_path: Path) -> None:
             "ZENY_SERVER_RENDER_DPI": "300",
             "ZENY_SERVER_RENDER_MAX_PIXELS": "12345",
             "ZENY_SERVER_RENDER_MAX_BYTES": "67890",
+            "ZENY_SERVER_VIEWER_SESSION_TTL_SECONDS": "321",
+            "ZENY_SERVER_VIEWER_MAX_FILES": "7",
         }
     )
 
@@ -39,6 +41,8 @@ def test_server_settings_load_supported_runtime_values(tmp_path: Path) -> None:
     assert settings.render_dpi == 300
     assert settings.render_max_pixels == 12345
     assert settings.render_max_bytes == 67890
+    assert settings.viewer_session_ttl_seconds == 321
+    assert settings.viewer_max_files == 7
     assert "senha longa de teste" not in repr(settings)
     assert not hasattr(settings.core_settings(), "password")
 
@@ -54,6 +58,8 @@ def test_server_settings_load_supported_runtime_values(tmp_path: Path) -> None:
         ("ZENY_SERVER_RENDER_DPI", "601", "RENDER_DPI"),
         ("ZENY_SERVER_RENDER_MAX_PIXELS", "-1", "RENDER_MAX_PIXELS"),
         ("ZENY_SERVER_RENDER_MAX_BYTES", "zero", "RENDER_MAX_BYTES"),
+        ("ZENY_SERVER_VIEWER_SESSION_TTL_SECONDS", "0", "VIEWER_SESSION_TTL_SECONDS"),
+        ("ZENY_SERVER_VIEWER_MAX_FILES", "-1", "VIEWER_MAX_FILES"),
     ],
 )
 def test_server_settings_reject_invalid_values(name: str, value: str, message: str) -> None:

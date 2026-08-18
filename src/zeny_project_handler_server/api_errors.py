@@ -65,3 +65,11 @@ def operation_conflict(message: str) -> ApiError:
 
 def unsupported_media(message: str) -> ApiError:
     return ApiError(415, ErrorCode.UNSUPPORTED_MEDIA_TYPE, message)
+
+
+def viewer_session_expired() -> ApiError:
+    return ApiError(
+        410,
+        ErrorCode.VIEWER_SESSION_EXPIRED,
+        "A sessão temporária do visualizador expirou.",
+    )

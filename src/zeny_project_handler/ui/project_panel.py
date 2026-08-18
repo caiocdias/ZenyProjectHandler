@@ -793,11 +793,31 @@ class ProjectPanelWidget(QWidget):
         source_paths = tuple(source.caminho_canonico for source in session.fontes_pdf)
         if source_paths:
             saved_page = int(str(self._settings.value(f"projects/{project_id}/page", 1)))
+            source_identities = tuple(
+                IdentidadeCredencialPdf.da_fonte(source) for source in session.fontes_pdf
+            )
+            valid_identities = {
+                identity
+                for identity, source in zip(
+                    source_identities,
+                    session.fontes_pdf,
+                    strict=True,
+                )
+                if identity.ainda_descreve(source.caminho_canonico)
+            }
+            initial_passwords = tuple(
+                self._credential_resolver.provedor.obter(identity)
+                if identity in valid_identities
+                else None
+                for identity in source_identities
+            )
+            self._credential_resolver.provedor.reter(valid_identities)
             if not self._viewer.carregar_projeto(
                 source_paths,
                 documentos=session.projeto.documentos,
                 fontes=session.fontes_pdf,
                 ordem_paginas=session.projeto.ordem_leitura_paginas,
+                senhas_iniciais=initial_passwords,
             ):
                 self._viewer.limpar()
                 self.status_changed.emit(
