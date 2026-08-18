@@ -1,14 +1,19 @@
-"""Projeções e comandos de revisão humana."""
+"""Projeções e comandos de revisão humana, sem comportamento de negócio."""
 
 from __future__ import annotations
+
+from typing import Annotated
+from uuid import UUID
 
 from pydantic import Field, JsonValue
 
 from zeny_project_handler_contracts.base import (
+    CatalogItemId,
     ContractModel,
     DecimalString,
     ElementId,
     NonEmptyString,
+    PageId,
     ProjectId,
     ProposalId,
     RegionId,
@@ -18,16 +23,25 @@ from zeny_project_handler_contracts.base import (
 )
 from zeny_project_handler_contracts.common import (
     EvidenceNavigationDto,
-    NormalizedBoxDto,
+    NormalizedPointDto,
     PageMetadataDto,
 )
 from zeny_project_handler_contracts.enums import (
     ElementCategory,
     ElementSituation,
     ReviewDecision,
+    ReviewGeometryKind,
+    ReviewProposalKind,
+    ReviewReferenceKind,
     ReviewState,
     SpanLengthSource,
 )
+
+
+class ReviewGeometryDto(ContractModel):
+    page_id: PageId
+    kind: ReviewGeometryKind
+    points: Annotated[tuple[NormalizedPointDto, ...], Field(min_length=1)]
 
 
 class ReviewProjectSummaryDto(ContractModel):
@@ -42,71 +56,165 @@ class ReviewProjectSummaryListResponse(ContractModel):
     page: PageMetadataDto
 
 
+class ReviewCatalogItemDto(ContractModel):
+    catalog_item_id: CatalogItemId
+    category: ElementCategory
+    code: NonEmptyString
+    description: NonEmptyString
+    label: NonEmptyString
+
+
+class ReviewReferenceDto(ContractModel):
+    reference_id: UUID
+    kind: ReviewReferenceKind
+    label: NonEmptyString
+    category: ElementCategory | None = None
+
+
+class ReviewAuditDto(ContractModel):
+    audit_id: UUID
+    action: ReviewDecision
+    author: NonEmptyString
+    occurred_at: UtcDateTime
+    reason: str | None = Field(default=None, max_length=1000)
+    proposal_id: ProposalId | None = None
+    created_reference_id: UUID | None = None
+    previous_values: dict[str, JsonValue] | None = None
+    confirmed_values: dict[str, JsonValue] | None = None
+
+
 class ReviewOverlayDto(ContractModel):
     proposal_id: ProposalId
-    geometry: NormalizedBoxDto
+    geometry: ReviewGeometryDto
+    link_geometry: ReviewGeometryDto
     label: NonEmptyString
     category: ElementCategory
     situation: ElementSituation
+    review_state: ReviewState
+    confidence: DecimalString | None = None
 
 
 class ReviewProposalDto(ContractModel):
     proposal_id: ProposalId
+    kind: ReviewProposalKind = ReviewProposalKind.ELEMENT
     category: ElementCategory
     situation: ElementSituation
     review_state: ReviewState
+    state_label: NonEmptyString
+    situation_label: NonEmptyString
     label: NonEmptyString
-    confidence: DecimalString
+    catalog_item_id: CatalogItemId | None = None
+    catalog_label: NonEmptyString
+    detection_summary: NonEmptyString
+    observed_code: str | None = Field(default=None, max_length=500)
+    confidence: DecimalString | None = None
     attributes: dict[str, JsonValue]
     evidence: tuple[EvidenceNavigationDto, ...]
-    overlay: ReviewOverlayDto | None = None
+    relationship_labels: tuple[str, ...] = ()
+    requires_review: bool
+    overlay: ReviewOverlayDto
 
 
 class ReviewRelationDto(ContractModel):
-    relation_id: RelationId
-    source_element_id: ElementId
-    target_element_id: ElementId
+    proposal_id: ProposalId
     relation_type: NonEmptyString
+    label: NonEmptyString
+    source_reference_id: UUID
+    target_reference_id: UUID
     review_state: ReviewState
+    state_label: NonEmptyString
+    confidence: DecimalString | None = None
     evidence: tuple[EvidenceNavigationDto, ...]
+    requires_review: bool
+    confirmed_relation_id: RelationId | None = None
+
+
+class ConfirmedElementDto(ContractModel):
+    element_id: ElementId
+    category: ElementCategory
+    situation: ElementSituation
+    label: NonEmptyString
+    catalog_label: NonEmptyString
+    geometry: ReviewGeometryDto | None = None
+
+
+class ConfirmedRelationDto(ContractModel):
+    relation_id: RelationId
+    relation_type: NonEmptyString
+    source_reference_id: UUID
+    target_reference_id: UUID
+    label: NonEmptyString
 
 
 class AnalysisRegionDto(ContractModel):
     region_id: RegionId
+    page_id: PageId
     label: NonEmptyString
-    geometry: NormalizedBoxDto
+    location_label: NonEmptyString
+    coordinate_label: NonEmptyString
+    action_summary: NonEmptyString
+    detail_summary: NonEmptyString
+    geometry: ReviewGeometryDto
     proposal_ids: tuple[ProposalId, ...]
-    relation_ids: tuple[RelationId, ...]
+    relation_proposal_ids: tuple[ProposalId, ...]
     coordinate_east: DecimalString | None = None
     coordinate_north: DecimalString | None = None
 
 
 class DetectedSpanDto(ContractModel):
-    span_id: str = Field(min_length=1, max_length=200)
+    span_id: UUID
+    proposal_id: ProposalId | None = None
     start_element_id: ElementId | None = None
     end_element_id: ElementId | None = None
-    cable_element_id: ElementId | None = None
+    cable_element_id: ElementId
+    label: NonEmptyString
+    situation: ElementSituation
+    situation_label: NonEmptyString
+    start_label: NonEmptyString
+    end_label: NonEmptyString
+    cable_label: NonEmptyString
     length: DecimalString | None = None
+    length_label: NonEmptyString
     length_source: SpanLengthSource
-    situation: ElementSituation | None = None
+    length_source_label: NonEmptyString
+    page_label: NonEmptyString
+    geometry: ReviewGeometryDto | None = None
     evidence: tuple[EvidenceNavigationDto, ...]
 
 
 class ReviewSessionResponse(ContractModel):
     review_session_id: ReviewSessionId
     project_id: ProjectId
+    service_note: NonEmptyString
     project_version: int = Field(ge=0)
     semantic_signature: NonEmptyString
+    page_order: tuple[PageId, ...]
+    catalog_items: tuple[ReviewCatalogItemDto, ...]
+    references: tuple[ReviewReferenceDto, ...]
+    confirmed_elements: tuple[ConfirmedElementDto, ...]
+    confirmed_relations: tuple[ConfirmedRelationDto, ...]
     regions: tuple[AnalysisRegionDto, ...]
     proposals: tuple[ReviewProposalDto, ...]
     relations: tuple[ReviewRelationDto, ...]
     spans: tuple[DetectedSpanDto, ...]
+    audit: tuple[ReviewAuditDto, ...]
+
+
+class ReviewElementInputDto(ContractModel):
+    category: ElementCategory
+    catalog_item_id: CatalogItemId
+    situation: ElementSituation
+    geometry: ReviewGeometryDto
+    observed_code: str | None = Field(default=None, max_length=500)
+    pole_id: ElementId | None = None
+    origin_point_id: UUID | None = None
+    target_point_id: UUID | None = None
 
 
 class AcceptReviewProposalRequest(ContractModel):
     author: NonEmptyString
     reason: str | None = Field(default=None, max_length=1000)
-    adjustments: dict[str, JsonValue] | None = None
+    adjustments: ReviewElementInputDto | None = None
     expected_review_session_id: ReviewSessionId
 
 
@@ -118,19 +226,19 @@ class RejectReviewProposalRequest(ContractModel):
 
 class CreateManualElementRequest(ContractModel):
     author: NonEmptyString
-    category: ElementCategory
-    situation: ElementSituation
-    attributes: dict[str, JsonValue]
-    evidence: tuple[EvidenceNavigationDto, ...]
+    reason: str | None = Field(default=None, max_length=1000)
+    element: ReviewElementInputDto
+    evidence: tuple[EvidenceNavigationDto, ...] = ()
     expected_project_version: int = Field(ge=0)
 
 
 class CreateManualRelationRequest(ContractModel):
     author: NonEmptyString
-    source_element_id: ElementId
-    target_element_id: ElementId
+    reason: str | None = Field(default=None, max_length=1000)
+    source_reference_id: UUID
+    target_reference_id: UUID
     relation_type: NonEmptyString
-    evidence: tuple[EvidenceNavigationDto, ...]
+    evidence: tuple[EvidenceNavigationDto, ...] = ()
     expected_project_version: int = Field(ge=0)
 
 
@@ -142,4 +250,5 @@ class ReviewDecisionResponse(ContractModel):
     review_state: ReviewState
     author: NonEmptyString
     decided_at: UtcDateTime
+    reason: str | None = Field(default=None, max_length=1000)
     project_version: int = Field(ge=0)

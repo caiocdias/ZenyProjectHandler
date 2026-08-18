@@ -29,6 +29,10 @@ from pytestqt.qtbot import QtBot
 from tests.conftest import ApplicationFactory
 from zeny_project_handler.adapters.catalog import carregar_catalogo_inicial
 from zeny_project_handler.adapters.compliance import carregar_registro_conformidade_inicial
+from zeny_project_handler.adapters.persistence import (
+    SqlAlchemyUnitOfWork,
+    create_sqlite_engine,
+)
 from zeny_project_handler.config import AppSettings
 from zeny_project_handler.domain.analysis import (
     DecisaoRevisao,
@@ -74,7 +78,7 @@ def test_span_rule_full_ui_cycle_survives_restart(
     qtbot.addWidget(window)
     window.show()
     project_id = _create_project_with_pdf(qtbot, monkeypatch, window.project_panel, source)
-    _persist_span_semantic_session(window.project_panel, project_id)
+    _persist_span_semantic_session(window.project_panel, project_id, settings.database_path)
 
     confirmations: list[str] = []
 
@@ -234,13 +238,18 @@ def _create_project_with_pdf(
     return UUID(str(project_combo.currentData()))
 
 
-def _persist_span_semantic_session(panel: object, project_id: UUID) -> None:
+def _persist_span_semantic_session(
+    panel: object,
+    project_id: UUID,
+    database_path: Path,
+) -> None:
     assert isinstance(panel, ProjectPanelWidget)
     catalog = carregar_catalogo_inicial()
     cable_type = _protected_cable(catalog)
     pole_type_id = catalog.itens_ativos(CategoriaElemento.POSTE)[0].id
     execution_id = _id("semantic-execution")
-    with panel._review_panel._service._unit_of_work() as work:
+    persistence = create_sqlite_engine(database_path)
+    with SqlAlchemyUnitOfWork(persistence) as work:
         project = work.projetos.obter(project_id)
         assert project is not None
         page = project.documentos[0].paginas[0]
@@ -350,6 +359,7 @@ def _persist_span_semantic_session(panel: object, project_id: UUID) -> None:
         work.propostas.salvar(proposal)
         work.decisoes_revisao.salvar(decision)
         work.commit()
+    persistence.dispose()
 
 
 def _span_rule_file(path: Path, *, enabled: bool = True) -> Path:

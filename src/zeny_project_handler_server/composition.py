@@ -57,6 +57,7 @@ from zeny_project_handler_contracts.session import (
 from zeny_project_handler_server.config import ServerSettings
 from zeny_project_handler_server.job_manager import JobManager
 from zeny_project_handler_server.project_api import ProjectApiService
+from zeny_project_handler_server.review_api import ReviewApiService
 from zeny_project_handler_server.viewer_api import ViewerApiService
 
 SERVER_CAPABILITIES = (
@@ -70,6 +71,8 @@ SERVER_CAPABILITIES = (
     "temporary-viewer-sessions",
     "remote-analysis-jobs",
     "global-operation-observability",
+    "remote-human-review",
+    "review-audit-projections",
 )
 
 
@@ -134,6 +137,9 @@ class ServerRuntimeProtocol(Protocol):
     def viewer_api(self) -> ViewerApiService | None: ...
 
     @property
+    def review_api(self) -> ReviewApiService | None: ...
+
+    @property
     def jobs(self) -> JobLifecycle: ...
 
     def close(self) -> None: ...
@@ -148,6 +154,7 @@ class ServerRuntime:
     jobs: JobLifecycle
     project_api: ProjectApiService | None = None
     viewer_api: ViewerApiService | None = None
+    review_api: ReviewApiService | None = None
     _closed: bool = False
 
     def session_capabilities(self) -> SessionCapabilitiesResponse:
@@ -267,6 +274,7 @@ def compose_server_runtime(settings: ServerSettings) -> ServerRuntime:
         jobs=jobs,
         project_api=project_api,
         viewer_api=viewer_api,
+        review_api=ReviewApiService(core.engine),
     )
 
 

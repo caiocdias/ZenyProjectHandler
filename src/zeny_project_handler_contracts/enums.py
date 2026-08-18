@@ -79,6 +79,7 @@ class ElementSituation(StrEnum):
 
 class ReviewState(StrEnum):
     PENDING = "PENDING"
+    CONFLICTING = "CONFLICTING"
     ACCEPTED = "ACCEPTED"
     ADJUSTED = "ADJUSTED"
     REJECTED = "REJECTED"
@@ -89,6 +90,24 @@ class ReviewDecision(StrEnum):
     ADJUST = "ADJUST"
     REJECT = "REJECT"
     CREATE_MANUAL = "CREATE_MANUAL"
+
+
+class ReviewProposalKind(StrEnum):
+    ELEMENT = "ELEMENT"
+    RELATION = "RELATION"
+
+
+class ReviewReferenceKind(StrEnum):
+    ELEMENT = "ELEMENT"
+    NETWORK_POINT = "NETWORK_POINT"
+    TERMINAL = "TERMINAL"
+
+
+class ReviewGeometryKind(StrEnum):
+    POINT = "POINT"
+    BOX = "BOX"
+    POLYLINE = "POLYLINE"
+    POLYGON = "POLYGON"
 
 
 class SpanLengthSource(StrEnum):

@@ -19,7 +19,8 @@ if TYPE_CHECKING:
     from zeny_project_handler.config import AppSettings
     from zeny_project_handler.ui.main_window import MainWindow
     from zeny_project_handler.ui.pdf_gateway import PdfViewerGateway
-    from zeny_project_handler.ui.project_gateway import ProjectGateway
+from zeny_project_handler.ui.project_gateway import ProjectGateway
+from zeny_project_handler.ui.review_gateway import ReviewGateway
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -54,6 +55,7 @@ class ApplicationFactory(Protocol):
         settings: AppSettings | None = None,
         pdf_viewer_gateway: PdfViewerGateway | None = None,
         project_gateway: ProjectGateway | None = None,
+        review_gateway: ReviewGateway | None = None,
     ) -> tuple[QApplication, MainWindow]: ...
 
 
@@ -70,8 +72,13 @@ def application_factory() -> Iterator[ApplicationFactory]:
         settings: AppSettings | None = None,
         pdf_viewer_gateway: PdfViewerGateway | None = None,
         project_gateway: ProjectGateway | None = None,
+        review_gateway: ReviewGateway | None = None,
     ) -> tuple[QApplication, MainWindow]:
-        from tests.remote_gateways import DirectPdfViewerGateway, DirectProjectGateway
+        from tests.remote_gateways import (
+            DirectPdfViewerGateway,
+            DirectProjectGateway,
+            DirectReviewGateway,
+        )
         from zeny_project_handler.bootstrap import create_application
         from zeny_project_handler_server.composition import compose_server_runtime
         from zeny_project_handler_server.config import ServerSettings
@@ -97,12 +104,17 @@ def application_factory() -> Iterator[ApplicationFactory]:
             gateway: Any = DirectPdfViewerGateway(runtime)
         else:
             gateway = pdf_viewer_gateway
+        if review_gateway is None:
+            if runtime is None:
+                raise ValueError("O gateway de revisão deve acompanhar o runtime de teste")
+            review_gateway = DirectReviewGateway(runtime)
         gateways.append(gateway)
         result = create_application(
             argv,
             settings=settings,
             pdf_viewer_gateway=gateway,
             project_gateway=project_gateway,
+            review_gateway=review_gateway,
         )
         created.append(result)
         return result

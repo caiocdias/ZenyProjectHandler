@@ -71,6 +71,7 @@ from zeny_project_handler.ui.application_icon import (
 from zeny_project_handler.ui.main_window import MainWindow
 from zeny_project_handler.ui.pdf_gateway import PdfViewerGateway, configured_pdf_viewer_gateway
 from zeny_project_handler.ui.project_gateway import ProjectGateway, configured_project_gateway
+from zeny_project_handler.ui.review_gateway import ReviewGateway, configured_review_gateway
 from zeny_project_handler.ui.theme import THEME_SETTING_KEY, Tema, aplicar_tema
 from zeny_project_handler.windows_app_identity import (
     configurar_identidade_aplicativo_windows,
@@ -98,6 +99,7 @@ def create_application(
     settings: AppSettings | None = None,
     pdf_viewer_gateway: PdfViewerGateway | None = None,
     project_gateway: ProjectGateway | None = None,
+    review_gateway: ReviewGateway | None = None,
 ) -> tuple[QApplication, MainWindow]:
     """Monte a aplicação sem iniciar o loop de eventos."""
     app_settings = settings or AppSettings.from_environment()
@@ -112,6 +114,7 @@ def create_application(
                 app_settings,
                 pdf_viewer_gateway,
                 project_gateway,
+                review_gateway,
             )
         except (ApplicationError, ValueError) as error:
             observation.failed(error, expected=True)
@@ -128,6 +131,7 @@ def _compose_application(
     app_settings: AppSettings,
     pdf_viewer_gateway: PdfViewerGateway | None = None,
     project_gateway: ProjectGateway | None = None,
+    review_gateway: ReviewGateway | None = None,
 ) -> tuple[QApplication, MainWindow]:
     engine = initialize_local_storage(app_settings)
     lifetime = _EngineLifetime(engine)
@@ -139,6 +143,7 @@ def _compose_application(
             lifetime,
             pdf_viewer_gateway,
             project_gateway,
+            review_gateway,
         )
     except BaseException:
         lifetime.dispose()
@@ -152,6 +157,7 @@ def _compose_initialized_application(
     lifetime: _EngineLifetime,
     pdf_viewer_gateway: PdfViewerGateway | None,
     project_gateway: ProjectGateway | None,
+    review_gateway: ReviewGateway | None,
 ) -> tuple[QApplication, MainWindow]:
 
     arguments = list(argv) if argv is not None else list(sys.argv)
@@ -241,6 +247,7 @@ def _compose_initialized_application(
         ),
         pdf_tile_cache_max_bytes=app_settings.pdf_tile_cache_max_bytes,
         provedor_credenciais_pdf=pdf_credentials,
+        review_gateway=review_gateway or configured_review_gateway(),
         review_service=review_service,
         workflow_service=workflow_service,
         portability_service=ServicoPortabilidadeProjeto(

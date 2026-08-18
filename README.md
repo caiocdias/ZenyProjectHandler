@@ -21,10 +21,11 @@ há instalador ou pacote de distribuição para máquinas sem Python.
   global visível a todos os clientes.
 - Interpretação versionada de postes, estruturas MT/BT, cabos e equipamentos, além de relações entre
   os elementos. Resultados catalogados são promovidos automaticamente e continuam auditáveis.
-- Revisão humana para aceitar, corrigir ou rejeitar propostas, criar elementos e relações manuais e
-  navegar da lista até a evidência no PDF.
-- Regiões de ocorrência e vãos derivados da análise, com controle independente de visibilidade dos
-  elementos no desenho.
+- Painel **Resultados** remoto: sessão, catálogo, regiões, vãos, propostas, relações, decisões e
+  auditoria chegam como DTOs prontos da API; aceitar, corrigir, rejeitar e criar itens manuais são
+  persistidos no servidor com controle de conflito entre revisores.
+- Regiões de ocorrência, vãos, rótulos e vínculos são derivados exclusivamente no servidor; o
+  cliente conserva navegação e controle independente de visibilidade dos elementos no desenho.
 - Inspeção documental de cabeçalho, servidão, carimbos e campos de assinatura.
 - Motor declarativo de conformidade com quatro famílias de provedores de fatos, snapshots
   persistidos e callouts vetoriais no PDF. O seed atual é

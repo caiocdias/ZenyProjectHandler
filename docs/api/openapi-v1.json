@@ -7,16 +7,12 @@
           "adjustments": {
             "anyOf": [
               {
-                "additionalProperties": {
-                  "$ref": "#/components/schemas/JsonValue"
-                },
-                "type": "object"
+                "$ref": "#/components/schemas/ReviewElementInputDto"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Adjustments"
+            ]
           },
           "author": {
             "maxLength": 500,
@@ -116,6 +112,12 @@
       "AnalysisRegionDto": {
         "additionalProperties": false,
         "properties": {
+          "action_summary": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Action Summary",
+            "type": "string"
+          },
           "coordinate_east": {
             "anyOf": [
               {
@@ -128,6 +130,12 @@
               }
             ],
             "title": "Coordinate East"
+          },
+          "coordinate_label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Coordinate Label",
+            "type": "string"
           },
           "coordinate_north": {
             "anyOf": [
@@ -142,14 +150,29 @@
             ],
             "title": "Coordinate North"
           },
+          "detail_summary": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Detail Summary",
+            "type": "string"
+          },
           "geometry": {
-            "$ref": "#/components/schemas/NormalizedBoxDto"
+            "$ref": "#/components/schemas/ReviewGeometryDto"
           },
           "label": {
             "maxLength": 500,
             "minLength": 1,
             "title": "Label",
             "type": "string"
+          },
+          "location_label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Location Label",
+            "type": "string"
+          },
+          "page_id": {
+            "$ref": "#/components/schemas/PageId"
           },
           "proposal_ids": {
             "items": {
@@ -161,20 +184,25 @@
           "region_id": {
             "$ref": "#/components/schemas/RegionId"
           },
-          "relation_ids": {
+          "relation_proposal_ids": {
             "items": {
-              "$ref": "#/components/schemas/RelationId"
+              "$ref": "#/components/schemas/ProposalId"
             },
-            "title": "Relation Ids",
+            "title": "Relation Proposal Ids",
             "type": "array"
           }
         },
         "required": [
           "region_id",
+          "page_id",
           "label",
+          "location_label",
+          "coordinate_label",
+          "action_summary",
+          "detail_summary",
           "geometry",
           "proposal_ids",
-          "relation_ids"
+          "relation_proposal_ids"
         ],
         "title": "AnalysisRegionDto",
         "type": "object"
@@ -441,6 +469,11 @@
         ],
         "title": "CancelJobResponse",
         "type": "object"
+      },
+      "CatalogItemId": {
+        "format": "uuid",
+        "title": "CatalogItemId",
+        "type": "string"
       },
       "CloseViewerSessionResponse": {
         "additionalProperties": false,
@@ -836,6 +869,90 @@
         "title": "ConfirmRuleImportRequest",
         "type": "object"
       },
+      "ConfirmedElementDto": {
+        "additionalProperties": false,
+        "properties": {
+          "catalog_label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Catalog Label",
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/components/schemas/ElementCategory"
+          },
+          "element_id": {
+            "$ref": "#/components/schemas/ElementId"
+          },
+          "geometry": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewGeometryDto"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "situation": {
+            "$ref": "#/components/schemas/ElementSituation"
+          }
+        },
+        "required": [
+          "element_id",
+          "category",
+          "situation",
+          "label",
+          "catalog_label"
+        ],
+        "title": "ConfirmedElementDto",
+        "type": "object"
+      },
+      "ConfirmedRelationDto": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "relation_id": {
+            "$ref": "#/components/schemas/RelationId"
+          },
+          "relation_type": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Relation Type",
+            "type": "string"
+          },
+          "source_reference_id": {
+            "format": "uuid",
+            "title": "Source Reference Id",
+            "type": "string"
+          },
+          "target_reference_id": {
+            "format": "uuid",
+            "title": "Target Reference Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "relation_id",
+          "relation_type",
+          "source_reference_id",
+          "target_reference_id",
+          "label"
+        ],
+        "title": "ConfirmedRelationDto",
+        "type": "object"
+      },
       "CorrelationId": {
         "format": "uuid",
         "title": "CorrelationId",
@@ -925,23 +1042,17 @@
       "CreateManualElementRequest": {
         "additionalProperties": false,
         "properties": {
-          "attributes": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/JsonValue"
-            },
-            "title": "Attributes",
-            "type": "object"
-          },
           "author": {
             "maxLength": 500,
             "minLength": 1,
             "title": "Author",
             "type": "string"
           },
-          "category": {
-            "$ref": "#/components/schemas/ElementCategory"
+          "element": {
+            "$ref": "#/components/schemas/ReviewElementInputDto"
           },
           "evidence": {
+            "default": [],
             "items": {
               "$ref": "#/components/schemas/EvidenceNavigationDto"
             },
@@ -953,16 +1064,22 @@
             "title": "Expected Project Version",
             "type": "integer"
           },
-          "situation": {
-            "$ref": "#/components/schemas/ElementSituation"
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
           }
         },
         "required": [
           "author",
-          "category",
-          "situation",
-          "attributes",
-          "evidence",
+          "element",
           "expected_project_version"
         ],
         "title": "CreateManualElementRequest",
@@ -978,6 +1095,7 @@
             "type": "string"
           },
           "evidence": {
+            "default": [],
             "items": {
               "$ref": "#/components/schemas/EvidenceNavigationDto"
             },
@@ -989,25 +1107,40 @@
             "title": "Expected Project Version",
             "type": "integer"
           },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
           "relation_type": {
             "maxLength": 500,
             "minLength": 1,
             "title": "Relation Type",
             "type": "string"
           },
-          "source_element_id": {
-            "$ref": "#/components/schemas/ElementId"
+          "source_reference_id": {
+            "format": "uuid",
+            "title": "Source Reference Id",
+            "type": "string"
           },
-          "target_element_id": {
-            "$ref": "#/components/schemas/ElementId"
+          "target_reference_id": {
+            "format": "uuid",
+            "title": "Target Reference Id",
+            "type": "string"
           }
         },
         "required": [
           "author",
-          "source_element_id",
-          "target_element_id",
+          "source_reference_id",
+          "target_reference_id",
           "relation_type",
-          "evidence",
           "expected_project_version"
         ],
         "title": "CreateManualRelationRequest",
@@ -1169,14 +1302,13 @@
         "additionalProperties": false,
         "properties": {
           "cable_element_id": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ElementId"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/ElementId"
+          },
+          "cable_label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Cable Label",
+            "type": "string"
           },
           "end_element_id": {
             "anyOf": [
@@ -1188,12 +1320,34 @@
               }
             ]
           },
+          "end_label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "End Label",
+            "type": "string"
+          },
           "evidence": {
             "items": {
               "$ref": "#/components/schemas/EvidenceNavigationDto"
             },
             "title": "Evidence",
             "type": "array"
+          },
+          "geometry": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewGeometryDto"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
           },
           "length": {
             "anyOf": [
@@ -1208,22 +1362,48 @@
             ],
             "title": "Length"
           },
+          "length_label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Length Label",
+            "type": "string"
+          },
           "length_source": {
             "$ref": "#/components/schemas/SpanLengthSource"
           },
-          "situation": {
+          "length_source_label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Length Source Label",
+            "type": "string"
+          },
+          "page_label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Page Label",
+            "type": "string"
+          },
+          "proposal_id": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ElementSituation"
+                "$ref": "#/components/schemas/ProposalId"
               },
               {
                 "type": "null"
               }
             ]
           },
-          "span_id": {
-            "maxLength": 200,
+          "situation": {
+            "$ref": "#/components/schemas/ElementSituation"
+          },
+          "situation_label": {
+            "maxLength": 500,
             "minLength": 1,
+            "title": "Situation Label",
+            "type": "string"
+          },
+          "span_id": {
+            "format": "uuid",
             "title": "Span Id",
             "type": "string"
           },
@@ -1236,11 +1416,27 @@
                 "type": "null"
               }
             ]
+          },
+          "start_label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Start Label",
+            "type": "string"
           }
         },
         "required": [
           "span_id",
+          "cable_element_id",
+          "label",
+          "situation",
+          "situation_label",
+          "start_label",
+          "end_label",
+          "cable_label",
+          "length_label",
           "length_source",
+          "length_source_label",
+          "page_label",
           "evidence"
         ],
         "title": "DetectedSpanDto",
@@ -2762,6 +2958,138 @@
         "title": "ReplacePageOrderRequest",
         "type": "object"
       },
+      "ReviewAuditDto": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/ReviewDecision"
+          },
+          "audit_id": {
+            "format": "uuid",
+            "title": "Audit Id",
+            "type": "string"
+          },
+          "author": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Author",
+            "type": "string"
+          },
+          "confirmed_values": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed Values"
+          },
+          "created_reference_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created Reference Id"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
+          "previous_values": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Values"
+          },
+          "proposal_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProposalId"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "audit_id",
+          "action",
+          "author",
+          "occurred_at"
+        ],
+        "title": "ReviewAuditDto",
+        "type": "object"
+      },
+      "ReviewCatalogItemDto": {
+        "additionalProperties": false,
+        "properties": {
+          "catalog_item_id": {
+            "$ref": "#/components/schemas/CatalogItemId"
+          },
+          "category": {
+            "$ref": "#/components/schemas/ElementCategory"
+          },
+          "code": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          },
+          "description": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Description",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "catalog_item_id",
+          "category",
+          "code",
+          "description",
+          "label"
+        ],
+        "title": "ReviewCatalogItemDto",
+        "type": "object"
+      },
       "ReviewDecision": {
         "enum": [
           "ACCEPT",
@@ -2814,6 +3142,18 @@
               }
             ]
           },
+          "reason": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
           "relation_id": {
             "anyOf": [
               {
@@ -2838,14 +3178,134 @@
         "title": "ReviewDecisionResponse",
         "type": "object"
       },
+      "ReviewElementInputDto": {
+        "additionalProperties": false,
+        "properties": {
+          "catalog_item_id": {
+            "$ref": "#/components/schemas/CatalogItemId"
+          },
+          "category": {
+            "$ref": "#/components/schemas/ElementCategory"
+          },
+          "geometry": {
+            "$ref": "#/components/schemas/ReviewGeometryDto"
+          },
+          "observed_code": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Code"
+          },
+          "origin_point_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin Point Id"
+          },
+          "pole_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ElementId"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "situation": {
+            "$ref": "#/components/schemas/ElementSituation"
+          },
+          "target_point_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Point Id"
+          }
+        },
+        "required": [
+          "category",
+          "catalog_item_id",
+          "situation",
+          "geometry"
+        ],
+        "title": "ReviewElementInputDto",
+        "type": "object"
+      },
+      "ReviewGeometryDto": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/ReviewGeometryKind"
+          },
+          "page_id": {
+            "$ref": "#/components/schemas/PageId"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/NormalizedPointDto"
+            },
+            "minItems": 1,
+            "title": "Points",
+            "type": "array"
+          }
+        },
+        "required": [
+          "page_id",
+          "kind",
+          "points"
+        ],
+        "title": "ReviewGeometryDto",
+        "type": "object"
+      },
+      "ReviewGeometryKind": {
+        "enum": [
+          "POINT",
+          "BOX",
+          "POLYLINE",
+          "POLYGON"
+        ],
+        "title": "ReviewGeometryKind",
+        "type": "string"
+      },
       "ReviewOverlayDto": {
         "additionalProperties": false,
         "properties": {
           "category": {
             "$ref": "#/components/schemas/ElementCategory"
           },
+          "confidence": {
+            "anyOf": [
+              {
+                "description": "Número decimal codificado como texto para preservar precisão.",
+                "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
           "geometry": {
-            "$ref": "#/components/schemas/NormalizedBoxDto"
+            "$ref": "#/components/schemas/ReviewGeometryDto"
           },
           "label": {
             "maxLength": 500,
@@ -2853,8 +3313,14 @@
             "title": "Label",
             "type": "string"
           },
+          "link_geometry": {
+            "$ref": "#/components/schemas/ReviewGeometryDto"
+          },
           "proposal_id": {
             "$ref": "#/components/schemas/ProposalId"
+          },
+          "review_state": {
+            "$ref": "#/components/schemas/ReviewState"
           },
           "situation": {
             "$ref": "#/components/schemas/ElementSituation"
@@ -2863,9 +3329,11 @@
         "required": [
           "proposal_id",
           "geometry",
+          "link_geometry",
           "label",
           "category",
-          "situation"
+          "situation",
+          "review_state"
         ],
         "title": "ReviewOverlayDto",
         "type": "object"
@@ -2933,14 +3401,206 @@
             "title": "Attributes",
             "type": "object"
           },
+          "catalog_item_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CatalogItemId"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "catalog_label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Catalog Label",
+            "type": "string"
+          },
           "category": {
             "$ref": "#/components/schemas/ElementCategory"
           },
           "confidence": {
-            "description": "Número decimal codificado como texto para preservar precisão.",
-            "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
-            "title": "Confidence",
+            "anyOf": [
+              {
+                "description": "Número decimal codificado como texto para preservar precisão.",
+                "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "detection_summary": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Detection Summary",
             "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceNavigationDto"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ReviewProposalKind",
+            "default": "ELEMENT"
+          },
+          "label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "observed_code": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed Code"
+          },
+          "overlay": {
+            "$ref": "#/components/schemas/ReviewOverlayDto"
+          },
+          "proposal_id": {
+            "$ref": "#/components/schemas/ProposalId"
+          },
+          "relationship_labels": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Relationship Labels",
+            "type": "array"
+          },
+          "requires_review": {
+            "title": "Requires Review",
+            "type": "boolean"
+          },
+          "review_state": {
+            "$ref": "#/components/schemas/ReviewState"
+          },
+          "situation": {
+            "$ref": "#/components/schemas/ElementSituation"
+          },
+          "situation_label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Situation Label",
+            "type": "string"
+          },
+          "state_label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "State Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposal_id",
+          "category",
+          "situation",
+          "review_state",
+          "state_label",
+          "situation_label",
+          "label",
+          "catalog_label",
+          "detection_summary",
+          "attributes",
+          "evidence",
+          "requires_review",
+          "overlay"
+        ],
+        "title": "ReviewProposalDto",
+        "type": "object"
+      },
+      "ReviewProposalKind": {
+        "enum": [
+          "ELEMENT",
+          "RELATION"
+        ],
+        "title": "ReviewProposalKind",
+        "type": "string"
+      },
+      "ReviewReferenceDto": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ElementCategory"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ReviewReferenceKind"
+          },
+          "label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "reference_id": {
+            "format": "uuid",
+            "title": "Reference Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reference_id",
+          "kind",
+          "label"
+        ],
+        "title": "ReviewReferenceDto",
+        "type": "object"
+      },
+      "ReviewReferenceKind": {
+        "enum": [
+          "ELEMENT",
+          "NETWORK_POINT",
+          "TERMINAL"
+        ],
+        "title": "ReviewReferenceKind",
+        "type": "string"
+      },
+      "ReviewRelationDto": {
+        "additionalProperties": false,
+        "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "description": "Número decimal codificado como texto para preservar precisão.",
+                "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "confirmed_relation_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RelationId"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "evidence": {
             "items": {
@@ -2955,51 +3615,8 @@
             "title": "Label",
             "type": "string"
           },
-          "overlay": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ReviewOverlayDto"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
           "proposal_id": {
             "$ref": "#/components/schemas/ProposalId"
-          },
-          "review_state": {
-            "$ref": "#/components/schemas/ReviewState"
-          },
-          "situation": {
-            "$ref": "#/components/schemas/ElementSituation"
-          }
-        },
-        "required": [
-          "proposal_id",
-          "category",
-          "situation",
-          "review_state",
-          "label",
-          "confidence",
-          "attributes",
-          "evidence"
-        ],
-        "title": "ReviewProposalDto",
-        "type": "object"
-      },
-      "ReviewRelationDto": {
-        "additionalProperties": false,
-        "properties": {
-          "evidence": {
-            "items": {
-              "$ref": "#/components/schemas/EvidenceNavigationDto"
-            },
-            "title": "Evidence",
-            "type": "array"
-          },
-          "relation_id": {
-            "$ref": "#/components/schemas/RelationId"
           },
           "relation_type": {
             "maxLength": 500,
@@ -3007,23 +3624,40 @@
             "title": "Relation Type",
             "type": "string"
           },
+          "requires_review": {
+            "title": "Requires Review",
+            "type": "boolean"
+          },
           "review_state": {
             "$ref": "#/components/schemas/ReviewState"
           },
-          "source_element_id": {
-            "$ref": "#/components/schemas/ElementId"
+          "source_reference_id": {
+            "format": "uuid",
+            "title": "Source Reference Id",
+            "type": "string"
           },
-          "target_element_id": {
-            "$ref": "#/components/schemas/ElementId"
+          "state_label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "State Label",
+            "type": "string"
+          },
+          "target_reference_id": {
+            "format": "uuid",
+            "title": "Target Reference Id",
+            "type": "string"
           }
         },
         "required": [
-          "relation_id",
-          "source_element_id",
-          "target_element_id",
+          "proposal_id",
           "relation_type",
+          "label",
+          "source_reference_id",
+          "target_reference_id",
           "review_state",
-          "evidence"
+          "state_label",
+          "evidence",
+          "requires_review"
         ],
         "title": "ReviewRelationDto",
         "type": "object"
@@ -3036,6 +3670,41 @@
       "ReviewSessionResponse": {
         "additionalProperties": false,
         "properties": {
+          "audit": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewAuditDto"
+            },
+            "title": "Audit",
+            "type": "array"
+          },
+          "catalog_items": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewCatalogItemDto"
+            },
+            "title": "Catalog Items",
+            "type": "array"
+          },
+          "confirmed_elements": {
+            "items": {
+              "$ref": "#/components/schemas/ConfirmedElementDto"
+            },
+            "title": "Confirmed Elements",
+            "type": "array"
+          },
+          "confirmed_relations": {
+            "items": {
+              "$ref": "#/components/schemas/ConfirmedRelationDto"
+            },
+            "title": "Confirmed Relations",
+            "type": "array"
+          },
+          "page_order": {
+            "items": {
+              "$ref": "#/components/schemas/PageId"
+            },
+            "title": "Page Order",
+            "type": "array"
+          },
           "project_id": {
             "$ref": "#/components/schemas/ProjectId"
           },
@@ -3049,6 +3718,13 @@
               "$ref": "#/components/schemas/ReviewProposalDto"
             },
             "title": "Proposals",
+            "type": "array"
+          },
+          "references": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewReferenceDto"
+            },
+            "title": "References",
             "type": "array"
           },
           "regions": {
@@ -3074,6 +3750,12 @@
             "title": "Semantic Signature",
             "type": "string"
           },
+          "service_note": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Service Note",
+            "type": "string"
+          },
           "spans": {
             "items": {
               "$ref": "#/components/schemas/DetectedSpanDto"
@@ -3085,12 +3767,19 @@
         "required": [
           "review_session_id",
           "project_id",
+          "service_note",
           "project_version",
           "semantic_signature",
+          "page_order",
+          "catalog_items",
+          "references",
+          "confirmed_elements",
+          "confirmed_relations",
           "regions",
           "proposals",
           "relations",
-          "spans"
+          "spans",
+          "audit"
         ],
         "title": "ReviewSessionResponse",
         "type": "object"
@@ -3098,6 +3787,7 @@
       "ReviewState": {
         "enum": [
           "PENDING",
+          "CONFLICTING",
           "ACCEPTED",
           "ADJUSTED",
           "REJECTED"

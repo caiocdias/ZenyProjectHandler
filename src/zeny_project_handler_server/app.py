@@ -64,6 +64,15 @@ from zeny_project_handler_contracts.projects import (
     ProjectSummaryListResponse,
     UpdateProjectRequest,
 )
+from zeny_project_handler_contracts.review import (
+    AcceptReviewProposalRequest,
+    CreateManualElementRequest,
+    CreateManualRelationRequest,
+    RejectReviewProposalRequest,
+    ReviewDecisionResponse,
+    ReviewProjectSummaryListResponse,
+    ReviewSessionResponse,
+)
 from zeny_project_handler_contracts.session import HealthLiveResponse, SessionCapabilitiesResponse
 from zeny_project_handler_contracts.viewer import (
     CloseViewerSessionResponse,
@@ -88,6 +97,7 @@ from zeny_project_handler_server.composition import (
 )
 from zeny_project_handler_server.config import ServerSettings
 from zeny_project_handler_server.project_api import ManagedDownload, ProjectApiService
+from zeny_project_handler_server.review_api import ReviewApiService
 from zeny_project_handler_server.viewer_api import ViewerApiService, ViewerRaster
 
 CORRELATION_HEADER = "X-Correlation-ID"
@@ -525,6 +535,85 @@ def create_app(
         return _jobs(request).cancel(job_id)
 
     @application.get(
+        f"{API_V1_PREFIX}/review/projects",
+        response_model=ReviewProjectSummaryListResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def list_review_projects(
+        request: Request,
+        limit: int = Query(default=50, ge=1, le=200),
+        offset: int = Query(default=0, ge=0),
+    ) -> ReviewProjectSummaryListResponse:
+        return _review_api(request).list_projects(limit=limit, offset=offset)
+
+    @application.get(
+        f"{API_V1_PREFIX}/projects/{{project_id}}/review-session",
+        response_model=ReviewSessionResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def get_review_session(
+        request: Request,
+        project_id: UUID,
+    ) -> ReviewSessionResponse:
+        return _review_api(request).get_session(project_id)
+
+    @application.post(
+        f"{API_V1_PREFIX}/review/proposals/{{proposal_id}}/accept",
+        response_model=ReviewDecisionResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def accept_review_proposal(
+        request: Request,
+        proposal_id: UUID,
+        payload: AcceptReviewProposalRequest,
+    ) -> ReviewDecisionResponse:
+        return _review_api(request).accept(proposal_id, payload)
+
+    @application.post(
+        f"{API_V1_PREFIX}/review/proposals/{{proposal_id}}/reject",
+        response_model=ReviewDecisionResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def reject_review_proposal(
+        request: Request,
+        proposal_id: UUID,
+        payload: RejectReviewProposalRequest,
+    ) -> ReviewDecisionResponse:
+        return _review_api(request).reject(proposal_id, payload)
+
+    @application.post(
+        f"{API_V1_PREFIX}/projects/{{project_id}}/review/elements",
+        status_code=status.HTTP_201_CREATED,
+        response_model=ReviewDecisionResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def create_manual_review_element(
+        request: Request,
+        project_id: UUID,
+        payload: CreateManualElementRequest,
+    ) -> ReviewDecisionResponse:
+        return _review_api(request).create_manual_element(project_id, payload)
+
+    @application.post(
+        f"{API_V1_PREFIX}/projects/{{project_id}}/review/relations",
+        status_code=status.HTTP_201_CREATED,
+        response_model=ReviewDecisionResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def create_manual_review_relation(
+        request: Request,
+        project_id: UUID,
+        payload: CreateManualRelationRequest,
+    ) -> ReviewDecisionResponse:
+        return _review_api(request).create_manual_relation(project_id, payload)
+
+    @application.get(
         f"{API_V1_PREFIX}/projects/{{project_id}}/photos",
         response_model=ManagedPhotoListResponse,
         dependencies=protected,
@@ -600,6 +689,13 @@ def _viewer_api(request: Request) -> ViewerApiService:
     service = _runtime(request).viewer_api
     if service is None:
         raise ApiError(503, ErrorCode.OPERATION_CONFLICT, "O visualizador não está disponível.")
+    return service
+
+
+def _review_api(request: Request) -> ReviewApiService:
+    service = _runtime(request).review_api
+    if service is None:
+        raise ApiError(503, ErrorCode.OPERATION_CONFLICT, "A revisão não está disponível.")
     return service
 
 

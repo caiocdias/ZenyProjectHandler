@@ -53,6 +53,7 @@ from .pdf_viewer import PdfViewerWidget
 from .portability_panel import PortabilityPanelWidget
 from .project_gateway import ProjectGateway
 from .project_panel import ProjectPanelWidget
+from .review_gateway import ReviewGateway
 from .review_panel import ReviewPanelWidget
 from .theme import THEME_SETTING_KEY, Tema, aplicar_tema
 
@@ -341,6 +342,7 @@ class MainWindow(QMainWindow):
         pdf_render_budget: OrcamentoRenderizacaoPdf,
         pdf_tile_cache_max_bytes: int,
         provedor_credenciais_pdf: ProvedorCredenciaisPdfMemoria | None = None,
+        review_gateway: ReviewGateway | None = None,
         review_service: ServicoRevisaoHumana | None = None,
         workflow_service: ServicoFluxoMvp | None = None,
         portability_service: ServicoPortabilidadeProjeto | None = None,
@@ -397,9 +399,9 @@ class MainWindow(QMainWindow):
         self.portability_panel: PortabilityPanelWidget | None = None
         self.documentation_panel: DocumentationPanelWidget | None = None
         right_docks: list[QDockWidget] = []
-        if review_service is not None:
+        if review_gateway is not None:
             self.review_panel = ReviewPanelWidget(
-                service=review_service,
+                gateway=review_gateway,
                 viewer=self.pdf_viewer,
                 parent=self,
             )
@@ -416,31 +418,36 @@ class MainWindow(QMainWindow):
                 lambda _proposal_id, review_dock=dock: review_dock.raise_()
             )
             right_docks.append(dock)
-            if compliance_registry_service is not None and compliance_analysis_service is not None:
-                self.documentation_panel = DocumentationPanelWidget(
-                    service=review_service,
-                    registry_service=compliance_registry_service,
-                    analysis_service=compliance_analysis_service,
-                    viewer=self.pdf_viewer,
-                    parent=self,
-                )
-                self.documentation_panel.status_changed.connect(self.statusBar().showMessage)
-                documentation_dock = QDockWidget(
-                    "Documentação e conformidade",
-                    self,
-                )
-                documentation_dock.setObjectName("documentationComplianceDock")
-                documentation_dock.setAllowedAreas(
-                    Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
-                )
-                documentation_dock.setWidget(self.documentation_panel)
-                self._register_dock(documentation_dock)
-                self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, documentation_dock)
+        if (
+            review_service is not None
+            and compliance_registry_service is not None
+            and compliance_analysis_service is not None
+        ):
+            self.documentation_panel = DocumentationPanelWidget(
+                service=review_service,
+                registry_service=compliance_registry_service,
+                analysis_service=compliance_analysis_service,
+                viewer=self.pdf_viewer,
+                parent=self,
+            )
+            self.documentation_panel.status_changed.connect(self.statusBar().showMessage)
+            documentation_dock = QDockWidget(
+                "Documentação e conformidade",
+                self,
+            )
+            documentation_dock.setObjectName("documentationComplianceDock")
+            documentation_dock.setAllowedAreas(
+                Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
+            )
+            documentation_dock.setWidget(self.documentation_panel)
+            self._register_dock(documentation_dock)
+            self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, documentation_dock)
+            if self.review_panel is not None:
                 self.review_panel.session_changed.connect(self.documentation_panel.abrir_sessao)
-                self.pdf_viewer.compliance_callout_selected.connect(
-                    lambda _finding_id, target=documentation_dock: target.raise_()
-                )
-                right_docks.append(documentation_dock)
+            self.pdf_viewer.compliance_callout_selected.connect(
+                lambda _finding_id, target=documentation_dock: target.raise_()
+            )
+            right_docks.append(documentation_dock)
         if (
             workflow_service is not None
             and self.review_panel is not None

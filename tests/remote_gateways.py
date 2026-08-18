@@ -11,6 +11,7 @@ from fastapi import UploadFile
 from zeny_project_handler.adapters.pdf.errors import PdfProtegidoError
 from zeny_project_handler.ui.pdf_gateway import RemoteRaster, ViewerGatewayError
 from zeny_project_handler.ui.project_gateway import ProjectGatewayError
+from zeny_project_handler.ui.review_gateway import ReviewGatewayError
 from zeny_project_handler_contracts.common import NormalizedBoxDto
 from zeny_project_handler_contracts.documents import (
     CreateUploadResponse,
@@ -30,6 +31,15 @@ from zeny_project_handler_contracts.projects import (
     ProjectDetailResponse,
     ProjectSummaryListResponse,
 )
+from zeny_project_handler_contracts.review import (
+    AcceptReviewProposalRequest,
+    CreateManualElementRequest,
+    CreateManualRelationRequest,
+    RejectReviewProposalRequest,
+    ReviewDecisionResponse,
+    ReviewProjectSummaryListResponse,
+    ReviewSessionResponse,
+)
 from zeny_project_handler_contracts.session import SessionCapabilitiesResponse
 from zeny_project_handler_contracts.viewer import (
     CloseViewerSessionResponse,
@@ -42,6 +52,7 @@ from zeny_project_handler_contracts.viewer import (
 from zeny_project_handler_server.api_errors import ApiError
 from zeny_project_handler_server.composition import ServerRuntime
 from zeny_project_handler_server.project_api import ProjectApiService
+from zeny_project_handler_server.review_api import ReviewApiService
 from zeny_project_handler_server.viewer_api import ViewerApiService
 
 
@@ -154,6 +165,69 @@ class DirectProjectGateway:
         return self._runtime.jobs.cancel(job_id)
 
 
+class DirectReviewGateway:
+    def __init__(self, runtime: ServerRuntime) -> None:
+        self._runtime = runtime
+
+    @property
+    def _review(self) -> ReviewApiService:
+        service = self._runtime.review_api
+        if service is None:
+            raise RuntimeError("Revisão remota indisponível")
+        return service
+
+    def list_projects(
+        self,
+        *,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> ReviewProjectSummaryListResponse:
+        return self._review.list_projects(limit=limit, offset=offset)
+
+    def get_session(self, project_id: UUID) -> ReviewSessionResponse:
+        return self._review.get_session(project_id)
+
+    def accept(
+        self,
+        proposal_id: UUID,
+        request: AcceptReviewProposalRequest,
+    ) -> ReviewDecisionResponse:
+        try:
+            return self._review.accept(proposal_id, request)
+        except ApiError as error:
+            raise _review_error(error) from None
+
+    def reject(
+        self,
+        proposal_id: UUID,
+        request: RejectReviewProposalRequest,
+    ) -> ReviewDecisionResponse:
+        try:
+            return self._review.reject(proposal_id, request)
+        except ApiError as error:
+            raise _review_error(error) from None
+
+    def create_manual_element(
+        self,
+        project_id: UUID,
+        request: CreateManualElementRequest,
+    ) -> ReviewDecisionResponse:
+        try:
+            return self._review.create_manual_element(project_id, request)
+        except ApiError as error:
+            raise _review_error(error) from None
+
+    def create_manual_relation(
+        self,
+        project_id: UUID,
+        request: CreateManualRelationRequest,
+    ) -> ReviewDecisionResponse:
+        try:
+            return self._review.create_manual_relation(project_id, request)
+        except ApiError as error:
+            raise _review_error(error) from None
+
+
 class DirectPdfViewerGateway:
     def __init__(self, runtime: ServerRuntime) -> None:
         self._runtime = runtime
@@ -260,6 +334,16 @@ def _project_error(error: ApiError) -> ProjectGatewayError:
 
 def _viewer_error(error: ApiError) -> ViewerGatewayError:
     return ViewerGatewayError(
+        error.code,
+        error.message,
+        status_code=error.status_code,
+        correlation_id="11111111-1111-1111-1111-111111111111",
+        details=dict(error.details) if error.details is not None else None,
+    )
+
+
+def _review_error(error: ApiError) -> ReviewGatewayError:
+    return ReviewGatewayError(
         error.code,
         error.message,
         status_code=error.status_code,

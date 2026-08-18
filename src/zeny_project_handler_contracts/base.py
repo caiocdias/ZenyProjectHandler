@@ -81,6 +81,10 @@ class ProposalId(ContractRootModel):
     pass
 
 
+class CatalogItemId(ContractRootModel):
+    pass
+
+
 class ElementId(ContractRootModel):
     pass
 

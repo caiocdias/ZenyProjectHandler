@@ -1,9 +1,8 @@
-"""Painel Qt para transformar propostas revisáveis em dados confirmados."""
+"""Painel Qt de Resultados alimentado exclusivamente por DTOs da API."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from decimal import Decimal
 from functools import partial
 from typing import TypeVar
 from uuid import UUID
@@ -32,44 +31,36 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from zeny_project_handler.application.analysis_regions import RegiaoAnalise
-from zeny_project_handler.application.errors import ApplicationError
-from zeny_project_handler.application.human_review import (
-    DadosElementoRevisao,
-    ServicoRevisaoHumana,
-    SessaoRevisao,
+from zeny_project_handler_contracts.base import CatalogItemId, ElementId, PageId
+from zeny_project_handler_contracts.common import NormalizedPointDto
+from zeny_project_handler_contracts.enums import (
+    ElementCategory,
+    ElementSituation,
+    ReviewGeometryKind,
+    ReviewReferenceKind,
+    ReviewState,
 )
-from zeny_project_handler.application.spans import VaoDetectado, detectar_vaos
-from zeny_project_handler.domain.analysis import (
-    EvidenciaDocumento,
-    PropostaElemento,
-    PropostaRelacao,
+from zeny_project_handler_contracts.errors import ErrorCode
+from zeny_project_handler_contracts.review import (
+    AcceptReviewProposalRequest,
+    CreateManualElementRequest,
+    CreateManualRelationRequest,
+    DetectedSpanDto,
+    RejectReviewProposalRequest,
+    ReviewElementInputDto,
+    ReviewGeometryDto,
+    ReviewProposalDto,
+    ReviewRelationDto,
+    ReviewSessionResponse,
 )
-from zeny_project_handler.domain.catalog import CatalogoTecnico, TipoEquipamento
-from zeny_project_handler.domain.enums import (
-    CategoriaElemento,
-    EstadoRevisao,
-    OrigemComprimentoVao,
-    SituacaoProjeto,
-    TipoEvidencia,
-    TipoGeometria,
-)
-from zeny_project_handler.domain.errors import DomainValidationError
-from zeny_project_handler.domain.project import (
-    Cabo,
-    ElementoProjetoType,
-    Equipamento,
-    EstruturaBt,
-    EstruturaMt,
-    Poste,
-)
-from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 
 from .pdf_viewer import PdfViewerWidget
+from .review_gateway import ReviewGateway, ReviewGatewayError
 from .table_word_wrap import TableWordWrapController
 from .visibility import visibility_icon
 
 T = TypeVar("T")
+ReviewItem = ReviewProposalDto | ReviewRelationDto
 
 
 class ReviewPanelWidget(QWidget):
@@ -79,18 +70,18 @@ class ReviewPanelWidget(QWidget):
     def __init__(
         self,
         *,
-        service: ServicoRevisaoHumana,
+        gateway: ReviewGateway,
         viewer: PdfViewerWidget,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("analysisResultsPanel")
-        self._service = service
+        self._gateway = gateway
         self._viewer = viewer
-        self._session: SessaoRevisao | None = None
+        self._session: ReviewSessionResponse | None = None
         self._page_id: UUID | None = None
         self._selected_proposal_id: UUID | None = None
-        self._spans: tuple[VaoDetectado, ...] = ()
+        self._spans: tuple[DetectedSpanDto, ...] = ()
         self._hidden_region_ids: set[UUID] = set()
         self._hidden_proposal_ids: set[UUID] = set()
         self._hidden_span_ids: set[UUID] = set()
@@ -100,7 +91,7 @@ class ReviewPanelWidget(QWidget):
         self._syncing_selection = False
         self._build_ui()
         self._connect_viewer()
-        self.atualizar_projetos()
+        self.atualizar_projetos(show_warning=False)
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -122,14 +113,14 @@ class ReviewPanelWidget(QWidget):
         self._category_filter = QComboBox()
         self._category_filter.setObjectName("reviewCategoryFilter")
         self._category_filter.addItem("Todas as classes", None)
-        for category in CategoriaElemento:
-            self._category_filter.addItem(category.value, category.value)
+        for category in ElementCategory:
+            self._category_filter.addItem(_category_label(category), category.value)
         filter_row.addWidget(self._category_filter)
         self._state_filter = QComboBox()
         self._state_filter.setObjectName("reviewStateFilter")
         self._state_filter.addItem("Todos os estados", None)
-        for state in EstadoRevisao:
-            self._state_filter.addItem(state.value, state.value)
+        for state in ReviewState:
+            self._state_filter.addItem(_state_label(state), state.value)
         filter_row.addWidget(self._state_filter)
 
         self._results_tabs = QTabWidget()
@@ -138,7 +129,6 @@ class ReviewPanelWidget(QWidget):
         elements_layout = QVBoxLayout(elements_page)
         elements_layout.setContentsMargins(0, 0, 0, 0)
         elements_layout.addWidget(filter_widget)
-
         guidance = QLabel(
             "As identificações são incorporadas automaticamente ao projeto. "
             "Expanda cada região para ver a coordenada e tudo o que acontece naquele ponto; "
@@ -152,14 +142,7 @@ class ReviewPanelWidget(QWidget):
         self._tree = QTreeWidget()
         self._tree.setObjectName("analysisRelationshipTree")
         self._tree.setHeaderLabels(
-            (
-                "Ponto / elemento",
-                "Ação",
-                "Coordenada",
-                "Catálogo",
-                "Vínculos",
-                "Exibir",
-            )
+            ("Ponto / elemento", "Ação", "Coordenada", "Catálogo", "Vínculos", "Exibir")
         )
         self._tree.setSelectionMode(QTreeWidget.SelectionMode.SingleSelection)
         self._tree.setUniformRowHeights(True)
@@ -240,47 +223,46 @@ class ReviewPanelWidget(QWidget):
         editor = QGroupBox("Revisar identificação")
         editor.setObjectName("reviewDecisionEditor")
         self._editor_form = QFormLayout(editor)
-        form = self._editor_form
         self._detected = QLabel("Selecione uma identificação na lista ou no PDF")
         self._detected.setObjectName("reviewDetectedSummary")
         self._detected.setWordWrap(True)
-        form.addRow("Identificado", self._detected)
+        self._editor_form.addRow("Identificado", self._detected)
         self._reviewer = QLineEdit()
         self._reviewer.setObjectName("reviewAuthorEdit")
         self._reviewer.setPlaceholderText("Nome de quem está revisando")
-        form.addRow("Responsável", self._reviewer)
+        self._editor_form.addRow("Responsável", self._reviewer)
         self._reason = QLineEdit()
         self._reason.setObjectName("reviewReasonEdit")
         self._reason.setPlaceholderText("Opcional")
-        form.addRow("Observação", self._reason)
+        self._editor_form.addRow("Observação", self._reason)
         self._classification_correction = QCheckBox("Corrigir classe ou item do catálogo")
         self._classification_correction.setObjectName("reviewCorrectClassificationCheck")
-        form.addRow(self._classification_correction)
+        self._editor_form.addRow(self._classification_correction)
         self._category = QComboBox()
         self._category.setObjectName("reviewCategoryCombo")
-        for category in CategoriaElemento:
-            self._category.addItem(category.value, category.value)
-        form.addRow("Classe corrigida", self._category)
+        for category in ElementCategory:
+            self._category.addItem(_category_label(category), category.value)
+        self._editor_form.addRow("Classe corrigida", self._category)
         self._catalog_item = QComboBox()
         self._catalog_item.setObjectName("reviewCatalogItemCombo")
-        form.addRow("Item corrigido", self._catalog_item)
+        self._editor_form.addRow("Item corrigido", self._catalog_item)
         self._situation = QComboBox()
         self._situation.setObjectName("reviewSituationCombo")
-        for situation in SituacaoProjeto:
-            self._situation.addItem(situation.value, situation.value)
-        form.addRow("Situação da obra", self._situation)
+        for situation in ElementSituation:
+            self._situation.addItem(_situation_label(situation), situation.value)
+        self._editor_form.addRow("Situação da obra", self._situation)
         self._pole = QComboBox()
         self._pole.setObjectName("reviewPoleCombo")
-        form.addRow("Poste associado", self._pole)
+        self._editor_form.addRow("Poste associado", self._pole)
         self._origin_point = QComboBox()
         self._origin_point.setObjectName("reviewOriginPointCombo")
-        form.addRow("Origem do cabo", self._origin_point)
+        self._editor_form.addRow("Origem do cabo", self._origin_point)
         self._destination_point = QComboBox()
         self._destination_point.setObjectName("reviewDestinationPointCombo")
-        form.addRow("Destino do cabo", self._destination_point)
+        self._editor_form.addRow("Destino do cabo", self._destination_point)
         self._adjust_geometry = QCheckBox("Ajustar posição numericamente")
         self._adjust_geometry.setObjectName("reviewAdjustGeometryCheck")
-        form.addRow(self._adjust_geometry)
+        self._editor_form.addRow(self._adjust_geometry)
         self._geometry_widget = QWidget(editor)
         geometry_row = QHBoxLayout(self._geometry_widget)
         geometry_row.setContentsMargins(0, 0, 0, 0)
@@ -296,7 +278,7 @@ class ReviewPanelWidget(QWidget):
         ):
             geometry_row.addWidget(QLabel(label))
             geometry_row.addWidget(field)
-        form.addRow("Posição na folha (0 a 1)", self._geometry_widget)
+        self._editor_form.addRow("Posição na folha (0 a 1)", self._geometry_widget)
         editor.hide()
         layout.addWidget(editor)
 
@@ -331,7 +313,6 @@ class ReviewPanelWidget(QWidget):
         manual_relation.hide()
         manual_row.addWidget(manual_relation)
         layout.addLayout(manual_row)
-
         self._reference_origin = QComboBox()
         self._reference_origin.setObjectName("reviewRelationOriginCombo")
         self._reference_origin.hide()
@@ -360,22 +341,31 @@ class ReviewPanelWidget(QWidget):
         self._viewer.page_changed.connect(self._page_changed)
         self._viewer.proposal_selected.connect(self._select_proposal_id)
 
-    def atualizar_projetos(self) -> None:
+    def atualizar_projetos(
+        self,
+        _checked: bool = False,
+        *,
+        show_warning: bool = True,
+    ) -> None:
         selected = self._project.currentData()
-        self._project.blockSignals(True)
-        self._project.clear()
-        self._project.addItem("Selecione um projeto analisado", None)
-        for summary in self._service.listar_projetos():
-            self._project.addItem(
-                f"{summary.nome} (resultados disponíveis)",
-                str(summary.projeto_id),
-            )
-        if selected is not None:
-            index = self._project.findData(selected)
-            self._project.setCurrentIndex(max(0, index))
-        self._project.blockSignals(False)
-        if self._project.currentData() is not None:
-            self._load_selected_project()
+
+        def update() -> None:
+            response = self._gateway.list_projects()
+            self._project.blockSignals(True)
+            self._project.clear()
+            self._project.addItem("Selecione um projeto analisado", None)
+            for summary in response.items:
+                self._project.addItem(
+                    f"{summary.service_note} (resultados disponíveis)",
+                    str(summary.project_id.root),
+                )
+            if selected is not None:
+                self._project.setCurrentIndex(max(0, self._project.findData(selected)))
+            self._project.blockSignals(False)
+            if self._project.currentData() is not None:
+                self._load_selected_project()
+
+        self._run_action(update, success_message=None, show_warning=show_warning)
 
     def limpar(self) -> None:
         self._session = None
@@ -399,13 +389,13 @@ class ReviewPanelWidget(QWidget):
 
     def _load_selected_project(self) -> None:
         value = self._project.currentData()
-        if value is None:
-            return
-        project_id = UUID(value)
-        self._run_action(lambda: self._activate_session(self._service.carregar_sessao(project_id)))
+        if value is not None:
+            self._run_action(
+                lambda: self._activate_session(self._gateway.get_session(UUID(str(value)))),
+                success_message=None,
+            )
 
     def abrir_projeto(self, projeto_id: UUID) -> None:
-        """Sincronize o painel com um projeto concluído pelo fluxo operacional."""
         self.atualizar_projetos()
         project_index = self._project.findData(str(projeto_id))
         if project_index < 0:
@@ -414,25 +404,22 @@ class ReviewPanelWidget(QWidget):
         self._project.blockSignals(True)
         self._project.setCurrentIndex(project_index)
         self._project.blockSignals(False)
-        self._run_action(lambda: self._activate_session(self._service.carregar_sessao(projeto_id)))
+        self._run_action(
+            lambda: self._activate_session(self._gateway.get_session(projeto_id)),
+            success_message=None,
+        )
 
-    def _activate_session(self, session: SessaoRevisao) -> None:
+    def _activate_session(self, session: ReviewSessionResponse) -> None:
         self._session = session
         self._hidden_region_ids.clear()
         self._hidden_proposal_ids.clear()
         self._hidden_span_ids.clear()
         self._visibility_buttons.clear()
         self._span_visibility_buttons.clear()
-        source_paths = tuple(source.caminho_canonico for source in session.fontes_pdf)
-        if source_paths and not self._viewer.carregar_projeto(
-            source_paths,
-            documentos=session.projeto.documentos,
-            ordem_paginas=session.projeto.ordem_leitura_paginas,
-        ):
-            raise ApplicationError("Não foi possível abrir todos os PDFs do projeto")
-        if not source_paths:
-            self.status_changed.emit(
-                "Projeto sem referências locais de PDF; resultados estruturados disponíveis"
+        if not self._viewer.carregar_projeto_remoto(session.project_id.root):
+            raise ReviewGatewayError(
+                code=ErrorCode.INTERNAL_ERROR,
+                message="Não foi possível abrir os PDFs gerenciados do projeto.",
             )
         self._refresh_references()
         self._refresh_catalog_items()
@@ -444,98 +431,90 @@ class ReviewPanelWidget(QWidget):
         self._page_id = UUID(page_id)
         self._refresh_proposals()
 
+    def _all_items(self) -> tuple[ReviewItem, ...]:
+        session = self._session
+        return (*session.proposals, *session.relations) if session is not None else ()
+
+    def _filtered_items(self, *, category: object, state: object) -> tuple[ReviewItem, ...]:
+        return tuple(
+            item
+            for item in self._all_items()
+            if (category is None or _proposal_category(item) == category)
+            and (state is None or item.review_state.value == state)
+        )
+
     def _refresh_proposals(self) -> None:
         session = self._session
         if session is None:
             return
-        category = self._category_filter.currentData()
-        state = self._state_filter.currentData()
-        filtered = self._filtered_proposals(category=category, state=state)
+        filtered = self._filtered_items(
+            category=self._category_filter.currentData(),
+            state=self._state_filter.currentData(),
+        )
         if self._selected_proposal_id is not None and all(
-            item.id != self._selected_proposal_id for item in filtered
+            _proposal_id(item) != self._selected_proposal_id for item in filtered
         ):
             self._selected_proposal_id = None
             self._detected.setText("Selecione uma identificação na lista ou no PDF")
             self._update_editor_visibility(None)
-        self._populate_result_tree(filtered)
+        elements = tuple(item for item in filtered if isinstance(item, ReviewProposalDto))
+        self._populate_result_tree(elements)
         self._table.setRowCount(0)
-        for proposal in filtered:
+        for item in filtered:
             row = self._table.rowCount()
             self._table.insertRow(row)
-            kind = "Elemento" if isinstance(proposal, PropostaElemento) else "Relação"
             values = (
-                kind,
-                _proposal_category(proposal),
-                proposal.estado_revisao.value,
-                str(proposal.confianca) if proposal.confianca is not None else "-",
+                "Elemento" if isinstance(item, ReviewProposalDto) else "Relação",
+                _proposal_category(item),
+                item.state_label,
+                item.confidence or "-",
             )
             for column, value in enumerate(values):
                 cell = QTableWidgetItem(value)
                 if column == 0:
-                    cell.setData(Qt.ItemDataRole.UserRole, str(proposal.id))
+                    cell.setData(Qt.ItemDataRole.UserRole, str(_proposal_id(item)))
                 self._table.setItem(row, column, cell)
-        self._update_review_overlays(filtered)
+        self._update_review_overlays(elements)
         self._elements_word_wrap.refresh()
 
     def _refresh_spans(self) -> None:
         session = self._session
-        self._spans = detectar_vaos(session.projeto) if session is not None else ()
+        self._spans = session.spans if session is not None else ()
         self._span_table.setRowCount(0)
         self._span_visibility_buttons.clear()
-        if session is None:
-            self._spans_word_wrap.refresh()
-            return
-        elements = {item.id: item for item in session.projeto.elementos}
-        for index, span in enumerate(self._spans, start=1):
+        for span in self._spans:
             row = self._span_table.rowCount()
             self._span_table.insertRow(row)
-            origin = (
-                elements.get(span.poste_origem_id) if span.poste_origem_id is not None else None
-            )
-            destination = (
-                elements.get(span.poste_destino_id) if span.poste_destino_id is not None else None
-            )
-            cable = elements.get(span.cabo_id)
-            page_number = (
-                self._project_page_number(span.geometria.pagina_id)
-                if span.geometria is not None
-                else None
-            )
-            span_label = (
-                cable.identificador_operacional
-                if isinstance(cable, Cabo) and cable.identificador_operacional
-                else f"Vão {index}"
-            )
             values = (
-                span_label,
-                _situation_label(span.situacao),
-                _project_element_label(origin),
-                _project_element_label(destination),
-                _project_element_label(cable, catalog=session.catalogo),
-                _span_length_label(span.comprimento_m),
-                _span_length_source_label(span.origem_comprimento),
-                f"Folha {page_number}" if page_number is not None else "-",
+                span.label,
+                span.situation_label,
+                span.start_label,
+                span.end_label,
+                span.cable_label,
+                span.length_label,
+                span.length_source_label,
+                span.page_label,
             )
             for column, value in enumerate(values):
                 cell = QTableWidgetItem(value)
                 if column == 0:
-                    cell.setData(Qt.ItemDataRole.UserRole, str(span.id))
+                    cell.setData(Qt.ItemDataRole.UserRole, str(span.span_id))
                 self._span_table.setItem(row, column, cell)
             visible, enabled = self._span_visibility_state(span)
-            span_button = self._visibility_button(
+            button = self._visibility_button(
                 visible=visible,
                 object_name="analysisSpanVisibilityButton",
-                tooltip=("Ocultar este vão no PDF" if visible else "Exibir este vão no PDF"),
-                toggled=partial(self._set_span_visible, span.id),
+                tooltip="Ocultar este vão no PDF" if visible else "Exibir este vão no PDF",
+                toggled=partial(self._set_span_visible, span.span_id),
                 parent=self._span_table,
             )
-            span_button.setEnabled(enabled)
-            span_button.setProperty("spanId", str(span.id))
-            span_button.setProperty("cableId", str(span.cabo_id))
-            if (proposal_id := self._span_proposal_id(span)) is not None:
-                span_button.setProperty("proposalId", str(proposal_id))
-            self._span_visibility_buttons[span.id] = span_button
-            self._span_table.setCellWidget(row, 8, span_button)
+            button.setEnabled(enabled)
+            button.setProperty("spanId", str(span.span_id))
+            button.setProperty("cableId", str(span.cable_element_id.root))
+            if span.proposal_id is not None:
+                button.setProperty("proposalId", str(span.proposal_id.root))
+            self._span_visibility_buttons[span.span_id] = button
+            self._span_table.setCellWidget(row, 8, button)
         self._spans_word_wrap.refresh()
 
     def _refresh_visible_word_wrap(self, index: int) -> None:
@@ -547,72 +526,56 @@ class ReviewPanelWidget(QWidget):
         selected = self._span_table.selectedItems()
         if not selected:
             return
-        row = selected[0].row()
-        identity_cell = self._span_table.item(row, 0)
-        if identity_cell is None:
+        identity = self._span_table.item(selected[0].row(), 0)
+        if identity is None:
             return
-        span_id = identity_cell.data(Qt.ItemDataRole.UserRole)
-        span = next((item for item in self._spans if str(item.id) == span_id), None)
-        session = self._session
-        if span is None or session is None:
-            return
-        if span.geometria is not None:
-            page_number = self._project_page_number(span.geometria.pagina_id)
-            if page_number is not None:
-                self._viewer.ir_para_folha(page_number)
-        decision = next(
-            (item for item in session.decisoes if item.elemento_confirmado_id == span.cabo_id),
+        span = next(
+            (
+                item
+                for item in self._spans
+                if str(item.span_id) == identity.data(Qt.ItemDataRole.UserRole)
+            ),
             None,
         )
-        if decision is not None:
-            self._select_proposal_id(str(decision.proposta_id))
-
-    def _filtered_proposals(
-        self,
-        *,
-        category: object,
-        state: object,
-    ) -> tuple[PropostaElemento | PropostaRelacao, ...]:
-        session = self._session
-        if session is None:
-            return ()
-        return tuple(
-            item
-            for item in session.propostas
-            if (category is None or _proposal_category(item) == category)
-            and (state is None or item.estado_revisao.value == state)
-        )
+        if span is None:
+            return
+        if span.geometry is not None:
+            page_number = self._project_page_number(span.geometry.page_id.root)
+            if page_number is not None:
+                self._viewer.ir_para_folha(page_number)
+        if span.proposal_id is not None:
+            self._select_proposal_id(str(span.proposal_id.root))
 
     def _update_review_overlays(
         self,
-        filtered: tuple[PropostaElemento | PropostaRelacao, ...] | None = None,
+        filtered: tuple[ReviewProposalDto, ...] | None = None,
     ) -> None:
         session = self._session
         if session is None:
             self._viewer.definir_propostas_revisao(())
             return
-        proposals = filtered or self._filtered_proposals(
-            category=self._category_filter.currentData(),
-            state=self._state_filter.currentData(),
+        proposals = filtered or tuple(
+            item
+            for item in self._filtered_items(
+                category=self._category_filter.currentData(),
+                state=self._state_filter.currentData(),
+            )
+            if isinstance(item, ReviewProposalDto)
         )
         hidden_by_region = {
-            element_id
-            for region in session.regioes
-            if region.id in self._hidden_region_ids
-            for element_id in region.elemento_ids
+            proposal_id.root
+            for region in session.regions
+            if region.region_id.root in self._hidden_region_ids
+            for proposal_id in region.proposal_ids
         }
         overlays = tuple(
-            item
+            item.overlay
             for item in proposals
-            if isinstance(item, PropostaElemento)
-            and item.id not in self._hidden_proposal_ids
-            and item.id not in hidden_by_region
-            and (self._page_id is None or item.geometria.pagina_id == self._page_id)
+            if item.proposal_id.root not in self._hidden_proposal_ids
+            and item.proposal_id.root not in hidden_by_region
+            and (self._page_id is None or item.overlay.geometry.page_id.root == self._page_id)
         )
-        self._viewer.definir_propostas_revisao(
-            overlays,
-            geometrias_links=_link_geometries(overlays, session.evidencias),
-        )
+        self._viewer.definir_propostas_revisao(overlays)
 
     def _visibility_button(
         self,
@@ -638,7 +601,7 @@ class ReviewPanelWidget(QWidget):
             self._hidden_region_ids.discard(region_id)
         else:
             self._hidden_region_ids.add(region_id)
-            self._viewer.definir_sobreposicoes(())
+            self._viewer.definir_sobreposicoes_revisao(())
         self._sync_visibility_buttons()
         self._update_review_overlays()
 
@@ -651,15 +614,12 @@ class ReviewPanelWidget(QWidget):
         self._update_review_overlays()
 
     def _set_span_visible(self, span_id: UUID, visible: bool) -> None:
-        span = next((item for item in self._spans if item.id == span_id), None)
+        span = next((item for item in self._spans if item.span_id == span_id), None)
         if span is None:
             return
-        proposal_id = self._span_proposal_id(span)
+        proposal_id = span.proposal_id.root if span.proposal_id is not None else None
         if proposal_id is None:
-            if visible:
-                self._hidden_span_ids.discard(span_id)
-            else:
-                self._hidden_span_ids.add(span_id)
+            (self._hidden_span_ids.discard if visible else self._hidden_span_ids.add)(span_id)
         elif visible:
             self._hidden_proposal_ids.discard(proposal_id)
             self._hidden_span_ids.discard(span_id)
@@ -672,8 +632,10 @@ class ReviewPanelWidget(QWidget):
         session = self._session
         if session is None:
             return
-        region_by_element = {
-            element_id: region for region in session.regioes for element_id in region.elemento_ids
+        region_by_proposal = {
+            proposal_id.root: region
+            for region in session.regions
+            for proposal_id in region.proposal_ids
         }
         for (kind, reference_id), button in self._visibility_buttons.items():
             if kind == "region":
@@ -683,8 +645,8 @@ class ReviewPanelWidget(QWidget):
                     "Ocultar o ponto inteiro no PDF" if visible else "Exibir o ponto inteiro no PDF"
                 )
             else:
-                region = region_by_element.get(reference_id)
-                enabled = region is None or region.id not in self._hidden_region_ids
+                region = region_by_proposal.get(reference_id)
+                enabled = region is None or region.region_id.root not in self._hidden_region_ids
                 visible = enabled and reference_id not in self._hidden_proposal_ids
                 tooltip = (
                     "Ocultar somente este elemento no PDF"
@@ -702,7 +664,7 @@ class ReviewPanelWidget(QWidget):
 
     def _sync_span_visibility_buttons(self) -> None:
         for span_id, button in self._span_visibility_buttons.items():
-            span = next((item for item in self._spans if item.id == span_id), None)
+            span = next((item for item in self._spans if item.span_id == span_id), None)
             if span is None:
                 continue
             visible, enabled = self._span_visibility_state(span)
@@ -715,105 +677,78 @@ class ReviewPanelWidget(QWidget):
             button.setAccessibleName(tooltip)
             button.blockSignals(False)
 
-    def _span_visibility_state(self, span: VaoDetectado) -> tuple[bool, bool]:
-        proposal_id = self._span_proposal_id(span)
-        if proposal_id is None:
-            return span.id not in self._hidden_span_ids, True
+    def _span_visibility_state(self, span: DetectedSpanDto) -> tuple[bool, bool]:
+        if span.proposal_id is None:
+            return span.span_id not in self._hidden_span_ids, True
+        proposal_id = span.proposal_id.root
         session = self._session
         region = (
             next(
-                (item for item in session.regioes if proposal_id in item.elemento_ids),
+                (item for item in session.regions if span.proposal_id in item.proposal_ids),
                 None,
             )
             if session is not None
             else None
         )
-        enabled = region is None or region.id not in self._hidden_region_ids
-        visible = enabled and proposal_id not in self._hidden_proposal_ids
-        return visible, enabled
+        enabled = region is None or region.region_id.root not in self._hidden_region_ids
+        return enabled and proposal_id not in self._hidden_proposal_ids, enabled
 
-    def _span_proposal_id(self, span: VaoDetectado) -> UUID | None:
-        session = self._session
-        if session is None:
-            return None
-        decision = next(
-            (item for item in session.decisoes if item.elemento_confirmado_id == span.cabo_id),
-            None,
-        )
-        return decision.proposta_id if decision is not None else None
-
-    def _populate_result_tree(
-        self,
-        proposals: tuple[PropostaElemento | PropostaRelacao, ...],
-    ) -> None:
+    def _populate_result_tree(self, proposals: tuple[ReviewProposalDto, ...]) -> None:
         session = self._session
         if session is None:
             return
         self._tree.clear()
         self._visibility_buttons.clear()
-        visible_elements = {
-            item.id: item for item in proposals if isinstance(item, PropostaElemento)
-        }
-        all_elements = {
-            item.id: item for item in session.propostas if isinstance(item, PropostaElemento)
-        }
-        all_relations = {
-            item.id: item for item in session.propostas if isinstance(item, PropostaRelacao)
-        }
-        for region_number, region in enumerate(session.regioes, start=1):
+        visible = {item.proposal_id.root: item for item in proposals}
+        for region in session.regions:
             elements = tuple(
-                visible_elements[element_id]
-                for element_id in region.elemento_ids
-                if element_id in visible_elements
+                visible[item.root] for item in region.proposal_ids if item.root in visible
             )
-            if not elements and region.elemento_ids:
+            if not elements and region.proposal_ids:
                 continue
-            action_summary = _region_action_counts(elements) or "Ponto identificado"
-            detail_summary = _region_summary(elements, catalog=session.catalogo) or (
-                "Identificador de ponto reconhecido no PDF"
-            )
             root = QTreeWidgetItem(
                 (
-                    self._region_label(region, region_number),
-                    action_summary,
-                    _coordinate_label(region),
+                    region.label,
+                    region.action_summary,
+                    region.coordinate_label,
                     f"{len(elements)} elemento(s)",
-                    f"{len(region.vinculo_ids)} vínculo(s)",
+                    f"{len(region.relation_proposal_ids)} vínculo(s)",
                     "",
                 )
             )
-            root.setData(0, Qt.ItemDataRole.UserRole + 1, str(region.id))
-            root.setToolTip(0, self._region_location(region, region_number))
-            root.setToolTip(1, detail_summary)
+            root.setData(0, Qt.ItemDataRole.UserRole + 1, str(region.region_id.root))
+            root.setToolTip(0, region.location_label)
+            root.setToolTip(1, region.detail_summary)
             self._tree.addTopLevelItem(root)
-            region_visible = region.id not in self._hidden_region_ids
+            region_id = region.region_id.root
+            region_visible = region_id not in self._hidden_region_ids
             region_button = self._visibility_button(
                 visible=region_visible,
                 object_name="analysisRegionVisibilityButton",
-                tooltip=(
-                    "Ocultar o ponto inteiro no PDF"
-                    if region_visible
-                    else "Exibir o ponto inteiro no PDF"
-                ),
-                toggled=partial(self._set_region_visible, region.id),
+                tooltip="Ocultar o ponto inteiro no PDF"
+                if region_visible
+                else "Exibir o ponto inteiro no PDF",
+                toggled=partial(self._set_region_visible, region_id),
             )
-            region_button.setProperty("regionId", str(region.id))
-            self._visibility_buttons[("region", region.id)] = region_button
+            region_button.setProperty("regionId", str(region_id))
+            self._visibility_buttons[("region", region_id)] = region_button
             self._tree.setItemWidget(root, 5, region_button)
-            for element in elements:
-                child = self._result_item(
-                    element,
-                    relationships=_relationship_labels(
-                        element,
-                        region,
-                        all_elements,
-                        all_relations,
-                        catalog=session.catalogo,
-                    ),
+            for proposal in elements:
+                child = QTreeWidgetItem(
+                    (
+                        proposal.label,
+                        proposal.situation_label,
+                        "",
+                        proposal.catalog_label,
+                        "; ".join(proposal.relationship_labels) or "Agrupado por proximidade",
+                        "",
+                    )
                 )
+                proposal_id = proposal.proposal_id.root
+                child.setData(0, Qt.ItemDataRole.UserRole, str(proposal_id))
                 root.addChild(child)
-                element_visible = region_visible and element.id not in self._hidden_proposal_ids
-                element_button = self._visibility_button(
+                element_visible = region_visible and proposal_id not in self._hidden_proposal_ids
+                button = self._visibility_button(
                     visible=element_visible,
                     object_name="analysisElementVisibilityButton",
                     tooltip=(
@@ -821,66 +756,17 @@ class ReviewPanelWidget(QWidget):
                         if element_visible
                         else "Exibir somente este elemento no PDF"
                     ),
-                    toggled=partial(self._set_element_visible, element.id),
+                    toggled=partial(self._set_element_visible, proposal_id),
                 )
-                element_button.setEnabled(region_visible)
-                element_button.setProperty("proposalId", str(element.id))
-                self._visibility_buttons[("element", element.id)] = element_button
-                self._tree.setItemWidget(child, 5, element_button)
-        if not visible_elements:
+                button.setEnabled(region_visible)
+                button.setProperty("proposalId", str(proposal_id))
+                self._visibility_buttons[("element", proposal_id)] = button
+                self._tree.setItemWidget(child, 5, button)
+        if not visible:
             self._tree.addTopLevelItem(
                 QTreeWidgetItem(("Nenhuma identificação neste filtro", "", "", "", "", ""))
             )
         self._tree.expandAll()
-
-    def _result_item(
-        self,
-        proposal: PropostaElemento,
-        *,
-        relationships: tuple[str, ...] = (),
-    ) -> QTreeWidgetItem:
-        item = QTreeWidgetItem(
-            (
-                _proposal_label(
-                    proposal,
-                    catalog=self._session.catalogo if self._session is not None else None,
-                ),
-                _situation_label(proposal.situacao_projeto),
-                "",
-                self._catalog_label(proposal),
-                "; ".join(relationships) or "Agrupado por proximidade",
-                "",
-            )
-        )
-        item.setData(0, Qt.ItemDataRole.UserRole, str(proposal.id))
-        return item
-
-    def _region_label(self, region: RegiaoAnalise, number: int) -> str:
-        return region.rotulo_ponto or f"Ponto {number}"
-
-    def _region_location(self, region: RegiaoAnalise, number: int) -> str:
-        session = self._session
-        if session is None:
-            return self._region_label(region, number)
-        for document in session.projeto.documentos:
-            for page in document.paginas:
-                if page.id == region.pagina_id:
-                    return (
-                        f"{self._region_label(region, number)} · "
-                        f"{document.nome_arquivo} · página {page.numero}"
-                    )
-        return self._region_label(region, number)
-
-    def _catalog_label(self, proposal: PropostaElemento) -> str:
-        session = self._session
-        catalog_item = (
-            session.catalogo.item_por_id(proposal.tipo_catalogo_sugerido_id)
-            if session is not None and proposal.tipo_catalogo_sugerido_id is not None
-            else None
-        )
-        if catalog_item is None:
-            return "Não catalogado"
-        return f"{catalog_item.codigo} — {catalog_item.descricao}"
 
     def _select_tree_proposal(self) -> None:
         selected = self._tree.selectedItems()
@@ -889,49 +775,45 @@ class ReviewPanelWidget(QWidget):
         proposal_id = selected[0].data(0, Qt.ItemDataRole.UserRole)
         if proposal_id:
             self._select_proposal_id(str(proposal_id))
-            return
-        region_id = selected[0].data(0, Qt.ItemDataRole.UserRole + 1)
-        if region_id:
+        elif region_id := selected[0].data(0, Qt.ItemDataRole.UserRole + 1):
             self._select_region_id(str(region_id))
 
     def _select_region_id(self, region_id: str) -> None:
         session = self._session
         if session is None:
             return
-        region = next((item for item in session.regioes if str(item.id) == region_id), None)
+        region = next(
+            (item for item in session.regions if str(item.region_id.root) == region_id), None
+        )
         if region is None:
             return
-        page_number = self._project_page_number(region.pagina_id)
+        page_number = self._project_page_number(region.page_id.root)
         if page_number is not None:
             self._viewer.ir_para_folha(page_number)
-        self._viewer.definir_sobreposicoes(
-            () if region.id in self._hidden_region_ids else (region.geometria.pontos,)
+        self._viewer.definir_sobreposicoes_revisao(
+            () if region.region_id.root in self._hidden_region_ids else (region.geometry,)
         )
-        self._detected.setText(
-            f"{self._region_location(region, session.regioes.index(region) + 1)} · "
-            f"{_coordinate_label(region)}"
-        )
+        self._detected.setText(f"{region.location_label} · {region.coordinate_label}")
 
     def _select_table_proposal(self) -> None:
         selected = self._table.selectedItems()
-        if not selected:
-            return
-        proposal_id = selected[0].data(Qt.ItemDataRole.UserRole)
-        if proposal_id:
+        if selected and (proposal_id := selected[0].data(Qt.ItemDataRole.UserRole)):
             self._select_proposal_id(str(proposal_id))
 
     def _select_proposal_id(self, proposal_id: str) -> None:
-        session = self._session
-        if session is None or self._syncing_selection:
+        if self._session is None or self._syncing_selection:
             return
-        proposal = next((item for item in session.propostas if str(item.id) == proposal_id), None)
+        proposal = next(
+            (item for item in self._all_items() if str(_proposal_id(item)) == proposal_id),
+            None,
+        )
         if proposal is None:
             return
         self._syncing_selection = True
         try:
-            self._selected_proposal_id = proposal.id
-            if isinstance(proposal, PropostaElemento):
-                page_number = self._project_page_number(proposal.geometria.pagina_id)
+            self._selected_proposal_id = _proposal_id(proposal)
+            if isinstance(proposal, ReviewProposalDto):
+                page_number = self._project_page_number(proposal.overlay.geometry.page_id.root)
                 if page_number is not None:
                     self._viewer.ir_para_folha(page_number)
             self._select_tree_item(proposal_id)
@@ -943,30 +825,27 @@ class ReviewPanelWidget(QWidget):
             self._adjust_geometry.blockSignals(True)
             self._adjust_geometry.setChecked(False)
             self._adjust_geometry.blockSignals(False)
-            if isinstance(proposal, PropostaElemento):
-                self._set_combo_value(self._category, proposal.categoria.value)
+            if isinstance(proposal, ReviewProposalDto):
+                self._set_combo_value(self._category, proposal.category.value)
                 self._refresh_catalog_items()
-                if proposal.tipo_catalogo_sugerido_id is not None:
-                    self._set_combo_value(
-                        self._catalog_item, str(proposal.tipo_catalogo_sugerido_id)
-                    )
+                if proposal.catalog_item_id is not None:
+                    self._set_combo_value(self._catalog_item, str(proposal.catalog_item_id.root))
                 else:
                     self._classification_correction.setChecked(True)
-                self._set_combo_value(self._situation, proposal.situacao_projeto.value)
-                self._set_geometry_fields(proposal.geometria)
-                self._detected.setText(self._element_detection_summary(proposal))
+                self._set_combo_value(self._situation, proposal.situation.value)
+                self._set_geometry_fields(proposal.overlay.geometry)
+                self._detected.setText(proposal.detection_summary)
             else:
-                self._detected.setText(f"Relação proposta: {proposal.tipo_relacao}")
+                self._detected.setText(proposal.label)
             self._update_editor_visibility(proposal)
         finally:
             self._syncing_selection = False
 
     def _project_page_number(self, page_id: UUID) -> int | None:
-        session = self._session
-        if session is None:
+        if self._session is None:
             return None
         try:
-            return session.projeto.ordem_leitura_paginas.index(page_id) + 1
+            return tuple(item.root for item in self._session.page_order).index(page_id) + 1
         except ValueError:
             return None
 
@@ -987,78 +866,60 @@ class ReviewPanelWidget(QWidget):
     def _select_table_row(self, proposal_id: str) -> None:
         for row in range(self._table.rowCount()):
             cell = self._table.item(row, 0)
-            if cell is None or str(cell.data(Qt.ItemDataRole.UserRole)) != proposal_id:
-                continue
-            self._table.blockSignals(True)
-            self._table.selectRow(row)
-            self._table.scrollToItem(cell)
-            self._table.blockSignals(False)
-            return
-
-    def _element_detection_summary(self, proposal: PropostaElemento) -> str:
-        session = self._session
-        item = (
-            session.catalogo.item_por_id(proposal.tipo_catalogo_sugerido_id)
-            if session is not None and proposal.tipo_catalogo_sugerido_id is not None
-            else None
-        )
-        if item is None:
-            return f"{proposal.categoria.value} · item do catálogo não identificado"
-        return f"{proposal.categoria.value} · {item.codigo} — {item.descricao}"
+            if cell is not None and str(cell.data(Qt.ItemDataRole.UserRole)) == proposal_id:
+                self._table.blockSignals(True)
+                self._table.selectRow(row)
+                self._table.scrollToItem(cell)
+                self._table.blockSignals(False)
+                return
 
     def _editor_mode_changed(self, *_args: object) -> None:
         self._update_editor_visibility(self._selected_proposal())
 
-    def _update_editor_visibility(
-        self,
-        proposal: PropostaElemento | PropostaRelacao | None,
-    ) -> None:
-        is_element = isinstance(proposal, PropostaElemento)
-        decidable = proposal is not None and proposal.estado_revisao in {
-            EstadoRevisao.PROPOSTA,
-            EstadoRevisao.CONFLITANTE,
-        }
-        editable_element = is_element and decidable
-        correcting = editable_element and self._classification_correction.isChecked()
+    def _update_editor_visibility(self, proposal: ReviewItem | None) -> None:
+        is_element = isinstance(proposal, ReviewProposalDto)
+        decidable = proposal is not None and proposal.requires_review
+        editable = is_element and decidable
+        correcting = editable and self._classification_correction.isChecked()
         category = (
-            CategoriaElemento(self._category.currentData())
+            ElementCategory(self._category.currentData())
             if is_element and self._category.currentData() is not None
             else None
         )
-        self._classification_correction.setVisible(editable_element)
+        self._classification_correction.setVisible(editable)
         self._editor_form.setRowVisible(self._category, correcting)
         self._editor_form.setRowVisible(self._catalog_item, correcting)
-        self._editor_form.setRowVisible(self._situation, editable_element)
+        self._editor_form.setRowVisible(self._situation, editable)
         self._editor_form.setRowVisible(
             self._pole,
-            editable_element
+            editable
             and category
             in {
-                CategoriaElemento.ESTRUTURA_MT,
-                CategoriaElemento.ESTRUTURA_BT,
-                CategoriaElemento.EQUIPAMENTO,
+                ElementCategory.MV_STRUCTURE,
+                ElementCategory.LV_STRUCTURE,
+                ElementCategory.EQUIPMENT,
             },
         )
-        is_cable = editable_element and category is CategoriaElemento.CABO
+        is_cable = editable and category is ElementCategory.CABLE
         self._editor_form.setRowVisible(self._origin_point, is_cable)
         self._editor_form.setRowVisible(self._destination_point, is_cable)
-        self._adjust_geometry.setVisible(editable_element)
+        self._adjust_geometry.setVisible(editable)
         self._editor_form.setRowVisible(
             self._geometry_widget,
-            editable_element and self._adjust_geometry.isChecked(),
+            editable and self._adjust_geometry.isChecked(),
         )
         self._accept.setEnabled(decidable)
         self._reject.setEnabled(decidable)
         if proposal is not None and not decidable:
             self._accept.setText("Decisão já registrada")
-        elif isinstance(proposal, PropostaRelacao):
+        elif isinstance(proposal, ReviewRelationDto):
             self._accept.setText("Confirmar relação")
         elif correcting or (is_element and self._adjust_geometry.isChecked()):
             self._accept.setText("Salvar correções")
         else:
             self._accept.setText("Confirmar identificação")
 
-    def _set_geometry_fields(self, geometry: GeometriaDocumento) -> None:
+    def _set_geometry_fields(self, geometry: ReviewGeometryDto) -> None:
         left, top, width, height = _bounds(geometry)
         self._loaded_bounds = (left, top, width, height)
         for field, value in (
@@ -1071,13 +932,14 @@ class ReviewPanelWidget(QWidget):
 
     def _refresh_catalog_items(self) -> None:
         session = self._session
-        if session is None:
+        if session is None or self._category.currentData() is None:
             return
-        category = CategoriaElemento(self._category.currentData())
+        category = ElementCategory(self._category.currentData())
         selected = self._catalog_item.currentData()
         self._catalog_item.clear()
-        for item in session.catalogo.itens_ativos(category):
-            self._catalog_item.addItem(f"{item.codigo} — {item.descricao}", str(item.id))
+        for item in session.catalog_items:
+            if item.category is category:
+                self._catalog_item.addItem(item.label, str(item.catalog_item_id.root))
         if selected is not None:
             self._set_combo_value(self._catalog_item, selected)
 
@@ -1087,83 +949,77 @@ class ReviewPanelWidget(QWidget):
             return
         self._pole.clear()
         self._pole.addItem("Selecione", None)
-        for element in session.projeto.elementos:
-            if isinstance(element, Poste):
-                self._pole.addItem(
-                    element.identificador_operacional or str(element.id), str(element.id)
-                )
+        for item in session.references:
+            if item.kind is ReviewReferenceKind.ELEMENT and item.category is ElementCategory.POLE:
+                self._pole.addItem(item.label, str(item.reference_id))
         for combo in (self._origin_point, self._destination_point):
             combo.clear()
             combo.addItem("Selecione", None)
-            for point in session.projeto.pontos_rede:
-                combo.addItem(point.nome, str(point.id))
-        references = [
-            *[(item.id, _element_label(item)) for item in session.projeto.elementos],
-            *[(item.id, item.nome) for item in session.projeto.pontos_rede],
-            *[(item.id, item.nome) for item in session.projeto.terminais],
-        ]
+            for item in session.references:
+                if item.kind is ReviewReferenceKind.NETWORK_POINT:
+                    combo.addItem(item.label, str(item.reference_id))
         for combo in (self._reference_origin, self._reference_destination):
             combo.clear()
             combo.addItem("Selecione", None)
-            for reference_id, label in references:
-                combo.addItem(label, str(reference_id))
+            for item in session.references:
+                combo.addItem(item.label, str(item.reference_id))
 
     def aceitar_selecionada(self) -> None:
         proposal = self._selected_proposal()
-        if proposal is None:
+        session = self._session
+        if proposal is None or session is None:
             return
-        if isinstance(proposal, PropostaRelacao):
-            result = self._run_action(
-                lambda: self._service.confirmar_relacao(
-                    proposal.id,
-                    revisor=self._reviewer.text(),
-                    motivo=self._reason.text() or None,
-                )
-            )
-        else:
-            result = self._run_action(
-                lambda: self._service.confirmar_elemento(
-                    proposal.id,
-                    self._element_data(proposal),
-                    revisor=self._reviewer.text(),
-                    motivo=self._reason.text() or None,
-                )
-            )
+        request = AcceptReviewProposalRequest(
+            author=self._reviewer.text(),
+            reason=self._reason.text() or None,
+            adjustments=(
+                self._element_data(proposal) if isinstance(proposal, ReviewProposalDto) else None
+            ),
+            expected_review_session_id=session.review_session_id,
+        )
+        result = self._run_action(lambda: self._gateway.accept(_proposal_id(proposal), request))
         if result is not None:
             self._reload_session()
 
     def rejeitar_selecionada(self) -> None:
         proposal = self._selected_proposal()
-        if proposal is None:
+        session = self._session
+        if proposal is None or session is None:
             return
         result = self._run_action(
-            lambda: self._service.rejeitar(
-                proposal.id,
-                revisor=self._reviewer.text(),
-                motivo=self._reason.text() or None,
+            lambda: self._gateway.reject(
+                _proposal_id(proposal),
+                RejectReviewProposalRequest(
+                    author=self._reviewer.text(),
+                    reason=self._reason.text() or "Rejeitada na revisão humana",
+                    expected_review_session_id=session.review_session_id,
+                ),
             )
         )
-        if result:
+        if result is not None:
             self._reload_session()
 
     def criar_elemento_manual(self) -> None:
         session = self._session
         if session is None or self._page_id is None:
             return
-        geometry = GeometriaDocumento.ponto(
-            self._page_id,
-            PontoNormalizado(Decimal(str(self._x.value())), Decimal(str(self._y.value()))),
+        geometry = ReviewGeometryDto(
+            page_id=PageId(self._page_id),
+            kind=ReviewGeometryKind.POINT,
+            points=(NormalizedPointDto(x=str(self._x.value()), y=str(self._y.value())),),
         )
-        data = self._element_data(None, default_geometry=geometry)
         result = self._run_action(
-            lambda: self._service.criar_elemento_manual(
-                session.projeto.id,
-                data,
-                revisor=self._reviewer.text(),
-                motivo=self._reason.text() or None,
+            lambda: self._gateway.create_manual_element(
+                session.project_id.root,
+                CreateManualElementRequest(
+                    author=self._reviewer.text(),
+                    reason=self._reason.text() or None,
+                    element=self._element_data(None, default_geometry=geometry),
+                    expected_project_version=session.project_version,
+                ),
             )
         )
-        if result:
+        if result is not None:
             self._reload_session()
 
     def criar_relacao_manual(self) -> None:
@@ -1173,31 +1029,36 @@ class ReviewPanelWidget(QWidget):
         if session is None or origin is None or destination is None:
             return
         result = self._run_action(
-            lambda: self._service.criar_relacao_manual(
-                session.projeto.id,
-                tipo_relacao=self._relation_type.text(),
-                origem_id=UUID(origin),
-                destino_id=UUID(destination),
-                revisor=self._reviewer.text(),
-                motivo=self._reason.text() or None,
+            lambda: self._gateway.create_manual_relation(
+                session.project_id.root,
+                CreateManualRelationRequest(
+                    author=self._reviewer.text(),
+                    reason=self._reason.text() or None,
+                    relation_type=self._relation_type.text(),
+                    source_reference_id=UUID(str(origin)),
+                    target_reference_id=UUID(str(destination)),
+                    expected_project_version=session.project_version,
+                ),
             )
         )
-        if result:
+        if result is not None:
             self._reload_session()
 
     def _element_data(
         self,
-        proposal: PropostaElemento | None,
+        proposal: ReviewProposalDto | None,
         *,
-        default_geometry: GeometriaDocumento | None = None,
-    ) -> DadosElementoRevisao:
-        category = CategoriaElemento(self._category.currentData())
+        default_geometry: ReviewGeometryDto | None = None,
+    ) -> ReviewElementInputDto:
         catalog_item = self._catalog_item.currentData()
         if catalog_item is None:
-            raise ApplicationError("Selecione um item do catálogo")
+            raise ValueError("Selecione um item do catálogo")
         geometry = default_geometry
         if proposal is not None:
-            geometry = self._viewer.geometria_proposta(str(proposal.id)) or proposal.geometria
+            geometry = (
+                self._viewer.geometria_proposta(str(proposal.proposal_id.root))
+                or proposal.overlay.geometry
+            )
             current_bounds = (
                 self._x.value(),
                 self._y.value(),
@@ -1210,24 +1071,31 @@ class ReviewPanelWidget(QWidget):
             ):
                 geometry = _resize_geometry(geometry, *current_bounds)
         if geometry is None:
-            raise ApplicationError("Defina a geometria do elemento")
-        return DadosElementoRevisao(
-            categoria=category,
-            tipo_catalogo_id=UUID(catalog_item),
-            situacao=SituacaoProjeto(self._situation.currentData()),
-            geometria=geometry,
-            codigo_observado=(proposal.codigo_observado if proposal is not None else None),
-            poste_id=_optional_uuid(self._pole.currentData()),
-            ponto_origem_id=_optional_uuid(self._origin_point.currentData()),
-            ponto_destino_id=_optional_uuid(self._destination_point.currentData()),
+            raise ValueError("Defina a geometria do elemento")
+        return ReviewElementInputDto(
+            category=ElementCategory(self._category.currentData()),
+            catalog_item_id=CatalogItemId(UUID(str(catalog_item))),
+            situation=ElementSituation(self._situation.currentData()),
+            geometry=geometry,
+            observed_code=proposal.observed_code if proposal is not None else None,
+            pole_id=(
+                ElementId(UUID(str(self._pole.currentData())))
+                if self._pole.currentData() is not None
+                else None
+            ),
+            origin_point_id=_optional_uuid(self._origin_point.currentData()),
+            target_point_id=_optional_uuid(self._destination_point.currentData()),
         )
 
-    def _selected_proposal(self) -> PropostaElemento | PropostaRelacao | None:
-        session = self._session
-        if session is None or self._selected_proposal_id is None:
+    def _selected_proposal(self) -> ReviewItem | None:
+        if self._selected_proposal_id is None:
             return None
         return next(
-            (item for item in session.propostas if item.id == self._selected_proposal_id),
+            (
+                item
+                for item in self._all_items()
+                if _proposal_id(item) == self._selected_proposal_id
+            ),
             None,
         )
 
@@ -1236,18 +1104,26 @@ class ReviewPanelWidget(QWidget):
         if session is None:
             return
         selected = self._selected_proposal_id
-        self._activate_session(self._service.carregar_sessao(session.projeto.id))
+        self._activate_session(self._gateway.get_session(session.project_id.root))
         if selected is not None:
             self._select_proposal_id(str(selected))
 
-    def _run_action(self, action: Callable[[], T]) -> T | None:
+    def _run_action(
+        self,
+        action: Callable[[], T],
+        *,
+        success_message: str | None = "Revisão salva",
+        show_warning: bool = True,
+    ) -> T | None:
         try:
             result = action()
-        except (ApplicationError, DomainValidationError, ValueError) as error:
-            QMessageBox.warning(self, "Revisão não concluída", str(error))
+        except (ReviewGatewayError, ValueError) as error:
+            if show_warning:
+                QMessageBox.warning(self, "Revisão não concluída", str(error))
             self.status_changed.emit(str(error))
             return None
-        self.status_changed.emit("Revisão salva")
+        if success_message is not None:
+            self.status_changed.emit(success_message)
         return result
 
     @staticmethod
@@ -1266,235 +1142,46 @@ def _coordinate_spin(name: str) -> QDoubleSpinBox:
     return spin
 
 
-def _proposal_category(proposal: PropostaElemento | PropostaRelacao) -> str:
-    return (
-        proposal.categoria.value
-        if isinstance(proposal, PropostaElemento)
-        else proposal.tipo_relacao
-    )
+def _proposal_id(value: ReviewItem) -> UUID:
+    return value.proposal_id.root
 
 
-def _proposal_label(
-    proposal: PropostaElemento,
-    *,
-    catalog: CatalogoTecnico | None = None,
-) -> str:
-    if proposal.categoria is CategoriaElemento.EQUIPAMENTO:
-        category = _equipment_type_label(proposal, catalog)
-        if dict(proposal.atributos_sugeridos).get("reconhecido_por_simbologia") is True:
-            return category
-        return f"{category} {proposal.codigo_observado or ''}".strip()
-    category = {
-        CategoriaElemento.POSTE: "Poste",
-        CategoriaElemento.ESTRUTURA_MT: "Estrutura MT",
-        CategoriaElemento.ESTRUTURA_BT: "Estrutura BT",
-        CategoriaElemento.CABO: "Cabo",
-    }[proposal.categoria]
-    return f"{category} {proposal.codigo_observado or ''}".strip()
+def _proposal_category(value: ReviewItem) -> str:
+    return value.category.value if isinstance(value, ReviewProposalDto) else value.relation_type
 
 
-def _equipment_type_label(
-    proposal: PropostaElemento,
-    catalog: CatalogoTecnico | None,
-) -> str:
-    if catalog is not None and proposal.tipo_catalogo_sugerido_id is not None:
-        catalog_item = catalog.item_por_id(proposal.tipo_catalogo_sugerido_id)
-        if isinstance(catalog_item, TipoEquipamento):
-            option_label = next(
-                (
-                    option.rotulo
-                    for group in catalog.grupos_opcao
-                    if group.chave == "classe_equipamento"
-                    for option in group.opcoes
-                    if option.id == catalog_item.classe_equipamento_opcao_id
-                ),
-                None,
-            )
-            if option_label is not None:
-                return option_label.capitalize()
-    suggested_class = dict(proposal.atributos_sugeridos).get("classe_equipamento")
-    if isinstance(suggested_class, str) and suggested_class.strip():
-        symbolic_labels = {
-            "ATERRAMENTO": "Aterramento",
-            "PARA_RAIOS_BT": "Para-raios BT",
-            "PARA_RAIOS_MT": "Para-raios MT",
-        }
-        if suggested_class.strip().upper() in symbolic_labels:
-            return symbolic_labels[suggested_class.strip().upper()]
-        return suggested_class.replace("_", " ").strip().capitalize()
-    return "Equipamento"
+def _proposal_label(value: ReviewProposalDto) -> str:
+    """Rótulo já calculado pelo servidor; mantido como helper puramente visual."""
+    return value.label
 
 
-def _link_geometries(
-    proposals: tuple[PropostaElemento, ...],
-    evidence: tuple[EvidenciaDocumento, ...],
-) -> dict[UUID, GeometriaDocumento]:
-    evidence_by_id = {item.id: item for item in evidence}
-    geometries: dict[UUID, GeometriaDocumento] = {}
-    for proposal in proposals:
-        if proposal.categoria is not CategoriaElemento.CABO:
-            continue
-        label = _cable_label_evidence(proposal, evidence_by_id)
-        if label is not None:
-            geometries[proposal.id] = label.geometria
-    return geometries
-
-
-def _cable_label_evidence(
-    proposal: PropostaElemento,
-    evidence_by_id: dict[UUID, EvidenciaDocumento],
-) -> EvidenciaDocumento | None:
-    attributes = dict(proposal.atributos_sugeridos)
-    explicit_id = _safe_uuid(attributes.get("evidencia_rotulo_id"))
-    if explicit_id is not None:
-        explicit = evidence_by_id.get(explicit_id)
-        if (
-            explicit is not None
-            and explicit.tipo in {TipoEvidencia.TEXTO, TipoEvidencia.OCR}
-            and explicit.pagina_id == proposal.geometria.pagina_id
-        ):
-            return explicit
-
-    excluded_ids = {
-        identifier
-        for key in ("evidencia_identificador_id", "evidencia_comprimento_id")
-        if (identifier := _safe_uuid(attributes.get(key))) is not None
-    }
-    candidates = tuple(
-        item
-        for evidence_id in proposal.evidencia_ids
-        if evidence_id not in excluded_ids
-        if (item := evidence_by_id.get(evidence_id)) is not None
-        and item.tipo in {TipoEvidencia.TEXTO, TipoEvidencia.OCR}
-        and item.pagina_id == proposal.geometria.pagina_id
-    )
-    if not candidates:
-        return None
-    observed = (proposal.codigo_observado or "").casefold()
-    return min(
-        candidates,
-        key=lambda item: (
-            0 if observed and observed in (item.conteudo_bruto or "").casefold() else 1,
-            str(item.id),
-        ),
-    )
-
-
-def _safe_uuid(value: object) -> UUID | None:
-    if value is None:
-        return None
-    try:
-        return UUID(str(value))
-    except ValueError:
-        return None
-
-
-def _situation_label(situation: SituacaoProjeto) -> str:
-    return {
-        SituacaoProjeto.INSTALAR: "A instalar",
-        SituacaoProjeto.REMOVER: "A remover",
-        SituacaoProjeto.EXISTENTE: "Existente",
-    }[situation]
-
-
-def _coordinate_label(region: RegiaoAnalise) -> str:
-    if region.coordenada is None:
-        return "Sem coordenada identificada"
-    return f"E {region.coordenada.leste:.0f} · N {region.coordenada.norte:.0f}"
-
-
-def _region_summary(
-    elements: tuple[PropostaElemento, ...],
-    *,
-    catalog: CatalogoTecnico | None = None,
-) -> str:
-    parts: list[str] = []
-    for situation, verb in (
-        (SituacaoProjeto.REMOVER, "Remover"),
-        (SituacaoProjeto.INSTALAR, "Instalar"),
-        (SituacaoProjeto.EXISTENTE, "Existente"),
-    ):
-        labels = tuple(
-            _proposal_label(element, catalog=catalog)
-            for element in elements
-            if element.situacao_projeto is situation
-        )
-        if labels:
-            parts.append(f"{verb}: {', '.join(labels)}")
-    return " · ".join(parts)
-
-
-def _region_action_counts(elements: tuple[PropostaElemento, ...]) -> str:
-    parts: list[str] = []
-    for situation, singular, plural in (
-        (SituacaoProjeto.REMOVER, "remover", "remover"),
-        (SituacaoProjeto.INSTALAR, "instalar", "instalar"),
-        (SituacaoProjeto.EXISTENTE, "existente", "existentes"),
-    ):
-        count = sum(element.situacao_projeto is situation for element in elements)
-        if count:
-            parts.append(f"{count} {singular if count == 1 else plural}")
-    return " · ".join(parts)
-
-
-def _relationship_labels(
-    element: PropostaElemento,
-    region: RegiaoAnalise,
-    elements: dict[UUID, PropostaElemento],
-    relations: dict[UUID, PropostaRelacao],
-    *,
-    catalog: CatalogoTecnico | None = None,
-) -> tuple[str, ...]:
-    labels: list[str] = []
-    for relation_id in region.vinculo_ids:
-        relation = relations.get(relation_id)
-        if relation is None:
-            continue
-        if relation.origem_referencia_id == element.id:
-            related_id = relation.destino_referencia_id
-            direction = "→"
-        elif relation.destino_referencia_id == element.id:
-            related_id = relation.origem_referencia_id
-            direction = "←"
-        else:
-            continue
-        related = elements.get(related_id)
-        if related is None:
-            continue
-        relation_label = relation.tipo_relacao.replace("_", " ").lower()
-        labels.append(f"{relation_label} {direction} {_proposal_label(related, catalog=catalog)}")
-    return tuple(labels)
-
-
-def _bounds(geometry: GeometriaDocumento) -> tuple[float, float, float, float]:
-    x_values = [float(point.x) for point in geometry.pontos]
-    y_values = [float(point.y) for point in geometry.pontos]
-    left, right = min(x_values), max(x_values)
-    top, bottom = min(y_values), max(y_values)
+def _bounds(geometry: ReviewGeometryDto) -> tuple[float, float, float, float]:
+    xs = [float(item.x) for item in geometry.points]
+    ys = [float(item.y) for item in geometry.points]
+    left, right = min(xs), max(xs)
+    top, bottom = min(ys), max(ys)
     return left, top, right - left, bottom - top
 
 
 def _resize_geometry(
-    geometry: GeometriaDocumento,
+    geometry: ReviewGeometryDto,
     left: float,
     top: float,
     width: float,
     height: float,
-) -> GeometriaDocumento:
+) -> ReviewGeometryDto:
     old_left, old_top, old_width, old_height = _bounds(geometry)
-    if geometry.tipo is TipoGeometria.PONTO:
-        points: tuple[PontoNormalizado, ...] = (
-            PontoNormalizado(Decimal(str(left)), Decimal(str(top))),
-        )
+    if geometry.kind is ReviewGeometryKind.POINT:
+        points: tuple[NormalizedPointDto, ...] = (NormalizedPointDto(x=str(left), y=str(top)),)
     else:
         points = tuple(
-            PontoNormalizado(
-                Decimal(str(left + _scaled(float(point.x), old_left, old_width, width))),
-                Decimal(str(top + _scaled(float(point.y), old_top, old_height, height))),
+            NormalizedPointDto(
+                x=str(left + _scaled(float(item.x), old_left, old_width, width)),
+                y=str(top + _scaled(float(item.y), old_top, old_height, height)),
             )
-            for point in geometry.pontos
+            for item in geometry.points
         )
-    return GeometriaDocumento(pagina_id=geometry.pagina_id, tipo=geometry.tipo, pontos=points)
+    return geometry.model_copy(update={"points": points})
 
 
 def _scaled(value: float, origin: float, old_size: float, new_size: float) -> float:
@@ -1505,48 +1192,29 @@ def _optional_uuid(value: object) -> UUID | None:
     return UUID(str(value)) if value is not None else None
 
 
-def _element_label(element: object) -> str:
-    if isinstance(element, (Poste, EstruturaMt, EstruturaBt, Cabo, Equipamento)):
-        return f"{element.categoria.value}: {element.codigo_observado or element.id}"
-    return str(element)
-
-
-def _project_element_label(
-    element: ElementoProjetoType | None,
-    *,
-    catalog: CatalogoTecnico | None = None,
-) -> str:
-    if element is None:
-        return "-"
-    if isinstance(element, Poste):
-        reference = (
-            element.identificador_operacional
-            or element.referencia_desenho
-            or element.codigo_observado
-        )
-        coordinate = element.coordenada_campo
-        if coordinate is not None:
-            coordinate_label = f"E {coordinate.leste:f} · N {coordinate.norte:f}"
-            return f"{reference} · {coordinate_label}" if reference else coordinate_label
-        return f"{reference} · {str(element.id)[:8]}" if reference else str(element.id)
-    if isinstance(element, Cabo) and catalog is not None:
-        item = catalog.item_por_id(element.tipo_catalogo_id)
-        if item is not None:
-            return f"{item.codigo} — {item.descricao}"
-    return element.codigo_observado or element.identificador_operacional or str(element.id)
-
-
-def _span_length_label(length: Decimal | None) -> str:
-    if length is None:
-        return "Não identificado"
-    return f"{length.quantize(Decimal('0.01')):f} m".replace(".", ",")
-
-
-def _span_length_source_label(source: OrigemComprimentoVao | None) -> str:
-    if source is None:
-        return "-"
+def _category_label(value: ElementCategory) -> str:
     return {
-        OrigemComprimentoVao.ANOTACAO_DESENHO: "Anotação do desenho",
-        OrigemComprimentoVao.COORDENADAS: "Distância entre coordenadas",
-        OrigemComprimentoVao.INFORMADO: "Comprimento informado",
-    }[source]
+        ElementCategory.POLE: "Poste",
+        ElementCategory.MV_STRUCTURE: "Estrutura MT",
+        ElementCategory.LV_STRUCTURE: "Estrutura BT",
+        ElementCategory.CABLE: "Cabo",
+        ElementCategory.EQUIPMENT: "Equipamento",
+    }[value]
+
+
+def _situation_label(value: ElementSituation) -> str:
+    return {
+        ElementSituation.EXISTING: "Existente",
+        ElementSituation.INSTALL: "A instalar",
+        ElementSituation.REMOVE: "A remover",
+    }[value]
+
+
+def _state_label(value: ReviewState) -> str:
+    return {
+        ReviewState.PENDING: "Proposta",
+        ReviewState.CONFLICTING: "Conflitante",
+        ReviewState.ACCEPTED: "Confirmada",
+        ReviewState.ADJUSTED: "Ajustada",
+        ReviewState.REJECTED: "Rejeitada",
+    }[value]

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import os
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from decimal import Decimal
@@ -62,13 +62,14 @@ from zeny_project_handler.application.visual_occupancy import (
     detectar_ocupacao_visual_rgb,
 )
 from zeny_project_handler.config import DEFAULT_PDF_TILE_CACHE_MAX_BYTES
-from zeny_project_handler.domain.analysis import PropostaElemento
 from zeny_project_handler.domain.compliance import ResultadoConformidade
-from zeny_project_handler.domain.enums import EstadoRevisao, TipoGeometria
+from zeny_project_handler.domain.enums import TipoGeometria
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 from zeny_project_handler.logging_config import OperationLogger, operation_logger
 from zeny_project_handler_contracts.base import DocumentId, PageId
+from zeny_project_handler_contracts.enums import ReviewGeometryKind, ReviewState
 from zeny_project_handler_contracts.errors import ErrorCode
+from zeny_project_handler_contracts.review import ReviewGeometryDto, ReviewOverlayDto
 from zeny_project_handler_contracts.viewer import (
     CreateViewerSessionResponse,
     ViewerDocumentDto,
@@ -387,9 +388,8 @@ class PdfGraphicsView(QGraphicsView):
 
     def definir_propostas_revisao(
         self,
-        proposals: tuple[PropostaElemento, ...],
+        proposals: tuple[ReviewOverlayDto, ...],
         transformer: TransformadorViewport,
-        link_geometries: Mapping[str, GeometriaDocumento] | None = None,
     ) -> None:
         signals_were_blocked = self._scene.blockSignals(True)
         try:
@@ -401,30 +401,27 @@ class PdfGraphicsView(QGraphicsView):
             self._scene.blockSignals(signals_were_blocked)
         self._review_transformer = transformer
         for proposal in proposals:
-            key = str(proposal.id)
-            link_geometry = (
-                link_geometries.get(key, proposal.geometria)
-                if link_geometries is not None
-                else proposal.geometria
-            )
+            key = str(proposal.proposal_id.root)
+            geometry = _review_geometry_to_domain(proposal.geometry)
+            link_geometry = _review_geometry_to_domain(proposal.link_geometry)
             item = ReviewLinkItem(
                 _review_link_path(link_geometry, transformer),
             )
-            item.setPen(_review_link_pen(proposal.estado_revisao))
+            item.setPen(_review_link_pen(proposal.review_state))
             self._scene.addItem(item)
             item.setZValue(20)
             item.setFlag(QGraphicsPathItem.GraphicsItemFlag.ItemIsSelectable)
             item.setCursor(Qt.CursorShape.PointingHandCursor)
             item.setToolTip(
-                f"Abrir {proposal.categoria.value} na revisão · "
-                f"{proposal.estado_revisao.value} · "
-                f"confiança {proposal.confianca if proposal.confianca is not None else '-'}"
+                f"Abrir {proposal.category.value} na revisão · "
+                f"{proposal.review_state.value} · "
+                f"confiança {proposal.confidence if proposal.confidence is not None else '-'}"
             )
             item.setData(0, key)
-            item.setData(1, proposal.estado_revisao.value)
+            item.setData(1, proposal.review_state.value)
             item.setData(2, "review_proposal")
             self._review_items[key] = item
-            self._review_geometries[key] = proposal.geometria
+            self._review_geometries[key] = geometry
 
     def selecionar_proposta(self, proposal_id: str) -> None:
         item = self._review_items.get(proposal_id)
@@ -477,7 +474,7 @@ class PdfGraphicsView(QGraphicsView):
         for key, item in self._review_items.items():
             item.setPen(
                 _review_link_pen(
-                    EstadoRevisao(str(item.data(1))),
+                    ReviewState(str(item.data(1))),
                     selected=selected_kind == "review_proposal" and key == selected_id,
                 )
             )
@@ -597,7 +594,7 @@ class PdfViewerWidget(QWidget):
         self._project_pages: tuple[_PaginaProjetoRemota, ...] = ()
         self._rotation = 0
         self._overlays: tuple[tuple[PontoNormalizado, ...], ...] = ()
-        self._review_proposals: tuple[PropostaElemento, ...] = ()
+        self._review_proposals: tuple[ReviewOverlayDto, ...] = ()
         self._review_link_geometries: dict[str, GeometriaDocumento] = {}
         self._compliance_callouts: tuple[CalloutConformidade, ...] = ()
         self._callout_position_overrides: dict[str, RetanguloCallout] = {}
@@ -895,27 +892,36 @@ class PdfViewerWidget(QWidget):
 
     def carregar_projeto_remoto(self, project_id: UUID) -> bool:
         """Abra metadados e páginas gerenciadas sem receber qualquer caminho do cliente."""
-        try:
-            response = self._gateway.get_project(project_id)
-        except ViewerGatewayError as error:
-            self._open_warning(str(error))
-            return False
-        pages = tuple(
-            _PaginaProjetoRemota(
-                documento=next(
-                    item for item in response.documents if item.document_id == page.document_id
-                ),
-                pagina=page,
-                pagina_remota_id=page.page_id.root,
+        observation = operation_logger("pdf.viewer.open")
+        with observation.context():
+            observation.started(project_id=str(project_id))
+            try:
+                response = self._gateway.get_project(project_id)
+            except ViewerGatewayError as error:
+                observation.failed(error, expected=True)
+                self._open_warning(str(error))
+                return False
+            pages = tuple(
+                _PaginaProjetoRemota(
+                    documento=next(
+                        item for item in response.documents if item.document_id == page.document_id
+                    ),
+                    pagina=page,
+                    pagina_remota_id=page.page_id.root,
+                )
+                for page in response.pages
             )
-            for page in response.pages
-        )
-        self._activate_project(
-            response.documents,
-            project_pages=pages,
-            viewer_session_id=None,
-        )
-        return True
+            self._activate_project(
+                response.documents,
+                project_pages=pages,
+                viewer_session_id=None,
+            )
+            observation.succeeded(
+                project_id=str(project_id),
+                item_count=len(response.documents),
+                document_ids=tuple(item.document_id.root for item in response.documents),
+            )
+            return True
 
     def _unlock_pending_uploads(
         self,
@@ -1016,21 +1022,24 @@ class PdfViewerWidget(QWidget):
         if self._current_transformer is not None:
             self.view.definir_sobreposicoes(geometries, self._current_transformer)
 
+    def definir_sobreposicoes_revisao(
+        self,
+        geometries: tuple[ReviewGeometryDto, ...],
+    ) -> None:
+        """Converta DTOs normalizados somente para o desenho vetorial local."""
+        self.definir_sobreposicoes(
+            tuple(_review_geometry_to_domain(item).pontos for item in geometries)
+        )
+
     def definir_propostas_revisao(
         self,
-        proposals: tuple[PropostaElemento, ...],
-        *,
-        geometrias_links: Mapping[UUID, GeometriaDocumento] | None = None,
+        proposals: tuple[ReviewOverlayDto, ...],
     ) -> None:
         self._review_proposals = proposals
-        self._review_link_geometries = {
-            str(proposal_id): geometry for proposal_id, geometry in (geometrias_links or {}).items()
-        }
         if self._current_transformer is not None:
             self.view.definir_propostas_revisao(
                 proposals,
                 self._current_transformer,
-                self._review_link_geometries,
             )
 
     def definir_callouts_conformidade(
@@ -1125,8 +1134,9 @@ class PdfViewerWidget(QWidget):
     def selecionar_proposta(self, proposal_id: str) -> None:
         self.view.selecionar_proposta(proposal_id)
 
-    def geometria_proposta(self, proposal_id: str) -> GeometriaDocumento | None:
-        return self.view.geometria_proposta(proposal_id)
+    def geometria_proposta(self, proposal_id: str) -> ReviewGeometryDto | None:
+        geometry = self.view.geometria_proposta(proposal_id)
+        return _review_geometry_from_domain(geometry) if geometry is not None else None
 
     def _render_current_page(self) -> None:
         if not self._project_pages:
@@ -1299,7 +1309,6 @@ class PdfViewerWidget(QWidget):
         self.view.definir_propostas_revisao(
             self._review_proposals,
             transformer,
-            self._review_link_geometries,
         )
         self.view.definir_callouts_conformidade(self._compliance_callouts, transformer)
         if self._selected_compliance_callout_id is not None:
@@ -1652,12 +1661,42 @@ def _close_remote_sessions(gateway: PdfViewerGateway, session_ids: tuple[UUID, .
             gateway.close_session(session_id)
 
 
-def _review_color(state: EstadoRevisao, *, alpha: int = 255) -> QColor:
+def _review_geometry_to_domain(value: ReviewGeometryDto) -> GeometriaDocumento:
+    return GeometriaDocumento(
+        pagina_id=value.page_id.root,
+        tipo={
+            ReviewGeometryKind.POINT: TipoGeometria.PONTO,
+            ReviewGeometryKind.BOX: TipoGeometria.CAIXA,
+            ReviewGeometryKind.POLYLINE: TipoGeometria.POLILINHA,
+            ReviewGeometryKind.POLYGON: TipoGeometria.POLIGONO,
+        }[value.kind],
+        pontos=tuple(PontoNormalizado(Decimal(item.x), Decimal(item.y)) for item in value.points),
+    )
+
+
+def _review_geometry_from_domain(value: GeometriaDocumento) -> ReviewGeometryDto:
+    from zeny_project_handler_contracts.base import PageId
+    from zeny_project_handler_contracts.common import NormalizedPointDto
+
+    return ReviewGeometryDto(
+        page_id=PageId(value.pagina_id),
+        kind={
+            TipoGeometria.PONTO: ReviewGeometryKind.POINT,
+            TipoGeometria.CAIXA: ReviewGeometryKind.BOX,
+            TipoGeometria.POLILINHA: ReviewGeometryKind.POLYLINE,
+            TipoGeometria.POLIGONO: ReviewGeometryKind.POLYGON,
+        }[value.tipo],
+        points=tuple(NormalizedPointDto(x=str(item.x), y=str(item.y)) for item in value.pontos),
+    )
+
+
+def _review_color(state: ReviewState, *, alpha: int = 255) -> QColor:
     colors = {
-        EstadoRevisao.PROPOSTA: (255, 193, 7),
-        EstadoRevisao.CONFIRMADA: (52, 199, 89),
-        EstadoRevisao.REJEITADA: (142, 142, 147),
-        EstadoRevisao.CONFLITANTE: (255, 69, 58),
+        ReviewState.PENDING: (255, 193, 7),
+        ReviewState.CONFLICTING: (255, 69, 58),
+        ReviewState.ACCEPTED: (52, 199, 89),
+        ReviewState.ADJUSTED: (52, 199, 89),
+        ReviewState.REJECTED: (142, 142, 147),
     }
     red, green, blue = colors[state]
     return QColor(red, green, blue, alpha)
@@ -1860,10 +1899,10 @@ def _fonte_callout(pixel_size: int) -> QFont:
     return font
 
 
-def _review_link_pen(state: EstadoRevisao, *, selected: bool = False) -> QPen:
+def _review_link_pen(state: ReviewState, *, selected: bool = False) -> QPen:
     pen = QPen(QColor("#0078d4") if selected else _review_color(state), 5 if selected else 3)
     pen.setCosmetic(True)
-    if state is EstadoRevisao.REJEITADA:
+    if state is ReviewState.REJECTED:
         pen.setStyle(Qt.PenStyle.DashLine)
     return pen
 

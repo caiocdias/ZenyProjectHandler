@@ -166,6 +166,13 @@ originaram a entidade. O painel de resultados permite:
 Revisões persistem a autoria, o instante, a decisão, o conteúdo anterior e o conteúdo confirmado.
 Uma proposta de outro projeto ou uma referência incompatível é recusada.
 
+O painel consome uma sessão remota versionada que já contém catálogo, referências, regiões, vãos,
+rótulos, overlays, evidências de navegação e histórico de auditoria. Aceite, ajuste, rejeição e
+criações manuais são comandos HTTP autenticados. O servidor revalida projeto, página, catálogo e
+referências; o identificador da sessão impede que uma segunda janela grave sobre uma decisão mais
+recente e devolve conflito `409`, após o qual a sessão pode ser recarregada sem perda silenciosa.
+Nenhuma região, vão, classificação, vínculo ou rótulo técnico é derivado pelo cliente.
+
 ## Regiões e vãos
 
 `RegiaoAnalise` é uma projeção derivada e determinística que agrupa propostas próximas na mesma
@@ -258,9 +265,11 @@ de SQLite e árvore gerenciada não possui journal durável contra queda abrupta
 
 A análise do painel Projeto executa no servidor e é observada por polling fora da thread da
 interface. Um segundo cliente recebe o mesmo progresso/bloqueio global e conflito HTTP 409 ao tentar
-uma operação incompatível. Importação, exportação, backup e restauração ainda não migradas continuam
-fora da thread da interface com progresso e cancelamento cooperativo local. Objetos Qt visuais
-permanecem na thread principal.
+uma operação incompatível. A revisão humana também usa estado otimista remoto: duas sessões podem
+ler a mesma proposta, mas somente a primeira decisão válida persiste; a segunda recebe `409` e deve
+recarregar os DTOs. Importação, exportação, backup e restauração ainda não migradas continuam fora da
+thread da interface com progresso e cancelamento cooperativo local. Objetos Qt visuais permanecem na
+thread principal.
 
 Os painéis **Projeto**, **Resultados**, **Documentação e conformidade** e
 **Importar, exportar e backup** podem ser movidos, desacoplados e restaurados. Tema, geometria e

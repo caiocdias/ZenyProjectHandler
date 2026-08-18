@@ -3,7 +3,7 @@
 - Estado geral: **PLANEJADO**
 - Data do planejamento: **2026-08-17**
 - Responsável pelo planejamento: **Codex**
-- Próxima etapa liberada: **Etapa 6** (**PENDENTE**; não iniciada neste chat)
+- Próxima etapa liberada: **Etapa 7** (**PENDENTE**; não iniciada neste chat)
 - Regra de execução: uma etapa só pode começar quando todas as suas dependências estiverem
   marcadas como **CONCLUÍDA**.
 
@@ -798,7 +798,7 @@ da API na conexão e recusar, com mensagem clara, uma combinação incompatível
 
 ## Etapa 6 — Resultados e revisão humana remotos
 
-- Estado: **PENDENTE**
+- Estado: **CONCLUÍDA**
 - Dependências: Etapa 5 **CONCLUÍDA**
 - Entrega principal: o painel Resultados recebe projeções prontas e persiste revisões pela API.
 
@@ -827,12 +827,46 @@ da API na conexão e recusar, com mensagem clara, uma combinação incompatível
 
 ### Evidências
 
-- Início/data/agente: _preencher_
-- Comparação de regiões/vãos/revisões: _preencher_
-- Testes de concorrência e restart: _preencher_
-- Import graph do painel: _preencher_
-- Comandos/gates: _preencher_
-- Observações/bloqueios: _preencher_
+- Início/data/agente: **2026-08-18 18:16 -03:00 — Codex; roadmap, README, especificação
+  funcional, inventário de paridade e ADRs 0006, 0007 (histórico/substituído), 0009, 0010 e 0013
+  lidos integralmente; Etapa 5 confirmada como CONCLUÍDA e working tree inicial limpo. Escopo
+  limitado aos DTOs/endpoints/gateway de sessão, regiões, vãos, propostas, decisões e catálogo da
+  revisão, migração integral do painel Resultados sem derivação de negócio, paridade visual e de
+  auditoria, conflitos, concorrência, restart e gates da Etapa 6. Etapa 7 permanece PENDENTE e não
+  será iniciada.**
+- Comparação de regiões/vãos/revisões: **`ReviewApiService` passou a projetar sessão, catálogo,
+  referências, elementos/relações confirmados, regiões, propostas, relações, vãos, evidências,
+  overlays e auditoria em DTOs. O teste
+  `test_remote_review_projects_projection_conflict_manual_audit_and_restart` compara os IDs de
+  regiões e vãos da resposta HTTP com `ServicoRevisaoHumana`/`detectar_vaos` sobre a mesma fixture.
+  A regressão visual combinada aprovou 34 testes de Resultados, seleção, filtros, navegação,
+  visibilidade independente, links de overlay, word wrap, rotação e coexistência com callouts.**
+- Testes de concorrência e restart: **duas leituras obtiveram a mesma sessão; a primeira aceitou a
+  proposta e a segunda recebeu `409 STALE_STATE`. Nova tentativa sobre a proposta já decidida também
+  recebeu 409; catálogo inexistente e referência de outro projeto receberam 422. Elemento e relação
+  manuais foram criados pela API. Após fechar o primeiro runtime e abrir outro sobre o mesmo SQLite,
+  proposta, elemento, relação e auditoria permaneceram, incluindo autor, motivo, timestamp, valores
+  anteriores e confirmados. O gateway HTTP repete somente leituras e nunca mutações.**
+- Import graph do painel: **`tests/unit/test_review_panel_remote_boundary.py` inspeciona
+  `review_panel.py` e `review_gateway.py` por AST e proíbe `application`, `domain`, `adapters`,
+  `ports`, servidor e os antigos helpers de regiões/vãos. O painel recebe somente `ReviewGateway`,
+  DTOs e overlays prontos; `MainWindow` injeta o gateway remoto. O serviço local continua restrito
+  ao painel de Documentação, cuja migração pertence à Etapa 7 e não foi iniciada.**
+- Comandos/gates: **a bateria dirigida de contratos, servidor, gateway, fronteira, UI e E2E aprovou
+  124 testes. `IniciarTestes.bat` final registrou `RESULTADO FINAL: APROVADO`: Python 3.13.14,
+  `pip check` íntegro, Ruff lint aprovado e 271 arquivos formatados, Mypy sem erros em 267
+  arquivos-fonte, 711 testes aprovados em 139,83 s, cobertura 86,70% contra mínimo 85,01% e 2.214
+  funções/métodos sem complexidade E/F. `docker compose config --quiet` passou; a imagem foi
+  reconstruída com `docker compose build --no-cache`, digest
+  `sha256:b9be971f829166250169487b74fb5bfa0ee82e9edd3ed2bd63ea7b9cc56aa1d2` e 173.643.601 bytes. O
+  Compose isolado ficou `healthy`, expôs `remote-human-review` e `review-audit-projections`, criou um
+  projeto, reiniciou e voltou `healthy`/`ready=true` com o mesmo ID persistido.**
+- Observações/bloqueios: **conclusão em 2026-08-18 19:09 -03:00, sem bloqueios. A primeira execução
+  do gate revelou que o modo `--smoke-test` sem senha podia aguardar um diálogo modal na carga
+  inicial; a inicialização agora registra o erro no status sem modal, mantendo avisos nas ações
+  explícitas, e o gate foi reiniciado integralmente e aprovado. Contêiner, rede e volume efêmeros
+  `zph-stage6-validation` foram removidos; a imagem permaneceu para inspeção. Nenhum commit foi
+  criado e a Etapa 7 permanece PENDENTE e não foi iniciada.**
 
 ### Mensagem para um novo chat limpo do Codex
 

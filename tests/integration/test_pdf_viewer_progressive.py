@@ -12,12 +12,6 @@ from pytestqt.qtbot import QtBot
 from tests.pdf_fixtures import TEST_RENDER_BUDGET, create_feature_pdf, create_golden_pdf
 from tests.viewer_gateway import LocalTestPdfViewerGateway
 
-from zeny_project_handler.domain.analysis import PropostaElemento
-from zeny_project_handler.domain.enums import (
-    CategoriaElemento,
-    EstadoRevisao,
-    SituacaoProjeto,
-)
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 from zeny_project_handler.ports.pdf import OrcamentoRenderizacaoPdf
 from zeny_project_handler.ui.pdf_gateway import PdfViewerGateway, RemoteRaster
@@ -27,7 +21,15 @@ from zeny_project_handler.ui.pdf_rendering import (
     regioes_tiles_priorizadas,
 )
 from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
-from zeny_project_handler_contracts.common import NormalizedBoxDto
+from zeny_project_handler_contracts.base import PageId, ProposalId
+from zeny_project_handler_contracts.common import NormalizedBoxDto, NormalizedPointDto
+from zeny_project_handler_contracts.enums import (
+    ElementCategory,
+    ElementSituation,
+    ReviewGeometryKind,
+    ReviewState,
+)
+from zeny_project_handler_contracts.review import ReviewGeometryDto, ReviewOverlayDto
 from zeny_project_handler_contracts.viewer import (
     CloseViewerSessionResponse,
     CreateViewerSessionResponse,
@@ -347,15 +349,23 @@ def test_rotated_overlays_remain_aligned_and_review_link_is_clickable(
             PontoNormalizado(Decimal("0.7"), Decimal("0.6")),
         ),
     )
-    proposal = PropostaElemento(
-        id=uuid4(),
-        execucao_id=uuid4(),
-        categoria=CategoriaElemento.POSTE,
-        situacao_projeto=SituacaoProjeto.INSTALAR,
-        estado_revisao=EstadoRevisao.PROPOSTA,
-        evidencia_ids=(uuid4(),),
-        geometria=geometry,
-        confianca=Decimal("0.9"),
+    proposal_id = ProposalId(uuid4())
+    geometry_dto = ReviewGeometryDto(
+        page_id=PageId(page_id),
+        kind=ReviewGeometryKind.POLYLINE,
+        points=tuple(
+            NormalizedPointDto(x=str(point.x), y=str(point.y)) for point in geometry.pontos
+        ),
+    )
+    proposal = ReviewOverlayDto(
+        proposal_id=proposal_id,
+        geometry=geometry_dto,
+        link_geometry=geometry_dto,
+        label="Poste",
+        category=ElementCategory.POLE,
+        situation=ElementSituation.INSTALL,
+        review_state=ReviewState.PENDING,
+        confidence="0.9",
     )
     viewer.definir_propostas_revisao((proposal,))
 
@@ -364,7 +374,7 @@ def test_rotated_overlays_remain_aligned_and_review_link_is_clickable(
         _wait_preview(qtbot, viewer, rotation=rotation)
         transformer = viewer._current_transformer
         assert transformer is not None
-        marker = viewer.view._review_items[str(proposal.id)]
+        marker = viewer.view._review_items[str(proposal_id.root)]
         pixels = tuple(transformer.normalizado_para_pixel(point) for point in geometry.pontos)
         expected_left = min(point.x for point in pixels)
         expected_bottom = min(
@@ -375,7 +385,7 @@ def test_rotated_overlays_remain_aligned_and_review_link_is_clickable(
         assert path_start.x == pytest.approx(expected_left)
         assert path_start.y == pytest.approx(expected_bottom)
 
-    marker = viewer.view._review_items[str(proposal.id)]
+    marker = viewer.view._review_items[str(proposal_id.root)]
     target = viewer.view.mapFromScene(marker.mapToScene(marker.path().pointAtPercent(0.5)))
     with qtbot.waitSignal(viewer.proposal_selected, timeout=1_000) as selected:
         qtbot.mouseClick(  # type: ignore[no-untyped-call]
@@ -383,7 +393,7 @@ def test_rotated_overlays_remain_aligned_and_review_link_is_clickable(
             Qt.MouseButton.LeftButton,
             pos=QPoint(target.x(), target.y()),
         )
-    assert selected.args == [str(proposal.id)]
+    assert selected.args == [str(proposal_id.root)]
 
 
 @pytest.mark.integration

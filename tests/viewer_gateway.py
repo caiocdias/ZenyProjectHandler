@@ -23,7 +23,13 @@ from zeny_project_handler.ports.pdf import (
     SessaoLeituraPdfPort,
 )
 from zeny_project_handler.ui.pdf_gateway import RemoteRaster, ViewerGatewayError
-from zeny_project_handler_contracts.base import DocumentId, PageId, UploadId, ViewerSessionId
+from zeny_project_handler_contracts.base import (
+    DocumentId,
+    PageId,
+    ProjectId,
+    UploadId,
+    ViewerSessionId,
+)
 from zeny_project_handler_contracts.common import NormalizedBoxDto
 from zeny_project_handler_contracts.errors import ErrorCode
 from zeny_project_handler_contracts.viewer import (
@@ -66,7 +72,59 @@ class LocalTestPdfViewerGateway:
         self._reader = reader or PyMuPdfReader()
         self._budget = budget or OrcamentoRenderizacaoPdf(8_000_000, 64 * 1024 * 1024)
         self._sessions: dict[UUID, _Session] = {}
+        self._projects: dict[UUID, ViewerProjectResponse] = {}
+        self._page_aliases: dict[UUID, UUID] = {}
         self._lock = RLock()
+
+    def register_project(
+        self,
+        project_id: UUID,
+        paths: tuple[Path, ...],
+        *,
+        project_version: int = 0,
+        document_page_ids: tuple[tuple[UUID, tuple[UUID, ...]], ...] | None = None,
+    ) -> ViewerProjectResponse:
+        """Configure uma projeção remota de projeto para testes do desktop DTO-only."""
+        session = self.create_session(paths, idempotency_key=f"project-{project_id}")
+        documents = session.documents
+        if document_page_ids is not None:
+            remapped: list[ViewerDocumentDto] = []
+            for document, (document_id, page_ids) in zip(
+                documents,
+                document_page_ids,
+                strict=True,
+            ):
+                pages = tuple(
+                    page.model_copy(
+                        update={
+                            "page_id": PageId(page_id),
+                            "document_id": DocumentId(document_id),
+                        }
+                    )
+                    for page, page_id in zip(document.pages, page_ids, strict=True)
+                )
+                self._page_aliases.update(
+                    (expected.root, actual.page_id.root)
+                    for expected, actual in zip(
+                        (item.page_id for item in pages),
+                        document.pages,
+                        strict=True,
+                    )
+                )
+                remapped.append(
+                    document.model_copy(
+                        update={"document_id": DocumentId(document_id), "pages": pages}
+                    )
+                )
+            documents = tuple(remapped)
+        response = ViewerProjectResponse(
+            project_id=ProjectId(project_id),
+            project_version=project_version,
+            documents=documents,
+            pages=tuple(page for document in documents for page in document.pages),
+        )
+        self._projects[project_id] = response
+        return response
 
     def create_session(
         self,
@@ -140,12 +198,19 @@ class LocalTestPdfViewerGateway:
         shutil.rmtree(self._root, ignore_errors=True)
 
     def get_project(self, project_id: UUID) -> ViewerProjectResponse:
-        raise ViewerGatewayError(
-            ErrorCode.RESOURCE_NOT_FOUND,
-            f"Projeto de teste {project_id} não configurado.",
-        )
+        try:
+            return self._projects[project_id]
+        except KeyError as error:
+            raise ViewerGatewayError(
+                ErrorCode.RESOURCE_NOT_FOUND,
+                f"Projeto de teste {project_id} não configurado.",
+            ) from error
 
     def get_page(self, page_id: UUID) -> ViewerPageDto:
+        for project in self._projects.values():
+            for page in project.pages:
+                if page.page_id.root == page_id:
+                    return page
         with self._lock:
             for temporary in self._sessions.values():
                 for document in self._response(temporary).documents:
@@ -194,6 +259,7 @@ class LocalTestPdfViewerGateway:
             return RemoteRaster(_png(rendered), _metadata(page_id, rendered))
 
     def _source(self, page_id: UUID) -> tuple[SessaoLeituraPdfPort, int]:
+        page_id = self._page_aliases.get(page_id, page_id)
         for temporary in self._sessions.values():
             for item in temporary.files:
                 if item.session is None:

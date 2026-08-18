@@ -26,6 +26,10 @@ from tests.conftest import ApplicationFactory
 from tests.pdf_fixtures import create_golden_pdf
 from zeny_project_handler.adapters.analysis import PyMuPdfDocumentAnalyzer, TesseractCliOcr
 from zeny_project_handler.adapters.catalog import carregar_catalogo_inicial
+from zeny_project_handler.adapters.persistence import (
+    SqlAlchemyUnitOfWork,
+    create_sqlite_engine,
+)
 from zeny_project_handler.config import AppSettings
 from zeny_project_handler.domain.enums import CategoriaElemento
 from zeny_project_handler.domain.project_metadata import MetadadosProjeto
@@ -160,13 +164,15 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
     assert window.pdf_viewer.inspecao is not None
 
     assert window.review_panel is not None
-    with window.review_panel._service._unit_of_work() as work:
+    persistence = create_sqlite_engine(settings.database_path)
+    with SqlAlchemyUnitOfWork(persistence) as work:
         project = work.projetos.obter(UUID(str(project_id)))
         assert project is not None
         work.projetos.salvar(
             replace(project, metadados=MetadadosProjeto(tipo_servico="Rede urbana"))
         )
         work.commit()
+    persistence.dispose()
     panel.abrir_selecionado()
 
     run = panel.findChild(QPushButton, "mvpRunAnalysisButton")

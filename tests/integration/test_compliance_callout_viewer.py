@@ -27,7 +27,6 @@ from zeny_project_handler.application.compliance_callouts import (
     projetar_callouts_conformidade,
 )
 from zeny_project_handler.application.visual_occupancy import MapaOcupacaoVisual
-from zeny_project_handler.domain.analysis import PropostaElemento
 from zeny_project_handler.domain.compliance import (
     AchadoConformidade,
     AlvoConformidade,
@@ -44,10 +43,18 @@ from zeny_project_handler.domain.compliance import (
     TipoEscopoConformidade,
 )
 from zeny_project_handler.domain.documents import PaginaDocumento
-from zeny_project_handler.domain.enums import CategoriaElemento, EstadoRevisao, SituacaoProjeto
 from zeny_project_handler.domain.values import CaixaPagina, GeometriaDocumento, PontoNormalizado
 from zeny_project_handler.ports.pdf import OrcamentoRenderizacaoPdf
 from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
+from zeny_project_handler_contracts.base import PageId, ProposalId
+from zeny_project_handler_contracts.common import NormalizedPointDto
+from zeny_project_handler_contracts.enums import (
+    ElementCategory,
+    ElementSituation,
+    ReviewGeometryKind,
+    ReviewState,
+)
+from zeny_project_handler_contracts.review import ReviewGeometryDto, ReviewOverlayDto
 from zeny_project_handler_contracts.viewer import ViewerPageDto
 
 TILED_BUDGET = OrcamentoRenderizacaoPdf(
@@ -87,13 +94,14 @@ def test_callout_layer_draws_box_text_open_arrows_and_coexists_with_review_links
     assert graphics.texto.toPlainText() == callout.texto
     assert len(graphics.linhas) == 2
     assert all(item.path().elementCount() == 6 for item in graphics.linhas)
-    assert str(proposal.id) in viewer.view._review_items
+    proposal_id = str(proposal.proposal_id.root)
+    assert proposal_id in viewer.view._review_items
     assert viewer.view._callout_layer is not None
     assert viewer.view._callout_layer.zValue() == 30
-    assert viewer.view._review_items[str(proposal.id)].zValue() == 20
+    assert viewer.view._review_items[proposal_id].zValue() == 20
 
     viewer.definir_callouts_conformidade(())
-    assert str(proposal.id) in viewer.view._review_items
+    assert proposal_id in viewer.view._review_items
     viewer.definir_callouts_conformidade((callout,))
     viewer.definir_propostas_revisao(())
     assert str(callout.id) in viewer.view._callout_items
@@ -706,17 +714,22 @@ def _dense_id(value: str) -> UUID:
     return uuid5(NAMESPACE_URL, f"callout-dense-render:{value}")
 
 
-def _proposal(page_id: UUID) -> PropostaElemento:
-    point = PontoNormalizado(Decimal("0.46"), Decimal("0.56"))
-    return PropostaElemento(
-        id=uuid4(),
-        execucao_id=uuid4(),
-        categoria=CategoriaElemento.POSTE,
-        situacao_projeto=SituacaoProjeto.INSTALAR,
-        estado_revisao=EstadoRevisao.PROPOSTA,
-        evidencia_ids=(uuid4(),),
-        geometria=GeometriaDocumento.ponto(page_id, point),
-        confianca=Decimal("0.9"),
+def _proposal(page_id: UUID) -> ReviewOverlayDto:
+    proposal_id = ProposalId(uuid4())
+    geometry = ReviewGeometryDto(
+        page_id=PageId(page_id),
+        kind=ReviewGeometryKind.POINT,
+        points=(NormalizedPointDto(x="0.46", y="0.56"),),
+    )
+    return ReviewOverlayDto(
+        proposal_id=proposal_id,
+        geometry=geometry,
+        link_geometry=geometry,
+        label="Poste",
+        category=ElementCategory.POLE,
+        situation=ElementSituation.INSTALL,
+        review_state=ReviewState.PENDING,
+        confidence="0.9",
     )
 
 

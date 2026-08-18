@@ -25,7 +25,6 @@ from PySide6.QtWidgets import (
 )
 from pytestqt.qtbot import QtBot
 from sqlalchemy import Engine
-from tests.factories import complete_project
 from tests.pdf_fixtures import TEST_RENDER_BUDGET, create_golden_pdf
 from tests.viewer_gateway import LocalTestPdfViewerGateway
 
@@ -36,14 +35,12 @@ from zeny_project_handler.adapters.persistence import (
     create_sqlite_engine,
     upgrade_database,
 )
-from zeny_project_handler.application.analysis_regions import RegiaoAnalise
 from zeny_project_handler.application.compliance_analysis import ExecutarAnaliseConformidade
 from zeny_project_handler.application.compliance_registry import (
     ServicoRegistroRegrasConformidade,
 )
 from zeny_project_handler.application.human_review import ServicoRevisaoHumana
 from zeny_project_handler.domain.analysis import (
-    DecisaoRevisao,
     EvidenciaDocumento,
     ExecucaoAnalise,
     PropostaElemento,
@@ -55,15 +52,25 @@ from zeny_project_handler.domain.enums import (
     EstadoExecucaoAnalise,
     EstadoRevisao,
     SituacaoProjeto,
-    TipoDecisaoRevisao,
     TipoEvidencia,
 )
-from zeny_project_handler.domain.project import Cabo, Projeto
+from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 from zeny_project_handler.ports.pdf import ReferenciaFontePdf
 from zeny_project_handler.ui.documentation_panel import DocumentationPanelWidget
 from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
-from zeny_project_handler.ui.review_panel import ReviewPanelWidget, _proposal_label
+from zeny_project_handler.ui.review_panel import ReviewPanelWidget
+from zeny_project_handler_contracts.base import ElementId, ProposalId, RegionId
+from zeny_project_handler_contracts.common import NormalizedPointDto as DtoPoint
+from zeny_project_handler_contracts.enums import (
+    ElementCategory,
+    ElementSituation,
+    ReviewGeometryKind,
+    ReviewState,
+    SpanLengthSource,
+)
+from zeny_project_handler_contracts.review import AnalysisRegionDto, DetectedSpanDto
+from zeny_project_handler_server.review_api import ReviewApiService, _proposal_label
 
 pytestmark = pytest.mark.integration
 
@@ -71,6 +78,35 @@ _LONG_CELL_TEXT = (
     "Texto longo de resultado que deve permanecer totalmente visível quando a coluna fica "
     "estreita e precisa ocupar várias linhas sem reticências"
 )
+
+
+def _span_dto(
+    panel: ReviewPanelWidget,
+    *,
+    situation: ElementSituation = ElementSituation.INSTALL,
+    situation_label: str = "A instalar",
+    proposal_id: ProposalId | None = None,
+) -> DetectedSpanDto:
+    assert panel._session is not None
+    proposal = panel._session.proposals[0]
+    return DetectedSpanDto(
+        span_id=uuid4(),
+        proposal_id=proposal_id,
+        cable_element_id=ElementId(uuid4()),
+        label="V1-2",
+        situation=situation,
+        situation_label=situation_label,
+        start_label="Poste P1",
+        end_label="Poste P2",
+        cable_label="B-2-CAA — Cabo protegido",
+        length="31.5",
+        length_label="31,50 m",
+        length_source=SpanLengthSource.DRAWING_LABEL,
+        length_source_label="Comprimento informado",
+        page_label="Folha 1",
+        geometry=proposal.overlay.geometry,
+        evidence=(),
+    )
 
 
 def _assert_word_wrap_control(button: QToolButton) -> None:
@@ -232,11 +268,15 @@ def review_panel_context(
         work.propostas.salvar(conflict)
         work.propostas.salvar(relation)
         work.commit()
-    service = ServicoRevisaoHumana(
-        lambda: SqlAlchemyUnitOfWork(engine),
-        relogio=lambda: datetime(2026, 7, 21, 18, tzinfo=UTC),
-    )
     gateway = LocalTestPdfViewerGateway(budget=TEST_RENDER_BUDGET)
+    gateway.register_project(
+        project.id,
+        (source,),
+        document_page_ids=tuple(
+            (document.id, tuple(page.id for page in document.paginas))
+            for document in project.documentos
+        ),
+    )
     viewer = PdfViewerWidget(
         gateway=gateway,
         dpi=72,
@@ -245,7 +285,7 @@ def review_panel_context(
             TEST_RENDER_BUDGET.limite_bytes // 7,
         ),
     )
-    panel = ReviewPanelWidget(service=service, viewer=viewer)
+    panel = ReviewPanelWidget(gateway=ReviewApiService(engine), viewer=viewer)
     qtbot.addWidget(viewer)
     qtbot.addWidget(panel)
     viewer.show()
@@ -289,7 +329,7 @@ def test_results_panel_groups_relationships_and_links_elements_to_pdf(
 
     state_filter = panel.findChild(QComboBox, "reviewStateFilter")
     assert state_filter is not None
-    state_filter.setCurrentIndex(state_filter.findData(EstadoRevisao.CONFLITANTE.value))
+    state_filter.setCurrentIndex(state_filter.findData(ReviewState.CONFLICTING.value))
     assert tree.topLevelItemCount() == 1
     filtered_region = tree.topLevelItem(0)
     assert filtered_region is not None and filtered_region.childCount() == 1
@@ -326,6 +366,7 @@ def test_results_panel_groups_relationships_and_links_elements_to_pdf(
 )
 def test_symbolic_equipment_uses_identified_type_as_label(
     review_panel_context: tuple[Engine, ReviewPanelWidget, PropostaElemento],
+    catalogo_inicial: CatalogoTecnico,
     equipment_class: str,
     expected_label: str,
 ) -> None:
@@ -341,7 +382,7 @@ def test_symbolic_equipment_uses_identified_type_as_label(
         ),
     )
 
-    assert _proposal_label(symbolic) == expected_label
+    assert _proposal_label(symbolic, catalogo_inicial) == expected_label
 
 
 def test_results_panel_keeps_recognized_point_without_elements(
@@ -354,15 +395,20 @@ def test_results_panel_keeps_recognized_point_without_elements(
     assert tree is not None
     project_combo.setCurrentIndex(1)
     assert panel._session is not None
-    evidence = panel._session.evidencias[0]
-    standalone = RegiaoAnalise(
-        id=uuid4(),
-        pagina_id=evidence.pagina_id,
-        geometria=evidence.geometria,
-        elemento_ids=(),
-        rotulo_ponto="P11",
+    original = panel._session.regions[0]
+    standalone = AnalysisRegionDto(
+        region_id=RegionId(uuid4()),
+        page_id=original.page_id,
+        label="P11",
+        location_label="P11 · revisão.pdf · página 1",
+        coordinate_label="Sem coordenada identificada",
+        action_summary="Ponto identificado",
+        detail_summary="Identificador de ponto reconhecido no PDF",
+        geometry=original.geometry,
+        proposal_ids=(),
+        relation_proposal_ids=(),
     )
-    panel._session = replace(panel._session, regioes=(standalone,))
+    panel._session = panel._session.model_copy(update={"regions": (standalone,)})
 
     panel._refresh_proposals()
 
@@ -397,23 +443,21 @@ def test_results_panel_has_span_tab_with_situation_cable_and_length_source(
     assert table is not None
     project_combo.setCurrentIndex(1)
     assert panel._session is not None
-    project = complete_project(panel._session.catalogo)
-    cable = next(item for item in project.elementos if isinstance(item, Cabo))
-    panel._session = replace(
-        panel._session,
-        projeto=replace(
-            project,
-            elementos=tuple(
-                replace(
-                    item,
-                    identificador_operacional="V1-2",
-                    situacao=cable_situation,
-                )
-                if item.id == cable.id
-                else item
-                for item in project.elementos
-            ),
-        ),
+    situation = {
+        SituacaoProjeto.INSTALAR: ElementSituation.INSTALL,
+        SituacaoProjeto.REMOVER: ElementSituation.REMOVE,
+        SituacaoProjeto.EXISTENTE: ElementSituation.EXISTING,
+    }[cable_situation]
+    panel._session = panel._session.model_copy(
+        update={
+            "spans": (
+                _span_dto(
+                    panel,
+                    situation=situation,
+                    situation_label=expected_situation,
+                ),
+            )
+        }
     )
 
     panel._refresh_spans()
@@ -441,12 +485,10 @@ def test_results_panel_has_span_tab_with_situation_cable_and_length_source(
     cable_item = table.item(0, 4)
     length_item = table.item(0, 5)
     source_item = table.item(0, 6)
-    catalog_cable = panel._session.catalogo.item_por_id(cable.tipo_catalogo_id)
     assert identifier_item is not None and identifier_item.text() == "V1-2"
     assert situation_item is not None and situation_item.text() == expected_situation
-    assert catalog_cable is not None
     assert cable_item is not None
-    assert cable_item.text() == f"{catalog_cable.codigo} — {catalog_cable.descricao}"
+    assert cable_item.text() == "B-2-CAA — Cabo protegido"
     assert length_item is not None and length_item.text() == "31,50 m"
     assert source_item is not None and source_item.text() == "Comprimento informado"
     visibility = table.cellWidget(0, 8)
@@ -523,7 +565,7 @@ def test_review_tables_toggle_word_wrap_and_keep_interactions_after_reload(
     assert tree.currentItem() is reloaded_item
 
     assert panel._session is not None
-    panel._session = replace(panel._session, projeto=complete_project(panel._session.catalogo))
+    panel._session = panel._session.model_copy(update={"spans": (_span_dto(panel),)})
     panel._refresh_spans()
     tabs.setCurrentIndex(1)
     assert spans.rowCount() == 1
@@ -569,57 +611,27 @@ def test_span_visibility_button_hides_matching_cable_overlay(
     project_combo.setCurrentIndex(1)
     qtbot.waitUntil(lambda: panel._viewer._current_transformer is not None)
     assert panel._session is not None
-    project = complete_project(panel._session.catalogo)
-    cable = next(item for item in project.elementos if isinstance(item, Cabo))
-    assert cable.geometria is not None
-    cable_proposal = PropostaElemento(
-        id=uuid4(),
-        execucao_id=panel._session.execucao.id,
-        categoria=CategoriaElemento.CABO,
-        situacao_projeto=cable.situacao,
-        estado_revisao=EstadoRevisao.CONFIRMADA,
-        evidencia_ids=(panel._session.evidencias[0].id,),
-        geometria=cable.geometria,
-        tipo_catalogo_sugerido_id=cable.tipo_catalogo_id,
-        confianca=Decimal("0.95"),
+    proposal = panel._session.proposals[0]
+    panel._session = panel._session.model_copy(
+        update={"spans": (_span_dto(panel, proposal_id=proposal.proposal_id),)}
     )
-    decision = DecisaoRevisao(
-        id=uuid4(),
-        proposta_id=cable_proposal.id,
-        decisao=TipoDecisaoRevisao.ACEITAR,
-        revisor="Caio",
-        decidida_em=datetime(2026, 7, 21, 18, tzinfo=UTC),
-        elemento_confirmado_id=cable.id,
-    )
-    region = RegiaoAnalise(
-        id=uuid4(),
-        pagina_id=cable.geometria.pagina_id,
-        geometria=cable.geometria,
-        elemento_ids=(cable_proposal.id,),
-    )
-    panel._session = replace(
-        panel._session,
-        projeto=project,
-        propostas=(cable_proposal,),
-        regioes=(region,),
-        decisoes=(decision,),
-    )
-    panel._page_id = cable.geometria.pagina_id
+    panel._page_id = proposal.overlay.geometry.page_id.root
 
     panel._refresh_spans()
     panel._refresh_proposals()
 
     visibility = table.cellWidget(0, 8)
     assert isinstance(visibility, QToolButton)
-    assert str(cable_proposal.id) in panel._viewer.view._review_items
+    proposal_id = str(proposal.proposal_id.root)
+    assert proposal_id in panel._viewer.view._review_items
 
     visibility.click()
 
-    assert str(cable_proposal.id) not in panel._viewer.view._review_items
+    assert proposal_id not in panel._viewer.view._review_items
 
     visibility.click()
 
-    assert str(cable_proposal.id) in panel._viewer.view._review_items
+    assert proposal_id in panel._viewer.view._review_items
 
 
 def test_cable_link_uses_the_rotated_label_instead_of_the_span_path(
@@ -632,77 +644,55 @@ def test_cable_link_uses_the_rotated_label_instead_of_the_span_path(
     project_combo.setCurrentIndex(1)
     qtbot.waitUntil(lambda: panel._viewer._current_transformer is not None)
     assert panel._session is not None
-    page_id = panel._session.projeto.documentos[0].paginas[0].id
-    label_geometry = GeometriaDocumento.poligono(
-        page_id,
-        (
-            PontoNormalizado(Decimal("0.40"), Decimal("0.30")),
-            PontoNormalizado(Decimal("0.60"), Decimal("0.40")),
-            PontoNormalizado(Decimal("0.58"), Decimal("0.44")),
-            PontoNormalizado(Decimal("0.38"), Decimal("0.34")),
-        ),
+    original = panel._session.proposals[0]
+    page_id = original.overlay.geometry.page_id
+    label_geometry = original.overlay.geometry.model_copy(
+        update={
+            "kind": ReviewGeometryKind.POLYGON,
+            "points": (
+                DtoPoint(x="0.40", y="0.30"),
+                DtoPoint(x="0.60", y="0.40"),
+                DtoPoint(x="0.58", y="0.44"),
+                DtoPoint(x="0.38", y="0.34"),
+            ),
+        }
     )
-    label = EvidenciaDocumento(
-        id=uuid4(),
-        execucao_id=panel._session.execucao.id,
-        pagina_id=page_id,
-        tipo=TipoEvidencia.TEXTO,
-        geometria=label_geometry,
-        metodo="fixture",
-        versao_metodo="1",
-        parametros=(),
-        conteudo_bruto="B-2-CAA",
-        criada_em=datetime(2026, 7, 21, 17, tzinfo=UTC),
+    span_geometry = original.overlay.geometry.model_copy(
+        update={
+            "kind": ReviewGeometryKind.POLYLINE,
+            "points": (
+                DtoPoint(x="0.05", y="0.05"),
+                DtoPoint(x="0.95", y="0.95"),
+            ),
+        }
     )
-    span_geometry = GeometriaDocumento.polilinha(
-        page_id,
-        (
-            PontoNormalizado(Decimal("0.05"), Decimal("0.05")),
-            PontoNormalizado(Decimal("0.95"), Decimal("0.95")),
-        ),
+    cable_proposal = original.model_copy(
+        update={
+            "category": ElementCategory.CABLE,
+            "label": "B-2-CAA",
+            "overlay": original.overlay.model_copy(
+                update={"geometry": span_geometry, "link_geometry": label_geometry}
+            ),
+        }
     )
-    cable_proposal = PropostaElemento(
-        id=uuid4(),
-        execucao_id=panel._session.execucao.id,
-        categoria=CategoriaElemento.CABO,
-        situacao_projeto=SituacaoProjeto.INSTALAR,
-        estado_revisao=EstadoRevisao.CONFIRMADA,
-        evidencia_ids=(label.id,),
-        geometria=span_geometry,
-        codigo_observado="B-2-CAA",
-        atributos_sugeridos=(("evidencia_rotulo_id", str(label.id)),),
-        confianca=Decimal("0.95"),
-    )
-    panel._session = replace(
-        panel._session,
-        propostas=(cable_proposal,),
-        evidencias=(label,),
-    )
-    panel._page_id = page_id
+    panel._session = panel._session.model_copy(update={"proposals": (cable_proposal,)})
+    panel._page_id = page_id.root
 
     panel._update_review_overlays((cable_proposal,))
 
-    proposal_id = str(cable_proposal.id)
+    proposal_id = str(cable_proposal.proposal_id.root)
     marker = panel._viewer.view._review_items[proposal_id]
     first = marker.path().elementAt(0)
     second = marker.path().elementAt(1)
     assert marker.path().boundingRect().width() < 30
     assert abs(first.y - second.y) > 1
-    assert panel._viewer.view._review_geometries[proposal_id] == span_geometry
     editable_geometry = panel._viewer.geometria_proposta(proposal_id)
     assert editable_geometry is not None
-    assert editable_geometry.tipo is span_geometry.tipo
-    assert float(editable_geometry.pontos[0].x) == pytest.approx(0.05)
-    assert float(editable_geometry.pontos[0].y) == pytest.approx(0.05)
-    assert float(editable_geometry.pontos[1].x) == pytest.approx(0.95)
-    assert float(editable_geometry.pontos[1].y) == pytest.approx(0.95)
-
-    legacy_proposal = replace(cable_proposal, atributos_sugeridos=())
-    panel._session = replace(panel._session, propostas=(legacy_proposal,))
-    panel._update_review_overlays((legacy_proposal,))
-
-    legacy_marker = panel._viewer.view._review_items[proposal_id]
-    assert legacy_marker.path().boundingRect().width() < 30
+    assert editable_geometry.kind is ReviewGeometryKind.POLYLINE
+    assert float(editable_geometry.points[0].x) == pytest.approx(0.05)
+    assert float(editable_geometry.points[0].y) == pytest.approx(0.05)
+    assert float(editable_geometry.points[1].x) == pytest.approx(0.95)
+    assert float(editable_geometry.points[1].y) == pytest.approx(0.95)
 
 
 def test_result_visibility_can_hide_a_whole_point_or_one_element(
@@ -768,14 +758,15 @@ def test_documentation_panel_has_own_document_and_compliance_views(
         diretorio_dados=tmp_path / "compliance-data",
     )
     registry_service.inicializar(carregar_registro_conformidade_inicial())
+    review_service = ServicoRevisaoHumana(unit_of_work)
     analysis_service = ExecutarAnaliseConformidade(
         unit_of_work,
-        review_panel._service.carregar_sessao_semantica,
+        review_service.carregar_sessao_semantica,
     )
-    project_id = review_panel._service.listar_projetos()[0].projeto_id
+    project_id = review_service.listar_projetos()[0].projeto_id
     analysis_service.executar(project_id)
     panel = DocumentationPanelWidget(
-        service=review_panel._service,
+        service=review_service,
         registry_service=registry_service,
         analysis_service=analysis_service,
         viewer=review_panel._viewer,
@@ -813,14 +804,15 @@ def test_documentation_tables_toggle_word_wrap_and_recalculate_after_reload(
         diretorio_dados=tmp_path / "wrap-compliance-data",
     )
     registry_service.inicializar(carregar_registro_conformidade_inicial())
+    review_service = ServicoRevisaoHumana(unit_of_work)
     analysis_service = ExecutarAnaliseConformidade(
         unit_of_work,
-        review_panel._service.carregar_sessao_semantica,
+        review_service.carregar_sessao_semantica,
     )
-    project_id = review_panel._service.listar_projetos()[0].projeto_id
+    project_id = review_service.listar_projetos()[0].projeto_id
     analysis_service.executar(project_id)
     panel = DocumentationPanelWidget(
-        service=review_panel._service,
+        service=review_service,
         registry_service=registry_service,
         analysis_service=analysis_service,
         viewer=review_panel._viewer,

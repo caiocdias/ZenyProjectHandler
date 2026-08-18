@@ -30,6 +30,7 @@ class FakeRuntime:
         self.closed = False
         self.project_api = None
         self.viewer_api = None
+        self.review_api = None
         self.jobs = cast(JobLifecycle, FakeJobs())
 
     def session_capabilities(self) -> SessionCapabilitiesResponse:
