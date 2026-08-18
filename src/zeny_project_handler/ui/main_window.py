@@ -31,11 +31,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from zeny_project_handler.application.compliance_analysis import ExecutarAnaliseConformidade
-from zeny_project_handler.application.compliance_registry import (
-    ServicoRegistroRegrasConformidade,
-)
-from zeny_project_handler.application.human_review import ServicoRevisaoHumana
 from zeny_project_handler.application.mvp_workflow import ServicoFluxoMvp
 from zeny_project_handler.application.operation_coordinator import (
     CoordenadorOperacoes,
@@ -46,6 +41,7 @@ from zeny_project_handler.application.project_portability import ServicoPortabil
 from zeny_project_handler.ports.pdf import OrcamentoRenderizacaoPdf
 
 from .application_icon import carregar_icone_aplicacao
+from .documentation_gateway import DocumentationGateway
 from .documentation_panel import DocumentationPanelWidget
 from .pdf_credentials import ResolvedorCredenciaisPdf
 from .pdf_gateway import PdfViewerGateway
@@ -343,12 +339,10 @@ class MainWindow(QMainWindow):
         pdf_tile_cache_max_bytes: int,
         provedor_credenciais_pdf: ProvedorCredenciaisPdfMemoria | None = None,
         review_gateway: ReviewGateway | None = None,
-        review_service: ServicoRevisaoHumana | None = None,
+        documentation_gateway: DocumentationGateway | None = None,
         workflow_service: ServicoFluxoMvp | None = None,
         portability_service: ServicoPortabilidadeProjeto | None = None,
         operation_coordinator: CoordenadorOperacoes | None = None,
-        compliance_registry_service: ServicoRegistroRegrasConformidade | None = None,
-        compliance_analysis_service: ExecutarAnaliseConformidade | None = None,
         ui_state_path: Path | None = None,
         initial_theme: Tema = Tema.CLARO,
         window_icon: QIcon | None = None,
@@ -418,15 +412,9 @@ class MainWindow(QMainWindow):
                 lambda _proposal_id, review_dock=dock: review_dock.raise_()
             )
             right_docks.append(dock)
-        if (
-            review_service is not None
-            and compliance_registry_service is not None
-            and compliance_analysis_service is not None
-        ):
+        if documentation_gateway is not None:
             self.documentation_panel = DocumentationPanelWidget(
-                service=review_service,
-                registry_service=compliance_registry_service,
-                analysis_service=compliance_analysis_service,
+                gateway=documentation_gateway,
                 viewer=self.pdf_viewer,
                 parent=self,
             )

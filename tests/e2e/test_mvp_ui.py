@@ -231,6 +231,7 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
     monkeypatch.setattr(TesseractCliOcr, "reconhecer", forbidden_call)
     previous_count = compliance_tree.topLevelItemCount()
     qtbot.mouseClick(reapply, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: "Resultado atual" in compliance_status.text(), timeout=30_000)
     assert compliance_tree.topLevelItemCount() == previous_count
     assert "Resultado atual" in compliance_status.text()
 

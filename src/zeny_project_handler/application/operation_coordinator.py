@@ -21,6 +21,7 @@ class TipoOperacao(StrEnum):
     """Operações exclusivas apresentadas de forma segura ao usuário."""
 
     ANALISE = "análise do projeto"
+    CONFORMIDADE = "análise de conformidade"
     IMPORTACAO_PDFS = "importação de PDFs"
     EXPORTACAO_PROJETO = "exportação do projeto"
     IMPORTACAO_PROJETO = "importação do projeto"

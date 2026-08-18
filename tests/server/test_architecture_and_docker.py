@@ -6,6 +6,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).parents[2]
 SERVER_SOURCE = ROOT / "src" / "zeny_project_handler_server"
+DOCUMENTATION_CLIENT_SOURCES = (
+    ROOT / "src" / "zeny_project_handler" / "ui" / "documentation_panel.py",
+    ROOT / "src" / "zeny_project_handler" / "ui" / "documentation_gateway.py",
+)
 
 
 def _imported_modules(source_file: Path) -> set[str]:
@@ -33,6 +37,35 @@ def test_server_package_does_not_import_qt_ui_or_desktop_bootstrap() -> None:
             violations[source_file.name] = forbidden
 
     assert not violations
+
+
+def test_documentation_client_depends_only_on_dtos_gateway_and_qt() -> None:
+    protected_prefixes = (
+        "zeny_project_handler.adapters",
+        "zeny_project_handler.application",
+        "zeny_project_handler.domain",
+        "zeny_project_handler.ports",
+    )
+    violations = {
+        source_file.name: sorted(
+            module
+            for module in _imported_modules(source_file)
+            if module.startswith(protected_prefixes)
+        )
+        for source_file in DOCUMENTATION_CLIENT_SOURCES
+    }
+    assert not {name: modules for name, modules in violations.items() if modules}
+
+    client_source = "\n".join(
+        source_file.read_text(encoding="utf-8") for source_file in DOCUMENTATION_CLIENT_SOURCES
+    )
+    forbidden_payload_names = (
+        "regras-conformidade-iniciais.json",
+        "catalogo-regras-conformidade.md",
+        "projetar_callouts_conformidade",
+        "analisar_conformidade_projeto",
+    )
+    assert all(name not in client_source for name in forbidden_payload_names)
 
 
 def test_docker_build_is_multistage_non_root_with_ocr_and_no_build_secret() -> None:

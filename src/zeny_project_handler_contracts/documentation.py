@@ -7,7 +7,9 @@ from pydantic import Field
 from zeny_project_handler_contracts.base import (
     ContractModel,
     DecimalString,
+    DocumentId,
     NonEmptyString,
+    PageId,
     ProjectId,
 )
 from zeny_project_handler_contracts.common import EvidenceNavigationDto
@@ -26,10 +28,13 @@ class DocumentFieldDto(ContractModel):
 class DocumentationSectionDto(ContractModel):
     section_key: NonEmptyString
     label: NonEmptyString
+    document_id: DocumentId | None = None
+    document_name: str | None = Field(default=None, max_length=500)
     fields: tuple[DocumentFieldDto, ...]
 
 
 class DocumentationResponse(ContractModel):
     project_id: ProjectId
     semantic_signature: NonEmptyString
+    page_order: tuple[PageId, ...] = ()
     sections: tuple[DocumentationSectionDto, ...]

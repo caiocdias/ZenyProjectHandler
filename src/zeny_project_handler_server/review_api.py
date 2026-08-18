@@ -137,6 +137,32 @@ class ReviewApiService:
         version, _updated_at = self._project_metadata(project_id)
         return _session_dto(session, project_version=version)
 
+    def list_semantic_projects(
+        self,
+        *,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> ReviewProjectSummaryListResponse:
+        """Liste sessões analisadas mesmo quando não produziram propostas."""
+        summaries = self._service.listar_projetos_semanticos()
+        items = tuple(
+            self._semantic_project_summary(summary.projeto_id)
+            for summary in summaries[offset : offset + limit]
+        )
+        return ReviewProjectSummaryListResponse(
+            items=items,
+            page=PageMetadataDto(limit=limit, offset=offset, total=len(summaries)),
+        )
+
+    def get_semantic_session(self, project_id: UUID) -> ReviewSessionResponse:
+        """Projete uma sessão concluída sem exigir propostas de revisão."""
+        try:
+            session = self._service.carregar_sessao_semantica(project_id)
+        except RevisaoHumanaError as error:
+            raise validation_error(str(error)) from error
+        version, _updated_at = self._project_metadata(project_id)
+        return _session_dto(session, project_version=version)
+
     def accept(
         self,
         proposal_id: UUID,
@@ -251,6 +277,20 @@ class ReviewApiService:
         analyzed_at = max(
             (item.finalizada_em or item.iniciada_em for item in session.execucoes),
         )
+        return ReviewProjectSummaryDto(
+            project_id=ProjectId(project_id),
+            service_note=session.projeto.nome,
+            pending_proposal_count=pending,
+            analyzed_at=analyzed_at,
+        )
+
+    def _semantic_project_summary(self, project_id: UUID) -> ReviewProjectSummaryDto:
+        session = self._service.carregar_sessao_semantica(project_id)
+        pending = sum(
+            item.estado_revisao in {EstadoRevisao.PROPOSTA, EstadoRevisao.CONFLITANTE}
+            for item in session.propostas
+        )
+        analyzed_at = max(item.finalizada_em or item.iniciada_em for item in session.execucoes)
         return ReviewProjectSummaryDto(
             project_id=ProjectId(project_id),
             service_note=session.projeto.nome,

@@ -30,6 +30,12 @@ class RuleDetailDto(ContractModel):
     target_scope: NonEmptyString
     fact_keys: tuple[NonEmptyString, ...]
     definition: dict[str, JsonValue]
+    description: str | None = Field(default=None, max_length=4000)
+    source_detail: str | None = Field(default=None, max_length=1000)
+    applicability_text: str | None = Field(default=None, max_length=4000)
+    exceptions_text: str | None = Field(default=None, max_length=4000)
+    requirements_text: str | None = Field(default=None, max_length=4000)
+    provider_label: str = Field(default="Automático", min_length=1, max_length=100)
 
 
 class ActiveRuleRegistryResponse(ContractModel):

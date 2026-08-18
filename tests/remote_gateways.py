@@ -3,22 +3,38 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 from pathlib import Path
-from uuid import UUID
+from threading import Event
+from uuid import UUID, uuid4
 
 from fastapi import UploadFile
+from sqlalchemy import Engine
 
 from zeny_project_handler.adapters.pdf.errors import PdfProtegidoError
+from zeny_project_handler.application.compliance_analysis import ExecutarAnaliseConformidade
+from zeny_project_handler.application.compliance_registry import (
+    ServicoRegistroRegrasConformidade,
+)
+from zeny_project_handler.application.human_review import ServicoRevisaoHumana
+from zeny_project_handler.ui.documentation_gateway import DocumentationGatewayError
 from zeny_project_handler.ui.pdf_gateway import RemoteRaster, ViewerGatewayError
 from zeny_project_handler.ui.project_gateway import ProjectGatewayError
 from zeny_project_handler.ui.review_gateway import ReviewGatewayError
+from zeny_project_handler_contracts.base import JobId, ProjectId
 from zeny_project_handler_contracts.common import NormalizedBoxDto
+from zeny_project_handler_contracts.compliance import (
+    ComplianceExecutionResponse,
+    ComplianceHistoryResponse,
+)
+from zeny_project_handler_contracts.documentation import DocumentationResponse
 from zeny_project_handler_contracts.documents import (
     CreateUploadResponse,
     DocumentImportResultDto,
     PageOrderResponse,
     RemoveDocumentResponse,
 )
+from zeny_project_handler_contracts.enums import JobKind, JobStatus
 from zeny_project_handler_contracts.errors import ErrorCode
 from zeny_project_handler_contracts.jobs import (
     CancelJobResponse,
@@ -40,6 +56,12 @@ from zeny_project_handler_contracts.review import (
     ReviewProjectSummaryListResponse,
     ReviewSessionResponse,
 )
+from zeny_project_handler_contracts.rules import (
+    ActiveRuleRegistryResponse,
+    ConfirmRuleImportRequest,
+    RuleImportPreflightResponse,
+    RuleImportResponse,
+)
 from zeny_project_handler_contracts.session import SessionCapabilitiesResponse
 from zeny_project_handler_contracts.viewer import (
     CloseViewerSessionResponse,
@@ -50,6 +72,7 @@ from zeny_project_handler_contracts.viewer import (
     ViewerProjectResponse,
 )
 from zeny_project_handler_server.api_errors import ApiError
+from zeny_project_handler_server.compliance_api import DocumentationComplianceApiService
 from zeny_project_handler_server.composition import ServerRuntime
 from zeny_project_handler_server.project_api import ProjectApiService
 from zeny_project_handler_server.review_api import ReviewApiService
@@ -228,6 +251,223 @@ class DirectReviewGateway:
             raise _review_error(error) from None
 
 
+class DirectDocumentationGateway:
+    def __init__(self, runtime: ServerRuntime) -> None:
+        self._runtime = runtime
+
+    @property
+    def _compliance(self) -> DocumentationComplianceApiService:
+        service = self._runtime.compliance_api
+        if service is None:
+            raise RuntimeError("Documentação remota indisponível")
+        return service
+
+    def list_projects(
+        self,
+        *,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> ReviewProjectSummaryListResponse:
+        return self._compliance.list_projects(limit=limit, offset=offset)
+
+    def get_documentation(self, project_id: UUID) -> DocumentationResponse:
+        try:
+            return self._compliance.get_documentation(project_id)
+        except ApiError as error:
+            raise _documentation_error(error) from None
+
+    def get_latest_compliance(
+        self,
+        project_id: UUID,
+    ) -> ComplianceExecutionResponse | None:
+        try:
+            return self._compliance.get_latest(project_id)
+        except ApiError as error:
+            if error.code is ErrorCode.RESOURCE_NOT_FOUND:
+                return None
+            raise _documentation_error(error) from None
+
+    def list_compliance_history(
+        self,
+        project_id: UUID,
+        *,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> ComplianceHistoryResponse:
+        return self._compliance.list_history(project_id, limit=limit, offset=offset)
+
+    def create_compliance_job(
+        self,
+        project_id: UUID,
+        *,
+        expected_semantic_signature: str,
+        idempotency_key: str,
+    ) -> JobAcceptedResponse:
+        return self._runtime.jobs.create_compliance_job(
+            project_id,
+            expected_semantic_signature=expected_semantic_signature,
+            idempotency_key=idempotency_key,
+            correlation_id="11111111111111111111111111111111",
+        )
+
+    def get_job(self, job_id: UUID) -> JobStatusResponse:
+        return self._runtime.jobs.get_job(job_id)
+
+    def get_job_result(self, job_id: UUID) -> JobResultResponse:
+        return self._runtime.jobs.get_result(job_id)
+
+    def get_active_registry(self) -> ActiveRuleRegistryResponse:
+        return self._compliance.get_active_registry()
+
+    def preflight_rule_import(
+        self,
+        path: Path,
+        *,
+        idempotency_key: str,
+    ) -> RuleImportPreflightResponse:
+        try:
+            return self._compliance.preflight_rule_import(
+                path.read_bytes(),
+                idempotency_key=idempotency_key,
+            )
+        except ApiError as error:
+            raise _documentation_error(error) from None
+
+    def confirm_rule_import(self, request: ConfirmRuleImportRequest) -> RuleImportResponse:
+        try:
+            return self._compliance.confirm_rule_import(request)
+        except ApiError as error:
+            raise _documentation_error(error) from None
+
+    def download_active_registry(self) -> bytes:
+        return self._compliance.active_registry_json()
+
+
+class SynchronousDocumentationGateway:
+    """Mesmo limite DTO do HTTP, com jobs síncronos para testes focados na UI."""
+
+    def __init__(
+        self,
+        *,
+        engine: Engine,
+        data_directory: Path,
+        review_service: ServicoRevisaoHumana,
+        analysis_service: ExecutarAnaliseConformidade,
+        registry_service: ServicoRegistroRegrasConformidade,
+    ) -> None:
+        self._review_api = ReviewApiService(engine)
+        self._compliance = DocumentationComplianceApiService(
+            engine=engine,
+            data_directory=data_directory,
+            review_api=self._review_api,
+            upload_max_bytes=16 * 1024 * 1024,
+            review_service=review_service,
+            analysis_service=analysis_service,
+            registry_service=registry_service,
+        )
+        self._jobs: dict[UUID, JobStatusResponse] = {}
+
+    @property
+    def compliance_api(self) -> DocumentationComplianceApiService:
+        return self._compliance
+
+    def list_projects(
+        self,
+        *,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> ReviewProjectSummaryListResponse:
+        return self._compliance.list_projects(limit=limit, offset=offset)
+
+    def get_documentation(self, project_id: UUID) -> DocumentationResponse:
+        try:
+            return self._compliance.get_documentation(project_id)
+        except ApiError as error:
+            raise _documentation_error(error) from None
+
+    def get_latest_compliance(
+        self,
+        project_id: UUID,
+    ) -> ComplianceExecutionResponse | None:
+        try:
+            return self._compliance.get_latest(project_id)
+        except ApiError as error:
+            if error.code is ErrorCode.RESOURCE_NOT_FOUND:
+                return None
+            raise _documentation_error(error) from None
+
+    def list_compliance_history(
+        self,
+        project_id: UUID,
+        *,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> ComplianceHistoryResponse:
+        return self._compliance.list_history(project_id, limit=limit, offset=offset)
+
+    def create_compliance_job(
+        self,
+        project_id: UUID,
+        *,
+        expected_semantic_signature: str,
+        idempotency_key: str,
+    ) -> JobAcceptedResponse:
+        del idempotency_key
+        if self._compliance.semantic_signature(project_id) != expected_semantic_signature:
+            raise DocumentationGatewayError(
+                ErrorCode.STALE_STATE,
+                "A sessão semântica mudou; recarregue a documentação.",
+                status_code=409,
+            )
+        job_id = uuid4()
+        self._compliance.execute_compliance(project_id, Event())
+        now = datetime.now(UTC)
+        self._jobs[job_id] = JobStatusResponse(
+            job_id=JobId(job_id),
+            project_id=ProjectId(project_id),
+            kind=JobKind.COMPLIANCE,
+            status=JobStatus.SUCCEEDED,
+            progress_percent=100,
+            message="Conformidade concluída",
+            result_available=True,
+            created_at=now,
+            updated_at=now,
+        )
+        return JobAcceptedResponse(
+            job_id=JobId(job_id),
+            kind=JobKind.COMPLIANCE,
+            status=JobStatus.QUEUED,
+            poll_after_ms=350,
+        )
+
+    def get_job(self, job_id: UUID) -> JobStatusResponse:
+        return self._jobs[job_id]
+
+    def get_job_result(self, job_id: UUID) -> JobResultResponse:
+        job = self._jobs[job_id]
+        return JobResultResponse(job_id=job.job_id, status=job.status, result={})
+
+    def get_active_registry(self) -> ActiveRuleRegistryResponse:
+        return self._compliance.get_active_registry()
+
+    def preflight_rule_import(
+        self,
+        path: Path,
+        *,
+        idempotency_key: str,
+    ) -> RuleImportPreflightResponse:
+        return self._compliance.preflight_rule_import(
+            path.read_bytes(),
+            idempotency_key=idempotency_key,
+        )
+
+    def confirm_rule_import(self, request: ConfirmRuleImportRequest) -> RuleImportResponse:
+        return self._compliance.confirm_rule_import(request)
+
+    def download_active_registry(self) -> bytes:
+        return self._compliance.active_registry_json()
+
+
 class DirectPdfViewerGateway:
     def __init__(self, runtime: ServerRuntime) -> None:
         self._runtime = runtime
@@ -344,6 +584,16 @@ def _viewer_error(error: ApiError) -> ViewerGatewayError:
 
 def _review_error(error: ApiError) -> ReviewGatewayError:
     return ReviewGatewayError(
+        error.code,
+        error.message,
+        status_code=error.status_code,
+        correlation_id="11111111-1111-1111-1111-111111111111",
+        details=dict(error.details) if error.details is not None else None,
+    )
+
+
+def _documentation_error(error: ApiError) -> DocumentationGatewayError:
+    return DocumentationGatewayError(
         error.code,
         error.message,
         status_code=error.status_code,

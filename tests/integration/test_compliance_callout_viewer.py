@@ -46,9 +46,15 @@ from zeny_project_handler.domain.documents import PaginaDocumento
 from zeny_project_handler.domain.values import CaixaPagina, GeometriaDocumento, PontoNormalizado
 from zeny_project_handler.ports.pdf import OrcamentoRenderizacaoPdf
 from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
-from zeny_project_handler_contracts.base import PageId, ProposalId
-from zeny_project_handler_contracts.common import NormalizedPointDto
+from zeny_project_handler_contracts.base import CalloutId, DocumentId, FindingId, PageId, ProposalId
+from zeny_project_handler_contracts.common import (
+    EvidenceNavigationDto,
+    NormalizedBoxDto,
+    NormalizedPointDto,
+)
+from zeny_project_handler_contracts.compliance import ComplianceCalloutDto
 from zeny_project_handler_contracts.enums import (
+    ComplianceStatus,
     ElementCategory,
     ElementSituation,
     ReviewGeometryKind,
@@ -61,6 +67,14 @@ TILED_BUDGET = OrcamentoRenderizacaoPdf(
     limite_pixels=200_000,
     limite_bytes=1_400_000,
 )
+
+
+class _DtoCalloutViewer(PdfViewerWidget):
+    def definir_callouts_conformidade(
+        self,
+        callouts: tuple[ComplianceCalloutDto | CalloutConformidade, ...],
+    ) -> None:
+        super().definir_callouts_conformidade(tuple(_callout_dto(item) for item in callouts))
 
 
 @pytest.mark.integration
@@ -178,7 +192,7 @@ def test_callout_box_drag_keeps_anchor_fixed_updates_arrow_and_preserves_positio
     viewer.definir_callouts_conformidade((callout,))
     graphics = viewer.view._callout_items[str(callout.id)]
     original_position = graphics.caixa.pos()
-    original_box = callout.caixa_sugerida
+    original_box = _callout_dto(callout).box
     original_path = graphics.linhas[0].path()
     original_start = original_path.elementAt(0)
     fixed_tip = original_path.elementAt(1)
@@ -204,20 +218,22 @@ def test_callout_box_drag_keeps_anchor_fixed_updates_arrow_and_preserves_positio
     assert graphics.caixa.pos() != original_position
     assert (moved_start.x, moved_start.y) != pytest.approx((original_start.x, original_start.y))
     assert (moved_tip.x, moved_tip.y) == pytest.approx((fixed_tip.x, fixed_tip.y))
-    moved_box = viewer._compliance_callouts[0].caixa_sugerida
+    moved_box = viewer._compliance_callouts[0].box
     assert moved_box != original_box
-    assert Decimal(0) <= moved_box.esquerda < moved_box.direita <= Decimal(1)
-    assert Decimal(0) <= moved_box.topo < moved_box.base <= Decimal(1)
+    moved_left = Decimal(moved_box.x)
+    moved_top = Decimal(moved_box.y)
+    assert Decimal(0) <= moved_left < moved_left + Decimal(moved_box.width) <= Decimal(1)
+    assert Decimal(0) <= moved_top < moved_top + Decimal(moved_box.height) <= Decimal(1)
 
     viewer.definir_callouts_conformidade(())
     viewer.definir_callouts_conformidade((callout,))
-    assert viewer._compliance_callouts[0].caixa_sugerida == moved_box
+    assert viewer._compliance_callouts[0].box == moved_box
 
     viewer.ir_para_folha(2)
     _wait_preview(qtbot, viewer, page=2)
     viewer.ir_para_folha(1)
     _wait_preview(qtbot, viewer, page=1)
-    assert viewer._compliance_callouts[0].caixa_sugerida == moved_box
+    assert viewer._compliance_callouts[0].box == moved_box
 
 
 @pytest.mark.integration
@@ -499,8 +515,8 @@ def _save_viewport(viewer: PdfViewerWidget, output: Path) -> None:
     assert output.stat().st_size > 1_000
 
 
-def _viewer(qtbot: QtBot, *, dpi: int, budget: OrcamentoRenderizacaoPdf) -> PdfViewerWidget:
-    viewer = PdfViewerWidget(
+def _viewer(qtbot: QtBot, *, dpi: int, budget: OrcamentoRenderizacaoPdf) -> _DtoCalloutViewer:
+    viewer = _DtoCalloutViewer(
         gateway=LocalTestPdfViewerGateway(budget=budget),
         dpi=dpi,
         limite_pixels_tile=min(budget.limite_pixels, budget.limite_bytes // 7),
@@ -509,6 +525,44 @@ def _viewer(qtbot: QtBot, *, dpi: int, budget: OrcamentoRenderizacaoPdf) -> PdfV
     viewer.resize(900, 700)
     viewer.show()
     return viewer
+
+
+def _callout_dto(
+    callout: ComplianceCalloutDto | CalloutConformidade,
+) -> ComplianceCalloutDto:
+    if isinstance(callout, ComplianceCalloutDto):
+        return callout
+    box = callout.caixa_sugerida
+    box_dto = NormalizedBoxDto(
+        x=str(box.esquerda),
+        y=str(box.topo),
+        width=str(box.largura),
+        height=str(box.altura),
+    )
+    anchors = tuple(
+        NormalizedPointDto(x=str(item.ponto.x), y=str(item.ponto.y)) for item in callout.ancoras
+    )
+    navigation = EvidenceNavigationDto(
+        document_id=DocumentId(uuid5(NAMESPACE_URL, f"document:{callout.pagina_id}")),
+        page_id=PageId(callout.pagina_id),
+        geometry=box_dto,
+        label=callout.texto,
+    )
+    return ComplianceCalloutDto(
+        callout_id=CalloutId(callout.id),
+        finding_id=FindingId(callout.id),
+        text=callout.texto,
+        anchor=anchors[0],
+        anchors=anchors,
+        box=box_dto,
+        font_size_points=str(callout.tamanho_fonte_pontos),
+        status={
+            ResultadoConformidade.CONFORME: ComplianceStatus.COMPLIANT,
+            ResultadoConformidade.DIVERGENCIA: ComplianceStatus.DIVERGENCE,
+            ResultadoConformidade.NAO_AVALIAVEL: ComplianceStatus.NOT_EVALUABLE,
+        }[callout.resultado],
+        navigation=navigation,
+    )
 
 
 def _wait_preview(

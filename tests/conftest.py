@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from PySide6.QtWidgets import QApplication
 
     from zeny_project_handler.config import AppSettings
+    from zeny_project_handler.ui.documentation_gateway import DocumentationGateway
     from zeny_project_handler.ui.main_window import MainWindow
     from zeny_project_handler.ui.pdf_gateway import PdfViewerGateway
 from zeny_project_handler.ui.project_gateway import ProjectGateway
@@ -56,6 +57,7 @@ class ApplicationFactory(Protocol):
         pdf_viewer_gateway: PdfViewerGateway | None = None,
         project_gateway: ProjectGateway | None = None,
         review_gateway: ReviewGateway | None = None,
+        documentation_gateway: DocumentationGateway | None = None,
     ) -> tuple[QApplication, MainWindow]: ...
 
 
@@ -73,8 +75,10 @@ def application_factory() -> Iterator[ApplicationFactory]:
         pdf_viewer_gateway: PdfViewerGateway | None = None,
         project_gateway: ProjectGateway | None = None,
         review_gateway: ReviewGateway | None = None,
+        documentation_gateway: DocumentationGateway | None = None,
     ) -> tuple[QApplication, MainWindow]:
         from tests.remote_gateways import (
+            DirectDocumentationGateway,
             DirectPdfViewerGateway,
             DirectProjectGateway,
             DirectReviewGateway,
@@ -108,6 +112,10 @@ def application_factory() -> Iterator[ApplicationFactory]:
             if runtime is None:
                 raise ValueError("O gateway de revisão deve acompanhar o runtime de teste")
             review_gateway = DirectReviewGateway(runtime)
+        if documentation_gateway is None:
+            if runtime is None:
+                raise ValueError("O gateway de documentação deve acompanhar o runtime de teste")
+            documentation_gateway = DirectDocumentationGateway(runtime)
         gateways.append(gateway)
         result = create_application(
             argv,
@@ -115,6 +123,7 @@ def application_factory() -> Iterator[ApplicationFactory]:
             pdf_viewer_gateway=gateway,
             project_gateway=project_gateway,
             review_gateway=review_gateway,
+            documentation_gateway=documentation_gateway,
         )
         created.append(result)
         return result

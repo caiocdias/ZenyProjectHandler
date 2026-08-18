@@ -15,11 +15,10 @@ from pytestqt.qtbot import QtBot
 from zeny_project_handler.adapters.catalog import carregar_catalogo_inicial
 from zeny_project_handler.adapters.compliance import carregar_registro_conformidade_inicial
 from zeny_project_handler.adapters.pdf.errors import PdfError
-from zeny_project_handler.application.compliance_analysis import ExecutarAnaliseConformidade
-from zeny_project_handler.application.compliance_callouts import CalloutConformidade
+from zeny_project_handler.application.compliance_callouts import projetar_callouts_conformidade
+from zeny_project_handler.application.compliance_presentation import formatar_texto_achado
 from zeny_project_handler.application.human_review import (
     ResumoProjetoRevisao,
-    ServicoRevisaoHumana,
     SessaoRevisao,
 )
 from zeny_project_handler.domain.compliance import (
@@ -40,8 +39,26 @@ from zeny_project_handler.domain.compliance import (
 from zeny_project_handler.domain.documents import DocumentoProjeto, PaginaDocumento
 from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler.domain.values import CaixaPagina, GeometriaDocumento, PontoNormalizado
+from zeny_project_handler.ui.documentation_gateway import DocumentationGateway
 from zeny_project_handler.ui.documentation_panel import DocumentationPanelWidget
 from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
+from zeny_project_handler_contracts.base import ComplianceExecutionId, ProjectId
+from zeny_project_handler_contracts.common import PageMetadataDto
+from zeny_project_handler_contracts.compliance import (
+    ComplianceCalloutDto,
+    ComplianceExecutionResponse,
+    ComplianceExecutionSummaryDto,
+)
+from zeny_project_handler_contracts.documentation import DocumentationResponse
+from zeny_project_handler_contracts.review import (
+    ReviewProjectSummaryDto,
+    ReviewProjectSummaryListResponse,
+)
+from zeny_project_handler_contracts.rules import ActiveRuleRegistryResponse
+from zeny_project_handler_server.compliance_api import (
+    _documentation_response,
+    _finding_dto,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -53,14 +70,14 @@ class _ViewerStub(QObject):
 
     def __init__(self) -> None:
         super().__init__()
-        self.callouts: tuple[CalloutConformidade, ...] = ()
+        self.callouts: tuple[ComplianceCalloutDto, ...] = ()
         self.page_visits: list[int] = []
         self.selected_callouts: list[str] = []
-        self.overlays: list[tuple[tuple[PontoNormalizado, ...], ...]] = []
+        self.navigations: list[object] = []
 
     def definir_callouts_conformidade(
         self,
-        callouts: tuple[CalloutConformidade, ...],
+        callouts: tuple[ComplianceCalloutDto, ...],
     ) -> None:
         self.callouts = callouts
 
@@ -70,11 +87,117 @@ class _ViewerStub(QObject):
     def selecionar_callout(self, callout_id: str) -> None:
         self.selected_callouts.append(callout_id)
 
-    def definir_sobreposicoes(
+    def definir_destaque_navegacao(self, navigation: object) -> None:
+        self.navigations.append(navigation)
+
+
+class _DocumentationGatewayStub:
+    def __init__(
         self,
-        geometries: tuple[tuple[PontoNormalizado, ...], ...],
+        review: _ReviewServiceStub,
+        analysis: _AnalysisServiceStub,
+        registry_signature: str,
     ) -> None:
-        self.overlays.append(geometries)
+        self._review = review
+        self._analysis = analysis
+        self._registry_signature = registry_signature
+
+    def list_projects(
+        self,
+        *,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> ReviewProjectSummaryListResponse:
+        projects = self._review.listar_projetos_semanticos()
+        return ReviewProjectSummaryListResponse(
+            items=tuple(
+                ReviewProjectSummaryDto(
+                    project_id=ProjectId(item.projeto_id),
+                    service_note=item.nome,
+                    pending_proposal_count=item.propostas_pendentes,
+                    analyzed_at=_NOW,
+                )
+                for item in projects[offset : offset + limit]
+            ),
+            page=PageMetadataDto(limit=limit, offset=offset, total=len(projects)),
+        )
+
+    def get_documentation(self, project_id: UUID) -> DocumentationResponse:
+        session = self._review.carregar_sessao_semantica(project_id)
+        execution = self._analysis.obter_ultima(project_id)
+        assert execution is not None
+        return _documentation_response(
+            session,
+            execution.assinatura_sessao,
+            execution.itens_documentais,
+        )
+
+    def get_latest_compliance(self, project_id: UUID) -> ComplianceExecutionResponse | None:
+        execution = self._analysis.obter_ultima(project_id)
+        if execution is None:
+            return None
+        session = self._review.carregar_sessao_semantica(project_id)
+        targets = {item.id: item for item in execution.alvos}
+        presentations = {
+            item.id: formatar_texto_achado(item, targets[item.alvo_id])
+            for item in execution.achados
+        }
+        pages = tuple(page for document in session.projeto.documentos for page in document.paginas)
+        callouts = {
+            item.id: item
+            for item in projetar_callouts_conformidade(
+                execution,
+                evidencias=session.evidencias,
+                paginas=pages,
+                textos_apresentacao=presentations,
+            )
+        }
+        findings = tuple(
+            _finding_dto(
+                item,
+                execution=execution,
+                target=targets[item.alvo_id],
+                number=index,
+                callout=callouts.get(item.id),
+                session=session,
+                summary=presentations[item.id],
+            )
+            for index, item in enumerate(execution.achados, start=1)
+        )
+        return ComplianceExecutionResponse(
+            execution=ComplianceExecutionSummaryDto(
+                execution_id=ComplianceExecutionId(execution.id),
+                project_id=ProjectId(execution.projeto_id),
+                rule_registry_revision=execution.versao_regras,
+                semantic_signature=execution.assinatura_sessao,
+                method_version=execution.versao_metodo,
+                is_stale=False,
+                compliant_count=sum(
+                    item.resultado is ResultadoConformidade.CONFORME for item in execution.achados
+                ),
+                divergence_count=sum(
+                    item.resultado is ResultadoConformidade.DIVERGENCIA
+                    for item in execution.achados
+                ),
+                not_evaluable_count=sum(
+                    item.resultado is ResultadoConformidade.NAO_AVALIAVEL
+                    for item in execution.achados
+                ),
+                completed_at=execution.executada_em,
+            ),
+            findings=findings,
+        )
+
+    def get_active_registry(self) -> ActiveRuleRegistryResponse:
+        return ActiveRuleRegistryResponse(
+            revision="fixture-1",
+            sha256=self._registry_signature,
+            rule_count=0,
+            active_rule_count=0,
+            activated_at=_NOW,
+            rules=(),
+            details=(),
+        )
 
 
 class _FailingVisualMapperViewerStub(_ViewerStub):
@@ -120,11 +243,11 @@ def test_finding_eyes_batch_actions_sorting_and_missing_geometry_are_independent
     show_all = panel.findChild(QPushButton, "complianceShowAllCalloutsButton")
     hide_all = panel.findChild(QPushButton, "complianceHideAllCalloutsButton")
     assert tree is not None and show_all is not None and hide_all is not None
-    localized_ids = {item.id for item in panel._callouts}
+    localized_ids = {item.finding_id.root for item in panel._callouts}
     assert len(localized_ids) == 2
-    assert {item.id for item in viewer.callouts} == localized_ids
+    assert {item.finding_id.root for item in viewer.callouts} == localized_ids
 
-    localized_rows = tuple(_finding_row(tree, item.id) for item in panel._callouts)
+    localized_rows = tuple(_finding_row(tree, item.finding_id.root) for item in panel._callouts)
     localized_buttons = tuple(_visibility_button(tree, row) for row in localized_rows)
     assert all(button.isEnabled() and button.isChecked() for button in localized_buttons)
     assert all(button.text() == "Ocultar" for button in localized_buttons)
@@ -145,9 +268,9 @@ def test_finding_eyes_batch_actions_sorting_and_missing_geometry_are_independent
     assert unlocated_button.toolTip().startswith("Sem localização no PDF:")
     assert unlocated_button.accessibleName() == unlocated_button.toolTip()
 
-    first_id, second_id = (item.id for item in panel._callouts)
+    first_id, second_id = (item.finding_id.root for item in panel._callouts)
     localized_buttons[0].click()
-    assert {item.id for item in viewer.callouts} == {second_id}
+    assert {item.finding_id.root for item in viewer.callouts} == {second_id}
     assert not localized_buttons[0].isChecked()
     assert localized_buttons[0].text() == "Exibir"
     assert localized_buttons[1].isChecked()
@@ -157,22 +280,22 @@ def test_finding_eyes_batch_actions_sorting_and_missing_geometry_are_independent
     panel._populate_findings()
     hidden_button = _visibility_button(tree, _finding_row(tree, first_id))
     assert not hidden_button.isChecked()
-    assert {item.id for item in viewer.callouts} == {second_id}
+    assert {item.finding_id.root for item in viewer.callouts} == {second_id}
 
-    overlay_state = tuple(viewer.overlays)
+    navigation_state = tuple(viewer.navigations)
     hide_all.click()
     assert viewer.callouts == ()
     assert all(
         not _visibility_button(tree, _finding_row(tree, finding_id)).isChecked()
         for finding_id in localized_ids
     )
-    assert tuple(viewer.overlays) == overlay_state
+    assert tuple(viewer.navigations) == navigation_state
 
     show_all.click()
-    visible_callouts: tuple[CalloutConformidade, ...] = viewer.callouts
-    assert {item.id for item in visible_callouts} == localized_ids
+    visible_callouts: tuple[ComplianceCalloutDto, ...] = viewer.callouts
+    assert {item.finding_id.root for item in visible_callouts} == localized_ids
     assert first_id != second_id
-    assert tuple(viewer.overlays) == overlay_state
+    assert tuple(viewer.navigations) == navigation_state
 
 
 def test_only_divergences_are_listed_as_problems_and_projected_on_pdf(
@@ -218,8 +341,8 @@ def test_only_divergences_are_listed_as_problems_and_projected_on_pdf(
     }
     non_problem_ids = {conforming.id, not_evaluable.id}
     assert listed_ids == problem_ids
-    assert non_problem_ids.isdisjoint(item.id for item in panel._callouts)
-    assert non_problem_ids.isdisjoint(item.id for item in viewer.callouts)
+    assert non_problem_ids.isdisjoint(item.finding_id.root for item in panel._callouts)
+    assert non_problem_ids.isdisjoint(item.finding_id.root for item in viewer.callouts)
 
 
 def test_showing_callout_without_selecting_row_navigates_to_its_page_and_selects_it(
@@ -233,23 +356,25 @@ def test_showing_callout_without_selecting_row_navigates_to_its_page_and_selects
     tree = panel.findChild(QTreeWidget, "complianceFindingsTree")
     assert tree is not None
     second_page = first_session.projeto.documentos[0].paginas[1]
-    callout = next(item for item in panel._callouts if item.pagina_id == second_page.id)
-    row = _finding_row(tree, callout.id)
+    callout = next(
+        item for item in panel._callouts if item.navigation.page_id.root == second_page.id
+    )
+    row = _finding_row(tree, callout.finding_id.root)
     button = _visibility_button(tree, row)
     tree.clearSelection()
     assert tree.selectedItems() == []
 
     button.click()
-    assert callout.id not in {item.id for item in viewer.callouts}
+    assert callout.finding_id.root not in {item.finding_id.root for item in viewer.callouts}
     assert button.text() == "Exibir"
     assert viewer.page_visits == []
     assert viewer.selected_callouts == []
 
     button.click()
-    assert callout.id in {item.id for item in viewer.callouts}
+    assert callout.finding_id.root in {item.finding_id.root for item in viewer.callouts}
     assert button.text() == "Ocultar"
     assert viewer.page_visits == [2]
-    assert viewer.selected_callouts == [str(callout.id)]
+    assert viewer.selected_callouts == [str(callout.callout_id.root)]
     assert tree.selectedItems() == []
 
 
@@ -258,19 +383,19 @@ def test_hidden_state_survives_navigation_and_resets_for_project_or_execution(
 ) -> None:
     panel, viewer, first_session, second_session, first_execution, analysis = _panel(qtbot)
     panel.abrir_projeto(first_session.projeto.id)
-    hidden_id = panel._callouts[0].id
+    hidden_id = panel._callouts[0].finding_id.root
     panel._set_finding_visible(hidden_id, False)
 
     viewer.ir_para_folha(2)
     panel._load_persisted_result()
     assert hidden_id in panel._hidden_finding_ids
-    assert hidden_id not in {item.id for item in viewer.callouts}
+    assert hidden_id not in {item.finding_id.root for item in viewer.callouts}
 
     panel.abrir_projeto(second_session.projeto.id)
     assert panel._hidden_finding_ids == set()
     panel.abrir_projeto(first_session.projeto.id)
     assert hidden_id not in panel._hidden_finding_ids
-    assert hidden_id in {item.id for item in viewer.callouts}
+    assert hidden_id in {item.finding_id.root for item in viewer.callouts}
 
     panel._set_finding_visible(hidden_id, False)
     analysis.latest[first_session.projeto.id] = replace(
@@ -279,7 +404,7 @@ def test_hidden_state_survives_navigation_and_resets_for_project_or_execution(
     )
     panel._load_persisted_result()
     assert panel._hidden_finding_ids == set()
-    assert hidden_id in {item.id for item in viewer.callouts}
+    assert hidden_id in {item.finding_id.root for item in viewer.callouts}
 
 
 def test_visual_mapping_failure_keeps_previously_localized_callouts(qtbot: QtBot) -> None:
@@ -294,7 +419,7 @@ def test_visual_mapping_failure_keeps_previously_localized_callouts(qtbot: QtBot
 
     assert len(panel._callouts) == 2
     assert viewer.callouts == panel._callouts
-    assert statuses[-1] == "falha sintética no mapa visual"
+    assert statuses == []
 
 
 def test_list_and_callout_selection_sync_without_signal_cycles(qtbot: QtBot) -> None:
@@ -303,7 +428,7 @@ def test_list_and_callout_selection_sync_without_signal_cycles(qtbot: QtBot) -> 
     tree = panel.findChild(QTreeWidget, "complianceFindingsTree")
     tabs = panel.findChild(QTabWidget, "documentationTabs")
     assert tree is not None and tabs is not None
-    first_id, second_id = (item.id for item in panel._callouts)
+    first_id, second_id = (item.finding_id.root for item in panel._callouts)
 
     tree.setCurrentItem(_finding_row(tree, first_id))
     assert viewer.page_visits == [1]
@@ -322,7 +447,7 @@ def test_list_and_callout_selection_sync_without_signal_cycles(qtbot: QtBot) -> 
     tree.setCurrentItem(_finding_row(tree, first_id))
     tree.setCurrentItem(_finding_row(tree, second_id))
     assert second_id in panel._hidden_finding_ids
-    assert second_id not in {item.id for item in viewer.callouts}
+    assert second_id not in {item.finding_id.root for item in viewer.callouts}
 
 
 def test_friendly_fact_text_is_shared_by_cells_tooltips_targets_and_callouts(
@@ -356,11 +481,11 @@ def test_friendly_fact_text_is_shared_by_cells_tooltips_targets_and_callouts(
     assert "Poste P2" in visible_texts
     assert all(key not in "\n".join(visible_texts) for key in technical_keys)
     assert viewer.callouts
-    assert all(key not in callout.texto for callout in viewer.callouts for key in technical_keys)
+    assert all(key not in callout.text for callout in viewer.callouts for key in technical_keys)
     for finding in relevant_findings:
         row = _finding_row(tree, finding.id)
-        callout = next(item for item in viewer.callouts if item.id == finding.id)
-        assert row.toolTip(2).replace(" ", "") == callout.texto.replace("\n", "").replace(" ", "")
+        callout = next(item for item in viewer.callouts if item.finding_id.root == finding.id)
+        assert row.toolTip(2).replace(" ", "") == callout.text.replace("\n", "").replace(" ", "")
 
     navigated = relevant_findings[0]
     tree.setCurrentItem(_finding_row(tree, navigated.id))
@@ -390,10 +515,9 @@ def _panel(
     review = _ReviewServiceStub((first_session, second_session))
     analysis = _AnalysisServiceStub((first_execution, second_execution))
     viewer = viewer or _ViewerStub()
+    gateway = _DocumentationGatewayStub(review, analysis, registry.assinatura())
     panel = DocumentationPanelWidget(
-        service=cast(ServicoRevisaoHumana, review),
-        analysis_service=cast(ExecutarAnaliseConformidade, analysis),
-        registry=registry,
+        gateway=cast(DocumentationGateway, gateway),
         viewer=cast(PdfViewerWidget, viewer),
     )
     qtbot.addWidget(panel)

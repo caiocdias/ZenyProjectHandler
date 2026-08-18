@@ -5,6 +5,8 @@ from __future__ import annotations
 from base64 import b64encode
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
+from hashlib import sha256
+from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import Depends, FastAPI, Header, Query, Request, UploadFile, status
@@ -36,6 +38,11 @@ from zeny_project_handler.logging_config import (
 from zeny_project_handler_contracts import API_V1_PREFIX, API_VERSION
 from zeny_project_handler_contracts.base import CorrelationId
 from zeny_project_handler_contracts.common import NormalizedBoxDto
+from zeny_project_handler_contracts.compliance import (
+    ComplianceExecutionResponse,
+    ComplianceHistoryResponse,
+)
+from zeny_project_handler_contracts.documentation import DocumentationResponse
 from zeny_project_handler_contracts.documents import (
     CreateUploadResponse,
     DocumentImportResultDto,
@@ -48,6 +55,7 @@ from zeny_project_handler_contracts.errors import ErrorCode, ErrorEnvelope
 from zeny_project_handler_contracts.jobs import (
     CancelJobResponse,
     CreateAnalysisJobRequest,
+    CreateComplianceJobRequest,
     JobAcceptedResponse,
     JobResultResponse,
     JobStatusResponse,
@@ -73,6 +81,12 @@ from zeny_project_handler_contracts.review import (
     ReviewProjectSummaryListResponse,
     ReviewSessionResponse,
 )
+from zeny_project_handler_contracts.rules import (
+    ActiveRuleRegistryResponse,
+    ConfirmRuleImportRequest,
+    RuleImportPreflightResponse,
+    RuleImportResponse,
+)
 from zeny_project_handler_contracts.session import HealthLiveResponse, SessionCapabilitiesResponse
 from zeny_project_handler_contracts.viewer import (
     CloseViewerSessionResponse,
@@ -89,6 +103,7 @@ from zeny_project_handler_server.auth import (
     BearerAuthenticator,
     authentication_error,
 )
+from zeny_project_handler_server.compliance_api import DocumentationComplianceApiService
 from zeny_project_handler_server.composition import (
     JobLifecycle,
     RuntimeFactory,
@@ -614,6 +629,151 @@ def create_app(
         return _review_api(request).create_manual_relation(project_id, payload)
 
     @application.get(
+        f"{API_V1_PREFIX}/documentation/projects",
+        response_model=ReviewProjectSummaryListResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def list_documentation_projects(
+        request: Request,
+        limit: Annotated[int, Query(ge=1, le=200)] = 200,
+        offset: Annotated[int, Query(ge=0)] = 0,
+    ) -> ReviewProjectSummaryListResponse:
+        return _compliance_api(request).list_projects(limit=limit, offset=offset)
+
+    @application.get(
+        f"{API_V1_PREFIX}/projects/{{project_id}}/documentation",
+        response_model=DocumentationResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def get_project_documentation(
+        request: Request,
+        project_id: UUID,
+    ) -> DocumentationResponse:
+        return _compliance_api(request).get_documentation(project_id)
+
+    @application.get(
+        f"{API_V1_PREFIX}/projects/{{project_id}}/compliance/latest",
+        response_model=ComplianceExecutionResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def get_latest_compliance(
+        request: Request,
+        project_id: UUID,
+    ) -> ComplianceExecutionResponse:
+        return _compliance_api(request).get_latest(project_id)
+
+    @application.get(
+        f"{API_V1_PREFIX}/projects/{{project_id}}/compliance/history",
+        response_model=ComplianceHistoryResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def list_compliance_history(
+        request: Request,
+        project_id: UUID,
+        limit: int = Query(default=50, ge=1, le=200),
+        offset: int = Query(default=0, ge=0),
+    ) -> ComplianceHistoryResponse:
+        return _compliance_api(request).list_history(
+            project_id,
+            limit=limit,
+            offset=offset,
+        )
+
+    @application.post(
+        f"{API_V1_PREFIX}/projects/{{project_id}}/compliance-jobs",
+        status_code=status.HTTP_202_ACCEPTED,
+        response_model=JobAcceptedResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def create_compliance_job(
+        request: Request,
+        project_id: UUID,
+        payload: CreateComplianceJobRequest,
+        idempotency_key: str = Header(alias="Idempotency-Key", min_length=1, max_length=200),
+    ) -> JobAcceptedResponse:
+        return _jobs(request).create_compliance_job(
+            project_id,
+            expected_semantic_signature=payload.expected_semantic_signature,
+            idempotency_key=idempotency_key,
+            correlation_id=str(request.state.correlation_id),
+        )
+
+    @application.get(
+        f"{API_V1_PREFIX}/rules/active",
+        response_model=ActiveRuleRegistryResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def get_active_rule_registry(request: Request) -> ActiveRuleRegistryResponse:
+        return _compliance_api(request).get_active_registry()
+
+    @application.post(
+        f"{API_V1_PREFIX}/rules/import-preflights",
+        status_code=status.HTTP_201_CREATED,
+        response_model=RuleImportPreflightResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def preflight_rule_import(
+        request: Request,
+        file: UploadFile,
+        idempotency_key: str = Header(alias="Idempotency-Key", min_length=1, max_length=200),
+    ) -> RuleImportPreflightResponse:
+        chunks: list[bytes] = []
+        size = 0
+        while chunk := await file.read(1024 * 1024):
+            size += len(chunk)
+            if size > server_settings.upload_max_bytes:
+                raise ApiError(
+                    413,
+                    ErrorCode.UPLOAD_TOO_LARGE,
+                    "O arquivo de regras excede o limite configurado.",
+                )
+            chunks.append(chunk)
+        return _compliance_api(request).preflight_rule_import(
+            b"".join(chunks),
+            idempotency_key=idempotency_key,
+        )
+
+    @application.post(
+        f"{API_V1_PREFIX}/rules/imports",
+        status_code=status.HTTP_201_CREATED,
+        response_model=RuleImportResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def confirm_rule_import(
+        request: Request,
+        payload: ConfirmRuleImportRequest,
+    ) -> RuleImportResponse:
+        return _compliance_api(request).confirm_rule_import(payload)
+
+    @application.get(
+        f"{API_V1_PREFIX}/rules/active/download",
+        response_class=Response,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def download_active_rule_registry(request: Request) -> Response:
+        payload = _compliance_api(request).active_registry_json()
+        digest = b64encode(sha256(payload).digest()).decode("ascii")
+        return Response(
+            content=payload,
+            media_type="application/json",
+            headers={
+                "Content-Disposition": 'attachment; filename="regras-conformidade.json"',
+                "Content-Length": str(len(payload)),
+                "Digest": f"sha-256={digest}",
+                "Cache-Control": "private, no-store",
+            },
+        )
+
+    @application.get(
         f"{API_V1_PREFIX}/projects/{{project_id}}/photos",
         response_model=ManagedPhotoListResponse,
         dependencies=protected,
@@ -696,6 +856,13 @@ def _review_api(request: Request) -> ReviewApiService:
     service = _runtime(request).review_api
     if service is None:
         raise ApiError(503, ErrorCode.OPERATION_CONFLICT, "A revisão não está disponível.")
+    return service
+
+
+def _compliance_api(request: Request) -> DocumentationComplianceApiService:
+    service = _runtime(request).compliance_api
+    if service is None:
+        raise ApiError(503, ErrorCode.OPERATION_CONFLICT, "A conformidade não está disponível.")
     return service
 
 

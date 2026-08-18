@@ -455,6 +455,20 @@ async def list_review_projects(
 
 
 @protected.get(
+    "/documentation/projects",
+    tags=["documentation"],
+    operation_id="listDocumentationProjects",
+    response_model=ReviewProjectSummaryListResponse,
+    responses=ERROR_RESPONSES,
+)
+async def list_documentation_projects(
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> ReviewProjectSummaryListResponse:
+    raise NotImplementedError("Aplicação exclusiva para geração da OpenAPI.")
+
+
+@protected.get(
     "/projects/{project_id}/review-session",
     tags=["review"],
     operation_id="getReviewSession",

@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 from pytestqt.qtbot import QtBot
 from sqlalchemy import Engine
 from tests.pdf_fixtures import TEST_RENDER_BUDGET, create_golden_pdf
+from tests.remote_gateways import SynchronousDocumentationGateway
 from tests.viewer_gateway import LocalTestPdfViewerGateway
 
 from zeny_project_handler.adapters.compliance import carregar_registro_conformidade_inicial
@@ -764,11 +765,19 @@ def test_documentation_panel_has_own_document_and_compliance_views(
         review_service.carregar_sessao_semantica,
     )
     project_id = review_service.listar_projetos()[0].projeto_id
-    analysis_service.executar(project_id)
-    panel = DocumentationPanelWidget(
-        service=review_service,
-        registry_service=registry_service,
+    execution = analysis_service.executar(project_id)
+    assert execution.itens_documentais
+    gateway = SynchronousDocumentationGateway(
+        engine=engine,
+        data_directory=tmp_path / "compliance-data",
+        review_service=review_service,
         analysis_service=analysis_service,
+        registry_service=registry_service,
+    )
+    assert gateway.get_documentation(project_id).sections
+    assert gateway.get_latest_compliance(project_id) is not None
+    panel = DocumentationPanelWidget(
+        gateway=gateway,
         viewer=review_panel._viewer,
     )
     qtbot.addWidget(panel)
@@ -780,8 +789,10 @@ def test_documentation_panel_has_own_document_and_compliance_views(
     assert documents is not None
     assert findings is not None
 
-    project.setCurrentIndex(1)
+    panel.abrir_projeto(project_id)
 
+    assert panel._documentation is not None and panel._documentation.sections
+    assert documents is panel._documents
     assert documents.topLevelItemCount() == 1
     document_root = documents.topLevelItem(0)
     assert document_root is not None
@@ -810,11 +821,19 @@ def test_documentation_tables_toggle_word_wrap_and_recalculate_after_reload(
         review_service.carregar_sessao_semantica,
     )
     project_id = review_service.listar_projetos()[0].projeto_id
-    analysis_service.executar(project_id)
-    panel = DocumentationPanelWidget(
-        service=review_service,
-        registry_service=registry_service,
+    execution = analysis_service.executar(project_id)
+    assert execution.itens_documentais
+    gateway = SynchronousDocumentationGateway(
+        engine=engine,
+        data_directory=tmp_path / "wrap-compliance-data",
+        review_service=review_service,
         analysis_service=analysis_service,
+        registry_service=registry_service,
+    )
+    assert gateway.get_documentation(project_id).sections
+    assert gateway.get_latest_compliance(project_id) is not None
+    panel = DocumentationPanelWidget(
+        gateway=gateway,
         viewer=review_panel._viewer,
     )
     qtbot.addWidget(panel)
@@ -836,7 +855,9 @@ def test_documentation_tables_toggle_word_wrap_and_recalculate_after_reload(
     for toggle in (documents_toggle, findings_toggle, rules_toggle):
         _assert_word_wrap_control(toggle)
 
-    project.setCurrentIndex(1)
+    panel.abrir_projeto(project_id)
+    assert panel._documentation is not None and panel._documentation.sections
+    assert documents is panel._documents
     document_root = documents.topLevelItem(0)
     finding = findings.topLevelItem(0)
     rule = rules.topLevelItem(0)

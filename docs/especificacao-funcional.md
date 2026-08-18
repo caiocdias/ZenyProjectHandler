@@ -19,7 +19,7 @@ Estado versionado relevante:
 | Catálogo técnico | `2` |
 | Registro de interpretação | `1.3.0` |
 | Registro de conformidade distribuído | `cemig-normas-distribuicao-2025.6` |
-| Método de conformidade | `6` |
+| Método de conformidade | `7` |
 | Migração SQLite mais recente | `0009_remote_jobs` |
 
 ## Modelo de domínio
@@ -196,6 +196,12 @@ O painel **Documentação e conformidade** possui três abas:
 3. **Regras** mostra a revisão ativa e permite importar ou exportar o JSON. Não existe remoção nem
    ativação individual pela interface.
 
+A inspeção, a avaliação das regras, o histórico e a compilação de callouts ocorrem no servidor. O
+cliente lista sessões semânticas por `GET /api/v1/documentation/projects`, cria uma reanálise como
+job e recebe somente DTOs normalizados. Seleção cruzada, visibilidade e a posição manual efêmera das
+caixas permanecem locais. O upload de regras exige preflight e confirmação separados; cancelar no
+diálogo não publica revisão.
+
 O seed contém 39 regras habilitadas. A lista normativa completa está em
 [catalogo-regras-conformidade.md](catalogo-regras-conformidade.md), e o desenho do motor está em
 [arquitetura-conformidade.md](arquitetura-conformidade.md).
@@ -222,8 +228,8 @@ JSON:
 - valida schema, tipos, operadores, escopos e vocabulário de fatos;
 - mescla regras por ID;
 - preserva todos os IDs atuais omitidos no arquivo;
-- cria uma nova revisão assinada sem alterar o seed empacotado;
-- republica um catálogo Markdown da revisão ativa na pasta de dados.
+- cria uma nova revisão assinada sem alterar o seed empacotado no servidor;
+- republica um catálogo Markdown da revisão ativa na pasta de dados do servidor.
 
 Na inicialização, atualizações oficiais são aplicadas seletivamente: definições locais modificadas e
 IDs personalizados são preservados. A restauração de backup também reconcilia IDs locais ausentes

@@ -33,20 +33,21 @@ from zeny_project_handler.adapters.analysis.tesseract_runtime import (
     RuntimeTesseract,
 )
 from zeny_project_handler.adapters.pdf import PyMuPdfReader
-from zeny_project_handler.application.compliance_callouts import (
-    AncoraCallout,
-    CalloutConformidade,
-    OrigemAncoraCallout,
-    RetanguloCallout,
-)
 from zeny_project_handler.application.operation_coordinator import TipoOperacao
 from zeny_project_handler.bootstrap import _EngineLifetime, run
 from zeny_project_handler.config import AppSettings
-from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
+from zeny_project_handler.domain.values import PontoNormalizado
 from zeny_project_handler.ui.main_window import _DockTitleBar
 from zeny_project_handler.ui.pdf_gateway import PdfViewerGateway
 from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
 from zeny_project_handler.ui.theme import THEME_SETTING_KEY, Tema
+from zeny_project_handler_contracts.base import CalloutId, DocumentId, FindingId, PageId
+from zeny_project_handler_contracts.common import (
+    EvidenceNavigationDto,
+    NormalizedBoxDto,
+    NormalizedPointDto,
+)
+from zeny_project_handler_contracts.compliance import ComplianceCalloutDto
 
 
 def _pdf_viewer(gateway: PdfViewerGateway | None = None) -> PdfViewerWidget:
@@ -216,28 +217,24 @@ def test_theme_switch_preserves_project_pdf_callout_zoom_selection_and_wrap_togg
     inspection = window.pdf_viewer.inspecao
     assert inspection is not None
     page = inspection.pages[0]
-    point = PontoNormalizado(Decimal("0.50"), Decimal("0.50"))
-    callout = CalloutConformidade(
-        id=uuid4(),
-        pagina_id=page.page_id.root,
-        texto="Divergência sintética preservada durante a troca de tema.",
-        caixa_sugerida=RetanguloCallout(
-            Decimal("0.60"),
-            Decimal("0.08"),
-            Decimal("0.96"),
-            Decimal("0.22"),
-        ),
-        ancoras=(
-            AncoraCallout(
-                origem=OrigemAncoraCallout.FATO,
-                referencia_id=uuid4(),
-                geometria=GeometriaDocumento.ponto(page.page_id.root, point),
-                ponto=point,
-            ),
+    callout_id = uuid4()
+    point = NormalizedPointDto(x="0.50", y="0.50")
+    box = NormalizedBoxDto(x="0.60", y="0.08", width="0.36", height="0.14")
+    callout = ComplianceCalloutDto(
+        callout_id=CalloutId(callout_id),
+        finding_id=FindingId(callout_id),
+        text="Divergência sintética preservada durante a troca de tema.",
+        anchor=point,
+        anchors=(point,),
+        box=box,
+        navigation=EvidenceNavigationDto(
+            document_id=DocumentId(uuid4()),
+            page_id=PageId(page.page_id.root),
+            geometry=box,
         ),
     )
     window.pdf_viewer.definir_callouts_conformidade((callout,))
-    window.pdf_viewer.selecionar_callout(str(callout.id))
+    window.pdf_viewer.selecionar_callout(str(callout.callout_id.root))
     window.pdf_viewer.view.definir_zoom(1.75)
     wrap_buttons = tuple(
         button
@@ -255,7 +252,7 @@ def test_theme_switch_preserves_project_pdf_callout_zoom_selection_and_wrap_togg
         button.setChecked(True)
     qtbot.wait(100)
     application.processEvents()
-    graphics = window.pdf_viewer.view._callout_items[str(callout.id)]
+    graphics = window.pdf_viewer.view._callout_items[str(callout.callout_id.root)]
     pixmap_item = window.pdf_viewer.view._pixmap_item
     assert pixmap_item is not None
     pixmap_key = pixmap_item.pixmap().cacheKey()
@@ -280,8 +277,8 @@ def test_theme_switch_preserves_project_pdf_callout_zoom_selection_and_wrap_togg
 
     assert window.project_panel.projeto_ativo_id == created.project.project_id.root
     assert window.pdf_viewer.view.zoom == pytest.approx(1.75)
-    assert window.pdf_viewer.view._selected_callout_id == str(callout.id)
-    assert window.pdf_viewer.view._callout_items[str(callout.id)] is graphics
+    assert window.pdf_viewer.view._selected_callout_id == str(callout.callout_id.root)
+    assert window.pdf_viewer.view._callout_items[str(callout.callout_id.root)] is graphics
     assert graphics.caixa.pen().color() == QColor("#8e0000")
     assert graphics.caixa.brush().color().name() == QColor("#fff3e0").name()
     assert window.pdf_viewer.view.backgroundBrush().color() == QColor("#3b3d40")
@@ -387,10 +384,9 @@ def test_restore_signal_refreshes_the_cached_compliance_registry(
     documentation = window.documentation_panel
     portability = window.portability_panel
     assert documentation is not None and portability is not None
-    registry_service = documentation._registry_service
+    registry_service = portability._service._compliance_registry
     assert registry_service is not None
     current = registry_service.obter_revisao_ativa().registro
-    assert portability._service._compliance_registry is registry_service
     assert registry_service._seed == current
     custom_rule = replace(
         current.regras[0],
@@ -403,11 +399,13 @@ def test_restore_signal_refreshes_the_cached_compliance_registry(
         regras=(*current.regras, custom_rule),
     )
     registry_service.importar(registry_service.preparar_importacao(imported))
-    assert all(item.id != custom_rule.id for item in documentation._registry.regras)
+    assert documentation._registry is not None
+    assert all(item.rule_id != custom_rule.id for item in documentation._registry.rules)
 
     portability.data_restored.emit()
 
-    assert any(item.id == custom_rule.id for item in documentation._registry.regras)
+    assert documentation._registry is not None
+    assert any(item.rule_id == custom_rule.id for item in documentation._registry.rules)
     displayed_ids: set[str] = set()
     for index in range(documentation._rules.topLevelItemCount()):
         item = documentation._rules.topLevelItem(index)

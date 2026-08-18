@@ -63,6 +63,7 @@ protegidas são `401 AUTHENTICATION_FAILED`, `404 RESOURCE_NOT_FOUND`,
 | revisão | `POST /api/v1/review/proposals/{proposal_id}/reject` | `RejectReviewProposalRequest` | `ReviewDecisionResponse` | `200`; `409 STALE_STATE`; demais comuns |
 | revisão | `POST /api/v1/projects/{project_id}/review/elements` | `CreateManualElementRequest` | `ReviewDecisionResponse` | `201`; `409 STALE_STATE`; demais comuns |
 | revisão | `POST /api/v1/projects/{project_id}/review/relations` | `CreateManualRelationRequest` | `ReviewDecisionResponse` | `201`; `409 STALE_STATE`; demais comuns |
+| documentação | `GET /api/v1/documentation/projects` | paginação em query | `ReviewProjectSummaryListResponse` | `200`; códigos comuns |
 | documentação | `GET /api/v1/projects/{project_id}/documentation` | — | `DocumentationResponse` | `200`; códigos comuns |
 | conformidade | `GET /api/v1/projects/{project_id}/compliance/latest` | — | `ComplianceExecutionResponse` | `200`; códigos comuns |
 | conformidade | `GET /api/v1/projects/{project_id}/compliance/history` | paginação em query | `ComplianceHistoryResponse` | `200`; códigos comuns |
@@ -87,7 +88,7 @@ protegidas são `401 AUTHENTICATION_FAILED`, `404 RESOURCE_NOT_FOUND`,
 
 ## Painel Projeto
 
-| Ação visível atual | Método atual | Caracterização existente | Endpoint futuro | DTO esperado |
+| Ação visível atual | Método atual | Caracterização existente | Endpoint remoto | DTO esperado |
 |---|---|---|---|---|
 | listar e selecionar projeto | `ProjectPanelWidget.atualizar_projetos` → `ServicoFluxoMvp.listar_projetos` | `tests/e2e/test_mvp_ui.py::test_user_can_create_import_analyze_review_and_reopen_from_ui` | `GET /api/v1/projects` | `ProjectSummaryListResponse` com `ProjectSummaryDto` |
 | criar projeto por NS | `ProjectPanelWidget.criar_projeto` → `ServicoFluxoMvp.criar_projeto` | `tests/integration/test_mvp_workflow.py::test_project_identifier_is_a_user_supplied_ten_digit_service_note` | `POST /api/v1/projects` | `CreateProjectRequest` → `ProjectDetailResponse` |
@@ -135,18 +136,18 @@ protegidas são `401 AUTHENTICATION_FAILED`, `404 RESOURCE_NOT_FOUND`,
 
 ## Painel Documentação, conformidade e regras
 
-| Ação visível atual | Método atual | Caracterização existente | Endpoint futuro | DTO esperado |
+| Ação visível atual | Método atual | Caracterização existente | Endpoint remoto | DTO esperado |
 |---|---|---|---|---|
-| selecionar projeto analisado | `DocumentationPanelWidget.abrir_projeto` → `ServicoRevisaoHumana.carregar_sessao_semantica` | `tests/integration/test_review_panel.py::test_documentation_panel_has_own_document_and_compliance_views` | `GET /api/v1/projects/{project_id}/documentation` | `DocumentationResponse` com `DocumentFieldDto` |
+| selecionar projeto analisado | `DocumentationPanelWidget.abrir_projeto` → `DocumentationGateway` | `tests/integration/test_review_panel.py::test_documentation_panel_has_own_document_and_compliance_views` | `GET /api/v1/documentation/projects` e `GET /api/v1/projects/{project_id}/documentation` | `ReviewProjectSummaryListResponse`, `DocumentationResponse` com `DocumentFieldDto` |
 | ver campos documentais e navegar à evidência | `_populate_documents`, `_navigate_document_item` | `tests/integration/test_review_panel.py::test_documentation_panel_has_own_document_and_compliance_views` | mesma rota de documentação | `DocumentFieldDto`, `EvidenceNavigationDto` |
-| carregar a última conformidade e indicar resultado desatualizado | `_load_persisted_result` → `ExecutarAnaliseConformidade.obter_ultima` | `tests/integration/test_compliance_analysis.py::test_panel_loads_latest_marks_stale_and_reapplies_without_ocr` | `GET /api/v1/projects/{project_id}/compliance/latest` | `ComplianceExecutionResponse` |
+| carregar a última conformidade e indicar resultado desatualizado | `_load_persisted_result` → `DocumentationGateway.get_latest_compliance` | `tests/integration/test_compliance_analysis.py::test_panel_loads_latest_marks_stale_and_reapplies_without_ocr` | `GET /api/v1/projects/{project_id}/compliance/latest` | `ComplianceExecutionResponse` |
 | consultar histórico auditável | sem controle dedicado hoje; `ExecutarAnaliseConformidade.listar_historico` já existe | `tests/integration/test_compliance_analysis.py::test_execution_is_deterministic_preserves_history_and_survives_restart` | `GET /api/v1/projects/{project_id}/compliance/history` | `ComplianceHistoryResponse` |
-| analisar conformidade explicitamente | `_analyze_current_compliance` → `ExecutarAnaliseConformidade.executar` | `tests/integration/test_compliance_analysis.py::test_panel_loads_latest_marks_stale_and_reapplies_without_ocr` | `POST /api/v1/projects/{project_id}/compliance-jobs` | `CreateComplianceJobRequest` → `JobAcceptedResponse` |
+| analisar conformidade explicitamente | `_analyze_current_compliance` → criação/polling do job remoto | `tests/integration/test_compliance_analysis.py::test_panel_loads_latest_marks_stale_and_reapplies_without_ocr` | `POST /api/v1/projects/{project_id}/compliance-jobs` | `CreateComplianceJobRequest` → `JobAcceptedResponse` |
 | selecionar achado e navegar ao alvo/callout | `_navigate_finding_item`, `_select_finding_id` | `tests/integration/test_compliance_callout_viewer.py::test_multipage_callout_visual_qa_captures_show_hide_and_correct_page` | achados e callouts na resposta de conformidade | `ComplianceFindingDto`, `ComplianceCalloutDto` |
 | exibir/ocultar um ou todos os callouts | `_set_finding_visible`, `_set_all_findings_visible` | `tests/integration/test_compliance_visibility.py::test_hidden_state_survives_navigation_and_resets_for_project_or_execution` | nenhum; visibilidade e posição manual são locais | IDs de callout na projeção; estado visual local |
-| ver revisão ativa, números, estado e detalhes das regras | `atualizar_regras`, `_populate_rules`, `_show_rule_details` → `obter_revisao_ativa` | `tests/integration/test_compliance_rules_panel.py::test_rule_ids_stay_internal_and_details_use_the_fact_catalog` | `GET /api/v1/rules/active` | `ActiveRuleRegistryResponse`, `RuleSummaryDto`, `RuleDetailDto` |
-| importar JSON com preflight e confirmação | `_import_registry` → loader JSON, `preparar_importacao`, `importar` | `tests/integration/test_compliance_rules_panel.py::test_rules_view_only_imports_exports_and_survives_restart` | `POST /api/v1/rules/import-preflights` e `POST /api/v1/rules/imports` | upload + `RuleImportPreflightResponse`; `ConfirmRuleImportRequest` |
-| exportar revisão ativa | `_export_registry` → `ServicoRegistroRegrasConformidade.exportar` | `tests/integration/test_compliance_rules_panel.py::test_rules_view_only_imports_exports_and_survives_restart` | `GET /api/v1/rules/active/download` | download JSON + `DownloadMetadataDto` |
+| ver revisão ativa, números, estado e detalhes das regras | `atualizar_regras`, `_populate_rules`, `_show_rule_details` → `DocumentationGateway` | `tests/integration/test_compliance_rules_panel.py::test_rule_ids_stay_internal_and_details_use_the_fact_catalog` | `GET /api/v1/rules/active` | `ActiveRuleRegistryResponse`, `RuleSummaryDto`, `RuleDetailDto` |
+| importar JSON com preflight e confirmação | `_import_registry` → upload e confirmação pelo gateway | `tests/integration/test_compliance_rules_panel.py::test_rules_view_only_imports_exports_and_survives_restart` | `POST /api/v1/rules/import-preflights` e `POST /api/v1/rules/imports` | upload + `RuleImportPreflightResponse`; `ConfirmRuleImportRequest` |
+| exportar revisão ativa | `_export_registry` → download autenticado pelo gateway | `tests/integration/test_compliance_rules_panel.py::test_rules_view_only_imports_exports_and_survives_restart` | `GET /api/v1/rules/active/download` | bytes JSON com integridade HTTP |
 | alternar quebra de linha nas três abas | `TableWordWrapController` | `tests/integration/test_review_panel.py::test_documentation_tables_toggle_word_wrap_and_recalculate_after_reload` | nenhum | estado visual local |
 
 ## Painel Portabilidade, backup e fotos

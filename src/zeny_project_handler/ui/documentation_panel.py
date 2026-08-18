@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
-from decimal import Decimal
 from functools import partial
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -27,44 +27,26 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from zeny_project_handler.adapters.compliance import (
-    carregar_registro_conformidade_json_com_avisos,
+from zeny_project_handler_contracts.common import EvidenceNavigationDto
+from zeny_project_handler_contracts.compliance import (
+    ComplianceCalloutDto,
+    ComplianceExecutionResponse,
 )
-from zeny_project_handler.adapters.pdf.errors import PdfError
-from zeny_project_handler.application.compliance_analysis import (
-    ExecutarAnaliseConformidade,
-    resultado_conformidade_desatualizado,
+from zeny_project_handler_contracts.documentation import DocumentationResponse
+from zeny_project_handler_contracts.enums import (
+    ComplianceStatus,
+    DocumentationFieldStatus,
+    JobStatus,
 )
-from zeny_project_handler.application.compliance_callouts import (
-    CalloutConformidade,
-    LayoutCalloutsImpossivelError,
-    projetar_callouts_conformidade,
+from zeny_project_handler_contracts.review import ReviewSessionResponse
+from zeny_project_handler_contracts.rules import (
+    ActiveRuleRegistryResponse,
+    ConfirmRuleImportRequest,
+    RuleDetailDto,
+    RuleImportPreflightResponse,
 )
-from zeny_project_handler.application.compliance_registry import (
-    ServicoRegistroRegrasConformidade,
-)
-from zeny_project_handler.application.errors import ApplicationError
-from zeny_project_handler.application.human_review import (
-    ServicoRevisaoHumana,
-    SessaoRevisao,
-)
-from zeny_project_handler.domain.compliance import (
-    AlvoConformidade,
-    ExecucaoConformidade,
-    RegistroRegrasConformidade,
-    RegraConformidade,
-    ResultadoConformidade,
-)
-from zeny_project_handler.domain.errors import DomainValidationError
-from zeny_project_handler.domain.values import GeometriaDocumento
 
-from .compliance_presentation import (
-    formatar_alvo,
-    formatar_escopo,
-    formatar_lista_condicoes,
-    formatar_texto_achado,
-    formatar_valores_achado,
-)
+from .documentation_gateway import DocumentationGateway, DocumentationGatewayError
 from .pdf_viewer import PdfViewerWidget
 from .table_word_wrap import TableWordWrapController
 from .visibility import visibility_icon
@@ -76,34 +58,28 @@ class DocumentationPanelWidget(QWidget):
     def __init__(
         self,
         *,
-        service: ServicoRevisaoHumana,
-        analysis_service: ExecutarAnaliseConformidade | None = None,
-        registry_service: ServicoRegistroRegrasConformidade | None = None,
-        registry: RegistroRegrasConformidade | None = None,
+        gateway: DocumentationGateway,
         viewer: PdfViewerWidget,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("documentationCompliancePanel")
-        self._service = service
-        self._analysis_service = analysis_service
-        self._registry_service = registry_service
-        if registry_service is not None:
-            self._registry = registry_service.obter_revisao_ativa().registro
-        elif registry is not None:
-            self._registry = registry
-        else:
-            raise ValueError("Painel requer um registro de conformidade")
+        self._gateway = gateway
         self._viewer = viewer
-        self._session: SessaoRevisao | None = None
-        self._result: ExecucaoConformidade | None = None
-        self._callouts: tuple[CalloutConformidade, ...] = ()
+        self._documentation: DocumentationResponse | None = None
+        self._result: ComplianceExecutionResponse | None = None
+        self._registry: ActiveRuleRegistryResponse | None = None
+        self._callouts: tuple[ComplianceCalloutDto, ...] = ()
         self._hidden_finding_ids: set[UUID] = set()
         self._finding_visibility_buttons: dict[UUID, QToolButton] = {}
         self._visibility_context: tuple[UUID, UUID | None] | None = None
         self._syncing_finding_selection = False
+        self._compliance_job_id: UUID | None = None
+        self._compliance_poll = QTimer(self)
+        self._compliance_poll.timeout.connect(self._poll_compliance_job)
         self._build_ui()
         self._viewer.compliance_callout_selected.connect(self._select_finding_id)
+        self.atualizar_regras()
         self.atualizar_projetos()
 
     def _build_ui(self) -> None:
@@ -261,43 +237,52 @@ class DocumentationPanelWidget(QWidget):
 
     def atualizar_projetos(self) -> None:
         selected = self._project.currentData()
+        try:
+            projects = self._gateway.list_projects(limit=200, offset=0)
+        except (DocumentationGatewayError, ValueError) as error:
+            self.status_changed.emit(str(error))
+            return
         self._project.blockSignals(True)
-        self._project.clear()
-        self._project.addItem("Selecione um projeto analisado", None)
-        for summary in self._service.listar_projetos_semanticos():
-            self._project.addItem(summary.nome, str(summary.projeto_id))
-        if selected is not None:
-            index = self._project.findData(selected)
-            self._project.setCurrentIndex(max(0, index))
-        self._project.blockSignals(False)
+        try:
+            self._project.clear()
+            self._project.addItem("Selecione um projeto analisado", None)
+            for summary in projects.items:
+                self._project.addItem(summary.service_note, str(summary.project_id.root))
+            if selected is not None:
+                index = self._project.findData(selected)
+                self._project.setCurrentIndex(max(0, index))
+        finally:
+            self._project.blockSignals(False)
         if self._project.currentData() is not None:
             self._load_selected_project()
 
     def atualizar_regras(self) -> None:
-        service = self._registry_service
-        if service is None:
+        try:
+            registry = self._gateway.get_active_registry()
+        except (DocumentationGatewayError, ValueError) as error:
+            self.status_changed.emit(str(error))
             return
-        self._refresh_registry(service.obter_revisao_ativa().registro)
+        self._refresh_registry(registry)
 
     def abrir_projeto(self, projeto_id: UUID) -> None:
         self.atualizar_projetos()
         index = self._project.findData(str(projeto_id))
-        if index < 0:
-            self.status_changed.emit("Projeto ainda não possui documentação analisável")
+        try:
+            self._activate(projeto_id)
+        except (DocumentationGatewayError, ValueError) as error:
+            self.status_changed.emit(str(error))
             return
-        self._project.blockSignals(True)
-        self._project.setCurrentIndex(index)
-        self._project.blockSignals(False)
-        self._activate(self._service.carregar_sessao_semantica(projeto_id))
+        if index < 0:
+            self.status_changed.emit("Projeto aberto por identificador remoto")
 
     def abrir_sessao(self, session: object) -> None:
-        if isinstance(session, SessaoRevisao):
-            self._activate(session)
+        if isinstance(session, ReviewSessionResponse):
+            self.abrir_projeto(session.project_id.root)
         elif session is None:
             self.limpar()
 
     def limpar(self) -> None:
-        self._session = None
+        self._documentation = None
         self._result = None
         self._callouts = ()
         self._hidden_finding_ids.clear()
@@ -311,6 +296,8 @@ class DocumentationPanelWidget(QWidget):
         self._summary.setText("Selecione um projeto analisado")
         self._execution_status.setText("Nenhuma execução de conformidade persistida")
         self._analyze_compliance.setEnabled(False)
+        self._compliance_poll.stop()
+        self._compliance_job_id = None
         self._sync_finding_visibility_buttons()
 
     def _load_selected_project(self) -> None:
@@ -318,13 +305,13 @@ class DocumentationPanelWidget(QWidget):
         if value is None:
             return
         try:
-            self._activate(self._service.carregar_sessao_semantica(UUID(str(value))))
-        except (DomainValidationError, ValueError) as error:
+            self._activate(UUID(str(value)))
+        except (DocumentationGatewayError, ValueError) as error:
             self.status_changed.emit(str(error))
 
-    def _activate(self, session: SessaoRevisao) -> None:
-        self._session = session
-        index = self._project.findData(str(session.projeto.id))
+    def _activate(self, project_id: UUID) -> None:
+        self._documentation = self._gateway.get_documentation(project_id)
+        index = self._project.findData(str(project_id))
         if index >= 0:
             self._project.blockSignals(True)
             self._project.setCurrentIndex(index)
@@ -332,142 +319,138 @@ class DocumentationPanelWidget(QWidget):
         self._load_persisted_result()
 
     def _load_persisted_result(self) -> None:
-        session = self._session
-        service = self._analysis_service
+        documentation = self._documentation
         result = (
-            service.obter_ultima(session.projeto.id)
-            if session is not None and service is not None
+            self._gateway.get_latest_compliance(documentation.project_id.root)
+            if documentation is not None
             else None
         )
         context = (
-            (session.projeto.id, result.id if result is not None else None)
-            if session is not None
+            (
+                documentation.project_id.root,
+                result.execution.execution_id.root if result is not None else None,
+            )
+            if documentation is not None
             else None
         )
         if context != self._visibility_context:
             self._hidden_finding_ids.clear()
             self._visibility_context = context
         self._result = result
-        pages = (
-            tuple(page for document in session.projeto.documentos for page in document.paginas)
-            if session is not None
+        self._callouts = (
+            tuple(item.callout for item in result.findings if item.callout is not None)
+            if result is not None
             else ()
         )
-        presentation_texts: dict[UUID, str] = {}
-        if self._result is not None:
-            targets = {item.id: item for item in self._result.alvos}
-            presentation_texts = {
-                finding.id: formatar_texto_achado(finding, targets[finding.alvo_id])
-                for finding in self._result.achados
-            }
-        self._callouts = ()
-        if self._result is not None and session is not None:
-            try:
-                initial_callouts = projetar_callouts_conformidade(
-                    self._result,
-                    evidencias=session.evidencias,
-                    paginas=pages,
-                    textos_apresentacao=presentation_texts,
-                )
-                # Preserve o layout determinístico já disponível caso a
-                # rasterização usada apenas para refiná-lo falhe.
-                self._callouts = initial_callouts
-                visual_mapper = getattr(self._viewer, "mapear_ocupacao_visual", None)
-                visual_maps = (
-                    visual_mapper(frozenset(item.pagina_id for item in initial_callouts))
-                    if callable(visual_mapper)
-                    else {}
-                )
-                self._callouts = projetar_callouts_conformidade(
-                    self._result,
-                    evidencias=session.evidencias,
-                    paginas=pages,
-                    textos_apresentacao=presentation_texts,
-                    mapas_ocupacao_visual=visual_maps,
-                )
-            except (LayoutCalloutsImpossivelError, PdfError) as error:
-                self.status_changed.emit(str(error))
         self._update_visible_callouts()
         self._populate_documents()
         self._populate_findings()
-        self._analyze_compliance.setEnabled(session is not None and service is not None)
-        if session is None:
+        self._analyze_compliance.setEnabled(documentation is not None)
+        if documentation is None:
             return
         if self._result is None:
             self._summary.setText("Sessão semântica disponível · conformidade ainda não analisada")
             self._execution_status.setText("Nenhuma execução de conformidade persistida")
             return
-        divergent = sum(
-            item.resultado is ResultadoConformidade.DIVERGENCIA for item in self._result.achados
-        )
-        conforming = sum(
-            item.resultado is ResultadoConformidade.CONFORME for item in self._result.achados
-        )
+        execution = self._result.execution
+        documented = sum(len(item.fields) for item in documentation.sections)
         self._summary.setText(
-            f"{len(self._result.itens_documentais)} controles documentais · "
-            f"{divergent} divergência(s) · "
-            f"{conforming} regra(s) conforme(s)"
+            f"{documented} controles documentais · "
+            f"{execution.divergence_count} divergência(s) · "
+            f"{execution.compliant_count} regra(s) conforme(s)"
         )
-        stale = resultado_conformidade_desatualizado(
-            self._result,
-            self._registry.assinatura(),
-        )
-        state = "Resultado desatualizado" if stale else "Resultado atual"
+        state = "Resultado desatualizado" if execution.is_stale else "Resultado atual"
         self._execution_status.setText(
-            f"{state} · regras {self._result.versao_regras} · "
-            f"{self._result.executada_em.isoformat(timespec='seconds')}"
+            f"{state} · regras {execution.rule_registry_revision} · "
+            f"{execution.completed_at.isoformat(timespec='seconds')}"
         )
 
     def _analyze_current_compliance(self) -> None:
-        session = self._session
-        service = self._analysis_service
-        if session is None or service is None:
+        documentation = self._documentation
+        if documentation is None or self._compliance_job_id is not None:
             return
         try:
-            self._result = service.executar(session.projeto.id)
-        except (ApplicationError, DomainValidationError, ValueError) as error:
+            accepted = self._gateway.create_compliance_job(
+                documentation.project_id.root,
+                expected_semantic_signature=documentation.semantic_signature,
+                idempotency_key=f"compliance-ui-{uuid4()}",
+            )
+        except (DocumentationGatewayError, ValueError) as error:
             self.status_changed.emit(str(error))
             QMessageBox.warning(self, "Conformidade não concluída", str(error))
             return
-        self._load_persisted_result()
-        self.status_changed.emit(
-            f"Conformidade analisada com as regras {self._result.versao_regras}"
+        self._compliance_job_id = accepted.job_id.root
+        self._analyze_compliance.setEnabled(False)
+        self._execution_status.setText("Análise de conformidade na fila")
+        self._compliance_poll.start(accepted.poll_after_ms)
+        self._poll_compliance_job()
+
+    def _poll_compliance_job(self) -> None:
+        job_id = self._compliance_job_id
+        if job_id is None:
+            self._compliance_poll.stop()
+            return
+        try:
+            job = self._gateway.get_job(job_id)
+        except DocumentationGatewayError as error:
+            self._finish_compliance_job_error(str(error))
+            return
+        self._execution_status.setText(
+            f"{job.message or 'Analisando conformidade'} · {job.progress_percent}%"
         )
+        if job.status not in {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELLED}:
+            return
+        self._compliance_poll.stop()
+        self._compliance_job_id = None
+        self._analyze_compliance.setEnabled(self._documentation is not None)
+        if job.status is JobStatus.SUCCEEDED:
+            self._gateway.get_job_result(job_id)
+            self._load_persisted_result()
+            version = self._result.execution.rule_registry_revision if self._result else "ativa"
+            self.status_changed.emit(f"Conformidade analisada com as regras {version}")
+            return
+        message = str(job.error) if job.error is not None else (job.message or "Operação cancelada")
+        self._finish_compliance_job_error(message)
+
+    def _finish_compliance_job_error(self, message: str) -> None:
+        self._compliance_poll.stop()
+        self._compliance_job_id = None
+        self._analyze_compliance.setEnabled(self._documentation is not None)
+        self.status_changed.emit(message)
+        QMessageBox.warning(self, "Conformidade não concluída", message)
 
     def _populate_documents(self) -> None:
-        result = self._result
-        session = self._session
+        documentation = self._documentation
         self._documents.clear()
-        if result is None or session is None:
+        if documentation is None:
             self._documents_word_wrap.refresh()
             return
-        by_document = {item.id: item for item in session.projeto.documentos}
-        roots: dict[UUID, QTreeWidgetItem] = {}
-        groups: dict[tuple[UUID, str], QTreeWidgetItem] = {}
-        for item in result.itens_documentais:
-            document = by_document[item.documento_id]
-            root = roots.get(document.id)
+        roots: dict[str, QTreeWidgetItem] = {}
+        for section in documentation.sections:
+            document_name = section.document_name or "Documento"
+            root = roots.get(document_name)
             if root is None:
-                root = QTreeWidgetItem((document.nome_arquivo, "", "", "", ""))
-                roots[document.id] = root
+                root = QTreeWidgetItem((document_name, "", "", "", ""))
+                roots[document_name] = root
                 self._documents.addTopLevelItem(root)
-            group_key = (document.id, item.grupo)
-            group = groups.get(group_key)
-            if group is None:
-                group = QTreeWidgetItem((item.grupo, "", "", "", ""))
-                groups[group_key] = group
-                root.addChild(group)
-            child = QTreeWidgetItem(
-                (
-                    "",
-                    item.campo,
-                    item.valor,
-                    _status_label(item.estado),
-                    _confidence_label(item.confianca),
+            group = QTreeWidgetItem((section.label, "", "", "", ""))
+            root.addChild(group)
+            for field in section.fields:
+                child = QTreeWidgetItem(
+                    (
+                        "",
+                        field.label,
+                        field.value or "",
+                        _status_label(field.status),
+                        _confidence_label(field.confidence),
+                    )
                 )
-            )
-            _set_navigation_data(child, item.pagina_id, item.geometria)
-            group.addChild(child)
+                child.setData(
+                    0,
+                    Qt.ItemDataRole.UserRole,
+                    field.evidence[0] if field.evidence else None,
+                )
+                group.addChild(child)
         self._documents.expandAll()
         self._documents_word_wrap.refresh()
 
@@ -479,67 +462,67 @@ class DocumentationPanelWidget(QWidget):
             self._sync_finding_visibility_buttons()
             self._findings_word_wrap.refresh()
             return
-        targets = {item.id: item for item in result.alvos}
-        localized_findings = {item.id for item in self._callouts}
+        localized_findings = {item.finding_id.root for item in self._callouts}
         for finding in sorted(
-            (
-                item
-                for item in result.achados
-                if item.resultado is ResultadoConformidade.DIVERGENCIA
-            ),
-            key=lambda item: (item.regra_id, str(item.alvo_id)),
+            (item for item in result.findings if item.status is ComplianceStatus.DIVERGENCE),
+            key=lambda item: (item.rule_id, str(item.target_id)),
         ):
-            target = targets[finding.alvo_id]
-            observed, expected = formatar_valores_achado(
-                finding.avaliacoes_condicoes,
-                finding.resultado,
+            finding_id = finding.finding_id.root
+            observed = finding.observed_value or "—"
+            expected = finding.expected_value or "—"
+            target_label = finding.target_label or finding.target_scope.value.title()
+            rule_revision = (
+                finding.rule_registry_revision or result.execution.rule_registry_revision
             )
-            target_label = formatar_alvo(target)
-            presentation_text = formatar_texto_achado(finding, target)
             row = QTreeWidgetItem(
                 (
-                    _result_label(finding.resultado),
-                    finding.severidade.value.title(),
-                    finding.titulo,
+                    _result_label(finding.status),
+                    finding.severity or "—",
+                    finding.title or finding.summary,
                     observed,
                     expected,
                     target_label,
-                    f"{finding.fonte.documento} · {finding.fonte.item}",
-                    f"Regras {result.versao_regras} · norma {finding.fonte.revisao}",
-                    _location_label(target, projected=finding.id in localized_findings),
+                    finding.source_reference,
+                    f"Regras {rule_revision}"
+                    + (
+                        f" · norma {finding.normative_revision}"
+                        if finding.normative_revision
+                        else ""
+                    ),
+                    finding.location_label or "Sem localização no PDF",
                     "",
                 )
             )
-            row.setToolTip(2, presentation_text)
+            row.setToolTip(2, finding.summary)
             row.setToolTip(3, observed)
             row.setToolTip(4, expected)
             row.setToolTip(5, target_label)
             row.setToolTip(
                 6,
-                f"Revisão {finding.fonte.revisao}"
-                + (f" · página {finding.fonte.pagina}" if finding.fonte.pagina is not None else ""),
+                f"Revisão {finding.normative_revision or '—'}",
             )
             row.setToolTip(
                 7,
-                f"Regras {result.versao_regras} · norma {finding.fonte.revisao}",
+                f"Regras {rule_revision}"
+                + (f" · norma {finding.normative_revision}" if finding.normative_revision else ""),
             )
-            row.setData(0, Qt.ItemDataRole.UserRole + 2, str(target.id))
-            row.setData(0, Qt.ItemDataRole.UserRole + 3, str(finding.id))
+            row.setData(0, Qt.ItemDataRole.UserRole + 2, finding.navigation)
+            row.setData(0, Qt.ItemDataRole.UserRole + 3, str(finding_id))
             self._findings.addTopLevelItem(row)
-            localized = finding.id in localized_findings
+            localized = finding_id in localized_findings
             tooltip = _finding_visibility_tooltip(
-                visible=finding.id not in self._hidden_finding_ids,
+                visible=finding_id not in self._hidden_finding_ids,
                 localized=localized,
             )
             button = self._visibility_button(
-                visible=localized and finding.id not in self._hidden_finding_ids,
+                visible=localized and finding_id not in self._hidden_finding_ids,
                 localized=localized,
                 tooltip=tooltip,
-                toggled=partial(self._set_finding_visible, finding.id),
+                toggled=partial(self._set_finding_visible, finding_id),
             )
             button.setEnabled(localized)
-            button.setProperty("findingId", str(finding.id))
-            self._finding_visibility_buttons[finding.id] = button
+            button.setProperty("findingId", str(finding_id))
+            self._finding_visibility_buttons[finding_id] = button
             self._findings.setItemWidget(row, 9, button)
         self._sync_finding_visibility_buttons()
         self._findings_word_wrap.refresh()
@@ -565,7 +548,10 @@ class DocumentationPanelWidget(QWidget):
         return button
 
     def _set_finding_visible(self, finding_id: UUID, visible: bool) -> None:
-        callout = next((item for item in self._callouts if item.id == finding_id), None)
+        callout = next(
+            (item for item in self._callouts if item.finding_id.root == finding_id),
+            None,
+        )
         if callout is None:
             return
         if visible:
@@ -575,11 +561,11 @@ class DocumentationPanelWidget(QWidget):
         self._sync_finding_visibility_buttons()
         self._update_visible_callouts()
         if visible:
-            self._navigate(callout.pagina_id, None)
-            self._viewer.selecionar_callout(str(callout.id))
+            self._navigate(callout.navigation)
+            self._viewer.selecionar_callout(str(callout.callout_id.root))
 
     def _set_all_findings_visible(self, *, visible: bool) -> None:
-        localized_ids = {item.id for item in self._callouts}
+        localized_ids = {item.finding_id.root for item in self._callouts}
         if visible:
             self._hidden_finding_ids.difference_update(localized_ids)
         else:
@@ -588,7 +574,7 @@ class DocumentationPanelWidget(QWidget):
         self._update_visible_callouts()
 
     def _sync_finding_visibility_buttons(self) -> None:
-        localized_ids = {item.id for item in self._callouts}
+        localized_ids = {item.finding_id.root for item in self._callouts}
         for finding_id, button in self._finding_visibility_buttons.items():
             localized = finding_id in localized_ids
             visible = localized and finding_id not in self._hidden_finding_ids
@@ -609,43 +595,44 @@ class DocumentationPanelWidget(QWidget):
 
     def _update_visible_callouts(self) -> None:
         self._viewer.definir_callouts_conformidade(
-            tuple(item for item in self._callouts if item.id not in self._hidden_finding_ids)
+            tuple(
+                item
+                for item in self._callouts
+                if item.finding_id.root not in self._hidden_finding_ids
+            )
         )
 
     def _populate_rules(self) -> None:
         self._rules.clear()
-        service = self._registry_service
-        number_by_id = (
-            {item.regra_id: item.numero for item in service.listar_numeros()}
-            if service is not None
-            else {rule.id: index for index, rule in enumerate(self._registry.regras, start=1)}
-        )
-        for rule in sorted(self._registry.regras, key=lambda item: number_by_id[item.id]):
+        registry = self._registry
+        if registry is None:
+            self._rules_summary.setText("Registro de regras indisponível")
+            self._import_rules.setEnabled(False)
+            self._export_rules.setEnabled(False)
+            self._rule_details.clear()
+            self._rules_word_wrap.refresh()
+            return
+        details = {item.summary.rule_id: item for item in registry.details}
+        for rule in sorted(registry.rules, key=lambda item: item.rule_number):
+            detail = details[rule.rule_id]
             row = QTreeWidgetItem(
                 (
-                    f"Regra {number_by_id[rule.id]}",
-                    "Ativa" if rule.ativa else "Inativa",
-                    rule.titulo,
-                    formatar_escopo(rule.escopo),
-                    "Automático",
+                    f"Regra {rule.rule_number}",
+                    "Ativa" if rule.enabled else "Inativa",
+                    rule.title,
+                    detail.target_scope,
+                    detail.provider_label,
                 )
             )
-            row.setData(0, Qt.ItemDataRole.UserRole, rule.id)
+            row.setData(0, Qt.ItemDataRole.UserRole, rule.rule_id)
             self._rules.addTopLevelItem(row)
-        active_count = sum(item.ativa for item in self._registry.regras)
-        inactive_count = len(self._registry.regras) - active_count
-        if service is not None:
-            revision = service.obter_revisao_ativa()
-            revision_text = f"Revisão ativa · versão {revision.registro.versao}"
-        else:
-            revision_text = f"Registro empacotado · versão {self._registry.versao}"
         self._rules_summary.setText(
-            f"{revision_text} · {active_count} regra(s) ativa(s) · "
-            f"{inactive_count} regra(s) inativa(s)"
+            f"Revisão ativa · versão {registry.revision} · "
+            f"{registry.active_rule_count} regra(s) ativa(s) · "
+            f"{registry.rule_count - registry.active_rule_count} regra(s) inativa(s)"
         )
-        enabled = service is not None
-        self._import_rules.setEnabled(enabled)
-        self._export_rules.setEnabled(enabled)
+        self._import_rules.setEnabled(True)
+        self._export_rules.setEnabled(True)
         self._rule_details.clear()
         self._rules_word_wrap.refresh()
 
@@ -663,37 +650,29 @@ class DocumentationPanelWidget(QWidget):
         if rule is None:
             self._rule_details.clear()
             return
-        source = f"{rule.fonte.documento} · {rule.fonte.revisao} · {rule.fonte.item}"
-        if rule.fonte.pagina is not None:
-            source += f" · página {rule.fonte.pagina}"
         self._rule_details.setPlainText(
             "\n".join(
                 (
-                    rule.titulo,
-                    rule.descricao,
+                    rule.summary.title,
+                    rule.description or "",
                     "",
-                    f"Fonte: {source}",
-                    "Aplicável quando: "
-                    + formatar_lista_condicoes(rule.aplicabilidade, vazio="sempre"),
-                    "Exceto quando: "
-                    + formatar_lista_condicoes(rule.excecoes, vazio="sem exceção"),
-                    "Deve atender: "
-                    + formatar_lista_condicoes(rule.requisitos, vazio="sem requisito"),
+                    f"Fonte: {rule.source_detail or rule.summary.source_reference}",
+                    f"Aplicável quando: {rule.applicability_text or 'sempre'}",
+                    f"Exceto quando: {rule.exceptions_text or 'sem exceção'}",
+                    f"Deve atender: {rule.requirements_text or 'sem requisito'}",
                 )
             )
         )
 
-    def _selected_rule(self) -> RegraConformidade | None:
+    def _selected_rule(self) -> RuleDetailDto | None:
         selected = self._rules.selectedItems()
-        if not selected:
+        registry = self._registry
+        if not selected or registry is None:
             return None
         rule_id = str(selected[0].data(0, Qt.ItemDataRole.UserRole))
-        return next((item for item in self._registry.regras if item.id == rule_id), None)
+        return next((item for item in registry.details if item.summary.rule_id == rule_id), None)
 
     def _import_registry(self) -> None:
-        service = self._registry_service
-        if service is None:
-            return
         selected, _filter = QFileDialog.getOpenFileName(
             self,
             "Importar regras de conformidade",
@@ -703,34 +682,38 @@ class DocumentationPanelWidget(QWidget):
         if not selected:
             return
         try:
-            registry, warnings = carregar_registro_conformidade_json_com_avisos(Path(selected))
-            summary = service.preparar_importacao(registry, avisos=warnings)
-        except (ApplicationError, DomainValidationError, OSError) as error:
+            summary = self._gateway.preflight_rule_import(
+                Path(selected),
+                idempotency_key=f"rules-preflight-ui-{uuid4()}",
+            )
+        except (DocumentationGatewayError, OSError, ValueError) as error:
             self._show_rules_error("Importação recusada", error)
             return
         confirmation = QMessageBox.question(
             self,
             "Resumo da importação",
-            summary.texto_confirmacao(),
+            _preflight_confirmation(summary),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
         if confirmation != QMessageBox.StandardButton.Yes:
             return
         try:
-            revision = service.importar(summary)
-        except (ApplicationError, DomainValidationError, OSError) as error:
+            revision = self._gateway.confirm_rule_import(
+                ConfirmRuleImportRequest(
+                    preflight_id=summary.preflight_id,
+                    fingerprint=summary.fingerprint,
+                    expected_active_revision=summary.current_revision,
+                    confirmed=True,
+                )
+            )
+        except (DocumentationGatewayError, OSError, ValueError) as error:
             self._show_rules_error("Importação não concluída", error)
             return
-        self._refresh_registry(revision.registro)
-        self.status_changed.emit(
-            f"Revisão ativa de regras atualizada para {revision.registro.versao}"
-        )
+        self.atualizar_regras()
+        self.status_changed.emit(f"Revisão ativa de regras atualizada para {revision.revision}")
 
     def _export_registry(self) -> None:
-        service = self._registry_service
-        if service is None:
-            return
         selected, _filter = QFileDialog.getSaveFileName(
             self,
             "Exportar regras de conformidade",
@@ -739,17 +722,21 @@ class DocumentationPanelWidget(QWidget):
         )
         if not selected:
             return
+        destination = Path(selected)
+        temporary = destination.with_name(f".{destination.name}.{uuid4().hex}.tmp")
         try:
-            service.exportar(Path(selected))
-        except (ApplicationError, DomainValidationError, OSError) as error:
+            temporary.write_bytes(self._gateway.download_active_registry())
+            os.replace(temporary, destination)
+        except (DocumentationGatewayError, OSError, ValueError) as error:
+            temporary.unlink(missing_ok=True)
             self._show_rules_error("Exportação não concluída", error)
             return
         QMessageBox.information(self, "Exportação concluída", "Registro ativo exportado.")
 
-    def _refresh_registry(self, registry: RegistroRegrasConformidade) -> None:
+    def _refresh_registry(self, registry: ActiveRuleRegistryResponse) -> None:
         self._registry = registry
         self._populate_rules()
-        if self._session is not None:
+        if self._documentation is not None:
             self._load_persisted_result()
 
     def _show_rules_error(self, title: str, error: Exception) -> None:
@@ -766,25 +753,20 @@ class DocumentationPanelWidget(QWidget):
 
     def _navigate_finding_item(self) -> None:
         selected = self._findings.selectedItems()
-        result = self._result
-        if not selected or result is None or self._syncing_finding_selection:
+        if not selected or self._result is None or self._syncing_finding_selection:
             return
         finding_id = selected[0].data(0, Qt.ItemDataRole.UserRole + 3)
         callout = next(
-            (item for item in self._callouts if str(item.id) == str(finding_id)),
+            (item for item in self._callouts if str(item.finding_id.root) == str(finding_id)),
             None,
         )
         if callout is not None:
-            self._navigate(callout.pagina_id, None)
-            self._viewer.selecionar_callout(str(callout.id))
+            self._navigate(callout.navigation)
+            self._viewer.selecionar_callout(str(callout.callout_id.root))
             return
-        target_id = selected[0].data(0, Qt.ItemDataRole.UserRole + 2)
-        target = next(
-            (item for item in result.alvos if str(item.id) == str(target_id)),
-            None,
-        )
-        if target is not None:
-            self._navigate_target(target)
+        navigation = selected[0].data(0, Qt.ItemDataRole.UserRole + 2)
+        if isinstance(navigation, EvidenceNavigationDto):
+            self._navigate(navigation)
 
     def _select_finding_id(self, finding_id: str) -> None:
         if self._syncing_finding_selection:
@@ -808,24 +790,20 @@ class DocumentationPanelWidget(QWidget):
         selected = tree.selectedItems()
         if not selected:
             return
-        page_id = selected[0].data(0, Qt.ItemDataRole.UserRole)
-        geometry = selected[0].data(0, Qt.ItemDataRole.UserRole + 1)
-        self._navigate(page_id, geometry if isinstance(geometry, GeometriaDocumento) else None)
+        navigation = selected[0].data(0, Qt.ItemDataRole.UserRole)
+        if isinstance(navigation, EvidenceNavigationDto):
+            self._navigate(navigation)
 
-    def _navigate_target(self, target: AlvoConformidade) -> None:
-        self._navigate(target.pagina_id, target.geometria)
-
-    def _navigate(self, page_id: object, geometry: GeometriaDocumento | None) -> None:
-        session = self._session
-        if session is None or page_id is None:
+    def _navigate(self, navigation: EvidenceNavigationDto) -> None:
+        documentation = self._documentation
+        if documentation is None:
             return
         try:
-            page_number = session.projeto.ordem_leitura_paginas.index(UUID(str(page_id))) + 1
+            page_number = documentation.page_order.index(navigation.page_id) + 1
         except (ValueError, TypeError):
             return
         self._viewer.ir_para_folha(page_number)
-        if geometry is not None:
-            self._viewer.definir_sobreposicoes((geometry.pontos,))
+        self._viewer.definir_destaque_navegacao(navigation)
 
 
 def _tree(
@@ -847,51 +825,24 @@ def _tree(
     return tree
 
 
-def _set_navigation_data(
-    item: QTreeWidgetItem,
-    page_id: UUID | None,
-    geometry: GeometriaDocumento | None,
-) -> None:
-    item.setData(
-        0,
-        Qt.ItemDataRole.UserRole,
-        str(page_id) if page_id is not None else None,
-    )
-    item.setData(0, Qt.ItemDataRole.UserRole + 1, geometry)
+def _confidence_label(value: str | None) -> str:
+    return f"{float(value) * 100:.0f}%" if value is not None else "—"
 
 
-def _confidence_label(value: Decimal | None) -> str:
-    return f"{value * 100:.0f}%" if value is not None else "—"
-
-
-def _status_label(value: str) -> str:
+def _status_label(value: DocumentationFieldStatus) -> str:
     return {
-        "IDENTIFICADO": "Identificado",
-        "CONFIRMADO": "Confirmado",
-        "INFERIDO_PELA_PAGINA": "Inferido pela página",
-        "NAO_IDENTIFICADO": "Não identificado",
-        "NAO_AVALIAVEL": "Não avaliável",
-        "REQUER_REVISAO_VISUAL": "Revisão visual",
-        "ASSINATURA_PDF_PRESENTE": "Campo PDF preenchido",
-    }.get(value, value.replace("_", " ").title())
-
-
-def _result_label(value: ResultadoConformidade) -> str:
-    return {
-        ResultadoConformidade.CONFORME: "Conforme",
-        ResultadoConformidade.DIVERGENCIA: "Divergência",
-        ResultadoConformidade.NAO_AVALIAVEL: "Não avaliável",
+        DocumentationFieldStatus.PRESENT: "Identificado",
+        DocumentationFieldStatus.ABSENT: "Não identificado",
+        DocumentationFieldStatus.UNCERTAIN: "Revisão visual",
     }[value]
 
 
-def _location_label(target: AlvoConformidade, *, projected: bool = False) -> str:
-    if projected:
-        return "Localizado no PDF"
-    if target.pagina_id is None:
-        return "Sem localização no PDF"
-    if target.geometria is None:
-        return "Sem localização no PDF"
-    return "Localizado no PDF"
+def _result_label(value: ComplianceStatus) -> str:
+    return {
+        ComplianceStatus.COMPLIANT: "Conforme",
+        ComplianceStatus.DIVERGENCE: "Divergência",
+        ComplianceStatus.NOT_EVALUABLE: "Não avaliável",
+    }[value]
 
 
 def _finding_visibility_tooltip(
@@ -908,3 +859,21 @@ def _finding_visibility_button_text(visible: bool, *, localized: bool = True) ->
     if not localized:
         return "Sem local"
     return "Ocultar" if visible else "Exibir"
+
+
+def _preflight_confirmation(value: RuleImportPreflightResponse) -> str:
+    lines = (
+        f"Versão informada: {value.proposed_revision}",
+        f"Novas: {len(value.added_rule_ids)}",
+        f"IDs existentes substituídos: {len(value.changed_rule_ids)}",
+        f"IDs atuais omitidos e preservados: {len(value.preserved_rule_ids)}",
+    )
+    warnings = tuple(item.summary for item in value.issues)
+    return "\n".join(
+        (
+            *lines,
+            *(("", "Avisos:", *(f"• {item}" for item in warnings)) if warnings else ()),
+            "",
+            "Confirmar a criação de uma nova revisão ativa?",
+        )
+    )

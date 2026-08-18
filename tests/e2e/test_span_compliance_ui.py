@@ -111,6 +111,7 @@ def test_span_rule_full_ui_cycle_survives_restart(
     assert imported_row.text(4) == "Automático"
     tabs.setCurrentIndex(1)
     qtbot.mouseClick(analyze, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: documentation._compliance_job_id is None, timeout=10_000)
 
     finding = _finding_row(findings, _RULE_TITLE)
     finding_id = UUID(str(finding.data(0, Qt.ItemDataRole.UserRole + 3)))
@@ -118,11 +119,13 @@ def test_span_rule_full_ui_cycle_survives_restart(
     assert "52" in finding.text(3)
     assert "45" in finding.text(4)
     assert finding.text(8) == "Localizado no PDF"
-    assert finding_id in {item.id for item in window.pdf_viewer._compliance_callouts}
+    assert finding_id in {item.finding_id.root for item in window.pdf_viewer._compliance_callouts}
     current_rule_finding = _finding_row(findings, _CURRENT_SPAN_RULE_TITLE)
     current_rule_finding_id = UUID(str(current_rule_finding.data(0, Qt.ItemDataRole.UserRole + 3)))
     assert current_rule_finding.text(0) == "Divergência"
-    assert current_rule_finding_id in {item.id for item in window.pdf_viewer._compliance_callouts}
+    assert current_rule_finding_id in {
+        item.finding_id.root for item in window.pdf_viewer._compliance_callouts
+    }
     qtbot.waitUntil(
         lambda: str(finding_id) in window.pdf_viewer.view._callout_items,
         timeout=10_000,
@@ -134,7 +137,7 @@ def test_span_rule_full_ui_cycle_survives_restart(
 
     first_execution = documentation._result
     assert first_execution is not None
-    assert any(item.regra_id == _RULE_ID for item in first_execution.achados)
+    assert any(item.rule_id == _RULE_ID for item in first_execution.findings)
     assert confirmations and "IDs existentes substituídos: 0" in confirmations[0]
 
     window.close()
@@ -174,15 +177,21 @@ def test_span_rule_full_ui_cycle_survives_restart(
     reopened_finding_id = UUID(str(reopened_finding.data(0, Qt.ItemDataRole.UserRole + 3)))
     assert reopened_finding_id == finding_id
     assert reopened_documentation._result == first_execution
-    assert reopened_finding_id in {item.id for item in reopened.pdf_viewer._compliance_callouts}
+    assert reopened_finding_id in {
+        item.finding_id.root for item in reopened.pdf_viewer._compliance_callouts
+    }
 
     visibility = reopened_findings.itemWidget(reopened_finding, 9)
     assert isinstance(visibility, QToolButton)
     assert visibility.isChecked()
     qtbot.mouseClick(visibility, Qt.MouseButton.LeftButton)
-    assert reopened_finding_id not in {item.id for item in reopened.pdf_viewer._compliance_callouts}
+    assert reopened_finding_id not in {
+        item.finding_id.root for item in reopened.pdf_viewer._compliance_callouts
+    }
     qtbot.mouseClick(visibility, Qt.MouseButton.LeftButton)
-    assert reopened_finding_id in {item.id for item in reopened.pdf_viewer._compliance_callouts}
+    assert reopened_finding_id in {
+        item.finding_id.root for item in reopened.pdf_viewer._compliance_callouts
+    }
 
     reopened_tabs.setCurrentIndex(2)
     reopened_rules.setCurrentItem(_rule_row(reopened_rules, _RULE_ID))
@@ -198,18 +207,23 @@ def test_span_rule_full_ui_cycle_survives_restart(
 
     reopened_tabs.setCurrentIndex(1)
     qtbot.mouseClick(reanalyze, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: reopened_documentation._compliance_job_id is None, timeout=10_000)
     assert all(
         (item := reopened_findings.topLevelItem(index)) is not None and item.text(2) != _RULE_TITLE
         for index in range(reopened_findings.topLevelItemCount())
     )
     latest = reopened_documentation._result
-    assert latest is not None and latest.id != first_execution.id
-    assert all(item.regra_id != _RULE_ID for item in latest.achados)
-    analysis_service = reopened_documentation._analysis_service
-    assert analysis_service is not None
-    history = analysis_service.listar_historico(project_id)
-    assert history == (first_execution, latest)
-    assert any(item.regra_id == _RULE_ID for item in history[0].achados)
+    assert latest is not None
+    assert latest.execution.execution_id != first_execution.execution.execution_id
+    assert all(item.rule_id != _RULE_ID for item in latest.findings)
+    history = reopened_documentation._gateway.list_compliance_history(project_id)
+    assert tuple(item.execution_id for item in history.items) == (
+        first_execution.execution.execution_id,
+        latest.execution.execution_id,
+    )
+    assert history.items[0].is_stale
+    assert not history.items[1].is_stale
+    assert any(item.rule_id == _RULE_ID for item in first_execution.findings)
     assert "IDs existentes substituídos: 1" in confirmations[-1]
     assert "IDs atuais omitidos e preservados: 39" in confirmations[-1]
 

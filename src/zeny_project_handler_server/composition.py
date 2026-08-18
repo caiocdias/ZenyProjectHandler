@@ -54,6 +54,7 @@ from zeny_project_handler_contracts.session import (
     OcrDiagnosticDto,
     SessionCapabilitiesResponse,
 )
+from zeny_project_handler_server.compliance_api import DocumentationComplianceApiService
 from zeny_project_handler_server.config import ServerSettings
 from zeny_project_handler_server.job_manager import JobManager
 from zeny_project_handler_server.project_api import ProjectApiService
@@ -73,6 +74,9 @@ SERVER_CAPABILITIES = (
     "global-operation-observability",
     "remote-human-review",
     "review-audit-projections",
+    "remote-documentation-compliance",
+    "remote-rule-registry",
+    "server-compiled-compliance-callouts",
 )
 
 
@@ -89,6 +93,15 @@ class JobLifecycle(Protocol):
         *,
         expected_project_version: int,
         force_reanalysis: bool,
+        idempotency_key: str,
+        correlation_id: str,
+    ) -> JobAcceptedResponse: ...
+
+    def create_compliance_job(
+        self,
+        project_id: UUID,
+        *,
+        expected_semantic_signature: str,
         idempotency_key: str,
         correlation_id: str,
     ) -> JobAcceptedResponse: ...
@@ -110,6 +123,9 @@ class _IdleJobLifecycle:
         pass
 
     def create_analysis_job(self, *_args: object, **_kwargs: object) -> JobAcceptedResponse:
+        raise RuntimeError("O gerenciador de jobs não está disponível")
+
+    def create_compliance_job(self, *_args: object, **_kwargs: object) -> JobAcceptedResponse:
         raise RuntimeError("O gerenciador de jobs não está disponível")
 
     def get_job(self, _job_id: UUID) -> JobStatusResponse:
@@ -140,6 +156,9 @@ class ServerRuntimeProtocol(Protocol):
     def review_api(self) -> ReviewApiService | None: ...
 
     @property
+    def compliance_api(self) -> DocumentationComplianceApiService | None: ...
+
+    @property
     def jobs(self) -> JobLifecycle: ...
 
     def close(self) -> None: ...
@@ -155,6 +174,7 @@ class ServerRuntime:
     project_api: ProjectApiService | None = None
     viewer_api: ViewerApiService | None = None
     review_api: ReviewApiService | None = None
+    compliance_api: DocumentationComplianceApiService | None = None
     _closed: bool = False
 
     def session_capabilities(self) -> SessionCapabilitiesResponse:
@@ -238,6 +258,13 @@ def compose_server_runtime(settings: ServerSettings) -> ServerRuntime:
             settings,
             ocr,
         )
+        review_api = ReviewApiService(core.engine)
+        compliance_api = DocumentationComplianceApiService(
+            engine=core.engine,
+            data_directory=settings.data_directory,
+            review_api=review_api,
+            upload_max_bytes=settings.upload_max_bytes,
+        )
 
         def run_analysis(
             project_id: UUID,
@@ -260,6 +287,8 @@ def compose_server_runtime(settings: ServerSettings) -> ServerRuntime:
             coordinator=core.operation_coordinator,
             project_versions=project_api,
             analysis_runner=run_analysis,
+            compliance_runner=compliance_api.execute_compliance,
+            semantic_signature_reader=compliance_api.semantic_signature,
             retention_seconds=settings.job_retention_seconds,
             maximum_retained=settings.job_max_retained,
         )
@@ -274,7 +303,8 @@ def compose_server_runtime(settings: ServerSettings) -> ServerRuntime:
         jobs=jobs,
         project_api=project_api,
         viewer_api=viewer_api,
-        review_api=ReviewApiService(core.engine),
+        review_api=review_api,
+        compliance_api=compliance_api,
     )
 
 

@@ -8,6 +8,7 @@ from zeny_project_handler_contracts.base import (
     CalloutId,
     ComplianceExecutionId,
     ContractModel,
+    DecimalString,
     FindingId,
     NonEmptyString,
     ProjectId,
@@ -27,7 +28,10 @@ class ComplianceCalloutDto(ContractModel):
     finding_id: FindingId
     text: NonEmptyString
     anchor: NormalizedPointDto
+    anchors: tuple[NormalizedPointDto, ...] = ()
     box: NormalizedBoxDto
+    font_size_points: DecimalString = "9.5"
+    status: ComplianceStatus = ComplianceStatus.DIVERGENCE
     navigation: EvidenceNavigationDto
 
 
@@ -39,9 +43,16 @@ class ComplianceFindingDto(ContractModel):
     target_scope: ComplianceTargetScope
     target_id: str | None = Field(default=None, max_length=200)
     summary: NonEmptyString
+    title: str | None = Field(default=None, max_length=500)
+    severity: str | None = Field(default=None, max_length=50)
+    target_label: str | None = Field(default=None, max_length=500)
     observed_value: str | None = Field(default=None, max_length=2000)
     expected_value: str | None = Field(default=None, max_length=2000)
     source_reference: NonEmptyString
+    rule_registry_revision: str | None = Field(default=None, max_length=200)
+    normative_revision: str | None = Field(default=None, max_length=200)
+    location_label: str | None = Field(default=None, max_length=200)
+    navigation: EvidenceNavigationDto | None = None
     evidence: tuple[EvidenceNavigationDto, ...]
     callout: ComplianceCalloutDto | None = None
 

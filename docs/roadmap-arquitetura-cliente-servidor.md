@@ -3,7 +3,7 @@
 - Estado geral: **PLANEJADO**
 - Data do planejamento: **2026-08-17**
 - Responsável pelo planejamento: **Codex**
-- Próxima etapa liberada: **Etapa 7** (**PENDENTE**; não iniciada neste chat)
+- Próxima etapa liberada: **Etapa 8** (**PENDENTE**; não iniciada neste chat)
 - Regra de execução: uma etapa só pode começar quando todas as suas dependências estiverem
   marcadas como **CONCLUÍDA**.
 
@@ -879,7 +879,7 @@ da API na conexão e recusar, com mensagem clara, uma combinação incompatível
 
 ## Etapa 7 — Documentação, conformidade, regras e callouts remotos
 
-- Estado: **PENDENTE**
+- Estado: **CONCLUÍDA**
 - Dependências: Etapa 6 **CONCLUÍDA**
 - Entrega principal: inspeção e motor de conformidade ficam integralmente no servidor.
 
@@ -910,12 +910,40 @@ da API na conexão e recusar, com mensagem clara, uma combinação incompatível
 
 ### Evidências
 
-- Início/data/agente: _preencher_
-- Paridade de snapshots/39 regras: _preencher_
-- Testes de registro/callouts: _preencher_
-- Import graph e inspeção de dados do cliente: _preencher_
-- Comandos/gates: _preencher_
-- Observações/bloqueios: _preencher_
+- Início/data/agente: **2026-08-18 19:17 -03:00 — Codex; roadmap, README, especificação
+  funcional, inventário de paridade, arquitetura/catálogo de conformidade e ADRs 0011 e 0013
+  lidos; Etapa 6 confirmada como CONCLUÍDA e working tree inicial limpo. Escopo limitado aos
+  DTOs/endpoints/gateway de documentação, conformidade, registro de regras e callouts, migração
+  integral do painel, paridade das 39 regras, preflight/confirmação, estado visual e gates da
+  Etapa 7. Etapa 8 permanece PENDENTE e não será iniciada.**
+- Paridade de snapshots/39 regras: **registro remoto confirmou 39/39 regras ativas, IDs únicos,
+  numeração estável 1–39 e equivalência por achado entre `ExecucaoConformidade` e
+  `ComplianceExecutionResponse`; gate dirigido consolidado com 105 testes aprovado. A mesma
+  contagem, unicidade e faixa 1–39 foram confirmadas novamente pela API autenticada da imagem
+  Docker final.**
+- Testes de registro/callouts: **round trip do download JSON com SHA-256, preflight cancelado sem
+  publicação, confirmação com merge aditivo, restart com 40 regras, saturação de layout sem perda
+  de achados/documentação, navegação, seleção cruzada, visibilidade e posição manual cobertos.**
+- Import graph e inspeção de dados do cliente: **gate AST impede imports de adapters/application/
+  domain/ports no painel/gateway e impede seeds/compiladores no código cliente de documentação;
+  servidor sem imports de Qt/UI; mypy limpo em 272 arquivos.**
+- Comandos/gates: **`IniciarTestes.bat` final registrou `RESULTADO FINAL: APROVADO`: Python 3.13.14,
+  `pip check` íntegro, Ruff lint aprovado, 276 arquivos formatados, Mypy sem erros em 272
+  arquivos-fonte, 714 testes aprovados em 214,68 s, cobertura 86,32% contra mínimo 85,01% e 2.301
+  funções/métodos sem complexidade E/F. Antes do gate completo, a suíte dirigida da Etapa 7 aprovou
+  105 testes e as provas adicionais de paridade/registro/fronteira aprovaram 7; a OpenAPI v1 foi
+  regenerada com 51 operações. `docker compose config --quiet` passou e
+  `docker compose build --no-cache` gerou `zeny-project-handler-server:dev`, ID
+  `sha256:c36dedf0844f3991b1cf1c69305d0f1e8f08f72db90a433e267ba89598a390ec`, 173.699.750 bytes.
+  O Compose isolado ficou `healthy` como usuário `zeny`; o smoke confirmou health público,
+  `401` sem Bearer, sessão autenticada `ready=true`, as três capacidades da Etapa 7, endpoint de
+  projetos documentais e registro remoto com 39 regras ativas, 39 IDs únicos e numeração 1–39.**
+- Observações/bloqueios: **conclusão em 2026-08-18 20:23 -03:00, sem bloqueios. A primeira execução
+  do gate completo detectou um E2E que lia o job remoto ainda em `queued` e dois arquivos fora da
+  formatação; a espera do E2E foi tornada determinística, os arquivos foram formatados e o gate foi
+  repetido integralmente até aprovação. Contêiner, rede e volume efêmeros
+  `zph-stage7-validation` foram removidos; a imagem permaneceu para inspeção. Nenhum commit foi
+  criado. A Etapa 8 permanece PENDENTE e não foi iniciada.**
 
 ### Mensagem para um novo chat limpo do Codex
 

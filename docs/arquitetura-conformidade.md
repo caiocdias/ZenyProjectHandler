@@ -4,7 +4,7 @@
 
 O motor compara fatos rastreáveis do projeto com regras declarativas sem transformar ausência de
 evidência em certeza. A revisão distribuída atual é `cemig-normas-distribuicao-2025.6`, com 39 regras
-habilitadas, e o método de conformidade está na versão `6`.
+habilitadas, e o método de conformidade está na versão `7`.
 
 O [catálogo de regras](catalogo-regras-conformidade.md) documenta obrigações e fontes. O
 [inventário normativo](inventario-fontes-normativas.md) registra documentos, revisões, hashes e
@@ -28,12 +28,13 @@ Projeto + sessão semântica persistida
  registro ativo -> avaliador declarativo -> achados
                 |
                 v
- snapshot SQLite -> lista, explicação e callouts no PDF
+ snapshot SQLite -> DTOs + callouts normalizados -> camada vetorial Qt
 ```
 
-`ExecutarAnaliseConformidade` é a entrada transacional. O fluxo completo do projeto e o botão
-**Analisar conformidade** chamam o mesmo caso de uso. A ação explícita reutiliza a sessão semântica
-persistida e não repete leitura do PDF, extração ou OCR.
+`ExecutarAnaliseConformidade` é a entrada transacional no processo servidor. O fluxo completo do
+projeto e o job criado pelo botão **Analisar conformidade** chamam o mesmo caso de uso. A ação
+explícita reutiliza a sessão semântica persistida e não repete leitura do PDF, extração ou OCR. O
+cliente não carrega registro, provedores, avaliador nem compilador de callouts.
 
 ## Contratos do domínio
 
@@ -131,9 +132,10 @@ O SQLite mantém:
 - assinatura SHA-256, versão informada e indicador da revisão ativa;
 - número de exibição permanente por ID técnico em `compliance_rule_numbers`.
 
-Importar regras mescla por ID e preserva IDs atuais omitidos. O usuário pode alterar `enabled` apenas
-ao importar o mesmo ID; não há comando de remoção, ativação ou desativação individual. Exportar grava
-a revisão ativa.
+Importar regras é uma operação autenticada do servidor: o preflight valida e prepara o merge por ID,
+preserva IDs atuais omitidos e exige uma confirmação separada antes de publicar. O usuário pode
+alterar `enabled` apenas ao importar o mesmo ID; não há comando de remoção, ativação ou desativação
+individual. O download devolve a revisão ativa sem expor caminho físico.
 
 Cada mudança republica `catalogo-regras-conformidade.md` na pasta de dados do usuário. Esse arquivo é
 uma projeção explicativa da revisão local; o catálogo versionado no repositório descreve o seed.
@@ -169,7 +171,8 @@ corresponde ao estado ativo. O snapshot antigo continua visível até uma reaná
 
 ## Callouts e interface
 
-`application/compliance_callouts.py` converte somente divergências localizáveis em projeções sem Qt.
+No servidor, `application/compliance_callouts.py` converte somente divergências localizáveis em
+`ComplianceCalloutDto` sem Qt.
 Resultados conformes e não avaliáveis permanecem no snapshot auditável, mas não são apresentados
 como problemas de comissionamento nem recebem callout.
 A geometria é escolhida, em ordem, entre fatos participantes, evidências referenciadas e alvo. Uma

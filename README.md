@@ -26,9 +26,11 @@ há instalador ou pacote de distribuição para máquinas sem Python.
   persistidos no servidor com controle de conflito entre revisores.
 - Regiões de ocorrência, vãos, rótulos e vínculos são derivados exclusivamente no servidor; o
   cliente conserva navegação e controle independente de visibilidade dos elementos no desenho.
-- Inspeção documental de cabeçalho, servidão, carimbos e campos de assinatura.
-- Motor declarativo de conformidade com quatro famílias de provedores de fatos, snapshots
-  persistidos e callouts vetoriais no PDF. O seed atual é
+- Painel **Documentação e conformidade** remoto: inspeção de cabeçalho, servidão, carimbos e
+  assinaturas, reanálise, histórico, estado desatualizado e regras chegam como DTOs do servidor.
+- Motor declarativo de conformidade executado no servidor, com quatro famílias de provedores de
+  fatos, snapshots persistidos e callouts normalizados compilados para a camada vetorial do cliente.
+  O seed atual é
   `cemig-normas-distribuicao-2025.6`, com 39 regras habilitadas.
 - Importação e exportação de projetos `.zphproj`, backup completo `.zphbackup`, validação de
   integridade e recuperação de operações interrompidas sobre arquivos gerenciados.
@@ -82,10 +84,11 @@ resultados semânticos persistidos; ela não abre o PDF nem repete OCR.
 
 ## Dados e integridade
 
-Por padrão, os dados ainda pertencentes aos painéis não migrados, logs e estado da interface ficam
-em `%LOCALAPPDATA%\ZenyProjectHandler`. Use `ZENY_DATA_DIR` para escolher outra raiz. O painel
-**Projeto** usa o servidor como fonte principal; banco, PDFs gerenciados, cache, jobs e logs desse
-processo ficam em `ZENY_SERVER_DATA_DIR` (normalmente o volume `/data`).
+Por padrão, os dados ainda pertencentes ao painel de portabilidade não migrado, logs e estado da
+interface ficam em `%LOCALAPPDATA%\ZenyProjectHandler`. Use `ZENY_DATA_DIR` para escolher outra
+raiz. Os painéis **Projeto**, **Resultados** e **Documentação e conformidade** usam o servidor como
+fonte principal; banco, PDFs gerenciados, cache, jobs e logs desses processos ficam em
+`ZENY_SERVER_DATA_DIR` (normalmente o volume `/data`).
 
 - O SQLite é migrado automaticamente na inicialização.
 - PDFs adicionados pelo painel Projeto são enviados por streaming e publicados em cópia gerenciada

@@ -15,6 +15,7 @@ from PySide6.QtWidgets import QLabel, QPushButton, QTreeWidget
 from pytestqt.qtbot import QtBot
 from sqlalchemy import Engine, update
 from sqlalchemy.exc import IntegrityError
+from tests.remote_gateways import SynchronousDocumentationGateway
 
 from zeny_project_handler.adapters.analysis import PyMuPdfDocumentAnalyzer, TesseractCliOcr
 from zeny_project_handler.adapters.compliance import (
@@ -42,7 +43,7 @@ from zeny_project_handler.application.errors import AnaliseConformidadeCancelada
 from zeny_project_handler.application.human_review import ServicoRevisaoHumana, SessaoRevisao
 from zeny_project_handler.domain.analysis import EvidenciaDocumento, ExecucaoAnalise
 from zeny_project_handler.domain.catalog import CatalogoTecnico
-from zeny_project_handler.domain.compliance import ExecucaoConformidade
+from zeny_project_handler.domain.compliance import ExecucaoConformidade, ResultadoConformidade
 from zeny_project_handler.domain.documents import DocumentoProjeto, PaginaDocumento
 from zeny_project_handler.domain.enums import EstadoExecucaoAnalise, TipoEvidencia
 from zeny_project_handler.domain.project import Projeto
@@ -54,6 +55,7 @@ from zeny_project_handler.domain.values import (
 )
 from zeny_project_handler.ui.documentation_panel import DocumentationPanelWidget
 from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
+from zeny_project_handler_contracts.enums import ComplianceStatus
 
 
 class _ViewerStub(QObject):
@@ -255,6 +257,52 @@ def test_execution_is_deterministic_preserves_history_and_survives_restart(
     reopened_engine.dispose()
 
 
+def test_remote_dtos_preserve_baseline_semantics_for_all_39_active_rules(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    engine, project_id, service, registry_service = _prepare_context(
+        tmp_path,
+        catalogo_inicial,
+    )
+    execution = service.executar(project_id)
+
+    def unit_of_work() -> SqlAlchemyUnitOfWork:
+        return SqlAlchemyUnitOfWork(engine)
+
+    gateway = SynchronousDocumentationGateway(
+        engine=engine,
+        data_directory=tmp_path / "data",
+        review_service=ServicoRevisaoHumana(unit_of_work),
+        analysis_service=service,
+        registry_service=registry_service,
+    )
+    registry = gateway.get_active_registry()
+    remote = gateway.get_latest_compliance(project_id)
+
+    assert registry.rule_count == registry.active_rule_count == 39
+    assert remote is not None
+    expected_status = {
+        ResultadoConformidade.CONFORME: ComplianceStatus.COMPLIANT,
+        ResultadoConformidade.DIVERGENCIA: ComplianceStatus.DIVERGENCE,
+        ResultadoConformidade.NAO_AVALIAVEL: ComplianceStatus.NOT_EVALUABLE,
+    }
+    domain_findings = {item.id: item for item in execution.achados}
+    dto_findings = {item.finding_id.root: item for item in remote.findings}
+    assert dto_findings.keys() == domain_findings.keys()
+    for finding_id, finding in domain_findings.items():
+        dto = dto_findings[finding_id]
+        assert dto.rule_id == finding.regra_id
+        assert dto.status is expected_status[finding.resultado]
+        assert dto.rule_registry_revision == finding.versao_regras
+        assert dto.source_reference == f"{finding.fonte.documento} · {finding.fonte.item}"
+        if dto.callout is not None:
+            assert dto.callout.finding_id == dto.finding_id
+            assert dto.callout.navigation == dto.navigation
+            assert dto.callout.anchors
+    engine.dispose()
+
+
 def test_active_rule_revision_is_captured_before_loading_the_semantic_session(
     tmp_path: Path,
     catalogo_inicial: CatalogoTecnico,
@@ -345,10 +393,15 @@ def test_panel_loads_latest_marks_stale_and_reapplies_without_ocr(
         return SqlAlchemyUnitOfWork(engine)
 
     review_service = ServicoRevisaoHumana(unit_of_work)
-    panel = DocumentationPanelWidget(
-        service=review_service,
-        registry_service=registry_service,
+    gateway = SynchronousDocumentationGateway(
+        engine=engine,
+        data_directory=tmp_path / "data",
+        review_service=review_service,
         analysis_service=service,
+        registry_service=registry_service,
+    )
+    panel = DocumentationPanelWidget(
+        gateway=gateway,
         viewer=cast(PdfViewerWidget, _ViewerStub()),
     )
     qtbot.addWidget(panel)
@@ -380,7 +433,7 @@ def test_panel_loads_latest_marks_stale_and_reapplies_without_ocr(
     )
     rules.setCurrentItem(number_rule)
     _import_rule_state(registry_service, "nd31.desenho.numero-projeto", enabled=False)
-    panel._refresh_registry(registry_service.obter_revisao_ativa().registro)
+    panel._refresh_registry(gateway.get_active_registry())
 
     assert "Resultado desatualizado" in status.text()
     assert service.listar_historico(project_id) == (first,)
@@ -420,10 +473,15 @@ def test_panel_marks_a_previous_compliance_method_as_stale(
     def unit_of_work() -> SqlAlchemyUnitOfWork:
         return SqlAlchemyUnitOfWork(engine)
 
-    panel = DocumentationPanelWidget(
-        service=ServicoRevisaoHumana(unit_of_work),
-        registry_service=registry_service,
+    gateway = SynchronousDocumentationGateway(
+        engine=engine,
+        data_directory=tmp_path / "data",
+        review_service=ServicoRevisaoHumana(unit_of_work),
         analysis_service=service,
+        registry_service=registry_service,
+    )
+    panel = DocumentationPanelWidget(
+        gateway=gateway,
         viewer=cast(PdfViewerWidget, _ViewerStub()),
     )
     qtbot.addWidget(panel)

@@ -16,6 +16,7 @@ from sqlalchemy import Engine
 
 from zeny_project_handler.adapters.pdf.errors import PdfProtegidoError
 from zeny_project_handler.application.errors import (
+    AnaliseConformidadeCanceladaError,
     ApplicationError,
     FluxoMvpCanceladoError,
     OperacaoEmAndamentoError,
@@ -63,6 +64,14 @@ class ProjectVersionReader(Protocol):
     def require_project_version(self, project_id: UUID, expected_version: int) -> None: ...
 
 
+class ComplianceRunner(Protocol):
+    def __call__(self, project_id: UUID, cancellation: Event) -> UUID: ...
+
+
+class SemanticSignatureReader(Protocol):
+    def __call__(self, project_id: UUID) -> str: ...
+
+
 class JobManager:
     """Mantenha um único executor e uma única reserva global por job ativo."""
 
@@ -73,12 +82,16 @@ class JobManager:
         coordinator: CoordenadorOperacoes,
         project_versions: ProjectVersionReader,
         analysis_runner: AnalysisRunner,
+        compliance_runner: ComplianceRunner | None = None,
+        semantic_signature_reader: SemanticSignatureReader | None = None,
         retention_seconds: int,
         maximum_retained: int,
     ) -> None:
         self._coordinator = coordinator
         self._project_versions = project_versions
         self._analysis_runner = analysis_runner
+        self._compliance_runner = compliance_runner
+        self._semantic_signature_reader = semantic_signature_reader
         self._store = JobStore(
             engine,
             retention=timedelta(seconds=retention_seconds),
@@ -150,6 +163,82 @@ class JobManager:
                     self._cancellations[job_id] = cancellation
                     future = self._executor.submit(
                         self._run_analysis,
+                        job_id,
+                        project_id,
+                        cancellation,
+                        token,
+                        correlation_id,
+                    )
+                    self._futures[job_id] = future
+                except BaseException:
+                    self._active_job_id = None
+                    self._cancellations.pop(job_id, None)
+                    token.liberar()
+                    self._idempotency.abandon_idempotency(idempotency)
+                    raise
+        return response
+
+    def create_compliance_job(
+        self,
+        project_id: UUID,
+        *,
+        expected_semantic_signature: str,
+        idempotency_key: str,
+        correlation_id: str,
+    ) -> JobAcceptedResponse:
+        runner = self._compliance_runner
+        signature_reader = self._semantic_signature_reader
+        if runner is None or signature_reader is None:
+            raise operation_conflict("A análise de conformidade não está disponível.")
+        current_signature = signature_reader(project_id)
+        if current_signature != expected_semantic_signature:
+            raise ApiError(
+                409,
+                ErrorCode.STALE_STATE,
+                "A sessão semântica mudou; recarregue o projeto antes de analisar.",
+            )
+        fingerprint = _fingerprint(
+            "compliance-job",
+            {
+                "project_id": str(project_id),
+                "expected_semantic_signature": expected_semantic_signature,
+            },
+        )
+        job_id = uuid5(_RESOURCE_NAMESPACE, f"{idempotency_key}:{fingerprint}")
+        with self._idempotency.idempotency_guard(
+            key=idempotency_key,
+            operation="compliance-job",
+            request_sha256=fingerprint,
+            resource_id=job_id,
+        ) as idempotency:
+            if idempotency.response_json is not None:
+                return JobAcceptedResponse.model_validate_json(idempotency.response_json)
+            response = JobAcceptedResponse(
+                job_id=JobId(job_id),
+                kind=JobKind.COMPLIANCE,
+                status=JobStatus.QUEUED,
+                poll_after_ms=_POLL_AFTER_MS,
+            )
+            with self._lock:
+                if not self._accepting:
+                    self._idempotency.abandon_idempotency(idempotency)
+                    raise operation_conflict("O servidor está encerrando e não aceita novos jobs.")
+                try:
+                    token = self._coordinator.adquirir(TipoOperacao.CONFORMIDADE)
+                except OperacaoEmAndamentoError as error:
+                    self._idempotency.abandon_idempotency(idempotency)
+                    raise operation_conflict(str(error)) from error
+                cancellation = Event()
+                try:
+                    self._store.create(job_id, project_id, JobKind.COMPLIANCE)
+                    self._idempotency.complete_idempotency(
+                        idempotency,
+                        response.model_dump_json(),
+                    )
+                    self._active_job_id = job_id
+                    self._cancellations[job_id] = cancellation
+                    future = self._executor.submit(
+                        self._run_compliance,
                         job_id,
                         project_id,
                         cancellation,
@@ -309,6 +398,77 @@ class JobManager:
                     status=JobStatus.SUCCEEDED,
                     message="Análise concluída.",
                     result_json=json.dumps(_result_payload(result), separators=(",", ":")),
+                )
+                observation.succeeded()
+            finally:
+                token.liberar()
+                with self._lock:
+                    self._cancellations.pop(job_id, None)
+                    self._futures.pop(job_id, None)
+                    if self._active_job_id == job_id:
+                        self._active_job_id = None
+                self._store.prune()
+
+    def _run_compliance(
+        self,
+        job_id: UUID,
+        project_id: UUID,
+        cancellation: Event,
+        token: TokenOperacao,
+        correlation_id: str,
+    ) -> None:
+        runner = self._compliance_runner
+        if runner is None:
+            token.liberar()
+            return
+        observation = operation_logger(
+            "server.job.compliance",
+            correlation_id=correlation_id,
+            project_id=project_id,
+            job_id=job_id,
+        )
+        with observation.context():
+            observation.started()
+            try:
+                self._store.update_progress(
+                    job_id,
+                    status=JobStatus.RUNNING,
+                    progress_percent=10,
+                    message="Reaplicando as regras à sessão semântica persistida.",
+                )
+                execution_id = runner(project_id, cancellation)
+                if cancellation.is_set():
+                    raise AnaliseConformidadeCanceladaError(
+                        "Análise de conformidade cancelada sem publicar resultado parcial"
+                    )
+            except AnaliseConformidadeCanceladaError as error:
+                self._store.finish(
+                    job_id,
+                    status=JobStatus.CANCELLED,
+                    message=str(error),
+                )
+                observation.cancelled(error_code=type(error).__name__)
+            except Exception as error:
+                envelope, expected = _safe_job_error(error, correlation_id)
+                self._store.finish(
+                    job_id,
+                    status=JobStatus.FAILED,
+                    message=envelope.message,
+                    error_json=envelope.model_dump_json(),
+                )
+                observation.failed(error, expected=expected)
+            else:
+                self._store.finish(
+                    job_id,
+                    status=JobStatus.SUCCEEDED,
+                    message="Análise de conformidade concluída.",
+                    result_json=json.dumps(
+                        {
+                            "project_id": str(project_id),
+                            "compliance_execution_id": str(execution_id),
+                        },
+                        separators=(",", ":"),
+                    ),
                 )
                 observation.succeeded()
             finally:

@@ -6,7 +6,7 @@ import math
 import os
 from collections.abc import Callable
 from contextlib import suppress
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 from typing import Protocol, cast
@@ -52,22 +52,22 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from zeny_project_handler.application.compliance_callouts import (
-    CalloutConformidade,
-    RetanguloCallout,
-    ponto_conexao_callout,
-)
 from zeny_project_handler.application.visual_occupancy import (
     MapaOcupacaoVisual,
     detectar_ocupacao_visual_rgb,
 )
 from zeny_project_handler.config import DEFAULT_PDF_TILE_CACHE_MAX_BYTES
-from zeny_project_handler.domain.compliance import ResultadoConformidade
 from zeny_project_handler.domain.enums import TipoGeometria
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 from zeny_project_handler.logging_config import OperationLogger, operation_logger
 from zeny_project_handler_contracts.base import DocumentId, PageId
-from zeny_project_handler_contracts.enums import ReviewGeometryKind, ReviewState
+from zeny_project_handler_contracts.common import (
+    EvidenceNavigationDto,
+    NormalizedBoxDto,
+    NormalizedPointDto,
+)
+from zeny_project_handler_contracts.compliance import ComplianceCalloutDto
+from zeny_project_handler_contracts.enums import ComplianceStatus, ReviewGeometryKind, ReviewState
 from zeny_project_handler_contracts.errors import ErrorCode
 from zeny_project_handler_contracts.review import ReviewGeometryDto, ReviewOverlayDto
 from zeny_project_handler_contracts.viewer import (
@@ -147,7 +147,7 @@ class _GraficosCallout:
     caixa: CalloutBoxItem
     texto: QGraphicsTextItem
     linhas: tuple[QGraphicsPathItem, ...]
-    resultado: ResultadoConformidade
+    resultado: ComplianceStatus
 
 
 class ReviewLinkItem(QGraphicsPathItem):
@@ -350,7 +350,7 @@ class PdfGraphicsView(QGraphicsView):
 
     def definir_callouts_conformidade(
         self,
-        callouts: tuple[CalloutConformidade, ...],
+        callouts: tuple[ComplianceCalloutDto, ...],
         transformer: TransformadorViewport,
     ) -> None:
         """Reconstrua a camada vetorial de callouts sem tocar no raster ou nos links."""
@@ -365,9 +365,9 @@ class PdfGraphicsView(QGraphicsView):
         self._scene.addItem(layer)
         self._callout_layer = layer
         for callout in callouts:
-            if callout.pagina_id != transformer.pagina.page_id.root:
+            if callout.navigation.page_id.root != transformer.pagina.page_id.root:
                 continue
-            self._callout_items[str(callout.id)] = _criar_graficos_callout(
+            self._callout_items[str(callout.callout_id.root)] = _criar_graficos_callout(
                 callout,
                 transformer,
                 layer,
@@ -596,8 +596,8 @@ class PdfViewerWidget(QWidget):
         self._overlays: tuple[tuple[PontoNormalizado, ...], ...] = ()
         self._review_proposals: tuple[ReviewOverlayDto, ...] = ()
         self._review_link_geometries: dict[str, GeometriaDocumento] = {}
-        self._compliance_callouts: tuple[CalloutConformidade, ...] = ()
-        self._callout_position_overrides: dict[str, RetanguloCallout] = {}
+        self._compliance_callouts: tuple[ComplianceCalloutDto, ...] = ()
+        self._callout_position_overrides: dict[str, NormalizedBoxDto] = {}
         self._selected_compliance_callout_id: str | None = None
         self._visual_occupancy_cache: dict[UUID, MapaOcupacaoVisual] = {}
         self._current_transformer: TransformadorViewport | None = None
@@ -1044,20 +1044,21 @@ class PdfViewerWidget(QWidget):
 
     def definir_callouts_conformidade(
         self,
-        callouts: tuple[CalloutConformidade, ...],
+        callouts: tuple[ComplianceCalloutDto, ...],
     ) -> None:
         positioned = tuple(
-            replace(
-                item,
-                caixa_sugerida=self._callout_position_overrides.get(
-                    str(item.id),
-                    item.caixa_sugerida,
-                ),
+            item.model_copy(
+                update={
+                    "box": self._callout_position_overrides.get(
+                        str(item.callout_id.root),
+                        item.box,
+                    )
+                }
             )
             for item in callouts
         )
         self._compliance_callouts = positioned
-        visible_ids = {str(item.id) for item in callouts}
+        visible_ids = {str(item.callout_id.root) for item in callouts}
         if self._selected_compliance_callout_id not in visible_ids:
             self._selected_compliance_callout_id = None
             self.view.limpar_selecao_callout()
@@ -1111,7 +1112,7 @@ class PdfViewerWidget(QWidget):
         return result
 
     def selecionar_callout(self, callout_id: str) -> None:
-        if all(str(item.id) != callout_id for item in self._compliance_callouts):
+        if all(str(item.callout_id.root) != callout_id for item in self._compliance_callouts):
             return
         self._selected_compliance_callout_id = callout_id
         self.view.selecionar_callout(callout_id)
@@ -1121,14 +1122,39 @@ class PdfViewerWidget(QWidget):
         self.compliance_callout_selected.emit(callout_id)
 
     def _callout_moved(self, callout_id: str, box: object) -> None:
-        if not isinstance(box, RetanguloCallout):
+        if not isinstance(box, NormalizedBoxDto):
             return
-        if all(str(item.id) != callout_id for item in self._compliance_callouts):
+        if all(str(item.callout_id.root) != callout_id for item in self._compliance_callouts):
             return
         self._callout_position_overrides[callout_id] = box
         self._compliance_callouts = tuple(
-            replace(item, caixa_sugerida=box) if str(item.id) == callout_id else item
+            item.model_copy(update={"box": box})
+            if str(item.callout_id.root) == callout_id
+            else item
             for item in self._compliance_callouts
+        )
+
+    def definir_destaque_navegacao(self, navigation: EvidenceNavigationDto) -> None:
+        geometry = navigation.geometry
+        if geometry is None:
+            self.definir_sobreposicoes(())
+            return
+        left = Decimal(geometry.x)
+        top = Decimal(geometry.y)
+        right = left + Decimal(geometry.width)
+        bottom = top + Decimal(geometry.height)
+        if right <= left or bottom <= top:
+            self.definir_sobreposicoes(((PontoNormalizado(left, top),),))
+            return
+        self.definir_sobreposicoes(
+            (
+                (
+                    PontoNormalizado(left, top),
+                    PontoNormalizado(right, top),
+                    PontoNormalizado(right, bottom),
+                    PontoNormalizado(left, bottom),
+                ),
+            )
         )
 
     def selecionar_proposta(self, proposal_id: str) -> None:
@@ -1675,9 +1701,6 @@ def _review_geometry_to_domain(value: ReviewGeometryDto) -> GeometriaDocumento:
 
 
 def _review_geometry_from_domain(value: GeometriaDocumento) -> ReviewGeometryDto:
-    from zeny_project_handler_contracts.base import PageId
-    from zeny_project_handler_contracts.common import NormalizedPointDto
-
     return ReviewGeometryDto(
         page_id=PageId(value.pagina_id),
         kind={
@@ -1703,18 +1726,20 @@ def _review_color(state: ReviewState, *, alpha: int = 255) -> QColor:
 
 
 def _criar_graficos_callout(
-    callout: CalloutConformidade,
+    callout: ComplianceCalloutDto,
     transformer: TransformadorViewport,
     layer: QGraphicsRectItem,
     *,
     zoom: float,
-    callout_movido: Callable[[str, RetanguloCallout], None],
+    callout_movido: Callable[[str, NormalizedBoxDto], None],
 ) -> _GraficosCallout:
-    color, background = _cores_callout(callout.resultado, selecionado=False)
-    box = callout.caixa_sugerida
-    top_left = transformer.normalizado_para_pixel(PontoNormalizado(box.esquerda, box.topo))
-    top_right = transformer.normalizado_para_pixel(PontoNormalizado(box.direita, box.topo))
-    bottom_left = transformer.normalizado_para_pixel(PontoNormalizado(box.esquerda, box.base))
+    result = callout.status
+    color, background = _cores_callout(result, selecionado=False)
+    box = callout.box
+    left, top, right, bottom = _box_edges(box)
+    top_left = transformer.normalizado_para_pixel(PontoNormalizado(left, top))
+    top_right = transformer.normalizado_para_pixel(PontoNormalizado(right, top))
+    bottom_left = transformer.normalizado_para_pixel(PontoNormalizado(left, bottom))
     box_width = math.hypot(top_right.x - top_left.x, top_right.y - top_left.y)
     box_height = math.hypot(bottom_left.x - top_left.x, bottom_left.y - top_left.y)
     angle = math.degrees(math.atan2(top_right.y - top_left.y, top_right.x - top_left.x))
@@ -1723,7 +1748,7 @@ def _criar_graficos_callout(
     pen.setCosmetic(True)
     rectangle.setPen(pen)
     rectangle.setBrush(QBrush(background))
-    rectangle.setData(0, str(callout.id))
+    rectangle.setData(0, str(callout.callout_id.root))
     rectangle.setData(2, "compliance_callout")
     rectangle.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
     rectangle.setPos(top_left.x, top_left.y)
@@ -1732,32 +1757,32 @@ def _criar_graficos_callout(
     text_item = QGraphicsTextItem(rectangle)
     text_item.setDefaultTextColor(color)
     text_item.document().setDocumentMargin(0)
-    points_width = float(box.largura) * float(transformer.pagina.width_points)
+    points_width = float(Decimal(box.width)) * float(transformer.pagina.width_points)
     pixels_per_point = box_width / points_width
     padding = max(2.0, 6.0 * pixels_per_point)
     available_width = max(1.0, box_width - 2 * padding)
     minimum_scene_pixels = max(1, math.ceil(7.0 / zoom))
-    font_points = float(callout.tamanho_fonte_pontos)
+    font_points = float(callout.font_size_points)
     font = _fonte_callout(max(minimum_scene_pixels, round(font_points * pixels_per_point)))
     text_item.setFont(font)
-    text_item.setPlainText(callout.texto)
+    text_item.setPlainText(callout.text)
     text_item.setTextWidth(available_width)
     text_item.setPos(padding, padding)
-    text_item.setData(0, str(callout.id))
+    text_item.setData(0, str(callout.callout_id.root))
     text_item.setData(2, "compliance_callout")
     text_item.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
     text_item.setZValue(1)
-    tooltip = f"{callout.texto.replace(chr(10), ' ')} · Arraste a caixa para reposicioná-la"
+    tooltip = f"{callout.text.replace(chr(10), ' ')} · Arraste a caixa para reposicioná-la"
     rectangle.setToolTip(tooltip)
     text_item.setToolTip(tooltip)
     scene_bounds = layer.rect()
     arrow_pen = QPen(color, 2)
     arrow_pen.setCosmetic(True)
     lines: list[QGraphicsPathItem] = []
-    for _anchor in callout.ancoras:
+    for _anchor in _callout_anchors(callout):
         line = CalloutLinkItem(QPainterPath(), layer)
         line.setPen(arrow_pen)
-        line.setData(0, str(callout.id))
+        line.setData(0, str(callout.callout_id.root))
         line.setData(2, "compliance_callout")
         line.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable)
         line.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1765,7 +1790,7 @@ def _criar_graficos_callout(
         lines.append(line)
     line_tuple = tuple(lines)
 
-    def current_box() -> RetanguloCallout:
+    def current_box() -> NormalizedBoxDto:
         return _caixa_callout_normalizada(rectangle, transformer)
 
     def update_arrows() -> None:
@@ -1782,15 +1807,18 @@ def _criar_graficos_callout(
     rectangle.habilitar_arraste(
         limites=scene_bounds,
         posicao_alterada=update_arrows,
-        arraste_concluido=lambda: callout_movido(str(callout.id), current_box()),
+        arraste_concluido=lambda: callout_movido(
+            str(callout.callout_id.root),
+            current_box(),
+        ),
     )
-    return _GraficosCallout(rectangle, text_item, line_tuple, callout.resultado)
+    return _GraficosCallout(rectangle, text_item, line_tuple, result)
 
 
 def _caixa_callout_normalizada(
     rectangle: CalloutBoxItem,
     transformer: TransformadorViewport,
-) -> RetanguloCallout:
+) -> NormalizedBoxDto:
     corners = tuple(
         transformer.pixel_para_normalizado(PontoPlano(point.x(), point.y()))
         for point in (
@@ -1800,44 +1828,97 @@ def _caixa_callout_normalizada(
             rectangle.mapToScene(rectangle.rect().bottomRight()),
         )
     )
-    return RetanguloCallout(
-        min(item.x for item in corners),
-        min(item.y for item in corners),
-        max(item.x for item in corners),
-        max(item.y for item in corners),
+    left = min(item.x for item in corners)
+    top = min(item.y for item in corners)
+    right = max(item.x for item in corners)
+    bottom = max(item.y for item in corners)
+    return NormalizedBoxDto(
+        x=str(left),
+        y=str(top),
+        width=str(right - left),
+        height=str(bottom - top),
     )
 
 
 def _atualizar_setas_callout(
     lines: tuple[QGraphicsPathItem, ...],
-    box: RetanguloCallout,
-    callout: CalloutConformidade,
+    box: NormalizedBoxDto,
+    callout: ComplianceCalloutDto,
     transformer: TransformadorViewport,
     *,
     pixels_per_point: float,
     scene_bounds: QRectF,
 ) -> None:
-    for line, anchor in zip(lines, callout.ancoras, strict=True):
-        connection = ponto_conexao_callout(box, anchor.ponto)
-        start = transformer.normalizado_para_pixel(connection)
-        end = transformer.normalizado_para_pixel(anchor.ponto)
+    for line, anchor in zip(lines, _callout_anchors(callout), strict=True):
+        connection = _ponto_conexao_callout(box, anchor)
+        start = transformer.normalizado_para_pixel(_point_to_domain(connection))
+        end = transformer.normalizado_para_pixel(_point_to_domain(anchor))
         line.setPath(_caminho_seta_aberta(start, end, pixels_per_point, scene_bounds))
 
 
+def _callout_anchors(callout: ComplianceCalloutDto) -> tuple[NormalizedPointDto, ...]:
+    return callout.anchors or (callout.anchor,)
+
+
+def _box_edges(box: NormalizedBoxDto) -> tuple[Decimal, Decimal, Decimal, Decimal]:
+    left = Decimal(box.x)
+    top = Decimal(box.y)
+    return left, top, left + Decimal(box.width), top + Decimal(box.height)
+
+
+def _point_to_domain(point: NormalizedPointDto) -> PontoNormalizado:
+    return PontoNormalizado(Decimal(point.x), Decimal(point.y))
+
+
+def _ponto_conexao_callout(
+    box: NormalizedBoxDto,
+    anchor: NormalizedPointDto,
+) -> NormalizedPointDto:
+    left, top, right, bottom = _box_edges(box)
+    anchor_x = Decimal(anchor.x)
+    anchor_y = Decimal(anchor.y)
+    center_x = (left + right) / 2
+    center_y = (top + bottom) / 2
+    dx = anchor_x - center_x
+    dy = anchor_y - center_y
+    if left <= anchor_x <= right and top <= anchor_y <= bottom:
+        _distance, point = min(
+            (
+                (anchor_x - left, (left, anchor_y)),
+                (right - anchor_x, (right, anchor_y)),
+                (anchor_y - top, (anchor_x, top)),
+                (bottom - anchor_y, (anchor_x, bottom)),
+            ),
+            key=lambda item: item[0],
+        )
+        return NormalizedPointDto(x=str(point[0]), y=str(point[1]))
+    half_width = (right - left) / 2
+    half_height = (bottom - top) / 2
+    horizontal_ratio = abs(dx) / half_width if dx else Decimal(0)
+    vertical_ratio = abs(dy) / half_height if dy else Decimal(0)
+    if horizontal_ratio >= vertical_ratio:
+        x = right if dx > 0 else left
+        scale = (x - center_x) / dx
+        return NormalizedPointDto(x=str(x), y=str(center_y + dy * scale))
+    y = bottom if dy > 0 else top
+    scale = (y - center_y) / dy
+    return NormalizedPointDto(x=str(center_x + dx * scale), y=str(y))
+
+
 def _cores_callout(
-    resultado: ResultadoConformidade,
+    resultado: ComplianceStatus,
     *,
     selecionado: bool,
 ) -> tuple[QColor, QColor]:
     foregrounds = {
-        ResultadoConformidade.DIVERGENCIA: ("#c62828", "#8e0000"),
-        ResultadoConformidade.CONFORME: ("#2e7d32", "#1b5e20"),
-        ResultadoConformidade.NAO_AVALIAVEL: ("#8d6e00", "#5f4b00"),
+        ComplianceStatus.DIVERGENCE: ("#c62828", "#8e0000"),
+        ComplianceStatus.COMPLIANT: ("#2e7d32", "#1b5e20"),
+        ComplianceStatus.NOT_EVALUABLE: ("#8d6e00", "#5f4b00"),
     }
     selected_backgrounds = {
-        ResultadoConformidade.DIVERGENCIA: "#fff3e0",
-        ResultadoConformidade.CONFORME: "#e8f5e9",
-        ResultadoConformidade.NAO_AVALIAVEL: "#fff8e1",
+        ComplianceStatus.DIVERGENCE: "#fff3e0",
+        ComplianceStatus.COMPLIANT: "#e8f5e9",
+        ComplianceStatus.NOT_EVALUABLE: "#fff8e1",
     }
     regular, highlighted = foregrounds[resultado]
     foreground = QColor(highlighted if selecionado else regular)

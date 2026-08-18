@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 from pytestqt.qtbot import QtBot
 from sqlalchemy import Engine
+from tests.remote_gateways import SynchronousDocumentationGateway
 
 from zeny_project_handler.adapters.compliance import carregar_registro_conformidade_inicial
 from zeny_project_handler.adapters.persistence import (
@@ -99,13 +100,18 @@ def _panel(
     )
     registry_service.inicializar(carregar_registro_conformidade_inicial())
     review_service = ServicoRevisaoHumana(unit_of_work)
+    analysis_service = ExecutarAnaliseConformidade(
+        unit_of_work,
+        review_service.carregar_sessao_semantica,
+    )
     panel = DocumentationPanelWidget(
-        service=review_service,
-        analysis_service=ExecutarAnaliseConformidade(
-            unit_of_work,
-            review_service.carregar_sessao_semantica,
+        gateway=SynchronousDocumentationGateway(
+            engine=engine,
+            data_directory=data,
+            review_service=review_service,
+            analysis_service=analysis_service,
+            registry_service=registry_service,
         ),
-        registry_service=registry_service,
         viewer=cast(PdfViewerWidget, _ViewerStub()),
     )
     qtbot.addWidget(panel)
