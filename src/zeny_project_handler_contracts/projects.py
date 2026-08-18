@@ -12,7 +12,14 @@ from zeny_project_handler_contracts.base import (
 )
 from zeny_project_handler_contracts.common import DeletionCountsDto, PageMetadataDto
 from zeny_project_handler_contracts.documents import DocumentSummaryDto, PageSummaryDto
-from zeny_project_handler_contracts.enums import ProjectState
+from zeny_project_handler_contracts.enums import AnalysisExecutionState, ProjectState
+
+
+class ProjectAnalysisSummaryDto(ContractModel):
+    last_extraction: AnalysisExecutionState | None = None
+    last_interpretation: AnalysisExecutionState | None = None
+    pending_proposals: int = Field(ge=0)
+    completed_decisions: int = Field(ge=0)
 
 
 class ProjectSummaryDto(ContractModel):
@@ -21,6 +28,7 @@ class ProjectSummaryDto(ContractModel):
     state: ProjectState
     document_count: int = Field(ge=0)
     page_count: int = Field(ge=0)
+    analysis: ProjectAnalysisSummaryDto
     created_at: UtcDateTime
     updated_at: UtcDateTime
 
@@ -46,6 +54,7 @@ class ProjectDetailDto(ContractModel):
     project_version: int = Field(ge=0)
     documents: tuple[DocumentSummaryDto, ...]
     pages: tuple[PageSummaryDto, ...]
+    analysis: ProjectAnalysisSummaryDto
     created_at: UtcDateTime
     updated_at: UtcDateTime
 

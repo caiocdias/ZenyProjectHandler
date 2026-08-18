@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from zeny_project_handler.config import AppSettings
     from zeny_project_handler.ui.main_window import MainWindow
     from zeny_project_handler.ui.pdf_gateway import PdfViewerGateway
+    from zeny_project_handler.ui.project_gateway import ProjectGateway
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -52,6 +53,7 @@ class ApplicationFactory(Protocol):
         *,
         settings: AppSettings | None = None,
         pdf_viewer_gateway: PdfViewerGateway | None = None,
+        project_gateway: ProjectGateway | None = None,
     ) -> tuple[QApplication, MainWindow]: ...
 
 
@@ -60,23 +62,47 @@ def application_factory() -> Iterator[ApplicationFactory]:
     """Componha janelas e descarte seus engines antes da coleta do pytest."""
     created: list[tuple[QApplication, MainWindow]] = []
     gateways: list[Any] = []
+    server_runtimes: list[Any] = []
 
     def create(
         argv: Sequence[str] | None = None,
         *,
         settings: AppSettings | None = None,
         pdf_viewer_gateway: PdfViewerGateway | None = None,
+        project_gateway: ProjectGateway | None = None,
     ) -> tuple[QApplication, MainWindow]:
-        from tests.viewer_gateway import LocalTestPdfViewerGateway
+        from tests.remote_gateways import DirectPdfViewerGateway, DirectProjectGateway
         from zeny_project_handler.bootstrap import create_application
+        from zeny_project_handler_server.composition import compose_server_runtime
+        from zeny_project_handler_server.config import ServerSettings
 
-        gateway = pdf_viewer_gateway or LocalTestPdfViewerGateway()
-        if isinstance(gateway, LocalTestPdfViewerGateway):
-            gateways.append(gateway)
+        if settings is None:
+            raise ValueError("Os testes de janela devem fornecer AppSettings isolado")
+        runtime = None
+        if project_gateway is None:
+            runtime = compose_server_runtime(
+                ServerSettings(
+                    password="senha isolada do gateway Qt de testes",
+                    data_directory=settings.data_directory,
+                    render_dpi=settings.pdf_render_dpi,
+                    render_max_pixels=settings.pdf_render_max_pixels,
+                    render_max_bytes=settings.pdf_render_max_bytes,
+                )
+            )
+            server_runtimes.append(runtime)
+            project_gateway = DirectProjectGateway(runtime)
+        if pdf_viewer_gateway is None:
+            if runtime is None:
+                raise ValueError("O gateway PDF deve acompanhar o gateway de projeto customizado")
+            gateway: Any = DirectPdfViewerGateway(runtime)
+        else:
+            gateway = pdf_viewer_gateway
+        gateways.append(gateway)
         result = create_application(
             argv,
             settings=settings,
             pdf_viewer_gateway=gateway,
+            project_gateway=project_gateway,
         )
         created.append(result)
         return result
@@ -89,7 +115,11 @@ def application_factory() -> Iterator[ApplicationFactory]:
             window.release_resources()
             application.processEvents()
         for gateway in gateways:
-            gateway.close()
+            close = getattr(gateway, "close", None)
+            if callable(close):
+                close()
+        for runtime in reversed(server_runtimes):
+            runtime.close()
 
 
 @pytest.fixture

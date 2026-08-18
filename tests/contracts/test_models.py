@@ -52,6 +52,7 @@ from zeny_project_handler_contracts.documents import (
     DocumentUploadPreflightDto,
 )
 from zeny_project_handler_contracts.enums import (
+    AnalysisExecutionState,
     ComplianceStatus,
     ComplianceTargetScope,
     DocumentationFieldStatus,
@@ -76,7 +77,7 @@ from zeny_project_handler_contracts.portability import (
     ProjectImportPreflightResponse,
     ProjectImportSummaryDto,
 )
-from zeny_project_handler_contracts.projects import ProjectSummaryDto
+from zeny_project_handler_contracts.projects import ProjectAnalysisSummaryDto, ProjectSummaryDto
 from zeny_project_handler_contracts.review import (
     AnalysisRegionDto,
     ReviewProposalDto,
@@ -126,6 +127,12 @@ def _representative_models() -> list[ContractModel]:
         state=ProjectState.READY,
         document_count=1,
         page_count=2,
+        analysis=ProjectAnalysisSummaryDto(
+            last_extraction=AnalysisExecutionState.SUCCEEDED,
+            last_interpretation=AnalysisExecutionState.SUCCEEDED,
+            pending_proposals=1,
+            completed_decisions=2,
+        ),
         created_at=NOW,
         updated_at=NOW,
     )
@@ -339,6 +346,7 @@ def test_enum_values_are_stable() -> None:
             "INTERNAL_ERROR",
         ],
         ProjectState: ["CREATED", "READY", "ANALYZING", "ERROR"],
+        AnalysisExecutionState: ["STARTED", "SUCCEEDED", "FAILED", "CANCELLED"],
         UploadState: [
             "RECEIVING",
             "PREFLIGHT_READY",

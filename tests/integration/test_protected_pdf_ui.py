@@ -81,23 +81,21 @@ def test_distinct_passwords_are_reused_in_session_and_never_leak_to_artifacts(
 
     window.pdf_viewer.limpar()
     qtbot.mouseClick(_run_button(panel), Qt.MouseButton.LeftButton)
-    assert len(prompts) == 4  # o preflight repôs as duas credenciais antes do worker
     qtbot.waitUntil(lambda: not panel.processando, timeout=30_000)
-    assert len(prompts) == 4  # worker e reabertura pós-análise não abriram modais
+    assert len(prompts) == 2  # o job usa o cofre efêmero do servidor, sem preflight local
     assert all(thread == application.thread() for _label, thread in prompts)
 
     status = first.stat()
     os.utime(first, ns=(status.st_atime_ns, status.st_mtime_ns + 1_000_000))
     panel.abrir_selecionado()
-    assert len(prompts) == 5  # somente a identidade modificada foi solicitada novamente
-    assert "protegido-a.pdf" in prompts[-1][0]
+    assert len(prompts) == 2  # a cópia gerenciada não depende mais da origem do cliente
 
     portability = window.portability_panel
     active_session = panel._session
     assert portability is not None and active_session is not None
     package = tmp_path / "projeto-protegido.zphproj"
     portability._service.exportar_projeto(
-        active_session.projeto.id,
+        active_session.project_id.root,
         package,
     )
     artifact_files = (
@@ -114,7 +112,11 @@ def test_distinct_passwords_are_reused_in_session_and_never_leak_to_artifacts(
     _restarted_application, restarted = application_factory([], settings=settings)
     qtbot.addWidget(restarted)
     restarted.show()
-    assert len(prompts) == 7  # novo processo lógico: ambas foram solicitadas novamente
+    restarted.pdf_viewer.ir_para_folha(1)
+    qtbot.waitUntil(lambda: len(prompts) >= 3, timeout=10_000)
+    restarted.pdf_viewer.ir_para_folha(2)
+    qtbot.waitUntil(lambda: len(prompts) >= 4, timeout=10_000)
+    assert len(prompts) == 4  # novo processo servidor solicita novamente cada senha usada
     assert restarted.pdf_viewer.inspecao is not None
 
 
@@ -163,8 +165,8 @@ def test_wrong_password_limit_and_cancel_produce_partial_import_summary(
 
     active_session = panel._session
     assert active_session is not None
-    session = panel._service.abrir_projeto(active_session.projeto.id)
-    assert [document.nome_arquivo for document in session.projeto.documentos] == ["aberto.pdf"]
+    session = panel._gateway.get_project(active_session.project_id.root).project
+    assert [document.file.display_name for document in session.documents] == ["aberto.pdf"]
     assert len(prompts) == 4
     assert sum("sem-senha-valida.pdf" in prompt for prompt in prompts) == 3
     assert sum("cancelado.pdf" in prompt for prompt in prompts) == 1

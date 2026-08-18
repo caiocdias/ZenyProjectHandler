@@ -43,7 +43,7 @@ from zeny_project_handler.application.operation_coordinator import (
 )
 from zeny_project_handler.application.pdf_credentials import ProvedorCredenciaisPdfMemoria
 from zeny_project_handler.application.project_portability import ServicoPortabilidadeProjeto
-from zeny_project_handler.ports.pdf import LeitorPdfPort, OrcamentoRenderizacaoPdf
+from zeny_project_handler.ports.pdf import OrcamentoRenderizacaoPdf
 
 from .application_icon import carregar_icone_aplicacao
 from .documentation_panel import DocumentationPanelWidget
@@ -51,6 +51,7 @@ from .pdf_credentials import ResolvedorCredenciaisPdf
 from .pdf_gateway import PdfViewerGateway
 from .pdf_viewer import PdfViewerWidget
 from .portability_panel import PortabilityPanelWidget
+from .project_gateway import ProjectGateway
 from .project_panel import ProjectPanelWidget
 from .review_panel import ReviewPanelWidget
 from .theme import THEME_SETTING_KEY, Tema, aplicar_tema
@@ -334,8 +335,8 @@ class MainWindow(QMainWindow):
         self,
         *,
         application_name: str,
-        pdf_reader: LeitorPdfPort,
         pdf_viewer_gateway: PdfViewerGateway,
+        project_gateway: ProjectGateway,
         pdf_render_dpi: int,
         pdf_render_budget: OrcamentoRenderizacaoPdf,
         pdf_tile_cache_max_bytes: int,
@@ -446,11 +447,9 @@ class MainWindow(QMainWindow):
             and ui_state_path is not None
         ):
             self.project_panel = ProjectPanelWidget(
-                service=workflow_service,
+                gateway=project_gateway,
                 viewer=self.pdf_viewer,
                 review_panel=self.review_panel,
-                leitor_pdf=pdf_reader,
-                resolvedor_credenciais=credential_resolver,
                 state_path=ui_state_path,
                 parent=self,
             )
@@ -653,6 +652,8 @@ class MainWindow(QMainWindow):
             )
             event.ignore()
             return
+        if self.project_panel is not None:
+            self.project_panel.shutdown_polling()
         self.pdf_viewer.encerrar()
         super().closeEvent(event)
         if event.isAccepted():

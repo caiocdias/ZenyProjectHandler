@@ -10,6 +10,13 @@ class ProjectState(StrEnum):
     ERROR = "ERROR"
 
 
+class AnalysisExecutionState(StrEnum):
+    STARTED = "STARTED"
+    SUCCEEDED = "SUCCEEDED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
 class UploadState(StrEnum):
     RECEIVING = "RECEIVING"
     PREFLIGHT_READY = "PREFLIGHT_READY"

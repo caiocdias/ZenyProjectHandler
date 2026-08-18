@@ -3,6 +3,7 @@ from __future__ import annotations
 import hmac
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import cast
 
 import pytest
 from fastapi.testclient import TestClient
@@ -18,7 +19,7 @@ from zeny_project_handler_contracts.session import (
     SessionCapabilitiesResponse,
 )
 from zeny_project_handler_server.app import CORRELATION_HEADER, create_app
-from zeny_project_handler_server.composition import ServerRuntimeProtocol
+from zeny_project_handler_server.composition import JobLifecycle, ServerRuntimeProtocol
 from zeny_project_handler_server.config import ServerSettings
 
 PASSWORD = "senha correta somente para teste"
@@ -29,6 +30,7 @@ class FakeRuntime:
         self.closed = False
         self.project_api = None
         self.viewer_api = None
+        self.jobs = cast(JobLifecycle, FakeJobs())
 
     def session_capabilities(self) -> SessionCapabilitiesResponse:
         return SessionCapabilitiesResponse(
@@ -49,6 +51,11 @@ class FakeRuntime:
 
     def close(self) -> None:
         self.closed = True
+
+
+class FakeJobs:
+    def global_operation(self) -> None:
+        return None
 
 
 def _settings(tmp_path: Path) -> ServerSettings:

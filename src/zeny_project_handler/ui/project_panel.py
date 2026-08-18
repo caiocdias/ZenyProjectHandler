@@ -1,12 +1,14 @@
-"""Painel operacional do projeto."""
+"""Painel Projeto orientado exclusivamente ao gateway HTTP e DTOs de transporte."""
 
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import suppress
+from functools import partial
 from pathlib import Path
 from threading import Event
-from typing import TypeVar
-from uuid import UUID
+from typing import Any, TypeVar
+from uuid import UUID, uuid4
 
 from PySide6.QtCore import QObject, QRegularExpression, QSettings, Qt, QThread, QTimer, Signal, Slot
 from PySide6.QtGui import QKeyEvent, QKeySequence, QRegularExpressionValidator
@@ -18,6 +20,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -29,27 +32,20 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from zeny_project_handler.adapters.pdf.errors import PdfError
-from zeny_project_handler.application.errors import ApplicationError, FluxoMvpCanceladoError
-from zeny_project_handler.application.mvp_workflow import (
-    ResultadoFluxoMvp,
-    ServicoFluxoMvp,
-    SessaoProjetoMvp,
+from zeny_project_handler_contracts.enums import (
+    AnalysisExecutionState,
+    JobStatus,
+    UploadState,
 )
-from zeny_project_handler.application.operation_coordinator import TipoOperacao
-from zeny_project_handler.application.pdf_credentials import IdentidadeCredencialPdf
-from zeny_project_handler.application.pdf_import import ResultadoImportacaoPdfs
-from zeny_project_handler.domain.enums import EstadoExecucaoAnalise
-from zeny_project_handler.domain.errors import DomainValidationError
-from zeny_project_handler.logging_config import operation_logger
-from zeny_project_handler.ports.pdf import LeitorPdfPort, ReferenciaFontePdf
+from zeny_project_handler_contracts.jobs import JobResultResponse
+from zeny_project_handler_contracts.projects import ProjectDetailDto
+from zeny_project_handler_contracts.session import SessionCapabilitiesResponse
 
-from .pdf_credentials import EstadoResolucaoCredencialPdf, ResolvedorCredenciaisPdf
-from .pdf_viewer import PdfViewerWidget
-from .review_panel import ReviewPanelWidget
+from .project_gateway import ProjectGateway, ProjectGatewayError
 
 T = TypeVar("T")
 _NUMERO_NS_PATTERN = r"[0-9]{10}"
+_TERMINAL_JOB_STATES = frozenset({JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELLED})
 
 
 class _NumeroNsLineEdit(QLineEdit):
@@ -79,64 +75,79 @@ class _NumeroNsLineEdit(QLineEdit):
         super().keyPressEvent(event)
 
 
-class _PipelineWorker(QObject):
-    progress = Signal(int, int, str)
+class _JobPollingWorker(QObject):
+    progress = Signal(int, str)
     completed = Signal(object)
     failed = Signal(str, bool)
     finished = Signal()
 
     def __init__(
         self,
-        service: ServicoFluxoMvp,
-        project_id: UUID,
+        gateway: ProjectGateway,
+        job_id: UUID,
+        poll_after_ms: int,
         cancellation: Event,
-        correlation_id: str,
-        senhas_documentos: dict[UUID, str] | None = None,
     ) -> None:
         super().__init__()
-        self._service = service
-        self._project_id = project_id
+        self._gateway = gateway
+        self._job_id = job_id
+        self._poll_seconds = min(0.5, max(0.25, poll_after_ms / 1000))
         self._cancellation = cancellation
-        self._correlation_id = correlation_id
-        self._senhas_documentos = dict(senhas_documentos or {})
 
     @Slot()
     def run(self) -> None:
-        observation = operation_logger(
-            "qt.worker.analysis_pipeline",
-            correlation_id=self._correlation_id,
-            project_id=self._project_id,
-        )
-        with observation.context():
-            observation.started()
-            try:
-                result = self._service.executar_pipeline(
-                    self._project_id,
-                    progresso=self.progress.emit,
-                    cancelado=self._cancellation.is_set,
-                    senhas_documentos=self._senhas_documentos,
+        cancellation_sent = False
+        try:
+            while True:
+                if self._cancellation.is_set() and not cancellation_sent:
+                    self._gateway.cancel_job(self._job_id)
+                    cancellation_sent = True
+                status = self._gateway.get_job(self._job_id)
+                self.progress.emit(
+                    status.progress_percent,
+                    status.message or "Acompanhando a execução remota.",
                 )
-            except FluxoMvpCanceladoError as error:
-                observation.cancelled(error_code=error.__class__.__name__)
-                self.failed.emit(str(error), True)
-            except (ApplicationError, DomainValidationError, ValueError) as error:
-                observation.failed(error, expected=True)
-                message = str(error).strip() or error.__class__.__name__
-                self.failed.emit(message, False)
-            except Exception as error:  # UI boundary: never expose a traceback to the user.
-                observation.failed(error, expected=False)
-                message = str(error).strip() or error.__class__.__name__
-                self.failed.emit(message, False)
-            else:
-                observation.succeeded()
-                self.completed.emit(result)
-            finally:
-                self._senhas_documentos.clear()
-                self.finished.emit()
+                if status.status in _TERMINAL_JOB_STATES:
+                    if status.status is JobStatus.SUCCEEDED:
+                        self.completed.emit(self._gateway.get_job_result(self._job_id))
+                    elif status.status is JobStatus.CANCELLED:
+                        self.failed.emit(status.message or "Análise cancelada.", True)
+                    else:
+                        error = status.error
+                        message = str(error.message if error is not None else status.message)
+                        if error is not None:
+                            message += f" (correlação {error.correlation_id.root})"
+                        self.failed.emit(message, False)
+                    return
+                self._cancellation.wait(self._poll_seconds)
+        except Exception as error:
+            self.failed.emit(str(error).strip() or type(error).__name__, False)
+        finally:
+            self.finished.emit()
+
+
+class _GlobalOperationPollingWorker(QObject):
+    session_received = Signal(object)
+    finished = Signal()
+
+    def __init__(self, gateway: ProjectGateway, stopped: Event) -> None:
+        super().__init__()
+        self._gateway = gateway
+        self._stopped = stopped
+
+    @Slot()
+    def run(self) -> None:
+        try:
+            while not self._stopped.is_set():
+                with suppress(Exception):
+                    self.session_received.emit(self._gateway.session())
+                self._stopped.wait(0.4)
+        finally:
+            self.finished.emit()
 
 
 class ProjectPanelWidget(QWidget):
-    """Conecte criação, importação, análise e revisão em um único fluxo visível."""
+    """Execute CRUD, uploads e análise somente por contratos do gateway remoto."""
 
     status_changed = Signal(str)
     busy_changed = Signal(bool)
@@ -145,32 +156,34 @@ class ProjectPanelWidget(QWidget):
     def __init__(
         self,
         *,
-        service: ServicoFluxoMvp,
-        viewer: PdfViewerWidget,
-        review_panel: ReviewPanelWidget,
-        leitor_pdf: LeitorPdfPort,
-        resolvedor_credenciais: ResolvedorCredenciaisPdf,
+        gateway: ProjectGateway,
+        viewer: Any,
+        review_panel: Any,
         state_path: Path,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("projectPanel")
-        self._service = service
+        self._gateway = gateway
         self._viewer = viewer
         self._review_panel = review_panel
-        self._pdf_reader = leitor_pdf
-        self._credential_resolver = resolvedor_credenciais
         self._settings = QSettings(str(state_path), QSettings.Format.IniFormat)
-        self._session: SessaoProjetoMvp | None = None
+        self._session: ProjectDetailDto | None = None
         self._updating_page_order = False
         self._thread: QThread | None = None
-        self._worker: _PipelineWorker | None = None
+        self._worker: _JobPollingWorker | None = None
         self._cancellation: Event | None = None
-        self._global_operation: TipoOperacao | None = None
-        self._ignore_pipeline_signals = False
+        self._job_id: UUID | None = None
+        self._server_operation: object | None = None
+        self._external_operation: object | None = None
+        self._ignore_job_signals = False
+        self._global_poll_stop = Event()
+        self._global_poll_thread: QThread | None = None
+        self._global_poll_worker: _GlobalOperationPollingWorker | None = None
         self._build_ui()
         self._viewer.page_changed.connect(self._remember_page)
-        self.atualizar_projetos(restaurar_ultimo=True)
+        self.atualizar_projetos(restaurar_ultimo=True, mostrar_erro=False)
+        self._start_global_polling()
 
     @property
     def processando(self) -> bool:
@@ -178,7 +191,7 @@ class ProjectPanelWidget(QWidget):
 
     @property
     def projeto_ativo_id(self) -> UUID | None:
-        return self._session.projeto.id if self._session is not None else None
+        return self._session.project_id.root if self._session is not None else None
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -236,7 +249,7 @@ class ProjectPanelWidget(QWidget):
         document_layout.addWidget(select)
         order_help = QLabel(
             "Ordem de leitura: arraste qualquer página ou use os botões abaixo. "
-            "Os PDFs originais não são modificados."
+            "O conteúdo enviado é mantido no servidor."
         )
         order_help.setObjectName("mvpPageOrderHelp")
         order_help.setProperty("role", "hint")
@@ -277,7 +290,7 @@ class ProjectPanelWidget(QWidget):
         analysis_layout.addWidget(self._summary)
         self._progress = QProgressBar()
         self._progress.setObjectName("mvpAnalysisProgress")
-        self._progress.setRange(0, 1)
+        self._progress.setRange(0, 100)
         self._progress.setValue(0)
         analysis_layout.addWidget(self._progress)
         analysis_actions = QHBoxLayout()
@@ -303,14 +316,25 @@ class ProjectPanelWidget(QWidget):
         layout.addStretch(1)
         self._apply_operation_state()
 
-    def atualizar_projetos(self, *, restaurar_ultimo: bool = False) -> None:
+    def atualizar_projetos(
+        self,
+        *,
+        restaurar_ultimo: bool = False,
+        mostrar_erro: bool = True,
+    ) -> None:
         selected = self._projects.currentData()
         if restaurar_ultimo:
             selected = self._settings.value("last_project_id")
+        response = self._action(
+            lambda: self._gateway.list_projects(limit=200, offset=0),
+            mostrar_erro=mostrar_erro,
+        )
+        if response is None:
+            return
         self._projects.clear()
         self._projects.addItem("Selecione um projeto", None)
-        for summary in self._service.listar_projetos():
-            self._projects.addItem(summary.nome, str(summary.projeto_id))
+        for summary in response.items:
+            self._projects.addItem(summary.service_note, str(summary.project_id.root))
         if selected is not None:
             index = self._projects.findData(str(selected))
             if index >= 0:
@@ -322,33 +346,44 @@ class ProjectPanelWidget(QWidget):
         if not self._service_note.hasAcceptableInput():
             self._warn("Informe o número da NS com exatamente 10 dígitos")
             return
-        session = self._action(lambda: self._service.criar_projeto(numero_ns))
-        if session is None:
+        response = self._action(
+            lambda: self._gateway.create_project(
+                numero_ns,
+                idempotency_key=f"project-{uuid4()}",
+            )
+        )
+        if response is None:
             return
         self._service_note.clear()
         self.atualizar_projetos()
-        self._select_and_activate(session)
+        self._select_and_activate(response.project)
         self.status_changed.emit("Projeto criado e pronto para receber PDFs")
 
     def abrir_selecionado(self) -> None:
         value = self._projects.currentData()
         if value is None:
             return
-        session = self._action(lambda: self._service.abrir_projeto(UUID(str(value))))
-        if session is not None:
-            self._activate(session)
+        response = self._action(lambda: self._gateway.get_project(UUID(str(value))))
+        if response is not None:
+            self._activate(response.project)
 
     def alterar_numero_ns(self) -> None:
-        value = self._projects.currentData()
+        session = self._session
         numero_ns = self._service_note.text()
-        if value is None or not self._service_note.hasAcceptableInput():
+        if session is None or not self._service_note.hasAcceptableInput():
             self._warn("Selecione o projeto e informe o número da NS com exatamente 10 dígitos")
             return
-        session = self._action(lambda: self._service.alterar_numero_ns(UUID(str(value)), numero_ns))
-        if session is not None:
+        response = self._action(
+            lambda: self._gateway.update_project(
+                session.project_id.root,
+                numero_ns,
+                expected_project_version=session.project_version,
+            )
+        )
+        if response is not None:
             self._service_note.clear()
             self.atualizar_projetos()
-            self._select_and_activate(session)
+            self._select_and_activate(response.project)
             self._review_panel.atualizar_projetos()
 
     def excluir_projeto(self) -> None:
@@ -362,17 +397,16 @@ class ProjectPanelWidget(QWidget):
         confirmation = QMessageBox.question(
             self,
             "Excluir projeto",
-            f"Excluir permanentemente o projeto “{session.projeto.nome}”, seu cadastro, "
-            "análises, revisões, fotos e cópias de arquivos mantidas na pasta gerenciada?\n\n"
-            "Os arquivos PDF originais externos permanecem no local de origem e não serão "
-            "apagados.",
+            f"Excluir permanentemente o projeto “{session.service_note}”, seu cadastro, "
+            "análises, revisões, fotos e arquivos gerenciados no servidor?\n\n"
+            "Arquivos já baixados ou mantidos fora do servidor não serão apagados.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
         if confirmation != QMessageBox.StandardButton.Yes:
             return
-        project_id = session.projeto.id
-        result = self._action(lambda: self._service.excluir_projeto(project_id))
+        project_id = session.project_id.root
+        result = self._action(lambda: self._gateway.delete_project(project_id))
         if result is None:
             return
         self._session = None
@@ -385,15 +419,10 @@ class ProjectPanelWidget(QWidget):
         self._review_panel.limpar()
         self.atualizar_projetos()
         self._show_empty_state()
-        if result.limpeza_pendente:
-            self.status_changed.emit(
-                "Projeto excluído e PDFs originais externos preservados; a limpeza da pasta "
-                "gerenciada ficou registrada para nova tentativa"
-            )
-        else:
-            self.status_changed.emit(
-                "Projeto e sua pasta gerenciada excluídos; PDFs originais externos preservados"
-            )
+        self.status_changed.emit(
+            f"Projeto excluído no servidor: {result.counts.documents} PDF(s), "
+            f"{result.counts.analyses} análise(s) e {result.counts.photos} foto(s)"
+        )
 
     def selecionar_pdfs(self) -> None:
         session = self._session
@@ -403,68 +432,87 @@ class ProjectPanelWidget(QWidget):
         if self.processando:
             self._warn("Aguarde ou cancele a análise antes de adicionar PDFs")
             return
-        observation = operation_logger(
-            "pdf.import.selection",
-            project_id=session.projeto.id,
+        names, _selected_filter = QFileDialog.getOpenFileNames(
+            self,
+            "Selecionar folhas do projeto em PDF",
+            "",
+            "Documentos PDF (*.pdf)",
         )
-        with observation.context():
-            observation.started()
-            names, _selected_filter = QFileDialog.getOpenFileNames(
-                self,
-                "Selecionar folhas do projeto em PDF",
-                "",
-                "Documentos PDF (*.pdf)",
-            )
-            paths = tuple(Path(name) for name in names)
-            if not paths:
-                observation.cancelled()
-                return
-            observation.succeeded(item_count=len(paths))
-            self._importar_selecao(session.projeto.id, paths)
+        paths = tuple(Path(name) for name in names)
+        if paths:
+            self._importar_selecao(session.project_id.root, paths)
 
     def _importar_selecao(self, projeto_id: UUID, caminhos: tuple[Path, ...]) -> None:
         importados = 0
         cancelados = 0
         tentativas_esgotadas = 0
         falhas = 0
+        detalhes_falha: list[str] = []
         for caminho in caminhos:
             try:
-                result = self._credential_resolver.executar(
-                    parent=self,
-                    caminho=caminho,
-                    acao=self._acao_importacao_pdf(projeto_id, caminho),
+                uploaded = self._gateway.upload_document(
+                    projeto_id,
+                    caminho,
+                    idempotency_key=f"upload-{uuid4()}",
                 )
-            except (ApplicationError, DomainValidationError, PdfError, ValueError):
+                if uploaded.state is UploadState.PASSWORD_REQUIRED:
+                    outcome = self._unlock_upload(
+                        uploaded.upload_id.root,
+                        uploaded.display_name,
+                    )
+                    if outcome == "cancelled":
+                        cancelados += 1
+                        continue
+                    if outcome == "exhausted":
+                        tentativas_esgotadas += 1
+                        continue
+                elif uploaded.state is not UploadState.IMPORTED:
+                    raise RuntimeError("O servidor não concluiu a importação do PDF")
+            except Exception as error:
                 falhas += 1
-                continue
-            except Exception:
-                falhas += 1
-                continue
-            if result.estado is EstadoResolucaoCredencialPdf.CANCELADA:
-                cancelados += 1
-            elif result.estado is EstadoResolucaoCredencialPdf.TENTATIVAS_ESGOTADAS:
-                tentativas_esgotadas += 1
+                detalhes_falha.append(
+                    f"{caminho.name}: {str(error).strip() or type(error).__name__}"
+                )
             else:
                 importados += 1
         if importados:
-            self._activate(self._service.abrir_projeto(projeto_id))
+            refreshed = self._action(lambda: self._gateway.get_project(projeto_id))
+            if refreshed is not None:
+                self._activate(refreshed.project)
         resumo = (
             f"Importação concluída: {importados} adicionado(s), {cancelados} cancelado(s), "
             f"{tentativas_esgotadas} sem senha válida e {falhas} com erro"
         )
+        if detalhes_falha:
+            resumo += "\n" + "\n".join(detalhes_falha)
         self.status_changed.emit(resumo)
         if cancelados or tentativas_esgotadas or falhas:
             QMessageBox.information(self, "Resumo da importação", resumo)
 
-    def _acao_importacao_pdf(
-        self,
-        projeto_id: UUID,
-        caminho: Path,
-    ) -> Callable[[str | None], ResultadoImportacaoPdfs]:
-        def execute(senha: str | None) -> ResultadoImportacaoPdfs:
-            return self._service.importar_pdfs(projeto_id, (caminho,), senha=senha)
-
-        return execute
+    def _unlock_upload(self, upload_id: UUID, display_name: str) -> str:
+        for attempt in range(1, 4):
+            password, accepted = QInputDialog.getText(
+                self,
+                "Senha do PDF",
+                f"{display_name}\nTentativa {attempt} de 3",
+                QLineEdit.EchoMode.Password,
+            )
+            if not accepted:
+                return "cancelled"
+            try:
+                self._gateway.unlock_upload(upload_id, password)
+            except ProjectGatewayError as error:
+                if error.code.value == "PDF_PASSWORD_INVALID":
+                    remaining = (error.details or {}).get("password_attempts_remaining", 0)
+                    remaining_count = int(remaining) if isinstance(remaining, (int, str)) else 0
+                    if remaining_count > 0:
+                        continue
+                    return "exhausted"
+                raise
+            finally:
+                password = ""
+            return "imported"
+        return "exhausted"
 
     def _move_selected_page(self, offset: int) -> None:
         if self.processando:
@@ -501,17 +549,24 @@ class ProjectPanelWidget(QWidget):
             UUID(str(self._pages.item(row).data(Qt.ItemDataRole.UserRole)))
             for row in range(self._pages.count())
         )
-        current_ids = session.projeto.ordem_leitura_paginas
+        current_ids = tuple(page.page_id.root for page in session.pages)
         if ordered_ids == current_ids:
             self._update_order_controls()
             return
         updated = self._action(
-            lambda: self._service.reordenar_paginas(session.projeto.id, ordered_ids)
+            lambda: self._gateway.replace_page_order(
+                session.project_id.root,
+                ordered_ids,
+                expected_project_version=session.project_version,
+            )
         )
         if updated is None:
             self._activate(session)
             return
-        self._activate(updated)
+        refreshed = self._action(lambda: self._gateway.get_project(session.project_id.root))
+        if refreshed is None:
+            return
+        self._activate(refreshed.project)
         self.status_changed.emit("Ordem de leitura do projeto atualizada")
 
     def _update_order_controls(self) -> None:
@@ -535,64 +590,68 @@ class ProjectPanelWidget(QWidget):
                 UUID(str(item.data(Qt.ItemDataRole.UserRole + 1))) for item in selected_items
             )
         )
-        document_by_id = {document.id: document for document in session.projeto.documentos}
-        names = ", ".join(document_by_id[item].nome_arquivo for item in document_ids)
+        document_by_id = {item.document_id.root: item for item in session.documents}
+        names = ", ".join(document_by_id[item].file.display_name for item in document_ids)
         confirmation = QMessageBox.question(
             self,
             "Remover PDFs do projeto",
-            f"Remover do projeto: {names}?\n\nAnálises, propostas, decisões e elementos "
-            "dependentes dessas folhas também serão removidos. Fotos gerenciadas desses "
-            "elementos serão apagadas somente quando nenhuma referência viva usar o mesmo "
-            "conteúdo. Os arquivos PDF originais externos serão preservados.",
+            f"Remover do projeto: {names}?\n\nAnálises, propostas, decisões, elementos e "
+            "fotos dependentes também poderão ser removidos no servidor. Cópias mantidas fora "
+            "do servidor serão preservadas.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
         if confirmation != QMessageBox.StandardButton.Yes:
             return
-        result = self._action(
-            lambda: self._service.remover_documentos(session.projeto.id, document_ids)
-        )
-        if result is None:
+        removed = 0
+        for document_id in document_ids:
+            result = self._action(
+                partial(
+                    self._gateway.remove_document,
+                    session.project_id.root,
+                    document_id,
+                )
+            )
+            if result is None:
+                break
+            removed += 1
+        refreshed = self._action(lambda: self._gateway.get_project(session.project_id.root))
+        if refreshed is None:
             return
-        self._activate(result.sessao)
+        self._activate(refreshed.project)
         self._review_panel.limpar()
         self._review_panel.atualizar_projetos()
-        message = (
-            f"{len(result.documentos_removidos)} PDF(s), {result.execucoes_removidas} "
-            f"execução(ões), {result.elementos_removidos} elemento(s) e "
-            f"{result.arquivos_gerenciados_removidos} foto(s) sem referência removidos; "
-            "PDFs originais externos preservados"
-        )
-        if result.limpeza_pendente:
-            message += "; limpeza restante registrada para nova tentativa"
-        self.status_changed.emit(message)
+        self.status_changed.emit(f"{removed} PDF(s) e dados dependentes removidos no servidor")
 
     def executar_analise(self) -> None:
         session = self._session
         if session is None:
             self._warn("Crie ou abra um projeto antes de executar a análise")
             return
-        if not session.projeto.documentos:
+        if not session.documents:
             self._warn("Importe ao menos um PDF antes de executar a análise")
             return
         if self.processando:
             return
-        senhas_documentos = self._preflight_credenciais_analise(session)
-        if senhas_documentos is None:
+        accepted = self._action(
+            lambda: self._gateway.create_analysis_job(
+                session.project_id.root,
+                expected_project_version=session.project_version,
+                force_reanalysis=False,
+                idempotency_key=f"analysis-{uuid4()}",
+            )
+        )
+        if accepted is None:
             return
         self._cancellation = Event()
-        self._ignore_pipeline_signals = False
+        self._job_id = accepted.job_id.root
+        self._ignore_job_signals = False
         thread = QThread(self)
-        worker_observation = operation_logger(
-            "qt.worker.analysis_pipeline",
-            project_id=session.projeto.id,
-        )
-        worker = _PipelineWorker(
-            self._service,
-            session.projeto.id,
+        worker = _JobPollingWorker(
+            self._gateway,
+            accepted.job_id.root,
+            accepted.poll_after_ms,
             self._cancellation,
-            worker_observation.correlation_id,
-            senhas_documentos,
         )
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
@@ -608,85 +667,10 @@ class ProjectPanelWidget(QWidget):
         self._run.setText("Análise em andamento…")
         self._pages.setDragEnabled(False)
         self._update_order_controls()
-        self._summary.setText("Execução ativa: preparando documentos")
+        self._summary.setText("Execução remota ativa: preparando documentos")
         self._apply_operation_state()
         self.busy_changed.emit(True)
         thread.start()
-
-    def _preflight_credenciais_analise(
-        self,
-        session: SessaoProjetoMvp,
-    ) -> dict[UUID, str] | None:
-        fontes = {fonte.documento_id: fonte for fonte in session.fontes_pdf}
-        senhas: dict[UUID, str] = {}
-        for validados, documento in enumerate(session.projeto.documentos):
-            fonte = fontes.get(documento.id)
-            if fonte is None:
-                self._warn(
-                    "Análise não iniciada: uma origem PDF não está disponível para o preflight"
-                )
-                return None
-
-            try:
-                result = self._credential_resolver.executar(
-                    parent=self,
-                    caminho=fonte.caminho_canonico,
-                    identidade_sugerida=IdentidadeCredencialPdf.da_fonte(fonte),
-                    acao=self._acao_preflight_analise(
-                        documento.id,
-                        documento.sha256,
-                        fonte,
-                    ),
-                )
-            except (PdfError, ValueError) as error:
-                self._warn(f"Análise não iniciada no preflight: {error}")
-                return None
-            if result.estado is not EstadoResolucaoCredencialPdf.SUCESSO:
-                motivo = (
-                    "solicitação de senha cancelada"
-                    if result.estado is EstadoResolucaoCredencialPdf.CANCELADA
-                    else "limite de 3 tentativas de senha atingido"
-                )
-                self._warn(
-                    f"Análise não iniciada: {motivo} em {documento.nome_arquivo}; "
-                    f"{validados} PDF(s) já haviam sido validados"
-                )
-                return None
-            if result.senha is not None:
-                senhas[documento.id] = result.senha
-        return senhas
-
-    def _acao_preflight_analise(
-        self,
-        documento_id: UUID,
-        sha256_esperado: str,
-        fonte: ReferenciaFontePdf,
-    ) -> Callable[[str | None], bool]:
-        def execute(senha: str | None) -> bool:
-            return self._validar_credencial_analise(
-                documento_id,
-                sha256_esperado,
-                fonte,
-                senha,
-            )
-
-        return execute
-
-    def _validar_credencial_analise(
-        self,
-        documento_id: UUID,
-        sha256_esperado: str,
-        fonte: ReferenciaFontePdf,
-        senha: str | None,
-    ) -> bool:
-        sessao = self._pdf_reader.abrir_sessao(
-            fonte.caminho_canonico,
-            senha=senha,
-            documento_id=documento_id,
-            sha256_esperado=sha256_esperado,
-        )
-        sessao.fechar()
-        return True
 
     def cancelar_analise(self) -> None:
         if self._cancellation is not None:
@@ -695,50 +679,64 @@ class ProjectPanelWidget(QWidget):
             self.status_changed.emit("Cancelamento solicitado; aguardando um ponto seguro")
 
     def cancelar_e_aguardar(self, timeout_ms: int) -> bool:
-        """Cancele cooperativamente e aguarde sem finalizar a thread à força."""
         thread = self._thread
         if thread is None or not thread.isRunning():
             return True
         self.cancelar_analise()
         finished = thread.wait(max(0, timeout_ms))
         if finished:
-            self._ignore_pipeline_signals = True
+            self._ignore_job_signals = True
         return finished
 
-    def set_global_operation(self, operation: TipoOperacao | None) -> None:
-        self._global_operation = operation
+    def shutdown_polling(self, timeout_ms: int = 1_000) -> bool:
+        self._global_poll_stop.set()
+        thread = self._global_poll_thread
+        if thread is None or not thread.isRunning():
+            return True
+        finished = thread.wait(max(0, timeout_ms))
+        if finished:
+            self._global_poll_worker = None
+        return finished
+
+    def set_global_operation(self, operation: object | None) -> None:
+        self._external_operation = operation
         self._apply_operation_state()
 
-    @Slot(int, int, str)
-    def _update_progress(self, current: int, total: int, message: str) -> None:
-        if self._ignore_pipeline_signals:
+    @Slot(int, str)
+    def _update_progress(self, percent: int, message: str) -> None:
+        if self._ignore_job_signals:
             return
-        self._progress.setRange(0, max(1, total))
-        self._progress.setValue(current)
-        self._summary.setText(f"Execução ativa: {message}")
+        self._progress.setValue(max(self._progress.value(), percent))
+        self._summary.setText(f"Execução remota ativa: {message}")
         self.status_changed.emit(message)
 
     @Slot(object)
     def _pipeline_completed(self, result: object) -> None:
-        if self._ignore_pipeline_signals:
+        if self._ignore_job_signals or not isinstance(result, JobResultResponse):
             return
-        if not isinstance(result, ResultadoFluxoMvp):
+        payload = result.result or {}
+        raw_project_id = payload.get("project_id")
+        project_id = UUID(str(raw_project_id)) if raw_project_id is not None else None
+        if project_id is None:
             return
-        self._activate(self._service.abrir_projeto(result.projeto_id))
-        self._review_panel.abrir_projeto(result.projeto_id)
-        if result.propostas_geradas:
-            message = (
-                f"Análise concluída: {result.propostas_geradas} identificação(ões) "
-                "incorporada(s) ao projeto"
-            )
-        else:
-            message = "Análise concluída sem novas identificações"
+        refreshed = self._action(lambda: self._gateway.get_project(project_id))
+        if refreshed is None:
+            return
+        self._activate(refreshed.project)
+        self._review_panel.abrir_projeto(project_id)
+        raw_count = payload.get("proposals_generated", 0)
+        count = int(raw_count) if isinstance(raw_count, (int, str)) else 0
+        message = (
+            f"Análise concluída: {count} identificação(ões) incorporada(s) ao projeto"
+            if count
+            else "Análise concluída sem novas identificações"
+        )
         self.status_changed.emit(message)
         self._summary.setText(message)
 
     @Slot(str, bool)
     def _pipeline_failed(self, message: str, cancelled: bool) -> None:
-        if self._ignore_pipeline_signals:
+        if self._ignore_job_signals:
             return
         title = "Análise cancelada" if cancelled else "Análise não concluída"
         self._summary.setText(message)
@@ -751,116 +749,128 @@ class ProjectPanelWidget(QWidget):
         self._thread = None
         self._worker = None
         self._cancellation = None
+        self._job_id = None
         self._run.setText("Analisar novamente")
         self._pages.setDragEnabled(True)
         self._apply_operation_state()
         self.busy_changed.emit(False)
         self._update_order_controls()
-        if self._session is not None:
-            self._session = self._service.abrir_projeto(self._session.projeto.id)
-            self._show_summary(self._session)
+        session = self._session
+        if session is not None:
+            response = self._action(lambda: self._gateway.get_project(session.project_id.root))
+            if response is not None:
+                self._session = response.project
+                self._show_summary(self._session)
+
+    @Slot(object)
+    def _session_received(self, response: object) -> None:
+        if not isinstance(response, SessionCapabilitiesResponse):
+            return
+        operation = response.global_operation
+        self._server_operation = operation
+        if operation is not None and not self.processando:
+            self._progress.setValue(max(self._progress.value(), operation.progress_percent))
+            self._summary.setText(
+                f"Operação global no servidor: {operation.message or operation.kind.value}"
+            )
+        self._apply_operation_state()
 
     def _apply_operation_state(self) -> None:
-        blocked = self._global_operation is not None or self.processando
+        blocked = (
+            self._server_operation is not None
+            or self._external_operation is not None
+            or self.processando
+        )
         self._project_box.setEnabled(not blocked)
         self._document_box.setEnabled(not blocked)
         self._run.setEnabled(not blocked)
-        self._cancel.setEnabled(self.processando)
+        self._cancel.setEnabled(self.processando and self._cancellation is not None)
+
+    def _start_global_polling(self) -> None:
+        thread = QThread(self)
+        worker = _GlobalOperationPollingWorker(self._gateway, self._global_poll_stop)
+        worker.moveToThread(thread)
+        thread.started.connect(worker.run)
+        worker.session_received.connect(self._session_received)
+        worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)
+        thread.finished.connect(worker.deleteLater)
+        thread.finished.connect(thread.deleteLater)
+        thread.destroyed.connect(self._global_polling_destroyed)
+        self._global_poll_thread = thread
+        self._global_poll_worker = worker
+        thread.start()
+
+    @Slot()
+    def _global_polling_destroyed(self) -> None:
+        self._global_poll_thread = None
+        self._global_poll_worker = None
 
     def exibir_guia_aceite(self) -> None:
         QMessageBox.information(
             self,
             "Como usar o projeto",
-            "1. Crie ou abra um projeto.\n"
-            "2. Selecione um ou vários PDFs e adicione-os ao projeto.\n"
-            "3. Execute a análise e acompanhe o progresso.\n"
+            "1. Crie ou abra um projeto no servidor.\n"
+            "2. Selecione um ou vários PDFs para upload.\n"
+            "3. Execute a análise remota e acompanhe o progresso.\n"
             "4. Confira os vínculos no painel Resultados.\n"
             "5. Clique nos itens para conferir os sublinhados no PDF.\n"
-            "6. Feche e reabra o aplicativo e confira se o trabalho foi preservado.",
+            "6. Reinicie cliente e servidor e confira se o trabalho foi preservado.",
         )
 
-    def _select_and_activate(self, session: SessaoProjetoMvp) -> None:
-        index = self._projects.findData(str(session.projeto.id))
+    def _select_and_activate(self, session: ProjectDetailDto) -> None:
+        index = self._projects.findData(str(session.project_id.root))
         if index >= 0:
             self._projects.setCurrentIndex(index)
         self._activate(session)
 
-    def _activate(self, session: SessaoProjetoMvp) -> None:
+    def _activate(self, session: ProjectDetailDto) -> None:
         self._session = session
-        project_id = str(session.projeto.id)
+        project_id = str(session.project_id.root)
         self._settings.setValue("last_project_id", project_id)
         self._settings.sync()
-        source_paths = tuple(source.caminho_canonico for source in session.fontes_pdf)
-        if source_paths:
+        if session.pages:
             saved_page = int(str(self._settings.value(f"projects/{project_id}/page", 1)))
-            source_identities = tuple(
-                IdentidadeCredencialPdf.da_fonte(source) for source in session.fontes_pdf
-            )
-            valid_identities = {
-                identity
-                for identity, source in zip(
-                    source_identities,
-                    session.fontes_pdf,
-                    strict=True,
-                )
-                if identity.ainda_descreve(source.caminho_canonico)
-            }
-            initial_passwords = tuple(
-                self._credential_resolver.provedor.obter(identity)
-                if identity in valid_identities
-                else None
-                for identity in source_identities
-            )
-            self._credential_resolver.provedor.reter(valid_identities)
-            if not self._viewer.carregar_projeto(
-                source_paths,
-                documentos=session.projeto.documentos,
-                fontes=session.fontes_pdf,
-                ordem_paginas=session.projeto.ordem_leitura_paginas,
-                senhas_iniciais=initial_passwords,
-            ):
+            if self._viewer.carregar_projeto_remoto(session.project_id.root):
+                self._viewer.ir_para_folha(saved_page)
+            else:
                 self._viewer.limpar()
                 self.status_changed.emit(
-                    "Projeto aberto, mas uma origem PDF precisa ser localizada ou restaurada"
+                    "Projeto aberto, mas o visualizador remoto não pôde carregar as folhas"
                 )
-            else:
-                self._viewer.ir_para_folha(saved_page)
         else:
             self._viewer.limpar()
         self._updating_page_order = True
         self._pages.clear()
-        page_by_id = {
-            page.id: (document, page)
-            for document in session.projeto.documentos
-            for page in document.paginas
-        }
-        for position, page_id in enumerate(session.projeto.ordem_leitura_paginas, start=1):
-            document, page = page_by_id[page_id]
-            item = QListWidgetItem(f"{position}. {document.nome_arquivo} · página {page.numero}")
-            item.setData(Qt.ItemDataRole.UserRole, str(page.id))
-            item.setData(Qt.ItemDataRole.UserRole + 1, str(document.id))
+        documents = {item.document_id.root: item for item in session.documents}
+        for position, page in enumerate(session.pages, start=1):
+            document = documents[page.document_id.root]
+            item = QListWidgetItem(
+                f"{position}. {document.file.display_name} · página {page.source_page_number}"
+            )
+            item.setData(Qt.ItemDataRole.UserRole, str(page.page_id.root))
+            item.setData(Qt.ItemDataRole.UserRole + 1, str(page.document_id.root))
             self._pages.addItem(item)
         self._updating_page_order = False
         self._update_order_controls()
         self._show_summary(session)
-        self.project_opened.emit(session.projeto.id)
+        self.project_opened.emit(session.project_id.root)
 
-    def _show_summary(self, session: SessaoProjetoMvp) -> None:
-        summary = session.resumo
-        extraction = _state_label(summary.ultima_extracao)
-        interpretation = _state_label(summary.ultima_interpretacao)
+    def _show_summary(self, session: ProjectDetailDto) -> None:
+        analysis = session.analysis
+        extraction = _state_label(analysis.last_extraction)
+        interpretation = _state_label(analysis.last_interpretation)
         self._summary.setText(
-            f"{summary.documentos} PDF(s), {summary.paginas} folha(s)\n"
+            f"{len(session.documents)} PDF(s), {len(session.pages)} folha(s)\n"
             f"Extração: {extraction} · Interpretação: {interpretation}\n"
-            f"Identificações automáticas: {summary.decisoes_realizadas} · "
-            f"Exceções: {summary.propostas_pendentes}"
+            f"Identificações automáticas: {analysis.completed_decisions} · "
+            f"Exceções: {analysis.pending_proposals}"
         )
 
     def _remember_page(self, _page_id: str) -> None:
         if self._session is None:
             return
         self._settings.setValue(
-            f"projects/{self._session.projeto.id}/page",
+            f"projects/{self._session.project_id.root}/page",
             self._viewer.folha_atual,
         )
         self._settings.sync()
@@ -869,11 +879,15 @@ class ProjectPanelWidget(QWidget):
         self.status_changed.emit(message)
         QMessageBox.warning(self, "Ação não concluída", message)
 
-    def _action(self, action: Callable[[], T]) -> T | None:
+    def _action(self, action: Callable[[], T], *, mostrar_erro: bool = True) -> T | None:
         try:
             return action()
-        except Exception as error:  # UI boundary: convert expected failures into guidance.
-            self._warn(str(error).strip() or error.__class__.__name__)
+        except Exception as error:
+            message = str(error).strip() or type(error).__name__
+            if mostrar_erro:
+                self._warn(message)
+            else:
+                self.status_changed.emit(message)
             return None
 
     def _show_empty_state(self) -> None:
@@ -884,5 +898,12 @@ class ProjectPanelWidget(QWidget):
         self._summary.setText("Crie ou abra um projeto para começar")
 
 
-def _state_label(state: EstadoExecucaoAnalise | None) -> str:
-    return state.value if state is not None else "não executada"
+def _state_label(state: AnalysisExecutionState | None) -> str:
+    if state is None:
+        return "não executada"
+    return {
+        AnalysisExecutionState.STARTED: "INICIADA",
+        AnalysisExecutionState.SUCCEEDED: "CONCLUÍDA",
+        AnalysisExecutionState.FAILED: "FALHOU",
+        AnalysisExecutionState.CANCELLED: "CANCELADA",
+    }[state]

@@ -20,7 +20,7 @@ Estado versionado relevante:
 | Registro de interpretação | `1.3.0` |
 | Registro de conformidade distribuído | `cemig-normas-distribuicao-2025.6` |
 | Método de conformidade | `6` |
-| Migração SQLite mais recente | `0007_compliance_executions` |
+| Migração SQLite mais recente | `0009_remote_jobs` |
 
 ## Modelo de domínio
 
@@ -51,19 +51,19 @@ O diagrama resumido está em [modelo-entidades.mmd](modelo-entidades.mmd). O dom
 - Excluir o projeto remove seus dados e arquivos pertencentes à área gerenciada, também preservando
   origens externas.
 
-O fluxo normal não copia nem altera o PDF escolhido. Ele persiste a referência canônica, tamanho,
-SHA-256, metadados e páginas. Um PDF importado de pacote pode apontar para a cópia publicada na área
-gerenciada.
+O painel Projeto usa somente o gateway HTTP. Cada PDF é enviado por streaming para uma área
+temporária limitada, validado e publicado atomicamente na área gerenciada do servidor. O contrato
+leva bytes e nome de exibição, nunca caminho local. A origem escolhida no cliente não é alterada e a
+cópia gerenciada continua disponível se essa origem for movida ou apagada.
 
 ## PDFs protegidos
 
 PDFs protegidos solicitam senha individualmente. Cada arquivo admite até três tentativas; cancelar
 pula apenas o arquivo atual numa seleção múltipla.
 
-A senha correta é indexada pela identidade verificável da origem e permanece apenas em memória.
-Ela é descartada ao trocar ou limpar o conjunto visual, fechar o aplicativo ou quando tamanho,
-modificação ou hash da origem deixam de corresponder. Senhas não entram no banco, cache, logs,
-pacotes, backups nem estado da interface.
+A senha correta é indexada pela identidade verificável da cópia gerenciada e permanece apenas na
+memória do processo servidor. Ela é descartada no restart ou quando a identidade deixa de
+corresponder. Senhas não entram no banco, cache, logs, pacotes, backups nem estado da interface.
 
 ## Visualização
 
@@ -137,6 +137,19 @@ o contexto, mas coordenadas isoladas não criam um elemento elétrico.
 
 Uma execução concluída é idempotente para o mesmo projeto, extração, catálogo, registro e
 configuração. Cancelamento ou falha não publica um conjunto parcial como concluído.
+
+### Jobs de análise
+
+O cliente cria a análise com `Idempotency-Key` e recebe `202` com um job em `QUEUED`. O worker único
+do servidor conduz `RUNNING`, `WAITING_CONFIRMATION` quando uma operação futura exigir confirmação,
+`CANCELLING` e os terminais `SUCCEEDED`, `FAILED` ou `CANCELLED`. Consulta e resultado usam DTOs
+seguros; erros inesperados expõem apenas mensagem e `correlation_id`.
+
+O cliente consulta a cada 250–500 ms. O servidor persiste progresso monotônico, resultado terminal e
+histórico com retenção por tempo e quantidade. Cancelar apenas sinaliza o job; a execução para numa
+fronteira segura e libera a operação global. Repetir a mesma criação devolve o mesmo job e não roda o
+pipeline duas vezes. Após restart, qualquer estado ativo remanescente vira `FAILED` recuperável, sem
+resultado e sem sucesso presumido.
 
 ## Promoção e revisão humana
 
@@ -243,9 +256,11 @@ de SQLite e árvore gerenciada não possui journal durável contra queda abrupta
 
 ## Interface e concorrência
 
-Análise, importação, exportação, backup e restauração executam fora da thread da interface e expõem
-progresso e cancelamento cooperativo. Um coordenador global impede operações destrutivas ou
-incompatíveis simultâneas. Objetos Qt visuais permanecem na thread principal.
+A análise do painel Projeto executa no servidor e é observada por polling fora da thread da
+interface. Um segundo cliente recebe o mesmo progresso/bloqueio global e conflito HTTP 409 ao tentar
+uma operação incompatível. Importação, exportação, backup e restauração ainda não migradas continuam
+fora da thread da interface com progresso e cancelamento cooperativo local. Objetos Qt visuais
+permanecem na thread principal.
 
 Os painéis **Projeto**, **Resultados**, **Documentação e conformidade** e
 **Importar, exportar e backup** podem ser movidos, desacoplados e restaurados. Tema, geometria e

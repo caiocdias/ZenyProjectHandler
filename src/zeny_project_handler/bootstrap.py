@@ -70,6 +70,7 @@ from zeny_project_handler.ui.application_icon import (
 )
 from zeny_project_handler.ui.main_window import MainWindow
 from zeny_project_handler.ui.pdf_gateway import PdfViewerGateway, configured_pdf_viewer_gateway
+from zeny_project_handler.ui.project_gateway import ProjectGateway, configured_project_gateway
 from zeny_project_handler.ui.theme import THEME_SETTING_KEY, Tema, aplicar_tema
 from zeny_project_handler.windows_app_identity import (
     configurar_identidade_aplicativo_windows,
@@ -96,6 +97,7 @@ def create_application(
     *,
     settings: AppSettings | None = None,
     pdf_viewer_gateway: PdfViewerGateway | None = None,
+    project_gateway: ProjectGateway | None = None,
 ) -> tuple[QApplication, MainWindow]:
     """Monte a aplicação sem iniciar o loop de eventos."""
     app_settings = settings or AppSettings.from_environment()
@@ -105,7 +107,12 @@ def create_application(
     with observation.context():
         observation.started()
         try:
-            application, window = _compose_application(argv, app_settings, pdf_viewer_gateway)
+            application, window = _compose_application(
+                argv,
+                app_settings,
+                pdf_viewer_gateway,
+                project_gateway,
+            )
         except (ApplicationError, ValueError) as error:
             observation.failed(error, expected=True)
             raise
@@ -120,6 +127,7 @@ def _compose_application(
     argv: Sequence[str] | None,
     app_settings: AppSettings,
     pdf_viewer_gateway: PdfViewerGateway | None = None,
+    project_gateway: ProjectGateway | None = None,
 ) -> tuple[QApplication, MainWindow]:
     engine = initialize_local_storage(app_settings)
     lifetime = _EngineLifetime(engine)
@@ -130,6 +138,7 @@ def _compose_application(
             engine,
             lifetime,
             pdf_viewer_gateway,
+            project_gateway,
         )
     except BaseException:
         lifetime.dispose()
@@ -142,6 +151,7 @@ def _compose_initialized_application(
     engine: Engine,
     lifetime: _EngineLifetime,
     pdf_viewer_gateway: PdfViewerGateway | None,
+    project_gateway: ProjectGateway | None,
 ) -> tuple[QApplication, MainWindow]:
 
     arguments = list(argv) if argv is not None else list(sys.argv)
@@ -222,8 +232,8 @@ def _compose_initialized_application(
     )
     window = MainWindow(
         application_name=app_settings.application_name,
-        pdf_reader=reader,
         pdf_viewer_gateway=pdf_viewer_gateway or configured_pdf_viewer_gateway(),
+        project_gateway=project_gateway or configured_project_gateway(),
         pdf_render_dpi=app_settings.pdf_render_dpi,
         pdf_render_budget=OrcamentoRenderizacaoPdf(
             limite_pixels=app_settings.pdf_render_max_pixels,

@@ -1,119 +1,113 @@
 from __future__ import annotations
 
-import json
-import logging
+from datetime import UTC, datetime
 from threading import Event
-from typing import Never, cast
+from typing import cast
 from uuid import UUID
 
-import pytest
-
-from zeny_project_handler.application.errors import FluxoMvpCanceladoError
-from zeny_project_handler.application.mvp_workflow import ServicoFluxoMvp
-from zeny_project_handler.application.operation_coordinator import (
-    CoordenadorOperacoes,
-    TipoOperacao,
+from zeny_project_handler.ui.project_gateway import ProjectGateway
+from zeny_project_handler.ui.project_panel import _JobPollingWorker
+from zeny_project_handler_contracts.base import JobId, ProjectId
+from zeny_project_handler_contracts.enums import JobKind, JobStatus
+from zeny_project_handler_contracts.jobs import (
+    CancelJobResponse,
+    JobResultResponse,
+    JobStatusResponse,
 )
-from zeny_project_handler.logging_config import JsonFormatter
-from zeny_project_handler.ui.project_panel import _PipelineWorker
 
 PROJECT_ID = UUID("10000000-0000-0000-0000-000000000001")
+JOB_ID = UUID("20000000-0000-0000-0000-000000000002")
+NOW = datetime(2026, 8, 18, 17, 0, tzinfo=UTC)
 
 
-class CancelledPipeline:
-    def executar_pipeline(self, _project_id: UUID, **_kwargs: object) -> Never:
-        raise FluxoMvpCanceladoError("Cancelada em ponto seguro")
+class SequencedGateway:
+    def __init__(
+        self,
+        *statuses: JobStatusResponse,
+        result: JobResultResponse | None = None,
+    ) -> None:
+        self.statuses = list(statuses)
+        self.result = result
+        self.cancelled: list[UUID] = []
+
+    def get_job(self, _job_id: UUID) -> JobStatusResponse:
+        if len(self.statuses) > 1:
+            return self.statuses.pop(0)
+        return self.statuses[0]
+
+    def get_job_result(self, _job_id: UUID) -> JobResultResponse:
+        assert self.result is not None
+        return self.result
+
+    def cancel_job(self, job_id: UUID) -> CancelJobResponse:
+        self.cancelled.append(job_id)
+        return CancelJobResponse(
+            job_id=JobId(job_id),
+            status=JobStatus.CANCELLING,
+            cancellation_requested=True,
+        )
 
 
-class BrokenPipeline:
-    def executar_pipeline(self, _project_id: UUID, **_kwargs: object) -> Never:
-        raise RuntimeError("senha=segredo em C:\\clientes\\obra.pdf")
-
-
-class CoordinatorGuardedPipeline:
-    def __init__(self, coordinator: CoordenadorOperacoes) -> None:
-        self._coordinator = coordinator
-
-    def executar_pipeline(self, _project_id: UUID, **_kwargs: object) -> None:
-        with self._coordinator.adquirir(TipoOperacao.ANALISE):
-            raise AssertionError("A operação incompatível deveria ter sido recusada")
-
-
-@pytest.mark.parametrize(
-    ("service", "correlation_id", "expected_status", "expected_level", "has_traceback"),
-    [
-        (
-            CancelledPipeline(),
-            "11111111111111111111111111111111",
-            "cancelled",
-            logging.INFO,
-            False,
-        ),
-        (
-            BrokenPipeline(),
-            "22222222222222222222222222222222",
-            "failed",
-            logging.ERROR,
-            True,
-        ),
-    ],
-)
-def test_qt_worker_logs_terminal_state_without_touching_widgets(
-    service: object,
-    correlation_id: str,
-    expected_status: str,
-    expected_level: int,
-    has_traceback: bool,
-    app_log_capture: pytest.LogCaptureFixture,
-) -> None:
-    worker = _PipelineWorker(
-        cast(ServicoFluxoMvp, service),
-        PROJECT_ID,
-        Event(),
-        correlation_id,
+def _status(status: JobStatus, progress: int, message: str) -> JobStatusResponse:
+    return JobStatusResponse(
+        job_id=JobId(JOB_ID),
+        project_id=ProjectId(PROJECT_ID),
+        kind=JobKind.ANALYSIS,
+        status=status,
+        progress_percent=progress,
+        message=message,
+        result_available=status is JobStatus.SUCCEEDED,
+        created_at=NOW,
+        updated_at=NOW,
     )
-    failed: list[tuple[str, bool]] = []
+
+
+def test_job_polling_worker_emits_monotonic_remote_progress_and_result() -> None:
+    result = JobResultResponse(
+        job_id=JobId(JOB_ID),
+        status=JobStatus.SUCCEEDED,
+        result={"project_id": str(PROJECT_ID), "proposals_generated": 2},
+    )
+    gateway = SequencedGateway(
+        _status(JobStatus.QUEUED, 0, "Na fila"),
+        _status(JobStatus.RUNNING, 40, "Extraindo"),
+        _status(JobStatus.SUCCEEDED, 100, "Concluída"),
+        result=result,
+    )
+    worker = _JobPollingWorker(
+        cast(ProjectGateway, gateway),
+        JOB_ID,
+        250,
+        Event(),
+    )
+    progress: list[tuple[int, str]] = []
+    completed: list[object] = []
     finished: list[bool] = []
-    worker.failed.connect(lambda message, cancelled: failed.append((message, cancelled)))
+    worker.progress.connect(lambda percent, message: progress.append((percent, message)))
+    worker.completed.connect(completed.append)
     worker.finished.connect(lambda: finished.append(True))
 
     worker.run()
 
-    assert failed
+    assert [item[0] for item in progress] == [0, 40, 100]
+    assert completed == [result]
     assert finished == [True]
-    records = [
-        record
-        for record in app_log_capture.records
-        if getattr(record, "operation", None) == "qt.worker.analysis_pipeline"
-    ]
-    assert [getattr(record, "status", None) for record in records] == [
-        "started",
-        expected_status,
-    ]
-    assert {getattr(record, "correlation_id", None) for record in records} == {correlation_id}
-    terminal = records[-1]
-    assert terminal.levelno == expected_level
-    assert (terminal.exc_info is not None) is has_traceback
-    serialized = json.loads(JsonFormatter().format(terminal))
-    assert "segredo" not in json.dumps(serialized, ensure_ascii=False)
-    assert "clientes" not in json.dumps(serialized, ensure_ascii=False)
 
 
-def test_analysis_worker_reports_coordinator_refusal_without_mutating_owner() -> None:
-    coordinator = CoordenadorOperacoes()
-    worker = _PipelineWorker(
-        cast(ServicoFluxoMvp, CoordinatorGuardedPipeline(coordinator)),
-        PROJECT_ID,
-        Event(),
-        "33333333333333333333333333333333",
+def test_job_polling_worker_requests_cooperative_cancel_once() -> None:
+    gateway = SequencedGateway(_status(JobStatus.CANCELLED, 30, "Cancelada em ponto seguro"))
+    cancellation = Event()
+    cancellation.set()
+    worker = _JobPollingWorker(
+        cast(ProjectGateway, gateway),
+        JOB_ID,
+        250,
+        cancellation,
     )
     failures: list[tuple[str, bool]] = []
     worker.failed.connect(lambda message, cancelled: failures.append((message, cancelled)))
 
-    with coordinator.adquirir(TipoOperacao.RESTAURACAO):
-        worker.run()
-        assert coordinator.operacao_em_andamento is TipoOperacao.RESTAURACAO
+    worker.run()
 
-    assert len(failures) == 1
-    assert failures[0][1] is False
-    assert "restauração do backup está em andamento" in failures[0][0]
+    assert gateway.cancelled == [JOB_ID]
+    assert failures == [("Cancelada em ponto seguro", True)]

@@ -9,13 +9,16 @@ há instalador ou pacote de distribuição para máquinas sem Python.
 
 ## Estado atual
 
-- Projetos locais com NS, múltiplos PDFs, ordem de folhas persistida, remoção de documentos e
-  exclusão segura do projeto.
+- Painel **Projeto** remoto: NS, múltiplos PDFs, ordem de folhas, remoção e exclusão usam
+  exclusivamente o gateway HTTP autenticado e a fonte principal do servidor.
 - Visualizador remoto progressivo: o cliente Qt apresenta prévias/tiles, paginação, zoom e rotação,
   enquanto o servidor autenticado abre e rasteriza os PDFs. PDFs avulsos usam sessão temporária e
   senha somente em memória.
 - Extração de texto, vetores, imagens, anotações, Form XObjects e OCR Tesseract local quando
   necessário.
+- Pipeline do projeto executado como job persistente no worker único do servidor, com criação
+  idempotente, polling entre 250 e 500 ms, progresso monotônico, cancelamento cooperativo e bloqueio
+  global visível a todos os clientes.
 - Interpretação versionada de postes, estruturas MT/BT, cabos e equipamentos, além de relações entre
   os elementos. Resultados catalogados são promovidos automaticamente e continuam auditáveis.
 - Revisão humana para aceitar, corrigir ou rejeitar propostas, criar elementos e relações manuais e
@@ -78,12 +81,14 @@ resultados semânticos persistidos; ela não abre o PDF nem repete OCR.
 
 ## Dados e integridade
 
-Por padrão, banco, logs, cache derivado, estado da interface e arquivos gerenciados ficam em
-`%LOCALAPPDATA%\ZenyProjectHandler`. Use `ZENY_DATA_DIR` para escolher outra raiz.
+Por padrão, os dados ainda pertencentes aos painéis não migrados, logs e estado da interface ficam
+em `%LOCALAPPDATA%\ZenyProjectHandler`. Use `ZENY_DATA_DIR` para escolher outra raiz. O painel
+**Projeto** usa o servidor como fonte principal; banco, PDFs gerenciados, cache, jobs e logs desse
+processo ficam em `ZENY_SERVER_DATA_DIR` (normalmente o volume `/data`).
 
 - O SQLite é migrado automaticamente na inicialização.
-- PDFs adicionados pelo fluxo normal permanecem no local escolhido e não são alterados nem apagados
-  ao serem removidos do projeto.
+- PDFs adicionados pelo painel Projeto são enviados por streaming e publicados em cópia gerenciada
+  pelo servidor. A origem escolhida no cliente não é alterada nem apagada.
 - O aplicativo registra identidade, tamanho e SHA-256 da origem antes de analisar ou transportar o
   conteúdo.
 - `.zphproj` transporta um projeto com seus dados auditáveis e arquivos disponíveis.
@@ -130,14 +135,18 @@ As opções são lidas na inicialização:
 | `ZENY_SERVER_PASSWORD` | sem padrão | segredo Bearer obrigatório no servidor e na conexão transitória do cliente |
 | `ZENY_SERVER_VIEWER_SESSION_TTL_SECONDS` | `900` | inatividade até limpar PDF avulso no servidor |
 | `ZENY_SERVER_VIEWER_MAX_FILES` | `20` | máximo de PDFs por sessão avulsa |
+| `ZENY_SERVER_JOB_RETENTION_SECONDS` | `86400` | retenção renovada do histórico terminal de jobs |
+| `ZENY_SERVER_JOB_MAX_RETAINED` | `100` | máximo de jobs terminais mantidos no servidor |
 | `ZENY_TESSERACT_PATH` | descoberta automática | caminho do `tesseract.exe` |
 | `ZENY_TESSDATA_DIR` | pasta gerenciada | diretório gravável de idiomas do Tesseract |
 | `ZENY_BOOTSTRAP_PYTHON` | descoberta automática | Python usado por `setup.bat` |
 
 As opções de renderização afetam somente o visualizador, não os parâmetros ou resultados da análise.
 O servidor aplica seus próprios tetos equivalentes (`ZENY_SERVER_RENDER_DPI`,
-`ZENY_SERVER_RENDER_MAX_PIXELS` e `ZENY_SERVER_RENDER_MAX_BYTES`). Somente leituras idempotentes são
-repetidas automaticamente depois de uma falha transitória; uploads, senha e encerramento não são.
+`ZENY_SERVER_RENDER_MAX_PIXELS` e `ZENY_SERVER_RENDER_MAX_BYTES`). Somente leituras idempotentes dos
+gateways são repetidas automaticamente depois de uma falha transitória; criação/alteração, uploads,
+senha, cancelamento e encerramento não são. Repetir deliberadamente a criação de um job com a mesma
+`Idempotency-Key` devolve o mesmo job sem executar o pipeline novamente.
 
 ## Testes e qualidade
 

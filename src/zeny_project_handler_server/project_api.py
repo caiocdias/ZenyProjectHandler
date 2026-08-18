@@ -40,6 +40,7 @@ from zeny_project_handler.application.pdf_import import ImportarPdfsNoProjeto
 from zeny_project_handler.application.project_document_removal import project_without_documents
 from zeny_project_handler.application.project_portability import ServicoPortabilidadeProjeto
 from zeny_project_handler.domain.documents import DocumentoProjeto
+from zeny_project_handler.domain.enums import EstadoExecucaoAnalise, EstadoRevisao
 from zeny_project_handler.domain.project import ElementoProjetoType, FotoElemento, Projeto
 from zeny_project_handler.domain.project_metadata import normalizar_numero_ns
 from zeny_project_handler_contracts.base import (
@@ -65,6 +66,7 @@ from zeny_project_handler_contracts.documents import (
     RemoveDocumentResponse,
 )
 from zeny_project_handler_contracts.enums import (
+    AnalysisExecutionState,
     PreflightDisposition,
     ProjectState,
     UploadState,
@@ -78,6 +80,7 @@ from zeny_project_handler_contracts.photos import (
 )
 from zeny_project_handler_contracts.projects import (
     DeleteProjectResponse,
+    ProjectAnalysisSummaryDto,
     ProjectDetailDto,
     ProjectDetailResponse,
     ProjectSummaryDto,
@@ -215,6 +218,24 @@ class ProjectApiService:
 
     def get_project(self, project_id: UUID) -> ProjectDetailResponse:
         return ProjectDetailResponse(project=self._project_detail(self._snapshot(project_id)))
+
+    def require_project_version(self, project_id: UUID, expected_version: int) -> None:
+        """Valide a precondição do job antes de reservar a operação global."""
+        self._require_version(self._snapshot(project_id), expected_version)
+
+    def analysis_passwords(self, project_id: UUID) -> dict[UUID, str]:
+        """Copie para o job somente credenciais efêmeras do worker atual."""
+        project = self._snapshot(project_id).project
+        passwords: dict[UUID, str] = {}
+        with self._unit_of_work() as work:
+            for document in project.documentos:
+                source = work.fontes_pdf.obter(document.id)
+                if source is None:
+                    continue
+                password = self._credentials.obter(IdentidadeCredencialPdf.da_fonte(source))
+                if password is not None:
+                    passwords[document.id] = password
+        return passwords
 
     def update_project(
         self,
@@ -720,6 +741,7 @@ class ProjectApiService:
             state=_project_state(project),
             document_count=len(project.documentos),
             page_count=sum(len(item.paginas) for item in project.documentos),
+            analysis=self._analysis_summary(project),
             created_at=project.criado_em,
             updated_at=snapshot.updated_at,
         )
@@ -733,8 +755,44 @@ class ProjectApiService:
             project_version=snapshot.version,
             documents=tuple(self._document_summary(snapshot, item) for item in project.documentos),
             pages=self._page_summaries(project),
+            analysis=self._analysis_summary(project),
             created_at=project.criado_em,
             updated_at=snapshot.updated_at,
+        )
+
+    def _analysis_summary(self, project: Projeto) -> ProjectAnalysisSummaryDto:
+        with self._unit_of_work() as work:
+            runs = work.execucoes_analise.listar_do_projeto(project.id)
+            extractions = tuple(
+                run for run in runs if "execucao_extracao_id" not in dict(run.parametros)
+            )
+            interpretations = tuple(
+                run for run in runs if "execucao_extracao_id" in dict(run.parametros)
+            )
+            latest_by_source = {}
+            for run in interpretations:
+                source = str(dict(run.parametros).get("execucao_extracao_id", run.id))
+                latest_by_source[source] = run
+            proposals = tuple(
+                proposal
+                for run in latest_by_source.values()
+                for proposal in work.propostas.listar_da_execucao(run.id)
+            )
+            pending = sum(
+                proposal.estado_revisao in {EstadoRevisao.PROPOSTA, EstadoRevisao.CONFLITANTE}
+                for proposal in proposals
+            )
+            decided = sum(
+                work.decisoes_revisao.obter_da_proposta(proposal.id) is not None
+                for proposal in proposals
+            )
+        return ProjectAnalysisSummaryDto(
+            last_extraction=(_analysis_state(extractions[-1].estado) if extractions else None),
+            last_interpretation=(
+                _analysis_state(interpretations[-1].estado) if interpretations else None
+            ),
+            pending_proposals=pending,
+            completed_decisions=decided + len(project.historico_revisao_manual),
         )
 
     def _document_summary(
@@ -894,6 +952,15 @@ class ProjectApiService:
 
 def _project_state(project: Projeto) -> ProjectState:
     return ProjectState.READY if project.documentos else ProjectState.CREATED
+
+
+def _analysis_state(state: EstadoExecucaoAnalise) -> AnalysisExecutionState:
+    return {
+        EstadoExecucaoAnalise.INICIADA: AnalysisExecutionState.STARTED,
+        EstadoExecucaoAnalise.CONCLUIDA: AnalysisExecutionState.SUCCEEDED,
+        EstadoExecucaoAnalise.FALHOU: AnalysisExecutionState.FAILED,
+        EstadoExecucaoAnalise.CANCELADA: AnalysisExecutionState.CANCELLED,
+    }[state]
 
 
 def _fingerprint(operation: str, payload: dict[str, object]) -> str:

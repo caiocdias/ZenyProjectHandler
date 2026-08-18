@@ -314,6 +314,26 @@ class ServicoFluxoMvp:
                 senhas_documentos=senhas_documentos,
             )
 
+    def executar_pipeline_ja_coordenado(
+        self,
+        projeto_id: UUID,
+        *,
+        progresso: ProgressCallback | None = None,
+        cancelado: Callable[[], bool] | None = None,
+        senhas_documentos: Mapping[UUID, str] | None = None,
+    ) -> ResultadoFluxoMvp:
+        """Execute sob a reserva de análise já mantida pelo gerenciador remoto."""
+        if self._coordinator.operacao_em_andamento is not TipoOperacao.ANALISE:
+            raise RuntimeError("A execução remota exige a reserva global de análise")
+        return self._executar_pipeline(
+            projeto_id,
+            progresso=progresso,
+            cancelado=cancelado,
+            configuracao_extracao=None,
+            configuracao_interpretacao=None,
+            senhas_documentos=senhas_documentos,
+        )
+
     def _executar_pipeline(
         self,
         projeto_id: UUID,

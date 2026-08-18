@@ -103,6 +103,16 @@
         "title": "ActiveRuleRegistryResponse",
         "type": "object"
       },
+      "AnalysisExecutionState": {
+        "enum": [
+          "STARTED",
+          "SUCCEEDED",
+          "FAILED",
+          "CANCELLED"
+        ],
+        "title": "AnalysisExecutionState",
+        "type": "string"
+      },
       "AnalysisRegionDto": {
         "additionalProperties": false,
         "properties": {
@@ -2331,9 +2341,53 @@
         "title": "PreflightIssueDto",
         "type": "object"
       },
+      "ProjectAnalysisSummaryDto": {
+        "additionalProperties": false,
+        "properties": {
+          "completed_decisions": {
+            "minimum": 0.0,
+            "title": "Completed Decisions",
+            "type": "integer"
+          },
+          "last_extraction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnalysisExecutionState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_interpretation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnalysisExecutionState"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "pending_proposals": {
+            "minimum": 0.0,
+            "title": "Pending Proposals",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pending_proposals",
+          "completed_decisions"
+        ],
+        "title": "ProjectAnalysisSummaryDto",
+        "type": "object"
+      },
       "ProjectDetailDto": {
         "additionalProperties": false,
         "properties": {
+          "analysis": {
+            "$ref": "#/components/schemas/ProjectAnalysisSummaryDto"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -2383,6 +2437,7 @@
           "project_version",
           "documents",
           "pages",
+          "analysis",
           "created_at",
           "updated_at"
         ],
@@ -2519,6 +2574,9 @@
       "ProjectSummaryDto": {
         "additionalProperties": false,
         "properties": {
+          "analysis": {
+            "$ref": "#/components/schemas/ProjectAnalysisSummaryDto"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -2558,6 +2616,7 @@
           "state",
           "document_count",
           "page_count",
+          "analysis",
           "created_at",
           "updated_at"
         ],

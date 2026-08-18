@@ -159,13 +159,15 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
     qtbot.mouseClick(add_pdfs, Qt.MouseButton.LeftButton)
     assert window.pdf_viewer.inspecao is not None
 
-    with panel._service._unit_of_work() as work:
+    assert window.review_panel is not None
+    with window.review_panel._service._unit_of_work() as work:
         project = work.projetos.obter(UUID(str(project_id)))
         assert project is not None
         work.projetos.salvar(
             replace(project, metadados=MetadadosProjeto(tipo_servico="Rede urbana"))
         )
         work.commit()
+    panel.abrir_selecionado()
 
     run = panel.findChild(QPushButton, "mvpRunAnalysisButton")
     assert run is not None
@@ -179,12 +181,12 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
         "pdf.viewer.open",
         "pdf.viewer.render",
         "pdf.analysis",
-        "qt.worker.analysis_pipeline",
+        "server.job.analysis",
     ):
         records = [item for item in log_payloads if item.get("operation") == operation]
         assert {item.get("status") for item in records} >= {"started", "succeeded"}
     worker_records = [
-        item for item in log_payloads if item.get("operation") == "qt.worker.analysis_pipeline"
+        item for item in log_payloads if item.get("operation") == "server.job.analysis"
     ]
     assert len({item.get("correlation_id") for item in worker_records}) == 1
     serialized_log = json.dumps(log_payloads, ensure_ascii=False)
@@ -258,7 +260,8 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
     assert document_list.count() == 0
     assert reopened.pdf_viewer.inspecao is None
     assert any(
-        "Fotos gerenciadas" in message and "PDF originais externos serão preservados" in message
+        "Análises, propostas" in message
+        and "Cópias mantidas fora do servidor serão preservadas" in message
         for message in confirmations
     )
 
@@ -267,7 +270,7 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
     qtbot.mouseClick(delete_project, Qt.MouseButton.LeftButton)
     assert reopened_combo.findData(project_id) < 0
     assert any(
-        "fotos e cópias de arquivos mantidas na pasta gerenciada" in message
-        and "PDF originais externos permanecem" in message
+        "arquivos gerenciados no servidor" in message
+        and "Arquivos já baixados ou mantidos fora do servidor" in message
         for message in confirmations
     )

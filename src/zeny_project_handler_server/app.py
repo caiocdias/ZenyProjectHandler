@@ -45,6 +45,13 @@ from zeny_project_handler_contracts.documents import (
     UnlockPdfRequest,
 )
 from zeny_project_handler_contracts.errors import ErrorCode, ErrorEnvelope
+from zeny_project_handler_contracts.jobs import (
+    CancelJobResponse,
+    CreateAnalysisJobRequest,
+    JobAcceptedResponse,
+    JobResultResponse,
+    JobStatusResponse,
+)
 from zeny_project_handler_contracts.photos import (
     ManagedPhotoListResponse,
     ManagedPhotoResponse,
@@ -74,6 +81,7 @@ from zeny_project_handler_server.auth import (
     authentication_error,
 )
 from zeny_project_handler_server.composition import (
+    JobLifecycle,
     RuntimeFactory,
     ServerRuntimeProtocol,
     compose_server_runtime,
@@ -468,6 +476,54 @@ def create_app(
             )
         )
 
+    @application.post(
+        f"{API_V1_PREFIX}/projects/{{project_id}}/analysis-jobs",
+        status_code=status.HTTP_202_ACCEPTED,
+        response_model=JobAcceptedResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def create_analysis_job(
+        request: Request,
+        project_id: UUID,
+        payload: CreateAnalysisJobRequest,
+        idempotency_key: str = Header(alias="Idempotency-Key", min_length=1, max_length=200),
+    ) -> JobAcceptedResponse:
+        return _jobs(request).create_analysis_job(
+            project_id,
+            expected_project_version=payload.expected_project_version,
+            force_reanalysis=payload.force_reanalysis,
+            idempotency_key=idempotency_key,
+            correlation_id=str(request.state.correlation_id),
+        )
+
+    @application.get(
+        f"{API_V1_PREFIX}/jobs/{{job_id}}",
+        response_model=JobStatusResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def get_job(request: Request, job_id: UUID) -> JobStatusResponse:
+        return _jobs(request).get_job(job_id)
+
+    @application.get(
+        f"{API_V1_PREFIX}/jobs/{{job_id}}/result",
+        response_model=JobResultResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def get_job_result(request: Request, job_id: UUID) -> JobResultResponse:
+        return _jobs(request).get_result(job_id)
+
+    @application.post(
+        f"{API_V1_PREFIX}/jobs/{{job_id}}/cancel",
+        response_model=CancelJobResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def cancel_job(request: Request, job_id: UUID) -> CancelJobResponse:
+        return _jobs(request).cancel(job_id)
+
     @application.get(
         f"{API_V1_PREFIX}/projects/{{project_id}}/photos",
         response_model=ManagedPhotoListResponse,
@@ -545,6 +601,10 @@ def _viewer_api(request: Request) -> ViewerApiService:
     if service is None:
         raise ApiError(503, ErrorCode.OPERATION_CONFLICT, "O visualizador não está disponível.")
     return service
+
+
+def _jobs(request: Request) -> JobLifecycle:
+    return _runtime(request).jobs
 
 
 def _error_response(

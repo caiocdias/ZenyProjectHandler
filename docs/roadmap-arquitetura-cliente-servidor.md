@@ -3,7 +3,7 @@
 - Estado geral: **PLANEJADO**
 - Data do planejamento: **2026-08-17**
 - Responsável pelo planejamento: **Codex**
-- Próxima etapa liberada: **Etapa 5** (**PENDENTE**; não iniciada neste chat)
+- Próxima etapa liberada: **Etapa 6** (**PENDENTE**; não iniciada neste chat)
 - Regra de execução: uma etapa só pode começar quando todas as suas dependências estiverem
   marcadas como **CONCLUÍDA**.
 
@@ -703,7 +703,7 @@ da API na conexão e recusar, com mensagem clara, uma combinação incompatível
 
 ## Etapa 5 — Jobs remotos e painel de projetos
 
-- Estado: **PENDENTE**
+- Estado: **CONCLUÍDA**
 - Dependências: Etapa 4 **CONCLUÍDA**
 - Entrega principal: CRUD, importação e pipeline do painel Projeto usam exclusivamente a API.
 
@@ -736,12 +736,56 @@ da API na conexão e recusar, com mensagem clara, uma combinação incompatível
 
 ### Evidências
 
-- Início/data/agente: _preencher_
-- Matriz de estados de job testada: _preencher_
-- Teste com dois clientes/restart: _preencher_
-- Import graph do painel: _preencher_
-- Comandos/gates: _preencher_
-- Observações/bloqueios: _preencher_
+- Início/data/agente: **2026-08-18 17:06 -03:00 — Codex; roadmap, README, especificação
+  funcional e ADRs 0006, 0009 e 0013 lidos integralmente; Etapa 4 confirmada como CONCLUÍDA;
+  escopo limitado ao gerenciador de jobs do servidor, idempotência, polling, cancelamento,
+  coordenação global, reconciliação após restart e migração integral do painel Projeto para o
+  gateway HTTP. Etapa 6 permanece PENDENTE e não será iniciada.**
+- Validação/data/agente: **2026-08-18 18:09 -03:00 — Codex; conclusão autorizada somente após
+  testes direcionados, gate completo, build sem cache e smoke com restart da imagem Docker terem
+  sido aprovados.**
+- Matriz de estados de job testada: **`tests/server/test_jobs_api.py` cobriu `QUEUED` na criação,
+  `RUNNING` durante a execução observável, `WAITING_CONFIRMATION` no journal, `CANCELLING` na
+  resposta ao pedido cooperativo, `CANCELLED` como terminal sem resultado parcial, `SUCCEEDED` com
+  resultado seguro e replay da chave sem nova execução, e `FAILED` na reconciliação de restart.
+  O store manteve 60% diante de atualizações atrasadas de 40% e 20%, recusou alterar terminal
+  `CANCELLED` para `SUCCEEDED` e limitou a retenção por prazo e quantidade.**
+- Teste com dois clientes/restart: **`test_two_http_clients_run_full_project_flow_and_survive_server_restart`
+  iniciou Uvicorn real e usou dois `HttpProjectGateway` independentes: o cliente B observou a
+  operação iniciada por A em 75%, a mesma chave devolveu o mesmo job com uma única execução, outra
+  operação recebeu 409 com `correlation_id`, e o cancelamento terminou em `CANCELLED`, preservou
+  75%, não publicou resultado e liberou a coordenação global. Após reiniciar o servidor sobre o
+  mesmo diretório, ambos os clientes reencontraram o projeto e o fluxo integral de CRUD, dois
+  uploads, ordenação, análise real até `SUCCEEDED`, resultado/resumo, remoção e exclusão passou.
+  `test_restart_reconciles_active_job_as_recoverable_failure_without_false_success` converteu job
+  ativo persistido em `FAILED`, manteve 55% e devolveu erro recuperável com
+  `restart_interrupted=true`, sem sucesso falso. O smoke da imagem repetiu duas sessões e criação
+  idempotente, reiniciou o contêiner com volume e comprovou `healthy`, sessão `ready=true` e o mesmo
+  projeto persistido.**
+- Import graph do painel: **o gate AST
+  `tests/unit/test_project_panel_remote_boundary.py` inspeciona `project_panel.py` e
+  `project_gateway.py` e proíbe `application`, `domain`, `adapters`, `ports`, `fitz` e `pymupdf`.
+  Lista, criação, abertura, alteração de NS, exclusão, upload/desbloqueio, ordenação, remoção,
+  análise, polling, progresso e cancelamento usam contratos/DTOs e gateway HTTP; nenhum caso de
+  uso, leitor PDF ou coordenador protegido é injetado no painel.**
+- Comandos/gates: **a bateria direcionada de jobs/configuração/HTTP/fronteira/workers aprovou 25
+  testes; as suítes completas de janela, PDF protegido e o ciclo HTTP real também passaram.
+  `IniciarTestes.bat` final terminou com `RESULTADO FINAL: APROVADO`: Python 3.13.14,
+  `pip check` sem dependências quebradas, Ruff lint aprovado e 266 arquivos formatados, Mypy sem
+  erros em 262 arquivos-fonte, 706 testes aprovados em 203,04 s, cobertura 86,70% contra mínimo
+  85,01% e 2.140 funções/métodos sem complexidade E/F. `docker compose config --quiet` passou; a
+  imagem foi reconstruída sem cache com digest
+  `sha256:a11c4bea1b02945e8ca07e20570b4591e5ea3736b53e5a887e3398ba154fabd6` e 173.592.354 bytes.
+  O contêiner expôs as capacidades `remote-analysis-jobs` e `global-operation-observability`,
+  passou healthcheck antes e depois do restart e preservou os dados no volume.**
+- Observações/bloqueios: **conclusão em 2026-08-18 18:09 -03:00, sem bloqueios. As regressões
+  encontradas durante a validação — tradução de conflito interno para envelope HTTP seguro,
+  retenção forte do worker Qt, corrida de navegação de PDF protegido e sincronização de versão no
+  E2E — foram corrigidas antes do gate final. Jobs usam um worker global no servidor,
+  cancelamento cooperativo e journal persistente; restart falha jobs ativos de forma recuperável e
+  a retenção remove terminais expirados/excedentes. O contêiner e o volume efêmeros foram removidos,
+  a imagem permaneceu para inspeção, nenhum commit foi criado e a Etapa 6 permanece PENDENTE e não
+  foi iniciada.**
 
 ### Mensagem para um novo chat limpo do Codex
 

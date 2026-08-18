@@ -240,7 +240,7 @@ def _persist_span_semantic_session(panel: object, project_id: UUID) -> None:
     cable_type = _protected_cable(catalog)
     pole_type_id = catalog.itens_ativos(CategoriaElemento.POSTE)[0].id
     execution_id = _id("semantic-execution")
-    with panel._service._unit_of_work() as work:
+    with panel._review_panel._service._unit_of_work() as work:
         project = work.projetos.obter(project_id)
         assert project is not None
         page = project.documentos[0].paginas[0]

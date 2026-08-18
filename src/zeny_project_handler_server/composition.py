@@ -7,23 +7,55 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from typing import Protocol
+from uuid import UUID
 
+from zeny_project_handler.adapters.analysis import (
+    JsonAnalysisCache,
+    PyMuPdfDocumentAnalyzer,
+    TesseractCliOcr,
+)
 from zeny_project_handler.adapters.analysis.tesseract_runtime import (
     RuntimeTesseract,
     inspect_tesseract_runtime,
 )
+from zeny_project_handler.adapters.interpretation import (
+    InterpretadorRegrasExplicitas,
+    carregar_registro_regras_inicial,
+)
+from zeny_project_handler.adapters.pdf import PyMuPdfReader
+from zeny_project_handler.adapters.persistence import SqlAlchemyUnitOfWork
+from zeny_project_handler.application.compliance_analysis import ExecutarAnaliseConformidade
+from zeny_project_handler.application.document_analysis import ExecutarAnaliseDocumento
+from zeny_project_handler.application.document_compliance import prover_fatos_documentais
+from zeny_project_handler.application.human_review import ServicoRevisaoHumana
+from zeny_project_handler.application.interpretation_pipeline import ExecutarPipelineInterpretacao
+from zeny_project_handler.application.managed_files import GerenciadorArquivosGerenciados
+from zeny_project_handler.application.mvp_workflow import ResultadoFluxoMvp, ServicoFluxoMvp
+from zeny_project_handler.application.pdf_import import ImportarPdfsNoProjeto
+from zeny_project_handler.application.project_compliance import prover_fatos_regionais
+from zeny_project_handler.application.span_compliance import prover_fatos_vaos
+from zeny_project_handler.application.topology_compliance import prover_fatos_topologicos
 from zeny_project_handler.composition import CoreServices, compose_core_services
+from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler_contracts import (
     API_VERSION,
     MAX_COMPATIBLE_API_VERSION,
     MIN_COMPATIBLE_API_VERSION,
 )
+from zeny_project_handler_contracts.common import GlobalOperationDto
 from zeny_project_handler_contracts.enums import OcrStatus
+from zeny_project_handler_contracts.jobs import (
+    CancelJobResponse,
+    JobAcceptedResponse,
+    JobResultResponse,
+    JobStatusResponse,
+)
 from zeny_project_handler_contracts.session import (
     OcrDiagnosticDto,
     SessionCapabilitiesResponse,
 )
 from zeny_project_handler_server.config import ServerSettings
+from zeny_project_handler_server.job_manager import JobManager
 from zeny_project_handler_server.project_api import ProjectApiService
 from zeny_project_handler_server.viewer_api import ViewerApiService
 
@@ -36,15 +68,35 @@ SERVER_CAPABILITIES = (
     "managed-photos",
     "remote-pdf-viewer",
     "temporary-viewer-sessions",
+    "remote-analysis-jobs",
+    "global-operation-observability",
 )
 
 
 class JobLifecycle(Protocol):
-    """Fronteira preparada para o gerenciador de jobs da Etapa 5."""
+    """Fronteira do gerenciador de jobs pertencente ao worker único."""
 
     def stop_accepting(self) -> None: ...
 
     def cancel_and_wait(self) -> None: ...
+
+    def create_analysis_job(
+        self,
+        project_id: UUID,
+        *,
+        expected_project_version: int,
+        force_reanalysis: bool,
+        idempotency_key: str,
+        correlation_id: str,
+    ) -> JobAcceptedResponse: ...
+
+    def get_job(self, job_id: UUID) -> JobStatusResponse: ...
+
+    def get_result(self, job_id: UUID) -> JobResultResponse: ...
+
+    def cancel(self, job_id: UUID) -> CancelJobResponse: ...
+
+    def global_operation(self) -> GlobalOperationDto | None: ...
 
 
 class _IdleJobLifecycle:
@@ -53,6 +105,21 @@ class _IdleJobLifecycle:
 
     def cancel_and_wait(self) -> None:
         pass
+
+    def create_analysis_job(self, *_args: object, **_kwargs: object) -> JobAcceptedResponse:
+        raise RuntimeError("O gerenciador de jobs não está disponível")
+
+    def get_job(self, _job_id: UUID) -> JobStatusResponse:
+        raise RuntimeError("O gerenciador de jobs não está disponível")
+
+    def get_result(self, _job_id: UUID) -> JobResultResponse:
+        raise RuntimeError("O gerenciador de jobs não está disponível")
+
+    def cancel(self, _job_id: UUID) -> CancelJobResponse:
+        raise RuntimeError("O gerenciador de jobs não está disponível")
+
+    def global_operation(self) -> GlobalOperationDto | None:
+        return None
 
 
 class ServerRuntimeProtocol(Protocol):
@@ -65,6 +132,9 @@ class ServerRuntimeProtocol(Protocol):
 
     @property
     def viewer_api(self) -> ViewerApiService | None: ...
+
+    @property
+    def jobs(self) -> JobLifecycle: ...
 
     def close(self) -> None: ...
 
@@ -92,7 +162,7 @@ class ServerRuntime:
             ready=True,
             capabilities=SERVER_CAPABILITIES,
             ocr=_ocr_diagnostic(self.ocr),
-            global_operation=None,
+            global_operation=self.jobs.global_operation(),
             server_time=datetime.now(UTC),
         )
 
@@ -155,12 +225,114 @@ def compose_server_runtime(settings: ServerSettings) -> ServerRuntime:
         project_api.close()
         core.close()
         raise
+    try:
+        workflow = _compose_analysis_workflow(
+            core,
+            settings,
+            ocr,
+        )
+
+        def run_analysis(
+            project_id: UUID,
+            progress: Callable[[int, int, str], None],
+            cancelled: Callable[[], bool],
+        ) -> ResultadoFluxoMvp:
+            passwords = project_api.analysis_passwords(project_id)
+            try:
+                return workflow.executar_pipeline_ja_coordenado(
+                    project_id,
+                    progresso=progress,
+                    cancelado=cancelled,
+                    senhas_documentos=passwords,
+                )
+            finally:
+                passwords.clear()
+
+        jobs = JobManager(
+            engine=core.engine,
+            coordinator=core.operation_coordinator,
+            project_versions=project_api,
+            analysis_runner=run_analysis,
+            retention_seconds=settings.job_retention_seconds,
+            maximum_retained=settings.job_max_retained,
+        )
+    except BaseException:
+        viewer_api.close()
+        project_api.close()
+        core.close()
+        raise
     return ServerRuntime(
         core=core,
         ocr=ocr,
-        jobs=_IdleJobLifecycle(),
+        jobs=jobs,
         project_api=project_api,
         viewer_api=viewer_api,
+    )
+
+
+def _compose_analysis_workflow(
+    core: CoreServices,
+    settings: ServerSettings,
+    ocr: RuntimeTesseract,
+) -> ServicoFluxoMvp:
+    def unit_of_work() -> SqlAlchemyUnitOfWork:
+        return SqlAlchemyUnitOfWork(core.engine)
+
+    def list_projects() -> tuple[Projeto, ...]:
+        with unit_of_work() as work:
+            return work.projetos.listar()
+
+    reader = PyMuPdfReader()
+    managed_files = GerenciadorArquivosGerenciados(settings.data_directory, list_projects)
+    review = ServicoRevisaoHumana(unit_of_work)
+    compliance = ExecutarAnaliseConformidade(
+        unit_of_work,
+        review.carregar_sessao_semantica,
+        provedores_fatos=(
+            prover_fatos_documentais,
+            prover_fatos_regionais,
+            prover_fatos_vaos,
+            prover_fatos_topologicos,
+        ),
+    )
+    registry = carregar_registro_regras_inicial()
+    return ServicoFluxoMvp(
+        unit_of_work,
+        catalogo_inicial_id=core.catalog.id,
+        importador=ImportarPdfsNoProjeto(
+            reader,
+            unit_of_work,
+            coordenador=core.operation_coordinator,
+        ),
+        extrator=ExecutarAnaliseDocumento(
+            PyMuPdfDocumentAnalyzer(
+                cache=JsonAnalysisCache(settings.core_settings().analysis_cache_directory),
+                motor_ocr=_ocr_engine(ocr),
+            ),
+            unit_of_work,
+        ),
+        interpretador=ExecutarPipelineInterpretacao(
+            InterpretadorRegrasExplicitas(registry),
+            registry,
+            unit_of_work,
+        ),
+        analisador_conformidade=compliance,
+        gerenciador_arquivos=managed_files,
+        coordenador=core.operation_coordinator,
+    )
+
+
+def _ocr_engine(runtime: RuntimeTesseract) -> TesseractCliOcr | None:
+    if not runtime.portugues_pronto:
+        return None
+    executable = runtime.executavel
+    tessdata_directory = runtime.diretorio_tessdata
+    if executable is None or tessdata_directory is None:
+        return None
+    return TesseractCliOcr(
+        executable,
+        language="+".join(runtime.idiomas_selecionados),
+        tessdata_directory=tessdata_directory,
     )
 
 

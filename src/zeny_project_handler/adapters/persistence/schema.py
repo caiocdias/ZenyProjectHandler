@@ -107,6 +107,30 @@ api_uploads = Table(
 
 Index("ix_api_uploads_project", api_uploads.c.project_id)
 
+api_jobs = Table(
+    "api_jobs",
+    metadata,
+    Column("id", String(36), primary_key=True),
+    Column(
+        "project_id",
+        String(36),
+        ForeignKey("projects.id", ondelete="SET NULL"),
+    ),
+    Column("kind", String(40), nullable=False),
+    Column("status", String(32), nullable=False),
+    Column("progress_percent", Integer, nullable=False),
+    Column("message", String(500)),
+    Column("result_json", Text),
+    Column("error_json", Text),
+    Column("created_at", String(40), nullable=False),
+    Column("updated_at", String(40), nullable=False),
+    Column("expires_at", String(40), nullable=False),
+)
+
+Index("ix_api_jobs_project", api_jobs.c.project_id)
+Index("ix_api_jobs_status", api_jobs.c.status)
+Index("ix_api_jobs_expires", api_jobs.c.expires_at)
+
 documents = Table(
     "documents",
     metadata,

@@ -1,7 +1,6 @@
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
-from threading import Event
 from unittest.mock import Mock
 from uuid import uuid4
 
@@ -24,6 +23,7 @@ from PySide6.QtWidgets import (
 from pytestqt.qtbot import QtBot
 from tests.conftest import ApplicationFactory
 from tests.pdf_fixtures import TEST_RENDER_BUDGET, create_feature_pdf, create_golden_pdf
+from tests.remote_gateways import DirectProjectGateway
 from tests.viewer_gateway import LocalTestPdfViewerGateway
 
 import zeny_project_handler.adapters.pdf.pymupdf_reader as pdf_reader_module
@@ -46,7 +46,6 @@ from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormaliz
 from zeny_project_handler.ui.main_window import _DockTitleBar
 from zeny_project_handler.ui.pdf_gateway import PdfViewerGateway
 from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
-from zeny_project_handler.ui.project_panel import _PipelineWorker
 from zeny_project_handler.ui.theme import THEME_SETTING_KEY, Tema
 
 
@@ -121,13 +120,8 @@ def test_main_window_smoke(
     qtbot.waitUntil(window.review_panel.isVisible)
     window.pdf_viewer.compliance_callout_selected.emit("finding-sintetico")
     qtbot.waitUntil(window.documentation_panel.isVisible)
-    workflow_coordinator = window.project_panel._service._coordinator
-    assert workflow_coordinator is window.project_panel._service._importer._coordenador
-    assert workflow_coordinator is window.portability_panel._service._coordinator
-    assert (
-        window.project_panel._service._managed_files
-        is window.portability_panel._service._managed_files
-    )
+    assert not hasattr(window.project_panel, "_service")
+    assert isinstance(window.project_panel._gateway, DirectProjectGateway)
     assert window.statusBar().currentMessage() == "Pronto"
     assert settings.database_path.is_file()
 
@@ -210,9 +204,12 @@ def test_theme_switch_preserves_project_pdf_callout_zoom_selection_and_wrap_togg
     qtbot.addWidget(window)
     window.show()
     assert window.project_panel is not None
-    created = window.project_panel._service.criar_projeto("0000000417")
+    created = window.project_panel._gateway.create_project(
+        "0000000417",
+        idempotency_key="theme-project",
+    )
     window.project_panel.atualizar_projetos()
-    window.project_panel._select_and_activate(created)
+    window.project_panel._select_and_activate(created.project)
     source = create_golden_pdf(tmp_path / "theme-state.pdf")
     assert window.pdf_viewer.carregar_pdf(source)
     qtbot.waitUntil(lambda: window.pdf_viewer._current_preview is not None)
@@ -281,7 +278,7 @@ def test_theme_switch_preserves_project_pdf_callout_zoom_selection_and_wrap_togg
     dark_action.trigger()
     application.processEvents()
 
-    assert window.project_panel.projeto_ativo_id == created.projeto.id
+    assert window.project_panel.projeto_ativo_id == created.project.project_id.root
     assert window.pdf_viewer.view.zoom == pytest.approx(1.75)
     assert window.pdf_viewer.view._selected_callout_id == str(callout.id)
     assert window.pdf_viewer.view._callout_items[str(callout.id)] is graphics
@@ -473,33 +470,35 @@ def test_bootstrapped_analysis_worker_refuses_restore_conflict_before_mutation(
     qtbot.addWidget(window)
     panel = window.project_panel
     assert panel is not None
-    service = panel._service
-    coordinator = service._coordinator
-    created = service.criar_projeto("0000000182")
+    gateway = panel._gateway
+    assert isinstance(gateway, DirectProjectGateway)
+    coordinator = gateway._runtime.core.operation_coordinator
+    created = gateway.create_project("0000000182", idempotency_key="coordinated-project")
     source = create_golden_pdf(tmp_path / "worker-source.pdf")
-    service.importar_pdfs(created.projeto.id, (source,))
-    worker = _PipelineWorker(
-        service,
-        created.projeto.id,
-        Event(),
-        "44444444444444444444444444444444",
+    gateway.upload_document(
+        created.project.project_id.root,
+        source,
+        idempotency_key="coordinated-upload",
     )
-    failures: list[tuple[str, bool]] = []
-    worker.failed.connect(lambda message, cancelled: failures.append((message, cancelled)))
 
-    with coordinator.adquirir(TipoOperacao.RESTAURACAO):
-        worker.run()
-
-    assert failures == [
-        (
-            "Não foi possível iniciar análise do projeto: restauração do backup está em andamento. "
-            "Aguarde a conclusão ou o cancelamento.",
-            False,
+    with (
+        coordinator.adquirir(TipoOperacao.RESTAURACAO),
+        pytest.raises(
+            Exception,
+            match="restauração do backup está em andamento",
+        ),
+    ):
+        gateway.create_analysis_job(
+            created.project.project_id.root,
+            expected_project_version=gateway.get_project(
+                created.project.project_id.root
+            ).project.project_version,
+            force_reanalysis=False,
+            idempotency_key="coordinated-analysis",
         )
-    ]
-    summary = service.abrir_projeto(created.projeto.id).resumo
-    assert summary.ultima_extracao is None
-    assert summary.ultima_interpretacao is None
+    summary = gateway.get_project(created.project.project_id.root).project.analysis
+    assert summary.last_extraction is None
+    assert summary.last_interpretation is None
 
 
 @pytest.mark.integration
