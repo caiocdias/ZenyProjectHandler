@@ -66,10 +66,46 @@ projects = Table(
     Column("name", String(240), nullable=False),
     Column("created_at", String(40), nullable=False),
     Column("updated_at", String(40), nullable=False),
+    Column("version", Integer, nullable=False, default=0),
     Column("content_hash", String(64), nullable=False),
     Column("payload", Text, nullable=False),
     UniqueConstraint("id", "catalog_id", name="uq_projects_id_catalog"),
 )
+
+api_idempotency_records = Table(
+    "api_idempotency_records",
+    metadata,
+    Column("idempotency_key", String(200), primary_key=True),
+    Column("operation", String(120), nullable=False),
+    Column("request_sha256", String(64), nullable=False),
+    Column("resource_id", String(36), nullable=False),
+    Column("response_json", Text),
+    Column("created_at", String(40), nullable=False),
+    Column("updated_at", String(40), nullable=False),
+)
+
+api_uploads = Table(
+    "api_uploads",
+    metadata,
+    Column("id", String(36), primary_key=True),
+    Column(
+        "project_id",
+        String(36),
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+    ),
+    Column("document_id", String(36)),
+    Column("state", String(32), nullable=False),
+    Column("display_name", String(255), nullable=False),
+    Column("sha256", String(64), nullable=False),
+    Column("size_bytes", Integer, nullable=False),
+    Column("pending_relative_path", String(120)),
+    Column("password_attempts_remaining", Integer),
+    Column("created_at", String(40), nullable=False),
+    Column("updated_at", String(40), nullable=False),
+)
+
+Index("ix_api_uploads_project", api_uploads.c.project_id)
 
 documents = Table(
     "documents",

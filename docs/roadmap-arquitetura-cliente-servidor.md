@@ -3,7 +3,7 @@
 - Estado geral: **PLANEJADO**
 - Data do planejamento: **2026-08-17**
 - Responsável pelo planejamento: **Codex**
-- Próxima etapa liberada: **Etapa 3** (permanece **PENDENTE**; não iniciada neste chat)
+- Próxima etapa liberada: **Etapa 4** (**PENDENTE**; não iniciada neste chat)
 - Regra de execução: uma etapa só pode começar quando todas as suas dependências estiverem
   marcadas como **CONCLUÍDA**.
 
@@ -512,7 +512,7 @@ da API na conexão e recusar, com mensagem clara, uma combinação incompatível
 
 ## Etapa 3 — API de projetos, documentos e armazenamento gerenciado
 
-- Estado: **PENDENTE**
+- Estado: **CONCLUÍDA**
 - Dependências: Etapa 2 **CONCLUÍDA**
 - Entrega principal: o servidor passa a possuir projetos e PDFs recebidos pela rede.
 
@@ -548,12 +548,55 @@ da API na conexão e recusar, com mensagem clara, uma combinação incompatível
 
 ### Evidências
 
-- Início/data/agente: _preencher_
-- Rotas implementadas: _preencher_
-- Testes de upload/restart/idempotência/senha: _preencher_
-- Inspeção de logs e banco: _preencher_
-- Comandos/gates: _preencher_
-- Observações/bloqueios: _preencher_
+- Início/data/agente: **2026-08-18 08:54 -03:00 — Codex; roadmap, README, especificação
+  funcional e ADRs 0002, 0003, 0006, 0008 e 0013 lidos integralmente; Etapa 2 confirmada como
+  CONCLUÍDA; escopo limitado à API de projetos/documentos/fotos, uploads streaming,
+  armazenamento gerenciado, idempotência, PDFs protegidos, falhas, restart, segredos e gates da
+  Etapa 3. Etapa 4 permanece PENDENTE e não será iniciada.**
+- Validação/data/agente: **2026-08-18 09:28 -03:00 — Codex; implementação pronta e movida para
+  EM VALIDAÇÃO após testes ASGI direcionados e ciclo HTTP real em imagem Docker com volume
+  isolado. A bateria final de gates ainda deve comprovar a conclusão.**
+- Rotas implementadas: **todas autenticadas sob `/api/v1`: `GET/POST /projects`,
+  `GET/PATCH/DELETE /projects/{project_id}`, `POST
+  /projects/{project_id}/document-uploads`, `POST /uploads/{upload_id}/unlock`, `PUT
+  /projects/{project_id}/page-order`, `DELETE
+  /projects/{project_id}/documents/{document_id}`, `GET /projects/{project_id}/photos`,
+  `POST /projects/{project_id}/elements/{element_id}/photos`, `DELETE
+  /projects/{project_id}/elements/{element_id}/photos/{photo_id}` e `GET
+  /projects/{project_id}/photos/{photo_id}/content`. A API recebe bytes multipart em chunks de 1
+  MiB, calcula hash/tamanho durante o stream, limita o total, valida somente nome de exibição e
+  deriva internamente os destinos UUID sob `/data`; respostas contêm apenas metadados seguros.**
+- Testes de upload/restart/idempotência/senha: **`tests/server/test_project_document_api.py`
+  comprova CRUD, ordem e versão otimista, PDF disponível sem o original, replay persistente,
+  conflito de chave/hash, dois clientes concorrentes, fotos gerenciadas, traversal, excesso,
+  desconexão, falha de importação com rollback, preservação de publicação preexistente, limpeza
+  de partes e uploads protegidos abandonados, três tentativas e credencial apenas em memória.
+  Rodada direcionada final: 35 aprovados. Ciclo HTTP real na imagem final: criação, dois uploads
+  `IMPORTED`, replay idempotente, inversão de ordem, exclusão das cópias do cliente e `docker
+  restart`; após o restart permaneceram 2 documentos na ordem `final-second.pdf`,
+  `final-first.pdf`, sem caminhos públicos.**
+- Inspeção de logs e banco: **no ciclo final isolado havia 1 projeto, 2 documentos, 2 PDFs
+  gerenciados e 3 registros de idempotência. Busca byte a byte do segredo runtime em todos os
+  arquivos de `/data`: ausente; colunas capazes de armazenar credencial: nenhuma; segredo também
+  ausente nos logs e em `Config.Env`. Os testes de PDF protegido procuram a senha literal em cada
+  arquivo de dados e comprovam zero credenciais após restart. Imagem
+  `zeny-project-handler-server:dev`, ID
+  `sha256:edaaff5a8682a505439bde64559dbcf6119a64bc5e25a1fcd0bc984f19d43c2e`, 173.464.300
+  bytes, criada em 2026-08-18 12:35:52 UTC, usuário não privilegiado `zeny`; build final sem
+  cache aprovado.**
+- Comandos/gates: **`.venv\\Scripts\\python.exe -m pytest --basetemp=<C:\\tmp isolado> -p
+  no:cacheprovider tests\\server\\test_project_document_api.py
+  tests\\integration\\test_persistence.py -q` -> 35 aprovados; `docker compose build
+  --no-cache` -> aprovado; ciclo `docker run`/HTTP/`docker restart`/auditoria -> aprovado;
+  `IniciarTestes.bat` final em 2026-08-18 09:34 -03:00 -> APROVADO: Python 3.13.14, `pip
+  check`, Ruff lint/formatação, Mypy (248 arquivos), 689 testes em 67,63 s, cobertura 87,27%
+  contra mínimo 85,01% e complexidade E/F aprovada em 1.938 funções/métodos. `git diff
+  --check` sem erros.**
+- Observações/bloqueios: **conclusão em 2026-08-18 09:37 -03:00, sem bloqueios. O `pytest`
+  emitiu um aviso não bloqueante porque o sandbox não permite atualizar `.pytest_cache`; todos os
+  temporários de teste usaram `C:\\tmp`. Contêiner, volume isolado e arquivos cliente sintéticos
+  foram removidos ao final. Etapa 4 permanece PENDENTE e não foi iniciada; nenhum commit foi
+  criado.**
 
 ### Mensagem para um novo chat limpo do Codex
 

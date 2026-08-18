@@ -27,6 +27,7 @@ PASSWORD = "senha correta somente para teste"
 class FakeRuntime:
     def __init__(self) -> None:
         self.closed = False
+        self.project_api = None
 
     def session_capabilities(self) -> SessionCapabilitiesResponse:
         return SessionCapabilitiesResponse(

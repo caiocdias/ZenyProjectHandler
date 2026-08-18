@@ -50,6 +50,8 @@ class ImportarPdfNoProjeto:
         caminho: Path,
         *,
         senha: str | None = None,
+        documento_id: UUID | None = None,
+        nome_exibicao: str | None = None,
     ) -> ResultadoImportacaoPdf:
         result = ImportarPdfsNoProjeto(
             self._leitor,
@@ -59,6 +61,8 @@ class ImportarPdfNoProjeto:
             projeto_id,
             (caminho,),
             senha=senha,
+            documentos_ids=(documento_id,) if documento_id is not None else None,
+            nomes_exibicao=(nome_exibicao,) if nome_exibicao is not None else None,
         )
         return ResultadoImportacaoPdf(projeto=result.projeto, inspecao=result.inspecoes[0])
 
@@ -83,9 +87,17 @@ class ImportarPdfsNoProjeto:
         caminhos: tuple[Path, ...],
         *,
         senha: str | None = None,
+        documentos_ids: tuple[UUID, ...] | None = None,
+        nomes_exibicao: tuple[str, ...] | None = None,
     ) -> ResultadoImportacaoPdfs:
         with self._coordenador.adquirir(TipoOperacao.IMPORTACAO_PDFS):
-            return self._executar_observado(projeto_id, caminhos, senha=senha)
+            return self._executar_observado(
+                projeto_id,
+                caminhos,
+                senha=senha,
+                documentos_ids=documentos_ids,
+                nomes_exibicao=nomes_exibicao,
+            )
 
     def _executar_observado(
         self,
@@ -93,6 +105,8 @@ class ImportarPdfsNoProjeto:
         caminhos: tuple[Path, ...],
         *,
         senha: str | None,
+        documentos_ids: tuple[UUID, ...] | None,
+        nomes_exibicao: tuple[str, ...] | None,
     ) -> ResultadoImportacaoPdfs:
         observation = operation_logger(
             "pdf.import",
@@ -101,7 +115,13 @@ class ImportarPdfsNoProjeto:
         with observation.context():
             observation.started(item_count=len(caminhos))
             try:
-                result = self._executar(projeto_id, caminhos, senha=senha)
+                result = self._executar(
+                    projeto_id,
+                    caminhos,
+                    senha=senha,
+                    documentos_ids=documentos_ids,
+                    nomes_exibicao=nomes_exibicao,
+                )
             except Exception as error:
                 observation.failed(error, expected=_is_expected_import_failure(error))
                 raise
@@ -117,10 +137,34 @@ class ImportarPdfsNoProjeto:
         caminhos: tuple[Path, ...],
         *,
         senha: str | None,
+        documentos_ids: tuple[UUID, ...] | None,
+        nomes_exibicao: tuple[str, ...] | None,
     ) -> ResultadoImportacaoPdfs:
         if not caminhos:
             raise ValueError("Selecione ao menos um PDF para importar")
-        inspections = tuple(self._leitor.inspecionar(path, senha=senha) for path in caminhos)
+        if documentos_ids is not None and len(documentos_ids) != len(caminhos):
+            raise ValueError("A quantidade de IDs deve corresponder aos PDFs selecionados")
+        if nomes_exibicao is not None and len(nomes_exibicao) != len(caminhos):
+            raise ValueError("A quantidade de nomes deve corresponder aos PDFs selecionados")
+        inspections = tuple(
+            self._leitor.inspecionar(
+                path,
+                senha=senha,
+                documento_id=(documentos_ids[index] if documentos_ids is not None else None),
+            )
+            for index, path in enumerate(caminhos)
+        )
+        if nomes_exibicao is not None:
+            inspections = tuple(
+                replace(
+                    inspection,
+                    documento=replace(
+                        inspection.documento,
+                        nome_arquivo=nomes_exibicao[index],
+                    ),
+                )
+                for index, inspection in enumerate(inspections)
+            )
         for inspection in inspections:
             self._leitor.verificar_origem(inspection)
         selected_hashes = [inspection.documento.sha256 for inspection in inspections]

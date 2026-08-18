@@ -88,14 +88,18 @@ class SqlProjectRepository:
             "payload": payload,
         }
         if existing_catalog_id is None:
-            self._session.execute(sqlite_insert(projects).values(id=project_id, **values))
+            self._session.execute(
+                sqlite_insert(projects).values(id=project_id, version=0, **values)
+            )
         else:
             if existing_catalog_id != str(project.catalogo_versao_id):
                 raise PersistenceConflictError(
                     "A versão de catálogo de um projeto persistido não pode ser trocada"
                 )
             self._session.execute(
-                update(projects).where(projects.c.id == project_id).values(**values)
+                update(projects)
+                .where(projects.c.id == project_id)
+                .values(version=projects.c.version + 1, **values)
             )
 
         self._sync_documents(project)

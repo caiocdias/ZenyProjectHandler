@@ -24,11 +24,15 @@ from zeny_project_handler_contracts.session import (
     SessionCapabilitiesResponse,
 )
 from zeny_project_handler_server.config import ServerSettings
+from zeny_project_handler_server.project_api import ProjectApiService
 
 SERVER_CAPABILITIES = (
     "authenticated-session",
     "persistent-storage",
     "tesseract-ocr",
+    "managed-projects",
+    "managed-document-uploads",
+    "managed-photos",
 )
 
 
@@ -53,6 +57,9 @@ class ServerRuntimeProtocol(Protocol):
 
     def session_capabilities(self) -> SessionCapabilitiesResponse: ...
 
+    @property
+    def project_api(self) -> ProjectApiService | None: ...
+
     def close(self) -> None: ...
 
 
@@ -63,6 +70,7 @@ class ServerRuntime:
     core: CoreServices
     ocr: RuntimeTesseract
     jobs: JobLifecycle
+    project_api: ProjectApiService | None = None
     _closed: bool = False
 
     def session_capabilities(self) -> SessionCapabilitiesResponse:
@@ -90,7 +98,11 @@ class ServerRuntime:
             self.jobs.stop_accepting()
             self.jobs.cancel_and_wait()
         finally:
-            self.core.close()
+            try:
+                if self.project_api is not None:
+                    self.project_api.close()
+            finally:
+                self.core.close()
 
 
 RuntimeFactory = Callable[[ServerSettings], ServerRuntimeProtocol]
@@ -104,7 +116,24 @@ def compose_server_runtime(settings: ServerSettings) -> ServerRuntime:
     except BaseException:
         core.close()
         raise
-    return ServerRuntime(core=core, ocr=ocr, jobs=_IdleJobLifecycle())
+    try:
+        project_api = ProjectApiService(
+            engine=core.engine,
+            catalog_id=core.catalog.id,
+            data_directory=settings.data_directory,
+            database_path=settings.core_settings().database_path,
+            coordinator=core.operation_coordinator,
+            upload_max_bytes=settings.upload_max_bytes,
+        )
+    except BaseException:
+        core.close()
+        raise
+    return ServerRuntime(
+        core=core,
+        ocr=ocr,
+        jobs=_IdleJobLifecycle(),
+        project_api=project_api,
+    )
 
 
 def _server_version() -> str:
