@@ -2,7 +2,7 @@
 
 ## Status
 
-Aceita em 21/07/2026; revisada em 06/08/2026.
+Aceita em 21/07/2026; revisada em 06/08/2026 e 20/08/2026.
 
 ## Contexto
 
@@ -101,6 +101,10 @@ adulterado; copiar apenas o SQLite deixaria os PDFs externos fora do backup.
 - Separar limitações declaradas pela origem da integridade física do pacote recebido. Mesmo um
   backup `DEGRADADO` precisa ter manifesto, snapshot e todos os arquivos declarados íntegros para ser
   restaurado; o resultado da restauração expõe as omissões sem tratá-las como corrupção do ZIP.
+- Na arquitetura servidor, depois de publicar o snapshot, recalcular todas as referências PDF para o
+  namespace `project-files/<project-id>/pdfs/<document-id>.pdf` do volume atual. A referência de uma
+  omissão aponta para esse destino determinístico ainda ausente e continua degradada; nenhum caminho
+  Windows/SMB legado se torna fonte permanente nem requisito de montagem.
 - Mostrar no diálogo apenas identificadores abreviados e a classificação do problema, nunca nome de
   arquivo nem caminho absoluto. Gestão de fotos e localização manual de arquivos permanecem fora do
   painel de portabilidade.
@@ -110,7 +114,8 @@ adulterado; copiar apenas o SQLite deixaria os PDFs externos fora do backup.
 Um pacote sem omissões permanece autocontido depois de movido e sua integridade é validada
 internamente. Um pacote degradado é deliberadamente incompleto, mas deixa essa condição verificável e
 restaurável de modo previsível: dados canônicos são recuperados e as origens omitidas continuam
-externas ou indisponíveis conforme registrado. Uma gravação interrompida não invalida o último
+indisponíveis conforme registrado, agora sob o namespace seguro do volume servidor em vez do caminho
+externo histórico. Uma gravação interrompida não invalida o último
 destino publicado. O custo é duplicar PDFs íntegros, manter compatibilidade de leitura com o formato
 1 e distinguir degradação declarada de corrupção real. Nenhuma origem inválida é omitida
 silenciosamente e a interface nunca apresenta um backup degradado como íntegro. A substituição

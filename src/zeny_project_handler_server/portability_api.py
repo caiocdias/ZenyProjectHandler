@@ -24,6 +24,7 @@ from zeny_project_handler.application.project_portability import (
 )
 from zeny_project_handler.domain.portability import (
     EstadoIntegridadePacote,
+    OmissaoPacoteProjeto,
     RelatorioIntegridadeProjeto,
 )
 from zeny_project_handler_contracts.backup import (
@@ -492,7 +493,11 @@ def _restore_preflight_response(
     plan: PlanoRestauracaoBackup,
     expires_at: datetime,
 ) -> BackupRestorePreflightResponse:
-    state = _integrity_state(plan.integridade_pacote.estado)
+    state = (
+        IntegrityState.DEGRADED
+        if plan.omissoes_origem
+        else _integrity_state(plan.integridade_pacote.estado)
+    )
     return BackupRestorePreflightResponse(
         preflight_id=BackupRestorePreflightId(preflight_id),
         package_sha256=plan.pacote_sha256,
@@ -504,7 +509,7 @@ def _restore_preflight_response(
             photo_count=plan.resumo.quantidade_fotos,
             integrity_state=state,
         ),
-        issues=_issues(plan.integridade_pacote),
+        issues=(*_issues(plan.integridade_pacote), *_omission_issues(plan.omissoes_origem)),
         expires_at=expires_at,
     )
 
@@ -518,6 +523,21 @@ def _issues(report: RelatorioIntegridadeProjeto) -> tuple[PreflightIssueDto, ...
             resource_id=str(item.referencia_id) if item.referencia_id is not None else None,
         )
         for item in report.problemas
+    )
+
+
+def _omission_issues(omissions: tuple[OmissaoPacoteProjeto, ...]) -> tuple[PreflightIssueDto, ...]:
+    return tuple(
+        PreflightIssueDto(
+            code=item.codigo,
+            severity=IssueSeverity.WARNING,
+            summary=(
+                "O backup declara uma origem omitida; os dados auditáveis serão restaurados, "
+                "mas o arquivo precisará ser enviado novamente."
+            ),
+            resource_id=str(item.referencia_id),
+        )
+        for item in omissions
     )
 
 

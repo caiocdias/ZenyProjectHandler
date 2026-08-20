@@ -237,10 +237,14 @@ antes de liberar o registro restaurado.
 
 ## Persistência e recuperação
 
-O banco SQLite fica em `ZENY_SERVER_DATA_DIR` (normalmente o volume `/data`). Alembic aplica as
-migrações na inicialização do servidor. Entidades de domínio são serializadas por repositórios;
-modelos SQLAlchemy não são usados como domínio. O diretório local do cliente contém somente
-preferências visuais e logs, nunca banco, cache de análise ou arquivos de projeto gerenciados.
+O banco SQLite fica em `ZENY_SERVER_DATA_DIR` (normalmente o volume `/data`). Antes da prontidão, o
+servidor prova escrita, valida `.zeny-volume.json`, executa `PRAGMA quick_check`, rejeita revisão
+desconhecida e aplica Alembic somente quando o banco ainda não está no `head` embarcado. Revisão,
+integridade e manifesto são confirmados depois da migração. Falta de permissão, corrupção, formato
+de volume futuro ou erro de migração encerram o startup sem atendimento de negócio. Entidades de
+domínio são serializadas por repositórios; modelos SQLAlchemy não são usados como domínio. O
+diretório local do cliente contém somente preferências visuais e logs, nunca banco, cache de análise
+ou arquivos de projeto gerenciados.
 
 Snapshots de análise, interpretação, decisões, conformidade e revisões de regras preservam
 identidade e versão. Dados grandes e pesquisáveis possuem colunas próprias; os agregados completos
@@ -264,7 +268,10 @@ aplicação exige novo preflight. IDs, análises, propostas, revisões e resulta
 
 Antes do backup, todas as origens PDF são classificadas. Backup íntegro prossegue diretamente;
 origens ausentes, alteradas ou ilegíveis exigem confirmação e geram pacote `DEGRADADO`. A restauração
-de um pacote degradado ainda exige integridade de tudo que o manifesto declara.
+de um pacote degradado ainda exige integridade de tudo que o manifesto declara e uma segunda
+confirmação explícita no destino. Toda referência restaurada é recalculada para `project-files` do
+volume atual. Uma origem omitida continua ausente e diagnosticável, mas não conserva caminho
+Windows/SMB como dependência permanente.
 
 A troca de cada arquivo é atômica e exceções capturadas disparam compensação. Exportação e backup
 publicam um download autenticado com metadados de tamanho, SHA-256 e expiração; o cliente grava em
@@ -281,6 +288,11 @@ ler a mesma proposta, mas somente a primeira decisão válida persiste; a segund
 recarregar os DTOs. Importação, exportação, backup e restauração executam como jobs persistidos no
 servidor. O cliente acompanha progresso monotônico por polling, solicita cancelamento remoto e faz
 upload/download fora da thread visual. Objetos Qt visuais permanecem na thread principal.
+
+O procedimento operacional usa backup antes de upgrade, `docker compose down` sem remoção de volume
+e migração fail-closed antes de `ready=true`. Rollback no mesmo volume é permitido somente para
+imagem compatível com seu formato/revisão; rollback incompatível cria volume novo e restaura o
+`.zphbackup` pré-upgrade. Não há downgrade automático nem edição de `alembic_version`.
 
 Os painéis **Projeto**, **Resultados**, **Documentação e conformidade** e
 **Importar, exportar e backup** podem ser movidos, desacoplados e restaurados. Tema, geometria e

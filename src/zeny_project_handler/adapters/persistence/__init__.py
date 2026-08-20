@@ -13,8 +13,11 @@ from .compliance_registry_repository import SqlComplianceRuleRegistryRepository
 from .database import (
     create_sqlite_engine,
     current_database_revision,
+    is_known_database_revision,
+    latest_database_revision,
     managed_sqlite_engine,
     upgrade_database,
+    verify_database_integrity,
 )
 from .portable_database import SqlitePortableProjectDatabase
 from .unit_of_work import SqlAlchemyUnitOfWork
@@ -29,8 +32,11 @@ __all__ = [
     "create_atomic_backup",
     "create_sqlite_engine",
     "current_database_revision",
+    "is_known_database_revision",
+    "latest_database_revision",
     "managed_sqlite_engine",
     "restore_atomic_backup",
     "rewrite_backup_pdf_sources",
     "upgrade_database",
+    "verify_database_integrity",
 ]

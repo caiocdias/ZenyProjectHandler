@@ -1,6 +1,6 @@
 services:
   server:
-    image: zeny-project-handler-server:dev
+    image: "${ZENY_SERVER_IMAGE:-zeny-project-handler-server:dev}"
     build:
       context: .
       target: runtime
@@ -20,9 +20,19 @@ services:
       ZENY_SERVER_JOB_MAX_RETAINED: "${ZENY_SERVER_JOB_MAX_RETAINED:-100}"
       ZENY_SERVER_TRANSFER_TTL_SECONDS: "${ZENY_SERVER_TRANSFER_TTL_SECONDS:-3600}"
     ports:
-      - "${ZENY_SERVER_PORT:-8000}:8000"
+      - "${ZENY_SERVER_BIND_ADDRESS:-127.0.0.1}:${ZENY_SERVER_PORT:-8000}:8000"
     volumes:
       - zeny-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=${ZENY_SERVER_TMPFS_SIZE:-268435456}
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: ${ZENY_SERVER_PIDS_LIMIT:-256}
+    mem_limit: ${ZENY_SERVER_MEMORY_LIMIT:-2g}
+    init: true
     healthcheck:
       test:
         - CMD
@@ -36,7 +46,13 @@ services:
       start_period: 20s
       retries: 12
     restart: unless-stopped
+    stop_signal: SIGTERM
     stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   zeny-data:

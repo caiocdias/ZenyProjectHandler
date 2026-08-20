@@ -33,6 +33,9 @@ apresenta os DTOs e rasters recebidos pela API autenticada.
 - Importação e exportação remotas de projetos `.zphproj` e backup completo `.zphbackup`: o servidor
   valida e processa pacotes em jobs, enquanto o cliente só transmite streams e publica downloads
   conferidos por tamanho e SHA-256.
+- Lifecycle fail-closed do volume: manifesto de formato versionado, verificação SQLite pré/pós,
+  Alembic somente quando necessário e rejeição de revisão futura, corrupção ou falta de escrita
+  antes da prontidão.
 - Temas claro e escuro, painéis acopláveis e restauração do estado da interface.
 
 As 39 regras são executáveis, mas um achado só é criado para alvos que satisfazem todas as condições
@@ -118,9 +121,13 @@ servidor ficam em `ZENY_SERVER_DATA_DIR` (normalmente o volume `/data`).
 - Pacotes validam manifesto, caminhos, tipos, tamanhos e hashes. Uma origem ausente, alterada ou
   ilegível só pode ser omitida depois de confirmação explícita e deixa o pacote marcado como
   degradado.
+- Na restauração, referências PDF são relocalizadas para o namespace gerenciado do volume atual.
+  Uma omissão continua ausente/degradada, sem conservar caminho Windows como fonte permanente.
 - A importação de projeto e a limpeza de arquivos possuem journals recuperáveis. A restauração de
   backup usa publicação atômica por arquivo e compensação para falhas capturadas; a troca conjunta
   de banco e anexos ainda não possui journal durável contra encerramento abrupto.
+- `/data/.zeny-volume.json` registra somente formato/revisão/instantes do lifecycle, nunca segredo.
+  `docker compose down` preserva dados; `down -v` não pertence ao procedimento operacional.
 
 ## OCR no servidor
 
@@ -150,10 +157,14 @@ As opções são lidas na inicialização:
 | `ZENY_PDF_TILE_CACHE_MAX_BYTES` | `134217728` | limite do cache visual de tiles |
 | `ZENY_CLIENT_SERVER_URL` | `http://127.0.0.1:8000` | URL inicial do diálogo em desenvolvimento |
 | `ZENY_SERVER_PASSWORD` | sem padrão | segredo obrigatório, lido somente pelo processo servidor |
+| `ZENY_SERVER_BIND_ADDRESS` | `127.0.0.1` | endereço do host que publica a porta; use IPv4 privado específico para LAN |
 | `ZENY_SERVER_VIEWER_SESSION_TTL_SECONDS` | `900` | inatividade até limpar PDF avulso no servidor |
 | `ZENY_SERVER_VIEWER_MAX_FILES` | `20` | máximo de PDFs por sessão avulsa |
 | `ZENY_SERVER_JOB_RETENTION_SECONDS` | `86400` | retenção renovada do histórico terminal de jobs |
 | `ZENY_SERVER_JOB_MAX_RETAINED` | `100` | máximo de jobs terminais mantidos no servidor |
+| `ZENY_SERVER_TMPFS_SIZE` | `268435456` | limite em bytes do `/tmp` efêmero do container |
+| `ZENY_SERVER_PIDS_LIMIT` | `256` | limite de processos/threads imposto pelo Compose |
+| `ZENY_SERVER_MEMORY_LIMIT` | `2g` | limite de memória do container |
 | `ZENY_TESSERACT_PATH` | descoberta automática | caminho do `tesseract.exe` |
 | `ZENY_TESSDATA_DIR` | pasta gerenciada | diretório gravável de idiomas do Tesseract |
 | `ZENY_BOOTSTRAP_PYTHON` | descoberta automática | Python usado por `setup.bat` |
@@ -164,6 +175,11 @@ O servidor aplica seus próprios tetos equivalentes (`ZENY_SERVER_RENDER_DPI`,
 gateways são repetidas automaticamente depois de uma falha transitória; criação/alteração, uploads,
 senha, cancelamento e encerramento não são. Repetir deliberadamente a criação de um job com a mesma
 `Idempotency-Key` devolve o mesmo job sem executar o pipeline novamente.
+
+Instalação do servidor, exposição LAN/firewall, volume, cutover, backup antes de upgrade, rotação de
+senha, health/logs, rollback e recuperação estão no
+[runbook de operação do servidor](docs/operacao-servidor.md). A porta HTTP deve permanecer restrita
+à LAN confiável; TLS/VPN é obrigatório antes de atravessar esse limite.
 
 ## Testes e qualidade
 
@@ -213,6 +229,8 @@ smoke opcional, somente leitura, sobre todos os exemplos disponíveis:
 - [Catálogo de regras](docs/catalogo-regras-conformidade.md): as 39 regras do seed e suas fontes.
 - [Inventário normativo](docs/inventario-fontes-normativas.md): documentos, revisões, hashes e escopo
   da auditoria normativa.
+- [Operação do servidor](docs/operacao-servidor.md): instalação, LAN, volume, cutover, atualização,
+  rollback, senha, observabilidade e recuperação.
 - [ADRs](docs/adr): decisões arquiteturais; textos substituídos são mantidos somente quando o status
   os identifica explicitamente como histórico.
 - [Exemplos locais](examples/README.md): política da bancada de PDFs não versionados.

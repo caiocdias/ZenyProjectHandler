@@ -3,7 +3,7 @@
 - Estado geral: **PLANEJADO**
 - Data do planejamento: **2026-08-17**
 - Responsável pelo planejamento: **Codex**
-- Próxima etapa liberada: **Etapa 10** (**PENDENTE**; não iniciada)
+- Próxima etapa liberada: **Etapa 11** (**PENDENTE**; não iniciada)
 - Regra de execução: uma etapa só pode começar quando todas as suas dependências estiverem
   marcadas como **CONCLUÍDA**.
 
@@ -1137,7 +1137,7 @@ da API na conexão e recusar, com mensagem clara, uma combinação incompatível
 
 ## Etapa 10 — Migração de dados, operação e endurecimento do servidor
 
-- Estado: **PENDENTE**
+- Estado: **CONCLUÍDA**
 - Dependências: Etapa 9 **CONCLUÍDA**
 - Entrega principal: procedimento seguro e reproduzível para levar a fonte local ao volume Docker.
 
@@ -1173,13 +1173,62 @@ da API na conexão e recusar, com mensagem clara, uma combinação incompatível
 
 ### Evidências
 
-- Início/data/agente: _preencher_
-- Relatório de migração e comparação: _preencher_
-- Testes de lifecycle/upgrade/rollback: _preencher_
-- Inspeção de imagem/segredos/permissões: _preencher_
-- Documentos atualizados: _preencher_
-- Comandos/gates: _preencher_
-- Observações/bloqueios: _preencher_
+- Início/data/agente: **2026-08-20 18:35 -03:00 — Codex; roadmap, README, especificação funcional
+  e ADRs 0002, 0003, 0008 e 0013 lidos integralmente; Etapa 9 confirmada como CONCLUÍDA e working
+  tree inicial limpo. Escopo limitado ao cutover por backup para volume novo, origens degradadas,
+  lifecycle e versionamento do volume, migrações Alembic fail-closed, hardening da imagem,
+  documentação operacional, ensaios de falha/rollback/dois clientes e gates da Etapa 10. A Etapa
+  11 permanece PENDENTE e não será iniciada; caminhos Windows compartilhados não serão fonte
+  permanente e segredos não entrarão na imagem.**
+- Relatório de migração e comparação: **`tests/integration/test_stage10_cutover.py` criou uma fonte
+  legada representativa com PDF real, projeto completo, análise, propostas, decisão humana,
+  snapshot de conformidade e revisão ativa das regras; gerou o `.zphbackup` no lado antigo,
+  removeu a raiz original, enviou-o pelo gateway HTTP para um volume novo e executou
+  preflight/confirm. A comparação normalizada comprovou preservação de IDs, hashes, ordens,
+  documentos, análises, propostas, decisões, snapshots e catálogo/revisão ativa, visíveis por dois
+  clientes. Após restore, toda origem aponta somente para `project-files/<projeto>/pdfs/<pdf>.pdf`
+  sob o volume gerenciado. O caso degradado retornou `409` sem aceite explícito e só restaurou após
+  `accept_degraded=true`, mantendo caminho gerenciado seguro e sem montar/depender da origem
+  Windows ausente. Os 8 testes dirigidos de cutover/backup/API passaram.**
+- Testes de lifecycle/upgrade/rollback: **`tests/server/test_volume_lifecycle.py` comprovou volume
+  novo, execução única do Alembic, upgrade de revisão antiga, quick check, manifesto atômico
+  `.zeny-volume.json`, rejeição de manifesto futuro e falha fechada com preservação byte a byte de
+  revisão desconhecida/banco corrompido; 15 testes dirigidos de lifecycle/composição/autenticação
+  passaram. `scripts/stage10_operational_gate.py` foi APROVADO em Docker real para dois clientes,
+  restart, recreate, `compose down/up` sem `-v`, persistência do marcador/projeto, rotação de senha,
+  troca de referência da imagem, rollback binário compatível, OCR ausente somente degradado,
+  volume read-only, banco corrompido e revisão futura fail-closed. A auditoria posterior confirmou
+  zero contêiner, volume, rede ou tag temporária remanescente.**
+- Inspeção de imagem/segredos/permissões: **build `docker compose build --no-cache server`
+  aprovado; imagem `zeny-project-handler-server:dev`, ID
+  `sha256:d18a72952255a78f157f31bb1e6f424afb302606962bdabab531de52d7c616c7`, 163.956.400 bytes,
+  base `python:3.13.7-slim-bookworm` fixada por digest, UID/GID `10001:10001`, `/app` vazio,
+  site-packages sem escrita runtime, cliente/Qt/`.env` ausentes e healthcheck presente. Rootfs
+  read-only, tmpfs, `cap_drop: ALL`, `no-new-privileges`, limites de PIDs/memória e bind localhost
+  padrão foram observados no contêiner. O gate com a senha real confirmou ausência do valor em
+  filesystem, metadados e histórico da imagem; o gate operacional confirmou ausência das senhas
+  efêmeras nos logs; `git grep` confirmou ausência do valor real nos arquivos versionados e
+  `git check-ignore .env` confirmou o segredo runtime fora do Git.**
+- Documentos atualizados: **`docs/operacao-servidor.md` cobre instalação limpa, imagem por digest,
+  LAN/firewall, health/logs, volume, backup/cutover, atualização, rollback, troca de senha e
+  recuperação; ADR 0014 formaliza lifecycle/migração fail-closed. README, especificação funcional,
+  ADRs 0008/0013, `.env-example` e Compose foram alinhados. O procedimento proíbe bind/SMB/caminho
+  Windows como fonte permanente, proíbe `down -v` e mantém segredos somente no runtime.**
+- Comandos/gates: **`docker compose --env-file .env config --quiet`; `docker compose build
+  --no-cache server`; `python scripts/server_artifact_gate.py --image
+  zeny-project-handler-server:dev --secret-env-file .env`; `python
+  scripts/stage10_operational_gate.py --image zeny-project-handler-server:dev --compose-file
+  compose.yaml`; testes dirigidos (15 + 8 aprovados); `python scripts/build_client.py --version
+  0.1.0` com gate do cliente aprovado (ZIP 53.351.248 bytes, SHA-256
+  `f389ce200cb91c1a7a47cf377066d51b567a44d610460f490103cbdc78459a2d`); e
+  `IniciarTestes.bat` final APROVADO em 2026-08-20 19:25 -03:00: 736 testes em 180,41 s, cobertura
+  86,25% > 85,01%, `pip check`, Ruff check/format, mypy em 295 arquivos, fonte do cliente magro e
+  complexidade (2.481 funções/métodos, nenhum rank E/F) aprovados. `git diff --check` aprovado.**
+- Observações/bloqueios: **concluída em 2026-08-20 19:28 -03:00. Um ensaio intermediário revelou
+  que o cleanup do próprio gate dependia do `.env` temporário já removido; o gate foi corrigido para
+  limpar por rótulo exato do projeto, os quatro conjuntos de fixtures temporárias foram removidos e
+  a matriz completa passou novamente sem resíduos. Nenhum bloqueio remanescente, nenhum commit
+  criado e Etapa 11 permanece PENDENTE/não iniciada.**
 
 ### Mensagem para um novo chat limpo do Codex
 

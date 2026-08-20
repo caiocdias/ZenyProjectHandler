@@ -870,7 +870,17 @@ def test_degraded_backup_requires_confirmation_records_omission_and_restores_pre
             restored_source = work.fontes_pdf.obter(project.documentos[0].id)
         assert restored_project == project
         assert restored_source is not None
-        assert restored_source.caminho_canonico == pdf_source.caminho_canonico
+        assert (
+            restored_source.caminho_canonico
+            == (
+                data
+                / "project-files"
+                / str(project.id)
+                / "pdfs"
+                / f"{project.documentos[0].id}.pdf"
+            ).resolve()
+        )
+        assert restored_source.caminho_canonico != pdf_source.caminho_canonico
         assert not restored_source.caminho_canonico.exists()
         assert [item.codigo for item in service.verificar_integridade(project.id).problemas] == [
             "PDF_AUSENTE"

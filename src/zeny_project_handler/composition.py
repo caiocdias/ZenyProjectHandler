@@ -39,9 +39,13 @@ class CoreServices:
         self.engine.dispose()
 
 
-def compose_core_services(settings: AppSettings) -> CoreServices:
+def compose_core_services(
+    settings: AppSettings,
+    *,
+    database_prepared: bool = False,
+) -> CoreServices:
     """Inicialize a fonte persistente e os serviços de coordenação sem carregar Qt."""
-    engine = initialize_local_storage(settings)
+    engine = initialize_local_storage(settings, database_prepared=database_prepared)
     try:
         catalog = ensure_initial_catalog(engine)
     except BaseException:
@@ -54,11 +58,16 @@ def compose_core_services(settings: AppSettings) -> CoreServices:
     )
 
 
-def initialize_local_storage(settings: AppSettings) -> Engine:
+def initialize_local_storage(
+    settings: AppSettings,
+    *,
+    database_prepared: bool = False,
+) -> Engine:
     """Migre e reconcilie o estado local antes de expor qualquer operação."""
     engine = create_sqlite_engine(settings.database_path)
     try:
-        upgrade_database(engine)
+        if not database_prepared:
+            upgrade_database(engine)
         compliance_service = ServicoRegistroRegrasConformidade(
             lambda: SqlAlchemyUnitOfWork(engine),
             diretorio_dados=settings.data_directory,

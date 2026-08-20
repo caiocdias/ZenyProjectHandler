@@ -73,6 +73,7 @@ def test_docker_build_is_multistage_non_root_with_ocr_and_no_build_secret() -> N
     normalized = dockerfile.casefold()
 
     assert len(re.findall(r"^FROM ", dockerfile, flags=re.MULTILINE)) >= 2
+    assert normalized.count("@sha256:") == 2
     assert "tesseract-ocr" in normalized
     assert "tesseract-ocr-por" in normalized
     assert re.search(r"^USER\s+(?!root\b)\S+", dockerfile, flags=re.MULTILINE)
@@ -84,6 +85,8 @@ def test_docker_build_is_multistage_non_root_with_ocr_and_no_build_secret() -> N
     assert "copy src ./src" not in normalized
     assert "src/zeny_project_handler_client" not in normalized
     assert "server/pyproject.toml" in normalized
+    assert "user 10001:10001" in normalized
+    assert "rm -rf /wheels requirements-server.lock" in normalized
 
 
 def test_server_distribution_manifest_excludes_client_package() -> None:
@@ -103,6 +106,12 @@ def test_compose_injects_secret_at_runtime_and_mounts_persistent_data() -> None:
     assert "target: runtime" in compose
     assert "healthcheck:" in compose
     assert "down -v" not in compose
+    assert "read_only: true" in compose
+    assert "no-new-privileges:true" in compose
+    assert "cap_drop:" in compose and "- ALL" in compose
+    assert "pids_limit:" in compose
+    assert "mem_limit:" in compose
+    assert "${ZENY_SERVER_BIND_ADDRESS:-127.0.0.1}" in compose
 
 
 def test_docker_context_and_server_lock_exclude_local_secret_and_qt() -> None:

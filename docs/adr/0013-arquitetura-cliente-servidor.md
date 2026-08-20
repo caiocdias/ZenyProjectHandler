@@ -2,9 +2,11 @@
 
 - Estado: aceita
 - Data: 2026-08-17
+- Atualizada: 2026-08-20
 - Escopo de vigência: arquitetura-alvo da migração descrita em
   `docs/roadmap-arquitetura-cliente-servidor.md`
-- Relações: preserva as garantias dos ADRs 0001–0012; substitui, na nova fronteira HTTP, a
+- Relações: preserva as garantias dos ADRs 0001–0012 e é detalhada pelo ADR 0014; substitui, na nova
+  fronteira HTTP, a
   referência a PDFs externos por caminho local descrita no ADR 0003 e a noção de ambiente local do
   ADR 0008. O monólito continua com o comportamento vigente até as etapas que migrarem cada fluxo.
 
@@ -134,6 +136,9 @@ O container será a fonte principal e única fonte de verdade para dados de neg�
 - nenhum cliente mantém SQLite de negócio ou cópia autoritativa de projeto;
 - backup, importação, restauração, migrações e recuperação acontecem no servidor;
 - o volume `/data` precisa sobreviver a restart e recreate do container;
+- o manifesto `/data/.zeny-volume.json` versiona o lifecycle sem conter segredo;
+- integridade e revisão são validadas antes de Alembic, que só executa quando necessário, e
+  novamente antes da prontidão;
 - o servidor deve ficar indisponível para negócio quando migração, integridade ou recuperação estiver
   em estado ambíguo;
 - indisponibilidade do servidor impede operações de negócio no cliente, embora preferências visuais
@@ -196,6 +201,7 @@ testes ou manter lógica protegida no artefato final do cliente.
 | DTO expor lógica ou detalhes internos | modelos próprios de transporte e gates de imports/artefatos |
 | cliente incompatível com servidor | negociação de versão/faixa da API antes de carregar dados |
 | perda do volume `/data` | documentação operacional, backup, restore, migrações e testes de lifecycle |
+| imagem antiga sobre schema futuro | rejeição fail-closed; rollback incompatível por backup em volume novo |
 | acesso administrativo à imagem | limitação documentada; distribuição restrita ao administrador do servidor |
 
 ## Alternativas rejeitadas

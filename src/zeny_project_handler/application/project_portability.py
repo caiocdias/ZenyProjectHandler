@@ -1087,6 +1087,7 @@ class ServicoPortabilidadeProjeto:
                             os.replace(self._managed_root, old_assets)
                         os.replace(staging, self._managed_root)
                         self._backup.restaurar_snapshot(restored_database, self._database_path)
+                        self._relocalizar_origens_backup()
                         self._compliance_registry.reconciliar_apos_restauracao(
                             preserved_registry,
                         )
@@ -1109,6 +1110,23 @@ class ServicoPortabilidadeProjeto:
             manifesto=extracted.manifesto,
             integridade_pacote=extracted.integridade,
         )
+
+    def _relocalizar_origens_backup(self) -> None:
+        """Faça toda referência restaurada pertencer ao volume atual do servidor."""
+        with self._unit_of_work() as work:
+            changed = False
+            for project in work.projetos.listar():
+                for document in project.documentos:
+                    source = work.fontes_pdf.obter(document.id)
+                    if source is None:
+                        continue
+                    managed_path = (
+                        self._managed_root / str(project.id) / "pdfs" / f"{document.id}.pdf"
+                    )
+                    work.fontes_pdf.salvar(replace(source, caminho_canonico=managed_path))
+                    changed = True
+            if changed:
+                work.commit()
 
     def _validated_backup_database_entry(
         self,

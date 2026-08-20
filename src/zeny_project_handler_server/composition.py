@@ -68,6 +68,7 @@ from zeny_project_handler_server.project_api import ProjectApiService
 from zeny_project_handler_server.review_api import ReviewApiService
 from zeny_project_handler_server.transfer_storage import ManagedTransferStorage
 from zeny_project_handler_server.viewer_api import ViewerApiService
+from zeny_project_handler_server.volume_lifecycle import prepare_server_volume
 
 SERVER_CAPABILITIES = (
     "authenticated-session",
@@ -88,6 +89,7 @@ SERVER_CAPABILITIES = (
     "remote-project-portability",
     "remote-backup-restore",
     "managed-transfer-downloads",
+    "managed-volume-v1",
 )
 
 
@@ -278,7 +280,9 @@ RuntimeFactory = Callable[[ServerSettings], ServerRuntimeProtocol]
 
 def compose_server_runtime(settings: ServerSettings) -> ServerRuntime:
     """Inicialize fonte persistente, coordenação e OCR sem importar o bootstrap Qt."""
-    core = compose_core_services(settings.core_settings())
+    core_settings = settings.core_settings()
+    prepare_server_volume(settings.data_directory, core_settings.database_path)
+    core = compose_core_services(core_settings, database_prepared=True)
     try:
         ocr = inspect_tesseract_runtime(settings.data_directory)
     except BaseException:
