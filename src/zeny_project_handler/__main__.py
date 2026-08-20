@@ -1,6 +1,6 @@
 """Ponto de entrada para ``python -m zeny_project_handler``."""
 
-from zeny_project_handler.bootstrap import run
+from zeny_project_handler_client.bootstrap import run
 
 
 def main() -> int:

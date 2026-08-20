@@ -22,7 +22,7 @@ from zeny_project_handler.ports.pdf import (
     PaginaPdfRenderizada,
     SessaoLeituraPdfPort,
 )
-from zeny_project_handler.ui.pdf_gateway import RemoteRaster, ViewerGatewayError
+from zeny_project_handler_client.ui.pdf_gateway import RemoteRaster, ViewerGatewayError
 from zeny_project_handler_contracts.base import (
     DocumentId,
     PageId,

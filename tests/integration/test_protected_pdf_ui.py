@@ -12,8 +12,8 @@ from pytestqt.qtbot import QtBot
 from tests.conftest import ApplicationFactory
 from tests.pdf_fixtures import create_golden_pdf, create_protected_pdf
 
-from zeny_project_handler.config import AppSettings
-from zeny_project_handler.ui.project_panel import ProjectPanelWidget
+from zeny_project_handler_client.config import ClientSettings
+from zeny_project_handler_client.ui.project_panel import ProjectPanelWidget
 from zeny_project_handler_contracts.enums import JobStatus
 
 pytestmark = pytest.mark.integration
@@ -51,7 +51,7 @@ def test_distinct_passwords_are_reused_in_session_and_never_leak_to_artifacts(
     }
     first = create_protected_pdf(tmp_path / "protegido-a.pdf", secrets["protegido-a.pdf"])
     second = create_protected_pdf(tmp_path / "protegido-b.pdf", secrets["protegido-b.pdf"])
-    settings = AppSettings(data_directory=tmp_path / "data", pdf_render_dpi=72)
+    settings = ClientSettings(data_directory=tmp_path / "data", pdf_render_dpi=72)
     application, window = application_factory([], settings=settings)
     qtbot.addWidget(window)
     window.show()
@@ -155,7 +155,7 @@ def test_wrong_password_limit_and_cancel_produce_partial_import_summary(
     regular = create_golden_pdf(tmp_path / "aberto.pdf")
     exhausted = create_protected_pdf(tmp_path / "sem-senha-valida.pdf", "correta")
     cancelled = create_protected_pdf(tmp_path / "cancelado.pdf", "outra")
-    settings = AppSettings(data_directory=tmp_path / "data", pdf_render_dpi=72)
+    settings = ClientSettings(data_directory=tmp_path / "data", pdf_render_dpi=72)
     _application, window = application_factory([], settings=settings)
     qtbot.addWidget(window)
     panel = window.project_panel

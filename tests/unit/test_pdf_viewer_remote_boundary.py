@@ -4,9 +4,9 @@ import ast
 from pathlib import Path
 
 VIEWER_MODULES = (
-    Path("src/zeny_project_handler/ui/pdf_gateway.py"),
-    Path("src/zeny_project_handler/ui/pdf_rendering.py"),
-    Path("src/zeny_project_handler/ui/pdf_viewer.py"),
+    Path("src/zeny_project_handler_client/ui/pdf_gateway.py"),
+    Path("src/zeny_project_handler_client/ui/pdf_rendering.py"),
+    Path("src/zeny_project_handler_client/ui/pdf_viewer.py"),
 )
 FORBIDDEN_MODULES = (
     "fitz",

@@ -33,7 +33,7 @@ from zeny_project_handler.adapters.persistence import (
     SqlAlchemyUnitOfWork,
     create_sqlite_engine,
 )
-from zeny_project_handler.config import AppSettings
+from zeny_project_handler.config import DATABASE_FILE_NAME
 from zeny_project_handler.domain.analysis import (
     DecisaoRevisao,
     EvidenciaDocumento,
@@ -54,7 +54,8 @@ from zeny_project_handler.domain.enums import (
 from zeny_project_handler.domain.project import Cabo, PontoRede, Poste
 from zeny_project_handler.domain.project_metadata import MetadadosProjeto
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
-from zeny_project_handler.ui.project_panel import ProjectPanelWidget
+from zeny_project_handler_client.config import ClientSettings
+from zeny_project_handler_client.ui.project_panel import ProjectPanelWidget
 
 pytestmark = [pytest.mark.integration, pytest.mark.e2e]
 
@@ -70,7 +71,7 @@ def test_span_rule_full_ui_cycle_survives_restart(
     monkeypatch: pytest.MonkeyPatch,
     application_factory: ApplicationFactory,
 ) -> None:
-    settings = AppSettings(data_directory=tmp_path / "data", pdf_render_dpi=72)
+    settings = ClientSettings(data_directory=tmp_path / "data", pdf_render_dpi=72)
     source = _span_pdf(tmp_path / "vao-sintetico.pdf")
     imported_rules = _span_rule_file(tmp_path / "regra-vao.json")
     disabled_rules = _span_rule_file(tmp_path / "regra-vao-inativa.json", enabled=False)
@@ -78,7 +79,12 @@ def test_span_rule_full_ui_cycle_survives_restart(
     qtbot.addWidget(window)
     window.show()
     project_id = _create_project_with_pdf(qtbot, monkeypatch, window.project_panel, source)
-    _persist_span_semantic_session(window.project_panel, project_id, settings.database_path)
+    server_database = (
+        settings.data_directory.parent
+        / f"{settings.data_directory.name}-server"
+        / DATABASE_FILE_NAME
+    )
+    _persist_span_semantic_session(window.project_panel, project_id, server_database)
 
     confirmations: list[str] = []
 

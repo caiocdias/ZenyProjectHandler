@@ -1,4 +1,4 @@
-"""Painel de cabeçalho, controles documentais, vãos e conformidade."""
+"""Painel cliente de cabeçalho, controles documentais, vãos e conformidade."""
 
 from __future__ import annotations
 

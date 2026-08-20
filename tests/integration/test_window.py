@@ -2,7 +2,6 @@ from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 from typing import cast
-from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
@@ -10,6 +9,7 @@ from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QSettings, Qt
 from PySide6.QtGui import QAction, QColor, QImage, QMouseEvent, QPalette
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
     QDockWidget,
     QFileDialog,
     QFrame,
@@ -28,20 +28,19 @@ from tests.remote_gateways import DirectDocumentationGateway, DirectProjectGatew
 from tests.viewer_gateway import LocalTestPdfViewerGateway
 
 import zeny_project_handler.adapters.pdf.pymupdf_reader as pdf_reader_module
-from zeny_project_handler import bootstrap
-from zeny_project_handler.adapters.analysis.tesseract_runtime import (
-    DiagnosticoRuntimeOcr,
-    RuntimeTesseract,
-)
 from zeny_project_handler.adapters.pdf import PyMuPdfReader
 from zeny_project_handler.application.operation_coordinator import TipoOperacao
-from zeny_project_handler.bootstrap import _EngineLifetime, run
-from zeny_project_handler.config import AppSettings
-from zeny_project_handler.domain.values import PontoNormalizado
-from zeny_project_handler.ui.main_window import _DockTitleBar
-from zeny_project_handler.ui.pdf_gateway import PdfViewerGateway
-from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
-from zeny_project_handler.ui.theme import THEME_SETTING_KEY, Tema
+from zeny_project_handler_client.bootstrap import (
+    ConnectionCancelledError,
+    create_application,
+    run,
+)
+from zeny_project_handler_client.config import ClientSettings
+from zeny_project_handler_client.presentation import NormalizedPoint
+from zeny_project_handler_client.ui.main_window import _DockTitleBar
+from zeny_project_handler_client.ui.pdf_gateway import PdfViewerGateway
+from zeny_project_handler_client.ui.pdf_viewer import PdfViewerWidget
+from zeny_project_handler_client.ui.theme import THEME_SETTING_KEY, Tema
 from zeny_project_handler_contracts.base import CalloutId, DocumentId, FindingId, PageId
 from zeny_project_handler_contracts.common import (
     EvidenceNavigationDto,
@@ -49,6 +48,8 @@ from zeny_project_handler_contracts.common import (
     NormalizedPointDto,
 )
 from zeny_project_handler_contracts.compliance import ComplianceCalloutDto
+from zeny_project_handler_contracts.enums import OcrStatus
+from zeny_project_handler_contracts.session import OcrDiagnosticDto
 
 
 def _pdf_viewer(gateway: PdfViewerGateway | None = None) -> PdfViewerWidget:
@@ -66,7 +67,7 @@ def _pdf_viewer(gateway: PdfViewerGateway | None = None) -> PdfViewerWidget:
 def test_main_window_smoke(
     qtbot: QtBot, tmp_path: Path, application_factory: ApplicationFactory
 ) -> None:
-    settings = AppSettings(data_directory=tmp_path)
+    settings = ClientSettings(data_directory=tmp_path)
 
     application, window = application_factory([], settings=settings)
     qtbot.addWidget(window)
@@ -125,7 +126,7 @@ def test_main_window_smoke(
     assert not hasattr(window.project_panel, "_service")
     assert isinstance(window.project_panel._gateway, DirectProjectGateway)
     assert window.statusBar().currentMessage() == "Pronto"
-    assert settings.database_path.is_file()
+    assert not tuple(settings.data_directory.rglob("*.sqlite3"))
 
 
 @pytest.mark.integration
@@ -134,7 +135,7 @@ def test_theme_menu_switches_immediately_and_is_restored_before_window_is_shown(
     tmp_path: Path,
     application_factory: ApplicationFactory,
 ) -> None:
-    settings = AppSettings(data_directory=tmp_path / "remembered-theme")
+    settings = ClientSettings(data_directory=tmp_path / "remembered-theme")
     application, window = application_factory([], settings=settings)
     qtbot.addWidget(window)
     light_action = window.findChild(QAction, "lightThemeAction")
@@ -174,7 +175,7 @@ def test_invalid_saved_theme_uses_light_without_overwriting_the_ini(
     tmp_path: Path,
     application_factory: ApplicationFactory,
 ) -> None:
-    settings = AppSettings(data_directory=tmp_path / "invalid-theme")
+    settings = ClientSettings(data_directory=tmp_path / "invalid-theme")
     settings.data_directory.mkdir(parents=True)
     ui_state_path = settings.data_directory / "ui-state.ini"
     ui_settings = QSettings(str(ui_state_path), QSettings.Format.IniFormat)
@@ -201,7 +202,7 @@ def test_theme_switch_preserves_project_pdf_callout_zoom_selection_and_wrap_togg
     tmp_path: Path,
     application_factory: ApplicationFactory,
 ) -> None:
-    settings = AppSettings(data_directory=tmp_path / "theme-state")
+    settings = ClientSettings(data_directory=tmp_path / "theme-state")
     application, window = application_factory([], settings=settings)
     qtbot.addWidget(window)
     window.show()
@@ -327,7 +328,7 @@ def test_service_note_is_plain_numeric_field_with_predictable_clipboard_shortcut
 ) -> None:
     _application, window = application_factory(
         [],
-        settings=AppSettings(data_directory=tmp_path / "service-note-clipboard"),
+        settings=ClientSettings(data_directory=tmp_path / "service-note-clipboard"),
     )
     qtbot.addWidget(window)
     window.show()
@@ -379,7 +380,7 @@ def test_restore_signal_refreshes_the_cached_compliance_registry(
     tmp_path: Path,
     application_factory: ApplicationFactory,
 ) -> None:
-    settings = AppSettings(data_directory=tmp_path / "restored-rules-window")
+    settings = ClientSettings(data_directory=tmp_path / "restored-rules-window")
     _application, window = application_factory([], settings=settings)
     qtbot.addWidget(window)
     documentation = window.documentation_panel
@@ -421,20 +422,18 @@ def test_startup_exposes_actionable_portuguese_ocr_remediation(
     monkeypatch: pytest.MonkeyPatch,
     application_factory: ApplicationFactory,
 ) -> None:
-    diagnostic = DiagnosticoRuntimeOcr(
-        codigo="ocr.portugues_ausente",
-        mensagem="tesseract --list-langs não confirmou por.",
-        remediacao="Execute setup.bat com acesso à rede e tente novamente.",
+    diagnostic = OcrDiagnosticDto(
+        status=OcrStatus.UNAVAILABLE,
+        engine="Tesseract",
+        language="por",
+        message="OCR em português indisponível no servidor; contate o administrador.",
     )
-    monkeypatch.setattr(
-        bootstrap,
-        "inspect_tesseract_runtime",
-        lambda _data_directory: RuntimeTesseract(
-            executavel=None,
-            diretorio_tessdata=None,
-            diagnostico=diagnostic,
-        ),
-    )
+    original_session = DirectProjectGateway.session
+
+    def session_with_diagnostic(self: DirectProjectGateway):  # type: ignore[no-untyped-def]
+        return original_session(self).model_copy(update={"ocr": diagnostic})
+
+    monkeypatch.setattr(DirectProjectGateway, "session", session_with_diagnostic)
     shown_messages: list[str] = []
     monkeypatch.setattr(
         QMessageBox,
@@ -444,7 +443,7 @@ def test_startup_exposes_actionable_portuguese_ocr_remediation(
 
     _application, window = application_factory(
         [],
-        settings=AppSettings(data_directory=tmp_path / "startup-diagnostic"),
+        settings=ClientSettings(data_directory=tmp_path / "startup-diagnostic"),
     )
     qtbot.addWidget(window)
     window.show()
@@ -452,9 +451,9 @@ def test_startup_exposes_actionable_portuguese_ocr_remediation(
 
     assert button is not None
     assert "como corrigir" in button.text()
-    assert "setup.bat" in button.toolTip()
+    assert "administrador" in button.toolTip()
     qtbot.mouseClick(button, Qt.MouseButton.LeftButton)  # type: ignore[no-untyped-call]
-    assert shown_messages == [diagnostic.texto_ui]
+    assert shown_messages == [diagnostic.message]
 
 
 @pytest.mark.integration
@@ -463,7 +462,7 @@ def test_bootstrapped_analysis_worker_refuses_restore_conflict_before_mutation(
     tmp_path: Path,
     application_factory: ApplicationFactory,
 ) -> None:
-    settings = AppSettings(data_directory=tmp_path / "coordinated-window")
+    settings = ClientSettings(data_directory=tmp_path / "coordinated-window")
     _application, window = application_factory([], settings=settings)
     qtbot.addWidget(window)
     panel = window.project_panel
@@ -505,7 +504,7 @@ def test_floating_panel_has_window_controls_and_can_be_reopened(
     tmp_path: Path,
     application_factory: ApplicationFactory,
 ) -> None:
-    settings = AppSettings(data_directory=tmp_path)
+    settings = ClientSettings(data_directory=tmp_path)
     _application, window = application_factory([], settings=settings)
     qtbot.addWidget(window)
     window.show()
@@ -616,7 +615,7 @@ def test_floating_panel_has_window_controls_and_can_be_reopened(
 def test_floating_panel_screen_edge_snap_geometry(
     qtbot: QtBot, tmp_path: Path, application_factory: ApplicationFactory
 ) -> None:
-    settings = AppSettings(data_directory=tmp_path)
+    settings = ClientSettings(data_directory=tmp_path)
     _application, window = application_factory([], settings=settings)
     qtbot.addWidget(window)
     review_dock = window.findChild(QDockWidget, "humanReviewDock")
@@ -647,7 +646,7 @@ def test_dock_title_bar_propagates_drag_events_to_qdockwidget(
     tmp_path: Path,
     application_factory: ApplicationFactory,
 ) -> None:
-    settings = AppSettings(data_directory=tmp_path)
+    settings = ClientSettings(data_directory=tmp_path)
     _application, window = application_factory([], settings=settings)
     qtbot.addWidget(window)
     review_dock = window.findChild(QDockWidget, "humanReviewDock")
@@ -694,7 +693,7 @@ def test_floating_panel_has_consistent_docking_fallback(
     tmp_path: Path,
     application_factory: ApplicationFactory,
 ) -> None:
-    settings = AppSettings(data_directory=tmp_path)
+    settings = ClientSettings(data_directory=tmp_path)
     _application, window = application_factory([], settings=settings)
     qtbot.addWidget(window)
     window.resize(1200, 800)
@@ -719,40 +718,34 @@ def test_floating_panel_has_consistent_docking_fallback(
 
 
 @pytest.mark.integration
-def test_application_smoke_mode_opens_and_closes(tmp_path: Path) -> None:
-    settings = AppSettings(data_directory=tmp_path)
+def test_application_artifact_self_test_needs_no_server_or_local_data(tmp_path: Path) -> None:
+    data_directory = tmp_path / "client-data"
+    settings = ClientSettings(data_directory=data_directory)
 
-    exit_code = run(["zeny-project-handler", "--smoke-test"], settings=settings)
+    exit_code = run(["zeny-project-handler", "--artifact-self-test"], settings=settings)
 
     assert exit_code == 0
-    moved_database = tmp_path / "closed.sqlite3"
-    settings.database_path.replace(moved_database)
-    moved_database.unlink()
-    assert not moved_database.exists()
+    assert not data_directory.exists()
 
 
 @pytest.mark.integration
-def test_engine_lifetime_disposes_once_and_bootstrap_failure_disposes(
+def test_cancelled_connection_does_not_create_business_data(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    engine = Mock()
-    lifetime = _EngineLifetime(engine)
+    class CancelledDialog(QDialog):
+        def exec(self) -> int:
+            return int(QDialog.DialogCode.Rejected)
 
-    lifetime.dispose()
-    lifetime.dispose(object())
+    with pytest.raises(ConnectionCancelledError):
+        create_application(
+            [],
+            settings=ClientSettings(data_directory=tmp_path),
+            dialog_factory=lambda _url, _attempt, _parent: CancelledDialog(),
+        )
 
-    engine.dispose.assert_called_once_with()
-    failed_engine = Mock()
-    monkeypatch.setattr(bootstrap, "initialize_local_storage", lambda _settings: failed_engine)
-
-    def fail_composition(*_args: object) -> None:
-        raise RuntimeError("composição interrompida")
-
-    monkeypatch.setattr(bootstrap, "_compose_initialized_application", fail_composition)
-    with pytest.raises(RuntimeError, match="interrompida"):
-        bootstrap._compose_application([], AppSettings(data_directory=tmp_path))
-    failed_engine.dispose.assert_called_once_with()
+    assert not tuple(tmp_path.rglob("*.sqlite3"))
+    assert not (tmp_path / "cache").exists()
+    assert not (tmp_path / "project-files").exists()
 
 
 @pytest.mark.integration
@@ -772,8 +765,8 @@ def test_pdf_viewer_navigation_zoom_rotation_and_overlays(qtbot: QtBot, tmp_path
     viewer.definir_sobreposicoes(
         (
             (
-                PontoNormalizado(Decimal("0.1"), Decimal("0.1")),
-                PontoNormalizado(Decimal("0.5"), Decimal("0.5")),
+                NormalizedPoint(Decimal("0.1"), Decimal("0.1")),
+                NormalizedPoint(Decimal("0.5"), Decimal("0.5")),
             ),
         )
     )
@@ -879,7 +872,7 @@ def test_main_window_stops_pdf_render_queue_when_closing_central_viewer(
 ) -> None:
     _application, window = application_factory(
         [],
-        settings=AppSettings(data_directory=tmp_path / "close-main-viewer"),
+        settings=ClientSettings(data_directory=tmp_path / "close-main-viewer"),
     )
     qtbot.addWidget(window)
     window.show()

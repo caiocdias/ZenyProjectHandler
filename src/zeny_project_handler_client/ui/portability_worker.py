@@ -1,4 +1,4 @@
-"""Worker Qt de upload, polling e download da portabilidade remota."""
+"""Worker Qt cliente de upload, polling e download da portabilidade remota."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ from uuid import UUID
 
 from PySide6.QtCore import QObject, Signal, Slot
 
-from zeny_project_handler.logging_config import operation_logger
-from zeny_project_handler.ui.portability_gateway import (
+from zeny_project_handler_client.logging_config import operation_logger
+from zeny_project_handler_client.ui.portability_gateway import (
     PortabilityGateway,
     PortabilityGatewayError,
     PortabilityTransferCancelledError,

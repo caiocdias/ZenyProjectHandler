@@ -1,4 +1,4 @@
-"""Painel Projeto orientado exclusivamente ao gateway HTTP e DTOs de transporte."""
+"""Painel Projeto cliente orientado exclusivamente ao gateway HTTP e DTOs."""
 
 from __future__ import annotations
 
@@ -695,8 +695,17 @@ class ProjectPanelWidget(QWidget):
             return True
         finished = thread.wait(max(0, timeout_ms))
         if finished:
+            self._global_poll_thread = None
             self._global_poll_worker = None
         return finished
+
+    def restart_polling(self) -> None:
+        """Retome a observação global usando o gateway reconectável já atualizado."""
+        thread = self._global_poll_thread
+        if thread is not None and thread.isRunning():
+            return
+        self._global_poll_stop = Event()
+        self._start_global_polling()
 
     def set_global_operation(self, operation: object | None) -> None:
         self._external_operation = operation

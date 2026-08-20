@@ -53,8 +53,8 @@ from zeny_project_handler.domain.values import (
     GeometriaDocumento,
     PontoNormalizado,
 )
-from zeny_project_handler.ui.documentation_panel import DocumentationPanelWidget
-from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
+from zeny_project_handler_client.ui.documentation_panel import DocumentationPanelWidget
+from zeny_project_handler_client.ui.pdf_viewer import PdfViewerWidget
 from zeny_project_handler_contracts.enums import ComplianceStatus
 
 

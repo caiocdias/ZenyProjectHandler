@@ -1,4 +1,4 @@
-"""Painel Qt de portabilidade remota sem ZIP, SQLite ou regras locais."""
+"""Painel Qt cliente de portabilidade remota sem ZIP, SQLite ou regras locais."""
 
 from __future__ import annotations
 
@@ -20,8 +20,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from zeny_project_handler.logging_config import operation_logger
-from zeny_project_handler.ui.portability_gateway import PortabilityGateway
+from zeny_project_handler_client.logging_config import operation_logger
+from zeny_project_handler_client.ui.portability_gateway import PortabilityGateway
 from zeny_project_handler_contracts.backup import (
     BackupPreflightResponse,
     BackupRestorePreflightResponse,

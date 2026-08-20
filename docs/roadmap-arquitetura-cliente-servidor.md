@@ -3,7 +3,7 @@
 - Estado geral: **PLANEJADO**
 - Data do planejamento: **2026-08-17**
 - Responsável pelo planejamento: **Codex**
-- Próxima etapa liberada: **Etapa 9** (**PENDENTE**; não iniciada neste chat)
+- Próxima etapa liberada: **Etapa 10** (**PENDENTE**; não iniciada)
 - Regra de execução: uma etapa só pode começar quando todas as suas dependências estiverem
   marcadas como **CONCLUÍDA**.
 
@@ -1046,7 +1046,7 @@ da API na conexão e recusar, com mensagem clara, uma combinação incompatível
 
 ## Etapa 9 — Bootstrap, autenticação e artefato do cliente magro
 
-- Estado: **PENDENTE**
+- Estado: **CONCLUÍDA**
 - Dependências: Etapa 8 **CONCLUÍDA**
 - Entrega principal: cliente independente, incapaz de executar a lógica protegida localmente.
 
@@ -1086,12 +1086,45 @@ da API na conexão e recusar, com mensagem clara, uma combinação incompatível
 
 ### Evidências
 
-- Início/data/agente: _preencher_
-- Caminho/hash/tamanho do artefato cliente: _preencher_
-- Manifesto/SBOM e inspeção negativa: _preencher_
-- Testes 401/reconexão/ausência de dados locais: _preencher_
-- Comandos/gates: _preencher_
-- Observações/bloqueios: _preencher_
+- Início/data/agente: **2026-08-20 17:10 -03:00 — Codex; roadmap, README, especificação funcional
+  e ADRs 0001, 0002, 0003, 0004, 0008, 0012 e 0013 lidos integralmente; Etapa 8 confirmada como
+  CONCLUÍDA e working tree inicial limpo. Escopo limitado ao bootstrap/autenticação/reconexão do
+  cliente, separação física e de dependências, launchers, wheel/bundle Windows portátil,
+  manifesto/SBOM, inspeção negativa e gates da Etapa 9. Etapa 10 permanece PENDENTE e não será
+  iniciada.**
+- Caminho/hash/tamanho do artefato cliente:
+  **`dist/client/0.1.0/ZenyProjectHandler-Client-0.1.0-win-x64.zip`; 53.349.178 bytes; SHA-256
+  `37d3be0b156d9767ec8130058bda7d535d34ec66a7b4ab9568e22e4a7b4cf3d9`. Wheel interno
+  `dist/client/0.1.0/wheel/zeny_project_handler_client-0.1.0-py3-none-any.whl`; 467.522
+  bytes; SHA-256 `d3022bdb422108ef3561da45d63f549b6f17474898df427787758bbefbad8133`.**
+- Manifesto/SBOM e inspeção negativa: **`dist/client/0.1.0/client-manifest.json` registra
+  plataforma Windows x64, Python embutido 3.13.14, nomes, tamanhos e hashes; SBOM CycloneDX 1.5 em
+  `dist/client/0.1.0/client-sbom.json`, 1.116 bytes, SHA-256
+  `819e636ba3833f06f7d3849abd254d86156c5ba861cdfc147ff3485e36930359`. O gate abriu wheel,
+  ZIP, manifesto, SBOM, hashes internos e o arquivo PyInstaller recursivamente e foi APROVADO sem
+  domínio, application, adapters, ports, servidor, SQLAlchemy, Alembic, PyMuPDF, Tesseract, seeds
+  ou SQLite. O executável extraído, 5.689.430 bytes, passou `--artifact-self-test` com `PATH`
+  limitado a `C:\Windows\System32`, sem Python do host e sem criar a pasta ZenyProjectHandler,
+  SQLite, cache de análise ou pacotes.**
+- Testes 401/reconexão/ausência de dados locais: **5 testes dirigidos aprovados em 8,63 s:
+  senha errada limpa o campo e permite nova tentativa; cliente ignora `ZENY_SERVER_PASSWORD` e não
+  oferece persistência; restart real do Uvicorn bloqueia os painéis e reconecta na mesma janela;
+  somente URL/preferências ficam no cliente; cancelamento/autoteste não criam dados de negócio.
+  A suíte integral também aprovou esses cenários.**
+- Comandos/gates: **`IniciarTestes.bat` final APROVADO: `pip check`, Ruff lint/formatação, Mypy
+  estrito em 292 arquivos, gate de fonte, 729 testes em 210,89 s, cobertura 86,23% (mínimo 85,01%)
+  e 2.468 funções/métodos sem rank E/F. `scripts/build_client.py --version 0.1.0` e
+  `scripts/client_artifact_gate.py` aprovados. `docker compose config --quiet` e
+  `docker compose build --no-cache server` aprovados; `scripts/server_artifact_gate.py` aprovou a
+  imagem `zeny-project-handler-server:dev`, ID/digest
+  `sha256:89317123f5e6498ac4c904369b66a52ed163fb496f23364734b9e5933c100ae1`, 172.647.102
+  bytes, usuário `zeny`, sem Qt ou pacote cliente. `git diff --check` aprovado.**
+- Observações/bloqueios: **concluída em 2026-08-20 18:19 -03:00. O primeiro build foi
+  intencionalmente reprovado pelo gate porque o diretório de assets incluía `__init__.py`/bytecode;
+  a spec passou a incluir somente PNG/ICO e o rebuild foi aprovado. A primeira suíte encontrou um
+  fixture que capturava apenas o logger do core; a captura foi adaptada aos loggers separados e a
+  repetição integral passou. Nenhum bloqueio remanescente, nenhum commit criado e Etapa 10
+  permanece PENDENTE/não iniciada.**
 
 ### Mensagem para um novo chat limpo do Codex
 

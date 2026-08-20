@@ -13,16 +13,16 @@ from PySide6.QtWidgets import QFileDialog, QMessageBox, QProgressBar, QPushButto
 from pytestqt.qtbot import QtBot
 from tests.conftest import ApplicationFactory
 
-import zeny_project_handler.ui.main_window as main_window_module
-from zeny_project_handler.config import AppSettings
-from zeny_project_handler.ui.portability_gateway import (
+import zeny_project_handler_client.ui.main_window as main_window_module
+from zeny_project_handler_client.config import ClientSettings
+from zeny_project_handler_client.ui.portability_gateway import (
     CancelCallback,
     PortabilityGatewayError,
     PortabilityTransferCancelledError,
     ProgressCallback,
 )
-from zeny_project_handler.ui.portability_panel import PortabilityPanelWidget
-from zeny_project_handler.ui.portability_worker import (
+from zeny_project_handler_client.ui.portability_panel import PortabilityPanelWidget
+from zeny_project_handler_client.ui.portability_worker import (
     PortabilityCommand,
     PortabilityOperation,
     PortabilityWorker,
@@ -542,7 +542,7 @@ def test_window_disables_incompatible_panels_and_close_wait_is_bounded(
     application_factory: ApplicationFactory,
 ) -> None:
     _application, window = application_factory(
-        [], settings=AppSettings(data_directory=tmp_path / "window")
+        [], settings=ClientSettings(data_directory=tmp_path / "window")
     )
     qtbot.addWidget(window)
     window.show()

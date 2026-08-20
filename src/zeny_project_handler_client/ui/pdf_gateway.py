@@ -1,9 +1,8 @@
-"""Gateway HTTP do visualizador; não abre nem inspeciona conteúdo PDF local."""
+"""Gateway HTTP do visualizador cliente; não abre nem inspeciona conteúdo PDF local."""
 
 from __future__ import annotations
 
 import http.client
-import os
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -28,9 +27,6 @@ from zeny_project_handler_contracts.viewer import (
     ViewerProjectResponse,
 )
 
-CLIENT_SERVER_URL_ENVIRONMENT_VARIABLE = "ZENY_CLIENT_SERVER_URL"
-SERVER_PASSWORD_ENVIRONMENT_VARIABLE = "ZENY_SERVER_PASSWORD"
-DEFAULT_CLIENT_SERVER_URL = "http://127.0.0.1:8000"
 _CHUNK_SIZE = 1024 * 1024
 _READ_RETRIES = 1
 ModelT = TypeVar("ModelT", bound=BaseModel)
@@ -146,17 +142,6 @@ class UnavailablePdfViewerGateway:
         self._fail()
 
 
-def configured_pdf_viewer_gateway(
-    environment: Mapping[str, str] | None = None,
-) -> PdfViewerGateway:
-    values = os.environ if environment is None else environment
-    if not values.get(SERVER_PASSWORD_ENVIRONMENT_VARIABLE, ""):
-        return UnavailablePdfViewerGateway(
-            "Configure a conexão autenticada com o servidor para usar o visualizador remoto."
-        )
-    return HttpPdfViewerGateway.from_environment(values)
-
-
 @dataclass(slots=True)
 class HttpPdfViewerGateway:
     base_url: str
@@ -181,20 +166,6 @@ class HttpPdfViewerGateway:
         self._host = parsed.hostname
         self._port = parsed.port or (443 if parsed.scheme == "https" else 80)
         self._base_path = parsed.path.rstrip("/")
-
-    @classmethod
-    def from_environment(
-        cls,
-        environment: Mapping[str, str] | None = None,
-    ) -> HttpPdfViewerGateway:
-        values = os.environ if environment is None else environment
-        return cls(
-            base_url=values.get(
-                CLIENT_SERVER_URL_ENVIRONMENT_VARIABLE,
-                DEFAULT_CLIENT_SERVER_URL,
-            ),
-            password=values.get(SERVER_PASSWORD_ENVIRONMENT_VARIABLE, ""),
-        )
 
     def create_session(
         self,

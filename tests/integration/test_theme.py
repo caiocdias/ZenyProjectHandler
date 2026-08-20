@@ -5,7 +5,7 @@ from PySide6.QtGui import QColor, QFont, QPalette
 from PySide6.QtWidgets import QApplication, QComboBox, QLineEdit, QPushButton, QToolButton
 from pytestqt.qtbot import QtBot
 
-from zeny_project_handler.ui.theme import Tema, aplicar_tema
+from zeny_project_handler_client.ui.theme import Tema, aplicar_tema
 
 pytestmark = pytest.mark.integration
 

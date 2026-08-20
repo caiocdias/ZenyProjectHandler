@@ -1,4 +1,4 @@
-"""Gateway HTTP do painel de portabilidade; contém somente transporte e arquivos locais."""
+"""Gateway cliente de portabilidade; contém somente transporte e arquivos locais."""
 
 from __future__ import annotations
 
@@ -14,12 +14,7 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel
 
-from zeny_project_handler._atomic_files import sibling_temporary_file
-from zeny_project_handler.ui.pdf_gateway import (
-    CLIENT_SERVER_URL_ENVIRONMENT_VARIABLE,
-    DEFAULT_CLIENT_SERVER_URL,
-    SERVER_PASSWORD_ENVIRONMENT_VARIABLE,
-)
+from zeny_project_handler_client.atomic_files import sibling_temporary_file
 from zeny_project_handler_contracts import API_V1_PREFIX
 from zeny_project_handler_contracts.backup import (
     BackupPreflightResponse,
@@ -151,17 +146,6 @@ class UnavailablePortabilityGateway:
         self._fail()
 
 
-def configured_portability_gateway(
-    environment: Mapping[str, str] | None = None,
-) -> PortabilityGateway:
-    values = os.environ if environment is None else environment
-    if not values.get(SERVER_PASSWORD_ENVIRONMENT_VARIABLE, ""):
-        return UnavailablePortabilityGateway(
-            "Configure a conexão autenticada com o servidor para usar portabilidade e backup."
-        )
-    return HttpPortabilityGateway.from_environment(values)
-
-
 @dataclass(slots=True)
 class HttpPortabilityGateway:
     base_url: str
@@ -186,20 +170,6 @@ class HttpPortabilityGateway:
         self._host = parsed.hostname
         self._port = parsed.port or (443 if parsed.scheme == "https" else 80)
         self._base_path = parsed.path.rstrip("/")
-
-    @classmethod
-    def from_environment(
-        cls,
-        environment: Mapping[str, str] | None = None,
-    ) -> HttpPortabilityGateway:
-        values = os.environ if environment is None else environment
-        return cls(
-            base_url=values.get(
-                CLIENT_SERVER_URL_ENVIRONMENT_VARIABLE,
-                DEFAULT_CLIENT_SERVER_URL,
-            ),
-            password=values.get(SERVER_PASSWORD_ENVIRONMENT_VARIABLE, ""),
-        )
 
     def list_projects(
         self,

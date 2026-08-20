@@ -6,10 +6,10 @@ seu histórico ficam nos [ADRs](adr); detalhes exclusivos do motor de conformida
 
 ## Escopo do produto
 
-O aplicativo desktop mantém projetos de expansão da rede de distribuição, importa referências a
-folhas PDF, extrai e interpreta evidências do desenho, permite revisão humana e avalia regras de
-conformidade. Todas as conclusões automáticas conservam a versão do método, a origem e a evidência
-que as sustentam.
+O produto combina um cliente Windows magro com um servidor protegido. O servidor mantém projetos
+de expansão da rede de distribuição, recebe folhas PDF, extrai e interpreta evidências do desenho e
+avalia regras de conformidade; o cliente apresenta os resultados e permite revisão humana. Todas as
+conclusões automáticas conservam a versão do método, a origem e a evidência que as sustentam.
 
 Estado versionado relevante:
 
@@ -110,7 +110,7 @@ não são filtrados como comentários.
 
 ## OCR
 
-O Tesseract é um adaptador opcional e local. Sua assinatura inclui a versão real do executável,
+O Tesseract é um adaptador opcional do servidor. Sua assinatura inclui a versão real do executável,
 idiomas selecionados, hashes dos arquivos `traineddata`, perfis, pré-processamento e parâmetros de
 reconhecimento. Instalações equivalentes em caminhos diferentes produzem a mesma identidade.
 
@@ -237,9 +237,10 @@ antes de liberar o registro restaurado.
 
 ## Persistência e recuperação
 
-O banco SQLite fica, por padrão, em `%LOCALAPPDATA%\ZenyProjectHandler`. Alembic aplica as migrações
-na inicialização. Entidades de domínio são serializadas por repositórios; modelos SQLAlchemy não são
-usados como domínio.
+O banco SQLite fica em `ZENY_SERVER_DATA_DIR` (normalmente o volume `/data`). Alembic aplica as
+migrações na inicialização do servidor. Entidades de domínio são serializadas por repositórios;
+modelos SQLAlchemy não são usados como domínio. O diretório local do cliente contém somente
+preferências visuais e logs, nunca banco, cache de análise ou arquivos de projeto gerenciados.
 
 Snapshots de análise, interpretação, decisões, conformidade e revisões de regras preservam
 identidade e versão. Dados grandes e pesquisáveis possuem colunas próprias; os agregados completos
@@ -285,6 +286,10 @@ Os painéis **Projeto**, **Resultados**, **Documentação e conformidade** e
 **Importar, exportar e backup** podem ser movidos, desacoplados e restaurados. Tema, geometria e
 estado dos docks ficam em `ui-state.ini` na pasta de dados.
 
+Antes de construir os painéis de dados, o cliente exige URL e senha e valida a rota de sessão. A URL
+pode ser persistida; a senha fica somente em memória e não é obtida de `.env`. Uma desconexão ou
+resposta `401` bloqueia ações remotas e permite reconectar na mesma janela.
+
 ## Exemplos e qualidade
 
 `examples/` é uma bancada local dinâmica. Tudo abaixo dela, exceto seu README, é ignorado pelo Git.
@@ -298,11 +303,12 @@ investigação, mas não substituem fonte normativa.
 
 ## Limites atuais
 
-- Não há instalador para execução sem Python nem artefato de distribuição assinado.
+- O cliente possui ZIP portátil Windows x64 autocontido, mas ainda não possui instalador nem
+  assinatura de código.
 - Reconhecimento visual pode permanecer ambíguo; a interface conserva o resultado para revisão em
   vez de forçar uma classificação.
 - Cálculos elétricos e mecânicos completos e verificações dependentes de fontes restritas não são
   executados sem todos os fatos e referências necessários.
 - Carimbo, rótulo ou campo de assinatura não comprova autoria ou autenticidade.
-- Não existe integração ativa com serviços externos de OCR, nuvem ou IA; o pipeline funciona
-  localmente com PyMuPDF e Tesseract.
+- Não existe integração ativa com serviços externos de OCR, nuvem ou IA; o pipeline funciona no
+  servidor com PyMuPDF e Tesseract.

@@ -1,9 +1,8 @@
-"""Gateway HTTP/DTO do painel Projeto, sem dependência da lógica protegida."""
+"""Gateway HTTP/DTO cliente do painel Projeto, sem lógica protegida."""
 
 from __future__ import annotations
 
 import http.client
-import os
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -13,11 +12,6 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel
 
-from zeny_project_handler.ui.pdf_gateway import (
-    CLIENT_SERVER_URL_ENVIRONMENT_VARIABLE,
-    DEFAULT_CLIENT_SERVER_URL,
-    SERVER_PASSWORD_ENVIRONMENT_VARIABLE,
-)
 from zeny_project_handler_contracts import API_V1_PREFIX
 from zeny_project_handler_contracts.base import PageId
 from zeny_project_handler_contracts.documents import (
@@ -134,17 +128,6 @@ class UnavailableProjectGateway:
         self._fail()
 
 
-def configured_project_gateway(
-    environment: Mapping[str, str] | None = None,
-) -> ProjectGateway:
-    values = os.environ if environment is None else environment
-    if not values.get(SERVER_PASSWORD_ENVIRONMENT_VARIABLE, ""):
-        return UnavailableProjectGateway(
-            "Configure a conexão autenticada com o servidor para usar o painel Projeto."
-        )
-    return HttpProjectGateway.from_environment(values)
-
-
 @dataclass(slots=True)
 class HttpProjectGateway:
     base_url: str
@@ -169,20 +152,6 @@ class HttpProjectGateway:
         self._host = parsed.hostname
         self._port = parsed.port or (443 if parsed.scheme == "https" else 80)
         self._base_path = parsed.path.rstrip("/")
-
-    @classmethod
-    def from_environment(
-        cls,
-        environment: Mapping[str, str] | None = None,
-    ) -> HttpProjectGateway:
-        values = os.environ if environment is None else environment
-        return cls(
-            base_url=values.get(
-                CLIENT_SERVER_URL_ENVIRONMENT_VARIABLE,
-                DEFAULT_CLIENT_SERVER_URL,
-            ),
-            password=values.get(SERVER_PASSWORD_ENVIRONMENT_VARIABLE, ""),
-        )
 
     def session(self) -> SessionCapabilitiesResponse:
         return self._json_model(

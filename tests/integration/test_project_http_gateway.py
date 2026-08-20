@@ -16,7 +16,7 @@ from uvicorn import Config, Server
 
 from zeny_project_handler.application.errors import FluxoMvpCanceladoError
 from zeny_project_handler.application.mvp_workflow import ResultadoFluxoMvp
-from zeny_project_handler.ui.project_gateway import HttpProjectGateway, ProjectGatewayError
+from zeny_project_handler_client.ui.project_gateway import HttpProjectGateway, ProjectGatewayError
 from zeny_project_handler_contracts.enums import (
     AnalysisExecutionState,
     JobStatus,

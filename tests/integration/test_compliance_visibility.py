@@ -39,9 +39,9 @@ from zeny_project_handler.domain.compliance import (
 from zeny_project_handler.domain.documents import DocumentoProjeto, PaginaDocumento
 from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler.domain.values import CaixaPagina, GeometriaDocumento, PontoNormalizado
-from zeny_project_handler.ui.documentation_gateway import DocumentationGateway
-from zeny_project_handler.ui.documentation_panel import DocumentationPanelWidget
-from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
+from zeny_project_handler_client.ui.documentation_gateway import DocumentationGateway
+from zeny_project_handler_client.ui.documentation_panel import DocumentationPanelWidget
+from zeny_project_handler_client.ui.pdf_viewer import PdfViewerWidget
 from zeny_project_handler_contracts.base import ComplianceExecutionId, ProjectId
 from zeny_project_handler_contracts.common import PageMetadataDto
 from zeny_project_handler_contracts.compliance import (

@@ -1,9 +1,8 @@
-"""Gateway HTTP/DTO do painel Resultados, sem lógica protegida."""
+"""Gateway HTTP/DTO cliente do painel Resultados, sem lógica protegida."""
 
 from __future__ import annotations
 
 import http.client
-import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Never, Protocol, TypeVar
@@ -12,11 +11,6 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from zeny_project_handler.ui.pdf_gateway import (
-    CLIENT_SERVER_URL_ENVIRONMENT_VARIABLE,
-    DEFAULT_CLIENT_SERVER_URL,
-    SERVER_PASSWORD_ENVIRONMENT_VARIABLE,
-)
 from zeny_project_handler_contracts import API_V1_PREFIX
 from zeny_project_handler_contracts.errors import ErrorCode, ErrorEnvelope
 from zeny_project_handler_contracts.review import (
@@ -91,17 +85,6 @@ class UnavailableReviewGateway:
         self._fail()
 
 
-def configured_review_gateway(
-    environment: Mapping[str, str] | None = None,
-) -> ReviewGateway:
-    values = os.environ if environment is None else environment
-    if not values.get(SERVER_PASSWORD_ENVIRONMENT_VARIABLE, ""):
-        return UnavailableReviewGateway(
-            "Configure a conexão autenticada com o servidor para usar o painel Resultados."
-        )
-    return HttpReviewGateway.from_environment(values)
-
-
 @dataclass(slots=True)
 class HttpReviewGateway:
     base_url: str
@@ -126,20 +109,6 @@ class HttpReviewGateway:
         self._host = parsed.hostname
         self._port = parsed.port or (443 if parsed.scheme == "https" else 80)
         self._base_path = parsed.path.rstrip("/")
-
-    @classmethod
-    def from_environment(
-        cls,
-        environment: Mapping[str, str] | None = None,
-    ) -> HttpReviewGateway:
-        values = os.environ if environment is None else environment
-        return cls(
-            base_url=values.get(
-                CLIENT_SERVER_URL_ENVIRONMENT_VARIABLE,
-                DEFAULT_CLIENT_SERVER_URL,
-            ),
-            password=values.get(SERVER_PASSWORD_ENVIRONMENT_VARIABLE, ""),
-        )
 
     def list_projects(
         self,

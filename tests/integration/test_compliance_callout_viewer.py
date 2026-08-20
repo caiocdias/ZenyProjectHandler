@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping
 from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -26,7 +25,6 @@ from zeny_project_handler.application.compliance_callouts import (
     RetanguloCallout,
     projetar_callouts_conformidade,
 )
-from zeny_project_handler.application.visual_occupancy import MapaOcupacaoVisual
 from zeny_project_handler.domain.compliance import (
     AchadoConformidade,
     AlvoConformidade,
@@ -45,7 +43,7 @@ from zeny_project_handler.domain.compliance import (
 from zeny_project_handler.domain.documents import PaginaDocumento
 from zeny_project_handler.domain.values import CaixaPagina, GeometriaDocumento, PontoNormalizado
 from zeny_project_handler.ports.pdf import OrcamentoRenderizacaoPdf
-from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
+from zeny_project_handler_client.ui.pdf_viewer import PdfViewerWidget
 from zeny_project_handler_contracts.base import CalloutId, DocumentId, FindingId, PageId, ProposalId
 from zeny_project_handler_contracts.common import (
     EvidenceNavigationDto,
@@ -373,7 +371,7 @@ def test_synthetic_a4_a3_portrait_landscape_callout_renders_are_saved(
 
 
 @pytest.mark.integration
-def test_computer_vision_rejects_header_and_places_callout_on_white_space(
+def test_client_draws_prepositioned_callout_without_local_layout_analysis(
     qtbot: QtBot,
     tmp_path: Path,
 ) -> None:
@@ -385,23 +383,9 @@ def test_computer_vision_rejects_header_and_places_callout_on_white_space(
     assert viewer.inspecao is not None
     page = viewer.inspecao.pages[0]
 
-    without_vision = _projected_dense_callouts(page, count=1)[0]
-    assert without_vision.caixa_sugerida.direita > Decimal("0.58")
-
-    visual_maps = viewer.mapear_ocupacao_visual(frozenset({page.page_id.root}))
-    callout = _projected_dense_callouts(
-        page,
-        count=1,
-        visual_maps=visual_maps,
-    )[0]
+    callout = _projected_dense_callouts(page, count=1)[0]
     box = callout.caixa_sugerida
-    assert box.direita < Decimal("0.58")
-    assert visual_maps[page.page_id.root].regiao_totalmente_branca(
-        float(box.esquerda),
-        float(box.topo),
-        float(box.direita),
-        float(box.base),
-    )
+    assert Decimal(0) <= box.esquerda < box.direita <= Decimal(1)
 
     viewer.definir_callouts_conformidade((callout,))
     viewer.resize(1400, 1000)
@@ -627,7 +611,6 @@ def _projected_dense_callouts(
     *,
     count: int,
     long_text: bool = False,
-    visual_maps: Mapping[UUID, MapaOcupacaoVisual] | None = None,
 ) -> tuple[CalloutConformidade, ...]:
     width = Decimal(remote_page.width_points)
     height = Decimal(remote_page.height_points)
@@ -732,7 +715,6 @@ def _projected_dense_callouts(
         evidencias=(),
         paginas=(page,),
         textos_apresentacao=presentation,
-        mapas_ocupacao_visual=visual_maps,
     )
 
 

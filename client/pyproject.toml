@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools==80.10.2", "wheel==0.45.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zeny-project-handler-client"
+version = "0.1.0"
+description = "Cliente Windows magro do Zeny Project Handler"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "pydantic>=2.13.4,<3",
+    "PySide6>=6.8,<7",
+]
+
+[project.gui-scripts]
+zeny-project-handler = "zeny_project_handler_client.__main__:main"
+
+[tool.setuptools]
+package-dir = {"" = "../src"}
+
+[tool.setuptools.packages.find]
+where = ["../src"]
+include = ["zeny_project_handler_client*", "zeny_project_handler_contracts*"]
+
+[tool.setuptools.package-data]
+"zeny_project_handler_client.assets" = ["*.png", "*.ico"]

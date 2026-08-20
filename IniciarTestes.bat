@@ -48,6 +48,7 @@ call :run_section "INTEGRIDADE DAS DEPENDÊNCIAS" "python -m pip check"
 call :run_section "LINT - RUFF" "python -m ruff check ."
 call :run_section "FORMATAÇÃO - RUFF" "python -m ruff format --check ."
 call :run_section "TIPAGEM ESTÁTICA - MYPY" "python -m mypy"
+call :run_section "GATE DE FONTE DO CLIENTE MAGRO" "python scripts\client_artifact_gate.py --source-only"
 >> "%REPORT_FILE%" echo.
 >> "%REPORT_FILE%" echo ============================================================
 >> "%REPORT_FILE%" echo TESTES PUBLICOS E COBERTURA

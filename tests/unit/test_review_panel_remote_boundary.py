@@ -4,8 +4,8 @@ import ast
 from pathlib import Path
 
 REVIEW_CLIENT_MODULES = (
-    Path("src/zeny_project_handler/ui/review_gateway.py"),
-    Path("src/zeny_project_handler/ui/review_panel.py"),
+    Path("src/zeny_project_handler_client/ui/review_gateway.py"),
+    Path("src/zeny_project_handler_client/ui/review_panel.py"),
 )
 FORBIDDEN_MODULES = (
     "zeny_project_handler.application",

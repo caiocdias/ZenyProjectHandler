@@ -13,8 +13,8 @@ import pytest
 from tests.pdf_fixtures import create_golden_pdf
 from uvicorn import Config, Server
 
-from zeny_project_handler.ui.portability_gateway import HttpPortabilityGateway
-from zeny_project_handler.ui.project_gateway import HttpProjectGateway
+from zeny_project_handler_client.ui.portability_gateway import HttpPortabilityGateway
+from zeny_project_handler_client.ui.project_gateway import HttpProjectGateway
 from zeny_project_handler_contracts.backup import (
     ConfirmBackupRestoreRequest,
     CreateBackupJobRequest,

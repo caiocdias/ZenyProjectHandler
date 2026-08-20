@@ -13,12 +13,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-desktop = [
-    "alembic>=1.18,<2",
-    "Pillow>=12.2,<13",
-    "PyMuPDF>=1.28,<1.29",
+client = [
     "PySide6>=6.8,<7",
-    "SQLAlchemy>=2.0.51,<2.1",
 ]
 server = [
     "alembic>=1.18,<2",
@@ -40,7 +36,7 @@ dev = [
 ]
 
 [project.scripts]
-zeny-project-handler = "zeny_project_handler.__main__:main"
+zeny-project-handler = "zeny_project_handler_client.__main__:main"
 zeny-project-handler-server = "zeny_project_handler_server.__main__:main"
 
 [tool.setuptools.packages.find]
@@ -50,7 +46,7 @@ where = ["src"]
 "zeny_project_handler.adapters.catalog.data" = ["*.json"]
 "zeny_project_handler.adapters.compliance.data" = ["*.json"]
 "zeny_project_handler.adapters.interpretation.data" = ["*.json"]
-"zeny_project_handler.assets" = ["*.png", "*.ico"]
+"zeny_project_handler_client.assets" = ["*.png", "*.ico"]
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers"
@@ -69,6 +65,7 @@ markers = [
 branch = true
 source = [
     "zeny_project_handler",
+    "zeny_project_handler_client",
     "zeny_project_handler_api_spec",
     "zeny_project_handler_contracts",
     "zeny_project_handler_server",
@@ -90,7 +87,12 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "N", "UP", "B", "C4", "SIM", "RUF"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["zeny_project_handler"]
+known-first-party = [
+    "zeny_project_handler",
+    "zeny_project_handler_client",
+    "zeny_project_handler_contracts",
+    "zeny_project_handler_server",
+]
 
 [tool.mypy]
 python_version = "3.11"

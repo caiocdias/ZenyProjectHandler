@@ -13,8 +13,10 @@ def test_setup_creates_venv_and_installs_locked_dependencies() -> None:
     setup_script = script_text("setup.bat")
 
     assert "-m venv" in setup_script
-    assert "requirements.lock" in setup_script
+    assert "requirements-client.lock" in setup_script
+    assert "requirements.lock" not in setup_script
     assert "--no-build-isolation --no-deps -e" in setup_script
+    assert '"%CD%\\client"' in setup_script
     assert "ZENY_BOOTSTRAP_PYTHON" in setup_script
 
 
@@ -29,33 +31,26 @@ def test_setup_recreates_incompatible_existing_venv() -> None:
     assert "Ambiente virtual existente usa uma versao de Python incompativel" in setup_script
 
 
-def test_setup_installs_and_validates_tesseract_ocr() -> None:
+def test_setup_excludes_server_and_ocr_dependencies() -> None:
     setup_script = script_text("setup.bat")
 
-    assert "ensure_tesseract_executable" in setup_script
-    assert "UB-Mannheim.TesseractOCR" in setup_script
-    assert "--scope user" in setup_script
-    assert "--accept-package-agreements --accept-source-agreements" in setup_script
-    assert "ZENY_TESSERACT_PATH" in setup_script
-    assert "ocr_dependency_error" in setup_script
-    assert "python -m zeny_project_handler.tesseract_setup --provision" in setup_script
-    assert "tesseract --list-langs" in script_text(
-        "src/zeny_project_handler/adapters/analysis/tesseract_runtime.py"
-    )
+    assert "TesseractOCR" not in setup_script
+    assert "ZENY_TESSERACT_PATH" not in setup_script
+    assert "tesseract_setup" not in setup_script
+    assert "requirements-server.lock" not in setup_script
 
 
-def test_setup_preserves_completed_python_environment_when_ocr_is_offline() -> None:
+def test_setup_installs_and_validates_only_the_independent_client() -> None:
     setup_script = script_text("setup.bat")
 
     application_install = setup_script.index(
-        'python -m pip install --disable-pip-version-check --no-build-isolation --no-deps -e "%CD%"'
+        "python -m pip install --disable-pip-version-check "
+        '--no-build-isolation --no-deps -e "%CD%\\client"'
     )
     python_validation = setup_script.index("python -m pip check")
-    ocr_provision = setup_script.index("python -m zeny_project_handler.tesseract_setup --provision")
 
-    assert application_install < python_validation < ocr_provision
-    assert "o ambiente virtual e o aplicativo foram preservados" in setup_script
-    assert "O setup NAO confirmou o OCR em portugues" in setup_script
+    assert application_install < python_validation
+    assert "sem dependencias do servidor ou OCR local" in setup_script
 
 
 def test_portuguese_tessdata_provenance_is_pinned_and_documented() -> None:
@@ -79,7 +74,7 @@ def test_launcher_activates_venv_and_runs_application() -> None:
     launcher_script = script_text("ZenyProjectHandler.bat")
 
     assert "activate.bat" in launcher_script
-    assert "python -m zeny_project_handler" in launcher_script
+    assert "python -m zeny_project_handler_client" in launcher_script
     assert "%*" in launcher_script
 
 
@@ -92,6 +87,7 @@ def test_quality_script_enforces_the_relevant_quality_gates() -> None:
     assert "--cov" in quality_script
     assert "private_samples" not in quality_script
     assert "python scripts\\complexity_gate.py src" in quality_script
+    assert "python scripts\\client_artifact_gate.py --source-only" in quality_script
     assert "radon mi" not in quality_script
     assert "radon raw" not in quality_script
     assert configuration["tool"]["coverage"]["report"]["fail_under"] > 85

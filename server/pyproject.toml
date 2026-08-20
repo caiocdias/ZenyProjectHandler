@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools==80.10.2", "wheel==0.45.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zeny-project-handler-server"
+version = "0.1.0"
+description = "Servidor protegido do Zeny Project Handler"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "alembic>=1.18,<2",
+    "fastapi>=0.141.1,<0.142",
+    "Pillow>=12.2,<13",
+    "pydantic>=2.13.4,<3",
+    "PyMuPDF>=1.28,<1.29",
+    "python-multipart>=0.0.32,<0.1",
+    "SQLAlchemy>=2.0.51,<2.1",
+    "uvicorn>=0.41,<0.42",
+]
+
+[project.scripts]
+zeny-project-handler-server = "zeny_project_handler_server.__main__:main"
+
+[tool.setuptools]
+package-dir = {"" = "../src"}
+
+[tool.setuptools.packages.find]
+where = ["../src"]
+include = [
+    "zeny_project_handler*",
+    "zeny_project_handler_contracts*",
+    "zeny_project_handler_server*",
+]
+exclude = ["zeny_project_handler_client*"]
+
+[tool.setuptools.package-data]
+"zeny_project_handler.adapters.catalog.data" = ["*.json"]
+"zeny_project_handler.adapters.compliance.data" = ["*.json"]
+"zeny_project_handler.adapters.interpretation.data" = ["*.json"]

@@ -7,7 +7,7 @@ set "PYTHONUTF8=1"
 set "VENV_DIR=%CD%\.venv"
 set "VENV_PYTHON=%VENV_DIR%\Scripts\python.exe"
 
-echo [1/6] Verificando o ambiente virtual...
+echo [1/5] Verificando o ambiente virtual do cliente...
 if not exist "%VENV_PYTHON%" goto create_environment
 
 call :ensure_supported_python "%VENV_PYTHON%"
@@ -19,7 +19,7 @@ rmdir /s /q "%VENV_DIR%"
 if exist "%VENV_DIR%" goto venv_cleanup_error
 
 :create_environment
-echo [1/6] Criando o ambiente virtual em "%VENV_DIR%"...
+echo [1/5] Criando o ambiente virtual do cliente em "%VENV_DIR%"...
 if defined ZENY_BOOTSTRAP_PYTHON goto use_configured_python
 
 where py >nul 2>nul
@@ -68,33 +68,26 @@ python -m venv "%VENV_DIR%"
 if errorlevel 1 goto venv_error
 
 :activate_environment
-echo [2/6] Ativando o ambiente virtual...
+echo [2/5] Ativando o ambiente virtual...
 call "%VENV_DIR%\Scripts\activate.bat"
 if errorlevel 1 goto activation_error
 
-echo [3/6] Instalando as dependencias fixadas...
-python -m pip install --disable-pip-version-check -r "%CD%\requirements.lock"
+echo [3/5] Instalando somente as dependencias fixadas do cliente...
+python -m pip install --disable-pip-version-check -r "%CD%\requirements-client.lock"
 if errorlevel 1 goto dependency_error
 
-echo [4/6] Instalando o aplicativo no ambiente virtual...
-python -m pip install --disable-pip-version-check --no-build-isolation --no-deps -e "%CD%"
+echo [4/5] Instalando o pacote independente do cliente...
+python -m pip install --disable-pip-version-check --no-build-isolation --no-deps -e "%CD%\client"
 if errorlevel 1 goto application_error
 
-echo [5/6] Verificando a instalacao Python...
+echo [5/5] Verificando a instalacao do cliente...
 python -m pip check
 if errorlevel 1 goto dependency_error
 
-echo [6/6] Validando Tesseract e o idioma portugues...
-call :ensure_tesseract_executable
-if errorlevel 1 goto ocr_dependency_error
-python -m zeny_project_handler.tesseract_setup --provision
-if errorlevel 1 goto ocr_language_error
-
 echo.
-echo Ambiente e OCR em portugues preparados com sucesso.
+echo Cliente preparado com sucesso, sem dependencias do servidor ou OCR local.
 echo Abra ZenyProjectHandler.vbs para iniciar sem uma janela de console.
 echo Use ZenyProjectHandler.bat somente quando quiser acompanhar a saida no terminal.
-echo Execute IniciarTestes.bat para gerar o relatorio de qualidade.
 exit /b 0
 
 :python_not_found
@@ -130,44 +123,6 @@ exit /b 1
 
 :application_error
 echo ERRO: nao foi possivel instalar o aplicativo no ambiente virtual.
-exit /b 1
-
-:ocr_dependency_error
-echo ERRO: o ambiente Python foi preservado, mas o Tesseract OCR nao esta disponivel.
-echo Instale-o com "winget install --id UB-Mannheim.TesseractOCR --exact" e execute o setup novamente.
-echo Se ele estiver em outro local, defina ZENY_TESSERACT_PATH com o caminho do tesseract.exe.
-echo Sem permissao administrativa, solicite a instalacao ou use uma copia autorizada em pasta gravavel.
-exit /b 1
-
-:ocr_language_error
-echo.
-echo ERRO: o ambiente virtual e o aplicativo foram preservados e podem ser iniciados.
-echo O setup NAO confirmou o OCR em portugues. Siga a remediacao acima e execute setup.bat novamente.
-exit /b 1
-
-:ensure_tesseract_executable
-if defined ZENY_TESSERACT_PATH (
-    if exist "%ZENY_TESSERACT_PATH%" exit /b 0
-    echo ZENY_TESSERACT_PATH nao aponta para um arquivo existente.
-    exit /b 1
-)
-
-where tesseract >nul 2>nul
-if not errorlevel 1 exit /b 0
-if exist "C:\Program Files\Tesseract-OCR\tesseract.exe" exit /b 0
-if exist "C:\Program Files (x86)\Tesseract-OCR\tesseract.exe" exit /b 0
-
-where winget >nul 2>nul
-if errorlevel 1 exit /b 1
-
-echo Tesseract nao encontrado. Instalando a dependencia de OCR com o Windows Package Manager...
-winget install --id UB-Mannheim.TesseractOCR --exact --scope user --silent --accept-package-agreements --accept-source-agreements
-if errorlevel 1 exit /b 1
-
-where tesseract >nul 2>nul
-if not errorlevel 1 exit /b 0
-if exist "C:\Program Files\Tesseract-OCR\tesseract.exe" exit /b 0
-if exist "C:\Program Files (x86)\Tesseract-OCR\tesseract.exe" exit /b 0
 exit /b 1
 
 :ensure_supported_python

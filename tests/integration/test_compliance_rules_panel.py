@@ -31,8 +31,8 @@ from zeny_project_handler.application.compliance_registry import (
     ServicoRegistroRegrasConformidade,
 )
 from zeny_project_handler.application.human_review import ServicoRevisaoHumana
-from zeny_project_handler.ui.documentation_panel import DocumentationPanelWidget
-from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
+from zeny_project_handler_client.ui.documentation_panel import DocumentationPanelWidget
+from zeny_project_handler_client.ui.pdf_viewer import PdfViewerWidget
 
 
 class _ViewerStub(QObject):

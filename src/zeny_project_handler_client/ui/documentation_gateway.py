@@ -1,9 +1,8 @@
-"""Gateway HTTP/DTO do painel Documentação e conformidade."""
+"""Gateway HTTP/DTO do cliente para Documentação e conformidade."""
 
 from __future__ import annotations
 
 import http.client
-import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -13,11 +12,6 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel
 
-from zeny_project_handler.ui.pdf_gateway import (
-    CLIENT_SERVER_URL_ENVIRONMENT_VARIABLE,
-    DEFAULT_CLIENT_SERVER_URL,
-    SERVER_PASSWORD_ENVIRONMENT_VARIABLE,
-)
 from zeny_project_handler_contracts import API_V1_PREFIX
 from zeny_project_handler_contracts.compliance import (
     ComplianceExecutionResponse,
@@ -115,17 +109,6 @@ class UnavailableDocumentationGateway:
         self._fail()
 
 
-def configured_documentation_gateway(
-    environment: Mapping[str, str] | None = None,
-) -> DocumentationGateway:
-    values = os.environ if environment is None else environment
-    if not values.get(SERVER_PASSWORD_ENVIRONMENT_VARIABLE, ""):
-        return UnavailableDocumentationGateway(
-            "Configure a conexão autenticada com o servidor para usar Documentação e conformidade."
-        )
-    return HttpDocumentationGateway.from_environment(values)
-
-
 @dataclass(slots=True)
 class HttpDocumentationGateway:
     base_url: str
@@ -150,20 +133,6 @@ class HttpDocumentationGateway:
         self._host = parsed.hostname
         self._port = parsed.port or (443 if parsed.scheme == "https" else 80)
         self._base_path = parsed.path.rstrip("/")
-
-    @classmethod
-    def from_environment(
-        cls,
-        environment: Mapping[str, str] | None = None,
-    ) -> HttpDocumentationGateway:
-        values = os.environ if environment is None else environment
-        return cls(
-            base_url=values.get(
-                CLIENT_SERVER_URL_ENVIRONMENT_VARIABLE,
-                DEFAULT_CLIENT_SERVER_URL,
-            ),
-            password=values.get(SERVER_PASSWORD_ENVIRONMENT_VARIABLE, ""),
-        )
 
     def list_projects(
         self,

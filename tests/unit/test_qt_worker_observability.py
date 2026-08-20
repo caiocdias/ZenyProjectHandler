@@ -5,8 +5,8 @@ from threading import Event
 from typing import cast
 from uuid import UUID
 
-from zeny_project_handler.ui.project_gateway import ProjectGateway
-from zeny_project_handler.ui.project_panel import _JobPollingWorker
+from zeny_project_handler_client.ui.project_gateway import ProjectGateway
+from zeny_project_handler_client.ui.project_panel import _JobPollingWorker
 from zeny_project_handler_contracts.base import JobId, ProjectId
 from zeny_project_handler_contracts.enums import JobKind, JobStatus
 from zeny_project_handler_contracts.jobs import (

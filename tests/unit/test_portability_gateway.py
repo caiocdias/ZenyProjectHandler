@@ -8,7 +8,7 @@ from uuid import uuid4
 
 import pytest
 
-from zeny_project_handler.ui.portability_gateway import (
+from zeny_project_handler_client.ui.portability_gateway import (
     HttpPortabilityGateway,
     PortabilityGatewayError,
 )

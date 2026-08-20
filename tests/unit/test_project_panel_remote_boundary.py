@@ -4,8 +4,8 @@ import ast
 from pathlib import Path
 
 PANEL_MODULES = (
-    Path("src/zeny_project_handler/ui/project_gateway.py"),
-    Path("src/zeny_project_handler/ui/project_panel.py"),
+    Path("src/zeny_project_handler_client/ui/project_gateway.py"),
+    Path("src/zeny_project_handler_client/ui/project_panel.py"),
 )
 FORBIDDEN_MODULES = (
     "fitz",

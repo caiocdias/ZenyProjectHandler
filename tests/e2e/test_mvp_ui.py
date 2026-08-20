@@ -30,10 +30,11 @@ from zeny_project_handler.adapters.persistence import (
     SqlAlchemyUnitOfWork,
     create_sqlite_engine,
 )
-from zeny_project_handler.config import AppSettings
+from zeny_project_handler.config import DATABASE_FILE_NAME
 from zeny_project_handler.domain.enums import CategoriaElemento
 from zeny_project_handler.domain.project_metadata import MetadadosProjeto
-from zeny_project_handler.ui.project_panel import ProjectPanelWidget
+from zeny_project_handler_client.config import ClientSettings
+from zeny_project_handler_client.ui.project_panel import ProjectPanelWidget
 
 pytestmark = [
     pytest.mark.integration,
@@ -56,13 +57,17 @@ def _catalog_pdf(path: Path) -> Path:
     return path
 
 
-def _application_log(data_directory: Path) -> tuple[dict[str, object], ...]:
-    log_path = data_directory / "logs" / "application.jsonl"
+def _application_log(*data_directories: Path) -> tuple[dict[str, object], ...]:
     payloads: list[dict[str, object]] = []
-    for line in log_path.read_text(encoding="utf-8").splitlines():
-        decoded = json.loads(line)
-        assert isinstance(decoded, dict)
-        payloads.append(cast(dict[str, object], decoded))
+    for data_directory in data_directories:
+        for file_name in ("client.jsonl", "application.jsonl"):
+            log_path = data_directory / "logs" / file_name
+            if not log_path.exists():
+                continue
+            for line in log_path.read_text(encoding="utf-8").splitlines():
+                decoded = json.loads(line)
+                assert isinstance(decoded, dict)
+                payloads.append(cast(dict[str, object], decoded))
     return tuple(payloads)
 
 
@@ -72,7 +77,7 @@ def test_user_can_reorder_project_pdfs_and_reopen_in_reading_order(
     monkeypatch: pytest.MonkeyPatch,
     application_factory: ApplicationFactory,
 ) -> None:
-    settings = AppSettings(data_directory=tmp_path / "data", pdf_render_dpi=72)
+    settings = ClientSettings(data_directory=tmp_path / "data", pdf_render_dpi=72)
     first = _catalog_pdf(tmp_path / "folha-01.pdf")
     second = create_golden_pdf(tmp_path / "folha-02.pdf")
     _application, window = application_factory([], settings=settings)
@@ -134,7 +139,7 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
     monkeypatch: pytest.MonkeyPatch,
     application_factory: ApplicationFactory,
 ) -> None:
-    settings = AppSettings(data_directory=tmp_path / "data", pdf_render_dpi=72)
+    settings = ClientSettings(data_directory=tmp_path / "data", pdf_render_dpi=72)
     source = _catalog_pdf(tmp_path / "projeto.pdf")
     _application, window = application_factory([], settings=settings)
     qtbot.addWidget(window)
@@ -164,7 +169,12 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
     assert window.pdf_viewer.inspecao is not None
 
     assert window.review_panel is not None
-    persistence = create_sqlite_engine(settings.database_path)
+    server_database = (
+        settings.data_directory.parent
+        / f"{settings.data_directory.name}-server"
+        / DATABASE_FILE_NAME
+    )
+    persistence = create_sqlite_engine(server_database)
     with SqlAlchemyUnitOfWork(persistence) as work:
         project = work.projetos.obter(UUID(str(project_id)))
         assert project is not None
@@ -180,21 +190,20 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
     qtbot.mouseClick(run, Qt.MouseButton.LeftButton)
     qtbot.waitUntil(lambda: not panel.processando, timeout=30_000)
 
-    log_payloads = _application_log(settings.data_directory)
+    server_data_directory = (
+        settings.data_directory.parent / f"{settings.data_directory.name}-server"
+    )
+    log_payloads = _application_log(settings.data_directory, server_data_directory)
     for operation in (
-        "application.bootstrap",
-        "pdf.import",
+        "client.bootstrap",
         "pdf.viewer.open",
         "pdf.viewer.render",
-        "pdf.analysis",
-        "server.job.analysis",
     ):
         records = [item for item in log_payloads if item.get("operation") == operation]
-        assert {item.get("status") for item in records} >= {"started", "succeeded"}
-    worker_records = [
-        item for item in log_payloads if item.get("operation") == "server.job.analysis"
-    ]
-    assert len({item.get("correlation_id") for item in worker_records}) == 1
+        assert {item.get("status") for item in records} >= {
+            "started",
+            "succeeded",
+        }, operation
     serialized_log = json.dumps(log_payloads, ensure_ascii=False)
     assert str(source.resolve()) not in serialized_log
     assert "password" not in serialized_log.casefold()

@@ -1,4 +1,4 @@
-"""Painel Qt de Resultados alimentado exclusivamente por DTOs da API."""
+"""Painel Qt cliente de Resultados alimentado exclusivamente por DTOs da API."""
 
 from __future__ import annotations
 

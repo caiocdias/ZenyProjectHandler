@@ -14,13 +14,13 @@ from tests.viewer_gateway import LocalTestPdfViewerGateway
 
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 from zeny_project_handler.ports.pdf import OrcamentoRenderizacaoPdf
-from zeny_project_handler.ui.pdf_gateway import PdfViewerGateway, RemoteRaster
-from zeny_project_handler.ui.pdf_rendering import (
+from zeny_project_handler_client.ui.pdf_gateway import PdfViewerGateway, RemoteRaster
+from zeny_project_handler_client.ui.pdf_rendering import (
     CacheLruBytes,
     PdfRectangle,
     regioes_tiles_priorizadas,
 )
-from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
+from zeny_project_handler_client.ui.pdf_viewer import PdfViewerWidget
 from zeny_project_handler_contracts.base import PageId, ProposalId
 from zeny_project_handler_contracts.common import NormalizedBoxDto, NormalizedPointDto
 from zeny_project_handler_contracts.enums import (

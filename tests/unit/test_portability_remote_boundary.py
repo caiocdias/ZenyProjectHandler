@@ -4,9 +4,9 @@ import ast
 from pathlib import Path
 
 CLIENT_MODULES = (
-    Path("src/zeny_project_handler/ui/portability_gateway.py"),
-    Path("src/zeny_project_handler/ui/portability_panel.py"),
-    Path("src/zeny_project_handler/ui/portability_worker.py"),
+    Path("src/zeny_project_handler_client/ui/portability_gateway.py"),
+    Path("src/zeny_project_handler_client/ui/portability_panel.py"),
+    Path("src/zeny_project_handler_client/ui/portability_worker.py"),
 )
 FORBIDDEN_MODULES = (
     "sqlite3",

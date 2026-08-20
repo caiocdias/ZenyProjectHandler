@@ -1,4 +1,4 @@
-"""Temas claro e escuro da aplicação."""
+"""Temas claro e escuro do cliente."""
 
 from __future__ import annotations
 

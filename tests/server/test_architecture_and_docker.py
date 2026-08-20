@@ -7,8 +7,8 @@ from pathlib import Path
 ROOT = Path(__file__).parents[2]
 SERVER_SOURCE = ROOT / "src" / "zeny_project_handler_server"
 DOCUMENTATION_CLIENT_SOURCES = (
-    ROOT / "src" / "zeny_project_handler" / "ui" / "documentation_panel.py",
-    ROOT / "src" / "zeny_project_handler" / "ui" / "documentation_gateway.py",
+    ROOT / "src" / "zeny_project_handler_client" / "ui" / "documentation_panel.py",
+    ROOT / "src" / "zeny_project_handler_client" / "ui" / "documentation_gateway.py",
 )
 
 
@@ -31,7 +31,7 @@ def test_server_package_does_not_import_qt_ui_or_desktop_bootstrap() -> None:
             for module in _imported_modules(source_file)
             if module.partition(".")[0] == "PySide6"
             or module == "zeny_project_handler.bootstrap"
-            or module.startswith("zeny_project_handler.ui")
+            or module.startswith("zeny_project_handler_client.ui")
         )
         if forbidden:
             violations[source_file.name] = forbidden
@@ -81,6 +81,17 @@ def test_docker_build_is_multistage_non_root_with_ocr_and_no_build_secret() -> N
     assert not re.search(r"^ENV\s+.*ZENY_SERVER_PASSWORD", dockerfile, flags=re.MULTILINE)
     assert "copy .env" not in normalized
     assert "--workers" not in normalized
+    assert "copy src ./src" not in normalized
+    assert "src/zeny_project_handler_client" not in normalized
+    assert "server/pyproject.toml" in normalized
+
+
+def test_server_distribution_manifest_excludes_client_package() -> None:
+    manifest = (ROOT / "server" / "pyproject.toml").read_text(encoding="utf-8").casefold()
+
+    assert 'name = "zeny-project-handler-server"' in manifest
+    assert 'exclude = ["zeny_project_handler_client*"]' in manifest
+    assert "pyside6" not in manifest
 
 
 def test_compose_injects_secret_at_runtime_and_mounts_persistent_data() -> None:

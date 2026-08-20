@@ -1,4 +1,4 @@
-"""Agendamento e cache do raster progressivo, sem dependência de widgets Qt."""
+"""Agendamento cliente e cache do raster progressivo, sem dependência de widgets Qt."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from uuid import UUID
 
 from PySide6.QtCore import QThread
 
-from zeny_project_handler.logging_config import operation_logger
+from zeny_project_handler_client.logging_config import operation_logger
 from zeny_project_handler_contracts.common import NormalizedBoxDto
 
 from .pdf_gateway import PdfViewerGateway, ViewerGatewayError

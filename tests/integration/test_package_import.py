@@ -14,11 +14,11 @@ import pytest
 from PIL import Image
 
 import zeny_project_handler
-from zeny_project_handler.assets import APPLICATION_ICON_ICO, APPLICATION_ICON_PNG
-from zeny_project_handler.ui import application_icon
+from zeny_project_handler_client.assets import APPLICATION_ICON_ICO, APPLICATION_ICON_PNG
+from zeny_project_handler_client.ui import application_icon
 
 PROJECT_ROOT = Path(__file__).parents[2]
-ASSET_PACKAGE = "zeny_project_handler.assets"
+ASSET_PACKAGE = "zeny_project_handler_client.assets"
 
 
 def _asset_payload(file_name: str) -> bytes:
@@ -74,11 +74,17 @@ def test_application_icon_can_be_materialized_for_the_windows_shell(tmp_path: Pa
 
 
 @pytest.mark.integration
-def test_temporary_wheel_installs_both_icon_assets(tmp_path: Path) -> None:
+def test_independent_client_wheel_installs_both_icon_assets(tmp_path: Path) -> None:
     source = tmp_path / "wheel-source"
-    shutil.copytree(PROJECT_ROOT / "src", source / "src")
-    shutil.copy2(PROJECT_ROOT / "pyproject.toml", source / "pyproject.toml")
-    shutil.copy2(PROJECT_ROOT / "README.md", source / "README.md")
+    shutil.copytree(
+        PROJECT_ROOT / "src" / "zeny_project_handler_client",
+        source / "src" / "zeny_project_handler_client",
+    )
+    shutil.copytree(
+        PROJECT_ROOT / "src" / "zeny_project_handler_contracts",
+        source / "src" / "zeny_project_handler_contracts",
+    )
+    shutil.copytree(PROJECT_ROOT / "client", source / "client")
     wheelhouse = tmp_path / "wheelhouse"
     wheelhouse.mkdir()
 
@@ -94,7 +100,7 @@ def test_temporary_wheel_installs_both_icon_assets(tmp_path: Path) -> None:
             "--no-build-isolation",
             "--wheel-dir",
             str(wheelhouse),
-            str(source),
+            str(source / "client"),
         ],
         cwd=tmp_path,
         capture_output=True,
@@ -102,13 +108,18 @@ def test_temporary_wheel_installs_both_icon_assets(tmp_path: Path) -> None:
         check=False,
     )
     assert build.returncode == 0, build.stdout + build.stderr
-    wheel = next(wheelhouse.glob("zeny_project_handler-*.whl"))
+    wheel = next(wheelhouse.glob("zeny_project_handler_client-*.whl"))
     expected_members = {
-        f"zeny_project_handler/assets/{APPLICATION_ICON_PNG}",
-        f"zeny_project_handler/assets/{APPLICATION_ICON_ICO}",
+        f"zeny_project_handler_client/assets/{APPLICATION_ICON_PNG}",
+        f"zeny_project_handler_client/assets/{APPLICATION_ICON_ICO}",
     }
     with ZipFile(wheel) as archive:
-        assert expected_members <= set(archive.namelist())
+        members = set(archive.namelist())
+        assert expected_members <= members
+        assert not any(
+            member.startswith(("zeny_project_handler/", "zeny_project_handler_server/"))
+            for member in members
+        )
 
     installation = tmp_path / "installed"
     install = subprocess.run(
@@ -140,10 +151,10 @@ from pathlib import Path
 
 target = Path(sys.argv[1]).resolve()
 sys.path.insert(0, str(target))
-import zeny_project_handler
+import zeny_project_handler_client
 
-assert Path(zeny_project_handler.__file__).resolve().is_relative_to(target)
-assets = files("zeny_project_handler.assets")
+assert Path(zeny_project_handler_client.__file__).resolve().is_relative_to(target)
+assets = files("zeny_project_handler_client.assets")
 digests = {
     name: sha256(assets.joinpath(name).read_bytes()).hexdigest()
     for name in sys.argv[2:]

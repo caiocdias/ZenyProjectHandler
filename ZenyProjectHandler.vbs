@@ -25,7 +25,7 @@ If Not fileSystem.FileExists(pythonwPath) Then
 End If
 
 shell.CurrentDirectory = appDirectory
-command = QuoteArgument(pythonwPath) & " -m zeny_project_handler"
+command = QuoteArgument(pythonwPath) & " -m zeny_project_handler_client"
 
 Set arguments = WScript.Arguments
 For index = 0 To arguments.Count - 1

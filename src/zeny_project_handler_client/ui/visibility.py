@@ -1,4 +1,4 @@
-"""Recursos visuais compartilhados pelos controles temporários de visibilidade."""
+"""Recursos visuais do cliente para controles temporários de visibilidade."""
 
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPixmap

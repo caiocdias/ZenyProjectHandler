@@ -16,7 +16,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-python -m zeny_project_handler %*
+python -m zeny_project_handler_client %*
 set "APP_EXIT_CODE=%ERRORLEVEL%"
 call deactivate >nul 2>nul
 exit /b %APP_EXIT_CODE%

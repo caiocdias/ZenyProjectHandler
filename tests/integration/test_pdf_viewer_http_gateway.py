@@ -13,7 +13,7 @@ from PIL import Image
 from tests.pdf_fixtures import create_golden_pdf, create_protected_pdf
 from uvicorn import Config, Server
 
-from zeny_project_handler.ui.pdf_gateway import HttpPdfViewerGateway, ViewerGatewayError
+from zeny_project_handler_client.ui.pdf_gateway import HttpPdfViewerGateway, ViewerGatewayError
 from zeny_project_handler_contracts.base import DocumentId, PageId
 from zeny_project_handler_contracts.common import NormalizedBoxDto
 from zeny_project_handler_contracts.errors import ErrorCode

@@ -41,7 +41,7 @@ from zeny_project_handler.application.operation_coordinator import (
     TipoOperacao,
 )
 from zeny_project_handler.application.project_portability import ServicoPortabilidadeProjeto
-from zeny_project_handler.bootstrap import initialize_local_storage
+from zeny_project_handler.composition import initialize_local_storage
 from zeny_project_handler.config import AppSettings
 from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.domain.compliance import (

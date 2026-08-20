@@ -20,15 +20,15 @@ from zeny_project_handler.application.compliance_registry import (
     ServicoRegistroRegrasConformidade,
 )
 from zeny_project_handler.application.human_review import ServicoRevisaoHumana
-from zeny_project_handler.ui.documentation_gateway import DocumentationGatewayError
-from zeny_project_handler.ui.pdf_gateway import RemoteRaster, ViewerGatewayError
-from zeny_project_handler.ui.portability_gateway import (
+from zeny_project_handler_client.ui.documentation_gateway import DocumentationGatewayError
+from zeny_project_handler_client.ui.pdf_gateway import RemoteRaster, ViewerGatewayError
+from zeny_project_handler_client.ui.portability_gateway import (
     CancelCallback,
     PortabilityTransferCancelledError,
     ProgressCallback,
 )
-from zeny_project_handler.ui.project_gateway import ProjectGatewayError
-from zeny_project_handler.ui.review_gateway import ReviewGatewayError
+from zeny_project_handler_client.ui.project_gateway import ProjectGatewayError
+from zeny_project_handler_client.ui.review_gateway import ReviewGatewayError
 from zeny_project_handler_contracts.backup import (
     BackupPreflightResponse,
     BackupRestorePreflightResponse,

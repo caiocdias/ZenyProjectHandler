@@ -1,11 +1,9 @@
 # Zeny Project Handler
 
-Aplicativo desktop para organizar, visualizar e analisar projetos de expansão da rede de
-distribuição elétrica. O Zeny mantém os PDFs de origem somente leitura, extrai evidências nativas e
-por OCR, interpreta elementos técnicos e executa verificações de conformidade rastreáveis.
-
-O projeto está em desenvolvimento e hoje é executado diretamente pelo código-fonte no Windows. Não
-há instalador ou pacote de distribuição para máquinas sem Python.
+Cliente Windows e servidor protegido para organizar, visualizar e analisar projetos de expansão da
+rede de distribuição elétrica. O servidor mantém cópias gerenciadas dos PDFs, extrai evidências,
+interpreta elementos técnicos e executa verificações de conformidade rastreáveis. O cliente magro
+apresenta os DTOs e rasters recebidos pela API autenticada.
 
 ## Estado atual
 
@@ -14,7 +12,7 @@ há instalador ou pacote de distribuição para máquinas sem Python.
 - Visualizador remoto progressivo: o cliente Qt apresenta prévias/tiles, paginação, zoom e rotação,
   enquanto o servidor autenticado abre e rasteriza os PDFs. PDFs avulsos usam sessão temporária e
   senha somente em memória.
-- Extração de texto, vetores, imagens, anotações, Form XObjects e OCR Tesseract local quando
+- Extração de texto, vetores, imagens, anotações, Form XObjects e OCR Tesseract no servidor quando
   necessário.
 - Pipeline do projeto executado como job persistente no worker único do servidor, com criação
   idempotente, polling entre 250 e 500 ms, progresso monotônico, cancelamento cooperativo e bloqueio
@@ -43,13 +41,26 @@ fora do subconjunto que o pipeline consegue caracterizar. Em um alvo aplicável,
 fato declarado como requisito pode produzir divergência — por exemplo, quando a própria regra exige
 a presença de um campo.
 
-## Instalar e abrir
+## Obter, abrir e conectar
+
+O artefato oficial do cliente é o ZIP portátil Windows x64 em `dist/client/<versão>`. Ele é
+autocontido e não exige Python, Tesseract, banco ou dependências do servidor:
+
+1. extraia o ZIP inteiro;
+2. execute `ZenyProjectHandler.exe`;
+3. informe a URL e a senha fornecidas pelo administrador;
+4. se a conexão cair, use **Conexão > Reconectar** sem reiniciar a interface.
+
+A URL pode ser lembrada. A senha do servidor e as senhas de PDFs permanecem somente em memória e
+não são lidas de `.env` nem gravadas nas preferências.
+
+Para executar o cliente a partir do código-fonte, use o setup abaixo.
 
 Requisitos:
 
 - Windows;
 - Python 3.11, 3.12 ou 3.13;
-- acesso à internet na preparação inicial das dependências e, se necessário, do OCR.
+- acesso à internet somente na preparação inicial das dependências do cliente.
 
 Na primeira execução:
 
@@ -57,9 +68,8 @@ Na primeira execução:
 .\setup.bat
 ```
 
-O setup cria `.venv`, instala as versões de `requirements.lock`, instala o projeto em modo editável
-e tenta preparar o Tesseract com português. Se apenas o OCR falhar, o ambiente Python já concluído é
-preservado e a aplicação continua disponível com a extração nativa.
+O setup cria `.venv`, instala somente `requirements-client.lock` e o manifesto independente em
+`client/`. Ele não instala SQLAlchemy, Alembic, PyMuPDF, OCR ou o pacote do servidor.
 
 Abra sem console com duplo clique em `ZenyProjectHandler.vbs`. Para diagnóstico pelo terminal:
 
@@ -87,12 +97,13 @@ resultados semânticos persistidos; ela não abre o PDF nem repete OCR.
 ## Dados e integridade
 
 Por padrão, preferências visuais, logs do cliente e downloads escolhidos pelo usuário ficam no
-computador cliente. Use `ZENY_DATA_DIR` para escolher a raiz local da interface. Os painéis
+computador cliente. Use `ZENY_DATA_DIR` para escolher a raiz local da interface; essa pasta não
+contém banco nem cache de análise. Os painéis
 **Projeto**, **Resultados**, **Documentação e conformidade** e **Importar, exportar e backup** usam o
 servidor como fonte principal; banco, PDFs gerenciados, cache, jobs, pacotes temporários e logs do
 servidor ficam em `ZENY_SERVER_DATA_DIR` (normalmente o volume `/data`).
 
-- O SQLite é migrado automaticamente na inicialização.
+- O SQLite e suas migrações existem somente no servidor.
 - PDFs adicionados pelo painel Projeto são enviados por streaming e publicados em cópia gerenciada
   pelo servidor. A origem escolhida no cliente não é alterada nem apagada.
 - O aplicativo registra identidade, tamanho e SHA-256 da origem antes de analisar ou transportar o
@@ -111,10 +122,10 @@ servidor ficam em `ZENY_SERVER_DATA_DIR` (normalmente o volume `/data`).
   backup usa publicação atômica por arquivo e compensação para falhas capturadas; a troca conjunta
   de banco e anexos ainda não possui journal durável contra encerramento abrupto.
 
-## OCR local
+## OCR no servidor
 
-O pipeline prioriza conteúdo nativo do PDF. O Tesseract é usado localmente como fallback em páginas
-ou regiões que precisam de reconhecimento raster; a ausência do OCR não impede os demais
+O pipeline prioriza conteúdo nativo do PDF. O Tesseract é usado pelo servidor como fallback em
+páginas ou regiões que precisam de reconhecimento raster; a ausência do OCR não impede os demais
 extratores.
 
 O modelo português provisionado vem de `tesseract-ocr/tessdata_fast`, revisão imutável
@@ -122,12 +133,8 @@ O modelo português provisionado vem de `tesseract-ocr/tessdata_fast`, revisão 
 `c4932b937207a9514b7514d518b931a99938c02a28a5a5a553f8599ed58b7deb`. A licença é Apache-2.0 e os
 avisos de terceiros estão em [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-Se o Tesseract estiver fora dos locais usuais, defina `ZENY_TESSERACT_PATH`. Para usar outro diretório
-gravável de idiomas, defina `ZENY_TESSDATA_DIR` e execute novamente:
-
-```powershell
-.\.venv\Scripts\python.exe -m zeny_project_handler.tesseract_setup --provision
-```
+Essas opções são administradas no host do servidor e não fazem parte do setup ou do artefato do
+cliente.
 
 ## Configuração
 
@@ -141,8 +148,8 @@ As opções são lidas na inicialização:
 | `ZENY_PDF_RENDER_MAX_PIXELS` | `8000000` | limite de pixels por solicitação de renderização |
 | `ZENY_PDF_RENDER_MAX_BYTES` | `67108864` | limite estimado de memória por solicitação |
 | `ZENY_PDF_TILE_CACHE_MAX_BYTES` | `134217728` | limite do cache visual de tiles |
-| `ZENY_CLIENT_SERVER_URL` | `http://127.0.0.1:8000` | URL-base usada pelo visualizador Qt |
-| `ZENY_SERVER_PASSWORD` | sem padrão | segredo Bearer obrigatório no servidor e na conexão transitória do cliente |
+| `ZENY_CLIENT_SERVER_URL` | `http://127.0.0.1:8000` | URL inicial do diálogo em desenvolvimento |
+| `ZENY_SERVER_PASSWORD` | sem padrão | segredo obrigatório, lido somente pelo processo servidor |
 | `ZENY_SERVER_VIEWER_SESSION_TTL_SECONDS` | `900` | inatividade até limpar PDF avulso no servidor |
 | `ZENY_SERVER_VIEWER_MAX_FILES` | `20` | máximo de PDFs por sessão avulsa |
 | `ZENY_SERVER_JOB_RETENTION_SECONDS` | `86400` | retenção renovada do histórico terminal de jobs |
@@ -194,8 +201,8 @@ smoke opcional, somente leitura, sobre todos os exemplos disponíveis:
   de documentos restritos não são inferidos sem fonte e evidência suficientes.
 - Algumas regras de pacote documental ou topologia permanecem não avaliáveis quando os anexos ou as
   associações necessárias não aparecem no projeto analisado.
-- Ainda não há instalador, assinatura de executável nem validação de distribuição em uma máquina
-  Windows limpa.
+- O ZIP portátil ainda não possui assinatura de código nem instalador; a verificação automatizada
+  comprova inicialização autocontida no Windows x64 sem usar o Python do host.
 
 ## Documentação
 

@@ -1,4 +1,4 @@
-"""Janela principal da aplicação."""
+"""Janela principal do cliente magro."""
 
 from collections.abc import Callable
 from itertools import pairwise
@@ -14,7 +14,6 @@ from PySide6.QtCore import (
     QSettings,
     Qt,
     QTimer,
-    Signal,
     Slot,
 )
 from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QGuiApplication, QIcon, QMouseEvent
@@ -31,18 +30,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from zeny_project_handler.application.mvp_workflow import ServicoFluxoMvp
-from zeny_project_handler.application.operation_coordinator import (
-    CoordenadorOperacoes,
-    TipoOperacao,
-)
-from zeny_project_handler.application.pdf_credentials import ProvedorCredenciaisPdfMemoria
-from zeny_project_handler.ports.pdf import OrcamentoRenderizacaoPdf
+from zeny_project_handler_client.config import ClientRenderBudget
 
 from .application_icon import carregar_icone_aplicacao
 from .documentation_gateway import DocumentationGateway
 from .documentation_panel import DocumentationPanelWidget
-from .pdf_credentials import ResolvedorCredenciaisPdf
 from .pdf_gateway import PdfViewerGateway
 from .pdf_viewer import PdfViewerWidget
 from .portability_gateway import PortabilityGateway
@@ -54,27 +46,6 @@ from .review_panel import ReviewPanelWidget
 from .theme import THEME_SETTING_KEY, Tema, aplicar_tema
 
 _CLOSE_WAIT_MS = 300
-
-
-class _OperationStateBridge(QObject):
-    """Converta observações thread-safe do coordenador em sinais enfileirados do Qt."""
-
-    state_changed = Signal(object)
-
-    def __init__(self, coordinator: CoordenadorOperacoes, parent: QObject) -> None:
-        super().__init__(parent)
-        self.current = coordinator.operacao_em_andamento
-        self._remove_observer: Callable[[], None] | None = coordinator.observar(self._relay)
-
-    def _relay(self, operation: TipoOperacao | None) -> None:
-        self.current = operation
-        self.state_changed.emit(operation)
-
-    def close(self) -> None:
-        remove = self._remove_observer
-        self._remove_observer = None
-        if remove is not None:
-            remove()
 
 
 class _DockTitleBar(QWidget):
@@ -335,14 +306,12 @@ class MainWindow(QMainWindow):
         pdf_viewer_gateway: PdfViewerGateway,
         project_gateway: ProjectGateway,
         pdf_render_dpi: int,
-        pdf_render_budget: OrcamentoRenderizacaoPdf,
+        pdf_render_budget: ClientRenderBudget,
         pdf_tile_cache_max_bytes: int,
-        provedor_credenciais_pdf: ProvedorCredenciaisPdfMemoria | None = None,
         review_gateway: ReviewGateway | None = None,
         documentation_gateway: DocumentationGateway | None = None,
-        workflow_service: ServicoFluxoMvp | None = None,
         portability_gateway: PortabilityGateway | None = None,
-        operation_coordinator: CoordenadorOperacoes | None = None,
+        reconnect_callback: Callable[[], bool] | None = None,
         ui_state_path: Path | None = None,
         initial_theme: Tema = Tema.CLARO,
         window_icon: QIcon | None = None,
@@ -351,8 +320,8 @@ class MainWindow(QMainWindow):
     ) -> None:
         super().__init__(parent)
         self._resource_cleanup: Callable[[], None] = lambda: None
-        self._operation_bridge: _OperationStateBridge | None = None
-        self._coordinator_operation: TipoOperacao | None = None
+        self._reconnect_callback = reconnect_callback
+        self._connection_available = True
         self._startup_ocr_diagnostic = startup_ocr_diagnostic
         self._theme = initial_theme
         self._ui_settings = (
@@ -375,15 +344,17 @@ class MainWindow(QMainWindow):
         self._panels_menu.setObjectName("panelsMenu")
         self._build_theme_menu()
         self._panels_menu.addSeparator()
-        credential_resolver = ResolvedorCredenciaisPdf(
-            provedor_credenciais_pdf or ProvedorCredenciaisPdfMemoria()
-        )
+        self._connection_menu = self.menuBar().addMenu("Conexão")
+        self._connection_menu.setObjectName("connectionMenu")
+        self._reconnect_action = QAction("Reconectar", self)
+        self._reconnect_action.setObjectName("reconnectAction")
+        self._reconnect_action.triggered.connect(self._reconnect)
+        self._connection_menu.addAction(self._reconnect_action)
         self.pdf_viewer = PdfViewerWidget(
             gateway=pdf_viewer_gateway,
             dpi=pdf_render_dpi,
             limite_pixels_tile=pdf_render_budget.limite_pixels,
             cache_limite_bytes=pdf_tile_cache_max_bytes,
-            limpar_credenciais_efemeras=credential_resolver.provedor.limpar,
             parent=self,
         )
         self.pdf_viewer.status_changed.connect(self.statusBar().showMessage)
@@ -436,11 +407,7 @@ class MainWindow(QMainWindow):
                 lambda _finding_id, target=documentation_dock: target.raise_()
             )
             right_docks.append(documentation_dock)
-        if (
-            workflow_service is not None
-            and self.review_panel is not None
-            and ui_state_path is not None
-        ):
+        if self.review_panel is not None and ui_state_path is not None:
             self.project_panel = ProjectPanelWidget(
                 gateway=project_gateway,
                 viewer=self.pdf_viewer,
@@ -485,13 +452,6 @@ class MainWindow(QMainWindow):
             self.tabifyDockWidget(current, following)
         if right_docks:
             right_docks[0].raise_()
-        selected_coordinator = operation_coordinator
-        if selected_coordinator is None and workflow_service is not None:
-            selected_coordinator = workflow_service.coordenador
-        if selected_coordinator is not None:
-            self._operation_bridge = _OperationStateBridge(selected_coordinator, self)
-            self._operation_bridge.state_changed.connect(self._operation_state_changed)
-            self._operation_state_changed(self._operation_bridge.current)
         if startup_ocr_diagnostic is not None:
             self.ocr_diagnostic_button = QToolButton(self)
             self.ocr_diagnostic_button.setObjectName("ocrStartupDiagnosticButton")
@@ -593,27 +553,56 @@ class MainWindow(QMainWindow):
             self.documentation_panel.atualizar_regras()
         self._refresh_data_panels()
 
-    @Slot(object)
-    def _operation_state_changed(self, operation: object) -> None:
-        self._coordinator_operation = operation if isinstance(operation, TipoOperacao) else None
-        self._refresh_operation_controls()
-
     @Slot(bool)
     def _refresh_operation_controls(self, _busy: bool = False) -> None:
         project_busy = self.project_panel is not None and self.project_panel.processando
         portability_busy = self.portability_panel is not None and self.portability_panel.processando
-        busy = self._coordinator_operation is not None or project_busy or portability_busy
+        busy = project_busy or portability_busy
         if self.project_panel is not None:
-            self.project_panel.setEnabled(not portability_busy)
-            self.project_panel.set_global_operation(self._coordinator_operation)
+            self.project_panel.setEnabled(self._connection_available and not portability_busy)
+            self.project_panel.set_global_operation(None)
         if self.portability_panel is not None:
-            self.portability_panel.setEnabled(not project_busy)
-            self.portability_panel.set_global_operation(self._coordinator_operation)
-        self.pdf_viewer.setEnabled(not portability_busy)
+            self.portability_panel.setEnabled(self._connection_available and not project_busy)
+            self.portability_panel.set_global_operation(None)
+        self.pdf_viewer.setEnabled(self._connection_available and not portability_busy)
         if self.review_panel is not None:
-            self.review_panel.setEnabled(not busy)
+            self.review_panel.setEnabled(self._connection_available and not busy)
         if self.documentation_panel is not None:
-            self.documentation_panel.setEnabled(not busy)
+            self.documentation_panel.setEnabled(self._connection_available and not busy)
+
+    @Slot()
+    def _reconnect(self) -> None:
+        callback = self._reconnect_callback
+        if callback is None:
+            return
+        if callback():
+            self.set_connection_available(True, "Conexão restabelecida")
+
+    @Slot(bool, str)
+    def set_connection_available(self, available: bool, message: str = "") -> None:
+        """Bloqueie operações remotas e reative os mesmos painéis após reconectar."""
+        if self._connection_available == available and not message:
+            return
+        self._connection_available = available
+        self._reconnect_action.setEnabled(not available)
+        if self.project_panel is not None:
+            if available:
+                self.project_panel.restart_polling()
+            else:
+                self.project_panel.shutdown_polling()
+        self._refresh_operation_controls()
+        if available:
+            self._refresh_data_panels()
+            if self.documentation_panel is not None:
+                self.documentation_panel.atualizar_regras()
+        self.statusBar().showMessage(
+            message
+            or (
+                "Conectado ao servidor"
+                if available
+                else "Servidor indisponível. Use Conexão > Reconectar."
+            )
+        )
 
     def set_resource_cleanup(self, callback: Callable[[], None]) -> None:
         self._resource_cleanup = callback
@@ -650,6 +639,4 @@ class MainWindow(QMainWindow):
         self.pdf_viewer.encerrar()
         super().closeEvent(event)
         if event.isAccepted():
-            if self._operation_bridge is not None:
-                self._operation_bridge.close()
             self.release_resources()

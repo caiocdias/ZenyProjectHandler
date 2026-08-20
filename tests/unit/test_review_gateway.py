@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from zeny_project_handler.ui.review_gateway import HttpReviewGateway, ReviewGatewayError
+from zeny_project_handler_client.ui.review_gateway import HttpReviewGateway, ReviewGatewayError
 from zeny_project_handler_contracts.base import CorrelationId, ReviewSessionId
 from zeny_project_handler_contracts.errors import ErrorCode, ErrorEnvelope
 from zeny_project_handler_contracts.review import (

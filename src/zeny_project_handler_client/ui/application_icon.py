@@ -1,4 +1,4 @@
-"""Carregamento do ícone empacotado da aplicação."""
+"""Carregamento do ícone empacotado do cliente."""
 
 from __future__ import annotations
 
@@ -8,9 +8,9 @@ from pathlib import Path
 from PySide6.QtCore import QBuffer, QByteArray, QIODevice
 from PySide6.QtGui import QIcon, QImageReader, QPixmap
 
-from zeny_project_handler.assets import APPLICATION_ICON_ICO
+from zeny_project_handler_client.assets import APPLICATION_ICON_ICO
 
-_ASSET_PACKAGE = "zeny_project_handler.assets"
+_ASSET_PACKAGE = "zeny_project_handler_client.assets"
 
 
 def materializar_icone_aplicacao(diretorio: Path) -> Path:

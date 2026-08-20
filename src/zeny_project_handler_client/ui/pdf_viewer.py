@@ -1,4 +1,4 @@
-"""Visualizador PDF desacoplado do mecanismo concreto de leitura."""
+"""Visualizador cliente desacoplado do mecanismo concreto de leitura."""
 
 from __future__ import annotations
 
@@ -52,14 +52,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from zeny_project_handler.application.visual_occupancy import (
-    MapaOcupacaoVisual,
-    detectar_ocupacao_visual_rgb,
-)
-from zeny_project_handler.config import DEFAULT_PDF_TILE_CACHE_MAX_BYTES
-from zeny_project_handler.domain.enums import TipoGeometria
-from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
-from zeny_project_handler.logging_config import OperationLogger, operation_logger
+from zeny_project_handler_client.config import DEFAULT_PDF_TILE_CACHE_MAX_BYTES
+from zeny_project_handler_client.logging_config import OperationLogger, operation_logger
+from zeny_project_handler_client.presentation import NormalizedPoint, PresentationGeometry
 from zeny_project_handler_contracts.base import DocumentId, PageId
 from zeny_project_handler_contracts.common import (
     EvidenceNavigationDto,
@@ -92,13 +87,20 @@ from .pdf_rendering import (
 )
 
 _FONTE_CALLOUT_REGISTRO_TENTADO = False
-_DPI_MAPA_OCUPACAO = 48
 
 
 @dataclass(frozen=True, slots=True)
 class PontoPlano:
     x: float
     y: float
+
+
+class _NormalizedPointLike(Protocol):
+    @property
+    def x(self) -> Decimal: ...
+
+    @property
+    def y(self) -> Decimal: ...
 
 
 class TransformadorViewport:
@@ -115,18 +117,18 @@ class TransformadorViewport:
         self.origem_x_pixels = plan.origem_x_pixels
         self.origem_y_pixels = plan.origem_y_pixels
 
-    def normalizado_para_pixel(self, point: PontoNormalizado) -> PontoPlano:
+    def normalizado_para_pixel(self, point: _NormalizedPointLike) -> PontoPlano:
         x, y = _rotate_normalized(float(point.x), float(point.y), self.rotacao_adicional_graus)
         return PontoPlano(
             x * self.largura_pagina_pixels - self.origem_x_pixels,
             y * self.altura_pagina_pixels - self.origem_y_pixels,
         )
 
-    def pixel_para_normalizado(self, point: PontoPlano) -> PontoNormalizado:
+    def pixel_para_normalizado(self, point: PontoPlano) -> NormalizedPoint:
         x = (point.x + self.origem_x_pixels) / self.largura_pagina_pixels
         y = (point.y + self.origem_y_pixels) / self.altura_pagina_pixels
         x, y = _unrotate_normalized(x, y, self.rotacao_adicional_graus)
-        return PontoNormalizado(Decimal(str(x)), Decimal(str(y)))
+        return NormalizedPoint(Decimal(str(x)), Decimal(str(y)))
 
 
 @dataclass(frozen=True, slots=True)
@@ -255,7 +257,7 @@ class PdfGraphicsView(QGraphicsView):
         self._tile_items: dict[ChaveCacheRenderizacao, QGraphicsPixmapItem] = {}
         self._overlay_items: list[QGraphicsPathItem] = []
         self._review_items: dict[str, QGraphicsPathItem] = {}
-        self._review_geometries: dict[str, GeometriaDocumento] = {}
+        self._review_geometries: dict[str, PresentationGeometry] = {}
         self._review_transformer: TransformadorViewport | None = None
         self._callout_layer: QGraphicsRectItem | None = None
         self._callout_items: dict[str, _GraficosCallout] = {}
@@ -324,7 +326,7 @@ class PdfGraphicsView(QGraphicsView):
 
     def definir_sobreposicoes(
         self,
-        geometries: tuple[tuple[PontoNormalizado, ...], ...],
+        geometries: tuple[tuple[NormalizedPoint, ...], ...],
         transformer: TransformadorViewport,
     ) -> None:
         if self._pixmap_item is None:
@@ -402,8 +404,8 @@ class PdfGraphicsView(QGraphicsView):
         self._review_transformer = transformer
         for proposal in proposals:
             key = str(proposal.proposal_id.root)
-            geometry = _review_geometry_to_domain(proposal.geometry)
-            link_geometry = _review_geometry_to_domain(proposal.link_geometry)
+            geometry = _review_geometry_to_presentation(proposal.geometry)
+            link_geometry = _review_geometry_to_presentation(proposal.link_geometry)
             item = ReviewLinkItem(
                 _review_link_path(link_geometry, transformer),
             )
@@ -443,23 +445,23 @@ class PdfGraphicsView(QGraphicsView):
         self._selected_callout_id = None
         self._atualizar_realce_callouts()
 
-    def geometria_proposta(self, proposal_id: str) -> GeometriaDocumento | None:
+    def geometria_proposta(self, proposal_id: str) -> PresentationGeometry | None:
         item = self._review_items.get(proposal_id)
         geometry = self._review_geometries.get(proposal_id)
         transformer = self._review_transformer
         if item is None or geometry is None or transformer is None:
             return None
-        normalized_points: list[PontoNormalizado] = []
-        for normalized in geometry.pontos:
+        normalized_points: list[NormalizedPoint] = []
+        for normalized in geometry.points:
             pixel = transformer.normalizado_para_pixel(normalized)
             moved = item.mapToScene(QPointF(pixel.x, pixel.y))
             normalized_points.append(
                 transformer.pixel_para_normalizado(PontoPlano(moved.x(), moved.y()))
             )
-        return GeometriaDocumento(
-            pagina_id=geometry.pagina_id,
-            tipo=geometry.tipo,
-            pontos=tuple(normalized_points),
+        return PresentationGeometry(
+            page_id=geometry.page_id,
+            kind=geometry.kind,
+            points=tuple(normalized_points),
         )
 
     def _emit_selected_item(self) -> None:
@@ -593,13 +595,12 @@ class PdfViewerWidget(QWidget):
         self._inspections: tuple[ViewerDocumentDto, ...] = ()
         self._project_pages: tuple[_PaginaProjetoRemota, ...] = ()
         self._rotation = 0
-        self._overlays: tuple[tuple[PontoNormalizado, ...], ...] = ()
+        self._overlays: tuple[tuple[NormalizedPoint, ...], ...] = ()
         self._review_proposals: tuple[ReviewOverlayDto, ...] = ()
-        self._review_link_geometries: dict[str, GeometriaDocumento] = {}
+        self._review_link_geometries: dict[str, PresentationGeometry] = {}
         self._compliance_callouts: tuple[ComplianceCalloutDto, ...] = ()
         self._callout_position_overrides: dict[str, NormalizedBoxDto] = {}
         self._selected_compliance_callout_id: str | None = None
-        self._visual_occupancy_cache: dict[UUID, MapaOcupacaoVisual] = {}
         self._current_transformer: TransformadorViewport | None = None
         self._last_page_id: str | None = None
         self._build_ui()
@@ -725,7 +726,6 @@ class PdfViewerWidget(QWidget):
         self._compliance_callouts = ()
         self._callout_position_overrides.clear()
         self._selected_compliance_callout_id = None
-        self._visual_occupancy_cache.clear()
         self._current_transformer = None
         self._last_page_id = None
         self._page.blockSignals(True)
@@ -1001,7 +1001,6 @@ class PdfViewerWidget(QWidget):
         self._compliance_callouts = ()
         self._callout_position_overrides.clear()
         self._selected_compliance_callout_id = None
-        self._visual_occupancy_cache.clear()
         self._last_page_id = None
         self._project_pages = project_pages
         self._inspection = inspections[0] if inspections else None
@@ -1017,7 +1016,7 @@ class PdfViewerWidget(QWidget):
         if project_pages:
             self._render_current_page()
 
-    def definir_sobreposicoes(self, geometries: tuple[tuple[PontoNormalizado, ...], ...]) -> None:
+    def definir_sobreposicoes(self, geometries: tuple[tuple[NormalizedPoint, ...], ...]) -> None:
         self._overlays = geometries
         if self._current_transformer is not None:
             self.view.definir_sobreposicoes(geometries, self._current_transformer)
@@ -1028,7 +1027,7 @@ class PdfViewerWidget(QWidget):
     ) -> None:
         """Converta DTOs normalizados somente para o desenho vetorial local."""
         self.definir_sobreposicoes(
-            tuple(_review_geometry_to_domain(item).pontos for item in geometries)
+            tuple(_review_geometry_to_presentation(item).points for item in geometries)
         )
 
     def definir_propostas_revisao(
@@ -1067,50 +1066,6 @@ class PdfViewerWidget(QWidget):
             if self._selected_compliance_callout_id is not None:
                 self.view.selecionar_callout(self._selected_compliance_callout_id)
 
-    def mapear_ocupacao_visual(
-        self,
-        pagina_ids: frozenset[UUID],
-    ) -> dict[UUID, MapaOcupacaoVisual]:
-        """Rasterize as páginas pedidas e detecte espaços realmente brancos."""
-        if not pagina_ids:
-            return {}
-        result: dict[UUID, MapaOcupacaoVisual] = {}
-        for context in self._project_pages:
-            page_id = context.pagina.page_id.root
-            if page_id not in pagina_ids:
-                continue
-            cached = self._visual_occupancy_cache.get(page_id)
-            if cached is None:
-                rendered = self._gateway.render_preview(
-                    context.pagina_remota_id,
-                    dpi=_DPI_MAPA_OCUPACAO,
-                    rotation=0,
-                )
-                image = QImage.fromData(rendered.png).convertToFormat(QImage.Format.Format_RGB888)
-                if image.isNull():
-                    raise ViewerGatewayError(
-                        ErrorCode.INTEGRITY_ERROR,
-                        "O raster remoto não pôde ser decodificado.",
-                    )
-                bits = image.bits()
-                rgb = bytes(bits[: image.sizeInBytes()])
-                cached = detectar_ocupacao_visual_rgb(
-                    page_id,
-                    largura_pixels=image.width(),
-                    altura_pixels=image.height(),
-                    stride=image.bytesPerLine(),
-                    dados_rgb=memoryview(rgb),
-                )
-                self._visual_occupancy_cache[page_id] = cached
-            result[page_id] = cached
-        missing = pagina_ids - result.keys()
-        if missing:
-            raise ViewerGatewayError(
-                ErrorCode.RESOURCE_NOT_FOUND,
-                "Não foi possível gerar o mapa visual de todas as páginas com callouts.",
-            )
-        return result
-
     def selecionar_callout(self, callout_id: str) -> None:
         if all(str(item.callout_id.root) != callout_id for item in self._compliance_callouts):
             return
@@ -1144,15 +1099,15 @@ class PdfViewerWidget(QWidget):
         right = left + Decimal(geometry.width)
         bottom = top + Decimal(geometry.height)
         if right <= left or bottom <= top:
-            self.definir_sobreposicoes(((PontoNormalizado(left, top),),))
+            self.definir_sobreposicoes(((NormalizedPoint(left, top),),))
             return
         self.definir_sobreposicoes(
             (
                 (
-                    PontoNormalizado(left, top),
-                    PontoNormalizado(right, top),
-                    PontoNormalizado(right, bottom),
-                    PontoNormalizado(left, bottom),
+                    NormalizedPoint(left, top),
+                    NormalizedPoint(right, top),
+                    NormalizedPoint(right, bottom),
+                    NormalizedPoint(left, bottom),
                 ),
             )
         )
@@ -1162,7 +1117,7 @@ class PdfViewerWidget(QWidget):
 
     def geometria_proposta(self, proposal_id: str) -> ReviewGeometryDto | None:
         geometry = self.view.geometria_proposta(proposal_id)
-        return _review_geometry_from_domain(geometry) if geometry is not None else None
+        return _review_geometry_from_presentation(geometry) if geometry is not None else None
 
     def _render_current_page(self) -> None:
         if not self._project_pages:
@@ -1687,29 +1642,19 @@ def _close_remote_sessions(gateway: PdfViewerGateway, session_ids: tuple[UUID, .
             gateway.close_session(session_id)
 
 
-def _review_geometry_to_domain(value: ReviewGeometryDto) -> GeometriaDocumento:
-    return GeometriaDocumento(
-        pagina_id=value.page_id.root,
-        tipo={
-            ReviewGeometryKind.POINT: TipoGeometria.PONTO,
-            ReviewGeometryKind.BOX: TipoGeometria.CAIXA,
-            ReviewGeometryKind.POLYLINE: TipoGeometria.POLILINHA,
-            ReviewGeometryKind.POLYGON: TipoGeometria.POLIGONO,
-        }[value.kind],
-        pontos=tuple(PontoNormalizado(Decimal(item.x), Decimal(item.y)) for item in value.points),
+def _review_geometry_to_presentation(value: ReviewGeometryDto) -> PresentationGeometry:
+    return PresentationGeometry(
+        page_id=value.page_id.root,
+        kind=value.kind,
+        points=tuple(NormalizedPoint(Decimal(item.x), Decimal(item.y)) for item in value.points),
     )
 
 
-def _review_geometry_from_domain(value: GeometriaDocumento) -> ReviewGeometryDto:
+def _review_geometry_from_presentation(value: PresentationGeometry) -> ReviewGeometryDto:
     return ReviewGeometryDto(
-        page_id=PageId(value.pagina_id),
-        kind={
-            TipoGeometria.PONTO: ReviewGeometryKind.POINT,
-            TipoGeometria.CAIXA: ReviewGeometryKind.BOX,
-            TipoGeometria.POLILINHA: ReviewGeometryKind.POLYLINE,
-            TipoGeometria.POLIGONO: ReviewGeometryKind.POLYGON,
-        }[value.tipo],
-        points=tuple(NormalizedPointDto(x=str(item.x), y=str(item.y)) for item in value.pontos),
+        page_id=PageId(value.page_id),
+        kind=value.kind,
+        points=tuple(NormalizedPointDto(x=str(item.x), y=str(item.y)) for item in value.points),
     )
 
 
@@ -1737,9 +1682,9 @@ def _criar_graficos_callout(
     color, background = _cores_callout(result, selecionado=False)
     box = callout.box
     left, top, right, bottom = _box_edges(box)
-    top_left = transformer.normalizado_para_pixel(PontoNormalizado(left, top))
-    top_right = transformer.normalizado_para_pixel(PontoNormalizado(right, top))
-    bottom_left = transformer.normalizado_para_pixel(PontoNormalizado(left, bottom))
+    top_left = transformer.normalizado_para_pixel(NormalizedPoint(left, top))
+    top_right = transformer.normalizado_para_pixel(NormalizedPoint(right, top))
+    bottom_left = transformer.normalizado_para_pixel(NormalizedPoint(left, bottom))
     box_width = math.hypot(top_right.x - top_left.x, top_right.y - top_left.y)
     box_height = math.hypot(bottom_left.x - top_left.x, bottom_left.y - top_left.y)
     angle = math.degrees(math.atan2(top_right.y - top_left.y, top_right.x - top_left.x))
@@ -1851,8 +1796,8 @@ def _atualizar_setas_callout(
 ) -> None:
     for line, anchor in zip(lines, _callout_anchors(callout), strict=True):
         connection = _ponto_conexao_callout(box, anchor)
-        start = transformer.normalizado_para_pixel(_point_to_domain(connection))
-        end = transformer.normalizado_para_pixel(_point_to_domain(anchor))
+        start = transformer.normalizado_para_pixel(_point_to_presentation(connection))
+        end = transformer.normalizado_para_pixel(_point_to_presentation(anchor))
         line.setPath(_caminho_seta_aberta(start, end, pixels_per_point, scene_bounds))
 
 
@@ -1866,8 +1811,8 @@ def _box_edges(box: NormalizedBoxDto) -> tuple[Decimal, Decimal, Decimal, Decima
     return left, top, left + Decimal(box.width), top + Decimal(box.height)
 
 
-def _point_to_domain(point: NormalizedPointDto) -> PontoNormalizado:
-    return PontoNormalizado(Decimal(point.x), Decimal(point.y))
+def _point_to_presentation(point: NormalizedPointDto) -> NormalizedPoint:
+    return NormalizedPoint(Decimal(point.x), Decimal(point.y))
 
 
 def _ponto_conexao_callout(
@@ -1989,11 +1934,11 @@ def _review_link_pen(state: ReviewState, *, selected: bool = False) -> QPen:
 
 
 def _review_link_path(
-    geometry: GeometriaDocumento,
+    geometry: PresentationGeometry,
     transformer: TransformadorViewport,
 ) -> QPainterPath:
-    pixels = tuple(transformer.normalizado_para_pixel(point) for point in geometry.pontos)
-    if geometry.tipo is TipoGeometria.POLIGONO and len(pixels) == 4:
+    pixels = tuple(transformer.normalizado_para_pixel(point) for point in geometry.points)
+    if geometry.kind is ReviewGeometryKind.POLYGON and len(pixels) == 4:
         return _polygon_review_link_path(pixels)
     left = min(point.x for point in pixels)
     right = max(point.x for point in pixels)

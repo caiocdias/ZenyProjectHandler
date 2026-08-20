@@ -58,9 +58,9 @@ from zeny_project_handler.domain.enums import (
 from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 from zeny_project_handler.ports.pdf import ReferenciaFontePdf
-from zeny_project_handler.ui.documentation_panel import DocumentationPanelWidget
-from zeny_project_handler.ui.pdf_viewer import PdfViewerWidget
-from zeny_project_handler.ui.review_panel import ReviewPanelWidget
+from zeny_project_handler_client.ui.documentation_panel import DocumentationPanelWidget
+from zeny_project_handler_client.ui.pdf_viewer import PdfViewerWidget
+from zeny_project_handler_client.ui.review_panel import ReviewPanelWidget
 from zeny_project_handler_contracts.base import ElementId, ProposalId, RegionId
 from zeny_project_handler_contracts.common import NormalizedPointDto as DtoPoint
 from zeny_project_handler_contracts.enums import (

@@ -13,12 +13,12 @@ from pytestqt.qtbot import QtBot
 from tests.pdf_fixtures import create_golden_pdf
 from tests.remote_gateways import DirectPortabilityGateway, DirectProjectGateway
 
-from zeny_project_handler.ui.portability_gateway import (
+from zeny_project_handler_client.ui.portability_gateway import (
     CancelCallback,
     PortabilityGateway,
     ProgressCallback,
 )
-from zeny_project_handler.ui.portability_panel import PortabilityPanelWidget
+from zeny_project_handler_client.ui.portability_panel import PortabilityPanelWidget
 from zeny_project_handler_contracts.backup import (
     BackupPreflightResponse,
     BackupRestorePreflightResponse,

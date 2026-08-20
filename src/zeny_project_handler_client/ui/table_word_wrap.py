@@ -1,4 +1,4 @@
-"""Quebra de linha opcional para as tabelas de dados da interface."""
+"""Quebra de linha opcional para as tabelas de dados do cliente."""
 
 from __future__ import annotations
 
