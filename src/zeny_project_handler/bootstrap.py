@@ -20,22 +20,13 @@ from zeny_project_handler.adapters.analysis.tesseract_runtime import (
     RuntimeTesseract,
     inspect_tesseract_runtime,
 )
-from zeny_project_handler.adapters.compliance import carregar_registro_conformidade_inicial
 from zeny_project_handler.adapters.interpretation import (
     InterpretadorRegrasExplicitas,
     carregar_registro_regras_inicial,
 )
 from zeny_project_handler.adapters.pdf import PyMuPdfReader
-from zeny_project_handler.adapters.persistence import (
-    SqlAlchemyUnitOfWork,
-    SqliteBackupManager,
-    SqlitePortableProjectDatabase,
-)
-from zeny_project_handler.adapters.portability import ZipProjectArchive
+from zeny_project_handler.adapters.persistence import SqlAlchemyUnitOfWork
 from zeny_project_handler.application.compliance_analysis import ExecutarAnaliseConformidade
-from zeny_project_handler.application.compliance_registry import (
-    ServicoRegistroRegrasConformidade,
-)
 from zeny_project_handler.application.document_analysis import ExecutarAnaliseDocumento
 from zeny_project_handler.application.document_compliance import prover_fatos_documentais
 from zeny_project_handler.application.errors import ApplicationError
@@ -47,7 +38,6 @@ from zeny_project_handler.application.operation_coordinator import CoordenadorOp
 from zeny_project_handler.application.pdf_credentials import ProvedorCredenciaisPdfMemoria
 from zeny_project_handler.application.pdf_import import ImportarPdfsNoProjeto
 from zeny_project_handler.application.project_compliance import prover_fatos_regionais
-from zeny_project_handler.application.project_portability import ServicoPortabilidadeProjeto
 from zeny_project_handler.application.span_compliance import prover_fatos_vaos
 from zeny_project_handler.application.topology_compliance import prover_fatos_topologicos
 from zeny_project_handler.composition import (
@@ -74,6 +64,10 @@ from zeny_project_handler.ui.documentation_gateway import (
 )
 from zeny_project_handler.ui.main_window import MainWindow
 from zeny_project_handler.ui.pdf_gateway import PdfViewerGateway, configured_pdf_viewer_gateway
+from zeny_project_handler.ui.portability_gateway import (
+    PortabilityGateway,
+    configured_portability_gateway,
+)
 from zeny_project_handler.ui.project_gateway import ProjectGateway, configured_project_gateway
 from zeny_project_handler.ui.review_gateway import ReviewGateway, configured_review_gateway
 from zeny_project_handler.ui.theme import THEME_SETTING_KEY, Tema, aplicar_tema
@@ -105,6 +99,7 @@ def create_application(
     project_gateway: ProjectGateway | None = None,
     review_gateway: ReviewGateway | None = None,
     documentation_gateway: DocumentationGateway | None = None,
+    portability_gateway: PortabilityGateway | None = None,
 ) -> tuple[QApplication, MainWindow]:
     """Monte a aplicação sem iniciar o loop de eventos."""
     app_settings = settings or AppSettings.from_environment()
@@ -121,6 +116,7 @@ def create_application(
                 project_gateway,
                 review_gateway,
                 documentation_gateway,
+                portability_gateway,
             )
         except (ApplicationError, ValueError) as error:
             observation.failed(error, expected=True)
@@ -139,6 +135,7 @@ def _compose_application(
     project_gateway: ProjectGateway | None = None,
     review_gateway: ReviewGateway | None = None,
     documentation_gateway: DocumentationGateway | None = None,
+    portability_gateway: PortabilityGateway | None = None,
 ) -> tuple[QApplication, MainWindow]:
     engine = initialize_local_storage(app_settings)
     lifetime = _EngineLifetime(engine)
@@ -152,6 +149,7 @@ def _compose_application(
             project_gateway,
             review_gateway,
             documentation_gateway,
+            portability_gateway,
         )
     except BaseException:
         lifetime.dispose()
@@ -167,6 +165,7 @@ def _compose_initialized_application(
     project_gateway: ProjectGateway | None,
     review_gateway: ReviewGateway | None,
     documentation_gateway: DocumentationGateway | None,
+    portability_gateway: PortabilityGateway | None,
 ) -> tuple[QApplication, MainWindow]:
 
     arguments = list(argv) if argv is not None else list(sys.argv)
@@ -191,12 +190,6 @@ def _compose_initialized_application(
 
     def unit_of_work() -> SqlAlchemyUnitOfWork:
         return SqlAlchemyUnitOfWork(engine)
-
-    compliance_service = ServicoRegistroRegrasConformidade(
-        unit_of_work,
-        diretorio_dados=app_settings.data_directory,
-        seed=carregar_registro_conformidade_inicial(),
-    )
 
     def list_projects() -> tuple[Projeto, ...]:
         with unit_of_work() as work:
@@ -259,18 +252,7 @@ def _compose_initialized_application(
         review_gateway=review_gateway or configured_review_gateway(),
         documentation_gateway=documentation_gateway or configured_documentation_gateway(),
         workflow_service=workflow_service,
-        portability_service=ServicoPortabilidadeProjeto(
-            unit_of_work,
-            ZipProjectArchive(),
-            SqlitePortableProjectDatabase(),
-            SqliteBackupManager(),
-            diretorio_dados=app_settings.data_directory,
-            caminho_banco=app_settings.database_path,
-            gerenciador_arquivos=managed_files,
-            coordenador=operation_coordinator,
-            descartar_conexoes=engine.dispose,
-            registro_conformidade=compliance_service,
-        ),
+        portability_gateway=portability_gateway or configured_portability_gateway(),
         operation_coordinator=operation_coordinator,
         ui_state_path=ui_state_path,
         initial_theme=initial_theme,

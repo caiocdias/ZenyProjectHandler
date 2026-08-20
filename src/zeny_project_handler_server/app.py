@@ -36,8 +36,14 @@ from zeny_project_handler.logging_config import (
     operation_logger,
 )
 from zeny_project_handler_contracts import API_V1_PREFIX, API_VERSION
+from zeny_project_handler_contracts.backup import (
+    BackupPreflightResponse,
+    BackupRestorePreflightResponse,
+    ConfirmBackupRestoreRequest,
+    CreateBackupJobRequest,
+)
 from zeny_project_handler_contracts.base import CorrelationId
-from zeny_project_handler_contracts.common import NormalizedBoxDto
+from zeny_project_handler_contracts.common import DownloadMetadataDto, NormalizedBoxDto
 from zeny_project_handler_contracts.compliance import (
     ComplianceExecutionResponse,
     ComplianceHistoryResponse,
@@ -56,6 +62,7 @@ from zeny_project_handler_contracts.jobs import (
     CancelJobResponse,
     CreateAnalysisJobRequest,
     CreateComplianceJobRequest,
+    CreateExportJobRequest,
     JobAcceptedResponse,
     JobResultResponse,
     JobStatusResponse,
@@ -64,6 +71,10 @@ from zeny_project_handler_contracts.photos import (
     ManagedPhotoListResponse,
     ManagedPhotoResponse,
     RemoveManagedPhotoResponse,
+)
+from zeny_project_handler_contracts.portability import (
+    ConfirmProjectImportRequest,
+    ProjectImportPreflightResponse,
 )
 from zeny_project_handler_contracts.projects import (
     CreateProjectRequest,
@@ -111,8 +122,10 @@ from zeny_project_handler_server.composition import (
     compose_server_runtime,
 )
 from zeny_project_handler_server.config import ServerSettings
+from zeny_project_handler_server.portability_api import PortabilityApiService
 from zeny_project_handler_server.project_api import ManagedDownload, ProjectApiService
 from zeny_project_handler_server.review_api import ReviewApiService
+from zeny_project_handler_server.transfer_storage import TransferDownload
 from zeny_project_handler_server.viewer_api import ViewerApiService, ViewerRaster
 
 CORRELATION_HEADER = "X-Correlation-ID"
@@ -773,6 +786,148 @@ def create_app(
             },
         )
 
+    @application.post(
+        f"{API_V1_PREFIX}/projects/{{project_id}}/export-jobs",
+        status_code=status.HTTP_202_ACCEPTED,
+        response_model=JobAcceptedResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def create_project_export_job(
+        request: Request,
+        project_id: UUID,
+        payload: CreateExportJobRequest,
+        idempotency_key: str = Header(alias="Idempotency-Key", min_length=1, max_length=200),
+    ) -> JobAcceptedResponse:
+        return _jobs(request).create_project_export_job(
+            project_id,
+            payload,
+            idempotency_key=idempotency_key,
+            correlation_id=str(request.state.correlation_id),
+        )
+
+    @application.post(
+        f"{API_V1_PREFIX}/project-import-preflights",
+        status_code=status.HTTP_201_CREATED,
+        response_model=ProjectImportPreflightResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def preflight_project_import(
+        request: Request,
+        file: UploadFile,
+        idempotency_key: str = Header(alias="Idempotency-Key", min_length=1, max_length=200),
+    ) -> ProjectImportPreflightResponse:
+        return await _portability_api(request).receive_project_import(
+            file,
+            idempotency_key=idempotency_key,
+        )
+
+    @application.post(
+        f"{API_V1_PREFIX}/project-import-jobs",
+        status_code=status.HTTP_202_ACCEPTED,
+        response_model=JobAcceptedResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def confirm_project_import(
+        request: Request,
+        payload: ConfirmProjectImportRequest,
+        idempotency_key: str = Header(alias="Idempotency-Key", min_length=1, max_length=200),
+    ) -> JobAcceptedResponse:
+        return _jobs(request).create_project_import_job(
+            payload,
+            idempotency_key=idempotency_key,
+            correlation_id=str(request.state.correlation_id),
+        )
+
+    @application.post(
+        f"{API_V1_PREFIX}/backup-preflights",
+        status_code=status.HTTP_201_CREATED,
+        response_model=BackupPreflightResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def preflight_backup_create(request: Request) -> BackupPreflightResponse:
+        return _portability_api(request).preflight_backup()
+
+    @application.post(
+        f"{API_V1_PREFIX}/backup-jobs",
+        status_code=status.HTTP_202_ACCEPTED,
+        response_model=JobAcceptedResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def create_backup_job(
+        request: Request,
+        payload: CreateBackupJobRequest,
+        idempotency_key: str = Header(alias="Idempotency-Key", min_length=1, max_length=200),
+    ) -> JobAcceptedResponse:
+        return _jobs(request).create_backup_job(
+            payload,
+            idempotency_key=idempotency_key,
+            correlation_id=str(request.state.correlation_id),
+        )
+
+    @application.post(
+        f"{API_V1_PREFIX}/backup-restore-preflights",
+        status_code=status.HTTP_201_CREATED,
+        response_model=BackupRestorePreflightResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def preflight_backup_restore(
+        request: Request,
+        file: UploadFile,
+        idempotency_key: str = Header(alias="Idempotency-Key", min_length=1, max_length=200),
+    ) -> BackupRestorePreflightResponse:
+        return await _portability_api(request).receive_backup_restore(
+            file,
+            idempotency_key=idempotency_key,
+        )
+
+    @application.post(
+        f"{API_V1_PREFIX}/backup-restore-jobs",
+        status_code=status.HTTP_202_ACCEPTED,
+        response_model=JobAcceptedResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def confirm_backup_restore(
+        request: Request,
+        payload: ConfirmBackupRestoreRequest,
+        idempotency_key: str = Header(alias="Idempotency-Key", min_length=1, max_length=200),
+    ) -> JobAcceptedResponse:
+        return _jobs(request).create_backup_restore_job(
+            payload,
+            idempotency_key=idempotency_key,
+            correlation_id=str(request.state.correlation_id),
+        )
+
+    @application.get(
+        f"{API_V1_PREFIX}/downloads/{{download_id}}/metadata",
+        response_model=DownloadMetadataDto,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def get_download_metadata(
+        request: Request,
+        download_id: UUID,
+    ) -> DownloadMetadataDto:
+        return _portability_api(request).get_download(download_id).metadata
+
+    @application.get(
+        f"{API_V1_PREFIX}/downloads/{{download_id}}",
+        response_class=StreamingResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def download_job_artifact(
+        request: Request,
+        download_id: UUID,
+    ) -> StreamingResponse:
+        return _stream_transfer_download(_portability_api(request).get_download(download_id))
+
     @application.get(
         f"{API_V1_PREFIX}/projects/{{project_id}}/photos",
         response_model=ManagedPhotoListResponse,
@@ -866,6 +1021,13 @@ def _compliance_api(request: Request) -> DocumentationComplianceApiService:
     return service
 
 
+def _portability_api(request: Request) -> PortabilityApiService:
+    service = _runtime(request).portability_api
+    if service is None:
+        raise ApiError(503, ErrorCode.OPERATION_CONFLICT, "A portabilidade não está disponível.")
+    return service
+
+
 def _jobs(request: Request) -> JobLifecycle:
     return _runtime(request).jobs
 
@@ -946,6 +1108,28 @@ def _stream_download(download: ManagedDownload) -> StreamingResponse:
             "Content-Disposition": f'attachment; filename="{download.display_name}"',
             "Content-Length": str(download.size_bytes),
             "Digest": f"sha-256={digest}",
+        },
+    )
+
+
+def _stream_transfer_download(download: TransferDownload) -> StreamingResponse:
+    metadata = download.metadata
+
+    def sync_chunks() -> Iterator[bytes]:
+        with download.path.open("rb") as stream:
+            while chunk := stream.read(1024 * 1024):
+                yield chunk
+
+    digest = b64encode(bytes.fromhex(metadata.sha256)).decode("ascii")
+    return StreamingResponse(
+        sync_chunks(),
+        media_type=metadata.mime_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{metadata.file_name}"',
+            "Content-Length": str(metadata.size_bytes),
+            "Digest": f"sha-256={digest}",
+            "Cache-Control": "private, no-store",
+            "X-Content-SHA256": metadata.sha256,
         },
     )
 

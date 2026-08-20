@@ -91,6 +91,35 @@ class StageThreeStore:
                 )
             )
 
+    def replace_completed_idempotency(
+        self,
+        *,
+        key: str,
+        operation: str,
+        request_sha256: str,
+        resource_id: UUID,
+        response_json: str,
+    ) -> None:
+        """Republique o recibo que um restore de banco pode ter substituído."""
+        now = _now_text()
+        with self._lock, self._engine.begin() as connection:
+            connection.execute(
+                delete(api_idempotency_records).where(
+                    api_idempotency_records.c.idempotency_key == key
+                )
+            )
+            connection.execute(
+                insert(api_idempotency_records).values(
+                    idempotency_key=key,
+                    operation=operation,
+                    request_sha256=request_sha256,
+                    resource_id=str(resource_id),
+                    response_json=response_json,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+
     def get_upload(self, upload_id: UUID) -> UploadRecord | None:
         with self._engine.connect() as connection:
             row = (

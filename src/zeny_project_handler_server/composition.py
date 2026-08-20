@@ -42,14 +42,20 @@ from zeny_project_handler_contracts import (
     MAX_COMPATIBLE_API_VERSION,
     MIN_COMPATIBLE_API_VERSION,
 )
+from zeny_project_handler_contracts.backup import (
+    ConfirmBackupRestoreRequest,
+    CreateBackupJobRequest,
+)
 from zeny_project_handler_contracts.common import GlobalOperationDto
 from zeny_project_handler_contracts.enums import OcrStatus
 from zeny_project_handler_contracts.jobs import (
     CancelJobResponse,
+    CreateExportJobRequest,
     JobAcceptedResponse,
     JobResultResponse,
     JobStatusResponse,
 )
+from zeny_project_handler_contracts.portability import ConfirmProjectImportRequest
 from zeny_project_handler_contracts.session import (
     OcrDiagnosticDto,
     SessionCapabilitiesResponse,
@@ -57,8 +63,10 @@ from zeny_project_handler_contracts.session import (
 from zeny_project_handler_server.compliance_api import DocumentationComplianceApiService
 from zeny_project_handler_server.config import ServerSettings
 from zeny_project_handler_server.job_manager import JobManager
+from zeny_project_handler_server.portability_api import PortabilityApiService
 from zeny_project_handler_server.project_api import ProjectApiService
 from zeny_project_handler_server.review_api import ReviewApiService
+from zeny_project_handler_server.transfer_storage import ManagedTransferStorage
 from zeny_project_handler_server.viewer_api import ViewerApiService
 
 SERVER_CAPABILITIES = (
@@ -77,6 +85,9 @@ SERVER_CAPABILITIES = (
     "remote-documentation-compliance",
     "remote-rule-registry",
     "server-compiled-compliance-callouts",
+    "remote-project-portability",
+    "remote-backup-restore",
+    "managed-transfer-downloads",
 )
 
 
@@ -106,6 +117,39 @@ class JobLifecycle(Protocol):
         correlation_id: str,
     ) -> JobAcceptedResponse: ...
 
+    def create_project_export_job(
+        self,
+        project_id: UUID,
+        request: CreateExportJobRequest,
+        *,
+        idempotency_key: str,
+        correlation_id: str,
+    ) -> JobAcceptedResponse: ...
+
+    def create_project_import_job(
+        self,
+        request: ConfirmProjectImportRequest,
+        *,
+        idempotency_key: str,
+        correlation_id: str,
+    ) -> JobAcceptedResponse: ...
+
+    def create_backup_job(
+        self,
+        request: CreateBackupJobRequest,
+        *,
+        idempotency_key: str,
+        correlation_id: str,
+    ) -> JobAcceptedResponse: ...
+
+    def create_backup_restore_job(
+        self,
+        request: ConfirmBackupRestoreRequest,
+        *,
+        idempotency_key: str,
+        correlation_id: str,
+    ) -> JobAcceptedResponse: ...
+
     def get_job(self, job_id: UUID) -> JobStatusResponse: ...
 
     def get_result(self, job_id: UUID) -> JobResultResponse: ...
@@ -126,6 +170,18 @@ class _IdleJobLifecycle:
         raise RuntimeError("O gerenciador de jobs não está disponível")
 
     def create_compliance_job(self, *_args: object, **_kwargs: object) -> JobAcceptedResponse:
+        raise RuntimeError("O gerenciador de jobs não está disponível")
+
+    def create_project_export_job(self, *_args: object, **_kwargs: object) -> JobAcceptedResponse:
+        raise RuntimeError("O gerenciador de jobs não está disponível")
+
+    def create_project_import_job(self, *_args: object, **_kwargs: object) -> JobAcceptedResponse:
+        raise RuntimeError("O gerenciador de jobs não está disponível")
+
+    def create_backup_job(self, *_args: object, **_kwargs: object) -> JobAcceptedResponse:
+        raise RuntimeError("O gerenciador de jobs não está disponível")
+
+    def create_backup_restore_job(self, *_args: object, **_kwargs: object) -> JobAcceptedResponse:
         raise RuntimeError("O gerenciador de jobs não está disponível")
 
     def get_job(self, _job_id: UUID) -> JobStatusResponse:
@@ -159,6 +215,9 @@ class ServerRuntimeProtocol(Protocol):
     def compliance_api(self) -> DocumentationComplianceApiService | None: ...
 
     @property
+    def portability_api(self) -> PortabilityApiService | None: ...
+
+    @property
     def jobs(self) -> JobLifecycle: ...
 
     def close(self) -> None: ...
@@ -175,6 +234,7 @@ class ServerRuntime:
     viewer_api: ViewerApiService | None = None
     review_api: ReviewApiService | None = None
     compliance_api: DocumentationComplianceApiService | None = None
+    portability_api: PortabilityApiService | None = None
     _closed: bool = False
 
     def session_capabilities(self) -> SessionCapabilitiesResponse:
@@ -265,6 +325,14 @@ def compose_server_runtime(settings: ServerSettings) -> ServerRuntime:
             review_api=review_api,
             upload_max_bytes=settings.upload_max_bytes,
         )
+        portability_api = PortabilityApiService(
+            project_api=project_api,
+            transfer_storage=ManagedTransferStorage(
+                settings.data_directory,
+                maximum_bytes=settings.upload_max_bytes,
+                ttl_seconds=settings.transfer_ttl_seconds,
+            ),
+        )
 
         def run_analysis(
             project_id: UUID,
@@ -289,6 +357,7 @@ def compose_server_runtime(settings: ServerSettings) -> ServerRuntime:
             analysis_runner=run_analysis,
             compliance_runner=compliance_api.execute_compliance,
             semantic_signature_reader=compliance_api.semantic_signature,
+            portability=portability_api,
             retention_seconds=settings.job_retention_seconds,
             maximum_retained=settings.job_max_retained,
         )
@@ -305,6 +374,7 @@ def compose_server_runtime(settings: ServerSettings) -> ServerRuntime:
         viewer_api=viewer_api,
         review_api=review_api,
         compliance_api=compliance_api,
+        portability_api=portability_api,
     )
 
 

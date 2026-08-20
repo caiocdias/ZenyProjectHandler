@@ -252,20 +252,24 @@ inferência.
 
 ## Portabilidade e backup
 
-`.zphproj` é um ZIP verificável para um projeto. `.zphbackup` contém um snapshot do ambiente local.
-Pacotes novos usam manifesto de formato 2 com caminhos relativos, tipos, tamanhos, SHA-256, estado
-de integridade e omissões declaradas.
+`.zphproj` é um ZIP verificável para um projeto. `.zphbackup` contém um snapshot do ambiente do
+servidor. Pacotes novos usam manifesto de formato 2 com caminhos relativos, tipos, tamanhos,
+SHA-256, estado de integridade e omissões declaradas. ZIP, SQLite e árvore gerenciada são manipulados
+somente pelo servidor.
 
-A importação possui preflight somente leitura e aplicação posterior à confirmação. O plano inclui a
-identidade do pacote e do destino; qualquer mudança entre inspeção e aplicação exige novo preflight.
-IDs, análises, propostas, revisões e resultados são preservados.
+A importação possui upload streaming, preflight somente leitura e job posterior à confirmação. O
+plano inclui a identidade do pacote e o fingerprint do destino; qualquer mudança entre inspeção e
+aplicação exige novo preflight. IDs, análises, propostas, revisões e resultados são preservados.
 
 Antes do backup, todas as origens PDF são classificadas. Backup íntegro prossegue diretamente;
 origens ausentes, alteradas ou ilegíveis exigem confirmação e geram pacote `DEGRADADO`. A restauração
 de um pacote degradado ainda exige integridade de tudo que o manifesto declara.
 
-A troca de cada arquivo é atômica e exceções capturadas disparam compensação. A restauração conjunta
-de SQLite e árvore gerenciada não possui journal durável contra queda abrupta entre os recursos.
+A troca de cada arquivo é atômica e exceções capturadas disparam compensação. Exportação e backup
+publicam um download autenticado com metadados de tamanho, SHA-256 e expiração; o cliente grava em
+temporário irmão e só substitui o destino após validar a identidade. Uploads, preflights e downloads
+expirados são removidos pela política de TTL. A restauração conjunta de SQLite e árvore gerenciada
+não possui journal durável contra queda abrupta entre os recursos.
 
 ## Interface e concorrência
 
@@ -273,9 +277,9 @@ A análise do painel Projeto executa no servidor e é observada por polling fora
 interface. Um segundo cliente recebe o mesmo progresso/bloqueio global e conflito HTTP 409 ao tentar
 uma operação incompatível. A revisão humana também usa estado otimista remoto: duas sessões podem
 ler a mesma proposta, mas somente a primeira decisão válida persiste; a segunda recebe `409` e deve
-recarregar os DTOs. Importação, exportação, backup e restauração ainda não migradas continuam fora da
-thread da interface com progresso e cancelamento cooperativo local. Objetos Qt visuais permanecem na
-thread principal.
+recarregar os DTOs. Importação, exportação, backup e restauração executam como jobs persistidos no
+servidor. O cliente acompanha progresso monotônico por polling, solicita cancelamento remoto e faz
+upload/download fora da thread visual. Objetos Qt visuais permanecem na thread principal.
 
 Os painéis **Projeto**, **Resultados**, **Documentação e conformidade** e
 **Importar, exportar e backup** podem ser movidos, desacoplados e restaurados. Tema, geometria e

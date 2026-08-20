@@ -26,6 +26,7 @@ class ProjectSummaryDto(ContractModel):
     project_id: ProjectId
     service_note: NonEmptyString
     state: ProjectState
+    project_version: int = Field(ge=0)
     document_count: int = Field(ge=0)
     page_count: int = Field(ge=0)
     analysis: ProjectAnalysisSummaryDto

@@ -128,6 +128,7 @@ def _representative_models() -> list[ContractModel]:
         project_id=ProjectId(UUIDS[4]),
         service_note="1234567890",
         state=ProjectState.READY,
+        project_version=1,
         document_count=1,
         page_count=2,
         analysis=ProjectAnalysisSummaryDto(

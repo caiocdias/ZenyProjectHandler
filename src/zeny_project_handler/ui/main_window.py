@@ -37,7 +37,6 @@ from zeny_project_handler.application.operation_coordinator import (
     TipoOperacao,
 )
 from zeny_project_handler.application.pdf_credentials import ProvedorCredenciaisPdfMemoria
-from zeny_project_handler.application.project_portability import ServicoPortabilidadeProjeto
 from zeny_project_handler.ports.pdf import OrcamentoRenderizacaoPdf
 
 from .application_icon import carregar_icone_aplicacao
@@ -46,6 +45,7 @@ from .documentation_panel import DocumentationPanelWidget
 from .pdf_credentials import ResolvedorCredenciaisPdf
 from .pdf_gateway import PdfViewerGateway
 from .pdf_viewer import PdfViewerWidget
+from .portability_gateway import PortabilityGateway
 from .portability_panel import PortabilityPanelWidget
 from .project_gateway import ProjectGateway
 from .project_panel import ProjectPanelWidget
@@ -341,7 +341,7 @@ class MainWindow(QMainWindow):
         review_gateway: ReviewGateway | None = None,
         documentation_gateway: DocumentationGateway | None = None,
         workflow_service: ServicoFluxoMvp | None = None,
-        portability_service: ServicoPortabilidadeProjeto | None = None,
+        portability_gateway: PortabilityGateway | None = None,
         operation_coordinator: CoordenadorOperacoes | None = None,
         ui_state_path: Path | None = None,
         initial_theme: Tema = Tema.CLARO,
@@ -462,9 +462,9 @@ class MainWindow(QMainWindow):
             project_dock.setWidget(self.project_panel)
             self._register_dock(project_dock)
             self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, project_dock)
-        if portability_service is not None:
+        if portability_gateway is not None:
             self.portability_panel = PortabilityPanelWidget(
-                service=portability_service,
+                gateway=portability_gateway,
                 preparar_restauracao=lambda: self.pdf_viewer.preparar_para_restauracao(1_000),
                 parent=self,
             )
@@ -488,8 +488,6 @@ class MainWindow(QMainWindow):
         selected_coordinator = operation_coordinator
         if selected_coordinator is None and workflow_service is not None:
             selected_coordinator = workflow_service.coordenador
-        if selected_coordinator is None and portability_service is not None:
-            selected_coordinator = portability_service.coordenador
         if selected_coordinator is not None:
             self._operation_bridge = _OperationStateBridge(selected_coordinator, self)
             self._operation_bridge.state_changed.connect(self._operation_state_changed)

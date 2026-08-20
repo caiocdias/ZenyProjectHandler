@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from zeny_project_handler.ui.documentation_gateway import DocumentationGateway
     from zeny_project_handler.ui.main_window import MainWindow
     from zeny_project_handler.ui.pdf_gateway import PdfViewerGateway
+    from zeny_project_handler.ui.portability_gateway import PortabilityGateway
 from zeny_project_handler.ui.project_gateway import ProjectGateway
 from zeny_project_handler.ui.review_gateway import ReviewGateway
 
@@ -58,6 +59,7 @@ class ApplicationFactory(Protocol):
         project_gateway: ProjectGateway | None = None,
         review_gateway: ReviewGateway | None = None,
         documentation_gateway: DocumentationGateway | None = None,
+        portability_gateway: PortabilityGateway | None = None,
     ) -> tuple[QApplication, MainWindow]: ...
 
 
@@ -76,10 +78,12 @@ def application_factory() -> Iterator[ApplicationFactory]:
         project_gateway: ProjectGateway | None = None,
         review_gateway: ReviewGateway | None = None,
         documentation_gateway: DocumentationGateway | None = None,
+        portability_gateway: PortabilityGateway | None = None,
     ) -> tuple[QApplication, MainWindow]:
         from tests.remote_gateways import (
             DirectDocumentationGateway,
             DirectPdfViewerGateway,
+            DirectPortabilityGateway,
             DirectProjectGateway,
             DirectReviewGateway,
         )
@@ -116,6 +120,10 @@ def application_factory() -> Iterator[ApplicationFactory]:
             if runtime is None:
                 raise ValueError("O gateway de documentação deve acompanhar o runtime de teste")
             documentation_gateway = DirectDocumentationGateway(runtime)
+        if portability_gateway is None:
+            if runtime is None:
+                raise ValueError("O gateway de portabilidade deve acompanhar o runtime de teste")
+            portability_gateway = DirectPortabilityGateway(runtime)
         gateways.append(gateway)
         result = create_application(
             argv,
@@ -124,6 +132,7 @@ def application_factory() -> Iterator[ApplicationFactory]:
             project_gateway=project_gateway,
             review_gateway=review_gateway,
             documentation_gateway=documentation_gateway,
+            portability_gateway=portability_gateway,
         )
         created.append(result)
         return result

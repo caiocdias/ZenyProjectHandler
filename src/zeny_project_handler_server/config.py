@@ -27,6 +27,7 @@ VIEWER_SESSION_TTL_ENVIRONMENT_VARIABLE = "ZENY_SERVER_VIEWER_SESSION_TTL_SECOND
 VIEWER_MAX_FILES_ENVIRONMENT_VARIABLE = "ZENY_SERVER_VIEWER_MAX_FILES"
 JOB_RETENTION_ENVIRONMENT_VARIABLE = "ZENY_SERVER_JOB_RETENTION_SECONDS"
 JOB_MAX_RETAINED_ENVIRONMENT_VARIABLE = "ZENY_SERVER_JOB_MAX_RETAINED"
+TRANSFER_TTL_ENVIRONMENT_VARIABLE = "ZENY_SERVER_TRANSFER_TTL_SECONDS"
 
 PASSWORD_PLACEHOLDER = "troque-por-uma-senha-longa-e-aleatoria"
 DEFAULT_HOST = "0.0.0.0"
@@ -38,6 +39,7 @@ DEFAULT_VIEWER_SESSION_TTL_SECONDS = 15 * 60
 DEFAULT_VIEWER_MAX_FILES = 20
 DEFAULT_JOB_RETENTION_SECONDS = 24 * 60 * 60
 DEFAULT_JOB_MAX_RETAINED = 100
+DEFAULT_TRANSFER_TTL_SECONDS = 60 * 60
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +59,7 @@ class ServerSettings:
     viewer_max_files: int = DEFAULT_VIEWER_MAX_FILES
     job_retention_seconds: int = DEFAULT_JOB_RETENTION_SECONDS
     job_max_retained: int = DEFAULT_JOB_MAX_RETAINED
+    transfer_ttl_seconds: int = DEFAULT_TRANSFER_TTL_SECONDS
 
     def __post_init__(self) -> None:
         if not self.password.strip() or self.password.strip() == PASSWORD_PLACEHOLDER:
@@ -84,6 +87,7 @@ class ServerSettings:
         _require_positive(self.viewer_max_files, VIEWER_MAX_FILES_ENVIRONMENT_VARIABLE)
         _require_positive(self.job_retention_seconds, JOB_RETENTION_ENVIRONMENT_VARIABLE)
         _require_positive(self.job_max_retained, JOB_MAX_RETAINED_ENVIRONMENT_VARIABLE)
+        _require_positive(self.transfer_ttl_seconds, TRANSFER_TTL_ENVIRONMENT_VARIABLE)
         object.__setattr__(self, "host", normalized_host)
         object.__setattr__(self, "log_level", normalized_level)
         object.__setattr__(
@@ -156,6 +160,11 @@ class ServerSettings:
                 values,
                 JOB_MAX_RETAINED_ENVIRONMENT_VARIABLE,
                 DEFAULT_JOB_MAX_RETAINED,
+            ),
+            transfer_ttl_seconds=_integer_setting(
+                values,
+                TRANSFER_TTL_ENVIRONMENT_VARIABLE,
+                DEFAULT_TRANSFER_TTL_SECONDS,
             ),
         )
 

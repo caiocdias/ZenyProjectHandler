@@ -3,7 +3,7 @@
 - Estado geral: **PLANEJADO**
 - Data do planejamento: **2026-08-17**
 - Responsável pelo planejamento: **Codex**
-- Próxima etapa liberada: **Etapa 8** (**PENDENTE**; não iniciada neste chat)
+- Próxima etapa liberada: **Etapa 9** (**PENDENTE**; não iniciada neste chat)
 - Regra de execução: uma etapa só pode começar quando todas as suas dependências estiverem
   marcadas como **CONCLUÍDA**.
 
@@ -956,7 +956,7 @@ da API na conexão e recusar, com mensagem clara, uma combinação incompatível
 
 ## Etapa 8 — Portabilidade, backup e transferências remotas
 
-- Estado: **PENDENTE**
+- Estado: **CONCLUÍDA**
 - Dependências: Etapa 7 **CONCLUÍDA**
 - Entrega principal: pacotes são processados no servidor e transferidos como streams pelo cliente.
 
@@ -988,12 +988,52 @@ da API na conexão e recusar, com mensagem clara, uma combinação incompatível
 
 ### Evidências
 
-- Início/data/agente: _preencher_
-- Hashes e round trips: _preencher_
-- Testes de interrupção/corrupção/restart: _preencher_
-- Import graph do painel: _preencher_
-- Comandos/gates: _preencher_
-- Observações/bloqueios: _preencher_
+- Início/data/agente: **2026-08-20 13:32 -03:00 — Codex; roadmap, README, especificação
+  funcional e ADRs 0002, 0006, 0008 e 0013 lidos integralmente; Etapa 7 confirmada como
+  CONCLUÍDA e working tree inicial limpo. Escopo limitado aos DTOs/endpoints/jobs e transferências
+  remotas de portabilidade e backup, migração integral do painel sem ZIP/SQLite/lógica local,
+  preflight/confirmação/fingerprint, integridade, cancelamento, falhas de rede, restart e gates da
+  Etapa 8. Etapa 9 permanece PENDENTE e não será iniciada.**
+- Hashes e round trips: **exportação/importação `.zphproj` e criação/restauração
+  `.zphbackup` passaram por API HTTP real sem caminho compartilhado, inclusive com PDF sintético
+  e comparação do SHA-256 do documento antes/depois. Downloads autenticados são persistidos por
+  TTL, repetíveis até expirar e conferidos por tamanho/SHA-256 antes de publicação atômica no
+  cliente. O smoke da imagem final confirmou projeto
+  `40ca7306-645a-5e2a-9dda-ed2a9c0db713`, `.zphproj`
+  `9b11db0c22ca12a8a38ce0156f91098b2819d3d8f3e6ee90d91392d945681f02` e `.zphbackup`
+  `6d1340413208ed72fa13fb2c81afcb7bc3a80e6e1f3923e28c03c9d47314b216`, além de download
+  repetido idêntico e replay idempotente do restore.**
+- Testes de interrupção/corrupção/restart: **uploads são limitados e transmitidos em chunks para
+  `incoming` gerenciado; interrupção/cancelamento remove `.part`, e download interrompido preserva
+  o destino anterior e remove o temporário irmão. Pacote corrompido retorna
+  `422 INTEGRITY_ERROR`, path traversal é recusado, fingerprints obsoletos de projeto/backup
+  retornam `409 STALE_STATE`, cancelamento cooperativo termina sem artefato e uploads mutáveis não
+  são repetidos após falha de rede. Testes reiniciaram armazenamento e servidor HTTP preservando
+  downloads válidos e removendo expirados/interrompidos; o contêiner final voltou `healthy` após
+  restart e preservou o projeto restaurado no volume.**
+- Import graph do painel: **`tests/unit/test_portability_remote_boundary.py` inspeciona por AST
+  `portability_panel.py`, `portability_worker.py` e `portability_gateway.py`, proibindo
+  `sqlite3`, `zipfile`, adapters/application/domain/ports e símbolos protegidos. Painel e worker
+  usam somente contratos/DTOs, jobs, polling, cancelamento e streaming HTTP; ZIP, SQLite,
+  journals, fingerprints, árvore gerenciada e reconciliação permanecem no servidor.**
+- Comandos/gates: **a suíte dirigida consolidada aprovou 80 testes. `IniciarTestes.bat` final
+  registrou `RESULTADO FINAL: APROVADO`: Python 3.13.14, `pip check` íntegro, Ruff lint aprovado,
+  284 arquivos formatados, Mypy sem erros em 280 arquivos-fonte, 725 testes aprovados em 98,72 s,
+  cobertura 86,09% contra mínimo 85,01% e 2.431 funções/métodos sem complexidade E/F.
+  `docker compose config --quiet` passou; `docker compose build --no-cache` gerou
+  `zeny-project-handler-server:dev`, ID
+  `sha256:96cbd935eedadfc0f278fb134b722997d8d4265b0f7c49b58881847d3e3c921f`, 173.777.338
+  bytes e usuário `zeny`. O smoke autenticado da imagem comprovou as capacidades
+  `remote-project-portability`, `remote-backup-restore` e `managed-transfer-downloads`, os dois
+  round trips, hashes/tamanhos, download repetido, idempotência e persistência após restart.**
+- Observações/bloqueios: **conclusão em 2026-08-20 14:39 -03:00, sem bloqueios. A validação
+  encontrou e corrigiu o cache de progresso inicialmente compartilhado com jobs de análise, a
+  republicação do recibo idempotente após a troca do SQLite no restore e o fingerprint incompleto
+  do preflight de backup. O Temp padrão do Windows tinha ACL inválida, por isso as baterias
+  dirigidas foram repetidas no `C:\tmp` previsto pelo gate; o Docker Desktop foi iniciado para o
+  build final. Contêiner, rede, volume e pacotes temporários isolados foram removidos; a imagem
+  permaneceu para inspeção. Nenhum commit foi criado e a Etapa 9 permanece PENDENTE e não foi
+  iniciada.**
 
 ### Mensagem para um novo chat limpo do Codex
 

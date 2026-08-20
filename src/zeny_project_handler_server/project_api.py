@@ -167,6 +167,7 @@ class ProjectApiService:
             caminho_banco=database_path,
             gerenciador_arquivos=self._managed_files,
             coordenador=coordinator,
+            descartar_conexoes=engine.dispose,
         )
         self._storage.cleanup_interrupted()
         self._cleanup_abandoned_uploads()
@@ -177,6 +178,11 @@ class ProjectApiService:
 
     def close(self) -> None:
         self._credentials.limpar()
+
+    @property
+    def portability_service(self) -> ServicoPortabilidadeProjeto:
+        """Compartilhe os casos de uso somente com a API servidor de portabilidade."""
+        return self._photos
 
     @property
     def pdf_credentials(self) -> ProvedorCredenciaisPdfMemoria:
@@ -739,6 +745,7 @@ class ProjectApiService:
             project_id=ProjectId(project.id),
             service_note=project.nome,
             state=_project_state(project),
+            project_version=snapshot.version,
             document_count=len(project.documentos),
             page_count=sum(len(item.paginas) for item in project.documentos),
             analysis=self._analysis_summary(project),

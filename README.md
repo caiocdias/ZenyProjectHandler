@@ -32,8 +32,9 @@ há instalador ou pacote de distribuição para máquinas sem Python.
   fatos, snapshots persistidos e callouts normalizados compilados para a camada vetorial do cliente.
   O seed atual é
   `cemig-normas-distribuicao-2025.6`, com 39 regras habilitadas.
-- Importação e exportação de projetos `.zphproj`, backup completo `.zphbackup`, validação de
-  integridade e recuperação de operações interrompidas sobre arquivos gerenciados.
+- Importação e exportação remotas de projetos `.zphproj` e backup completo `.zphbackup`: o servidor
+  valida e processa pacotes em jobs, enquanto o cliente só transmite streams e publica downloads
+  conferidos por tamanho e SHA-256.
 - Temas claro e escuro, painéis acopláveis e restauração do estado da interface.
 
 As 39 regras são executáveis, mas um achado só é criado para alvos que satisfazem todas as condições
@@ -76,7 +77,8 @@ Abra sem console com duplo clique em `ZenyProjectHandler.vbs`. Para diagnóstico
    no PDF.
 5. Em **Documentação e conformidade**, confira os dados documentais, execute a conformidade e revise
    os callouts.
-6. Use **Importar, exportar e backup** para transportar um projeto ou proteger todo o estado local.
+6. Use **Importar, exportar e backup** para transportar um projeto ou proteger o estado persistido
+   no servidor. Preflights destrutivos exibem o resumo remoto antes da confirmação.
 
 O pipeline principal executa, em ordem, a extração documental, a interpretação semântica, a
 promoção dos resultados e a conformidade. A ação **Analisar conformidade** reaplica as regras aos
@@ -84,20 +86,24 @@ resultados semânticos persistidos; ela não abre o PDF nem repete OCR.
 
 ## Dados e integridade
 
-Por padrão, os dados ainda pertencentes ao painel de portabilidade não migrado, logs e estado da
-interface ficam em `%LOCALAPPDATA%\ZenyProjectHandler`. Use `ZENY_DATA_DIR` para escolher outra
-raiz. Os painéis **Projeto**, **Resultados** e **Documentação e conformidade** usam o servidor como
-fonte principal; banco, PDFs gerenciados, cache, jobs e logs desses processos ficam em
-`ZENY_SERVER_DATA_DIR` (normalmente o volume `/data`).
+Por padrão, preferências visuais, logs do cliente e downloads escolhidos pelo usuário ficam no
+computador cliente. Use `ZENY_DATA_DIR` para escolher a raiz local da interface. Os painéis
+**Projeto**, **Resultados**, **Documentação e conformidade** e **Importar, exportar e backup** usam o
+servidor como fonte principal; banco, PDFs gerenciados, cache, jobs, pacotes temporários e logs do
+servidor ficam em `ZENY_SERVER_DATA_DIR` (normalmente o volume `/data`).
 
 - O SQLite é migrado automaticamente na inicialização.
 - PDFs adicionados pelo painel Projeto são enviados por streaming e publicados em cópia gerenciada
   pelo servidor. A origem escolhida no cliente não é alterada nem apagada.
 - O aplicativo registra identidade, tamanho e SHA-256 da origem antes de analisar ou transportar o
   conteúdo.
-- `.zphproj` transporta um projeto com seus dados auditáveis e arquivos disponíveis.
-- `.zphbackup` protege o banco local completo, arquivos gerenciados e cópias verificadas dos PDFs
-  externos.
+- `.zphproj` transporta um projeto com seus dados auditáveis e arquivos disponíveis. Exportação e
+  importação executam no servidor; o cliente nunca abre o ZIP.
+- `.zphbackup` protege o banco completo do servidor, arquivos gerenciados e cópias verificadas dos
+  PDFs externos. O cliente nunca abre o snapshot SQLite.
+- Uploads possuem limite de tamanho, nome saneado e temporário gerenciado; downloads autenticados
+  têm TTL, podem ser repetidos enquanto válidos e só substituem o destino local após conferir
+  tamanho e SHA-256.
 - Pacotes validam manifesto, caminhos, tipos, tamanhos e hashes. Uma origem ausente, alterada ou
   ilegível só pode ser omitida depois de confirmação explícita e deixa o pacote marcado como
   degradado.

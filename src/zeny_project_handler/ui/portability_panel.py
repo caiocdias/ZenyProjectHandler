@@ -1,4 +1,4 @@
-"""Painel Qt assíncrono de transporte e recuperação de projetos."""
+"""Painel Qt de portabilidade remota sem ZIP, SQLite ou regras locais."""
 
 from __future__ import annotations
 
@@ -20,28 +20,23 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from zeny_project_handler.application.operation_coordinator import (
-    CoordenadorOperacoes,
-    TipoOperacao,
-)
-from zeny_project_handler.application.project_portability import (
-    PlanoImportacaoProjeto,
-    ResultadoBackupCompleto,
-    ResultadoExportacaoProjeto,
-    ResultadoImportacaoProjeto,
-    ResultadoRestauracaoBackup,
-    ServicoPortabilidadeProjeto,
-)
-from zeny_project_handler.domain.portability import (
-    EstadoIntegridadePacote,
-    RelatorioIntegridadeProjeto,
-)
 from zeny_project_handler.logging_config import operation_logger
+from zeny_project_handler.ui.portability_gateway import PortabilityGateway
+from zeny_project_handler_contracts.backup import (
+    BackupPreflightResponse,
+    BackupRestorePreflightResponse,
+)
+from zeny_project_handler_contracts.enums import IntegrityState
+from zeny_project_handler_contracts.portability import ProjectImportPreflightResponse
 
 from .portability_worker import (
     PortabilityCommand,
     PortabilityOperation,
+    PortabilityResult,
     PortabilityWorker,
+    backup_confirmation,
+    project_import_confirmation,
+    restore_confirmation,
 )
 
 
@@ -54,22 +49,21 @@ class PortabilityPanelWidget(QWidget):
     def __init__(
         self,
         *,
-        service: ServicoPortabilidadeProjeto,
-        coordinator: CoordenadorOperacoes | None = None,
+        gateway: PortabilityGateway,
         preparar_restauracao: Callable[[], bool] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("portabilityPanel")
-        self._service = service
-        self._coordinator = coordinator or service.coordenador
+        self._gateway = gateway
         self._preparar_restauracao = preparar_restauracao or (lambda: True)
         self._thread: QThread | None = None
         self._worker: PortabilityWorker | None = None
         self._cancellation: Event | None = None
         self._execution_id: str | None = None
         self._operation: PortabilityOperation | None = None
-        self._global_operation: TipoOperacao | None = None
+        self._global_operation: object | None = None
+        self._project_versions: dict[UUID, int] = {}
         self._last_progress = 0.0
         self._build_ui()
         self.atualizar_projetos()
@@ -127,15 +121,18 @@ class PortabilityPanelWidget(QWidget):
     def atualizar_projetos(self) -> None:
         selected = self._project.currentData()
         try:
-            summaries = self._service.listar_projetos()
+            response = self._gateway.list_projects(limit=200, offset=0)
         except Exception as error:
-            self._warn(str(error).strip() or error.__class__.__name__)
+            self.status_changed.emit(str(error).strip() or error.__class__.__name__)
             return
+        self._project_versions = {
+            item.project_id.root: item.project_version for item in response.items
+        }
         self._project.blockSignals(True)
         self._project.clear()
         self._project.addItem("Selecione um projeto", None)
-        for summary in summaries:
-            self._project.addItem(summary.nome, str(summary.projeto_id))
+        for summary in response.items:
+            self._project.addItem(summary.service_note, str(summary.project_id.root))
         if selected is not None:
             index = self._project.findData(selected)
             if index >= 0:
@@ -159,7 +156,10 @@ class PortabilityPanelWidget(QWidget):
         with selection.context():
             selection.started()
             name, _filter = QFileDialog.getSaveFileName(
-                self, "Exportar projeto portátil", "projeto.zphproj", "Projeto Zeny (*.zphproj)"
+                self,
+                "Exportar projeto portátil",
+                "projeto.zphproj",
+                "Projeto Zeny (*.zphproj)",
             )
             if not name:
                 selection.cancelled()
@@ -170,6 +170,7 @@ class PortabilityPanelWidget(QWidget):
                 PortabilityOperation.EXPORT,
                 _with_suffix(Path(name), ".zphproj"),
                 project_id,
+                self._project_versions[project_id],
             )
         )
 
@@ -224,31 +225,9 @@ class PortabilityPanelWidget(QWidget):
                 selection.cancelled()
                 return
             selection.succeeded()
-        confirmation_log = operation_logger("portability.restore.confirmation")
-        confirmation_log.started()
-        confirmation = QMessageBox.question(
-            self,
-            "Restaurar backup",
-            "Substituir o banco e os arquivos gerenciados atuais pelo backup selecionado? O "
-            "estado atual será preservado temporariamente para reversão se houver falha.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if confirmation != QMessageBox.StandardButton.Yes:
-            confirmation_log.cancelled()
-            return
-        confirmation_log.succeeded()
-        if not self._preparar_restauracao():
-            message = (
-                "A restauração não foi iniciada porque o PDF ainda está em uso. "
-                "Aguarde a renderização terminar e tente novamente."
-            )
-            self.status_changed.emit(message)
-            QMessageBox.warning(self, "Restauração não iniciada", message)
-            return
         self._start_operation(PortabilityCommand(PortabilityOperation.RESTORE, Path(name)))
 
-    def set_global_operation(self, operation: TipoOperacao | None) -> None:
+    def set_global_operation(self, operation: object | None) -> None:
         self._global_operation = operation
         self._apply_action_state()
 
@@ -263,7 +242,6 @@ class PortabilityPanelWidget(QWidget):
         self.status_changed.emit("Cancelamento solicitado; aguardando um ponto seguro")
 
     def cancelar_e_aguardar(self, timeout_ms: int) -> bool:
-        """Cancele cooperativamente e espere sem finalizar a thread à força."""
         thread = self._thread
         if thread is None or not thread.isRunning():
             return True
@@ -277,12 +255,7 @@ class PortabilityPanelWidget(QWidget):
         cancellation = Event()
         thread = QThread(self)
         thread.setObjectName(f"portability-{command.operation.value}-{execution_id[:8]}")
-        worker = PortabilityWorker(
-            self._service,
-            command,
-            cancellation,
-            execution_id,
-        )
+        worker = PortabilityWorker(self._gateway, command, cancellation, execution_id)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
         worker.progress.connect(self._show_progress)
@@ -300,21 +273,20 @@ class PortabilityPanelWidget(QWidget):
         self._operation = command.operation
         self._last_progress = 0.0
         self._progress.setRange(0, 0)
-        self._progress.setFormat("Preparando operação…")
+        self._progress.setFormat("Preparando operação remota…")
         self._apply_action_state()
         self.busy_changed.emit(True)
         thread.start()
 
     def _reject_reentry(self) -> bool:
         thread_running = self._thread is not None and self._thread.isRunning()
-        active = self._coordinator.operacao_em_andamento
-        if not self.processando and not thread_running and active is None:
+        if not self.processando and not thread_running and self._global_operation is None:
             return False
-        if self.processando or thread_running:
-            message = "Uma operação de portabilidade já está em andamento"
-        else:
-            assert active is not None
-            message = f"{active.value.capitalize()} está em andamento; aguarde a conclusão"
+        message = (
+            "Uma operação de portabilidade já está em andamento"
+            if self.processando or thread_running
+            else "Outra operação global está em andamento; aguarde a conclusão"
+        )
         self.status_changed.emit(message)
         return True
 
@@ -342,18 +314,25 @@ class PortabilityPanelWidget(QWidget):
                 worker.resolve_confirmation(False)
             return
         assert worker is not None
-        if kind == "replace_project" and isinstance(payload, PlanoImportacaoProjeto):
-            confirmation_log = operation_logger("portability.import.replace_confirmation")
+        if kind == "replace_project" and isinstance(payload, ProjectImportPreflightResponse):
             title = "Substituir projeto existente"
-            message = _import_confirmation_message(payload)
-        elif kind == "degraded_backup" and isinstance(payload, RelatorioIntegridadeProjeto):
-            confirmation_log = operation_logger("portability.backup.degraded_confirmation")
+            message = project_import_confirmation(payload)
+        elif kind == "degraded_backup" and isinstance(payload, BackupPreflightResponse):
             title = "Criar backup com ressalvas"
-            message = _backup_confirmation_message(payload)
+            message = backup_confirmation(payload)
+        elif kind == "restore_backup" and isinstance(payload, BackupRestorePreflightResponse):
+            if not self._preparar_restauracao():
+                worker.resolve_confirmation(False)
+                self._warn(
+                    "A restauração não foi iniciada porque o PDF ainda está em uso. "
+                    "Aguarde a renderização terminar e tente novamente."
+                )
+                return
+            title = "Restaurar backup remoto"
+            message = restore_confirmation(payload)
         else:
             worker.resolve_confirmation(False)
             return
-        confirmation_log.started()
         accepted = (
             QMessageBox.question(
                 self,
@@ -364,54 +343,32 @@ class PortabilityPanelWidget(QWidget):
             )
             == QMessageBox.StandardButton.Yes
         )
-        if accepted:
-            confirmation_log.succeeded()
-        else:
-            confirmation_log.cancelled()
         worker.resolve_confirmation(accepted)
 
     @Slot(str, object)
     def _operation_succeeded(self, execution_id: str, result: object) -> None:
-        if execution_id != self._execution_id:
+        if execution_id != self._execution_id or not isinstance(result, PortabilityResult):
             return
-        operation = self._operation
-        if operation is PortabilityOperation.EXPORT and isinstance(
-            result, ResultadoExportacaoProjeto
-        ):
-            qualifier = " com ressalvas" if _is_degraded(result.estado_integridade) else ""
-            self.status_changed.emit(f"Projeto exportado{qualifier} para {result.caminho}")
-        elif operation is PortabilityOperation.IMPORT and isinstance(
-            result, ResultadoImportacaoProjeto
-        ):
+        state = str(result.payload.get("integrity_state", ""))
+        degraded = state == IntegrityState.DEGRADED.value
+        if result.operation is PortabilityOperation.EXPORT:
+            qualifier = " com ressalvas" if degraded else ""
+            self.status_changed.emit(f"Projeto exportado{qualifier} para {result.destination}")
+        elif result.operation is PortabilityOperation.IMPORT:
             self.atualizar_projetos()
-            self.abrir_projeto(result.projeto.id)
+            project_value = result.payload.get("project_id")
+            if isinstance(project_value, str):
+                self.abrir_projeto(UUID(project_value))
             self.data_changed.emit()
-            if result.omissoes_origem:
-                self.status_changed.emit(
-                    "Projeto importado com ressalvas da origem; "
-                    "PDFs omitidos continuam indisponíveis"
-                )
-            else:
-                self.status_changed.emit(
-                    "Projeto importado com IDs, análises e revisões preservados"
-                )
-        elif operation is PortabilityOperation.BACKUP and isinstance(
-            result, ResultadoBackupCompleto
-        ):
-            qualifier = " com ressalvas" if _is_degraded(result.estado_integridade) else ""
-            self.status_changed.emit(f"Backup criado{qualifier} em {result.caminho}")
-        elif operation is PortabilityOperation.RESTORE and isinstance(
-            result, ResultadoRestauracaoBackup
-        ):
+            self.status_changed.emit("Projeto importado e validado pelo servidor")
+        elif result.operation is PortabilityOperation.BACKUP:
+            qualifier = " com ressalvas" if degraded else ""
+            self.status_changed.emit(f"Backup criado{qualifier} em {result.destination}")
+        elif result.operation is PortabilityOperation.RESTORE:
             self.atualizar_projetos()
             self.data_restored.emit()
-            if _is_degraded(result.estado_integridade):
-                count = len(result.manifesto.omissoes)
-                self.status_changed.emit(
-                    f"Backup restaurado com ressalvas; {count} PDF(s) continuam indisponíveis"
-                )
-            else:
-                self.status_changed.emit("Backup restaurado e dados da interface recarregados")
+            qualifier = " com ressalvas" if degraded else ""
+            self.status_changed.emit(f"Backup restaurado{qualifier} no servidor")
 
     @Slot(str, str, bool)
     def _operation_failed(self, execution_id: str, message: str, cancelled: bool) -> None:
@@ -421,24 +378,17 @@ class PortabilityPanelWidget(QWidget):
         if not cancelled:
             QMessageBox.warning(self, "Ação não concluída", message)
 
-    def _finalize_execution(self, execution_id: str) -> None:
-        if execution_id != self._execution_id:
-            return
-        self._execution_id = None
-        self._operation = None
-        self._cancellation = None
-        self._reset_progress()
-        self._apply_action_state()
-        self.busy_changed.emit(False)
-
     @Slot(object)
     def _thread_stopped(self, _destroyed_thread: object | None = None) -> None:
-        execution_id = self._execution_id
         self._thread = None
         self._worker = None
-        if execution_id is not None:
-            self._finalize_execution(execution_id)
-        self._apply_action_state()
+        if self._execution_id is not None:
+            self._execution_id = None
+            self._operation = None
+            self._cancellation = None
+            self._reset_progress()
+            self._apply_action_state()
+            self.busy_changed.emit(False)
 
     def _apply_action_state(self) -> None:
         thread_running = self._thread is not None and self._thread.isRunning()
@@ -464,53 +414,3 @@ class PortabilityPanelWidget(QWidget):
 
 def _with_suffix(path: Path, suffix: str) -> Path:
     return path if path.suffix.casefold() == suffix else path.with_suffix(suffix)
-
-
-def _is_degraded(state: EstadoIntegridadePacote) -> bool:
-    return state is EstadoIntegridadePacote.DEGRADADO
-
-
-def _import_confirmation_message(plan: PlanoImportacaoProjeto) -> str:
-    summary = plan.resumo
-    conflicts: list[str] = []
-    if plan.projeto_existente:
-        conflicts.append("há um projeto local com o mesmo ID")
-    if plan.pasta_destino_existente:
-        conflicts.append("há arquivos na pasta gerenciada desse ID")
-    conflict_text = " e ".join(conflicts)
-    return (
-        "O preflight validou o pacote e detectou que "
-        f"{conflict_text}.\n\n"
-        f"Projeto: {summary.nome}\n"
-        f"ID: {str(summary.projeto_id)[:8]}\n"
-        f"Conteúdo: {summary.quantidade_documentos} PDF(s), "
-        f"{summary.quantidade_fotos} foto(s) e "
-        f"{summary.quantidade_analises} análise(s)\n"
-        f"Fingerprint do plano: {plan.fingerprint[:12]}\n\n"
-        "Substituir os dados e arquivos locais pela versão importada? O pacote e o destino serão "
-        "revalidados antes de qualquer troca."
-    )
-
-
-def _backup_confirmation_message(report: RelatorioIntegridadeProjeto) -> str:
-    labels = {
-        "PDF_AUSENTE": "ausente",
-        "PDF_ADULTERADO": "alterado desde a importação",
-        "PDF_ILEGIVEL": "ilegível",
-    }
-    treatments = {
-        "OMITIDO": "cópia omitida; não há origem registrada",
-        "PERMANECE_EXTERNO": "cópia omitida; referência permanecerá externa",
-    }
-    details = "\n".join(
-        f"• Documento {str(item.referencia_id)[:8]} — "
-        f"{labels.get(item.codigo, 'indisponível')}; "
-        f"{treatments.get(str(item.tratamento), 'cópia omitida')}"
-        for item in report.problemas
-    )
-    return (
-        "Os PDFs abaixo não serão copiados. O efeito de cada omissão após uma restauração está "
-        "indicado individualmente:\n\n"
-        f"{details}\n\n"
-        "Criar o backup degradado mesmo assim?"
-    )

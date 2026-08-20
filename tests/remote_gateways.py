@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
 from threading import Event
 from uuid import UUID, uuid4
@@ -11,6 +13,7 @@ from uuid import UUID, uuid4
 from fastapi import UploadFile
 from sqlalchemy import Engine
 
+from zeny_project_handler._atomic_files import sibling_temporary_file
 from zeny_project_handler.adapters.pdf.errors import PdfProtegidoError
 from zeny_project_handler.application.compliance_analysis import ExecutarAnaliseConformidade
 from zeny_project_handler.application.compliance_registry import (
@@ -19,10 +22,21 @@ from zeny_project_handler.application.compliance_registry import (
 from zeny_project_handler.application.human_review import ServicoRevisaoHumana
 from zeny_project_handler.ui.documentation_gateway import DocumentationGatewayError
 from zeny_project_handler.ui.pdf_gateway import RemoteRaster, ViewerGatewayError
+from zeny_project_handler.ui.portability_gateway import (
+    CancelCallback,
+    PortabilityTransferCancelledError,
+    ProgressCallback,
+)
 from zeny_project_handler.ui.project_gateway import ProjectGatewayError
 from zeny_project_handler.ui.review_gateway import ReviewGatewayError
+from zeny_project_handler_contracts.backup import (
+    BackupPreflightResponse,
+    BackupRestorePreflightResponse,
+    ConfirmBackupRestoreRequest,
+    CreateBackupJobRequest,
+)
 from zeny_project_handler_contracts.base import JobId, ProjectId
-from zeny_project_handler_contracts.common import NormalizedBoxDto
+from zeny_project_handler_contracts.common import DownloadMetadataDto, NormalizedBoxDto
 from zeny_project_handler_contracts.compliance import (
     ComplianceExecutionResponse,
     ComplianceHistoryResponse,
@@ -38,9 +52,14 @@ from zeny_project_handler_contracts.enums import JobKind, JobStatus
 from zeny_project_handler_contracts.errors import ErrorCode
 from zeny_project_handler_contracts.jobs import (
     CancelJobResponse,
+    CreateExportJobRequest,
     JobAcceptedResponse,
     JobResultResponse,
     JobStatusResponse,
+)
+from zeny_project_handler_contracts.portability import (
+    ConfirmProjectImportRequest,
+    ProjectImportPreflightResponse,
 )
 from zeny_project_handler_contracts.projects import (
     DeleteProjectResponse,
@@ -74,6 +93,7 @@ from zeny_project_handler_contracts.viewer import (
 from zeny_project_handler_server.api_errors import ApiError
 from zeny_project_handler_server.compliance_api import DocumentationComplianceApiService
 from zeny_project_handler_server.composition import ServerRuntime
+from zeny_project_handler_server.portability_api import PortabilityApiService
 from zeny_project_handler_server.project_api import ProjectApiService
 from zeny_project_handler_server.review_api import ReviewApiService
 from zeny_project_handler_server.viewer_api import ViewerApiService
@@ -186,6 +206,161 @@ class DirectProjectGateway:
 
     def cancel_job(self, job_id: UUID) -> CancelJobResponse:
         return self._runtime.jobs.cancel(job_id)
+
+
+class DirectPortabilityGateway:
+    def __init__(self, runtime: ServerRuntime) -> None:
+        self._runtime = runtime
+
+    @property
+    def _portability(self) -> PortabilityApiService:
+        service = self._runtime.portability_api
+        if service is None:
+            raise RuntimeError("API de portabilidade indisponível")
+        return service
+
+    def list_projects(
+        self,
+        *,
+        limit: int = 200,
+        offset: int = 0,
+    ) -> ProjectSummaryListResponse:
+        assert self._runtime.project_api is not None
+        return self._runtime.project_api.list_projects(limit=limit, offset=offset)
+
+    def create_project_export_job(
+        self,
+        project_id: UUID,
+        *,
+        expected_project_version: int,
+        idempotency_key: str,
+    ) -> JobAcceptedResponse:
+        return self._runtime.jobs.create_project_export_job(
+            project_id,
+            CreateExportJobRequest(expected_project_version=expected_project_version),
+            idempotency_key=idempotency_key,
+            correlation_id=str(uuid4()),
+        )
+
+    def preflight_project_import(
+        self,
+        path: Path,
+        *,
+        idempotency_key: str,
+        progress: ProgressCallback,
+        cancelled: CancelCallback,
+    ) -> ProjectImportPreflightResponse:
+        if cancelled():
+            raise PortabilityTransferCancelledError("transferência cancelada")
+        progress(path.stat().st_size, path.stat().st_size, "Enviando pacote")
+        with path.open("rb") as stream:
+            upload = UploadFile(file=stream, filename=path.name)
+            return asyncio.run(
+                self._portability.receive_project_import(
+                    upload,
+                    idempotency_key=idempotency_key,
+                )
+            )
+
+    def create_project_import_job(
+        self,
+        request: ConfirmProjectImportRequest,
+        *,
+        idempotency_key: str,
+    ) -> JobAcceptedResponse:
+        return self._runtime.jobs.create_project_import_job(
+            request,
+            idempotency_key=idempotency_key,
+            correlation_id=str(uuid4()),
+        )
+
+    def preflight_backup(self) -> BackupPreflightResponse:
+        return self._portability.preflight_backup()
+
+    def create_backup_job(
+        self,
+        request: CreateBackupJobRequest,
+        *,
+        idempotency_key: str,
+    ) -> JobAcceptedResponse:
+        return self._runtime.jobs.create_backup_job(
+            request,
+            idempotency_key=idempotency_key,
+            correlation_id=str(uuid4()),
+        )
+
+    def preflight_backup_restore(
+        self,
+        path: Path,
+        *,
+        idempotency_key: str,
+        progress: ProgressCallback,
+        cancelled: CancelCallback,
+    ) -> BackupRestorePreflightResponse:
+        if cancelled():
+            raise PortabilityTransferCancelledError("transferência cancelada")
+        progress(path.stat().st_size, path.stat().st_size, "Enviando pacote")
+        with path.open("rb") as stream:
+            upload = UploadFile(file=stream, filename=path.name)
+            return asyncio.run(
+                self._portability.receive_backup_restore(
+                    upload,
+                    idempotency_key=idempotency_key,
+                )
+            )
+
+    def create_backup_restore_job(
+        self,
+        request: ConfirmBackupRestoreRequest,
+        *,
+        idempotency_key: str,
+    ) -> JobAcceptedResponse:
+        return self._runtime.jobs.create_backup_restore_job(
+            request,
+            idempotency_key=idempotency_key,
+            correlation_id=str(uuid4()),
+        )
+
+    def get_job(self, job_id: UUID) -> JobStatusResponse:
+        return self._runtime.jobs.get_job(job_id)
+
+    def get_job_result(self, job_id: UUID) -> JobResultResponse:
+        return self._runtime.jobs.get_result(job_id)
+
+    def cancel_job(self, job_id: UUID) -> CancelJobResponse:
+        return self._runtime.jobs.cancel(job_id)
+
+    def get_download_metadata(self, download_id: UUID) -> DownloadMetadataDto:
+        return self._portability.get_download(download_id).metadata
+
+    def download_to(
+        self,
+        download_id: UUID,
+        destination: Path,
+        *,
+        progress: ProgressCallback,
+        cancelled: CancelCallback,
+    ) -> DownloadMetadataDto:
+        download = self._portability.get_download(download_id)
+        metadata = download.metadata
+        digest = sha256()
+        received = 0
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with sibling_temporary_file(destination) as temporary:
+            with download.path.open("rb") as source, temporary.open("wb") as target:
+                while chunk := source.read(1024 * 1024):
+                    if cancelled():
+                        raise PortabilityTransferCancelledError("transferência cancelada")
+                    target.write(chunk)
+                    digest.update(chunk)
+                    received += len(chunk)
+                    progress(received, metadata.size_bytes, "Baixando pacote")
+                target.flush()
+                os.fsync(target.fileno())
+            assert received == metadata.size_bytes
+            assert digest.hexdigest() == metadata.sha256
+            os.replace(temporary, destination)
+        return metadata
 
 
 class DirectReviewGateway:

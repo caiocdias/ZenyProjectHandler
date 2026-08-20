@@ -2922,6 +2922,11 @@
           "project_id": {
             "$ref": "#/components/schemas/ProjectId"
           },
+          "project_version": {
+            "minimum": 0.0,
+            "title": "Project Version",
+            "type": "integer"
+          },
           "service_note": {
             "maxLength": 500,
             "minLength": 1,
@@ -2941,6 +2946,7 @@
           "project_id",
           "service_note",
           "state",
+          "project_version",
           "document_count",
           "page_count",
           "analysis",

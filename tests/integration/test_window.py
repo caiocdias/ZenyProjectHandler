@@ -1,6 +1,7 @@
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
+from typing import cast
 from unittest.mock import Mock
 from uuid import uuid4
 
@@ -23,7 +24,7 @@ from PySide6.QtWidgets import (
 from pytestqt.qtbot import QtBot
 from tests.conftest import ApplicationFactory
 from tests.pdf_fixtures import TEST_RENDER_BUDGET, create_feature_pdf, create_golden_pdf
-from tests.remote_gateways import DirectProjectGateway
+from tests.remote_gateways import DirectDocumentationGateway, DirectProjectGateway
 from tests.viewer_gateway import LocalTestPdfViewerGateway
 
 import zeny_project_handler.adapters.pdf.pymupdf_reader as pdf_reader_module
@@ -384,10 +385,9 @@ def test_restore_signal_refreshes_the_cached_compliance_registry(
     documentation = window.documentation_panel
     portability = window.portability_panel
     assert documentation is not None and portability is not None
-    registry_service = portability._service._compliance_registry
-    assert registry_service is not None
+    documentation_gateway = cast(DirectDocumentationGateway, documentation._gateway)
+    registry_service = documentation_gateway._compliance._registry
     current = registry_service.obter_revisao_ativa().registro
-    assert registry_service._seed == current
     custom_rule = replace(
         current.regras[0],
         id="fixture.restauracao.regra-na-interface",

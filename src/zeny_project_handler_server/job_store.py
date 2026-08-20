@@ -56,13 +56,13 @@ class JobStore:
         self._maximum_retained = maximum_retained
         self._lock = RLock()
 
-    def create(self, job_id: UUID, project_id: UUID, kind: JobKind) -> JobRecord:
+    def create(self, job_id: UUID, project_id: UUID | None, kind: JobKind) -> JobRecord:
         now = datetime.now(UTC)
         with self._lock, self._engine.begin() as connection:
             connection.execute(
                 insert(api_jobs).values(
                     id=str(job_id),
-                    project_id=str(project_id),
+                    project_id=str(project_id) if project_id is not None else None,
                     kind=kind.value,
                     status=JobStatus.QUEUED.value,
                     progress_percent=0,

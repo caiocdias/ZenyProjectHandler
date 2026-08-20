@@ -68,3 +68,14 @@ class BackupLocalPort(Protocol):
     def restaurar_snapshot(self, origem: Path, banco: Path) -> Path: ...
 
     def preparar_origens_pdf(self, snapshot: Path, caminhos: dict[UUID, Path]) -> None: ...
+
+    def inspecionar_snapshot(self, snapshot: Path) -> ResumoSnapshotBackup: ...
+
+    def fingerprint_banco(self, banco: Path) -> str: ...
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ResumoSnapshotBackup:
+    projetos_ids: tuple[UUID, ...]
+    quantidade_documentos: int
+    quantidade_fotos: int

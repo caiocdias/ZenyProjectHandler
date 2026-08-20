@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from time import monotonic, sleep
 
 import pytest
 from PySide6.QtCore import Qt, QThread
@@ -13,6 +14,7 @@ from tests.pdf_fixtures import create_golden_pdf, create_protected_pdf
 
 from zeny_project_handler.config import AppSettings
 from zeny_project_handler.ui.project_panel import ProjectPanelWidget
+from zeny_project_handler_contracts.enums import JobStatus
 
 pytestmark = pytest.mark.integration
 
@@ -85,8 +87,11 @@ def test_distinct_passwords_are_reused_in_session_and_never_leak_to_artifacts(
     assert len(prompts) == 2  # o job usa o cofre efêmero do servidor, sem preflight local
     assert all(thread == application.thread() for _label, thread in prompts)
 
-    status = first.stat()
-    os.utime(first, ns=(status.st_atime_ns, status.st_mtime_ns + 1_000_000))
+    source_status = first.stat()
+    os.utime(
+        first,
+        ns=(source_status.st_atime_ns, source_status.st_mtime_ns + 1_000_000),
+    )
     panel.abrir_selecionado()
     assert len(prompts) == 2  # a cópia gerenciada não depende mais da origem do cliente
 
@@ -94,9 +99,30 @@ def test_distinct_passwords_are_reused_in_session_and_never_leak_to_artifacts(
     active_session = panel._session
     assert portability is not None and active_session is not None
     package = tmp_path / "projeto-protegido.zphproj"
-    portability._service.exportar_projeto(
+    gateway = portability._gateway
+    accepted = gateway.create_project_export_job(
         active_session.project_id.root,
+        expected_project_version=active_session.project_version,
+        idempotency_key="stage8-protected-pdf-export",
+    )
+    deadline = monotonic() + 15
+    job_status = gateway.get_job(accepted.job_id.root)
+    while job_status.status not in {
+        JobStatus.SUCCEEDED,
+        JobStatus.FAILED,
+        JobStatus.CANCELLED,
+    }:
+        assert monotonic() < deadline
+        sleep(0.02)
+        job_status = gateway.get_job(accepted.job_id.root)
+    assert job_status.status is JobStatus.SUCCEEDED
+    result = gateway.get_job_result(accepted.job_id.root)
+    assert result.download is not None
+    gateway.download_to(
+        result.download.download_id.root,
         package,
+        progress=lambda _current, _total, _message: None,
+        cancelled=lambda: False,
     )
     artifact_files = (
         *(path for path in settings.data_directory.rglob("*") if path.is_file()),

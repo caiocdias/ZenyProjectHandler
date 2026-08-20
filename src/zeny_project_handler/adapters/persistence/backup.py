@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 from contextlib import closing, suppress
+from hashlib import sha256
 from pathlib import Path
 from uuid import UUID
 
 from zeny_project_handler._atomic_files import sibling_temporary_file
+from zeny_project_handler.ports.portability import ResumoSnapshotBackup
 
 from .errors import PersistenceError
 
@@ -115,6 +118,72 @@ def rewrite_backup_pdf_sources(snapshot: Path, paths: dict[UUID, Path]) -> None:
         raise PersistenceError("Não foi possível preparar as origens PDF do backup") from error
 
 
+def inspect_backup_snapshot(snapshot: Path) -> ResumoSnapshotBackup:
+    """Valide e resuma um snapshot sem alterar seu conteúdo."""
+    source = snapshot.expanduser().resolve()
+    try:
+        with closing(sqlite3.connect(f"file:{source.as_posix()}?mode=ro", uri=True)) as connection:
+            if connection.execute("PRAGMA integrity_check").fetchone() != ("ok",):
+                raise PersistenceError("Snapshot de recuperação está corrompido")
+            project_ids = tuple(
+                UUID(str(row[0]))
+                for row in connection.execute("SELECT id FROM projects ORDER BY id")
+            )
+            document_count = int(connection.execute("SELECT COUNT(*) FROM documents").fetchone()[0])
+            photo_count = 0
+            for (payload,) in connection.execute("SELECT payload FROM elements"):
+                decoded = json.loads(str(payload))
+                photos = decoded.get("fotos", []) if isinstance(decoded, dict) else []
+                if isinstance(photos, list):
+                    photo_count += len(photos)
+    except (OSError, sqlite3.Error, ValueError, json.JSONDecodeError) as error:
+        raise PersistenceError("Não foi possível inspecionar o snapshot de recuperação") from error
+    return ResumoSnapshotBackup(
+        projetos_ids=project_ids,
+        quantidade_documentos=document_count,
+        quantidade_fotos=photo_count,
+    )
+
+
+def fingerprint_database(database_path: Path) -> str:
+    """Assine o estado persistente ignorando apenas journals HTTP voláteis de jobs."""
+    source = database_path.expanduser().resolve()
+    digest = sha256()
+    excluded = {"api_idempotency_records", "api_jobs", "sqlite_sequence"}
+    try:
+        with closing(sqlite3.connect(f"file:{source.as_posix()}?mode=ro", uri=True)) as connection:
+            if connection.execute("PRAGMA integrity_check").fetchone() != ("ok",):
+                raise PersistenceError("Banco atual falhou na verificação de integridade")
+            tables = tuple(
+                str(row[0])
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master "
+                    "WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+                )
+                if str(row[0]) not in excluded
+            )
+            for table in tables:
+                quoted = table.replace('"', '""')
+                columns = tuple(
+                    str(row[1]) for row in connection.execute(f'PRAGMA table_info("{quoted}")')
+                )
+                digest.update(table.encode("utf-8"))
+                digest.update(b"\0")
+                digest.update("\x1f".join(columns).encode("utf-8"))
+                digest.update(b"\0")
+                rows = connection.execute(f'SELECT * FROM "{quoted}"').fetchall()
+                canonical_rows = sorted(
+                    json.dumps(row, ensure_ascii=False, separators=(",", ":"), default=str)
+                    for row in rows
+                )
+                for row in canonical_rows:
+                    digest.update(row.encode("utf-8"))
+                    digest.update(b"\0")
+    except (OSError, sqlite3.Error) as error:
+        raise PersistenceError("Não foi possível assinar o estado do banco") from error
+    return digest.hexdigest()
+
+
 def _remove_sqlite_sidecars(path: Path) -> None:
     for suffix in ("-journal", "-wal", "-shm"):
         with suppress(OSError):
@@ -130,3 +199,9 @@ class SqliteBackupManager:
 
     def preparar_origens_pdf(self, snapshot: Path, caminhos: dict[UUID, Path]) -> None:
         rewrite_backup_pdf_sources(snapshot, caminhos)
+
+    def inspecionar_snapshot(self, snapshot: Path) -> ResumoSnapshotBackup:
+        return inspect_backup_snapshot(snapshot)
+
+    def fingerprint_banco(self, banco: Path) -> str:
+        return fingerprint_database(banco)

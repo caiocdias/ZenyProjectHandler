@@ -79,6 +79,9 @@ _PREFLIGHT_STALE_MESSAGE = (
 _IMPORT_PLAN_STALE_MESSAGE = (
     "O pacote ou o projeto local mudou após o preflight; inspecione a importação novamente"
 )
+_RESTORE_PLAN_STALE_MESSAGE = (
+    "O backup ou o estado do servidor mudou após o preflight; inspecione a restauração novamente"
+)
 _SUPPORTED_PHOTO_MIME = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
@@ -154,6 +157,7 @@ class ResumoPreflightImportacaoProjeto:
     quantidade_analises: int
     quantidade_arquivos: int
     quantidade_omissoes: int
+    quantidade_paginas: int = 0
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -201,6 +205,25 @@ class ResultadoRestauracaoBackup:
     @property
     def estado_integridade(self) -> EstadoIntegridadePacote:
         return self.manifesto.estado_integridade
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ResumoPreflightRestauracaoBackup:
+    projetos_ids: tuple[UUID, ...]
+    quantidade_documentos: int
+    quantidade_fotos: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PlanoRestauracaoBackup:
+    pacote: Path
+    pacote_sha256: str
+    pacote_tamanho_bytes: int
+    estado_alvo_sha256: str
+    resumo: ResumoPreflightRestauracaoBackup
+    integridade_pacote: RelatorioIntegridadeProjeto
+    omissoes_origem: tuple[OmissaoPacoteProjeto, ...]
+    fingerprint: str
 
 
 class ServicoPortabilidadeProjeto:
@@ -914,15 +937,108 @@ class ServicoPortabilidadeProjeto:
         progresso: ProgressCallback | None = None,
         cancelado: CancelCallback | None = None,
     ) -> ResultadoRestauracaoBackup:
+        plano = self.preflight_restauracao_backup(origem, cancelado=cancelado)
+        return self.aplicar_plano_restauracao_backup(
+            plano,
+            progresso=progresso,
+            cancelado=cancelado,
+        )
+
+    def preflight_restauracao_backup(
+        self,
+        pacote: Path,
+        *,
+        cancelado: CancelCallback | None = None,
+    ) -> PlanoRestauracaoBackup:
+        """Valide o pacote e fotografe o destino sem publicar banco ou arquivos."""
+        return self._observe_external_operation(
+            "portability.restore.preflight",
+            lambda: self._preflight_restauracao_backup(pacote, cancelado=cancelado),
+        )
+
+    def _preflight_restauracao_backup(
+        self,
+        pacote: Path,
+        *,
+        cancelado: CancelCallback | None,
+    ) -> PlanoRestauracaoBackup:
+        self._ensure_not_cancelled(cancelado)
+        try:
+            package_path = pacote.expanduser().resolve()
+            package_digest, package_size = _file_digest(package_path)
+        except (OSError, RuntimeError) as error:
+            raise PortabilidadeProjetoError("Backup informado não existe") from error
+        with TemporaryDirectory(prefix="zeny-restore-preflight-") as temporary_name:
+            extracted = self._archive.extrair_validado(
+                package_path,
+                Path(temporary_name) / "backup",
+            )
+            self._ensure_not_cancelled(cancelado)
+            database_entry = self._validated_backup_database_entry(extracted)
+            snapshot_summary = self._backup.inspecionar_snapshot(
+                extracted.diretorio / PurePosixPath(database_entry.caminho_relativo)
+            )
+            final_digest, final_size = _file_digest(package_path)
+            if final_digest != package_digest or final_size != package_size:
+                raise PortabilidadeProjetoError("Backup mudou durante o preflight de restauração")
+            summary = ResumoPreflightRestauracaoBackup(
+                projetos_ids=snapshot_summary.projetos_ids,
+                quantidade_documentos=snapshot_summary.quantidade_documentos,
+                quantidade_fotos=snapshot_summary.quantidade_fotos,
+            )
+            target_fingerprint = self._backup_target_fingerprint()
+            plan = PlanoRestauracaoBackup(
+                pacote=package_path,
+                pacote_sha256=final_digest,
+                pacote_tamanho_bytes=final_size,
+                estado_alvo_sha256=target_fingerprint,
+                resumo=summary,
+                integridade_pacote=extracted.integridade,
+                omissoes_origem=extracted.manifesto.omissoes,
+                fingerprint="0" * 64,
+            )
+            return replace(plan, fingerprint=_restore_plan_fingerprint(plan))
+
+    def aplicar_plano_restauracao_backup(
+        self,
+        plano: PlanoRestauracaoBackup,
+        *,
+        progresso: ProgressCallback | None = None,
+        cancelado: CancelCallback | None = None,
+    ) -> ResultadoRestauracaoBackup:
         with self._coordinator.adquirir(TipoOperacao.RESTAURACAO):
             return self._observe_external_operation(
                 "portability.restore",
-                lambda: self._restaurar_backup(
-                    origem,
+                lambda: self._aplicar_plano_restauracao_backup(
+                    plano,
                     progresso=progresso,
                     cancelado=cancelado,
                 ),
             )
+
+    def _aplicar_plano_restauracao_backup(
+        self,
+        plano: PlanoRestauracaoBackup,
+        *,
+        progresso: ProgressCallback | None,
+        cancelado: CancelCallback | None,
+    ) -> ResultadoRestauracaoBackup:
+        self._ensure_not_cancelled(cancelado)
+        if plano.fingerprint != _restore_plan_fingerprint(plano):
+            raise PlanoImportacaoObsoletoError(_RESTORE_PLAN_STALE_MESSAGE)
+        if self._backup_target_fingerprint() != plano.estado_alvo_sha256:
+            raise PlanoImportacaoObsoletoError(_RESTORE_PLAN_STALE_MESSAGE)
+        try:
+            current_digest, current_size = _file_digest(plano.pacote)
+        except OSError as error:
+            raise PlanoImportacaoObsoletoError(_RESTORE_PLAN_STALE_MESSAGE) from error
+        if current_digest != plano.pacote_sha256 or current_size != plano.pacote_tamanho_bytes:
+            raise PlanoImportacaoObsoletoError(_RESTORE_PLAN_STALE_MESSAGE)
+        return self._restaurar_backup(
+            plano.pacote,
+            progresso=progresso,
+            cancelado=cancelado,
+        )
 
     def _restaurar_backup(
         self,
@@ -938,25 +1054,7 @@ class ServicoPortabilidadeProjeto:
             notify(1, 4, "Validando backup")
             extracted = self._archive.extrair_validado(origem, temporary / "backup")
             self._ensure_not_cancelled(cancelado)
-            if extracted.manifesto.projeto_id != _BACKUP_ID:
-                raise PortabilidadeProjetoError("Arquivo selecionado não é um backup completo")
-            if not extracted.integridade.integro:
-                raise PortabilidadeProjetoError("Backup possui problemas de integridade")
-            if any(
-                item.tipo != "PDF"
-                or item.tratamento
-                not in {
-                    TratamentoOmissaoPacote.OMITIDO,
-                    TratamentoOmissaoPacote.PERMANECE_EXTERNO,
-                }
-                for item in extracted.manifesto.omissoes
-            ):
-                raise PortabilidadeProjetoError("Registro de omissões do backup é inválido")
-            database_entry = next(
-                (item for item in extracted.manifesto.arquivos if item.tipo == "BANCO"), None
-            )
-            if database_entry is None:
-                raise PortabilidadeProjetoError("Backup não possui snapshot do banco")
+            database_entry = self._validated_backup_database_entry(extracted)
             restored_database = extracted.diretorio / PurePosixPath(database_entry.caminho_relativo)
             previous_revision = self._compliance_registry.obter_revisao_ativa_opcional()
             preserved_registry = (
@@ -982,8 +1080,8 @@ class ServicoPortabilidadeProjeto:
                         destination.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copy2(extracted.diretorio / entry.caminho_relativo, destination)
                     self._ensure_not_cancelled(cancelado)
-                    self._dispose_connections()
                     notify(3, 4, "Restaurando banco e anexos")
+                    self._dispose_connections()
                     try:
                         if self._managed_root.exists():
                             os.replace(self._managed_root, old_assets)
@@ -1011,6 +1109,39 @@ class ServicoPortabilidadeProjeto:
             manifesto=extracted.manifesto,
             integridade_pacote=extracted.integridade,
         )
+
+    def _validated_backup_database_entry(
+        self,
+        extracted: PacoteProjetoExtraido,
+    ) -> ArquivoPacoteProjeto:
+        if extracted.manifesto.projeto_id != _BACKUP_ID:
+            raise PortabilidadeProjetoError("Arquivo selecionado não é um backup completo")
+        if not extracted.integridade.integro:
+            raise PortabilidadeProjetoError("Backup possui problemas de integridade")
+        if any(
+            item.tipo != "PDF"
+            or item.tratamento
+            not in {
+                TratamentoOmissaoPacote.OMITIDO,
+                TratamentoOmissaoPacote.PERMANECE_EXTERNO,
+            }
+            for item in extracted.manifesto.omissoes
+        ):
+            raise PortabilidadeProjetoError("Registro de omissões do backup é inválido")
+        entries = tuple(item for item in extracted.manifesto.arquivos if item.tipo == "BANCO")
+        if len(entries) != 1:
+            raise PortabilidadeProjetoError("Backup deve possuir exatamente um snapshot do banco")
+        return entries[0]
+
+    def fingerprint_estado_backup(self) -> str:
+        """Identifique semanticamente banco e anexos gerenciados do backup atual."""
+        return self._backup_target_fingerprint()
+
+    def _backup_target_fingerprint(self) -> str:
+        digest = sha256()
+        _update_fingerprint(digest, "database", self._backup.fingerprint_banco(self._database_path))
+        _update_managed_tree_fingerprint(digest, self._managed_root)
+        return digest.hexdigest()
 
     def _load_validated_import_package(
         self,
@@ -1425,6 +1556,7 @@ def _create_import_plan(
         quantidade_analises=len(content.execucoes),
         quantidade_arquivos=len(extracted.manifesto.arquivos),
         quantidade_omissoes=len(extracted.manifesto.omissoes),
+        quantidade_paginas=sum(len(document.paginas) for document in content.projeto.documentos),
     )
     plan = PlanoImportacaoProjeto(
         pacote=package_path,
@@ -1451,6 +1583,22 @@ def _import_plan_fingerprint(plan: PlanoImportacaoProjeto) -> str:
         ("target", plan.estado_alvo_sha256),
         ("project_exists", str(plan.projeto_existente)),
         ("folder_exists", str(plan.pasta_destino_existente)),
+        ("summary", repr(plan.resumo)),
+        ("integrity", repr(plan.integridade_pacote)),
+        ("omissions", repr(plan.omissoes_origem)),
+    ):
+        _update_fingerprint(digest, label, value)
+    return digest.hexdigest()
+
+
+def _restore_plan_fingerprint(plan: PlanoRestauracaoBackup) -> str:
+    digest = sha256()
+    for label, value in (
+        ("version", "1"),
+        ("package", str(plan.pacote)),
+        ("package_digest", plan.pacote_sha256),
+        ("package_size", str(plan.pacote_tamanho_bytes)),
+        ("target", plan.estado_alvo_sha256),
         ("summary", repr(plan.resumo)),
         ("integrity", repr(plan.integridade_pacote)),
         ("omissions", repr(plan.omissoes_origem)),
