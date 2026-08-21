@@ -13,6 +13,7 @@ from uuid import UUID
 
 from PySide6.QtCore import QThread
 
+from zeny_project_handler_client.contract_values import decimal_string
 from zeny_project_handler_client.logging_config import operation_logger
 from zeny_project_handler_contracts.common import NormalizedBoxDto
 
@@ -438,10 +439,10 @@ def _rounded_rectangle(region: PdfRectangle) -> PdfRectangle:
 def _normalized_box(region: PdfRectangle) -> NormalizedBoxDto:
     x0, y0, x1, y1 = region
     return NormalizedBoxDto(
-        x=_decimal_text(x0),
-        y=_decimal_text(y0),
-        width=_decimal_text(x1 - x0),
-        height=_decimal_text(y1 - y0),
+        x=decimal_string(x0),
+        y=decimal_string(y0),
+        width=decimal_string(x1 - x0),
+        height=decimal_string(y1 - y0),
     )
 
 
@@ -449,7 +450,3 @@ def _box_tuple(box: NormalizedBoxDto) -> PdfRectangle:
     x = float(box.x)
     y = float(box.y)
     return x, y, x + float(box.width), y + float(box.height)
-
-
-def _decimal_text(value: float) -> str:
-    return format(value, ".12g")

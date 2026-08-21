@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from zeny_project_handler_client.contract_values import decimal_string
 from zeny_project_handler_contracts.base import CatalogItemId, ElementId, PageId
 from zeny_project_handler_contracts.common import NormalizedPointDto
 from zeny_project_handler_contracts.enums import (
@@ -1006,7 +1007,12 @@ class ReviewPanelWidget(QWidget):
         geometry = ReviewGeometryDto(
             page_id=PageId(self._page_id),
             kind=ReviewGeometryKind.POINT,
-            points=(NormalizedPointDto(x=str(self._x.value()), y=str(self._y.value())),),
+            points=(
+                NormalizedPointDto(
+                    x=decimal_string(self._x.value()),
+                    y=decimal_string(self._y.value()),
+                ),
+            ),
         )
         result = self._run_action(
             lambda: self._gateway.create_manual_element(
@@ -1172,12 +1178,14 @@ def _resize_geometry(
 ) -> ReviewGeometryDto:
     old_left, old_top, old_width, old_height = _bounds(geometry)
     if geometry.kind is ReviewGeometryKind.POINT:
-        points: tuple[NormalizedPointDto, ...] = (NormalizedPointDto(x=str(left), y=str(top)),)
+        points: tuple[NormalizedPointDto, ...] = (
+            NormalizedPointDto(x=decimal_string(left), y=decimal_string(top)),
+        )
     else:
         points = tuple(
             NormalizedPointDto(
-                x=str(left + _scaled(float(item.x), old_left, old_width, width)),
-                y=str(top + _scaled(float(item.y), old_top, old_height, height)),
+                x=decimal_string(left + _scaled(float(item.x), old_left, old_width, width)),
+                y=decimal_string(top + _scaled(float(item.y), old_top, old_height, height)),
             )
             for item in geometry.points
         )

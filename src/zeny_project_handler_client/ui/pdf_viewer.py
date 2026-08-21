@@ -53,6 +53,7 @@ from PySide6.QtWidgets import (
 )
 
 from zeny_project_handler_client.config import DEFAULT_PDF_TILE_CACHE_MAX_BYTES
+from zeny_project_handler_client.contract_values import decimal_string
 from zeny_project_handler_client.logging_config import OperationLogger, operation_logger
 from zeny_project_handler_client.presentation import NormalizedPoint, PresentationGeometry
 from zeny_project_handler_contracts.base import DocumentId, PageId
@@ -1654,7 +1655,10 @@ def _review_geometry_from_presentation(value: PresentationGeometry) -> ReviewGeo
     return ReviewGeometryDto(
         page_id=PageId(value.page_id),
         kind=value.kind,
-        points=tuple(NormalizedPointDto(x=str(item.x), y=str(item.y)) for item in value.points),
+        points=tuple(
+            NormalizedPointDto(x=decimal_string(item.x), y=decimal_string(item.y))
+            for item in value.points
+        ),
     )
 
 
@@ -1778,10 +1782,10 @@ def _caixa_callout_normalizada(
     right = max(item.x for item in corners)
     bottom = max(item.y for item in corners)
     return NormalizedBoxDto(
-        x=str(left),
-        y=str(top),
-        width=str(right - left),
-        height=str(bottom - top),
+        x=decimal_string(left),
+        y=decimal_string(top),
+        width=decimal_string(right - left),
+        height=decimal_string(bottom - top),
     )
 
 
@@ -1836,7 +1840,7 @@ def _ponto_conexao_callout(
             ),
             key=lambda item: item[0],
         )
-        return NormalizedPointDto(x=str(point[0]), y=str(point[1]))
+        return NormalizedPointDto(x=decimal_string(point[0]), y=decimal_string(point[1]))
     half_width = (right - left) / 2
     half_height = (bottom - top) / 2
     horizontal_ratio = abs(dx) / half_width if dx else Decimal(0)
@@ -1844,10 +1848,16 @@ def _ponto_conexao_callout(
     if horizontal_ratio >= vertical_ratio:
         x = right if dx > 0 else left
         scale = (x - center_x) / dx
-        return NormalizedPointDto(x=str(x), y=str(center_y + dy * scale))
+        return NormalizedPointDto(
+            x=decimal_string(x),
+            y=decimal_string(center_y + dy * scale),
+        )
     y = bottom if dy > 0 else top
     scale = (y - center_y) / dy
-    return NormalizedPointDto(x=str(center_x + dx * scale), y=str(y))
+    return NormalizedPointDto(
+        x=decimal_string(center_x + dx * scale),
+        y=decimal_string(y),
+    )
 
 
 def _cores_callout(

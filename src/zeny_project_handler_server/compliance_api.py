@@ -98,6 +98,7 @@ from zeny_project_handler_contracts.rules import (
     RuleSummaryDto,
 )
 from zeny_project_handler_server.api_errors import ApiError, resource_not_found, validation_error
+from zeny_project_handler_server.dto_values import decimal_string
 from zeny_project_handler_server.review_api import ReviewApiService
 
 _PREFLIGHT_TTL = timedelta(minutes=15)
@@ -497,7 +498,7 @@ def _document_field(
         label=item.campo,
         value=item.valor,
         status=_documentation_status(item.estado),
-        confidence=str(item.confianca) if item.confianca is not None else None,
+        confidence=decimal_string(item.confianca) if item.confianca is not None else None,
         evidence=navigation,
     )
 
@@ -564,14 +565,18 @@ def _callout_dto(
     page_id = callout.pagina_id
     document = document_by_page[page_id]
     anchors = tuple(
-        NormalizedPointDto(x=str(item.ponto.x), y=str(item.ponto.y)) for item in callout.ancoras
+        NormalizedPointDto(
+            x=decimal_string(item.ponto.x),
+            y=decimal_string(item.ponto.y),
+        )
+        for item in callout.ancoras
     )
     box = callout.caixa_sugerida
     box_dto = NormalizedBoxDto(
-        x=str(box.esquerda),
-        y=str(box.topo),
-        width=str(box.largura),
-        height=str(box.altura),
+        x=decimal_string(box.esquerda),
+        y=decimal_string(box.topo),
+        width=decimal_string(box.largura),
+        height=decimal_string(box.altura),
     )
     navigation = EvidenceNavigationDto(
         document_id=DocumentId(document.id),
@@ -586,7 +591,7 @@ def _callout_dto(
         anchor=anchors[0],
         anchors=anchors,
         box=box_dto,
-        font_size_points=str(callout.tamanho_fonte_pontos),
+        font_size_points=decimal_string(callout.tamanho_fonte_pontos),
         status=_compliance_status(callout.resultado),
         navigation=navigation,
     )
@@ -639,10 +644,10 @@ def _box(geometry: GeometriaDocumento) -> NormalizedBoxDto:
     left, right = min(xs), max(xs)
     top, bottom = min(ys), max(ys)
     return NormalizedBoxDto(
-        x=str(left),
-        y=str(top),
-        width=str(right - left),
-        height=str(bottom - top),
+        x=decimal_string(left),
+        y=decimal_string(top),
+        width=decimal_string(right - left),
+        height=decimal_string(bottom - top),
     )
 
 

@@ -98,6 +98,7 @@ from zeny_project_handler_server.api_errors import (
     resource_not_found,
     validation_error,
 )
+from zeny_project_handler_server.dto_values import decimal_string
 
 _SESSION_NAMESPACE = UUID("8314f77e-f4d8-4518-a63d-90a44785ef5f")
 
@@ -572,7 +573,7 @@ def _proposal_dto(
             session.catalogo,
         )
     )
-    confidence = str(proposal.confianca) if proposal.confianca is not None else None
+    confidence = decimal_string(proposal.confianca) if proposal.confianca is not None else None
     return ReviewProposalDto(
         proposal_id=ProposalId(proposal.id),
         kind=ReviewProposalKind.ELEMENT,
@@ -628,7 +629,7 @@ def _relation_dto(
         target_reference_id=proposal.destino_referencia_id,
         review_state=_review_state(proposal.estado_revisao, decision),
         state_label=_review_state_label(proposal.estado_revisao, decision),
-        confidence=str(proposal.confianca) if proposal.confianca is not None else None,
+        confidence=(decimal_string(proposal.confianca) if proposal.confianca is not None else None),
         evidence=_evidence_navigation(
             proposal.evidencia_ids,
             evidence_by_id,
@@ -684,8 +685,8 @@ def _region_dto(
         geometry=_geometry(region.geometria),
         proposal_ids=tuple(ProposalId(item) for item in region.elemento_ids),
         relation_proposal_ids=tuple(ProposalId(item) for item in region.vinculo_ids),
-        coordinate_east=str(coordinate.leste) if coordinate is not None else None,
-        coordinate_north=str(coordinate.norte) if coordinate is not None else None,
+        coordinate_east=decimal_string(coordinate.leste) if coordinate is not None else None,
+        coordinate_north=decimal_string(coordinate.norte) if coordinate is not None else None,
     )
 
 
@@ -740,7 +741,7 @@ def _span_dto(
         start_label=_project_element_label(origin, catalog=catalog),
         end_label=_project_element_label(destination, catalog=catalog),
         cable_label=_project_element_label(cable, catalog=catalog),
-        length=str(span.comprimento_m) if span.comprimento_m is not None else None,
+        length=decimal_string(span.comprimento_m) if span.comprimento_m is not None else None,
         length_label=(
             f"{span.comprimento_m.quantize(Decimal('0.01')):f} m".replace(".", ",")
             if span.comprimento_m is not None
@@ -845,7 +846,10 @@ def _geometry(value: GeometriaDocumento) -> ReviewGeometryDto:
             TipoGeometria.POLILINHA: ReviewGeometryKind.POLYLINE,
             TipoGeometria.POLIGONO: ReviewGeometryKind.POLYGON,
         }[value.tipo],
-        points=tuple(NormalizedPointDto(x=str(item.x), y=str(item.y)) for item in value.pontos),
+        points=tuple(
+            NormalizedPointDto(x=decimal_string(item.x), y=decimal_string(item.y))
+            for item in value.pontos
+        ),
     )
 
 
@@ -893,10 +897,10 @@ def _box(geometry: GeometriaDocumento) -> NormalizedBoxDto:
     left, right = min(xs), max(xs)
     top, bottom = min(ys), max(ys)
     return NormalizedBoxDto(
-        x=str(left),
-        y=str(top),
-        width=str(right - left),
-        height=str(bottom - top),
+        x=decimal_string(left),
+        y=decimal_string(top),
+        width=decimal_string(right - left),
+        height=decimal_string(bottom - top),
     )
 
 

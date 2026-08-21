@@ -14,7 +14,7 @@ from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_VERSION = "0.1.0"
+DEFAULT_VERSION = "0.1.1"
 
 
 def main() -> int:
