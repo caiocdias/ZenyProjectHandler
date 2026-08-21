@@ -8,8 +8,8 @@ from pathlib import Path
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 import pytest
-from PySide6.QtCore import QPoint, Qt
-from PySide6.QtGui import QColor
+from PySide6.QtCore import QPoint, QPointF, QRectF, Qt
+from PySide6.QtGui import QColor, QPainterPath
 from pytestqt.qtbot import QtBot
 from tests.pdf_fixtures import (
     TEST_RENDER_BUDGET,
@@ -43,7 +43,7 @@ from zeny_project_handler.domain.compliance import (
 from zeny_project_handler.domain.documents import PaginaDocumento
 from zeny_project_handler.domain.values import CaixaPagina, GeometriaDocumento, PontoNormalizado
 from zeny_project_handler.ports.pdf import OrcamentoRenderizacaoPdf
-from zeny_project_handler_client.ui.pdf_viewer import PdfViewerWidget
+from zeny_project_handler_client.ui.pdf_viewer import PdfViewerWidget, PontoPlano
 from zeny_project_handler_contracts.base import CalloutId, DocumentId, FindingId, PageId, ProposalId
 from zeny_project_handler_contracts.common import (
     EvidenceNavigationDto,
@@ -168,6 +168,72 @@ def test_callout_box_and_arrow_emit_only_user_selection_and_are_highlighted(
         )
     assert selected == [str(callout.id), str(callout.id)]
     assert proposals == []
+
+
+@pytest.mark.integration
+def test_callout_arrow_only_intercepts_clicks_near_its_stroke(
+    qtbot: QtBot,
+    tmp_path: Path,
+) -> None:
+    source = create_callout_formats_pdf(tmp_path / "interacao-sob-seta.pdf")
+    viewer = _viewer(qtbot, dpi=144, budget=TEST_RENDER_BUDGET)
+    assert viewer.carregar_pdf(source)
+    _wait_preview(qtbot, viewer)
+    assert viewer.inspecao is not None
+    page = viewer.inspecao.pages[0]
+    callout = _callout(
+        page.page_id.root,
+        float(page.width_points),
+        float(page.height_points),
+        "click-through",
+    )
+    viewer.definir_callouts_conformidade((callout,))
+    graphics = viewer.view._callout_items[str(callout.id)]
+    arrow = graphics.linhas[0]
+    arrow_bounds = arrow.path().boundingRect()
+    safe_point = _point_inside_bounds_outside_shapes(
+        arrow_bounds,
+        (
+            *(item.mapToScene(item.shape()) for item in graphics.linhas),
+            graphics.caixa.mapToScene(graphics.caixa.shape()),
+        ),
+    )
+    transformer = viewer._current_transformer
+    assert transformer is not None
+    normalized = transformer.pixel_para_normalizado(
+        PontoPlano(safe_point.x(), safe_point.y() - 5.0)
+    )
+    proposal = _proposal_at(
+        page.page_id.root,
+        x=str(normalized.x),
+        y=str(normalized.y),
+    )
+    viewer.definir_propostas_revisao((proposal,))
+    proposal_item = viewer.view._review_items[str(proposal.proposal_id.root)]
+    link = proposal_item.path()
+    click_point = QPointF(
+        (link.elementAt(0).x + link.elementAt(1).x) / 2,
+        (link.elementAt(0).y + link.elementAt(1).y) / 2,
+    )
+
+    assert viewer.view._callout_layer is not None
+    assert viewer.view._callout_layer.acceptedMouseButtons() == Qt.MouseButton.NoButton
+    assert arrow_bounds.contains(click_point)
+    assert all(not item.shape().contains(click_point) for item in graphics.linhas)
+    proposals: list[str] = []
+    viewer.proposal_selected.connect(proposals.append)
+    view_point = viewer.view.mapFromScene(click_point)
+    actual_scene_point = viewer.view.mapToScene(view_point)
+    assert arrow_bounds.contains(actual_scene_point)
+    assert all(not item.shape().contains(actual_scene_point) for item in graphics.linhas)
+    assert not graphics.caixa.mapToScene(graphics.caixa.shape()).contains(actual_scene_point)
+    with qtbot.waitSignal(viewer.proposal_selected, timeout=1_000):
+        qtbot.mouseClick(  # type: ignore[no-untyped-call]
+            viewer.view.viewport(),
+            Qt.MouseButton.LeftButton,
+            pos=QPoint(view_point.x(), view_point.y()),
+        )
+    assert proposals == [str(proposal.proposal_id.root)]
 
 
 @pytest.mark.integration
@@ -751,11 +817,15 @@ def _dense_id(value: str) -> UUID:
 
 
 def _proposal(page_id: UUID) -> ReviewOverlayDto:
+    return _proposal_at(page_id, x="0.46", y="0.56")
+
+
+def _proposal_at(page_id: UUID, *, x: str, y: str) -> ReviewOverlayDto:
     proposal_id = ProposalId(uuid4())
     geometry = ReviewGeometryDto(
         page_id=PageId(page_id),
         kind=ReviewGeometryKind.POINT,
-        points=(NormalizedPointDto(x="0.46", y="0.56"),),
+        points=(NormalizedPointDto(x=x, y=y),),
     )
     return ReviewOverlayDto(
         proposal_id=proposal_id,
@@ -767,6 +837,19 @@ def _proposal(page_id: UUID) -> ReviewOverlayDto:
         review_state=ReviewState.PENDING,
         confidence="0.9",
     )
+
+
+def _point_inside_bounds_outside_shapes(
+    bounds: QRectF,
+    shapes: tuple[QPainterPath, ...],
+) -> QPointF:
+    candidates = (
+        QPointF(bounds.left() + bounds.width() * 0.2, bounds.top() + bounds.height() * 0.2),
+        QPointF(bounds.left() + bounds.width() * 0.8, bounds.top() + bounds.height() * 0.2),
+        QPointF(bounds.left() + bounds.width() * 0.2, bounds.top() + bounds.height() * 0.8),
+        QPointF(bounds.left() + bounds.width() * 0.8, bounds.top() + bounds.height() * 0.8),
+    )
+    return next(point for point in candidates if not any(shape.contains(point) for shape in shapes))
 
 
 def _assert_anchor_aligned(viewer: PdfViewerWidget, callout: CalloutConformidade) -> None:

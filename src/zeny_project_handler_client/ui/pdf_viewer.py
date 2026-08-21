@@ -48,6 +48,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSpinBox,
+    QStyleOptionGraphicsItem,
     QVBoxLayout,
     QWidget,
 )
@@ -163,12 +164,34 @@ class ReviewLinkItem(QGraphicsPathItem):
 
 
 class CalloutLinkItem(QGraphicsPathItem):
-    """Seta de callout com área de clique confortável em qualquer zoom."""
+    """Seta de callout com seleção restrita ao traço visível."""
 
     def shape(self) -> QPainterPath:
         stroker = QPainterPathStroker()
         stroker.setWidth(14)
         return stroker.createStroke(self.path())
+
+    def mousePressEvent(self, event: QGraphicsSceneMouseEvent) -> None:  # noqa: N802 - API Qt
+        if not self.shape().contains(event.pos()):
+            event.ignore()
+            return
+        super().mousePressEvent(event)
+
+    def paint(
+        self,
+        painter: QPainter,
+        _option: QStyleOptionGraphicsItem,
+        _widget: QWidget | None = None,
+    ) -> None:
+        # QGraphicsPathItem desenha por padrão um retângulo pontilhado em torno de
+        # todo o boundingRect quando selecionado. Em setas diagonais longas esse
+        # retângulo parece (e se comporta visualmente) como uma grande sobreposição.
+        # O realce do callout já é aplicado no próprio traço pela caneta selecionada.
+        painter.save()
+        painter.setPen(self.pen())
+        painter.setBrush(self.brush())
+        painter.drawPath(self.path())
+        painter.restore()
 
 
 class CalloutBoxItem(QGraphicsRectItem):
@@ -363,6 +386,7 @@ class PdfGraphicsView(QGraphicsView):
         layer = QGraphicsRectItem(self._scene.sceneRect())
         layer.setPen(QPen(Qt.PenStyle.NoPen))
         layer.setBrush(QBrush(Qt.BrushStyle.NoBrush))
+        layer.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
         layer.setFlag(QGraphicsItem.GraphicsItemFlag.ItemClipsChildrenToShape)
         layer.setZValue(30)
         self._scene.addItem(layer)
