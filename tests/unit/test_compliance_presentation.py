@@ -3,6 +3,15 @@ from __future__ import annotations
 from decimal import Decimal
 from uuid import uuid4
 
+from zeny_project_handler.application.compliance_presentation_core import (
+    formatar_alvo,
+    formatar_condicao,
+    formatar_operador,
+    formatar_quantificador,
+    formatar_texto_achado,
+    formatar_valor_fato,
+    rotulo_fato_conformidade,
+)
 from zeny_project_handler.domain.catalog import JsonPrimitive
 from zeny_project_handler.domain.compliance import (
     AchadoConformidade,
@@ -17,15 +26,6 @@ from zeny_project_handler.domain.compliance import (
     ResultadoConformidade,
     SeveridadeConformidade,
     TipoEscopoConformidade,
-)
-from zeny_project_handler.ui.compliance_presentation import (
-    formatar_alvo,
-    formatar_condicao,
-    formatar_operador,
-    formatar_quantificador,
-    formatar_texto_achado,
-    formatar_valor_fato,
-    rotulo_fato_conformidade,
 )
 
 

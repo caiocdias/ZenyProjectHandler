@@ -1,9 +1,9 @@
-# Roadmap da migração para arquitetura cliente-servidor
+# Roadmap da migração para arquitetura cliente-servidosr
 
 - Estado geral: **PLANEJADO**
 - Data do planejamento: **2026-08-17**
 - Responsável pelo planejamento: **Codex**
-- Próxima etapa liberada: **Etapa 11** (**PENDENTE**; não iniciada)
+- Próxima etapa liberada: **Etapa 12** (**PENDENTE; não iniciada e não executada neste trabalho**)
 - Regra de execução: uma etapa só pode começar quando todas as suas dependências estiverem
   marcadas como **CONCLUÍDA**.
 
@@ -1242,7 +1242,7 @@ da API na conexão e recusar, com mensagem clara, uma combinação incompatível
 
 ## Etapa 11 — Paridade final, auditoria de isolamento e aceite
 
-- Estado: **PENDENTE**
+- Estado: **CONCLUÍDA** (2026-08-21 00:12 -03:00)
 - Dependências: Etapa 10 **CONCLUÍDA**
 - Entrega principal: prova final de que a aplicação preserva funções e respeita a separação.
 
@@ -1276,13 +1276,56 @@ da API na conexão e recusar, com mensagem clara, uma combinação incompatível
 
 ### Evidências
 
-- Início/data/agente: _preencher_
-- Matriz final de paridade: _preencher_
-- Quantidade de testes/cobertura/complexidade: _preencher_
-- Hashes dos artefatos cliente e servidor: _preencher_
-- Relatório de isolamento e busca de segredos: _preencher_
-- Relatório E2E em processos/máquinas distintas: _preencher_
-- Pendências conhecidas aceitas pelo responsável: _preencher ou “nenhuma”_
+- Início/data/agente: **2026-08-20 23:04 -03:00 — Codex; roadmap completo, README,
+  especificação funcional, inventário de paridade e ADRs relevantes lidos; Etapas 0 a 10
+  confirmadas como CONCLUÍDAS e working tree inicial limpo. Escopo limitado à matriz final de
+  paridade sobre cliente empacotado e servidor Docker isolados, E2E real, remoção estrita de código
+  transitório, auditoria de artefatos/segredos/imports e execução de todos os gates da Etapa 11. O
+  Estado geral permanece PLANEJADO, a Etapa 12 permanece PENDENTE e não será iniciada; nenhum
+  commit será criado.**
+- Matriz final de paridade: **gate `scripts/stage11_parity_gate.py` aprovado sobre os artefatos
+  finais em 2026-08-21 00:09 -03:00; 15/15 blocos funcionais aprovados, 50 operações protegidas do
+  OpenAPI exercitadas com senha ausente/incorreta/correta, 254 requests e 204 requests autenticados
+  auditados. Todas as linhas de `docs/inventario-paridade-cliente-servidor.md` conservam prova de
+  comportamento e foram repetidas pela fronteira distribuída.**
+- Quantidade de testes/cobertura/complexidade: **`IniciarTestes.bat` aprovado em 2026-08-21 00:06
+  -03:00: 737/737 testes, 86,34% de cobertura (mínimo 85,01%), Ruff lint e format em 299 arquivos,
+  mypy estrito em 289 arquivos e 2.471 funções/métodos analisados sem rank E/F. Gate contratual
+  adicional: 28/28 testes em `tests/contracts`. `pip check`, fonte do cliente magro e complexidade
+  também aprovados.**
+- Hashes dos artefatos cliente e servidor: **wheel
+  `zeny_project_handler_client-0.1.0-py3-none-any.whl`: 469.392 bytes, SHA-256
+  `40f2ff27f239bc393dc1b488f2e5997d568021201415261b217590555a3c57dc`; ZIP
+  `ZenyProjectHandler-Client-0.1.0-win-x64.zip`: 52.796.798 bytes, SHA-256
+  `22fa892027da4c4356ef8928bfb089d10931f37a4edf8f9cf4b5a86f2a90c76d`; SBOM: 1.116 bytes,
+  SHA-256 `819e636ba3833f06f7d3849abd254d86156c5ba861cdfc147ff3485e36930359`; imagem
+  `zeny-project-handler-server:dev`: ID
+  `sha256:927458d2876bd8d3db9ab894a1b761c47ff45b43f140078b3b699bf648af33d3`,
+  163.945.040 bytes.**
+- Relatório de isolamento e busca de segredos: **gates de fonte/artefato cliente e imagem servidor
+  aprovados. O wheel rodou com `python -S` em venv efêmera só com `requirements-client.lock` e
+  recusou import de Alembic, PyMuPDF, SQLAlchemy, core, spec e servidor. A imagem não contém cliente
+  nem senha em `Config.Env`. As senhas aleatórias da execução ficaram ausentes de Git, imagem,
+  volume/banco, logs, cache/dados locais, wheel, ZIP, `.zphproj` e `.zphbackup`; no tráfego, a senha
+  do servidor apareceu somente em `Authorization` e a do PDF somente nos endpoints `/unlock`, sem
+  caminhos internos ou segredos nas respostas. `.env` continua ignorado, `.env-example` contém só
+  placeholder, e a busca final por contêineres/volumes `zph-stage*` ficou vazia. `git diff --check`
+  passou.**
+- Relatório E2E em processos/máquinas distintas: **ZIP PyInstaller autenticado pelo diálogo real
+  via UI Automation; wheel fora do repositório; servidor exclusivamente da imagem Docker, root
+  filesystem read-only, volume nomeado sem bind mount e proxy HTTP. Dois clientes, projeto/NS,
+  múltiplos PDFs, três tentativas e reautenticação após restart, ordem/remoção, viewer/preview/tile,
+  análise/OCR/interpretação/promoção e cancelamento, revisão manual, conformidade (1 achado e 1
+  callout), regras 39→40, foto, `.zphproj`, `.zphbackup`, delete/import/restore e persistência após
+  restart aprovados. O gate operacional final aprovou 11/11 cenários de lifecycle/hardening.**
+- Remoção transitória e auditoria manual: **removidos somente os entrypoints/adaptadores legados
+  `zeny_project_handler.__main__`, `bootstrap`, wrappers de apresentação, UI local de credencial PDF
+  e identidade Windows duplicada; testes/imports foram apontados às implementações canônicas e a
+  paridade completa da identidade Windows foi preservada no pacote cliente. README, especificação
+  funcional e inventário descrevem o comportamento vigente.**
+- Conclusão/data/agente: **2026-08-21 00:12 -03:00 — Codex; Etapa 11 aceita. Estado geral mantido
+  PLANEJADO, Etapa 12 mantida PENDENTE e não iniciada; nenhum commit criado.**
+- Pendências conhecidas aceitas pelo responsável: **nenhuma**.
 
 ### Mensagem para um novo chat limpo do Codex
 

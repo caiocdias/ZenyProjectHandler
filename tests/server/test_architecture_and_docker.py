@@ -39,6 +39,20 @@ def test_server_package_does_not_import_qt_ui_or_desktop_bootstrap() -> None:
     assert not violations
 
 
+def test_legacy_monolithic_entrypoints_and_ui_adapters_are_absent() -> None:
+    core = ROOT / "src" / "zeny_project_handler"
+    forbidden = (
+        core / "__main__.py",
+        core / "bootstrap.py",
+        core / "windows_app_identity.py",
+        core / "ui" / "pdf_credentials.py",
+        core / "ui" / "compliance_presentation.py",
+        core / "application" / "compliance_presentation.py",
+    )
+
+    assert not tuple(path for path in forbidden if path.exists())
+
+
 def test_documentation_client_depends_only_on_dtos_gateway_and_qt() -> None:
     protected_prefixes = (
         "zeny_project_handler.adapters",

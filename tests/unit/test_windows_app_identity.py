@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from zeny_project_handler import windows_app_identity
+from zeny_project_handler_client import windows_app_identity
 
 
 def test_windows_identity_is_configured_with_stable_application_id(
@@ -74,7 +74,7 @@ def test_window_identity_sets_taskbar_relaunch_icon_and_clears_properties(
     cleanup = windows_app_identity.configurar_identidade_janela_windows(
         1234,
         icon_path=Path("C:/Zeny/icone.ico"),
-        relaunch_command='"C:\\Zeny\\pythonw.exe" -m zeny_project_handler',
+        relaunch_command='"C:\\Zeny\\pythonw.exe" -m zeny_project_handler_client',
         application_name="Zeny Project Handler",
     )
     cleanup()
@@ -84,7 +84,7 @@ def test_window_identity_sets_taskbar_relaunch_icon_and_clears_properties(
         1234,
         {
             "app_user_model_id": windows_app_identity.WINDOWS_APP_USER_MODEL_ID,
-            "relaunch_command": '"C:\\Zeny\\pythonw.exe" -m zeny_project_handler',
+            "relaunch_command": '"C:\\Zeny\\pythonw.exe" -m zeny_project_handler_client',
             "relaunch_display_name": "Zeny Project Handler",
             "relaunch_icon": "C:\\Zeny\\icone.ico,0",
         },

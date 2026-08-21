@@ -174,9 +174,14 @@ protegidas são `401 AUTHENTICATION_FAILED`, `404 RESOURCE_NOT_FOUND`,
 | restaurar tema, geometria, docks e última folha | bootstrap/MainWindow/ProjectPanel com `QSettings` | `tests/integration/test_window.py::test_theme_switch_preserves_project_pdf_callout_zoom_selection_and_wrap_toggles` | nenhum | `ui-state.ini` local; senha nunca incluída |
 | consultar orientação de OCR indisponível | `MainWindow._show_startup_ocr_diagnostic` | `tests/integration/test_window.py::test_startup_exposes_actionable_portuguese_ocr_remediation` | diagnóstico protegido em `GET /api/v1/session` | `SessionCapabilitiesResponse` com diagnóstico seguro |
 | observar conflito global e bloqueio de ações | `_OperationStateBridge`, `set_global_operation`, `CoordenadorOperacoes.adquirir` | `tests/unit/test_operation_coordinator.py::test_conflict_and_reentry_are_refused_immediately_with_friendly_message` | HTTP 409 e estado global nos jobs | `ErrorEnvelope` (`OPERATION_CONFLICT`) e `GlobalOperationDto` |
-| conectar por URL e senha | não existe no monólito; ação será criada na Etapa 9 | ainda sem teste de UI; contrato/autenticação será caracterizado nas Etapas 1–2 e UI na Etapa 9 | `GET /api/v1/session`; `GET /health/live` público | `SessionCapabilitiesResponse`; erro `AUTHENTICATION_FAILED` |
+| conectar por URL e senha | `ConnectionDialog._connect` → `ConnectionManager.connect` | `tests/unit/test_client_connection.py::test_connection_dialog_rejects_wrong_password_then_accepts_retry`; `tests/integration/test_client_reconnection.py::test_client_opens_authenticated_blocks_on_disconnect_and_reconnects` | `GET /api/v1/session`; `GET /health/live` público | `SessionCapabilitiesResponse`; erro `AUTHENTICATION_FAILED` |
 
 ## Cobertura explícita da matriz de paridade do roadmap
+
+Na Etapa 11, todas as linhas abaixo também foram reexecutadas pela fronteira distribuída em
+`scripts/stage11_parity_gate.py`: ZIP PyInstaller e wheel do cliente isolado, imagem Docker do
+servidor sem bind mount, restart e auditoria do tráfego. A prova final não substitui os testes de
+comportamento listados; ela confirma que a mesma cobertura permanece válida após a separação.
 
 | Item obrigatório da matriz | Linhas deste inventário | Prova atual mínima |
 |---|---|---|

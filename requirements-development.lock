@@ -3,6 +3,7 @@
 -r requirements-server.lock
 
 colorama==0.4.6
+comtypes==1.4.16
 coverage==7.15.2
 httpcore2==2.10.0
 httpx2==2.10.0
@@ -18,6 +19,8 @@ Pygments==2.20.0
 pytest==8.4.2
 pytest-cov==7.1.0
 pytest-qt==4.5.0
+pywin32==312
+pywinauto==0.6.9
 radon==6.0.1
 ruff==0.15.22
 setuptools==80.10.2

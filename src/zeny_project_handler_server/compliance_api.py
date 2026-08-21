@@ -21,7 +21,7 @@ from zeny_project_handler.application.compliance_callouts import (
     LayoutCalloutsImpossivelError,
     projetar_callouts_conformidade,
 )
-from zeny_project_handler.application.compliance_presentation import (
+from zeny_project_handler.application.compliance_presentation_core import (
     formatar_alvo,
     formatar_escopo,
     formatar_lista_condicoes,

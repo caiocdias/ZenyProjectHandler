@@ -16,7 +16,7 @@ from zeny_project_handler.adapters.catalog import carregar_catalogo_inicial
 from zeny_project_handler.adapters.compliance import carregar_registro_conformidade_inicial
 from zeny_project_handler.adapters.pdf.errors import PdfError
 from zeny_project_handler.application.compliance_callouts import projetar_callouts_conformidade
-from zeny_project_handler.application.compliance_presentation import formatar_texto_achado
+from zeny_project_handler.application.compliance_presentation_core import formatar_texto_achado
 from zeny_project_handler.application.human_review import (
     ResumoProjetoRevisao,
     SessaoRevisao,
