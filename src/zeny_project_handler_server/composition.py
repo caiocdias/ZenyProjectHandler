@@ -62,6 +62,7 @@ from zeny_project_handler_contracts.session import (
 )
 from zeny_project_handler_server.compliance_api import DocumentationComplianceApiService
 from zeny_project_handler_server.config import ServerSettings
+from zeny_project_handler_server.deliverable_exports import DeliverableExportService
 from zeny_project_handler_server.job_manager import JobManager
 from zeny_project_handler_server.portability_api import PortabilityApiService
 from zeny_project_handler_server.project_api import ProjectApiService
@@ -89,6 +90,7 @@ SERVER_CAPABILITIES = (
     "remote-project-portability",
     "remote-backup-restore",
     "managed-transfer-downloads",
+    "server-generated-deliverable-exports",
     "managed-volume-v1",
 )
 
@@ -329,13 +331,22 @@ def compose_server_runtime(settings: ServerSettings) -> ServerRuntime:
             review_api=review_api,
             upload_max_bytes=settings.upload_max_bytes,
         )
+        transfer_storage = ManagedTransferStorage(
+            settings.data_directory,
+            maximum_bytes=settings.upload_max_bytes,
+            ttl_seconds=settings.transfer_ttl_seconds,
+        )
+        deliverable_exports = DeliverableExportService(
+            engine=core.engine,
+            projects=project_api,
+            review=review_api,
+            compliance=compliance_api,
+            storage=transfer_storage,
+        )
         portability_api = PortabilityApiService(
             project_api=project_api,
-            transfer_storage=ManagedTransferStorage(
-                settings.data_directory,
-                maximum_bytes=settings.upload_max_bytes,
-                ttl_seconds=settings.transfer_ttl_seconds,
-            ),
+            transfer_storage=transfer_storage,
+            deliverable_exports=deliverable_exports,
         )
 
         def run_analysis(
@@ -452,7 +463,7 @@ def _server_version() -> str:
     try:
         return version("zeny-project-handler-server")
     except PackageNotFoundError:
-        return "0.1.1"
+        return "0.2.0"
 
 
 def _ocr_diagnostic(runtime: RuntimeTesseract) -> OcrDiagnosticDto:

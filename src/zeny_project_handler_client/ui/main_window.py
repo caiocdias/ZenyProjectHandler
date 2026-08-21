@@ -432,15 +432,13 @@ class MainWindow(QMainWindow):
         if portability_gateway is not None:
             self.portability_panel = PortabilityPanelWidget(
                 gateway=portability_gateway,
-                preparar_restauracao=lambda: self.pdf_viewer.preparar_para_restauracao(1_000),
+                callout_positions=self.pdf_viewer.posicoes_callouts_conformidade,
                 parent=self,
             )
             self.portability_panel.status_changed.connect(self.statusBar().showMessage)
-            self.portability_panel.data_changed.connect(self._refresh_data_panels)
-            self.portability_panel.data_restored.connect(self._refresh_after_restore)
             self.portability_panel.busy_changed.connect(self._refresh_operation_controls)
-            portability_dock = QDockWidget("Importar, exportar e backup", self)
-            portability_dock.setObjectName("projectPortabilityDock")
+            portability_dock = QDockWidget("Exportar", self)
+            portability_dock.setObjectName("projectExportDock")
             portability_dock.setAllowedAreas(
                 Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
             )
@@ -448,6 +446,10 @@ class MainWindow(QMainWindow):
             self._register_dock(portability_dock)
             self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, portability_dock)
             right_docks.append(portability_dock)
+            if self.project_panel is not None:
+                self.project_panel.project_opened.connect(self.portability_panel.abrir_projeto)
+                if self.project_panel.projeto_ativo_id is not None:
+                    self.portability_panel.abrir_projeto(self.project_panel.projeto_ativo_id)
         for current, following in pairwise(right_docks):
             self.tabifyDockWidget(current, following)
         if right_docks:
@@ -543,15 +545,6 @@ class MainWindow(QMainWindow):
             self.review_panel.atualizar_projetos()
         if self.documentation_panel is not None:
             self.documentation_panel.atualizar_projetos()
-
-    def _refresh_after_restore(self) -> None:
-        self.pdf_viewer.limpar()
-        if self.review_panel is not None:
-            self.review_panel.limpar()
-        if self.documentation_panel is not None:
-            self.documentation_panel.limpar()
-            self.documentation_panel.atualizar_regras()
-        self._refresh_data_panels()
 
     @Slot(bool)
     def _refresh_operation_controls(self, _busy: bool = False) -> None:

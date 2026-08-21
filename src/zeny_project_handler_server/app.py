@@ -58,6 +58,7 @@ from zeny_project_handler_contracts.documents import (
     UnlockPdfRequest,
 )
 from zeny_project_handler_contracts.errors import ErrorCode, ErrorEnvelope
+from zeny_project_handler_contracts.exports import CreateDeliverableExportRequest
 from zeny_project_handler_contracts.jobs import (
     CancelJobResponse,
     CreateAnalysisJobRequest,
@@ -785,6 +786,20 @@ def create_app(
                 "Cache-Control": "private, no-store",
             },
         )
+
+    @application.post(
+        f"{API_V1_PREFIX}/projects/{{project_id}}/deliverable-exports",
+        status_code=status.HTTP_201_CREATED,
+        response_model=DownloadMetadataDto,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    def create_deliverable_export(
+        request: Request,
+        project_id: UUID,
+        payload: CreateDeliverableExportRequest,
+    ) -> DownloadMetadataDto:
+        return _portability_api(request).create_deliverable_export(project_id, payload)
 
     @application.post(
         f"{API_V1_PREFIX}/projects/{{project_id}}/export-jobs",

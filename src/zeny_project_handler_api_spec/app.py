@@ -31,6 +31,7 @@ from zeny_project_handler_contracts.documents import (
     UnlockPdfRequest,
 )
 from zeny_project_handler_contracts.errors import ErrorEnvelope
+from zeny_project_handler_contracts.exports import CreateDeliverableExportRequest
 from zeny_project_handler_contracts.jobs import (
     CancelJobResponse,
     CreateAnalysisJobRequest,
@@ -642,6 +643,21 @@ async def confirm_rule_import(request: ConfirmRuleImportRequest) -> RuleImportRe
     },
 )
 async def download_active_rule_registry() -> Response:
+    raise NotImplementedError("Aplicação exclusiva para geração da OpenAPI.")
+
+
+@protected.post(
+    "/projects/{project_id}/deliverable-exports",
+    tags=["exports"],
+    operation_id="createDeliverableExport",
+    status_code=status.HTTP_201_CREATED,
+    response_model=DownloadMetadataDto,
+    responses=ERROR_RESPONSES,
+)
+async def create_deliverable_export(
+    project_id: UUID,
+    request: CreateDeliverableExportRequest,
+) -> DownloadMetadataDto:
     raise NotImplementedError("Aplicação exclusiva para geração da OpenAPI.")
 
 

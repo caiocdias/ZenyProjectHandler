@@ -3,6 +3,11 @@
 Este pacote contém somente a interface Windows e a comunicação HTTP. O banco, PDFs gerenciados,
 análise, OCR, regras, backup e recuperação executam no servidor administrado separadamente.
 
+O painel **Exportar** baixa arquivos finais, não cópias internas do projeto: PDF com as anotações
+de conformidade, Resultados `.xlsx` (Elementos e Vãos), Documentação `.xlsx` e Conformidade `.xlsx`
+(Conformidade e Regras). Escolha uma pasta local; o cliente só publica o arquivo depois de conferir
+tamanho e SHA-256.
+
 ## Abrir e conectar
 
 1. Extraia o ZIP inteiro para uma pasta gravável.

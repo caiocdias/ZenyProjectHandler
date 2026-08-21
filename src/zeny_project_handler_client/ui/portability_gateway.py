@@ -24,6 +24,7 @@ from zeny_project_handler_contracts.backup import (
 )
 from zeny_project_handler_contracts.common import DownloadMetadataDto
 from zeny_project_handler_contracts.errors import ErrorCode, ErrorEnvelope
+from zeny_project_handler_contracts.exports import CreateDeliverableExportRequest
 from zeny_project_handler_contracts.jobs import (
     CancelJobResponse,
     CreateExportJobRequest,
@@ -67,6 +68,12 @@ class PortabilityGateway(Protocol):
         limit: int = 200,
         offset: int = 0,
     ) -> ProjectSummaryListResponse: ...
+
+    def create_deliverable_export(
+        self,
+        project_id: UUID,
+        request: CreateDeliverableExportRequest,
+    ) -> DownloadMetadataDto: ...
 
     def create_project_export_job(
         self,
@@ -184,6 +191,18 @@ class HttpPortabilityGateway:
             None,
             ProjectSummaryListResponse,
             retry_read=True,
+        )
+
+    def create_deliverable_export(
+        self,
+        project_id: UUID,
+        request: CreateDeliverableExportRequest,
+    ) -> DownloadMetadataDto:
+        return self._json_model(
+            "POST",
+            f"{API_V1_PREFIX}/projects/{project_id}/deliverable-exports",
+            request,
+            DownloadMetadataDto,
         )
 
     def create_project_export_job(
@@ -360,7 +379,7 @@ class HttpPortabilityGateway:
                             stream.write(chunk)
                             digest.update(chunk)
                             received += len(chunk)
-                            progress(received, metadata.size_bytes, "Baixando pacote")
+                            progress(received, metadata.size_bytes, "Baixando arquivo")
                         stream.flush()
                         os.fsync(stream.fileno())
                     if received != metadata.size_bytes or digest.hexdigest() != metadata.sha256:

@@ -30,9 +30,10 @@ apresenta os DTOs e rasters recebidos pela API autenticada.
   fatos, snapshots persistidos e callouts normalizados compilados para a camada vetorial do cliente.
   O seed atual é
   `cemig-normas-distribuicao-2025.6`, com 39 regras habilitadas.
-- Importação e exportação remotas de projetos `.zphproj` e backup completo `.zphbackup`: o servidor
-  valida e processa pacotes em jobs, enquanto o cliente só transmite streams e publica downloads
-  conferidos por tamanho e SHA-256.
+- Painel **Exportar**: o servidor compila o PDF na ordem das folhas, incorpora as anotações de
+  conformidade e gera planilhas Excel de **Resultados** (Elementos e Vãos), **Documentação** e
+  **Conformidade** (Conformidade e Regras). O cliente apenas escolhe o destino e confere tamanho e
+  SHA-256 antes de publicar o download local.
 - Lifecycle fail-closed do volume: manifesto de formato versionado, verificação SQLite pré/pós,
   Alembic somente quando necessário e rejeição de revisão futura, corrupção ou falta de escrita
   antes da prontidão.
@@ -92,8 +93,7 @@ Abra sem console com duplo clique em `ZenyProjectHandler.vbs`. Para diagnóstico
    no PDF.
 5. Em **Documentação e conformidade**, confira os dados documentais, execute a conformidade e revise
    os callouts.
-6. Use **Importar, exportar e backup** para transportar um projeto ou proteger o estado persistido
-   no servidor. Preflights destrutivos exibem o resumo remoto antes da confirmação.
+6. Use **Exportar** para baixar o PDF anotado ou as planilhas `.xlsx` na própria máquina.
 
 O pipeline principal executa, em ordem, a extração documental, a interpretação semântica, a
 promoção dos resultados e a conformidade. A ação **Analisar conformidade** reaplica as regras aos
@@ -104,30 +104,24 @@ resultados semânticos persistidos; ela não abre o PDF nem repete OCR.
 Por padrão, preferências visuais, logs do cliente e downloads escolhidos pelo usuário ficam no
 computador cliente. Use `ZENY_DATA_DIR` para escolher a raiz local da interface; essa pasta não
 contém banco nem cache de análise. Os painéis
-**Projeto**, **Resultados**, **Documentação e conformidade** e **Importar, exportar e backup** usam o
-servidor como fonte principal; banco, PDFs gerenciados, cache, jobs, pacotes temporários e logs do
-servidor ficam em `ZENY_SERVER_DATA_DIR` (normalmente o volume `/data`).
+**Projeto**, **Resultados**, **Documentação e conformidade** e **Exportar** usam o servidor como
+fonte principal; banco, PDFs gerenciados, cache, jobs, arquivos temporários e logs do servidor ficam
+em `ZENY_SERVER_DATA_DIR` (normalmente o volume `/data`).
 
 - O SQLite e suas migrações existem somente no servidor.
 - PDFs adicionados pelo painel Projeto são enviados por streaming e publicados em cópia gerenciada
   pelo servidor. A origem escolhida no cliente não é alterada nem apagada.
-- O aplicativo registra identidade, tamanho e SHA-256 da origem antes de analisar ou transportar o
+- O aplicativo registra identidade, tamanho e SHA-256 da origem antes de analisar ou compilar o
   conteúdo.
-- `.zphproj` transporta um projeto com seus dados auditáveis e arquivos disponíveis. Exportação e
-  importação executam no servidor; o cliente nunca abre o ZIP.
-- `.zphbackup` protege o banco completo do servidor, arquivos gerenciados e cópias verificadas dos
-  PDFs externos. O cliente nunca abre o snapshot SQLite.
+- O PDF exportado preserva as páginas originais, a ordem definida no projeto e as anotações já
+  existentes, além de receber os callouts de conformidade disponíveis.
+- As planilhas `.xlsx` são geradas no servidor a partir das mesmas projeções canônicas exibidas nos
+  painéis, sem banco, caminhos internos ou arquivos de projeto no computador cliente.
+- Backup, restauração e retenção do volume são responsabilidades administrativas do servidor e não
+  aparecem como ações do usuário final.
 - Uploads possuem limite de tamanho, nome saneado e temporário gerenciado; downloads autenticados
   têm TTL, podem ser repetidos enquanto válidos e só substituem o destino local após conferir
   tamanho e SHA-256.
-- Pacotes validam manifesto, caminhos, tipos, tamanhos e hashes. Uma origem ausente, alterada ou
-  ilegível só pode ser omitida depois de confirmação explícita e deixa o pacote marcado como
-  degradado.
-- Na restauração, referências PDF são relocalizadas para o namespace gerenciado do volume atual.
-  Uma omissão continua ausente/degradada, sem conservar caminho Windows como fonte permanente.
-- A importação de projeto e a limpeza de arquivos possuem journals recuperáveis. A restauração de
-  backup usa publicação atômica por arquivo e compensação para falhas capturadas; a troca conjunta
-  de banco e anexos ainda não possui journal durável contra encerramento abrupto.
 - `/data/.zeny-volume.json` registra somente formato/revisão/instantes do lifecycle, nunca segredo.
   `docker compose down` preserva dados; `down -v` não pertence ao procedimento operacional.
 
@@ -216,10 +210,10 @@ smoke opcional, somente leitura, sobre todos os exemplos disponíveis:
 Para montar cliente e kit servidor oficiais com versão igual aos manifestos do produto:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\build_release.py --version 0.1.1
+.\.venv\Scripts\python.exe scripts\build_release.py --version 0.2.0
 ```
 
-O comando recompõe `dist/release/0.1.1/`, gera os dois SBOMs, notas, manifesto e hashes e executa a
+O comando recompõe `dist/release/0.2.0/`, gera os dois SBOMs, notas, manifesto e hashes e executa a
 inspeção estática dos artefatos. A validação de distribuição carrega o archive num host Docker
 temporário sem fonte e abre o executável num diretório cliente sem checkout/Python no `PATH`.
 

@@ -162,7 +162,7 @@ class ManagedTransferStorage:
         upload.path.unlink(missing_ok=True)
 
     def pending_download_path(self, job_id: UUID, suffix: str) -> Path:
-        if suffix not in {".zphproj", ".zphbackup"}:
+        if suffix not in {".zphproj", ".zphbackup", ".pdf", ".xlsx"}:
             raise ValueError("Extensão de download não suportada")
         return self.pending_download_root / f"{job_id}{suffix}"
 

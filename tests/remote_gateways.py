@@ -50,6 +50,7 @@ from zeny_project_handler_contracts.documents import (
 )
 from zeny_project_handler_contracts.enums import JobKind, JobStatus
 from zeny_project_handler_contracts.errors import ErrorCode
+from zeny_project_handler_contracts.exports import CreateDeliverableExportRequest
 from zeny_project_handler_contracts.jobs import (
     CancelJobResponse,
     CreateExportJobRequest,
@@ -228,6 +229,13 @@ class DirectPortabilityGateway:
         assert self._runtime.project_api is not None
         return self._runtime.project_api.list_projects(limit=limit, offset=offset)
 
+    def create_deliverable_export(
+        self,
+        project_id: UUID,
+        request: CreateDeliverableExportRequest,
+    ) -> DownloadMetadataDto:
+        return self._portability.create_deliverable_export(project_id, request)
+
     def create_project_export_job(
         self,
         project_id: UUID,
@@ -354,7 +362,7 @@ class DirectPortabilityGateway:
                     target.write(chunk)
                     digest.update(chunk)
                     received += len(chunk)
-                    progress(received, metadata.size_bytes, "Baixando pacote")
+                    progress(received, metadata.size_bytes, "Baixando arquivo")
                 target.flush()
                 os.fsync(target.fileno())
             assert received == metadata.size_bytes

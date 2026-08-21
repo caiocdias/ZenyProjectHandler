@@ -379,14 +379,20 @@ def _write_release_notes(path: Path, version: str, image: str, digest: str) -> N
   `{MAX_COMPATIBLE_API_VERSION}`.
 - Volume: formato `{VOLUME_FORMAT_VERSION}`; revisão Alembic `{ALEMBIC_REVISION}`.
 
-Esta é a primeira release fisicamente separada. O cliente deve ser distribuído somente aos usuários
-finais; o kit servidor, somente aos administradores. Ambos podem receber também os três arquivos
-comuns de notas e integridade. Não existe senha predefinida: o administrador deve criar `.env` a
-partir do exemplo antes do primeiro start.
+Esta release substitui o painel de importação/backup por **Exportar**. O servidor compila o PDF
+anotado e as planilhas Excel de Resultados, Documentação e Conformidade; o cliente baixa os arquivos
+com validação de tamanho e SHA-256. Backup e restauração do volume permanecem responsabilidades do
+administrador do servidor.
 
-Upgrade executa validação e migração fail-closed antes da prontidão. Faça `.zphbackup` antes de
-trocar a imagem. Rollback no mesmo volume só é permitido quando a imagem anterior suporta o formato
-e a revisão atuais; caso contrário, restaure o backup pré-upgrade em volume novo.
+O cliente deve ser distribuído somente aos usuários finais; o kit servidor, somente aos
+administradores. Ambos podem receber também os três arquivos comuns de notas e integridade. Não
+existe senha predefinida: o administrador deve criar `.env` a partir do exemplo antes do primeiro
+start.
+
+Upgrade executa validação e migração fail-closed antes da prontidão. Faça um snapshot administrativo
+consistente do volume com o serviço parado antes de trocar a imagem. Rollback no mesmo volume só é
+permitido quando a imagem anterior suporta o formato e a revisão atuais; caso contrário, restaure o
+snapshot pré-upgrade em volume novo.
 """,
         encoding="utf-8",
         newline="\n",

@@ -66,6 +66,7 @@ from zeny_project_handler_contracts.common import (
 from zeny_project_handler_contracts.compliance import ComplianceCalloutDto
 from zeny_project_handler_contracts.enums import ComplianceStatus, ReviewGeometryKind, ReviewState
 from zeny_project_handler_contracts.errors import ErrorCode
+from zeny_project_handler_contracts.exports import CalloutPositionOverrideDto
 from zeny_project_handler_contracts.review import ReviewGeometryDto, ReviewOverlayDto
 from zeny_project_handler_contracts.viewer import (
     CreateViewerSessionResponse,
@@ -1090,6 +1091,13 @@ class PdfViewerWidget(QWidget):
             self.view.definir_callouts_conformidade(positioned, self._current_transformer)
             if self._selected_compliance_callout_id is not None:
                 self.view.selecionar_callout(self._selected_compliance_callout_id)
+
+    def posicoes_callouts_conformidade(self) -> tuple[CalloutPositionOverrideDto, ...]:
+        """Entregue ao exportador as posições ajustadas na sessão visual atual."""
+        return tuple(
+            CalloutPositionOverrideDto(callout_id=item.callout_id, box=item.box)
+            for item in self._compliance_callouts
+        )
 
     def selecionar_callout(self, callout_id: str) -> None:
         if all(str(item.callout_id.root) != callout_id for item in self._compliance_callouts):

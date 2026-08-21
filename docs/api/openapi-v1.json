@@ -448,6 +448,23 @@
         "title": "CalloutId",
         "type": "string"
       },
+      "CalloutPositionOverrideDto": {
+        "additionalProperties": false,
+        "properties": {
+          "box": {
+            "$ref": "#/components/schemas/NormalizedBoxDto"
+          },
+          "callout_id": {
+            "$ref": "#/components/schemas/CalloutId"
+          }
+        },
+        "required": [
+          "callout_id",
+          "box"
+        ],
+        "title": "CalloutPositionOverrideDto",
+        "type": "object"
+      },
       "CancelJobResponse": {
         "additionalProperties": false,
         "properties": {
@@ -1125,6 +1142,33 @@
         "title": "CreateComplianceJobRequest",
         "type": "object"
       },
+      "CreateDeliverableExportRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "callout_positions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CalloutPositionOverrideDto"
+            },
+            "title": "Callout Positions",
+            "type": "array"
+          },
+          "expected_project_version": {
+            "minimum": 0.0,
+            "title": "Expected Project Version",
+            "type": "integer"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/DeliverableExportKind"
+          }
+        },
+        "required": [
+          "kind",
+          "expected_project_version"
+        ],
+        "title": "CreateDeliverableExportRequest",
+        "type": "object"
+      },
       "CreateExportJobRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1398,6 +1442,16 @@
         },
         "title": "DeletionCountsDto",
         "type": "object"
+      },
+      "DeliverableExportKind": {
+        "enum": [
+          "ANNOTATED_PDF",
+          "RESULTS_XLSX",
+          "DOCUMENTATION_XLSX",
+          "COMPLIANCE_XLSX"
+        ],
+        "title": "DeliverableExportKind",
+        "type": "string"
       },
       "DetectedSpanDto": {
         "additionalProperties": false,
@@ -7217,6 +7271,134 @@
         "summary": "Get Latest Compliance",
         "tags": [
           "compliance"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/deliverable-exports": {
+      "post": {
+        "operationId": "createDeliverableExport",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDeliverableExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DownloadMetadataDto"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Credencial Bearer ausente ou inválida."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Recurso não encontrado."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Upload acima do limite configurado."
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Tipo de mídia não suportado."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request inválido para o contrato v1."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Erro interno seguro e correlacionável."
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Create Deliverable Export",
+        "tags": [
+          "exports"
         ]
       }
     },

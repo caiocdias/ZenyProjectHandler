@@ -50,6 +50,7 @@ from zeny_project_handler_contracts.enums import (
     PreflightDisposition,
 )
 from zeny_project_handler_contracts.errors import ErrorCode
+from zeny_project_handler_contracts.exports import CreateDeliverableExportRequest
 from zeny_project_handler_contracts.portability import (
     ConfirmProjectImportRequest,
     ProjectImportPreflightResponse,
@@ -59,6 +60,7 @@ from zeny_project_handler_server.api_errors import (
     ApiError,
     IdempotencyConflictError,
 )
+from zeny_project_handler_server.deliverable_exports import DeliverableExportService
 from zeny_project_handler_server.project_api import ProjectApiService
 from zeny_project_handler_server.transfer_storage import (
     ManagedTransferStorage,
@@ -93,12 +95,24 @@ class PortabilityApiService:
         *,
         project_api: ProjectApiService,
         transfer_storage: ManagedTransferStorage,
+        deliverable_exports: DeliverableExportService | None = None,
     ) -> None:
         self._projects = project_api
         self._service: ServicoPortabilidadeProjeto = project_api.portability_service
         self._storage = transfer_storage
+        self._deliverable_exports = deliverable_exports
         self._backup_preflights: dict[UUID, _BackupPreflight] = {}
         self._lock = RLock()
+
+    def create_deliverable_export(
+        self,
+        project_id: UUID,
+        request: CreateDeliverableExportRequest,
+    ) -> DownloadMetadataDto:
+        exporter = self._deliverable_exports
+        if exporter is None:
+            raise RuntimeError("A exportação de arquivos finais não está disponível")
+        return exporter.create(project_id, request)
 
     async def receive_project_import(
         self,

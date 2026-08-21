@@ -68,8 +68,10 @@ backup; clientes devem reconectar.
 
 ## Backup e atualização
 
-Crie e retire do host um `.zphbackup` pelo painel **Importar, exportar e backup** antes de qualquer
-upgrade. O cliente confere tamanho e SHA-256 do download. Registre o digest atual e o nome do volume.
+Backup não é uma ação do usuário final. Antes de qualquer upgrade, o administrador deve parar o
+serviço, criar um snapshot consistente do volume nomeado `zeny-data` usando a política de backup do
+host e guardar a cópia fora da máquina. Registre o hash do snapshot, o digest atual da imagem e o
+nome do volume; reinicie o serviço somente depois que a cópia tiver sido validada.
 
 Para atualizar, carregue o novo archive, confira hashes/digest, leia as notas de schema, altere
 `ZENY_SERVER_IMAGE` no `.env` para a referência aprovada e recrie sem build e sem remover o volume:
@@ -86,8 +88,8 @@ falham antes da prontidão e preservam o volume para recuperação.
 
 Trocar a referência para a imagem anterior no mesmo volume só é permitido quando ela declara
 compatibilidade com o formato/revisão atuais. Caso contrário, preserve o volume atualizado, crie um
-volume novo com a imagem anterior e restaure o `.zphbackup` pré-upgrade. Não execute downgrade do
-Alembic e não edite `.zeny-volume.json` ou `alembic_version`.
+volume novo com a imagem anterior e restaure o snapshot administrativo pré-upgrade. Não execute
+downgrade do Alembic e não edite `.zeny-volume.json` ou `alembic_version`.
 
 Banco corrompido, volume sem permissão ou revisão incompatível exigem parada, preservação do volume
 e restauração controlada. Não use `chmod 777`, bind mount Windows/SMB ou cópia de SQLite vivo.

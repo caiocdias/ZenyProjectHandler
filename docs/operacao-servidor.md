@@ -114,37 +114,32 @@ docker volume inspect <nome-do-volume>
 
 ## Backup rotineiro
 
-Crie `.zphbackup` pelo painel **Importar, exportar e backup**. O servidor executa preflight, cria
-snapshot SQLite íntegro, coleta arquivos gerenciados e oferece download autenticado; o cliente
-confere tamanho/SHA-256 antes da publicação local. Copie o pacote final para armazenamento protegido
-fora do host e do volume.
+Backup deixou de ser uma função do cliente. A operação do servidor deve criar um snapshot consistente
+do volume nomeado `zeny-data`, com o serviço parado, e copiar o artefato para armazenamento protegido
+fora do host e do próprio volume. Registre horário, digest, versão da imagem e revisão indicada em
+`.zeny-volume.json`.
 
-Uma origem ausente, alterada ou ilegível produz preflight `DEGRADADO`. Só prossiga depois de revisar
-as omissões e confirmar explicitamente. O pacote continua exigindo integridade de tudo que declara.
-Teste regularmente a restauração em um volume descartável, nunca sobre produção apenas para “ver se
-abre”.
+Teste regularmente a restauração do snapshot em um volume descartável. Nunca copie somente o SQLite
+em execução, monte uma pasta de cliente como armazenamento permanente nem valide uma restauração
+sobre produção.
 
 ## Cutover da versão monolítica
 
 Agende janela sem edições concorrentes e registre operador, horário, versões e digest da imagem.
 
 1. Na versão antiga, encerre análises e revisões em andamento.
-2. Execute o preflight de backup completo. Se houver origem ausente/alterada, registre projeto e
-   documento, decida conscientemente pelo backup degradado e não monte a pasta Windows no servidor.
-3. Crie o `.zphbackup`, salve em mídia independente e confira o SHA-256 informado pelo download.
+2. Pare o serviço e crie um snapshot consistente do volume `zeny-data`.
+3. Salve o snapshot em mídia independente e registre seu SHA-256.
 4. Pare a versão antiga sem apagar sua pasta. Ela permanece como rollback até o aceite.
 5. Suba a imagem nova com um volume nomeado vazio e aguarde health/readiness.
-6. Conecte o cliente ao servidor novo, envie os bytes do `.zphbackup`, execute o preflight remoto e
-   confira integridade, quantidade de projetos/documentos/fotos e IDs resumidos.
-7. Confirme a restauração vinculada ao fingerprint. Não copie SQLite nem monte a pasta antiga.
+6. Restaure o snapshot no volume novo antes de iniciar o servidor e confira permissões e manifesto.
+7. Conecte o cliente e confira integridade, quantidade de projetos/documentos/fotos e IDs resumidos.
 8. Compare e registre: projetos/NS/IDs; documentos, hashes e ordem das folhas; análises e snapshots;
    propostas/decisões; revisão ativa e números das regras; fotos e navegação até evidências.
 9. Reinicie o container e repita a consulta com dois clientes antes de liberar usuários.
 
-Em backup íntegro, cada PDF passa a apontar para a cópia sob o volume novo. Em backup degradado, a
-referência externa antiga é substituída por um destino determinístico sob `project-files` do volume,
-mas o arquivo permanece ausente e o estado continua degradado. Reenvie o PDF correto ou remova o
-documento pelo fluxo normal; nunca solucione montando o caminho Windows legado.
+O snapshot deve preservar todo o volume, inclusive banco, PDFs gerenciados, fotos, manifesto e
+metadados de migração. Nunca tente reconstruir o estado copiando apenas arquivos selecionados.
 
 Se a comparação falhar, pare o servidor novo, preserve seu volume para diagnóstico e reative a
 versão antiga. Não tente mesclar manualmente os bancos.
@@ -152,7 +147,7 @@ versão antiga. Não tente mesclar manualmente os bancos.
 ## Atualização de imagem
 
 1. Avise os clientes e aguarde jobs terminarem.
-2. Gere e retire do host um `.zphbackup` íntegro ou conscientemente degradado.
+2. Pare o serviço, gere um snapshot consistente do volume e retire-o do host.
 3. Registre tag/digest atual, revisão indicada em `.zeny-volume.json` e nome do volume.
 4. Carregue/puxe a nova imagem e confira o digest.
 5. Leia as notas de schema e compatibilidade.
@@ -174,7 +169,7 @@ revisão atuais do volume. Nesse caso, restaure a referência imutável anterior
 
 Se a atualização mudou para schema que a imagem anterior não conhece, **não conecte a imagem antiga
 ao volume atualizado e não execute Alembic downgrade**. Pare o container, preserve o volume falho,
-crie outro volume e restaure o `.zphbackup` feito antes do upgrade com a imagem anterior. Só remova o
+crie outro volume e restaure o snapshot feito antes do upgrade com a imagem anterior. Só remova o
 volume falho depois do aceite e da retenção definida pela operação.
 
 ## Troca da senha
@@ -192,7 +187,7 @@ arquivo.
 | Sintoma | Conduta segura |
 |---|---|
 | volume sem permissão | pare; confirme volume nomeado e UID/GID 10001; corrija ownership de forma controlada; nunca use `chmod 777` |
-| banco corrompido | pare; preserve o volume; crie volume novo e restaure o último `.zphbackup` validado |
+| banco corrompido | pare; preserve o volume; crie volume novo e restaure o último snapshot validado |
 | revisão futura/incompatível | use a imagem compatível ou restaure backup pré-upgrade em outro volume; não edite `alembic_version` |
 | migração falhou | mantenha o container fora de serviço, guarde logs/digest/volume e aplique rollback compatível ou restauração |
 | OCR ausente | operações nativas continuam; reinstale a imagem validada antes de depender de OCR |

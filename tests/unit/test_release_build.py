@@ -17,9 +17,9 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_release_version_must_be_stable_semver_and_match_all_packages() -> None:
-    _validate_version("0.1.1")
+    _validate_version("0.2.0")
 
-    for invalid in ("1", "1.0", "01.0.0", "1.0.0-rc.1", "v1.0.0", "0.2.0"):
+    for invalid in ("1", "1.0", "01.0.0", "1.0.0-rc.1", "v1.0.0", "0.2.1"):
         with pytest.raises(ReleaseBuildError):
             _validate_version(invalid)
 

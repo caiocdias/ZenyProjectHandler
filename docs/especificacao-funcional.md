@@ -15,7 +15,7 @@ Estado versionado relevante:
 
 | Componente | Versão atual |
 |---|---|
-| Pacote Python | `0.1.1` |
+| Pacote Python | `0.2.0` |
 | Catálogo técnico | `2` |
 | Registro de interpretação | `1.3.0` |
 | Registro de conformidade distribuído | `cemig-normas-distribuicao-2025.6` |
@@ -255,29 +255,24 @@ importação de projeto e a exclusão/limpeza de arquivos gerenciados mantêm jo
 bootstrap. Estado corrompido ou ambíguo bloqueia a inicialização em vez de autorizar uma limpeza por
 inferência.
 
-## Portabilidade e backup
+## Exportação de entregáveis
 
-`.zphproj` é um ZIP verificável para um projeto. `.zphbackup` contém um snapshot do ambiente do
-servidor. Pacotes novos usam manifesto de formato 2 com caminhos relativos, tipos, tamanhos,
-SHA-256, estado de integridade e omissões declaradas. ZIP, SQLite e árvore gerenciada são manipulados
-somente pelo servidor.
+O painel **Exportar** não transporta o agregado nem oferece backup/restauração ao usuário. O servidor
+compila quatro entregáveis a partir do projeto atual: PDF na ordem das folhas com anotações de
+conformidade, Resultados `.xlsx` com abas Elementos e Vãos, Documentação `.xlsx` e Conformidade
+`.xlsx` com abas Conformidade e Regras.
 
-A importação possui upload streaming, preflight somente leitura e job posterior à confirmação. O
-plano inclui a identidade do pacote e o fingerprint do destino; qualquer mudança entre inspeção e
-aplicação exige novo preflight. IDs, análises, propostas, revisões e resultados são preservados.
+O PDF mantém o conteúdo e as anotações originais e recebe callouts FreeText nas coordenadas
+normalizadas da execução mais recente. Posições ajustadas na interface são enviadas como overrides
+validados contra os IDs de callout atuais. As planilhas usam as mesmas projeções DTO mostradas nos
+painéis e tratam todo conteúdo como texto, inclusive valores iniciados por `=`, para não executar
+fórmulas vindas dos documentos.
 
-Antes do backup, todas as origens PDF são classificadas. Backup íntegro prossegue diretamente;
-origens ausentes, alteradas ou ilegíveis exigem confirmação e geram pacote `DEGRADADO`. A restauração
-de um pacote degradado ainda exige integridade de tudo que o manifesto declara e uma segunda
-confirmação explícita no destino. Toda referência restaurada é recalculada para `project-files` do
-volume atual. Uma origem omitida continua ausente e diagnosticável, mas não conserva caminho
-Windows/SMB como dependência permanente.
-
-A troca de cada arquivo é atômica e exceções capturadas disparam compensação. Exportação e backup
-publicam um download autenticado com metadados de tamanho, SHA-256 e expiração; o cliente grava em
-temporário irmão e só substitui o destino após validar a identidade. Uploads, preflights e downloads
-expirados são removidos pela política de TTL. A restauração conjunta de SQLite e árvore gerenciada
-não possui journal durável contra queda abrupta entre os recursos.
+Cada artefato é publicado como download autenticado com metadados de tamanho, SHA-256 e expiração;
+o cliente grava em temporário irmão e só substitui o destino após validar a identidade. Downloads
+expirados são removidos pela política de TTL. A proteção integral do banco e dos arquivos é uma
+responsabilidade administrativa do servidor, por snapshot consistente do volume com o serviço
+parado, e não uma ação da interface do usuário.
 
 ## Interface e concorrência
 
@@ -285,17 +280,17 @@ A análise do painel Projeto executa no servidor e é observada por polling fora
 interface. Um segundo cliente recebe o mesmo progresso/bloqueio global e conflito HTTP 409 ao tentar
 uma operação incompatível. A revisão humana também usa estado otimista remoto: duas sessões podem
 ler a mesma proposta, mas somente a primeira decisão válida persiste; a segunda recebe `409` e deve
-recarregar os DTOs. Importação, exportação, backup e restauração executam como jobs persistidos no
-servidor. O cliente acompanha progresso monotônico por polling, solicita cancelamento remoto e faz
-upload/download fora da thread visual. Objetos Qt visuais permanecem na thread principal.
+recarregar os DTOs. A compilação e o download dos entregáveis executam fora da thread visual; o
+cliente mantém a interface responsiva, permite cancelar antes da publicação local e preserva o
+arquivo anterior em caso de falha. Objetos Qt visuais permanecem na thread principal.
 
-O procedimento operacional usa backup antes de upgrade, `docker compose down` sem remoção de volume
-e migração fail-closed antes de `ready=true`. Rollback no mesmo volume é permitido somente para
-imagem compatível com seu formato/revisão; rollback incompatível cria volume novo e restaura o
-`.zphbackup` pré-upgrade. Não há downgrade automático nem edição de `alembic_version`.
+O procedimento operacional usa snapshot administrativo antes de upgrade, `docker compose down` sem
+remoção de volume e migração fail-closed antes de `ready=true`. Rollback no mesmo volume é permitido
+somente para imagem compatível com seu formato/revisão; rollback incompatível cria volume novo e
+restaura o snapshot pré-upgrade. Não há downgrade automático nem edição de `alembic_version`.
 
 Os painéis **Projeto**, **Resultados**, **Documentação e conformidade** e
-**Importar, exportar e backup** podem ser movidos, desacoplados e restaurados. Tema, geometria e
+**Exportar** podem ser movidos, desacoplados e restaurados. Tema, geometria e
 estado dos docks ficam em `ui-state.ini` na pasta de dados.
 
 Antes de construir os painéis de dados, o cliente exige URL e senha e valida a rota de sessão. A URL
