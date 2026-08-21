@@ -86,8 +86,17 @@ def test_docker_build_is_multistage_non_root_with_ocr_and_no_build_secret() -> N
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     normalized = dockerfile.casefold()
 
-    assert len(re.findall(r"^FROM ", dockerfile, flags=re.MULTILINE)) >= 2
-    assert normalized.count("@sha256:") == 2
+    pinned_from_lines = re.findall(
+        r"^FROM\s+\S+@sha256:[0-9a-f]{64}(?:\s+AS\s+\S+)?$",
+        dockerfile,
+        flags=re.MULTILINE,
+    )
+    assert len(pinned_from_lines) == 2
+    assert re.search(
+        r"^# syntax=docker/dockerfile:1@sha256:[0-9a-f]{64}$",
+        dockerfile,
+        flags=re.MULTILINE,
+    )
     assert "tesseract-ocr" in normalized
     assert "tesseract-ocr-por" in normalized
     assert re.search(r"^USER\s+(?!root\b)\S+", dockerfile, flags=re.MULTILINE)

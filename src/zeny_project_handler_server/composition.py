@@ -450,7 +450,7 @@ def _ocr_engine(runtime: RuntimeTesseract) -> TesseractCliOcr | None:
 
 def _server_version() -> str:
     try:
-        return version("zeny-project-handler")
+        return version("zeny-project-handler-server")
     except PackageNotFoundError:
         return "0.1.0"
 

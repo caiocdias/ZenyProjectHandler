@@ -1,9 +1,9 @@
 # Roadmap da migração para arquitetura cliente-servidosr
 
-- Estado geral: **PLANEJADO**
+- Estado geral: **CONCLUÍDO**
 - Data do planejamento: **2026-08-17**
 - Responsável pelo planejamento: **Codex**
-- Próxima etapa liberada: **Etapa 12** (**PENDENTE; não iniciada e não executada neste trabalho**)
+- Próxima etapa liberada: **nenhuma — roadmap concluído**
 - Regra de execução: uma etapa só pode começar quando todas as suas dependências estiverem
   marcadas como **CONCLUÍDA**.
 
@@ -1340,7 +1340,7 @@ da API na conexão e recusar, com mensagem clara, uma combinação incompatível
 
 ## Etapa 12 — Montagem e validação da release separada
 
-- Estado: **PENDENTE**
+- Estado: **CONCLUÍDA**
 - Dependências: Etapa 11 **CONCLUÍDA**
 - Entrega principal: dois pacotes distribuíveis e fisicamente separados, sem necessidade de
   compartilhar o repositório com usuários ou com o host de produção.
@@ -1389,28 +1389,76 @@ dist/release/<versao>/
 
 ### Critérios de aceite e comprovação
 
-- Um único comando reproduz a estrutura acima a partir de checkout limpo.
-- O cliente roda sem Python e conecta a um servidor em outra máquina/processo.
-- O host servidor roda somente com engine Docker, kit de release e senha definida pelo administrador;
+- [x] Um único comando reproduz a estrutura acima a partir de checkout limpo.
+- [x] O cliente roda sem Python e conecta a um servidor em outra máquina/processo.
+- [x] O host servidor roda somente com engine Docker, kit de release e senha definida pelo
+  administrador;
   não recebe o repositório.
-- `compose.release.yaml` não possui `build:` e a imagem não contém `.env`, PySide6 ou fontes do
+- [x] `compose.release.yaml` não possui `build:` e a imagem não contém `.env`, PySide6 ou fontes do
   cliente.
-- A inspeção do ZIP cliente não encontra lógica/dependências/seeds do servidor.
-- Todos os hashes do manifesto conferem e o digest registrado identifica a imagem testada.
-- Testes de compatibilidade aceitam versões suportadas e recusam versões incompatíveis.
-- O E2E final é executado sobre os artefatos empacotados, não sobre `python -m` no checkout.
+- [x] A inspeção do ZIP cliente não encontra lógica/dependências/seeds do servidor.
+- [x] Todos os hashes do manifesto conferem e o digest registrado identifica a imagem testada.
+- [x] Testes de compatibilidade aceitam versões suportadas e recusam versões incompatíveis.
+- [x] O E2E final é executado sobre os artefatos empacotados, não sobre `python -m` no checkout.
 
 ### Evidências
 
-- Início/data/agente: _preencher_
-- Versão da release: _preencher_
-- Comando reproduzível: _preencher_
-- Caminhos/tamanhos/SHA-256 dos pacotes: _preencher_
-- Digest da imagem: _preencher_
-- Relatório de Windows/host Docker limpos: _preencher_
-- Inspeção negativa dos dois artefatos: _preencher_
-- Resultado dos gates/E2E: _preencher_
-- Observações/bloqueios: _preencher_
+- Início/data/agente: **2026-08-21 00:24 -03:00 — Codex; roadmap completo lido, working tree
+  inicial limpo e Etapa 11 confirmada como CONCLUÍDA em 2026-08-21 00:12 -03:00, sem pendências
+  aceitas. Escopo limitado à montagem reproduzível da release oficial separada, negociação de
+  compatibilidade, documentação/SBOMs/manifesto/hashes, ensaios dos artefatos exatos em ambientes
+  sem checkout e gates finais da Etapa 12. O Estado geral permanece PLANEJADO durante a execução e
+  nenhum commit será criado.**
+- Versão da release: **`0.1.0`, API `1.0.0`, faixa aceita `1.0.0`–`1.999.999`, revisão Alembic
+  `0009_remote_jobs` e formato de volume `1`. A estrutura oficial contém exatamente 11 arquivos em
+  `dist/release/0.1.0/`, divididos nos conjuntos físicos cliente, administrador do servidor e
+  integridade comum.**
+- Comando reproduzível: **`.venv\Scripts\python.exe -m scripts.build_release --version 0.1.0`.
+  O builder valida SemVer e igualdade das versões dos três projetos, cria ambiente cliente isolado,
+  usa locks separados, base e frontend Docker por digest, `PYTHONHASHSEED=0`,
+  `SOURCE_DATE_EPOCH=1787282227`, build Docker `--no-cache` sem provenance e exportação com
+  timestamps reescritos. Duas reconstruções completas consecutivas produziram
+  `SHA256SUMS.txt` byte a byte idêntico e o mesmo TAR do servidor; SHA-256 do índice final:
+  `ac14bf16ab8294bdbc36464c1ac814ffaeb80720b7059500fbef0b33d002dcee`.**
+- Caminhos/tamanhos/SHA-256 dos pacotes: **cliente
+  `client/ZenyProjectHandler-Client-0.1.0-win-x64.zip`: 52.922.263 bytes,
+  `a76a97ce59fb06131ebff63be840696de56c8a7248157eb799c5ce964427c9e9`; servidor
+  `server/ZenyProjectHandler-Server-0.1.0.oci.tar`: 163.458.560 bytes,
+  `7ab647d889a6b3270f334e0ec3ad43a1f383ffbd772c0e038199aeb7cf84d369`; SBOM cliente:
+  1.116 bytes, `819e636ba3833f06f7d3849abd254d86156c5ba861cdfc147ff3485e36930359`;
+  SBOM servidor: 2.867 bytes,
+  `63035b807a858acfe90e4aced79202b377d6aea5876f60102fbe138ef5e7242b`; manifesto:
+  `54349851e3a1e6d0faac58685f918170e5e956b95a8fe4c49b3ca611f40e7327`.**
+- Digest da imagem: **`zeny-project-handler-server:0.1.0` =
+  `sha256:8c83002e8498e95797311abe27466f750d244c83677e76bc3da9a8f92d80272d`; o gate
+  removeu a tag local, carregou o TAR distribuído com `docker load` e confirmou igualdade entre ID
+  carregado, manifesto e imagem efetivamente testada.**
+- Relatório de Windows/host Docker limpos: **`scripts/stage12_release_gate.py` aprovado com cópias
+  temporárias contendo somente cada conjunto entregue. O host cliente não tinha checkout nem
+  Python no `PATH` do processo, executou e autenticou o EXE PyInstaller do ZIP e não criou dados de
+  negócio locais. O host servidor não tinha fontes, carregou somente o TAR, `.env-example`, guia,
+  SBOM e Compose, subiu com `--no-build`, sem bind mount, e preservou o projeto após `force-recreate`.
+  O usuário final recebeu apenas o conjunto cliente e o administrador apenas o conjunto servidor.**
+- Inspeção negativa dos dois artefatos: **`release_artifact_gate.py` aprovado: 11 arquivos, 9
+  payloads no manifesto e 10 entradas no índice SHA-256; conjuntos cliente/servidor disjuntos,
+  SBOMs CycloneDX separados e Compose resolvido sem `build:`. Gates cliente/servidor não encontraram
+  core, casos de uso, seeds, Alembic, SQLAlchemy, PyMuPDF, testes, fontes ou `.env` no cliente, nem
+  PySide6, pacote/asset/fonte cliente, senha ou `.env` na imagem. A senha aleatória ficou ausente de
+  logs, volume e pacotes; a auditoria final encontrou zero resíduos `zph-stage*`.**
+- Resultado dos gates/E2E: **gate Etapa 12 aprovado sobre os artefatos exatos, incluindo combinação
+  suportada aceita e API 2.x recusada antes da janela de dados; gate de paridade Etapa 11 repetido e
+  aprovado em 15/15 blocos, 50 operações protegidas, 256 requisições e 206 respostas protegidas;
+  gate operacional Etapa 10 aprovado em 11/11 cenários; gate de release aprovado; testes
+  contratuais/direcionados 47/47. `IniciarTestes.bat` final aprovado em 2026-08-21 02:02 -03:00:
+  746/746 testes em 171,74 s, cobertura 86,36% (mínimo 85,01%), `pip check`, Ruff lint/formatação em
+  303 arquivos, mypy estrito em 289 arquivos, fonte cliente magra e 2.471 funções/métodos sem rank
+  E/F. `docker compose config --quiet` e `git diff --check` também aprovados.**
+- Observações/bloqueios: **nenhum bloqueio ou pendência aceita. Um primeiro gate completo apontou
+  somente dois arquivos sem formatação; Ruff foi aplicado e a repetição integral ficou aprovada.
+  Working tree contém apenas as mudanças da Etapa 12 e os artefatos ignorados de `dist/release/`;
+  nenhum commit ou publicação remota foi criado.**
+- Conclusão/data/agente: **2026-08-21 02:03 -03:00 — Codex; Etapa 12 aceita e Estado geral marcado
+  CONCLUÍDO somente após todas as comprovações acima.**
 
 ### Mensagem para um novo chat limpo do Codex
 

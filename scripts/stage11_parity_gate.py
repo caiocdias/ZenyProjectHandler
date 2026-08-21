@@ -171,7 +171,11 @@ def main() -> int:
     parser.add_argument("--image", default="zeny-project-handler-server:dev")
     parser.add_argument("--wheel", type=Path, required=True)
     parser.add_argument("--zip", dest="client_zip", type=Path, required=True)
+    parser.add_argument("--client-manifest", type=Path)
     arguments = parser.parse_args()
+    client_manifest = arguments.client_manifest or (
+        arguments.client_zip.parent / "client-manifest.json"
+    )
     suffix = uuid4().hex[:10]
     container = f"zph-stage11-{suffix}"
     volume = f"zph-stage11-{suffix}"
@@ -283,7 +287,7 @@ def main() -> int:
                     "--zip",
                     str(arguments.client_zip),
                     "--manifest",
-                    str(arguments.client_zip.parent / "client-manifest.json"),
+                    str(client_manifest),
                 ],
                 timeout=180,
             )

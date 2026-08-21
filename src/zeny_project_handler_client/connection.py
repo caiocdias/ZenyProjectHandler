@@ -8,6 +8,7 @@ from typing import Any, Generic, Protocol, TypeVar, cast
 
 from PySide6.QtCore import QObject, Signal
 
+from zeny_project_handler_client import __version__ as client_version
 from zeny_project_handler_client.ui.documentation_gateway import (
     DocumentationGateway,
     HttpDocumentationGateway,
@@ -208,7 +209,8 @@ def _validate_session(response: SessionCapabilitiesResponse) -> None:
     ):
         raise ConnectionError(
             "Cliente e servidor usam versões incompatíveis da API. "
-            f"Cliente {API_VERSION}; servidor {response.api_version}."
+            f"Cliente {client_version} (API {API_VERSION}); "
+            f"servidor {response.server_version} (API {response.api_version})."
         )
 
 

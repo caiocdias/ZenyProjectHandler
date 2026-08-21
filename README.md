@@ -46,8 +46,10 @@ a presença de um campo.
 
 ## Obter, abrir e conectar
 
-O artefato oficial do cliente é o ZIP portátil Windows x64 em `dist/client/<versão>`. Ele é
-autocontido e não exige Python, Tesseract, banco ou dependências do servidor:
+A release oficial fica em `dist/release/<versão>/` e separa fisicamente o que cada público recebe.
+O usuário final recebe somente `client/` (mais os arquivos comuns de integridade, quando
+necessário); o administrador recebe somente `server/` e os mesmos arquivos comuns. O ZIP portátil
+Windows x64 é autocontido e não exige Python, Tesseract, banco ou dependências do servidor:
 
 1. extraia o ZIP inteiro;
 2. execute `ZenyProjectHandler.exe`;
@@ -176,8 +178,10 @@ gateways são repetidas automaticamente depois de uma falha transitória; criaç
 senha, cancelamento e encerramento não são. Repetir deliberadamente a criação de um job com a mesma
 `Idempotency-Key` devolve o mesmo job sem executar o pipeline novamente.
 
-Instalação do servidor, exposição LAN/firewall, volume, cutover, backup antes de upgrade, rotação de
-senha, health/logs, rollback e recuperação estão no
+O kit servidor da mesma release contém a imagem exportada, Compose sem `build:`, `.env-example`,
+guia e SBOM; o host precisa somente de Docker e não recebe o checkout. Instalação,
+exposição LAN/firewall, volume, cutover, backup antes de upgrade, rotação de senha, health/logs,
+rollback e recuperação estão no
 [runbook de operação do servidor](docs/operacao-servidor.md). A porta HTTP deve permanecer restrita
 à LAN confiável; TLS/VPN é obrigatório antes de atravessar esse limite.
 
@@ -208,6 +212,16 @@ smoke opcional, somente leitura, sobre todos os exemplos disponíveis:
 ```powershell
 .\.venv\Scripts\python.exe scripts\smoke_examples.py
 ```
+
+Para montar cliente e kit servidor oficiais com versão igual aos manifestos do produto:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\build_release.py --version 0.1.0
+```
+
+O comando recompõe `dist/release/0.1.0/`, gera os dois SBOMs, notas, manifesto e hashes e executa a
+inspeção estática dos artefatos. A validação de distribuição carrega o archive num host Docker
+temporário sem fonte e abre o executável num diretório cliente sem checkout/Python no `PATH`.
 
 ## Limites conhecidos
 

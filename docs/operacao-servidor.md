@@ -1,10 +1,10 @@
 # Operação segura do servidor
 
 Este runbook descreve a instalação e o lifecycle do servidor Docker do Zeny Project Handler. Ele
-é suficiente para o administrador operar uma imagem já recebida e conectar clientes de outra
-máquina da LAN, sem abrir nem interpretar o código-fonte. O kit oficial sem checkout, com imagem
-OCI e Compose de release, será montado somente na Etapa 12; até lá, use a imagem/tag validada e o
-`compose.yaml` fornecido junto dela, sempre com `--no-build` no host operacional.
+é suficiente para o administrador operar a imagem recebida e conectar clientes de outra máquina
+da LAN, sem abrir nem interpretar o código-fonte. O kit oficial fica em
+`dist/release/<versão>/server/` e contém o archive da imagem, `compose.release.yaml` sem `build:`,
+`.env-example`, guia autocontido e SBOM. Use sempre `--no-build` no host operacional.
 
 ## Limite de confiança
 
@@ -52,8 +52,8 @@ host nem do pacote do cliente.
 8. Inicie sem reconstruir a imagem recebida:
 
    ```powershell
-   docker compose --env-file .env up -d --no-build
-   docker compose ps
+   docker compose --env-file .env -f compose.release.yaml up -d --no-build
+   docker compose --env-file .env -f compose.release.yaml ps
    ```
 
 O serviço usa um worker, UID/GID `10001:10001`, root filesystem somente leitura, `/tmp` em tmpfs,

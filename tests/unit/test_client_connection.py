@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialogButtonBox
 from pytestqt.qtbot import QtBot
 
 from zeny_project_handler_client.config import ClientSettings
+from zeny_project_handler_client.connection import _validate_session
 from zeny_project_handler_client.connection_dialog import ConnectionDialog
 from zeny_project_handler_client.ui.project_gateway import ProjectGatewayError
 from zeny_project_handler_contracts.enums import OcrStatus
@@ -87,3 +89,41 @@ def test_client_environment_uses_url_but_has_no_password_setting(tmp_path) -> No
 
     assert settings.development_server_url == "http://servidor-lan:8123"
     assert not any("password" in name or "senha" in name for name in settings.__slots__)
+
+
+def test_compatibility_negotiation_accepts_supported_release() -> None:
+    _validate_session(_session())
+
+
+@pytest.mark.parametrize(
+    "session",
+    (
+        _session().model_copy(
+            update={
+                "server_version": "2.0.0",
+                "api_version": "2.0.0",
+                "min_compatible_api_version": "2.0.0",
+                "max_compatible_api_version": "2.999.999",
+            }
+        ),
+        _session().model_copy(
+            update={
+                "min_compatible_api_version": "1.1.0",
+                "max_compatible_api_version": "1.999.999",
+            }
+        ),
+    ),
+)
+def test_compatibility_negotiation_refuses_incompatible_release_before_data(
+    session: SessionCapabilitiesResponse,
+) -> None:
+    with pytest.raises(
+        ConnectionError,
+        match=r"Cliente 0\.1\.0 \(API 1\.0\.0\); servidor .*API",
+    ):
+        _validate_session(session)
+
+
+def test_compatibility_negotiation_refuses_invalid_server_version() -> None:
+    with pytest.raises(ConnectionError, match="versão de API inválida"):
+        _validate_session(_session().model_copy(update={"api_version": "v1"}))
