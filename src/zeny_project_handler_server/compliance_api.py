@@ -98,7 +98,7 @@ from zeny_project_handler_contracts.rules import (
     RuleSummaryDto,
 )
 from zeny_project_handler_server.api_errors import ApiError, resource_not_found, validation_error
-from zeny_project_handler_server.dto_values import decimal_string
+from zeny_project_handler_server.dto_values import bounded_label, decimal_string
 from zeny_project_handler_server.review_api import ReviewApiService
 
 _PREFLIGHT_TTL = timedelta(minutes=15)
@@ -490,7 +490,7 @@ def _document_field(
                 document_id=DocumentId(item.documento_id),
                 page_id=PageId(item.pagina_id),
                 geometry=_box(item.geometria) if item.geometria is not None else None,
-                label=item.campo,
+                label=bounded_label(item.campo),
             ),
         )
     return DocumentFieldDto(
@@ -582,7 +582,7 @@ def _callout_dto(
         document_id=DocumentId(document.id),
         page_id=PageId(page_id),
         geometry=box_dto,
-        label=callout.texto,
+        label=bounded_label(callout.texto),
     )
     return ComplianceCalloutDto(
         callout_id=CalloutId(finding_id),
@@ -615,7 +615,7 @@ def _evidence_navigation(
                 document_id=DocumentId(document.id),
                 page_id=PageId(item.pagina_id),
                 geometry=_box(item.geometria),
-                label=item.conteudo_bruto,
+                label=bounded_label(item.conteudo_bruto),
             )
         )
     return tuple(result)
@@ -634,7 +634,7 @@ def _target_navigation(
         document_id=DocumentId(document.id),
         page_id=PageId(target.pagina_id),
         geometry=_box(target.geometria) if target.geometria is not None else None,
-        label=target.rotulo,
+        label=bounded_label(target.rotulo),
     )
 
 

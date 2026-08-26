@@ -98,7 +98,7 @@ from zeny_project_handler_server.api_errors import (
     resource_not_found,
     validation_error,
 )
-from zeny_project_handler_server.dto_values import decimal_string
+from zeny_project_handler_server.dto_values import bounded_label, decimal_string
 
 _SESSION_NAMESPACE = UUID("8314f77e-f4d8-4518-a63d-90a44785ef5f")
 
@@ -885,7 +885,7 @@ def _evidence_navigation(
                 document_id=DocumentId(document.id),
                 page_id=PageId(evidence.pagina_id),
                 geometry=_box(evidence.geometria),
-                label=evidence.conteudo_bruto,
+                label=bounded_label(evidence.conteudo_bruto),
             )
         )
     return tuple(result)

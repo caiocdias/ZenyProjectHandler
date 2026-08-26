@@ -27,10 +27,16 @@ def _settings(data_directory: Path) -> ServerSettings:
     return ServerSettings(password=PASSWORD, data_directory=data_directory)
 
 
-def _seed_review(runtime: ServerRuntime) -> tuple[UUID, UUID, UUID]:
+def _seed_review(
+    runtime: ServerRuntime,
+    *,
+    evidence_content: str | None = None,
+) -> tuple[UUID, UUID, UUID]:
     project = complete_project(runtime.core.catalog)
     other_project = complete_project(runtime.core.catalog)
     execution, evidence, template, relation, _decision = complete_analysis(project)
+    if evidence_content is not None:
+        evidence = replace(evidence, conteudo_bruto=evidence_content)
     proposal = replace(
         template,
         id=uuid4(),
@@ -234,6 +240,37 @@ def test_remote_review_projects_projection_conflict_manual_audit_and_restart(
         assert accepted_audit["previous_values"]
         assert accepted_audit["confirmed_values"]
         assert len(audit_by_action["CREATE_MANUAL"]) == 2
+
+
+def test_review_session_bounds_raw_vector_content_used_as_navigation_label(
+    tmp_path: Path,
+) -> None:
+    raw_vector_commands = (
+        '[["l",' + ",".join(f"[{index}.1,{index}.2]" for index in range(80)) + "]]"
+    )
+    assert len(raw_vector_commands) > 500
+    settings = _settings(tmp_path / "server-data")
+    runtime = compose_server_runtime(settings)
+    project_id, proposal_id, _foreign = _seed_review(
+        runtime,
+        evidence_content=raw_vector_commands,
+    )
+    application = create_app(settings, runtime_factory=lambda _settings: runtime)
+
+    with TestClient(application, raise_server_exceptions=False) as client:
+        response = client.get(
+            f"/api/v1/projects/{project_id}/review-session",
+            headers=AUTH,
+        )
+
+    assert response.status_code == 200, response.text
+    payload = _json(response)
+    proposal = next(
+        item for item in payload["proposals"] if item["proposal_id"] == str(proposal_id)
+    )
+    label = proposal["evidence"][0]["label"]
+    assert label == f"{raw_vector_commands[:499]}…"
+    assert len(label) == 500
 
 
 def test_review_routes_require_authentication(tmp_path: Path) -> None:
