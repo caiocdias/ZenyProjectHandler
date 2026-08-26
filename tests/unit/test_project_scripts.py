@@ -9,14 +9,14 @@ def script_text(file_name: str) -> str:
     return (PROJECT_ROOT / file_name).read_text(encoding="utf-8")
 
 
-def test_setup_creates_venv_and_installs_locked_dependencies() -> None:
+def test_setup_creates_venv_and_installs_locked_development_environment() -> None:
     setup_script = script_text("setup.bat")
 
     assert "-m venv" in setup_script
-    assert "requirements-client.lock" in setup_script
+    assert "requirements-development.lock" in setup_script
     assert "requirements.lock" not in setup_script
     assert "--no-build-isolation --no-deps -e" in setup_script
-    assert '"%CD%\\client"' in setup_script
+    assert '"%CD%"' in setup_script
     assert "ZENY_BOOTSTRAP_PYTHON" in setup_script
 
 
@@ -31,26 +31,27 @@ def test_setup_recreates_incompatible_existing_venv() -> None:
     assert "Ambiente virtual existente usa uma versao de Python incompativel" in setup_script
 
 
-def test_setup_excludes_server_and_ocr_dependencies() -> None:
+def test_setup_uses_the_aggregate_development_lock_without_managing_ocr() -> None:
     setup_script = script_text("setup.bat")
 
     assert "TesseractOCR" not in setup_script
     assert "ZENY_TESSERACT_PATH" not in setup_script
     assert "tesseract_setup" not in setup_script
+    assert "requirements-client.lock" not in setup_script
     assert "requirements-server.lock" not in setup_script
 
 
-def test_setup_installs_and_validates_only_the_independent_client() -> None:
+def test_setup_installs_and_validates_the_editable_root_project() -> None:
     setup_script = script_text("setup.bat")
 
     application_install = setup_script.index(
         "python -m pip install --disable-pip-version-check "
-        '--no-build-isolation --no-deps -e "%CD%\\client"'
+        '--no-build-isolation --no-deps -e "%CD%"'
     )
     python_validation = setup_script.index("python -m pip check")
 
     assert application_install < python_validation
-    assert "sem dependencias do servidor ou OCR local" in setup_script
+    assert "cliente, servidor e ferramentas de qualidade" in setup_script
 
 
 def test_portuguese_tessdata_provenance_is_pinned_and_documented() -> None:
@@ -70,12 +71,31 @@ def test_portuguese_tessdata_provenance_is_pinned_and_documented() -> None:
     assert "tesseract-ocr/tessdata_fast" in notices
 
 
-def test_launcher_activates_venv_and_runs_application() -> None:
+def test_launcher_runs_local_server_and_stops_it_after_the_client() -> None:
     launcher_script = script_text("ZenyProjectHandler.bat")
+    development_client = script_text("scripts/run_development_client.py")
+    development_password = "_".join(("default", "text"))
 
     assert "activate.bat" in launcher_script
-    assert "python -m zeny_project_handler_client" in launcher_script
+    assert "zeny_project_handler_server" in launcher_script
+    assert "scripts\\run_development_client.py" in launcher_script
     assert "%*" in launcher_script
+    assert "ZENY_SERVER_HOST=127.0.0.1" in launcher_script
+    assert "ZENY_CLIENT_SERVER_URL=http://127.0.0.1:8000" in launcher_script
+    assert f"ZENY_SERVER_PASSWORD={development_password}" in launcher_script
+    assert "Start-Process" in launcher_script
+    assert "-WindowStyle Hidden" in launcher_script
+    assert "-PassThru" in launcher_script
+    assert "Stop-Process" in launcher_script
+    assert launcher_script.index("zeny_project_handler_server") < launcher_script.index(
+        "scripts\\run_development_client.py"
+    )
+    assert launcher_script.index("scripts\\run_development_client.py") < launcher_script.index(
+        "Stop-Process"
+    )
+    assert development_password not in development_client
+    assert 'os.environ.pop("ZENY_SERVER_PASSWORD", "")' in development_client
+    assert "dialog.password_input.setText(server_password)" in development_client
 
 
 def test_quality_script_enforces_the_relevant_quality_gates() -> None:

@@ -60,13 +60,13 @@ Windows x64 é autocontido e não exige Python, Tesseract, banco ou dependência
 A URL pode ser lembrada. A senha do servidor e as senhas de PDFs permanecem somente em memória e
 não são lidas de `.env` nem gravadas nas preferências.
 
-Para executar o cliente a partir do código-fonte, use o setup abaixo.
+Para trabalhar no projeto a partir do código-fonte, prepare o ambiente de desenvolvimento abaixo.
 
 Requisitos:
 
 - Windows;
 - Python 3.11, 3.12 ou 3.13;
-- acesso à internet somente na preparação inicial das dependências do cliente.
+- acesso à internet somente na preparação inicial das dependências de desenvolvimento.
 
 Na primeira execução:
 
@@ -74,14 +74,20 @@ Na primeira execução:
 .\setup.bat
 ```
 
-O setup cria `.venv`, instala somente `requirements-client.lock` e o manifesto independente em
-`client/`. Ele não instala SQLAlchemy, Alembic, PyMuPDF, OCR ou o pacote do servidor.
+O setup cria `.venv`, instala `requirements-development.lock` (que agrega os runtimes fixados de
+cliente e servidor e as ferramentas de qualidade) e registra o projeto completo em modo editável.
 
-Abra sem console com duplo clique em `ZenyProjectHandler.vbs`. Para diagnóstico pelo terminal:
+Para iniciar o ambiente integrado de desenvolvimento:
 
 ```powershell
 .\ZenyProjectHandler.bat
 ```
+
+O lançador sobe o servidor somente em `127.0.0.1`, espera a API ficar pronta e então abre o cliente
+com a conexão local de desenvolvimento já preenchida. Ao fechar ou cancelar o cliente, inclusive
+quando ele termina com erro, o mesmo `.bat` encerra o processo do servidor. A credencial local fica
+definida exclusivamente no lançador; o lançador e seu pequeno adaptador de interface não integram os
+artefatos de release. Os dados usados nesse fluxo ficam isolados sob `.local/`.
 
 ## Fluxo de uso
 
@@ -152,7 +158,8 @@ As opções são lidas na inicialização:
 | `ZENY_PDF_RENDER_MAX_BYTES` | `67108864` | limite estimado de memória por solicitação |
 | `ZENY_PDF_TILE_CACHE_MAX_BYTES` | `134217728` | limite do cache visual de tiles |
 | `ZENY_CLIENT_SERVER_URL` | `http://127.0.0.1:8000` | URL inicial do diálogo em desenvolvimento |
-| `ZENY_SERVER_PASSWORD` | sem padrão | segredo obrigatório, lido somente pelo processo servidor |
+| `ZENY_SERVER_PASSWORD` | sem padrão | segredo obrigatório do servidor; no fluxo local, o `.bat` o repassa em memória para preencher o cliente |
+| `ZENY_SERVER_HOST` | `0.0.0.0` | socket do processo servidor; o lançador de desenvolvimento força `127.0.0.1` |
 | `ZENY_SERVER_BIND_ADDRESS` | `127.0.0.1` | endereço do host que publica a porta; use IPv4 privado específico para LAN |
 | `ZENY_SERVER_VIEWER_SESSION_TTL_SECONDS` | `900` | inatividade até limpar PDF avulso no servidor |
 | `ZENY_SERVER_VIEWER_MAX_FILES` | `20` | máximo de PDFs por sessão avulsa |

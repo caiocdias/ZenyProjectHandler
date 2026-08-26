@@ -294,6 +294,7 @@ def run(
     argv: Sequence[str] | None = None,
     *,
     settings: ClientSettings | None = None,
+    dialog_factory: DialogFactory | None = None,
 ) -> int:
     arguments = list(argv) if argv is not None else list(sys.argv)
     if "--artifact-self-test" in arguments:
@@ -303,7 +304,11 @@ def run(
     smoke_test = "--smoke-test" in arguments
     qt_arguments = [argument for argument in arguments if argument != "--smoke-test"]
     try:
-        application, window = create_application(qt_arguments, settings=settings)
+        application, window = create_application(
+            qt_arguments,
+            settings=settings,
+            dialog_factory=dialog_factory,
+        )
     except ConnectionCancelledError:
         return 0
     window.show()

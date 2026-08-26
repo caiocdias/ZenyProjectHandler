@@ -7,7 +7,7 @@ set "PYTHONUTF8=1"
 set "VENV_DIR=%CD%\.venv"
 set "VENV_PYTHON=%VENV_DIR%\Scripts\python.exe"
 
-echo [1/5] Verificando o ambiente virtual do cliente...
+echo [1/5] Verificando o ambiente virtual de desenvolvimento...
 if not exist "%VENV_PYTHON%" goto create_environment
 
 call :ensure_supported_python "%VENV_PYTHON%"
@@ -19,7 +19,7 @@ rmdir /s /q "%VENV_DIR%"
 if exist "%VENV_DIR%" goto venv_cleanup_error
 
 :create_environment
-echo [1/5] Criando o ambiente virtual do cliente em "%VENV_DIR%"...
+echo [1/5] Criando o ambiente virtual de desenvolvimento em "%VENV_DIR%"...
 if defined ZENY_BOOTSTRAP_PYTHON goto use_configured_python
 
 where py >nul 2>nul
@@ -72,22 +72,22 @@ echo [2/5] Ativando o ambiente virtual...
 call "%VENV_DIR%\Scripts\activate.bat"
 if errorlevel 1 goto activation_error
 
-echo [3/5] Instalando somente as dependencias fixadas do cliente...
-python -m pip install --disable-pip-version-check -r "%CD%\requirements-client.lock"
+echo [3/5] Instalando as dependencias fixadas de desenvolvimento...
+python -m pip install --disable-pip-version-check -r "%CD%\requirements-development.lock"
 if errorlevel 1 goto dependency_error
 
-echo [4/5] Instalando o pacote independente do cliente...
-python -m pip install --disable-pip-version-check --no-build-isolation --no-deps -e "%CD%\client"
+echo [4/5] Instalando o projeto completo em modo editavel...
+python -m pip uninstall --yes zeny-project-handler-client zeny-project-handler-server >nul 2>nul
+python -m pip install --disable-pip-version-check --no-build-isolation --no-deps -e "%CD%"
 if errorlevel 1 goto application_error
 
-echo [5/5] Verificando a instalacao do cliente...
+echo [5/5] Verificando o ambiente de desenvolvimento...
 python -m pip check
 if errorlevel 1 goto dependency_error
 
 echo.
-echo Cliente preparado com sucesso, sem dependencias do servidor ou OCR local.
-echo Abra ZenyProjectHandler.vbs para iniciar sem uma janela de console.
-echo Use ZenyProjectHandler.bat somente quando quiser acompanhar a saida no terminal.
+echo Ambiente de desenvolvimento preparado com cliente, servidor e ferramentas de qualidade.
+echo Execute ZenyProjectHandler.bat para iniciar o servidor local e o cliente de desenvolvimento.
 exit /b 0
 
 :python_not_found
@@ -122,7 +122,7 @@ echo ERRO: nao foi possivel instalar ou validar as dependencias.
 exit /b 1
 
 :application_error
-echo ERRO: nao foi possivel instalar o aplicativo no ambiente virtual.
+echo ERRO: nao foi possivel instalar o projeto no ambiente virtual.
 exit /b 1
 
 :ensure_supported_python
