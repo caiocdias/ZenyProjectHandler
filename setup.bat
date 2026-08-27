@@ -7,7 +7,13 @@ set "PYTHONUTF8=1"
 set "VENV_DIR=%CD%\.venv"
 set "VENV_PYTHON=%VENV_DIR%\Scripts\python.exe"
 
-echo [1/5] Verificando o ambiente virtual de desenvolvimento...
+echo [1/6] Verificando Docker e Docker Compose...
+where docker >nul 2>nul
+if errorlevel 1 goto docker_not_found
+docker compose version >nul 2>nul
+if errorlevel 1 goto compose_not_found
+
+echo [2/6] Verificando o ambiente virtual de desenvolvimento...
 if not exist "%VENV_PYTHON%" goto create_environment
 
 call :ensure_supported_python "%VENV_PYTHON%"
@@ -19,7 +25,7 @@ rmdir /s /q "%VENV_DIR%"
 if exist "%VENV_DIR%" goto venv_cleanup_error
 
 :create_environment
-echo [1/5] Criando o ambiente virtual de desenvolvimento em "%VENV_DIR%"...
+echo [2/6] Criando o ambiente virtual de desenvolvimento em "%VENV_DIR%"...
 if defined ZENY_BOOTSTRAP_PYTHON goto use_configured_python
 
 where py >nul 2>nul
@@ -68,27 +74,37 @@ python -m venv "%VENV_DIR%"
 if errorlevel 1 goto venv_error
 
 :activate_environment
-echo [2/5] Ativando o ambiente virtual...
+echo [3/6] Ativando o ambiente virtual...
 call "%VENV_DIR%\Scripts\activate.bat"
 if errorlevel 1 goto activation_error
 
-echo [3/5] Instalando as dependencias fixadas de desenvolvimento...
+echo [4/6] Instalando as dependencias fixadas de desenvolvimento...
 python -m pip install --disable-pip-version-check -r "%CD%\requirements-development.lock"
 if errorlevel 1 goto dependency_error
 
-echo [4/5] Instalando o projeto completo em modo editavel...
+echo [5/6] Instalando o projeto completo em modo editavel...
 python -m pip uninstall --yes zeny-project-handler-client zeny-project-handler-server >nul 2>nul
 python -m pip install --disable-pip-version-check --no-build-isolation --no-deps -e "%CD%"
 if errorlevel 1 goto application_error
 
-echo [5/5] Verificando o ambiente de desenvolvimento...
+echo [6/6] Verificando o ambiente de desenvolvimento...
 python -m pip check
 if errorlevel 1 goto dependency_error
 
 echo.
-echo Ambiente de desenvolvimento preparado com cliente, servidor e ferramentas de qualidade.
-echo Execute ZenyProjectHandler.bat para iniciar o servidor local e o cliente de desenvolvimento.
+echo Ambiente de desenvolvimento preparado com cliente, servidor, Docker e ferramentas de qualidade.
+echo Abra o Docker Desktop e execute ZenyProjectHandler.bat para iniciar uma sessao local efemera.
 exit /b 0
+
+:docker_not_found
+echo ERRO: Docker nao foi encontrado.
+echo Instale o Docker Desktop e execute este arquivo novamente.
+exit /b 1
+
+:compose_not_found
+echo ERRO: o plugin Docker Compose nao foi encontrado.
+echo Instale ou atualize o Docker Desktop e execute este arquivo novamente.
+exit /b 1
 
 :python_not_found
 echo ERRO: Python 3.11, 3.12 ou 3.13 nao foi encontrado.

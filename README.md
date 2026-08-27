@@ -66,6 +66,7 @@ Requisitos:
 
 - Windows;
 - Python 3.11, 3.12 ou 3.13;
+- Docker Desktop com Docker Compose;
 - acesso à internet somente na preparação inicial das dependências de desenvolvimento.
 
 Na primeira execução:
@@ -74,8 +75,9 @@ Na primeira execução:
 .\setup.bat
 ```
 
-O setup cria `.venv`, instala `requirements-development.lock` (que agrega os runtimes fixados de
-cliente e servidor e as ferramentas de qualidade) e registra o projeto completo em modo editável.
+O setup valida Docker e Docker Compose, cria `.venv`, instala `requirements-development.lock` (que
+agrega os runtimes fixados de cliente e servidor e as ferramentas de qualidade) e registra o projeto
+completo em modo editável.
 
 Para iniciar o ambiente integrado de desenvolvimento:
 
@@ -83,11 +85,17 @@ Para iniciar o ambiente integrado de desenvolvimento:
 .\ZenyProjectHandler.bat
 ```
 
-O lançador sobe o servidor somente em `127.0.0.1`, espera a API ficar pronta e então abre o cliente
-com a conexão local de desenvolvimento já preenchida. Ao fechar ou cancelar o cliente, inclusive
-quando ele termina com erro, o mesmo `.bat` encerra o processo do servidor. A credencial local fica
-definida exclusivamente no lançador; o lançador e seu pequeno adaptador de interface não integram os
-artefatos de release. Os dados usados nesse fluxo ficam isolados sob `.local/`.
+O único lançador local é `ZenyProjectHandler.bat`; não há lançador `.vbs`. Ele constrói e sobe o
+servidor em Docker somente em `127.0.0.1`, espera a API ficar pronta e então abre o cliente com a
+conexão e a senha de desenvolvimento já preenchidas. A credencial fica definida exclusivamente no
+`.bat`, que gera um valor aleatório novo para cada sessão: o Compose apenas a recebe em runtime e o
+lançador e seu pequeno adaptador de interface não integram os artefatos de release.
+
+Essa execução é deliberadamente efêmera. O servidor monta `/data` em `tmpfs`, o cliente usa uma pasta
+exclusiva da sessão sob `%TEMP%` e o encerramento executa `docker compose down --volumes`. Fechar o
+cliente encerra o servidor; pressionar `Ctrl+C` ou fechar o terminal também interrompe o Compose
+anexado. Projetos, alterações, uploads e preferências dessa sessão são descartados e não reaparecem
+na próxima execução local. O `compose.yaml` operacional continua separado e persistente.
 
 ## Fluxo de uso
 

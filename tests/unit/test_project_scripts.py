@@ -12,6 +12,8 @@ def script_text(file_name: str) -> str:
 def test_setup_creates_venv_and_installs_locked_development_environment() -> None:
     setup_script = script_text("setup.bat")
 
+    assert "where docker" in setup_script
+    assert "docker compose version" in setup_script
     assert "-m venv" in setup_script
     assert "requirements-development.lock" in setup_script
     assert "requirements.lock" not in setup_script
@@ -45,13 +47,12 @@ def test_setup_installs_and_validates_the_editable_root_project() -> None:
     setup_script = script_text("setup.bat")
 
     application_install = setup_script.index(
-        "python -m pip install --disable-pip-version-check "
-        '--no-build-isolation --no-deps -e "%CD%"'
+        'python -m pip install --disable-pip-version-check --no-build-isolation --no-deps -e "%CD%"'
     )
     python_validation = setup_script.index("python -m pip check")
 
     assert application_install < python_validation
-    assert "cliente, servidor e ferramentas de qualidade" in setup_script
+    assert "cliente, servidor, Docker e ferramentas de qualidade" in setup_script
 
 
 def test_portuguese_tessdata_provenance_is_pinned_and_documented() -> None:
@@ -71,31 +72,43 @@ def test_portuguese_tessdata_provenance_is_pinned_and_documented() -> None:
     assert "tesseract-ocr/tessdata_fast" in notices
 
 
-def test_launcher_runs_local_server_and_stops_it_after_the_client() -> None:
+def test_launcher_runs_ephemeral_docker_server_and_stops_it_after_the_client() -> None:
     launcher_script = script_text("ZenyProjectHandler.bat")
+    local_compose = script_text("compose.local.yaml")
     development_client = script_text("scripts/run_development_client.py")
-    development_password = "_".join(("default", "text"))
+    docker_ignore = script_text(".dockerignore")
 
-    assert "activate.bat" in launcher_script
-    assert "zeny_project_handler_server" in launcher_script
+    assert "docker info" in launcher_script
+    assert "compose.local.yaml" in launcher_script
+    assert "docker compose" in launcher_script
+    assert '"%ZENY_LOCAL_COMPOSE_FILE%" build' in launcher_script
+    assert " up --no-build --force-recreate --remove-orphans" in launcher_script
+    assert " up --no-build --force-recreate --remove-orphans -d" not in launcher_script
     assert "scripts\\run_development_client.py" in launcher_script
     assert "%*" in launcher_script
-    assert "ZENY_SERVER_HOST=127.0.0.1" in launcher_script
     assert "ZENY_CLIENT_SERVER_URL=http://127.0.0.1:8000" in launcher_script
-    assert f"ZENY_SERVER_PASSWORD={development_password}" in launcher_script
-    assert "Start-Process" in launcher_script
-    assert "-WindowStyle Hidden" in launcher_script
-    assert "-PassThru" in launcher_script
-    assert "Stop-Process" in launcher_script
-    assert launcher_script.index("zeny_project_handler_server") < launcher_script.index(
-        "scripts\\run_development_client.py"
-    )
-    assert launcher_script.index("scripts\\run_development_client.py") < launcher_script.index(
-        "Stop-Process"
-    )
-    assert development_password not in development_client
+    assert "[Guid]::NewGuid()" in launcher_script
+    assert 'set "ZENY_SERVER_PASSWORD=%%S"' in launcher_script
+    assert "ZENY_LOCAL_SESSION_DIR=%TEMP%" in launcher_script
+    assert "ZENY_DATA_DIR=%ZENY_LOCAL_SESSION_DIR%\\client" in launcher_script
+    assert "down --volumes --remove-orphans" in launcher_script
+    assert "/data:rw" in local_compose
+    assert "tmpfs:" in local_compose
+    assert 'restart: "no"' in local_compose
+    assert "zeny-data" not in local_compose
+    assert "*.bat" in docker_ignore
     assert 'os.environ.pop("ZENY_SERVER_PASSWORD", "")' in development_client
     assert "dialog.password_input.setText(server_password)" in development_client
+    assert "_wait_until_ready" in development_client
+    assert "_discard_client_data" in development_client
+    assert launcher_script.index('"%ZENY_LOCAL_COMPOSE_FILE%" build') < launcher_script.index(
+        "scripts\\run_development_client.py"
+    )
+
+
+def test_only_batch_launcher_exists_for_local_execution() -> None:
+    assert (PROJECT_ROOT / "ZenyProjectHandler.bat").is_file()
+    assert not (PROJECT_ROOT / "ZenyProjectHandler.vbs").exists()
 
 
 def test_quality_script_enforces_the_relevant_quality_gates() -> None:

@@ -1,73 +1,96 @@
 @echo off
-setlocal EnableExtensions
+setlocal EnableExtensions DisableDelayedExpansion
 chcp 65001 >nul
 cd /d "%~dp0"
 
-set "VENV_ACTIVATE=%CD%\.venv\Scripts\activate.bat"
 set "VENV_PYTHON=%CD%\.venv\Scripts\python.exe"
-if not exist "%VENV_ACTIVATE%" (
+if not exist "%VENV_PYTHON%" (
     echo ERRO: ambiente virtual não encontrado.
     echo Execute setup.bat antes de iniciar o aplicativo.
     exit /b 1
 )
 
-call "%VENV_ACTIVATE%"
-if errorlevel 1 (
-    echo ERRO: não foi possível ativar o ambiente virtual.
-    exit /b 1
-)
+where docker >nul 2>nul
+if errorlevel 1 goto docker_not_found
 
-rem Valores exclusivos do ambiente local de desenvolvimento; não entram na release.
-set "ZENY_SERVER_HOST=127.0.0.1"
-set "ZENY_SERVER_PORT=8000"
-set "ZENY_SERVER_PASSWORD=default_text"
-set "ZENY_SERVER_DATA_DIR=%CD%\.local\development-server"
+docker compose version >nul 2>nul
+if errorlevel 1 goto compose_not_found
+
+docker info >nul 2>nul
+if errorlevel 1 goto docker_not_running
+
+rem Credencial aleatória exclusiva desta execução local; nunca é gravada nem enviada como build arg.
+for /f "usebackq delims=" %%S in (`powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command "[Guid]::NewGuid().ToString('N') + [Guid]::NewGuid().ToString('N')"`) do set "ZENY_SERVER_PASSWORD=%%S"
+if not defined ZENY_SERVER_PASSWORD goto password_generation_error
+set "ZENY_LOCAL_SERVER_PORT=8000"
 set "ZENY_CLIENT_SERVER_URL=http://127.0.0.1:8000"
-set "ZENY_DATA_DIR=%CD%\.local\development-client"
-set "ZENY_PROJECT_ROOT=%CD%"
-set "ZENY_DEV_SERVER_PID="
+set "ZENY_LOCAL_COMPOSE_FILE=%CD%\compose.local.yaml"
+set "ZENY_LOCAL_COMPOSE_PROJECT=zeny-local-%RANDOM%-%RANDOM%"
+set "ZENY_LOCAL_SESSION_DIR=%TEMP%\ZenyProjectHandler\%ZENY_LOCAL_COMPOSE_PROJECT%"
+set "ZENY_DATA_DIR=%ZENY_LOCAL_SESSION_DIR%\client"
+set "ZENY_LOCAL_STOP_FILE=%ZENY_LOCAL_SESSION_DIR%\stop"
+set "ZENY_LOCAL_RESULT_FILE=%ZENY_LOCAL_SESSION_DIR%\client-exit-code"
 set "APP_EXIT_CODE=1"
 
-echo Iniciando o servidor local de desenvolvimento...
-for /f "usebackq delims=" %%P in (`powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command "$process = Start-Process -FilePath $env:VENV_PYTHON -ArgumentList '-m','zeny_project_handler_server' -WorkingDirectory $env:ZENY_PROJECT_ROOT -WindowStyle Hidden -PassThru; $process.Id"`) do set "ZENY_DEV_SERVER_PID=%%P"
-if not defined ZENY_DEV_SERVER_PID goto server_start_error
+mkdir "%ZENY_DATA_DIR%" >nul 2>nul
+if errorlevel 1 goto temporary_directory_error
 
+echo Construindo a imagem local do servidor...
+docker compose --project-name "%ZENY_LOCAL_COMPOSE_PROJECT%" --file "%ZENY_LOCAL_COMPOSE_FILE%" build
+if errorlevel 1 goto server_build_error
+
+echo Iniciando o cliente assim que o servidor estiver pronto...
+start "" /b "%VENV_PYTHON%" "%CD%\scripts\run_development_client.py" %*
+if errorlevel 1 goto client_start_error
+
+echo Subindo o servidor Docker local e efêmero...
+echo Feche o cliente ou pressione Ctrl+C para encerrar toda a sessão.
+docker compose --project-name "%ZENY_LOCAL_COMPOSE_PROJECT%" --file "%ZENY_LOCAL_COMPOSE_FILE%" up --no-build --force-recreate --remove-orphans
+set "COMPOSE_EXIT_CODE=%ERRORLEVEL%"
+
+type nul > "%ZENY_LOCAL_STOP_FILE%"
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command ^
-    "$deadline = (Get-Date).AddSeconds(30);" ^
-    "$headers = @{ Authorization = 'Bearer ' + $env:ZENY_SERVER_PASSWORD };" ^
-    "while ((Get-Date) -lt $deadline) {" ^
-    "  if ($null -eq (Get-Process -Id ([int]$env:ZENY_DEV_SERVER_PID) -ErrorAction SilentlyContinue)) { exit 2 };" ^
-    "  try {" ^
-    "    $response = Invoke-WebRequest -UseBasicParsing -Uri ($env:ZENY_CLIENT_SERVER_URL + '/api/v1/session') -Headers $headers -TimeoutSec 1;" ^
-    "    if ($response.StatusCode -eq 200) { exit 0 }" ^
-    "  } catch {};" ^
-    "  Start-Sleep -Milliseconds 250" ^
-    "}; exit 1"
-if errorlevel 2 goto server_stopped
-if errorlevel 1 goto server_timeout
+    "$deadline = (Get-Date).AddSeconds(10);" ^
+    "while ((Get-Date) -lt $deadline -and -not (Test-Path -LiteralPath $env:ZENY_LOCAL_RESULT_FILE)) { Start-Sleep -Milliseconds 100 }" >nul 2>nul
 
-echo Servidor pronto. Iniciando o cliente...
-"%VENV_PYTHON%" "%CD%\scripts\run_development_client.py" %*
-set "APP_EXIT_CODE=%ERRORLEVEL%"
+if exist "%ZENY_LOCAL_RESULT_FILE%" set /p APP_EXIT_CODE=<"%ZENY_LOCAL_RESULT_FILE%"
+if not "%COMPOSE_EXIT_CODE%"=="0" set "APP_EXIT_CODE=%COMPOSE_EXIT_CODE%"
 goto cleanup
 
-:server_start_error
-echo ERRO: não foi possível iniciar o processo do servidor local.
+:docker_not_found
+echo ERRO: Docker não foi encontrado.
+echo Instale o Docker Desktop e execute setup.bat novamente.
+exit /b 1
+
+:compose_not_found
+echo ERRO: o plugin Docker Compose não foi encontrado.
+echo Instale ou atualize o Docker Desktop e execute setup.bat novamente.
+exit /b 1
+
+:docker_not_running
+echo ERRO: o mecanismo do Docker não está disponível.
+echo Abra o Docker Desktop e tente novamente.
+exit /b 1
+
+:temporary_directory_error
+echo ERRO: não foi possível criar o diretório temporário da sessão local.
+exit /b 1
+
+:password_generation_error
+echo ERRO: não foi possível gerar a credencial efêmera da sessão local.
+exit /b 1
+
+:server_build_error
+echo ERRO: não foi possível construir a imagem local do servidor.
 goto cleanup
 
-:server_stopped
-echo ERRO: o servidor local encerrou antes de ficar pronto.
-goto cleanup
-
-:server_timeout
-echo ERRO: o servidor local não ficou pronto em até 30 segundos.
+:client_start_error
+echo ERRO: não foi possível iniciar o cliente local.
 goto cleanup
 
 :cleanup
-if defined ZENY_DEV_SERVER_PID (
-    echo Encerrando o servidor local de desenvolvimento...
-    powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command "$process = Get-Process -Id ([int]$env:ZENY_DEV_SERVER_PID) -ErrorAction SilentlyContinue; if ($null -ne $process) { Stop-Process -Id $process.Id -Force; Wait-Process -Id $process.Id -ErrorAction SilentlyContinue }" >nul 2>nul
-)
-call deactivate >nul 2>nul
+echo Descartando o servidor e todos os dados da sessão local...
+docker compose --project-name "%ZENY_LOCAL_COMPOSE_PROJECT%" --file "%ZENY_LOCAL_COMPOSE_FILE%" down --volumes --remove-orphans --timeout 30 >nul 2>nul
+if exist "%ZENY_LOCAL_SESSION_DIR%" rmdir /s /q "%ZENY_LOCAL_SESSION_DIR%" >nul 2>nul
 exit /b %APP_EXIT_CODE%
 
