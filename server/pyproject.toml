@@ -12,6 +12,7 @@ dependencies = [
     "fastapi>=0.141.1,<0.142",
     "Pillow>=12.2,<13",
     "pydantic>=2.13.4,<3",
+    "pyodbc>=5.3,<5.4",
     "PyMuPDF>=1.28,<1.29",
     "python-multipart>=0.0.32,<0.1",
     "SQLAlchemy>=2.0.51,<2.1",

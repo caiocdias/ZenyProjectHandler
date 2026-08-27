@@ -341,6 +341,8 @@ def _server_sbom(version: str, image_reference: str) -> dict[str, object]:
         "tesseract-ocr",
         "tesseract-ocr-por",
         "libtesseract5",
+        "msodbcsql18",
+        "unixodbc",
     )
     for line in query.stdout.splitlines():
         name, separator, package_version = line.partition("\t")

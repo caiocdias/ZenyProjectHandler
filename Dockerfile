@@ -34,6 +34,13 @@ ENV PYTHONUNBUFFERED=1 \
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     DEBIAN_FRONTEND=noninteractive apt-get update \
+    && python -c "import urllib.request; urllib.request.urlretrieve('https://packages.microsoft.com/debian/12/prod/pool/main/p/packages-microsoft-prod/packages-microsoft-prod_1.1-debian12_all.deb', '/tmp/packages-microsoft-prod.deb')" \
+    && echo "8434dcb8c346dc95fbd63dbece056c343704590b58b6a5c323d39acf52bf0b48  /tmp/packages-microsoft-prod.deb" | sha256sum --check - \
+    && dpkg -i /tmp/packages-microsoft-prod.deb \
+    && rm /tmp/packages-microsoft-prod.deb \
+    && apt-get update \
+    && ACCEPT_EULA=Y DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
+        msodbcsql18=18.6.2.1-1 unixodbc=2.3.11-2+deb12u1 \
     && apt-get install --yes --no-install-recommends \
         -o APT::Keep-Downloaded-Packages=true tesseract-ocr tesseract-ocr-por \
     && groupadd --gid 10001 zeny \

@@ -233,8 +233,20 @@ def _validate_sboms(release_dir: Path, version: str) -> None:
         raise ReleaseGateError("SBOM do cliente não identifica a aplicação")
     if "zeny-project-handler-server" not in server_components:
         raise ReleaseGateError("SBOM do servidor não identifica a aplicação")
-    if not {"pymupdf", "sqlalchemy", "tesseract-ocr"} <= server_components:
-        raise ReleaseGateError("SBOM do servidor não cobre runtime Python/OCR obrigatório")
+    if (
+        not {
+            "msodbcsql18",
+            "pymupdf",
+            "pyodbc",
+            "sqlalchemy",
+            "tesseract-ocr",
+            "unixodbc",
+        }
+        <= server_components
+    ):
+        raise ReleaseGateError(
+            "SBOM do servidor não cobre runtimes Python, OCR e ODBC obrigatórios"
+        )
     applications = [item for item in client["components"] if item["type"] == "application"]
     if not applications or applications[0]["version"] != version:
         raise ReleaseGateError("versão do cliente diverge em sua SBOM")

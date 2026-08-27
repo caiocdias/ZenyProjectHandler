@@ -156,14 +156,14 @@ todo o aceite e executar as validações obrigatórias. Registre comandos, resul
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E01 | Porta e gateway SQL Server | #pendente | nenhuma | Classificador externo isolado, seguro e testado |
+| E01 | Porta e gateway SQL Server | #concluida | nenhuma | Classificador externo isolado, seguro e testado |
 | E02 | Troca da fonte no motor de conformidade | #pendente | E01 | Mercado externo governa fatos e aplicabilidade nos dois fluxos |
 | E03 | Distribuição, documentação e regressão completa | #pendente | E01, E02 | Operação/release documentados e gate automatizado verde |
 | E04 | Homologação com o SQL Server real | #bloqueada | E03 | Evidência real de URBANO, RURAL e falha fechada |
 
 ---
 
-## E01 — Porta e gateway SQL Server — #pendente
+## E01 — Porta e gateway SQL Server — #concluida
 
 ### Objetivo
 
@@ -251,17 +251,17 @@ explícito do usuário.
 
 ### Critérios de aceite
 
-- [ ] A aplicação possui um único tipo canônico que não admite mercado diferente de `RURAL` ou
+- [x] A aplicação possui um único tipo canônico que não admite mercado diferente de `RURAL` ou
       `URBANO`.
-- [ ] A porta não depende de `pyodbc`, SQLAlchemy, FastAPI ou servidor.
-- [ ] O adaptador envia o SQL com `?` e o parâmetro Python inteiro, preservando a string da NS fora
+- [x] A porta não depende de `pyodbc`, SQLAlchemy, FastAPI ou servidor.
+- [x] O adaptador envia o SQL com `?` e o parâmetro Python inteiro, preservando a string da NS fora
       dessa fronteira.
-- [ ] Zero/múltiplas linhas, `NULL`, valor inválido e falha técnica têm comportamento determinístico
+- [x] Zero/múltiplas linhas, `NULL`, valor inválido e falha técnica têm comportamento determinístico
       e seguro.
-- [ ] Nenhum caminho de erro inclui a string de conexão, usuário, senha, host ou detalhe bruto do
+- [x] Nenhum caminho de erro inclui a string de conexão, usuário, senha, host ou detalhe bruto do
       driver na mensagem pública.
-- [ ] Dependências e imagem suportam o driver e continuam reproduzíveis/auditáveis.
-- [ ] Testes não dependem de rede nem de SQL Server real.
+- [x] Dependências e imagem suportam o driver e continuam reproduzíveis/auditáveis.
+- [x] Testes não dependem de rede nem de SQL Server real.
 
 ### Validação obrigatória
 
@@ -292,10 +292,40 @@ cadeia de certificados continua aberta para a homologação E04.
 
 ### Evidências e handoff
 
-- Arquivos alterados: ainda não iniciado.
-- Decisões tomadas: ainda não iniciado.
-- Validações executadas: ainda não iniciado.
-- Observações para E02: ainda não iniciado.
+- Arquivos alterados: `domain/market.py`, `ports/market.py`,
+  `adapters/market/{__init__.py,sql_server.py}` e `tests/unit/test_sql_server_market.py` criam e
+  cobrem o contrato; `pyproject.toml`, `server/pyproject.toml`, `requirements-server.lock` e
+  `requirements-development.lock` propagam o runtime; `Dockerfile`, `THIRD_PARTY_NOTICES.md`,
+  `scripts/build_release.py`, `scripts/release_artifact_gate.py`,
+  `tests/server/test_architecture_and_docker.py` e `tests/unit/test_project_scripts.py` atualizam
+  imagem, proveniência e SBOM. Nenhum DTO, regra, UI ou composição do motor foi alterado.
+- Decisões tomadas: `Mercado` é `StrEnum` canônico; `ClassificadorMercadoPort` e os erros públicos
+  não importam infraestrutura. `ClassificadorMercadoSqlServer` recebe factory de conexão, usa
+  `autocommit=True`, `readonly=True`, timeout de conexão e consulta, executa literalmente
+  `SELECT NOTAS_COD_MERCADO FROM TB_NOTAS WHERE NOTAS_NUM_NS = ?;`, vincula
+  `int(normalizar_numero_ns(ns))`, lê no máximo duas linhas e aceita somente texto após
+  `strip().upper()`. Cursor e conexão são fechados independentemente, inclusive quando um dos
+  fechamentos falha; detalhes ODBC permanecem apenas na causa e não em `str`/`repr` do erro público.
+- Versões e proveniência: `pyodbc==5.3.0` (release/PyPI oficial com wheels para CPython 3.9–3.14,
+  cobrindo 3.11–3.13; MIT-0), `msodbcsql18=18.6.2.1-1` (repositório Microsoft Debian 12,
+  amd64/arm64; EULA Microsoft) e `unixodbc=2.3.11-2+deb12u1` (Debian Bookworm;
+  LGPL-2.1-or-later/GPL-2.0-or-later). O bootstrap Microsoft `1.1-debian12` usa URL versionada e
+  SHA-256 verificado `8434dcb8c346dc95fbd63dbece056c343704590b58b6a5c323d39acf52bf0b48`.
+- Validações executadas: `.\.venv\Scripts\python.exe -m pytest tests\unit -q` — **492 passed**;
+  `.\.venv\Scripts\python.exe -m ruff check src tests` — **All checks passed**;
+  `.\.venv\Scripts\python.exe -m ruff format --check src tests` — **301 files already formatted**;
+  `.\.venv\Scripts\python.exe -m mypy` — **Success, 300 source files**. Teste focado de gateway, proveniência e Docker
+  estático — **39 passed**; `python -m pip check` — **No broken requirements found**; import local
+  confirmou `pyodbc 5.3.0`. A primeira execução unitária no sandbox teve `PermissionError` apenas
+  no diretório temporário do Windows; a repetição autorizada fora dessa restrição passou integralmente.
+- Limitação de imagem: `docker version` não encontrou o pipe `docker_engine`; portanto nenhum build
+  foi declarado validado. Os gates estáticos de pacote, versão, EULA, checksum, usuário não root e
+  SBOM passaram. A E03 deve obrigatoriamente construir a imagem, conferir `import pyodbc`,
+  `dpkg-query` para `msodbcsql18`/`unixodbc` e executar o gate de release no Docker disponível.
+- Observações para E02: injetar `ClassificadorMercadoPort`/`ClassificadorMercadoSqlServer` na única
+  composição dos dois fluxos, sem importar `pyodbc` fora do adaptador. O wheel não publica marcador
+  PEP 561; o único `type: ignore[import-not-found]` fica isolado no import e os contratos internos do
+  adaptador permanecem tipados. Não há credencial real em código, teste ou fixture.
 
 ---
 

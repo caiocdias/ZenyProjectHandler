@@ -99,6 +99,10 @@ def test_docker_build_is_multistage_non_root_with_ocr_and_no_build_secret() -> N
     )
     assert "tesseract-ocr" in normalized
     assert "tesseract-ocr-por" in normalized
+    assert "msodbcsql18=18.6.2.1-1" in normalized
+    assert "unixodbc=2.3.11-2+deb12u1" in normalized
+    assert "8434dcb8c346dc95fbd63dbece056c343704590b58b6a5c323d39acf52bf0b48" in normalized
+    assert "accept_eula=y" in normalized
     assert re.search(r"^USER\s+(?!root\b)\S+", dockerfile, flags=re.MULTILINE)
     assert "healthcheck" in normalized
     assert "arg zeny_server_password" not in normalized
@@ -149,6 +153,7 @@ def test_docker_context_and_server_lock_exclude_local_secret_and_qt() -> None:
 
     assert ".env" in ignored
     assert "pyside" not in server_lock.casefold()
+    assert "pyodbc==5.3.0" in server_lock
     assert "-r requirements-development.lock" in aggregate_lock
     assert "-r requirements-client.lock" in development_lock
     assert "-r requirements-server.lock" in development_lock

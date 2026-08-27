@@ -72,6 +72,38 @@ def test_portuguese_tessdata_provenance_is_pinned_and_documented() -> None:
     assert "tesseract-ocr/tessdata_fast" in notices
 
 
+def test_sql_server_driver_provenance_is_pinned_and_documented() -> None:
+    dockerfile = script_text("Dockerfile")
+    notices = script_text("THIRD_PARTY_NOTICES.md")
+    release_builder = script_text("scripts/build_release.py")
+    release_gate = script_text("scripts/release_artifact_gate.py")
+    server_lock = script_text("requirements-server.lock")
+    locked_components = {
+        line.partition("==")[0]
+        for line in server_lock.splitlines()
+        if line and not line.startswith("#")
+    }
+
+    assert "pyodbc==5.3.0" in server_lock
+    assert "pyodbc" in locked_components
+    assert "pyodbc" in release_gate
+    assert '_locked_components(ROOT / "requirements-server.lock")' in release_builder
+    assert "msodbcsql18=18.6.2.1-1" in dockerfile
+    assert "unixodbc=2.3.11-2+deb12u1" in dockerfile
+    for component in ("pyodbc", "msodbcsql18", "unixODBC"):
+        assert component in notices
+        assert component.casefold() in release_gate.casefold()
+    for native_component in ("msodbcsql18", "unixodbc"):
+        assert native_component in release_builder
+    for license_name in (
+        "MIT-0",
+        "End User License Agreement",
+        "LGPL-2.1-or-later",
+        "GPL-2.0-or-later",
+    ):
+        assert license_name in notices
+
+
 def test_launcher_runs_ephemeral_docker_server_and_stops_it_after_the_client() -> None:
     launcher_script = script_text("ZenyProjectHandler.bat")
     local_compose = script_text("compose.local.yaml")
