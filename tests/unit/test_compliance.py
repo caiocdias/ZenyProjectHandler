@@ -51,6 +51,7 @@ from zeny_project_handler.domain.enums import (
     TipoEvidencia,
     TipoOrigemPdf,
 )
+from zeny_project_handler.domain.market import Mercado
 from zeny_project_handler.domain.project import Poste, Projeto
 from zeny_project_handler.domain.project_metadata import MetadadosProjeto
 from zeny_project_handler.domain.values import (
@@ -91,6 +92,7 @@ def test_project_compliance_extracts_header_without_deriving_spans_or_angles() -
     result = analisar_conformidade_projeto(
         session,
         carregar_registro_conformidade_inicial(),
+        mercado=Mercado.URBANO,
     )
     facts = {(item.chave, item.valor) for item in result.fatos}
     findings = {item.regra_id: item.resultado.value for item in result.achados}
@@ -128,6 +130,7 @@ def test_project_service_note_rule_alerts_when_pdf_header_differs_from_project_n
     result = analisar_conformidade_projeto(
         session,
         carregar_registro_conformidade_inicial(),
+        mercado=Mercado.URBANO,
     )
 
     finding = next(
@@ -176,6 +179,7 @@ def test_project_service_note_rule_accepts_full_project_number_header_label() ->
     result = analisar_conformidade_projeto(
         session,
         carregar_registro_conformidade_inicial(),
+        mercado=Mercado.URBANO,
     )
 
     finding = next(
@@ -202,6 +206,7 @@ def test_project_service_note_ignores_divergent_ns_reference_in_drawing_body() -
     result = analisar_conformidade_projeto(
         session,
         carregar_registro_conformidade_inicial(),
+        mercado=Mercado.URBANO,
     )
 
     facts = {(item.chave, item.valor) for item in result.fatos}
@@ -263,6 +268,7 @@ def test_project_automation_evaluates_document_pack_and_post_sequence(
     result = analisar_conformidade_projeto(
         session,
         carregar_registro_conformidade_inicial(),
+        mercado=Mercado.URBANO,
     )
     facts = {item.chave: item.valor for item in result.fatos}
     findings = {item.regra_id: item.resultado for item in result.achados}
@@ -386,6 +392,7 @@ def test_documentation_lists_every_labeled_header_and_servitude_value() -> None:
     result = analisar_conformidade_projeto(
         session,
         carregar_registro_conformidade_inicial(),
+        mercado=Mercado.URBANO,
     )
     servitude = {
         item.campo: item.valor for item in result.itens_documentais if item.grupo == "Servidão"
@@ -544,8 +551,16 @@ def test_region_facts_preserve_semantic_order_and_deterministic_ids() -> None:
         geometria=region.geometria,
     )
 
-    first = _region_facts(session, region_targets={region.id: target})
-    second = _region_facts(session, region_targets={region.id: target})
+    first = _region_facts(
+        session,
+        mercado=Mercado.URBANO,
+        region_targets={region.id: target},
+    )
+    second = _region_facts(
+        session,
+        mercado=Mercado.URBANO,
+        region_targets={region.id: target},
+    )
 
     assert first == second
     assert [fact.chave for fact in first] == [
@@ -573,146 +588,115 @@ def test_region_facts_preserve_semantic_order_and_deterministic_ids() -> None:
 
 
 @pytest.mark.parametrize(
-    ("label", "expected_key"),
+    ("mercado", "metadata_context", "header_context", "expected_key"),
     (
-        ("Bairro: ÁREA RURAL", "rede.contexto_rural"),
-        ("Localização: Área urbana", "rede.contexto_urbano"),
-        ("Contexto: Urbano", "rede.contexto_urbano"),
+        (Mercado.URBANO, "Rede rural", "Bairro: ÁREA RURAL", "rede.contexto_urbano"),
+        (Mercado.RURAL, "Rede urbana", "Contexto: Urbano", "rede.contexto_rural"),
     ),
 )
-def test_explicit_header_area_publishes_network_context_without_metadata(
-    label: str,
+def test_external_market_is_the_only_context_source_for_project_and_regions(
+    mercado: Mercado,
+    metadata_context: str,
+    header_context: str,
     expected_key: str,
 ) -> None:
     session = _session_with_document_controls()
     execution = session.execucoes[0]
     page_id = session.projeto.documentos[0].paginas[0].id
-    context_evidence = _text_evidence(execution.id, page_id, label, "0.45", "0.90")
-    session = replace(
-        session,
-        projeto=replace(session.projeto, metadados=None),
-        evidencias=(*session.evidencias, context_evidence),
-    )
-    region = session.regioes[0]
-    target = AlvoConformidade(
-        id=uuid5(region.id, "characterization:region"),
-        tipo=TipoEscopoConformidade.REGIAO,
-        rotulo="Região com contexto explícito",
-        referencia_id=region.id,
-        pagina_id=region.pagina_id,
-        geometria=region.geometria,
-    )
-
-    facts = _region_facts(session, region_targets={region.id: target})
-    context_fact = next(item for item in facts if item.chave == expected_key)
-
-    assert context_fact.valor is True
-    assert context_fact.origem == "classificação explícita no cabeçalho do projeto"
-    assert context_fact.confianca == Decimal("0.95")
-    assert context_fact.evidencia_ids == (context_evidence.id,)
-    opposite_key = (
-        "rede.contexto_urbano" if expected_key == "rede.contexto_rural" else "rede.contexto_rural"
-    )
-    assert all(item.chave != opposite_key for item in facts)
-
-
-@pytest.mark.parametrize("text", ("RURAL", "ÁREA URBANA"))
-def test_unlabeled_context_text_outside_header_does_not_activate_rules(text: str) -> None:
-    session = _session_with_document_controls()
-    execution = session.execucoes[0]
-    page_id = session.projeto.documentos[0].paginas[0].id
-    loose_text = _text_evidence(execution.id, page_id, text, "0.45", "0.35")
-    session = replace(
-        session,
-        projeto=replace(session.projeto, metadados=None),
-        evidencias=(*session.evidencias, loose_text),
-    )
-    region = session.regioes[0]
-    target = AlvoConformidade(
-        id=uuid5(region.id, "characterization:region"),
-        tipo=TipoEscopoConformidade.REGIAO,
-        rotulo="Região sem campo de contexto",
-        referencia_id=region.id,
-        pagina_id=region.pagina_id,
-        geometria=region.geometria,
-    )
-
-    facts = _region_facts(session, region_targets={region.id: target})
-
-    assert all(item.chave not in {"rede.contexto_urbano", "rede.contexto_rural"} for item in facts)
-
-
-@pytest.mark.parametrize("label", ("Contexto: Não urbana", "Bairro: Jardim Rural"))
-def test_ambiguous_labeled_header_value_does_not_activate_context(label: str) -> None:
-    session = _session_with_document_controls()
-    execution = session.execucoes[0]
-    page_id = session.projeto.documentos[0].paginas[0].id
-    header = _text_evidence(execution.id, page_id, label, "0.45", "0.90")
-    session = replace(
-        session,
-        projeto=replace(session.projeto, metadados=None),
-        evidencias=(*session.evidencias, header),
-    )
-    region = session.regioes[0]
-    target = AlvoConformidade(
-        id=uuid5(region.id, "characterization:region"),
-        tipo=TipoEscopoConformidade.REGIAO,
-        rotulo="Região com contexto ambíguo",
-        referencia_id=region.id,
-        pagina_id=region.pagina_id,
-        geometria=region.geometria,
-    )
-
-    facts = _region_facts(session, region_targets={region.id: target})
-
-    assert all(item.chave not in {"rede.contexto_urbano", "rede.contexto_rural"} for item in facts)
-
-
-def test_conflicting_or_review_annotation_context_is_not_published() -> None:
-    session = _session_with_document_controls()
-    execution = session.execucoes[0]
-    page_id = session.projeto.documentos[0].paginas[0].id
-    rural_header = _text_evidence(
+    conflicting_header = _text_evidence(
         execution.id,
         page_id,
-        "Bairro: ÁREA RURAL",
+        header_context,
         "0.45",
         "0.90",
     )
-    conflicting_session = replace(
-        session,
-        evidencias=(*session.evidencias, rural_header),
-    )
-    review_annotation = replace(
-        rural_header,
+    first_region = session.regioes[0]
+    second_region = replace(
+        first_region,
         id=uuid4(),
-        origem_pdf=OrigemObjetoPdf(
-            tipo=TipoOrigemPdf.ANOTACAO,
-            numero_objeto=77,
-            indice_anotacao=0,
-            subtipo_anotacao="FreeText",
-        ),
+        rotulo_ponto="P8",
     )
-    annotation_only_session = replace(
+    session = replace(
         session,
-        projeto=replace(session.projeto, metadados=None),
-        evidencias=(*session.evidencias, review_annotation),
+        projeto=replace(
+            session.projeto,
+            metadados=MetadadosProjeto(tipo_servico=metadata_context),
+        ),
+        regioes=(first_region, second_region),
+        evidencias=(*session.evidencias, conflicting_header),
     )
-    region = session.regioes[0]
-    target = AlvoConformidade(
-        id=uuid5(region.id, "characterization:region"),
-        tipo=TipoEscopoConformidade.REGIAO,
-        rotulo="Região sem contexto inequívoco",
-        referencia_id=region.id,
-        pagina_id=region.pagina_id,
-        geometria=region.geometria,
+    result = analisar_conformidade_projeto(
+        session,
+        carregar_registro_conformidade_inicial(),
+        mercado=mercado,
+    )
+    expected_target_ids = {
+        item.id
+        for item in result.alvos
+        if item.tipo in {TipoEscopoConformidade.PROJETO, TipoEscopoConformidade.REGIAO}
+    }
+    context_facts = tuple(
+        item
+        for item in result.fatos
+        if item.chave in {"rede.contexto_urbano", "rede.contexto_rural"}
+    )
+    opposite_key = (
+        "rede.contexto_rural" if expected_key == "rede.contexto_urbano" else "rede.contexto_urbano"
     )
 
-    for candidate_session in (conflicting_session, annotation_only_session):
-        facts = _region_facts(candidate_session, region_targets={region.id: target})
-        assert all(
-            item.chave not in {"rede.contexto_urbano", "rede.contexto_rural"} for item in facts
+    assert {item.alvo_id for item in context_facts} == expected_target_ids
+    assert all(item.chave == expected_key and item.valor is True for item in context_facts)
+    assert all(item.chave != opposite_key for item in result.fatos)
+    assert all(item.confianca == Decimal("1") for item in context_facts)
+    assert all(item.origem == "consulta ao cadastro de Notas de Serviço" for item in context_facts)
+    assert all(item.evidencia_ids == () and item.geometria is None for item in context_facts)
+
+
+@pytest.mark.parametrize(
+    ("mercado", "expected_rule", "opposite_rule"),
+    (
+        (
+            Mercado.URBANO,
+            "nd31.cabo.convencional-novo-urbano",
+            "nd93.compatibilidade.estrutura-poste-duplo-t",
+        ),
+        (
+            Mercado.RURAL,
+            "nd93.compatibilidade.estrutura-poste-duplo-t",
+            "nd31.cabo.convencional-novo-urbano",
+        ),
+    ),
+)
+def test_existing_when_semantics_select_only_rules_for_external_market(
+    mercado: Mercado,
+    expected_rule: str,
+    opposite_rule: str,
+) -> None:
+    seed = carregar_registro_conformidade_inicial()
+    selected = tuple(
+        replace(
+            rule,
+            aplicabilidade=tuple(
+                condition
+                for condition in rule.aplicabilidade
+                if condition.chave_fato.startswith("rede.contexto_")
+            ),
+            excecoes=(),
         )
+        for rule in seed.regras
+        if rule.id in {expected_rule, opposite_rule}
+    )
+    registry = replace(seed, regras=selected)
+
+    result = analisar_conformidade_projeto(
+        _session_with_document_controls(),
+        registry,
+        mercado=mercado,
+    )
+
+    finding_ids = {item.regra_id for item in result.achados}
+    assert expected_rule in finding_ids
+    assert opposite_rule not in finding_ids
 
 
 def test_installation_cable_fact_does_not_reclassify_existing_cable_as_new_work() -> None:
@@ -741,7 +725,11 @@ def test_installation_cable_fact_does_not_reclassify_existing_cable_as_new_work(
         geometria=region.geometria,
     )
 
-    facts = _region_facts(session, region_targets={region.id: target})
+    facts = _region_facts(
+        session,
+        mercado=Mercado.URBANO,
+        region_targets={region.id: target},
+    )
 
     assert any(item.chave == "cabo.tecnologia" for item in facts)
     assert all(item.chave != "cabo.instalar_tecnologia" for item in facts)
@@ -821,7 +809,11 @@ def test_region_facts_publish_unambiguous_rural_structure_post_compatibility() -
         geometria=region.geometria,
     )
 
-    facts = _region_facts(session, region_targets={region.id: target})
+    facts = _region_facts(
+        session,
+        mercado=Mercado.RURAL,
+        region_targets={region.id: target},
+    )
 
     assert {(item.chave, item.valor) for item in facts} >= {
         ("rede.contexto_rural", True),
@@ -848,6 +840,7 @@ def test_region_facts_publish_unambiguous_rural_structure_post_compatibility() -
 
     ambiguous_facts = _region_facts(
         ambiguous_session,
+        mercado=Mercado.RURAL,
         region_targets={ambiguous_region.id: ambiguous_target},
     )
 

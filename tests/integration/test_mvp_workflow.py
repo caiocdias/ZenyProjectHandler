@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import Engine
+from tests.market_fakes import FakeClassificadorMercado
 from tests.pdf_fixtures import (
     create_catalog_pdf,
     create_feature_pdf,
@@ -59,6 +60,7 @@ def _service(
     catalog: CatalogoTecnico,
     cache_directory: Path,
     coordinator: CoordenadorOperacoes | None = None,
+    market_classifier: FakeClassificadorMercado | None = None,
 ) -> ServicoFluxoMvp:
     reader = PyMuPdfReader()
 
@@ -75,6 +77,9 @@ def _service(
     compliance_analysis = ExecutarAnaliseConformidade(
         unit_of_work,
         review_service.carregar_sessao_semantica,
+        classificador_mercado=(
+            market_classifier if market_classifier is not None else FakeClassificadorMercado()
+        ),
     )
 
     def list_projects() -> tuple[Projeto, ...]:
@@ -111,14 +116,24 @@ def _service(
 def workflow(
     tmp_path: Path,
     catalogo_inicial: CatalogoTecnico,
-) -> Iterator[tuple[Engine, ServicoFluxoMvp]]:
+) -> Iterator[tuple[Engine, ServicoFluxoMvp, FakeClassificadorMercado]]:
     engine = create_sqlite_engine(tmp_path / "mvp.sqlite3")
     upgrade_database(engine)
     with SqlAlchemyUnitOfWork(engine) as work:
         work.catalogos.salvar(catalogo_inicial)
         work.commit()
     try:
-        yield engine, _service(engine, catalogo_inicial, tmp_path / "cache")
+        market_classifier = FakeClassificadorMercado()
+        yield (
+            engine,
+            _service(
+                engine,
+                catalogo_inicial,
+                tmp_path / "cache",
+                market_classifier=market_classifier,
+            ),
+            market_classifier,
+        )
     finally:
         engine.dispose()
 
@@ -141,9 +156,9 @@ def _first_automatic_decision(
 
 
 def test_project_identifier_is_a_user_supplied_ten_digit_service_note(
-    workflow: tuple[Engine, ServicoFluxoMvp],
+    workflow: tuple[Engine, ServicoFluxoMvp, FakeClassificadorMercado],
 ) -> None:
-    engine, service = workflow
+    engine, service, _market_classifier = workflow
 
     for invalid in (
         "",
@@ -166,10 +181,10 @@ def test_project_identifier_is_a_user_supplied_ten_digit_service_note(
 
 
 def test_multiple_pdf_import_is_atomic_and_preserves_order(
-    workflow: tuple[Engine, ServicoFluxoMvp],
+    workflow: tuple[Engine, ServicoFluxoMvp, FakeClassificadorMercado],
     tmp_path: Path,
 ) -> None:
-    engine, service = workflow
+    engine, service, _market_classifier = workflow
     project = service.criar_projeto("0000000147")
     first = create_feature_pdf(tmp_path / "folha-01.pdf")
     second = create_golden_pdf(tmp_path / "folha-02.pdf")
@@ -195,10 +210,10 @@ def test_multiple_pdf_import_is_atomic_and_preserves_order(
 
 
 def test_pipeline_uses_a_distinct_ephemeral_password_for_each_document(
-    workflow: tuple[Engine, ServicoFluxoMvp],
+    workflow: tuple[Engine, ServicoFluxoMvp, FakeClassificadorMercado],
     tmp_path: Path,
 ) -> None:
-    engine, service = workflow
+    engine, service, market_classifier = workflow
     created = service.criar_projeto("0000000176")
     first = create_protected_pdf(tmp_path / "protegido-a.pdf", "senha-a")
     second = create_protected_pdf(tmp_path / "protegido-b.pdf", "senha-b")
@@ -219,14 +234,15 @@ def test_pipeline_uses_a_distinct_ephemeral_password_for_each_document(
     assert compliance is not None
     assert compliance.id == result.execucao_conformidade_id
     assert compliance.execucoes_semanticas_ids == result.execucoes_interpretacao
+    assert market_classifier.consultas == ["0000000176"]
     engine.dispose()
 
 
 def test_project_page_order_can_interleave_pdfs_and_is_persisted(
-    workflow: tuple[Engine, ServicoFluxoMvp],
+    workflow: tuple[Engine, ServicoFluxoMvp, FakeClassificadorMercado],
     tmp_path: Path,
 ) -> None:
-    engine, service = workflow
+    engine, service, _market_classifier = workflow
     created = service.criar_projeto("0000000204")
     first = create_feature_pdf(tmp_path / "primeira.pdf")
     second = create_golden_pdf(tmp_path / "segunda.pdf")
@@ -256,10 +272,10 @@ def test_project_page_order_can_interleave_pdfs_and_is_persisted(
 
 
 def test_cancel_and_resume_pipeline_reuses_completed_work_without_duplicates(
-    workflow: tuple[Engine, ServicoFluxoMvp],
+    workflow: tuple[Engine, ServicoFluxoMvp, FakeClassificadorMercado],
     tmp_path: Path,
 ) -> None:
-    engine, service = workflow
+    engine, service, market_classifier = workflow
     project = service.criar_projeto("0000000237")
     first = create_feature_pdf(tmp_path / "primeira.pdf")
     second = create_golden_pdf(tmp_path / "segunda.pdf")
@@ -282,6 +298,7 @@ def test_cancel_and_resume_pipeline_reuses_completed_work_without_duplicates(
 
     assert resumed.execucoes_interpretacao == repeated.execucoes_interpretacao
     assert resumed.execucao_conformidade_id == repeated.execucao_conformidade_id
+    assert market_classifier.consultas == ["0000000237", "0000000237"]
     assert resumed.documentos_processados == 2
     with SqlAlchemyUnitOfWork(engine) as work:
         runs = work.execucoes_analise.listar_do_projeto(project.projeto.id)
@@ -294,11 +311,11 @@ def test_cancel_and_resume_pipeline_reuses_completed_work_without_duplicates(
 
 
 def test_cancelled_analysis_releases_shared_coordinator(
-    workflow: tuple[Engine, ServicoFluxoMvp],
+    workflow: tuple[Engine, ServicoFluxoMvp, FakeClassificadorMercado],
     tmp_path: Path,
     catalogo_inicial: CatalogoTecnico,
 ) -> None:
-    engine, _default_service = workflow
+    engine, _default_service, _market_classifier = workflow
     coordinator = CoordenadorOperacoes()
     service = _service(
         engine,
@@ -319,11 +336,11 @@ def test_cancelled_analysis_releases_shared_coordinator(
 
 
 def test_review_session_consolidates_latest_results_from_every_pdf(
-    workflow: tuple[Engine, ServicoFluxoMvp],
+    workflow: tuple[Engine, ServicoFluxoMvp, FakeClassificadorMercado],
     tmp_path: Path,
     catalogo_inicial: CatalogoTecnico,
 ) -> None:
-    engine, service = workflow
+    engine, service, _market_classifier = workflow
     created = service.criar_projeto("0000000301")
     code = catalogo_inicial.itens_ativos(CategoriaElemento.POSTE)[0].codigo
     first = create_catalog_pdf(tmp_path / "primeiro.pdf", code)
@@ -351,11 +368,11 @@ def test_review_session_consolidates_latest_results_from_every_pdf(
 
 
 def test_remove_pdf_prunes_only_dependent_data_and_project_can_be_deleted(
-    workflow: tuple[Engine, ServicoFluxoMvp],
+    workflow: tuple[Engine, ServicoFluxoMvp, FakeClassificadorMercado],
     tmp_path: Path,
     catalogo_inicial: CatalogoTecnico,
 ) -> None:
-    engine, service = workflow
+    engine, service, _market_classifier = workflow
     created = service.criar_projeto("0000000333")
     catalog_code = catalogo_inicial.itens_ativos(CategoriaElemento.POSTE)[0].codigo
     first = create_catalog_pdf(tmp_path / "remover.pdf", catalog_code)
@@ -414,11 +431,11 @@ def test_remove_pdf_prunes_only_dependent_data_and_project_can_be_deleted(
 
 
 def test_delete_project_with_confirmed_review_removes_dependents_in_safe_order(
-    workflow: tuple[Engine, ServicoFluxoMvp],
+    workflow: tuple[Engine, ServicoFluxoMvp, FakeClassificadorMercado],
     tmp_path: Path,
     catalogo_inicial: CatalogoTecnico,
 ) -> None:
-    engine, service = workflow
+    engine, service, _market_classifier = workflow
     created = service.criar_projeto("0000000396")
     catalog_code = catalogo_inicial.itens_ativos(CategoriaElemento.POSTE)[0].codigo
     source = create_catalog_pdf(tmp_path / "projeto-revisado.pdf", catalog_code)
@@ -445,11 +462,11 @@ def test_delete_project_with_confirmed_review_removes_dependents_in_safe_order(
 
 
 def test_delete_project_restores_tombstone_when_database_commit_rolls_back(
-    workflow: tuple[Engine, ServicoFluxoMvp],
+    workflow: tuple[Engine, ServicoFluxoMvp, FakeClassificadorMercado],
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    engine, service = workflow
+    engine, service, _market_classifier = workflow
     created = service.criar_projeto("0000000427")
     managed_root = tmp_path / "project-files" / str(created.projeto.id)
     managed_root.mkdir(parents=True)

@@ -31,6 +31,7 @@ def test_http_gateway_streams_upload_unlocks_and_renders_remote_png(tmp_path: Pa
     protected = create_protected_pdf(tmp_path / "protegido.pdf", pdf_password)
     settings = ServerSettings(
         password=PASSWORD,
+        market_sqlserver_connection_string="fixture-market-connection",
         data_directory=tmp_path / "server-data",
         render_dpi=600,
         render_max_pixels=8_000_000,

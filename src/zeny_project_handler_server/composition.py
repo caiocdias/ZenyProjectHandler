@@ -22,6 +22,7 @@ from zeny_project_handler.adapters.interpretation import (
     InterpretadorRegrasExplicitas,
     carregar_registro_regras_inicial,
 )
+from zeny_project_handler.adapters.market.sql_server import ClassificadorMercadoSqlServer
 from zeny_project_handler.adapters.pdf import PyMuPdfReader
 from zeny_project_handler.adapters.persistence import SqlAlchemyUnitOfWork
 from zeny_project_handler.application.compliance_analysis import ExecutarAnaliseConformidade
@@ -37,6 +38,7 @@ from zeny_project_handler.application.span_compliance import prover_fatos_vaos
 from zeny_project_handler.application.topology_compliance import prover_fatos_topologicos
 from zeny_project_handler.composition import CoreServices, compose_core_services
 from zeny_project_handler.domain.project import Projeto
+from zeny_project_handler.ports.market import ClassificadorMercadoPort
 from zeny_project_handler_contracts import (
     API_VERSION,
     MAX_COMPATIBLE_API_VERSION,
@@ -280,7 +282,11 @@ class ServerRuntime:
 RuntimeFactory = Callable[[ServerSettings], ServerRuntimeProtocol]
 
 
-def compose_server_runtime(settings: ServerSettings) -> ServerRuntime:
+def compose_server_runtime(
+    settings: ServerSettings,
+    *,
+    market_classifier: ClassificadorMercadoPort | None = None,
+) -> ServerRuntime:
     """Inicialize fonte persistente, coordenação e OCR sem importar o bootstrap Qt."""
     core_settings = settings.core_settings()
     prepare_server_volume(settings.data_directory, core_settings.database_path)
@@ -319,10 +325,35 @@ def compose_server_runtime(settings: ServerSettings) -> ServerRuntime:
         core.close()
         raise
     try:
+
+        def unit_of_work() -> SqlAlchemyUnitOfWork:
+            return SqlAlchemyUnitOfWork(core.engine)
+
+        selected_market_classifier = (
+            market_classifier
+            if market_classifier is not None
+            else ClassificadorMercadoSqlServer(
+                settings.market_sqlserver_connection_string,
+                timeout_seconds=settings.market_sqlserver_timeout_seconds,
+            )
+        )
+        review = ServicoRevisaoHumana(unit_of_work)
+        compliance = ExecutarAnaliseConformidade(
+            unit_of_work,
+            review.carregar_sessao_semantica,
+            classificador_mercado=selected_market_classifier,
+            provedores_fatos=(
+                prover_fatos_documentais,
+                prover_fatos_regionais,
+                prover_fatos_vaos,
+                prover_fatos_topologicos,
+            ),
+        )
         workflow = _compose_analysis_workflow(
             core,
             settings,
             ocr,
+            compliance,
         )
         review_api = ReviewApiService(core.engine)
         compliance_api = DocumentationComplianceApiService(
@@ -330,6 +361,8 @@ def compose_server_runtime(settings: ServerSettings) -> ServerRuntime:
             data_directory=settings.data_directory,
             review_api=review_api,
             upload_max_bytes=settings.upload_max_bytes,
+            review_service=review,
+            analysis_service=compliance,
         )
         transfer_storage = ManagedTransferStorage(
             settings.data_directory,
@@ -397,6 +430,7 @@ def _compose_analysis_workflow(
     core: CoreServices,
     settings: ServerSettings,
     ocr: RuntimeTesseract,
+    compliance: ExecutarAnaliseConformidade,
 ) -> ServicoFluxoMvp:
     def unit_of_work() -> SqlAlchemyUnitOfWork:
         return SqlAlchemyUnitOfWork(core.engine)
@@ -407,17 +441,6 @@ def _compose_analysis_workflow(
 
     reader = PyMuPdfReader()
     managed_files = GerenciadorArquivosGerenciados(settings.data_directory, list_projects)
-    review = ServicoRevisaoHumana(unit_of_work)
-    compliance = ExecutarAnaliseConformidade(
-        unit_of_work,
-        review.carregar_sessao_semantica,
-        provedores_fatos=(
-            prover_fatos_documentais,
-            prover_fatos_regionais,
-            prover_fatos_vaos,
-            prover_fatos_topologicos,
-        ),
-    )
     registry = carregar_registro_regras_inicial()
     return ServicoFluxoMvp(
         unit_of_work,

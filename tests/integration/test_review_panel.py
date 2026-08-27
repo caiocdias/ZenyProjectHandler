@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 from pytestqt.qtbot import QtBot
 from sqlalchemy import Engine
+from tests.market_fakes import FakeClassificadorMercado
 from tests.pdf_fixtures import TEST_RENDER_BUDGET, create_golden_pdf
 from tests.remote_gateways import SynchronousDocumentationGateway
 from tests.viewer_gateway import LocalTestPdfViewerGateway
@@ -763,6 +764,7 @@ def test_documentation_panel_has_own_document_and_compliance_views(
     analysis_service = ExecutarAnaliseConformidade(
         unit_of_work,
         review_service.carregar_sessao_semantica,
+        classificador_mercado=FakeClassificadorMercado(),
     )
     project_id = review_service.listar_projetos()[0].projeto_id
     execution = analysis_service.executar(project_id)
@@ -819,6 +821,7 @@ def test_documentation_tables_toggle_word_wrap_and_recalculate_after_reload(
     analysis_service = ExecutarAnaliseConformidade(
         unit_of_work,
         review_service.carregar_sessao_semantica,
+        classificador_mercado=FakeClassificadorMercado(),
     )
     project_id = review_service.listar_projetos()[0].projeto_id
     execution = analysis_service.executar(project_id)

@@ -26,6 +26,7 @@ AUTH = {"Authorization": f"Bearer {PASSWORD}"}
 def _settings(data: Path) -> ServerSettings:
     return ServerSettings(
         password=PASSWORD,
+        market_sqlserver_connection_string="fixture-market-connection",
         data_directory=data,
         render_dpi=600,
         render_max_pixels=8_000_000,

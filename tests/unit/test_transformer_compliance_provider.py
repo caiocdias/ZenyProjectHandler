@@ -32,6 +32,7 @@ from zeny_project_handler.domain.enums import (
     TipoDecisaoRevisao,
     TipoEvidencia,
 )
+from zeny_project_handler.domain.market import Mercado
 from zeny_project_handler.domain.project import Equipamento, Poste, Projeto, RelacaoConfirmada
 from zeny_project_handler.domain.project_metadata import MetadadosProjeto
 from zeny_project_handler.domain.values import CaixaPagina, GeometriaDocumento, PontoNormalizado
@@ -45,6 +46,7 @@ _LARGE_RULE = "nd31.transformador.poste-existente-150-300"
 class _TransformerFixture:
     session: SessaoRevisao
     region_id: UUID
+    mercado: Mercado
 
 
 @pytest.mark.parametrize(
@@ -74,6 +76,7 @@ def test_transformer_rules_correlate_exact_power_with_the_same_existing_post(
     result = analisar_conformidade_projeto(
         fixture.session,
         carregar_registro_conformidade_inicial(),
+        mercado=fixture.mercado,
     )
 
     finding = _region_finding(result, fixture.region_id, rule_id)
@@ -115,6 +118,7 @@ def test_transformer_rule_uses_semantic_situation_and_canonical_format(
     result = analisar_conformidade_projeto(
         fixture.session,
         carregar_registro_conformidade_inicial(),
+        mercado=fixture.mercado,
     )
 
     applicability = tuple(
@@ -144,6 +148,7 @@ def test_transformer_rule_uses_confirmed_relation_when_region_has_two_poles() ->
     result = analisar_conformidade_projeto(
         fixture.session,
         carregar_registro_conformidade_inicial(),
+        mercado=fixture.mercado,
     )
 
     assert any(
@@ -161,12 +166,13 @@ def test_transformer_rule_is_known_not_applicable_outside_urban_context() -> Non
         equipment_code="-3-75",
         resistance=300,
         post_format="CIRCULAR",
-        context="Rede rural",
+        mercado=Mercado.RURAL,
     )
 
     result = analisar_conformidade_projeto(
         fixture.session,
         carregar_registro_conformidade_inicial(),
+        mercado=fixture.mercado,
     )
 
     applicability = next(
@@ -187,7 +193,7 @@ def _transformer_fixture(
     explicit_existing: bool = True,
     inferred_format: bool = False,
     second_pole: bool = False,
-    context: str = "Rede urbana",
+    mercado: Mercado = Mercado.URBANO,
 ) -> _TransformerFixture:
     catalog = carregar_catalogo_inicial()
     page = _page()
@@ -239,7 +245,7 @@ def _transformer_fixture(
         documentos=(document,),
         elementos=(post, equipment, *((extra_post,) if extra_post is not None else ())),
         relacoes_confirmadas=(relation,),
-        metadados=MetadadosProjeto(tipo_servico=context),
+        metadados=MetadadosProjeto(tipo_servico="Rede urbana"),
     )
     execution = ExecucaoAnalise(
         id=_id("execution"),
@@ -330,6 +336,7 @@ def _transformer_fixture(
             fontes_pdf=(),
         ),
         region_id=region.id,
+        mercado=mercado,
     )
 
 

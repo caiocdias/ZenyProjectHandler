@@ -12,6 +12,7 @@ from zipfile import ZipFile
 import pymupdf
 from fastapi.testclient import TestClient
 
+from tests.market_fakes import FakeClassificadorMercado
 from tests.pdf_fixtures import create_analysis_pdf
 from zeny_project_handler_contracts.base import CalloutId, DocumentId, FindingId, PageId
 from zeny_project_handler_contracts.common import (
@@ -22,6 +23,7 @@ from zeny_project_handler_contracts.common import (
 from zeny_project_handler_contracts.compliance import ComplianceCalloutDto
 from zeny_project_handler_contracts.enums import ComplianceStatus
 from zeny_project_handler_server.app import create_app
+from zeny_project_handler_server.composition import compose_server_runtime
 from zeny_project_handler_server.config import ServerSettings
 from zeny_project_handler_server.deliverable_exports import _add_callout_annotation
 
@@ -93,9 +95,17 @@ def _sheet_names(content: bytes) -> tuple[str, ...]:
 
 
 def test_server_generates_pdf_and_three_real_xlsx_deliverables(tmp_path: Path) -> None:
-    settings = ServerSettings(password=PASSWORD, data_directory=tmp_path / "server")
+    settings = ServerSettings(
+        password=PASSWORD,
+        market_sqlserver_connection_string="fixture-market-connection",
+        data_directory=tmp_path / "server",
+    )
     source = create_analysis_pdf(tmp_path / "projeto.pdf")
-    with TestClient(create_app(settings)) as client:
+    runtime = compose_server_runtime(
+        settings,
+        market_classifier=FakeClassificadorMercado(),
+    )
+    with TestClient(create_app(settings, runtime_factory=lambda _settings: runtime)) as client:
         project_id, version = _project_with_pdf(client, source)
 
         pdf_metadata, pdf_content = _create_export(

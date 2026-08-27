@@ -11,6 +11,7 @@ from uuid import UUID
 
 import pytest
 from fastapi import FastAPI
+from tests.market_fakes import FakeClassificadorMercado
 from tests.pdf_fixtures import create_feature_pdf, create_golden_pdf
 from uvicorn import Config, Server
 
@@ -60,7 +61,11 @@ def test_two_http_clients_run_full_project_flow_and_survive_server_restart(
     tmp_path: Path,
 ) -> None:
     data_directory = tmp_path / "server-data"
-    settings = ServerSettings(password=PASSWORD, data_directory=data_directory)
+    settings = ServerSettings(
+        password=PASSWORD,
+        market_sqlserver_connection_string="fixture-market-connection",
+        data_directory=data_directory,
+    )
     first_pdf = create_golden_pdf(tmp_path / "primeiro.pdf")
     second_pdf = create_feature_pdf(tmp_path / "segundo.pdf")
     runner = CancelOnlyRunner(Event())
@@ -119,7 +124,14 @@ def test_two_http_clients_run_full_project_flow_and_survive_server_restart(
         assert terminal.progress_percent == 75
         assert first_client.session().global_operation is None
 
-    with _running_server(create_app(settings)) as restarted_url:
+    restarted_classifier = FakeClassificadorMercado()
+    restarted_runtime = compose_server_runtime(
+        settings,
+        market_classifier=restarted_classifier,
+    )
+    with _running_server(
+        create_app(settings, runtime_factory=lambda _settings: restarted_runtime)
+    ) as restarted_url:
         first_client = HttpProjectGateway(restarted_url, PASSWORD)
         second_client = HttpProjectGateway(restarted_url, PASSWORD)
         project = second_client.get_project(project_id).project
@@ -155,6 +167,7 @@ def test_two_http_clients_run_full_project_flow_and_survive_server_restart(
         )
         succeeded = _wait_job(second_client, accepted.job_id.root, JobStatus.SUCCEEDED)
         assert succeeded.progress_percent == 100
+        assert restarted_classifier.consultas == ["0007654321"]
         result = first_client.get_job_result(accepted.job_id.root)
         assert result.result is not None
         assert result.result["project_id"] == str(project_id)
@@ -172,7 +185,10 @@ def test_two_http_clients_run_full_project_flow_and_survive_server_restart(
 
 
 def _controlled_runtime(settings: ServerSettings, runner: CancelOnlyRunner) -> ServerRuntime:
-    runtime = compose_server_runtime(settings)
+    runtime = compose_server_runtime(
+        settings,
+        market_classifier=FakeClassificadorMercado(),
+    )
     runtime.jobs.stop_accepting()
     runtime.jobs.cancel_and_wait()
     assert runtime.project_api is not None

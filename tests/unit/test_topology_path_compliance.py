@@ -30,6 +30,7 @@ from zeny_project_handler.domain.enums import (
     SituacaoProjeto,
     TipoEvidencia,
 )
+from zeny_project_handler.domain.market import Mercado
 from zeny_project_handler.domain.project import Cabo, EstruturaMt, PontoRede, Poste, Projeto
 from zeny_project_handler.domain.values import CaixaPagina, GeometriaDocumento, PontoNormalizado
 
@@ -97,7 +98,9 @@ def test_neutral_grounding_uses_symbol_associated_to_route_pole(
 
     facts = {
         item.chave: item.valor
-        for item in prover_fatos_topologicos(ContextoProvedorFatos(session, (target,)))
+        for item in prover_fatos_topologicos(
+            ContextoProvedorFatos(session, (target,), Mercado.URBANO)
+        )
     }
 
     assert facts["projeto.neutro_maior_componente_m"] == Decimal(300)
@@ -110,7 +113,9 @@ def test_compact_anchoring_uses_actual_anchor_position() -> None:
 
     facts = {
         item.chave: item.valor
-        for item in prover_fatos_topologicos(ContextoProvedorFatos(session, (target,)))
+        for item in prover_fatos_topologicos(
+            ContextoProvedorFatos(session, (target,), Mercado.URBANO)
+        )
     }
 
     assert facts["projeto.rede_compacta_extensao_m"] == Decimal(900)
@@ -134,7 +139,9 @@ def test_violation_facts_point_to_an_edge_in_the_longest_uninterrupted_branch() 
 
     facts = {
         item.chave: item
-        for item in prover_fatos_topologicos(ContextoProvedorFatos(session, (target,)))
+        for item in prover_fatos_topologicos(
+            ContextoProvedorFatos(session, (target,), Mercado.URBANO)
+        )
     }
 
     assert facts["projeto.rede_compacta_maior_trecho_sem_ancoragem_m"].valor == Decimal(600)
@@ -162,7 +169,7 @@ def test_violation_facts_point_to_an_edge_in_the_longest_uninterrupted_branch() 
     neutral_facts = {
         item.chave: item
         for item in prover_fatos_topologicos(
-            ContextoProvedorFatos(neutral_session, (neutral_target,))
+            ContextoProvedorFatos(neutral_session, (neutral_target,), Mercado.URBANO)
         )
     }
 

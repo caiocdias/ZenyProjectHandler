@@ -37,6 +37,7 @@ from zeny_project_handler.domain.enums import (
     TipoEvidencia,
     TipoOrigemPdf,
 )
+from zeny_project_handler.domain.market import Mercado
 from zeny_project_handler.domain.project import Cabo, PontoRede, Poste, Projeto
 from zeny_project_handler.domain.project_metadata import MetadadosProjeto
 from zeny_project_handler.domain.values import (
@@ -68,7 +69,7 @@ def test_annotated_length_preserves_origin_evidence_region_page_and_label_geomet
     )
     targets = _targets(fixture.session)
 
-    facts = prover_fatos_vaos(ContextoProvedorFatos(fixture.session, targets))
+    facts = prover_fatos_vaos(ContextoProvedorFatos(fixture.session, targets, Mercado.URBANO))
 
     fact = next(item for item in facts if item.chave == "vao.comprimento_m")
     target = next(item for item in targets if item.id == fact.alvo_id)
@@ -88,7 +89,9 @@ def test_annotated_length_preserves_origin_evidence_region_page_and_label_geomet
 def test_coordinate_length_preserves_endpoint_evidence_and_cable_geometry() -> None:
     fixture = _span_fixture(length=None, coordinates=True)
 
-    facts = prover_fatos_vaos(ContextoProvedorFatos(fixture.session, _targets(fixture.session)))
+    facts = prover_fatos_vaos(
+        ContextoProvedorFatos(fixture.session, _targets(fixture.session), Mercado.URBANO)
+    )
 
     fact = next(item for item in facts if item.chave == "vao.comprimento_m")
     assert fact.valor == Decimal("50.00")
@@ -104,7 +107,9 @@ def test_coordinate_length_preserves_endpoint_evidence_and_cable_geometry() -> N
 def test_missing_length_does_not_publish_a_measurement() -> None:
     fixture = _span_fixture(length=None)
 
-    facts = prover_fatos_vaos(ContextoProvedorFatos(fixture.session, _targets(fixture.session)))
+    facts = prover_fatos_vaos(
+        ContextoProvedorFatos(fixture.session, _targets(fixture.session), Mercado.URBANO)
+    )
 
     assert all(item.chave != "vao.comprimento_m" for item in facts)
 
@@ -131,7 +136,7 @@ def test_review_annotation_from_legacy_session_does_not_publish_span_measurement
         ),
     )
 
-    facts = prover_fatos_vaos(ContextoProvedorFatos(session, _targets(session)))
+    facts = prover_fatos_vaos(ContextoProvedorFatos(session, _targets(session), Mercado.URBANO))
 
     assert all(item.chave != "vao.comprimento_m" for item in facts)
 
@@ -157,7 +162,7 @@ def test_rejected_cable_proposal_does_not_publish_span_measurement() -> None:
         ),
     )
 
-    facts = prover_fatos_vaos(ContextoProvedorFatos(session, _targets(session)))
+    facts = prover_fatos_vaos(ContextoProvedorFatos(session, _targets(session), Mercado.URBANO))
 
     assert all(item.chave != "vao.comprimento_m" for item in facts)
 
@@ -182,7 +187,9 @@ def test_span_exception_requires_positive_flag_and_traceable_evidence(
         exception_evidence=with_evidence,
     )
 
-    facts = prover_fatos_vaos(ContextoProvedorFatos(fixture.session, _targets(fixture.session)))
+    facts = prover_fatos_vaos(
+        ContextoProvedorFatos(fixture.session, _targets(fixture.session), Mercado.URBANO)
+    )
     exceptions = tuple(item for item in facts if item.chave == "vao.excecao_45_60_demonstrada")
     applicability = tuple(
         item for item in facts if item.chave == "vao.aplicabilidade_excecao_45_60_resolvida"
@@ -228,6 +235,7 @@ def test_current_span_rule_crosses_the_complete_provider_and_evaluation_flow(
     result = analisar_conformidade_projeto(
         fixture.session,
         carregar_registro_conformidade_inicial(),
+        mercado=Mercado.URBANO,
     )
     finding = next(
         (

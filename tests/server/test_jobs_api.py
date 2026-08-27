@@ -2,17 +2,24 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Event
 from time import monotonic, sleep
 from typing import cast
 from uuid import UUID, uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
+from tests.market_fakes import FakeClassificadorMercado
+from zeny_project_handler.adapters.persistence import SqlAlchemyUnitOfWork
 from zeny_project_handler.application.errors import FluxoMvpCanceladoError
 from zeny_project_handler.application.mvp_workflow import ResultadoFluxoMvp
+from zeny_project_handler.domain.analysis import ExecucaoAnalise
+from zeny_project_handler.domain.enums import EstadoExecucaoAnalise
+from zeny_project_handler.domain.market import Mercado
+from zeny_project_handler.ports.market import DependenciaMercadoError
 from zeny_project_handler_contracts.enums import JobKind, JobStatus
 from zeny_project_handler_server.app import create_app
 from zeny_project_handler_server.composition import ServerRuntime, compose_server_runtime
@@ -59,6 +66,7 @@ class ControlledRunner:
 def _settings(tmp_path: Path) -> ServerSettings:
     return ServerSettings(
         password=PASSWORD,
+        market_sqlserver_connection_string="fixture-market-connection",
         data_directory=tmp_path,
         job_retention_seconds=3_600,
         job_max_retained=10,
@@ -89,6 +97,24 @@ def _create_project(client: TestClient, key: str = "project-key") -> dict[str, o
     )
     assert response.status_code == 201, response.text
     return cast(dict[str, object], response.json()["project"])
+
+
+def _seed_semantic_execution(runtime: ServerRuntime, project_id: UUID) -> None:
+    now = datetime.now(UTC)
+    with SqlAlchemyUnitOfWork(runtime.core.engine) as work:
+        work.execucoes_analise.salvar(
+            ExecucaoAnalise(
+                id=uuid4(),
+                projeto_id=project_id,
+                metodo="semantic-fixture",
+                versao_metodo="1",
+                parametros=(("execucao_extracao_id", str(uuid4())),),
+                estado=EstadoExecucaoAnalise.CONCLUIDA,
+                iniciada_em=now,
+                finalizada_em=now,
+            )
+        )
+        work.commit()
 
 
 def _wait_status(client: TestClient, job_id: str, expected: JobStatus) -> dict[str, object]:
@@ -261,6 +287,72 @@ def test_restart_reconciles_active_job_as_recoverable_failure_without_false_succ
         }
     finally:
         runtime.close()
+
+
+def test_explicit_compliance_job_uses_external_market_once_and_persists_snapshot(
+    tmp_path: Path,
+) -> None:
+    classifier = FakeClassificadorMercado(Mercado.RURAL)
+    settings = _settings(tmp_path / "data")
+    runtime = compose_server_runtime(settings, market_classifier=classifier)
+    application = create_app(settings, runtime_factory=lambda _settings: runtime)
+
+    with TestClient(application) as client:
+        project = _create_project(client, "compliance-project")
+        project_id = UUID(str(project["project_id"]))
+        _seed_semantic_execution(runtime, project_id)
+        assert runtime.compliance_api is not None
+        signature = runtime.compliance_api.semantic_signature(project_id)
+        accepted = client.post(
+            f"/api/v1/projects/{project_id}/compliance-jobs",
+            headers={**AUTH, "Idempotency-Key": "explicit-compliance"},
+            json={"expected_semantic_signature": signature},
+        )
+        assert accepted.status_code == 202, accepted.text
+        terminal = _wait_status(client, accepted.json()["job_id"], JobStatus.SUCCEEDED)
+        execution = runtime.compliance_api.analysis_service.obter_ultima(project_id)
+
+        assert terminal["result_available"] is True
+        assert classifier.consultas == ["0001234567"]
+        assert execution is not None
+        assert {
+            item.chave for item in execution.fatos if item.chave.startswith("rede.contexto_")
+        } == {"rede.contexto_rural"}
+
+
+def test_external_market_failure_finishes_job_safely_without_snapshot_or_secret(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    secret = "server=market-secret.invalid;pwd=do-not-log"
+    classifier = FakeClassificadorMercado(erro=DependenciaMercadoError(f"driver failure {secret}"))
+    settings = _settings(tmp_path / "data")
+    runtime = compose_server_runtime(settings, market_classifier=classifier)
+    application = create_app(settings, runtime_factory=lambda _settings: runtime)
+
+    with TestClient(application) as client:
+        project = _create_project(client, "failing-compliance-project")
+        project_id = UUID(str(project["project_id"]))
+        _seed_semantic_execution(runtime, project_id)
+        assert runtime.compliance_api is not None
+        signature = runtime.compliance_api.semantic_signature(project_id)
+        accepted = client.post(
+            f"/api/v1/projects/{project_id}/compliance-jobs",
+            headers={**AUTH, "Idempotency-Key": "failing-compliance"},
+            json={"expected_semantic_signature": signature},
+        )
+        assert accepted.status_code == 202, accepted.text
+        terminal = _wait_status(client, accepted.json()["job_id"], JobStatus.FAILED)
+        error_payload = cast(dict[str, object], terminal["error"])
+
+        assert terminal["result_available"] is False
+        assert error_payload["code"] == "INTERNAL_ERROR"
+        assert "informe a correlação" in str(error_payload["message"])
+        assert error_payload["correlation_id"]
+        assert secret not in str(terminal)
+        assert secret not in caplog.text
+        assert classifier.consultas == ["0001234567"]
+        assert runtime.compliance_api.analysis_service.obter_ultima(project_id) is None
 
 
 def test_job_store_accepts_complete_state_matrix_without_progress_regression(

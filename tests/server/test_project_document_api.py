@@ -34,6 +34,7 @@ AUTH = {"Authorization": f"Bearer {PASSWORD}"}
 def _settings(data_directory: Path, *, upload_max_bytes: int = 8 * 1024 * 1024) -> ServerSettings:
     return ServerSettings(
         password=PASSWORD,
+        market_sqlserver_connection_string="fixture-market-connection",
         data_directory=data_directory,
         upload_max_bytes=upload_max_bytes,
     )

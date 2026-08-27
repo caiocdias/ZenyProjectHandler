@@ -38,6 +38,7 @@ from zeny_project_handler.domain.enums import (
     TipoEvidencia,
     TipoOrigemPdf,
 )
+from zeny_project_handler.domain.market import Mercado
 from zeny_project_handler.domain.project import ElementoProjetoType, Equipamento, Poste
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 
@@ -71,18 +72,7 @@ _KNOWN_DOCUMENT_LABEL_PATTERN = re.compile(
     r")\s*:",
     re.IGNORECASE,
 )
-_CONTEXT_FIELD_LABELS = {
-    "AREA",
-    "BAIRRO",
-    "CLASSIFICACAO",
-    "CONTEXTO",
-    "LOCALIZACAO",
-    "SERVICO",
-    "TIPO DE AREA",
-    "TIPO DE SERVICO",
-    "ZONA",
-}
-_CONTEXT_VALUE_PATTERN = re.compile(r"(?:(?:AREA|REDE|ZONA)\s+)?(URBAN[AO]|RURAL)")
+_MARKET_FACT_ORIGIN = "consulta ao cadastro de Notas de Serviço"
 _FIELD_PATTERNS = {
     "nota_servico": re.compile(
         r"\b(?:NOTA\s+DE\s+SERVICO|"
@@ -138,15 +128,6 @@ class _SignatureEvidence:
 
 
 @dataclass(frozen=True, slots=True)
-class _NetworkContext:
-    urban: bool = False
-    rural: bool = False
-    origin: str = ""
-    confidence: Decimal = Decimal("0")
-    evidence: tuple[EvidenciaDocumento, ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
 class _RegionFactContext:
     proposals_by_id: dict[UUID, PropostaElemento]
     confirmed_elements_by_proposal: dict[UUID, ElementoProjetoType]
@@ -154,7 +135,7 @@ class _RegionFactContext:
     equipment_class_options: dict[UUID, str]
     phase_options: dict[UUID, str]
     post_format_options: dict[UUID, str]
-    network_context: _NetworkContext
+    mercado: Mercado
     text_evidence: tuple[EvidenciaDocumento, ...]
     evidence: tuple[EvidenciaDocumento, ...]
 
@@ -185,6 +166,7 @@ def analisar_conformidade_projeto(
     sessao: SessaoRevisao,
     registro: RegistroRegrasConformidade,
     *,
+    mercado: Mercado,
     provedores_fatos: tuple[ProvedorFatosConformidade, ...] | None = None,
 ) -> ResultadoConformidadeProjeto:
     targets = _targets(sessao)
@@ -207,29 +189,7 @@ def analisar_conformidade_projeto(
     }
 
     metadata_values = _metadata_values(sessao)
-    network_context = _network_context(sessao)
-    if network_context.urban:
-        facts.append(
-            _fact(
-                project_target.id,
-                "rede.contexto_urbano",
-                True,
-                network_context.origin,
-                evidence=network_context.evidence,
-                confidence=network_context.confidence,
-            )
-        )
-    elif network_context.rural:
-        facts.append(
-            _fact(
-                project_target.id,
-                "rede.contexto_rural",
-                True,
-                network_context.origin,
-                evidence=network_context.evidence,
-                confidence=network_context.confidence,
-            )
-        )
+    facts.append(_market_context_fact(project_target.id, mercado))
     detected_values: dict[str, list[tuple[str, EvidenciaDocumento | None]]] = {}
     for document in sessao.projeto.documentos:
         target = document_targets[document.id]
@@ -342,7 +302,7 @@ def analisar_conformidade_projeto(
 
     facts.extend(_project_automation_facts(sessao, project_target.id))
 
-    provider_context = ContextoProvedorFatos(sessao=sessao, alvos=targets)
+    provider_context = ContextoProvedorFatos(sessao=sessao, alvos=targets, mercado=mercado)
     providers = provedores_fatos if provedores_fatos is not None else provedores_fatos_padrao()
     for provider in providers:
         facts.extend(provider(provider_context))
@@ -1105,9 +1065,10 @@ def _signature_item(
 def _region_facts(
     session: SessaoRevisao,
     *,
+    mercado: Mercado,
     region_targets: dict[UUID | None, AlvoConformidade],
 ) -> tuple[FatoConformidade, ...]:
-    context = _region_fact_context(session)
+    context = _region_fact_context(session, mercado)
     facts: list[FatoConformidade] = []
     for region in session.regioes:
         target = region_targets[region.id]
@@ -1124,7 +1085,7 @@ def _region_facts(
         )
         facts.append(_equipment_install_fact(target.id, proposals, context.evidence))
         facts.extend(_equipment_class_facts(target.id, proposals, session, context))
-        facts.extend(_network_context_facts(target.id, context.network_context))
+        facts.append(_market_context_fact(target.id, context.mercado))
         facts.extend(_risk_facts(target.id, nearby_text))
         facts.extend(_cable_technology_facts(target.id, proposals, session, context))
         facts.extend(_installed_cable_technology_facts(target.id, proposals, session, context))
@@ -1140,7 +1101,11 @@ def prover_fatos_regionais(contexto: ContextoProvedorFatos) -> tuple[FatoConform
         for item in contexto.alvos
         if item.tipo is TipoEscopoConformidade.REGIAO
     }
-    return _region_facts(contexto.sessao, region_targets=targets)
+    return _region_facts(
+        contexto.sessao,
+        mercado=contexto.mercado,
+        region_targets=targets,
+    )
 
 
 def provedores_fatos_padrao() -> tuple[ProvedorFatosConformidade, ...]:
@@ -1153,7 +1118,7 @@ def provedores_fatos_padrao() -> tuple[ProvedorFatosConformidade, ...]:
     )
 
 
-def _region_fact_context(session: SessaoRevisao) -> _RegionFactContext:
+def _region_fact_context(session: SessaoRevisao, mercado: Mercado) -> _RegionFactContext:
     review_evidence_ids = {
         item.id for item in session.evidencias if evidencia_eh_anotacao_de_revisao(item)
     }
@@ -1178,7 +1143,7 @@ def _region_fact_context(session: SessaoRevisao) -> _RegionFactContext:
         equipment_class_options=_catalog_option_codes(session, "classe_equipamento"),
         phase_options=_catalog_option_codes(session, "configuracao_fases"),
         post_format_options=_catalog_option_codes(session, "formato_poste"),
-        network_context=_network_context(session),
+        mercado=mercado,
         text_evidence=tuple(
             item
             for item in session.evidencias
@@ -1258,26 +1223,16 @@ def _equipment_class_facts(
     return tuple(facts)
 
 
-def _network_context_facts(
-    target_id: UUID,
-    context: _NetworkContext,
-) -> tuple[FatoConformidade, ...]:
-    key = (
-        "rede.contexto_urbano"
-        if context.urban
-        else ("rede.contexto_rural" if context.rural else None)
-    )
-    if key is None:
-        return ()
-    return (
-        _fact(
-            target_id,
-            key,
-            True,
-            context.origin,
-            evidence=context.evidence,
-            confidence=context.confidence,
-        ),
+def _market_context_fact(target_id: UUID, mercado: Mercado) -> FatoConformidade:
+    return _fact(
+        target_id,
+        {
+            Mercado.URBANO: "rede.contexto_urbano",
+            Mercado.RURAL: "rede.contexto_rural",
+        }[mercado],
+        True,
+        _MARKET_FACT_ORIGIN,
+        confidence=Decimal("1"),
     )
 
 
@@ -1432,7 +1387,7 @@ def _existing_post_transformer_facts(
     )
     candidates = _transformer_candidates(equipment_proposals, session, context)
     applicability_evidence = _proposals_evidence(equipment_proposals, context.evidence)
-    if context.network_context.rural or not candidates:
+    if context.mercado is Mercado.RURAL or not candidates:
         return _transformer_applicability_facts(
             target_id,
             value=False,
@@ -1440,7 +1395,7 @@ def _existing_post_transformer_facts(
             evidence=applicability_evidence,
             confidence=Decimal("0.98"),
         )
-    if not context.network_context.urban or len(candidates) != 1:
+    if context.mercado is not Mercado.URBANO or len(candidates) != 1:
         return ()
 
     pair = _confirmed_transformer_post_pair(candidates[0], proposals, session, context)
@@ -1583,13 +1538,11 @@ def _transformer_post_facts(
 
     pole_evidence = _proposal_evidence(pair.pole_proposal, context.evidence)
     equipment_evidence = _proposal_evidence(equipment_proposal, context.evidence)
-    pair_evidence = tuple(
-        dict.fromkeys((*equipment_evidence, *pole_evidence, *context.network_context.evidence))
-    )
+    pair_evidence = tuple(dict.fromkeys((*equipment_evidence, *pole_evidence)))
     confidence = _combined_confidence(
         equipment_proposal.confianca,
         pole_proposal.confianca,
-        context.network_context.confidence,
+        Decimal("1"),
     )
     facts: list[FatoConformidade] = [
         _fact(
@@ -1643,66 +1596,6 @@ def _transformer_post_facts(
 def _combined_confidence(*values: Decimal | None) -> Decimal | None:
     known = tuple(item for item in values if item is not None)
     return min(known) if len(known) == len(values) else None
-
-
-def _network_context(session: SessaoRevisao) -> _NetworkContext:
-    metadata = session.projeto.metadados
-    metadata_kind = (
-        _context_kind(metadata.tipo_servico)
-        if metadata is not None and metadata.tipo_servico
-        else None
-    )
-    evidence_by_kind = _explicit_context_evidence(session.evidencias)
-    document_kinds = {kind for kind, evidence in evidence_by_kind.items() if evidence}
-    if len(document_kinds) > 1 or (
-        metadata_kind is not None and document_kinds and metadata_kind not in document_kinds
-    ):
-        return _NetworkContext()
-    if metadata_kind is not None:
-        return _NetworkContext(
-            urban=metadata_kind == "URBANA",
-            rural=metadata_kind == "RURAL",
-            origin="tipo de serviço do projeto",
-            confidence=Decimal("1"),
-        )
-    if not document_kinds:
-        return _NetworkContext()
-    kind = next(iter(document_kinds))
-    return _NetworkContext(
-        urban=kind == "URBANA",
-        rural=kind == "RURAL",
-        origin="classificação explícita no cabeçalho do projeto",
-        confidence=Decimal("0.95"),
-        evidence=evidence_by_kind[kind],
-    )
-
-
-def _explicit_context_evidence(
-    evidence: tuple[EvidenciaDocumento, ...],
-) -> dict[str, tuple[EvidenciaDocumento, ...]]:
-    project_text = tuple(
-        item
-        for item in evidence
-        if item.tipo in _TEXT_TYPES
-        and item.conteudo_bruto
-        and not evidencia_eh_anotacao_de_revisao(item)
-    )
-    found: dict[str, list[EvidenciaDocumento]] = {"URBANA": [], "RURAL": []}
-    for field in _header_labeled_fields(project_text):
-        if _normalize_text(field.rotulo) not in _CONTEXT_FIELD_LABELS:
-            continue
-        kind = _context_kind(field.valor)
-        if kind is not None:
-            found[kind].extend(field.evidencias)
-    return {kind: tuple(dict.fromkeys(items)) for kind, items in found.items()}
-
-
-def _context_kind(value: str) -> str | None:
-    normalized = _normalize_text(value)
-    match = _CONTEXT_VALUE_PATTERN.fullmatch(normalized)
-    if match is None:
-        return None
-    return "URBANA" if match.group(1).startswith("URBAN") else "RURAL"
 
 
 def _risk_assessment_evidence(

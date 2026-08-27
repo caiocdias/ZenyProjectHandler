@@ -32,11 +32,7 @@ from zeny_project_handler.application.compliance_registry import (
     ResumoImportacaoRegras,
     ServicoRegistroRegrasConformidade,
 )
-from zeny_project_handler.application.document_compliance import prover_fatos_documentais
 from zeny_project_handler.application.human_review import ServicoRevisaoHumana, SessaoRevisao
-from zeny_project_handler.application.project_compliance import prover_fatos_regionais
-from zeny_project_handler.application.span_compliance import prover_fatos_vaos
-from zeny_project_handler.application.topology_compliance import prover_fatos_topologicos
 from zeny_project_handler.domain.analysis import EvidenciaDocumento
 from zeny_project_handler.domain.compliance import (
     AchadoConformidade,
@@ -121,24 +117,15 @@ class DocumentationComplianceApiService:
         data_directory: Path,
         review_api: ReviewApiService,
         upload_max_bytes: int,
+        analysis_service: ExecutarAnaliseConformidade,
         review_service: ServicoRevisaoHumana | None = None,
-        analysis_service: ExecutarAnaliseConformidade | None = None,
         registry_service: ServicoRegistroRegrasConformidade | None = None,
     ) -> None:
         self._engine = engine
         self._review_api = review_api
         self._upload_max_bytes = upload_max_bytes
         self._review = review_service or ServicoRevisaoHumana(self._unit_of_work)
-        self._analysis = analysis_service or ExecutarAnaliseConformidade(
-            self._unit_of_work,
-            self._review.carregar_sessao_semantica,
-            provedores_fatos=(
-                prover_fatos_documentais,
-                prover_fatos_regionais,
-                prover_fatos_vaos,
-                prover_fatos_topologicos,
-            ),
-        )
+        self._analysis = analysis_service
         self._registry = registry_service or ServicoRegistroRegrasConformidade(
             self._unit_of_work,
             diretorio_dados=data_directory,

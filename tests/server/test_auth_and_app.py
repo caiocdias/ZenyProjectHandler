@@ -62,7 +62,11 @@ class FakeJobs:
 
 
 def _settings(tmp_path: Path) -> ServerSettings:
-    return ServerSettings(password=PASSWORD, data_directory=tmp_path)
+    return ServerSettings(
+        password=PASSWORD,
+        market_sqlserver_connection_string="fixture-market-connection",
+        data_directory=tmp_path,
+    )
 
 
 def test_health_is_public_and_session_has_uniform_401_or_authenticated_200(

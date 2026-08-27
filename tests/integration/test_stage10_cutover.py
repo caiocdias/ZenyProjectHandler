@@ -105,7 +105,11 @@ def test_representative_backup_cutover_to_fresh_volume_preserves_auditable_state
     shutil.rmtree(legacy_root)
     assert not legacy_root.exists()
     target_root = tmp_path / "new-server-volume"
-    settings = ServerSettings(password=PASSWORD, data_directory=target_root)
+    settings = ServerSettings(
+        password=PASSWORD,
+        market_sqlserver_connection_string="fixture-market-connection",
+        data_directory=target_root,
+    )
     with _running_server(settings) as base_url:
         transfers = HttpPortabilityGateway(base_url, PASSWORD)
         first_client = HttpProjectGateway(base_url, PASSWORD)
@@ -182,7 +186,13 @@ def test_degraded_cutover_requires_confirmation_and_drops_legacy_windows_path(
     engine.dispose()
 
     target_root = tmp_path / "degraded-target"
-    with _running_server(ServerSettings(password=PASSWORD, data_directory=target_root)) as base_url:
+    with _running_server(
+        ServerSettings(
+            password=PASSWORD,
+            market_sqlserver_connection_string="fixture-market-connection",
+            data_directory=target_root,
+        )
+    ) as base_url:
         transfers = HttpPortabilityGateway(base_url, PASSWORD)
         prepared = transfers.preflight_backup_restore(
             backup.caminho,

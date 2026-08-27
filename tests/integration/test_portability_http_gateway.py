@@ -35,6 +35,7 @@ def test_http_round_trip_hash_repeated_download_restore_and_restart(tmp_path: Pa
     source = create_golden_pdf(client_root / "source.pdf")
     settings = ServerSettings(
         password=PASSWORD,
+        market_sqlserver_connection_string="fixture-market-connection",
         data_directory=tmp_path / "server-volume",
         transfer_ttl_seconds=300,
     )

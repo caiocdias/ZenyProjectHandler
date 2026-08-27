@@ -11,6 +11,7 @@ from zeny_project_handler.domain.compliance import (
     RevisaoRegistroConformidade,
     assinatura_conteudo_conformidade,
 )
+from zeny_project_handler.ports.market import ClassificadorMercadoPort
 from zeny_project_handler.ports.persistence import UnitOfWorkPort
 
 from .compliance_fact_providers import ProvedorFatosConformidade
@@ -18,7 +19,7 @@ from .errors import AnaliseConformidadeCanceladaError, RegistroConformidadeError
 from .human_review import SessaoRevisao
 from .project_compliance import analisar_conformidade_projeto
 
-VERSAO_METODO_CONFORMIDADE = "7"
+VERSAO_METODO_CONFORMIDADE = "8"
 
 
 def resultado_conformidade_desatualizado(
@@ -41,11 +42,13 @@ class ExecutarAnaliseConformidade:
         unidade_de_trabalho: Callable[[], UnitOfWorkPort],
         carregar_sessao_semantica: Callable[[UUID], SessaoRevisao],
         *,
+        classificador_mercado: ClassificadorMercadoPort,
         provedores_fatos: tuple[ProvedorFatosConformidade, ...] | None = None,
         relogio: Callable[[], datetime] | None = None,
     ) -> None:
         self._unit_of_work = unidade_de_trabalho
         self._load_semantic_session = carregar_sessao_semantica
+        self._market_classifier = classificador_mercado
         self._fact_providers = provedores_fatos
         self._clock = relogio or (lambda: datetime.now(UTC))
 
@@ -59,9 +62,12 @@ class ExecutarAnaliseConformidade:
         self._ensure_not_cancelled(cancelado)
         session = self._load_semantic_session(projeto_id)
         self._ensure_not_cancelled(cancelado)
+        market = self._market_classifier.classificar(session.projeto.nome)
+        self._ensure_not_cancelled(cancelado)
         result = analisar_conformidade_projeto(
             session,
             revision.registro,
+            mercado=market,
             provedores_fatos=self._fact_providers,
         )
         source_ids = tuple(item.id for item in session.execucoes)

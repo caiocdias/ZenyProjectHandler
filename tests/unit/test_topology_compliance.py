@@ -50,6 +50,7 @@ from zeny_project_handler.domain.enums import (
     TipoDecisaoRevisao,
     TipoEvidencia,
 )
+from zeny_project_handler.domain.market import Mercado
 from zeny_project_handler.domain.project import (
     Cabo,
     Equipamento,
@@ -102,7 +103,7 @@ def test_structure_cable_pair_is_evaluated_against_catalog(
     fixture = _fixture(compatible=compatible)
 
     produced_facts = prover_fatos_topologicos(
-        ContextoProvedorFatos(fixture.session, (fixture.target,))
+        ContextoProvedorFatos(fixture.session, (fixture.target,), Mercado.URBANO)
     )
     facts = {fact.chave: fact.valor for fact in produced_facts}
     findings = avaliar_regras_conformidade(
@@ -181,7 +182,9 @@ def test_missing_fuse_fact_keeps_specific_p2_post_geometry_instead_of_region() -
         target=target,
     )
 
-    facts = prover_fatos_topologicos(ContextoProvedorFatos(fixture.session, (fixture.target,)))
+    facts = prover_fatos_topologicos(
+        ContextoProvedorFatos(fixture.session, (fixture.target,), Mercado.URBANO)
+    )
     fuse_fact = next(item for item in facts if item.chave == "regiao.chave_fusivel_presente")
     transformer = next(item for item in session.projeto.elementos if isinstance(item, Equipamento))
     post = next(
@@ -700,7 +703,9 @@ def _fixture(*, compatible: bool) -> _Fixture:
 
 
 def _facts_by_key(fixture: _Fixture) -> dict[str, object]:
-    facts = prover_fatos_topologicos(ContextoProvedorFatos(fixture.session, (fixture.target,)))
+    facts = prover_fatos_topologicos(
+        ContextoProvedorFatos(fixture.session, (fixture.target,), Mercado.URBANO)
+    )
     return {fact.chave: fact.valor for fact in facts}
 
 

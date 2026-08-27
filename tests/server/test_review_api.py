@@ -24,7 +24,11 @@ AUTH = {"Authorization": f"Bearer {PASSWORD}"}
 
 
 def _settings(data_directory: Path) -> ServerSettings:
-    return ServerSettings(password=PASSWORD, data_directory=data_directory)
+    return ServerSettings(
+        password=PASSWORD,
+        market_sqlserver_connection_string="fixture-market-connection",
+        data_directory=data_directory,
+    )
 
 
 def _seed_review(

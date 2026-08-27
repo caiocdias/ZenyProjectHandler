@@ -28,8 +28,11 @@ VIEWER_MAX_FILES_ENVIRONMENT_VARIABLE = "ZENY_SERVER_VIEWER_MAX_FILES"
 JOB_RETENTION_ENVIRONMENT_VARIABLE = "ZENY_SERVER_JOB_RETENTION_SECONDS"
 JOB_MAX_RETAINED_ENVIRONMENT_VARIABLE = "ZENY_SERVER_JOB_MAX_RETAINED"
 TRANSFER_TTL_ENVIRONMENT_VARIABLE = "ZENY_SERVER_TRANSFER_TTL_SECONDS"
+MARKET_SQLSERVER_CONNECTION_STRING_ENVIRONMENT_VARIABLE = "ZENY_MARKET_SQLSERVER_CONNECTION_STRING"
+MARKET_SQLSERVER_TIMEOUT_ENVIRONMENT_VARIABLE = "ZENY_MARKET_SQLSERVER_TIMEOUT_SECONDS"
 
 PASSWORD_PLACEHOLDER = "troque-por-uma-senha-longa-e-aleatoria"
+MARKET_SQLSERVER_CONNECTION_PLACEHOLDER = "troque-por-uma-string-de-conexao-sql-server"
 DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8000
 DEFAULT_DATA_DIRECTORY = Path("/data")
@@ -40,6 +43,7 @@ DEFAULT_VIEWER_MAX_FILES = 20
 DEFAULT_JOB_RETENTION_SECONDS = 24 * 60 * 60
 DEFAULT_JOB_MAX_RETAINED = 100
 DEFAULT_TRANSFER_TTL_SECONDS = 60 * 60
+DEFAULT_MARKET_SQLSERVER_TIMEOUT_SECONDS = 15
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +51,7 @@ class ServerSettings:
     """Valores imutáveis necessários para iniciar um único worker do servidor."""
 
     password: str = field(repr=False)
+    market_sqlserver_connection_string: str = field(repr=False)
     host: str = DEFAULT_HOST
     port: int = DEFAULT_PORT
     data_directory: Path = DEFAULT_DATA_DIRECTORY
@@ -60,11 +65,21 @@ class ServerSettings:
     job_retention_seconds: int = DEFAULT_JOB_RETENTION_SECONDS
     job_max_retained: int = DEFAULT_JOB_MAX_RETAINED
     transfer_ttl_seconds: int = DEFAULT_TRANSFER_TTL_SECONDS
+    market_sqlserver_timeout_seconds: int = DEFAULT_MARKET_SQLSERVER_TIMEOUT_SECONDS
 
     def __post_init__(self) -> None:
         if not self.password.strip() or self.password.strip() == PASSWORD_PLACEHOLDER:
             raise ValueError(
                 "ZENY_SERVER_PASSWORD é obrigatória e deve ser diferente do placeholder"
+            )
+        if (
+            not self.market_sqlserver_connection_string.strip()
+            or self.market_sqlserver_connection_string.strip()
+            == MARKET_SQLSERVER_CONNECTION_PLACEHOLDER
+        ):
+            raise ValueError(
+                "ZENY_MARKET_SQLSERVER_CONNECTION_STRING é obrigatória e deve ser "
+                "diferente do placeholder"
             )
         normalized_host = self.host.strip()
         if not _valid_host(normalized_host):
@@ -88,6 +103,10 @@ class ServerSettings:
         _require_positive(self.job_retention_seconds, JOB_RETENTION_ENVIRONMENT_VARIABLE)
         _require_positive(self.job_max_retained, JOB_MAX_RETAINED_ENVIRONMENT_VARIABLE)
         _require_positive(self.transfer_ttl_seconds, TRANSFER_TTL_ENVIRONMENT_VARIABLE)
+        _require_positive(
+            self.market_sqlserver_timeout_seconds,
+            MARKET_SQLSERVER_TIMEOUT_ENVIRONMENT_VARIABLE,
+        )
         object.__setattr__(self, "host", normalized_host)
         object.__setattr__(self, "log_level", normalized_level)
         object.__setattr__(
@@ -115,6 +134,10 @@ class ServerSettings:
         values = os.environ if environment is None else environment
         return cls(
             password=values.get(PASSWORD_ENVIRONMENT_VARIABLE, ""),
+            market_sqlserver_connection_string=values.get(
+                MARKET_SQLSERVER_CONNECTION_STRING_ENVIRONMENT_VARIABLE,
+                "",
+            ),
             host=values.get(HOST_ENVIRONMENT_VARIABLE, DEFAULT_HOST),
             port=_integer_setting(values, PORT_ENVIRONMENT_VARIABLE, DEFAULT_PORT),
             data_directory=Path(
@@ -165,6 +188,11 @@ class ServerSettings:
                 values,
                 TRANSFER_TTL_ENVIRONMENT_VARIABLE,
                 DEFAULT_TRANSFER_TTL_SECONDS,
+            ),
+            market_sqlserver_timeout_seconds=_integer_setting(
+                values,
+                MARKET_SQLSERVER_TIMEOUT_ENVIRONMENT_VARIABLE,
+                DEFAULT_MARKET_SQLSERVER_TIMEOUT_SECONDS,
             ),
         )
 

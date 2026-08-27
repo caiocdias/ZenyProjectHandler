@@ -31,6 +31,7 @@ from zeny_project_handler.application.operation_coordinator import (
 )
 from zeny_project_handler.domain.errors import DomainValidationError
 from zeny_project_handler.logging_config import operation_logger
+from zeny_project_handler.ports.market import ClassificacaoMercadoError
 from zeny_project_handler_contracts.backup import (
     ConfirmBackupRestoreRequest,
     CreateBackupJobRequest,
@@ -955,11 +956,23 @@ def _safe_job_error(error: Exception, correlation_id: str) -> tuple[ErrorEnvelop
         )
     expected = isinstance(
         error,
-        (ApplicationError, DomainValidationError, PdfProtegidoError, ValueError),
+        (
+            ApplicationError,
+            ClassificacaoMercadoError,
+            DomainValidationError,
+            PdfProtegidoError,
+            ValueError,
+        ),
     )
     if isinstance(error, PdfProtegidoError):
         code = ErrorCode.PDF_PASSWORD_REQUIRED
         message = "Um PDF protegido precisa ser desbloqueado antes da análise."
+    elif isinstance(error, ClassificacaoMercadoError):
+        code = ErrorCode.INTERNAL_ERROR
+        message = (
+            "Não foi possível consultar o mercado da Nota de Serviço. "
+            "Tente novamente; se persistir, informe a correlação ao suporte."
+        )
     elif expected:
         code = ErrorCode.VALIDATION_ERROR
         message = str(error).strip() or "A análise não pôde ser concluída."

@@ -141,7 +141,11 @@ def test_corrupted_volume_prevents_asgi_startup_and_business_readiness(tmp_path:
     root.mkdir()
     _database(root).write_bytes(b"corrupted sqlite")
     application = create_app(
-        ServerSettings(password="senha do teste fail closed", data_directory=root)
+        ServerSettings(
+            password="senha do teste fail closed",
+            market_sqlserver_connection_string="fixture-market-connection",
+            data_directory=root,
+        )
     )
 
     with pytest.raises(VolumeLifecycleError), TestClient(application):

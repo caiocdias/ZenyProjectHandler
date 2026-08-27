@@ -21,6 +21,7 @@ from zeny_project_handler.domain.compliance import (
 )
 from zeny_project_handler.domain.documents import DocumentoProjeto, PaginaDocumento
 from zeny_project_handler.domain.enums import EstadoExecucaoAnalise, TipoEvidencia
+from zeny_project_handler.domain.market import Mercado
 from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler.domain.values import (
     CaixaPagina,
@@ -61,7 +62,9 @@ def test_document_provider_compares_power_phases_code_and_circuit(
         ("relacao-materiais-orcamento.pdf", materials_text),
     )
     target = _project_target(session)
-    facts = prover_fatos_documentais(ContextoProvedorFatos(sessao=session, alvos=(target,)))
+    facts = prover_fatos_documentais(
+        ContextoProvedorFatos(sessao=session, alvos=(target,), mercado=Mercado.URBANO)
+    )
     findings = avaliar_regras_conformidade(
         carregar_registro_conformidade_inicial(),
         (target,),
@@ -99,7 +102,9 @@ def test_document_provider_compares_multiple_explicit_values_as_sets(
         ("orcamento.pdf", materials_text),
     )
     target = _project_target(session)
-    facts = prover_fatos_documentais(ContextoProvedorFatos(sessao=session, alvos=(target,)))
+    facts = prover_fatos_documentais(
+        ContextoProvedorFatos(sessao=session, alvos=(target,), mercado=Mercado.URBANO)
+    )
     by_key = {item.chave: item.valor for item in facts}
     findings = avaliar_regras_conformidade(
         carregar_registro_conformidade_inicial(),
@@ -122,7 +127,9 @@ def test_document_provider_skips_comparison_when_one_document_has_no_value() -> 
         ("orcamento.pdf", "RELACAO DE MATERIAIS SEM TRANSFORMADOR"),
     )
     target = _project_target(session)
-    facts = prover_fatos_documentais(ContextoProvedorFatos(sessao=session, alvos=(target,)))
+    facts = prover_fatos_documentais(
+        ContextoProvedorFatos(sessao=session, alvos=(target,), mercado=Mercado.URBANO)
+    )
     by_key = {item.chave: item.valor for item in facts}
     findings = avaliar_regras_conformidade(
         carregar_registro_conformidade_inicial(),
@@ -151,7 +158,9 @@ def test_gd_document_rule_uses_explicit_package_markers(
         documents.append(support_document)
     session = _session(*documents)
     target = _project_target(session)
-    facts = prover_fatos_documentais(ContextoProvedorFatos(sessao=session, alvos=(target,)))
+    facts = prover_fatos_documentais(
+        ContextoProvedorFatos(sessao=session, alvos=(target,), mercado=Mercado.URBANO)
+    )
     finding = next(
         item
         for item in avaliar_regras_conformidade(
@@ -188,7 +197,11 @@ def test_prordr_photo_rule_uses_detected_photo_document(
     session = _session(*documents)
     target = _project_target(session)
     document_facts = prover_fatos_documentais(
-        ContextoProvedorFatos(sessao=session, alvos=(target,))
+        ContextoProvedorFatos(
+            sessao=session,
+            alvos=(target,),
+            mercado=Mercado.URBANO,
+        )
     )
     facts = (
         *document_facts,

@@ -104,6 +104,7 @@ def test_project_and_backup_round_trip_integrity_repeated_download_and_restart(
     source = create_golden_pdf(tmp_path / "client-only.pdf")
     settings = ServerSettings(
         password=PASSWORD,
+        market_sqlserver_connection_string="fixture-market-connection",
         data_directory=data,
         upload_max_bytes=16 * 1024 * 1024,
         transfer_ttl_seconds=300,
@@ -219,6 +220,7 @@ def test_project_and_backup_round_trip_integrity_repeated_download_and_restart(
 def test_preflight_rejects_corruption_traversal_and_stale_target(tmp_path: Path) -> None:
     settings = ServerSettings(
         password=PASSWORD,
+        market_sqlserver_connection_string="fixture-market-connection",
         data_directory=tmp_path / "server-data",
         upload_max_bytes=16 * 1024 * 1024,
     )
@@ -318,6 +320,7 @@ def test_interrupted_upload_is_removed_and_expired_download_is_unavailable(
 ) -> None:
     settings = ServerSettings(
         password=PASSWORD,
+        market_sqlserver_connection_string="fixture-market-connection",
         data_directory=tmp_path / "server-data",
         upload_max_bytes=64,
         transfer_ttl_seconds=1,
@@ -338,6 +341,7 @@ def test_backup_job_cancellation_removes_pending_artifact_and_has_no_result(
 ) -> None:
     settings = ServerSettings(
         password=PASSWORD,
+        market_sqlserver_connection_string="fixture-market-connection",
         data_directory=tmp_path / "server-data",
     )
     runtime = compose_server_runtime(settings)

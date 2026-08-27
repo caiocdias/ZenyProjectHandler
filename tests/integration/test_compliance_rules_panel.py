@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 from pytestqt.qtbot import QtBot
 from sqlalchemy import Engine
+from tests.market_fakes import FakeClassificadorMercado
 from tests.remote_gateways import SynchronousDocumentationGateway
 
 from zeny_project_handler.adapters.compliance import carregar_registro_conformidade_inicial
@@ -103,6 +104,7 @@ def _panel(
     analysis_service = ExecutarAnaliseConformidade(
         unit_of_work,
         review_service.carregar_sessao_semantica,
+        classificador_mercado=FakeClassificadorMercado(),
     )
     panel = DocumentationPanelWidget(
         gateway=SynchronousDocumentationGateway(

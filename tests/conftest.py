@@ -86,6 +86,7 @@ def application_factory() -> Iterator[ApplicationFactory]:
         documentation_gateway: DocumentationGateway | None = None,
         portability_gateway: PortabilityGateway | None = None,
     ) -> tuple[QApplication, MainWindow]:
+        from tests.market_fakes import FakeClassificadorMercado
         from tests.remote_gateways import (
             DirectDocumentationGateway,
             DirectPdfViewerGateway,
@@ -104,13 +105,15 @@ def application_factory() -> Iterator[ApplicationFactory]:
             runtime = compose_server_runtime(
                 ServerSettings(
                     password="senha isolada do gateway Qt de testes",
+                    market_sqlserver_connection_string="fixture-market-connection",
                     data_directory=(
                         settings.data_directory.parent / f"{settings.data_directory.name}-server"
                     ),
                     render_dpi=settings.pdf_render_dpi,
                     render_max_pixels=settings.pdf_render_max_pixels,
                     render_max_bytes=settings.pdf_render_max_bytes,
-                )
+                ),
+                market_classifier=FakeClassificadorMercado(),
             )
             server_runtimes.append(runtime)
             project_gateway = DirectProjectGateway(runtime)

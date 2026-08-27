@@ -55,6 +55,7 @@ def test_client_opens_authenticated_blocks_on_disconnect_and_reconnects(
 ) -> None:
     server_settings = ServerSettings(
         password=PASSWORD,
+        market_sqlserver_connection_string="fixture-market-connection",
         data_directory=tmp_path / "server-data",
     )
     client_settings = ClientSettings(data_directory=tmp_path / "client-data")

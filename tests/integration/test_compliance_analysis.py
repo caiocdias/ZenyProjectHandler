@@ -15,6 +15,7 @@ from PySide6.QtWidgets import QLabel, QPushButton, QTreeWidget
 from pytestqt.qtbot import QtBot
 from sqlalchemy import Engine, update
 from sqlalchemy.exc import IntegrityError
+from tests.market_fakes import FakeClassificadorMercado
 from tests.remote_gateways import SynchronousDocumentationGateway
 
 from zeny_project_handler.adapters.analysis import PyMuPdfDocumentAnalyzer, TesseractCliOcr
@@ -46,6 +47,7 @@ from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.domain.compliance import ExecucaoConformidade, ResultadoConformidade
 from zeny_project_handler.domain.documents import DocumentoProjeto, PaginaDocumento
 from zeny_project_handler.domain.enums import EstadoExecucaoAnalise, TipoEvidencia
+from zeny_project_handler.domain.market import Mercado
 from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler.domain.project_metadata import MetadadosProjeto
 from zeny_project_handler.domain.values import (
@@ -53,6 +55,7 @@ from zeny_project_handler.domain.values import (
     GeometriaDocumento,
     PontoNormalizado,
 )
+from zeny_project_handler.ports.market import DependenciaMercadoError
 from zeny_project_handler_client.ui.documentation_panel import DocumentationPanelWidget
 from zeny_project_handler_client.ui.pdf_viewer import PdfViewerWidget
 from zeny_project_handler_contracts.enums import ComplianceStatus
@@ -121,6 +124,7 @@ def _prepare_context(
     UUID,
     ExecutarAnaliseConformidade,
     ServicoRegistroRegrasConformidade,
+    FakeClassificadorMercado,
 ]:
     engine = create_sqlite_engine(tmp_path / "compliance.sqlite3")
     upgrade_database(engine)
@@ -132,11 +136,11 @@ def _prepare_context(
     unknown = _document("sem-formato.pdf", "b", _page("700", "1000"))
     project = Projeto(
         id=uuid4(),
-        nome="Projeto sintético divergente",
+        nome="0012345678",
         catalogo_versao_id=catalog.id,
         criado_em=_NOW,
         documentos=(a4, unknown),
-        metadados=MetadadosProjeto(tipo_servico="Rede urbana"),
+        metadados=MetadadosProjeto(tipo_servico="Rede rural"),
     )
     semantic_run = ExecucaoAnalise(
         id=uuid4(),
@@ -181,19 +185,21 @@ def _prepare_context(
     registry_service.inicializar(carregar_registro_conformidade_inicial())
     _import_rule_state(registry_service, "nd31.desenho.escala", enabled=True)
     review_service = ServicoRevisaoHumana(unit_of_work)
+    market_classifier = FakeClassificadorMercado(Mercado.URBANO)
     analysis_service = ExecutarAnaliseConformidade(
         unit_of_work,
         review_service.carregar_sessao_semantica,
+        classificador_mercado=market_classifier,
         relogio=lambda: _NOW,
     )
-    return engine, project.id, analysis_service, registry_service
+    return engine, project.id, analysis_service, registry_service, market_classifier
 
 
 def test_execution_is_deterministic_preserves_history_and_survives_restart(
     tmp_path: Path,
     catalogo_inicial: CatalogoTecnico,
 ) -> None:
-    engine, project_id, service, registry_service = _prepare_context(
+    engine, project_id, service, registry_service, market_classifier = _prepare_context(
         tmp_path,
         catalogo_inicial,
     )
@@ -201,11 +207,12 @@ def test_execution_is_deterministic_preserves_history_and_survives_restart(
     first = service.executar(project_id)
     repeated = service.executar(project_id)
 
-    assert VERSAO_METODO_CONFORMIDADE == "7"
+    assert VERSAO_METODO_CONFORMIDADE == "8"
     assert first.versao_metodo == VERSAO_METODO_CONFORMIDADE
     assert repeated.id == first.id
     assert dumps_domain(repeated) == dumps_domain(first)
     assert len(service.listar_historico(project_id)) == 1
+    assert market_classifier.consultas == ["0012345678", "0012345678"]
     persisted = service.obter_ultima(project_id)
     assert persisted is not None
     assert "projeto.documentacao_gd_identificada" in {item.chave for item in persisted.fatos}
@@ -238,7 +245,7 @@ def test_execution_is_deterministic_preserves_history_and_survives_restart(
     assert all(item.regra_id != "nd31.desenho.escala" for item in second.achados)
     assert service.resultado_desatualizado(first)
     assert not service.resultado_desatualizado(second)
-    assert service.resultado_desatualizado(replace(second, versao_metodo="2"))
+    assert service.resultado_desatualizado(replace(second, versao_metodo="7"))
 
     database_path = tmp_path / "compliance.sqlite3"
     engine.dispose()
@@ -251,17 +258,66 @@ def test_execution_is_deterministic_preserves_history_and_survives_restart(
     reopened_service = ExecutarAnaliseConformidade(
         reopened_unit_of_work,
         reopened_review.carregar_sessao_semantica,
+        classificador_mercado=FakeClassificadorMercado(Mercado.URBANO),
     )
     assert reopened_service.obter_ultima(project_id) == second
     assert reopened_service.listar_historico(project_id) == history
     reopened_engine.dispose()
 
 
+def test_market_change_creates_new_snapshot_identity_and_same_market_is_idempotent(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    engine, project_id, service, _registry_service, market_classifier = _prepare_context(
+        tmp_path,
+        catalogo_inicial,
+    )
+
+    urban = service.executar(project_id)
+    market_classifier.mercado = Mercado.RURAL
+    rural = service.executar(project_id)
+    repeated_rural = service.executar(project_id)
+
+    assert rural.id != urban.id
+    assert repeated_rural.id == rural.id
+    assert service.listar_historico(project_id) == (urban, rural)
+    assert market_classifier.consultas == ["0012345678"] * 3
+    assert {item.chave for item in urban.fatos if item.chave.startswith("rede.contexto_")} == {
+        "rede.contexto_urbano"
+    }
+    assert {item.chave for item in rural.fatos if item.chave.startswith("rede.contexto_")} == {
+        "rede.contexto_rural"
+    }
+    engine.dispose()
+
+
+def test_external_market_failure_does_not_persist_compliance_snapshot(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    engine, project_id, service, _registry_service, market_classifier = _prepare_context(
+        tmp_path,
+        catalogo_inicial,
+    )
+    market_classifier.erro = DependenciaMercadoError(
+        "O cadastro externo de mercado não pôde ser consultado"
+    )
+
+    with pytest.raises(DependenciaMercadoError):
+        service.executar(project_id)
+
+    assert market_classifier.consultas == ["0012345678"]
+    assert service.obter_ultima(project_id) is None
+    assert service.listar_historico(project_id) == ()
+    engine.dispose()
+
+
 def test_remote_dtos_preserve_baseline_semantics_for_all_39_active_rules(
     tmp_path: Path,
     catalogo_inicial: CatalogoTecnico,
 ) -> None:
-    engine, project_id, service, registry_service = _prepare_context(
+    engine, project_id, service, registry_service, _market_classifier = _prepare_context(
         tmp_path,
         catalogo_inicial,
     )
@@ -307,7 +363,7 @@ def test_active_rule_revision_is_captured_before_loading_the_semantic_session(
     tmp_path: Path,
     catalogo_inicial: CatalogoTecnico,
 ) -> None:
-    engine, project_id, _service, registry_service = _prepare_context(
+    engine, project_id, _service, registry_service, _market_classifier = _prepare_context(
         tmp_path,
         catalogo_inicial,
     )
@@ -325,6 +381,7 @@ def test_active_rule_revision_is_captured_before_loading_the_semantic_session(
     service = ExecutarAnaliseConformidade(
         unit_of_work,
         load_after_registry_changes,
+        classificador_mercado=FakeClassificadorMercado(Mercado.URBANO),
         relogio=lambda: _NOW,
     )
 
@@ -344,7 +401,7 @@ def test_failure_or_cancellation_rolls_back_the_complete_snapshot(
     monkeypatch: pytest.MonkeyPatch,
     failure: str,
 ) -> None:
-    engine, project_id, service, _registry_service = _prepare_context(
+    engine, project_id, service, _registry_service, market_classifier = _prepare_context(
         tmp_path,
         catalogo_inicial,
     )
@@ -367,13 +424,14 @@ def test_failure_or_cancellation_rolls_back_the_complete_snapshot(
         def cancel_after_insert() -> bool:
             nonlocal checks
             checks += 1
-            return checks == 4
+            return checks == 5
 
         with pytest.raises(AnaliseConformidadeCanceladaError):
             service.executar(project_id, cancelado=cancel_after_insert)
 
     assert service.obter_ultima(project_id) is None
     assert service.listar_historico(project_id) == ()
+    assert market_classifier.consultas == ["0012345678"]
     engine.dispose()
 
 
@@ -383,7 +441,7 @@ def test_panel_loads_latest_marks_stale_and_reapplies_without_ocr(
     catalogo_inicial: CatalogoTecnico,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    engine, project_id, service, registry_service = _prepare_context(
+    engine, project_id, service, registry_service, _market_classifier = _prepare_context(
         tmp_path,
         catalogo_inicial,
     )
@@ -463,7 +521,7 @@ def test_panel_marks_a_previous_compliance_method_as_stale(
     catalogo_inicial: CatalogoTecnico,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    engine, project_id, service, registry_service = _prepare_context(
+    engine, project_id, service, registry_service, _market_classifier = _prepare_context(
         tmp_path,
         catalogo_inicial,
     )

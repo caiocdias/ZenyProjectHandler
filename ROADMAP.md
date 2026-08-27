@@ -157,7 +157,7 @@ todo o aceite e executar as validações obrigatórias. Registre comandos, resul
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E01 | Porta e gateway SQL Server | #concluida | nenhuma | Classificador externo isolado, seguro e testado |
-| E02 | Troca da fonte no motor de conformidade | #pendente | E01 | Mercado externo governa fatos e aplicabilidade nos dois fluxos |
+| E02 | Troca da fonte no motor de conformidade | #concluida | E01 | Mercado externo governa fatos e aplicabilidade nos dois fluxos |
 | E03 | Distribuição, documentação e regressão completa | #pendente | E01, E02 | Operação/release documentados e gate automatizado verde |
 | E04 | Homologação com o SQL Server real | #bloqueada | E03 | Evidência real de URBANO, RURAL e falha fechada |
 
@@ -329,7 +329,7 @@ cadeia de certificados continua aberta para a homologação E04.
 
 ---
 
-## E02 — Troca da fonte no motor de conformidade — #pendente
+## E02 — Troca da fonte no motor de conformidade — #concluida
 
 ### Objetivo
 
@@ -431,19 +431,19 @@ autorização explícita.
 
 ### Critérios de aceite
 
-- [ ] Cada execução de conformidade consulta uma vez a NS vigente; nenhuma consulta ocorre por
+- [x] Cada execução de conformidade consulta uma vez a NS vigente; nenhuma consulta ocorre por
       regra ou alvo.
-- [ ] Pipeline completo e reanálise explícita usam a mesma implementação externa.
-- [ ] Projeto e todas as regiões recebem somente o fato coerente com o retorno externo.
-- [ ] Metadado/PDF ausente ou conflitante não muda nem impede uma classificação externa válida.
-- [ ] Nenhum código produtivo ainda usa `tipo_servico` ou texto/OCR para definir rural/urbano.
-- [ ] As regras do mercado oposto não aparecem nos achados; as do mercado correto continuam
+- [x] Pipeline completo e reanálise explícita usam a mesma implementação externa.
+- [x] Projeto e todas as regiões recebem somente o fato coerente com o retorno externo.
+- [x] Metadado/PDF ausente ou conflitante não muda nem impede uma classificação externa válida.
+- [x] Nenhum código produtivo ainda usa `tipo_servico` ou texto/OCR para definir rural/urbano.
+- [x] As regras do mercado oposto não aparecem nos achados; as do mercado correto continuam
       avaliadas pelos demais fatos.
-- [ ] Mudança do mercado entre execuções produz nova assinatura/execução; repetição do mesmo mercado
+- [x] Mudança do mercado entre execuções produz nova assinatura/execução; repetição do mesmo mercado
       permanece idempotente.
-- [ ] Falha externa/cancelamento não publica snapshot e chega ao cliente como erro seguro.
-- [ ] A versão do método foi incrementada e snapshots anteriores são considerados desatualizados.
-- [ ] Configuração ausente/placeholder/timeout inválido falha cedo, não aparece em `repr` e está
+- [x] Falha externa/cancelamento não publica snapshot e chega ao cliente como erro seguro.
+- [x] A versão do método foi incrementada e snapshots anteriores são considerados desatualizados.
+- [x] Configuração ausente/placeholder/timeout inválido falha cedo, não aparece em `repr` e está
       presente em todos os Compose/exemplos sem valor real.
 
 ### Validação obrigatória
@@ -478,10 +478,30 @@ etapa devem injetar fakes e nunca alcançar rede.
 
 ### Evidências e handoff
 
-- Arquivos alterados: ainda não iniciado.
-- Decisões tomadas: ainda não iniciado.
-- Validações executadas: ainda não iniciado.
-- Observações para E03: ainda não iniciado.
+- Arquivos alterados: `application/{compliance_analysis.py,compliance_fact_providers.py,
+  project_compliance.py}` tornam `ClassificadorMercadoPort` obrigatório, propagam `Mercado` e geram
+  os fatos assinados; `zeny_project_handler_server/{config.py,composition.py,compliance_api.py,
+  job_manager.py}` configuram o gateway único e o erro seguro; os três Compose, `.env-example` e
+  `server/env.release.example` propagam conexão/timeout; testes unitários, de integração e servidor
+  afetados usam `tests/market_fakes.py`. `compliance_evaluation.py` permaneceu inalterado.
+- Decisões tomadas: uma única consulta ocorre depois de carregar a sessão semântica, com
+  `sessao.projeto.nome`; o enum externo é a única fonte e publica, no projeto e em cada região,
+  apenas `rede.contexto_urbano` ou `rede.contexto_rural`, confiança `1`, origem estável “consulta ao
+  cadastro de Notas de Serviço” e nenhuma evidência PDF. O fato participa da assinatura, a versão do
+  método passou de `7` para `8` e a semântica existente de `when` foi preservada sem filtro paralelo.
+  Pipeline e reanálise recebem a mesma instância de analisador/gateway. A conexão é obrigatória,
+  `repr=False`, não entra em core settings nem logs; timeout padrão `15` é validado como positivo.
+- Validações executadas: precondição E01 revalidada em `test_sql_server_market.py` — **21 passed**.
+  Gates obrigatórios da E02: unitários focados — **67 passed**; integração de conformidade/pipeline —
+  **19 passed**; configuração/API/jobs — **29 passed**; `mypy` — **Success, 301 source files**.
+  Verificação ampliada: suíte unitária — **488 passed**; suíte servidor — **87 passed**; composição,
+  empacotamento estático e painéis — **26 passed**; integrações HTTP afetadas — **8 passed** após
+  substituir a composição real remanescente por fake explícito; teste HTTP do pipeline renomeado —
+  **2 passed**. `ruff check` — **All checks passed**; `ruff format --check` — **302 files already
+  formatted**; `git diff --check` sem erros de whitespace (apenas avisos de conversão LF/CRLF).
+- Observações para E03: documentar as novas variáveis e executar os gates de imagem/release previstos
+  nessa etapa, mantendo a injeção de fake nos testes normais. Nenhuma credencial real foi usada,
+  nenhum acesso ao SQL Server ocorreu e o `.env` real não foi lido ou alterado.
 
 ---
 
