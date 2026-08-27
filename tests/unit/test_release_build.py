@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import pytest
+from scripts.build_client import _pyinstaller_environment
 from scripts.build_release import (
     ReleaseBuildError,
     _render_server_environment,
@@ -14,6 +15,29 @@ from scripts.build_release import (
 from scripts.release_artifact_gate import _validate_sha256s
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_pyinstaller_build_environment_excludes_external_dll_and_qt_paths() -> None:
+    environment = _pyinstaller_environment(
+        {
+            "SYSTEMROOT": "C:/Windows",
+            "PATH": "C:/runtime/poppler;C:/runtime/ffmpeg",
+            "PYTHONHOME": "C:/external-python",
+            "PYTHONPATH": "C:/external-modules",
+            "QML2_IMPORT_PATH": "C:/external-qml",
+            "QT_PLUGIN_PATH": "C:/external-qt",
+            "PRESERVED": "yes",
+        }
+    )
+
+    assert environment["PATH"].split(";") == [
+        "C:\\Windows\\System32",
+        "C:\\Windows",
+        "C:\\Windows\\System32\\Wbem",
+    ]
+    assert environment["PRESERVED"] == "yes"
+    for name in ("PYTHONHOME", "PYTHONPATH", "QML2_IMPORT_PATH", "QT_PLUGIN_PATH"):
+        assert name not in environment
 
 
 def test_release_version_must_be_stable_semver_and_match_all_packages() -> None:
@@ -37,6 +61,10 @@ def test_release_compose_is_image_only_and_server_environment_is_separate(tmp_pa
     environment = destination.read_text(encoding="utf-8")
     assert "ZENY_SERVER_IMAGE=zeny-project-handler-server:0.1.0" in environment
     assert "ZENY_SERVER_PASSWORD=troque-por-uma-senha-longa-e-aleatoria" in environment
+    assert (
+        "ZENY_MARKET_SQLSERVER_CONNECTION_STRING=troque-por-uma-string-de-conexao-sql-server"
+    ) in environment
+    assert "ZENY_MARKET_SQLSERVER_TIMEOUT_SECONDS=15" in environment
     assert "ZENY_CLIENT" not in environment
     assert "@ZENY_SERVER_IMAGE@" not in environment
 
@@ -53,6 +81,9 @@ def test_release_sources_document_load_lifecycle_backup_and_rollback() -> None:
         "atualizar",
         "rollback",
         "trocar a senha",
+        "zeny_market_sqlserver_connection_string",
+        "trustservercertificate=no",
+        "select",
     ):
         assert requirement in guide
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")

@@ -82,6 +82,25 @@ def test_documentation_client_depends_only_on_dtos_gateway_and_qt() -> None:
     assert all(name not in client_source for name in forbidden_payload_names)
 
 
+def test_market_sql_server_configuration_is_server_only() -> None:
+    forbidden_name = "ZENY_MARKET_SQLSERVER_CONNECTION_STRING"
+    protected_roots = (
+        ROOT / "src" / "zeny_project_handler_client",
+        ROOT / "src" / "zeny_project_handler_contracts",
+    )
+
+    violations = [
+        path.relative_to(ROOT).as_posix()
+        for protected_root in protected_roots
+        for path in protected_root.rglob("*")
+        if path.is_file()
+        and path.suffix in {".py", ".json", ".toml"}
+        and forbidden_name in path.read_text(encoding="utf-8")
+    ]
+
+    assert not violations
+
+
 def test_docker_build_is_multistage_non_root_with_ocr_and_no_build_secret() -> None:
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     normalized = dockerfile.casefold()
@@ -106,7 +125,13 @@ def test_docker_build_is_multistage_non_root_with_ocr_and_no_build_secret() -> N
     assert re.search(r"^USER\s+(?!root\b)\S+", dockerfile, flags=re.MULTILINE)
     assert "healthcheck" in normalized
     assert "arg zeny_server_password" not in normalized
+    assert "arg zeny_market_sqlserver" not in normalized
     assert not re.search(r"^ENV\s+.*ZENY_SERVER_PASSWORD", dockerfile, flags=re.MULTILINE)
+    assert not re.search(
+        r"^ENV\s+.*ZENY_MARKET_SQLSERVER",
+        dockerfile,
+        flags=re.MULTILINE,
+    )
     assert "copy .env" not in normalized
     assert "--workers" not in normalized
     assert "copy src ./src" not in normalized
@@ -128,7 +153,9 @@ def test_compose_injects_secret_at_runtime_and_mounts_persistent_data() -> None:
     compose = (ROOT / "compose.yaml").read_text(encoding="utf-8")
 
     assert "${ZENY_SERVER_PASSWORD:" in compose
+    assert "${ZENY_MARKET_SQLSERVER_CONNECTION_STRING:?" in compose
     assert "ZENY_SERVER_PASSWORD" not in (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    assert "ZENY_MARKET_SQLSERVER" not in (ROOT / "Dockerfile").read_text(encoding="utf-8")
     assert "zeny-data:/data" in compose
     assert "target: runtime" in compose
     assert "healthcheck:" in compose

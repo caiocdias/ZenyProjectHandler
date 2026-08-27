@@ -73,8 +73,11 @@ def test_server_settings_load_supported_runtime_values(tmp_path: Path) -> None:
     assert settings.market_sqlserver_timeout_seconds == 7
     assert "senha longa de teste" not in repr(settings)
     assert MARKET_CONNECTION not in repr(settings)
+    assert "market_sqlserver_connection_string" not in repr(settings)
+    assert "market_sqlserver_timeout_seconds" not in repr(settings)
     assert not hasattr(settings.core_settings(), "password")
     assert not hasattr(settings.core_settings(), "market_sqlserver_connection_string")
+    assert not hasattr(settings.core_settings(), "market_sqlserver_timeout_seconds")
 
 
 @pytest.mark.parametrize(

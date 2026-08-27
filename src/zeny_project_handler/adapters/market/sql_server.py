@@ -57,7 +57,7 @@ class ClassificadorMercadoSqlServer:
     """Consulte exatamente uma classificação por conexão ODBC curta."""
 
     connection_string: str = field(repr=False)
-    timeout_seconds: int = 15
+    timeout_seconds: int = field(default=15, repr=False)
     connection_factory: FabricaConexao = field(default=_conectar_pyodbc, repr=False)
 
     def __post_init__(self) -> None:

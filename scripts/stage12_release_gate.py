@@ -29,6 +29,7 @@ if str(ROOT) not in sys.path:
 from scripts.stage11_parity_gate import _run_packaged_ui_smoke  # noqa: E402
 
 PLACEHOLDER = "troque-por-uma-senha-longa-e-aleatoria"
+MARKET_CONNECTION_PLACEHOLDER = "troque-por-uma-string-de-conexao-sql-server"
 
 
 class GateError(RuntimeError):
@@ -40,6 +41,7 @@ def main() -> int:
     parser.add_argument("--release-dir", type=Path, required=True)
     parser.add_argument("--wheel", type=Path, required=True)
     parser.add_argument("--client-manifest", type=Path, required=True)
+    parser.add_argument("--pyinstaller-python", type=Path, default=Path(sys.executable))
     arguments = parser.parse_args()
     suffix = uuid4().hex[:10]
     project = f"zph-stage12-{suffix}"
@@ -74,12 +76,22 @@ def main() -> int:
                 raise GateError("docker load não restaurou o digest registrado no manifesto")
 
             password = secrets.token_urlsafe(36)
+            market_password = secrets.token_urlsafe(36)
+            market_connection = (
+                "Driver={ODBC Driver 18 for SQL Server};"
+                "Server=stage12.invalid;Database=fixture;Uid=fixture;"
+                f"Pwd={market_password};Encrypt=yes;TrustServerCertificate=no"
+            )
             port = _available_port()
             environment_file = server_host / ".env"
             environment = (server_host / ".env-example").read_text(encoding="utf-8")
-            environment = environment.replace(PLACEHOLDER, password).replace(
-                "ZENY_SERVER_PORT=8000",
-                f"ZENY_SERVER_PORT={port}",
+            environment = (
+                environment.replace(PLACEHOLDER, password)
+                .replace(MARKET_CONNECTION_PLACEHOLDER, market_connection)
+                .replace(
+                    "ZENY_SERVER_PORT=8000",
+                    f"ZENY_SERVER_PORT={port}",
+                )
             )
             environment_file.write_text(environment, encoding="utf-8", newline="\n")
             compose_prefix = [
@@ -123,7 +135,11 @@ def main() -> int:
             _assert_project_visible(base_url, password, project_id)
             recreated = _run([*compose_prefix, "ps", "-q", "server"]).stdout.strip()
             _assert_runtime_boundary(recreated, digest)
-            _assert_secret_absent(recreated, password, client_host)
+            _assert_secrets_absent(
+                recreated,
+                (password, market_connection, market_password),
+                client_host,
+            )
             _run(
                 [
                     sys.executable,
@@ -134,6 +150,8 @@ def main() -> int:
                     str(arguments.wheel.resolve()),
                     "--client-manifest",
                     str(arguments.client_manifest.resolve()),
+                    "--pyinstaller-python",
+                    str(arguments.pyinstaller_python.resolve()),
                     "--image",
                     image,
                 ],
@@ -141,7 +159,10 @@ def main() -> int:
             )
             server_gate_environment = temporary / "server-secret.env"
             server_gate_environment.write_text(
-                f"ZENY_SERVER_PASSWORD={password}\n",
+                (
+                    f"ZENY_SERVER_PASSWORD={password}\n"
+                    f"ZENY_MARKET_SQLSERVER_CONNECTION_STRING={market_connection}\n"
+                ),
                 encoding="utf-8",
             )
             _run(
@@ -210,6 +231,7 @@ def _assert_distribution_boundary(client_host: Path, server_host: Path, version:
         ".env-example",
         "LEIA-ME-SERVIDOR.md",
         "server-sbom.json",
+        "THIRD_PARTY_NOTICES.md",
     }:
         raise GateError("o host Docker recebeu arquivos além do kit servidor")
     forbidden = {"src", "tests", "client", "server", "dockerfile", "pyproject.toml", ".git"}
@@ -288,11 +310,14 @@ def _json_request(
         return 0, {}
 
 
-def _assert_secret_absent(container: str, password: str, client_host: Path) -> None:
+def _assert_secrets_absent(
+    container: str,
+    secrets_to_check: tuple[str, ...],
+    client_host: Path,
+) -> None:
     logs = _run(["docker", "logs", container]).stdout.encode()
-    secret = password.encode()
-    if secret in logs or b"authorization" in logs.lower():
-        raise GateError("segredo/header encontrado nos logs do kit servidor")
+    if b"authorization" in logs.lower():
+        raise GateError("header de autorização encontrado nos logs do kit servidor")
     probe = (
         "import sys; from pathlib import Path; secret=sys.stdin.buffer.read(); found=False; "
         "files=(p for p in Path('/data').rglob('*') if p.is_file()); "
@@ -301,18 +326,23 @@ def _assert_secret_absent(container: str, password: str, client_host: Path) -> N
         " except OSError:\n  pass\n"
         "raise SystemExit(1 if found else 0)"
     )
-    completed = subprocess.run(
-        ["docker", "exec", "-i", container, "python", "-c", probe],
-        input=secret,
-        capture_output=True,
-        timeout=120,
-        check=False,
-    )
-    if completed.returncode != 0:
-        raise GateError("segredo runtime encontrado no volume")
-    for path in client_host.rglob("*"):
-        if path.is_file() and secret in path.read_bytes():
-            raise GateError("segredo runtime encontrado no pacote/host cliente")
+    client_files = tuple(path for path in client_host.rglob("*") if path.is_file())
+    for secret_text in secrets_to_check:
+        secret = secret_text.encode()
+        if secret in logs:
+            raise GateError("segredo runtime encontrado nos logs do kit servidor")
+        completed = subprocess.run(
+            ["docker", "exec", "-i", container, "python", "-c", probe],
+            input=secret,
+            capture_output=True,
+            timeout=120,
+            check=False,
+        )
+        if completed.returncode != 0:
+            raise GateError("segredo runtime encontrado no volume")
+        for path in client_files:
+            if secret in path.read_bytes():
+                raise GateError("segredo runtime encontrado no pacote/host cliente")
 
 
 class _IncompatibleHandler(BaseHTTPRequestHandler):

@@ -143,6 +143,7 @@ def build_release(
     image_metadata = _image_metadata(image_reference, version)
     image_digest = str(image_metadata["Id"])
     shutil.copy2(ROOT / "server" / "compose.release.yaml", server_directory)
+    shutil.copy2(ROOT / "THIRD_PARTY_NOTICES.md", server_directory)
     _render_server_environment(image_reference, server_directory / ".env-example")
     _render_server_guide(
         version,
@@ -198,6 +199,7 @@ def build_release(
                 "server/.env-example",
                 "server/LEIA-ME-SERVIDOR.md",
                 "server/server-sbom.json",
+                "server/THIRD_PARTY_NOTICES.md",
             ],
             "common_integrity": [
                 "RELEASE_NOTES.md",
@@ -224,6 +226,8 @@ def build_release(
         str(client_wheel),
         "--client-manifest",
         str(built_client / "client-manifest.json"),
+        "--pyinstaller-python",
+        str(client_python),
         "--image",
         image_reference,
     )
@@ -385,6 +389,11 @@ Esta release substitui o painel de importação/backup por **Exportar**. O servi
 anotado e as planilhas Excel de Resultados, Documentação e Conformidade; o cliente baixa os arquivos
 com validação de tamanho e SHA-256. Backup e restauração do volume permanecem responsabilidades do
 administrador do servidor.
+
+A classificação rural/urbana da conformidade consulta o SQL Server externo uma vez por execução.
+O administrador deve configurar a conexão ODBC com TLS e login de `SELECT` mínimo no `.env`; falha,
+ausência ou resposta inválida interrompe a análise sem fallback. Depois de uma alteração no
+cadastro externo, execute novamente **Analisar conformidade** para criar o snapshot atualizado.
 
 O cliente deve ser distribuído somente aos usuários finais; o kit servidor, somente aos
 administradores. Ambos podem receber também os três arquivos comuns de notas e integridade. Não

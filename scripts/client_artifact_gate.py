@@ -57,13 +57,19 @@ def main() -> int:
     parser.add_argument("--wheel", type=Path)
     parser.add_argument("--zip", dest="bundle_zip", type=Path)
     parser.add_argument("--manifest", type=Path)
+    parser.add_argument("--pyinstaller-python", type=Path, default=Path(sys.executable))
     arguments = parser.parse_args()
     violations = _source_violations()
     if not arguments.source_only:
         if arguments.wheel is None or arguments.bundle_zip is None:
             parser.error("--wheel e --zip são obrigatórios fora de --source-only")
         violations.extend(_wheel_violations(arguments.wheel))
-        violations.extend(_bundle_violations(arguments.bundle_zip))
+        violations.extend(
+            _bundle_violations(
+                arguments.bundle_zip,
+                pyinstaller_python=arguments.pyinstaller_python,
+            )
+        )
         if arguments.manifest is not None:
             violations.extend(
                 _outer_manifest_violations(
@@ -135,7 +141,7 @@ def _wheel_violations(path: Path) -> list[str]:
     return violations
 
 
-def _bundle_violations(path: Path) -> list[str]:
+def _bundle_violations(path: Path, *, pyinstaller_python: Path) -> list[str]:
     violations: list[str] = []
     with ZipFile(path) as archive:
         names = archive.namelist()
@@ -173,16 +179,27 @@ def _bundle_violations(path: Path) -> list[str]:
             name = str(component.get("name", "")).casefold()
             if any(item in name for item in FORBIDDEN_DEPENDENCIES):
                 violations.append(f"dependência protegida no SBOM: {name}")
-        violations.extend(_pyinstaller_archive_violations(path, archive.read(executable_name)))
+        violations.extend(
+            _pyinstaller_archive_violations(
+                path,
+                archive.read(executable_name),
+                pyinstaller_python=pyinstaller_python,
+            )
+        )
     return violations
 
 
-def _pyinstaller_archive_violations(zip_path: Path, executable: bytes) -> list[str]:
+def _pyinstaller_archive_violations(
+    zip_path: Path,
+    executable: bytes,
+    *,
+    pyinstaller_python: Path,
+) -> list[str]:
     temporary = zip_path.with_suffix(".gate-executable.tmp.exe")
     try:
         temporary.write_bytes(executable)
         command = [
-            sys.executable,
+            str(pyinstaller_python),
             "-m",
             "PyInstaller.utils.cliutils.archive_viewer",
             "-l",

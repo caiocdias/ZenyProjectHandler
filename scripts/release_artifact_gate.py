@@ -16,6 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 FORBIDDEN_CLIENT_COMPONENTS = {"alembic", "pymupdf", "sqlalchemy", "tesseract"}
 FORBIDDEN_SERVER_COMPONENTS = {"pyside6", "pyside6_addons", "pyside6_essentials", "shiboken6"}
 PLACEHOLDER = "troque-por-uma-senha-longa-e-aleatoria"
+MARKET_CONNECTION_PLACEHOLDER = "troque-por-uma-string-de-conexao-sql-server"
+MARKET_TIMEOUT = "15"
 
 
 class ReleaseGateError(RuntimeError):
@@ -27,6 +29,7 @@ def main() -> int:
     parser.add_argument("--release-dir", type=Path, required=True)
     parser.add_argument("--wheel", type=Path, required=True)
     parser.add_argument("--client-manifest", type=Path, required=True)
+    parser.add_argument("--pyinstaller-python", type=Path, default=Path(sys.executable))
     parser.add_argument("--image")
     arguments = parser.parse_args()
     try:
@@ -34,6 +37,7 @@ def main() -> int:
             arguments.release_dir.resolve(),
             wheel=arguments.wheel.resolve(),
             client_manifest=arguments.client_manifest.resolve(),
+            pyinstaller_python=arguments.pyinstaller_python.resolve(),
             image=arguments.image,
         )
     except (OSError, ReleaseGateError, ValueError, KeyError, json.JSONDecodeError) as error:
@@ -49,6 +53,7 @@ def validate_release(
     *,
     wheel: Path,
     client_manifest: Path,
+    pyinstaller_python: Path = Path(sys.executable),
     image: str | None,
 ) -> dict[str, object]:
     manifest_path = release_dir / "release-manifest.json"
@@ -92,6 +97,8 @@ def validate_release(
             str(client_zip),
             "--manifest",
             str(client_manifest),
+            "--pyinstaller-python",
+            str(pyinstaller_python),
         ],
         "gate interno do cliente",
     )
@@ -129,6 +136,7 @@ def _expected_paths(version: str) -> set[str]:
         "server/.env-example",
         "server/LEIA-ME-SERVIDOR.md",
         "server/server-sbom.json",
+        "server/THIRD_PARTY_NOTICES.md",
         "RELEASE_NOTES.md",
         "release-manifest.json",
         "SHA256SUMS.txt",
@@ -186,6 +194,13 @@ def _validate_compose_and_environment(release_dir: Path, image_reference: str) -
     environment = environment_path.read_text(encoding="utf-8")
     if f"ZENY_SERVER_PASSWORD={PLACEHOLDER}" not in environment:
         raise ReleaseGateError(".env-example não contém o placeholder fail-closed esperado")
+    if (
+        "ZENY_MARKET_SQLSERVER_CONNECTION_STRING="
+        f"{MARKET_CONNECTION_PLACEHOLDER}" not in environment
+    ):
+        raise ReleaseGateError(".env-example não contém o placeholder fail-closed do SQL Server")
+    if f"ZENY_MARKET_SQLSERVER_TIMEOUT_SECONDS={MARKET_TIMEOUT}" not in environment:
+        raise ReleaseGateError(".env-example não fixa o timeout SQL Server esperado")
     if f"ZENY_SERVER_IMAGE={image_reference}" not in environment:
         raise ReleaseGateError(".env-example não fixa a tag da release")
     if "ZENY_CLIENT" in environment or "@ZENY_" in environment:
@@ -215,6 +230,15 @@ def _validate_compose_and_environment(release_dir: Path, image_reference: str) -
     service = configuration["services"]["server"]
     if "build" in service or service.get("image") != image_reference:
         raise ReleaseGateError("configuração resolvida do Compose diverge da imagem da release")
+    service_environment = service.get("environment", {})
+    if (
+        not isinstance(service_environment, dict)
+        or service_environment.get("ZENY_MARKET_SQLSERVER_CONNECTION_STRING")
+        != MARKET_CONNECTION_PLACEHOLDER
+    ):
+        raise ReleaseGateError("Compose não preserva a conexão SQL Server somente em runtime")
+    if str(service_environment.get("ZENY_MARKET_SQLSERVER_TIMEOUT_SECONDS")) != MARKET_TIMEOUT:
+        raise ReleaseGateError("Compose não preserva o timeout SQL Server positivo")
 
 
 def _validate_sboms(release_dir: Path, version: str) -> None:
@@ -247,6 +271,18 @@ def _validate_sboms(release_dir: Path, version: str) -> None:
         raise ReleaseGateError(
             "SBOM do servidor não cobre runtimes Python, OCR e ODBC obrigatórios"
         )
+    server_versions = {
+        str(item["name"]).casefold(): str(item["version"]) for item in server["components"]
+    }
+    expected_odbc_versions = {
+        "pyodbc": "5.3.0",
+        "msodbcsql18": "18.6.2.1-1",
+        "unixodbc": "2.3.11-2+deb12u1",
+    }
+    if any(
+        server_versions.get(name) != version for name, version in expected_odbc_versions.items()
+    ):
+        raise ReleaseGateError("SBOM do servidor diverge das versões ODBC fixadas")
     applications = [item for item in client["components"] if item["type"] == "application"]
     if not applications or applications[0]["version"] != version:
         raise ReleaseGateError("versão do cliente diverge em sua SBOM")
@@ -290,6 +326,7 @@ def _validate_guides(release_dir: Path, version: str, image: str, digest: str) -
     client = (release_dir / "client" / "LEIA-ME-CLIENTE.md").read_text(encoding="utf-8")
     server = (release_dir / "server" / "LEIA-ME-SERVIDOR.md").read_text(encoding="utf-8")
     notes = (release_dir / "RELEASE_NOTES.md").read_text(encoding="utf-8")
+    notices = (release_dir / "server" / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
     if "ZenyProjectHandler.exe" not in client or "senha nunca é salva" not in client:
         raise ReleaseGateError("guia do cliente não cobre execução/conexão segura")
     required = (
@@ -301,11 +338,17 @@ def _validate_guides(release_dir: Path, version: str, image: str, digest: str) -
         "down -v",
         "rollback",
         "firewall",
+        "ZENY_MARKET_SQLSERVER_CONNECTION_STRING",
+        "TrustServerCertificate=no",
+        "SELECT",
     )
     if any(item.casefold() not in server.casefold() for item in required):
         raise ReleaseGateError("guia do servidor não cobre instalação/operação/rollback completos")
     if version not in notes or API_VERSION not in notes or ALEMBIC_REVISION not in notes:
         raise ReleaseGateError("release notes não registram versões de produto/API/schema")
+    for component in ("pyodbc", "msodbcsql18", "unixODBC"):
+        if component.casefold() not in notices.casefold():
+            raise ReleaseGateError(f"notices do servidor omitem {component}")
     if "@IMAGE_" in server or "@RELEASE_" in server:
         raise ReleaseGateError("guia do servidor contém token não renderizado")
 

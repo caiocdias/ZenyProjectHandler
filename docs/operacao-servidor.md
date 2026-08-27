@@ -43,10 +43,12 @@ host nem do pacote do cliente.
 3. Confira o digest recebido com o manifesto da distribuição. Não use `latest` em produção.
 4. Defina `ZENY_SERVER_IMAGE=<imagem>@sha256:<digest-aprovado>` no `.env`; essa referência é a
    unidade de atualização e rollback do Compose.
-5. Copie `.env-example` para `.env`; gere uma senha longa e aleatória e substitua somente o valor
-   de `ZENY_SERVER_PASSWORD`. O placeholder impede o startup.
-6. Mantenha `.env` fora de Git, backups genéricos do checkout, tickets e mensagens. O segredo entra
-   somente como ambiente runtime; não use `ARG`, `ENV` de Dockerfile nem imagem derivada com senha.
+5. Copie `.env-example` para `.env`; gere uma senha longa e aleatória e configure também a string
+   ODBC secreta em `ZENY_MARKET_SQLSERVER_CONNECTION_STRING`. Os dois placeholders impedem o
+   startup. Mantenha `ZENY_MARKET_SQLSERVER_TIMEOUT_SECONDS` como inteiro positivo; o padrão é 15.
+6. Mantenha `.env` fora de Git, backups genéricos do checkout, tickets e mensagens. Os segredos
+   entram somente como ambiente runtime; não use `ARG`, `ENV` de Dockerfile nem imagem derivada com
+   senha ou conexão.
 7. Defina `ZENY_SERVER_BIND_ADDRESS`, `ZENY_SERVER_PORT`, memória e PIDs. Não altere
    `ZENY_SERVER_DATA_DIR=/data`.
 8. Inicie sem reconstruir a imagem recebida:
@@ -63,11 +65,59 @@ Não escale réplicas enquanto jobs, coordenação e credenciais efêmeras forem
 No cliente de outra máquina, extraia o ZIP Windows, abra `ZenyProjectHandler.exe` e informe
 `http://<ipv4-privado-do-servidor>:<porta>` e a senha. A URL pode ser lembrada; a senha não.
 
+## Dependência SQL Server de mercado
+
+O cadastro de Notas de Serviço no SQL Server é a única fonte da classificação rural/urbana. Em
+cada execução de conformidade, o servidor consulta uma vez, sem cache:
+
+```sql
+SELECT NOTAS_COD_MERCADO FROM TB_NOTAS WHERE NOTAS_NUM_NS = ?;
+```
+
+A NS permanece texto de 10 dígitos no produto e é vinculada como inteiro apenas nessa consulta;
+nunca é interpolada no SQL. O login dedicado deve possuir somente acesso ao banco e `SELECT` nas
+colunas `NOTAS_NUM_NS` e `NOTAS_COD_MERCADO` de `TB_NOTAS`. Não conceda `INSERT`, `UPDATE`,
+`DELETE`, DDL ou privilégio administrativo.
+
+Configure Microsoft ODBC Driver 18 com `Encrypt=yes` e `TrustServerCertificate=no`. Se a autoridade
+certificadora for privada, incorpore a CA confiável à imagem pelo processo de distribuição aprovado;
+não desabilite a validação. Confirme DNS, rota e firewall a partir do container, além do schema
+padrão do login que resolve `TB_NOTAS`. O timeout positivo vale para abertura e execução da
+consulta.
+
+O comportamento é fail-closed: zero ou múltiplas linhas, `NULL`, valor diferente de `RURAL` ou
+`URBANO`, timeout e erro de driver encerram o job com mensagem segura, sem novo snapshot e sem
+fallback por metadado, OCR ou valor anterior. Dados e snapshots já persistidos não são apagados. O
+healthcheck HTTP não consulta o SQL Server e não comprova sua prontidão.
+
+A alteração de mercado no sistema externo não invalida um snapshot de forma espontânea, pois a
+consulta fornecida não oferece versão/evento. Depois da mudança, execute **Analisar conformidade**:
+a nova consulta entra na assinatura dos fatos e produz a execução coerente com o mercado atual.
+
+### Smoke opt-in de homologação
+
+O smoke somente leitura existe dentro da imagem e não participa dos testes normais. Sem opt-in
+exato, ele não abre conexão e retorna código 2. Com uma `.env` segura e uma NS autorizada:
+
+```powershell
+$env:ZENY_MARKET_SQLSERVER_SMOKE_ENABLED = "1"
+$env:ZENY_MARKET_SQLSERVER_SMOKE_NS = "<NS-de-homologacao-com-10-digitos>"
+docker compose --env-file .env -f compose.release.yaml run --rm --no-deps `
+  -e ZENY_MARKET_SQLSERVER_SMOKE_ENABLED -e ZENY_MARKET_SQLSERVER_SMOKE_NS `
+  --entrypoint python server -m zeny_project_handler_server.market_smoke
+Remove-Item Env:ZENY_MARKET_SQLSERVER_SMOKE_ENABLED, Env:ZENY_MARKET_SQLSERVER_SMOKE_NS
+```
+
+Rode separadamente para uma NS `RURAL` e uma `URBANO`. O comando não recebe a conexão na linha de
+comando e imprime somente aprovação/mercado ou erro opaco; não anexe `.env` nem use o modo verbose
+do Compose como evidência.
+
 ## Health, prontidão e logs
 
 `GET /health/live` é público e responde apenas `{"live":true}`. O container só fica healthy depois
-que o lifecycle ASGI terminou; ainda assim, a prova operacional de prontidão é a conexão autenticada
-do cliente ou `GET /api/v1/session` com `ready=true`.
+que o lifecycle ASGI terminou; ainda assim, a prova operacional de prontidão da API é a conexão
+autenticada do cliente ou `GET /api/v1/session` com `ready=true`. A prontidão do SQL Server exige o
+smoke opt-in ou uma execução de conformidade autorizada.
 
 Comandos de diagnóstico que não exibem a senha:
 
@@ -78,8 +128,9 @@ docker compose logs --since 30m server
 ```
 
 Os logs da aplicação também ficam sob `/data/logs`, com rotação. Headers `Authorization`, senha do
-servidor e senhas de PDF não são registrados. Preserve o `correlation_id` mostrado ao usuário ao
-abrir um incidente. Não anexe `.env`, banco, backup ou logs sem revisar dados sensíveis do projeto.
+servidor, string ODBC e senhas de PDF não são registrados. Preserve o `correlation_id` mostrado ao
+usuário ao abrir um incidente. Não anexe `.env`, banco, backup ou logs sem revisar dados sensíveis
+do projeto.
 
 Ausência do Tesseract ou do idioma português aparece no diagnóstico OCR autenticado. Ela degrada
 somente OCR; o servidor continua ready e mantém extração nativa. Reinstale a imagem oficial para
@@ -122,6 +173,9 @@ fora do host e do próprio volume. Registre horário, digest, versão da imagem 
 Teste regularmente a restauração do snapshot em um volume descartável. Nunca copie somente o SQLite
 em execução, monte uma pasta de cliente como armazenamento permanente nem valide uma restauração
 sobre produção.
+
+O `.env`, a string ODBC e o timeout não pertencem ao volume e não devem ser anexados ao backup.
+Proteja/rotacione os segredos pelo cofre ou canal administrativo e reconfigure-os no host restaurado.
 
 ## Cutover da versão monolítica
 
@@ -182,6 +236,17 @@ volume falho depois do aceite e da retenção definida pela operação.
 A troca não altera o volume nem inclui a senha em backup. Não mantenha a senha antiga comentada no
 arquivo.
 
+## Rotação da conexão SQL Server
+
+1. Provisione e valide o novo login de `SELECT` mínimo por canal seguro.
+2. Substitua apenas `ZENY_MARKET_SQLSERVER_CONNECTION_STRING` no `.env`; não mantenha o valor antigo
+   comentado.
+3. Recrie o container com `up -d --no-build --force-recreate`.
+4. Execute os dois smokes autorizados e uma reanálise controlada; confira logs sem modo verbose.
+5. Revogue a credencial anterior conforme a janela acordada.
+
+A rotação não altera o volume, a API ou o cliente e a conexão nunca deve integrar backup.
+
 ## Recuperação de falhas
 
 | Sintoma | Conduta segura |
@@ -192,6 +257,8 @@ arquivo.
 | migração falhou | mantenha o container fora de serviço, guarde logs/digest/volume e aplique rollback compatível ou restauração |
 | OCR ausente | operações nativas continuam; reinstale a imagem validada antes de depender de OCR |
 | senha perdida | defina nova senha runtime e recrie; não existe senha recuperável em banco/imagem |
+| cadastro SQL Server indisponível | preserve o job falho e `correlation_id`; valide rota/TLS/login/timeout com o DBA e o smoke opt-in; não habilite fallback |
+| mercado externo alterado | execute novamente Analisar conformidade; snapshots anteriores permanecem históricos |
 | job interrompido por restart | consulte o histórico; ativo anterior vira falha recuperável, nunca sucesso presumido |
 
 Para parada planejada, use `docker compose stop` e aguarde até 30 segundos para shutdown cooperativo.

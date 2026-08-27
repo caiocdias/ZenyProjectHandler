@@ -4,7 +4,7 @@
 
 O motor compara fatos rastreáveis do projeto com regras declarativas sem transformar ausência de
 evidência em certeza. A revisão distribuída atual é `cemig-normas-distribuicao-2025.6`, com 39 regras
-habilitadas, e o método de conformidade está na versão `7`.
+habilitadas, e o método de conformidade está na versão `8`.
 
 O [catálogo de regras](catalogo-regras-conformidade.md) documenta obrigações e fontes. O
 [inventário normativo](inventario-fontes-normativas.md) registra documentos, revisões, hashes e
@@ -14,6 +14,9 @@ escopo de leitura. Esta página trata somente da implementação.
 
 ```text
 Projeto + sessão semântica persistida
+                |
+                v
+ consulta única de mercado por NS no SQL Server
                 |
                 v
      construção de alvos de conformidade
@@ -34,7 +37,14 @@ Projeto + sessão semântica persistida
 `ExecutarAnaliseConformidade` é a entrada transacional no processo servidor. O fluxo completo do
 projeto e o job criado pelo botão **Analisar conformidade** chamam o mesmo caso de uso. A ação
 explícita reutiliza a sessão semântica persistida e não repete leitura do PDF, extração ou OCR. O
-cliente não carrega registro, provedores, avaliador nem compilador de callouts.
+cliente não carrega registro, provedores, avaliador, classificador de mercado nem compilador de
+callouts.
+
+Depois de carregar a sessão, o caso de uso chama obrigatoriamente `ClassificadorMercadoPort` uma
+vez com o nome/NS vigente do projeto. O adaptador SQL Server executa com parâmetro vinculado
+`SELECT NOTAS_COD_MERCADO FROM TB_NOTAS WHERE NOTAS_NUM_NS = ?;`, converte a NS de 10 dígitos para
+inteiro somente nessa fronteira e aceita exclusivamente `RURAL` ou `URBANO`. A mesma instância
+composta atende ao pipeline completo e à reanálise explícita.
 
 ## Contratos do domínio
 
@@ -84,7 +94,9 @@ continua capaz de apresentar os três estados; o avaliador vigente não cria `NA
    conhecido.
 
 O avaliador genérico está em `application/compliance_evaluation.py`. Ele não conhece geometria,
-topologia, PDF nem normas específicas.
+topologia, PDF, SQL Server, mercado nem normas específicas. As guardas
+`rede.contexto_rural`/`rede.contexto_urbano` permanecem no `when` de cada regra aplicável; não há
+filtro paralelo por mercado.
 
 ## Catálogo de fatos
 
@@ -117,8 +129,27 @@ família não exige alterar o avaliador.
 
 Comentários PDF (`ANOTACAO`) e objetos derivados de sua aparência não podem alimentar fatos
 técnicos. Objetos `AutoCAD SHX Text` identificados como conteúdo técnico são preservados. Contexto
-urbano ou rural só é publicado quando vem de metadado ou campo rotulado permitido, sem inferência
-por token solto.
+urbano ou rural vem exclusivamente do enum retornado pelo SQL Server, nunca de metadado, campo
+rotulado, OCR ou token do PDF. O provedor publica somente o fato correspondente, com confiança 1,
+origem auditável sem dados de conexão e nenhuma evidência PDF, no projeto e em todas as regiões.
+
+## Fronteira operacional do mercado
+
+`ServerSettings` exige `ZENY_MARKET_SQLSERVER_CONNECTION_STRING` fora de `repr` e valida
+`ZENY_MARKET_SQLSERVER_TIMEOUT_SECONDS` como inteiro positivo também fora de `repr`. A projeção de
+core settings, contratos HTTP e pacote cliente não carregam esses campos. O segredo entra somente
+como ambiente runtime do container: não pertence a Dockerfile/camadas, SQLite, `/data`, backups,
+DTOs, respostas ou logs.
+
+O login externo deve possuir somente conexão ao banco e `SELECT` nas duas colunas consultadas de
+`TB_NOTAS`. Microsoft ODBC Driver 18 usa `Encrypt=yes` e `TrustServerCertificate=no`; CA privada
+deve ser confiada na imagem, sem ignorar o certificado. O timeout é aplicado tanto à abertura
+quanto ao cursor/consulta, e cursor e conexão são fechados em sucesso e falha.
+
+Zero/múltiplas linhas, `NULL`, valor inválido, timeout ou erro ODBC geram erros de aplicação seguros
+e interrompem o job antes do commit. Não existe snapshot parcial, fallback, cache persistente ou
+publicação dos dois contextos. O healthcheck HTTP não consulta essa dependência. Testes normais
+injetam fakes; o adaptador real é exercitado apenas pelo smoke opt-in da homologação.
 
 ## Registro configurável
 
@@ -165,6 +196,11 @@ compensação da restauração.
 O ID deriva das assinaturas da entrada. Repetir a mesma sessão, revisão e método é idempotente;
 alterar regras ou método cria outra identidade e conserva o histórico. Um trigger impede a edição do
 snapshot concluído.
+
+O fato de mercado participa da assinatura da sessão. Se a consulta seguinte mudar de `RURAL` para
+`URBANO` ou vice-versa, a reanálise cria outra identidade. Uma alteração apenas no sistema externo
+não marca automaticamente o snapshot antigo como desatualizado, porque a consulta disponível não
+expõe versão ou evento; é necessário acionar **Analisar conformidade** para capturá-la.
 
 O painel considera desatualizado um resultado cuja assinatura das regras ou versão do método não
 corresponde ao estado ativo. O snapshot antigo continua visível até uma reanálise explícita.

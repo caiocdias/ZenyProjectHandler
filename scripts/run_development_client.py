@@ -22,6 +22,8 @@ from zeny_project_handler_contracts.session import SessionCapabilitiesResponse
 
 def main() -> int:
     """Preencha a conexão local sem introduzir credenciais padrão no cliente distribuído."""
+    os.environ.pop("ZENY_MARKET_SQLSERVER_CONNECTION_STRING", None)
+    os.environ.pop("ZENY_MARKET_SQLSERVER_TIMEOUT_SECONDS", None)
     server_url = os.environ.get("ZENY_CLIENT_SERVER_URL", "").strip()
     server_password = os.environ.pop("ZENY_SERVER_PASSWORD", "")
     session_directory_value = os.environ.get("ZENY_LOCAL_SESSION_DIR", "").strip()
@@ -103,7 +105,14 @@ def _stop_server(compose_file: str, compose_project: str, server_password: str) 
             "30",
         ],
         check=False,
-        env={**os.environ, "ZENY_SERVER_PASSWORD": server_password},
+        env={
+            **os.environ,
+            "ZENY_SERVER_PASSWORD": server_password,
+            # O Compose exige a variável para resolver o arquivo, mas `stop` não a usa.
+            # Um sentinela impede que o segredo SQL Server precise existir no processo cliente.
+            "ZENY_MARKET_SQLSERVER_CONNECTION_STRING": "development-stop-not-used",
+            "ZENY_MARKET_SQLSERVER_TIMEOUT_SECONDS": "15",
+        },
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )

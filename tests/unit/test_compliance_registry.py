@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from collections import Counter
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 
@@ -98,6 +100,48 @@ def test_official_2025_6_seed_contains_the_complete_additive_rule_set() -> None:
     assert registry.versao == "cemig-normas-distribuicao-2025.6"
     assert len(registry.regras) == 39
     assert expected_additions <= {item.id for item in registry.regras}
+
+
+def test_every_semantically_rural_or_urban_rule_has_the_matching_guard() -> None:
+    registry = carregar_registro_conformidade_inicial()
+    market_facts = {"rede.contexto_rural", "rede.contexto_urbano"}
+    guarded_counts: Counter[str] = Counter()
+
+    for rule in registry.regras:
+        declared_guards = {
+            condition.chave_fato
+            for condition in rule.aplicabilidade
+            if condition.chave_fato in market_facts
+        }
+        semantic_text = f"{rule.id} {rule.titulo} {rule.descricao}".casefold()
+        expected_guards = {
+            guard
+            for marker, guard in (
+                ("rural", "rede.contexto_rural"),
+                ("urban", "rede.contexto_urbano"),
+            )
+            if marker in semantic_text
+        }
+
+        assert expected_guards <= declared_guards, rule.id
+        assert len(declared_guards) <= 1, rule.id
+        guarded_counts.update(declared_guards)
+
+    assert guarded_counts == Counter(
+        {
+            "rede.contexto_urbano": 16,
+            "rede.contexto_rural": 6,
+        }
+    )
+
+    evaluator = (
+        Path(__file__).parents[2]
+        / "src"
+        / "zeny_project_handler"
+        / "application"
+        / "compliance_evaluation.py"
+    ).read_text(encoding="utf-8")
+    assert all(fact not in evaluator for fact in market_facts)
 
 
 @pytest.mark.parametrize(

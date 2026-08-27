@@ -65,7 +65,10 @@ class ServerSettings:
     job_retention_seconds: int = DEFAULT_JOB_RETENTION_SECONDS
     job_max_retained: int = DEFAULT_JOB_MAX_RETAINED
     transfer_ttl_seconds: int = DEFAULT_TRANSFER_TTL_SECONDS
-    market_sqlserver_timeout_seconds: int = DEFAULT_MARKET_SQLSERVER_TIMEOUT_SECONDS
+    market_sqlserver_timeout_seconds: int = field(
+        default=DEFAULT_MARKET_SQLSERVER_TIMEOUT_SECONDS,
+        repr=False,
+    )
 
     def __post_init__(self) -> None:
         if not self.password.strip() or self.password.strip() == PASSWORD_PLACEHOLDER:

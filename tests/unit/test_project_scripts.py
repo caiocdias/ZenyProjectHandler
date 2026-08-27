@@ -77,6 +77,8 @@ def test_sql_server_driver_provenance_is_pinned_and_documented() -> None:
     notices = script_text("THIRD_PARTY_NOTICES.md")
     release_builder = script_text("scripts/build_release.py")
     release_gate = script_text("scripts/release_artifact_gate.py")
+    client_gate = script_text("scripts/client_artifact_gate.py")
+    distribution_gate = script_text("scripts/stage12_release_gate.py")
     server_lock = script_text("requirements-server.lock")
     locked_components = {
         line.partition("==")[0]
@@ -87,6 +89,10 @@ def test_sql_server_driver_provenance_is_pinned_and_documented() -> None:
     assert "pyodbc==5.3.0" in server_lock
     assert "pyodbc" in locked_components
     assert "pyodbc" in release_gate
+    assert '"--pyinstaller-python"' in release_builder
+    assert '"--pyinstaller-python"' in release_gate
+    assert '"--pyinstaller-python"' in client_gate
+    assert '"--pyinstaller-python"' in distribution_gate
     assert '_locked_components(ROOT / "requirements-server.lock")' in release_builder
     assert "msodbcsql18=18.6.2.1-1" in dockerfile
     assert "unixodbc=2.3.11-2+deb12u1" in dockerfile
@@ -130,6 +136,8 @@ def test_launcher_runs_ephemeral_docker_server_and_stops_it_after_the_client() -
     assert "zeny-data" not in local_compose
     assert "*.bat" in docker_ignore
     assert 'os.environ.pop("ZENY_SERVER_PASSWORD", "")' in development_client
+    assert 'os.environ.pop("ZENY_MARKET_SQLSERVER_CONNECTION_STRING", None)' in (development_client)
+    assert 'os.environ.pop("ZENY_MARKET_SQLSERVER_TIMEOUT_SECONDS", None)' in (development_client)
     assert "dialog.password_input.setText(server_password)" in development_client
     assert "_wait_until_ready" in development_client
     assert "_discard_client_data" in development_client

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import platform
 import shutil
 import subprocess
@@ -61,6 +62,7 @@ def main() -> int:
         "--workpath",
         str(work / "pyinstaller"),
         str(ROOT / "client" / "zeny-client.spec"),
+        environment=_pyinstaller_environment(),
     )
     bundle = bundle_dist / "ZenyProjectHandler"
     shutil.copy2(ROOT / "client" / "LEIA-ME-CLIENTE.md", bundle / "LEIA-ME-CLIENTE.md")
@@ -102,8 +104,26 @@ def main() -> int:
     return 0
 
 
-def _run(*command: str) -> None:
-    subprocess.run(command, cwd=ROOT, check=True)
+def _run(*command: str, environment: dict[str, str] | None = None) -> None:
+    subprocess.run(command, cwd=ROOT, env=environment, check=True)
+
+
+def _pyinstaller_environment(
+    source: dict[str, str] | None = None,
+) -> dict[str, str]:
+    environment = dict(os.environ if source is None else source)
+    system_root = Path(environment.get("SYSTEMROOT", "C:/Windows"))
+    environment["PATH"] = os.pathsep.join(
+        str(path)
+        for path in (
+            system_root / "System32",
+            system_root,
+            system_root / "System32" / "Wbem",
+        )
+    )
+    for name in ("PYTHONHOME", "PYTHONPATH", "QML2_IMPORT_PATH", "QT_PLUGIN_PATH"):
+        environment.pop(name, None)
+    return environment
 
 
 def _record(path: Path) -> dict[str, object]:

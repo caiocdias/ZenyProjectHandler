@@ -158,7 +158,7 @@ todo o aceite e executar as validações obrigatórias. Registre comandos, resul
 |---|---|---|---|---|
 | E01 | Porta e gateway SQL Server | #concluida | nenhuma | Classificador externo isolado, seguro e testado |
 | E02 | Troca da fonte no motor de conformidade | #concluida | E01 | Mercado externo governa fatos e aplicabilidade nos dois fluxos |
-| E03 | Distribuição, documentação e regressão completa | #pendente | E01, E02 | Operação/release documentados e gate automatizado verde |
+| E03 | Distribuição, documentação e regressão completa | #concluida | E01, E02 | Operação/release documentados e gate automatizado verde |
 | E04 | Homologação com o SQL Server real | #bloqueada | E03 | Evidência real de URBANO, RURAL e falha fechada |
 
 ---
@@ -505,7 +505,7 @@ etapa devem injetar fakes e nunca alcançar rede.
 
 ---
 
-## E03 — Distribuição, documentação e regressão completa — #pendente
+## E03 — Distribuição, documentação e regressão completa — #concluida
 
 ### Objetivo
 
@@ -590,17 +590,17 @@ crie commit, publique ou implante sem autorização explícita.
 
 ### Critérios de aceite
 
-- [ ] Configuração ausente/placeholder/timeout inválido falha cedo e de modo seguro.
-- [ ] A variável secreta está em todos os fluxos de Compose/kit e nunca em Dockerfile, imagem,
+- [x] Configuração ausente/placeholder/timeout inválido falha cedo e de modo seguro.
+- [x] A variável secreta está em todos os fluxos de Compose/kit e nunca em Dockerfile, imagem,
       cliente, backup ou log.
-- [ ] Desenvolvimento e testes automatizados não requerem SQL Server real.
-- [ ] O kit inclui driver/dependências/licenças/SBOM necessários e ainda passa os gates de artefato.
-- [ ] Teste de paridade cobre todas as regras rurais/urbanas e confirma as 22 guardas atuais ou
+- [x] Desenvolvimento e testes automatizados não requerem SQL Server real.
+- [x] O kit inclui driver/dependências/licenças/SBOM necessários e ainda passa os gates de artefato.
+- [x] Teste de paridade cobre todas as regras rurais/urbanas e confirma as 22 guardas atuais ou
       registra/corrige divergência comprovada.
-- [ ] Documentação operacional permite a um administrador configurar conexão, TLS, privilégio e
+- [x] Documentação operacional permite a um administrador configurar conexão, TLS, privilégio e
       diagnóstico sem conhecer o código-fonte.
-- [ ] Existe smoke opt-in que não roda acidentalmente e nunca imprime a conexão.
-- [ ] Gate padrão completo e validação de release passam sem redução dos controles existentes.
+- [x] Existe smoke opt-in que não roda acidentalmente e nunca imprime a conexão.
+- [x] Gate padrão completo e validação de release passam sem redução dos controles existentes.
 
 ### Validação obrigatória
 
@@ -617,8 +617,8 @@ build ser executado em ambiente apto.
 
 ### Bloqueios
 
-Nenhum bloqueio conhecido para automação e documentação. A configuração real permanece reservada à
-E04 e não deve ser necessária para concluir esta etapa.
+- Nenhum bloqueio conhecido. O bloqueio anterior foi resolvido após reiniciar o Docker Desktop;
+  `docker version` confirmou Engine `29.7.2` e os gates de imagem/distribuição foram executados.
 
 ### Riscos e mitigação
 
@@ -632,10 +632,41 @@ E04 e não deve ser necessária para concluir esta etapa.
 
 ### Evidências e handoff
 
-- Arquivos alterados: ainda não iniciado.
-- Decisões tomadas: ainda não iniciado.
-- Validações executadas: ainda não iniciado.
-- Observações para E04: ainda não iniciado.
+- Arquivos alterados: `config.py` e o adaptador SQL Server ocultam também o timeout em `repr`;
+  `run_development_client.py` remove conexão/timeout antes de abrir o Qt; `build_client.py` isola o
+  `PATH` do PyInstaller; `build_release.py`, gates de cliente/release/servidor e `stage12_release_gate.py`
+  propagam o inspetor PyInstaller, notices, versões ODBC e auditorias de senha/conexão em imagem,
+  logs, volume e pacote cliente. `market_smoke.py` e seu teste criam o smoke opt-in.
+  `test_compliance_registry.py` audita todo o seed; testes de configuração, arquitetura, scripts,
+  release e gateway foram ampliados. README, guia servidor, exemplos `.env`, operação e arquitetura
+  documentam a fronteira externa.
+- Decisões tomadas: o kit servidor passa a distribuir `THIRD_PARTY_NOTICES.md`; a SBOM deve conter
+  exatamente `pyodbc 5.3.0`, `msodbcsql18 18.6.2.1-1` e `unixodbc 2.3.11-2+deb12u1`. O ensaio de
+  distribuição recebe string ODBC sintética não roteável, mas não executa conformidade/rede, e
+  procura senha, string completa e senha interna em logs, volume e cliente. O smoke fica dentro da
+  imagem, exige `ZENY_MARKET_SQLSERVER_SMOKE_ENABLED=1` mais uma NS por ambiente, retorna código 2
+  sem opt-in e nunca imprime NS/conexão/detalhe ODBC. A auditoria confirmou 39 regras, 16 guardas
+  urbanas, 6 rurais, nenhuma regra com ambas e nenhuma divergência semântica; seed e avaliador não
+  foram alterados. Durante o retry, o primeiro gate agregado revelou que a venv principal não tinha
+  PyInstaller; o interpretador isolado passou a ser propagado sem relaxar a inspeção. O primeiro
+  stage12 revelou ICU 78 do Poppler capturado do `PATH`; o build PyInstaller passou a usar somente
+  diretórios do Windows, o ZIP caiu de 67 MB para 52 MB e o auto-teste/UI com `PATH` mínimo passou.
+- Validações executadas: `docker version` — cliente/Engine **29.7.2**; três Compose com
+  `.env-example` e `config --quiet` — **código 0**; testes focados após os ajustes — **16 passed**;
+  `IniciarTestes.bat` — **APROVADO: 789 passed, cobertura 86,51%**, dependências, Ruff, formato (318
+  arquivos), Mypy (303 arquivos), cliente magro e complexidade com código 0. O comando
+  `.\.venv\Scripts\python.exe scripts\build_release.py --version 0.2.0` — **APROVADO**, com 12
+  arquivos físicos/10 payloads manifestados, SBOM/notices aprovados, archive OCI e imagem
+  `zeny-project-handler-server:0.2.0` no digest
+  `sha256:a7d358d83ad246fd6c5ff4e5fa40548eef9fc2592e838a53cff7a3e985f43763`.
+  `scripts\stage12_release_gate.py` sobre a release exata — **APROVADO**: `docker load`, Compose sem
+  build/binds, cliente empacotado autenticado sem Python no `PATH`, incompatibilidade de API
+  recusada, persistência após recreate e segredos ausentes. Nenhum SQL Server real foi acessado.
+- Observações para E04: usar exclusivamente o comando documentado de
+  `zeny_project_handler_server.market_smoke` dentro da imagem aprovada, uma vez para a NS rural e
+  outra para a urbana. A conexão permanece no `.env` seguro; opt-in/NS são temporários e removidos
+  do ambiente ao terminar. A dependência E03 está satisfeita; E04 continua bloqueada somente até
+  existirem os insumos externos de homologação.
 
 ---
 

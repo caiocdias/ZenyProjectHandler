@@ -332,6 +332,8 @@ def test_gateway_configuration_is_validated_and_secret_is_absent_from_repr() -> 
     gateway, _, _, _ = _gateway([("RURAL",)])
 
     assert CONNECTION_STRING not in repr(gateway)
+    assert "connection_string" not in repr(gateway)
+    assert "timeout_seconds" not in repr(gateway)
 
     with pytest.raises(ValueError, match="string de conexão"):
         ClassificadorMercadoSqlServer("   ")

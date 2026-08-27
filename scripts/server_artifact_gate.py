@@ -1,4 +1,4 @@
-"""Inspecione isolamento, permissões e ausência de segredo na imagem do servidor."""
+"""Inspecione isolamento, permissões e ausência de segredos na imagem do servidor."""
 
 from __future__ import annotations
 
@@ -7,24 +7,32 @@ import json
 import subprocess
 from pathlib import Path
 
+SECRET_ENVIRONMENT_VARIABLES = (
+    "ZENY_SERVER_PASSWORD",
+    "ZENY_MARKET_SQLSERVER_CONNECTION_STRING",
+)
 
-def _read_secret(environment_file: Path | None) -> bytes | None:
+
+def _read_secrets(environment_file: Path | None) -> dict[str, bytes]:
     if environment_file is None or not environment_file.is_file():
-        return None
+        return {}
+    secrets: dict[str, bytes] = {}
     for raw_line in environment_file.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         name, value = line.split("=", 1)
-        if name.strip() == "ZENY_SERVER_PASSWORD":
+        normalized_name = name.strip()
+        if normalized_name in SECRET_ENVIRONMENT_VARIABLES:
             secret = value.strip().encode("utf-8")
-            return secret or None
-    return None
+            if secret:
+                secrets[normalized_name] = secret
+    return secrets
 
 
 def _run_runtime_probe(image: str) -> subprocess.CompletedProcess[str]:
     probe = (
-        "import importlib.util,os,site; from pathlib import Path; "
+        "import importlib.util,os,pyodbc,site; from pathlib import Path; "
         "blocked=('PySide6','zeny_project_handler_client'); "
         "roots=(Path('/app'),*(Path(p) for p in site.getsitepackages())); "
         "bad_name=any(p.name=='.env' for r in roots if r.exists() for p in r.rglob('.env')); "
@@ -99,20 +107,27 @@ def main() -> int:
             "imagem viola permissões runtime, /app vazio, UID/GID ou isolamento do cliente"
         )
     environment = tuple(str(item) for item in configuration.get("Env", ()))
-    if any(item.partition("=")[0] == "ZENY_SERVER_PASSWORD" for item in environment):
-        violations.append("Config.Env da imagem contém ZENY_SERVER_PASSWORD")
+    for variable in SECRET_ENVIRONMENT_VARIABLES:
+        if any(item.partition("=")[0] == variable for item in environment):
+            violations.append(f"Config.Env da imagem contém {variable}")
     if configuration.get("Healthcheck") is None:
         violations.append("imagem não possui healthcheck")
     if history.returncode != 0:
         violations.append("histórico da imagem não pôde ser inspecionado")
-    elif "ZENY_SERVER_PASSWORD" in history.stdout:
-        violations.append("histórico da imagem referencia ZENY_SERVER_PASSWORD")
-    secret = _read_secret(arguments.secret_env_file)
-    if secret is not None:
+    else:
+        for variable in SECRET_ENVIRONMENT_VARIABLES:
+            if variable in history.stdout:
+                violations.append(f"histórico da imagem referencia {variable}")
+    secrets = _read_secrets(arguments.secret_env_file)
+    for variable, secret in secrets.items():
         if secret in inspect.stdout.encode("utf-8") or secret in history.stdout.encode("utf-8"):
-            violations.append("valor runtime foi encontrado nos metadados ou histórico")
+            violations.append(
+                f"valor runtime de {variable} foi encontrado nos metadados ou histórico"
+            )
         if _run_secret_probe(arguments.image, secret).returncode != 0:
-            violations.append("valor runtime foi encontrado no filesystem final da imagem")
+            violations.append(
+                f"valor runtime de {variable} foi encontrado no filesystem final da imagem"
+            )
     if violations:
         print("GATE DO SERVIDOR: REPROVADO")
         for item in violations:
@@ -127,7 +142,7 @@ def main() -> int:
                 "size_bytes": metadata.get("Size"),
                 "user": user,
                 "healthcheck": True,
-                "runtime_secret_checked": secret is not None,
+                "runtime_secrets_checked": sorted(secrets),
             },
             ensure_ascii=False,
         )
