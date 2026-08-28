@@ -528,6 +528,7 @@ def test_export_import_preserves_ids_decisions_and_repairs_missing_photo(
     source_engine = create_sqlite_engine(source_data / "zeny-project-handler.sqlite3")
     upgrade_database(source_engine)
     project, pdf_source = _project_with_real_pdf(tmp_path, catalogo_inicial)
+    project = replace(project, codigos_servico=("9012", "0007"))
     _persist_complete_project(source_engine, catalogo_inicial, project, pdf_source)
     source_service = _service(source_data, source_engine)
     photo_path = _create_png(tmp_path / "photo.png")
@@ -580,6 +581,7 @@ def test_export_import_preserves_ids_decisions_and_repairs_missing_photo(
     assert not tuple(target_data.glob(".z-*"))
 
     assert imported.projeto == expected_project
+    assert imported.projeto.codigos_servico == ("0007", "9012")
     assert imported.projeto.catalogo_versao_id == catalogo_inicial.id
     assert target_service.verificar_integridade(project.id).integro
     with SqlAlchemyUnitOfWork(target_engine) as work:

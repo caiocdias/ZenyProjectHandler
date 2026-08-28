@@ -25,7 +25,11 @@ from zeny_project_handler.domain.enums import (
 )
 from zeny_project_handler.domain.errors import DomainValidationError
 from zeny_project_handler.domain.operations import VinculoObra
-from zeny_project_handler.domain.project_metadata import ContatoSolicitante, MetadadosProjeto
+from zeny_project_handler.domain.project_metadata import (
+    ContatoSolicitante,
+    MetadadosProjeto,
+    normalizar_codigo_servico,
+)
 from zeny_project_handler.domain.values import (
     CoordenadaCampo,
     GeometriaDocumento,
@@ -288,6 +292,7 @@ class Projeto:
     nome: str
     catalogo_versao_id: UUID
     criado_em: datetime
+    codigos_servico: tuple[str, ...] = ()
     documentos: tuple[DocumentoProjeto, ...] = ()
     ordem_leitura_paginas: tuple[UUID, ...] = ()
     elementos: tuple[ElementoProjetoType, ...] = ()
@@ -304,6 +309,11 @@ class Projeto:
         name = required_text(self.nome, field_name="nome")
         if self.criado_em.tzinfo is None:
             raise DomainValidationError("Data de criação do projeto deve possuir fuso horário")
+
+        service_codes = tuple(normalizar_codigo_servico(code) for code in self.codigos_servico)
+        if len(set(service_codes)) != len(service_codes):
+            raise DomainValidationError("Códigos de serviço devem ser únicos")
+        service_codes = tuple(sorted(service_codes))
 
         documents = tuple(self.documentos)
         page_ids = tuple(page.id for document in documents for page in document.paginas)
@@ -342,6 +352,7 @@ class Projeto:
         )
 
         object.__setattr__(self, "nome", name)
+        object.__setattr__(self, "codigos_servico", service_codes)
         object.__setattr__(self, "documentos", documents)
         object.__setattr__(self, "ordem_leitura_paginas", reading_order)
         object.__setattr__(self, "elementos", elements)

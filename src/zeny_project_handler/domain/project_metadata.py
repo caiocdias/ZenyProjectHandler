@@ -10,6 +10,7 @@ from zeny_project_handler.domain.catalog import ExtraAttributes
 from zeny_project_handler.domain.errors import DomainValidationError
 
 NOTA_SERVICO_PATTERN = re.compile(r"^[0-9]{10}$")
+CODIGO_SERVICO_PATTERN = re.compile(r"^[0-9]{4}$")
 ESCALA_PATTERN = re.compile(r"^1:\d+$")
 
 
@@ -23,6 +24,16 @@ def normalizar_numero_ns(value: str) -> str:
     normalized = value.strip()
     if not NOTA_SERVICO_PATTERN.fullmatch(normalized):
         raise DomainValidationError("Número da NS deve conter exatamente 10 dígitos")
+    return normalized
+
+
+def normalizar_codigo_servico(value: str) -> str:
+    """Normalize e valide um código de serviço sem perder zeros à esquerda."""
+    if not isinstance(value, str):
+        raise DomainValidationError("Código de serviço deve conter exatamente 4 dígitos ASCII")
+    normalized = value.strip()
+    if not CODIGO_SERVICO_PATTERN.fullmatch(normalized):
+        raise DomainValidationError("Código de serviço deve conter exatamente 4 dígitos ASCII")
     return normalized
 
 

@@ -8,6 +8,7 @@ from zeny_project_handler_contracts.base import (
     ContractModel,
     NonEmptyString,
     ProjectId,
+    ServiceCode,
     UtcDateTime,
 )
 from zeny_project_handler_contracts.common import DeletionCountsDto, PageMetadataDto
@@ -45,6 +46,17 @@ class CreateProjectRequest(ContractModel):
 
 class UpdateProjectRequest(ContractModel):
     service_note: NonEmptyString
+    expected_project_version: int = Field(ge=0)
+
+
+class ProjectServiceCodesResponse(ContractModel):
+    project_id: ProjectId
+    service_codes: tuple[ServiceCode, ...]
+    project_version: int = Field(ge=0)
+
+
+class ReplaceProjectServiceCodesRequest(ContractModel):
+    service_codes: tuple[ServiceCode, ...]
     expected_project_version: int = Field(ge=0)
 
 

@@ -188,13 +188,13 @@ desbloqueio documentados.
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E01 | Modelo persistente e contrato remoto dos serviços | #pendente | nenhuma | Coleção canônica, rotas GET/PUT e compatibilidade de dados/API |
+| E01 | Modelo persistente e contrato remoto dos serviços | #concluida | nenhuma | Coleção canônica, rotas GET/PUT e compatibilidade de dados/API |
 | E02 | Caixa de serviços no painel Projeto | #pendente | E01 | Inclusão/remoção remota de códigos na posição visual solicitada |
 | E03 | Porta e consulta parametrizada de ações | #pendente | E01 | Verificador existencial de `vBIAcoes` seguro e testado |
 | E04 | Gatilhos, fatos, regras e callouts | #pendente | E01, E03 | Duas pendências auditáveis e localizáveis no PDF |
 | E05 | Integração, documentação e gate final | #pendente | E02, E04 | Fluxo completo validado e documentação operacional pronta |
 
-## E01 — Modelo persistente e contrato remoto dos serviços — #pendente
+## E01 — Modelo persistente e contrato remoto dos serviços — #concluida
 
 ### Objetivo
 
@@ -295,16 +295,16 @@ validações e pendências.
 
 ### Critérios de aceite
 
-- [ ] `0001` e `9999` são aceitos como strings; `1`, `001`, `10000`, espaço interno, sinal, letra,
+- [x] `0001` e `9999` são aceitos como strings; `1`, `001`, `10000`, espaço interno, sinal, letra,
   dígito Unicode e booleano são rejeitados.
-- [ ] A coleção vazia é válida; duplicatas são rejeitadas; a ordem persistida é determinística.
-- [ ] Payload anterior à mudança abre com coleção vazia sem migração ou regravação automática.
-- [ ] Salvar e reabrir, reiniciar o servidor e exportar/importar preservam exatamente a coleção.
-- [ ] GET retorna coleção e versão; PUT substitui toda a coleção e incrementa uma vez a versão.
-- [ ] PUT com versão obsoleta retorna `409 STALE_STATE` sem alteração parcial.
-- [ ] `ProjectDetailDto` e o PATCH de NS continuam com a forma anterior.
-- [ ] O gateway não repete PUT após falha transitória.
-- [ ] A OpenAPI possui as duas operações autenticadas, a versão `1.1.0` e nenhum caminho interno.
+- [x] A coleção vazia é válida; duplicatas são rejeitadas; a ordem persistida é determinística.
+- [x] Payload anterior à mudança abre com coleção vazia sem migração ou regravação automática.
+- [x] Salvar e reabrir, reiniciar o servidor e exportar/importar preservam exatamente a coleção.
+- [x] GET retorna coleção e versão; PUT substitui toda a coleção e incrementa uma vez a versão.
+- [x] PUT com versão obsoleta retorna `409 STALE_STATE` sem alteração parcial.
+- [x] `ProjectDetailDto` e o PATCH de NS continuam com a forma anterior.
+- [x] O gateway não repete PUT após falha transitória.
+- [x] A OpenAPI possui as duas operações autenticadas, a versão `1.1.0` e nenhum caminho interno.
 
 ### Validação obrigatória
 
@@ -345,12 +345,38 @@ Nenhum bloqueio conhecido.
 
 ### Evidências e handoff
 
-- Estado: não iniciado.
-- Arquivos alterados: nenhum.
-- Decisões tomadas: nenhuma além das decisões globais deste roadmap.
-- Validações executadas: nenhuma.
-- Observações para E02/E03: aguardar E01 concluída e usar os nomes finais dos DTOs/métodos registrados
-  aqui.
+- Estado: concluído em 2026-08-28.
+- Arquivos alterados:
+  - domínio e persistência: `domain/project_metadata.py`, `domain/project.py` e testes de codec,
+    persistência/restart/backup e portabilidade; `domain_json.py` e as migrações não precisaram de
+    alteração;
+  - contrato e API: `contracts/base.py`, `contracts/projects.py`, `contracts/versioning.py`,
+    `server/project_api.py`, `server/app.py`, `api_spec/app.py`, `docs/api/openapi-v1.json` e
+    `docs/api/README.md`;
+  - cliente e testes: `client/ui/project_gateway.py`, `tests/remote_gateways.py` e testes de domínio,
+    contratos, OpenAPI, servidor, gateway HTTP, persistência e portabilidade.
+- Decisões tomadas:
+  - `Projeto.codigos_servico` é uma tupla vazia por padrão, rejeita duplicatas e mantém ordem textual
+    crescente depois de validar cada item com `normalizar_codigo_servico` e `[0-9]{4}`;
+  - o transporte usa `ServiceCode`, `ProjectServiceCodesResponse` e
+    `ReplaceProjectServiceCodesRequest`, com o campo `service_codes`; `ProjectDetailDto` e
+    `UpdateProjectRequest` permaneceram inalterados;
+  - o PUT faz substituição total sob `TipoOperacao.ALTERACAO_PROJETO`, verifica
+    `expected_project_version`, incrementa a versão uma vez e não recebe retry no gateway;
+  - nenhuma coluna/migração foi criada: o teste de payload legado prova o default vazio, e os testes
+    de reabertura, backup e portabilidade passam mantendo os códigos dentro do payload do agregado;
+    o teste de schema confirma explicitamente a ausência de coluna `service_codes`.
+- Validações executadas:
+  - `scripts/generate_openapi_v1.py`: concluído; snapshot gerado com API `1.1.0` e 54 operações;
+  - matriz Pytest obrigatória da E01, com `TEMP`/`TMP=C:\\tmp` para evitar `MAX_PATH` nas fixtures de
+    portabilidade no Windows: `133 passed in 53.35s` na confirmação final;
+  - Ruff obrigatório da E01: `All checks passed!`;
+  - Mypy adicional: `Success: no issues found in 303 source files`;
+  - `git diff --check`: código zero; somente avisos informativos de futura normalização LF/CRLF.
+- Observações para E02/E03: usar `get_service_codes`/`replace_service_codes` no gateway,
+  `service_codes` nos DTOs e `codigos_servico` no domínio. A resposta do PUT já devolve a nova
+  `project_version`; E02 deve preservá-la na sessão. E03 deve consumir as strings canônicas sem
+  remover zeros à esquerda fora do adaptador SQL.
 
 ## E02 — Caixa de serviços no painel Projeto — #pendente
 

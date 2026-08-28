@@ -49,7 +49,8 @@ def test_openapi_covers_every_minimum_group_and_expected_operation() -> None:
     } <= tags
     assert schema["info"]["version"] == API_VERSION
     assert schema["openapi"].startswith("3.1.")
-    assert len(operations) == 52
+    assert API_VERSION == "1.1.0"
+    assert len(operations) == 54
 
 
 def test_every_business_operation_is_bearer_protected() -> None:
@@ -113,3 +114,27 @@ def test_public_schemas_never_expose_file_paths() -> None:
         for schema_name, schema in schemas.items()
     }
     assert not {key: value for key, value in violations.items() if value}
+
+
+def test_service_code_operations_are_additive_versioned_and_strict() -> None:
+    schema = build_openapi_schema()
+    route = schema["paths"]["/api/v1/projects/{project_id}/service-codes"]
+    schemas = schema["components"]["schemas"]
+
+    assert set(route) == {"get", "put"}
+    assert route["get"]["operationId"] == "getProjectServiceCodes"
+    assert route["put"]["operationId"] == "replaceProjectServiceCodes"
+    assert route["put"]["requestBody"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/ReplaceProjectServiceCodesRequest"
+    }
+    assert (
+        schemas["ReplaceProjectServiceCodesRequest"]["properties"]["service_codes"]["items"][
+            "pattern"
+        ]
+        == "^[0-9]{4}$"
+    )
+    assert "service_codes" not in schemas["ProjectDetailDto"]["properties"]
+    assert set(schemas["UpdateProjectRequest"]["properties"]) == {
+        "service_note",
+        "expected_project_version",
+    }

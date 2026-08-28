@@ -1,6 +1,7 @@
 from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from typing import cast
 from uuid import UUID, uuid4
 
 import pytest
@@ -35,7 +36,10 @@ from zeny_project_handler.domain.project import (
     TerminalEquipamento,
     validar_projeto_com_catalogo,
 )
-from zeny_project_handler.domain.project_metadata import MetadadosProjeto
+from zeny_project_handler.domain.project_metadata import (
+    MetadadosProjeto,
+    normalizar_codigo_servico,
+)
 from zeny_project_handler.domain.values import (
     CaixaPagina,
     CoordenadaCampo,
@@ -188,6 +192,34 @@ def valid_project(catalog: CatalogoTecnico) -> Projeto:
         elementos=(first_pole, second_pole, structure, cable),
         pontos_rede=(first_point, second_point),
     )
+
+
+@pytest.mark.parametrize("value", ("0001", "9999"))
+def test_service_code_preserves_exactly_four_ascii_digits(value: str) -> None:
+    assert normalizar_codigo_servico(value) == value
+
+
+@pytest.mark.parametrize(
+    "value",
+    ("1", "001", "10000", "00 1", "+001", "A001", "\uff11\uff12\uff13\uff14", True),
+)
+def test_service_code_rejects_invalid_values(value: object) -> None:
+    with pytest.raises(DomainValidationError, match="4 dígitos ASCII"):
+        normalizar_codigo_servico(cast(str, value))
+
+
+def test_project_service_codes_are_unique_sorted_and_optional(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    project = valid_project(catalogo_inicial)
+
+    assert project.codigos_servico == ()
+    assert replace(project, codigos_servico=("9999", "0001")).codigos_servico == (
+        "0001",
+        "9999",
+    )
+    with pytest.raises(DomainValidationError, match="devem ser únicos"):
+        replace(project, codigos_servico=("0001", "0001"))
 
 
 def test_project_reading_order_contains_every_page_once(

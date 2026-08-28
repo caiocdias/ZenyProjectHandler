@@ -20,6 +20,7 @@ from tests.pdf_fixtures import create_feature_pdf, create_golden_pdf, create_pro
 from zeny_project_handler.adapters.pdf.pymupdf_reader import PyMuPdfReader
 from zeny_project_handler.adapters.persistence import SqlAlchemyUnitOfWork, create_sqlite_engine
 from zeny_project_handler.adapters.persistence.schema import api_uploads
+from zeny_project_handler.application.operation_coordinator import TipoOperacao
 from zeny_project_handler.domain.enums import CategoriaElemento, SituacaoProjeto
 from zeny_project_handler.domain.project import Poste
 from zeny_project_handler_server.app import create_app
@@ -193,6 +194,105 @@ def test_project_crud_managed_upload_idempotency_order_and_restart(tmp_path: Pat
         assert not (data / "project-files" / project_id).exists()
 
 
+def test_service_codes_replace_conflict_coordination_and_restart(tmp_path: Path) -> None:
+    data = tmp_path / "server-data"
+    settings = _settings(data)
+    application = create_app(settings)
+
+    with TestClient(application, raise_server_exceptions=False) as client:
+        created = _create_project(client, key="service-code-project")
+        project_id = str(created["project_id"])
+        route = f"/api/v1/projects/{project_id}/service-codes"
+        assert "service_codes" not in created
+
+        initial = client.get(route, headers=AUTH)
+        assert initial.status_code == 200
+        assert initial.json() == {
+            "project_id": project_id,
+            "service_codes": [],
+            "project_version": 0,
+        }
+
+        runtime = cast(ServerRuntime, application.state.runtime)
+        with runtime.core.operation_coordinator.adquirir(TipoOperacao.ANALISE):
+            blocked = client.put(
+                route,
+                headers=AUTH,
+                json={"service_codes": ["0007"], "expected_project_version": 0},
+            )
+        assert blocked.status_code == 409
+        assert blocked.json()["code"] == "OPERATION_CONFLICT"
+        assert client.get(route, headers=AUTH).json()["project_version"] == 0
+
+        replaced = client.put(
+            route,
+            headers=AUTH,
+            json={
+                "service_codes": ["9012", "0007"],
+                "expected_project_version": 0,
+            },
+        )
+        assert replaced.status_code == 200
+        assert replaced.json()["service_codes"] == ["0007", "9012"]
+        assert replaced.json()["project_version"] == 1
+
+        stale = client.put(
+            route,
+            headers=AUTH,
+            json={"service_codes": ["1111"], "expected_project_version": 0},
+        )
+        assert stale.status_code == 409
+        assert stale.json()["code"] == "STALE_STATE"
+        assert stale.json()["details"] == {"current_project_version": 1}
+
+        duplicate = client.put(
+            route,
+            headers=AUTH,
+            json={
+                "service_codes": ["0007", "0007"],
+                "expected_project_version": 1,
+            },
+        )
+        assert duplicate.status_code == 422
+        assert duplicate.json()["code"] == "VALIDATION_ERROR"
+        unicode_digits = client.put(
+            route,
+            headers=AUTH,
+            json={
+                "service_codes": ["\uff11\uff12\uff13\uff14"],
+                "expected_project_version": 1,
+            },
+        )
+        assert unicode_digits.status_code == 422
+        assert client.get(route, headers=AUTH).json()["project_version"] == 1
+
+        removed = client.put(
+            route,
+            headers=AUTH,
+            json={"service_codes": [], "expected_project_version": 1},
+        )
+        assert removed.status_code == 200
+        assert removed.json()["service_codes"] == []
+        assert removed.json()["project_version"] == 2
+
+        restored = client.put(
+            route,
+            headers=AUTH,
+            json={"service_codes": ["9012", "0007"], "expected_project_version": 2},
+        )
+        assert restored.status_code == 200
+        assert restored.json()["project_version"] == 3
+        detail = client.get(f"/api/v1/projects/{project_id}", headers=AUTH).json()["project"]
+        assert "service_codes" not in detail
+
+    restarted = create_app(settings)
+    with TestClient(restarted) as client:
+        persisted = client.get(route, headers=AUTH)
+        assert persisted.status_code == 200
+        assert persisted.json()["service_codes"] == ["0007", "9012"]
+        assert persisted.json()["project_version"] == 3
+
+
 def test_protected_pdf_attempts_restart_and_absence_of_secret(tmp_path: Path) -> None:
     data = tmp_path / "server-data"
     secret = "senha-pdf-super-secreta"
@@ -330,6 +430,8 @@ def test_restart_expires_abandoned_protected_upload_without_orphan(tmp_path: Pat
         ("GET", "/api/v1/projects"),
         ("POST", "/api/v1/projects"),
         ("GET", f"/api/v1/projects/{uuid4()}"),
+        ("GET", f"/api/v1/projects/{uuid4()}/service-codes"),
+        ("PUT", f"/api/v1/projects/{uuid4()}/service-codes"),
         ("PATCH", f"/api/v1/projects/{uuid4()}"),
         ("DELETE", f"/api/v1/projects/{uuid4()}"),
         ("POST", f"/api/v1/projects/{uuid4()}/document-uploads"),

@@ -1,5 +1,7 @@
+import json
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from typing import Any, cast
 from uuid import UUID
 
 import pytest
@@ -48,3 +50,22 @@ def test_codec_rejects_unsupported_values_and_unexpected_root_type() -> None:
         dumps_domain({1, 2})
     with pytest.raises(DomainCodecError, match="esperado Projeto"):
         loads_domain("{}", Projeto)
+
+
+def test_project_codec_preserves_service_codes_and_loads_legacy_payload() -> None:
+    project = Projeto(
+        id=UUID("12345678-1234-5678-1234-567812345678"),
+        nome="1234567890",
+        catalogo_versao_id=UUID("87654321-4321-8765-4321-876543218765"),
+        criado_em=datetime(2026, 8, 28, tzinfo=UTC),
+        codigos_servico=("9012", "0007"),
+    )
+
+    assert loads_domain(dumps_domain(project), Projeto).codigos_servico == ("0007", "9012")
+
+    legacy = cast(dict[str, Any], json.loads(dumps_domain(project)))
+    fields = cast(dict[str, Any], legacy["fields"])
+    fields.pop("codigos_servico")
+    loaded = loads_domain(json.dumps(legacy), Projeto)
+
+    assert loaded.codigos_servico == ()

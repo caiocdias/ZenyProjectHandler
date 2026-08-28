@@ -25,6 +25,13 @@ FileName = Annotated[
     ),
 ]
 Sha256 = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+ServiceCode = Annotated[
+    str,
+    Field(
+        pattern=r"^[0-9]{4}$",
+        description="Código de serviço com exatamente quatro dígitos ASCII.",
+    ),
+]
 UtcDateTime = AwareDatetime
 
 

@@ -79,6 +79,15 @@ def test_two_http_clients_run_full_project_flow_and_survive_server_restart(
         created = first_client.create_project("0001234567", idempotency_key="http-project")
         project_id = created.project.project_id.root
         assert second_client.list_projects().items[0].project_id.root == project_id
+        initial_codes = second_client.get_service_codes(project_id)
+        assert initial_codes.service_codes == ()
+        updated_codes = first_client.replace_service_codes(
+            project_id,
+            ("9012", "0007"),
+            expected_project_version=initial_codes.project_version,
+        )
+        assert updated_codes.service_codes == ("0007", "9012")
+        assert updated_codes.project_version == initial_codes.project_version + 1
         uploaded = first_client.upload_document(
             project_id,
             first_pdf,
@@ -136,6 +145,23 @@ def test_two_http_clients_run_full_project_flow_and_survive_server_restart(
         second_client = HttpProjectGateway(restarted_url, PASSWORD)
         project = second_client.get_project(project_id).project
         assert len(project.documents) == 1
+        persisted_codes = second_client.get_service_codes(project_id)
+        assert persisted_codes.service_codes == ("0007", "9012")
+        changed_codes = first_client.replace_service_codes(
+            project_id,
+            ("3456", "0007"),
+            expected_project_version=persisted_codes.project_version,
+        )
+        with pytest.raises(ProjectGatewayError) as stale_codes:
+            second_client.replace_service_codes(
+                project_id,
+                ("1111",),
+                expected_project_version=persisted_codes.project_version,
+            )
+        assert stale_codes.value.status_code == 409
+        assert stale_codes.value.code is ErrorCode.STALE_STATE
+        assert changed_codes.service_codes == ("0007", "3456")
+        project = second_client.get_project(project_id).project
         updated = first_client.update_project(
             project_id,
             "0007654321",
@@ -279,3 +305,8 @@ def test_project_gateway_retries_reads_but_never_mutations(
     with pytest.raises(ProjectGatewayError):
         gateway._request("POST", "/mutation")
     assert attempts == ["POST"]
+
+    attempts.clear()
+    with pytest.raises(ProjectGatewayError):
+        gateway._request("PUT", "/service-codes")
+    assert attempts == ["PUT"]

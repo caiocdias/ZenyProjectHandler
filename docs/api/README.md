@@ -14,13 +14,17 @@ falha diante de qualquer alteração não revisada.
 
 ## Compatibilidade
 
-- versão atual: `1.0.0`;
+- versão atual: `1.1.0`;
 - prefixo protegido: `/api/v1`;
 - faixa inicialmente negociada: `1.0.0` a `1.999.999`;
 - adições compatíveis podem introduzir rotas e campos opcionais dentro de v1;
 - remoção, renomeação ou mudança semântica de rota, campo obrigatório, enum ou código de erro exige
   nova versão principal;
 - o cliente consulta `GET /api/v1/session` antes de carregar dados e recusa uma faixa incompatível.
+
+Os códigos de serviço usam as operações aditivas `GET` e `PUT`
+`/api/v1/projects/{project_id}/service-codes`. O detalhe do projeto e o PATCH da NS preservam a
+forma anterior.
 
 ## Decisões transversais
 

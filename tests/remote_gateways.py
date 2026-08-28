@@ -65,6 +65,7 @@ from zeny_project_handler_contracts.portability import (
 from zeny_project_handler_contracts.projects import (
     DeleteProjectResponse,
     ProjectDetailResponse,
+    ProjectServiceCodesResponse,
     ProjectSummaryListResponse,
 )
 from zeny_project_handler_contracts.review import (
@@ -132,6 +133,22 @@ class DirectProjectGateway:
 
     def get_project(self, project_id: UUID) -> ProjectDetailResponse:
         return self._projects.get_project(project_id)
+
+    def get_service_codes(self, project_id: UUID) -> ProjectServiceCodesResponse:
+        return self._projects.get_service_codes(project_id)
+
+    def replace_service_codes(
+        self,
+        project_id: UUID,
+        service_codes: tuple[str, ...],
+        *,
+        expected_project_version: int,
+    ) -> ProjectServiceCodesResponse:
+        return self._projects.replace_service_codes(
+            project_id,
+            service_codes=service_codes,
+            expected_version=expected_project_version,
+        )
 
     def update_project(
         self,

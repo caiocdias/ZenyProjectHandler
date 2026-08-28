@@ -62,6 +62,7 @@ def test_migrations_upgrade_empty_database_and_previous_revision(tmp_path: Path)
     assert current_database_revision(engine) == "0009_remote_jobs"
     project_columns = {column["name"] for column in inspect(engine).get_columns("projects")}
     assert {"updated_at", "version"} <= project_columns
+    assert "service_codes" not in project_columns
     assert "ix_elements_project" in {
         index["name"] for index in inspect(engine).get_indexes("elements")
     }
@@ -95,7 +96,10 @@ def test_complete_round_trip_survives_reopen_and_atomic_backup(
     database: tuple[Path, Engine], catalogo_inicial: CatalogoTecnico, tmp_path: Path
 ) -> None:
     database_path, engine = database
-    project = complete_project(catalogo_inicial)
+    project = replace(
+        complete_project(catalogo_inicial),
+        codigos_servico=("9012", "0007"),
+    )
     execution, item, element_proposal, relation_proposal, decision = complete_analysis(project)
 
     with SqlAlchemyUnitOfWork(engine) as unit:

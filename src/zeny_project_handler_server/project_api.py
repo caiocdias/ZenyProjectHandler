@@ -42,7 +42,10 @@ from zeny_project_handler.application.project_portability import ServicoPortabil
 from zeny_project_handler.domain.documents import DocumentoProjeto
 from zeny_project_handler.domain.enums import EstadoExecucaoAnalise, EstadoRevisao
 from zeny_project_handler.domain.project import ElementoProjetoType, FotoElemento, Projeto
-from zeny_project_handler.domain.project_metadata import normalizar_numero_ns
+from zeny_project_handler.domain.project_metadata import (
+    normalizar_codigo_servico,
+    normalizar_numero_ns,
+)
 from zeny_project_handler_contracts.base import (
     DocumentId,
     ElementId,
@@ -83,6 +86,7 @@ from zeny_project_handler_contracts.projects import (
     ProjectAnalysisSummaryDto,
     ProjectDetailDto,
     ProjectDetailResponse,
+    ProjectServiceCodesResponse,
     ProjectSummaryDto,
     ProjectSummaryListResponse,
 )
@@ -225,6 +229,14 @@ class ProjectApiService:
     def get_project(self, project_id: UUID) -> ProjectDetailResponse:
         return ProjectDetailResponse(project=self._project_detail(self._snapshot(project_id)))
 
+    def get_service_codes(self, project_id: UUID) -> ProjectServiceCodesResponse:
+        snapshot = self._snapshot(project_id)
+        return ProjectServiceCodesResponse(
+            project_id=ProjectId(project_id),
+            service_codes=snapshot.project.codigos_servico,
+            project_version=snapshot.version,
+        )
+
     def require_project_version(self, project_id: UUID, expected_version: int) -> None:
         """Valide a precondição do job antes de reservar a operação global."""
         self._require_version(self._snapshot(project_id), expected_version)
@@ -258,6 +270,22 @@ class ProjectApiService:
                 work.projetos.salvar(replace(snapshot.project, nome=normalized))
                 work.commit()
         return self.get_project(project_id)
+
+    def replace_service_codes(
+        self,
+        project_id: UUID,
+        *,
+        service_codes: tuple[str, ...],
+        expected_version: int,
+    ) -> ProjectServiceCodesResponse:
+        normalized = tuple(normalizar_codigo_servico(code) for code in service_codes)
+        with self._coordinator.adquirir(TipoOperacao.ALTERACAO_PROJETO):
+            snapshot = self._snapshot(project_id)
+            self._require_version(snapshot, expected_version)
+            with self._unit_of_work() as work:
+                work.projetos.salvar(replace(snapshot.project, codigos_servico=normalized))
+                work.commit()
+        return self.get_service_codes(project_id)
 
     def delete_project(self, project_id: UUID) -> DeleteProjectResponse:
         with self._coordinator.adquirir(TipoOperacao.EXCLUSAO_PROJETO):

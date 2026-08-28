@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import cast
 from uuid import UUID
 
 import pytest
@@ -78,7 +79,14 @@ from zeny_project_handler_contracts.portability import (
     ProjectImportPreflightResponse,
     ProjectImportSummaryDto,
 )
-from zeny_project_handler_contracts.projects import ProjectAnalysisSummaryDto, ProjectSummaryDto
+from zeny_project_handler_contracts.projects import (
+    ProjectAnalysisSummaryDto,
+    ProjectDetailDto,
+    ProjectServiceCodesResponse,
+    ProjectSummaryDto,
+    ReplaceProjectServiceCodesRequest,
+    UpdateProjectRequest,
+)
 from zeny_project_handler_contracts.review import (
     AnalysisRegionDto,
     ReviewGeometryDto,
@@ -360,6 +368,48 @@ def test_unknown_fields_naive_dates_wrong_ids_and_decimal_numbers_are_rejected()
         ProjectSummaryDto.model_validate({**valid_project, "project_id": DocumentId(UUIDS[1])})
     with pytest.raises(ValidationError):
         NormalizedBoxDto.model_validate({"x": 0.1, "y": "0", "width": "1", "height": "1"})
+
+
+def test_service_code_contracts_are_additive_strict_and_allow_total_removal() -> None:
+    response = ProjectServiceCodesResponse(
+        project_id=ProjectId(UUIDS[4]),
+        service_codes=("0007", "9012"),
+        project_version=8,
+    )
+    removal = ReplaceProjectServiceCodesRequest(
+        service_codes=(),
+        expected_project_version=response.project_version,
+    )
+
+    assert response.service_codes == ("0007", "9012")
+    assert removal.service_codes == ()
+    assert set(ProjectDetailDto.model_fields) == {
+        "project_id",
+        "service_note",
+        "state",
+        "project_version",
+        "documents",
+        "pages",
+        "analysis",
+        "created_at",
+        "updated_at",
+    }
+    assert set(UpdateProjectRequest.model_fields) == {
+        "service_note",
+        "expected_project_version",
+    }
+
+
+@pytest.mark.parametrize(
+    "value",
+    ("1", "001", "10000", "00 1", "+001", "A001", "\uff11\uff12\uff13\uff14", True),
+)
+def test_service_code_contract_rejects_invalid_values(value: object) -> None:
+    with pytest.raises(ValidationError):
+        ReplaceProjectServiceCodesRequest(
+            service_codes=(cast(str, value),),
+            expected_project_version=0,
+        )
 
 
 def test_password_is_serialized_for_transport_but_hidden_from_repr() -> None:

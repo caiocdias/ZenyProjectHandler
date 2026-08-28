@@ -81,7 +81,9 @@ from zeny_project_handler_contracts.projects import (
     CreateProjectRequest,
     DeleteProjectResponse,
     ProjectDetailResponse,
+    ProjectServiceCodesResponse,
     ProjectSummaryListResponse,
+    ReplaceProjectServiceCodesRequest,
     UpdateProjectRequest,
 )
 from zeny_project_handler_contracts.review import (
@@ -309,6 +311,35 @@ def create_app(
     )
     async def get_project(request: Request, project_id: UUID) -> ProjectDetailResponse:
         return _project_api(request).get_project(project_id)
+
+    @application.get(
+        f"{API_V1_PREFIX}/projects/{{project_id}}/service-codes",
+        response_model=ProjectServiceCodesResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def get_project_service_codes(
+        request: Request,
+        project_id: UUID,
+    ) -> ProjectServiceCodesResponse:
+        return _project_api(request).get_service_codes(project_id)
+
+    @application.put(
+        f"{API_V1_PREFIX}/projects/{{project_id}}/service-codes",
+        response_model=ProjectServiceCodesResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def replace_project_service_codes(
+        request: Request,
+        project_id: UUID,
+        payload: ReplaceProjectServiceCodesRequest,
+    ) -> ProjectServiceCodesResponse:
+        return _project_api(request).replace_service_codes(
+            project_id,
+            service_codes=payload.service_codes,
+            expected_version=payload.expected_project_version,
+        )
 
     @application.patch(
         f"{API_V1_PREFIX}/projects/{{project_id}}",

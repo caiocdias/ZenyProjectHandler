@@ -34,7 +34,9 @@ from zeny_project_handler_contracts.projects import (
     CreateProjectRequest,
     DeleteProjectResponse,
     ProjectDetailResponse,
+    ProjectServiceCodesResponse,
     ProjectSummaryListResponse,
+    ReplaceProjectServiceCodesRequest,
     UpdateProjectRequest,
 )
 from zeny_project_handler_contracts.session import SessionCapabilitiesResponse
@@ -70,6 +72,16 @@ class ProjectGateway(Protocol):
     ) -> ProjectDetailResponse: ...
 
     def get_project(self, project_id: UUID) -> ProjectDetailResponse: ...
+
+    def get_service_codes(self, project_id: UUID) -> ProjectServiceCodesResponse: ...
+
+    def replace_service_codes(
+        self,
+        project_id: UUID,
+        service_codes: tuple[str, ...],
+        *,
+        expected_project_version: int,
+    ) -> ProjectServiceCodesResponse: ...
 
     def update_project(
         self,
@@ -195,6 +207,31 @@ class HttpProjectGateway:
             f"{API_V1_PREFIX}/projects/{project_id}",
             None,
             ProjectDetailResponse,
+        )
+
+    def get_service_codes(self, project_id: UUID) -> ProjectServiceCodesResponse:
+        return self._json_model(
+            "GET",
+            f"{API_V1_PREFIX}/projects/{project_id}/service-codes",
+            None,
+            ProjectServiceCodesResponse,
+        )
+
+    def replace_service_codes(
+        self,
+        project_id: UUID,
+        service_codes: tuple[str, ...],
+        *,
+        expected_project_version: int,
+    ) -> ProjectServiceCodesResponse:
+        return self._json_model(
+            "PUT",
+            f"{API_V1_PREFIX}/projects/{project_id}/service-codes",
+            ReplaceProjectServiceCodesRequest(
+                service_codes=service_codes,
+                expected_project_version=expected_project_version,
+            ),
+            ProjectServiceCodesResponse,
         )
 
     def update_project(
