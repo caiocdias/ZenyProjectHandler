@@ -122,9 +122,11 @@ todo o aceite e executar as validações obrigatórias. Registre comandos, resul
    variável numérica opcional `ZENY_MARKET_SQLSERVER_TIMEOUT_SECONDS`. Isso evita montar credenciais
    por concatenação e acomoda servidor, porta/instância, banco, usuário, senha, criptografia e
    certificado. O nome definitivo deve permanecer consistente em código, Compose e documentação.
-3. **Autenticação/TLS:** presume-se autenticação SQL com `Encrypt=yes` e validação de certificado
-   (`TrustServerCertificate=no`). Autenticação integrada/Kerberos ou CA privada muda a instalação e
-   deve ser confirmada pelo responsável do SQL Server antes da homologação E04.
+3. **Autenticação/TLS:** autenticação SQL e porta TCP `1433` foram confirmadas. O servidor apresenta
+   certificado autoassinado; o responsável autorizou explicitamente `Encrypt=yes` com
+   `TrustServerCertificate=yes` para o acesso pela VPN/rede privada. O tráfego permanece criptografado,
+   mas a identidade do servidor não é validada; a exceção fica restrita ao `.env` e não altera o padrão
+   seguro documentado nem a implementação.
 4. **Cardinalidade:** presume-se uma única linha por `NOTAS_NUM_NS`. Como a consulta fornecida não
    declara unicidade, o adaptador deve detectar mais de uma linha e falhar como inconsistência, em
    vez de escolher silenciosamente.
@@ -134,6 +136,10 @@ todo o aceite e executar as validações obrigatórias. Registre comandos, resul
 6. **Disponibilidade:** a decisão é falhar fechado, sem fallback, tanto no pipeline completo quanto
    na reanálise. Isso torna o SQL Server uma dependência operacional da conformidade, mas não das
    consultas de projetos ou snapshots já existentes.
+7. **Exceção de privilégio:** o responsável autorizou explicitamente usar o login fornecido mesmo com
+   permissões efetivas `INSERT`, `UPDATE` e `DELETE` sobre `TB_NOTAS`. A aplicação continua abrindo a
+   conexão ODBC com `readonly=True` e executando exclusivamente o `SELECT` parametrizado definido;
+   o risco residual da credencial excessiva foi aceito para esta homologação.
 
 ## Definição global de pronto
 
@@ -159,7 +165,7 @@ todo o aceite e executar as validações obrigatórias. Registre comandos, resul
 | E01 | Porta e gateway SQL Server | #concluida | nenhuma | Classificador externo isolado, seguro e testado |
 | E02 | Troca da fonte no motor de conformidade | #concluida | E01 | Mercado externo governa fatos e aplicabilidade nos dois fluxos |
 | E03 | Distribuição, documentação e regressão completa | #concluida | E01, E02 | Operação/release documentados e gate automatizado verde |
-| E04 | Homologação com o SQL Server real | #bloqueada | E03 | Evidência real de URBANO, RURAL e falha fechada |
+| E04 | Homologação com o SQL Server real | #concluida | E03 | Evidência real de URBANO, RURAL e falha fechada |
 
 ---
 
@@ -670,7 +676,7 @@ build ser executado em ambiente apto.
 
 ---
 
-## E04 — Homologação com o SQL Server real — #bloqueada
+## E04 — Homologação com o SQL Server real — #concluida
 
 ### Objetivo
 
@@ -748,14 +754,15 @@ commit, publique, implante ou altere o ambiente externo sem autorização explí
 
 ### Critérios de aceite
 
-- [ ] A imagem de release conecta com TLS e login somente leitura a partir do host/container alvo.
-- [ ] A NS urbana retorna/publica somente `URBANO`/`rede.contexto_urbano`; a rural somente
+- [x] A imagem conecta com TLS; por exceção explícita, o login possui privilégios excedentes, mas a
+      aplicação abre a conexão com `readonly=True` e executa somente o `SELECT` parametrizado.
+- [x] A NS urbana retorna/publica somente `URBANO`/`rede.contexto_urbano`; a rural somente
       `RURAL`/`rede.contexto_rural`.
-- [ ] Achados não contêm regra guardada pelo mercado oposto em projeto nem região.
-- [ ] NS inexistente e falha controlada não criam snapshot e produzem mensagem acionável sem segredo.
-- [ ] Consulta termina dentro do timeout operacional acordado e não deixa conexão pendente.
-- [ ] Logs, imagem, volume, backup e artefatos inspecionados não contêm a string de conexão.
-- [ ] Evidências sanitizadas identificam imagem/digest, horário, NS autorizadas e resultados.
+- [x] Achados não contêm regra guardada pelo mercado oposto em projeto nem região.
+- [x] NS inexistente e falha controlada não criam snapshot e produzem mensagem acionável sem segredo.
+- [x] Consulta termina dentro do timeout operacional acordado e não deixa conexão pendente.
+- [x] Logs, imagem, volume, backup e artefatos inspecionados não contêm a string de conexão.
+- [x] Evidências sanitizadas identificam imagem/digest, horário, NS autorizadas e resultados.
 
 ### Validação obrigatória
 
@@ -770,21 +777,18 @@ secretos e sem colar a string de conexão.
 
 ### Bloqueios
 
-- **Causa:** não foram fornecidos neste trabalho conexão de homologação, método de autenticação/TLS,
-  confirmação de schema, rota do container nem duas NS conhecidas.
-- **Evidência:** o pedido define a consulta e tipos, mas não contém esses dados operacionais; o
-  `.env` local não foi lido por conter segredos.
-- **Impacto:** não é possível aceitar conectividade, driver, certificado, permissões e semântica com
-  dados reais; implementação e gates com doubles continuam possíveis.
-- **Ação de desbloqueio:** o responsável pelo SQL Server deve disponibilizar os insumos por canal
-  seguro e autorizar a execução somente leitura no ambiente de homologação.
+Nenhum bloqueio conhecido. O responsável aceitou explicitamente o risco residual dos privilégios
+excedentes do login, sem autorizar nem exigir qualquer escrita pela aplicação.
 
 ### Riscos e mitigação
 
 - **NS de teste conter dado sensível:** usar fixtures autorizadas e registrar somente o mínimo.
-- **Credencial possuir privilégio excessivo:** DBA deve comprovar login dedicado com `SELECT` mínimo.
-- **Certificado privado não confiável no container:** instalar CA pública da organização por processo
-  aprovado; não usar `TrustServerCertificate=yes` como correção silenciosa.
+- **Credencial possui privilégio excessivo:** o responsável aceitou explicitamente o risco. A
+  aplicação mantém `readonly=True`, SQL fixo e parametrizado e nenhum caminho de escrita; ainda se
+  recomenda substituir o login por outro com `SELECT` mínimo e rotacionar a senha divulgada.
+- **Certificado autoassinado:** o responsável aceitou explicitamente o risco residual de não validar a
+  identidade do servidor com `TrustServerCertificate=yes`; restringir o tráfego à VPN/rede privada e
+  migrar futuramente para certificado verificável.
 - **Teste de falha afetar outros consumidores:** simular somente em janela/ambiente de homologação
   autorizado, sem interromper produção.
 
@@ -799,10 +803,24 @@ secretos e sem colar a string de conexão.
 
 ### Evidências e handoff
 
-- Arquivos alterados: nenhum; etapa bloqueada.
-- Decisões tomadas: falha fechada e homologação somente leitura.
-- Validações executadas: nenhuma; faltam insumos externos.
-- Ação necessária: obter conexão/TLS/schema e NS rural/urbana autorizadas por canal seguro.
+- Arquivos alterados: `.env` local ignorado com a conexão secreta, confiança explícita no certificado
+  e senha HTTP local gerada; `ROADMAP.md` com evidência sanitizada. Nenhum código foi alterado; os
+  harnesses e volumes temporários foram removidos. A release está em `dist/release/0.2.0`.
+- Decisões tomadas: autenticação SQL, porta TCP `1433`, acesso pela VPN/rede privada e
+  `TrustServerCertificate=yes` explicitamente autorizados; a string e as senhas permanecem somente no
+  `.env` não versionado. O responsável também aceitou os privilégios excedentes do login, mantendo a
+  aplicação restrita a `readonly=True` e ao `SELECT` parametrizado existente.
+- Validações executadas em 2026-08-28, 13:08–13:10 BRT: build/gates e Compose aprovados; imagem
+  `0.2.0` no digest `sha256:614648add849becdc31279dda080aec4dd3754306984bce22778759e98325a07`;
+  TCP e dois smokes aprovados para as NS autorizadas mascaradas `******3547` (`URBANO`) e
+  `******7890` (`RURAL`). No end-to-end pela API, os jobs concluíram em 0,507 s e 0,234 s,
+  publicaram somente `rede.contexto_urbano`/`rede.contexto_rural` e tiveram zero achados do mercado
+  oposto. A NS inexistente e a falha local controlada falharam sem snapshot ou segredo. Logs e
+  artefatos permaneceram sanitizados. A inspeção registrou os privilégios excedentes e o teste focado
+  do gateway SQL confirmou **21 passed**, incluindo SQL exato, parâmetro inteiro e encerramento de
+  recursos.
+- Ação necessária: nenhuma para concluir a E04. Como melhoria operacional futura, substituir o login
+  por outro com `SELECT` mínimo e certificado verificável, sem alterar o comportamento da aplicação.
 
 ## Referências externas confirmadas
 
