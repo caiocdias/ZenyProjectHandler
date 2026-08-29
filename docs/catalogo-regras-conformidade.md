@@ -5,9 +5,9 @@ incluindo descrição, `when`, `unless`, `must`, operadores e URL — está em
 `src/zeny_project_handler/adapters/compliance/data/regras_conformidade_v1.json`. Evitar reproduzir
 essas condições aqui reduz o risco de divergência entre documentação e código.
 
-- Versão do seed: `cemig-normas-distribuicao-2025.6`.
-- Regras: 39 ativas, 0 inativas.
-- Método de conformidade: versão `6`.
+- Versão do seed: `cemig-normas-distribuicao-2025.7`.
+- Regras: 41 ativas, 0 inativas.
+- Método de conformidade: versão `9`.
 - Escopos usados pelo seed: `PROJETO` e `REGIAO`.
 - Fontes e cobertura normativa: [inventario-fontes-normativas.md](inventario-fontes-normativas.md).
 
@@ -66,6 +66,8 @@ essas condições aqui reduz o risco de divergência entre documentação e cód
 | Regra 37 | `pacote.documentacao.prordr-fotos` | Registro fotográfico no pacote PRORDR | ATIVA | PROJETO | ALERTA | Controle documental do projeto, 2025.6, pacote PRORDR e registro fotográfico |
 | Regra 38 | `nd31.rede.neutro-aterramento-200m` | Aterramento periódico do neutro | ATIVA | PROJETO | ERRO | CEMIG ND-3.1, Jul/2025, Dimensionamento Elétrico, item 7, p. 57 |
 | Regra 39 | `nd31.rede.compacta-aterramento-temporario-160m` | Pontos periódicos de aterramento temporário da rede compacta | ATIVA | PROJETO | ALERTA | CEMIG ND-3.1, Jul/2025, Dimensionamento Elétrico, item 7, p. 57 |
+| Regra 40 | `bi.acoes.impacto-ambiental` | IMPACTO AMBIENTAL PENDENTE | ATIVA | PROJETO | ERRO | Controle operacional de ações BI, 2026-08-28, AVALIAR IMPACTO AMBIENTAL |
+| Regra 41 | `bi.acoes.falta-servidao` | FALTA SERVIDÃO PENDENTE | ATIVA | PROJETO | ERRO | Controle operacional de ações BI, 2026-08-28, FALTA SERVIDÃO |
 
 ## Manutenção
 

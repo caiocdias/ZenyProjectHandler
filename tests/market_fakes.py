@@ -25,6 +25,8 @@ class FakeClassificadorMercado:
 class FakeVerificadorAcoesConcluidas:
     resultado: bool = False
     erro: Exception | None = None
+    resultados: dict[DescricaoAcao, bool] = field(default_factory=dict)
+    erros: dict[DescricaoAcao, Exception] = field(default_factory=dict)
     consultas: list[tuple[str, tuple[str, ...], DescricaoAcao]] = field(default_factory=list)
 
     def existe_acao_concluida(
@@ -34,6 +36,7 @@ class FakeVerificadorAcoesConcluidas:
         acao: DescricaoAcao,
     ) -> bool:
         self.consultas.append((numero_ns, tuple(codigos_servico), acao))
-        if self.erro is not None:
-            raise self.erro
-        return self.resultado
+        error = self.erros.get(acao, self.erro)
+        if error is not None:
+            raise error
+        return self.resultados.get(acao, self.resultado)

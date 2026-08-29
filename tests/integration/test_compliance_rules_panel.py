@@ -236,7 +236,7 @@ def test_rules_view_only_imports_exports_and_survives_restart(
     imported_rule = next(item for item in exported["rules"] if item["id"] == "fixture.ui.circuito")
     assert imported_rule["must"][0]["fact"] == "projeto.circuito"
     assert "IDs existentes substituídos: 0" in confirmations[0]
-    assert "IDs atuais omitidos e preservados: 39" in confirmations[0]
+    assert "IDs atuais omitidos e preservados: 41" in confirmations[0]
     assert f"Regra {stable_number}" in service.caminho_catalogo.read_text(encoding="utf-8")
 
     panel.close()

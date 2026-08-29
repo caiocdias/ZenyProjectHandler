@@ -31,7 +31,8 @@ from .errors import RegistroConformidadeError
 CATALOGO_REGRAS_FILE_NAME = "catalogo-regras-conformidade.md"
 _SAFE_BUNDLED_VERSION = "cemig-normas-distribuicao-2025.4"
 _PREVIOUS_BUNDLED_VERSION = "cemig-normas-distribuicao-2025.5"
-_CURRENT_BUNDLED_VERSION = "cemig-normas-distribuicao-2025.6"
+_BUNDLED_2025_6_VERSION = "cemig-normas-distribuicao-2025.6"
+_CURRENT_BUNDLED_VERSION = "cemig-normas-distribuicao-2025.7"
 _SPAN_RULE_ID = "nd31.vao.urbano-compacto-isolado"
 _SPAN_SAFEGUARD_FACT = "vao.aplicabilidade_excecao_45_60_resolvida"
 _SERVICE_NOTE_RULE_ID = "nd31.desenho.numero-projeto"
@@ -85,6 +86,10 @@ _BUNDLED_2025_6_ADDITION_IDS = (
     "pacote.documentacao.prordr-fotos",
     "nd31.rede.neutro-aterramento-200m",
     "nd31.rede.compacta-aterramento-temporario-160m",
+)
+_BUNDLED_2025_7_ADDITION_IDS = (
+    "bi.acoes.impacto-ambiental",
+    "bi.acoes.falta-servidao",
 )
 _TRANSFORMER_30_75_DESCRIPTION_2025_5 = (
     "Na parcela verificável da observação t, transformadores trifásicos de 30, 45 ou 75 kVA "
@@ -335,6 +340,7 @@ def _upgrade_bundled_registry(
     if seed.versao not in {
         _SAFE_BUNDLED_VERSION,
         _PREVIOUS_BUNDLED_VERSION,
+        _BUNDLED_2025_6_VERSION,
         _CURRENT_BUNDLED_VERSION,
     }:
         return None
@@ -342,7 +348,11 @@ def _upgrade_bundled_registry(
     candidate, service_note_changed = _upgrade_service_note_rule(candidate, seed)
 
     additions_2025_5_changed = False
-    if seed.versao in {_PREVIOUS_BUNDLED_VERSION, _CURRENT_BUNDLED_VERSION}:
+    if seed.versao in {
+        _PREVIOUS_BUNDLED_VERSION,
+        _BUNDLED_2025_6_VERSION,
+        _CURRENT_BUNDLED_VERSION,
+    }:
         candidate, additions_2025_5_changed = _add_missing_bundled_rules(
             candidate,
             seed,
@@ -351,7 +361,7 @@ def _upgrade_bundled_registry(
 
     updates_2025_6_changed = False
     additions_2025_6_changed = False
-    if seed.versao == _CURRENT_BUNDLED_VERSION:
+    if seed.versao in {_BUNDLED_2025_6_VERSION, _CURRENT_BUNDLED_VERSION}:
         candidate, updates_2025_6_changed = _replace_unchanged_2025_5_rules(
             candidate,
             seed,
@@ -360,6 +370,14 @@ def _upgrade_bundled_registry(
             candidate,
             seed,
             _BUNDLED_2025_6_ADDITION_IDS,
+        )
+
+    additions_2025_7_changed = False
+    if seed.versao == _CURRENT_BUNDLED_VERSION:
+        candidate, additions_2025_7_changed = _add_missing_bundled_rules(
+            candidate,
+            seed,
+            _BUNDLED_2025_7_ADDITION_IDS,
         )
 
     candidate = _upgrade_registry_version(
@@ -371,6 +389,7 @@ def _upgrade_bundled_registry(
         service_note_changed=service_note_changed,
         updates_2025_6_changed=updates_2025_6_changed,
         additions_2025_6_changed=additions_2025_6_changed,
+        additions_2025_7_changed=additions_2025_7_changed,
     )
     return candidate if candidate != current else None
 
@@ -447,6 +466,7 @@ def _upgrade_registry_version(
     service_note_changed: bool,
     updates_2025_6_changed: bool,
     additions_2025_6_changed: bool,
+    additions_2025_7_changed: bool,
 ) -> RegistroRegrasConformidade:
     if candidate.regras == seed.regras:
         return replace(candidate, versao=seed.versao)
@@ -458,6 +478,7 @@ def _upgrade_registry_version(
             (service_note_changed, "comparacao-ns-cabecalho"),
             (updates_2025_6_changed, "atualizacao-2025.6"),
             (additions_2025_6_changed, "adicoes-2025.6"),
+            (additions_2025_7_changed, "adicoes-2025.7"),
         )
         if changed
     )

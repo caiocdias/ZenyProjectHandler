@@ -767,7 +767,7 @@ def test_restore_immediately_migrates_the_unchanged_legacy_bundled_span_rule(
         span_rule = next(
             item for item in restored.regras if item.id == "nd31.vao.urbano-compacto-isolado"
         )
-        assert restored.versao == "cemig-normas-distribuicao-2025.6"
+        assert restored.versao == "cemig-normas-distribuicao-2025.7"
         assert restored.regras == safe_seed.regras
         assert any(
             item.chave_fato == "vao.aplicabilidade_excecao_45_60_resolvida"

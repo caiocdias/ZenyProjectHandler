@@ -5,7 +5,7 @@ from typing import cast
 
 import pytest
 
-from tests.market_fakes import FakeClassificadorMercado
+from tests.market_fakes import FakeClassificadorMercado, FakeVerificadorAcoesConcluidas
 from zeny_project_handler.adapters.analysis.tesseract_runtime import RuntimeTesseract
 from zeny_project_handler.application.compliance_analysis import ExecutarAnaliseConformidade
 from zeny_project_handler.application.mvp_workflow import ServicoFluxoMvp
@@ -81,6 +81,7 @@ def test_server_composes_one_market_backed_analyzer_for_pipeline_and_reanalysis(
 
     monkeypatch.setattr(server_composition, "_compose_analysis_workflow", record_analyzer)
     classifier = FakeClassificadorMercado()
+    action_verifier = FakeVerificadorAcoesConcluidas()
     settings = ServerSettings(
         password="senha de composição do mercado",
         market_sqlserver_connection_string="fixture-market-connection",
@@ -89,10 +90,12 @@ def test_server_composes_one_market_backed_analyzer_for_pipeline_and_reanalysis(
     runtime = server_composition.compose_server_runtime(
         settings,
         market_classifier=classifier,
+        action_verifier=action_verifier,
     )
     try:
         assert runtime.compliance_api is not None
         assert captured == [runtime.compliance_api.analysis_service]
         assert captured[0]._market_classifier is classifier
+        assert captured[0]._action_verifier is action_verifier
     finally:
         runtime.close()

@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QLabel, QPushButton, QTreeWidget
 from pytestqt.qtbot import QtBot
 from sqlalchemy import Engine, update
 from sqlalchemy.exc import IntegrityError
-from tests.market_fakes import FakeClassificadorMercado
+from tests.market_fakes import FakeClassificadorMercado, FakeVerificadorAcoesConcluidas
 from tests.remote_gateways import SynchronousDocumentationGateway
 
 from zeny_project_handler.adapters.analysis import PyMuPdfDocumentAnalyzer, TesseractCliOcr
@@ -37,6 +37,10 @@ from zeny_project_handler.application.compliance_analysis import (
     VERSAO_METODO_CONFORMIDADE,
     ExecutarAnaliseConformidade,
 )
+from zeny_project_handler.application.compliance_callouts import (
+    OrigemAncoraCallout,
+    projetar_callouts_conformidade,
+)
 from zeny_project_handler.application.compliance_registry import (
     ServicoRegistroRegrasConformidade,
 )
@@ -47,7 +51,7 @@ from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.domain.compliance import ExecucaoConformidade, ResultadoConformidade
 from zeny_project_handler.domain.documents import DocumentoProjeto, PaginaDocumento
 from zeny_project_handler.domain.enums import EstadoExecucaoAnalise, TipoEvidencia
-from zeny_project_handler.domain.market import Mercado
+from zeny_project_handler.domain.market import DescricaoAcao, Mercado
 from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler.domain.project_metadata import MetadadosProjeto
 from zeny_project_handler.domain.values import (
@@ -55,7 +59,7 @@ from zeny_project_handler.domain.values import (
     GeometriaDocumento,
     PontoNormalizado,
 )
-from zeny_project_handler.ports.market import DependenciaMercadoError
+from zeny_project_handler.ports.market import DependenciaAcoesError, DependenciaMercadoError
 from zeny_project_handler_client.ui.documentation_panel import DocumentationPanelWidget
 from zeny_project_handler_client.ui.pdf_viewer import PdfViewerWidget
 from zeny_project_handler_contracts.enums import ComplianceStatus
@@ -119,6 +123,10 @@ def _document(name: str, digest: str, page: PaginaDocumento) -> DocumentoProjeto
 def _prepare_context(
     tmp_path: Path,
     catalog: CatalogoTecnico,
+    *,
+    codigos_servico: tuple[str, ...] = (),
+    extra_evidence: tuple[tuple[str, str, str], ...] = (),
+    action_verifier: FakeVerificadorAcoesConcluidas | None = None,
 ) -> tuple[
     Engine,
     UUID,
@@ -139,6 +147,7 @@ def _prepare_context(
         nome="0012345678",
         catalogo_versao_id=catalog.id,
         criado_em=_NOW,
+        codigos_servico=codigos_servico,
         documentos=(a4, unknown),
         metadados=MetadadosProjeto(tipo_servico="Rede rural"),
     )
@@ -170,6 +179,27 @@ def _prepare_context(
         )
         for document in project.documentos
     )
+    evidence = (
+        *evidence,
+        *(
+            EvidenciaDocumento(
+                id=uuid4(),
+                execucao_id=semantic_run.id,
+                pagina_id=a4.paginas[0].id,
+                tipo=TipoEvidencia.TEXTO,
+                geometria=GeometriaDocumento.ponto(
+                    a4.paginas[0].id,
+                    PontoNormalizado(Decimal(x), Decimal(y)),
+                ),
+                metodo="fixture",
+                versao_metodo="1",
+                parametros=(),
+                conteudo_bruto=text,
+                criada_em=_NOW,
+            )
+            for text, x, y in extra_evidence
+        ),
+    )
     with unit_of_work() as work:
         work.catalogos.salvar(catalog)
         work.projetos.salvar(project)
@@ -190,6 +220,7 @@ def _prepare_context(
         unit_of_work,
         review_service.carregar_sessao_semantica,
         classificador_mercado=market_classifier,
+        verificador_acoes=action_verifier or FakeVerificadorAcoesConcluidas(),
         relogio=lambda: _NOW,
     )
     return engine, project.id, analysis_service, registry_service, market_classifier
@@ -207,7 +238,7 @@ def test_execution_is_deterministic_preserves_history_and_survives_restart(
     first = service.executar(project_id)
     repeated = service.executar(project_id)
 
-    assert VERSAO_METODO_CONFORMIDADE == "8"
+    assert VERSAO_METODO_CONFORMIDADE == "9"
     assert first.versao_metodo == VERSAO_METODO_CONFORMIDADE
     assert repeated.id == first.id
     assert dumps_domain(repeated) == dumps_domain(first)
@@ -313,7 +344,261 @@ def test_external_market_failure_does_not_persist_compliance_snapshot(
     engine.dispose()
 
 
-def test_remote_dtos_preserve_baseline_semantics_for_all_39_active_rules(
+def test_actions_without_documentary_trigger_are_not_queried_or_evaluated(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    verifier = FakeVerificadorAcoesConcluidas(resultado=True)
+    engine, project_id, service, _registry, _market = _prepare_context(
+        tmp_path,
+        catalogo_inicial,
+        codigos_servico=("0007",),
+        action_verifier=verifier,
+    )
+
+    execution = service.executar(project_id)
+
+    assert verifier.consultas == []
+    assert not {"bi.acoes.impacto-ambiental", "bi.acoes.falta-servidao"}.intersection(
+        item.regra_id for item in execution.achados
+    )
+    engine.dispose()
+
+
+def test_trigger_without_service_codes_publishes_explained_false_requirement(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    verifier = FakeVerificadorAcoesConcluidas(resultado=True)
+    engine, project_id, service, _registry, _market = _prepare_context(
+        tmp_path,
+        catalogo_inicial,
+        extra_evidence=(("Impacto Ambiental: Sim", "0.70", "0.88"),),
+        action_verifier=verifier,
+    )
+
+    execution = service.executar(project_id)
+    finding = next(
+        item for item in execution.achados if item.regra_id == "bi.acoes.impacto-ambiental"
+    )
+    requirement = next(
+        item
+        for item in execution.fatos
+        if item.chave == "projeto.acao_avaliar_impacto_ambiental_concluida"
+    )
+
+    assert verifier.consultas == []
+    assert finding.resultado is ResultadoConformidade.DIVERGENCIA
+    assert finding.titulo == "IMPACTO AMBIENTAL PENDENTE"
+    assert requirement.valor is False
+    assert requirement.geometria is None
+    assert "não possui códigos de serviço" in requirement.origem
+    engine.dispose()
+
+
+def test_two_action_triggers_query_once_preserve_evidence_and_anchor_callouts(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    verifier = FakeVerificadorAcoesConcluidas(resultado=False)
+    engine, project_id, service, _registry, _market = _prepare_context(
+        tmp_path,
+        catalogo_inicial,
+        codigos_servico=("0007", "0123"),
+        extra_evidence=(
+            ("Impacto Ambiental: SIM", "0.70", "0.91"),
+            ("FAIXA DE SERVIDÃO", "0.25", "0.25"),
+            ("Impacto Ambiental: Sim", "0.70", "0.84"),
+        ),
+        action_verifier=verifier,
+    )
+
+    execution = service.executar(project_id)
+    findings = {
+        item.regra_id: item
+        for item in execution.achados
+        if item.regra_id in {"bi.acoes.impacto-ambiental", "bi.acoes.falta-servidao"}
+    }
+    assert verifier.consultas == [
+        (
+            "0012345678",
+            ("0007", "0123"),
+            DescricaoAcao.AVALIAR_IMPACTO_AMBIENTAL,
+        ),
+        ("0012345678", ("0007", "0123"), DescricaoAcao.FALTA_SERVIDAO),
+    ]
+    assert set(findings) == {"bi.acoes.impacto-ambiental", "bi.acoes.falta-servidao"}
+    assert all(item.resultado is ResultadoConformidade.DIVERGENCIA for item in findings.values())
+    assert {item.valor for item in execution.fatos if item.chave == "projeto.codigo_servico"} == {
+        "0007",
+        "0123",
+    }
+
+    def unit_of_work() -> SqlAlchemyUnitOfWork:
+        return SqlAlchemyUnitOfWork(engine)
+
+    session = ServicoRevisaoHumana(unit_of_work).carregar_sessao_semantica(project_id)
+    impact_evidence = tuple(
+        item
+        for item in session.evidencias
+        if (item.conteudo_bruto or "").startswith("Impacto Ambiental")
+    )
+    impact_finding = findings["bi.acoes.impacto-ambiental"]
+    assert {item.id for item in impact_evidence} <= set(impact_finding.evidencia_ids)
+    callouts = {
+        item.id: item
+        for item in projetar_callouts_conformidade(
+            execution,
+            evidencias=session.evidencias,
+            paginas=tuple(
+                page for document in session.projeto.documentos for page in document.paginas
+            ),
+        )
+    }
+    impact_callout = callouts[impact_finding.id]
+    first_impact = min(
+        impact_evidence,
+        key=lambda item: tuple(point.y for point in item.geometria.pontos),
+    )
+    assert impact_callout.ancoras[0].origem is OrigemAncoraCallout.EVIDENCIA
+    assert impact_callout.ancoras[0].referencia_id == first_impact.id
+    assert len(callouts) >= 2
+    engine.dispose()
+
+
+def test_completed_action_is_conformant_and_has_no_callout(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    verifier = FakeVerificadorAcoesConcluidas(
+        resultados={DescricaoAcao.AVALIAR_IMPACTO_AMBIENTAL: True}
+    )
+    engine, project_id, service, _registry, _market = _prepare_context(
+        tmp_path,
+        catalogo_inicial,
+        codigos_servico=("0001",),
+        extra_evidence=(("Impacto Ambiental: Sim", "0.70", "0.88"),),
+        action_verifier=verifier,
+    )
+
+    execution = service.executar(project_id)
+    finding = next(
+        item for item in execution.achados if item.regra_id == "bi.acoes.impacto-ambiental"
+    )
+
+    assert finding.resultado is ResultadoConformidade.CONFORME
+    assert len(verifier.consultas) == 1
+
+    def unit_of_work() -> SqlAlchemyUnitOfWork:
+        return SqlAlchemyUnitOfWork(engine)
+
+    session = ServicoRevisaoHumana(unit_of_work).carregar_sessao_semantica(project_id)
+    assert finding.id not in {
+        item.id
+        for item in projetar_callouts_conformidade(
+            execution,
+            evidencias=session.evidencias,
+            paginas=tuple(
+                page for document in session.projeto.documentos for page in document.paginas
+            ),
+        )
+    }
+    engine.dispose()
+
+
+@pytest.mark.parametrize("failure", ["dependency", "cancellation"])
+def test_action_failure_or_cancellation_between_queries_publishes_no_snapshot(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+    failure: str,
+) -> None:
+    verifier = FakeVerificadorAcoesConcluidas(resultado=False)
+    if failure == "dependency":
+        verifier.erros[DescricaoAcao.FALTA_SERVIDAO] = DependenciaAcoesError(
+            "O cadastro externo de ações não pôde ser consultado"
+        )
+    engine, project_id, service, _registry, _market = _prepare_context(
+        tmp_path,
+        catalogo_inicial,
+        codigos_servico=("0001",),
+        extra_evidence=(
+            ("Impacto Ambiental: Sim", "0.70", "0.88"),
+            ("SERVIDÃO", "0.25", "0.25"),
+        ),
+        action_verifier=verifier,
+    )
+
+    if failure == "dependency":
+        with pytest.raises(DependenciaAcoesError):
+            service.executar(project_id)
+        assert len(verifier.consultas) == 2
+    else:
+        with pytest.raises(AnaliseConformidadeCanceladaError):
+            service.executar(
+                project_id,
+                cancelado=lambda: len(verifier.consultas) == 1,
+            )
+        assert verifier.consultas == [
+            (
+                "0012345678",
+                ("0001",),
+                DescricaoAcao.AVALIAR_IMPACTO_AMBIENTAL,
+            )
+        ]
+    assert service.obter_ultima(project_id) is None
+    assert service.listar_historico(project_id) == ()
+    engine.dispose()
+
+
+def test_ns_and_service_changes_mark_stale_and_create_auditable_history(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    verifier = FakeVerificadorAcoesConcluidas(resultado=True)
+    engine, project_id, service, _registry, _market = _prepare_context(
+        tmp_path,
+        catalogo_inicial,
+        codigos_servico=("0001",),
+        extra_evidence=(("Impacto Ambiental: Sim", "0.70", "0.88"),),
+        action_verifier=verifier,
+    )
+    first = service.executar(project_id)
+
+    with SqlAlchemyUnitOfWork(engine) as work:
+        project = work.projetos.obter(project_id)
+        assert project is not None
+        work.projetos.salvar(replace(project, codigos_servico=("0002",)))
+        work.commit()
+    assert service.resultado_desatualizado(first)
+    second = service.executar(project_id)
+    assert second.id != first.id
+    assert second.assinatura_sessao != first.assinatura_sessao
+    assert not service.resultado_desatualizado(second)
+
+    with SqlAlchemyUnitOfWork(engine) as work:
+        project = work.projetos.obter(project_id)
+        assert project is not None
+        work.projetos.salvar(replace(project, nome="0098765432"))
+        work.commit()
+    assert service.resultado_desatualizado(second)
+    third = service.executar(project_id)
+
+    assert third.id not in {first.id, second.id}
+    assert third.assinatura_sessao != second.assinatura_sessao
+    assert service.listar_historico(project_id) == (first, second, third)
+    assert [
+        tuple(item.valor for item in execution.fatos if item.chave == "projeto.codigo_servico")
+        for execution in (first, second, third)
+    ] == [("0001",), ("0002",), ("0002",)]
+    assert [item[0] for item in verifier.consultas] == [
+        "0012345678",
+        "0012345678",
+        "0098765432",
+    ]
+    engine.dispose()
+
+
+def test_remote_dtos_preserve_baseline_semantics_for_all_41_active_rules(
     tmp_path: Path,
     catalogo_inicial: CatalogoTecnico,
 ) -> None:
@@ -336,7 +621,7 @@ def test_remote_dtos_preserve_baseline_semantics_for_all_39_active_rules(
     registry = gateway.get_active_registry()
     remote = gateway.get_latest_compliance(project_id)
 
-    assert registry.rule_count == registry.active_rule_count == 39
+    assert registry.rule_count == registry.active_rule_count == 41
     assert remote is not None
     expected_status = {
         ResultadoConformidade.CONFORME: ComplianceStatus.COMPLIANT,

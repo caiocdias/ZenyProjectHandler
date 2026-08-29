@@ -191,7 +191,7 @@ desbloqueio documentados.
 | E01 | Modelo persistente e contrato remoto dos serviços | #concluida | nenhuma | Coleção canônica, rotas GET/PUT e compatibilidade de dados/API |
 | E02 | Caixa de serviços no painel Projeto | #concluida | E01 | Inclusão/remoção remota de códigos na posição visual solicitada |
 | E03 | Porta e consulta parametrizada de ações | #concluida | E01 | Verificador existencial de `vBIAcoes` seguro e testado |
-| E04 | Gatilhos, fatos, regras e callouts | #pendente | E01, E03 | Duas pendências auditáveis e localizáveis no PDF |
+| E04 | Gatilhos, fatos, regras e callouts | #concluida | E01, E03 | Duas pendências auditáveis e localizáveis no PDF |
 | E05 | Integração, documentação e gate final | #pendente | E02, E04 | Fluxo completo validado e documentação operacional pronta |
 
 ## E01 — Modelo persistente e contrato remoto dos serviços — #concluida
@@ -690,7 +690,7 @@ antes da produção, não um bloqueio do gate offline da E03.
   `int` exclusivamente no adaptador; a porta e o fake recebem as strings canônicas com zeros à
   esquerda.
 
-## E04 — Gatilhos, fatos, regras e callouts — #pendente
+## E04 — Gatilhos, fatos, regras e callouts — #concluida
 
 ### Objetivo
 
@@ -799,25 +799,25 @@ não acesse SQL real sem autorização. Termine com resumo conciso de mudanças,
 
 ### Critérios de aceite
 
-- [ ] `Impacto Ambiental: Sim`, com variação de caixa/acentos/espaços, produz gatilho somente se o
+- [x] `Impacto Ambiental: Sim`, com variação de caixa/acentos/espaços, produz gatilho somente se o
   rótulo estiver no cabeçalho e o valor normalizado for exatamente `SIM`.
-- [ ] `Não`, valor vazio, `SIMULAÇÃO`, ocorrência fora do cabeçalho ou comentário de revisão não
+- [x] `Não`, valor vazio, `SIMULAÇÃO`, ocorrência fora do cabeçalho ou comentário de revisão não
   produz o gatilho ambiental.
-- [ ] Qualquer detecção de servidão já aceita pelo comportamento vigente produz um único gatilho de
+- [x] Qualquer detecção de servidão já aceita pelo comportamento vigente produz um único gatilho de
   projeto, conservando todas as evidências ordenadas.
-- [ ] Sem gatilho, a ação correspondente não é consultada e a regra não cria achado.
-- [ ] Com gatilho e serviços, cada ação distinta é consultada exatamente uma vez.
-- [ ] Com ao menos uma linha, a regra é `CONFORME` e não gera callout.
-- [ ] Sem linha ou sem códigos, a regra é `DIVERGENCIA`, tem o título exato e gera callout na
+- [x] Sem gatilho, a ação correspondente não é consultada e a regra não cria achado.
+- [x] Com gatilho e serviços, cada ação distinta é consultada exatamente uma vez.
+- [x] Com ao menos uma linha, a regra é `CONFORME` e não gera callout.
+- [x] Sem linha ou sem códigos, a regra é `DIVERGENCIA`, tem o título exato e gera callout na
   evidência do PDF.
-- [ ] Se ambos os gatilhos existirem e ambas as ações faltarem, existem duas divergências e dois
+- [x] Se ambos os gatilhos existirem e ambas as ações faltarem, existem duas divergências e dois
   callouts independentes.
-- [ ] Erro externo ou cancelamento entre consultas não publica snapshot parcial nem converte erro em
+- [x] Erro externo ou cancelamento entre consultas não publica snapshot parcial nem converte erro em
   pendência.
-- [ ] Os códigos participam da assinatura auditável sem perder zeros à esquerda.
-- [ ] Alterar NS ou serviços marca o snapshot anterior como desatualizado; reanalisar produz/reutiliza
+- [x] Os códigos participam da assinatura auditável sem perder zeros à esquerda.
+- [x] Alterar NS ou serviços marca o snapshot anterior como desatualizado; reanalisar produz/reutiliza
   o snapshot coerente com a nova entrada.
-- [ ] As 39 regras antigas mantêm IDs/números; as novas recebem os próximos números e o catálogo passa
+- [x] As 39 regras antigas mantêm IDs/números; as novas recebem os próximos números e o catálogo passa
   a 41 regras.
 
 ### Validação obrigatória
@@ -852,12 +852,45 @@ antes do aceite.
 
 ### Evidências e handoff
 
-- Estado: não iniciado.
-- Arquivos alterados: nenhum.
-- Decisões tomadas: nenhuma além das decisões globais deste roadmap.
-- Validações executadas: nenhuma.
-- Observações para E05: registrar IDs/números finais das regras, chaves finais dos fatos, versão do
-  seed/método e nomes finais dos fakes.
+- Estado: concluído em 2026-08-29.
+- Arquivos alterados pela E04:
+  - `application/compliance_fact_providers.py`: estados e contexto imutável tipado para gatilhos,
+    códigos e resultados das duas ações;
+  - `application/project_compliance.py`: detecção pura/ordenada, publicação dos cinco fatos novos e
+    preservação de todas as evidências positivas;
+  - `application/compliance_analysis.py`: composição das consultas por ação, cancelamento entre
+    consultas, método `9`, snapshot atômico e staleness por NS/serviços;
+  - `domain/compliance_facts.py`, seed JSON, `application/compliance_registry.py` e catálogo
+    versionado: vocabulário, duas regras e upgrade aditivo `2025.6` → `2025.7`;
+  - `server/composition.py`: composição do verificador da E03 com a mesma configuração ODBC já
+    pertencente ao servidor;
+  - `tests/market_fakes.py` e testes unitários, integrados, servidor/E2E relacionados: resultados e
+    erros controláveis por ação, matriz de gatilhos/consultas/snapshot/callout/staleness e contagens
+    atualizadas para 41 regras.
+- Decisões tomadas:
+  - IDs finais: `bi.acoes.impacto-ambiental` (Regra 40) e `bi.acoes.falta-servidao` (Regra 41);
+  - chaves finais: `projeto.codigo_servico`, `projeto.impacto_ambiental_sim`,
+    `projeto.servidao_mencionada`, `projeto.acao_avaliar_impacto_ambiental_concluida` e
+    `projeto.acao_falta_servidao_concluida`;
+  - sem fonte oficial adicional no handoff, foram usados `Controle operacional de ações BI`, revisão
+    `2026-08-28`, e os itens exatos de cada ação, sem URL/página;
+  - lista vazia usa `EstadoVerificacaoAcao.SEM_CODIGOS_SERVICO`, publica requisito `False` com origem
+    explicativa e nunca chama a porta; gatilho ausente usa `NAO_APLICAVEL`;
+  - os resultados consultados usam somente `PENDENTE`/`CONCLUIDA`; origem, fatos e snapshots não
+    carregam SQL, configuração ODBC ou credenciais;
+  - a inicialização oficial adiciona seletivamente as duas regras a registros `2025.6`, conserva a
+    revisão anterior no histórico, mantém números 1–39 e reserva 40–41 para os novos IDs.
+- Validações executadas:
+  - Pytest obrigatório da E04, com `QT_QPA_PLATFORM=offscreen`: `114 passed in 11.97s`; fixtures
+    sintéticas somente, sem conexão SQL Server real;
+  - Ruff obrigatório: `All checks passed!`;
+  - Ruff format adicional nos 16 arquivos Python alterados/relevantes: `16 files already formatted`;
+  - Mypy global: `Success: no issues found in 303 source files`;
+  - `git diff --check`: código zero; apenas avisos informativos LF/CRLF.
+- Observações para E05: seed final `cemig-normas-distribuicao-2025.7`, método `9`, fake final
+  `FakeVerificadorAcoesConcluidas` com mapas `resultados`/`erros`. Atualizar a documentação viva que
+  ainda resume o baseline 2025.6/39 regras e executar o gate global. O smoke autorizado continua
+  responsável por confirmar o tipo físico de `TSERVICOS_CT_COD`; nenhum acesso real ocorreu na E04.
 
 ## E05 — Integração, documentação e gate final — #pendente
 

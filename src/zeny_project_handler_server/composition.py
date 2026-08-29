@@ -22,7 +22,10 @@ from zeny_project_handler.adapters.interpretation import (
     InterpretadorRegrasExplicitas,
     carregar_registro_regras_inicial,
 )
-from zeny_project_handler.adapters.market.sql_server import ClassificadorMercadoSqlServer
+from zeny_project_handler.adapters.market.sql_server import (
+    ClassificadorMercadoSqlServer,
+    VerificadorAcoesConcluidasSqlServer,
+)
 from zeny_project_handler.adapters.pdf import PyMuPdfReader
 from zeny_project_handler.adapters.persistence import SqlAlchemyUnitOfWork
 from zeny_project_handler.application.compliance_analysis import ExecutarAnaliseConformidade
@@ -38,7 +41,10 @@ from zeny_project_handler.application.span_compliance import prover_fatos_vaos
 from zeny_project_handler.application.topology_compliance import prover_fatos_topologicos
 from zeny_project_handler.composition import CoreServices, compose_core_services
 from zeny_project_handler.domain.project import Projeto
-from zeny_project_handler.ports.market import ClassificadorMercadoPort
+from zeny_project_handler.ports.market import (
+    ClassificadorMercadoPort,
+    VerificadorAcoesConcluidasPort,
+)
 from zeny_project_handler_contracts import (
     API_VERSION,
     MAX_COMPATIBLE_API_VERSION,
@@ -286,6 +292,7 @@ def compose_server_runtime(
     settings: ServerSettings,
     *,
     market_classifier: ClassificadorMercadoPort | None = None,
+    action_verifier: VerificadorAcoesConcluidasPort | None = None,
 ) -> ServerRuntime:
     """Inicialize fonte persistente, coordenação e OCR sem importar o bootstrap Qt."""
     core_settings = settings.core_settings()
@@ -337,11 +344,20 @@ def compose_server_runtime(
                 timeout_seconds=settings.market_sqlserver_timeout_seconds,
             )
         )
+        selected_action_verifier = (
+            action_verifier
+            if action_verifier is not None
+            else VerificadorAcoesConcluidasSqlServer(
+                settings.market_sqlserver_connection_string,
+                timeout_seconds=settings.market_sqlserver_timeout_seconds,
+            )
+        )
         review = ServicoRevisaoHumana(unit_of_work)
         compliance = ExecutarAnaliseConformidade(
             unit_of_work,
             review.carregar_sessao_semantica,
             classificador_mercado=selected_market_classifier,
+            verificador_acoes=selected_action_verifier,
             provedores_fatos=(
                 prover_fatos_documentais,
                 prover_fatos_regionais,

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "registry": {
     "id": "710c56ea-8586-5cdd-a272-f885ab93ac73",
-    "version": "cemig-normas-distribuicao-2025.6"
+    "version": "cemig-normas-distribuicao-2025.7"
   },
   "rules": [
     {
@@ -1382,6 +1382,66 @@
       "must": [
         {
           "fact": "projeto.rede_compacta_aterramento_temporario_suficiente",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "bi.acoes.impacto-ambiental",
+      "title": "IMPACTO AMBIENTAL PENDENTE",
+      "description": "Projeto com Impacto Ambiental igual a SIM no cabeçalho deve possuir a ação AVALIAR IMPACTO AMBIENTAL concluída para a NS e os serviços atuais.",
+      "scope": "PROJETO",
+      "severity": "ERRO",
+      "source": {
+        "document": "Controle operacional de ações BI",
+        "revision": "2026-08-28",
+        "item": "AVALIAR IMPACTO AMBIENTAL",
+        "page": null,
+        "url": null
+      },
+      "when": [
+        {
+          "fact": "projeto.impacto_ambiental_sim",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "projeto.acao_avaliar_impacto_ambiental_concluida",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "bi.acoes.falta-servidao",
+      "title": "FALTA SERVIDÃO PENDENTE",
+      "description": "Projeto com menção positiva a servidão deve possuir a ação FALTA SERVIDÃO concluída para a NS e os serviços atuais.",
+      "scope": "PROJETO",
+      "severity": "ERRO",
+      "source": {
+        "document": "Controle operacional de ações BI",
+        "revision": "2026-08-28",
+        "item": "FALTA SERVIDÃO",
+        "page": null,
+        "url": null
+      },
+      "when": [
+        {
+          "fact": "projeto.servidao_mencionada",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "unless": [],
+      "must": [
+        {
+          "fact": "projeto.acao_falta_servidao_concluida",
           "operator": "IGUAL",
           "expected": [true]
         }

@@ -191,6 +191,16 @@ def _safe_2025_4_registry(seed: RegistroRegrasConformidade) -> RegistroRegrasCon
     )
 
 
+def _official_2025_6_registry(
+    seed: RegistroRegrasConformidade,
+) -> RegistroRegrasConformidade:
+    return replace(
+        seed,
+        versao="cemig-normas-distribuicao-2025.6",
+        regras=seed.regras[:39],
+    )
+
+
 def _legacy_service_note_registry(
     seed: RegistroRegrasConformidade,
 ) -> RegistroRegrasConformidade:
@@ -309,7 +319,7 @@ def test_startup_migrates_only_unchanged_legacy_span_rule_and_preserves_custom_r
     ) == next(item for item in safe_seed.regras if item.id == "nd31.vao.urbano-compacto-isolado")
     assert migrated.registro.versao == (
         "synthetic-1+seguranca-vao-2025.4+adicoes-2025.5+comparacao-ns-cabecalho"
-        "+atualizacao-2025.6+adicoes-2025.6"
+        "+atualizacao-2025.6+adicoes-2025.6+adicoes-2025.7"
     )
     migrated_by_id = {item.id: item for item in migrated.registro.regras}
     assert all(migrated_by_id[item.id] == item for item in safe_seed.regras)
@@ -351,7 +361,8 @@ def test_startup_does_not_overwrite_a_custom_legacy_span_rule(tmp_path: Path) ->
         migrated_by_id[item.id] == item for item in safe_seed.regras if item.id != custom_span.id
     )
     assert after_restart.registro.versao == (
-        "custom-span-rule+adicoes-2025.5+comparacao-ns-cabecalho+atualizacao-2025.6+adicoes-2025.6"
+        "custom-span-rule+adicoes-2025.5+comparacao-ns-cabecalho+atualizacao-2025.6"
+        "+adicoes-2025.6+adicoes-2025.7"
     )
     assert len(service.listar_historico()) == 2
     engine.dispose()
@@ -382,7 +393,8 @@ def test_startup_migrates_2025_4_without_overwriting_a_colliding_2025_5_id(
     assert migrated_by_id[seed.regras[9].id] == seed.regras[9]
     assert all(migrated_by_id[item.id] == item for item in seed.regras if item.id != colliding.id)
     assert migrated.registro.versao == (
-        "custom-2025.4+adicoes-2025.5+comparacao-ns-cabecalho+atualizacao-2025.6+adicoes-2025.6"
+        "custom-2025.4+adicoes-2025.5+comparacao-ns-cabecalho+atualizacao-2025.6"
+        "+adicoes-2025.6+adicoes-2025.7"
     )
     numbers = {item.regra_id: item.numero for item in service.listar_numeros()}
     assert numbers[colliding.id] == 9
@@ -392,7 +404,7 @@ def test_startup_migrates_2025_4_without_overwriting_a_colliding_2025_5_id(
     engine.dispose()
 
 
-def test_startup_upgrades_unchanged_2025_4_registry_to_exact_2025_6_seed(
+def test_startup_upgrades_unchanged_2025_4_registry_to_exact_2025_7_seed(
     tmp_path: Path,
 ) -> None:
     engine = create_sqlite_engine(tmp_path / "official-seed-migration.sqlite3")
@@ -407,13 +419,13 @@ def test_startup_upgrades_unchanged_2025_4_registry_to_exact_2025_6_seed(
     assert migrated.id != initial.id
     assert migrated.registro.id == old.id
     assert migrated.registro.regras == seed.regras
-    assert migrated.registro.versao == "cemig-normas-distribuicao-2025.6"
+    assert migrated.registro.versao == "cemig-normas-distribuicao-2025.7"
     assert service.inicializar(seed) == migrated
     assert len(service.listar_historico()) == 2
     engine.dispose()
 
 
-def test_startup_upgrades_unchanged_2025_5_registry_to_exact_2025_6_seed(
+def test_startup_upgrades_unchanged_2025_5_registry_to_exact_2025_7_seed(
     tmp_path: Path,
 ) -> None:
     engine = create_sqlite_engine(tmp_path / "official-2025-5-migration.sqlite3")
@@ -428,6 +440,31 @@ def test_startup_upgrades_unchanged_2025_5_registry_to_exact_2025_6_seed(
     assert migrated.id != initial.id
     assert migrated.registro.id == old.id
     assert migrated.registro == seed
+    assert service.inicializar(seed) == migrated
+    assert len(service.listar_historico()) == 2
+    engine.dispose()
+
+
+def test_startup_adds_2025_7_rules_after_existing_numbers_and_preserves_history(
+    tmp_path: Path,
+) -> None:
+    engine = create_sqlite_engine(tmp_path / "official-2025-6-migration.sqlite3")
+    upgrade_database(engine)
+    service = _service(engine, tmp_path / "data", _Clock())
+    seed = carregar_registro_conformidade_inicial()
+    previous = _official_2025_6_registry(seed)
+    initial = service.inicializar(previous)
+    numbers_before = {item.regra_id: item.numero for item in service.listar_numeros()}
+
+    migrated = service.inicializar(seed)
+    numbers_after = {item.regra_id: item.numero for item in service.listar_numeros()}
+
+    assert migrated.id != initial.id
+    assert migrated.registro == seed
+    assert len(service.listar_historico()) == 2
+    assert all(numbers_after[rule_id] == number for rule_id, number in numbers_before.items())
+    assert numbers_after["bi.acoes.impacto-ambiental"] == 40
+    assert numbers_after["bi.acoes.falta-servidao"] == 41
     assert service.inicializar(seed) == migrated
     assert len(service.listar_historico()) == 2
     engine.dispose()
@@ -468,7 +505,7 @@ def test_startup_preserves_custom_2025_5_rule_and_colliding_2025_6_id(
         if item.id not in {custom_angle.id, colliding.id}
     )
     assert migrated.registro.versao == (
-        "custom-2025.5+comparacao-ns-cabecalho+atualizacao-2025.6+adicoes-2025.6"
+        "custom-2025.5+comparacao-ns-cabecalho+atualizacao-2025.6+adicoes-2025.6+adicoes-2025.7"
     )
     assert service.inicializar(seed) == migrated
     assert len(service.listar_historico()) == 2

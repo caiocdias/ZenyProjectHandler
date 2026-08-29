@@ -72,7 +72,7 @@ def test_fact_catalog_covers_current_and_planned_seed_vocabulary() -> None:
     assert all("vao.comprimento_m" not in item for item in warnings)
 
 
-def test_official_2025_6_seed_contains_the_complete_additive_rule_set() -> None:
+def test_official_2025_7_seed_contains_the_complete_additive_rule_set() -> None:
     registry = carregar_registro_conformidade_inicial()
     expected_additions = {
         "nd31.desenho.numero-folha",
@@ -95,11 +95,24 @@ def test_official_2025_6_seed_contains_the_complete_additive_rule_set() -> None:
         "pacote.documentacao.prordr-fotos",
         "nd31.rede.neutro-aterramento-200m",
         "nd31.rede.compacta-aterramento-temporario-160m",
+        "bi.acoes.impacto-ambiental",
+        "bi.acoes.falta-servidao",
     }
 
-    assert registry.versao == "cemig-normas-distribuicao-2025.6"
-    assert len(registry.regras) == 39
+    assert registry.versao == "cemig-normas-distribuicao-2025.7"
+    assert len(registry.regras) == 41
     assert expected_additions <= {item.id for item in registry.regras}
+    action_rules = registry.regras[-2:]
+    assert tuple(item.titulo for item in action_rules) == (
+        "IMPACTO AMBIENTAL PENDENTE",
+        "FALTA SERVIDÃO PENDENTE",
+    )
+    assert all(item.fonte.documento == "Controle operacional de ações BI" for item in action_rules)
+    assert all(item.fonte.revisao == "2026-08-28" for item in action_rules)
+    assert tuple(item.fonte.item for item in action_rules) == (
+        "AVALIAR IMPACTO AMBIENTAL",
+        "FALTA SERVIDÃO",
+    )
 
 
 def test_every_semantically_rural_or_urban_rule_has_the_matching_guard() -> None:

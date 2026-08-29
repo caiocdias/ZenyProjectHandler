@@ -38,12 +38,15 @@ from zeny_project_handler.domain.enums import (
     TipoEvidencia,
     TipoOrigemPdf,
 )
-from zeny_project_handler.domain.market import Mercado
+from zeny_project_handler.domain.market import DescricaoAcao, Mercado
 from zeny_project_handler.domain.project import ElementoProjetoType, Equipamento, Poste
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 
 from .compliance_fact_providers import (
+    ContextoAcoesProjeto,
     ContextoProvedorFatos,
+    EstadoVerificacaoAcao,
+    GatilhosAcoesProjeto,
     ProvedorFatosConformidade,
     criar_fato_conformidade,
 )
@@ -73,6 +76,24 @@ _KNOWN_DOCUMENT_LABEL_PATTERN = re.compile(
     re.IGNORECASE,
 )
 _MARKET_FACT_ORIGIN = "consulta ao cadastro de Notas de Serviço"
+_ACTION_RESULT_FACTS = {
+    DescricaoAcao.AVALIAR_IMPACTO_AMBIENTAL: ("projeto.acao_avaliar_impacto_ambiental_concluida"),
+    DescricaoAcao.FALTA_SERVIDAO: "projeto.acao_falta_servidao_concluida",
+}
+_ACTION_RESULT_ORIGINS = {
+    EstadoVerificacaoAcao.NAO_APLICAVEL: (
+        "verificação não aplicável porque o gatilho documental está ausente"
+    ),
+    EstadoVerificacaoAcao.SEM_CODIGOS_SERVICO: (
+        "verificação não consultada porque o projeto não possui códigos de serviço"
+    ),
+    EstadoVerificacaoAcao.PENDENTE: (
+        "consulta existencial ao cadastro operacional de ações concluídas"
+    ),
+    EstadoVerificacaoAcao.CONCLUIDA: (
+        "consulta existencial ao cadastro operacional de ações concluídas"
+    ),
+}
 _FIELD_PATTERNS = {
     "nota_servico": re.compile(
         r"\b(?:NOTA\s+DE\s+SERVICO|"
@@ -167,6 +188,7 @@ def analisar_conformidade_projeto(
     registro: RegistroRegrasConformidade,
     *,
     mercado: Mercado,
+    acoes_projeto: ContextoAcoesProjeto | None = None,
     provedores_fatos: tuple[ProvedorFatosConformidade, ...] | None = None,
 ) -> ResultadoConformidadeProjeto:
     targets = _targets(sessao)
@@ -301,8 +323,15 @@ def analisar_conformidade_projeto(
             )
 
     facts.extend(_project_automation_facts(sessao, project_target.id))
+    if acoes_projeto is not None:
+        facts.extend(_project_action_facts(project_target.id, acoes_projeto))
 
-    provider_context = ContextoProvedorFatos(sessao=sessao, alvos=targets, mercado=mercado)
+    provider_context = ContextoProvedorFatos(
+        sessao=sessao,
+        alvos=targets,
+        mercado=mercado,
+        acoes_projeto=acoes_projeto,
+    )
     providers = provedores_fatos if provedores_fatos is not None else provedores_fatos_padrao()
     for provider in providers:
         facts.extend(provider(provider_context))
@@ -314,6 +343,92 @@ def analisar_conformidade_projeto(
         achados=findings,
         itens_documentais=tuple(items),
     )
+
+
+def detectar_gatilhos_acoes_projeto(sessao: SessaoRevisao) -> GatilhosAcoesProjeto:
+    """Detecte gatilhos positivos sem I/O e preserve a ordem de leitura do projeto."""
+    page_order = {
+        page_id: index for index, page_id in enumerate(sessao.projeto.ordem_leitura_paginas)
+    }
+    semantic_evidence = tuple(
+        sorted(
+            evidencias_sem_anotacoes_de_revisao(sessao.evidencias),
+            key=lambda item: (
+                page_order.get(item.pagina_id, len(page_order)),
+                _center(item.geometria)[1],
+                _center(item.geometria)[0],
+                str(item.id),
+            ),
+        )
+    )
+    evidence_order = {item.id: index for index, item in enumerate(semantic_evidence)}
+    impact_fields = tuple(
+        sorted(
+            (
+                field
+                for field in _header_labeled_fields(semantic_evidence, deduplicate=False)
+                if _normalize_text(field.rotulo).strip(" .") == "IMPACTO AMBIENTAL"
+                and _normalize_text(field.valor) == "SIM"
+            ),
+            key=lambda field: min(evidence_order[item.id] for item in field.evidencias),
+        )
+    )
+    impact_evidence = tuple(
+        dict.fromkeys(item for field in impact_fields for item in field.evidencias)
+    )
+    return GatilhosAcoesProjeto(
+        impacto_ambiental_sim=impact_evidence,
+        servidao_mencionada=_servitude_evidence(semantic_evidence),
+    )
+
+
+def _project_action_facts(
+    target_id: UUID,
+    context: ContextoAcoesProjeto,
+) -> tuple[FatoConformidade, ...]:
+    facts: list[FatoConformidade] = [
+        _fact(
+            target_id,
+            "projeto.codigo_servico",
+            code,
+            "cadastro atual de serviços do projeto",
+            confidence=Decimal("1"),
+        )
+        for code in context.codigos_servico
+    ]
+    if context.gatilhos.impacto_ambiental_sim:
+        facts.append(
+            _fact(
+                target_id,
+                "projeto.impacto_ambiental_sim",
+                True,
+                "campo Impacto Ambiental igual a SIM no cabeçalho PDF",
+                evidence=context.gatilhos.impacto_ambiental_sim,
+                confidence=Decimal("0.92"),
+            )
+        )
+    if context.gatilhos.servidao_mencionada:
+        facts.append(
+            _fact(
+                target_id,
+                "projeto.servidao_mencionada",
+                True,
+                "menção textual aceita de servidão no pacote PDF",
+                evidence=context.gatilhos.servidao_mencionada,
+                confidence=Decimal("0.90"),
+            )
+        )
+    facts.extend(
+        _fact(
+            target_id,
+            _ACTION_RESULT_FACTS[result.acao],
+            result.concluida,
+            _ACTION_RESULT_ORIGINS[result.estado],
+            confidence=Decimal("1"),
+        )
+        for result in context.resultados
+    )
+    return tuple(facts)
 
 
 def _targets(session: SessaoRevisao) -> tuple[AlvoConformidade, ...]:
@@ -595,6 +710,8 @@ def _searchable_texts(
 
 def _header_labeled_fields(
     evidence: tuple[EvidenciaDocumento, ...],
+    *,
+    deduplicate: bool = True,
 ) -> tuple[_CampoRotuladoDocumento, ...]:
     candidates = tuple(
         item
@@ -603,7 +720,7 @@ def _header_labeled_fields(
         and item.conteudo_bruto
         and evidencia_esta_na_zona_de_cabecalho(item)
     )
-    return _extract_labeled_fields(candidates)
+    return _extract_labeled_fields(candidates, deduplicate=deduplicate)
 
 
 def _servitude_labeled_fields(
@@ -635,6 +752,8 @@ def _is_in_servitude_section(
 
 def _extract_labeled_fields(
     evidence: tuple[EvidenciaDocumento, ...],
+    *,
+    deduplicate: bool = True,
 ) -> tuple[_CampoRotuladoDocumento, ...]:
     ordered = tuple(
         sorted(
@@ -665,7 +784,7 @@ def _extract_labeled_fields(
                         field_evidence = (item, neighbor)
                         geometry = _combined_geometry((item.geometria, neighbor.geometria))
                 identity = (item.pagina_id, _normalize_text(label), value.casefold())
-                if identity in seen:
+                if deduplicate and identity in seen:
                     continue
                 seen.add(identity)
                 result.append(

@@ -231,7 +231,7 @@ def test_span_rule_full_ui_cycle_survives_restart(
     assert not history.items[1].is_stale
     assert any(item.rule_id == _RULE_ID for item in first_execution.findings)
     assert "IDs existentes substituídos: 1" in confirmations[-1]
-    assert "IDs atuais omitidos e preservados: 39" in confirmations[-1]
+    assert "IDs atuais omitidos e preservados: 41" in confirmations[-1]
 
 
 def _create_project_with_pdf(

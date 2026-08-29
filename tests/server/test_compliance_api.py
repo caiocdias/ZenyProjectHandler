@@ -44,7 +44,7 @@ def _custom_registry_payload() -> bytes:
     return json.dumps(payload, ensure_ascii=False).encode("utf-8")
 
 
-def test_remote_registry_preserves_39_rule_baseline_round_trip_and_confirmed_restart(
+def test_remote_registry_preserves_41_rule_baseline_round_trip_and_confirmed_restart(
     tmp_path: Path,
 ) -> None:
     settings = _settings(tmp_path / "server-data")
@@ -55,10 +55,10 @@ def test_remote_registry_preserves_39_rule_baseline_round_trip_and_confirmed_res
         active = client.get("/api/v1/rules/active", headers=AUTH)
         assert active.status_code == 200, active.text
         baseline = active.json()
-        assert baseline["rule_count"] == baseline["active_rule_count"] == 39
-        assert len(baseline["rules"]) == len(baseline["details"]) == 39
-        assert len({item["rule_id"] for item in baseline["rules"]}) == 39
-        assert {item["rule_number"] for item in baseline["rules"]} == set(range(1, 40))
+        assert baseline["rule_count"] == baseline["active_rule_count"] == 41
+        assert len(baseline["rules"]) == len(baseline["details"]) == 41
+        assert len({item["rule_id"] for item in baseline["rules"]}) == 41
+        assert {item["rule_number"] for item in baseline["rules"]} == set(range(1, 42))
 
         download = client.get("/api/v1/rules/active/download", headers=AUTH)
         assert download.status_code == 200
@@ -72,7 +72,7 @@ def test_remote_registry_preserves_39_rule_baseline_round_trip_and_confirmed_res
         registry, warnings = registro_conformidade_e_avisos_de_dict(decoded)
         assert warnings == ()
         assert registry.assinatura() == baseline["sha256"]
-        assert len(registry.regras) == 39
+        assert len(registry.regras) == 41
 
         content = _custom_registry_payload()
         preflight = client.post(
@@ -84,12 +84,12 @@ def test_remote_registry_preserves_39_rule_baseline_round_trip_and_confirmed_res
         prepared = preflight.json()
         assert prepared["disposition"] == "CONFIRMATION_REQUIRED"
         assert prepared["added_rule_ids"] == ["fixture.server.regra-adicional"]
-        assert len(prepared["preserved_rule_ids"]) == 39
+        assert len(prepared["preserved_rule_ids"]) == 41
 
         unchanged = client.get("/api/v1/rules/active", headers=AUTH).json()
         assert unchanged["revision"] == baseline["revision"]
         assert unchanged["sha256"] == baseline["sha256"]
-        assert unchanged["rule_count"] == 39
+        assert unchanged["rule_count"] == 41
 
         confirmed = client.post(
             "/api/v1/rules/imports",
@@ -102,13 +102,13 @@ def test_remote_registry_preserves_39_rule_baseline_round_trip_and_confirmed_res
             },
         )
         assert confirmed.status_code == 201, confirmed.text
-        assert confirmed.json()["active_rule_count"] == 40
+        assert confirmed.json()["active_rule_count"] == 42
 
         imported = client.get("/api/v1/rules/active", headers=AUTH).json()
         imported_numbers = {item["rule_id"]: item["rule_number"] for item in imported["rules"]}
         baseline_numbers = {item["rule_id"]: item["rule_number"] for item in baseline["rules"]}
-        assert imported["rule_count"] == imported["active_rule_count"] == 40
-        assert imported_numbers["fixture.server.regra-adicional"] == 40
+        assert imported["rule_count"] == imported["active_rule_count"] == 42
+        assert imported_numbers["fixture.server.regra-adicional"] == 42
         assert all(
             imported_numbers[rule_id] == number for rule_id, number in baseline_numbers.items()
         )
@@ -122,4 +122,4 @@ def test_remote_registry_preserves_39_rule_baseline_round_trip_and_confirmed_res
         reopened = client.get("/api/v1/rules/active", headers=AUTH)
         assert reopened.status_code == 200
         assert reopened.json()["revision"] == "fixture-server-stage7"
-        assert reopened.json()["rule_count"] == 40
+        assert reopened.json()["rule_count"] == 42

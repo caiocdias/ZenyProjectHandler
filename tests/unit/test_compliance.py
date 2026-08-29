@@ -20,6 +20,7 @@ from zeny_project_handler.application.project_compliance import (
     _document_control_facts,
     _region_facts,
     analisar_conformidade_projeto,
+    detectar_gatilhos_acoes_projeto,
 )
 from zeny_project_handler.domain.analysis import (
     EvidenciaDocumento,
@@ -411,6 +412,104 @@ def test_documentation_lists_every_labeled_header_and_servitude_value() -> None:
     assert header["Dispositivo"] == "CH. FUSÍVEL 31399-300A-6T-C"
     assert header["Serviço"] == "EXTENSÃO DE REDE / LIGAÇÃO NOVA"
     assert header["Aprovação"] == "Não informado"
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    (
+        ("Impacto Ambiental: Sim", True),
+        ("  IMPÁCTO   AMBIENTAL :  sim  ", True),
+        ("Impacto Ambiental: Não", False),
+        ("Impacto Ambiental:", False),
+        ("Impacto Ambiental: SIMULAÇÃO", False),
+    ),
+)
+def test_environmental_impact_trigger_requires_exact_sim_in_header(
+    text: str,
+    expected: bool,
+) -> None:
+    session = _session_with_document_controls()
+    evidence = _text_evidence(
+        session.execucoes[0].id,
+        session.projeto.documentos[0].paginas[0].id,
+        text,
+        "0.70",
+        "0.88",
+    )
+    triggers = detectar_gatilhos_acoes_projeto(
+        replace(session, evidencias=(*session.evidencias, evidence))
+    )
+
+    assert bool(triggers.impacto_ambiental_sim) is expected
+    assert (evidence.id in {item.id for item in triggers.impacto_ambiental_sim}) is expected
+
+
+def test_action_triggers_ignore_body_and_review_comments_and_keep_reading_order() -> None:
+    session = _session_with_document_controls()
+    execution_id = session.execucoes[0].id
+    page_id = session.projeto.documentos[0].paginas[0].id
+    later = _text_evidence(
+        execution_id,
+        page_id,
+        "Impacto Ambiental: SIM",
+        "0.70",
+        "0.92",
+    )
+    earlier = _text_evidence(
+        execution_id,
+        page_id,
+        "Impacto Ambiental: Sim",
+        "0.70",
+        "0.84",
+    )
+    body = _text_evidence(
+        execution_id,
+        page_id,
+        "Impacto Ambiental: Sim",
+        "0.20",
+        "0.20",
+    )
+    servitude = _text_evidence(
+        execution_id,
+        page_id,
+        "FAIXA DE DOMÍNIO",
+        "0.30",
+        "0.30",
+    )
+    review_comment = replace(
+        _text_evidence(
+            execution_id,
+            page_id,
+            "Impacto Ambiental: Sim · SERVIDÃO",
+            "0.75",
+            "0.86",
+        ),
+        origem_pdf=OrigemObjetoPdf(
+            tipo=TipoOrigemPdf.ANOTACAO,
+            numero_objeto=91,
+            indice_anotacao=0,
+            subtipo_anotacao="FreeText",
+        ),
+    )
+    triggers = detectar_gatilhos_acoes_projeto(
+        replace(
+            session,
+            evidencias=(
+                *session.evidencias,
+                later,
+                review_comment,
+                body,
+                servitude,
+                earlier,
+            ),
+        )
+    )
+
+    assert tuple(item.id for item in triggers.impacto_ambiental_sim) == (
+        earlier.id,
+        later.id,
+    )
+    assert tuple(item.id for item in triggers.servidao_mencionada) == (servitude.id,)
 
 
 def test_document_control_facts_preserve_branch_order_ids_and_provenance() -> None:
