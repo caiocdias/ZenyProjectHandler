@@ -22,6 +22,12 @@ essas condições aqui reduz o risco de divergência entre documentação e cód
   guarda omite o achado em vez de presumir uma divergência.
 - Importações mesclam por ID e não removem IDs omitidos. O estado `enabled` só muda por importação do
   próprio ID.
+- As regras 40 e 41 são aplicáveis somente quando o PDF fornece, respectivamente, o campo de
+  cabeçalho `Impacto Ambiental: Sim` ou uma menção positiva a servidão. Cada ação é consultada no
+  máximo uma vez por execução com a NS e os códigos de serviço vigentes.
+- Para essas duas regras, zero linha em `vBIAcoes` e coleção vazia significam requisito não atendido;
+  erro ODBC interrompe a execução e não vira divergência. O resultado SQL não possui geometria, por
+  isso a evidência do gatilho ancora o callout.
 
 ## Regras distribuídas
 

@@ -147,6 +147,22 @@ def create_catalog_pdf(path: Path, code: str) -> Path:
     return path
 
 
+def create_action_requirements_pdf(path: Path, code: str) -> Path:
+    """Crie uma prancha com os dois gatilhos operacionais e âncoras distintas."""
+    document = pymupdf.open()
+    try:
+        page = document.new_page(width=595, height=842)
+        page.insert_text((48, 90), "P1", fontsize=10)
+        page.insert_text((48, 108), code, fontsize=9)
+        page.insert_text((90, 310), "FAIXA DE SERVIDAO", fontsize=11)
+        page.draw_rect(pymupdf.Rect(332, 760, 570, 820), color=(0.2, 0.2, 0.2))
+        page.insert_text((350, 792), "Impacto Ambiental: Sim", fontsize=10)
+        document.save(path)
+    finally:
+        document.close()
+    return path
+
+
 def create_mixed_raster_text_pdf(path: Path) -> Path:
     """Página com texto nativo suficiente e uma imagem que ainda exige OCR."""
     document = pymupdf.open()

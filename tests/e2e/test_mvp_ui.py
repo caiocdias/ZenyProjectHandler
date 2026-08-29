@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 from typing import cast
 from uuid import UUID
@@ -24,7 +25,9 @@ from PySide6.QtWidgets import (
 from pytestqt.qtbot import QtBot
 
 from tests.conftest import ApplicationFactory
-from tests.pdf_fixtures import create_golden_pdf
+from tests.market_fakes import FakeVerificadorAcoesConcluidas
+from tests.pdf_fixtures import create_action_requirements_pdf, create_golden_pdf
+from tests.remote_gateways import DirectProjectGateway
 from zeny_project_handler.adapters.analysis import PyMuPdfDocumentAnalyzer, TesseractCliOcr
 from zeny_project_handler.adapters.catalog import carregar_catalogo_inicial
 from zeny_project_handler.adapters.persistence import (
@@ -33,9 +36,14 @@ from zeny_project_handler.adapters.persistence import (
 )
 from zeny_project_handler.config import DATABASE_FILE_NAME
 from zeny_project_handler.domain.enums import CategoriaElemento
+from zeny_project_handler.domain.market import DescricaoAcao
 from zeny_project_handler.domain.project_metadata import MetadadosProjeto
 from zeny_project_handler_client.config import ClientSettings
 from zeny_project_handler_client.ui.project_panel import ProjectPanelWidget
+from zeny_project_handler_contracts.base import ComplianceExecutionId
+from zeny_project_handler_contracts.compliance import ComplianceExecutionResponse
+from zeny_project_handler_contracts.enums import ComplianceStatus
+from zeny_project_handler_contracts.projects import ProjectServiceCodesResponse
 
 pytestmark = [
     pytest.mark.integration,
@@ -325,6 +333,214 @@ def test_project_service_codes_ui_is_remote_canonical_accessible_and_conflict_sa
     assert reopened_combo.findData(str(second_project_id)) < 0
     assert not reopened_service_box.isEnabled()
     assert reopened_services.count() == 0
+
+
+def test_environmental_actions_full_client_matrix_uses_current_service_codes(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    application_factory: ApplicationFactory,
+) -> None:
+    settings = ClientSettings(data_directory=tmp_path / "actions-flow", pdf_render_dpi=72)
+    catalog_code = carregar_catalogo_inicial().itens_ativos(CategoriaElemento.POSTE)[0].codigo
+    source = create_action_requirements_pdf(tmp_path / "acoes-sinteticas.pdf", catalog_code)
+    verifier = FakeVerificadorAcoesConcluidas(resultado=False)
+    warnings: list[str] = []
+    monkeypatch.setattr(
+        QMessageBox,
+        "warning",
+        lambda _parent, _title, message: warnings.append(str(message)),
+    )
+    _application, window = application_factory(
+        [],
+        settings=settings,
+        action_verifier=verifier,
+    )
+    qtbot.addWidget(window)
+    window.show()
+    panel = window.project_panel
+    assert isinstance(panel, ProjectPanelWidget)
+
+    name = panel.findChild(QLineEdit, "mvpProjectNameEdit")
+    create = panel.findChild(QPushButton, "mvpCreateProjectButton")
+    project_combo = panel.findChild(QComboBox, "mvpProjectCombo")
+    service_field = panel.findChild(QLineEdit, "mvpProjectServiceCodeEdit")
+    service_list = panel.findChild(QListWidget, "mvpProjectServiceCodeList")
+    add_service = panel.findChild(QPushButton, "mvpAddServiceCodeButton")
+    assert name is not None and create is not None and project_combo is not None
+    assert service_field is not None and service_list is not None and add_service is not None
+    name.setText("0000007401")
+    qtbot.mouseClick(create, Qt.MouseButton.LeftButton)
+    project_id = UUID(str(project_combo.currentData()))
+    for code in ("0007", "9012"):
+        service_field.setText(code)
+        qtbot.mouseClick(add_service, Qt.MouseButton.LeftButton)
+
+    assert isinstance(panel._gateway, DirectProjectGateway)
+    assert panel._session is not None
+    second_client = DirectProjectGateway(panel._gateway._runtime)
+    server_wins = second_client.replace_service_codes(
+        project_id,
+        ("1234", "0007"),
+        expected_project_version=panel._session.project_version,
+    )
+    assert isinstance(server_wins, ProjectServiceCodesResponse)
+    service_field.setText("9999")
+    qtbot.mouseClick(add_service, Qt.MouseButton.LeftButton)
+    current_codes = tuple(service_list.item(index).text() for index in range(service_list.count()))
+    assert current_codes == ("0007", "1234")
+    assert any("outra janela" in message for message in warnings)
+    canonical = panel._gateway.get_service_codes(project_id)
+    assert isinstance(canonical, ProjectServiceCodesResponse)
+    assert canonical.service_codes == current_codes
+    assert canonical.project_version == server_wins.project_version
+
+    monkeypatch.setattr(
+        QFileDialog,
+        "getOpenFileNames",
+        lambda *_args, **_kwargs: ([str(source)], "Documentos PDF (*.pdf)"),
+    )
+    add_pdfs = panel.findChild(QPushButton, "mvpAddPdfsButton")
+    run = panel.findChild(QPushButton, "mvpRunAnalysisButton")
+    assert add_pdfs is not None and run is not None
+    qtbot.mouseClick(add_pdfs, Qt.MouseButton.LeftButton)
+    assert window.pdf_viewer.inspecao is not None
+    qtbot.mouseClick(run, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: not panel.processando, timeout=30_000)
+
+    documentation = window.documentation_panel
+    assert documentation is not None
+    findings_tree = documentation.findChild(QTreeWidget, "complianceFindingsTree")
+    reanalyze = documentation.findChild(QPushButton, "complianceAnalyzeButton")
+    assert findings_tree is not None and reanalyze is not None
+    action_rules = {
+        "bi.acoes.impacto-ambiental": (
+            "IMPACTO AMBIENTAL PENDENTE",
+            DescricaoAcao.AVALIAR_IMPACTO_AMBIENTAL,
+        ),
+        "bi.acoes.falta-servidao": (
+            "FALTA SERVIDÃO PENDENTE",
+            DescricaoAcao.FALTA_SERVIDAO,
+        ),
+    }
+
+    def assert_action_projection(
+        impact_completed: bool,
+        servitude_completed: bool,
+    ) -> ComplianceExecutionResponse:
+        result = documentation._result
+        assert isinstance(result, ComplianceExecutionResponse)
+        by_rule = {item.rule_id: item for item in result.findings if item.rule_id in action_rules}
+        assert set(by_rule) == set(action_rules)
+        completed_by_rule = {
+            "bi.acoes.impacto-ambiental": impact_completed,
+            "bi.acoes.falta-servidao": servitude_completed,
+        }
+        visible_action_titles = {
+            item.text(2)
+            for index in range(findings_tree.topLevelItemCount())
+            if (item := findings_tree.topLevelItem(index)) is not None
+            and item.text(2) in {value[0] for value in action_rules.values()}
+        }
+        assert visible_action_titles == {
+            action_rules[rule_id][0]
+            for rule_id, completed in completed_by_rule.items()
+            if not completed
+        }
+        for rule_id, finding in by_rule.items():
+            title, _action = action_rules[rule_id]
+            assert finding.title == title
+            expected_status = (
+                ComplianceStatus.COMPLIANT
+                if completed_by_rule[rule_id]
+                else ComplianceStatus.DIVERGENCE
+            )
+            assert finding.status is expected_status
+            assert bool(finding.callout) is not completed_by_rule[rule_id]
+            assert finding.evidence
+            if finding.callout is None:
+                continue
+            assert finding.navigation is not None
+            assert finding.callout.navigation.page_id == finding.navigation.page_id
+            assert finding.callout.finding_id == finding.finding_id
+        impact_callout = by_rule["bi.acoes.impacto-ambiental"].callout
+        servitude_callout = by_rule["bi.acoes.falta-servidao"].callout
+        if impact_callout is not None:
+            assert float(impact_callout.anchor.y) >= 0.76
+        if servitude_callout is not None:
+            assert float(servitude_callout.anchor.y) < 0.76
+        divergent = next((item for item in by_rule.values() if item.callout is not None), None)
+        callout = divergent.callout if divergent is not None else None
+        if divergent is not None and callout is not None:
+            row = next(
+                item
+                for index in range(findings_tree.topLevelItemCount())
+                if (item := findings_tree.topLevelItem(index)) is not None
+                and item.text(2) == divergent.title
+            )
+            findings_tree.setCurrentItem(row)
+            qtbot.waitUntil(
+                lambda: (
+                    window.pdf_viewer._selected_compliance_callout_id
+                    == str(callout.callout_id.root)
+                ),
+                timeout=10_000,
+            )
+            assert window.pdf_viewer.folha_atual == 1
+            assert str(callout.callout_id.root) in window.pdf_viewer.view._callout_items
+        return result
+
+    def result_changed(expected_id: ComplianceExecutionId) -> bool:
+        result = documentation._result
+        return (
+            documentation._compliance_job_id is None
+            and result is not None
+            and result.execution.execution_id != expected_id
+        )
+
+    expected_calls = [
+        ("0000007401", current_codes, action_rules[rule_id][1]) for rule_id in action_rules
+    ]
+    assert verifier.consultas == expected_calls
+    previous = assert_action_projection(False, False)
+    matrix = ((True, False), (False, True), (True, True))
+    for impact_completed, servitude_completed in matrix:
+        verifier.resultados = {
+            DescricaoAcao.AVALIAR_IMPACTO_AMBIENTAL: impact_completed,
+            DescricaoAcao.FALTA_SERVIDAO: servitude_completed,
+        }
+        before_calls = len(verifier.consultas)
+        previous_id = previous.execution.execution_id
+        qtbot.mouseClick(reanalyze, Qt.MouseButton.LeftButton)
+        qtbot.waitUntil(
+            partial(result_changed, previous_id),
+            timeout=30_000,
+        )
+        assert verifier.consultas[before_calls:] == expected_calls
+        previous = assert_action_projection(impact_completed, servitude_completed)
+
+    _reopened_application, reopened = application_factory(
+        [],
+        settings=settings,
+        action_verifier=verifier,
+    )
+    qtbot.addWidget(reopened)
+    reopened.show()
+    reopened_panel = reopened.project_panel
+    assert isinstance(reopened_panel, ProjectPanelWidget)
+    reopened_services = reopened_panel.findChild(
+        QListWidget,
+        "mvpProjectServiceCodeList",
+    )
+    assert reopened_services is not None
+    assert (
+        tuple(reopened_services.item(index).text() for index in range(reopened_services.count()))
+        == current_codes
+    )
+    reopened_documentation = reopened.documentation_panel
+    assert reopened_documentation is not None
+    reopened_documentation.abrir_projeto(project_id)
+    assert reopened_documentation._result == previous
 
 
 def test_user_can_create_import_analyze_review_and_reopen_from_ui(

@@ -23,9 +23,10 @@ Copy-Item .env-example .env
 ```
 
 Edite `.env`: substitua os placeholders de `ZENY_SERVER_PASSWORD` e
-`ZENY_MARKET_SQLSERVER_CONNECTION_STRING`. A conexão ODBC é segredo; não a coloque no comando,
-Compose, imagem ou ticket. `ZENY_MARKET_SQLSERVER_TIMEOUT_SECONDS` deve ser um inteiro positivo
-(padrão `15`). Não altere `ZENY_SERVER_IMAGE`, salvo numa atualização/rollback conferidos. Para
+`ZENY_MARKET_SQLSERVER_CONNECTION_STRING`. A mesma conexão ODBC atende mercado e ações concluídas;
+ela é segredo e não deve entrar no comando, Compose, imagem ou ticket.
+`ZENY_MARKET_SQLSERVER_TIMEOUT_SECONDS` deve ser um inteiro positivo (padrão `15`) e vale para as
+duas consultas. Não altere `ZENY_SERVER_IMAGE`, salvo numa atualização/rollback conferidos. Para
 clientes de outra máquina, defina `ZENY_SERVER_BIND_ADDRESS` com o IPv4 privado específico do
 servidor.
 
@@ -38,27 +39,44 @@ docker compose --env-file .env -f compose.release.yaml ps
 O Compose nunca constrói imagem nem monta código-fonte. O volume nomeado `zeny-data` é a fonte de
 verdade e sobrevive a restart, recreate e `docker compose down`.
 
-## Cadastro SQL Server de mercado
+## Cadastros SQL Server de mercado e ações
 
-O SQL Server de Notas de Serviço é a única fonte de `RURAL`/`URBANO`. Cada execução de
-conformidade abre uma conexão curta, executa uma vez a consulta parametrizada
-`SELECT NOTAS_COD_MERCADO FROM TB_NOTAS WHERE NOTAS_NUM_NS = ?;` e fecha cursor/conexão. Não há
-cache, cópia no SQLite ou fallback por metadado/PDF.
+O SQL Server é a única fonte de `RURAL`/`URBANO` e das ações operacionais concluídas. Cada execução
+de conformidade abre conexões curtas, consulta o mercado uma vez e consulta no máximo uma vez cada
+ação cujo gatilho exista no PDF. Não há cache, cópia no SQLite ou fallback por metadado/PDF.
+
+```sql
+SELECT NOTAS_COD_MERCADO FROM TB_NOTAS WHERE NOTAS_NUM_NS = ?;
+
+SELECT TACOES_DES
+FROM vBIAcoes
+WHERE NOTAS_NUM_NS = ?
+  AND TSERVICOS_CT_COD IN (?, ...)
+  AND TACOES_DES = ?
+  AND ACOES_DAT_CONCLUSAO IS NOT NULL;
+```
+
+Na segunda consulta, somente a quantidade de placeholders é montada; NS, serviços e uma das duas
+descrições fechadas são parâmetros. Coleção vazia não abre conexão nem gera `IN ()`.
 
 Crie um login dedicado com permissão de conexão ao banco e somente `SELECT` sobre
-`TB_NOTAS.NOTAS_NUM_NS` e `TB_NOTAS.NOTAS_COD_MERCADO`. Não conceda escrita, DDL ou administração.
+`TB_NOTAS.NOTAS_NUM_NS`/`NOTAS_COD_MERCADO` e sobre `vBIAcoes.NOTAS_NUM_NS`,
+`TSERVICOS_CT_COD`, `TACOES_DES` e `ACOES_DAT_CONCLUSAO`. Não conceda acesso direto às tabelas-base
+da view, escrita, DDL ou administração.
 A string ODBC deve usar Microsoft ODBC Driver 18, `Encrypt=yes` e
 `TrustServerCertificate=no`. Instale a CA da organização na imagem por processo aprovado quando a
 cadeia não for pública; não desative a validação de certificado. Confirme DNS/rota/firewall do
-container até o SQL Server e o schema padrão que resolve `TB_NOTAS`.
+container até o SQL Server e o schema padrão que resolve `TB_NOTAS` e `vBIAcoes`.
 
-Ausência, placeholder, timeout não positivo, NS sem linha, `NULL`, valor fora de
-`RURAL`/`URBANO`, duplicidade ou falha ODBC encerram a conformidade sem snapshot parcial. Projetos e
-snapshots já persistidos continuam consultáveis. O health HTTP prova somente o servidor Zeny; não
-prova rede, TLS, permissão ou dados do SQL Server. Depois de uma mudança externa de mercado,
-execute **Analisar conformidade** novamente para capturá-la em outro snapshot.
+Para mercado, NS sem linha, `NULL`, valor fora de `RURAL`/`URBANO` ou duplicidade são erro. Para
+ações, zero linha é resultado válido e significa pendência; uma ou mais linhas significam ação
+concluída. Timeout, falha ODBC ou dado incompatível encerram a conformidade sem snapshot parcial e
+jamais viram pendência. Projetos e snapshots já persistidos continuam consultáveis. O health HTTP
+prova somente o servidor Zeny; não prova rede, TLS, permissão ou dados do SQL Server. Depois de uma
+mudança externa de mercado ou ação, execute **Analisar conformidade** novamente. Alterar NS ou
+serviços no Zeny já marca o resultado anterior como desatualizado.
 
-Na homologação E04, rode o smoke somente leitura dentro da imagem aprovada. A conexão continua
+Na homologação, rode o smoke de mercado somente leitura dentro da imagem aprovada. A conexão continua
 vindo do `.env`; apenas o opt-in e a NS autorizada são repassados separadamente:
 
 ```powershell
@@ -73,6 +91,13 @@ Remove-Item Env:ZENY_MARKET_SQLSERVER_SMOKE_ENABLED, Env:ZENY_MARKET_SQLSERVER_S
 Sem `ZENY_MARKET_SQLSERVER_SMOKE_ENABLED=1`, o comando não abre conexão e retorna código `2`.
 Execute uma vez para a NS `RURAL` e outra para a NS `URBANO`; a saída mostra somente o mercado, sem
 NS ou string ODBC.
+
+Esse comando não cobre `vBIAcoes`. Antes da implantação, obtenha autorização e massa conhecidas para
+uma validação somente leitura dentro da imagem aprovada. Confirme o tipo físico de
+`TSERVICOS_CT_COD`, as permissões mínimas e, para cada descrição, um caso com linha e um sem linha.
+Registre apenas estados sanitizados (`CONCLUIDA`/`PENDENTE`), sem NS, serviços, SQL, conexão ou
+credenciais. Sem autorização, o gate de ações permanece pendente e nenhuma consulta deve ser feita
+por tentativa.
 
 ## LAN, firewall e health
 

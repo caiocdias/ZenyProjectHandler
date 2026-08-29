@@ -18,14 +18,15 @@ Estado versionado relevante:
 | Pacote Python | `0.2.0` |
 | Catálogo técnico | `2` |
 | Registro de interpretação | `1.3.0` |
-| Registro de conformidade distribuído | `cemig-normas-distribuicao-2025.6` |
-| Método de conformidade | `7` |
+| Registro de conformidade distribuído | `cemig-normas-distribuicao-2025.7` |
+| Método de conformidade | `9` |
 | Migração SQLite mais recente | `0009_remote_jobs` |
 
 ## Modelo de domínio
 
 `Projeto` é o agregado persistido. Ele reúne:
 
+- coleção ordenada e sem duplicatas de códigos de serviço com quatro dígitos ASCII;
 - documentos e páginas na ordem de leitura escolhida;
 - elementos confirmados: `Poste`, `EstruturaMt`, `EstruturaBt`, `Cabo` e `Equipamento`;
 - relações confirmadas entre elementos;
@@ -42,6 +43,9 @@ O diagrama resumido está em [modelo-entidades.mmd](modelo-entidades.mmd). O dom
 ## Projetos e documentos
 
 - Um projeto é criado a partir de uma NS normalizada e pode ter a NS alterada depois.
+- A caixa **Serviços do projeto**, entre **Projeto** e **Folhas PDF**, consulta e substitui uma
+  coleção canônica pelo servidor. Cada código possui exatamente quatro dígitos ASCII, conserva
+  zeros à esquerda, e projetos legados abrem com coleção vazia.
 - Um ou vários PDFs podem ser adicionados na mesma seleção.
 - Conteúdo duplicado, identificado por hash, não pode entrar duas vezes no mesmo projeto.
 - A ordem de leitura é uma sequência de páginas persistida e pode intercalar páginas de PDFs
@@ -202,9 +206,22 @@ job e recebe somente DTOs normalizados. Seleção cruzada, visibilidade e a posi
 caixas permanecem locais. O upload de regras exige preflight e confirmação separados; cancelar no
 diálogo não publica revisão.
 
-O seed contém 39 regras habilitadas. A lista normativa completa está em
+O seed contém 41 regras habilitadas. As regras 40 e 41 têm, respectivamente, os títulos exatos
+`IMPACTO AMBIENTAL PENDENTE` e `FALTA SERVIDÃO PENDENTE`. A lista normativa completa está em
 [catalogo-regras-conformidade.md](catalogo-regras-conformidade.md), e o desenho do motor está em
 [arquitetura-conformidade.md](arquitetura-conformidade.md).
+
+`Impacto Ambiental: Sim` é gatilho somente quando o rótulo aparece na zona de cabeçalho e o valor
+normalizado é exatamente `SIM`. Uma menção positiva aceita a `SERVIDÃO`, `FAIXA DE SERVIDÃO` ou
+`FAIXA DE DOMÍNIO` em qualquer folha fora de comentários de revisão. Cada gatilho consulta no máximo
+uma vez por execução a ação fechada correspondente — `AVALIAR IMPACTO AMBIENTAL` ou
+`FALTA SERVIDÃO` — com a NS e a coleção de serviços vigentes. O cliente não executa nem conhece SQL.
+
+Uma ou mais linhas concluídas torna o requisito conforme; zero linha é uma consulta válida e gera a
+pendência. Lista vazia não produz `IN ()`: a porta não é chamada, o requisito fica falso com origem
+explicativa e o callout usa a evidência do PDF. Timeout, falha ODBC ou erro de execução interrompem o
+job sem snapshot parcial e não são convertidos em pendência. Sem o gatilho, a ação não é consultada
+e a regra não cria achado.
 
 O domínio e a interface reconhecem `CONFORME`, `DIVERGENCIA` e `NAO_AVALIAVEL`. O avaliador atual
 emite os dois primeiros para alvos aplicáveis e não cria achado quando alguma condição `when` falha.
@@ -216,9 +233,10 @@ encaminhados ao projetista como pendências. O usuário pode arrastar a caixa de
 âncora permanece fixa e a seta é recalculada durante o movimento. A posição manual é preservada
 enquanto o mesmo projeto permanece aberto.
 
-Uma execução de conformidade guarda a assinatura da sessão semântica, da revisão das regras e do
-método. Alterar regras ou incrementar o método marca o snapshot anterior como desatualizado; a
-reanálise é sempre explícita e cria ou reutiliza a execução idempotente correspondente.
+Uma execução de conformidade guarda a assinatura da sessão semântica, da revisão das regras, do
+método, da NS, dos códigos de serviço e dos resultados externos consultados. Alterar regras, método,
+NS ou serviços marca o snapshot anterior como desatualizado; a reanálise é sempre explícita e cria
+ou reutiliza a execução idempotente correspondente.
 
 ## Registro de regras
 
@@ -283,6 +301,12 @@ ler a mesma proposta, mas somente a primeira decisão válida persiste; a segund
 recarregar os DTOs. A compilação e o download dos entregáveis executam fora da thread visual; o
 cliente mantém a interface responsiva, permite cancelar antes da publicação local e preserva o
 arquivo anterior em caso de falha. Objetos Qt visuais permanecem na thread principal.
+
+Os códigos de serviço usam `GET` e `PUT /api/v1/projects/{project_id}/service-codes`. O PUT substitui
+toda a coleção com `expected_project_version`; uma segunda janela com versão obsoleta recebe
+`409 STALE_STATE`, recarrega detalhe e coleção e não sobrescreve os valores vigentes. A resposta
+devolve `ProjectServiceCodesResponse`; o DTO de detalhe do projeto e o PATCH da NS permanecem
+inalterados.
 
 O procedimento operacional usa snapshot administrativo antes de upgrade, `docker compose down` sem
 remoção de volume e migração fail-closed antes de `ready=true`. Rollback no mesmo volume é permitido

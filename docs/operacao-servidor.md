@@ -44,8 +44,9 @@ host nem do pacote do cliente.
 4. Defina `ZENY_SERVER_IMAGE=<imagem>@sha256:<digest-aprovado>` no `.env`; essa referência é a
    unidade de atualização e rollback do Compose.
 5. Copie `.env-example` para `.env`; gere uma senha longa e aleatória e configure também a string
-   ODBC secreta em `ZENY_MARKET_SQLSERVER_CONNECTION_STRING`. Os dois placeholders impedem o
-   startup. Mantenha `ZENY_MARKET_SQLSERVER_TIMEOUT_SECONDS` como inteiro positivo; o padrão é 15.
+   ODBC secreta em `ZENY_MARKET_SQLSERVER_CONNECTION_STRING`. A mesma conexão atende mercado e
+   ações concluídas. Os dois placeholders impedem o startup. Mantenha
+   `ZENY_MARKET_SQLSERVER_TIMEOUT_SECONDS` como inteiro positivo; o padrão é 15.
 6. Mantenha `.env` fora de Git, backups genéricos do checkout, tickets e mensagens. Os segredos
    entram somente como ambiente runtime; não use `ARG`, `ENV` de Dockerfile nem imagem derivada com
    senha ou conexão.
@@ -65,36 +66,55 @@ Não escale réplicas enquanto jobs, coordenação e credenciais efêmeras forem
 No cliente de outra máquina, extraia o ZIP Windows, abra `ZenyProjectHandler.exe` e informe
 `http://<ipv4-privado-do-servidor>:<porta>` e a senha. A URL pode ser lembrada; a senha não.
 
-## Dependência SQL Server de mercado
+## Dependência SQL Server de mercado e ações
 
-O cadastro de Notas de Serviço no SQL Server é a única fonte da classificação rural/urbana. Em
-cada execução de conformidade, o servidor consulta uma vez, sem cache:
+O SQL Server é a única fonte da classificação rural/urbana e da conclusão das ações operacionais.
+Em cada execução de conformidade, o servidor consulta o mercado uma vez, sem cache:
 
 ```sql
 SELECT NOTAS_COD_MERCADO FROM TB_NOTAS WHERE NOTAS_NUM_NS = ?;
 ```
 
-A NS permanece texto de 10 dígitos no produto e é vinculada como inteiro apenas nessa consulta;
-nunca é interpolada no SQL. O login dedicado deve possuir somente acesso ao banco e `SELECT` nas
-colunas `NOTAS_NUM_NS` e `NOTAS_COD_MERCADO` de `TB_NOTAS`. Não conceda `INSERT`, `UPDATE`,
-`DELETE`, DDL ou privilégio administrativo.
+A NS permanece texto de 10 dígitos no produto e é convertida apenas dentro do adaptador SQL; nunca
+é interpolada. Quando o PDF contém `Impacto Ambiental: Sim` no cabeçalho ou menção positiva a
+servidão, o servidor consulta no máximo uma vez a ação correspondente com a NS, os serviços atuais e
+a descrição fechada:
+
+```sql
+SELECT TACOES_DES
+FROM vBIAcoes
+WHERE NOTAS_NUM_NS = ?
+  AND TSERVICOS_CT_COD IN (?, ...)
+  AND TACOES_DES = ?
+  AND ACOES_DAT_CONCLUSAO IS NOT NULL;
+```
+
+Somente a quantidade de `?` do `IN` é montada. Todos os valores são parâmetros. O login dedicado
+deve possuir somente acesso ao banco e `SELECT` nas colunas `NOTAS_NUM_NS` e `NOTAS_COD_MERCADO` de
+`TB_NOTAS`, além de `NOTAS_NUM_NS`, `TSERVICOS_CT_COD`, `TACOES_DES` e
+`ACOES_DAT_CONCLUSAO` expostas por `vBIAcoes`. Não conceda acesso direto às tabelas-base da view,
+`INSERT`, `UPDATE`, `DELETE`, DDL ou privilégio administrativo.
 
 Configure Microsoft ODBC Driver 18 com `Encrypt=yes` e `TrustServerCertificate=no`. Se a autoridade
 certificadora for privada, incorpore a CA confiável à imagem pelo processo de distribuição aprovado;
 não desabilite a validação. Confirme DNS, rota e firewall a partir do container, além do schema
-padrão do login que resolve `TB_NOTAS`. O timeout positivo vale para abertura e execução da
-consulta.
+padrão do login que resolve `TB_NOTAS` e `vBIAcoes`. O mesmo timeout positivo vale para abertura e
+execução das duas consultas.
 
-O comportamento é fail-closed: zero ou múltiplas linhas, `NULL`, valor diferente de `RURAL` ou
-`URBANO`, timeout e erro de driver encerram o job com mensagem segura, sem novo snapshot e sem
-fallback por metadado, OCR ou valor anterior. Dados e snapshots já persistidos não são apagados. O
-healthcheck HTTP não consulta o SQL Server e não comprova sua prontidão.
+Para mercado, zero ou múltiplas linhas, `NULL` e valor diferente de `RURAL`/`URBANO` são erro. Para
+ações, zero linha é resultado válido e significa pendência; uma ou mais linhas significam ação
+concluída. Coleção vazia não abre conexão nem produz `IN ()`: a pendência permanece ancorada no PDF.
+Timeout, falha ODBC, erro de execução/fetch ou linha incompatível são dependência indisponível,
+nunca ausência válida. O job termina com mensagem segura, sem novo snapshot e sem fallback por
+metadado, OCR ou valor anterior. Dados e snapshots já persistidos não são apagados. O healthcheck
+HTTP não consulta o SQL Server e não comprova sua prontidão.
 
-A alteração de mercado no sistema externo não invalida um snapshot de forma espontânea, pois a
-consulta fornecida não oferece versão/evento. Depois da mudança, execute **Analisar conformidade**:
-a nova consulta entra na assinatura dos fatos e produz a execução coerente com o mercado atual.
+A alteração de mercado ou ação no sistema externo não invalida um snapshot de forma espontânea,
+pois as consultas não oferecem versão/evento. Depois da mudança, execute **Analisar conformidade**.
+Alterar NS ou serviços no Zeny marca imediatamente o snapshot anterior como desatualizado; a nova
+execução sempre lê a coleção vigente do servidor, não o estado visual antigo de outro cliente.
 
-### Smoke opt-in de homologação
+### Smoke opt-in de mercado
 
 O smoke somente leitura existe dentro da imagem e não participa dos testes normais. Sem opt-in
 exato, ele não abre conexão e retorna código 2. Com uma `.env` segura e uma NS autorizada:
@@ -111,6 +131,22 @@ Remove-Item Env:ZENY_MARKET_SQLSERVER_SMOKE_ENABLED, Env:ZENY_MARKET_SQLSERVER_S
 Rode separadamente para uma NS `RURAL` e uma `URBANO`. O comando não recebe a conexão na linha de
 comando e imprime somente aprovação/mercado ou erro opaco; não anexe `.env` nem use o modo verbose
 do Compose como evidência.
+
+### Gate de implantação de ações
+
+O smoke atual acima cobre somente `TB_NOTAS`; não o use como evidência de `vBIAcoes`. Antes da
+produção, um DBA/responsável deve autorizar massa de teste e uma execução somente leitura dentro da
+imagem aprovada. Registre apenas resultado sanitizado e confirme:
+
+1. o tipo físico de `TSERVICOS_CT_COD` e se o bind inteiro evita conversão da coluna;
+2. `SELECT` apenas nas quatro colunas necessárias da view, sem escrita, DDL ou acesso às tabelas-base;
+3. um caso autorizado com linha e um sem linha para cada descrição
+   (`AVALIAR IMPACTO AMBIENTAL` e `FALTA SERVIDÃO`);
+4. zero linha como `PENDENTE`, uma ou mais como `CONCLUIDA`, e erro de dependência como falha do job;
+5. ausência de NS, serviços, connection string, SQL parametrizado ou credenciais na evidência.
+
+Sem autorização, conexão e massa conhecidas, este item permanece gate de implantação pendente; não
+execute a consulta por tentativa e não trate os testes com fake como homologação do banco real.
 
 ## Health, prontidão e logs
 
@@ -242,7 +278,8 @@ arquivo.
 2. Substitua apenas `ZENY_MARKET_SQLSERVER_CONNECTION_STRING` no `.env`; não mantenha o valor antigo
    comentado.
 3. Recrie o container com `up -d --no-build --force-recreate`.
-4. Execute os dois smokes autorizados e uma reanálise controlada; confira logs sem modo verbose.
+4. Execute os smokes de mercado autorizados, o gate de ações com um caso com linha e um sem e uma
+   reanálise controlada; confira logs sem modo verbose.
 5. Revogue a credencial anterior conforme a janela acordada.
 
 A rotação não altera o volume, a API ou o cliente e a conexão nunca deve integrar backup.
@@ -259,6 +296,7 @@ A rotação não altera o volume, a API ou o cliente e a conexão nunca deve int
 | senha perdida | defina nova senha runtime e recrie; não existe senha recuperável em banco/imagem |
 | cadastro SQL Server indisponível | preserve o job falho e `correlation_id`; valide rota/TLS/login/timeout com o DBA e o smoke opt-in; não habilite fallback |
 | mercado externo alterado | execute novamente Analisar conformidade; snapshots anteriores permanecem históricos |
+| ações externas alteradas | execute novamente Analisar conformidade; confirme NS/serviços vigentes e não converta erro em pendência |
 | job interrompido por restart | consulte o histórico; ativo anterior vira falha recuperável, nunca sucesso presumido |
 
 Para parada planejada, use `docker compose stop` e aguarde até 30 segundos para shutdown cooperativo.

@@ -7,8 +7,10 @@ apresenta os DTOs e rasters recebidos pela API autenticada.
 
 ## Estado atual
 
-- Painel **Projeto** remoto: NS, múltiplos PDFs, ordem de folhas, remoção e exclusão usam
-  exclusivamente o gateway HTTP autenticado e a fonte principal do servidor.
+- Painel **Projeto** remoto: NS, coleção canônica de códigos de serviço com quatro dígitos, múltiplos
+  PDFs, ordem de folhas, remoção e exclusão usam exclusivamente o gateway HTTP autenticado e a fonte
+  principal do servidor. A caixa **Serviços do projeto** fica entre **Projeto** e **Folhas PDF** e
+  preserva zeros à esquerda.
 - Visualizador remoto progressivo: o cliente Qt apresenta prévias/tiles, paginação, zoom e rotação,
   enquanto o servidor autenticado abre e rasteriza os PDFs. PDFs avulsos usam sessão temporária e
   senha somente em memória.
@@ -28,9 +30,9 @@ apresenta os DTOs e rasters recebidos pela API autenticada.
   assinaturas, reanálise, histórico, estado desatualizado e regras chegam como DTOs do servidor.
 - Motor declarativo de conformidade executado no servidor, com quatro famílias de provedores de
   fatos, snapshots persistidos e callouts normalizados compilados para a camada vetorial do cliente.
-  O seed atual é
-  `cemig-normas-distribuicao-2025.6`, com 39 regras habilitadas. O mercado rural/urbano vem
-  exclusivamente do cadastro externo de Notas de Serviço no SQL Server.
+  O seed atual é `cemig-normas-distribuicao-2025.7`, com 41 regras habilitadas, e o método de
+  conformidade está na versão `9`. O mercado rural/urbano e a conclusão das ações operacionais
+  aplicáveis vêm exclusivamente do SQL Server.
 - Painel **Exportar**: o servidor compila o PDF na ordem das folhas, incorpora as anotações de
   conformidade e gera planilhas Excel de **Resultados** (Elementos e Vãos), **Documentação** e
   **Conformidade** (Conformidade e Regras). O cliente apenas escolhe o destino e confere tamanho e
@@ -40,7 +42,7 @@ apresenta os DTOs e rasters recebidos pela API autenticada.
   antes da prontidão.
 - Temas claro e escuro, painéis acopláveis e restauração do estado da interface.
 
-As 39 regras são executáveis, mas um achado só é criado para alvos que satisfazem todas as condições
+As 41 regras são executáveis, mas um achado só é criado para alvos que satisfazem todas as condições
 de aplicabilidade declaradas. Por isso o registro usa fatos de guarda para não aplicar uma obrigação
 fora do subconjunto que o pipeline consegue caracterizar. Em um alvo aplicável, a ausência de um
 fato declarado como requisito pode produzir divergência — por exemplo, quando a própria regra exige
@@ -106,21 +108,25 @@ na próxima execução local. O `compose.yaml` operacional continua separado e p
 ## Fluxo de uso
 
 1. No painel **Projeto**, crie ou abra um projeto usando a NS.
-2. Adicione um ou mais PDFs e ajuste a ordem das folhas, se necessário.
-3. Clique em **Analisar projeto** e acompanhe o progresso. A operação pode ser cancelada em um ponto
+2. Em **Serviços do projeto**, cadastre os códigos aplicáveis com exatamente quatro dígitos; por
+   exemplo, `0007` permanece texto e conserva o zero inicial.
+3. Adicione um ou mais PDFs e ajuste a ordem das folhas, se necessário.
+4. Clique em **Analisar projeto** e acompanhe o progresso. A operação pode ser cancelada em um ponto
    seguro.
-4. Use **Resultados** para inspecionar regiões, elementos, relações e vãos e localizar cada evidência
+5. Use **Resultados** para inspecionar regiões, elementos, relações e vãos e localizar cada evidência
    no PDF.
-5. Em **Documentação e conformidade**, confira os dados documentais, execute a conformidade e revise
+6. Em **Documentação e conformidade**, confira os dados documentais, execute a conformidade e revise
    os callouts.
-6. Use **Exportar** para baixar o PDF anotado ou as planilhas `.xlsx` na própria máquina.
+7. Use **Exportar** para baixar o PDF anotado ou as planilhas `.xlsx` na própria máquina.
 
 O pipeline principal executa, em ordem, a extração documental, a interpretação semântica, a
 promoção dos resultados e a conformidade. A ação **Analisar conformidade** reaplica as regras aos
 resultados semânticos persistidos; ela não abre o PDF nem repete OCR. Cada uma dessas execuções
 consulta uma vez o mercado da NS vigente no SQL Server, sem cache ou fallback por metadado/PDF.
-Assim, depois que o cadastro externo mudar entre `RURAL` e `URBANO`, execute **Analisar
-conformidade** novamente para produzir um snapshot com os fatos e regras do novo mercado.
+Quando o PDF contém `Impacto Ambiental: Sim` no cabeçalho ou uma menção positiva a servidão, a
+execução também consulta no máximo uma vez a ação correspondente com a NS e a coleção de serviços
+vigentes. Assim, depois que o mercado, a NS, os serviços ou as ações externas mudarem, execute
+**Analisar conformidade** novamente para produzir um snapshot coerente com as entradas atuais.
 
 ## Dados e integridade
 
@@ -132,8 +138,8 @@ fonte principal; banco, PDFs gerenciados, cache, jobs, arquivos temporários e l
 em `ZENY_SERVER_DATA_DIR` (normalmente o volume `/data`).
 
 - O SQLite e suas migrações existem somente no servidor.
-- A conexão SQL Server e seu timeout são configuração runtime do servidor: não entram no SQLite,
-  PDFs, volume `/data`, backup, API ou pacote cliente.
+- A mesma conexão SQL Server e o mesmo timeout atendem mercado e ações no processo servidor: não
+  entram no SQLite, PDFs, volume `/data`, backup, API ou pacote cliente.
 - PDFs adicionados pelo painel Projeto são enviados por streaming e publicados em cópia gerenciada
   pelo servidor. A origem escolhida no cliente não é alterada nem apagada.
 - O aplicativo registra identidade, tamanho e SHA-256 da origem antes de analisar ou compilar o
@@ -178,8 +184,8 @@ As opções são lidas na inicialização:
 | `ZENY_PDF_TILE_CACHE_MAX_BYTES` | `134217728` | limite do cache visual de tiles |
 | `ZENY_CLIENT_SERVER_URL` | `http://127.0.0.1:8000` | URL inicial do diálogo em desenvolvimento |
 | `ZENY_SERVER_PASSWORD` | sem padrão | segredo obrigatório do servidor; no fluxo local, o `.bat` o repassa em memória para preencher o cliente |
-| `ZENY_MARKET_SQLSERVER_CONNECTION_STRING` | sem padrão | string ODBC completa e secreta do cadastro de mercado; obrigatória somente no servidor |
-| `ZENY_MARKET_SQLSERVER_TIMEOUT_SECONDS` | `15` | timeout inteiro positivo de conexão e consulta do mercado |
+| `ZENY_MARKET_SQLSERVER_CONNECTION_STRING` | sem padrão | string ODBC completa e secreta dos cadastros de mercado e ações; obrigatória somente no servidor |
+| `ZENY_MARKET_SQLSERVER_TIMEOUT_SECONDS` | `15` | timeout inteiro positivo de conexão e consultas de mercado/ações |
 | `ZENY_SERVER_HOST` | `0.0.0.0` | socket do processo servidor; o lançador de desenvolvimento força `127.0.0.1` |
 | `ZENY_SERVER_BIND_ADDRESS` | `127.0.0.1` | endereço do host que publica a porta; use IPv4 privado específico para LAN |
 | `ZENY_SERVER_VIEWER_SESSION_TTL_SECONDS` | `900` | inatividade até limpar PDF avulso no servidor |
@@ -200,13 +206,29 @@ gateways são repetidas automaticamente depois de uma falha transitória; criaç
 senha, cancelamento e encerramento não são. Repetir deliberadamente a criação de um job com a mesma
 `Idempotency-Key` devolve o mesmo job sem executar o pipeline novamente.
 
-Para o cadastro de mercado, use uma string ODBC com Microsoft ODBC Driver 18, `Encrypt=yes` e
+Para a dependência operacional, use uma string ODBC com Microsoft ODBC Driver 18, `Encrypt=yes` e
 `TrustServerCertificate=no`, confiando a CA correta no container. O login deve ter apenas conexão
-ao banco e `SELECT` sobre `NOTAS_NUM_NS`/`NOTAS_COD_MERCADO` de `TB_NOTAS`. A aplicação executa,
-com parâmetro vinculado, somente
-`SELECT NOTAS_COD_MERCADO FROM TB_NOTAS WHERE NOTAS_NUM_NS = ?;`. Ausência, duplicidade, `NULL`,
-valor diferente de `RURAL`/`URBANO`, timeout ou falha ODBC encerram a conformidade sem publicar
-snapshot parcial e sem inferência local. O healthcheck HTTP não comprova conectividade SQL Server.
+ao banco e `SELECT` nas colunas necessárias: `NOTAS_NUM_NS`/`NOTAS_COD_MERCADO` de `TB_NOTAS` e
+`NOTAS_NUM_NS`, `TSERVICOS_CT_COD`, `TACOES_DES` e `ACOES_DAT_CONCLUSAO` de `vBIAcoes`; não conceda
+escrita, DDL ou acesso às tabelas-base da view. A classificação executa, com parâmetro vinculado,
+`SELECT NOTAS_COD_MERCADO FROM TB_NOTAS WHERE NOTAS_NUM_NS = ?;`. Para cada gatilho aplicável, a
+verificação existencial usa NS, cada serviço e a descrição fechada da ação como parâmetros e monta
+dinamicamente somente os `?` do `IN`:
+
+```sql
+SELECT TACOES_DES
+FROM vBIAcoes
+WHERE NOTAS_NUM_NS = ?
+  AND TSERVICOS_CT_COD IN (?, ...)
+  AND TACOES_DES = ?
+  AND ACOES_DAT_CONCLUSAO IS NOT NULL;
+```
+
+Na consulta de ações, zero linha é resultado válido e significa pendência; uma ou mais linhas
+significam ação concluída. Coleção vazia não abre conexão nem gera `IN ()`: o requisito fica não
+atendido e o achado permanece ancorado no PDF. Timeout, falha ODBC ou resultado inválido são erro de
+dependência, nunca “zero linha”, e encerram a conformidade sem snapshot parcial. O healthcheck HTTP
+não comprova conectividade SQL Server.
 
 O kit servidor da mesma release contém a imagem exportada, Compose sem `build:`, `.env-example`,
 guia e SBOM; o host precisa somente de Docker e não recebe o checkout. Instalação,
@@ -253,10 +275,13 @@ O comando recompõe `dist/release/0.2.0/`, gera os dois SBOMs, notas, manifesto 
 inspeção estática dos artefatos. A validação de distribuição carrega o archive num host Docker
 temporário sem fonte e abre o executável num diretório cliente sem checkout/Python no `PATH`.
 
-O smoke real do SQL Server é opt-in e pertence à homologação, não ao gate normal. Ele exige
+O smoke real do SQL Server é opt-in e pertence à homologação, não ao gate normal. O smoke disponível
+para mercado exige
 `ZENY_MARKET_SQLSERVER_SMOKE_ENABLED=1` e `ZENY_MARKET_SQLSERVER_SMOKE_NS` explícitos e deve ser
 executado dentro da imagem aprovada conforme o runbook. Sem o opt-in exato, termina sem abrir
-conexão; sua saída nunca inclui a string ODBC.
+conexão; sua saída nunca inclui a string ODBC. A homologação de `vBIAcoes` continua um gate de
+implantação separado: deve confirmar tipo físico de `TSERVICOS_CT_COD`, permissão mínima e casos
+sanitizados com e sem linha antes da produção.
 
 ## Limites conhecidos
 
@@ -275,7 +300,7 @@ conexão; sua saída nunca inclui a string ODBC.
 - [Modelo de entidades](docs/modelo-entidades.mmd): visão estrutural do domínio.
 - [Arquitetura de conformidade](docs/arquitetura-conformidade.md): fluxo de fatos, regras, snapshots e
   callouts.
-- [Catálogo de regras](docs/catalogo-regras-conformidade.md): as 39 regras do seed e suas fontes.
+- [Catálogo de regras](docs/catalogo-regras-conformidade.md): as 41 regras do seed e suas fontes.
 - [Inventário normativo](docs/inventario-fontes-normativas.md): documentos, revisões, hashes e escopo
   da auditoria normativa.
 - [Operação do servidor](docs/operacao-servidor.md): instalação, LAN, volume, cutover, atualização,

@@ -17,6 +17,7 @@ from zeny_project_handler_client.logging_config import LOGGER_NAME as CLIENT_LOG
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QApplication
 
+    from zeny_project_handler.ports.market import VerificadorAcoesConcluidasPort
     from zeny_project_handler_client.config import ClientSettings
     from zeny_project_handler_client.ui.documentation_gateway import DocumentationGateway
     from zeny_project_handler_client.ui.main_window import MainWindow
@@ -66,6 +67,7 @@ class ApplicationFactory(Protocol):
         review_gateway: ReviewGateway | None = None,
         documentation_gateway: DocumentationGateway | None = None,
         portability_gateway: PortabilityGateway | None = None,
+        action_verifier: VerificadorAcoesConcluidasPort | None = None,
     ) -> tuple[QApplication, MainWindow]: ...
 
 
@@ -85,6 +87,7 @@ def application_factory() -> Iterator[ApplicationFactory]:
         review_gateway: ReviewGateway | None = None,
         documentation_gateway: DocumentationGateway | None = None,
         portability_gateway: PortabilityGateway | None = None,
+        action_verifier: VerificadorAcoesConcluidasPort | None = None,
     ) -> tuple[QApplication, MainWindow]:
         from tests.market_fakes import FakeClassificadorMercado
         from tests.remote_gateways import (
@@ -114,6 +117,7 @@ def application_factory() -> Iterator[ApplicationFactory]:
                     render_max_bytes=settings.pdf_render_max_bytes,
                 ),
                 market_classifier=FakeClassificadorMercado(),
+                action_verifier=action_verifier,
             )
             server_runtimes.append(runtime)
             project_gateway = DirectProjectGateway(runtime)

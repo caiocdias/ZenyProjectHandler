@@ -1,9 +1,11 @@
 # Inventário de paridade cliente-servidor
 
-- Estado: linha de base da Etapa 0 com contrato v1 estabilizado pela Etapa 1
-- Data: 2026-08-17
-- Runtime caracterizado: monólito Qt vigente, sem mudança funcional
-- Gate inicial: 618 testes aprovados; cobertura total 87,08%; Pytest em 128,11 s
+- Estado: fronteira cliente-servidor vigente com contrato API `1.1.0`
+- Data da revisão: 2026-08-29
+- Runtime caracterizado: cliente Qt magro e servidor protegido como fonte principal
+- Linha de base histórica: 618 testes aprovados; cobertura total 87,08%; Pytest em 128,11 s
+- Gate E05: 856 testes aprovados; cobertura total 86,61%; Pytest em 178,00 s;
+  `RESULTADO FINAL: APROVADO`
 
 ## Finalidade e convenções
 
@@ -43,6 +45,8 @@ protegidas são `401 AUTHENTICATION_FAILED`, `404 RESOURCE_NOT_FOUND`,
 | projetos | `GET /api/v1/projects/{project_id}` | — | `ProjectDetailResponse` | `200`; códigos comuns |
 | projetos | `PATCH /api/v1/projects/{project_id}` | `UpdateProjectRequest` | `ProjectDetailResponse` | `200`; códigos comuns |
 | projetos | `DELETE /api/v1/projects/{project_id}` | — | `DeleteProjectResponse` | `200`; códigos comuns |
+| projetos | `GET /api/v1/projects/{project_id}/service-codes` | — | `ProjectServiceCodesResponse` | `200`; códigos comuns |
+| projetos | `PUT /api/v1/projects/{project_id}/service-codes` | `ReplaceProjectServiceCodesRequest` | `ProjectServiceCodesResponse` | `200`; `409 STALE_STATE`; demais comuns |
 | documentos | `POST /api/v1/projects/{project_id}/document-uploads` | multipart PDF + idempotência | `CreateUploadResponse` | `201`; comuns + `PDF_PASSWORD_REQUIRED` |
 | documentos | `POST /api/v1/uploads/{upload_id}/unlock` | `UnlockPdfRequest` | `DocumentImportResultDto` | `200`; comuns + `PDF_PASSWORD_INVALID` |
 | documentos | `PUT /api/v1/projects/{project_id}/page-order` | `ReplacePageOrderRequest` | `PageOrderResponse` | `200`; códigos comuns |
@@ -94,6 +98,7 @@ protegidas são `401 AUTHENTICATION_FAILED`, `404 RESOURCE_NOT_FOUND`,
 | criar projeto por NS | `ProjectPanelWidget.criar_projeto` → `ServicoFluxoMvp.criar_projeto` | `tests/integration/test_mvp_workflow.py::test_project_identifier_is_a_user_supplied_ten_digit_service_note` | `POST /api/v1/projects` | `CreateProjectRequest` → `ProjectDetailResponse` |
 | abrir/detalhar projeto | `ProjectPanelWidget.abrir_selecionado` → `ServicoFluxoMvp.abrir_projeto` | `tests/e2e/test_mvp_ui.py::test_user_can_create_import_analyze_review_and_reopen_from_ui` | `GET /api/v1/projects/{project_id}` | `ProjectDetailResponse` |
 | alterar NS | `ProjectPanelWidget.alterar_numero_ns` → `ServicoFluxoMvp.alterar_numero_ns` | `tests/integration/test_mvp_workflow.py::test_project_identifier_is_a_user_supplied_ten_digit_service_note` | `PATCH /api/v1/projects/{project_id}` | `UpdateProjectRequest` → `ProjectDetailResponse` |
+| cadastrar/remover códigos de serviço | `_add_service_code` / `_remove_selected_service_codes` → `ProjectGateway.get_service_codes` / `replace_service_codes` | `tests/e2e/test_mvp_ui.py::test_project_service_codes_ui_is_remote_canonical_accessible_and_conflict_safe`; `::test_environmental_actions_full_client_matrix_uses_current_service_codes` | `GET`/`PUT /api/v1/projects/{project_id}/service-codes` | `ProjectServiceCodesResponse`; `ReplaceProjectServiceCodesRequest`; `409 STALE_STATE` recarrega a coleção vigente |
 | excluir projeto após confirmação | `ProjectPanelWidget.excluir_projeto` → `ServicoFluxoMvp.excluir_projeto` | `tests/integration/test_mvp_workflow.py::test_delete_project_with_confirmed_review_removes_dependents_in_safe_order` | `DELETE /api/v1/projects/{project_id}` | `DeleteProjectResponse` com contagens de limpeza |
 | selecionar e adicionar vários PDFs | `ProjectPanelWidget.selecionar_pdfs` / `_importar_selecao` → `ServicoFluxoMvp.importar_pdfs` | `tests/integration/test_mvp_workflow.py::test_multiple_pdf_import_is_atomic_and_preserves_order` | `POST /api/v1/projects/{project_id}/document-uploads` | multipart + `CreateUploadResponse`/`DocumentImportResultDto`; `Idempotency-Key` |
 | informar senha de cada PDF, repetir até três vezes ou pular o arquivo | `ResolvedorCredenciaisPdf.executar` / `ProjectPanelWidget._acao_importacao_pdf` | `tests/integration/test_protected_pdf_ui.py::test_wrong_password_limit_and_cancel_produce_partial_import_summary` | `POST /api/v1/uploads/{upload_id}/unlock` | `UnlockPdfRequest` → `DocumentImportResultDto` ou erro `PDF_PASSWORD_*` |
@@ -143,6 +148,7 @@ protegidas são `401 AUTHENTICATION_FAILED`, `404 RESOURCE_NOT_FOUND`,
 | carregar a última conformidade e indicar resultado desatualizado | `_load_persisted_result` → `DocumentationGateway.get_latest_compliance` | `tests/integration/test_compliance_analysis.py::test_panel_loads_latest_marks_stale_and_reapplies_without_ocr` | `GET /api/v1/projects/{project_id}/compliance/latest` | `ComplianceExecutionResponse` |
 | consultar histórico auditável | sem controle dedicado hoje; `ExecutarAnaliseConformidade.listar_historico` já existe | `tests/integration/test_compliance_analysis.py::test_execution_is_deterministic_preserves_history_and_survives_restart` | `GET /api/v1/projects/{project_id}/compliance/history` | `ComplianceHistoryResponse` |
 | analisar conformidade explicitamente | `_analyze_current_compliance` → criação/polling do job remoto | `tests/integration/test_compliance_analysis.py::test_panel_loads_latest_marks_stale_and_reapplies_without_ocr` | `POST /api/v1/projects/{project_id}/compliance-jobs` | `CreateComplianceJobRequest` → `JobAcceptedResponse` |
+| avaliar impacto/servidão contra ações concluídas | mesmo job remoto; cliente apresenta os DTOs e callouts compilados | `tests/e2e/test_mvp_ui.py::test_environmental_actions_full_client_matrix_uses_current_service_codes`; `tests/integration/test_project_http_gateway.py::test_two_http_clients_run_full_project_flow_and_survive_server_restart` | mesmo endpoint de job; consultas SQL permanecem internas ao servidor | `ComplianceExecutionResponse` com títulos exatos, `ComplianceFindingDto`, `ComplianceCalloutDto` e navegação por evidência |
 | selecionar achado e navegar ao alvo/callout | `_navigate_finding_item`, `_select_finding_id` | `tests/integration/test_compliance_callout_viewer.py::test_multipage_callout_visual_qa_captures_show_hide_and_correct_page` | achados e callouts na resposta de conformidade | `ComplianceFindingDto`, `ComplianceCalloutDto` |
 | exibir/ocultar um ou todos os callouts | `_set_finding_visible`, `_set_all_findings_visible` | `tests/integration/test_compliance_visibility.py::test_hidden_state_survives_navigation_and_resets_for_project_or_execution` | nenhum; visibilidade e posição manual são locais | IDs de callout na projeção; estado visual local |
 | ver revisão ativa, números, estado e detalhes das regras | `atualizar_regras`, `_populate_rules`, `_show_rule_details` → `DocumentationGateway` | `tests/integration/test_compliance_rules_panel.py::test_rule_ids_stay_internal_and_details_use_the_fact_catalog` | `GET /api/v1/rules/active` | `ActiveRuleRegistryResponse`, `RuleSummaryDto`, `RuleDetailDto` |
@@ -185,21 +191,21 @@ comportamento listados; ela confirma que a mesma cobertura permanece válida ap�
 
 | Item obrigatório da matriz | Linhas deste inventário | Prova atual mínima |
 |---|---|---|
-| criar/abrir/alterar NS/excluir projeto | Painel Projeto, linhas 1–5 | `tests/integration/test_mvp_workflow.py::test_project_identifier_is_a_user_supplied_ten_digit_service_note`; `::test_delete_project_with_confirmed_review_removes_dependents_in_safe_order` |
-| selecionar e importar múltiplos PDFs | Painel Projeto, linha 6 | `tests/integration/test_mvp_workflow.py::test_multiple_pdf_import_is_atomic_and_preserves_order` |
-| senha de PDF, três tentativas e descarte seguro | Painel Projeto, linha 7 | `tests/integration/test_protected_pdf_ui.py::test_distinct_passwords_are_reused_in_session_and_never_leak_to_artifacts`; `::test_wrong_password_limit_and_cancel_produce_partial_import_summary` |
-| reordenar páginas e remover documentos | Painel Projeto, linhas 8–9 | `tests/e2e/test_mvp_ui.py::test_user_can_reorder_project_pdfs_and_reopen_in_reading_order`; `tests/integration/test_mvp_workflow.py::test_remove_pdf_prunes_only_dependent_data_and_project_can_be_deleted` |
+| criar/abrir/alterar NS/serviços/excluir projeto | Painel Projeto, linhas 1–6 | `tests/integration/test_mvp_workflow.py::test_project_identifier_is_a_user_supplied_ten_digit_service_note`; `tests/e2e/test_mvp_ui.py::test_environmental_actions_full_client_matrix_uses_current_service_codes`; `::test_project_service_codes_ui_is_remote_canonical_accessible_and_conflict_safe` |
+| selecionar e importar múltiplos PDFs | Painel Projeto, linha 7 | `tests/integration/test_mvp_workflow.py::test_multiple_pdf_import_is_atomic_and_preserves_order` |
+| senha de PDF, três tentativas e descarte seguro | Painel Projeto, linha 8 | `tests/integration/test_protected_pdf_ui.py::test_distinct_passwords_are_reused_in_session_and_never_leak_to_artifacts`; `::test_wrong_password_limit_and_cancel_produce_partial_import_summary` |
+| reordenar páginas e remover documentos | Painel Projeto, linhas 9–10 | `tests/e2e/test_mvp_ui.py::test_user_can_reorder_project_pdfs_and_reopen_in_reading_order`; `tests/integration/test_mvp_workflow.py::test_remove_pdf_prunes_only_dependent_data_and_project_can_be_deleted` |
 | PDF avulso no visualizador | Visualizador, linhas 1 e 10 | `tests/integration/test_window.py::test_pdf_viewer_opens_selected_files_as_one_ordered_project`; `tests/integration/test_pdf_viewer_progressive.py::test_closing_stops_render_thread_and_closes_verified_sessions` |
 | zoom, rotação, prévia, tiles e paginação | Visualizador, linhas 3–7 | `tests/integration/test_window.py::test_pdf_viewer_navigation_zoom_rotation_and_overlays`; `tests/integration/test_pdf_viewer_progressive.py::test_old_page_result_is_discarded_after_out_of_order_navigation` |
-| análise, OCR, interpretação e promoção | Painel Projeto, linha 10 | `tests/e2e/test_mvp_ui.py::test_user_can_create_import_analyze_review_and_reopen_from_ui`; `tests/integration/test_interpretation_pipeline.py::test_pipeline_persists_cross_run_provenance_and_reuses_completed_result` |
+| análise, OCR, interpretação e promoção | Painel Projeto, linha 11 | `tests/e2e/test_mvp_ui.py::test_user_can_create_import_analyze_review_and_reopen_from_ui`; `tests/integration/test_interpretation_pipeline.py::test_pipeline_persists_cross_run_provenance_and_reuses_completed_result` |
 | regiões, elementos, relações e vãos | Resultados, linhas 3–4 | `tests/integration/test_review_panel.py::test_results_panel_groups_relationships_and_links_elements_to_pdf`; `::test_results_panel_has_span_tab_with_situation_cable_and_length_source` |
 | revisão humana e criações manuais | Resultados, linhas 7–10 | `tests/integration/test_human_review.py::test_accept_adjust_reject_and_reopen_preserve_immutable_history`; `::test_confirm_relation_and_manual_creations_are_persisted_with_author` |
-| documentação, conformidade e callouts | Documentação, linhas 1–7 | `tests/integration/test_compliance_analysis.py::test_panel_loads_latest_marks_stale_and_reapplies_without_ocr`; `tests/integration/test_compliance_callout_viewer.py::test_callout_anchor_survives_zoom_resize_rotation_tiles_and_page_changes` |
+| documentação, conformidade e callouts | Documentação, linhas 1–8 | `tests/e2e/test_mvp_ui.py::test_environmental_actions_full_client_matrix_uses_current_service_codes`; `tests/integration/test_compliance_analysis.py::test_panel_loads_latest_marks_stale_and_reapplies_without_ocr`; `tests/integration/test_compliance_callout_viewer.py::test_callout_anchor_survives_zoom_resize_rotation_tiles_and_page_changes` |
 | importar/exportar regras | Documentação, linhas 8–10 | `tests/integration/test_compliance_rules_panel.py::test_rules_view_only_imports_exports_and_survives_restart`; `tests/unit/test_compliance_catalog_parity.py::test_versioned_catalog_has_registry_id_order_and_activation_parity` |
 | PDF e planilhas finais | Exportar, linhas 2–5 | `tests/server/test_deliverable_exports.py::test_server_generates_pdf_and_three_real_xlsx_deliverables`; `::test_pdf_callout_is_a_downloadable_annotation_even_on_rotated_page` |
 | fotos gerenciadas | Exportar, linhas 7–10 | `tests/integration/test_project_portability.py::test_export_import_preserves_ids_decisions_and_repairs_missing_photo` |
 | tema, docks e geometria da janela | Janela, linhas 1–3 | `tests/integration/test_window.py::test_theme_switch_preserves_project_pdf_callout_zoom_selection_and_wrap_toggles`; `::test_floating_panel_has_window_controls_and_can_be_reopened` |
-| coordenação global, progresso e cancelamento | Projeto linha 11, Exportar linha 6 e Janela linha 5 | `tests/integration/test_mvp_workflow.py::test_cancelled_analysis_releases_shared_coordinator`; `tests/integration/test_portability_panel.py::test_each_action_downloads_the_server_compiled_file`; `tests/unit/test_operation_coordinator.py::test_conflict_and_reentry_are_refused_immediately_with_friendly_message` |
+| coordenação global, progresso e cancelamento | Projeto linha 12, Exportar linha 6 e Janela linha 5 | `tests/integration/test_mvp_workflow.py::test_cancelled_analysis_releases_shared_coordinator`; `tests/integration/test_portability_panel.py::test_each_action_downloads_the_server_compiled_file`; `tests/unit/test_operation_coordinator.py::test_conflict_and_reentry_are_refused_immediately_with_friendly_message` |
 
 ## Auditoria dos pontos críticos de caracterização
 

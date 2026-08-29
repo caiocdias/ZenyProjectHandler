@@ -3,8 +3,8 @@
 ## Objetivo
 
 O motor compara fatos rastreáveis do projeto com regras declarativas sem transformar ausência de
-evidência em certeza. A revisão distribuída atual é `cemig-normas-distribuicao-2025.6`, com 39 regras
-habilitadas, e o método de conformidade está na versão `8`.
+evidência em certeza. A revisão distribuída atual é `cemig-normas-distribuicao-2025.7`, com 41 regras
+habilitadas, e o método de conformidade está na versão `9`.
 
 O [catálogo de regras](catalogo-regras-conformidade.md) documenta obrigações e fontes. O
 [inventário normativo](inventario-fontes-normativas.md) registra documentos, revisões, hashes e
@@ -17,6 +17,12 @@ Projeto + sessão semântica persistida
                 |
                 v
  consulta única de mercado por NS no SQL Server
+                |
+                v
+ detecção de impacto/servidão nos fatos do PDF
+                |
+                v
+ consulta única por ação aplicável com NS + serviços
                 |
                 v
      construção de alvos de conformidade
@@ -45,6 +51,12 @@ vez com o nome/NS vigente do projeto. O adaptador SQL Server executa com parâme
 `SELECT NOTAS_COD_MERCADO FROM TB_NOTAS WHERE NOTAS_NUM_NS = ?;`, converte a NS de 10 dígitos para
 inteiro somente nessa fronteira e aceita exclusivamente `RURAL` ou `URBANO`. A mesma instância
 composta atende ao pipeline completo e à reanálise explícita.
+
+Na mesma sessão carregada, `detectar_gatilhos_acoes_projeto` procura `Impacto Ambiental` com valor
+normalizado exatamente `SIM` somente na zona de cabeçalho e reutiliza a detecção positiva de
+servidão fora de comentários de revisão. Para cada ação distinta aplicável,
+`VerificadorAcoesConcluidasPort` recebe a NS e a coleção canônica vigente uma única vez. O resultado
+tipado é entregue ao provedor regional; nem o avaliador declarativo nem os provedores abrem conexão.
 
 ## Contratos do domínio
 
@@ -120,7 +132,7 @@ sessão semântica e seus alvos. A composição é explícita no bootstrap:
 | Família | Implementação | Exemplos de fatos |
 |---|---|---|
 | documental | `application/document_compliance.py` | nomes e conteúdo de documentos, anexos identificados |
-| regional | `application/project_compliance.py` | cabeçalho, formato, escala, contexto, elementos associados |
+| regional | `application/project_compliance.py` | cabeçalho, formato, escala, serviços, impacto/servidão e resultados das ações |
 | vãos | `application/span_compliance.py` | tecnologia, comprimento, origem da medida e exceções comprovadas |
 | topológica | `application/topology_compliance.py` | ângulos, continuidade, componentes, periodicidade e coerência entre elementos |
 
@@ -133,23 +145,45 @@ urbano ou rural vem exclusivamente do enum retornado pelo SQL Server, nunca de m
 rotulado, OCR ou token do PDF. O provedor publica somente o fato correspondente, com confiança 1,
 origem auditável sem dados de conexão e nenhuma evidência PDF, no projeto e em todas as regiões.
 
-## Fronteira operacional do mercado
+## Fronteira operacional do SQL Server
 
 `ServerSettings` exige `ZENY_MARKET_SQLSERVER_CONNECTION_STRING` fora de `repr` e valida
-`ZENY_MARKET_SQLSERVER_TIMEOUT_SECONDS` como inteiro positivo também fora de `repr`. A projeção de
-core settings, contratos HTTP e pacote cliente não carregam esses campos. O segredo entra somente
-como ambiente runtime do container: não pertence a Dockerfile/camadas, SQLite, `/data`, backups,
-DTOs, respostas ou logs.
+`ZENY_MARKET_SQLSERVER_TIMEOUT_SECONDS` como inteiro positivo também fora de `repr`. A mesma
+configuração atende o classificador de mercado e o verificador de ações, sempre no servidor. A
+projeção de core settings, contratos HTTP e pacote cliente não carregam esses campos. O segredo
+entra somente como ambiente runtime do container: não pertence a Dockerfile/camadas, SQLite,
+`/data`, backups, DTOs, respostas ou logs.
 
-O login externo deve possuir somente conexão ao banco e `SELECT` nas duas colunas consultadas de
-`TB_NOTAS`. Microsoft ODBC Driver 18 usa `Encrypt=yes` e `TrustServerCertificate=no`; CA privada
-deve ser confiada na imagem, sem ignorar o certificado. O timeout é aplicado tanto à abertura
-quanto ao cursor/consulta, e cursor e conexão são fechados em sucesso e falha.
+O login externo deve possuir somente conexão ao banco e `SELECT` em
+`TB_NOTAS.NOTAS_NUM_NS`/`TB_NOTAS.NOTAS_COD_MERCADO` e nas colunas expostas pela view
+`vBIAcoes.NOTAS_NUM_NS`, `TSERVICOS_CT_COD`, `TACOES_DES` e `ACOES_DAT_CONCLUSAO`. Não necessita
+`SELECT` direto nas tabelas-base da view e não recebe escrita, DDL ou administração. Microsoft ODBC
+Driver 18 usa `Encrypt=yes` e `TrustServerCertificate=no`; CA privada deve ser confiada na imagem,
+sem ignorar o certificado. O timeout é aplicado tanto à abertura quanto ao cursor/consulta, e cursor
+e conexão são fechados em sucesso e falha.
 
-Zero/múltiplas linhas, `NULL`, valor inválido, timeout ou erro ODBC geram erros de aplicação seguros
-e interrompem o job antes do commit. Não existe snapshot parcial, fallback, cache persistente ou
-publicação dos dois contextos. O healthcheck HTTP não consulta essa dependência. Testes normais
-injetam fakes; o adaptador real é exercitado apenas pelo smoke opt-in da homologação.
+O SQL existencial de ações é equivalente a:
+
+```sql
+SELECT TACOES_DES
+FROM vBIAcoes
+WHERE NOTAS_NUM_NS = ?
+  AND TSERVICOS_CT_COD IN (?, ...)
+  AND TACOES_DES = ?
+  AND ACOES_DAT_CONCLUSAO IS NOT NULL;
+```
+
+Somente a quantidade de placeholders do `IN` é montada; NS, todos os serviços e a descrição fechada
+da ação são parâmetros posicionais. Zero linha retorna `False`, uma ou mais retornam `True`, e
+duplicidade não é erro porque a condição é existencial. Coleção vazia é tratada antes do adaptador
+como `SEM_CODIGOS_SERVICO`, publica requisito falso e não abre conexão nem gera `IN ()`.
+
+Na classificação de mercado, zero/múltiplas linhas, `NULL` ou valor inválido são erro. Na consulta de
+ações, zero linha é um resultado válido e significa pendência; somente timeout, falha de driver,
+execução, fetch ou dado incompatível geram erro de dependência. Esses erros interrompem o job antes
+do commit. Não existe snapshot parcial, fallback ou cache persistente. O healthcheck HTTP não
+consulta essa dependência. Testes normais injetam fakes; o adaptador real só pode ser exercitado na
+homologação autorizada.
 
 ## Registro configurável
 
@@ -202,8 +236,10 @@ O fato de mercado participa da assinatura da sessão. Se a consulta seguinte mud
 não marca automaticamente o snapshot antigo como desatualizado, porque a consulta disponível não
 expõe versão ou evento; é necessário acionar **Analisar conformidade** para capturá-la.
 
-O painel considera desatualizado um resultado cuja assinatura das regras ou versão do método não
-corresponde ao estado ativo. O snapshot antigo continua visível até uma reanálise explícita.
+Os fatos `projeto.codigo_servico` e os resultados das ações também participam da assinatura. O
+painel considera desatualizado um resultado cuja assinatura das regras, versão do método, NS ou
+coleção atual de serviços não corresponde ao estado ativo. O snapshot antigo continua visível até
+uma reanálise explícita; mudanças externas sem evento continuam exigindo reanálise manual.
 
 ## Callouts e interface
 
@@ -211,8 +247,10 @@ No servidor, `application/compliance_callouts.py` converte somente divergências
 `ComplianceCalloutDto` sem Qt.
 Resultados conformes e não avaliáveis permanecem no snapshot auditável, mas não são apresentados
 como problemas de comissionamento nem recebem callout.
-A geometria é escolhida, em ordem, entre fatos participantes, evidências referenciadas e alvo. Uma
-ausência real de página ou geometria não recebe coordenadas inventadas.
+A geometria é escolhida, em ordem, entre fatos participantes, evidências referenciadas e alvo. Nas
+regras de ações, o resultado SQL não possui geometria, então o achado conserva as evidências do
+gatilho e o callout usa deterministicamente a primeira na ordem de leitura. Uma ausência real de
+página ou geometria não recebe coordenadas inventadas.
 
 O posicionador calcula caixas próximas às âncoras, respeita as margens da folha e minimiza colisões
 de modo determinístico. Texto, largura, margens e pontas de seta usam medidas físicas para manter

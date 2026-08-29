@@ -11,12 +11,15 @@ from uuid import UUID
 
 import pytest
 from fastapi import FastAPI
-from tests.market_fakes import FakeClassificadorMercado
-from tests.pdf_fixtures import create_feature_pdf, create_golden_pdf
+from tests.market_fakes import FakeClassificadorMercado, FakeVerificadorAcoesConcluidas
+from tests.pdf_fixtures import create_action_requirements_pdf, create_golden_pdf
 from uvicorn import Config, Server
 
+from zeny_project_handler.adapters.catalog import carregar_catalogo_inicial
 from zeny_project_handler.application.errors import FluxoMvpCanceladoError
 from zeny_project_handler.application.mvp_workflow import ResultadoFluxoMvp
+from zeny_project_handler.domain.enums import CategoriaElemento
+from zeny_project_handler.domain.market import DescricaoAcao
 from zeny_project_handler_client.ui.project_gateway import HttpProjectGateway, ProjectGatewayError
 from zeny_project_handler_contracts.enums import (
     AnalysisExecutionState,
@@ -67,7 +70,8 @@ def test_two_http_clients_run_full_project_flow_and_survive_server_restart(
         data_directory=data_directory,
     )
     first_pdf = create_golden_pdf(tmp_path / "primeiro.pdf")
-    second_pdf = create_feature_pdf(tmp_path / "segundo.pdf")
+    catalog_code = carregar_catalogo_inicial().itens_ativos(CategoriaElemento.POSTE)[0].codigo
+    second_pdf = create_action_requirements_pdf(tmp_path / "segundo.pdf", catalog_code)
     runner = CancelOnlyRunner(Event())
     runtime = _controlled_runtime(settings, runner)
 
@@ -134,9 +138,11 @@ def test_two_http_clients_run_full_project_flow_and_survive_server_restart(
         assert first_client.session().global_operation is None
 
     restarted_classifier = FakeClassificadorMercado()
+    restarted_action_verifier = FakeVerificadorAcoesConcluidas(resultado=False)
     restarted_runtime = compose_server_runtime(
         settings,
         market_classifier=restarted_classifier,
+        action_verifier=restarted_action_verifier,
     )
     with _running_server(
         create_app(settings, runtime_factory=lambda _settings: restarted_runtime)
@@ -194,6 +200,18 @@ def test_two_http_clients_run_full_project_flow_and_survive_server_restart(
         succeeded = _wait_job(second_client, accepted.job_id.root, JobStatus.SUCCEEDED)
         assert succeeded.progress_percent == 100
         assert restarted_classifier.consultas == ["0007654321"]
+        assert restarted_action_verifier.consultas == [
+            (
+                "0007654321",
+                ("0007", "3456"),
+                DescricaoAcao.AVALIAR_IMPACTO_AMBIENTAL,
+            ),
+            (
+                "0007654321",
+                ("0007", "3456"),
+                DescricaoAcao.FALTA_SERVIDAO,
+            ),
+        ]
         result = first_client.get_job_result(accepted.job_id.root)
         assert result.result is not None
         assert result.result["project_id"] == str(project_id)

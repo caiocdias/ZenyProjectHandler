@@ -24,7 +24,11 @@ falha diante de qualquer alteração não revisada.
 
 Os códigos de serviço usam as operações aditivas `GET` e `PUT`
 `/api/v1/projects/{project_id}/service-codes`. O detalhe do projeto e o PATCH da NS preservam a
-forma anterior.
+forma anterior. `ProjectServiceCodesResponse` devolve `service_codes` e `project_version`; o PUT
+recebe `ReplaceProjectServiceCodesRequest`, substitui toda a coleção e exige
+`expected_project_version`. Cada item segue `^[0-9]{4}$`, inclusive valores como `0007`; coleção
+vazia é válida. Uma versão obsoleta retorna `409 STALE_STATE` e nenhuma mutação recebe retry
+automático cego.
 
 ## Decisões transversais
 

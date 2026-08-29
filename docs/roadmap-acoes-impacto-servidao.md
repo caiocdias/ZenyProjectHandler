@@ -163,26 +163,27 @@ desbloqueio documentados.
 
 ## Definição global de pronto
 
-- [ ] O projeto aceita zero ou mais códigos únicos de quatro dígitos, preserva zeros à esquerda e
+- [x] O projeto aceita zero ou mais códigos únicos de quatro dígitos, preserva zeros à esquerda e
   rejeita qualquer outro formato em todas as fronteiras.
-- [ ] A caixa **Serviços do projeto** aparece exatamente entre **Projeto** e **Folhas PDF**, carrega a
+- [x] A caixa **Serviços do projeto** aparece exatamente entre **Projeto** e **Folhas PDF**, carrega a
   coleção persistida e permite adicionar/remover com feedback e controle de conflito.
-- [ ] Reiniciar servidor/cliente e exportar/importar um projeto preservam os códigos.
-- [ ] O adaptador produz placeholders de acordo com a quantidade de serviços e vincula todos os
+- [x] Reiniciar servidor/cliente e exportar/importar um projeto preservam os códigos.
+- [x] O adaptador produz placeholders de acordo com a quantidade de serviços e vincula todos os
   valores; nenhum dado do usuário entra por concatenação no SQL.
-- [ ] `Impacto Ambiental: Sim` no cabeçalho consulta somente
+- [x] `Impacto Ambiental: Sim` no cabeçalho consulta somente
   `AVALIAR IMPACTO AMBIENTAL`; menção a servidão consulta somente `FALTA SERVIDÃO`.
-- [ ] Sem linha aplicável, a lista de problemas e o PDF mostram, com âncora correta, o título exato
+- [x] Sem linha aplicável, a lista de problemas e o PDF mostram, com âncora correta, o título exato
   solicitado; com ao menos uma linha, a regra é conforme e não recebe callout.
-- [ ] Ausência de gatilho não consulta a ação e não cria achado; lista vazia com gatilho produz
+- [x] Ausência de gatilho não consulta a ação e não cria achado; lista vazia com gatilho produz
   pendência sem executar SQL inválido.
-- [ ] Falha ODBC não é tratada como pendência e não publica execução parcial.
-- [ ] Alterar NS ou serviços marca a execução anterior como desatualizada até nova análise.
-- [ ] O registro distribuído, catálogo de fatos, método, OpenAPI e documentação refletem a mudança.
-- [ ] `IniciarTestes.bat` termina com código zero, cobertura acima do limite e sem regressões de
+- [x] Falha ODBC não é tratada como pendência e não publica execução parcial.
+- [x] Alterar NS ou serviços marca a execução anterior como desatualizada até nova análise.
+- [x] O registro distribuído, catálogo de fatos, método, OpenAPI e documentação refletem a mudança.
+- [x] `IniciarTestes.bat` termina com código zero, cobertura acima do limite e sem regressões de
   isolamento do cliente.
 - [ ] Antes de produção, um smoke autorizado confirma o tipo físico da coluna, permissão de leitura
   e pelo menos um caso com linha e um sem linha, sem registrar credenciais nem dados sensíveis.
+  Gate de implantação pendente: esta E05 não recebeu autorização nem massa de homologação.
 
 ## Índice das etapas
 
@@ -192,7 +193,7 @@ desbloqueio documentados.
 | E02 | Caixa de serviços no painel Projeto | #concluida | E01 | Inclusão/remoção remota de códigos na posição visual solicitada |
 | E03 | Porta e consulta parametrizada de ações | #concluida | E01 | Verificador existencial de `vBIAcoes` seguro e testado |
 | E04 | Gatilhos, fatos, regras e callouts | #concluida | E01, E03 | Duas pendências auditáveis e localizáveis no PDF |
-| E05 | Integração, documentação e gate final | #pendente | E02, E04 | Fluxo completo validado e documentação operacional pronta |
+| E05 | Integração, documentação e gate final | #concluida | E02, E04 | Fluxo completo validado e documentação operacional pronta |
 
 ## E01 — Modelo persistente e contrato remoto dos serviços — #concluida
 
@@ -892,7 +893,7 @@ antes do aceite.
   ainda resume o baseline 2025.6/39 regras e executar o gate global. O smoke autorizado continua
   responsável por confirmar o tipo físico de `TSERVICOS_CT_COD`; nenhum acesso real ocorreu na E04.
 
-## E05 — Integração, documentação e gate final — #pendente
+## E05 — Integração, documentação e gate final — #concluida
 
 ### Objetivo
 
@@ -988,20 +989,20 @@ autorização. Finalize com resumo conciso de mudanças, validações e pendênc
 
 ### Critérios de aceite
 
-- [ ] Um teste ponta a ponta prova cadastro, persistência, restart e uso dos serviços na análise.
-- [ ] A matriz impacto/servidão × ação presente/ausente produz exatamente os achados esperados.
-- [ ] Os títulos exibidos são exatamente `IMPACTO AMBIENTAL PENDENTE` e
+- [x] Um teste ponta a ponta prova cadastro, persistência, restart e uso dos serviços na análise.
+- [x] A matriz impacto/servidão × ação presente/ausente produz exatamente os achados esperados.
+- [x] Os títulos exibidos são exatamente `IMPACTO AMBIENTAL PENDENTE` e
   `FALTA SERVIDÃO PENDENTE`.
-- [ ] Cada divergência navega e ancora o callout na evidência correta do PDF.
-- [ ] Dois clientes não perdem atualização e a análise usa NS/serviços vigentes.
-- [ ] A OpenAPI gerada coincide com o snapshot e permanece livre de paths/segredos.
-- [ ] README, especificação, arquitetura, catálogo, paridade e runbook não contradizem código ou
+- [x] Cada divergência navega e ancora o callout na evidência correta do PDF.
+- [x] Dois clientes não perdem atualização e a análise usa NS/serviços vigentes.
+- [x] A OpenAPI gerada coincide com o snapshot e permanece livre de paths/segredos.
+- [x] README, especificação, arquitetura, catálogo, paridade e runbook não contradizem código ou
   versões.
-- [ ] A documentação de operação concede somente `SELECT` nas colunas necessárias de `TB_NOTAS` e
+- [x] A documentação de operação concede somente `SELECT` nas colunas necessárias de `TB_NOTAS` e
   `vBIAcoes`, sem escrita/DDL.
-- [ ] O artefato cliente continua sem módulos do servidor, `pyodbc`, seeds ou SQL.
-- [ ] O gate oficial completo passa com cobertura acima de 85,01% e complexidade dentro do limite.
-- [ ] Homologação real executada com evidência sanitizada ou registrada explicitamente como requisito
+- [x] O artefato cliente continua sem módulos do servidor, `pyodbc`, seeds ou SQL.
+- [x] O gate oficial completo passa com cobertura acima de 85,01% e complexidade dentro do limite.
+- [x] Homologação real executada com evidência sanitizada ou registrada explicitamente como requisito
   de implantação ainda não autorizado.
 
 ### Validação obrigatória
@@ -1047,9 +1048,44 @@ aprovados por inferência.
 
 ### Evidências e handoff
 
-- Estado: não iniciado.
-- Arquivos alterados: nenhum.
-- Decisões tomadas: nenhuma além das decisões globais deste roadmap.
-- Validações executadas: nenhuma.
-- Pendência operacional esperada: confirmar autorização e massa de homologação sem registrar
-  credenciais neste documento.
+- Estado: concluído em 2026-08-29; gate offline aprovado, sem liberação implícita para produção.
+- Arquivos alterados pela E05:
+  - integração: `tests/e2e/test_mvp_ui.py`, `tests/integration/test_project_http_gateway.py`,
+    `tests/pdf_fixtures.py` e `tests/conftest.py`;
+  - documentação: `README.md`, `docs/api/README.md`, `docs/especificacao-funcional.md`,
+    `docs/arquitetura-conformidade.md`, `docs/catalogo-regras-conformidade.md`,
+    `docs/inventario-paridade-cliente-servidor.md`, `docs/operacao-servidor.md` e
+    `server/LEIA-ME-SERVIDOR.md`;
+  - `docs/api/openapi-v1.json` foi regenerado e permaneceu byte a byte igual ao snapshot vigente;
+    este roadmap sincroniza aceite e handoff.
+- Decisões e cobertura integrada:
+  - a fixture PDF versionada contém `Impacto Ambiental: Sim` no cabeçalho e `FAIXA DE SERVIDAO` em
+    outra região, permitindo comprovar âncoras e navegação distintas sem corpus privado;
+  - o E2E cadastra `0007` pelo cliente, simula uma segunda sessão vencedora e `STALE_STATE`, recarrega
+    `("0007", "1234")` e prova a matriz completa das duas ações pelo
+    `FakeVerificadorAcoesConcluidas`, com uma consulta por ação/execução, DTOs, títulos e callouts;
+  - o teste HTTP reinicia o runtime, mantém a coleção, usa dois gateways e comprova que a análise
+    consulta a NS e os serviços canônicos vigentes, não a tentativa obsoleta;
+  - API final `1.1.0`, DTOs `ProjectServiceCodesResponse` e
+    `ReplaceProjectServiceCodesRequest`, seed `cemig-normas-distribuicao-2025.7`, método `9` e 41
+    regras foram conferidos contra código, OpenAPI e catálogo.
+- Validações executadas:
+  - `scripts/generate_openapi_v1.py`: código zero; snapshot sem diff e teste contratual aprovado;
+  - matriz Pytest obrigatória da E05 com `QT_QPA_PLATFORM=offscreen` e `TEMP`/`TMP=C:\tmp`:
+    `99 passed in 35.17s`;
+  - `scripts/client_artifact_gate.py --source-only`: `GATE DO CLIENTE: APROVADO`;
+  - a primeira execução de `IniciarTestes.bat` detectou três estreitamentos Mypy no novo E2E e um
+    arquivo versionado fora do formato; ambos foram corrigidos sem relaxar gates;
+  - confirmação final de `IniciarTestes.bat`: `RESULTADO FINAL: APROVADO`, Ruff e formato em 318
+    arquivos, Mypy sem problemas em 303 fontes, `856 passed in 178.00s`, cobertura `86.61%`, gate
+    do cliente aprovado e 2.542 funções/métodos sem complexidade E/F.
+  - `git diff --check`: código zero; somente avisos informativos de futura normalização LF/CRLF;
+  - `git status --short`: somente os 13 arquivos intencionais desta E05, sem segredo, artefato
+    temporário, alteração staged ou entrada para `ROADMAP.md`.
+- Homologação SQL Server: não executada, pois não houve autorização explícita, imagem aprovada nem
+  massa conhecida. Causa: acesso real está fora do escopo autorizado. Impacto: produção ainda não
+  está liberada. Ação: DBA/responsável deve confirmar o tipo físico de `TSERVICOS_CT_COD`, conceder
+  somente `SELECT` nas colunas documentadas e executar, dentro da imagem aprovada, um caso sanitizado
+  com linha e outro sem linha para cada ação, sem registrar NS, serviços, SQL, conexão ou credenciais.
+- Preservação: nenhum acesso SQL real, commit, release, publicação ou alteração externa foi feito;
+  `ROADMAP.md` não foi recriado nem tocado, e `relatorio-testes.txt` permanece ignorado.
