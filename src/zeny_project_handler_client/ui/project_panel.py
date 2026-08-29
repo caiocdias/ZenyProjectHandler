@@ -37,6 +37,7 @@ from zeny_project_handler_contracts.enums import (
     JobStatus,
     UploadState,
 )
+from zeny_project_handler_contracts.errors import ErrorCode
 from zeny_project_handler_contracts.jobs import JobResultResponse
 from zeny_project_handler_contracts.projects import ProjectDetailDto
 from zeny_project_handler_contracts.session import SessionCapabilitiesResponse
@@ -45,10 +46,11 @@ from .project_gateway import ProjectGateway, ProjectGatewayError
 
 T = TypeVar("T")
 _NUMERO_NS_PATTERN = r"[0-9]{10}"
+_SERVICE_CODE_PATTERN = r"[0-9]{4}"
 _TERMINAL_JOB_STATES = frozenset({JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELLED})
 
 
-class _NumeroNsLineEdit(QLineEdit):
+class _AsciiDigitsLineEdit(QLineEdit):
     """Campo numérico simples com atalhos de clipboard previsíveis."""
 
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802 - API Qt
@@ -169,6 +171,8 @@ class ProjectPanelWidget(QWidget):
         self._review_panel = review_panel
         self._settings = QSettings(str(state_path), QSettings.Format.IniFormat)
         self._session: ProjectDetailDto | None = None
+        self._service_codes: tuple[str, ...] = ()
+        self._service_codes_loaded = False
         self._updating_page_order = False
         self._thread: QThread | None = None
         self._worker: _JobPollingWorker | None = None
@@ -205,7 +209,7 @@ class ProjectPanelWidget(QWidget):
         service_note_label = QLabel("Número da NS")
         service_note_label.setObjectName("mvpProjectServiceNoteLabel")
         project_layout.addWidget(service_note_label)
-        self._service_note = _NumeroNsLineEdit()
+        self._service_note = _AsciiDigitsLineEdit()
         self._service_note.setObjectName("mvpProjectNameEdit")
         self._service_note.setMaxLength(10)
         self._service_note.setValidator(
@@ -240,6 +244,50 @@ class ProjectPanelWidget(QWidget):
         project_actions.addWidget(delete_project, 1, 1)
         project_layout.addLayout(project_actions)
         layout.addWidget(self._project_box)
+
+        self._service_box = QGroupBox("Serviços do projeto")
+        self._service_box.setObjectName("mvpProjectServiceCodesBox")
+        self._service_box.setAccessibleName("Serviços do projeto")
+        service_layout = QVBoxLayout(self._service_box)
+        service_code_label = QLabel("Código do serviço")
+        service_code_label.setObjectName("mvpProjectServiceCodeLabel")
+        service_layout.addWidget(service_code_label)
+        service_entry = QHBoxLayout()
+        self._service_code = _AsciiDigitsLineEdit()
+        self._service_code.setObjectName("mvpProjectServiceCodeEdit")
+        self._service_code.setMaxLength(4)
+        self._service_code.setValidator(
+            QRegularExpressionValidator(
+                QRegularExpression(_SERVICE_CODE_PATTERN),
+                self._service_code,
+            )
+        )
+        self._service_code.setPlaceholderText("0000")
+        self._service_code.setToolTip("Informe os quatro dígitos do código de serviço")
+        self._service_code.setAccessibleName("Código do serviço")
+        self._service_code.textChanged.connect(self._update_service_controls)
+        service_code_label.setBuddy(self._service_code)
+        service_entry.addWidget(self._service_code)
+        self._add_service_code = QPushButton("Adicionar")
+        self._add_service_code.setObjectName("mvpAddServiceCodeButton")
+        self._add_service_code.setAccessibleName("Adicionar código de serviço")
+        self._add_service_code.clicked.connect(self.adicionar_codigo_servico)
+        service_entry.addWidget(self._add_service_code)
+        service_layout.addLayout(service_entry)
+        self._service_code_list = QListWidget()
+        self._service_code_list.setObjectName("mvpProjectServiceCodeList")
+        self._service_code_list.setAccessibleName("Códigos de serviço do projeto")
+        self._service_code_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        self._service_code_list.setMinimumHeight(76)
+        self._service_code_list.itemSelectionChanged.connect(self._update_service_controls)
+        service_layout.addWidget(self._service_code_list)
+        self._remove_service_codes = QPushButton("Remover selecionados")
+        self._remove_service_codes.setObjectName("mvpRemoveServiceCodesButton")
+        self._remove_service_codes.setAccessibleName("Remover códigos de serviço selecionados")
+        self._remove_service_codes.setProperty("role", "danger")
+        self._remove_service_codes.clicked.connect(self.remover_codigos_servico)
+        service_layout.addWidget(self._remove_service_codes)
+        layout.addWidget(self._service_box)
 
         self._document_box = QGroupBox("Folhas PDF")
         document_layout = QVBoxLayout(self._document_box)
@@ -385,6 +433,64 @@ class ProjectPanelWidget(QWidget):
             self.atualizar_projetos()
             self._select_and_activate(response.project)
             self._review_panel.atualizar_projetos()
+
+    def adicionar_codigo_servico(self) -> None:
+        session = self._session
+        code = self._service_code.text()
+        if session is None or not self._service_codes_loaded:
+            self._warn("Crie ou abra um projeto antes de adicionar serviços")
+            return
+        if not self._service_code.hasAcceptableInput():
+            self._warn("Informe o código de serviço com exatamente quatro dígitos")
+            return
+        if code in self._service_codes:
+            self._warn(f"O código de serviço {code} já está cadastrado no projeto")
+            return
+        self._replace_service_codes(tuple(sorted((*self._service_codes, code))))
+
+    def remover_codigos_servico(self) -> None:
+        if self._session is None or not self._service_codes_loaded:
+            self._warn("Crie ou abra um projeto antes de remover serviços")
+            return
+        selected = {item.text() for item in self._service_code_list.selectedItems()}
+        if not selected:
+            self._warn("Selecione ao menos um código de serviço para remover")
+            return
+        self._replace_service_codes(
+            tuple(code for code in self._service_codes if code not in selected)
+        )
+
+    def _replace_service_codes(self, service_codes: tuple[str, ...]) -> None:
+        session = self._session
+        if session is None or not self._service_codes_loaded:
+            return
+        try:
+            response = self._gateway.replace_service_codes(
+                session.project_id.root,
+                service_codes,
+                expected_project_version=session.project_version,
+            )
+        except Exception as error:
+            if getattr(error, "code", None) is ErrorCode.STALE_STATE:
+                self._warn(
+                    "O projeto mudou em outra janela; os serviços mais recentes serão recarregados."
+                )
+                self._reload_after_service_code_conflict(session.project_id.root)
+                return
+            self._warn(str(error).strip() or type(error).__name__)
+            return
+        if self.projeto_ativo_id != response.project_id.root:
+            return
+        self._session = session.model_copy(update={"project_version": response.project_version})
+        self._set_service_codes(response.service_codes)
+        self._service_code.clear()
+        self.status_changed.emit("Serviços do projeto atualizados")
+
+    def _reload_after_service_code_conflict(self, project_id: UUID) -> None:
+        self._clear_service_codes()
+        refreshed = self._action(lambda: self._gateway.get_project(project_id))
+        if refreshed is not None and self.projeto_ativo_id == project_id:
+            self._activate(refreshed.project)
 
     def excluir_projeto(self) -> None:
         session = self._session
@@ -791,9 +897,13 @@ class ProjectPanelWidget(QWidget):
             or self.processando
         )
         self._project_box.setEnabled(not blocked)
+        self._service_box.setEnabled(
+            self._session is not None and self._service_codes_loaded and not blocked
+        )
         self._document_box.setEnabled(not blocked)
         self._run.setEnabled(not blocked)
         self._cancel.setEnabled(self.processando and self._cancellation is not None)
+        self._update_service_controls()
 
     def _start_global_polling(self) -> None:
         thread = QThread(self)
@@ -819,11 +929,12 @@ class ProjectPanelWidget(QWidget):
             self,
             "Como usar o projeto",
             "1. Crie ou abra um projeto no servidor.\n"
-            "2. Selecione um ou vários PDFs para upload.\n"
-            "3. Execute a análise remota e acompanhe o progresso.\n"
-            "4. Confira os vínculos no painel Resultados.\n"
-            "5. Clique nos itens para conferir os sublinhados no PDF.\n"
-            "6. Reinicie cliente e servidor e confira se o trabalho foi preservado.",
+            "2. Cadastre os códigos de serviço com quatro dígitos.\n"
+            "3. Selecione um ou vários PDFs para upload.\n"
+            "4. Execute a análise remota e acompanhe o progresso.\n"
+            "5. Confira os vínculos no painel Resultados.\n"
+            "6. Clique nos itens para conferir os sublinhados no PDF.\n"
+            "7. Reinicie cliente e servidor e confira se o trabalho foi preservado.",
         )
 
     def _select_and_activate(self, session: ProjectDetailDto) -> None:
@@ -834,6 +945,7 @@ class ProjectPanelWidget(QWidget):
 
     def _activate(self, session: ProjectDetailDto) -> None:
         self._session = session
+        self._load_service_codes(session.project_id.root)
         project_id = str(session.project_id.root)
         self._settings.setValue("last_project_id", project_id)
         self._settings.sync()
@@ -863,6 +975,39 @@ class ProjectPanelWidget(QWidget):
         self._update_order_controls()
         self._show_summary(session)
         self.project_opened.emit(session.project_id.root)
+
+    def _load_service_codes(self, project_id: UUID) -> None:
+        self._clear_service_codes()
+        response = self._action(lambda: self._gateway.get_service_codes(project_id))
+        if response is None or self.projeto_ativo_id != project_id:
+            return
+        session = self._session
+        if session is None:
+            return
+        self._session = session.model_copy(update={"project_version": response.project_version})
+        self._service_codes_loaded = True
+        self._set_service_codes(response.service_codes)
+        self._apply_operation_state()
+
+    def _set_service_codes(self, service_codes: tuple[str, ...]) -> None:
+        self._service_codes = service_codes
+        self._service_code_list.clear()
+        self._service_code_list.addItems(service_codes)
+        self._update_service_controls()
+
+    def _clear_service_codes(self) -> None:
+        self._service_codes = ()
+        self._service_codes_loaded = False
+        self._service_code.clear()
+        self._service_code_list.clear()
+        self._apply_operation_state()
+
+    def _update_service_controls(self) -> None:
+        enabled = self._service_box.isEnabled()
+        self._add_service_code.setEnabled(enabled)
+        self._remove_service_codes.setEnabled(
+            enabled and bool(self._service_code_list.selectedItems())
+        )
 
     def _show_summary(self, session: ProjectDetailDto) -> None:
         analysis = session.analysis
@@ -900,6 +1045,7 @@ class ProjectPanelWidget(QWidget):
             return None
 
     def _show_empty_state(self) -> None:
+        self._clear_service_codes()
         self._updating_page_order = True
         self._pages.clear()
         self._updating_page_order = False

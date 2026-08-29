@@ -1,4 +1,4 @@
-"""Classificação canônica do mercado atendido por uma Nota de Serviço."""
+"""Valores canônicos do cadastro operacional externo."""
 
 from enum import StrEnum
 
@@ -8,3 +8,10 @@ class Mercado(StrEnum):
 
     RURAL = "RURAL"
     URBANO = "URBANO"
+
+
+class DescricaoAcao(StrEnum):
+    """Descrições exatas de ações cuja conclusão pode ser consultada."""
+
+    AVALIAR_IMPACTO_AMBIENTAL = "AVALIAR IMPACTO AMBIENTAL"
+    FALTA_SERVIDAO = "FALTA SERVIDÃO"

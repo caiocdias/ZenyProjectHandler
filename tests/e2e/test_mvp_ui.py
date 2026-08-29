@@ -9,10 +9,11 @@ from uuid import UUID
 
 import pymupdf
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
+    QGroupBox,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -131,6 +132,196 @@ def test_user_can_reorder_project_pdfs_and_reopen_in_reading_order(
     assert reopened_pages is not None
     assert "folha-01.pdf · página 2" in reopened_pages.item(0).text()
     assert "folha-01.pdf · página 1" in reopened_pages.item(1).text()
+
+
+def test_project_service_codes_ui_is_remote_canonical_accessible_and_conflict_safe(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    application_factory: ApplicationFactory,
+) -> None:
+    settings = ClientSettings(data_directory=tmp_path / "service-codes", pdf_render_dpi=72)
+    warnings: list[str] = []
+    monkeypatch.setattr(
+        QMessageBox,
+        "warning",
+        lambda _parent, _title, message: warnings.append(str(message)),
+    )
+    application, window = application_factory([], settings=settings)
+    qtbot.addWidget(window)
+    window.show()
+    panel = window.project_panel
+    assert isinstance(panel, ProjectPanelWidget)
+    panel_layout = panel.layout()
+    assert panel_layout is not None
+    group_titles = [
+        widget.title()
+        for index in range(panel_layout.count())
+        if isinstance((widget := panel_layout.itemAt(index).widget()), QGroupBox)
+    ]
+    assert group_titles[:3] == ["Projeto", "Serviços do projeto", "Folhas PDF"]
+
+    service_box = panel.findChild(QGroupBox, "mvpProjectServiceCodesBox")
+    service_field = panel.findChild(QLineEdit, "mvpProjectServiceCodeEdit")
+    service_list = panel.findChild(QListWidget, "mvpProjectServiceCodeList")
+    add_service = panel.findChild(QPushButton, "mvpAddServiceCodeButton")
+    remove_services = panel.findChild(QPushButton, "mvpRemoveServiceCodesButton")
+    assert service_box is not None
+    assert service_field is not None
+    assert service_list is not None
+    assert add_service is not None
+    assert remove_services is not None
+    assert not service_box.isEnabled()
+    assert service_list.count() == 0
+    assert service_box.accessibleName() == "Serviços do projeto"
+    assert service_field.accessibleName() == "Código do serviço"
+    assert service_list.accessibleName() == "Códigos de serviço do projeto"
+    assert add_service.accessibleName() == "Adicionar código de serviço"
+    assert remove_services.accessibleName() == "Remover códigos de serviço selecionados"
+    assert service_field.inputMask() == ""
+    assert service_field.maxLength() == 4
+    assert service_field.validator() is not None
+    assert service_field.placeholderText() == "0000"
+
+    name = panel.findChild(QLineEdit, "mvpProjectNameEdit")
+    create = panel.findChild(QPushButton, "mvpCreateProjectButton")
+    project_combo = panel.findChild(QComboBox, "mvpProjectCombo")
+    assert name is not None and create is not None and project_combo is not None
+    name.setText("0000000701")
+    qtbot.mouseClick(create, Qt.MouseButton.LeftButton)
+    first_project_id = UUID(str(project_combo.currentData()))
+    assert service_box.isEnabled()
+    initial_version = panel._session.project_version if panel._session is not None else -1
+
+    service_field.setText("007")
+    assert not service_field.hasAcceptableInput()
+    qtbot.mouseClick(add_service, Qt.MouseButton.LeftButton)
+    assert service_list.count() == 0
+    assert panel._session is not None
+    assert panel._session.project_version == initial_version
+
+    service_field.setText("\uff11\uff12\uff13\uff14")
+    assert not service_field.hasAcceptableInput()
+    qtbot.mouseClick(add_service, Qt.MouseButton.LeftButton)
+    assert service_list.count() == 0
+
+    clipboard = application.clipboard()
+    previous_clipboard_text = clipboard.text()
+    try:
+        clipboard.setText("Serviço 0007-x")
+        qtbot.keyClick(
+            service_field,
+            Qt.Key.Key_V,
+            Qt.KeyboardModifier.ControlModifier,
+        )
+        assert service_field.text() == "0007"
+        assert service_field.hasAcceptableInput()
+        service_field.selectAll()
+        clipboard.clear()
+        qtbot.keyClick(
+            service_field,
+            Qt.Key.Key_C,
+            Qt.KeyboardModifier.ControlModifier,
+        )
+        assert clipboard.text() == "0007"
+    finally:
+        clipboard.setText(previous_clipboard_text)
+
+    qtbot.mouseClick(add_service, Qt.MouseButton.LeftButton)
+    assert [service_list.item(index).text() for index in range(service_list.count())] == ["0007"]
+    assert panel._session is not None
+    version_after_first_add = panel._session.project_version
+    service_field.setText("0007")
+    qtbot.mouseClick(add_service, Qt.MouseButton.LeftButton)
+    assert panel._session.project_version == version_after_first_add
+    assert service_list.count() == 1
+    assert any("já está cadastrado" in message for message in warnings)
+
+    service_field.setText("9012")
+    qtbot.mouseClick(add_service, Qt.MouseButton.LeftButton)
+    assert [service_list.item(index).text() for index in range(service_list.count())] == [
+        "0007",
+        "9012",
+    ]
+    service_list.selectAll()
+    assert remove_services.isEnabled()
+    qtbot.mouseClick(remove_services, Qt.MouseButton.LeftButton)
+    assert service_list.count() == 0
+    assert panel._gateway.get_service_codes(first_project_id).service_codes == ()
+
+    service_field.setText("0007")
+    qtbot.mouseClick(add_service, Qt.MouseButton.LeftButton)
+    name.setText("0000000702")
+    qtbot.mouseClick(create, Qt.MouseButton.LeftButton)
+    second_project_id = UUID(str(project_combo.currentData()))
+    assert service_list.count() == 0
+    service_field.setText("1234")
+    qtbot.mouseClick(add_service, Qt.MouseButton.LeftButton)
+
+    first_index = project_combo.findData(str(first_project_id))
+    project_combo.setCurrentIndex(first_index)
+    panel.abrir_selecionado()
+    assert [service_list.item(index).text() for index in range(service_list.count())] == ["0007"]
+    second_index = project_combo.findData(str(second_project_id))
+    project_combo.setCurrentIndex(second_index)
+    panel.abrir_selecionado()
+    assert [service_list.item(index).text() for index in range(service_list.count())] == ["1234"]
+
+    assert panel._session is not None
+    external = panel._gateway.replace_service_codes(
+        second_project_id,
+        ("3456", "1234"),
+        expected_project_version=panel._session.project_version,
+    )
+    service_field.setText("9999")
+    qtbot.mouseClick(add_service, Qt.MouseButton.LeftButton)
+    assert [service_list.item(index).text() for index in range(service_list.count())] == [
+        "1234",
+        "3456",
+    ]
+    assert panel._session is not None
+    assert panel._session.project_version == external.project_version
+    assert "9999" not in panel._gateway.get_service_codes(second_project_id).service_codes
+    assert any("outra janela" in message for message in warnings)
+
+    panel.set_global_operation(object())
+    assert not service_box.isEnabled()
+    panel.set_global_operation(None)
+    assert service_box.isEnabled()
+    fake_analysis_thread = QThread()
+    panel._thread = fake_analysis_thread
+    panel._apply_operation_state()
+    assert not service_box.isEnabled()
+    panel._thread = None
+    panel._apply_operation_state()
+    fake_analysis_thread.deleteLater()
+    assert service_box.isEnabled()
+    assert all("service" not in key.casefold() for key in panel._settings.allKeys())
+
+    _reopened_application, reopened = application_factory([], settings=settings)
+    qtbot.addWidget(reopened)
+    reopened_panel = reopened.project_panel
+    assert isinstance(reopened_panel, ProjectPanelWidget)
+    reopened_combo = reopened_panel.findChild(QComboBox, "mvpProjectCombo")
+    reopened_services = reopened_panel.findChild(QListWidget, "mvpProjectServiceCodeList")
+    assert reopened_combo is not None and reopened_services is not None
+    assert UUID(str(reopened_combo.currentData())) == second_project_id
+    assert [reopened_services.item(index).text() for index in range(reopened_services.count())] == [
+        "1234",
+        "3456",
+    ]
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *_args, **_kwargs: QMessageBox.StandardButton.Yes,
+    )
+    reopened_delete = reopened_panel.findChild(QPushButton, "mvpDeleteProjectButton")
+    reopened_service_box = reopened_panel.findChild(QGroupBox, "mvpProjectServiceCodesBox")
+    assert reopened_delete is not None and reopened_service_box is not None
+    qtbot.mouseClick(reopened_delete, Qt.MouseButton.LeftButton)
+    assert reopened_combo.findData(str(second_project_id)) < 0
+    assert not reopened_service_box.isEnabled()
+    assert reopened_services.count() == 0
 
 
 def test_user_can_create_import_analyze_review_and_reopen_from_ui(

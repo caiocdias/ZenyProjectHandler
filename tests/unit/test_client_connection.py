@@ -108,7 +108,7 @@ def test_compatibility_negotiation_accepts_supported_release() -> None:
         ),
         _session().model_copy(
             update={
-                "min_compatible_api_version": "1.1.0",
+                "min_compatible_api_version": "1.2.0",
                 "max_compatible_api_version": "1.999.999",
             }
         ),
@@ -119,7 +119,7 @@ def test_compatibility_negotiation_refuses_incompatible_release_before_data(
 ) -> None:
     with pytest.raises(
         ConnectionError,
-        match=r"Cliente 0\.2\.0 \(API 1\.0\.0\); servidor .*API",
+        match=r"Cliente 0\.2\.0 \(API 1\.1\.0\); servidor .*API",
     ):
         _validate_session(session)
 

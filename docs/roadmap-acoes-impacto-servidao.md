@@ -189,8 +189,8 @@ desbloqueio documentados.
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E01 | Modelo persistente e contrato remoto dos serviços | #concluida | nenhuma | Coleção canônica, rotas GET/PUT e compatibilidade de dados/API |
-| E02 | Caixa de serviços no painel Projeto | #pendente | E01 | Inclusão/remoção remota de códigos na posição visual solicitada |
-| E03 | Porta e consulta parametrizada de ações | #pendente | E01 | Verificador existencial de `vBIAcoes` seguro e testado |
+| E02 | Caixa de serviços no painel Projeto | #concluida | E01 | Inclusão/remoção remota de códigos na posição visual solicitada |
+| E03 | Porta e consulta parametrizada de ações | #bloqueada | E01 | Verificador existencial de `vBIAcoes` seguro e testado |
 | E04 | Gatilhos, fatos, regras e callouts | #pendente | E01, E03 | Duas pendências auditáveis e localizáveis no PDF |
 | E05 | Integração, documentação e gate final | #pendente | E02, E04 | Fluxo completo validado e documentação operacional pronta |
 
@@ -378,7 +378,7 @@ Nenhum bloqueio conhecido.
   `project_version`; E02 deve preservá-la na sessão. E03 deve consumir as strings canônicas sem
   remover zeros à esquerda fora do adaptador SQL.
 
-## E02 — Caixa de serviços no painel Projeto — #pendente
+## E02 — Caixa de serviços no painel Projeto — #concluida
 
 ### Objetivo
 
@@ -459,15 +459,15 @@ Finalize com resumo conciso de mudanças, testes e pendências.
 
 ### Critérios de aceite
 
-- [ ] A ordem visual é **Projeto** → **Serviços do projeto** → **Folhas PDF**.
-- [ ] O campo aceita exatamente quatro dígitos, inclusive zeros iniciais, e rejeita os demais casos.
-- [ ] Adicionar `0007` mostra `0007`; reabrir o projeto e reiniciar o servidor preservam o valor.
-- [ ] Duplicata não cria chamada mutável nem nova versão.
-- [ ] Remover seleção atualiza servidor e lista; remover o último item deixa coleção vazia.
-- [ ] Trocar de projeto troca a lista; excluir/limpar projeto esvazia e desabilita a caixa.
-- [ ] `STALE_STATE` não sobrescreve a coleção mais recente de outra janela.
-- [ ] A caixa não permite mutação durante operação global ou job local.
-- [ ] Nenhum código de domínio, `pyodbc` ou SQL é introduzido no artefato cliente.
+- [x] A ordem visual é **Projeto** → **Serviços do projeto** → **Folhas PDF**.
+- [x] O campo aceita exatamente quatro dígitos, inclusive zeros iniciais, e rejeita os demais casos.
+- [x] Adicionar `0007` mostra `0007`; reabrir o projeto e reiniciar o servidor preservam o valor.
+- [x] Duplicata não cria chamada mutável nem nova versão.
+- [x] Remover seleção atualiza servidor e lista; remover o último item deixa coleção vazia.
+- [x] Trocar de projeto troca a lista; excluir/limpar projeto esvazia e desabilita a caixa.
+- [x] `STALE_STATE` não sobrescreve a coleção mais recente de outra janela.
+- [x] A caixa não permite mutação durante operação global ou job local.
+- [x] Nenhum código de domínio, `pyodbc` ou SQL é introduzido no artefato cliente.
 
 ### Validação obrigatória
 
@@ -484,7 +484,7 @@ e provam persistência/conflito sem dependência SQL real.
 
 ### Bloqueios
 
-Nenhum bloqueio conhecido além da dependência E01.
+Nenhum bloqueio conhecido.
 
 ### Riscos e mitigação
 
@@ -497,13 +497,33 @@ Nenhum bloqueio conhecido além da dependência E01.
 
 ### Evidências e handoff
 
-- Estado: não iniciado.
-- Arquivos alterados: nenhum.
-- Decisões tomadas: nenhuma além das decisões globais deste roadmap.
-- Validações executadas: nenhuma.
-- Observações para E05: registrar os `objectName` finais usados pelos testes de integração.
+- Estado: concluído em 2026-08-28.
+- Arquivos alterados:
+  - UI: `src/zeny_project_handler_client/ui/project_panel.py`;
+  - testes: `tests/e2e/test_mvp_ui.py` e `tests/unit/test_client_connection.py`.
+- Decisões tomadas:
+  - a NS e o código de serviço compartilham `_AsciiDigitsLineEdit`, preservando filtro ASCII de
+    copiar/colar; o código usa `maxLength=4`, validador `[0-9]{4}` e permanece string;
+  - a caixa só habilita depois do GET de serviços do projeto ativo e mantém a coleção canônica
+    apenas em memória; nenhuma chave de serviço é escrita em `QSettings`;
+  - cada add/remove envia substituição total pelo gateway, usa a versão de `_session`, aplica a
+    coleção/versão retornadas pelo servidor e aceita tupla vazia;
+  - em `STALE_STATE`, a coleção local é invalidada e a UI recarrega primeiro o detalhe e depois os
+    serviços; a caixa permanece desabilitada até concluir a recarga;
+  - a expectativa de incompatibilidade em `test_client_connection.py` foi alinhada à API `1.1.0`
+    já concluída pela E01; o caso incompatível passou a exigir servidor com mínimo `1.2.0`.
+- Validações executadas:
+  - matriz Pytest obrigatória da E02, com `QT_QPA_PLATFORM=offscreen` e `TEMP`/`TMP` isolados no
+    workspace durante a execução: `33 passed in 25.21s`;
+  - Ruff obrigatório, incluindo a regressão ajustada de conexão: `All checks passed!`;
+  - `scripts/client_artifact_gate.py --source-only`: `GATE DO CLIENTE: APROVADO`;
+  - `git diff --check`: código zero; somente avisos informativos de futura normalização LF/CRLF.
+- Observações para E05: os `objectName` finais são `mvpProjectServiceCodesBox`,
+  `mvpProjectServiceCodeEdit`, `mvpAddServiceCodeButton`, `mvpProjectServiceCodeList` e
+  `mvpRemoveServiceCodesButton`; o E2E cobre reabertura do cliente e o teste HTTP cobre restart do
+  servidor mantendo `0007`.
 
-## E03 — Porta e consulta parametrizada de ações — #pendente
+## E03 — Porta e consulta parametrizada de ações — #bloqueada
 
 ### Objetivo
 
@@ -590,17 +610,17 @@ resumo conciso de mudanças, validações e pendências.
 
 ### Critérios de aceite
 
-- [ ] A porta não importa `pyodbc`, SQLAlchemy, FastAPI nem cliente.
-- [ ] Somente as duas descrições exatas podem ser consultadas.
-- [ ] Para N serviços, o SQL contém N placeholders no `IN` e nenhum valor interpolado.
-- [ ] Os parâmetros preservam a correspondência NS → serviços → ação e zeros à esquerda fora da
+- [x] A porta não importa `pyodbc`, SQLAlchemy, FastAPI nem cliente.
+- [x] Somente as duas descrições exatas podem ser consultadas.
+- [x] Para N serviços, o SQL contém N placeholders no `IN` e nenhum valor interpolado.
+- [x] Os parâmetros preservam a correspondência NS → serviços → ação e zeros à esquerda fora da
   fronteira SQL.
-- [ ] Zero linha retorna `False`; uma ou várias retornam `True`.
-- [ ] Lista vazia e códigos inválidos não abrem conexão.
-- [ ] Timeout/falha de conexão, cursor, execute, fetch ou cleanup vira erro seguro de dependência.
-- [ ] Cursor e conexão são fechados em sucesso e em todas as falhas testadas.
-- [ ] `repr`, logs e mensagens não expõem connection string, servidor, usuário ou senha.
-- [ ] Testes comuns usam somente fakes e não dependem de rede.
+- [x] Zero linha retorna `False`; uma ou várias retornam `True`.
+- [x] Lista vazia e códigos inválidos não abrem conexão.
+- [x] Timeout/falha de conexão, cursor, execute, fetch ou cleanup vira erro seguro de dependência.
+- [x] Cursor e conexão são fechados em sucesso e em todas as falhas testadas.
+- [x] `repr`, logs e mensagens não expõem connection string, servidor, usuário ou senha.
+- [x] Testes comuns usam somente fakes e não dependem de rede.
 
 ### Validação obrigatória
 
@@ -615,9 +635,19 @@ Resultado esperado: testes, Ruff, Mypy e diff-check retornam zero; nenhuma conex
 
 ### Bloqueios
 
-Nenhum bloqueio de desenvolvimento conhecido. A confirmação do tipo físico da coluna pode ser
-feita por documentação/DBA; sem isso, registrar a hipótese adotada e exigir validação na E05 antes de
-produção.
+- Causa: depois do `git status --short` inicial limpo, surgiram mudanças concorrentes de E02 em
+  `project_panel.py`, `test_mvp_ui.py` e `test_client_connection.py`, além do temporário não
+  versionado `.tmp-e02/`. A E03 preservou tudo e não editou esses arquivos.
+- Evidência: o Mypy obrigatório verificou 303 arquivos e falhou somente em
+  `tests/e2e/test_mvp_ui.py:160` com `Item "None" of "QLayoutItem | None" has no attribute
+  "widget" [union-attr]`; a verificação focada nos cinco arquivos Python da E03 terminou sem erros.
+- Impacto: os critérios funcionais e a matriz Pytest da E03 estão verdes, mas a etapa não pode ser
+  marcada `#concluida` enquanto um comando obrigatório global retorna código diferente de zero.
+- Ação de desbloqueio: o responsável pela E02 deve estreitar/tratar o retorno opcional de
+  `panel_layout.itemAt(index)` sem alterar a intenção do teste e remover/ignorar seus temporários;
+  depois, reexecutar o Mypy global e, se retornar zero, trocar somente as tags E03 para
+  `#concluida` e atualizar este handoff. A confirmação documental/DBA do tipo físico de
+  `TSERVICOS_CT_COD` continua sendo validação de homologação da E05 antes da produção.
 
 ### Riscos e mitigação
 
@@ -630,11 +660,43 @@ produção.
 
 ### Evidências e handoff
 
-- Estado: não iniciado.
-- Arquivos alterados: nenhum.
-- Decisões tomadas: nenhuma além das decisões globais deste roadmap.
-- Validações executadas: nenhuma.
-- Observações para E04: registrar nome final da porta, enum, método, erro público e tipo de bind.
+- Estado: implementação concluída localmente em 2026-08-28; etapa `#bloqueada` somente pelo Mypy
+  global descrito acima.
+- Arquivos alterados pela E03:
+  - `domain/market.py`: `DescricaoAcao` com os dois valores exatos;
+  - `ports/market.py`: `VerificadorAcoesConcluidasPort`, `VerificacaoAcoesError`,
+    `DadosAcoesInvalidosError` e `DependenciaAcoesError`;
+  - `adapters/market/sql_server.py`: `VerificadorAcoesConcluidasSqlServer` e consulta existencial
+    parametrizada de `vBIAcoes`;
+  - `tests/market_fakes.py` e `tests/unit/test_sql_server_market.py`: fake registrável e matriz de
+    contrato, cardinalidade, parâmetros, falhas e cleanup;
+  - este roadmap. Nenhum arquivo de composição/conformidade/configuração foi alterado.
+- Decisões tomadas:
+  - não há schema, DDL, documentação do DBA nem acesso autorizado a `vBIAcoes` no repositório para
+    comprovar o tipo físico de `TSERVICOS_CT_COD`; conforme a hipótese explícita deste roadmap, a
+    E03 vincula cada código como `int` somente dentro do adaptador SQL, mantendo as strings de
+    quatro dígitos intactas no domínio, na porta e no fake. A homologação E05 deve confirmar que a
+    coluna é numérica antes da produção; se for `char`/`varchar`, somente o bind do adaptador deverá
+    mudar para string;
+  - a NS segue o adaptador de mercado existente e também é vinculada como `int`; os parâmetros são
+    sempre NS, cada serviço na ordem recebida e `DescricaoAcao.value`. Somente a sequência de `?` é
+    montada dinamicamente após validar todos os códigos;
+  - `fetchmany(1)` implementa a semântica existencial: zero linha é `False`; a primeira linha válida
+    é `True`, mesmo que existam duplicatas. Linha incompatível é dado externo inválido, nunca
+    ausência.
+- Validações executadas:
+  - matriz Pytest obrigatória, com `TEMP`/`TMP=C:\tmp` devido à permissão do temporário padrão:
+    `61 passed in 1.32s`; nenhuma conexão real foi aberta;
+  - Ruff obrigatório: `All checks passed!`;
+  - Ruff format adicional nos cinco arquivos Python da E03: `5 files already formatted`;
+  - Mypy focado: `Success: no issues found in 5 source files`;
+  - Mypy global obrigatório: bloqueado por um erro exclusivo da mudança concorrente de E02, como
+    detalhado em **Bloqueios**;
+  - `git diff --check`: código zero, somente avisos informativos LF/CRLF.
+- Observações para E04: usar `DescricaoAcao`, `VerificadorAcoesConcluidasPort`, o método
+  `existe_acao_concluida`, `DadosAcoesInvalidosError` e `DependenciaAcoesError`. O bind de serviços é
+  `int` exclusivamente no adaptador; a porta e o fake recebem as strings canônicas com zeros à
+  esquerda.
 
 ## E04 — Gatilhos, fatos, regras e callouts — #pendente
 
