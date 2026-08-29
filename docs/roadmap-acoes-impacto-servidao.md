@@ -190,7 +190,7 @@ desbloqueio documentados.
 |---|---|---|---|---|
 | E01 | Modelo persistente e contrato remoto dos serviços | #concluida | nenhuma | Coleção canônica, rotas GET/PUT e compatibilidade de dados/API |
 | E02 | Caixa de serviços no painel Projeto | #concluida | E01 | Inclusão/remoção remota de códigos na posição visual solicitada |
-| E03 | Porta e consulta parametrizada de ações | #bloqueada | E01 | Verificador existencial de `vBIAcoes` seguro e testado |
+| E03 | Porta e consulta parametrizada de ações | #concluida | E01 | Verificador existencial de `vBIAcoes` seguro e testado |
 | E04 | Gatilhos, fatos, regras e callouts | #pendente | E01, E03 | Duas pendências auditáveis e localizáveis no PDF |
 | E05 | Integração, documentação e gate final | #pendente | E02, E04 | Fluxo completo validado e documentação operacional pronta |
 
@@ -523,7 +523,7 @@ Nenhum bloqueio conhecido.
   `mvpRemoveServiceCodesButton`; o E2E cobre reabertura do cliente e o teste HTTP cobre restart do
   servidor mantendo `0007`.
 
-## E03 — Porta e consulta parametrizada de ações — #bloqueada
+## E03 — Porta e consulta parametrizada de ações — #concluida
 
 ### Objetivo
 
@@ -635,19 +635,11 @@ Resultado esperado: testes, Ruff, Mypy e diff-check retornam zero; nenhuma conex
 
 ### Bloqueios
 
-- Causa: depois do `git status --short` inicial limpo, surgiram mudanças concorrentes de E02 em
-  `project_panel.py`, `test_mvp_ui.py` e `test_client_connection.py`, além do temporário não
-  versionado `.tmp-e02/`. A E03 preservou tudo e não editou esses arquivos.
-- Evidência: o Mypy obrigatório verificou 303 arquivos e falhou somente em
-  `tests/e2e/test_mvp_ui.py:160` com `Item "None" of "QLayoutItem | None" has no attribute
-  "widget" [union-attr]`; a verificação focada nos cinco arquivos Python da E03 terminou sem erros.
-- Impacto: os critérios funcionais e a matriz Pytest da E03 estão verdes, mas a etapa não pode ser
-  marcada `#concluida` enquanto um comando obrigatório global retorna código diferente de zero.
-- Ação de desbloqueio: o responsável pela E02 deve estreitar/tratar o retorno opcional de
-  `panel_layout.itemAt(index)` sem alterar a intenção do teste e remover/ignorar seus temporários;
-  depois, reexecutar o Mypy global e, se retornar zero, trocar somente as tags E03 para
-  `#concluida` e atualizar este handoff. A confirmação documental/DBA do tipo físico de
-  `TSERVICOS_CT_COD` continua sendo validação de homologação da E05 antes da produção.
+Nenhum bloqueio ativo. O bloqueio transitório do Mypy em `tests/e2e/test_mvp_ui.py:160` foi resolvido
+em 2026-08-28 com tratamento explícito do retorno opcional de `panel_layout.itemAt(index)`, sem
+alterar a intenção do teste da E02. O Mypy global passou em seguida nos 303 arquivos. A confirmação
+documental/DBA do tipo físico de `TSERVICOS_CT_COD` continua sendo validação de homologação da E05
+antes da produção, não um bloqueio do gate offline da E03.
 
 ### Riscos e mitigação
 
@@ -660,8 +652,7 @@ Resultado esperado: testes, Ruff, Mypy e diff-check retornam zero; nenhuma conex
 
 ### Evidências e handoff
 
-- Estado: implementação concluída localmente em 2026-08-28; etapa `#bloqueada` somente pelo Mypy
-  global descrito acima.
+- Estado: concluído em 2026-08-28.
 - Arquivos alterados pela E03:
   - `domain/market.py`: `DescricaoAcao` com os dois valores exatos;
   - `ports/market.py`: `VerificadorAcoesConcluidasPort`, `VerificacaoAcoesError`,
@@ -670,6 +661,8 @@ Resultado esperado: testes, Ruff, Mypy e diff-check retornam zero; nenhuma conex
     parametrizada de `vBIAcoes`;
   - `tests/market_fakes.py` e `tests/unit/test_sql_server_market.py`: fake registrável e matriz de
     contrato, cardinalidade, parâmetros, falhas e cleanup;
+  - `tests/e2e/test_mvp_ui.py`: estreitamento explícito de `QLayoutItem | None` autorizado para
+    remover o bloqueio do Mypy, sem mudar a asserção de ordem visual da E02;
   - este roadmap. Nenhum arquivo de composição/conformidade/configuração foi alterado.
 - Decisões tomadas:
   - não há schema, DDL, documentação do DBA nem acesso autorizado a `vBIAcoes` no repositório para
@@ -685,13 +678,12 @@ Resultado esperado: testes, Ruff, Mypy e diff-check retornam zero; nenhuma conex
     é `True`, mesmo que existam duplicatas. Linha incompatível é dado externo inválido, nunca
     ausência.
 - Validações executadas:
-  - matriz Pytest obrigatória, com `TEMP`/`TMP=C:\tmp` devido à permissão do temporário padrão:
-    `61 passed in 1.32s`; nenhuma conexão real foi aberta;
-  - Ruff obrigatório: `All checks passed!`;
+  - matriz Pytest obrigatória da E03 mais o teste Qt corrigido, com `TEMP`/`TMP=C:\tmp` e
+    `QT_QPA_PLATFORM=offscreen`: `62 passed in 1.74s`; nenhuma conexão real foi aberta;
+  - Ruff obrigatório, incluindo o teste Qt corrigido: `All checks passed!`;
   - Ruff format adicional nos cinco arquivos Python da E03: `5 files already formatted`;
   - Mypy focado: `Success: no issues found in 5 source files`;
-  - Mypy global obrigatório: bloqueado por um erro exclusivo da mudança concorrente de E02, como
-    detalhado em **Bloqueios**;
+  - Mypy global obrigatório: `Success: no issues found in 303 source files`;
   - `git diff --check`: código zero, somente avisos informativos LF/CRLF.
 - Observações para E04: usar `DescricaoAcao`, `VerificadorAcoesConcluidasPort`, o método
   `existe_acao_concluida`, `DadosAcoesInvalidosError` e `DependenciaAcoesError`. O bind de serviços é

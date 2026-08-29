@@ -154,11 +154,14 @@ def test_project_service_codes_ui_is_remote_canonical_accessible_and_conflict_sa
     assert isinstance(panel, ProjectPanelWidget)
     panel_layout = panel.layout()
     assert panel_layout is not None
-    group_titles = [
-        widget.title()
-        for index in range(panel_layout.count())
-        if isinstance((widget := panel_layout.itemAt(index).widget()), QGroupBox)
-    ]
+    group_titles: list[str] = []
+    for index in range(panel_layout.count()):
+        layout_item = panel_layout.itemAt(index)
+        if layout_item is None:
+            continue
+        widget = layout_item.widget()
+        if isinstance(widget, QGroupBox):
+            group_titles.append(widget.title())
     assert group_titles[:3] == ["Projeto", "Serviços do projeto", "Folhas PDF"]
 
     service_box = panel.findChild(QGroupBox, "mvpProjectServiceCodesBox")
