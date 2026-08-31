@@ -15,7 +15,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SEMVER = re.compile(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\Z")
-API_VERSION = "1.0.0"
+API_VERSION = "1.1.0"
 MIN_COMPATIBLE_API_VERSION = "1.0.0"
 MAX_COMPATIBLE_API_VERSION = "1.999.999"
 VOLUME_FORMAT_VERSION = 1
@@ -385,15 +385,24 @@ def _write_release_notes(path: Path, version: str, image: str, digest: str) -> N
   `{MAX_COMPATIBLE_API_VERSION}`.
 - Volume: formato `{VOLUME_FORMAT_VERSION}`; revisão Alembic `{ALEMBIC_REVISION}`.
 
-Esta release substitui o painel de importação/backup por **Exportar**. O servidor compila o PDF
-anotado e as planilhas Excel de Resultados, Documentação e Conformidade; o cliente baixa os arquivos
-com validação de tamanho e SHA-256. Backup e restauração do volume permanecem responsabilidades do
-administrador do servidor.
+Esta release adiciona ao projeto uma coleção persistente de códigos de serviço de quatro dígitos,
+editável no cliente e exposta pelas rotas aditivas `GET`/`PUT`
+`/api/v1/projects/{{project_id}}/service-codes`. A API permanece compatível dentro da v1.
 
-A classificação rural/urbana da conformidade consulta o SQL Server externo uma vez por execução.
-O administrador deve configurar a conexão ODBC com TLS e login de `SELECT` mínimo no `.env`; falha,
-ausência ou resposta inválida interrompe a análise sem fallback. Depois de uma alteração no
-cadastro externo, execute novamente **Analisar conformidade** para criar o snapshot atualizado.
+Quando o PDF indicar impacto ambiental ou servidão, a conformidade verifica no SQL Server se as
+ações operacionais correspondentes foram concluídas. A ausência de ação gera, respectivamente,
+`IMPACTO AMBIENTAL PENDENTE` ou `FALTA SERVIDÃO PENDENTE`, ancoradas na evidência do PDF. Lista de
+serviços vazia produz a pendência sem SQL inválido; falha ODBC encerra a análise sem snapshot
+parcial.
+
+A classificação rural/urbana e as ações concluídas consultam o SQL Server externo somente pelo
+servidor. O administrador deve configurar a conexão ODBC com TLS e login de `SELECT` mínimo no
+`.env`; falha, ausência ou resposta inválida interrompe a análise sem fallback. Depois de alterar a
+NS, os serviços ou o cadastro externo, execute novamente **Analisar conformidade** para criar o
+snapshot atualizado.
+
+Antes da implantação em produção, a homologação deve confirmar o tipo físico de
+`TSERVICOS_CT_COD`, a permissão mínima de leitura e casos sanitizados com e sem linha em `vBIAcoes`.
 
 O cliente deve ser distribuído somente aos usuários finais; o kit servidor, somente aos
 administradores. Ambos podem receber também os três arquivos comuns de notas e integridade. Não

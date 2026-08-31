@@ -502,7 +502,7 @@ def _server_version() -> str:
     try:
         return version("zeny-project-handler-server")
     except PackageNotFoundError:
-        return "0.2.0"
+        return "0.3.0"
 
 
 def _ocr_diagnostic(runtime: RuntimeTesseract) -> OcrDiagnosticDto:

@@ -389,7 +389,7 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-API_VERSION = "1.0.0"
+API_VERSION = "1.1.0"
 ALEMBIC_REVISION = "0009_remote_jobs"
 
 

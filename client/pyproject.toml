@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zeny-project-handler-client"
-version = "0.2.0"
+version = "0.3.0"
 description = "Cliente Windows magro do Zeny Project Handler"
 requires-python = ">=3.11,<3.14"
 dependencies = [

@@ -22,7 +22,7 @@ RUN python -m pip wheel --no-deps --no-build-isolation --wheel-dir=/wheels ./ser
 
 FROM python:3.13.7-slim-bookworm@sha256:adafcc17694d715c905b4c7bebd96907a1fd5cf183395f0ebc4d3428bd22d92d AS runtime
 
-ARG ZENY_RELEASE_VERSION=0.2.0
+ARG ZENY_RELEASE_VERSION=0.3.0
 
 LABEL org.opencontainers.image.title="Zeny Project Handler Server" \
     org.opencontainers.image.version="${ZENY_RELEASE_VERSION}" \
