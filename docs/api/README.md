@@ -14,7 +14,7 @@ falha diante de qualquer alteração não revisada.
 
 ## Compatibilidade
 
-- versão atual: `1.1.0`;
+- versão atual: `1.2.0`;
 - prefixo protegido: `/api/v1`;
 - faixa inicialmente negociada: `1.0.0` a `1.999.999`;
 - adições compatíveis podem introduzir rotas e campos opcionais dentro de v1;
@@ -29,6 +29,14 @@ recebe `ReplaceProjectServiceCodesRequest`, substitui toda a coleção e exige
 `expected_project_version`. Cada item segue `^[0-9]{4}$`, inclusive valores como `0007`; coleção
 vazia é válida. Uma versão obsoleta retorna `409 STALE_STATE` e nenhuma mutação recebe retry
 automático cego.
+
+A resolução exata de uma NS usa
+`GET /api/v1/projects/by-service-note/{service_note}` com os dez dígitos preservados. Exatamente um
+projeto devolve `ProjectDetailResponse`, ausência devolve `404 RESOURCE_NOT_FOUND` e registros
+históricos ambíguos devolvem `409 INTEGRITY_ERROR` sem escolher um ID. Criar ou renomear para a NS
+de outro projeto devolve `409 PROJECT_ALREADY_EXISTS`; `details` contém somente `project_id` e
+`service_note`. Replay com a mesma chave e o mesmo payload continua idempotente, enquanto uma chave
+nova não cria uma segunda NS.
 
 ## Decisões transversais
 

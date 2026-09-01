@@ -92,6 +92,7 @@ from zeny_project_handler_contracts.projects import (
 )
 from zeny_project_handler_server.api_errors import (
     ApiError,
+    ProjectAlreadyExistsError,
     StaleStateError,
     operation_conflict,
     resource_not_found,
@@ -214,17 +215,27 @@ class ProjectApiService:
             replay = _replay(record, ProjectDetailResponse)
             if replay is not None:
                 return replay
-            existing = self._snapshot_or_none(project_id)
-            if existing is None:
-                try:
-                    with self._coordinator.adquirir(TipoOperacao.ALTERACAO_PROJETO):
+            try:
+                with self._coordinator.adquirir(TipoOperacao.ALTERACAO_PROJETO):
+                    existing = self._snapshot_or_none(project_id)
+                    self._require_available_service_note(normalized, project_id=project_id)
+                    if existing is None:
                         self._save_new_project(project_id, normalized)
-                except Exception:
-                    self._store.abandon_idempotency(record)
-                    raise
+            except Exception:
+                self._store.abandon_idempotency(record)
+                raise
             response = self.get_project(project_id)
             self._complete(record, response)
             return response
+
+    def find_project_by_service_note(self, service_note: str) -> ProjectDetailResponse:
+        normalized = normalizar_numero_ns(service_note)
+        matches = self._snapshots_by_service_note(normalized)
+        if not matches:
+            raise resource_not_found("Projeto não encontrado para a Nota de Serviço informada.")
+        if len(matches) > 1:
+            raise self._ambiguous_service_note_error()
+        return ProjectDetailResponse(project=self._project_detail(matches[0]))
 
     def get_project(self, project_id: UUID) -> ProjectDetailResponse:
         return ProjectDetailResponse(project=self._project_detail(self._snapshot(project_id)))
@@ -266,6 +277,7 @@ class ProjectApiService:
         with self._coordinator.adquirir(TipoOperacao.ALTERACAO_PROJETO):
             snapshot = self._snapshot(project_id)
             self._require_version(snapshot, expected_version)
+            self._require_available_service_note(normalized, project_id=project_id)
             with self._unit_of_work() as work:
                 work.projetos.salvar(replace(snapshot.project, nome=normalized))
                 work.commit()
@@ -763,6 +775,33 @@ class ProjectApiService:
     def _all_projects(self) -> tuple[Projeto, ...]:
         with self._unit_of_work() as work:
             return work.projetos.listar()
+
+    def _snapshots_by_service_note(self, service_note: str) -> tuple[_ProjectSnapshot, ...]:
+        with self._engine.connect() as connection:
+            project_ids = tuple(
+                UUID(value)
+                for value in connection.scalars(
+                    select(projects.c.id)
+                    .where(projects.c.name == service_note)
+                    .order_by(projects.c.created_at, projects.c.id)
+                )
+            )
+        return tuple(self._snapshot(project_id) for project_id in project_ids)
+
+    def _require_available_service_note(self, service_note: str, *, project_id: UUID) -> None:
+        matches = self._snapshots_by_service_note(service_note)
+        if len(matches) > 1:
+            raise self._ambiguous_service_note_error()
+        if matches and matches[0].project.id != project_id:
+            raise ProjectAlreadyExistsError(matches[0].project.id, service_note)
+
+    @staticmethod
+    def _ambiguous_service_note_error() -> ApiError:
+        return ApiError(
+            409,
+            ErrorCode.INTEGRITY_ERROR,
+            "Mais de um projeto possui a Nota de Serviço informada.",
+        )
 
     def _unit_of_work(self) -> SqlAlchemyUnitOfWork:
         return SqlAlchemyUnitOfWork(self._engine)

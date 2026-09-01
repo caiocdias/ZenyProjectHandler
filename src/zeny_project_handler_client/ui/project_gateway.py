@@ -73,6 +73,8 @@ class ProjectGateway(Protocol):
 
     def get_project(self, project_id: UUID) -> ProjectDetailResponse: ...
 
+    def find_project_by_service_note(self, service_note: str) -> ProjectDetailResponse | None: ...
+
     def get_service_codes(self, project_id: UUID) -> ProjectServiceCodesResponse: ...
 
     def replace_service_codes(
@@ -208,6 +210,19 @@ class HttpProjectGateway:
             None,
             ProjectDetailResponse,
         )
+
+    def find_project_by_service_note(self, service_note: str) -> ProjectDetailResponse | None:
+        try:
+            return self._json_model(
+                "GET",
+                f"{API_V1_PREFIX}/projects/by-service-note/{service_note}",
+                None,
+                ProjectDetailResponse,
+            )
+        except ProjectGatewayError as error:
+            if error.status_code == 404 and error.code is ErrorCode.RESOURCE_NOT_FOUND:
+                return None
+            raise
 
     def get_service_codes(self, project_id: UUID) -> ProjectServiceCodesResponse:
         return self._json_model(

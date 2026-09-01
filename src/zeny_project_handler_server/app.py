@@ -9,7 +9,7 @@ from hashlib import sha256
 from typing import Annotated
 from uuid import UUID, uuid4
 
-from fastapi import Depends, FastAPI, Header, Query, Request, UploadFile, status
+from fastapi import Depends, FastAPI, Header, Path, Query, Request, UploadFile, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import JsonValue
@@ -302,6 +302,18 @@ def create_app(
         idempotency_key: str = Header(alias="Idempotency-Key", min_length=1, max_length=200),
     ) -> ProjectDetailResponse:
         return _project_api(request).create_project(payload.service_note, idempotency_key)
+
+    @application.get(
+        f"{API_V1_PREFIX}/projects/by-service-note/{{service_note}}",
+        response_model=ProjectDetailResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def find_project_by_service_note(
+        request: Request,
+        service_note: Annotated[str, Path(pattern=r"^[0-9]{10}$")],
+    ) -> ProjectDetailResponse:
+        return _project_api(request).find_project_by_service_note(service_note)
 
     @application.get(
         f"{API_V1_PREFIX}/projects/{{project_id}}",

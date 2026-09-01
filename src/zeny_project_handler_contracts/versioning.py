@@ -1,6 +1,6 @@
 """Versão e política de compatibilidade da API pública."""
 
-API_VERSION = "1.1.0"
+API_VERSION = "1.2.0"
 API_V1_PREFIX = "/api/v1"
 MIN_COMPATIBLE_API_VERSION = "1.0.0"
 MAX_COMPATIBLE_API_VERSION = "1.999.999"

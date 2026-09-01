@@ -49,8 +49,8 @@ def test_openapi_covers_every_minimum_group_and_expected_operation() -> None:
     } <= tags
     assert schema["info"]["version"] == API_VERSION
     assert schema["openapi"].startswith("3.1.")
-    assert API_VERSION == "1.1.0"
-    assert len(operations) == 54
+    assert API_VERSION == "1.2.0"
+    assert len(operations) == 55
 
 
 def test_every_business_operation_is_bearer_protected() -> None:
@@ -138,3 +138,18 @@ def test_service_code_operations_are_additive_versioned_and_strict() -> None:
         "service_note",
         "expected_project_version",
     }
+
+
+def test_exact_service_note_operation_and_project_conflict_are_additive() -> None:
+    schema = build_openapi_schema()
+    operation = schema["paths"]["/api/v1/projects/by-service-note/{service_note}"]["get"]
+    parameter = next(item for item in operation["parameters"] if item["name"] == "service_note")
+
+    assert operation["operationId"] == "findProjectByServiceNote"
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/ProjectDetailResponse"
+    }
+    assert parameter["in"] == "path"
+    assert parameter["required"] is True
+    assert parameter["schema"]["pattern"] == "^[0-9]{10}$"
+    assert "PROJECT_ALREADY_EXISTS" in schema["components"]["schemas"]["ErrorCode"]["enum"]

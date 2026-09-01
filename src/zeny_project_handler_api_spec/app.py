@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, FastAPI, File, Header, Query, Security, UploadFile, status
+from fastapi import APIRouter, FastAPI, File, Header, Path, Query, Security, UploadFile, status
 from fastapi.responses import Response
 from fastapi.security import HTTPBearer
 
@@ -194,6 +194,19 @@ async def list_projects(
 async def create_project(
     request: CreateProjectRequest,
     idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=200)],
+) -> ProjectDetailResponse:
+    raise NotImplementedError("Aplicação exclusiva para geração da OpenAPI.")
+
+
+@protected.get(
+    "/projects/by-service-note/{service_note}",
+    tags=["projects"],
+    operation_id="findProjectByServiceNote",
+    response_model=ProjectDetailResponse,
+    responses=ERROR_RESPONSES,
+)
+async def find_project_by_service_note(
+    service_note: Annotated[str, Path(pattern=r"^[0-9]{10}$")],
 ) -> ProjectDetailResponse:
     raise NotImplementedError("Aplicação exclusiva para geração da OpenAPI.")
 

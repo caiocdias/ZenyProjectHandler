@@ -2,20 +2,23 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import closing, contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from pathlib import Path
 from socket import create_server
 from threading import Event, Thread
 from time import monotonic
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import FastAPI
 from tests.market_fakes import FakeClassificadorMercado, FakeVerificadorAcoesConcluidas
 from tests.pdf_fixtures import create_action_requirements_pdf, create_golden_pdf
+from tests.remote_gateways import DirectProjectGateway
 from uvicorn import Config, Server
 
 from zeny_project_handler.adapters.catalog import carregar_catalogo_inicial
+from zeny_project_handler.adapters.persistence import SqlAlchemyUnitOfWork
 from zeny_project_handler.application.errors import FluxoMvpCanceladoError
 from zeny_project_handler.application.mvp_workflow import ResultadoFluxoMvp
 from zeny_project_handler.domain.enums import CategoriaElemento
@@ -57,6 +60,51 @@ class CancelOnlyRunner:
         while not cancelled():
             tick.wait(0.01)
         raise FluxoMvpCanceladoError("Cancelada em ponto seguro")
+
+
+@pytest.mark.integration
+def test_http_and_direct_gateways_resolve_only_exact_unique_service_notes(tmp_path: Path) -> None:
+    settings = ServerSettings(
+        password=PASSWORD,
+        market_sqlserver_connection_string="fixture-market-connection",
+        data_directory=tmp_path / "server-data",
+    )
+    runtime = compose_server_runtime(settings, market_classifier=FakeClassificadorMercado())
+    assert runtime.project_api is not None
+    unique = runtime.project_api.create_project("0000000011", "gateway-unique")
+    ambiguous = runtime.project_api.create_project("0000000012", "gateway-ambiguous")
+    with SqlAlchemyUnitOfWork(runtime.core.engine) as work:
+        project = work.projetos.obter(ambiguous.project.project_id.root)
+        assert project is not None
+        work.projetos.salvar(replace(project, id=uuid4(), criado_em=datetime.now(UTC)))
+        work.commit()
+
+    direct = DirectProjectGateway(runtime)
+    assert direct.find_project_by_service_note("0000000011") == unique
+    assert direct.find_project_by_service_note("9999999999") is None
+    with pytest.raises(ProjectGatewayError) as direct_ambiguous:
+        direct.find_project_by_service_note("0000000012")
+    assert direct_ambiguous.value.code is ErrorCode.INTEGRITY_ERROR
+    assert direct_ambiguous.value.status_code == 409
+
+    application = create_app(settings, runtime_factory=lambda _settings: runtime)
+    with _running_server(application) as base_url:
+        gateway = HttpProjectGateway(base_url, PASSWORD)
+        assert gateway.find_project_by_service_note("0000000011") == unique
+        assert gateway.find_project_by_service_note("9999999999") is None
+        with pytest.raises(ProjectGatewayError) as http_ambiguous:
+            gateway.find_project_by_service_note("0000000012")
+        assert http_ambiguous.value.code is ErrorCode.INTEGRITY_ERROR
+        assert http_ambiguous.value.status_code == 409
+
+        with pytest.raises(ProjectGatewayError) as conflict:
+            gateway.create_project("0000000011", idempotency_key="gateway-conflict")
+        assert conflict.value.code is ErrorCode.PROJECT_ALREADY_EXISTS
+        assert conflict.value.status_code == 409
+        assert conflict.value.details == {
+            "project_id": str(unique.project.project_id.root),
+            "service_note": "0000000011",
+        }
 
 
 @pytest.mark.integration
@@ -328,3 +376,9 @@ def test_project_gateway_retries_reads_but_never_mutations(
     with pytest.raises(ProjectGatewayError):
         gateway._request("PUT", "/service-codes")
     assert attempts == ["PUT"]
+
+    attempts.clear()
+    with pytest.raises(ProjectGatewayError) as transport:
+        gateway.find_project_by_service_note("0000000011")
+    assert transport.value.code is ErrorCode.INTERNAL_ERROR
+    assert attempts == ["GET", "GET"]

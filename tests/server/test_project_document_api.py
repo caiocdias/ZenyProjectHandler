@@ -14,12 +14,12 @@ from fastapi import UploadFile
 from fastapi.testclient import TestClient
 from httpx2 import Response
 from PIL import Image
-from sqlalchemy import update
+from sqlalchemy import func, select, update
 
 from tests.pdf_fixtures import create_feature_pdf, create_golden_pdf, create_protected_pdf
 from zeny_project_handler.adapters.pdf.pymupdf_reader import PyMuPdfReader
 from zeny_project_handler.adapters.persistence import SqlAlchemyUnitOfWork, create_sqlite_engine
-from zeny_project_handler.adapters.persistence.schema import api_uploads
+from zeny_project_handler.adapters.persistence.schema import api_idempotency_records, api_uploads
 from zeny_project_handler.application.operation_coordinator import TipoOperacao
 from zeny_project_handler.domain.enums import CategoriaElemento, SituacaoProjeto
 from zeny_project_handler.domain.project import Poste
@@ -41,14 +41,158 @@ def _settings(data_directory: Path, *, upload_max_bytes: int = 8 * 1024 * 1024) 
     )
 
 
-def _create_project(client: TestClient, *, key: str = "create-project-1") -> dict[str, object]:
+def _create_project(
+    client: TestClient,
+    *,
+    key: str = "create-project-1",
+    service_note: str = "0001234567",
+) -> dict[str, object]:
     response = client.post(
         "/api/v1/projects",
         headers={**AUTH, "Idempotency-Key": key},
-        json={"service_note": "0001234567"},
+        json={"service_note": service_note},
     )
     assert response.status_code == 201, response.text
     return cast(dict[str, object], response.json()["project"])
+
+
+def test_service_note_exact_resolution_and_historical_ambiguity(tmp_path: Path) -> None:
+    application = create_app(_settings(tmp_path / "server-data"))
+    with TestClient(application) as client:
+        created = _create_project(client, key="exact-service-note")
+        project_id = UUID(str(created["project_id"]))
+        found = client.get("/api/v1/projects/by-service-note/0001234567", headers=AUTH)
+        assert found.status_code == 200
+        assert found.json()["project"] == created
+
+        missing = client.get("/api/v1/projects/by-service-note/9999999999", headers=AUTH)
+        assert missing.status_code == 404
+        assert missing.json()["code"] == "RESOURCE_NOT_FOUND"
+        assert missing.json()["details"] is None
+
+        invalid = client.get("/api/v1/projects/by-service-note/123", headers=AUTH)
+        assert invalid.status_code == 422
+        assert invalid.json()["code"] == "VALIDATION_ERROR"
+
+        runtime = cast(ServerRuntime, application.state.runtime)
+        with SqlAlchemyUnitOfWork(runtime.core.engine) as work:
+            project = work.projetos.obter(project_id)
+            assert project is not None
+            for index in range(200):
+                work.projetos.salvar(
+                    replace(
+                        project,
+                        id=uuid4(),
+                        nome=f"{index:010d}",
+                        criado_em=project.criado_em + timedelta(microseconds=index + 1),
+                    )
+                )
+            work.commit()
+
+        first_page = client.get("/api/v1/projects?limit=200", headers=AUTH).json()["items"]
+        assert "0000000199" not in {item["service_note"] for item in first_page}
+        outside_first_page = client.get(
+            "/api/v1/projects/by-service-note/0000000199",
+            headers=AUTH,
+        )
+        assert outside_first_page.status_code == 200
+        assert outside_first_page.json()["project"]["service_note"] == "0000000199"
+
+        with SqlAlchemyUnitOfWork(runtime.core.engine) as work:
+            project = work.projetos.obter(project_id)
+            assert project is not None
+            work.projetos.salvar(replace(project, id=uuid4(), criado_em=datetime.now(UTC)))
+            work.commit()
+
+        ambiguous = client.get("/api/v1/projects/by-service-note/0001234567", headers=AUTH)
+        assert ambiguous.status_code == 409
+        assert ambiguous.json()["code"] == "INTEGRITY_ERROR"
+        assert ambiguous.json()["details"] is None
+        assert str(project_id) not in ambiguous.text
+
+
+def test_project_service_note_conflict_replay_rename_and_safe_details(tmp_path: Path) -> None:
+    application = create_app(_settings(tmp_path / "server-data"))
+    with TestClient(application) as client:
+        first = _create_project(client, key="first-service-note", service_note="0000000001")
+        first_id = str(first["project_id"])
+        replay = _create_project(client, key="first-service-note", service_note="0000000001")
+        assert replay == first
+
+        conflict_key = "conflicting-service-note"
+        conflict = client.post(
+            "/api/v1/projects",
+            headers={**AUTH, "Idempotency-Key": conflict_key},
+            json={"service_note": "0000000001"},
+        )
+        assert conflict.status_code == 409
+        assert conflict.json()["code"] == "PROJECT_ALREADY_EXISTS"
+        assert conflict.json()["details"] == {
+            "project_id": first_id,
+            "service_note": "0000000001",
+        }
+        assert set(conflict.json()["details"]) == {"project_id", "service_note"}
+        assert client.get("/api/v1/projects", headers=AUTH).json()["page"]["total"] == 1
+
+        runtime = cast(ServerRuntime, application.state.runtime)
+        with runtime.core.engine.connect() as connection:
+            incomplete = connection.scalar(
+                select(func.count())
+                .select_from(api_idempotency_records)
+                .where(api_idempotency_records.c.idempotency_key == conflict_key)
+            )
+        assert incomplete == 0
+
+        second = _create_project(client, key="second-service-note", service_note="0000000002")
+        rename_conflict = client.patch(
+            f"/api/v1/projects/{first_id}",
+            headers=AUTH,
+            json={"service_note": "0000000002", "expected_project_version": 0},
+        )
+        assert rename_conflict.status_code == 409
+        assert rename_conflict.json()["code"] == "PROJECT_ALREADY_EXISTS"
+        assert rename_conflict.json()["details"] == {
+            "project_id": str(second["project_id"]),
+            "service_note": "0000000002",
+        }
+        unchanged = client.get(f"/api/v1/projects/{first_id}", headers=AUTH).json()["project"]
+        assert unchanged["service_note"] == "0000000001"
+        assert unchanged["project_version"] == 0
+
+        own_note = client.patch(
+            f"/api/v1/projects/{first_id}",
+            headers=AUTH,
+            json={"service_note": "0000000001", "expected_project_version": 0},
+        )
+        assert own_note.status_code == 200
+        assert own_note.json()["project"]["project_version"] == 1
+
+
+def test_two_concurrent_project_creations_publish_only_one_service_note(tmp_path: Path) -> None:
+    application = create_app(_settings(tmp_path / "server-data"))
+    with TestClient(application) as client:
+
+        def create(index: int) -> Response:
+            return client.post(
+                "/api/v1/projects",
+                headers={**AUTH, "Idempotency-Key": f"concurrent-project-{index}"},
+                json={"service_note": "0000000003"},
+            )
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            responses = tuple(executor.map(create, range(2)))
+
+        assert sorted(response.status_code for response in responses) == [201, 409]
+        created = next(response for response in responses if response.status_code == 201)
+        conflict = next(response for response in responses if response.status_code == 409)
+        assert conflict.json()["code"] == "PROJECT_ALREADY_EXISTS"
+        assert conflict.json()["details"] == {
+            "project_id": created.json()["project"]["project_id"],
+            "service_note": "0000000003",
+        }
+        listed = client.get("/api/v1/projects", headers=AUTH).json()
+        assert listed["page"]["total"] == 1
+        assert [item["service_note"] for item in listed["items"]] == ["0000000003"]
 
 
 def _upload_pdf(
@@ -429,6 +573,7 @@ def test_restart_expires_abandoned_protected_upload_without_orphan(tmp_path: Pat
     (
         ("GET", "/api/v1/projects"),
         ("POST", "/api/v1/projects"),
+        ("GET", "/api/v1/projects/by-service-note/0001234567"),
         ("GET", f"/api/v1/projects/{uuid4()}"),
         ("GET", f"/api/v1/projects/{uuid4()}/service-codes"),
         ("PUT", f"/api/v1/projects/{uuid4()}/service-codes"),

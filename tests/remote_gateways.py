@@ -134,6 +134,14 @@ class DirectProjectGateway:
     def get_project(self, project_id: UUID) -> ProjectDetailResponse:
         return self._projects.get_project(project_id)
 
+    def find_project_by_service_note(self, service_note: str) -> ProjectDetailResponse | None:
+        try:
+            return self._projects.find_project_by_service_note(service_note)
+        except ApiError as error:
+            if error.status_code == 404 and error.code is ErrorCode.RESOURCE_NOT_FOUND:
+                return None
+            raise _project_error(error) from None
+
     def get_service_codes(self, project_id: UUID) -> ProjectServiceCodesResponse:
         return self._projects.get_service_codes(project_id)
 

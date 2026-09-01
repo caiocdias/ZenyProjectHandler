@@ -42,8 +42,8 @@ dependência ainda pendente não é bloqueio.
   de idempotência diferentes podem criar NS duplicadas.
 - A API pública de projetos está em `zeny_project_handler_contracts/projects.py`,
   `zeny_project_handler_server/app.py`, `zeny_project_handler_api_spec/app.py` e
-  `zeny_project_handler_client/ui/project_gateway.py`. A versão atual é `1.1.0` e a política permite
-  operações e códigos de erro aditivos dentro da v1.
+  `zeny_project_handler_client/ui/project_gateway.py`. E01 estabeleceu a versão `1.2.0`; a política
+  permite operações e códigos de erro aditivos dentro da v1.
 - `MainWindow`, em `src/zeny_project_handler_client/ui/main_window.py`, tabifica na direita, nesta
   ordem, **Resultados**, **Documentação e conformidade** e **Exportar**. Os docks são móveis,
   destacáveis, persistidos e registrados no menu **Exibir**.
@@ -192,14 +192,14 @@ dependência ainda pendente não é bloqueio.
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E01 | Resolução exata e conflito de NS existente | #pendente | nenhuma | API capaz de resolver NS e impedir duplicidade interativa |
+| E01 | Resolução exata e conflito de NS existente | #concluida | nenhuma | API capaz de resolver NS e impedir duplicidade interativa |
 | E02 | Pesquisa e diálogos do painel Projeto | #pendente | E01 | Fluxos abrir/criar simétricos e retorno ao estado inicial |
 | E03 | Guarda de NS antes dos SELECTs | #pendente | nenhuma | Divergência de cabeçalho bloqueia mercado e ações sem snapshot |
 | E04 | Projeção e contrato remoto GMAX | #pendente | E03 | DTO/endpoint somente leitura com estados auditáveis |
 | E05 | Aba GMAX e sincronização Qt | #pendente | E02, E04 | Dock GMAX na ordem solicitada, atualizado e testado |
 | E06 | Fluxo integrado, documentação e gate final | #pendente | E01, E02, E03, E04, E05 | Regressão completa e definição global de pronto comprovada |
 
-## E01 — Resolução exata e conflito de NS existente — #pendente
+## E01 — Resolução exata e conflito de NS existente — #concluida
 
 ### Objetivo
 
@@ -303,15 +303,15 @@ termine com resumo conciso. Não crie commit, não publique e não implante sem 
 
 ### Critérios de aceite
 
-- [ ] Resolver NS inexistente produz `RESOURCE_NOT_FOUND`; exatamente uma devolve o detalhe correto.
-- [ ] Mais de um projeto histórico com a mesma NS produz `INTEGRITY_ERROR` e nenhum ID é escolhido.
-- [ ] Segunda criação com chave nova produz `PROJECT_ALREADY_EXISTS`, informa o ID existente e não
+- [x] Resolver NS inexistente produz `RESOURCE_NOT_FOUND`; exatamente uma devolve o detalhe correto.
+- [x] Mais de um projeto histórico com a mesma NS produz `INTEGRITY_ERROR` e nenhum ID é escolhido.
+- [x] Segunda criação com chave nova produz `PROJECT_ALREADY_EXISTS`, informa o ID existente e não
   altera a quantidade de projetos.
-- [ ] Replay da mesma criação continua idempotente.
-- [ ] Dois clientes concorrentes não conseguem publicar dois projetos interativos com a mesma NS.
-- [ ] Alterar um projeto para a NS de outro é recusado; manter a própria NS continua permitido.
-- [ ] Clientes/gateways distinguem ausência, duplicidade e falha de transporte.
-- [ ] API `1.2.0`, snapshot OpenAPI e documentação da rota estão sincronizados.
+- [x] Replay da mesma criação continua idempotente.
+- [x] Dois clientes concorrentes não conseguem publicar dois projetos interativos com a mesma NS.
+- [x] Alterar um projeto para a NS de outro é recusado; manter a própria NS continua permitido.
+- [x] Clientes/gateways distinguem ausência, duplicidade e falha de transporte.
+- [x] API `1.2.0`, snapshot OpenAPI e documentação da rota estão sincronizados.
 
 ### Validação obrigatória
 
@@ -338,8 +338,38 @@ Nenhum bloqueio conhecido.
 
 ### Evidências e handoff
 
-- Estado inicial: etapa não iniciada; nenhum arquivo alterado por este roadmap.
-- Evidências de implementação e validação: nenhuma enquanto a tag permanecer `#pendente`.
+- Estado inicial: etapa iniciada em 2026-09-01; dependências inexistentes e contexto técnico do
+  plano confirmados contra o código atual. A remoção preexistente de
+  `docs/roadmap-acoes-impacto-servidao.md` será preservada sem intervenção.
+- Arquivos de contrato/API: `src/zeny_project_handler_contracts/errors.py`,
+  `src/zeny_project_handler_contracts/versioning.py`,
+  `src/zeny_project_handler_server/api_errors.py`,
+  `src/zeny_project_handler_server/project_api.py`, `src/zeny_project_handler_server/app.py` e
+  `src/zeny_project_handler_api_spec/app.py`.
+- Arquivos de cliente/teste: `src/zeny_project_handler_client/ui/project_gateway.py`,
+  `tests/remote_gateways.py`, `tests/server/test_project_document_api.py`,
+  `tests/integration/test_project_http_gateway.py`, `tests/contracts/test_models.py` e
+  `tests/contracts/test_openapi_snapshot.py`.
+- Documentação sincronizada: `docs/api/openapi-v1.json`, `docs/api/README.md` e este roadmap.
+- Decisões: igualdade exata sobre a NS normalizada e persistida em `projects.name`, sem índice ou
+  migração; cardinalidade zero/um/múltiplos tratada antes de selecionar ID; replay completo
+  precede a checagem de conflito; criação abandona reserva idempotente incompleta em qualquer
+  falha; `PROJECT_ALREADY_EXISTS` expõe somente `project_id` e `service_note`; gateways convertem
+  somente `404 RESOURCE_NOT_FOUND` em `None`.
+- Cobertura adicional: o teste de servidor persiste 201 projetos, comprova que a última NS não está
+  nos 200 itens da primeira página e ainda assim a resolve pela rota exata.
+- Validação: `scripts/generate_openapi_v1.py` regenerou o snapshot com código zero. O comando Pytest
+  obrigatório passou com 65 testes (`65 passed`); por restrição do sandbox, usou `TEMP/TMP` local e
+  `PYTEST_ADDOPTS=--basetemp=tmp/e01c` para evitar o diretório temporário global e o limite de path
+  do Windows. O único aviso foi a impossibilidade preexistente de escrever `.pytest_cache`.
+- Validação: o comando Ruff obrigatório terminou com `All checks passed!`; o Mypy obrigatório
+  terminou com `Success: no issues found in 303 source files`; `git diff --check` retornou código
+  zero.
+- Handoff para E02: usar `ProjectGateway.find_project_by_service_note`; ausência é `None`, enquanto
+  integridade, conflito e transporte permanecem `ProjectGatewayError`. Em corrida de criação,
+  `details.project_id` é o único ID seguro a oferecer para abertura. Nenhum widget foi alterado.
+- Escopo preservado: nenhuma migração, índice, deduplicação, mudança de importação, commit,
+  publicação ou implantação foi realizada.
 
 ## E02 — Pesquisa e diálogos do painel Projeto — #pendente
 

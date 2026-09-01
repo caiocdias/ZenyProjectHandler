@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from uuid import UUID
 
 from pydantic import JsonValue
 
@@ -38,6 +39,16 @@ class IdempotencyConflictError(ApiError):
             status_code=409,
             code=ErrorCode.IDEMPOTENCY_CONFLICT,
             message="A chave de idempotência já foi usada por outra solicitação.",
+        )
+
+
+class ProjectAlreadyExistsError(ApiError):
+    def __init__(self, project_id: UUID, service_note: str) -> None:
+        super().__init__(
+            status_code=409,
+            code=ErrorCode.PROJECT_ALREADY_EXISTS,
+            message="Já existe um projeto para a Nota de Serviço informada.",
+            details={"project_id": str(project_id), "service_note": service_note},
         )
 
 

@@ -1982,6 +1982,7 @@
           "PDF_SOURCE_CHANGED",
           "VIEWER_SESSION_EXPIRED",
           "OPERATION_CONFLICT",
+          "PROJECT_ALREADY_EXISTS",
           "STALE_STATE",
           "UPLOAD_TOO_LARGE",
           "UNSUPPORTED_MEDIA_TYPE",
@@ -4669,7 +4670,7 @@
     },
     "summary": "Contrato HTTP v1 do cliente magro e do servidor Zeny.",
     "title": "Zeny Project Handler API",
-    "version": "1.1.0"
+    "version": "1.2.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -6424,6 +6425,124 @@
           }
         ],
         "summary": "Create Project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/v1/projects/by-service-note/{service_note}": {
+      "get": {
+        "operationId": "findProjectByServiceNote",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "service_note",
+            "required": true,
+            "schema": {
+              "pattern": "^[0-9]{10}$",
+              "title": "Service Note",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Credencial Bearer ausente ou inválida."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Recurso não encontrado."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Upload acima do limite configurado."
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Tipo de mídia não suportado."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request inválido para o contrato v1."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Erro interno seguro e correlacionável."
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Find Project By Service Note",
         "tags": [
           "projects"
         ]

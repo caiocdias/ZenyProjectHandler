@@ -432,6 +432,7 @@ def test_enum_values_are_stable() -> None:
             "PDF_SOURCE_CHANGED",
             "VIEWER_SESSION_EXPIRED",
             "OPERATION_CONFLICT",
+            "PROJECT_ALREADY_EXISTS",
             "STALE_STATE",
             "UPLOAD_TOO_LARGE",
             "UNSUPPORTED_MEDIA_TYPE",
