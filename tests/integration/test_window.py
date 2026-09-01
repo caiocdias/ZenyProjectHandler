@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSpinBox,
+    QTabBar,
     QToolButton,
 )
 from pytestqt.qtbot import QtBot
@@ -35,7 +36,7 @@ from zeny_project_handler_client.bootstrap import (
 )
 from zeny_project_handler_client.config import ClientSettings
 from zeny_project_handler_client.presentation import NormalizedPoint
-from zeny_project_handler_client.ui.main_window import _DockTitleBar
+from zeny_project_handler_client.ui.main_window import MainWindow, _DockTitleBar
 from zeny_project_handler_client.ui.pdf_gateway import PdfViewerGateway
 from zeny_project_handler_client.ui.pdf_viewer import PdfViewerWidget
 from zeny_project_handler_client.ui.theme import THEME_SETTING_KEY, Tema
@@ -98,6 +99,7 @@ def test_main_window_smoke(
     graph_dock = window.findChild(QDockWidget, "projectGraphDock")
     portability_dock = window.findChild(QDockWidget, "projectExportDock")
     documentation_dock = window.findChild(QDockWidget, "documentationComplianceDock")
+    gmax_dock = window.findChild(QDockWidget, "gmaxDock")
     assert review_dock is not None
     assert review_dock.windowTitle() == "Resultados"
     project_dock = window.findChild(QDockWidget, "projectWorkflowDock")
@@ -107,12 +109,30 @@ def test_main_window_smoke(
     assert portability_dock is not None
     assert portability_dock.windowTitle() == "Exportar"
     assert documentation_dock is not None
+    assert gmax_dock is not None
+    assert gmax_dock.windowTitle() == "GMAX"
     assert documentation_dock in window.tabifiedDockWidgets(review_dock)
+    assert gmax_dock in window.tabifiedDockWidgets(review_dock)
     assert portability_dock in window.tabifiedDockWidgets(review_dock)
     assert window.review_panel is not None
     assert window.project_panel is not None
     assert window.portability_panel is not None
     assert window.documentation_panel is not None
+    assert window.gmax_panel is not None
+    assert _right_dock_tab_titles(window) == [
+        "Resultados",
+        "Documentação e conformidade",
+        "GMAX",
+        "Exportar",
+    ]
+    panels_menu = window.findChild(QMenu, "panelsMenu")
+    assert panels_menu is not None
+    gmax_toggle = next(
+        action for action in panels_menu.actions() if action.objectName() == "gmaxDockToggleAction"
+    )
+    assert gmax_toggle.text() == "GMAX"
+    assert gmax_dock.features() & QDockWidget.DockWidgetFeature.DockWidgetMovable
+    assert gmax_dock.features() & QDockWidget.DockWidgetFeature.DockWidgetFloatable
     run_analysis = window.findChild(QPushButton, "mvpRunAnalysisButton")
     assert run_analysis is not None
     assert run_analysis.text() == "Analisar projeto"
@@ -125,6 +145,67 @@ def test_main_window_smoke(
     assert isinstance(window.project_panel._gateway, DirectProjectGateway)
     assert window.statusBar().currentMessage() == "Pronto"
     assert not tuple(settings.data_directory.rglob("*.sqlite3"))
+
+
+def _right_dock_tab_titles(window: MainWindow) -> list[str]:
+    for tab_bar in window.findChildren(QTabBar):
+        titles = [tab_bar.tabText(index) for index in range(tab_bar.count())]
+        if "Resultados" in titles:
+            return titles
+    raise AssertionError("A barra de tabs dos docks à direita não foi encontrada")
+
+
+@pytest.mark.integration
+def test_gmax_dock_visibility_is_restored_from_ui_state(
+    qtbot: QtBot,
+    tmp_path: Path,
+    application_factory: ApplicationFactory,
+) -> None:
+    settings = ClientSettings(data_directory=tmp_path / "gmax-dock-state")
+    application, window = application_factory([], settings=settings)
+    qtbot.addWidget(window)
+    window.show()
+    gmax_dock = window.findChild(QDockWidget, "gmaxDock")
+    assert gmax_dock is not None
+    gmax_dock.close()
+    assert not gmax_dock.toggleViewAction().isChecked()
+
+    window.close()
+    application.processEvents()
+
+    stored = QSettings(str(settings.ui_state_path), QSettings.Format.IniFormat)
+    assert stored.contains("window/geometry")
+    assert stored.contains("window/dock-state")
+    _restored_application, restored = application_factory([], settings=settings)
+    qtbot.addWidget(restored)
+    restored.show()
+    restored_gmax = restored.findChild(QDockWidget, "gmaxDock")
+    assert restored_gmax is not None
+    assert not restored_gmax.toggleViewAction().isChecked()
+
+
+@pytest.mark.integration
+def test_gmax_panel_is_disabled_during_disconnect_and_reenabled_after_reconnect(
+    qtbot: QtBot,
+    tmp_path: Path,
+    application_factory: ApplicationFactory,
+) -> None:
+    _application, window = application_factory(
+        [],
+        settings=ClientSettings(data_directory=tmp_path / "gmax-reconnect"),
+    )
+    qtbot.addWidget(window)
+    assert window.gmax_panel is not None
+
+    window.set_connection_available(False, "Servidor indisponível")
+
+    assert not window.gmax_panel.isEnabled()
+    assert window._reconnect_action.isEnabled()
+
+    window.set_connection_available(True, "Conexão restabelecida")
+
+    assert window.gmax_panel.isEnabled()
+    assert not window._reconnect_action.isEnabled()
 
 
 @pytest.mark.integration

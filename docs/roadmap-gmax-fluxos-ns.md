@@ -168,11 +168,11 @@ dependência ainda pendente não é bloqueio.
 
 ## Definição global de pronto
 
-- [ ] A aba **GMAX** aparece exatamente entre **Documentação e conformidade** e **Exportar**, é
+- [x] A aba **GMAX** aparece exatamente entre **Documentação e conformidade** e **Exportar**, é
   restaurável pelo menu **Exibir** e acompanha o projeto ativo.
-- [ ] GMAX mostra mercado, presença de impacto/servidão no PDF, ação consultada e resultado do
+- [x] GMAX mostra mercado, presença de impacto/servidão no PDF, ação consultada e resultado do
   `SELECT`, distinguindo claramente consulta não executada, sem linha e com linha.
-- [ ] GMAX mostra estado vazio sem snapshot, estado desatualizado e bloqueio por NS divergente sem
+- [x] GMAX mostra estado vazio sem snapshot, estado desatualizado e bloqueio por NS divergente sem
   apresentar resultado antigo como atual.
 - [x] O menu suspenso de projetos permite pesquisar NS e mantém associação correta entre texto e ID.
 - [x] Criar uma NS existente não faz `POST` efetivo adicional; o usuário pode abrir o único projeto
@@ -196,7 +196,7 @@ dependência ainda pendente não é bloqueio.
 | E02 | Pesquisa e diálogos do painel Projeto | #concluida | E01 | Fluxos abrir/criar simétricos e retorno ao estado inicial |
 | E03 | Guarda de NS antes dos SELECTs | #concluida | nenhuma | Divergência de cabeçalho bloqueia mercado e ações sem snapshot |
 | E04 | Projeção e contrato remoto GMAX | #concluida | E03 | DTO/endpoint somente leitura com estados auditáveis |
-| E05 | Aba GMAX e sincronização Qt | #pendente | E02, E04 | Dock GMAX na ordem solicitada, atualizado e testado |
+| E05 | Aba GMAX e sincronização Qt | #concluida | E02, E04 | Dock GMAX na ordem solicitada, atualizado e testado |
 | E06 | Fluxo integrado, documentação e gate final | #pendente | E01, E02, E03, E04, E05 | Regressão completa e definição global de pronto comprovada |
 
 ## E01 — Resolução exata e conflito de NS existente — #concluida
@@ -897,7 +897,7 @@ Nenhum bloqueio conhecido depois de E03.
   contratos; OpenAPI, docs da API, arquitetura e este roadmap. Nenhum widget Qt, SQL, migração,
   commit, publicação ou implantação foi criado ou alterado.
 
-## E05 — Aba GMAX e sincronização Qt — #pendente
+## E05 — Aba GMAX e sincronização Qt — #concluida
 
 ### Objetivo
 
@@ -990,15 +990,15 @@ resuma mudanças, validações e pendências. Não crie commit, não publique e 
 
 ### Critérios de aceite
 
-- [ ] A ordem visível é Resultados, Documentação e conformidade, GMAX, Exportar.
-- [ ] GMAX aparece no menu Exibir, pode ser destacado/reacoplado e restaura seu estado.
-- [ ] Mercado e os dois checks usam os valores/textos corretos para todos os enums.
-- [ ] Estado vazio, stale e bloqueio por NS são compreensíveis sem depender de cor.
-- [ ] Abrir/trocar projeto atualiza; recusar fluxo de E02 limpa; sucesso/falha de conformidade
+- [x] A ordem visível é Resultados, Documentação e conformidade, GMAX, Exportar.
+- [x] GMAX aparece no menu Exibir, pode ser destacado/reacoplado e restaura seu estado.
+- [x] Mercado e os dois checks usam os valores/textos corretos para todos os enums.
+- [x] Estado vazio, stale e bloqueio por NS são compreensíveis sem depender de cor.
+- [x] Abrir/trocar projeto atualiza; recusar fluxo de E02 limpa; sucesso/falha de conformidade
   recarrega o painel correto.
-- [ ] Desconexão desabilita acesso remoto de forma coerente e reconexão permite atualizar.
-- [ ] O painel não contém SQL, `pyodbc`, regra de inferência de fatos ou operação de escrita.
-- [ ] Testes Qt não deixam timers, threads ou diálogos pendentes.
+- [x] Desconexão desabilita acesso remoto de forma coerente e reconexão permite atualizar.
+- [x] O painel não contém SQL, `pyodbc`, regra de inferência de fatos ou operação de escrita.
+- [x] Testes Qt não deixam timers, threads ou diálogos pendentes.
 
 ### Validação obrigatória
 
@@ -1025,8 +1025,52 @@ Nenhum bloqueio conhecido depois de E02 e E04.
 
 ### Evidências e handoff
 
-- Estado inicial: etapa não iniciada; aguarda E02 e E04.
-- Evidências de implementação e validação: nenhuma enquanto a tag permanecer `#pendente`.
+- Estado inicial: E05 iniciada em 2026-09-01 sobre `main`, com
+  `git status --short --branch` limpo e sem mudanças preexistentes a preservar. E02 e E04 foram
+  confirmadas como `#concluida` no índice e nos detalhes do roadmap.
+- Contrato confirmado: `GmaxSummaryResponse` mantém exatamente os checks
+  `IMPACTO_AMBIENTAL`/`SERVIDAO` nessa ordem; `row_found` só é booleano em `EXECUTED`;
+  `BLOCKED_NS_MISMATCH` não admite mercado nem resultados antigos como atuais; e
+  `DocumentationGateway.get_gmax` é a única fronteira remota necessária ao widget.
+- Inspeção inicial: os docks existentes possuem nomes estáveis, menu **Exibir**, suporte a
+  mover/desacoplar e tabificação, mas a persistência declarada de layout ainda não chama
+  `saveState`/`restoreState`; E05 cobrirá essa lacuna junto do novo `gmaxDock`.
+- Implementação: o novo `src/zeny_project_handler_client/ui/gmax_panel.py` apresenta estado vazio,
+  NS do projeto/cabeçalhos, identidade/data de execução, mercado e tabela somente leitura com os
+  dois checks canônicos. Os textos distinguem todos os estados de consulta; `STALE` marca mercado,
+  consulta e linha como históricos; bloqueio e falha removem qualquer valor anterior da visão
+  atual. `objectName`s, nomes/descrições acessíveis e uma nota explícita de somente leitura não
+  dependem de cor.
+- Integração: `main_window.py` cria `gmaxDock` entre documentação e exportação, registra sua ação no
+  menu **Exibir**, preserva mover/desacoplar e agora salva/restaura geometria e estado dos docks em
+  `ui-state.ini`. `project_opened` abre/atualiza, `project_cleared` limpa e desconexão desabilita o
+  painel; a reconexão reabre o projeto vigente pelo fluxo já existente.
+- Sinal terminal: `documentation_panel.py` conserva o projeto do job e emite
+  `compliance_finished(project_id, status)` em sucesso, falha, cancelamento ou encerramento por erro
+  de polling. O GMAX só recarrega se esse ID ainda for o projeto ativo. O pipeline completo continua
+  atualizando pelo `project_opened`, sem criar uma consulta de conformidade adicional.
+- Fronteira de teste: `tests/remote_gateways.py` passou a converter em erro remoto seguro a exceção
+  interna de um projeto ainda sem sessão semântica, reproduzindo a fronteira HTTP nos gateways
+  direto/síncrono sem expor domínio ao widget.
+- Cobertura: o novo `tests/integration/test_gmax_panel.py` cobre os textos de todos os estados,
+  rural/urbano, dois checks fixos, linha presente/ausente, acessibilidade, erro seguro, troca/limpeza
+  e sinais terminais. `test_window.py` cobre ordem real da `QTabBar`, menu, features, persistência e
+  desconexão; `test_mvp_ui.py` cobre limpeza coordenada e atualização após reanálise; o teste de
+  arquitetura proíbe domínio, aplicação, adapters, ports e `pyodbc` na fronteira GMAX do cliente.
+- Documentação: `README.md` e `docs/especificacao-funcional.md` descrevem posição, fontes, estados,
+  sincronização, acessibilidade textual e caráter estritamente somente leitura do painel.
+- Validação obrigatória final: Pytest dos quatro caminhos da E05 passou com `40 passed` em 52,62 s;
+  o único aviso não fatal foi a impossibilidade preexistente de gravar `.pytest_cache`. Ruff
+  terminou com `All checks passed!`; Mypy terminou com
+  `Success: no issues found in 306 source files`.
+- Validações adicionais: os testes focados do painel passaram com `7 passed`, os de janela com
+  `23 passed` e o E2E completo com `7 passed`; Ruff do fixture remoto passou e
+  `ruff format --check` confirmou os oito arquivos Python alterados formatados. `git diff --check`
+  retornou código zero; o `git status --short --branch` final lista somente os onze arquivos
+  intencionalmente alterados/criados pela E05 sobre `main`.
+- Handoff para E06: executar o gate oficial e consolidar o cenário integrado global. E05 não
+  executou SQL Server real, não iniciou conformidade pelo GMAX, não criou commit e não publicou nem
+  implantou artefatos.
 
 ## E06 — Fluxo integrado, documentação e gate final — #pendente
 

@@ -28,10 +28,13 @@ apresenta os DTOs e rasters recebidos pela API autenticada.
   cliente conserva navegação e controle independente de visibilidade dos elementos no desenho.
 - Painel **Documentação e conformidade** remoto: inspeção de cabeçalho, servidão, carimbos e
   assinaturas, reanálise, histórico, estado desatualizado e regras chegam como DTOs do servidor.
+- Painel **GMAX** somente leitura: acompanha o projeto ativo e apresenta mercado, NS identificadas
+  nos cabeçalhos e os checks fixos de impacto ambiental e servidão, distinguindo consulta não
+  executada, sem linha, com linha, resultado desatualizado e bloqueio por divergência da NS.
 - Motor declarativo de conformidade executado no servidor, com quatro famílias de provedores de
   fatos, snapshots persistidos e callouts normalizados compilados para a camada vetorial do cliente.
   O seed atual é `cemig-normas-distribuicao-2025.7`, com 41 regras habilitadas, e o método de
-  conformidade está na versão `9`. O mercado rural/urbano e a conclusão das ações operacionais
+  conformidade está na versão `10`. O mercado rural/urbano e a conclusão das ações operacionais
   aplicáveis vêm exclusivamente do SQL Server.
 - Painel **Exportar**: o servidor compila o PDF na ordem das folhas, incorpora as anotações de
   conformidade e gera planilhas Excel de **Resultados** (Elementos e Vãos), **Documentação** e
@@ -117,7 +120,9 @@ na próxima execução local. O `compose.yaml` operacional continua separado e p
    no PDF.
 6. Em **Documentação e conformidade**, confira os dados documentais, execute a conformidade e revise
    os callouts.
-7. Use **Exportar** para baixar o PDF anotado ou as planilhas `.xlsx` na própria máquina.
+7. Em **GMAX**, confira o mercado, a NS dos cabeçalhos e se cada `SELECT` aplicável foi executado e
+   encontrou linha. A aba apenas lê o último resumo persistido e não inicia uma análise.
+8. Use **Exportar** para baixar o PDF anotado ou as planilhas `.xlsx` na própria máquina.
 
 O pipeline principal executa, em ordem, a extração documental, a interpretação semântica, a
 promoção dos resultados e a conformidade. A ação **Analisar conformidade** reaplica as regras aos
@@ -133,9 +138,9 @@ vigentes. Assim, depois que o mercado, a NS, os serviços ou as ações externas
 Por padrão, preferências visuais, logs do cliente e downloads escolhidos pelo usuário ficam no
 computador cliente. Use `ZENY_DATA_DIR` para escolher a raiz local da interface; essa pasta não
 contém banco nem cache de análise. Os painéis
-**Projeto**, **Resultados**, **Documentação e conformidade** e **Exportar** usam o servidor como
-fonte principal; banco, PDFs gerenciados, cache, jobs, arquivos temporários e logs do servidor ficam
-em `ZENY_SERVER_DATA_DIR` (normalmente o volume `/data`).
+**Projeto**, **Resultados**, **Documentação e conformidade**, **GMAX** e **Exportar** usam o servidor
+como fonte principal; banco, PDFs gerenciados, cache, jobs, arquivos temporários e logs do servidor
+ficam em `ZENY_SERVER_DATA_DIR` (normalmente o volume `/data`).
 
 - O SQLite e suas migrações existem somente no servidor.
 - A mesma conexão SQL Server e o mesmo timeout atendem mercado e ações no processo servidor: não

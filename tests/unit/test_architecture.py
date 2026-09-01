@@ -17,6 +17,21 @@ FORBIDDEN_IMPORTS = frozenset(
         "PIL",
     }
 )
+GMAX_CLIENT_MODULES = (
+    Path(__file__).parents[2] / "src" / "zeny_project_handler_client" / "ui" / "gmax_panel.py",
+    Path(__file__).parents[2]
+    / "src"
+    / "zeny_project_handler_client"
+    / "ui"
+    / "documentation_gateway.py",
+)
+GMAX_FORBIDDEN_MODULES = (
+    "pyodbc",
+    "zeny_project_handler.adapters",
+    "zeny_project_handler.application",
+    "zeny_project_handler.domain",
+    "zeny_project_handler.ports",
+)
 
 
 def imported_root_names(source_file: Path) -> set[str]:
@@ -61,6 +76,19 @@ def test_domain_does_not_know_concrete_adapters() -> None:
             if module.startswith("zeny_project_handler.adapters")
         )
         for source_file in DOMAIN_DIRECTORY.rglob("*.py")
+    }
+
+    assert not {key: value for key, value in violations.items() if value}
+
+
+def test_gmax_client_uses_only_remote_contracts_and_presentation_dependencies() -> None:
+    violations = {
+        str(source_file.relative_to(Path(__file__).parents[2])): sorted(
+            module
+            for module in imported_module_names(source_file)
+            if module.startswith(GMAX_FORBIDDEN_MODULES)
+        )
+        for source_file in GMAX_CLIENT_MODULES
     }
 
     assert not {key: value for key, value in violations.items() if value}

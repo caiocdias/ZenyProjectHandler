@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QMessageBox,
     QPushButton,
+    QTableWidget,
     QTreeWidget,
 )
 from pytestqt.qtbot import QtBot
@@ -373,9 +374,7 @@ def test_project_combo_searches_only_digits_without_inserting_or_losing_ids(
     first = gateway.create_project("0000000702", idempotency_key="search-first")
     second = gateway.create_project("1234500702", idempotency_key="search-second")
     panel.atualizar_projetos()
-    item_ids = {
-        combo.itemText(index): combo.itemData(index) for index in range(1, combo.count())
-    }
+    item_ids = {combo.itemText(index): combo.itemData(index) for index in range(1, combo.count())}
     assert item_ids == {
         hidden.project.service_note: str(hidden.project.project_id.root),
         first.project.service_note: str(first.project.project_id.root),
@@ -390,8 +389,7 @@ def test_project_combo_searches_only_digits_without_inserting_or_losing_ids(
     completer.setCompletionPrefix(search.text())
     completion_model = completer.completionModel()
     suggestions = {
-        str(completion_model.index(row, 0).data())
-        for row in range(completion_model.rowCount())
+        str(completion_model.index(row, 0).data()) for row in range(completion_model.rowCount())
     }
     assert suggestions == {first.project.service_note, second.project.service_note}
     assert combo.count() == original_count
@@ -479,8 +477,11 @@ def test_project_open_create_dialogs_and_refusals_return_to_initial_state(
     assert window.pdf_viewer.inspecao is not None
     review = window.review_panel
     documentation = window.documentation_panel
+    gmax = window.gmax_panel
     export = window.portability_panel
-    assert review is not None and documentation is not None and export is not None
+    assert (
+        review is not None and documentation is not None and gmax is not None and export is not None
+    )
     review._project.addItem("Projeto residual", str(existing.project.project_id.root))
     review._project.setCurrentIndex(review._project.count() - 1)
     documentation._project.addItem("Projeto residual", str(existing.project.project_id.root))
@@ -503,6 +504,9 @@ def test_project_open_create_dialogs_and_refusals_return_to_initial_state(
     assert review_accept is not None and not review_accept.isEnabled()
     assert review_reject is not None and not review_reject.isEnabled()
     assert documentation._project.currentData() is None
+    assert gmax.projeto_ativo_id is None
+    gmax_state = gmax.findChild(QLabel, "gmaxStateLabel")
+    assert gmax_state is not None and "Nenhum projeto ativo" in gmax_state.text()
     assert export._project.currentData() is None
     assert not export._pdf.isEnabled()
     assert not panel._service_box.isEnabled()
@@ -541,12 +545,13 @@ def test_project_open_create_dialogs_and_refusals_return_to_initial_state(
     assert len(find_calls) == before_find
     assert create_calls == [created_from_open]
     assert any("exatamente 10 dígitos" in message for message in warnings)
-    assert questions.count(
-        "Já existe um projeto para a Nota de Serviço informada. Deseja abrir esse projeto?"
-    ) == 2
-    assert questions.count(
-        "A Nota de Serviço não existe. Deseja criar o projeto da nota?"
-    ) == 2
+    assert (
+        questions.count(
+            "Já existe um projeto para a Nota de Serviço informada. Deseja abrir esse projeto?"
+        )
+        == 2
+    )
+    assert questions.count("A Nota de Serviço não existe. Deseja criar o projeto da nota?") == 2
 
 
 def test_project_creation_race_reuses_existing_dialog_without_repeating_post(
@@ -605,9 +610,12 @@ def test_project_creation_race_reuses_existing_dialog_without_repeating_post(
     qtbot.mouseClick(create_button, Qt.MouseButton.LeftButton)
     assert create_calls == [existing.project.service_note, existing.project.service_note]
     assert panel.projeto_ativo_id is None
-    assert questions.count(
-        "Já existe um projeto para a Nota de Serviço informada. Deseja abrir esse projeto?"
-    ) == 2
+    assert (
+        questions.count(
+            "Já existe um projeto para a Nota de Serviço informada. Deseja abrir esse projeto?"
+        )
+        == 2
+    )
 
 
 def test_environmental_actions_full_client_matrix_uses_current_service_codes(
@@ -684,10 +692,16 @@ def test_environmental_actions_full_client_matrix_uses_current_service_codes(
     qtbot.waitUntil(lambda: not panel.processando, timeout=30_000)
 
     documentation = window.documentation_panel
+    gmax = window.gmax_panel
     assert documentation is not None
+    assert gmax is not None
     findings_tree = documentation.findChild(QTreeWidget, "complianceFindingsTree")
     reanalyze = documentation.findChild(QPushButton, "complianceAnalyzeButton")
     assert findings_tree is not None and reanalyze is not None
+    gmax_state = gmax.findChild(QLabel, "gmaxStateLabel")
+    gmax_market = gmax.findChild(QLabel, "gmaxMarketLabel")
+    gmax_checks = gmax.findChild(QTableWidget, "gmaxChecksTable")
+    assert gmax_state is not None and gmax_market is not None and gmax_checks is not None
     action_rules = {
         "bi.acoes.impacto-ambiental": (
             "IMPACTO AMBIENTAL PENDENTE",
@@ -763,6 +777,19 @@ def test_environmental_actions_full_client_matrix_uses_current_service_codes(
             )
             assert window.pdf_viewer.folha_atual == 1
             assert str(callout.callout_id.root) in window.pdf_viewer.view._callout_items
+        assert "Resultado atual" in gmax_state.text()
+        assert gmax_market.text() == "Urbano"
+        query_cells = tuple(gmax_checks.item(row, 3) for row in range(gmax_checks.rowCount()))
+        result_cells = tuple(gmax_checks.item(row, 4) for row in range(gmax_checks.rowCount()))
+        assert all(cell is not None for cell in (*query_cells, *result_cells))
+        assert [cell.text() for cell in query_cells if cell is not None] == [
+            "Executado",
+            "Executado",
+        ]
+        assert [cell.text() for cell in result_cells if cell is not None] == [
+            "Linha encontrada" if impact_completed else "Sem linha",
+            "Linha encontrada" if servitude_completed else "Sem linha",
+        ]
         return result
 
     def result_changed(expected_id: ComplianceExecutionId) -> bool:

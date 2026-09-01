@@ -501,6 +501,8 @@ class DirectDocumentationGateway:
             return self._compliance.get_gmax(project_id)
         except ApiError as error:
             raise _documentation_error(error) from None
+        except Exception as error:
+            raise _safe_documentation_error() from error
 
     def list_compliance_history(
         self,
@@ -616,6 +618,8 @@ class SynchronousDocumentationGateway:
             return self._compliance.get_gmax(project_id)
         except ApiError as error:
             raise _documentation_error(error) from None
+        except Exception as error:
+            raise _safe_documentation_error() from error
 
     def list_compliance_history(
         self,
@@ -820,6 +824,15 @@ def _documentation_error(error: ApiError) -> DocumentationGatewayError:
         status_code=error.status_code,
         correlation_id="11111111-1111-1111-1111-111111111111",
         details=dict(error.details) if error.details is not None else None,
+    )
+
+
+def _safe_documentation_error() -> DocumentationGatewayError:
+    return DocumentationGatewayError(
+        ErrorCode.INTERNAL_ERROR,
+        "O servidor não conseguiu concluir a solicitação.",
+        status_code=500,
+        correlation_id="11111111-1111-1111-1111-111111111111",
     )
 
 

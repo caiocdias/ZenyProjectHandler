@@ -6,6 +6,7 @@ from pathlib import Path
 from time import monotonic
 
 from PySide6.QtCore import (
+    QByteArray,
     QEvent,
     QObject,
     QPoint,
@@ -35,6 +36,7 @@ from zeny_project_handler_client.config import ClientRenderBudget
 from .application_icon import carregar_icone_aplicacao
 from .documentation_gateway import DocumentationGateway
 from .documentation_panel import DocumentationPanelWidget
+from .gmax_panel import GmaxPanelWidget
 from .pdf_gateway import PdfViewerGateway
 from .pdf_viewer import PdfViewerWidget
 from .portability_gateway import PortabilityGateway
@@ -46,6 +48,8 @@ from .review_panel import ReviewPanelWidget
 from .theme import THEME_SETTING_KEY, Tema, aplicar_tema
 
 _CLOSE_WAIT_MS = 300
+_WINDOW_GEOMETRY_SETTING_KEY = "window/geometry"
+_WINDOW_DOCK_STATE_SETTING_KEY = "window/dock-state"
 
 
 class _DockTitleBar(QWidget):
@@ -363,6 +367,7 @@ class MainWindow(QMainWindow):
         self.project_panel: ProjectPanelWidget | None = None
         self.portability_panel: PortabilityPanelWidget | None = None
         self.documentation_panel: DocumentationPanelWidget | None = None
+        self.gmax_panel: GmaxPanelWidget | None = None
         right_docks: list[QDockWidget] = []
         if review_gateway is not None:
             self.review_panel = ReviewPanelWidget(
@@ -407,6 +412,23 @@ class MainWindow(QMainWindow):
                 lambda _finding_id, target=documentation_dock: target.raise_()
             )
             right_docks.append(documentation_dock)
+            self.gmax_panel = GmaxPanelWidget(
+                gateway=documentation_gateway,
+                parent=self,
+            )
+            self.gmax_panel.status_changed.connect(self.statusBar().showMessage)
+            gmax_dock = QDockWidget("GMAX", self)
+            gmax_dock.setObjectName("gmaxDock")
+            gmax_dock.setAllowedAreas(
+                Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
+            )
+            gmax_dock.setWidget(self.gmax_panel)
+            self._register_dock(gmax_dock)
+            self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, gmax_dock)
+            self.documentation_panel.compliance_finished.connect(
+                self.gmax_panel.atualizar_apos_conformidade
+            )
+            right_docks.append(gmax_dock)
         if self.review_panel is not None and ui_state_path is not None:
             self.project_panel = ProjectPanelWidget(
                 gateway=project_gateway,
@@ -423,6 +445,11 @@ class MainWindow(QMainWindow):
                 self.project_panel.project_opened.connect(self.documentation_panel.abrir_projeto)
                 if self.project_panel.projeto_ativo_id is not None:
                     self.documentation_panel.abrir_projeto(self.project_panel.projeto_ativo_id)
+            if self.gmax_panel is not None:
+                self.project_panel.project_opened.connect(self.gmax_panel.abrir_projeto)
+                self.project_panel.project_cleared.connect(self.gmax_panel.limpar)
+                if self.project_panel.projeto_ativo_id is not None:
+                    self.gmax_panel.abrir_projeto(self.project_panel.projeto_ativo_id)
             project_dock = QDockWidget("Projeto", self)
             project_dock.setObjectName("projectWorkflowDock")
             project_dock.setAllowedAreas(
@@ -457,6 +484,7 @@ class MainWindow(QMainWindow):
             self.tabifyDockWidget(current, following)
         if right_docks:
             right_docks[0].raise_()
+        self._restore_ui_state()
         if startup_ocr_diagnostic is not None:
             self.ocr_diagnostic_button = QToolButton(self)
             self.ocr_diagnostic_button.setObjectName("ocrStartupDiagnosticButton")
@@ -565,6 +593,8 @@ class MainWindow(QMainWindow):
             self.review_panel.setEnabled(self._connection_available and not busy)
         if self.documentation_panel is not None:
             self.documentation_panel.setEnabled(self._connection_available and not busy)
+        if self.gmax_panel is not None:
+            self.gmax_panel.setEnabled(self._connection_available and not busy)
 
     @Slot()
     def _reconnect(self) -> None:
@@ -603,6 +633,23 @@ class MainWindow(QMainWindow):
     def set_resource_cleanup(self, callback: Callable[[], None]) -> None:
         self._resource_cleanup = callback
 
+    def _restore_ui_state(self) -> None:
+        if self._ui_settings is None:
+            return
+        geometry = self._ui_settings.value(_WINDOW_GEOMETRY_SETTING_KEY)
+        if isinstance(geometry, QByteArray):
+            self.restoreGeometry(geometry)
+        dock_state = self._ui_settings.value(_WINDOW_DOCK_STATE_SETTING_KEY)
+        if isinstance(dock_state, QByteArray):
+            self.restoreState(dock_state)
+
+    def _save_ui_state(self) -> None:
+        if self._ui_settings is None:
+            return
+        self._ui_settings.setValue(_WINDOW_GEOMETRY_SETTING_KEY, self.saveGeometry())
+        self._ui_settings.setValue(_WINDOW_DOCK_STATE_SETTING_KEY, self.saveState())
+        self._ui_settings.sync()
+
     def release_resources(self) -> None:
         self._resource_cleanup()
 
@@ -635,4 +682,5 @@ class MainWindow(QMainWindow):
         self.pdf_viewer.encerrar()
         super().closeEvent(event)
         if event.isAccepted():
+            self._save_ui_state()
             self.release_resources()

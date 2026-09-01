@@ -72,8 +72,8 @@ criação automaticamente.
 
 Recusar qualquer uma dessas propostas retorna ao estado inicial: não há projeto ativo, pesquisa,
 NS, serviços nem folhas selecionados; `last_project_id` é removido; visualizador, Resultados,
-Documentação/conformidade e Exportar deixam de apontar para o projeto; ações dependentes ficam
-desabilitadas. Essa transição é somente local e não exclui nem altera projeto no servidor.
+Documentação/conformidade, GMAX e Exportar deixam de apontar para o projeto; ações dependentes
+ficam desabilitadas. Essa transição é somente local e não exclui nem altera projeto no servidor.
 
 ## PDFs protegidos
 
@@ -262,6 +262,29 @@ método, da NS, dos códigos de serviço e dos resultados externos consultados. 
 NS ou serviços marca o snapshot anterior como desatualizado; a reanálise é sempre explícita e cria
 ou reutiliza a execução idempotente correspondente.
 
+## GMAX
+
+O dock **GMAX** fica entre **Documentação e conformidade** e **Exportar**. Ele acompanha o projeto
+ativo e consulta somente `GET /api/v1/projects/{project_id}/gmax`; atualizar a aba não cria job,
+não grava dados e não abre conexão com o SQL Server. A apresentação mostra a NS do projeto, todas
+as NS válidas identificadas nos cabeçalhos, a identidade/data da última execução, o mercado e
+exatamente os checks **Impacto ambiental** e **Servidão**.
+
+Cada check informa, por texto e sem depender de cor, se o gatilho foi detectado no PDF, a ação
+operacional exata, se o `SELECT` não foi executado ou foi executado e, somente nesse último caso,
+se houve **Linha encontrada** ou **Sem linha**. Os motivos não executados permanecem distintos:
+conformidade ainda não executada, gatilho ausente e ausência de códigos de serviço.
+
+`NEVER_EXECUTED` não apresenta mercado nem resultado de linha. `STALE` identifica o mercado, a
+consulta e a linha como pertencentes à última execução desatualizada, com orientação para
+reanalisar. `BLOCKED_NS_MISMATCH` mostra a divergência, orienta corrigir projeto/PDF e reanalisar e
+não reapresenta mercado ou linha de um snapshot anterior como se fossem atuais. Falha de leitura
+também limpa os valores visíveis antes de informar o erro seguro e sua correlação, quando houver.
+
+Abrir ou trocar projeto atualiza o dock; retornar ao estado inicial o limpa. O término bem-sucedido,
+falho ou cancelado de uma reanálise explícita de conformidade recarrega somente o projeto ainda
+ativo. Durante uma desconexão o painel fica desabilitado, e a reconexão restabelece a atualização.
+
 ## Registro de regras
 
 O SQLite mantém revisões imutáveis do registro e números permanentes por ID técnico. Importar um
@@ -337,7 +360,7 @@ remoção de volume e migração fail-closed antes de `ready=true`. Rollback no 
 somente para imagem compatível com seu formato/revisão; rollback incompatível cria volume novo e
 restaura o snapshot pré-upgrade. Não há downgrade automático nem edição de `alembic_version`.
 
-Os painéis **Projeto**, **Resultados**, **Documentação e conformidade** e
+Os painéis **Projeto**, **Resultados**, **Documentação e conformidade**, **GMAX** e
 **Exportar** podem ser movidos, desacoplados e restaurados. Tema, geometria e
 estado dos docks ficam em `ui-state.ini` na pasta de dados.
 

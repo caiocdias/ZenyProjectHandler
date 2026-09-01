@@ -54,6 +54,7 @@ from .visibility import visibility_icon
 
 class DocumentationPanelWidget(QWidget):
     status_changed = Signal(str)
+    compliance_finished = Signal(object, object)
 
     def __init__(
         self,
@@ -75,6 +76,7 @@ class DocumentationPanelWidget(QWidget):
         self._visibility_context: tuple[UUID, UUID | None] | None = None
         self._syncing_finding_selection = False
         self._compliance_job_id: UUID | None = None
+        self._compliance_project_id: UUID | None = None
         self._compliance_poll = QTimer(self)
         self._compliance_poll.timeout.connect(self._poll_compliance_job)
         self._build_ui()
@@ -303,6 +305,7 @@ class DocumentationPanelWidget(QWidget):
         self._analyze_compliance.setEnabled(False)
         self._compliance_poll.stop()
         self._compliance_job_id = None
+        self._compliance_project_id = None
         self._sync_finding_visibility_buttons()
 
     def _load_selected_project(self) -> None:
@@ -385,6 +388,7 @@ class DocumentationPanelWidget(QWidget):
             QMessageBox.warning(self, "Conformidade não concluída", str(error))
             return
         self._compliance_job_id = accepted.job_id.root
+        self._compliance_project_id = documentation.project_id.root
         self._analyze_compliance.setEnabled(False)
         self._execution_status.setText("Análise de conformidade na fila")
         self._compliance_poll.start(accepted.poll_after_ms)
@@ -398,7 +402,11 @@ class DocumentationPanelWidget(QWidget):
         try:
             job = self._gateway.get_job(job_id)
         except DocumentationGatewayError as error:
-            self._finish_compliance_job_error(str(error))
+            self._finish_compliance_job_error(
+                str(error),
+                project_id=self._compliance_project_id,
+                status=JobStatus.FAILED,
+            )
             return
         self._execution_status.setText(
             f"{job.message or 'Analisando conformidade'} · {job.progress_percent}%"
@@ -407,21 +415,39 @@ class DocumentationPanelWidget(QWidget):
             return
         self._compliance_poll.stop()
         self._compliance_job_id = None
+        project_id = self._compliance_project_id
+        self._compliance_project_id = None
         self._analyze_compliance.setEnabled(self._documentation is not None)
         if job.status is JobStatus.SUCCEEDED:
             self._gateway.get_job_result(job_id)
-            self._load_persisted_result()
+            if (
+                project_id is not None
+                and self._documentation is not None
+                and self._documentation.project_id.root == project_id
+            ):
+                self._load_persisted_result()
             version = self._result.execution.rule_registry_revision if self._result else "ativa"
             self.status_changed.emit(f"Conformidade analisada com as regras {version}")
+            if project_id is not None:
+                self.compliance_finished.emit(project_id, job.status)
             return
         message = str(job.error) if job.error is not None else (job.message or "Operação cancelada")
-        self._finish_compliance_job_error(message)
+        self._finish_compliance_job_error(message, project_id=project_id, status=job.status)
 
-    def _finish_compliance_job_error(self, message: str) -> None:
+    def _finish_compliance_job_error(
+        self,
+        message: str,
+        *,
+        project_id: UUID | None,
+        status: JobStatus,
+    ) -> None:
         self._compliance_poll.stop()
         self._compliance_job_id = None
+        self._compliance_project_id = None
         self._analyze_compliance.setEnabled(self._documentation is not None)
         self.status_changed.emit(message)
+        if project_id is not None:
+            self.compliance_finished.emit(project_id, status)
         QMessageBox.warning(self, "Conformidade não concluída", message)
 
     def _populate_documents(self) -> None:
