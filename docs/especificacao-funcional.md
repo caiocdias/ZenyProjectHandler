@@ -17,7 +17,7 @@ Estado versionado relevante:
 |---|---|
 | Pacote Python | `0.3.0` |
 | Catálogo técnico | `2` |
-| Registro de interpretação | `1.3.0` |
+| Registro de interpretação | `1.4.0` |
 | Registro de conformidade distribuído | `cemig-normas-distribuicao-2025.7` |
 | Método de conformidade | `10` |
 | Migração SQLite mais recente | `0009_remote_jobs` |
@@ -140,7 +140,7 @@ diagnóstico; texto e recursos nativos continuam disponíveis.
 
 ## Interpretação semântica
 
-O registro `regras_interpretacao_v1.json`, hoje na versão `1.3.0`, possui cinco regras de
+O registro `regras_interpretacao_v1.json`, hoje na versão `1.4.0`, possui cinco regras de
 reconhecimento por categoria e sete regras de relação. O pipeline:
 
 1. filtra conteúdo que não pode fundamentar resultado técnico;
@@ -153,6 +153,12 @@ reconhecimento por categoria e sete regras de relação. O pipeline:
 Postes aceitam código do catálogo e nomenclaturas de altura e resistência. Estruturas, cabos e
 equipamentos usam analisadores próprios. Identificadores de ponto e coordenadas próximas enriquecem
 o contexto, mas coordenadas isoladas não criam um elemento elétrico.
+
+Estruturas admitem qualificador numérico entre parênteses, preservado nos atributos da ocorrência.
+O código unitário `N` só é reconhecido nessa forma qualificada; textos comuns e nomenclaturas como
+`N-(4 CAA)` não criam estrutura. Ocorrências do mesmo código e ponto continuam distintas quando têm
+qualificador ou geometria próprios, enquanto texto nativo e OCR da mesma ocorrência são consolidados
+com todas as evidências. A identidade e a ordenação resultantes independem da ordem das evidências.
 
 Uma execução concluída é idempotente para o mesmo projeto, extração, catálogo, registro e
 configuração. Cancelamento ou falha não publica um conjunto parcial como concluído.

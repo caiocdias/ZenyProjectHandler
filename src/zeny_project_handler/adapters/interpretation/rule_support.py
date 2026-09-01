@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import re
 import unicodedata
+from dataclasses import dataclass
 from decimal import Decimal
 
 from zeny_project_handler.domain.analysis import EvidenciaDocumento
@@ -36,6 +37,48 @@ def contains_code(text: str, code: str) -> bool:
         return False
     pattern = rf"(?<![A-Z0-9]){re.escape(normalized_code)}(?![A-Z0-9])"
     return re.search(pattern, normalized_text(text)) is not None
+
+
+@dataclass(frozen=True, slots=True)
+class StructureToken:
+    """Token de estrutura catalogada preservando sua ocorrência no texto normalizado."""
+
+    code: str
+    qualifier: str | None
+    start: int
+    end: int
+    observed: str
+
+
+def structure_tokens(text: str, codes: tuple[str, ...]) -> tuple[StructureToken, ...]:
+    """Reconheça estruturas; código unitário exige qualificador numérico explícito."""
+    normalized = normalized_text(text)
+    normalized_codes = tuple(
+        sorted(
+            {normalized_text(code) for code in codes if normalized_text(code)},
+            key=lambda code: (-len(code), code),
+        )
+    )
+    qualified_alternatives = "|".join(re.escape(code) for code in normalized_codes)
+    plain_alternatives = "|".join(re.escape(code) for code in normalized_codes if len(code) >= 2)
+    if not qualified_alternatives:
+        return ()
+    qualified = rf"(?P<qualified_code>{qualified_alternatives})\((?P<qualifier>\d{{1,4}})\)"
+    plain = rf"(?P<plain_code>{plain_alternatives})" if plain_alternatives else r"(?!)"
+    pattern = re.compile(rf"(?<![A-Z0-9])(?:{qualified}|{plain})(?![A-Z0-9(])")
+    tokens = []
+    for match in pattern.finditer(normalized):
+        code = match.group("qualified_code") or match.group("plain_code")
+        tokens.append(
+            StructureToken(
+                code=code,
+                qualifier=match.group("qualifier"),
+                start=match.start(),
+                end=match.end(),
+                observed=match.group(0),
+            )
+        )
+    return tuple(tokens)
 
 
 def center(geometry: GeometriaDocumento) -> tuple[float, float]:

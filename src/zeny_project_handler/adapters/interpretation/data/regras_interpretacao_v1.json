@@ -2,7 +2,7 @@
   "schema_version": 1,
   "registry": {
     "id": "a1b7d74a-0c02-5c99-a74e-0b3fb449c92f",
-    "version": "1.3.0"
+    "version": "1.4.0"
   },
   "recognition_rules": [
     {

@@ -20,6 +20,7 @@ def test_interpretation_rules_and_schema_are_versioned_json() -> None:
     pyproject = (PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
 
     assert rules["schema_version"] == 1
+    assert rules["registry"]["version"] == "1.4.0"
     assert len(rules["recognition_rules"]) == 5
     assert schema["properties"]["schema_version"]["const"] == 1
     assert "zeny_project_handler.adapters.interpretation.data" in pyproject

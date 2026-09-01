@@ -198,13 +198,28 @@ def _occurrence_components(
             connected = tuple(
                 index
                 for index in remaining
-                if _proposal_distance(proposals[current], proposals[index])
-                <= _MAXIMUM_OCCURRENCE_COMPONENT_DISTANCE
+                if (
+                    _same_identifier_evidence(proposals[current], proposals[index])
+                    or _proposal_distance(proposals[current], proposals[index])
+                    <= _MAXIMUM_OCCURRENCE_COMPONENT_DISTANCE
+                )
             )
             pending.extend(connected)
             remaining.difference_update(connected)
         components.append(tuple(proposals[index] for index in sorted(indexes)))
     return tuple(components)
+
+
+def _same_identifier_evidence(first: PropostaElemento, second: PropostaElemento) -> bool:
+    structure_categories = {
+        CategoriaElemento.ESTRUTURA_MT,
+        CategoriaElemento.ESTRUTURA_BT,
+    }
+    if first.categoria not in structure_categories or second.categoria not in structure_categories:
+        return False
+    first_id = dict(first.atributos_sugeridos).get("evidencia_identificador_id")
+    second_id = dict(second.atributos_sugeridos).get("evidencia_identificador_id")
+    return isinstance(first_id, str) and bool(first_id) and first_id == second_id
 
 
 def _occurrence_rank(

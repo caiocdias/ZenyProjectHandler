@@ -157,7 +157,7 @@ limpa do Codex, atualize sua tag e preencha **Evidências e handoff** antes de i
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E01 | Contrato normativo, decisão de domínio e fixtures | #concluida | nenhuma | ADR, inventário ND-5.1 e corpus sintético sanitizado |
-| E02 | Estruturas `N(x)` e ocorrências repetidas | #pendente | E01 | parser contextual e cardinalidade física preservada |
+| E02 | Estruturas `N(x)` e ocorrências repetidas | #concluida | E01 | parser contextual e cardinalidade física preservada |
 | E03 | Chaves e bolsas de instalação | #pendente | E01, E02 | nomenclatura completa e situação de instalação robusta |
 | E04 | Redução de vão e associação cabo–traçado | #pendente | E01, E02, E03 | medida vigente, alteração explícita e cabo no traçado correto |
 | E05 | Ponto de padrão e ramal no domínio topológico | #pendente | E01, E04 | ponto `ENTREGA` e tipo de vão/trecho derivados |
@@ -292,7 +292,7 @@ vetor vermelho não relacionado.
   ponto de entrega, ramal, `ALTERAR` ou regra normativa. A exclusão preexistente de
   `docs/roadmap-gmax-fluxos-ns.md` foi preservada e não pertence a E01.
 
-## E02 — Estruturas `N(x)` e ocorrências repetidas — #pendente
+## E02 — Estruturas `N(x)` e ocorrências repetidas — #concluida
 
 **Objetivo:** reconhecer códigos de estrutura de um caractere somente em sintaxe contextual segura e
 preservar cada ocorrência física repetida no mesmo poste sem duplicar leituras equivalentes.
@@ -329,11 +329,11 @@ Implemente reconhecimento contextual de estrutura N com qualificador, sem permit
 
 **Critérios de aceite:**
 
-- [ ] `N(2)` produz exatamente uma estrutura `N` com qualificador `2`.
-- [ ] `N-(4 CAA)` e variantes de cabo não produzem estrutura `N`.
-- [ ] `CM3(1)` e `CM3(2)` produzem duas propostas distintas no mesmo `P`.
-- [ ] Duas `S3R` físicas permanecem duas; texto nativo + OCR da mesma ocorrência permanece uma.
-- [ ] IDs, ordenação e atributos são determinísticos em reexecução e permutação das evidências.
+- [x] `N(2)` produz exatamente uma estrutura `N` com qualificador `2`.
+- [x] `N-(4 CAA)` e variantes de cabo não produzem estrutura `N`.
+- [x] `CM3(1)` e `CM3(2)` produzem duas propostas distintas no mesmo `P`.
+- [x] Duas `S3R` físicas permanecem duas; texto nativo + OCR da mesma ocorrência permanece uma.
+- [x] IDs, ordenação e atributos são determinísticos em reexecução e permutação das evidências.
 
 **Validação obrigatória:**
 
@@ -351,7 +351,32 @@ duplicata de extração.
 e contexto de identificador operacional. Perder deduplicação OCR; mitigar usando interseção
 geométrica, origem e evidência-alvo em vez de código/poste apenas.
 
-**Evidências e handoff:** ainda não iniciado.
+**Evidências e handoff (01/09/2026):**
+
+- **Implementação:** `rule_support.py` ganhou o token contextual de estrutura com código,
+  qualificador numérico e posição no texto normalizado; código de um caractere só é aceito na forma
+  qualificada. `category_analyzers.py` preserva `qualificador_estrutura`, `token_estrutura`,
+  `evidencia_ocorrencia_id` e `identidade_ocorrencia`, inclusive quando um bloco contém mais de uma
+  ocorrência do mesmo código. `operational_labels.py` mantém estruturas distintas ligadas à mesma
+  evidência de ponto sem reunir postes/equipamentos de ocorrências concorrentes.
+- **Consolidação determinística:** `rule_based.py` inclui o qualificador na chave semântica e só
+  consolida propostas da mesma ocorrência geométrica, usando até `0,015` por eixo, convenção já
+  adotada pelo OCR localizado. Leituras do mesmo texto preservam tokens diferentes; entre extratores,
+  a seleção é estável por OCR localizado, confiança e UUID, e todas as evidências são reunidas.
+- **Versões e documentação:** analisadores de estrutura `2.0`, interpretador `18.0` e registro de
+  interpretação `1.4.0`; seed, teste de recurso e `docs/especificacao-funcional.md` estão coerentes.
+- **Regressão sanitizada:** o novo teste consome `create_e01_structure_occurrences_pdf`, injeta apenas
+  âncoras operacionais sintéticas e prova uma `N(2)`, duas `CM3`, duas `S3R`, rejeição de
+  `N-(4 CAA)`/texto comum, consolidação de texto nativo + OCR, reexecução e entrada permutada.
+- **Validações:** a primeira execução Pytest no sandbox obteve 36 aprovações e quatro erros de setup
+  por `PermissionError` no temporário global, sem falha de asserção. A mesma seleção com
+  `-p no:cacheprovider --basetemp tmp\\pytest-e02-required` terminou com `40 passed in 4.50s`; o
+  comando obrigatório literal, repetido com acesso ao temporário do Windows, terminou com
+  `40 passed in 4.36s`. O `ruff check` obrigatório terminou com `All checks passed!`;
+  `ruff format --check` confirmou 11 arquivos formatados e `git diff --check` saiu com código zero.
+- **Handoff para E03:** preservar os quatro atributos auditáveis de ocorrência e as versões acima;
+  a correção de bolsas/chaves pode reutilizar a consolidação geométrica, mas não deve voltar a
+  deduplicar estruturas apenas por código, ponto e situação. Nenhum bloqueio residual conhecido.
 
 ## E03 — Chaves e bolsas de instalação — #pendente
 

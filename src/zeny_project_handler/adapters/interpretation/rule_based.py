@@ -32,12 +32,15 @@ from .category_analyzers import (
 )
 from .operational_labels import filtrar_propostas_identificadas
 from .relation_rules import generate_relations, mark_conflicts
+from .rule_support import center
 from .span_rules import associar_tracados_de_cabos
+
+_MAXIMUM_DUPLICATE_OCCURRENCE_AXIS_DISTANCE = 0.015
 
 
 class InterpretadorRegrasExplicitas:
     nome = "regras-explicitas-cemig"
-    versao = "17.0"
+    versao = "18.0"
 
     def __init__(
         self,
@@ -135,7 +138,7 @@ def _deduplicate_point_proposals(
         }
     }
     groups: dict[tuple[object, ...], list[PropostaElemento]] = {}
-    keys: dict[object, tuple[object, ...] | None] = {}
+    result: list[PropostaElemento] = []
     for proposal in proposals:
         attributes = dict(proposal.atributos_sugeridos)
         operational_label = attributes.get("identificador_operacional")
@@ -145,51 +148,87 @@ def _deduplicate_point_proposals(
             or operational_label is None
             or catalog_reference is None
         ):
-            keys[proposal.id] = None
+            result.append(proposal)
             continue
         key = (
             proposal.categoria,
             catalog_reference,
             operational_label,
             proposal.situacao_projeto,
+            attributes.get("qualificador_estrutura"),
         )
-        keys[proposal.id] = key
         groups.setdefault(key, []).append(proposal)
-    result = []
-    emitted: set[tuple[object, ...]] = set()
-    for proposal in proposals:
-        proposal_key = keys[proposal.id]
-        if proposal_key is None:
-            result.append(proposal)
-            continue
-        if proposal_key in emitted:
-            continue
-        emitted.add(proposal_key)
-        candidates = groups[proposal_key]
-        selected = max(
-            candidates,
-            key=lambda item: (
-                any(reference in targeted_evidence_ids for reference in item.evidencia_ids),
-                item.confianca or 0,
-                str(item.id),
-            ),
-        )
-        result.append(
-            replace(
-                selected,
-                evidencia_ids=tuple(
-                    sorted(
-                        {
-                            reference
-                            for candidate in candidates
-                            for reference in candidate.evidencia_ids
-                        },
-                        key=str,
-                    )
+    for semantic_key in sorted(
+        groups,
+        key=lambda key: tuple(str(part) for part in key),
+    ):
+        for candidates in _occurrence_groups(tuple(groups[semantic_key])):
+            selected = max(
+                candidates,
+                key=lambda item: (
+                    any(reference in targeted_evidence_ids for reference in item.evidencia_ids),
+                    item.confianca or 0,
+                    str(item.id),
                 ),
             )
+            result.append(
+                replace(
+                    selected,
+                    evidencia_ids=tuple(
+                        sorted(
+                            {
+                                reference
+                                for candidate in candidates
+                                for reference in candidate.evidencia_ids
+                            },
+                            key=str,
+                        )
+                    ),
+                )
+            )
+    return tuple(sorted(result, key=lambda item: str(item.id)))
+
+
+def _occurrence_groups(
+    proposals: tuple[PropostaElemento, ...],
+) -> tuple[tuple[PropostaElemento, ...], ...]:
+    groups: list[list[PropostaElemento]] = []
+    for proposal in sorted(proposals, key=lambda item: str(item.id)):
+        matching = next(
+            (
+                group
+                for group in groups
+                if all(_same_physical_occurrence(proposal, current) for current in group)
+            ),
+            None,
         )
-    return tuple(result)
+        if matching is None:
+            groups.append([proposal])
+        else:
+            matching.append(proposal)
+    return tuple(tuple(group) for group in groups)
+
+
+def _same_physical_occurrence(
+    first: PropostaElemento,
+    second: PropostaElemento,
+) -> bool:
+    first_attributes = dict(first.atributos_sugeridos)
+    second_attributes = dict(second.atributos_sugeridos)
+    first_source = first_attributes.get("evidencia_ocorrencia_id")
+    second_source = second_attributes.get("evidencia_ocorrencia_id")
+    if first_source is not None and first_source == second_source:
+        return first_attributes.get("identidade_ocorrencia") == second_attributes.get(
+            "identidade_ocorrencia"
+        )
+    if first.geometria.pagina_id != second.geometria.pagina_id:
+        return False
+    first_x, first_y = center(first.geometria)
+    second_x, second_y = center(second.geometria)
+    return (
+        abs(first_x - second_x) <= _MAXIMUM_DUPLICATE_OCCURRENCE_AXIS_DISTANCE
+        and abs(first_y - second_y) <= _MAXIMUM_DUPLICATE_OCCURRENCE_AXIS_DISTANCE
+    )
 
 
 def _analyzer_diagnostic(name: str, error: Exception) -> DiagnosticoAnalise:

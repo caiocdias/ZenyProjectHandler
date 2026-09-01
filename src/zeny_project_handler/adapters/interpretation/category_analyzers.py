@@ -32,6 +32,7 @@ from .rule_support import (
     normalized_text,
     project_situation_override,
     situation_from_evidence,
+    structure_tokens,
 )
 from .span_rules import detectar_comprimento_anotado
 
@@ -244,12 +245,80 @@ class AnalisadorPoste(AnalisadorCatalogoPorCodigo):
         )
 
 
-class AnalisadorEstruturaMt(AnalisadorCatalogoPorCodigo):
+class _AnalisadorEstruturaPorCodigo(AnalisadorCatalogoPorCodigo):
+    versao = "2.0"
+
+    def analisar(
+        self,
+        solicitacao: SolicitacaoInterpretacao,
+        regra: RegraReconhecimento,
+    ) -> tuple[PropostaElemento, ...]:
+        if regra.estrategia != "CODIGO_CATALOGO":
+            raise ValueError(f"Estratégia não suportada pelo analisador: {regra.estrategia}")
+        items_by_code = {
+            normalized_text(item.codigo): item
+            for item in solicitacao.catalogo.itens_ativos(self.categoria)
+        }
+        proposals: list[PropostaElemento] = []
+        for evidence in sorted(solicitacao.evidencias, key=lambda item: str(item.id)):
+            if evidence.tipo not in regra.tipos_evidencia or not evidence.conteudo_bruto:
+                continue
+            tokens = structure_tokens(evidence.conteudo_bruto, tuple(items_by_code))
+            occurrences_by_code = {
+                code: sum(token.code == code for token in tokens) for code in items_by_code
+            }
+            for token in tokens:
+                item = items_by_code[token.code]
+                proposal = self._proposal(
+                    solicitacao,
+                    regra,
+                    evidence,
+                    item,
+                    len(tokens) > 1,
+                )
+                occurrence_identity = f"{evidence.id}:{token.start}:{token.end}"
+                attributes = list(proposal.atributos_sugeridos)
+                attributes.extend(
+                    (
+                        ("evidencia_ocorrencia_id", str(evidence.id)),
+                        ("identidade_ocorrencia", occurrence_identity),
+                        ("token_estrutura", token.observed),
+                    )
+                )
+                if token.qualifier is not None:
+                    attributes.append(("qualificador_estrutura", token.qualifier))
+                proposal_id = proposal.id
+                if occurrences_by_code[token.code] > 1:
+                    proposal_id = uuid5(
+                        solicitacao.execucao_id,
+                        f"elemento:{regra.id}:{item.id}:{occurrence_identity}",
+                    )
+                proposal = replace(
+                    proposal,
+                    id=proposal_id,
+                    atributos_sugeridos=tuple(attributes),
+                    justificativa=(
+                        f"{proposal.justificativa or ''} O token {token.observed} identifica "
+                        "uma ocorrência física de estrutura"
+                        + (
+                            f" com qualificador observado {token.qualifier}."
+                            if token.qualifier is not None
+                            else "."
+                        )
+                    ).strip(),
+                )
+                minimum = solicitacao.configuracao.confianca_minima
+                if proposal.confianca is None or proposal.confianca >= minimum:
+                    proposals.append(proposal)
+        return tuple(proposals)
+
+
+class AnalisadorEstruturaMt(_AnalisadorEstruturaPorCodigo):
     nome = "estrutura-mt-codigo-catalogo"
     categoria = CategoriaElemento.ESTRUTURA_MT
 
 
-class AnalisadorEstruturaBt(AnalisadorCatalogoPorCodigo):
+class AnalisadorEstruturaBt(_AnalisadorEstruturaPorCodigo):
     nome = "estrutura-bt-codigo-catalogo"
     categoria = CategoriaElemento.ESTRUTURA_BT
 

@@ -1,17 +1,22 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import UTC, datetime
 from decimal import Decimal
-from uuid import uuid4
+from pathlib import Path
+from uuid import uuid4, uuid5
 
 import pytest
 from tests.interpretation_factories import image_evidence, text_evidence, vector_evidence
+from tests.pdf_fixtures import create_e01_structure_occurrences_pdf
 
+from zeny_project_handler.adapters.analysis import PyMuPdfDocumentAnalyzer
 from zeny_project_handler.adapters.interpretation import (
     InterpretadorRegrasExplicitas,
     carregar_registro_regras_inicial,
 )
 from zeny_project_handler.adapters.interpretation.rule_based import AnalisadorEstruturaMt
+from zeny_project_handler.adapters.pdf import PyMuPdfReader
 from zeny_project_handler.domain.analysis import OrigemObjetoPdf
 from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.domain.enums import (
@@ -23,7 +28,9 @@ from zeny_project_handler.domain.enums import (
     TipoOrigemPdf,
 )
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
+from zeny_project_handler.ports.analysis import SolicitacaoAnaliseDocumento
 from zeny_project_handler.ports.interpretation import SolicitacaoInterpretacao
+from zeny_project_handler.ports.pdf import ReferenciaFontePdf
 
 
 class FailingPoleAnalyzer:
@@ -542,6 +549,125 @@ def test_rule_interpreter_is_deterministic_and_does_not_match_code_as_substring(
     assert first == second
     false_positive = next(item for item in request.evidencias if item.conteudo_bruto == "RUA1")
     assert not any(false_positive.id in item.evidencia_ids for item in first.elementos)
+
+
+def test_e01_structure_fixture_preserves_physical_occurrences_and_qualifiers(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    fixture_path = create_e01_structure_occurrences_pdf(tmp_path / "e01-structures.pdf")
+    inspection = PyMuPdfReader().inspecionar(fixture_path)
+    project_id = uuid4()
+    extraction_id = uuid4()
+    extraction = PyMuPdfDocumentAnalyzer().analisar(
+        SolicitacaoAnaliseDocumento(
+            projeto_id=project_id,
+            documento=inspection.documento,
+            fonte=ReferenciaFontePdf(
+                documento_id=inspection.documento.id,
+                projeto_id=project_id,
+                caminho_canonico=fixture_path,
+                sha256=inspection.documento.sha256,
+                tamanho_bytes=inspection.tamanho_bytes,
+                modificado_em_ns=inspection.modificado_em_ns,
+            ),
+            execucao_id=extraction_id,
+            criada_em=datetime(2026, 9, 1, 20, tzinfo=UTC),
+        )
+    )
+    page_id = inspection.documento.paginas[0].id
+    point_labels = tuple(
+        text_evidence(
+            execution_id=extraction_id,
+            page_id=page_id,
+            key=f"e02-point-{identifier}",
+            text=identifier,
+            x=x,
+            y=y,
+        )
+        for identifier, x, y in (
+            ("P1", "0.08", "0.34"),
+            ("P2", "0.37", "0.34"),
+            ("P3", "0.66", "0.36"),
+            ("P4", "0.08", "0.67"),
+        )
+    )
+    fixture_text = {
+        item.conteudo_bruto: item
+        for item in extraction.evidencias
+        if item.tipo is TipoEvidencia.TEXTO and item.conteudo_bruto != "S3R"
+    }
+    physical_s3r = sorted(
+        (
+            item
+            for item in extraction.evidencias
+            if item.tipo is TipoEvidencia.TEXTO and item.conteudo_bruto == "S3R"
+        ),
+        key=lambda item: min(point.y for point in item.geometria.pontos),
+    )
+    duplicate_s3r = replace(
+        physical_s3r[0],
+        id=uuid5(extraction_id, "e02-duplicate-s3r-ocr"),
+        tipo=TipoEvidencia.OCR,
+        metodo="fixture-ocr-duplicado",
+        atributos_extraidos=(
+            ("confianca", Decimal("0.96")),
+            ("motor_ocr", "tesseract-rotulo-operacional-localizado"),
+        ),
+    )
+    evidence = (*extraction.evidencias, duplicate_s3r, *point_labels)
+    registry = carregar_registro_regras_inicial()
+    request = SolicitacaoInterpretacao(
+        projeto_id=project_id,
+        execucao_id=uuid4(),
+        execucao_extracao_id=extraction_id,
+        catalogo=catalogo_inicial,
+        evidencias=evidence,
+        registro=registry,
+    )
+    interpreter = InterpretadorRegrasExplicitas(registry)
+
+    first = interpreter.interpretar(request)
+    repeated = interpreter.interpretar(request)
+    permuted = interpreter.interpretar(replace(request, evidencias=tuple(reversed(evidence))))
+
+    assert first == repeated == permuted
+    structures = tuple(
+        item
+        for item in first.elementos
+        if item.categoria in {CategoriaElemento.ESTRUTURA_MT, CategoriaElemento.ESTRUTURA_BT}
+    )
+    assert len(structures) == 5, [
+        (
+            item.codigo_observado,
+            dict(item.atributos_sugeridos).get("qualificador_estrutura"),
+            dict(item.atributos_sugeridos).get("identificador_operacional"),
+        )
+        for item in structures
+    ]
+    n_structures = tuple(item for item in structures if item.codigo_observado == "N")
+    assert len(n_structures) == 1
+    assert dict(n_structures[0].atributos_sugeridos)["qualificador_estrutura"] == "2"
+    assert dict(n_structures[0].atributos_sugeridos)["token_estrutura"] == "N(2)"
+    assert fixture_text["N(2)"].id in n_structures[0].evidencia_ids
+    assert not any(
+        fixture_text[negative].id in item.evidencia_ids
+        for item in structures
+        for negative in ("N-(4 CAA)", "NEGATIVO: NOTA COM N ISOLADO")
+    )
+    cm3 = tuple(item for item in structures if item.codigo_observado == "CM3")
+    assert len(cm3) == 2
+    assert {dict(item.atributos_sugeridos)["qualificador_estrutura"] for item in cm3} == {
+        "1",
+        "2",
+    }
+    s3r = tuple(item for item in structures if item.codigo_observado == "S3R")
+    assert len(s3r) == 2
+    duplicate_occurrence = next(item for item in s3r if duplicate_s3r.id in item.evidencia_ids)
+    assert physical_s3r[0].id in duplicate_occurrence.evidencia_ids
+    assert any(physical_s3r[1].id in item.evidencia_ids for item in s3r)
+    assert len({item.id for item in structures}) == len(structures)
+    assert all("identidade_ocorrencia" in dict(item.atributos_sugeridos) for item in structures)
 
 
 def test_header_rows_are_not_interpreted_as_project_equipment(
