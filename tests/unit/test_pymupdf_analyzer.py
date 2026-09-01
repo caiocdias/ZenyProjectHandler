@@ -1,6 +1,8 @@
 # mypy: disable-error-code="no-untyped-call"
 from __future__ import annotations
 
+import re
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -12,6 +14,11 @@ import pytest
 from tests.pdf_fixtures import (
     create_analysis_pdf,
     create_dense_vector_text_pdf,
+    create_e01_network_service_drop_pdf,
+    create_e01_span_change_pdf,
+    create_e01_structure_occurrences_pdf,
+    create_e01_switch_bags_pdf,
+    create_e01_topology_cases_pdf,
     create_mixed_raster_text_pdf,
     create_small_raster_region_pdf,
 )
@@ -32,7 +39,7 @@ from zeny_project_handler.adapters.analysis.pymupdf_symbols import (
 from zeny_project_handler.adapters.pdf import PyMuPdfReader
 from zeny_project_handler.domain.analysis import OrigemObjetoPdf
 from zeny_project_handler.domain.enums import TipoEvidencia, TipoGeometria, TipoOrigemPdf
-from zeny_project_handler.domain.values import PontoNormalizado
+from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 from zeny_project_handler.ports.analysis import (
     AnalisadorDocumentoPort,
     CandidatoEvidenciaDocumento,
@@ -218,6 +225,22 @@ def _assert_contract(
     assert isinstance(result, ResultadoAnaliseDocumento)
 
 
+def _geometry_bounds(
+    geometry: GeometriaDocumento,
+) -> tuple[Decimal, Decimal, Decimal, Decimal]:
+    xs = [point.x for point in geometry.pontos]
+    ys = [point.y for point in geometry.pontos]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _geometries_overlap(left: GeometriaDocumento, right: GeometriaDocumento) -> bool:
+    left_x0, left_y0, left_x1, left_y1 = _geometry_bounds(left)
+    right_x0, right_y0, right_x1, right_y1 = _geometry_bounds(right)
+    return (
+        left_x0 <= right_x1 and right_x0 <= left_x1 and left_y0 <= right_y1 and right_y0 <= left_y1
+    )
+
+
 def test_real_and_fake_analyzers_follow_the_same_contract(tmp_path: Path) -> None:
     request = _request(create_analysis_pdf(tmp_path / "contract.pdf"))
 
@@ -288,6 +311,165 @@ def test_native_extraction_preserves_geometry_provenance_and_properties(tmp_path
     ocr_evidence = next(item for item in result.evidencias if item.tipo is TipoEvidencia.OCR)
     assert ocr_evidence.pagina_id == request.documento.paginas[1].id
     assert dict(ocr_evidence.atributos_extraidos)["confianca"] == Decimal("0.91")
+
+
+def test_e01_structure_fixture_extracts_each_raw_occurrence(tmp_path: Path) -> None:
+    path = create_e01_structure_occurrences_pdf(tmp_path / "e01-structures.pdf")
+
+    result = PyMuPdfDocumentAnalyzer().analisar(_request(path))
+
+    texts = [item.conteudo_bruto for item in result.evidencias if item.tipo is TipoEvidencia.TEXTO]
+    assert {"N(2)", "N-(4 CAA)", "CM3(1)", "CM3(2)"} <= set(texts)
+    assert texts.count("S3R") == 2
+    s3r_occurrences = [item for item in result.evidencias if item.conteudo_bruto == "S3R"]
+    assert s3r_occurrences[0].geometria != s3r_occurrences[1].geometria
+    assert not result.diagnosticos
+
+
+def test_e01_switch_fixture_extracts_bagged_and_unbagged_inputs(tmp_path: Path) -> None:
+    path = create_e01_switch_bags_pdf(tmp_path / "e01-switches.pdf")
+
+    result = PyMuPdfDocumentAnalyzer().analisar(_request(path))
+
+    switches = {
+        label: sorted(
+            (item for item in result.evidencias if item.conteudo_bruto == label),
+            key=lambda item: min(point.y for point in item.geometria.pontos),
+        )
+        for label in ("100A-10KA-2H", "100A-10KA-5H")
+    }
+    bags = [
+        item
+        for item in result.evidencias
+        if item.tipo is TipoEvidencia.VETOR
+        and dict(item.atributos_extraidos).get("cor_contorno") == "#8C0033"
+    ]
+    assert all(len(occurrences) == 2 for occurrences in switches.values())
+    assert len(bags) == 3
+    for occurrences in switches.values():
+        assert any(_geometries_overlap(occurrences[0].geometria, bag.geometria) for bag in bags)
+        assert not any(_geometries_overlap(occurrences[1].geometria, bag.geometria) for bag in bags)
+    assert any(item.conteudo_bruto == "IDTESTE-300A-12T" for item in result.evidencias)
+
+
+def test_e01_span_change_fixture_extracts_superseded_and_current_measurements(
+    tmp_path: Path,
+) -> None:
+    path = create_e01_span_change_pdf(tmp_path / "e01-span-change.pdf")
+
+    result = PyMuPdfDocumentAnalyzer().analisar(_request(path))
+
+    measurements = {
+        item.conteudo_bruto: item
+        for item in result.evidencias
+        if item.conteudo_bruto in {"321 m", "269 m", "42 m"}
+    }
+    red_lines = [
+        item
+        for item in result.evidencias
+        if item.tipo is TipoEvidencia.VETOR
+        and dict(item.atributos_extraidos).get("cor_contorno") == "#8C0033"
+    ]
+    assert set(measurements) == {"321 m", "269 m", "42 m"}
+    assert len(red_lines) == 2
+    assert any(
+        _geometries_overlap(measurements["321 m"].geometria, line.geometria) for line in red_lines
+    )
+    assert not any(
+        _geometries_overlap(measurements["269 m"].geometria, line.geometria) for line in red_lines
+    )
+    assert not any(
+        _geometries_overlap(measurements["42 m"].geometria, line.geometria) for line in red_lines
+    )
+
+
+def test_e01_network_fixture_extracts_distinct_network_drop_and_standard(
+    tmp_path: Path,
+) -> None:
+    path = create_e01_network_service_drop_pdf(tmp_path / "e01-network-drop.pdf")
+
+    result = PyMuPdfDocumentAnalyzer().analisar(_request(path))
+
+    texts = {item.conteudo_bruto for item in result.evidencias if item.tipo is TipoEvidencia.TEXTO}
+    vector_colors = {
+        dict(item.atributos_extraidos).get("cor_contorno")
+        for item in result.evidencias
+        if item.tipo is TipoEvidencia.VETOR
+    }
+    assert {
+        "P2 POSTE DA REDE",
+        "ESTRUTURA CM1",
+        "RAMAL R1-ENTREGA",
+        "PADRAO",
+        "LEGENDA: PADRAO DE COR",
+    } <= texts
+    assert {"#1A731A", "#262626", "#8C0033"} <= vector_colors
+
+
+def test_e01_topology_fixture_extracts_complete_incomplete_and_true_controls(
+    tmp_path: Path,
+) -> None:
+    path = create_e01_topology_cases_pdf(tmp_path / "e01-topologies.pdf")
+    request = _request(path)
+
+    result = PyMuPdfDocumentAnalyzer().analisar(request)
+
+    page_ids = [page.id for page in request.documento.paginas]
+    page_texts = {
+        page_id: {
+            item.conteudo_bruto
+            for item in result.evidencias
+            if item.pagina_id == page_id and item.tipo is TipoEvidencia.TEXTO
+        }
+        for page_id in page_ids
+    }
+    green_line_counts = {
+        page_id: sum(
+            1
+            for item in result.evidencias
+            if item.pagina_id == page_id
+            and item.tipo is TipoEvidencia.VETOR
+            and dict(item.atributos_extraidos).get("cor_contorno") == "#1A731A"
+            and dict(item.atributos_extraidos).get("operacoes") == "l"
+        )
+        for page_id in page_ids
+    }
+    assert "TOPOLOGIA COMPLETA" in page_texts[page_ids[0]]
+    assert "MESMA TECNOLOGIA" in page_texts[page_ids[0]]
+    assert green_line_counts[page_ids[0]] == 2
+    assert "TOPOLOGIA INCOMPLETA" in page_texts[page_ids[1]]
+    assert "EXTREMIDADE AUSENTE" in page_texts[page_ids[1]]
+    assert green_line_counts[page_ids[1]] == 1
+    assert {"FIM REAL", "TRECHO RESOLVIDO"} <= page_texts[page_ids[2]]
+    assert green_line_counts[page_ids[2]] == 1
+    assert {"TRANSICAO REAL", "REDE NUA", "REDE ISOLADA"} <= page_texts[page_ids[3]]
+    assert green_line_counts[page_ids[3]] == 2
+
+
+@pytest.mark.parametrize(
+    ("builder", "filename"),
+    (
+        (create_e01_structure_occurrences_pdf, "structures.pdf"),
+        (create_e01_switch_bags_pdf, "switches.pdf"),
+        (create_e01_span_change_pdf, "span-change.pdf"),
+        (create_e01_network_service_drop_pdf, "network-drop.pdf"),
+        (create_e01_topology_cases_pdf, "topologies.pdf"),
+    ),
+)
+def test_e01_fixtures_are_sanitized_and_self_contained(
+    tmp_path: Path,
+    builder: Callable[[Path], Path],
+    filename: str,
+) -> None:
+    result = PyMuPdfDocumentAnalyzer().analisar(_request(builder(tmp_path / filename)))
+
+    combined_text = "\n".join(item.conteudo_bruto or "" for item in result.evidencias)
+    assert not re.search(r"(?<!\d)\d{10}(?!\d)", combined_text)
+    assert not re.search(r"\b(?:NS|TELEFONE|ASSINATURA|COORDENADA)\b", combined_text, re.I)
+    assert "CEMIG" not in combined_text.upper()
+    assert not any(item.tipo is TipoEvidencia.IMAGEM for item in result.evidencias)
+    assert all(item.origem_pdf.tipo is TipoOrigemPdf.CONTEUDO_PAGINA for item in result.evidencias)
+    assert not result.diagnosticos
 
 
 def test_vector_symbols_identify_grounding_and_surge_arresters_with_situation(

@@ -154,6 +154,28 @@ sessão semântica e seus alvos. A composição é explícita no bootstrap:
 Os provedores publicam fatos e proveniência; condições normativas permanecem no JSON. Adicionar uma
 família não exige alterar o avaliador.
 
+## Contrato topológico aprovado para ramais
+
+O [ADR 0015](adr/0015-pontos-de-entrega-ramais-e-alteracao-de-vao.md) aprova a fronteira que será
+implementada pelas etapas E04–E08 do roadmap de correção de ramais. Até essas etapas alterarem e
+versionarem o código, esta seção é contrato de evolução e não descrição de um detector já ativo.
+
+- redução de comprimento usa a situação pública `ALTERAR`; a medida vigente alimenta o cabo e a
+  medida substituída permanece somente como evidência auditável, nunca como `REMOVER`;
+- o padrão do consumidor é `TipoPontoRede.ENTREGA`, com `poste_id=None`, e não pode receber
+  estruturas ou equipamentos de um poste próximo;
+- `TipoTrechoRede` distingue `REDE_DISTRIBUICAO`, `RAMAL_CONEXAO` e `DESCONHECIDO`; a modalidade
+  `AEREO`/`SUBTERRANEO`/`DESCONHECIDO` é outra dimensão e exige evidência própria;
+- somente `REDE_DISTRIBUICAO` participa do grafo usado por fim/transição, ângulo de equipamento e
+  compatibilidade estrutura–cabo. Ramal e trecho desconhecido não contam no grau nem fabricam fatos
+  topológicos;
+- projetos persistidos sem os campos novos são lidos como desconhecidos e exigem nova análise
+  semântica, seguida de nova conformidade, para obter classificações resolvidas. Não há backfill por
+  proximidade nem mutação de snapshots históricos.
+
+O servidor continua sendo a única camada autorizada a classificar esses conceitos. DTOs, cliente e
+exportações apenas apresentam os valores fechados produzidos pelo servidor.
+
 Comentários PDF (`ANOTACAO`) e objetos derivados de sua aparência não podem alimentar fatos
 técnicos. Objetos `AutoCAD SHX Text` identificados como conteúdo técnico são preservados. Contexto
 urbano ou rural vem exclusivamente do enum retornado pelo SQL Server, nunca de metadado, campo

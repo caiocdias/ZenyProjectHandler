@@ -49,6 +49,50 @@ formato são positivamente resolvidos; material PRFV e engastamento permanecem f
 Os demais localizadores e fatos necessários estão no catálogo incremental; nenhum comentário do
 corpus foi tratado como fonte.
 
+## Revisão dirigida ND-5.1 — 1º de setembro de 2026
+
+A E01 do roadmap de correção da interpretação de ramais consultou exclusivamente o
+[portal oficial de normas técnicas de conexão da CEMIG](https://www.cemig.com.br/normas-tecnicas/normas-tecnicas-de-conexao/)
+e o PDF por ele publicado. A cópia temporária permaneceu em `tmp/pdfs/e01_nd51`, fora do Git.
+
+| Documento | Órgão emissor | Revisão | URL oficial | Acesso | Páginas do PDF | SHA-256 da cópia de trabalho | Escopo dirigido lido | Situação |
+|---|---|---|---|---|---:|---|---|---|
+| ND-5.1 — Fornecimento de energia elétrica em tensão secundária — rede de distribuição aérea — edificações individuais | CEMIG Distribuição | Mar/2026; vigência em 23/03/2026 | [PDF oficial](https://www.cemig.com.br/wp-content/uploads/2025/10/nd5_1_000001p.pdf) | 01/09/2026 | 205 | `ffdbd926d0eb331cd3951227482a94534ae8746bff98bfeb7a50afc298972f75` | páginas PDF 18–20 e 32–35; Tabela 5 na página PDF 68; Tabela 16 na página PDF 80; Desenhos 1, 3, 4 e 59 nas páginas PDF 85, 87, 88 e 162; texto e imagem | vigente no portal; revisão dirigida, não integral |
+
+O número impresso no rodapé fica uma unidade abaixo do número da página PDF nesse recorte. A página
+PDF 20 foi incluída como referência indispensável porque completa o item 4.2 iniciado na página PDF
+19. A inspeção dirigida confirmou:
+
+- página PDF 18, itens 3.32–3.35: RDA/RDR/RDS/RDU são redes da CEMIG; essas definições sustentam a
+  separação de domínio entre a rede de distribuição e o trecho de atendimento ao consumidor;
+- páginas PDF 19–20, itens 4.2, 4.2.1.1 e 4.2.1.2: o ponto de conexão do atendimento aéreo fica junto
+  ao poste ou pontalete do padrão, ou à parede da edificação, e corresponde à conexão do ramal de
+  entrada com o ramal de conexão; a posição rural é tratada explicitamente;
+- páginas PDF 32–35, itens 5.1.1–5.1.4.7: aquisição, instalação e manutenção do ramal de conexão são
+  responsabilidade da CEMIG; o ramal aéreo é uma modalidade própria, tem comprimento máximo de 30 m
+  tanto no caso urbano quanto no rural, usa cabo multiplex e possui sistemas próprios de ancoragem e
+  encabeçamento;
+- Tabela 5, página PDF 68: relaciona o tipo/faixa de fornecimento ao cabo multiplex do ramal aéreo;
+  a tabela foi conferida visualmente, mas E01 não transforma seus valores em regra ativa;
+- Tabela 16, página PDF 80: relaciona vão, tração e flecha do ramal multiplex e remete ao Desenho 1;
+  não estabelece um limite de deflexão angular;
+- Desenho 1, página PDF 85: separa graficamente o ramal de conexão, o ramal de entrada, a entrada de
+  serviço e os pontos junto ao padrão; o trecho da rede até o padrão não é um vão poste–poste;
+- Desenho 3, página PDF 87: mostra configurações urbanas e rurais com o ponto de conexão no fim do
+  ramal aéreo e limite de 30 m;
+- Desenho 4, página PDF 88, e Desenho 59, página PDF 162: detalham conexões, alça preformada e ferragens
+  de ancoragem próprias do ramal aéreo.
+
+Uma busca textual em todas as 205 páginas por `ângulo`, `deflexão`, `30°` e `30 graus` não localizou
+limite angular aplicável ao ramal de conexão; as únicas ocorrências semelhantes eram do termo
+“triângulo” em tabelas de partida de motores. Portanto, esta revisão não autoriza aplicar ao ramal o
+limite angular ou a matriz estrutura–cabo usados para a rede. Requisitos que dependam das referências
+ND-2.1, ND-2.2, ND-2.6, ND-2.7 ou NBR 15688 não foram ampliados por inferência nesta revisão; antes de
+automatizá-los, o localizador e os fatos correspondentes precisam de auditoria própria.
+
+Os comentários presentes nos PDFs locais de projetos serviram somente para apontar casos de teste.
+Nenhuma obrigação, exceção ou interpretação normativa acima foi derivada desses comentários.
+
 ## Confirmação das fontes já citadas
 
 - A ND-3.1 do registro continua publicada no endereço de outubro de 2025, com revisão Jul/2025. Os

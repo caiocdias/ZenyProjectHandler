@@ -147,6 +147,135 @@ def create_catalog_pdf(path: Path, code: str) -> Path:
     return path
 
 
+def create_e01_structure_occurrences_pdf(path: Path) -> Path:
+    """Crie ocorrências independentes e negativos contextuais para estruturas."""
+    document = pymupdf.open()
+    try:
+        page = _new_e01_page(document, "ESTRUTURAS SINTETICAS")
+        page.insert_text((48, 72), "PONTO T1", fontsize=10)
+        page.insert_text((48, 96), "N(2)", fontsize=11)
+        page.insert_text((48, 132), "N-(4 CAA)", fontsize=11)
+        page.insert_text((220, 72), "PONTO T2", fontsize=10)
+        page.insert_text((220, 96), "CM3(1)", fontsize=11)
+        page.insert_text((220, 124), "CM3(2)", fontsize=11)
+        page.insert_text((392, 72), "PONTO T3", fontsize=10)
+        page.insert_text((392, 96), "S3R", fontsize=11)
+        page.insert_text((392, 136), "S3R", fontsize=11)
+        page.insert_text((48, 214), "NEGATIVO: NOTA COM N ISOLADO", fontsize=9)
+        document.save(path)
+    finally:
+        document.close()
+    return path
+
+
+def create_e01_switch_bags_pdf(path: Path) -> Path:
+    """Crie chaves com bolsas parciais e controles sem vínculo geométrico."""
+    document = pymupdf.open()
+    try:
+        page = _new_e01_page(document, "CHAVES E BOLSAS SINTETICAS", height=390)
+        positive_labels = (("100A-10KA-2H", 74.0), ("100A-10KA-5H", 132.0))
+        for label, baseline in positive_labels:
+            page.insert_text((48, baseline), label, fontsize=11)
+            _draw_partial_bag(page, x=48, baseline=baseline, label=label, suffix=label[-5:])
+        page.insert_text((48, 190), "100A-10KA-2H", fontsize=11)
+        page.insert_text((48, 232), "100A-10KA-5H", fontsize=11)
+        page.insert_text((270, 190), "IDTESTE-300A-12T", fontsize=11)
+        page.insert_text((270, 232), "MARCA SEM EQUIPAMENTO", fontsize=9)
+        page.draw_polyline(
+            [(268, 240), (268, 218), (410, 218), (410, 240)],
+            color=_E01_BURGUNDY,
+            width=1.4,
+        )
+        document.save(path)
+    finally:
+        document.close()
+    return path
+
+
+def create_e01_span_change_pdf(path: Path) -> Path:
+    """Crie medida substituída, medida vigente e marca vermelha não relacionada."""
+    document = pymupdf.open()
+    try:
+        page = _new_e01_page(document, "ALTERACAO DE MEDIDA SINTETICA")
+        page.draw_line((42, 188), (548, 188), color=(0.1, 0.45, 0.1), width=2)
+        page.insert_text((70, 92), "321 m", fontsize=12)
+        page.draw_line((66, 86), (118, 86), color=_E01_BURGUNDY, width=2)
+        page.insert_text((162, 92), "269 m", fontsize=12)
+        page.insert_text((70, 136), "42 m", fontsize=12)
+        page.draw_line((66, 146), (112, 146), color=_E01_BURGUNDY, width=2)
+        page.insert_text((70, 210), "CABO COLINEAR", fontsize=9)
+        document.save(path)
+    finally:
+        document.close()
+    return path
+
+
+def create_e01_network_service_drop_pdf(path: Path) -> Path:
+    """Crie rede colinear, ramal oblíquo e padrão separado do poste."""
+    document = pymupdf.open()
+    try:
+        page = _new_e01_page(document, "REDE RAMAL E PADRAO SINTETICOS", width=680, height=430)
+        page.draw_line((62, 210), (438, 210), color=(0.1, 0.45, 0.1), width=2)
+        page.draw_circle((96, 210), 5, color=(0, 0, 0), fill=(1, 1, 1))
+        page.draw_circle((308, 210), 5, color=(0, 0, 0), fill=(1, 1, 1))
+        page.insert_text((78, 194), "P1", fontsize=10)
+        page.insert_text((286, 194), "P2 POSTE DA REDE", fontsize=10)
+        page.insert_text((278, 236), "ESTRUTURA CM1", fontsize=9)
+        page.draw_line((308, 210), (520, 336), color=(0.15, 0.15, 0.15), width=1.6)
+        page.draw_circle((520, 336), 5, color=(0, 0, 0), fill=(1, 1, 1))
+        page.insert_text((442, 314), "RAMAL R1-ENTREGA", fontsize=9)
+        _insert_e01_padrao(page, x=500, baseline=360, fontsize=11)
+        page.insert_text((476, 86), "LEGENDA: PADRAO DE COR", fontsize=9)
+        page.draw_line((470, 98), (612, 98), color=_E01_BURGUNDY, width=1.4)
+        document.save(path)
+    finally:
+        document.close()
+    return path
+
+
+def create_e01_topology_cases_pdf(path: Path) -> Path:
+    """Crie topologias completa, incompleta, terminal e de transição reais."""
+    document = pymupdf.open()
+    try:
+        complete = _new_e01_page(document, "TOPOLOGIA COMPLETA")
+        _draw_topology_point(complete, 90, 176, "P1")
+        _draw_topology_point(complete, 300, 176, "P2")
+        _draw_topology_point(complete, 510, 176, "P3")
+        complete.draw_line((90, 176), (300, 176), color=(0.1, 0.45, 0.1), width=2)
+        complete.draw_line((300, 176), (510, 176), color=(0.1, 0.45, 0.1), width=2)
+        complete.insert_text((222, 214), "MESMA TECNOLOGIA", fontsize=9)
+
+        incomplete = _new_e01_page(document, "TOPOLOGIA INCOMPLETA")
+        _draw_topology_point(incomplete, 300, 176, "P4")
+        incomplete.draw_line((0, 176), (300, 176), color=(0.1, 0.45, 0.1), width=2)
+        incomplete.insert_text((170, 214), "EXTREMIDADE AUSENTE", fontsize=9)
+
+        terminal = _new_e01_page(document, "FIM REAL")
+        _draw_topology_point(terminal, 160, 176, "P5")
+        _draw_topology_point(terminal, 440, 176, "P6")
+        terminal.draw_line((160, 176), (440, 176), color=(0.1, 0.45, 0.1), width=2)
+        terminal.insert_text((238, 214), "TRECHO RESOLVIDO", fontsize=9)
+
+        transition = _new_e01_page(document, "TRANSICAO REAL")
+        _draw_topology_point(transition, 90, 176, "P7")
+        _draw_topology_point(transition, 300, 176, "P8")
+        _draw_topology_point(transition, 510, 176, "P9")
+        transition.draw_line((90, 176), (300, 176), color=(0.1, 0.45, 0.1), width=2)
+        transition.draw_line(
+            (300, 176),
+            (510, 176),
+            color=(0.1, 0.45, 0.1),
+            width=2,
+            dashes="[5 3] 0",
+        )
+        transition.insert_text((154, 154), "REDE NUA", fontsize=9)
+        transition.insert_text((374, 154), "REDE ISOLADA", fontsize=9)
+        document.save(path)
+    finally:
+        document.close()
+    return path
+
+
 def create_action_requirements_pdf(path: Path, code: str) -> Path:
     """Crie uma prancha com os dois gatilhos operacionais e âncoras distintas."""
     document = pymupdf.open()
@@ -272,6 +401,73 @@ def create_protected_pdf(path: Path, password: str = "senha") -> Path:
     finally:
         document.close()
     return path
+
+
+_E01_BURGUNDY = (0.55, 0.0, 0.2)
+
+
+def _new_e01_page(
+    document: pymupdf.Document,
+    title: str,
+    *,
+    width: float = 600,
+    height: float = 320,
+) -> pymupdf.Page:
+    page = document.new_page(width=width, height=height)
+    page.insert_text((24, 28), title, fontsize=12)
+    return page
+
+
+def _draw_partial_bag(
+    page: pymupdf.Page,
+    *,
+    x: float,
+    baseline: float,
+    label: str,
+    suffix: str,
+) -> None:
+    label_width = pymupdf.get_text_length(label, fontname="helv", fontsize=11)
+    suffix_width = pymupdf.get_text_length(suffix, fontname="helv", fontsize=11)
+    left = x + label_width - suffix_width - 2
+    right = x + label_width + 3
+    page.draw_polyline(
+        [
+            (left, baseline - 14),
+            (right, baseline - 14),
+            (right, baseline + 4),
+            (left, baseline + 4),
+        ],
+        color=_E01_BURGUNDY,
+        width=1.4,
+    )
+
+
+def _draw_topology_point(page: pymupdf.Page, x: float, y: float, label: str) -> None:
+    page.draw_circle((x, y), 5, color=(0, 0, 0), fill=(1, 1, 1))
+    page.insert_text((x - 8, y - 14), label, fontsize=9)
+
+
+def _insert_e01_padrao(
+    page: pymupdf.Page,
+    *,
+    x: float,
+    baseline: float,
+    fontsize: float,
+) -> None:
+    """Desenhe PADRÃO com texto ASCII extraível e til sobreposto sintético."""
+    page.insert_text((x, baseline), "PADRAO", fontsize=fontsize)
+    prefix_width = pymupdf.get_text_length("PADR", fontname="helv", fontsize=fontsize)
+    letter_width = pymupdf.get_text_length("A", fontname="helv", fontsize=fontsize)
+    left = x + prefix_width + 1
+    top = baseline - fontsize - 2
+    page.draw_bezier(
+        (left, top),
+        (left + letter_width * 0.3, top - 2),
+        (left + letter_width * 0.7, top + 2),
+        (left + letter_width - 1, top),
+        color=(0, 0, 0),
+        width=0.8,
+    )
 
 
 def _red_pixel_png() -> bytes:

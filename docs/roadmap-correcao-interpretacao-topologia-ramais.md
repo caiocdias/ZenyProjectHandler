@@ -119,19 +119,18 @@ limpa do Codex, atualize sua tag e preencha **Evidências e handoff** antes de i
 
 ## Hipóteses e decisões em aberto
 
-1. **Representação da redução de vão.** O requisito observável é que o cabo sobrevivente não apareça
-   como `A remover` e que a redução fique explícita. E01 deve decidir e registrar em ADR se isso exige
-   uma nova situação pública `ALTERAR` ou se `EXISTENTE` mais um tipo de alteração auditável é mais
-   compatível. Impacto: domínio, codec, API, filtros, exportação e migração/reanálise.
-2. **Variações de bolsa.** As duas amostras mostram bolsa vinho parcial, mas podem existir elipses,
-   retângulos e bolsas sobre apenas o sufixo do rótulo. E01 deve catalogar somente variações presentes
-   nas amostras e nas fixtures; generalização sem evidência aumenta falso positivo.
-3. **Ramal aéreo versus subterrâneo.** Os dois casos são inferidos como aéreos pela simbologia. A
-   classificação precisa permanecer separada e fail-closed quando a modalidade não estiver
-   resolvida. Impacto: aplicabilidade do limite de 30 m e dos requisitos de condutor/ancoragem.
-4. **Norma de ângulo.** A pesquisa preliminar na ND-5.1 não encontrou o limite de 30° usado para
-   equipamento de rede. Até E01 concluir a auditoria dirigida, o ramal deve ser excluído dessa regra,
-   e nenhum novo limite de ângulo deve ser inventado.
+1. **Representação da redução de vão — decidida em E01.** O ADR 0015 escolhe a nova situação pública
+   `ALTERAR`; a medida vigente alimenta o cabo e a substituída permanece auditável. O cabo sobrevivente
+   nunca é traduzido para `REMOVER` nem ocultado como `EXISTENTE` mais texto livre.
+2. **Variações de bolsa — recorte fixado em E01.** As fixtures cobrem bolsa vinho parcial sobre o
+   sufixo e negativos sem bolsa ou com marca de outro objeto. E03 só pode ampliar formas com evidência
+   sintética positiva e negativa; proximidade de qualquer vetor vermelho não basta.
+3. **Ramal aéreo versus subterrâneo — decidida em E01.** O ADR 0015 separa `TipoTrechoRede` de
+   `ModalidadeTrecho`; modalidade desconhecida permanece fail-closed e torna a obrigação dependente
+   dela não avaliável.
+4. **Norma de ângulo — decidida em E01.** A auditoria integral de termos nas 205 páginas da ND-5.1 e
+   a revisão visual dirigida não localizaram limite angular para o ramal. Ramais ficam excluídos da
+   regra de ângulo da rede, e nenhum novo limite será criado sem outra fonte oficial inequívoca.
 
 ## Definição global de pronto
 
@@ -157,7 +156,7 @@ limpa do Codex, atualize sua tag e preencha **Evidências e handoff** antes de i
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E01 | Contrato normativo, decisão de domínio e fixtures | #pendente | nenhuma | ADR, inventário ND-5.1 e corpus sintético sanitizado |
+| E01 | Contrato normativo, decisão de domínio e fixtures | #concluida | nenhuma | ADR, inventário ND-5.1 e corpus sintético sanitizado |
 | E02 | Estruturas `N(x)` e ocorrências repetidas | #pendente | E01 | parser contextual e cardinalidade física preservada |
 | E03 | Chaves e bolsas de instalação | #pendente | E01, E02 | nomenclatura completa e situação de instalação robusta |
 | E04 | Redução de vão e associação cabo–traçado | #pendente | E01, E02, E03 | medida vigente, alteração explícita e cabo no traçado correto |
@@ -180,7 +179,7 @@ limpa do Codex, atualize sua tag e preencha **Evidências e handoff** antes de i
 | `1255839633` — ramal tratado como vão de rede | E01, E05, E06, E07, E08, E09 | `V4-5` como ramal e somente regras ND-5.1 aplicáveis |
 | `1255839633` — duas `CM3` e duas `S3R` | E02, E09 | quatro ocorrências preservadas com evidências próprias |
 
-## E01 — Contrato normativo, decisão de domínio e fixtures — #pendente
+## E01 — Contrato normativo, decisão de domínio e fixtures — #concluida
 
 **Objetivo:** fechar o significado de alteração de vão, ponto de entrega e ramal; auditar as páginas
 necessárias da ND-5.1 Mar/2026; criar fixtures sintéticas sem dados pessoais que reproduzam todos os
@@ -230,13 +229,13 @@ Crie em tests/pdf_fixtures.py fixtures sintéticas mínimas e sanitizadas para c
 
 **Critérios de aceite:**
 
-- [ ] ND-5.1 Mar/2026 possui metadados, hash, páginas auditadas e paráfrases rastreáveis no inventário.
-- [ ] O ADR resolve a representação da alteração e a compatibilidade/reanálise sem deixar decisão
+- [x] ND-5.1 Mar/2026 possui metadados, hash, páginas auditadas e paráfrases rastreáveis no inventário.
+- [x] O ADR resolve a representação da alteração e a compatibilidade/reanálise sem deixar decisão
   material para E04/E08.
-- [ ] O contrato diferencia poste, ponto de entrega, ramal de conexão e rede de distribuição.
-- [ ] Os oito relatos do pedido possuem fixture sintética positiva e ao menos um negativo
+- [x] O contrato diferencia poste, ponto de entrega, ramal de conexão e rede de distribuição.
+- [x] Os oito relatos do pedido possuem fixture sintética positiva e ao menos um negativo
   contra generalização indevida.
-- [ ] Nenhuma fixture contém dado identificável ou material copiado dos PDFs locais.
+- [x] Nenhuma fixture contém dado identificável ou material copiado dos PDFs locais.
 
 **Validação obrigatória:**
 
@@ -255,7 +254,43 @@ antes de continuar; não usar cópia de terceiros.
 qualificador. Generalizar bolsa a qualquer marca vermelha; mitigar com negativos de medida riscada e
 vetor vermelho não relacionado.
 
-**Evidências e handoff:** ainda não iniciado.
+**Evidências e handoff (01/09/2026):**
+
+- **Fonte normativa:** portal oficial de normas de conexão e PDF oficial da ND-5.1, revisão Mar/2026,
+  vigência 23/03/2026, 205 páginas, 8.407.204 bytes e SHA-256
+  `ffdbd926d0eb331cd3951227482a94534ae8746bff98bfeb7a50afc298972f75`. Foram extraídas e
+  renderizadas as páginas PDF 18–20, 32–35, 68 (Tabela 5), 80 (Tabela 16), 85 (Desenho 1), 87
+  (Desenho 3), 88 (Desenho 4) e 162 (Desenho 59). Texto e imagem concordaram. A busca nas 205 páginas
+  não encontrou limite angular para ramal. Metadados, localizadores, paráfrases e limites estão em
+  `docs/inventario-fontes-normativas.md`.
+- **Decisões:** `docs/adr/0015-pontos-de-entrega-ramais-e-alteracao-de-vao.md` define
+  `SituacaoProjeto.ALTERAR`, `TipoPontoRede.ENTREGA` com `poste_id=None`, `TipoTrechoRede` separado de
+  `ModalidadeTrecho`, exclusão de ramal/desconhecido do grafo da rede e leitura compatível como
+  desconhecido com reanálise explícita, sem backfill heurístico. O contrato futuro, ainda não
+  implementado nesta etapa, também foi registrado em `docs/arquitetura-conformidade.md` e
+  `docs/especificacao-funcional.md`.
+- **Fixtures e testes:** `tests/pdf_fixtures.py` ganhou cinco construtores sanitizados cobrindo
+  `N(2)` e negativos contextuais; `CM3(1)`/`CM3(2)` e duas `S3R`; chaves 2H/5H com bolsa parcial,
+  versões sem bolsa, marca não relacionada e identificador sintético maior; `321 m` riscado,
+  `269 m` vigente e medida não cruzada; rede colinear, ramal oblíquo, `PADRÃO` e legenda negativa;
+  topologia completa/incompleta, fim real e transição real. O rótulo visual `PADRÃO` usa texto
+  extraível `PADRAO` e til vetorial sintético, sem depender de fonte externa. Os dez testes novos em
+  `tests/unit/test_pymupdf_analyzer.py` validam somente texto/vetores/geometrias brutos e sanitização;
+  não chamam o interpretador, não possuem `xfail` e não acessam `examples/`.
+- **Validações:** `ruff check` passou nos dois arquivos Python alterados e `ruff format --check`
+  confirmou a formatação após o ajuste mecânico. A execução Pytest obrigatória, com os mesmos quatro
+  arquivos e `-p no:cacheprovider --basetemp tmp\\pytest-e01-required` por restrição de escrita do
+  sandbox no temporário global, terminou com `100 passed in 3.97s`; os dez testes de E01 isolados
+  terminaram com `10 passed in 0.72s`. `scripts/smoke_examples.py` terminou com 2 aprovados e 0
+  falhas: 1.323 evidências/10 propostas/4 relações e 515 evidências/32 propostas/29 relações.
+- **Integridade dos exemplos:** antes e depois do smoke, tamanho, `mtime` e SHA-256 permaneceram
+  idênticos: `b1d6bd3d9f4b3fff8334ffbfb22b56e79f8a88f231ea237408c17ca551569c6d` e
+  `ab6c8fb160f1b454fa605791dbdc0379e571fff61e397e347371b40447f7ab6d`. Nenhum conteúdo real entrou
+  nas fixtures ou na documentação.
+- **Handoff para E02:** consumir `create_e01_structure_occurrences_pdf` para implementar parser de
+  qualificador e identidade de ocorrência; preservar o contrato do ADR 0015 e não alterar ainda
+  ponto de entrega, ramal, `ALTERAR` ou regra normativa. A exclusão preexistente de
+  `docs/roadmap-gmax-fluxos-ns.md` foi preservada e não pertence a E01.
 
 ## E02 — Estruturas `N(x)` e ocorrências repetidas — #pendente
 

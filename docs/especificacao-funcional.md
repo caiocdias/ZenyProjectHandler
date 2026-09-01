@@ -203,6 +203,31 @@ identificador operacional inequívoco. A medida usa, nesta ordem, o comprimento 
 desenho e a distância entre coordenadas compatíveis dos postes. A origem da medida e as evidências
 permanecem registradas; um comprimento não é inventado quando nenhuma fonte é suficiente.
 
+### Evolução aprovada para alteração, ponto de entrega e ramal
+
+O comportamento vigente acima ainda usa as três situações do domínio e não classifica o tipo do
+trecho. O [ADR 0015](adr/0015-pontos-de-entrega-ramais-e-alteracao-de-vao.md) aprova o contrato que as
+etapas E04–E08 do roadmap de correção de ramais implementarão e versionarão:
+
+- `ALTERAR` será uma situação pública distinta para o ativo que permanece com comprimento, traçado
+  ou configuração substituídos. Uma medida antiga riscada não torna o cabo `REMOVER`;
+- um `P<n>` com evidência inequívoca de `PADRÃO` materializará
+  `TipoPontoRede.ENTREGA`, `poste_id=None`, apresentado como **Padrão do cliente**. O poste real
+  próximo permanece separado e conserva suas estruturas e equipamentos;
+- `TipoTrechoRede` distinguirá `REDE_DISTRIBUICAO`, `RAMAL_CONEXAO` e `DESCONHECIDO` em `Cabo` e
+  `VaoDetectado`. Um ramal resolvido preservará o endpoint de entrega sem exigir dois postes;
+- `ModalidadeTrecho` distinguirá `AEREO`, `SUBTERRANEO` e `DESCONHECIDO` sem ser deduzida do tipo
+  topológico. Regras dependentes de modalidade ficarão não avaliáveis quando ela não estiver
+  resolvida;
+- um ramal não participará do grau, fim/transição, ângulo ou compatibilidade da rede de distribuição.
+  Somente regras próprias do ramal poderão consumi-lo;
+- dados anteriores continuarão legíveis com campos novos em `DESCONHECIDO`. Classificação resolvida
+  e `ALTERAR` exigirão reanálise semântica explícita e nova conformidade; snapshots históricos não
+  serão reescritos.
+
+Esses valores serão produzidos pelo servidor e apenas apresentados por API, cliente e exportações.
+Até a conclusão das etapas citadas, nenhum consumidor deve simular o contrato no cliente.
+
 ## Documentação e conformidade
 
 O painel **Documentação e conformidade** possui três abas:
