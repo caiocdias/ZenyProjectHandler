@@ -32,6 +32,7 @@ from zeny_project_handler_contracts.documents import (
 )
 from zeny_project_handler_contracts.errors import ErrorEnvelope
 from zeny_project_handler_contracts.exports import CreateDeliverableExportRequest
+from zeny_project_handler_contracts.gmax import GmaxSummaryResponse
 from zeny_project_handler_contracts.jobs import (
     CancelJobResponse,
     CreateAnalysisJobRequest,
@@ -586,6 +587,17 @@ async def create_manual_review_relation(
     responses=ERROR_RESPONSES,
 )
 async def get_project_documentation(project_id: UUID) -> DocumentationResponse:
+    raise NotImplementedError("Aplicação exclusiva para geração da OpenAPI.")
+
+
+@protected.get(
+    "/projects/{project_id}/gmax",
+    tags=["compliance"],
+    operation_id="getProjectGmax",
+    response_model=GmaxSummaryResponse,
+    responses=ERROR_RESPONSES,
+)
+async def get_project_gmax(project_id: UUID) -> GmaxSummaryResponse:
     raise NotImplementedError("Aplicação exclusiva para geração da OpenAPI.")
 
 

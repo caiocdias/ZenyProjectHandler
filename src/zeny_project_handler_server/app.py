@@ -59,6 +59,7 @@ from zeny_project_handler_contracts.documents import (
 )
 from zeny_project_handler_contracts.errors import ErrorCode, ErrorEnvelope
 from zeny_project_handler_contracts.exports import CreateDeliverableExportRequest
+from zeny_project_handler_contracts.gmax import GmaxSummaryResponse
 from zeny_project_handler_contracts.jobs import (
     CancelJobResponse,
     CreateAnalysisJobRequest,
@@ -709,6 +710,18 @@ def create_app(
         project_id: UUID,
     ) -> DocumentationResponse:
         return _compliance_api(request).get_documentation(project_id)
+
+    @application.get(
+        f"{API_V1_PREFIX}/projects/{{project_id}}/gmax",
+        response_model=GmaxSummaryResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def get_project_gmax(
+        request: Request,
+        project_id: UUID,
+    ) -> GmaxSummaryResponse:
+        return _compliance_api(request).get_gmax(project_id)
 
     @application.get(
         f"{API_V1_PREFIX}/projects/{{project_id}}/compliance/latest",

@@ -73,6 +73,15 @@ from zeny_project_handler_contracts.enums import (
     UploadState,
 )
 from zeny_project_handler_contracts.errors import ErrorCode, ErrorEnvelope
+from zeny_project_handler_contracts.gmax import (
+    GmaxCheckDto,
+    GmaxCheckType,
+    GmaxHeaderState,
+    GmaxMarket,
+    GmaxQueryState,
+    GmaxSnapshotState,
+    GmaxSummaryResponse,
+)
 from zeny_project_handler_contracts.jobs import JobAcceptedResponse
 from zeny_project_handler_contracts.photos import ManagedPhotoDto, ManagedPhotoResponse
 from zeny_project_handler_contracts.portability import (
@@ -291,6 +300,34 @@ def _representative_models() -> list[ContractModel]:
             ),
         ),
     )
+    gmax = GmaxSummaryResponse(
+        project_id=ProjectId(UUIDS[4]),
+        project_service_note="1234567890",
+        header_service_notes=("1234567890",),
+        header_state=GmaxHeaderState.MATCH,
+        snapshot_state=GmaxSnapshotState.CURRENT,
+        last_execution_id=ComplianceExecutionId(UUIDS[12]),
+        last_executed_at=NOW,
+        is_stale=False,
+        market=GmaxMarket.URBANO,
+        checks=(
+            GmaxCheckDto(
+                check_type=GmaxCheckType.IMPACTO_AMBIENTAL,
+                label="Impacto ambiental",
+                detected_in_pdf=True,
+                action="AVALIAR IMPACTO AMBIENTAL",
+                query_state=GmaxQueryState.EXECUTED,
+                row_found=False,
+            ),
+            GmaxCheckDto(
+                check_type=GmaxCheckType.SERVIDAO,
+                label="Servidão",
+                detected_in_pdf=False,
+                action="FALTA SERVIDÃO",
+                query_state=GmaxQueryState.NOT_EXECUTED_NO_TRIGGER,
+            ),
+        ),
+    )
     project_import = ProjectImportPreflightResponse(
         preflight_id=ProjectImportPreflightId(UUIDS[14]),
         package_sha256=SHA256,
@@ -336,6 +373,7 @@ def _representative_models() -> list[ContractModel]:
         review,
         documentation,
         compliance,
+        gmax,
         project_import,
         backup,
         photo,
@@ -482,6 +520,53 @@ def test_enum_values_are_stable() -> None:
         PreflightDisposition: ["READY", "CONFIRMATION_REQUIRED", "REJECTED"],
     }
     assert {enum_type: [member.value for member in enum_type] for enum_type in expected} == expected
+
+    gmax_expected = {
+        GmaxHeaderState: ["NOT_FOUND", "MATCH", "MISMATCH"],
+        GmaxSnapshotState: [
+            "NEVER_EXECUTED",
+            "CURRENT",
+            "STALE",
+            "BLOCKED_NS_MISMATCH",
+        ],
+        GmaxQueryState: [
+            "NOT_EXECUTED",
+            "NOT_EXECUTED_NO_TRIGGER",
+            "NOT_EXECUTED_NO_SERVICE_CODES",
+            "EXECUTED",
+        ],
+        GmaxCheckType: ["IMPACTO_AMBIENTAL", "SERVIDAO"],
+        GmaxMarket: ["RURAL", "URBANO"],
+    }
+    assert {
+        enum_type: [member.value for member in enum_type] for enum_type in gmax_expected
+    } == gmax_expected
+
+
+def test_gmax_contract_enforces_result_nullability_and_canonical_checks() -> None:
+    with pytest.raises(ValidationError, match="executado exige resultado"):
+        GmaxCheckDto(
+            check_type=GmaxCheckType.IMPACTO_AMBIENTAL,
+            label="Impacto ambiental",
+            detected_in_pdf=True,
+            action="AVALIAR IMPACTO AMBIENTAL",
+            query_state=GmaxQueryState.EXECUTED,
+        )
+    with pytest.raises(ValidationError, match="não admite resultado"):
+        GmaxCheckDto(
+            check_type=GmaxCheckType.IMPACTO_AMBIENTAL,
+            label="Impacto ambiental",
+            detected_in_pdf=False,
+            action="AVALIAR IMPACTO AMBIENTAL",
+            query_state=GmaxQueryState.NOT_EXECUTED_NO_TRIGGER,
+            row_found=False,
+        )
+
+    valid = cast(GmaxSummaryResponse, _representative_models()[8])
+    with pytest.raises(ValidationError, match="ordem canônica"):
+        GmaxSummaryResponse.model_validate(
+            {**valid.model_dump(), "checks": tuple(reversed(valid.checks))}
+        )
 
 
 def test_page_metadata_enforces_bounded_pagination() -> None:

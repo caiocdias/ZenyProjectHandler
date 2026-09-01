@@ -25,11 +25,19 @@ from .compliance_fact_providers import (
     ProvedorFatosConformidade,
     ResultadoVerificacaoAcao,
 )
-from .errors import AnaliseConformidadeCanceladaError, RegistroConformidadeError
+from .errors import (
+    AnaliseConformidadeCanceladaError,
+    NotaServicoCabecalhoDivergenteError,
+    RegistroConformidadeError,
+)
 from .human_review import SessaoRevisao
-from .project_compliance import analisar_conformidade_projeto, detectar_gatilhos_acoes_projeto
+from .project_compliance import (
+    analisar_conformidade_projeto,
+    detectar_gatilhos_acoes_projeto,
+    detectar_notas_servico_cabecalho,
+)
 
-VERSAO_METODO_CONFORMIDADE = "9"
+VERSAO_METODO_CONFORMIDADE = "10"
 
 
 def resultado_conformidade_desatualizado(
@@ -89,6 +97,16 @@ class ExecutarAnaliseConformidade:
         self._ensure_not_cancelled(cancelado)
         session = self._load_semantic_session(projeto_id)
         self._ensure_not_cancelled(cancelado)
+        divergent_service_notes = tuple(
+            detected.valor
+            for detected in detectar_notas_servico_cabecalho(session)
+            if detected.valor != session.projeto.nome
+        )
+        if divergent_service_notes:
+            raise NotaServicoCabecalhoDivergenteError(
+                session.projeto.nome,
+                divergent_service_notes,
+            )
         market = self._market_classifier.classificar(session.projeto.nome)
         self._ensure_not_cancelled(cancelado)
         action_context = self._action_context(session, cancelado=cancelado)

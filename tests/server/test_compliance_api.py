@@ -5,6 +5,7 @@ from base64 import b64encode
 from copy import deepcopy
 from hashlib import sha256
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -12,6 +13,15 @@ from fastapi.testclient import TestClient
 from zeny_project_handler.adapters.compliance import (
     carregar_registro_conformidade_inicial,
     registro_conformidade_e_avisos_de_dict,
+)
+from zeny_project_handler_contracts.base import ProjectId
+from zeny_project_handler_contracts.gmax import (
+    GmaxCheckDto,
+    GmaxCheckType,
+    GmaxHeaderState,
+    GmaxQueryState,
+    GmaxSnapshotState,
+    GmaxSummaryResponse,
 )
 from zeny_project_handler_server.app import create_app
 from zeny_project_handler_server.composition import compose_server_runtime
@@ -123,3 +133,65 @@ def test_remote_registry_preserves_41_rule_baseline_round_trip_and_confirmed_res
         assert reopened.status_code == 200
         assert reopened.json()["revision"] == "fixture-server-stage7"
         assert reopened.json()["rule_count"] == 42
+
+
+def test_authenticated_gmax_get_delegates_to_read_projection(tmp_path: Path) -> None:
+    project_id = uuid4()
+    expected = GmaxSummaryResponse(
+        project_id=ProjectId(project_id),
+        project_service_note="0012345678",
+        header_service_notes=(),
+        header_state=GmaxHeaderState.NOT_FOUND,
+        snapshot_state=GmaxSnapshotState.NEVER_EXECUTED,
+        is_stale=False,
+        checks=(
+            GmaxCheckDto(
+                check_type=GmaxCheckType.IMPACTO_AMBIENTAL,
+                label="Impacto ambiental",
+                detected_in_pdf=False,
+                action="AVALIAR IMPACTO AMBIENTAL",
+                query_state=GmaxQueryState.NOT_EXECUTED,
+            ),
+            GmaxCheckDto(
+                check_type=GmaxCheckType.SERVIDAO,
+                label="Servidão",
+                detected_in_pdf=False,
+                action="FALTA SERVIDÃO",
+                query_state=GmaxQueryState.NOT_EXECUTED,
+            ),
+        ),
+    )
+
+    class _ComplianceStub:
+        def __init__(self) -> None:
+            self.requests: list[object] = []
+
+        def get_gmax(self, requested_project_id: object) -> GmaxSummaryResponse:
+            self.requests.append(requested_project_id)
+            return expected
+
+    class _RuntimeStub:
+        def __init__(self, compliance: _ComplianceStub) -> None:
+            self.compliance_api = compliance
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+        def __getattr__(self, _name: str) -> Any:
+            return None
+
+    compliance = _ComplianceStub()
+    runtime = _RuntimeStub(compliance)
+    application = create_app(
+        _settings(tmp_path / "server-data"),
+        runtime_factory=lambda _settings: runtime,  # type: ignore[arg-type,return-value]
+    )
+
+    with TestClient(application) as client:
+        response = client.get(f"/api/v1/projects/{project_id}/gmax", headers=AUTH)
+
+    assert response.status_code == 200
+    assert GmaxSummaryResponse.model_validate(response.json()) == expected
+    assert compliance.requests == [project_id]
+    assert runtime.closed

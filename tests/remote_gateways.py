@@ -51,6 +51,7 @@ from zeny_project_handler_contracts.documents import (
 from zeny_project_handler_contracts.enums import JobKind, JobStatus
 from zeny_project_handler_contracts.errors import ErrorCode
 from zeny_project_handler_contracts.exports import CreateDeliverableExportRequest
+from zeny_project_handler_contracts.gmax import GmaxSummaryResponse
 from zeny_project_handler_contracts.jobs import (
     CancelJobResponse,
     CreateExportJobRequest,
@@ -495,6 +496,12 @@ class DirectDocumentationGateway:
                 return None
             raise _documentation_error(error) from None
 
+    def get_gmax(self, project_id: UUID) -> GmaxSummaryResponse:
+        try:
+            return self._compliance.get_gmax(project_id)
+        except ApiError as error:
+            raise _documentation_error(error) from None
+
     def list_compliance_history(
         self,
         project_id: UUID,
@@ -602,6 +609,12 @@ class SynchronousDocumentationGateway:
         except ApiError as error:
             if error.code is ErrorCode.RESOURCE_NOT_FOUND:
                 return None
+            raise _documentation_error(error) from None
+
+    def get_gmax(self, project_id: UUID) -> GmaxSummaryResponse:
+        try:
+            return self._compliance.get_gmax(project_id)
+        except ApiError as error:
             raise _documentation_error(error) from None
 
     def list_compliance_history(

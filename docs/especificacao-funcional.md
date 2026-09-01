@@ -19,7 +19,7 @@ Estado versionado relevante:
 | Catálogo técnico | `2` |
 | Registro de interpretação | `1.3.0` |
 | Registro de conformidade distribuído | `cemig-normas-distribuicao-2025.7` |
-| Método de conformidade | `9` |
+| Método de conformidade | `10` |
 | Migração SQLite mais recente | `0009_remote_jobs` |
 
 ## Modelo de domínio
@@ -225,6 +225,15 @@ O seed contém 41 regras habilitadas. As regras 40 e 41 têm, respectivamente, o
 `IMPACTO AMBIENTAL PENDENTE` e `FALTA SERVIDÃO PENDENTE`. A lista normativa completa está em
 [catalogo-regras-conformidade.md](catalogo-regras-conformidade.md), e o desenho do motor está em
 [arquitetura-conformidade.md](arquitetura-conformidade.md).
+
+Antes de qualquer `SELECT`, a execução compara a NS vigente do projeto com todos os valores válidos
+encontrados na zona de cabeçalho das folhas, na ordem de leitura e fora de comentários de revisão.
+Nenhum valor identificado permite continuar e a NS de cabeçalho não é obrigatória. Um ou vários
+valores todos iguais à NS do projeto também permitem o fluxo normal; qualquer valor diferente,
+inclusive quando outra folha contém a NS correta, encerra o job com `VALIDATION_ERROR`. A mensagem
+informa somente a NS do projeto, os valores divergentes e a orientação para corrigir projeto/PDF e
+reanalisar. Mercado e ações não são consultados, nenhum snapshot parcial é publicado e o snapshot
+anterior, quando existe, permanece inalterado.
 
 `Impacto Ambiental: Sim` é gatilho somente quando o rótulo aparece na zona de cabeçalho e o valor
 normalizado é exatamente `SIM`. Uma menção positiva aceita a `SERVIDÃO`, `FAIXA DE SERVIDÃO` ou

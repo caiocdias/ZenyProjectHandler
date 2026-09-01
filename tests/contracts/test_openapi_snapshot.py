@@ -50,7 +50,7 @@ def test_openapi_covers_every_minimum_group_and_expected_operation() -> None:
     assert schema["info"]["version"] == API_VERSION
     assert schema["openapi"].startswith("3.1.")
     assert API_VERSION == "1.2.0"
-    assert len(operations) == 55
+    assert len(operations) == 56
 
 
 def test_every_business_operation_is_bearer_protected() -> None:
@@ -153,3 +153,27 @@ def test_exact_service_note_operation_and_project_conflict_are_additive() -> Non
     assert parameter["required"] is True
     assert parameter["schema"]["pattern"] == "^[0-9]{10}$"
     assert "PROJECT_ALREADY_EXISTS" in schema["components"]["schemas"]["ErrorCode"]["enum"]
+
+
+def test_gmax_operation_exposes_closed_read_model() -> None:
+    schema = build_openapi_schema()
+    operation = schema["paths"]["/api/v1/projects/{project_id}/gmax"]["get"]
+    schemas = schema["components"]["schemas"]
+
+    assert operation["operationId"] == "getProjectGmax"
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/GmaxSummaryResponse"
+    }
+    assert schemas["GmaxHeaderState"]["enum"] == ["NOT_FOUND", "MATCH", "MISMATCH"]
+    assert schemas["GmaxSnapshotState"]["enum"] == [
+        "NEVER_EXECUTED",
+        "CURRENT",
+        "STALE",
+        "BLOCKED_NS_MISMATCH",
+    ]
+    assert schemas["GmaxQueryState"]["enum"] == [
+        "NOT_EXECUTED",
+        "NOT_EXECUTED_NO_TRIGGER",
+        "NOT_EXECUTED_NO_SERVICE_CODES",
+        "EXECUTED",
+    ]

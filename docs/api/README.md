@@ -38,6 +38,27 @@ de outro projeto devolve `409 PROJECT_ALREADY_EXISTS`; `details` contém somente
 `service_note`. Replay com a mesma chave e o mesmo payload continua idempotente, enquanto uma chave
 nova não cria uma segunda NS.
 
+## Projeção GMAX
+
+`GET /api/v1/projects/{project_id}/gmax` devolve `GmaxSummaryResponse`, uma projeção autenticada e
+somente leitura da sessão semântica atual e do último snapshot de conformidade. O GET não executa
+o classificador de mercado nem o verificador de ações, não cria job e não persiste dados.
+
+O cabeçalho usa os estados fechados `NOT_FOUND`, `MATCH` e `MISMATCH`. O snapshot usa
+`NEVER_EXECUTED`, `CURRENT`, `STALE` e `BLOCKED_NS_MISMATCH`; `last_execution_id` e
+`last_executed_at` identificam a última execução quando ela existe. Uma divergência atual entre a
+NS do projeto e qualquer NS válida de cabeçalho tem prioridade: a resposta fica bloqueada, conserva
+somente a identidade/data da execução anterior para auditoria e devolve `market=null` e
+`row_found=null`, sem apresentar valores antigos como atuais.
+
+A coleção `checks` contém exatamente, nesta ordem, `IMPACTO_AMBIENTAL` e `SERVIDAO`. Cada item
+expõe a detecção atual no PDF, a descrição fechada da ação e um dos estados de consulta:
+`NOT_EXECUTED`, `NOT_EXECUTED_NO_TRIGGER`, `NOT_EXECUTED_NO_SERVICE_CODES` ou `EXECUTED`.
+`row_found` é obrigatoriamente `null` nos três primeiros e booleano somente em `EXECUTED`; `false`
+significa SELECT executado sem linha, não ausência de execução. `market` aceita apenas `RURAL` ou
+`URBANO` quando comprovado por um snapshot projetável. Cardinalidade impossível dos fatos do alvo
+projeto falha com `409 INTEGRITY_ERROR` em vez de escolher ou inferir um valor.
+
 ## Decisões transversais
 
 - somente `GET /health/live` é público; todas as operações sob `/api/v1` declaram Bearer;

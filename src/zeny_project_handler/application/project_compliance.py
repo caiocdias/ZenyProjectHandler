@@ -183,6 +183,14 @@ class ResultadoConformidadeProjeto:
     itens_documentais: tuple[ItemInspecaoDocumental, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class NotaServicoCabecalhoDetectada:
+    """Associe uma NS válida às evidências encontradas na ordem de leitura."""
+
+    valor: str
+    evidencias: tuple[EvidenciaDocumento, ...]
+
+
 def analisar_conformidade_projeto(
     sessao: SessaoRevisao,
     registro: RegistroRegrasConformidade,
@@ -209,6 +217,7 @@ def analisar_conformidade_projeto(
         )
         for document in sessao.projeto.documentos
     }
+    header_service_notes = detectar_notas_servico_cabecalho(sessao)
 
     metadata_values = _metadata_values(sessao)
     facts.append(_market_context_fact(project_target.id, mercado))
@@ -217,9 +226,20 @@ def analisar_conformidade_projeto(
         target = document_targets[document.id]
         document_evidence = evidence_by_document[document.id]
         project_document_evidence = evidencias_sem_anotacoes_de_revisao(document_evidence)
-        fields = _extract_document_fields(project_document_evidence)
+        fields = _extract_document_fields(
+            project_document_evidence,
+            include_service_note=False,
+        )
+        document_page_ids = {page.id for page in document.paginas}
+        fields["nota_servico"] = [
+            (detected.valor, evidence)
+            for detected in header_service_notes
+            for evidence in detected.evidencias
+            if evidence.pagina_id in document_page_ids
+        ]
         for key, matches in fields.items():
-            detected_values.setdefault(key, []).extend(matches)
+            if key != "nota_servico":
+                detected_values.setdefault(key, []).extend(matches)
             for value, evidence in matches:
                 facts.append(
                     _fact(
@@ -270,36 +290,36 @@ def analisar_conformidade_projeto(
             )
         )
 
-    for key in _FIELD_LABELS:
-        values = detected_values.get(key, ())
-        if key == "nota_servico":
-            for value, value_evidence in values:
-                header_evidence = (value_evidence,) if value_evidence is not None else ()
-                facts.append(
-                    _fact(
-                        project_target.id,
-                        "projeto.nota_servico_cabecalho",
-                        value,
-                        "texto/OCR do cabeçalho PDF",
-                        evidence=header_evidence,
-                        confidence=Decimal("0.86"),
-                    )
+    for detected in header_service_notes:
+        facts.append(
+            _fact(
+                project_target.id,
+                "projeto.nota_servico_cabecalho",
+                detected.valor,
+                "texto/OCR do cabeçalho PDF",
+                evidence=detected.evidencias,
+                confidence=Decimal("0.86"),
+            )
+        )
+        if detected.valor != project_service_note:
+            facts.append(
+                _fact(
+                    project_target.id,
+                    "projeto.nota_servico_divergencia",
+                    (f"cabeçalho PDF: {detected.valor}; nome do projeto: {project_service_note}"),
+                    (
+                        f"comparação da NS do cabeçalho {detected.valor} com a NS "
+                        f"do projeto {project_service_note}"
+                    ),
+                    evidence=detected.evidencias,
+                    confidence=Decimal("0.86"),
                 )
-                if value != project_service_note:
-                    facts.append(
-                        _fact(
-                            project_target.id,
-                            "projeto.nota_servico_divergencia",
-                            f"cabeçalho PDF: {value}; nome do projeto: {project_service_note}",
-                            (
-                                f"comparação da NS do cabeçalho {value} com a NS "
-                                f"do projeto {project_service_note}"
-                            ),
-                            evidence=header_evidence,
-                            confidence=Decimal("0.86"),
-                        )
-                    )
+            )
+
+    for key in _FIELD_LABELS:
+        if key == "nota_servico":
             continue
+        values = detected_values.get(key, ())
         if key in metadata_values:
             facts.append(
                 _fact(
@@ -345,22 +365,31 @@ def analisar_conformidade_projeto(
     )
 
 
+def detectar_notas_servico_cabecalho(
+    sessao: SessaoRevisao,
+) -> tuple[NotaServicoCabecalhoDetectada, ...]:
+    """Detecte NS ASCII válidas no cabeçalho, sem comentários e sem perder evidências."""
+
+    matches = _extract_document_fields(_semantic_evidence_in_reading_order(sessao)).get(
+        "nota_servico",
+        (),
+    )
+    evidence_by_value: dict[str, list[EvidenciaDocumento]] = {}
+    for value, evidence in matches:
+        if re.fullmatch(r"[0-9]{10}", value) is None:
+            continue
+        evidence_for_value = evidence_by_value.setdefault(value, [])
+        if evidence.id not in {item.id for item in evidence_for_value}:
+            evidence_for_value.append(evidence)
+    return tuple(
+        NotaServicoCabecalhoDetectada(value, tuple(evidence))
+        for value, evidence in evidence_by_value.items()
+    )
+
+
 def detectar_gatilhos_acoes_projeto(sessao: SessaoRevisao) -> GatilhosAcoesProjeto:
     """Detecte gatilhos positivos sem I/O e preserve a ordem de leitura do projeto."""
-    page_order = {
-        page_id: index for index, page_id in enumerate(sessao.projeto.ordem_leitura_paginas)
-    }
-    semantic_evidence = tuple(
-        sorted(
-            evidencias_sem_anotacoes_de_revisao(sessao.evidencias),
-            key=lambda item: (
-                page_order.get(item.pagina_id, len(page_order)),
-                _center(item.geometria)[1],
-                _center(item.geometria)[0],
-                str(item.id),
-            ),
-        )
-    )
+    semantic_evidence = _semantic_evidence_in_reading_order(sessao)
     evidence_order = {item.id: index for index, item in enumerate(semantic_evidence)}
     impact_fields = tuple(
         sorted(
@@ -484,6 +513,25 @@ def _targets(session: SessaoRevisao) -> tuple[AlvoConformidade, ...]:
                 )
             )
     return tuple(result)
+
+
+def _semantic_evidence_in_reading_order(
+    session: SessaoRevisao,
+) -> tuple[EvidenciaDocumento, ...]:
+    page_order = {
+        page_id: index for index, page_id in enumerate(session.projeto.ordem_leitura_paginas)
+    }
+    return tuple(
+        sorted(
+            evidencias_sem_anotacoes_de_revisao(session.evidencias),
+            key=lambda item: (
+                page_order.get(item.pagina_id, len(page_order)),
+                _center(item.geometria)[1],
+                _center(item.geometria)[0],
+                str(item.id),
+            ),
+        )
+    )
 
 
 def _metadata_values(session: SessaoRevisao) -> dict[str, str]:
@@ -657,6 +705,8 @@ def _project_extension_facts(
 
 def _extract_document_fields(
     evidence: tuple[EvidenciaDocumento, ...],
+    *,
+    include_service_note: bool = True,
 ) -> dict[str, list[tuple[str, EvidenciaDocumento]]]:
     text_evidence = tuple(
         item for item in evidence if item.tipo in _TEXT_TYPES and item.conteudo_bruto
@@ -668,6 +718,8 @@ def _extract_document_fields(
     found: dict[str, list[tuple[str, EvidenciaDocumento]]] = {}
     seen: set[tuple[str, str, UUID]] = set()
     for key, pattern in _FIELD_PATTERNS.items():
+        if key == "nota_servico" and not include_service_note:
+            continue
         candidates = searchable_header if key == "nota_servico" else searchable
         for text, anchor in candidates:
             normalized = _normalize_text(text)

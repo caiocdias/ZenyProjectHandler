@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from threading import Event
 from time import monotonic, sleep
@@ -12,13 +13,19 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.market_fakes import FakeClassificadorMercado
+from tests.market_fakes import FakeClassificadorMercado, FakeVerificadorAcoesConcluidas
 from zeny_project_handler.adapters.persistence import SqlAlchemyUnitOfWork
 from zeny_project_handler.application.errors import FluxoMvpCanceladoError
 from zeny_project_handler.application.mvp_workflow import ResultadoFluxoMvp
-from zeny_project_handler.domain.analysis import ExecucaoAnalise
-from zeny_project_handler.domain.enums import EstadoExecucaoAnalise
+from zeny_project_handler.domain.analysis import EvidenciaDocumento, ExecucaoAnalise
+from zeny_project_handler.domain.documents import DocumentoProjeto, PaginaDocumento
+from zeny_project_handler.domain.enums import EstadoExecucaoAnalise, TipoEvidencia
 from zeny_project_handler.domain.market import Mercado
+from zeny_project_handler.domain.values import (
+    CaixaPagina,
+    GeometriaDocumento,
+    PontoNormalizado,
+)
 from zeny_project_handler.ports.market import DependenciaMercadoError
 from zeny_project_handler_contracts.enums import JobKind, JobStatus
 from zeny_project_handler_server.app import create_app
@@ -99,21 +106,65 @@ def _create_project(client: TestClient, key: str = "project-key") -> dict[str, o
     return cast(dict[str, object], response.json()["project"])
 
 
-def _seed_semantic_execution(runtime: ServerRuntime, project_id: UUID) -> None:
+def _seed_semantic_execution(
+    runtime: ServerRuntime,
+    project_id: UUID,
+    *,
+    header_service_note: str | None = None,
+) -> None:
     now = datetime.now(UTC)
+    execution = ExecucaoAnalise(
+        id=uuid4(),
+        projeto_id=project_id,
+        metodo="semantic-fixture",
+        versao_metodo="1",
+        parametros=(("execucao_extracao_id", str(uuid4())),),
+        estado=EstadoExecucaoAnalise.CONCLUIDA,
+        iniciada_em=now,
+        finalizada_em=now,
+    )
+    page_id = uuid4()
     with SqlAlchemyUnitOfWork(runtime.core.engine) as work:
-        work.execucoes_analise.salvar(
-            ExecucaoAnalise(
-                id=uuid4(),
-                projeto_id=project_id,
-                metodo="semantic-fixture",
-                versao_metodo="1",
-                parametros=(("execucao_extracao_id", str(uuid4())),),
-                estado=EstadoExecucaoAnalise.CONCLUIDA,
-                iniciada_em=now,
-                finalizada_em=now,
+        if header_service_note is not None:
+            project = work.projetos.obter(project_id)
+            assert project is not None
+            box = CaixaPagina(Decimal(0), Decimal(0), Decimal(595), Decimal(842))
+            page = PaginaDocumento(
+                id=page_id,
+                numero=1,
+                largura_pontos=Decimal(595),
+                altura_pontos=Decimal(842),
+                rotacao_graus=0,
+                media_box=box,
+                crop_box=box,
             )
-        )
+            document = DocumentoProjeto(
+                id=uuid4(),
+                nome_arquivo="cabecalho.pdf",
+                sha256="c" * 64,
+                paginas=(page,),
+                tamanho_bytes=100,
+            )
+            work.projetos.salvar(replace(project, documentos=(document,)))
+        work.execucoes_analise.salvar(execution)
+        if header_service_note is not None:
+            work.evidencias.salvar(
+                EvidenciaDocumento(
+                    id=uuid4(),
+                    execucao_id=execution.id,
+                    pagina_id=page_id,
+                    tipo=TipoEvidencia.TEXTO,
+                    geometria=GeometriaDocumento.ponto(
+                        page_id,
+                        PontoNormalizado(Decimal("0.7"), Decimal("0.85")),
+                    ),
+                    metodo="fixture",
+                    versao_metodo="1",
+                    parametros=(),
+                    conteudo_bruto=f"NS: {header_service_note}",
+                    criada_em=now,
+                )
+            )
         work.commit()
 
 
@@ -352,6 +403,49 @@ def test_external_market_failure_finishes_job_safely_without_snapshot_or_secret(
         assert secret not in str(terminal)
         assert secret not in caplog.text
         assert classifier.consultas == ["0001234567"]
+        assert runtime.compliance_api.analysis_service.obter_ultima(project_id) is None
+
+
+def test_divergent_header_finishes_job_as_safe_validation_without_sql_or_snapshot(
+    tmp_path: Path,
+) -> None:
+    classifier = FakeClassificadorMercado(Mercado.RURAL)
+    verifier = FakeVerificadorAcoesConcluidas(resultado=True)
+    settings = _settings(tmp_path / "data")
+    runtime = compose_server_runtime(
+        settings,
+        market_classifier=classifier,
+        action_verifier=verifier,
+    )
+    application = create_app(settings, runtime_factory=lambda _settings: runtime)
+
+    with TestClient(application) as client:
+        project = _create_project(client, "divergent-header-compliance-project")
+        project_id = UUID(str(project["project_id"]))
+        _seed_semantic_execution(
+            runtime,
+            project_id,
+            header_service_note="0099999999",
+        )
+        assert runtime.compliance_api is not None
+        signature = runtime.compliance_api.semantic_signature(project_id)
+        accepted = client.post(
+            f"/api/v1/projects/{project_id}/compliance-jobs",
+            headers={**AUTH, "Idempotency-Key": "divergent-header-compliance"},
+            json={"expected_semantic_signature": signature},
+        )
+        assert accepted.status_code == 202, accepted.text
+        terminal = _wait_status(client, accepted.json()["job_id"], JobStatus.FAILED)
+        error_payload = cast(dict[str, object], terminal["error"])
+
+        assert terminal["result_available"] is False
+        assert error_payload["code"] == "VALIDATION_ERROR"
+        assert "0001234567" in str(error_payload["message"])
+        assert "0099999999" in str(error_payload["message"])
+        assert "Corrija o projeto ou os PDFs" in str(error_payload["message"])
+        assert "SELECT" not in str(terminal)
+        assert classifier.consultas == []
+        assert verifier.consultas == []
         assert runtime.compliance_api.analysis_service.obter_ultima(project_id) is None
 
 

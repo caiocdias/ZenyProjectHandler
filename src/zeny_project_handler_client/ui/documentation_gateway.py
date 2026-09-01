@@ -19,6 +19,7 @@ from zeny_project_handler_contracts.compliance import (
 )
 from zeny_project_handler_contracts.documentation import DocumentationResponse
 from zeny_project_handler_contracts.errors import ErrorCode, ErrorEnvelope
+from zeny_project_handler_contracts.gmax import GmaxSummaryResponse
 from zeny_project_handler_contracts.jobs import (
     CreateComplianceJobRequest,
     JobAcceptedResponse,
@@ -63,6 +64,8 @@ class DocumentationGateway(Protocol):
         self,
         project_id: UUID,
     ) -> ComplianceExecutionResponse | None: ...
+
+    def get_gmax(self, project_id: UUID) -> GmaxSummaryResponse: ...
 
     def list_compliance_history(
         self,
@@ -171,6 +174,14 @@ class HttpDocumentationGateway:
             if error.code is ErrorCode.RESOURCE_NOT_FOUND:
                 return None
             raise
+
+    def get_gmax(self, project_id: UUID) -> GmaxSummaryResponse:
+        return self._json_model(
+            "GET",
+            f"{API_V1_PREFIX}/projects/{project_id}/gmax",
+            None,
+            GmaxSummaryResponse,
+        )
 
     def list_compliance_history(
         self,

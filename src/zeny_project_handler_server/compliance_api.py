@@ -15,7 +15,10 @@ from sqlalchemy import Engine
 
 from zeny_project_handler.adapters.compliance import registro_conformidade_e_avisos_de_dict
 from zeny_project_handler.adapters.persistence import SqlAlchemyUnitOfWork
-from zeny_project_handler.application.compliance_analysis import ExecutarAnaliseConformidade
+from zeny_project_handler.application.compliance_analysis import (
+    ExecutarAnaliseConformidade,
+    resultado_conformidade_desatualizado,
+)
 from zeny_project_handler.application.compliance_callouts import (
     CalloutConformidade,
     LayoutCalloutsImpossivelError,
@@ -33,11 +36,16 @@ from zeny_project_handler.application.compliance_registry import (
     ServicoRegistroRegrasConformidade,
 )
 from zeny_project_handler.application.human_review import ServicoRevisaoHumana, SessaoRevisao
+from zeny_project_handler.application.project_compliance import (
+    detectar_gatilhos_acoes_projeto,
+    detectar_notas_servico_cabecalho,
+)
 from zeny_project_handler.domain.analysis import EvidenciaDocumento
 from zeny_project_handler.domain.compliance import (
     AchadoConformidade,
     AlvoConformidade,
     ExecucaoConformidade,
+    FatoConformidade,
     FonteNormativa,
     ItemInspecaoDocumental,
     RegraConformidade,
@@ -46,6 +54,7 @@ from zeny_project_handler.domain.compliance import (
 )
 from zeny_project_handler.domain.documents import DocumentoProjeto
 from zeny_project_handler.domain.errors import DomainValidationError
+from zeny_project_handler.domain.market import DescricaoAcao
 from zeny_project_handler.domain.values import GeometriaDocumento
 from zeny_project_handler_contracts.base import (
     CalloutId,
@@ -84,6 +93,15 @@ from zeny_project_handler_contracts.enums import (
     PreflightDisposition,
 )
 from zeny_project_handler_contracts.errors import ErrorCode
+from zeny_project_handler_contracts.gmax import (
+    GmaxCheckDto,
+    GmaxCheckType,
+    GmaxHeaderState,
+    GmaxMarket,
+    GmaxQueryState,
+    GmaxSnapshotState,
+    GmaxSummaryResponse,
+)
 from zeny_project_handler_contracts.review import ReviewProjectSummaryListResponse
 from zeny_project_handler_contracts.rules import (
     ActiveRuleRegistryResponse,
@@ -98,6 +116,26 @@ from zeny_project_handler_server.dto_values import bounded_label, decimal_string
 from zeny_project_handler_server.review_api import ReviewApiService
 
 _PREFLIGHT_TTL = timedelta(minutes=15)
+_GMAX_MARKET_FACTS = {
+    "rede.contexto_rural": GmaxMarket.RURAL,
+    "rede.contexto_urbano": GmaxMarket.URBANO,
+}
+_GMAX_CHECKS = (
+    (
+        GmaxCheckType.IMPACTO_AMBIENTAL,
+        "Impacto ambiental",
+        DescricaoAcao.AVALIAR_IMPACTO_AMBIENTAL,
+        "projeto.impacto_ambiental_sim",
+        "projeto.acao_avaliar_impacto_ambiental_concluida",
+    ),
+    (
+        GmaxCheckType.SERVIDAO,
+        "Servidão",
+        DescricaoAcao.FALTA_SERVIDAO,
+        "projeto.servidao_mencionada",
+        "projeto.acao_falta_servidao_concluida",
+    ),
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,6 +209,75 @@ class DocumentationComplianceApiService:
         if execution is None:
             raise resource_not_found("O projeto ainda não possui execução de conformidade.")
         return self._execution_response(execution)
+
+    def get_gmax(self, project_id: UUID) -> GmaxSummaryResponse:
+        session = self._review.carregar_sessao_semantica(project_id)
+        header_service_notes = tuple(
+            item.valor for item in detectar_notas_servico_cabecalho(session)
+        )
+        mismatches = tuple(item for item in header_service_notes if item != session.projeto.nome)
+        header_state = (
+            GmaxHeaderState.NOT_FOUND
+            if not header_service_notes
+            else GmaxHeaderState.MISMATCH
+            if mismatches
+            else GmaxHeaderState.MATCH
+        )
+        triggers = detectar_gatilhos_acoes_projeto(session)
+        detected_now = {action: bool(triggers.evidencias_para(action)) for action in DescricaoAcao}
+        execution = self._analysis.obter_ultima(project_id)
+        last_execution_id = ComplianceExecutionId(execution.id) if execution is not None else None
+        last_executed_at = execution.executada_em if execution is not None else None
+
+        if mismatches:
+            return GmaxSummaryResponse(
+                project_id=ProjectId(project_id),
+                project_service_note=session.projeto.nome,
+                header_service_notes=header_service_notes,
+                header_state=header_state,
+                blocking_reason=(
+                    "A NS atual do projeto diverge de uma ou mais NS encontradas nos "
+                    "cabeçalhos PDF. Corrija o projeto ou os documentos e reexecute a conformidade."
+                ),
+                snapshot_state=GmaxSnapshotState.BLOCKED_NS_MISMATCH,
+                last_execution_id=last_execution_id,
+                last_executed_at=last_executed_at,
+                is_stale=True,
+                market=None,
+                checks=_not_executed_gmax_checks(detected_now),
+            )
+
+        if execution is None:
+            return GmaxSummaryResponse(
+                project_id=ProjectId(project_id),
+                project_service_note=session.projeto.nome,
+                header_service_notes=header_service_notes,
+                header_state=header_state,
+                snapshot_state=GmaxSnapshotState.NEVER_EXECUTED,
+                is_stale=False,
+                checks=_not_executed_gmax_checks(detected_now),
+            )
+
+        project_facts = _gmax_project_facts(execution, project_id)
+        active_revision = self._registry.obter_revisao_ativa()
+        is_stale = resultado_conformidade_desatualizado(
+            execution,
+            active_revision.assinatura,
+            numero_ns_atual=session.projeto.nome,
+            codigos_servico_atuais=session.projeto.codigos_servico,
+        )
+        return GmaxSummaryResponse(
+            project_id=ProjectId(project_id),
+            project_service_note=session.projeto.nome,
+            header_service_notes=header_service_notes,
+            header_state=header_state,
+            snapshot_state=(GmaxSnapshotState.STALE if is_stale else GmaxSnapshotState.CURRENT),
+            last_execution_id=last_execution_id,
+            last_executed_at=last_executed_at,
+            is_stale=is_stale,
+            market=_gmax_market(project_facts),
+            checks=_gmax_checks(project_facts, detected_now),
+        )
 
     def list_history(
         self,
@@ -424,6 +531,88 @@ class DocumentationComplianceApiService:
             self._preflight_keys = {
                 key: value for key, value in self._preflight_keys.items() if value[1] not in expired
             }
+
+
+def _gmax_project_facts(
+    execution: ExecucaoConformidade,
+    project_id: UUID,
+) -> tuple[FatoConformidade, ...]:
+    project_targets = tuple(
+        item for item in execution.alvos if item.tipo is TipoEscopoConformidade.PROJETO
+    )
+    if len(project_targets) != 1 or project_targets[0].referencia_id != project_id:
+        raise _gmax_integrity_error()
+    target_id = project_targets[0].id
+    return tuple(item for item in execution.fatos if item.alvo_id == target_id)
+
+
+def _gmax_market(facts: tuple[FatoConformidade, ...]) -> GmaxMarket:
+    market_facts = tuple(item for item in facts if item.chave in _GMAX_MARKET_FACTS)
+    if len(market_facts) != 1 or market_facts[0].valor is not True:
+        raise _gmax_integrity_error()
+    return _GMAX_MARKET_FACTS[market_facts[0].chave]
+
+
+def _gmax_checks(
+    facts: tuple[FatoConformidade, ...],
+    detected_now: dict[DescricaoAcao, bool],
+) -> tuple[GmaxCheckDto, GmaxCheckDto]:
+    has_service_codes = any(item.chave == "projeto.codigo_servico" for item in facts)
+    result: list[GmaxCheckDto] = []
+    for check_type, label, action, trigger_key, result_key in _GMAX_CHECKS:
+        trigger_facts = tuple(item for item in facts if item.chave == trigger_key)
+        if len(trigger_facts) > 1 or any(item.valor is not True for item in trigger_facts):
+            raise _gmax_integrity_error()
+        if not trigger_facts:
+            query_state = GmaxQueryState.NOT_EXECUTED_NO_TRIGGER
+            row_found = None
+        elif not has_service_codes:
+            query_state = GmaxQueryState.NOT_EXECUTED_NO_SERVICE_CODES
+            row_found = None
+        else:
+            action_facts = tuple(item for item in facts if item.chave == result_key)
+            if len(action_facts) != 1 or not isinstance(action_facts[0].valor, bool):
+                raise _gmax_integrity_error()
+            query_state = GmaxQueryState.EXECUTED
+            row_found = action_facts[0].valor
+        result.append(
+            GmaxCheckDto(
+                check_type=check_type,
+                label=label,
+                detected_in_pdf=detected_now[action],
+                action=action.value,
+                query_state=query_state,
+                row_found=row_found,
+            )
+        )
+    return cast(tuple[GmaxCheckDto, GmaxCheckDto], tuple(result))
+
+
+def _not_executed_gmax_checks(
+    detected_now: dict[DescricaoAcao, bool],
+) -> tuple[GmaxCheckDto, GmaxCheckDto]:
+    return cast(
+        tuple[GmaxCheckDto, GmaxCheckDto],
+        tuple(
+            GmaxCheckDto(
+                check_type=check_type,
+                label=label,
+                detected_in_pdf=detected_now[action],
+                action=action.value,
+                query_state=GmaxQueryState.NOT_EXECUTED,
+                row_found=None,
+            )
+            for check_type, label, action, _trigger_key, _result_key in _GMAX_CHECKS
+        ),
+    )
+
+
+def _gmax_integrity_error() -> ApiError:
+    return ApiError(
+        409,
+        ErrorCode.INTEGRITY_ERROR,
+        "O último snapshot de conformidade possui fatos GMAX inconsistentes.",
+    )
 
 
 def _documentation_response(

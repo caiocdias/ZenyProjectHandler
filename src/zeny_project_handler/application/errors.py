@@ -45,6 +45,20 @@ class AnaliseConformidadeCanceladaError(ApplicationError):
     """A conformidade foi cancelada antes de publicar qualquer snapshot parcial."""
 
 
+class NotaServicoCabecalhoDivergenteError(ApplicationError):
+    """Uma NS válida do cabeçalho diverge da NS vigente do projeto."""
+
+    def __init__(self, numero_ns_projeto: str, valores_divergentes: tuple[str, ...]) -> None:
+        self.numero_ns_projeto = numero_ns_projeto
+        self.valores_divergentes = valores_divergentes
+        super().__init__(
+            "A Nota de Serviço do projeto "
+            f"{numero_ns_projeto} diverge das NS identificadas nos cabeçalhos PDF: "
+            f"{', '.join(valores_divergentes)}. "
+            "Corrija o projeto ou os PDFs e execute a análise novamente."
+        )
+
+
 class FluxoMvpCanceladoError(ApplicationError):
     """O fluxo operacional foi cancelado em um ponto seguro e pode ser retomado."""
 

@@ -181,9 +181,9 @@ dependência ainda pendente não é bloqueio.
   recusar não cria nenhum e volta ao estado inicial.
 - [x] Conflito detectado no servidor depois de uma corrida recebe o mesmo tratamento visual da
   detecção antecipada no cliente.
-- [ ] Qualquer NS válida divergente no cabeçalho impede todas as chamadas aos dois ports SQL e não
+- [x] Qualquer NS válida divergente no cabeçalho impede todas as chamadas aos dois ports SQL e não
   publica snapshot parcial; cabeçalho ausente ou totalmente coincidente preserva o fluxo atual.
-- [ ] API `1.2.0`, OpenAPI, contratos, gateways, documentação funcional/arquitetural e testes estão
+- [x] API `1.2.0`, OpenAPI, contratos, gateways, documentação funcional/arquitetural e testes estão
   sincronizados.
 - [ ] `.\IniciarTestes.bat` termina com código zero, inclusive Ruff, formatação, Mypy, Pytest,
   cobertura e complexidade.
@@ -194,8 +194,8 @@ dependência ainda pendente não é bloqueio.
 |---|---|---|---|---|
 | E01 | Resolução exata e conflito de NS existente | #concluida | nenhuma | API capaz de resolver NS e impedir duplicidade interativa |
 | E02 | Pesquisa e diálogos do painel Projeto | #concluida | E01 | Fluxos abrir/criar simétricos e retorno ao estado inicial |
-| E03 | Guarda de NS antes dos SELECTs | #pendente | nenhuma | Divergência de cabeçalho bloqueia mercado e ações sem snapshot |
-| E04 | Projeção e contrato remoto GMAX | #pendente | E03 | DTO/endpoint somente leitura com estados auditáveis |
+| E03 | Guarda de NS antes dos SELECTs | #concluida | nenhuma | Divergência de cabeçalho bloqueia mercado e ações sem snapshot |
+| E04 | Projeção e contrato remoto GMAX | #concluida | E03 | DTO/endpoint somente leitura com estados auditáveis |
 | E05 | Aba GMAX e sincronização Qt | #pendente | E02, E04 | Dock GMAX na ordem solicitada, atualizado e testado |
 | E06 | Fluxo integrado, documentação e gate final | #pendente | E01, E02, E03, E04, E05 | Regressão completa e definição global de pronto comprovada |
 
@@ -531,7 +531,7 @@ Nenhum bloqueio conhecido depois de E01.
 - Escopo preservado: nenhum endpoint/contrato/regra servidor, commit, publicação ou implantação foi
   criado ou alterado.
 
-## E03 — Guarda de NS antes dos SELECTs — #pendente
+## E03 — Guarda de NS antes dos SELECTs — #concluida
 
 ### Objetivo
 
@@ -620,14 +620,14 @@ conciso. Não crie commit, não publique e não implante.
 
 ### Critérios de aceite
 
-- [ ] Nenhuma NS identificada no cabeçalho preserva o comportamento atual.
-- [ ] Uma ou várias NS iguais à do projeto permitem uma classificação e somente as consultas de
+- [x] Nenhuma NS identificada no cabeçalho preserva o comportamento atual.
+- [x] Uma ou várias NS iguais à do projeto permitem uma classificação e somente as consultas de
   ação aplicáveis.
-- [ ] Qualquer NS divergente impede mercado e ações; as listas dos dois fakes ficam vazias.
-- [ ] Uma folha correta e outra divergente também bloqueiam; comentários de revisão não bloqueiam.
-- [ ] O job devolve erro de validação compreensível e não expõe conexão, SQL ou stack trace.
-- [ ] Nenhum snapshot parcial é criado e um snapshot anterior permanece inalterado.
-- [ ] O método de conformidade é `10` e snapshots de método anterior são desatualizados.
+- [x] Qualquer NS divergente impede mercado e ações; as listas dos dois fakes ficam vazias.
+- [x] Uma folha correta e outra divergente também bloqueiam; comentários de revisão não bloqueiam.
+- [x] O job devolve erro de validação compreensível e não expõe conexão, SQL ou stack trace.
+- [x] Nenhum snapshot parcial é criado e um snapshot anterior permanece inalterado.
+- [x] O método de conformidade é `10` e snapshots de método anterior são desatualizados.
 
 ### Validação obrigatória
 
@@ -653,10 +653,54 @@ Nenhum bloqueio conhecido.
 
 ### Evidências e handoff
 
-- Estado inicial: etapa não iniciada; nenhum arquivo alterado por este roadmap.
-- Evidências de implementação e validação: nenhuma enquanto a tag permanecer `#pendente`.
+- Estado inicial: etapa iniciada em 2026-09-01 sobre `main`, com
+  `git status --short --branch` limpo; não havia mudanças preexistentes a preservar.
+- Contexto confirmado: depois de carregar a sessão semântica,
+  `ExecutarAnaliseConformidade.executar` ainda chamava imediatamente
+  `ClassificadorMercadoPort.classificar`; a extração da NS de cabeçalho ocorria apenas durante a
+  construção posterior dos fatos, portanto não protegia o primeiro `SELECT`.
+- Implementação: `project_compliance.py` expõe `detectar_notas_servico_cabecalho` e
+  `NotaServicoCabecalhoDetectada`. O detector filtra comentários, usa somente a zona de cabeçalho,
+  devolve valores únicos na ordem de leitura e agrega suas evidências; a mesma saída alimenta os
+  fatos `documento.nota_servico`, `projeto.nota_servico_cabecalho` e
+  `projeto.nota_servico_divergencia`. A ordenação semântica também foi reutilizada pelos gatilhos,
+  sem alterar seus critérios.
+- Guarda: `compliance_analysis.py` compara todos os valores detectados com
+  `session.projeto.nome` imediatamente depois de carregar a sessão e antes do classificador. Zero
+  valor ou somente valores iguais continua; qualquer diferente lança
+  `NotaServicoCabecalhoDivergenteError`. O erro deriva de `ApplicationError`, então o mapeamento
+  existente de `job_manager.py` já o publica como `VALIDATION_ERROR`; não foi necessário alterar o
+  gerenciador de jobs.
+- Atomicidade e versão: os ramos divergentes deixam vazias as listas de consultas dos fakes de
+  mercado e ações, não publicam execução e preservam integralmente o snapshot anterior. O método
+  passou de `9` para `10`, e a checagem de desatualização trata snapshots de método `9` como antigos.
+- Cobertura: `tests/integration/test_compliance_analysis.py` cobre ausência, uma coincidência,
+  coincidência em múltiplas folhas, evidências/ordem, comentário, divergência isolada, mistura de
+  folha correta com uma ou mais divergentes, listas de consultas vazias e preservação do snapshot.
+  `tests/server/test_jobs_api.py` comprova falha terminal `VALIDATION_ERROR`, mensagem operacional
+  segura, zero chamadas aos dois ports e ausência de snapshot.
+- Documentação sincronizada: `docs/arquitetura-conformidade.md` e
+  `docs/especificacao-funcional.md` descrevem o detector, a guarda pré-SQL, o caso ausente, a
+  correção operacional, a atomicidade e o método `10`.
+- Validação obrigatória: Pytest dos três arquivos da E03 passou com `31 passed` em 31,19 s; Ruff
+  terminou com `All checks passed!`; Mypy terminou com
+  `Success: no issues found in 303 source files`.
+- Validação adicional: os oito cenários focados novos passaram; nove testes unitários de NS e
+  gatilhos passaram; `ruff format --check` confirmou cinco arquivos formatados e
+  `git diff --check` retornou código zero (somente avisos informativos de conversão LF/CRLF).
+- Handoff para E04: reutilizar exclusivamente `detectar_notas_servico_cabecalho`; cada item fornece
+  `valor` e `evidencias` já deduplicados/ordenados. Para estado bloqueado, comparar os valores com a
+  NS vigente sem executar os ports nem projetar o snapshot anterior como atual.
+- Arquivos alterados: `src/zeny_project_handler/application/project_compliance.py`,
+  `src/zeny_project_handler/application/compliance_analysis.py`,
+  `src/zeny_project_handler/application/errors.py`,
+  `tests/integration/test_compliance_analysis.py`, `tests/server/test_jobs_api.py`, as duas
+  documentações citadas e este roadmap. `ports/market.py`, SQLs e gatilhos permaneceram sem mudança
+  semântica.
+- Escopo preservado: nenhuma NS de cabeçalho se tornou obrigatória; nenhum SQL, migração, contrato,
+  commit, publicação ou implantação foi criado ou alterado.
 
-## E04 — Projeção e contrato remoto GMAX — #pendente
+## E04 — Projeção e contrato remoto GMAX — #concluida
 
 ### Objetivo
 
@@ -768,15 +812,15 @@ não publique e não implante.
 
 ### Critérios de aceite
 
-- [ ] A resposta possui exatamente os checks de impacto e servidão, na ordem canônica.
-- [ ] Mercado é `RURAL` ou `URBANO` somente quando comprovado pelo snapshot aplicável.
-- [ ] Sem gatilho e sem serviços são distintos de `EXECUTED` com `row_found=False`.
-- [ ] Linha ausente produz `EXECUTED/False`; uma ou mais linhas produzem `EXECUTED/True`.
-- [ ] Sem snapshot, stale e NS divergente possuem estados explícitos e não parecem atuais.
-- [ ] Snapshot inconsistente falha fechado por integridade.
-- [ ] Chamar `GET /api/v1/projects/{project_id}/gmax` não chama nenhum port SQL nem grava
+- [x] A resposta possui exatamente os checks de impacto e servidão, na ordem canônica.
+- [x] Mercado é `RURAL` ou `URBANO` somente quando comprovado pelo snapshot aplicável.
+- [x] Sem gatilho e sem serviços são distintos de `EXECUTED` com `row_found=False`.
+- [x] Linha ausente produz `EXECUTED/False`; uma ou mais linhas produzem `EXECUTED/True`.
+- [x] Sem snapshot, stale e NS divergente possuem estados explícitos e não parecem atuais.
+- [x] Snapshot inconsistente falha fechado por integridade.
+- [x] Chamar `GET /api/v1/projects/{project_id}/gmax` não chama nenhum port SQL nem grava
   persistência.
-- [ ] Contrato, gateway, aplicação real, especificação, OpenAPI e docs estão sincronizados em 1.2.0.
+- [x] Contrato, gateway, aplicação real, especificação, OpenAPI e docs estão sincronizados em 1.2.0.
 
 ### Validação obrigatória
 
@@ -802,8 +846,56 @@ Nenhum bloqueio conhecido depois de E03.
 
 ### Evidências e handoff
 
-- Estado inicial: etapa não iniciada; aguarda E03.
-- Evidências de implementação e validação: nenhuma enquanto a tag permanecer `#pendente`.
+- Estado inicial: E04 iniciada em 2026-09-01 sobre `main` depois de confirmar E03
+  `#concluida`. O `git status --short --branch` já continha oito arquivos modificados por E03
+  (`docs/arquitetura-conformidade.md`, `docs/especificacao-funcional.md`, este roadmap,
+  `application/compliance_analysis.py`, `application/errors.py`,
+  `application/project_compliance.py`, `tests/integration/test_compliance_analysis.py` e
+  `tests/server/test_jobs_api.py`); todas as mudanças preexistentes foram preservadas.
+- Dependência verificada: `detectar_notas_servico_cabecalho` continua sendo o detector único das NS
+  de cabeçalho, `detectar_gatilhos_acoes_projeto` reutiliza a mesma ordenação semântica e
+  `VERSAO_METODO_CONFORMIDADE` permanece `10`. A guarda segue antes da primeira chamada ao
+  classificador de mercado.
+- Contrato: o novo `src/zeny_project_handler_contracts/gmax.py` fecha estados de cabeçalho,
+  snapshot, consulta, mercado e tipo de check. `GmaxSummaryResponse` exige exatamente impacto e
+  servidão na ordem canônica; os validadores garantem `row_found` booleano somente em `EXECUTED`,
+  identidade/data de execução coerentes, bloqueio explícito e nulabilidade de mercado.
+- Projeção: `DocumentationComplianceApiService.get_gmax` lê a sessão atual e o último snapshot,
+  filtra fatos pelo único alvo de escopo projeto e aceita exatamente um contexto rural/urbano.
+  Gatilho mais códigos exige exatamente um fato booleano por ação; cardinalidade impossível devolve
+  `409 INTEGRITY_ERROR`. `STALE` conserva valores identificados como pertencentes à última execução;
+  `BLOCKED_NS_MISMATCH` tem prioridade e remove mercado/resultados antigos da resposta atual.
+- Fronteiras remotas: a aplicação real e a especificação expõem
+  `GET /api/v1/projects/{project_id}/gmax`; `DocumentationGateway`, o adaptador HTTP e os gateways
+  direto/síncrono oferecem `get_gmax`. O HTTP usa o retry já limitado a leitura. API permaneceu em
+  `1.2.0`, sem segundo incremento.
+- Prova de somente leitura: os testes capturam os contadores de `FakeClassificadorMercado` e
+  `FakeVerificadorAcoesConcluidas` e o histórico antes/depois de `get_gmax`; nenhum contador muda e
+  nenhuma execução é criada. A rota autenticada também possui teste de delegação exclusivo ao read
+  model.
+- Cobertura: testes cobrem zero snapshot, cabeçalho ausente/coincidente/divergente, bloqueio com
+  snapshot anterior, `CURRENT`/`STALE`, rural/urbano, gatilho ausente, códigos ausentes, linha
+  encontrada/não encontrada, os dois checks fixos, mercado/resultados com cardinalidade impossível,
+  nulabilidade do contrato, gateway HTTP/direto, rota real e schema OpenAPI.
+- Documentação: `docs/api/README.md`, `docs/api/openapi-v1.json` e
+  `docs/arquitetura-conformidade.md` registram rota, fontes, estados, nulabilidade, integridade e
+  ausência de I/O SQL/escrita. O snapshot OpenAPI contém a operação `getProjectGmax`, os enums
+  fechados e versão `1.2.0`.
+- Validação obrigatória final: Pytest dos quatro arquivos da E04 passou com `71 passed` em 17,88 s;
+  Ruff terminou com `All checks passed!`; Mypy terminou com
+  `Success: no issues found in 304 source files`. O aviso não fatal foi apenas a impossibilidade
+  preexistente de gravar `.pytest_cache`; `TEMP`/`TMP` e `--basetemp` ficaram sob `tmp/e04-final`.
+- Validações adicionais: geração da OpenAPI retornou código zero; seus nove testes passaram; os 12
+  testes focados GMAX e o teste isolado da rota passaram; Ruff do arquivo de integração passou;
+  `ruff format --check` confirmou dez arquivos formatados e `git diff --check` retornou código zero
+  (somente avisos informativos LF/CRLF).
+- Handoff para E05: consumir somente `DocumentationGateway.get_gmax`. Exibir os checks na ordem do
+  DTO e tratar `NEVER_EXECUTED`, `STALE` e `BLOCKED_NS_MISMATCH` antes de mercado/resultado; no
+  bloqueio, `market` e `row_found` são nulos mesmo quando `last_execution_id` existe.
+- Arquivos da E04: novo contrato `gmax.py`; `compliance_api.py`; rotas real/especificação;
+  `documentation_gateway.py`; `tests/remote_gateways.py`; testes de servidor, integração e
+  contratos; OpenAPI, docs da API, arquitetura e este roadmap. Nenhum widget Qt, SQL, migração,
+  commit, publicação ou implantação foi criado ou alterado.
 
 ## E05 — Aba GMAX e sincronização Qt — #pendente
 

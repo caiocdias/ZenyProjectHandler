@@ -2174,6 +2174,199 @@
         "title": "GlobalOperationDto",
         "type": "object"
       },
+      "GmaxCheckDto": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Action",
+            "type": "string"
+          },
+          "check_type": {
+            "$ref": "#/components/schemas/GmaxCheckType"
+          },
+          "detected_in_pdf": {
+            "title": "Detected In Pdf",
+            "type": "boolean"
+          },
+          "label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "query_state": {
+            "$ref": "#/components/schemas/GmaxQueryState"
+          },
+          "row_found": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Found"
+          }
+        },
+        "required": [
+          "check_type",
+          "label",
+          "detected_in_pdf",
+          "action",
+          "query_state"
+        ],
+        "title": "GmaxCheckDto",
+        "type": "object"
+      },
+      "GmaxCheckType": {
+        "enum": [
+          "IMPACTO_AMBIENTAL",
+          "SERVIDAO"
+        ],
+        "title": "GmaxCheckType",
+        "type": "string"
+      },
+      "GmaxHeaderState": {
+        "enum": [
+          "NOT_FOUND",
+          "MATCH",
+          "MISMATCH"
+        ],
+        "title": "GmaxHeaderState",
+        "type": "string"
+      },
+      "GmaxMarket": {
+        "enum": [
+          "RURAL",
+          "URBANO"
+        ],
+        "title": "GmaxMarket",
+        "type": "string"
+      },
+      "GmaxQueryState": {
+        "enum": [
+          "NOT_EXECUTED",
+          "NOT_EXECUTED_NO_TRIGGER",
+          "NOT_EXECUTED_NO_SERVICE_CODES",
+          "EXECUTED"
+        ],
+        "title": "GmaxQueryState",
+        "type": "string"
+      },
+      "GmaxSnapshotState": {
+        "enum": [
+          "NEVER_EXECUTED",
+          "CURRENT",
+          "STALE",
+          "BLOCKED_NS_MISMATCH"
+        ],
+        "title": "GmaxSnapshotState",
+        "type": "string"
+      },
+      "GmaxSummaryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "blocking_reason": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocking Reason"
+          },
+          "checks": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "$ref": "#/components/schemas/GmaxCheckDto"
+              },
+              {
+                "$ref": "#/components/schemas/GmaxCheckDto"
+              }
+            ],
+            "title": "Checks",
+            "type": "array"
+          },
+          "header_service_notes": {
+            "items": {
+              "pattern": "^[0-9]{10}$",
+              "type": "string"
+            },
+            "title": "Header Service Notes",
+            "type": "array"
+          },
+          "header_state": {
+            "$ref": "#/components/schemas/GmaxHeaderState"
+          },
+          "is_stale": {
+            "title": "Is Stale",
+            "type": "boolean"
+          },
+          "last_executed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Executed At"
+          },
+          "last_execution_id": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ComplianceExecutionId"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "market": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GmaxMarket"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "project_id": {
+            "$ref": "#/components/schemas/ProjectId"
+          },
+          "project_service_note": {
+            "pattern": "^[0-9]{10}$",
+            "title": "Project Service Note",
+            "type": "string"
+          },
+          "snapshot_state": {
+            "$ref": "#/components/schemas/GmaxSnapshotState"
+          }
+        },
+        "required": [
+          "project_id",
+          "project_service_note",
+          "header_service_notes",
+          "header_state",
+          "snapshot_state",
+          "is_stale",
+          "checks"
+        ],
+        "title": "GmaxSummaryResponse",
+        "type": "object"
+      },
       "HealthLiveResponse": {
         "additionalProperties": false,
         "properties": {
@@ -8384,6 +8577,124 @@
         "tags": [
           "portability",
           "jobs"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/gmax": {
+      "get": {
+        "operationId": "getProjectGmax",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GmaxSummaryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Credencial Bearer ausente ou inválida."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Recurso não encontrado."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Upload acima do limite configurado."
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Tipo de mídia não suportado."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request inválido para o contrato v1."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Erro interno seguro e correlacionável."
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get Project Gmax",
+        "tags": [
+          "compliance"
         ]
       }
     },

@@ -4,7 +4,7 @@
 
 O motor compara fatos rastreáveis do projeto com regras declarativas sem transformar ausência de
 evidência em certeza. A revisão distribuída atual é `cemig-normas-distribuicao-2025.7`, com 41 regras
-habilitadas, e o método de conformidade está na versão `9`.
+habilitadas, e o método de conformidade está na versão `10`.
 
 O [catálogo de regras](catalogo-regras-conformidade.md) documenta obrigações e fontes. O
 [inventário normativo](inventario-fontes-normativas.md) registra documentos, revisões, hashes e
@@ -14,6 +14,12 @@ escopo de leitura. Esta página trata somente da implementação.
 
 ```text
 Projeto + sessão semântica persistida
+                |
+                v
+ detector único das NS válidas nos cabeçalhos PDF
+                |
+                v
+ comparação com a NS do projeto; divergência encerra sem SQL/snapshot
                 |
                 v
  consulta única de mercado por NS no SQL Server
@@ -46,8 +52,17 @@ explícita reutiliza a sessão semântica persistida e não repete leitura do PD
 cliente não carrega registro, provedores, avaliador, classificador de mercado nem compilador de
 callouts.
 
-Depois de carregar a sessão, o caso de uso chama obrigatoriamente `ClassificadorMercadoPort` uma
-vez com o nome/NS vigente do projeto. O adaptador SQL Server executa com parâmetro vinculado
+Depois de carregar a sessão, `detectar_notas_servico_cabecalho` percorre as páginas na ordem de
+leitura, considera somente NS válidas da zona de cabeçalho, reúne as evidências de cada valor e
+exclui comentários de revisão. Ausência de NS no cabeçalho não bloqueia. Um ou vários valores todos
+iguais a `session.projeto.nome` permitem continuar; qualquer valor diferente encerra a execução com
+`NotaServicoCabecalhoDivergenteError` antes de chamar qualquer porta SQL. O job publica
+`VALIDATION_ERROR` com a NS do projeto e os valores divergentes, sem conexão, SQL, stack trace ou
+detalhe de infraestrutura. Nenhum snapshot novo é criado; uma execução anterior permanece
+inalterada para auditoria.
+
+Depois dessa guarda, o caso de uso chama `ClassificadorMercadoPort` uma vez com o nome/NS vigente do
+projeto. O adaptador SQL Server executa com parâmetro vinculado
 `SELECT NOTAS_COD_MERCADO FROM TB_NOTAS WHERE NOTAS_NUM_NS = ?;`, converte a NS de 10 dígitos para
 inteiro somente nessa fronteira e aceita exclusivamente `RURAL` ou `URBANO`. A mesma instância
 composta atende ao pipeline completo e à reanálise explícita.
@@ -229,7 +244,9 @@ compensação da restauração.
 
 O ID deriva das assinaturas da entrada. Repetir a mesma sessão, revisão e método é idempotente;
 alterar regras ou método cria outra identidade e conserva o histórico. Um trigger impede a edição do
-snapshot concluído.
+snapshot concluído. A versão `10` introduz a guarda pré-SQL da NS de cabeçalho; snapshots da versão
+`9` são reconhecidos como desatualizados e só são substituídos por uma reanálise que ultrapasse a
+guarda.
 
 O fato de mercado participa da assinatura da sessão. Se a consulta seguinte mudar de `RURAL` para
 `URBANO` ou vice-versa, a reanálise cria outra identidade. Uma alteração apenas no sistema externo
@@ -240,6 +257,30 @@ Os fatos `projeto.codigo_servico` e os resultados das ações também participam
 painel considera desatualizado um resultado cuja assinatura das regras, versão do método, NS ou
 coleção atual de serviços não corresponde ao estado ativo. O snapshot antigo continua visível até
 uma reanálise explícita; mudanças externas sem evento continuam exigindo reanálise manual.
+
+## Projeção GMAX somente leitura
+
+`DocumentationComplianceApiService.get_gmax` alimenta
+`GET /api/v1/projects/{project_id}/gmax` sem chamar `ClassificadorMercadoPort`,
+`VerificadorAcoesConcluidasPort` ou qualquer operação de escrita. A projeção combina a sessão
+semântica atual com o último `ExecucaoConformidade`: o detector único fornece as NS de cabeçalho,
+o detector vigente fornece os dois gatilhos documentais e somente fatos do único alvo de escopo
+projeto podem fornecer mercado, códigos e resultados das ações.
+
+O read model possui quatro estados de snapshot. `NEVER_EXECUTED` não possui valores de banco;
+`CURRENT` representa o snapshot aplicável; `STALE` conserva mercado e resultados da última execução
+com `is_stale=true`; `BLOCKED_NS_MISMATCH` tem prioridade quando qualquer NS atual de cabeçalho
+diverge. No bloqueio, a identidade e a data da execução anterior podem permanecer para auditoria,
+mas mercado e resultados de linha são removidos da projeção e os checks ficam `NOT_EXECUTED`.
+
+Os checks são fixos e ordenados: impacto ambiental (`AVALIAR IMPACTO AMBIENTAL`) e servidão
+(`FALTA SERVIDÃO`). O fato positivo do gatilho e a presença de códigos distinguem
+`NOT_EXECUTED_NO_TRIGGER` e `NOT_EXECUTED_NO_SERVICE_CODES`. Somente gatilho mais códigos exige um
+único fato booleano da ação e produz `EXECUTED`, com `row_found=false` para zero linha ou `true`
+para uma ou mais linhas. Nos demais estados `row_found` é nulo. Mercado exige exatamente um fato
+verdadeiro `rede.contexto_rural` ou `rede.contexto_urbano` no alvo do projeto; alvo, mercado ou
+resultado com cardinalidade impossível devolve `INTEGRITY_ERROR`, sem fallback para fatos regionais
+ou metadados.
 
 ## Callouts e interface
 

@@ -44,13 +44,27 @@ from zeny_project_handler.application.compliance_callouts import (
 from zeny_project_handler.application.compliance_registry import (
     ServicoRegistroRegrasConformidade,
 )
-from zeny_project_handler.application.errors import AnaliseConformidadeCanceladaError
+from zeny_project_handler.application.errors import (
+    AnaliseConformidadeCanceladaError,
+    NotaServicoCabecalhoDivergenteError,
+)
 from zeny_project_handler.application.human_review import ServicoRevisaoHumana, SessaoRevisao
-from zeny_project_handler.domain.analysis import EvidenciaDocumento, ExecucaoAnalise
+from zeny_project_handler.application.project_compliance import (
+    detectar_notas_servico_cabecalho,
+)
+from zeny_project_handler.domain.analysis import (
+    EvidenciaDocumento,
+    ExecucaoAnalise,
+    OrigemObjetoPdf,
+)
 from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.domain.compliance import ExecucaoConformidade, ResultadoConformidade
 from zeny_project_handler.domain.documents import DocumentoProjeto, PaginaDocumento
-from zeny_project_handler.domain.enums import EstadoExecucaoAnalise, TipoEvidencia
+from zeny_project_handler.domain.enums import (
+    EstadoExecucaoAnalise,
+    TipoEvidencia,
+    TipoOrigemPdf,
+)
 from zeny_project_handler.domain.market import DescricaoAcao, Mercado
 from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler.domain.project_metadata import MetadadosProjeto
@@ -60,9 +74,21 @@ from zeny_project_handler.domain.values import (
     PontoNormalizado,
 )
 from zeny_project_handler.ports.market import DependenciaAcoesError, DependenciaMercadoError
+from zeny_project_handler_client.ui.documentation_gateway import (
+    DocumentationGatewayError,
+    HttpDocumentationGateway,
+)
 from zeny_project_handler_client.ui.documentation_panel import DocumentationPanelWidget
 from zeny_project_handler_client.ui.pdf_viewer import PdfViewerWidget
 from zeny_project_handler_contracts.enums import ComplianceStatus
+from zeny_project_handler_contracts.errors import ErrorCode
+from zeny_project_handler_contracts.gmax import (
+    GmaxCheckType,
+    GmaxHeaderState,
+    GmaxMarket,
+    GmaxQueryState,
+    GmaxSnapshotState,
+)
 
 
 class _ViewerStub(QObject):
@@ -126,6 +152,7 @@ def _prepare_context(
     *,
     codigos_servico: tuple[str, ...] = (),
     extra_evidence: tuple[tuple[str, str, str], ...] = (),
+    header_service_notes: tuple[tuple[int, str, bool], ...] = (),
     action_verifier: FakeVerificadorAcoesConcluidas | None = None,
 ) -> tuple[
     Engine,
@@ -200,6 +227,40 @@ def _prepare_context(
             for text, x, y in extra_evidence
         ),
     )
+    header_evidence: list[EvidenciaDocumento] = []
+    for index, (document_index, service_note, is_review_comment) in enumerate(header_service_notes):
+        document = project.documentos[document_index]
+        page_id = document.paginas[0].id
+        item = EvidenciaDocumento(
+            id=uuid4(),
+            execucao_id=semantic_run.id,
+            pagina_id=page_id,
+            tipo=TipoEvidencia.TEXTO,
+            geometria=GeometriaDocumento.ponto(
+                page_id,
+                PontoNormalizado(
+                    Decimal("0.70"),
+                    Decimal("0.80") + Decimal(index) / Decimal(100),
+                ),
+            ),
+            metodo="fixture",
+            versao_metodo="1",
+            parametros=(),
+            conteudo_bruto=f"NS: {service_note}",
+            criada_em=_NOW,
+        )
+        if is_review_comment:
+            item = replace(
+                item,
+                origem_pdf=OrigemObjetoPdf(
+                    tipo=TipoOrigemPdf.ANOTACAO,
+                    numero_objeto=100 + index,
+                    indice_anotacao=index,
+                    subtipo_anotacao="FreeText",
+                ),
+            )
+        header_evidence.append(item)
+    evidence = (*evidence, *header_evidence)
     with unit_of_work() as work:
         work.catalogos.salvar(catalog)
         work.projetos.salvar(project)
@@ -226,6 +287,24 @@ def _prepare_context(
     return engine, project.id, analysis_service, registry_service, market_classifier
 
 
+def _gmax_gateway(
+    engine: Engine,
+    data_directory: Path,
+    analysis_service: ExecutarAnaliseConformidade,
+    registry_service: ServicoRegistroRegrasConformidade,
+) -> SynchronousDocumentationGateway:
+    def unit_of_work() -> SqlAlchemyUnitOfWork:
+        return SqlAlchemyUnitOfWork(engine)
+
+    return SynchronousDocumentationGateway(
+        engine=engine,
+        data_directory=data_directory,
+        review_service=ServicoRevisaoHumana(unit_of_work),
+        analysis_service=analysis_service,
+        registry_service=registry_service,
+    )
+
+
 def test_execution_is_deterministic_preserves_history_and_survives_restart(
     tmp_path: Path,
     catalogo_inicial: CatalogoTecnico,
@@ -238,7 +317,7 @@ def test_execution_is_deterministic_preserves_history_and_survives_restart(
     first = service.executar(project_id)
     repeated = service.executar(project_id)
 
-    assert VERSAO_METODO_CONFORMIDADE == "9"
+    assert VERSAO_METODO_CONFORMIDADE == "10"
     assert first.versao_metodo == VERSAO_METODO_CONFORMIDADE
     assert repeated.id == first.id
     assert dumps_domain(repeated) == dumps_domain(first)
@@ -277,6 +356,7 @@ def test_execution_is_deterministic_preserves_history_and_survives_restart(
     assert service.resultado_desatualizado(first)
     assert not service.resultado_desatualizado(second)
     assert service.resultado_desatualizado(replace(second, versao_metodo="7"))
+    assert service.resultado_desatualizado(replace(second, versao_metodo="9"))
 
     database_path = tmp_path / "compliance.sqlite3"
     engine.dispose()
@@ -341,6 +421,170 @@ def test_external_market_failure_does_not_persist_compliance_snapshot(
     assert market_classifier.consultas == ["0012345678"]
     assert service.obter_ultima(project_id) is None
     assert service.listar_historico(project_id) == ()
+    engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "header_service_notes",
+    (
+        (),
+        ((0, "0012345678", False),),
+        (
+            (0, "0012345678", False),
+            (1, "0012345678", False),
+        ),
+    ),
+)
+def test_header_service_note_guard_allows_absence_and_equal_values_across_documents(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+    header_service_notes: tuple[tuple[int, str, bool], ...],
+) -> None:
+    verifier = FakeVerificadorAcoesConcluidas(resultado=True)
+    engine, project_id, service, _registry, classifier = _prepare_context(
+        tmp_path,
+        catalogo_inicial,
+        codigos_servico=("0007",),
+        extra_evidence=(("Impacto Ambiental: Sim", "0.70", "0.88"),),
+        header_service_notes=header_service_notes,
+        action_verifier=verifier,
+    )
+
+    execution = service.executar(project_id)
+
+    assert classifier.consultas == ["0012345678"]
+    assert verifier.consultas == [
+        (
+            "0012345678",
+            ("0007",),
+            DescricaoAcao.AVALIAR_IMPACTO_AMBIENTAL,
+        )
+    ]
+    header_facts = tuple(
+        item for item in execution.fatos if item.chave == "projeto.nota_servico_cabecalho"
+    )
+    if header_service_notes:
+        assert len(header_facts) == 1
+        assert header_facts[0].valor == "0012345678"
+        assert len(header_facts[0].evidencia_ids) == len(header_service_notes)
+    else:
+        assert header_facts == ()
+    engine.dispose()
+
+
+def test_header_service_note_detector_preserves_reading_order_and_ignores_comments(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    engine, project_id, service, _registry, classifier = _prepare_context(
+        tmp_path,
+        catalogo_inicial,
+        header_service_notes=(
+            (1, "0012345678", False),
+            (0, "0012345678", False),
+            (0, "0099999999", True),
+        ),
+    )
+
+    def unit_of_work() -> SqlAlchemyUnitOfWork:
+        return SqlAlchemyUnitOfWork(engine)
+
+    session = ServicoRevisaoHumana(unit_of_work).carregar_sessao_semantica(project_id)
+    detected = detectar_notas_servico_cabecalho(session)
+    execution = service.executar(project_id)
+    header_fact = next(
+        item for item in execution.fatos if item.chave == "projeto.nota_servico_cabecalho"
+    )
+
+    assert tuple(item.valor for item in detected) == ("0012345678",)
+    assert tuple(item.pagina_id for item in detected[0].evidencias) == (
+        session.projeto.documentos[0].paginas[0].id,
+        session.projeto.documentos[1].paginas[0].id,
+    )
+    assert header_fact.evidencia_ids == tuple(item.id for item in detected[0].evidencias)
+    assert classifier.consultas == ["0012345678"]
+    engine.dispose()
+
+
+@pytest.mark.parametrize(
+    ("header_service_notes", "expected_divergent_values"),
+    (
+        (((0, "0099999999", False),), ("0099999999",)),
+        (
+            (
+                (1, "0099999999", False),
+                (0, "0012345678", False),
+                (1, "0088888888", False),
+            ),
+            ("0099999999", "0088888888"),
+        ),
+    ),
+)
+def test_divergent_header_service_note_blocks_all_sql_ports_and_snapshot(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+    header_service_notes: tuple[tuple[int, str, bool], ...],
+    expected_divergent_values: tuple[str, ...],
+) -> None:
+    verifier = FakeVerificadorAcoesConcluidas(resultado=True)
+    engine, project_id, service, _registry, classifier = _prepare_context(
+        tmp_path,
+        catalogo_inicial,
+        codigos_servico=("0001",),
+        extra_evidence=(
+            ("Impacto Ambiental: Sim", "0.70", "0.88"),
+            ("SERVIDÃO", "0.25", "0.25"),
+        ),
+        header_service_notes=header_service_notes,
+        action_verifier=verifier,
+    )
+
+    with pytest.raises(NotaServicoCabecalhoDivergenteError) as captured:
+        service.executar(project_id)
+
+    assert captured.value.numero_ns_projeto == "0012345678"
+    assert captured.value.valores_divergentes == expected_divergent_values
+    assert classifier.consultas == []
+    assert verifier.consultas == []
+    assert service.obter_ultima(project_id) is None
+    assert service.listar_historico(project_id) == ()
+    engine.dispose()
+
+
+def test_divergent_header_preserves_previous_snapshot_without_new_sql_calls(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    verifier = FakeVerificadorAcoesConcluidas(resultado=True)
+    engine, project_id, service, _registry, classifier = _prepare_context(
+        tmp_path,
+        catalogo_inicial,
+        codigos_servico=("0001",),
+        extra_evidence=(("Impacto Ambiental: Sim", "0.70", "0.88"),),
+        header_service_notes=((0, "0012345678", False),),
+        action_verifier=verifier,
+    )
+    previous = service.executar(project_id)
+
+    with SqlAlchemyUnitOfWork(engine) as work:
+        project = work.projetos.obter(project_id)
+        assert project is not None
+        work.projetos.salvar(replace(project, nome="0098765432"))
+        work.commit()
+
+    with pytest.raises(NotaServicoCabecalhoDivergenteError):
+        service.executar(project_id)
+
+    assert classifier.consultas == ["0012345678"]
+    assert verifier.consultas == [
+        (
+            "0012345678",
+            ("0001",),
+            DescricaoAcao.AVALIAR_IMPACTO_AMBIENTAL,
+        )
+    ]
+    assert service.obter_ultima(project_id) == previous
+    assert service.listar_historico(project_id) == (previous,)
     engine.dispose()
 
 
@@ -595,6 +839,284 @@ def test_ns_and_service_changes_mark_stale_and_create_auditable_history(
         "0012345678",
         "0098765432",
     ]
+    engine.dispose()
+
+
+def test_gmax_without_snapshot_is_explicit_and_performs_zero_sql_or_persistence(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    verifier = FakeVerificadorAcoesConcluidas(resultado=True)
+    engine, project_id, service, registry, classifier = _prepare_context(
+        tmp_path,
+        catalogo_inicial,
+        codigos_servico=("0007",),
+        extra_evidence=(("Impacto Ambiental: Sim", "0.70", "0.88"),),
+        header_service_notes=((0, "0012345678", False),),
+        action_verifier=verifier,
+    )
+    gateway = _gmax_gateway(engine, tmp_path / "data", service, registry)
+
+    before_history = service.listar_historico(project_id)
+    summary = gateway.get_gmax(project_id)
+
+    assert summary.header_state is GmaxHeaderState.MATCH
+    assert summary.snapshot_state is GmaxSnapshotState.NEVER_EXECUTED
+    assert summary.last_execution_id is None
+    assert summary.last_executed_at is None
+    assert summary.market is None
+    assert tuple(item.check_type for item in summary.checks) == tuple(GmaxCheckType)
+    assert [item.detected_in_pdf for item in summary.checks] == [True, False]
+    assert all(item.query_state is GmaxQueryState.NOT_EXECUTED for item in summary.checks)
+    assert all(item.row_found is None for item in summary.checks)
+    assert classifier.consultas == []
+    assert verifier.consultas == []
+    assert service.listar_historico(project_id) == before_history == ()
+    engine.dispose()
+
+
+@pytest.mark.parametrize(
+    ("market", "expected_market", "row_found"),
+    (
+        (Mercado.URBANO, GmaxMarket.URBANO, False),
+        (Mercado.RURAL, GmaxMarket.RURAL, True),
+    ),
+)
+def test_gmax_projects_market_and_executed_rows_without_new_external_io(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+    market: Mercado,
+    expected_market: GmaxMarket,
+    row_found: bool,
+) -> None:
+    verifier = FakeVerificadorAcoesConcluidas(resultado=row_found)
+    engine, project_id, service, registry, classifier = _prepare_context(
+        tmp_path,
+        catalogo_inicial,
+        codigos_servico=("0007",),
+        extra_evidence=(
+            ("Impacto Ambiental: Sim", "0.70", "0.88"),
+            ("FAIXA DE SERVIDÃO", "0.25", "0.25"),
+        ),
+        action_verifier=verifier,
+    )
+    classifier.mercado = market
+    execution = service.executar(project_id)
+    gateway = _gmax_gateway(engine, tmp_path / "data", service, registry)
+    market_calls = tuple(classifier.consultas)
+    action_calls = tuple(verifier.consultas)
+    history = service.listar_historico(project_id)
+
+    summary = gateway.get_gmax(project_id)
+
+    assert summary.snapshot_state is GmaxSnapshotState.CURRENT
+    assert summary.last_execution_id is not None
+    assert summary.last_execution_id.root == execution.id
+    assert summary.market is expected_market
+    assert [item.query_state for item in summary.checks] == [
+        GmaxQueryState.EXECUTED,
+        GmaxQueryState.EXECUTED,
+    ]
+    assert [item.row_found for item in summary.checks] == [row_found, row_found]
+    assert tuple(classifier.consultas) == market_calls
+    assert tuple(verifier.consultas) == action_calls
+    assert service.listar_historico(project_id) == history == (execution,)
+    engine.dispose()
+
+
+@pytest.mark.parametrize(
+    ("service_codes", "evidence", "expected_states"),
+    (
+        (
+            ("0007",),
+            (),
+            (
+                GmaxQueryState.NOT_EXECUTED_NO_TRIGGER,
+                GmaxQueryState.NOT_EXECUTED_NO_TRIGGER,
+            ),
+        ),
+        (
+            (),
+            (
+                ("Impacto Ambiental: Sim", "0.70", "0.88"),
+                ("SERVIDÃO", "0.25", "0.25"),
+            ),
+            (
+                GmaxQueryState.NOT_EXECUTED_NO_SERVICE_CODES,
+                GmaxQueryState.NOT_EXECUTED_NO_SERVICE_CODES,
+            ),
+        ),
+    ),
+)
+def test_gmax_distinguishes_missing_triggers_from_missing_service_codes(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+    service_codes: tuple[str, ...],
+    evidence: tuple[tuple[str, str, str], ...],
+    expected_states: tuple[GmaxQueryState, GmaxQueryState],
+) -> None:
+    verifier = FakeVerificadorAcoesConcluidas(resultado=True)
+    engine, project_id, service, registry, _classifier = _prepare_context(
+        tmp_path,
+        catalogo_inicial,
+        codigos_servico=service_codes,
+        extra_evidence=evidence,
+        action_verifier=verifier,
+    )
+    service.executar(project_id)
+    summary = _gmax_gateway(engine, tmp_path / "data", service, registry).get_gmax(project_id)
+
+    assert tuple(item.query_state for item in summary.checks) == expected_states
+    assert all(item.row_found is None for item in summary.checks)
+    assert verifier.consultas == []
+    engine.dispose()
+
+
+def test_gmax_marks_stale_snapshot_but_preserves_last_execution_values(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    verifier = FakeVerificadorAcoesConcluidas(resultado=False)
+    engine, project_id, service, registry, _classifier = _prepare_context(
+        tmp_path,
+        catalogo_inicial,
+        codigos_servico=("0001",),
+        extra_evidence=(("Impacto Ambiental: Sim", "0.70", "0.88"),),
+        action_verifier=verifier,
+    )
+    execution = service.executar(project_id)
+    with SqlAlchemyUnitOfWork(engine) as work:
+        project = work.projetos.obter(project_id)
+        assert project is not None
+        work.projetos.salvar(replace(project, codigos_servico=("0002",)))
+        work.commit()
+
+    summary = _gmax_gateway(engine, tmp_path / "data", service, registry).get_gmax(project_id)
+
+    assert summary.snapshot_state is GmaxSnapshotState.STALE
+    assert summary.is_stale
+    assert summary.last_execution_id is not None
+    assert summary.last_execution_id.root == execution.id
+    assert summary.market is GmaxMarket.URBANO
+    impact, servitude = summary.checks
+    assert (impact.query_state, impact.row_found) == (GmaxQueryState.EXECUTED, False)
+    assert (servitude.query_state, servitude.row_found) == (
+        GmaxQueryState.NOT_EXECUTED_NO_TRIGGER,
+        None,
+    )
+    engine.dispose()
+
+
+def test_gmax_prioritizes_current_ns_block_and_hides_previous_results(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    verifier = FakeVerificadorAcoesConcluidas(resultado=True)
+    engine, project_id, service, registry, classifier = _prepare_context(
+        tmp_path,
+        catalogo_inicial,
+        codigos_servico=("0001",),
+        extra_evidence=(("Impacto Ambiental: Sim", "0.70", "0.88"),),
+        header_service_notes=((0, "0012345678", False),),
+        action_verifier=verifier,
+    )
+    execution = service.executar(project_id)
+    market_calls = tuple(classifier.consultas)
+    action_calls = tuple(verifier.consultas)
+    with SqlAlchemyUnitOfWork(engine) as work:
+        project = work.projetos.obter(project_id)
+        assert project is not None
+        work.projetos.salvar(replace(project, nome="0098765432"))
+        work.commit()
+
+    summary = _gmax_gateway(engine, tmp_path / "data", service, registry).get_gmax(project_id)
+
+    assert summary.project_service_note == "0098765432"
+    assert summary.header_service_notes == ("0012345678",)
+    assert summary.header_state is GmaxHeaderState.MISMATCH
+    assert summary.snapshot_state is GmaxSnapshotState.BLOCKED_NS_MISMATCH
+    assert summary.is_stale and summary.blocking_reason is not None
+    assert summary.last_execution_id is not None
+    assert summary.last_execution_id.root == execution.id
+    assert summary.market is None
+    assert all(item.query_state is GmaxQueryState.NOT_EXECUTED for item in summary.checks)
+    assert all(item.row_found is None for item in summary.checks)
+    assert tuple(classifier.consultas) == market_calls
+    assert tuple(verifier.consultas) == action_calls
+    assert service.listar_historico(project_id) == (execution,)
+    engine.dispose()
+
+
+@pytest.mark.parametrize("inconsistency", ["market", "action"])
+def test_gmax_fails_closed_for_impossible_snapshot_cardinality(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+    monkeypatch: pytest.MonkeyPatch,
+    inconsistency: str,
+) -> None:
+    verifier = FakeVerificadorAcoesConcluidas(resultado=True)
+    engine, project_id, service, registry, _classifier = _prepare_context(
+        tmp_path,
+        catalogo_inicial,
+        codigos_servico=("0001",),
+        extra_evidence=(("Impacto Ambiental: Sim", "0.70", "0.88"),),
+        action_verifier=verifier,
+    )
+    execution = service.executar(project_id)
+    if inconsistency == "market":
+        market_fact = next(
+            item for item in execution.fatos if item.chave.startswith("rede.contexto_")
+        )
+        invalid_facts = (*execution.fatos, market_fact)
+    else:
+        action_fact = next(
+            item
+            for item in execution.fatos
+            if item.chave == "projeto.acao_avaliar_impacto_ambiental_concluida"
+        )
+        invalid_facts = (*execution.fatos, action_fact)
+    invalid_execution = replace(execution, fatos=invalid_facts)
+    monkeypatch.setattr(service, "obter_ultima", lambda _project_id: invalid_execution)
+    gateway = _gmax_gateway(engine, tmp_path / "data", service, registry)
+
+    with pytest.raises(DocumentationGatewayError) as captured:
+        gateway.get_gmax(project_id)
+
+    assert captured.value.code is ErrorCode.INTEGRITY_ERROR
+    assert "inconsistentes" in captured.value.message
+    engine.dispose()
+
+
+def test_http_documentation_gateway_get_gmax_uses_read_retry_and_contract(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine, project_id, service, registry, _classifier = _prepare_context(
+        tmp_path,
+        catalogo_inicial,
+    )
+    expected = _gmax_gateway(engine, tmp_path / "data", service, registry).get_gmax(project_id)
+    requests: list[tuple[str, str, bool]] = []
+
+    def fake_request(
+        _gateway: HttpDocumentationGateway,
+        method: str,
+        path: str,
+        *,
+        headers: dict[str, str],
+        body: bytes | None,
+        retry_read: bool,
+    ) -> tuple[int, dict[str, str], bytes]:
+        assert headers == {} and body is None
+        requests.append((method, path, retry_read))
+        return 200, {}, expected.model_dump_json().encode("utf-8")
+
+    monkeypatch.setattr(HttpDocumentationGateway, "_request_with_retry", fake_request)
+    gateway = HttpDocumentationGateway("http://server.example", "secret")
+
+    assert gateway.get_gmax(project_id) == expected
+    assert requests == [("GET", f"/api/v1/projects/{project_id}/gmax", True)]
     engine.dispose()
 
 
