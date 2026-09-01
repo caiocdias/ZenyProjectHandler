@@ -23,8 +23,10 @@ from zeny_project_handler_contracts.gmax import (
     GmaxCheckDto,
     GmaxCheckType,
     GmaxHeaderState,
+    GmaxImpactCheckDto,
     GmaxMarket,
     GmaxQueryState,
+    GmaxServitudeCheckDto,
     GmaxSnapshotState,
     GmaxSummaryResponse,
 )
@@ -151,18 +153,21 @@ def _summary(
         last_executed_at=datetime(2026, 9, 1, 15, 30, tzinfo=UTC) if has_execution else None,
         is_stale=snapshot_state in {GmaxSnapshotState.STALE, GmaxSnapshotState.BLOCKED_NS_MISMATCH},
         market=market,
-        checks=(
-            _check(
-                GmaxCheckType.IMPACTO_AMBIENTAL,
-                detected=detected[0],
-                query_state=query_states[0],
-                row_found=rows[0],
-            ),
-            _check(
-                GmaxCheckType.SERVIDAO,
-                detected=detected[1],
-                query_state=query_states[1],
-                row_found=rows[1],
+        checks=cast(
+            tuple[GmaxImpactCheckDto, GmaxServitudeCheckDto],
+            (
+                _check(
+                    GmaxCheckType.IMPACTO_AMBIENTAL,
+                    detected=detected[0],
+                    query_state=query_states[0],
+                    row_found=rows[0],
+                ),
+                _check(
+                    GmaxCheckType.SERVIDAO,
+                    detected=detected[1],
+                    query_state=query_states[1],
+                    row_found=rows[1],
+                ),
             ),
         ),
     )

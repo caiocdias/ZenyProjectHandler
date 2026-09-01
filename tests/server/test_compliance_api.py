@@ -5,7 +5,7 @@ from base64 import b64encode
 from copy import deepcopy
 from hashlib import sha256
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
@@ -19,7 +19,9 @@ from zeny_project_handler_contracts.gmax import (
     GmaxCheckDto,
     GmaxCheckType,
     GmaxHeaderState,
+    GmaxImpactCheckDto,
     GmaxQueryState,
+    GmaxServitudeCheckDto,
     GmaxSnapshotState,
     GmaxSummaryResponse,
 )
@@ -144,20 +146,23 @@ def test_authenticated_gmax_get_delegates_to_read_projection(tmp_path: Path) -> 
         header_state=GmaxHeaderState.NOT_FOUND,
         snapshot_state=GmaxSnapshotState.NEVER_EXECUTED,
         is_stale=False,
-        checks=(
-            GmaxCheckDto(
-                check_type=GmaxCheckType.IMPACTO_AMBIENTAL,
-                label="Impacto ambiental",
-                detected_in_pdf=False,
-                action="AVALIAR IMPACTO AMBIENTAL",
-                query_state=GmaxQueryState.NOT_EXECUTED,
-            ),
-            GmaxCheckDto(
-                check_type=GmaxCheckType.SERVIDAO,
-                label="Servidão",
-                detected_in_pdf=False,
-                action="FALTA SERVIDÃO",
-                query_state=GmaxQueryState.NOT_EXECUTED,
+        checks=cast(
+            tuple[GmaxImpactCheckDto, GmaxServitudeCheckDto],
+            (
+                GmaxCheckDto(
+                    check_type=GmaxCheckType.IMPACTO_AMBIENTAL,
+                    label="Impacto ambiental",
+                    detected_in_pdf=False,
+                    action="AVALIAR IMPACTO AMBIENTAL",
+                    query_state=GmaxQueryState.NOT_EXECUTED,
+                ),
+                GmaxCheckDto(
+                    check_type=GmaxCheckType.SERVIDAO,
+                    label="Servidão",
+                    detected_in_pdf=False,
+                    action="FALTA SERVIDÃO",
+                    query_state=GmaxQueryState.NOT_EXECUTED,
+                ),
             ),
         ),
     )

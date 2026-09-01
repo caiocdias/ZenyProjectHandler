@@ -97,8 +97,10 @@ from zeny_project_handler_contracts.gmax import (
     GmaxCheckDto,
     GmaxCheckType,
     GmaxHeaderState,
+    GmaxImpactCheckDto,
     GmaxMarket,
     GmaxQueryState,
+    GmaxServitudeCheckDto,
     GmaxSnapshotState,
     GmaxSummaryResponse,
 )
@@ -556,7 +558,7 @@ def _gmax_market(facts: tuple[FatoConformidade, ...]) -> GmaxMarket:
 def _gmax_checks(
     facts: tuple[FatoConformidade, ...],
     detected_now: dict[DescricaoAcao, bool],
-) -> tuple[GmaxCheckDto, GmaxCheckDto]:
+) -> tuple[GmaxImpactCheckDto, GmaxServitudeCheckDto]:
     has_service_codes = any(item.chave == "projeto.codigo_servico" for item in facts)
     result: list[GmaxCheckDto] = []
     for check_type, label, action, trigger_key, result_key in _GMAX_CHECKS:
@@ -585,14 +587,14 @@ def _gmax_checks(
                 row_found=row_found,
             )
         )
-    return cast(tuple[GmaxCheckDto, GmaxCheckDto], tuple(result))
+    return cast(tuple[GmaxImpactCheckDto, GmaxServitudeCheckDto], tuple(result))
 
 
 def _not_executed_gmax_checks(
     detected_now: dict[DescricaoAcao, bool],
-) -> tuple[GmaxCheckDto, GmaxCheckDto]:
+) -> tuple[GmaxImpactCheckDto, GmaxServitudeCheckDto]:
     return cast(
-        tuple[GmaxCheckDto, GmaxCheckDto],
+        tuple[GmaxImpactCheckDto, GmaxServitudeCheckDto],
         tuple(
             GmaxCheckDto(
                 check_type=check_type,

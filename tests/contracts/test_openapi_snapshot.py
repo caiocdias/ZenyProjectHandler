@@ -171,9 +171,22 @@ def test_gmax_operation_exposes_closed_read_model() -> None:
         "STALE",
         "BLOCKED_NS_MISMATCH",
     ]
-    assert schemas["GmaxQueryState"]["enum"] == [
+    checks_schema = schemas["GmaxSummaryResponse"]["properties"]["checks"]
+    assert checks_schema["minItems"] == checks_schema["maxItems"] == 2
+    expected_query_states = [
         "NOT_EXECUTED",
         "NOT_EXECUTED_NO_TRIGGER",
         "NOT_EXECUTED_NO_SERVICE_CODES",
-        "EXECUTED",
     ]
+    for check_name, check_type in (
+        ("GmaxImpact", "IMPACTO_AMBIENTAL"),
+        ("GmaxServitude", "SERVIDAO"),
+    ):
+        executed = schemas[f"{check_name}ExecutedCheckDto"]
+        not_executed = schemas[f"{check_name}NotExecutedCheckDto"]
+        assert executed["properties"]["check_type"]["const"] == check_type
+        assert not_executed["properties"]["check_type"]["const"] == check_type
+        assert executed["properties"]["query_state"]["const"] == "EXECUTED"
+        assert executed["properties"]["row_found"]["type"] == "boolean"
+        assert not_executed["properties"]["query_state"]["enum"] == expected_query_states
+        assert not_executed["properties"]["row_found"]["type"] == "null"

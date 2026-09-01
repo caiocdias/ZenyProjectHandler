@@ -204,79 +204,18 @@ def analisar_conformidade_projeto(
     document_targets = {
         item.referencia_id: item
         for item in targets
-        if item.tipo is TipoEscopoConformidade.DOCUMENTO
-    }
-    facts: list[FatoConformidade] = []
-    items: list[ItemInspecaoDocumental] = []
-    page_to_document = {
-        page.id: document for document in sessao.projeto.documentos for page in document.paginas
-    }
-    evidence_by_document = {
-        document.id: tuple(
-            item for item in sessao.evidencias if page_to_document.get(item.pagina_id) == document
-        )
-        for document in sessao.projeto.documentos
+        if item.tipo is TipoEscopoConformidade.DOCUMENTO and item.referencia_id is not None
     }
     header_service_notes = detectar_notas_servico_cabecalho(sessao)
-
     metadata_values = _metadata_values(sessao)
-    facts.append(_market_context_fact(project_target.id, mercado))
-    detected_values: dict[str, list[tuple[str, EvidenciaDocumento | None]]] = {}
-    for document in sessao.projeto.documentos:
-        target = document_targets[document.id]
-        document_evidence = evidence_by_document[document.id]
-        project_document_evidence = evidencias_sem_anotacoes_de_revisao(document_evidence)
-        fields = _extract_document_fields(
-            project_document_evidence,
-            include_service_note=False,
-        )
-        document_page_ids = {page.id for page in document.paginas}
-        fields["nota_servico"] = [
-            (detected.valor, evidence)
-            for detected in header_service_notes
-            for evidence in detected.evidencias
-            if evidence.pagina_id in document_page_ids
-        ]
-        for key, matches in fields.items():
-            if key != "nota_servico":
-                detected_values.setdefault(key, []).extend(matches)
-            for value, evidence in matches:
-                facts.append(
-                    _fact(
-                        target.id,
-                        f"documento.{key}",
-                        value,
-                        "texto/OCR do cabeçalho",
-                        evidence=(evidence,),
-                        confidence=Decimal("0.86"),
-                    )
-                )
-        physical_format = _document_format(document)
-        if physical_format is not None and "formato_folha" not in fields:
-            detected_values.setdefault("formato_folha", []).append((physical_format, None))
-            facts.append(
-                _fact(
-                    target.id,
-                    "documento.formato_folha",
-                    physical_format,
-                    "dimensões físicas da página PDF",
-                    confidence=Decimal("0.98"),
-                )
-            )
-        items.extend(
-            _document_header_items(
-                document,
-                fields,
-                project_document_evidence,
-                physical_format=physical_format,
-                metadata_values=metadata_values,
-            )
-        )
-        document_facts, document_items = _document_control_facts(
-            document, target.id, document_evidence
-        )
-        facts.extend(document_facts)
-        items.extend(document_items)
+    document_facts, document_items, detected_values = _document_compliance_inputs(
+        sessao,
+        document_targets,
+        header_service_notes,
+        metadata_values,
+    )
+    facts = [_market_context_fact(project_target.id, mercado), *document_facts]
+    items = list(document_items)
 
     project_service_note = sessao.projeto.nome.strip()
     if re.fullmatch(r"[0-9]{10}", project_service_note):
@@ -363,6 +302,86 @@ def analisar_conformidade_projeto(
         achados=findings,
         itens_documentais=tuple(items),
     )
+
+
+def _document_compliance_inputs(
+    sessao: SessaoRevisao,
+    document_targets: dict[UUID, AlvoConformidade],
+    header_service_notes: tuple[NotaServicoCabecalhoDetectada, ...],
+    metadata_values: dict[str, str],
+) -> tuple[
+    tuple[FatoConformidade, ...],
+    tuple[ItemInspecaoDocumental, ...],
+    dict[str, list[tuple[str, EvidenciaDocumento | None]]],
+]:
+    facts: list[FatoConformidade] = []
+    items: list[ItemInspecaoDocumental] = []
+    detected_values: dict[str, list[tuple[str, EvidenciaDocumento | None]]] = {}
+    page_to_document = {
+        page.id: document for document in sessao.projeto.documentos for page in document.paginas
+    }
+    evidence_by_document = {
+        document.id: tuple(
+            item for item in sessao.evidencias if page_to_document.get(item.pagina_id) == document
+        )
+        for document in sessao.projeto.documentos
+    }
+    for document in sessao.projeto.documentos:
+        target = document_targets[document.id]
+        document_evidence = evidence_by_document[document.id]
+        project_document_evidence = evidencias_sem_anotacoes_de_revisao(document_evidence)
+        fields = _extract_document_fields(
+            project_document_evidence,
+            include_service_note=False,
+        )
+        document_page_ids = {page.id for page in document.paginas}
+        fields["nota_servico"] = [
+            (detected.valor, evidence)
+            for detected in header_service_notes
+            for evidence in detected.evidencias
+            if evidence.pagina_id in document_page_ids
+        ]
+        for key, matches in fields.items():
+            if key != "nota_servico":
+                detected_values.setdefault(key, []).extend(matches)
+            facts.extend(
+                _fact(
+                    target.id,
+                    f"documento.{key}",
+                    value,
+                    "texto/OCR do cabeçalho",
+                    evidence=(evidence,),
+                    confidence=Decimal("0.86"),
+                )
+                for value, evidence in matches
+            )
+        physical_format = _document_format(document)
+        if physical_format is not None and "formato_folha" not in fields:
+            detected_values.setdefault("formato_folha", []).append((physical_format, None))
+            facts.append(
+                _fact(
+                    target.id,
+                    "documento.formato_folha",
+                    physical_format,
+                    "dimensões físicas da página PDF",
+                    confidence=Decimal("0.98"),
+                )
+            )
+        items.extend(
+            _document_header_items(
+                document,
+                fields,
+                project_document_evidence,
+                physical_format=physical_format,
+                metadata_values=metadata_values,
+            )
+        )
+        document_facts, document_items = _document_control_facts(
+            document, target.id, document_evidence
+        )
+        facts.extend(document_facts)
+        items.extend(document_items)
+    return tuple(facts), tuple(items), detected_values
 
 
 def detectar_notas_servico_cabecalho(

@@ -1029,6 +1029,9 @@ def test_gmax_prioritizes_current_ns_block_and_hides_previous_results(
         work.projetos.salvar(replace(project, nome="0098765432"))
         work.commit()
 
+    with pytest.raises(NotaServicoCabecalhoDivergenteError):
+        service.executar(project_id)
+
     summary = _gmax_gateway(engine, tmp_path / "data", service, registry).get_gmax(project_id)
 
     assert summary.project_service_note == "0098765432"
@@ -1043,6 +1046,7 @@ def test_gmax_prioritizes_current_ns_block_and_hides_previous_results(
     assert all(item.row_found is None for item in summary.checks)
     assert tuple(classifier.consultas) == market_calls
     assert tuple(verifier.consultas) == action_calls
+    assert service.obter_ultima(project_id) == execution
     assert service.listar_historico(project_id) == (execution,)
     engine.dispose()
 

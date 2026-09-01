@@ -992,9 +992,7 @@ class ProjectPanelWidget(QWidget):
         self._project_box.setEnabled(not blocked)
         self._rename_project.setEnabled(has_session and not blocked)
         self._delete_project.setEnabled(has_session and not blocked)
-        self._service_box.setEnabled(
-            has_session and self._service_codes_loaded and not blocked
-        )
+        self._service_box.setEnabled(has_session and self._service_codes_loaded and not blocked)
         self._document_box.setEnabled(has_session and not blocked)
         self._run.setEnabled(has_session and not blocked)
         self._cancel.setEnabled(self.processando and self._cancellation is not None)

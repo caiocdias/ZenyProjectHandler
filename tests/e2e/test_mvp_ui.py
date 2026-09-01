@@ -364,26 +364,32 @@ def test_project_combo_searches_only_digits_without_inserting_or_losing_ids(
     assert search.maxLength() == 10
     assert search.validator() is not None
 
-    hidden = gateway.create_project("0000000701", idempotency_key="search-hidden")
+    first = gateway.create_project("1234567890", idempotency_key="search-first")
+    second = gateway.create_project("9234567890", idempotency_key="search-second")
+    for index in range(198):
+        gateway.create_project(
+            f"{1000 + index:010d}",
+            idempotency_key=f"search-page-{index}",
+        )
+    hidden = gateway.create_project("0000009999", idempotency_key="search-hidden")
+    panel.atualizar_projetos()
+    assert combo.count() == 201
+    assert combo.findData(str(first.project.project_id.root)) >= 0
+    assert combo.findData(str(second.project.project_id.root)) >= 0
     assert combo.findData(str(hidden.project.project_id.root)) < 0
     combo.setEditText(hidden.project.service_note)
     qtbot.mouseClick(open_button, Qt.MouseButton.LeftButton)
     assert panel.projeto_ativo_id == hidden.project.project_id.root
     assert combo.findData(str(hidden.project.project_id.root)) < 0
 
-    first = gateway.create_project("0000000702", idempotency_key="search-first")
-    second = gateway.create_project("1234500702", idempotency_key="search-second")
-    panel.atualizar_projetos()
     item_ids = {combo.itemText(index): combo.itemData(index) for index in range(1, combo.count())}
-    assert item_ids == {
-        hidden.project.service_note: str(hidden.project.project_id.root),
-        first.project.service_note: str(first.project.project_id.root),
-        second.project.service_note: str(second.project.project_id.root),
-    }
+    assert item_ids[first.project.service_note] == str(first.project.project_id.root)
+    assert item_ids[second.project.service_note] == str(second.project.project_id.root)
+    assert hidden.project.service_note not in item_ids
     original_count = combo.count()
     search.clear()
-    qtbot.keyClicks(search, "70a2")
-    assert search.text() == "702"
+    qtbot.keyClicks(search, "456a78")
+    assert search.text() == "45678"
     completer = combo.completer()
     assert completer is not None
     completer.setCompletionPrefix(search.text())
@@ -492,6 +498,7 @@ def test_project_open_create_dialogs_and_refusals_return_to_initial_state(
     qtbot.mouseClick(create_button, Qt.MouseButton.LeftButton)
 
     assert create_calls == []
+    assert gateway.list_projects(limit=1, offset=0).page.total == 1
     assert cleared == [True]
     assert panel.projeto_ativo_id is None
     assert combo.currentData() is None and combo.currentText() == ""
@@ -519,6 +526,7 @@ def test_project_open_create_dialogs_and_refusals_return_to_initial_state(
     service_note.setText(existing.project.service_note)
     qtbot.mouseClick(create_button, Qt.MouseButton.LeftButton)
     assert create_calls == []
+    assert gateway.list_projects(limit=1, offset=0).page.total == 1
     assert panel.projeto_ativo_id == existing.project.project_id.root
 
     missing = "0000000802"
@@ -526,6 +534,7 @@ def test_project_open_create_dialogs_and_refusals_return_to_initial_state(
     combo.setEditText(missing)
     qtbot.mouseClick(open_button, Qt.MouseButton.LeftButton)
     assert create_calls == []
+    assert gateway.list_projects(limit=1, offset=0).page.total == 1
     assert panel.projeto_ativo_id is None
     assert combo.currentText() == ""
 
@@ -534,6 +543,7 @@ def test_project_open_create_dialogs_and_refusals_return_to_initial_state(
     combo.setEditText(created_from_open)
     qtbot.mouseClick(open_button, Qt.MouseButton.LeftButton)
     assert create_calls == [created_from_open]
+    assert gateway.list_projects(limit=1, offset=0).page.total == 2
     assert panel._session is not None
     assert panel._session.service_note == created_from_open
 

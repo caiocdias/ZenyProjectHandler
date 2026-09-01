@@ -124,6 +124,12 @@ na próxima execução local. O `compose.yaml` operacional continua separado e p
    encontrou linha. A aba apenas lê o último resumo persistido e não inicia uma análise.
 8. Use **Exportar** para baixar o PDF anotado ou as planilhas `.xlsx` na própria máquina.
 
+O seletor de projetos pesquisa até dez dígitos da NS e resolve uma NS completa diretamente no
+servidor, inclusive fora da primeira página carregada. **Criar** uma NS existente oferece abrir o
+projeto encontrado; **Abrir** uma NS inexistente oferece criá-la. Recusar qualquer proposta volta ao
+estado inicial sem mutação remota. Se outro cliente vencer a corrida de criação, o conflito do
+servidor segue o mesmo fluxo e não repete o `POST`.
+
 O pipeline principal executa, em ordem, a extração documental, a interpretação semântica, a
 promoção dos resultados e a conformidade. A ação **Analisar conformidade** reaplica as regras aos
 resultados semânticos persistidos; ela não abre o PDF nem repete OCR. Cada uma dessas execuções
@@ -132,6 +138,11 @@ Quando o PDF contém `Impacto Ambiental: Sim` no cabeçalho ou uma menção posi
 execução também consulta no máximo uma vez a ação correspondente com a NS e a coleção de serviços
 vigentes. Assim, depois que o mercado, a NS, os serviços ou as ações externas mudarem, execute
 **Analisar conformidade** novamente para produzir um snapshot coerente com as entradas atuais.
+
+Antes da primeira consulta SQL, todas as NS válidas dos cabeçalhos PDF são comparadas com a NS do
+projeto. Qualquer divergência encerra a conformidade como erro de validação, sem consultar mercado
+ou ações e sem publicar snapshot parcial. O GMAX apresenta o bloqueio e não reutiliza mercado ou
+resultado de linha anterior como se fossem atuais.
 
 ## Dados e integridade
 

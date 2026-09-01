@@ -77,8 +77,10 @@ from zeny_project_handler_contracts.gmax import (
     GmaxCheckDto,
     GmaxCheckType,
     GmaxHeaderState,
+    GmaxImpactCheckDto,
     GmaxMarket,
     GmaxQueryState,
+    GmaxServitudeCheckDto,
     GmaxSnapshotState,
     GmaxSummaryResponse,
 )
@@ -310,21 +312,24 @@ def _representative_models() -> list[ContractModel]:
         last_executed_at=NOW,
         is_stale=False,
         market=GmaxMarket.URBANO,
-        checks=(
-            GmaxCheckDto(
-                check_type=GmaxCheckType.IMPACTO_AMBIENTAL,
-                label="Impacto ambiental",
-                detected_in_pdf=True,
-                action="AVALIAR IMPACTO AMBIENTAL",
-                query_state=GmaxQueryState.EXECUTED,
-                row_found=False,
-            ),
-            GmaxCheckDto(
-                check_type=GmaxCheckType.SERVIDAO,
-                label="Servidão",
-                detected_in_pdf=False,
-                action="FALTA SERVIDÃO",
-                query_state=GmaxQueryState.NOT_EXECUTED_NO_TRIGGER,
+        checks=cast(
+            tuple[GmaxImpactCheckDto, GmaxServitudeCheckDto],
+            (
+                GmaxCheckDto(
+                    check_type=GmaxCheckType.IMPACTO_AMBIENTAL,
+                    label="Impacto ambiental",
+                    detected_in_pdf=True,
+                    action="AVALIAR IMPACTO AMBIENTAL",
+                    query_state=GmaxQueryState.EXECUTED,
+                    row_found=False,
+                ),
+                GmaxCheckDto(
+                    check_type=GmaxCheckType.SERVIDAO,
+                    label="Servidão",
+                    detected_in_pdf=False,
+                    action="FALTA SERVIDÃO",
+                    query_state=GmaxQueryState.NOT_EXECUTED_NO_TRIGGER,
+                ),
             ),
         ),
     )
@@ -544,28 +549,20 @@ def test_enum_values_are_stable() -> None:
 
 
 def test_gmax_contract_enforces_result_nullability_and_canonical_checks() -> None:
-    with pytest.raises(ValidationError, match="executado exige resultado"):
-        GmaxCheckDto(
-            check_type=GmaxCheckType.IMPACTO_AMBIENTAL,
-            label="Impacto ambiental",
-            detected_in_pdf=True,
-            action="AVALIAR IMPACTO AMBIENTAL",
-            query_state=GmaxQueryState.EXECUTED,
-        )
-    with pytest.raises(ValidationError, match="não admite resultado"):
-        GmaxCheckDto(
-            check_type=GmaxCheckType.IMPACTO_AMBIENTAL,
-            label="Impacto ambiental",
-            detected_in_pdf=False,
-            action="AVALIAR IMPACTO AMBIENTAL",
-            query_state=GmaxQueryState.NOT_EXECUTED_NO_TRIGGER,
-            row_found=False,
-        )
-
     valid = cast(GmaxSummaryResponse, _representative_models()[8])
-    with pytest.raises(ValidationError, match="ordem canônica"):
+    payload = valid.model_dump()
+    impact, servitude = payload["checks"]
+    with pytest.raises(ValidationError):
         GmaxSummaryResponse.model_validate(
-            {**valid.model_dump(), "checks": tuple(reversed(valid.checks))}
+            {**payload, "checks": ({**impact, "row_found": None}, servitude)}
+        )
+    with pytest.raises(ValidationError):
+        GmaxSummaryResponse.model_validate(
+            {**payload, "checks": (impact, {**servitude, "row_found": False})}
+        )
+    with pytest.raises(ValidationError):
+        GmaxSummaryResponse.model_validate(
+            {**payload, "checks": tuple(reversed(payload["checks"]))}
         )
 
 

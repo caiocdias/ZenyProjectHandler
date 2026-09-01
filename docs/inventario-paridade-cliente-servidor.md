@@ -1,10 +1,12 @@
 # Inventário de paridade cliente-servidor
 
-- Estado: fronteira cliente-servidor vigente com contrato API `1.1.0`
-- Data da revisão: 2026-08-29
+- Estado: fronteira cliente-servidor vigente com contrato API `1.2.0`
+- Data da revisão: 2026-09-01
 - Runtime caracterizado: cliente Qt magro e servidor protegido como fonte principal
 - Linha de base histórica: 618 testes aprovados; cobertura total 87,08%; Pytest em 128,11 s
 - Gate E05: 856 testes aprovados; cobertura total 86,61%; Pytest em 178,00 s;
+  `RESULTADO FINAL: APROVADO`
+- Gate E06: 897 testes aprovados; cobertura total 86,88%; Pytest em 311,09 s;
   `RESULTADO FINAL: APROVADO`
 
 ## Finalidade e convenções
@@ -22,7 +24,7 @@ Convenções das colunas:
 
 - **Ação atual / método atual** identifica o slot Qt e o caso de uso ou helper chamado hoje;
 - **Caracterização existente** aponta ao menos um teste pytest que comprova o fluxo;
-- **Endpoint futuro** descreve a fronteira esperada; `nenhum` significa estado puramente visual no
+- **Endpoint atual** descreve a fronteira vigente; `nenhum` significa estado puramente visual no
   cliente;
 - **DTO esperado** é uma projeção de transporte sem comportamento de negócio. Nenhum DTO contém
   `Path`, entidade SQLAlchemy, agregado de domínio ou objeto PyMuPDF.
@@ -32,8 +34,10 @@ Convenções das colunas:
 Convenções: `—` significa ausência de body; parâmetros de path/query e headers continuam descritos
 na OpenAPI. Toda criação de job e todo upload exige `Idempotency-Key`. Os códigos comuns das rotas
 protegidas são `401 AUTHENTICATION_FAILED`, `404 RESOURCE_NOT_FOUND`,
-`409 OPERATION_CONFLICT`/`STALE_STATE`/`IDEMPOTENCY_CONFLICT`, `413 UPLOAD_TOO_LARGE`,
-`415 UNSUPPORTED_MEDIA_TYPE`, `422 VALIDATION_ERROR`/`INTEGRITY_ERROR` e `500 INTERNAL_ERROR`.
+`409 OPERATION_CONFLICT`/`STALE_STATE`/`IDEMPOTENCY_CONFLICT`/`PROJECT_ALREADY_EXISTS`/
+`INTEGRITY_ERROR`,
+`413 UPLOAD_TOO_LARGE`,
+`415 UNSUPPORTED_MEDIA_TYPE`, `422 VALIDATION_ERROR` e `500 INTERNAL_ERROR`.
 `PDF_PASSWORD_REQUIRED` e `PDF_PASSWORD_INVALID` pertencem aos fluxos de upload/desbloqueio.
 
 | Grupo | Método e rota v1 | Request | Response principal | HTTP/códigos esperados |
@@ -41,6 +45,7 @@ protegidas são `401 AUTHENTICATION_FAILED`, `404 RESOURCE_NOT_FOUND`,
 | saúde | `GET /health/live` | — | `HealthLiveResponse` | `200`; `500 INTERNAL_ERROR` |
 | sessão | `GET /api/v1/session` | Bearer | `SessionCapabilitiesResponse` | `200`; códigos comuns |
 | projetos | `GET /api/v1/projects` | paginação em query | `ProjectSummaryListResponse` | `200`; códigos comuns |
+| projetos | `GET /api/v1/projects/by-service-note/{service_note}` | — | `ProjectDetailResponse` | `200`; `404 RESOURCE_NOT_FOUND`; `409 INTEGRITY_ERROR`; demais comuns |
 | projetos | `POST /api/v1/projects` | `CreateProjectRequest` + idempotência | `ProjectDetailResponse` | `201`; códigos comuns |
 | projetos | `GET /api/v1/projects/{project_id}` | — | `ProjectDetailResponse` | `200`; códigos comuns |
 | projetos | `PATCH /api/v1/projects/{project_id}` | `UpdateProjectRequest` | `ProjectDetailResponse` | `200`; códigos comuns |
@@ -72,6 +77,7 @@ protegidas são `401 AUTHENTICATION_FAILED`, `404 RESOURCE_NOT_FOUND`,
 | conformidade | `GET /api/v1/projects/{project_id}/compliance/latest` | — | `ComplianceExecutionResponse` | `200`; códigos comuns |
 | conformidade | `GET /api/v1/projects/{project_id}/compliance/history` | paginação em query | `ComplianceHistoryResponse` | `200`; códigos comuns |
 | conformidade | `POST /api/v1/projects/{project_id}/compliance-jobs` | `CreateComplianceJobRequest` + idempotência | `JobAcceptedResponse` | `202`; códigos comuns |
+| GMAX | `GET /api/v1/projects/{project_id}/gmax` | — | `GmaxSummaryResponse` | `200`; `409 INTEGRITY_ERROR`; demais comuns |
 | regras | `GET /api/v1/rules/active` | — | `ActiveRuleRegistryResponse` | `200`; códigos comuns |
 | regras | `POST /api/v1/rules/import-preflights` | multipart JSON + idempotência | `RuleImportPreflightResponse` | `201`; `422 INTEGRITY_ERROR`; demais comuns |
 | regras | `POST /api/v1/rules/imports` | `ConfirmRuleImportRequest` | `RuleImportResponse` | `201`; `409 STALE_STATE`; demais comuns |
@@ -94,10 +100,10 @@ protegidas são `401 AUTHENTICATION_FAILED`, `404 RESOURCE_NOT_FOUND`,
 
 | Ação visível atual | Método atual | Caracterização existente | Endpoint remoto | DTO esperado |
 |---|---|---|---|---|
-| listar e selecionar projeto | `ProjectPanelWidget.atualizar_projetos` → `ServicoFluxoMvp.listar_projetos` | `tests/e2e/test_mvp_ui.py::test_user_can_create_import_analyze_review_and_reopen_from_ui` | `GET /api/v1/projects` | `ProjectSummaryListResponse` com `ProjectSummaryDto` |
-| criar projeto por NS | `ProjectPanelWidget.criar_projeto` → `ServicoFluxoMvp.criar_projeto` | `tests/integration/test_mvp_workflow.py::test_project_identifier_is_a_user_supplied_ten_digit_service_note` | `POST /api/v1/projects` | `CreateProjectRequest` → `ProjectDetailResponse` |
-| abrir/detalhar projeto | `ProjectPanelWidget.abrir_selecionado` → `ServicoFluxoMvp.abrir_projeto` | `tests/e2e/test_mvp_ui.py::test_user_can_create_import_analyze_review_and_reopen_from_ui` | `GET /api/v1/projects/{project_id}` | `ProjectDetailResponse` |
-| alterar NS | `ProjectPanelWidget.alterar_numero_ns` → `ServicoFluxoMvp.alterar_numero_ns` | `tests/integration/test_mvp_workflow.py::test_project_identifier_is_a_user_supplied_ten_digit_service_note` | `PATCH /api/v1/projects/{project_id}` | `UpdateProjectRequest` → `ProjectDetailResponse` |
+| listar, pesquisar e selecionar projeto | `ProjectPanelWidget.atualizar_projetos` / combo editável sem inserção | `tests/e2e/test_mvp_ui.py::test_project_combo_searches_only_digits_without_inserting_or_losing_ids` | `GET /api/v1/projects`; resolução exata em `GET /api/v1/projects/by-service-note/{service_note}` | `ProjectSummaryListResponse`; `ProjectDetailResponse` |
+| criar projeto por NS ou abrir o existente | `ProjectPanelWidget.criar_projeto` / `_offer_open_existing` → `ProjectGateway` | `tests/e2e/test_mvp_ui.py::test_project_open_create_dialogs_and_refusals_return_to_initial_state`; `::test_project_creation_race_reuses_existing_dialog_without_repeating_post` | `GET /api/v1/projects/by-service-note/{service_note}` e `POST /api/v1/projects` | `CreateProjectRequest` → `ProjectDetailResponse`; `409 PROJECT_ALREADY_EXISTS` contém somente ID/NS |
+| abrir/detalhar projeto ou criar NS ausente | `ProjectPanelWidget.abrir_selecionado` / `_offer_create_missing` → `ProjectGateway` | `tests/e2e/test_mvp_ui.py::test_project_open_create_dialogs_and_refusals_return_to_initial_state` | resolução exata e `GET /api/v1/projects/{project_id}`; criação única quando confirmada | `ProjectDetailResponse` |
+| alterar NS | `ProjectPanelWidget.alterar_numero_ns` → `ProjectGateway.update_project` | `tests/server/test_project_document_api.py::test_project_service_note_conflict_replay_rename_and_safe_details` | `PATCH /api/v1/projects/{project_id}` | `UpdateProjectRequest` → `ProjectDetailResponse`; `409 PROJECT_ALREADY_EXISTS` |
 | cadastrar/remover códigos de serviço | `_add_service_code` / `_remove_selected_service_codes` → `ProjectGateway.get_service_codes` / `replace_service_codes` | `tests/e2e/test_mvp_ui.py::test_project_service_codes_ui_is_remote_canonical_accessible_and_conflict_safe`; `::test_environmental_actions_full_client_matrix_uses_current_service_codes` | `GET`/`PUT /api/v1/projects/{project_id}/service-codes` | `ProjectServiceCodesResponse`; `ReplaceProjectServiceCodesRequest`; `409 STALE_STATE` recarrega a coleção vigente |
 | excluir projeto após confirmação | `ProjectPanelWidget.excluir_projeto` → `ServicoFluxoMvp.excluir_projeto` | `tests/integration/test_mvp_workflow.py::test_delete_project_with_confirmed_review_removes_dependents_in_safe_order` | `DELETE /api/v1/projects/{project_id}` | `DeleteProjectResponse` com contagens de limpeza |
 | selecionar e adicionar vários PDFs | `ProjectPanelWidget.selecionar_pdfs` / `_importar_selecao` → `ServicoFluxoMvp.importar_pdfs` | `tests/integration/test_mvp_workflow.py::test_multiple_pdf_import_is_atomic_and_preserves_order` | `POST /api/v1/projects/{project_id}/document-uploads` | multipart + `CreateUploadResponse`/`DocumentImportResultDto`; `Idempotency-Key` |
@@ -110,7 +116,7 @@ protegidas são `401 AUTHENTICATION_FAILED`, `404 RESOURCE_NOT_FOUND`,
 
 ## Visualizador de PDF
 
-| Ação visível atual | Método atual | Caracterização existente | Endpoint futuro | DTO esperado |
+| Ação visível atual | Método atual | Caracterização existente | Endpoint atual | DTO esperado |
 |---|---|---|---|---|
 | abrir um ou mais PDFs avulsos | `PdfViewerWidget.selecionar_pdf` / `carregar_pdf` | `tests/integration/test_window.py::test_pdf_viewer_opens_selected_files_as_one_ordered_project` | `POST /api/v1/viewer-sessions` e upload(s) da sessão | `CreateViewerSessionResponse`, `ViewerDocumentDto` |
 | abrir folhas do projeto na ordem persistida | `PdfViewerWidget.carregar_projeto` / `_ordered_project_pages` | `tests/integration/test_window.py::test_pdf_viewer_follows_page_order_across_different_files` | `GET /api/v1/projects/{project_id}/viewer` | `ViewerProjectResponse` com `ViewerPageDto` |
@@ -125,7 +131,7 @@ protegidas são `401 AUTHENTICATION_FAILED`, `404 RESOURCE_NOT_FOUND`,
 
 ## Painel Resultados e revisão humana
 
-| Ação visível atual | Método atual | Caracterização existente | Endpoint futuro | DTO esperado |
+| Ação visível atual | Método atual | Caracterização existente | Endpoint atual | DTO esperado |
 |---|---|---|---|---|
 | atualizar lista e abrir projeto analisado | `ReviewPanelWidget.atualizar_projetos` / `abrir_projeto` → `ServicoRevisaoHumana.listar_projetos` / `carregar_sessao` | `tests/integration/test_review_panel.py::test_results_panel_groups_relationships_and_links_elements_to_pdf` | `GET /api/v1/review/projects` e `GET /api/v1/projects/{project_id}/review-session` | `ReviewProjectSummaryListResponse`, `ReviewSessionResponse` |
 | filtrar localmente por classe e estado | `_refresh_proposals` / `_filtered_proposals` | `tests/integration/test_review_panel.py::test_review_tables_toggle_word_wrap_and_keep_interactions_after_reload` | nenhum; filtro sobre a projeção carregada | campos `category` e `review_state` em `ReviewProposalDto` |
@@ -156,6 +162,14 @@ protegidas são `401 AUTHENTICATION_FAILED`, `404 RESOURCE_NOT_FOUND`,
 | exportar revisão ativa | `_export_registry` → download autenticado pelo gateway | `tests/integration/test_compliance_rules_panel.py::test_rules_view_only_imports_exports_and_survives_restart` | `GET /api/v1/rules/active/download` | bytes JSON com integridade HTTP |
 | alternar quebra de linha nas três abas | `TableWordWrapController` | `tests/integration/test_review_panel.py::test_documentation_tables_toggle_word_wrap_and_recalculate_after_reload` | nenhum | estado visual local |
 
+## Painel GMAX
+
+| Ação visível atual | Método atual | Caracterização existente | Endpoint atual | DTO esperado |
+|---|---|---|---|---|
+| abrir ou atualizar o resumo somente leitura | `GmaxPanelWidget.abrir_projeto` / `atualizar` → `DocumentationGateway.get_gmax` | `tests/integration/test_gmax_panel.py::test_gmax_panel_is_read_only_accessible_and_maps_current_select_results`; `tests/integration/test_compliance_analysis.py::test_gmax_projects_market_and_executed_rows_without_new_external_io` | `GET /api/v1/projects/{project_id}/gmax` | `GmaxSummaryResponse` com mercado e dois `GmaxCheckDto` canônicos |
+| distinguir sem execução, sem gatilho, sem serviços, stale e bloqueio de NS | projeção servidor + textos fechados do `GmaxPanelWidget` | `tests/integration/test_compliance_analysis.py::test_gmax_distinguishes_missing_triggers_from_missing_service_codes`; `::test_gmax_prioritizes_current_ns_block_and_hides_previous_results`; `tests/integration/test_gmax_panel.py::test_gmax_panel_distinguishes_non_current_states_without_color` | mesmo GET; nenhuma operação de escrita ou consulta SQL | `GmaxSnapshotState`, `GmaxQueryState`, `row_found: bool | null` |
+| sincronizar abertura, limpeza e término da conformidade | sinais `project_opened`, `project_cleared` e `compliance_finished` | `tests/e2e/test_mvp_ui.py::test_project_open_create_dialogs_and_refusals_return_to_initial_state`; `tests/integration/test_gmax_panel.py::test_documentation_panel_emits_project_and_terminal_status_for_gmax_refresh` | mesmo GET apenas para o projeto ativo | `GmaxSummaryResponse` |
+
 ## Painel Exportar e fotos
 
 | Ação visível atual | Método atual | Caracterização existente | Endpoint atual | DTO esperado |
@@ -173,7 +187,7 @@ protegidas são `401 AUTHENTICATION_FAILED`, `404 RESOURCE_NOT_FOUND`,
 
 ## Janela, preferências locais, sessão e coordenação
 
-| Ação visível atual | Método atual | Caracterização existente | Endpoint futuro | DTO esperado |
+| Ação visível atual | Método atual | Caracterização existente | Endpoint atual | DTO esperado |
 |---|---|---|---|---|
 | alternar tema claro/escuro | `MainWindow._select_light_theme`, `_select_dark_theme`, `_select_theme` → `QSettings` | `tests/integration/test_window.py::test_theme_menu_switches_immediately_and_is_restored_before_window_is_shown` | nenhum | `ui-state.ini` local |
 | mover, desacoplar, reacoplar, maximizar, minimizar, fechar e reabrir painéis | `_DockTitleBar` e `MainWindow._register_dock` | `tests/integration/test_window.py::test_floating_panel_has_window_controls_and_can_be_reopened` | nenhum | geometria/estado de docks local |
@@ -191,6 +205,7 @@ comportamento listados; ela confirma que a mesma cobertura permanece válida ap�
 
 | Item obrigatório da matriz | Linhas deste inventário | Prova atual mínima |
 |---|---|---|
+| pesquisar NS, tratar existente/ausente e corrida de criação | Painel Projeto, linhas 1–3 | `tests/e2e/test_mvp_ui.py::test_project_combo_searches_only_digits_without_inserting_or_losing_ids`; `::test_project_open_create_dialogs_and_refusals_return_to_initial_state`; `::test_project_creation_race_reuses_existing_dialog_without_repeating_post`; `tests/server/test_project_document_api.py::test_two_concurrent_project_creations_publish_only_one_service_note` |
 | criar/abrir/alterar NS/serviços/excluir projeto | Painel Projeto, linhas 1–6 | `tests/integration/test_mvp_workflow.py::test_project_identifier_is_a_user_supplied_ten_digit_service_note`; `tests/e2e/test_mvp_ui.py::test_environmental_actions_full_client_matrix_uses_current_service_codes`; `::test_project_service_codes_ui_is_remote_canonical_accessible_and_conflict_safe` |
 | selecionar e importar múltiplos PDFs | Painel Projeto, linha 7 | `tests/integration/test_mvp_workflow.py::test_multiple_pdf_import_is_atomic_and_preserves_order` |
 | senha de PDF, três tentativas e descarte seguro | Painel Projeto, linha 8 | `tests/integration/test_protected_pdf_ui.py::test_distinct_passwords_are_reused_in_session_and_never_leak_to_artifacts`; `::test_wrong_password_limit_and_cancel_produce_partial_import_summary` |
@@ -201,6 +216,7 @@ comportamento listados; ela confirma que a mesma cobertura permanece válida ap�
 | regiões, elementos, relações e vãos | Resultados, linhas 3–4 | `tests/integration/test_review_panel.py::test_results_panel_groups_relationships_and_links_elements_to_pdf`; `::test_results_panel_has_span_tab_with_situation_cable_and_length_source` |
 | revisão humana e criações manuais | Resultados, linhas 7–10 | `tests/integration/test_human_review.py::test_accept_adjust_reject_and_reopen_preserve_immutable_history`; `::test_confirm_relation_and_manual_creations_are_persisted_with_author` |
 | documentação, conformidade e callouts | Documentação, linhas 1–8 | `tests/e2e/test_mvp_ui.py::test_environmental_actions_full_client_matrix_uses_current_service_codes`; `tests/integration/test_compliance_analysis.py::test_panel_loads_latest_marks_stale_and_reapplies_without_ocr`; `tests/integration/test_compliance_callout_viewer.py::test_callout_anchor_survives_zoom_resize_rotation_tiles_and_page_changes` |
+| GMAX rural/urbano, SELECT executado/não executado e bloqueio pré-SQL | Painel GMAX, linhas 1–3 | `tests/integration/test_compliance_analysis.py::test_gmax_projects_market_and_executed_rows_without_new_external_io`; `::test_gmax_distinguishes_missing_triggers_from_missing_service_codes`; `::test_gmax_prioritizes_current_ns_block_and_hides_previous_results`; `tests/e2e/test_mvp_ui.py::test_environmental_actions_full_client_matrix_uses_current_service_codes` |
 | importar/exportar regras | Documentação, linhas 8–10 | `tests/integration/test_compliance_rules_panel.py::test_rules_view_only_imports_exports_and_survives_restart`; `tests/unit/test_compliance_catalog_parity.py::test_versioned_catalog_has_registry_id_order_and_activation_parity` |
 | PDF e planilhas finais | Exportar, linhas 2–5 | `tests/server/test_deliverable_exports.py::test_server_generates_pdf_and_three_real_xlsx_deliverables`; `::test_pdf_callout_is_a_downloadable_annotation_even_on_rotated_page` |
 | fotos gerenciadas | Exportar, linhas 7–10 | `tests/integration/test_project_portability.py::test_export_import_preserves_ids_decisions_and_repairs_missing_photo` |

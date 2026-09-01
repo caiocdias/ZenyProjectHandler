@@ -185,7 +185,7 @@ dependência ainda pendente não é bloqueio.
   publica snapshot parcial; cabeçalho ausente ou totalmente coincidente preserva o fluxo atual.
 - [x] API `1.2.0`, OpenAPI, contratos, gateways, documentação funcional/arquitetural e testes estão
   sincronizados.
-- [ ] `.\IniciarTestes.bat` termina com código zero, inclusive Ruff, formatação, Mypy, Pytest,
+- [x] `.\IniciarTestes.bat` termina com código zero, inclusive Ruff, formatação, Mypy, Pytest,
   cobertura e complexidade.
 
 ## Índice das etapas
@@ -197,7 +197,7 @@ dependência ainda pendente não é bloqueio.
 | E03 | Guarda de NS antes dos SELECTs | #concluida | nenhuma | Divergência de cabeçalho bloqueia mercado e ações sem snapshot |
 | E04 | Projeção e contrato remoto GMAX | #concluida | E03 | DTO/endpoint somente leitura com estados auditáveis |
 | E05 | Aba GMAX e sincronização Qt | #concluida | E02, E04 | Dock GMAX na ordem solicitada, atualizado e testado |
-| E06 | Fluxo integrado, documentação e gate final | #pendente | E01, E02, E03, E04, E05 | Regressão completa e definição global de pronto comprovada |
+| E06 | Fluxo integrado, documentação e gate final | #concluida | E01, E02, E03, E04, E05 | Regressão completa e definição global de pronto comprovada |
 
 ## E01 — Resolução exata e conflito de NS existente — #concluida
 
@@ -1072,7 +1072,7 @@ Nenhum bloqueio conhecido depois de E02 e E04.
   executou SQL Server real, não iniciou conformidade pelo GMAX, não criou commit e não publicou nem
   implantou artefatos.
 
-## E06 — Fluxo integrado, documentação e gate final — #pendente
+## E06 — Fluxo integrado, documentação e gate final — #concluida
 
 ### Objetivo
 
@@ -1151,13 +1151,13 @@ publique, não consulte ambiente real e não implante.
 
 ### Critérios de aceite
 
-- [ ] Cada item da definição global de pronto possui teste, inspeção ou evidência registrada.
-- [ ] O cenário integrado cobre todos os ramos Sim/Não e prova ausência de mutações indevidas.
-- [ ] O cenário divergente comprova zero chamadas SQL, nenhum snapshot novo e GMAX bloqueado.
-- [ ] API real/especificação/OpenAPI, gateways direto/HTTP e cliente usam o mesmo contrato 1.2.0.
-- [ ] README, especificação, arquitetura e inventário aplicável descrevem o comportamento entregue.
-- [ ] Não há timers, threads, diálogos ou operações globais pendentes ao encerrar os testes Qt.
-- [ ] O gate oficial passa sem redução de qualidade ou cobertura.
+- [x] Cada item da definição global de pronto possui teste, inspeção ou evidência registrada.
+- [x] O cenário integrado cobre todos os ramos Sim/Não e prova ausência de mutações indevidas.
+- [x] O cenário divergente comprova zero chamadas SQL, nenhum snapshot novo e GMAX bloqueado.
+- [x] API real/especificação/OpenAPI, gateways direto/HTTP e cliente usam o mesmo contrato 1.2.0.
+- [x] README, especificação, arquitetura e inventário aplicável descrevem o comportamento entregue.
+- [x] Não há timers, threads, diálogos ou operações globais pendentes ao encerrar os testes Qt.
+- [x] O gate oficial passa sem redução de qualidade ou cobertura.
 
 ### Validação obrigatória
 
@@ -1185,5 +1185,47 @@ Nenhum bloqueio conhecido depois da conclusão de E01–E05.
 
 ### Evidências e handoff
 
-- Estado inicial: etapa não iniciada; aguarda E01–E05.
-- Evidências de implementação e validação: nenhuma enquanto a tag permanecer `#pendente`.
+- Estado inicial: E06 iniciada em 2026-09-01 sobre `main`, com
+  `git status --short --branch` limpo e sem mudanças preexistentes a preservar. Não há
+  `AGENTS.md` aplicável no repositório. E01–E05 foram confirmadas como `#concluida` no índice e
+  nos detalhes; o roadmap inteiro, `README.md`, `pyproject.toml`, `IniciarTestes.bat`, arquivos e
+  testes de E01–E05 e a documentação viva citada foram revisados antes das alterações.
+- Provas integradas: `tests/e2e/test_mvp_ui.py` passou a resolver uma NS exata fora da primeira
+  página de 200 itens sem perder/inventar IDs e a conferir, por contagem remota, que recusar os
+  diálogos não muta estado, abrir duplicata não cria e aceitar NS inexistente cria exatamente um
+  projeto. Os testes existentes de corrida no servidor, estado inicial, ordem/menu/limpeza dos
+  docks, reconexão e encerramento Qt permaneceram no conjunto focado aprovado.
+- Provas de conformidade/GMAX: `tests/integration/test_compliance_analysis.py` agora tenta executar
+  a análise divergente e comprova a exceção, zero chamadas adicionais aos fakes SQL, histórico e
+  snapshot inalterados e GMAX bloqueado sem exibir resultado antigo. As fixtures sintéticas já
+  cobrem rural/urbano, impacto/servidão e `SELECT` executado com/sem linha ou não executado.
+- Ajustes necessários revelados pelo primeiro gate, sem afrouxar regras: o contrato GMAX passou a
+  variantes Pydantic declarativas e discriminadas, sem validadores executáveis; a análise de
+  conformidade extraiu um helper para voltar ao limite de complexidade; testes de compatibilidade
+  foram alinhados à API `1.2.0`; e oito arquivos de E01–E05 foram formatados pelo Ruff. API
+  `1.2.0` e método de conformidade `10` permaneceram inalterados.
+- Arquivos com conteúdo alterado: `README.md`, `docs/api/openapi-v1.json`,
+  `docs/inventario-paridade-cliente-servidor.md`, este roadmap,
+  `src/zeny_project_handler/application/project_compliance.py`,
+  `src/zeny_project_handler_client/ui/project_panel.py`,
+  `src/zeny_project_handler_contracts/gmax.py`,
+  `src/zeny_project_handler_server/compliance_api.py`, `tests/contracts/test_models.py`,
+  `tests/contracts/test_openapi_snapshot.py`, `tests/e2e/test_mvp_ui.py`,
+  `tests/integration/test_compliance_analysis.py`, `tests/integration/test_gmax_panel.py`,
+  `tests/server/test_compliance_api.py` e `tests/unit/test_client_connection.py`.
+- Documentação/contrato: README e inventário foram consolidados; especificação funcional,
+  arquitetura e API já descreviam as invariantes vigentes e não exigiram alteração. OpenAPI foi
+  regenerada com `.\.venv\Scripts\python.exe scripts\generate_openapi_v1.py` (código zero) e o
+  snapshot confirma `info.version = 1.2.0` e as variantes GMAX na ordem impacto/servidão.
+- Validações focadas finais: o comando obrigatório de dez arquivos pytest passou com `147 passed`
+  em 142,07 s; antes dele, os três cenários diretamente reforçados passaram com `3 passed`. Todos
+  usam apenas fakes e fixtures sintéticas.
+- Gate oficial: a primeira execução identificou o diretório temporário externo ao sandbox e
+  regressões reais de formatação, arquitetura de contratos, compatibilidade de versão e
+  complexidade; todas foram corrigidas. A repetição exata de `.\IniciarTestes.bat`, com autorização
+  apenas para o `C:\tmp` exigido pelo próprio script, terminou com código zero: `pip check`, Ruff,
+  formatação (321 arquivos), Mypy (306 arquivos), gate de fonte do cliente, `897 passed` em
+  311,09 s, cobertura 86,88% contra mínimo 85,01% e complexidade aprovada em 2.594 funções/métodos;
+  `RESULTADO FINAL: APROVADO`.
+- Handoff: `git diff --check` retornou zero e o `git status --short` final lista somente arquivos
+  intencionalmente tocados por E06. Não houve SQL Server real, commit, publicação nem implantação.

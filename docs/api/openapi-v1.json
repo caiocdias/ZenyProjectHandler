@@ -2174,7 +2174,16 @@
         "title": "GlobalOperationDto",
         "type": "object"
       },
-      "GmaxCheckDto": {
+      "GmaxHeaderState": {
+        "enum": [
+          "NOT_FOUND",
+          "MATCH",
+          "MISMATCH"
+        ],
+        "title": "GmaxHeaderState",
+        "type": "string"
+      },
+      "GmaxImpactExecutedCheckDto": {
         "additionalProperties": false,
         "properties": {
           "action": {
@@ -2184,7 +2193,9 @@
             "type": "string"
           },
           "check_type": {
-            "$ref": "#/components/schemas/GmaxCheckType"
+            "const": "IMPACTO_AMBIENTAL",
+            "title": "Check Type",
+            "type": "string"
           },
           "detected_in_pdf": {
             "title": "Detected In Pdf",
@@ -2197,18 +2208,62 @@
             "type": "string"
           },
           "query_state": {
-            "$ref": "#/components/schemas/GmaxQueryState"
+            "const": "EXECUTED",
+            "title": "Query State",
+            "type": "string"
           },
           "row_found": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
+            "title": "Row Found",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "check_type",
+          "label",
+          "detected_in_pdf",
+          "action",
+          "query_state",
+          "row_found"
+        ],
+        "title": "GmaxImpactExecutedCheckDto",
+        "type": "object"
+      },
+      "GmaxImpactNotExecutedCheckDto": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Action",
+            "type": "string"
+          },
+          "check_type": {
+            "const": "IMPACTO_AMBIENTAL",
+            "title": "Check Type",
+            "type": "string"
+          },
+          "detected_in_pdf": {
+            "title": "Detected In Pdf",
+            "type": "boolean"
+          },
+          "label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "query_state": {
+            "enum": [
+              "NOT_EXECUTED",
+              "NOT_EXECUTED_NO_TRIGGER",
+              "NOT_EXECUTED_NO_SERVICE_CODES"
             ],
-            "title": "Row Found"
+            "title": "Query State",
+            "type": "string"
+          },
+          "row_found": {
+            "title": "Row Found",
+            "type": "null"
           }
         },
         "required": [
@@ -2218,25 +2273,8 @@
           "action",
           "query_state"
         ],
-        "title": "GmaxCheckDto",
+        "title": "GmaxImpactNotExecutedCheckDto",
         "type": "object"
-      },
-      "GmaxCheckType": {
-        "enum": [
-          "IMPACTO_AMBIENTAL",
-          "SERVIDAO"
-        ],
-        "title": "GmaxCheckType",
-        "type": "string"
-      },
-      "GmaxHeaderState": {
-        "enum": [
-          "NOT_FOUND",
-          "MATCH",
-          "MISMATCH"
-        ],
-        "title": "GmaxHeaderState",
-        "type": "string"
       },
       "GmaxMarket": {
         "enum": [
@@ -2246,15 +2284,98 @@
         "title": "GmaxMarket",
         "type": "string"
       },
-      "GmaxQueryState": {
-        "enum": [
-          "NOT_EXECUTED",
-          "NOT_EXECUTED_NO_TRIGGER",
-          "NOT_EXECUTED_NO_SERVICE_CODES",
-          "EXECUTED"
+      "GmaxServitudeExecutedCheckDto": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Action",
+            "type": "string"
+          },
+          "check_type": {
+            "const": "SERVIDAO",
+            "title": "Check Type",
+            "type": "string"
+          },
+          "detected_in_pdf": {
+            "title": "Detected In Pdf",
+            "type": "boolean"
+          },
+          "label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "query_state": {
+            "const": "EXECUTED",
+            "title": "Query State",
+            "type": "string"
+          },
+          "row_found": {
+            "title": "Row Found",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "check_type",
+          "label",
+          "detected_in_pdf",
+          "action",
+          "query_state",
+          "row_found"
         ],
-        "title": "GmaxQueryState",
-        "type": "string"
+        "title": "GmaxServitudeExecutedCheckDto",
+        "type": "object"
+      },
+      "GmaxServitudeNotExecutedCheckDto": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Action",
+            "type": "string"
+          },
+          "check_type": {
+            "const": "SERVIDAO",
+            "title": "Check Type",
+            "type": "string"
+          },
+          "detected_in_pdf": {
+            "title": "Detected In Pdf",
+            "type": "boolean"
+          },
+          "label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "query_state": {
+            "enum": [
+              "NOT_EXECUTED",
+              "NOT_EXECUTED_NO_TRIGGER",
+              "NOT_EXECUTED_NO_SERVICE_CODES"
+            ],
+            "title": "Query State",
+            "type": "string"
+          },
+          "row_found": {
+            "title": "Row Found",
+            "type": "null"
+          }
+        },
+        "required": [
+          "check_type",
+          "label",
+          "detected_in_pdf",
+          "action",
+          "query_state"
+        ],
+        "title": "GmaxServitudeNotExecutedCheckDto",
+        "type": "object"
       },
       "GmaxSnapshotState": {
         "enum": [
@@ -2287,10 +2408,42 @@
             "minItems": 2,
             "prefixItems": [
               {
-                "$ref": "#/components/schemas/GmaxCheckDto"
+                "discriminator": {
+                  "mapping": {
+                    "EXECUTED": "#/components/schemas/GmaxImpactExecutedCheckDto",
+                    "NOT_EXECUTED": "#/components/schemas/GmaxImpactNotExecutedCheckDto",
+                    "NOT_EXECUTED_NO_SERVICE_CODES": "#/components/schemas/GmaxImpactNotExecutedCheckDto",
+                    "NOT_EXECUTED_NO_TRIGGER": "#/components/schemas/GmaxImpactNotExecutedCheckDto"
+                  },
+                  "propertyName": "query_state"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/GmaxImpactExecutedCheckDto"
+                  },
+                  {
+                    "$ref": "#/components/schemas/GmaxImpactNotExecutedCheckDto"
+                  }
+                ]
               },
               {
-                "$ref": "#/components/schemas/GmaxCheckDto"
+                "discriminator": {
+                  "mapping": {
+                    "EXECUTED": "#/components/schemas/GmaxServitudeExecutedCheckDto",
+                    "NOT_EXECUTED": "#/components/schemas/GmaxServitudeNotExecutedCheckDto",
+                    "NOT_EXECUTED_NO_SERVICE_CODES": "#/components/schemas/GmaxServitudeNotExecutedCheckDto",
+                    "NOT_EXECUTED_NO_TRIGGER": "#/components/schemas/GmaxServitudeNotExecutedCheckDto"
+                  },
+                  "propertyName": "query_state"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/GmaxServitudeExecutedCheckDto"
+                  },
+                  {
+                    "$ref": "#/components/schemas/GmaxServitudeNotExecutedCheckDto"
+                  }
+                ]
               }
             ],
             "title": "Checks",
