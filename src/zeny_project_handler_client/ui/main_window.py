@@ -417,6 +417,8 @@ class MainWindow(QMainWindow):
             )
             self.project_panel.status_changed.connect(self.statusBar().showMessage)
             self.project_panel.busy_changed.connect(self._refresh_operation_controls)
+            self.project_panel.project_cleared.connect(self.pdf_viewer.limpar)
+            self.project_panel.project_cleared.connect(self.review_panel.limpar)
             if self.documentation_panel is not None:
                 self.project_panel.project_opened.connect(self.documentation_panel.abrir_projeto)
                 if self.project_panel.projeto_ativo_id is not None:
@@ -448,6 +450,7 @@ class MainWindow(QMainWindow):
             right_docks.append(portability_dock)
             if self.project_panel is not None:
                 self.project_panel.project_opened.connect(self.portability_panel.abrir_projeto)
+                self.project_panel.project_cleared.connect(self.portability_panel.limpar)
                 if self.project_panel.projeto_ativo_id is not None:
                     self.portability_panel.abrir_projeto(self.project_panel.projeto_ativo_id)
         for current, following in pairwise(right_docks):

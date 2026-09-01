@@ -39,10 +39,12 @@ from zeny_project_handler.domain.enums import CategoriaElemento
 from zeny_project_handler.domain.market import DescricaoAcao
 from zeny_project_handler.domain.project_metadata import MetadadosProjeto
 from zeny_project_handler_client.config import ClientSettings
+from zeny_project_handler_client.ui.project_gateway import ProjectGatewayError
 from zeny_project_handler_client.ui.project_panel import ProjectPanelWidget
 from zeny_project_handler_contracts.base import ComplianceExecutionId
 from zeny_project_handler_contracts.compliance import ComplianceExecutionResponse
 from zeny_project_handler_contracts.enums import ComplianceStatus
+from zeny_project_handler_contracts.errors import ErrorCode
 from zeny_project_handler_contracts.projects import ProjectServiceCodesResponse
 
 pytestmark = [
@@ -333,6 +335,279 @@ def test_project_service_codes_ui_is_remote_canonical_accessible_and_conflict_sa
     assert reopened_combo.findData(str(second_project_id)) < 0
     assert not reopened_service_box.isEnabled()
     assert reopened_services.count() == 0
+
+
+def test_project_combo_searches_only_digits_without_inserting_or_losing_ids(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    application_factory: ApplicationFactory,
+) -> None:
+    _application, window = application_factory(
+        [],
+        settings=ClientSettings(data_directory=tmp_path / "project-search", pdf_render_dpi=72),
+    )
+    qtbot.addWidget(window)
+    window.show()
+    panel = window.project_panel
+    assert isinstance(panel, ProjectPanelWidget)
+    gateway = panel._gateway
+    assert isinstance(gateway, DirectProjectGateway)
+    combo = panel.findChild(QComboBox, "mvpProjectCombo")
+    open_button = panel.findChild(QPushButton, "mvpOpenProjectButton")
+    assert combo is not None and open_button is not None
+    search = combo.lineEdit()
+    assert search is not None
+    assert combo.isEditable()
+    assert combo.insertPolicy() is QComboBox.InsertPolicy.NoInsert
+    assert search.maxLength() == 10
+    assert search.validator() is not None
+
+    hidden = gateway.create_project("0000000701", idempotency_key="search-hidden")
+    assert combo.findData(str(hidden.project.project_id.root)) < 0
+    combo.setEditText(hidden.project.service_note)
+    qtbot.mouseClick(open_button, Qt.MouseButton.LeftButton)
+    assert panel.projeto_ativo_id == hidden.project.project_id.root
+    assert combo.findData(str(hidden.project.project_id.root)) < 0
+
+    first = gateway.create_project("0000000702", idempotency_key="search-first")
+    second = gateway.create_project("1234500702", idempotency_key="search-second")
+    panel.atualizar_projetos()
+    item_ids = {
+        combo.itemText(index): combo.itemData(index) for index in range(1, combo.count())
+    }
+    assert item_ids == {
+        hidden.project.service_note: str(hidden.project.project_id.root),
+        first.project.service_note: str(first.project.project_id.root),
+        second.project.service_note: str(second.project.project_id.root),
+    }
+    original_count = combo.count()
+    search.clear()
+    qtbot.keyClicks(search, "70a2")
+    assert search.text() == "702"
+    completer = combo.completer()
+    assert completer is not None
+    completer.setCompletionPrefix(search.text())
+    completion_model = completer.completionModel()
+    suggestions = {
+        str(completion_model.index(row, 0).data())
+        for row in range(completion_model.rowCount())
+    }
+    assert suggestions == {first.project.service_note, second.project.service_note}
+    assert combo.count() == original_count
+    search.clear()
+    qtbot.keyClicks(search, "123456789012")
+    assert search.text() == "1234567890"
+    assert combo.count() == original_count
+
+    def unexpected_resolution(_service_note: str) -> object:
+        raise AssertionError("Uma opção selecionada deve abrir pelo ID preservado")
+
+    monkeypatch.setattr(gateway, "find_project_by_service_note", unexpected_resolution)
+    selected_index = combo.findData(str(second.project.project_id.root))
+    combo.setCurrentIndex(selected_index)
+    qtbot.mouseClick(open_button, Qt.MouseButton.LeftButton)
+    assert panel.projeto_ativo_id == second.project.project_id.root
+    assert combo.currentData() == str(second.project.project_id.root)
+
+
+def test_project_open_create_dialogs_and_refusals_return_to_initial_state(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    application_factory: ApplicationFactory,
+) -> None:
+    settings = ClientSettings(data_directory=tmp_path / "project-dialogs", pdf_render_dpi=72)
+    _application, window = application_factory([], settings=settings)
+    qtbot.addWidget(window)
+    window.show()
+    panel = window.project_panel
+    assert isinstance(panel, ProjectPanelWidget)
+    gateway = panel._gateway
+    assert isinstance(gateway, DirectProjectGateway)
+    existing = gateway.create_project("0000000801", idempotency_key="dialog-existing")
+    panel.atualizar_projetos()
+    combo = panel.findChild(QComboBox, "mvpProjectCombo")
+    service_note = panel.findChild(QLineEdit, "mvpProjectNameEdit")
+    create_button = panel.findChild(QPushButton, "mvpCreateProjectButton")
+    open_button = panel.findChild(QPushButton, "mvpOpenProjectButton")
+    run_button = panel.findChild(QPushButton, "mvpRunAnalysisButton")
+    rename_button = panel.findChild(QPushButton, "mvpRenameProjectButton")
+    delete_button = panel.findChild(QPushButton, "mvpDeleteProjectButton")
+    assert combo is not None and service_note is not None
+    assert create_button is not None and open_button is not None
+    assert run_button is not None and rename_button is not None and delete_button is not None
+
+    original_create = gateway.create_project
+    original_find = gateway.find_project_by_service_note
+    create_calls: list[str] = []
+    find_calls: list[str] = []
+
+    def counted_create(note: str, *, idempotency_key: str):  # type: ignore[no-untyped-def]
+        create_calls.append(note)
+        return original_create(note, idempotency_key=idempotency_key)
+
+    def counted_find(note: str):  # type: ignore[no-untyped-def]
+        find_calls.append(note)
+        return original_find(note)
+
+    monkeypatch.setattr(gateway, "create_project", counted_create)
+    monkeypatch.setattr(gateway, "find_project_by_service_note", counted_find)
+    answers = [QMessageBox.StandardButton.No]
+    questions: list[str] = []
+
+    def answer_question(*args: object, **_kwargs: object) -> QMessageBox.StandardButton:
+        questions.extend(item for item in args if isinstance(item, str))
+        return answers[-1]
+
+    warnings: list[str] = []
+    monkeypatch.setattr(QMessageBox, "question", answer_question)
+    monkeypatch.setattr(
+        QMessageBox,
+        "warning",
+        lambda _parent, _title, message: warnings.append(str(message)),
+    )
+    cleared: list[bool] = []
+    panel.project_cleared.connect(lambda: cleared.append(True))
+
+    combo.setCurrentIndex(combo.findData(str(existing.project.project_id.root)))
+    panel.abrir_selecionado()
+    assert panel.projeto_ativo_id == existing.project.project_id.root
+    assert panel._settings.contains("last_project_id")
+    source = create_golden_pdf(tmp_path / "residual.pdf")
+    assert window.pdf_viewer.carregar_pdf(source)
+    assert window.pdf_viewer.inspecao is not None
+    review = window.review_panel
+    documentation = window.documentation_panel
+    export = window.portability_panel
+    assert review is not None and documentation is not None and export is not None
+    review._project.addItem("Projeto residual", str(existing.project.project_id.root))
+    review._project.setCurrentIndex(review._project.count() - 1)
+    documentation._project.addItem("Projeto residual", str(existing.project.project_id.root))
+    documentation._project.setCurrentIndex(documentation._project.count() - 1)
+    assert export._project.currentData() == str(existing.project.project_id.root)
+
+    service_note.setText(existing.project.service_note)
+    qtbot.mouseClick(create_button, Qt.MouseButton.LeftButton)
+
+    assert create_calls == []
+    assert cleared == [True]
+    assert panel.projeto_ativo_id is None
+    assert combo.currentData() is None and combo.currentText() == ""
+    assert service_note.text() == ""
+    assert not panel._settings.contains("last_project_id")
+    assert window.pdf_viewer.inspecao is None
+    assert review._project.currentData() is None
+    review_accept = review.findChild(QPushButton, "reviewAcceptButton")
+    review_reject = review.findChild(QPushButton, "reviewRejectButton")
+    assert review_accept is not None and not review_accept.isEnabled()
+    assert review_reject is not None and not review_reject.isEnabled()
+    assert documentation._project.currentData() is None
+    assert export._project.currentData() is None
+    assert not export._pdf.isEnabled()
+    assert not panel._service_box.isEnabled()
+    assert not panel._document_box.isEnabled()
+    assert not run_button.isEnabled()
+    assert not rename_button.isEnabled()
+    assert not delete_button.isEnabled()
+
+    answers.append(QMessageBox.StandardButton.Yes)
+    service_note.setText(existing.project.service_note)
+    qtbot.mouseClick(create_button, Qt.MouseButton.LeftButton)
+    assert create_calls == []
+    assert panel.projeto_ativo_id == existing.project.project_id.root
+
+    missing = "0000000802"
+    answers.append(QMessageBox.StandardButton.No)
+    combo.setEditText(missing)
+    qtbot.mouseClick(open_button, Qt.MouseButton.LeftButton)
+    assert create_calls == []
+    assert panel.projeto_ativo_id is None
+    assert combo.currentText() == ""
+
+    created_from_open = "0000000803"
+    answers.append(QMessageBox.StandardButton.Yes)
+    combo.setEditText(created_from_open)
+    qtbot.mouseClick(open_button, Qt.MouseButton.LeftButton)
+    assert create_calls == [created_from_open]
+    assert panel._session is not None
+    assert panel._session.service_note == created_from_open
+
+    before_find = len(find_calls)
+    combo.setEditText("123")
+    qtbot.mouseClick(open_button, Qt.MouseButton.LeftButton)
+    service_note.setText("123")
+    qtbot.mouseClick(create_button, Qt.MouseButton.LeftButton)
+    assert len(find_calls) == before_find
+    assert create_calls == [created_from_open]
+    assert any("exatamente 10 dígitos" in message for message in warnings)
+    assert questions.count(
+        "Já existe um projeto para a Nota de Serviço informada. Deseja abrir esse projeto?"
+    ) == 2
+    assert questions.count(
+        "A Nota de Serviço não existe. Deseja criar o projeto da nota?"
+    ) == 2
+
+
+def test_project_creation_race_reuses_existing_dialog_without_repeating_post(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    application_factory: ApplicationFactory,
+) -> None:
+    _application, window = application_factory(
+        [],
+        settings=ClientSettings(data_directory=tmp_path / "project-race", pdf_render_dpi=72),
+    )
+    qtbot.addWidget(window)
+    window.show()
+    panel = window.project_panel
+    assert isinstance(panel, ProjectPanelWidget)
+    gateway = panel._gateway
+    assert isinstance(gateway, DirectProjectGateway)
+    existing = gateway.create_project("0000000810", idempotency_key="race-existing")
+    create_calls: list[str] = []
+
+    monkeypatch.setattr(gateway, "find_project_by_service_note", lambda _note: None)
+
+    def conflicting_create(note: str, *, idempotency_key: str) -> object:
+        del idempotency_key
+        create_calls.append(note)
+        raise ProjectGatewayError(
+            ErrorCode.PROJECT_ALREADY_EXISTS,
+            "Já existe um projeto para a Nota de Serviço informada.",
+            status_code=409,
+            details={
+                "project_id": str(existing.project.project_id.root),
+                "service_note": note,
+            },
+        )
+
+    monkeypatch.setattr(gateway, "create_project", conflicting_create)
+    answers = [QMessageBox.StandardButton.Yes, QMessageBox.StandardButton.No]
+    questions: list[str] = []
+
+    def answer_question(*args: object, **_kwargs: object) -> QMessageBox.StandardButton:
+        questions.extend(item for item in args if isinstance(item, str))
+        return answers.pop(0)
+
+    monkeypatch.setattr(QMessageBox, "question", answer_question)
+    service_note = panel.findChild(QLineEdit, "mvpProjectNameEdit")
+    create_button = panel.findChild(QPushButton, "mvpCreateProjectButton")
+    assert service_note is not None and create_button is not None
+
+    service_note.setText(existing.project.service_note)
+    qtbot.mouseClick(create_button, Qt.MouseButton.LeftButton)
+    assert create_calls == [existing.project.service_note]
+    assert panel.projeto_ativo_id == existing.project.project_id.root
+
+    service_note.setText(existing.project.service_note)
+    qtbot.mouseClick(create_button, Qt.MouseButton.LeftButton)
+    assert create_calls == [existing.project.service_note, existing.project.service_note]
+    assert panel.projeto_ativo_id is None
+    assert questions.count(
+        "Já existe um projeto para a Nota de Serviço informada. Deseja abrir esse projeto?"
+    ) == 2
 
 
 def test_environmental_actions_full_client_matrix_uses_current_service_codes(

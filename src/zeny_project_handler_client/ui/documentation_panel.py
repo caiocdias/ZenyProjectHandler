@@ -282,6 +282,11 @@ class DocumentationPanelWidget(QWidget):
             self.limpar()
 
     def limpar(self) -> None:
+        signals_were_blocked = self._project.blockSignals(True)
+        try:
+            self._project.setCurrentIndex(0 if self._project.count() else -1)
+        finally:
+            self._project.blockSignals(signals_were_blocked)
         self._documentation = None
         self._result = None
         self._callouts = ()

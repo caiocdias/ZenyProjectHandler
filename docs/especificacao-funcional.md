@@ -43,6 +43,9 @@ O diagrama resumido está em [modelo-entidades.mmd](modelo-entidades.mmd). O dom
 ## Projetos e documentos
 
 - Um projeto é criado a partir de uma NS normalizada e pode ter a NS alterada depois.
+- O seletor de projetos aceita pesquisa local por até dez dígitos da NS, sem inserir opções
+  provisórias nem dissociar cada opção de seu ID remoto. Uma NS completa também é resolvida
+  exatamente no servidor, mesmo quando o projeto não está entre os 200 itens carregados.
 - A caixa **Serviços do projeto**, entre **Projeto** e **Folhas PDF**, consulta e substitui uma
   coleção canônica pelo servidor. Cada código possui exatamente quatro dígitos ASCII, conserva
   zeros à esquerda, e projetos legados abrem com coleção vazia.
@@ -59,6 +62,18 @@ O painel Projeto usa somente o gateway HTTP. Cada PDF é enviado por streaming p
 temporária limitada, validado e publicado atomicamente na área gerenciada do servidor. O contrato
 leva bytes e nome de exibição, nunca caminho local. A origem escolhida no cliente não é alterada e a
 cópia gerenciada continua disponível se essa origem for movida ou apagada.
+
+**Abrir** usa o ID de uma opção realmente selecionada ou exige os dez dígitos pesquisados. Se a NS
+completa não existir, a interface informa a ausência e pergunta se deve criar o projeto; aceitar
+faz uma única criação e abre o resultado. **Criar** resolve primeiro a NS informada: quando ela já
+existe, não envia criação e pergunta se deve abrir o ID existente. Um conflito
+`PROJECT_ALREADY_EXISTS` ocorrido entre a resolução e o `POST` usa o mesmo diálogo e não repete a
+criação automaticamente.
+
+Recusar qualquer uma dessas propostas retorna ao estado inicial: não há projeto ativo, pesquisa,
+NS, serviços nem folhas selecionados; `last_project_id` é removido; visualizador, Resultados,
+Documentação/conformidade e Exportar deixam de apontar para o projeto; ações dependentes ficam
+desabilitadas. Essa transição é somente local e não exclui nem altera projeto no servidor.
 
 ## PDFs protegidos
 

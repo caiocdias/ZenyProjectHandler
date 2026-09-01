@@ -385,6 +385,8 @@ class ReviewPanelWidget(QWidget):
         self._span_table.setRowCount(0)
         self._elements_word_wrap.refresh()
         self._spans_word_wrap.refresh()
+        self._detected.setText("Selecione uma identificação na lista ou no PDF")
+        self._update_editor_visibility(None)
         self._viewer.definir_propostas_revisao(())
         self.session_changed.emit(None)
 

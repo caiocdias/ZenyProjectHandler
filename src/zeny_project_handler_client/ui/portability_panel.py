@@ -245,6 +245,14 @@ class PortabilityPanelWidget(QWidget):
         if index >= 0:
             self._project.setCurrentIndex(index)
 
+    def limpar(self) -> None:
+        signals_were_blocked = self._project.blockSignals(True)
+        try:
+            self._project.setCurrentIndex(0 if self._project.count() else -1)
+        finally:
+            self._project.blockSignals(signals_were_blocked)
+        self._apply_action_state()
+
     def exportar(self, kind: DeliverableExportKind) -> None:
         if self._reject_reentry():
             return

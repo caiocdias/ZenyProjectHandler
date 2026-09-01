@@ -174,12 +174,12 @@ dependência ainda pendente não é bloqueio.
   `SELECT`, distinguindo claramente consulta não executada, sem linha e com linha.
 - [ ] GMAX mostra estado vazio sem snapshot, estado desatualizado e bloqueio por NS divergente sem
   apresentar resultado antigo como atual.
-- [ ] O menu suspenso de projetos permite pesquisar NS e mantém associação correta entre texto e ID.
-- [ ] Criar uma NS existente não faz `POST` efetivo adicional; o usuário pode abrir o único projeto
+- [x] O menu suspenso de projetos permite pesquisar NS e mantém associação correta entre texto e ID.
+- [x] Criar uma NS existente não faz `POST` efetivo adicional; o usuário pode abrir o único projeto
   encontrado ou recusar e voltar ao estado inicial.
-- [ ] Abrir uma NS inexistente informa que a nota não existe; aceitar cria exatamente um projeto e
+- [x] Abrir uma NS inexistente informa que a nota não existe; aceitar cria exatamente um projeto e
   recusar não cria nenhum e volta ao estado inicial.
-- [ ] Conflito detectado no servidor depois de uma corrida recebe o mesmo tratamento visual da
+- [x] Conflito detectado no servidor depois de uma corrida recebe o mesmo tratamento visual da
   detecção antecipada no cliente.
 - [ ] Qualquer NS válida divergente no cabeçalho impede todas as chamadas aos dois ports SQL e não
   publica snapshot parcial; cabeçalho ausente ou totalmente coincidente preserva o fluxo atual.
@@ -193,7 +193,7 @@ dependência ainda pendente não é bloqueio.
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E01 | Resolução exata e conflito de NS existente | #concluida | nenhuma | API capaz de resolver NS e impedir duplicidade interativa |
-| E02 | Pesquisa e diálogos do painel Projeto | #pendente | E01 | Fluxos abrir/criar simétricos e retorno ao estado inicial |
+| E02 | Pesquisa e diálogos do painel Projeto | #concluida | E01 | Fluxos abrir/criar simétricos e retorno ao estado inicial |
 | E03 | Guarda de NS antes dos SELECTs | #pendente | nenhuma | Divergência de cabeçalho bloqueia mercado e ações sem snapshot |
 | E04 | Projeção e contrato remoto GMAX | #pendente | E03 | DTO/endpoint somente leitura com estados auditáveis |
 | E05 | Aba GMAX e sincronização Qt | #pendente | E02, E04 | Dock GMAX na ordem solicitada, atualizado e testado |
@@ -371,7 +371,7 @@ Nenhum bloqueio conhecido.
 - Escopo preservado: nenhuma migração, índice, deduplicação, mudança de importação, commit,
   publicação ou implantação foi realizada.
 
-## E02 — Pesquisa e diálogos do painel Projeto — #pendente
+## E02 — Pesquisa e diálogos do painel Projeto — #concluida
 
 ### Objetivo
 
@@ -457,16 +457,16 @@ resuma mudanças, validações e pendências. Não crie commit, não publique e 
 
 ### Critérios de aceite
 
-- [ ] Digitar parte de uma NS filtra/localiza sugestões sem alterar ou inventar IDs.
-- [ ] Uma NS completa fora dos itens carregados pode ser resolvida e aberta remotamente.
-- [ ] **Criar** com NS existente mostra a mensagem e o diálogo; **Sim** abre, **Não** não cria.
-- [ ] **Abrir** com NS inexistente mostra a mensagem e o diálogo; **Sim** cria uma vez, **Não** não
+- [x] Digitar parte de uma NS filtra/localiza sugestões sem alterar ou inventar IDs.
+- [x] Uma NS completa fora dos itens carregados pode ser resolvida e aberta remotamente.
+- [x] **Criar** com NS existente mostra a mensagem e o diálogo; **Sim** abre, **Não** não cria.
+- [x] **Abrir** com NS inexistente mostra a mensagem e o diálogo; **Sim** cria uma vez, **Não** não
   cria.
-- [ ] Um conflito de corrida `PROJECT_ALREADY_EXISTS` segue o mesmo fluxo e não repete `POST`.
-- [ ] Todos os ramos de recusa deixam a aplicação no estado inicial definido, sem mutação remota.
-- [ ] Viewer, Resultados, Documentação/conformidade e Exportar não permanecem apontando para um
+- [x] Um conflito de corrida `PROJECT_ALREADY_EXISTS` segue o mesmo fluxo e não repete `POST`.
+- [x] Todos os ramos de recusa deixam a aplicação no estado inicial definido, sem mutação remota.
+- [x] Viewer, Resultados, Documentação/conformidade e Exportar não permanecem apontando para um
   projeto depois do reset.
-- [ ] Campo incompleto ou inválido produz aviso e nenhuma requisição de abertura/criação.
+- [x] Campo incompleto ou inválido produz aviso e nenhuma requisição de abertura/criação.
 
 ### Validação obrigatória
 
@@ -494,8 +494,42 @@ Nenhum bloqueio conhecido depois de E01.
 
 ### Evidências e handoff
 
-- Estado inicial: etapa não iniciada; aguarda E01.
-- Evidências de implementação e validação: nenhuma enquanto a tag permanecer `#pendente`.
+- Estado inicial: etapa iniciada em 2026-09-01 sobre `main`, com
+  `git status --short --branch` limpo; não havia mudanças preexistentes a preservar nesta sessão.
+- Dependência confirmada: E01 permanece `#concluida`; rota, contrato e gateway de resolução exata
+  por NS continuam aderentes ao plano (`API_VERSION=1.2.0`, ausência convertida em `None` e
+  `PROJECT_ALREADY_EXISTS` com `project_id`/`service_note`).
+- Implementação: `project_panel.py` tornou `mvpProjectCombo` editável com `NoInsert`, validador
+  ASCII de zero a dez dígitos e `QCompleter` por conteúdo sobre o modelo real; a seleção só é usada
+  quando texto e item/ID permanecem associados, e uma NS completa sem item usa a resolução remota.
+- Fluxos: **Criar** resolve antes do `POST`; **Abrir** resolve uma pesquisa completa sem seleção;
+  os diálogos Sim/Não são simétricos. `PROJECT_ALREADY_EXISTS` extrai apenas o `project_id` seguro,
+  reutiliza o diálogo de projeto existente e nunca repete a criação automaticamente.
+- Estado inicial: `_reset_to_initial_state` remove sessão e `last_project_id`, limpa pesquisa, NS,
+  serviços, páginas, progresso e seleção, desabilita ações dependentes e emite `project_cleared`.
+  `main_window.py` conecta o sinal ao visualizador, Resultados e Exportar; a conexão de sessão já
+  existente limpa Documentação/conformidade. `portability_panel.py` ganhou `limpar()` e os combos
+  dependentes deixam de selecionar projeto. Nenhuma chamada de exclusão remota participa do reset.
+- Arquivos alterados: `src/zeny_project_handler_client/ui/project_panel.py`,
+  `src/zeny_project_handler_client/ui/main_window.py`,
+  `src/zeny_project_handler_client/ui/documentation_panel.py`,
+  `src/zeny_project_handler_client/ui/portability_panel.py`,
+  `src/zeny_project_handler_client/ui/review_panel.py`, `tests/e2e/test_mvp_ui.py`,
+  `docs/especificacao-funcional.md` e este roadmap.
+- Cobertura: testes Qt verificam filtro parcial e máximo de dez dígitos, ausência de item fictício,
+  IDs preservados, opção selecionada, resolução fora da lista local, Sim/Não para criação e
+  abertura, corrida Sim/Não com um único `POST` por tentativa, entradas inválidas e limpeza de
+  visualizador/Resultados/Documentação/Exportar/ações/QSettings.
+- Validação obrigatória final: Pytest passou com `29 passed` em 32,72 s; Ruff terminou com
+  `All checks passed!`; Mypy terminou com `Success: no issues found in 303 source files`.
+  Para contornar a restrição local já conhecida de `.pytest_cache`, Pytest usou `TEMP/TMP` no
+  workspace e `PYTEST_ADDOPTS=--basetemp=tmp/e02-final/pytest`; restou somente o aviso não fatal
+  de cache. `git diff --check` também retornou código zero.
+- Handoff para E05: conectar `project_cleared` diretamente ao futuro `GmaxPanelWidget.limpar`;
+  `project_opened` continua emitindo o UUID remoto tanto para seleção local quanto para resolução
+  fora dos 200 itens. O estado vazio não apaga dados do servidor.
+- Escopo preservado: nenhum endpoint/contrato/regra servidor, commit, publicação ou implantação foi
+  criado ou alterado.
 
 ## E03 — Guarda de NS antes dos SELECTs — #pendente
 
