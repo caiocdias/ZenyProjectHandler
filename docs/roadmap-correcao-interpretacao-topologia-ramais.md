@@ -162,7 +162,7 @@ limpa do Codex, atualize sua tag e preencha **Evidências e handoff** antes de i
 | E04 | Redução de vão e associação cabo–traçado | #concluida | E01, E02, E03 | medida vigente, alteração explícita e cabo no traçado correto |
 | E05 | Ponto de padrão e ramal no domínio topológico | #concluida | E01, E04 | ponto `ENTREGA` e tipo de vão/trecho derivados |
 | E06 | Fim/transição, ângulo e compatibilidade pela topologia | #concluida | E05 | fatos fail-closed apenas sobre rede resolvida |
-| E07 | Conformidade específica do ramal | #pendente | E05, E06 | registro ND-5.1 e guardas de aplicabilidade |
+| E07 | Conformidade específica do ramal | #concluida | E05, E06 | registro ND-5.1 e guardas de aplicabilidade |
 | E08 | Contratos, cliente e exportações | #pendente | E04, E05, E07 | DTO/UI/XLSX/OpenAPI coerentes |
 | E09 | Gate integrado e homologação dos exemplos | #pendente | E02–E08 | validação global e handoff final |
 
@@ -793,7 +793,7 @@ físico conforme `_route_groups()`.
   normativo do registro e fatos topológicos. Nenhum commit, push, publicação ou implantação foi
   executado.
 
-## E07 — Conformidade específica do ramal — #pendente
+## E07 — Conformidade específica do ramal — #concluida
 
 **Objetivo:** excluir ramais das regras de vãos/estruturas/ângulos de rede e ativar somente regras
 ND-5.1 sustentadas por fatos resolvidos, incluindo limite de 30 m para ramal aéreo.
@@ -832,11 +832,11 @@ Faça regras de rede consumirem apenas fatos de REDE_DISTRIBUICAO. Adicione a fo
 
 **Critérios de aceite:**
 
-- [ ] Ramais de 10 m, 23 m e 30 m não geram divergência de comprimento; 30,01 m gera quando aéreo.
-- [ ] Modalidade ou comprimento desconhecido resulta `NAO_AVALIAVEL`, não conformidade presumida.
-- [ ] Nenhuma regra de rede de vão, ângulo ou compatibilidade consome ramal.
-- [ ] Fonte, localizador, revisão e paráfrase da ND-5.1 são auditáveis no registro e documentação.
-- [ ] Versões e snapshots antigos não são confundidos com o novo método.
+- [x] Ramais de 10 m, 23 m e 30 m não geram divergência de comprimento; 30,01 m gera quando aéreo.
+- [x] Modalidade ou comprimento desconhecido resulta `NAO_AVALIAVEL`, não conformidade presumida.
+- [x] Nenhuma regra de rede de vão, ângulo ou compatibilidade consome ramal.
+- [x] Fonte, localizador, revisão e paráfrase da ND-5.1 são auditáveis no registro e documentação.
+- [x] Versões e snapshots antigos não são confundidos com o novo método.
 
 **Validação obrigatória:**
 
@@ -853,7 +853,50 @@ isso não bloqueia a regra de 30 m nem a exclusão das regras de rede.
 **Riscos e mitigação:** regra duplicada com o limite genérico de vão; mitigar por tipo de trecho nas
 duas aplicabilidades. Fonte mudar; mitigar registrando hash/revisão de E01.
 
-**Evidências e handoff:** ainda não iniciado.
+**Evidências e handoff (concluída em 02/09/2026):**
+
+- **Pré-auditoria:** E05 e E06 estavam `#concluida` no índice e nos detalhes, com evidências e
+  handoffs preenchidos; o worktree estava limpo antes do início de E07. Não há `AGENTS.md` na raiz
+  nem em seus pais aplicáveis. Foram revistos o ADR 0015, o inventário normativo de E01, provedores,
+  registro, seed, schemas, catálogo e testes de registro/análise.
+- **Fronteira de fatos:** `span_compliance.py` publica `trecho.tipo` e `trecho.modalidade` para o
+  trecho confirmado. Somente `REDE_DISTRIBUICAO` publica `vao.*`; `RAMAL_CONEXAO` publica fatos
+  próprios `ramal.*`, e `DESCONHECIDO` não alimenta nenhuma dessas famílias. Em
+  `project_compliance.py`, `cabo.tecnologia` e `cabo.instalar_tecnologia` também exigem cabo
+  confirmado como rede de distribuição. As guardas topológicas de E06 continuam excluindo ramal de
+  grau, fim/transição, ângulo de equipamento e matriz estrutura–cabo.
+- **Regra ND-5.1:** o seed ganhou a Regra 42,
+  `nd51.ramal-conexao-aereo-comprimento`, com paráfrase curta, revisão `Mar/2026`, itens 5.1.3 e
+  5.1.4, página PDF 33 e URL oficial inventariada em E01. A regra cobre os mercados urbano e rural,
+  dispensa ramal subterrâneo e usa o novo gate declarativo `evaluate_when`: somente modalidade aérea
+  e comprimento resolvidos liberam o requisito `<= 30 m`; caso contrário o achado é
+  `NAO_AVALIAVEL` e nenhum requisito é auditado como violado.
+- **Candidatos deliberadamente não ativados:** `ramal.cabo_multiplex_confirmado` e
+  `ramal.ancoragem_confirmada` foram registrados como fatos `PLANEJADO`, sem provedor e sem regra
+  ativa, porque não há evidência positiva inequívoca no pipeline. O catálogo e o inventário os
+  documentam como não avaliáveis, sem inferir ausência. Nenhum limite angular de ramal foi criado e
+  nenhum conteúdo protegido da ABNT foi incorporado.
+- **Versões e compatibilidade:** o registro passou de `cemig-normas-distribuicao-2025.7` para
+  `cemig-normas-distribuicao-2026.1`, com migração aditiva que preserva regras personalizadas e
+  numeração histórica; o método de conformidade passou de `11` para `12`, tornando snapshots do
+  método anterior obsoletos sem reescrevê-los. Schema, parser, serialização, projeção da API e
+  catálogo gerado reconhecem o gate opcional sem alterar a assinatura canônica de regras antigas.
+- **Cobertura:** testes unitários exercitam 10 m, 23 m e 30 m como `CONFORME`, 30,01 m como
+  `DIVERGENCIA`, nos dois mercados; modalidade desconhecida e comprimento ausente como
+  `NAO_AVALIAVEL`; subterrâneo fora da regra; separação dos fatos de ramal/rede; tecnologia de cabo
+  somente em rede confirmada; fonte e schema; migrações 2025.7→2026.1 e snapshots do método 12. Os
+  regressivos topológicos existentes continuam cobrindo exclusão de ramal/desconhecido do ângulo e
+  da compatibilidade.
+- **Validações:** a suíte obrigatória, executada com `--basetemp tmp\\pytest-e07-required-final`
+  porque o `%TEMP%\\pytest-of-Caio` do host recusou acesso, terminou com `92 passed in 8.94s`;
+  `python -m mypy` terminou com `Success: no issues found in 306 source files`; `ruff check src tests`
+  retornou `All checks passed!`; os 19 arquivos Python alterados passaram em `ruff format --check`.
+  A suíte completa final terminou com `948 passed in 100.82s`; depois da formatação mecânica, os
+  regressivos diretamente afetados foram reexecutados e terminaram com `5 passed in 3.79s`.
+- **Handoff para E08:** preservar as famílias tipadas `trecho.*`, `ramal.*` e `vao.*`, a semântica
+  pública de `NAO_AVALIAVEL`/`evaluate_when`, a Regra 42 e o método `12` ao atualizar DTOs, OpenAPI,
+  UI e exportações. O cliente não deve reconstruir tipo/modalidade nem voltar a consumir ramal como
+  vão de rede. Nenhum commit, push, publicação, implantação ou outra ação externa foi executado.
 
 ## E08 — Contratos, cliente e exportações — #pendente
 

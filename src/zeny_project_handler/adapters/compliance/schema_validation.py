@@ -73,7 +73,7 @@ def _validate_rule(value: object, index: int) -> dict[str, Any]:
         "must",
         "enabled",
     }
-    allowed = required | {"unless"}
+    allowed = required | {"unless", "evaluate_when"}
     _keys(rule, prefix, allowed, required=required)
     rule_id = _text(rule.get("id"), f"{prefix}.id")
     label = f"regra '{rule_id}'"
@@ -85,6 +85,8 @@ def _validate_rule(value: object, index: int) -> dict[str, Any]:
     _validate_conditions(rule.get("when"), label, "when")
     if "unless" in rule:
         _validate_conditions(rule.get("unless"), label, "unless")
+    if "evaluate_when" in rule:
+        _validate_conditions(rule.get("evaluate_when"), label, "evaluate_when", minimum=1)
     _validate_conditions(rule.get("must"), label, "must", minimum=1)
     if not isinstance(rule.get("enabled"), bool):
         _fail(f"{label} · campo enabled", "deve ser booleano")

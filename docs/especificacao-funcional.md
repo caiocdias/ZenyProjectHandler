@@ -18,8 +18,8 @@ Estado versionado relevante:
 | Pacote Python | `0.3.0` |
 | Catálogo técnico | `2` |
 | Registro de interpretação | `1.6.0` |
-| Registro de conformidade distribuído | `cemig-normas-distribuicao-2025.7` |
-| Método de conformidade | `10` |
+| Registro de conformidade distribuído | `cemig-normas-distribuicao-2026.1` |
+| Método de conformidade | `12` |
 | Migração SQLite mais recente | `0009_remote_jobs` |
 
 ## Modelo de domínio
@@ -215,7 +215,7 @@ identificador operacional inequívoco. A medida usa, nesta ordem, o comprimento 
 desenho e a distância entre coordenadas compatíveis dos postes. A origem da medida e as evidências
 permanecem registradas; um comprimento não é inventado quando nenhuma fonte é suficiente.
 
-### Evolução aprovada para alteração, ponto de entrega e ramal
+### Alteração, ponto de entrega e ramal
 
 O domínio e o interpretador já usam `ALTERAR` na redução de comprimento. Rótulo técnico, traçado,
 identificador `V<n>-<n>` e medida são associados separadamente por geometria; um cabo com traçado
@@ -224,8 +224,8 @@ essa medida substituída. Quando medida substituída e vigente pertencem sem amb
 traçado, `comprimento_m` recebe a vigente e a proposta conserva IDs navegáveis da medida anterior e
 da marca de supersessão. Paralelas, cruzamentos e rótulos empatados permanecem sem associação.
 
-O [ADR 0015](adr/0015-pontos-de-entrega-ramais-e-alteracao-de-vao.md) aprova ainda o contrato
-topológico interno implementado por E05 e que as etapas E06–E08 consumirão e exporão:
+O [ADR 0015](adr/0015-pontos-de-entrega-ramais-e-alteracao-de-vao.md) aprova o contrato topológico
+interno implementado por E05–E07 e que E08 exporá:
 
 - `ALTERAR` será uma situação pública distinta para o ativo que permanece com comprimento, traçado
   ou configuração substituídos. Uma medida antiga riscada não torna o cabo `REMOVER`;
@@ -237,8 +237,11 @@ topológico interno implementado por E05 e que as etapas E06–E08 consumirão e
 - `ModalidadeTrecho` distingue `AEREO`, `SUBTERRANEO` e `DESCONHECIDO` sem ser deduzida do tipo
   topológico. Regras dependentes de modalidade ficarão não avaliáveis quando ela não estiver
   resolvida;
-- um ramal não participará do grau, fim/transição, ângulo ou compatibilidade da rede de distribuição.
-  Somente regras próprias do ramal poderão consumi-lo;
+- um ramal não participa do grau, fim/transição, ângulo ou compatibilidade da rede de distribuição.
+  Fatos de vão e tecnologia usados por regras de rede também exigem `REDE_DISTRIBUICAO`;
+- a regra própria ativa do ramal limita a 30 m o trecho aéreo nos mercados urbano e rural. Falta de
+  modalidade ou comprimento gera `NAO_AVALIAVEL`; cabo multiplex e ancoragem continuam candidatos
+  sem requisito ativo até haver fatos positivos rastreáveis;
 - dados anteriores continuarão legíveis com campos novos em `DESCONHECIDO`. Classificação resolvida
   e `ALTERAR` exigirão reanálise semântica explícita e nova conformidade; snapshots históricos não
   serão reescritos.
@@ -266,7 +269,7 @@ job e recebe somente DTOs normalizados. Seleção cruzada, visibilidade e a posi
 caixas permanecem locais. O upload de regras exige preflight e confirmação separados; cancelar no
 diálogo não publica revisão.
 
-O seed contém 41 regras habilitadas. As regras 40 e 41 têm, respectivamente, os títulos exatos
+O seed contém 42 regras habilitadas. As regras 40 e 41 têm, respectivamente, os títulos exatos
 `IMPACTO AMBIENTAL PENDENTE` e `FALTA SERVIDÃO PENDENTE`. A lista normativa completa está em
 [catalogo-regras-conformidade.md](catalogo-regras-conformidade.md), e o desenho do motor está em
 [arquitetura-conformidade.md](arquitetura-conformidade.md).
@@ -292,10 +295,9 @@ explicativa e o callout usa a evidência do PDF. Timeout, falha ODBC ou erro de 
 job sem snapshot parcial e não são convertidos em pendência. Sem o gatilho, a ação não é consultada
 e a regra não cria achado.
 
-O domínio e a interface reconhecem `CONFORME`, `DIVERGENCIA` e `NAO_AVALIAVEL`. O avaliador atual
-emite os dois primeiros para alvos aplicáveis e não cria achado quando alguma condição `when` falha.
-Dentro de uma regra aplicável, requisito ausente conta como não atendido; por isso o registro inclui
-fatos de guarda sempre que a ausência significa “escopo ainda não caracterizado”, e não violação.
+O domínio e a interface reconhecem `CONFORME`, `DIVERGENCIA` e `NAO_AVALIAVEL`. Uma condição `when`
+que falha omite o alvo; uma condição `evaluate_when` que falha mantém o achado como
+`NAO_AVALIAVEL`. Dentro de uma regra avaliável, requisito ausente conta como não atendido.
 Somente divergências são compiladas na lista de problemas e, quando possuem geometria rastreável,
 recebem callout. Resultados conformes e não avaliáveis permanecem no snapshot auditável, sem serem
 encaminhados ao projetista como pendências. O usuário pode arrastar a caixa dentro da folha; a

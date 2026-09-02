@@ -37,9 +37,10 @@ from zeny_project_handler.domain.enums import (
     SituacaoProjeto,
     TipoEvidencia,
     TipoOrigemPdf,
+    TipoTrechoRede,
 )
 from zeny_project_handler.domain.market import DescricaoAcao, Mercado
-from zeny_project_handler.domain.project import ElementoProjetoType, Equipamento, Poste
+from zeny_project_handler.domain.project import Cabo, ElementoProjetoType, Equipamento, Poste
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 
 from .compliance_fact_providers import (
@@ -1455,7 +1456,7 @@ def _cable_technology_facts(
 ) -> tuple[FatoConformidade, ...]:
     facts: list[FatoConformidade] = []
     for proposal in proposals:
-        if proposal.categoria is not CategoriaElemento.CABO:
+        if not _is_confirmed_network_cable(proposal, context):
             continue
         catalog_item = (
             session.catalogo.item_por_id(proposal.tipo_catalogo_sugerido_id)
@@ -1471,7 +1472,7 @@ def _cable_technology_facts(
                     target_id,
                     "cabo.tecnologia",
                     technology,
-                    "catálogo do cabo reconhecido",
+                    "catálogo do cabo confirmado como REDE_DISTRIBUICAO",
                     evidence=_proposal_evidence(proposal, context.evidence),
                     confidence=proposal.confianca,
                 )
@@ -1488,7 +1489,7 @@ def _installed_cable_technology_facts(
     facts: list[FatoConformidade] = []
     for proposal in proposals:
         if (
-            proposal.categoria is not CategoriaElemento.CABO
+            not _is_confirmed_network_cable(proposal, context)
             or proposal.situacao_projeto is not SituacaoProjeto.INSTALAR
         ):
             continue
@@ -1506,12 +1507,24 @@ def _installed_cable_technology_facts(
                     target_id,
                     "cabo.instalar_tecnologia",
                     technology,
-                    "catálogo do cabo reconhecido como instalação",
+                    "catálogo do cabo a instalar confirmado como REDE_DISTRIBUICAO",
                     evidence=_proposal_evidence(proposal, context.evidence),
                     confidence=proposal.confianca,
                 )
             )
     return tuple(facts)
+
+
+def _is_confirmed_network_cable(
+    proposal: PropostaElemento,
+    context: _RegionFactContext,
+) -> bool:
+    confirmed = context.confirmed_elements_by_proposal.get(proposal.id)
+    return (
+        proposal.categoria is CategoriaElemento.CABO
+        and isinstance(confirmed, Cabo)
+        and confirmed.tipo_trecho is TipoTrechoRede.REDE_DISTRIBUICAO
+    )
 
 
 def _structure_post_facts(

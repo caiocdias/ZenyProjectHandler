@@ -14,7 +14,9 @@ from zeny_project_handler.domain.compliance import (
 from zeny_project_handler.domain.enums import (
     CategoriaElemento,
     EstadoRevisao,
+    ModalidadeTrecho,
     OrigemComprimentoVao,
+    TipoTrechoRede,
 )
 from zeny_project_handler.domain.values import GeometriaDocumento
 
@@ -30,7 +32,7 @@ _EXCEPTION_MAX_LENGTH = Decimal("60")
 
 
 def prover_fatos_vaos(contexto: ContextoProvedorFatos) -> tuple[FatoConformidade, ...]:
-    """Publique medidas e avalie todo vão cujo comprimento esteja disponível."""
+    """Publique classificação e medidas sem misturar rede de distribuição e ramal."""
     session = contexto.sessao
     evidence_by_id = {item.id: item for item in session.evidencias}
     proposals = {
@@ -59,6 +61,46 @@ def prover_fatos_vaos(contexto: ContextoProvedorFatos) -> tuple[FatoConformidade
             evidence_by_id,
             page_id=region_target.pagina_id,
         )
+        span_evidence = _proposal_evidence(
+            proposal,
+            evidence_by_id,
+            page_id=region_target.pagina_id,
+        )
+        facts.extend(
+            (
+                criar_fato_conformidade(
+                    region_target.id,
+                    "trecho.tipo",
+                    span.tipo_trecho.value,
+                    "detectar_vaos:tipo_trecho",
+                    evidencias=span_evidence,
+                    confianca=proposal.confianca,
+                    geometria=span.geometria,
+                ),
+                criar_fato_conformidade(
+                    region_target.id,
+                    "trecho.modalidade",
+                    span.modalidade.value,
+                    "detectar_vaos:modalidade",
+                    evidencias=span_evidence,
+                    confianca=proposal.confianca,
+                    geometria=span.geometria,
+                ),
+            )
+        )
+        if span.tipo_trecho is TipoTrechoRede.RAMAL_CONEXAO:
+            facts.extend(
+                _service_drop_facts(
+                    span,
+                    proposal,
+                    region_target,
+                    evidence,
+                    span_evidence,
+                )
+            )
+            continue
+        if span.tipo_trecho is not TipoTrechoRede.REDE_DISTRIBUICAO:
+            continue
         if span.comprimento_m is not None and span.origem_comprimento is not None:
             facts.append(
                 criar_fato_conformidade(
@@ -107,6 +149,54 @@ def prover_fatos_vaos(contexto: ContextoProvedorFatos) -> tuple[FatoConformidade
                     geometria=exception_evidence[0].geometria,
                 )
             )
+    return tuple(facts)
+
+
+def _service_drop_facts(
+    span: VaoDetectado,
+    proposal: PropostaElemento,
+    target: AlvoConformidade,
+    measurement_evidence: tuple[EvidenciaDocumento, ...],
+    span_evidence: tuple[EvidenciaDocumento, ...],
+) -> tuple[FatoConformidade, ...]:
+    facts: list[FatoConformidade] = [
+        criar_fato_conformidade(
+            target.id,
+            "ramal.modalidade",
+            span.modalidade.value,
+            "detectar_vaos:modalidade_ramal",
+            evidencias=span_evidence,
+            confianca=proposal.confianca,
+            geometria=span.geometria,
+        )
+    ]
+    if span.comprimento_m is not None and span.origem_comprimento is not None:
+        facts.append(
+            criar_fato_conformidade(
+                target.id,
+                "ramal.comprimento_m",
+                span.comprimento_m,
+                f"detectar_vaos:{span.origem_comprimento.value}",
+                evidencias=measurement_evidence,
+                confianca=proposal.confianca,
+                geometria=_measurement_geometry(span, measurement_evidence),
+            )
+        )
+    if span.modalidade is ModalidadeTrecho.SUBTERRANEO:
+        return tuple(facts)
+    evaluable = span.modalidade is ModalidadeTrecho.AEREO and span.comprimento_m is not None
+    evaluability_evidence = tuple(dict.fromkeys((*span_evidence, *measurement_evidence)))
+    facts.append(
+        criar_fato_conformidade(
+            target.id,
+            "ramal.comprimento_aereo_avaliavel",
+            evaluable,
+            "detectar_vaos:tipo_modalidade_comprimento",
+            evidencias=evaluability_evidence,
+            confianca=proposal.confianca,
+            geometria=_measurement_geometry(span, measurement_evidence),
+        )
+    )
     return tuple(facts)
 
 
@@ -199,6 +289,19 @@ def _measurement_evidence(
     return tuple(
         evidence_by_id[evidence_id]
         for evidence_id in evidence_ids
+        if evidence_id in evidence_by_id and evidence_by_id[evidence_id].pagina_id == page_id
+    )
+
+
+def _proposal_evidence(
+    proposal: PropostaElemento,
+    evidence_by_id: dict[UUID, EvidenciaDocumento],
+    *,
+    page_id: UUID | None,
+) -> tuple[EvidenciaDocumento, ...]:
+    return tuple(
+        evidence_by_id[evidence_id]
+        for evidence_id in proposal.evidencia_ids
         if evidence_id in evidence_by_id and evidence_by_id[evidence_id].pagina_id == page_id
     )
 

@@ -317,7 +317,7 @@ def test_execution_is_deterministic_preserves_history_and_survives_restart(
     first = service.executar(project_id)
     repeated = service.executar(project_id)
 
-    assert VERSAO_METODO_CONFORMIDADE == "11"
+    assert VERSAO_METODO_CONFORMIDADE == "12"
     assert first.versao_metodo == VERSAO_METODO_CONFORMIDADE
     assert repeated.id == first.id
     assert dumps_domain(repeated) == dumps_domain(first)
@@ -1124,7 +1124,7 @@ def test_http_documentation_gateway_get_gmax_uses_read_retry_and_contract(
     engine.dispose()
 
 
-def test_remote_dtos_preserve_baseline_semantics_for_all_41_active_rules(
+def test_remote_dtos_preserve_baseline_semantics_for_all_42_active_rules(
     tmp_path: Path,
     catalogo_inicial: CatalogoTecnico,
 ) -> None:
@@ -1147,7 +1147,7 @@ def test_remote_dtos_preserve_baseline_semantics_for_all_41_active_rules(
     registry = gateway.get_active_registry()
     remote = gateway.get_latest_compliance(project_id)
 
-    assert registry.rule_count == registry.active_rule_count == 41
+    assert registry.rule_count == registry.active_rule_count == 42
     assert remote is not None
     expected_status = {
         ResultadoConformidade.CONFORME: ComplianceStatus.COMPLIANT,

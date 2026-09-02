@@ -131,6 +131,7 @@ def _rule(data: dict[str, Any]) -> RegraConformidade:
             ),
             aplicabilidade=_conditions(data.get("when", []), "when"),
             excecoes=_conditions(data.get("unless", []), "unless"),
+            avaliabilidade=_conditions(data.get("evaluate_when", []), "evaluate_when"),
             requisitos=_conditions(data.get("must"), "must"),
             ativa=bool(data.get("enabled", True)),
         )

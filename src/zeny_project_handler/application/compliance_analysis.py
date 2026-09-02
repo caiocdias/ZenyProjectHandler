@@ -37,7 +37,7 @@ from .project_compliance import (
     detectar_notas_servico_cabecalho,
 )
 
-VERSAO_METODO_CONFORMIDADE = "11"
+VERSAO_METODO_CONFORMIDADE = "12"
 
 
 def resultado_conformidade_desatualizado(

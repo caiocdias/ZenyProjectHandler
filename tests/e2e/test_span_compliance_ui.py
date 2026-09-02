@@ -50,6 +50,7 @@ from zeny_project_handler.domain.enums import (
     SituacaoProjeto,
     TipoDecisaoRevisao,
     TipoEvidencia,
+    TipoTrechoRede,
 )
 from zeny_project_handler.domain.project import Cabo, PontoRede, Poste
 from zeny_project_handler.domain.project_metadata import MetadadosProjeto
@@ -231,7 +232,7 @@ def test_span_rule_full_ui_cycle_survives_restart(
     assert not history.items[1].is_stale
     assert any(item.rule_id == _RULE_ID for item in first_execution.findings)
     assert "IDs existentes substituídos: 1" in confirmations[-1]
-    assert "IDs atuais omitidos e preservados: 41" in confirmations[-1]
+    assert "IDs atuais omitidos e preservados: 42" in confirmations[-1]
 
 
 def _create_project_with_pdf(
@@ -319,6 +320,7 @@ def _persist_span_semantic_session(
             ponto_destino_id=second_point.id,
             comprimento_m=Decimal("52"),
             origem_comprimento=OrigemComprimentoVao.ANOTACAO_DESENHO,
+            tipo_trecho=TipoTrechoRede.REDE_DISTRIBUICAO,
         )
         updated = replace(
             project,

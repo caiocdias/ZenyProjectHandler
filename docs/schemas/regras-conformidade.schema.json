@@ -46,6 +46,11 @@
           },
           "when": {"type": "array", "items": {"$ref": "#/$defs/condition"}},
           "unless": {"type": "array", "items": {"$ref": "#/$defs/condition"}},
+          "evaluate_when": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"$ref": "#/$defs/condition"}
+          },
           "must": {
             "type": "array",
             "minItems": 1,

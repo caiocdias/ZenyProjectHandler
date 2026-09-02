@@ -57,18 +57,33 @@ def avaliar_regras_conformidade(
                 scoped_facts,
                 GrupoCondicaoConformidade.EXCECAO,
             )
-            requirement, requirement_audit = _conditions(
-                rule.requisitos,
-                scoped_facts,
-                GrupoCondicaoConformidade.REQUISITO,
-            )
-            evaluations = (*applicability_audit, *exception_audit, *requirement_audit)
             if rule.excecoes and exception is _Truth.TRUE:
                 continue
-            result = (
-                ResultadoConformidade.CONFORME
-                if requirement is _Truth.TRUE
-                else ResultadoConformidade.DIVERGENCIA
+            evaluability, evaluability_audit = _conditions(
+                rule.avaliabilidade,
+                scoped_facts,
+                GrupoCondicaoConformidade.AVALIABILIDADE,
+                unknown_on_false=True,
+            )
+            if evaluability is _Truth.FALSE:
+                result = ResultadoConformidade.NAO_AVALIAVEL
+                requirement_audit: tuple[AvaliacaoCondicaoConformidade, ...] = ()
+            else:
+                requirement, requirement_audit = _conditions(
+                    rule.requisitos,
+                    scoped_facts,
+                    GrupoCondicaoConformidade.REQUISITO,
+                )
+                result = (
+                    ResultadoConformidade.CONFORME
+                    if requirement is _Truth.TRUE
+                    else ResultadoConformidade.DIVERGENCIA
+                )
+            evaluations = (
+                *applicability_audit,
+                *exception_audit,
+                *evaluability_audit,
+                *requirement_audit,
             )
             evidence_ids = tuple(
                 dict.fromkeys(
@@ -109,11 +124,18 @@ def _conditions(
     conditions: tuple[CondicaoConformidade, ...],
     facts: tuple[FatoConformidade, ...],
     group: GrupoCondicaoConformidade,
+    unknown_on_false: bool = False,
 ) -> tuple[_Truth, tuple[AvaliacaoCondicaoConformidade, ...]]:
     if not conditions:
         return _Truth.TRUE, ()
     evaluated = tuple(
-        _condition(condition, facts, group=group, index=index)
+        _condition(
+            condition,
+            facts,
+            group=group,
+            index=index,
+            unknown_on_false=unknown_on_false,
+        )
         for index, condition in enumerate(conditions)
     )
     results = tuple(item[0] for item in evaluated)
@@ -127,6 +149,7 @@ def _condition(
     *,
     group: GrupoCondicaoConformidade,
     index: int,
+    unknown_on_false: bool = False,
 ) -> tuple[_Truth, AvaliacaoCondicaoConformidade]:
     relevant_facts = tuple(fact for fact in facts if fact.chave == condition.chave_fato)
     values = tuple(fact.valor for fact in relevant_facts)
@@ -157,7 +180,11 @@ def _condition(
         fato_ids=tuple(item.id for item in relevant_facts),
         resultado={
             _Truth.TRUE: ResultadoCondicaoConformidade.ATENDE,
-            _Truth.FALSE: ResultadoCondicaoConformidade.NAO_ATENDE,
+            _Truth.FALSE: (
+                ResultadoCondicaoConformidade.DESCONHECIDO
+                if unknown_on_false
+                else ResultadoCondicaoConformidade.NAO_ATENDE
+            ),
         }[truth],
     )
 

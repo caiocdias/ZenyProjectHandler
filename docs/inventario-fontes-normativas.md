@@ -93,6 +93,23 @@ automatizá-los, o localizador e os fatos correspondentes precisam de auditoria 
 Os comentários presentes nos PDFs locais de projetos serviram somente para apontar casos de teste.
 Nenhuma obrigação, exceção ou interpretação normativa acima foi derivada desses comentários.
 
+### Ativação controlada em E07 — 2 de setembro de 2026
+
+O registro `cemig-normas-distribuicao-2026.1` ativa somente a parcela cujo fato já é resolvido de
+forma determinística: o comprimento máximo de 30 m do ramal de conexão aéreo, aplicável tanto ao
+mercado urbano quanto ao rural. A Regra 42, `nd51.ramal-conexao-aereo-comprimento`, cita a ND-5.1
+Mar/2026, itens 5.1.3 e 5.1.4, com página PDF inicial 33 e a URL oficial registrada na tabela acima.
+Ela exige tipo `RAMAL_CONEXAO`, modalidade `AEREO` e comprimento rastreável; modalidade ou medida
+não resolvida produz `NAO_AVALIAVEL`, e ramal subterrâneo fica fora da aplicabilidade.
+
+Os requisitos de cabo multiplex e ancoragem própria do ramal permanecem candidatos documentados.
+As chaves `ramal.cabo_multiplex_confirmado` e `ramal.ancoragem_confirmada` estão marcadas como fatos
+planejados, sem provedor, porque os desenhos atuais não fornecem uma associação positiva segura.
+Nenhuma ausência é inferida e nenhuma divergência é criada. Também não foi ativado limite angular
+para ramal, e as regras de matriz estrutura–cabo e ângulo da rede consomem exclusivamente fatos de
+`REDE_DISTRIBUICAO`. Nenhum conteúdo protegido da ABNT foi reproduzido ou usado para ampliar a
+obrigação.
+
 ## Confirmação das fontes já citadas
 
 - A ND-3.1 do registro continua publicada no endereço de outubro de 2025, com revisão Jul/2025. Os

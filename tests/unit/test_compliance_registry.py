@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections import Counter
 from copy import deepcopy
 from pathlib import Path
@@ -47,7 +48,12 @@ def test_fact_catalog_covers_current_and_planned_seed_vocabulary() -> None:
     used = {
         condition.chave_fato
         for rule in registry.regras
-        for condition in (*rule.aplicabilidade, *rule.excecoes, *rule.requisitos)
+        for condition in (
+            *rule.aplicabilidade,
+            *rule.excecoes,
+            *rule.avaliabilidade,
+            *rule.requisitos,
+        )
     }
 
     assert used <= definitions.keys()
@@ -71,14 +77,31 @@ def test_fact_catalog_covers_current_and_planned_seed_vocabulary() -> None:
         "regiao.topologia_mt_avaliavel",
         "regiao.componente_mt_completo",
         "regiao.fim_rede",
+        "trecho.tipo",
+        "trecho.modalidade",
+        "ramal.modalidade",
+        "ramal.comprimento_m",
+        "ramal.comprimento_aereo_avaliavel",
     ):
         assert definitions[key].disponibilidade is DisponibilidadeProvedorFato.DISPONIVEL
+    for key in ("ramal.cabo_multiplex_confirmado", "ramal.ancoragem_confirmada"):
+        assert definitions[key].disponibilidade is DisponibilidadeProvedorFato.PLANEJADO
+        assert all(
+            condition.chave_fato != key
+            for rule in registry.regras
+            for condition in (
+                *rule.aplicabilidade,
+                *rule.excecoes,
+                *rule.avaliabilidade,
+                *rule.requisitos,
+            )
+        )
     warnings = validar_semantica_registro(registry)
     assert not any("conexao.angulo_graus" in item for item in warnings)
     assert all("vao.comprimento_m" not in item for item in warnings)
 
 
-def test_official_2025_7_seed_contains_the_complete_additive_rule_set() -> None:
+def test_official_2026_1_seed_contains_service_drop_rule_and_previous_additions() -> None:
     registry = carregar_registro_conformidade_inicial()
     expected_additions = {
         "nd31.desenho.numero-folha",
@@ -103,12 +126,13 @@ def test_official_2025_7_seed_contains_the_complete_additive_rule_set() -> None:
         "nd31.rede.compacta-aterramento-temporario-160m",
         "bi.acoes.impacto-ambiental",
         "bi.acoes.falta-servidao",
+        "nd51.ramal-conexao-aereo-comprimento",
     }
 
-    assert registry.versao == "cemig-normas-distribuicao-2025.7"
-    assert len(registry.regras) == 41
+    assert registry.versao == "cemig-normas-distribuicao-2026.1"
+    assert len(registry.regras) == 42
     assert expected_additions <= {item.id for item in registry.regras}
-    action_rules = registry.regras[-2:]
+    action_rules = tuple(item for item in registry.regras if item.id.startswith("bi.acoes."))
     assert tuple(item.titulo for item in action_rules) == (
         "IMPACTO AMBIENTAL PENDENTE",
         "FALTA SERVIDÃO PENDENTE",
@@ -118,6 +142,15 @@ def test_official_2025_7_seed_contains_the_complete_additive_rule_set() -> None:
     assert tuple(item.fonte.item for item in action_rules) == (
         "AVALIAR IMPACTO AMBIENTAL",
         "FALTA SERVIDÃO",
+    )
+    service_drop_rule = registry.regras[-1]
+    assert service_drop_rule.id == "nd51.ramal-conexao-aereo-comprimento"
+    assert service_drop_rule.ativa
+    assert service_drop_rule.fonte.documento == "CEMIG ND-5.1"
+    assert service_drop_rule.fonte.revisao == "Mar/2026"
+    assert service_drop_rule.fonte.pagina == 33
+    assert tuple(item.chave_fato for item in service_drop_rule.avaliabilidade) == (
+        "ramal.comprimento_aereo_avaliavel",
     )
 
 
@@ -202,6 +235,28 @@ def test_schema_rejects_executable_or_unknown_fields_without_evaluating_them() -
     rule["python"] = "__import__('pathlib').Path('executed').write_text('bad')"
 
     with pytest.raises(DomainValidationError, match="campo não permitido: python"):
+        registro_conformidade_de_dict(payload)
+
+
+def test_public_schema_declares_non_empty_optional_evaluability_gate() -> None:
+    schema_path = Path(__file__).parents[2] / "docs" / "schemas" / "regras-conformidade.schema.json"
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    rule_properties = schema["properties"]["rules"]["items"]["properties"]
+
+    assert rule_properties["evaluate_when"]["minItems"] == 1
+    assert "evaluate_when" not in schema["properties"]["rules"]["items"]["required"]
+
+    payload = _seed_payload()
+    rules = payload["rules"]
+    assert isinstance(rules, list)
+    service_drop_rule = next(
+        item
+        for item in rules
+        if isinstance(item, dict) and item.get("id") == "nd51.ramal-conexao-aereo-comprimento"
+    )
+    service_drop_rule["evaluate_when"] = []
+
+    with pytest.raises(DomainValidationError, match=r"evaluate_when.*ao menos 1"):
         registro_conformidade_de_dict(payload)
 
 

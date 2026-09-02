@@ -2,7 +2,7 @@
   "schema_version": 1,
   "registry": {
     "id": "710c56ea-8586-5cdd-a272-f885ab93ac73",
-    "version": "cemig-normas-distribuicao-2025.7"
+    "version": "cemig-normas-distribuicao-2026.1"
   },
   "rules": [
     {
@@ -1444,6 +1444,50 @@
           "fact": "projeto.acao_falta_servidao_concluida",
           "operator": "IGUAL",
           "expected": [true]
+        }
+      ],
+      "enabled": true
+    },
+    {
+      "id": "nd51.ramal-conexao-aereo-comprimento",
+      "title": "Comprimento máximo do ramal de conexão aéreo",
+      "description": "Ramal de conexão aéreo com modalidade e comprimento resolvidos não deve ultrapassar 30 m.",
+      "scope": "REGIAO",
+      "severity": "ERRO",
+      "source": {
+        "document": "CEMIG ND-5.1",
+        "revision": "Mar/2026",
+        "item": "Ramal de conexão aéreo, itens 5.1.3 e 5.1.4",
+        "page": 33,
+        "url": "https://www.cemig.com.br/wp-content/uploads/2025/10/nd5_1_000001p.pdf"
+      },
+      "when": [
+        {
+          "fact": "trecho.tipo",
+          "operator": "IGUAL",
+          "expected": ["RAMAL_CONEXAO"],
+          "quantifier": "QUALQUER"
+        }
+      ],
+      "unless": [
+        {
+          "fact": "ramal.modalidade",
+          "operator": "IGUAL",
+          "expected": ["SUBTERRANEO"]
+        }
+      ],
+      "evaluate_when": [
+        {
+          "fact": "ramal.comprimento_aereo_avaliavel",
+          "operator": "IGUAL",
+          "expected": [true]
+        }
+      ],
+      "must": [
+        {
+          "fact": "ramal.comprimento_m",
+          "operator": "MENOR_OU_IGUAL",
+          "expected": [30]
         }
       ],
       "enabled": true

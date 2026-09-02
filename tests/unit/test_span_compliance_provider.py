@@ -30,12 +30,15 @@ from zeny_project_handler.domain.enums import (
     CategoriaElemento,
     EstadoExecucaoAnalise,
     EstadoRevisao,
+    ModalidadeTrecho,
     NivelRede,
     OrigemComprimentoVao,
     SituacaoProjeto,
     TipoDecisaoRevisao,
     TipoEvidencia,
     TipoOrigemPdf,
+    TipoPontoRede,
+    TipoTrechoRede,
 )
 from zeny_project_handler.domain.market import Mercado
 from zeny_project_handler.domain.project import Cabo, PontoRede, Poste, Projeto
@@ -255,6 +258,114 @@ def test_current_span_rule_crosses_the_complete_provider_and_evaluation_flow(
         assert fact.geometria is not None
 
 
+@pytest.mark.parametrize(
+    ("length", "market", "expected"),
+    (
+        (Decimal("10"), Mercado.URBANO, "CONFORME"),
+        (Decimal("23"), Mercado.RURAL, "CONFORME"),
+        (Decimal("30"), Mercado.URBANO, "CONFORME"),
+        (Decimal("30.01"), Mercado.RURAL, "DIVERGENCIA"),
+    ),
+)
+def test_aerial_service_drop_length_rule_covers_both_markets_and_exact_threshold(
+    length: Decimal,
+    market: Mercado,
+    expected: str,
+) -> None:
+    fixture = _span_fixture(
+        length=length,
+        origin=OrigemComprimentoVao.ANOTACAO_DESENHO,
+        segment_type=TipoTrechoRede.RAMAL_CONEXAO,
+        modality=ModalidadeTrecho.AEREO,
+    )
+
+    result = analisar_conformidade_projeto(
+        fixture.session,
+        carregar_registro_conformidade_inicial(),
+        mercado=market,
+    )
+    finding = next(
+        item for item in result.achados if item.regra_id == "nd51.ramal-conexao-aereo-comprimento"
+    )
+    fact_keys = {item.chave for item in result.fatos}
+
+    assert finding.resultado.value == expected
+    assert "ramal.comprimento_m" in fact_keys
+    assert "ramal.comprimento_aereo_avaliavel" in fact_keys
+    assert all(not key.startswith("vao.") for key in fact_keys)
+    assert finding.fonte.documento == "CEMIG ND-5.1"
+    assert finding.fonte.revisao == "Mar/2026"
+    assert finding.fonte.item == "Ramal de conexão aéreo, itens 5.1.3 e 5.1.4"
+
+
+@pytest.mark.parametrize(
+    ("length", "modality"),
+    (
+        (Decimal("23"), ModalidadeTrecho.DESCONHECIDO),
+        (None, ModalidadeTrecho.AEREO),
+    ),
+)
+def test_unresolved_service_drop_modality_or_length_is_not_evaluable(
+    length: Decimal | None,
+    modality: ModalidadeTrecho,
+) -> None:
+    fixture = _span_fixture(
+        length=length,
+        origin=(OrigemComprimentoVao.ANOTACAO_DESENHO if length is not None else None),
+        segment_type=TipoTrechoRede.RAMAL_CONEXAO,
+        modality=modality,
+    )
+
+    result = analisar_conformidade_projeto(
+        fixture.session,
+        carregar_registro_conformidade_inicial(),
+        mercado=Mercado.URBANO,
+    )
+    finding = next(
+        item for item in result.achados if item.regra_id == "nd51.ramal-conexao-aereo-comprimento"
+    )
+    evaluability = next(
+        item for item in result.fatos if item.chave == "ramal.comprimento_aereo_avaliavel"
+    )
+
+    assert finding.resultado.value == "NAO_AVALIAVEL"
+    assert evaluability.valor is False
+    assert evaluability.id in finding.fato_ids
+    assert all(item.grupo.value != "REQUISITO" for item in finding.avaliacoes_condicoes)
+    assert any(item.resultado.value == "DESCONHECIDO" for item in finding.avaliacoes_condicoes)
+
+
+def test_subterranean_service_drop_is_outside_the_aerial_length_rule() -> None:
+    fixture = _span_fixture(
+        length=Decimal("31"),
+        origin=OrigemComprimentoVao.ANOTACAO_DESENHO,
+        segment_type=TipoTrechoRede.RAMAL_CONEXAO,
+        modality=ModalidadeTrecho.SUBTERRANEO,
+    )
+
+    result = analisar_conformidade_projeto(
+        fixture.session,
+        carregar_registro_conformidade_inicial(),
+        mercado=Mercado.URBANO,
+    )
+
+    assert all(item.regra_id != "nd51.ramal-conexao-aereo-comprimento" for item in result.achados)
+
+
+def test_distribution_span_does_not_publish_service_drop_facts() -> None:
+    fixture = _span_fixture(
+        length=Decimal("30"),
+        origin=OrigemComprimentoVao.ANOTACAO_DESENHO,
+    )
+
+    facts = prover_fatos_vaos(
+        ContextoProvedorFatos(fixture.session, _targets(fixture.session), Mercado.URBANO)
+    )
+
+    assert any(item.chave == "vao.comprimento_m" for item in facts)
+    assert all(not item.chave.startswith("ramal.") for item in facts)
+
+
 def _span_fixture(
     *,
     length: Decimal | None,
@@ -262,6 +373,8 @@ def _span_fixture(
     coordinates: bool = False,
     exception: bool = False,
     exception_evidence: bool = True,
+    segment_type: TipoTrechoRede = TipoTrechoRede.REDE_DISTRIBUICAO,
+    modality: ModalidadeTrecho = ModalidadeTrecho.DESCONHECIDO,
 ) -> _SpanFixture:
     catalog = carregar_catalogo_inicial()
     page = _page("primary")
@@ -300,11 +413,16 @@ def _span_fixture(
     )
     second_point = PontoRede(
         id=_id("network-point-2"),
-        poste_id=second_pole.id,
-        nome="P2-MT",
+        poste_id=(None if segment_type is TipoTrechoRede.RAMAL_CONEXAO else second_pole.id),
+        nome=("Padrão do cliente" if segment_type is TipoTrechoRede.RAMAL_CONEXAO else "P2-MT"),
         nivel_rede=NivelRede.MT,
         nivel_tensao_opcao_id=cable_type.nivel_tensao_opcao_id,
         configuracao_fases_opcao_id=cable_type.configuracao_fases_opcao_id,
+        tipo=(
+            TipoPontoRede.ENTREGA
+            if segment_type is TipoTrechoRede.RAMAL_CONEXAO
+            else TipoPontoRede.POSTE
+        ),
         geometria=second_pole.geometria,
     )
     cable_geometry = GeometriaDocumento.polilinha(
@@ -321,6 +439,8 @@ def _span_fixture(
         geometria=cable_geometry,
         ponto_origem_id=first_point.id,
         ponto_destino_id=second_point.id,
+        tipo_trecho=segment_type,
+        modalidade=modality,
         comprimento_m=length,
         origem_comprimento=origin,
     )

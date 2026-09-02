@@ -32,7 +32,8 @@ CATALOGO_REGRAS_FILE_NAME = "catalogo-regras-conformidade.md"
 _SAFE_BUNDLED_VERSION = "cemig-normas-distribuicao-2025.4"
 _PREVIOUS_BUNDLED_VERSION = "cemig-normas-distribuicao-2025.5"
 _BUNDLED_2025_6_VERSION = "cemig-normas-distribuicao-2025.6"
-_CURRENT_BUNDLED_VERSION = "cemig-normas-distribuicao-2025.7"
+_BUNDLED_2025_7_VERSION = "cemig-normas-distribuicao-2025.7"
+_CURRENT_BUNDLED_VERSION = "cemig-normas-distribuicao-2026.1"
 _SPAN_RULE_ID = "nd31.vao.urbano-compacto-isolado"
 _SPAN_SAFEGUARD_FACT = "vao.aplicabilidade_excecao_45_60_resolvida"
 _SERVICE_NOTE_RULE_ID = "nd31.desenho.numero-projeto"
@@ -91,6 +92,7 @@ _BUNDLED_2025_7_ADDITION_IDS = (
     "bi.acoes.impacto-ambiental",
     "bi.acoes.falta-servidao",
 )
+_BUNDLED_2026_1_ADDITION_IDS = ("nd51.ramal-conexao-aereo-comprimento",)
 _TRANSFORMER_30_75_DESCRIPTION_2025_5 = (
     "Na parcela verificável da observação t, transformadores trifásicos de 30, 45 ou 75 kVA "
     "a instalar em posteação existente exigem poste de formato admitido e capacidade nominal "
@@ -341,6 +343,7 @@ def _upgrade_bundled_registry(
         _SAFE_BUNDLED_VERSION,
         _PREVIOUS_BUNDLED_VERSION,
         _BUNDLED_2025_6_VERSION,
+        _BUNDLED_2025_7_VERSION,
         _CURRENT_BUNDLED_VERSION,
     }:
         return None
@@ -351,6 +354,7 @@ def _upgrade_bundled_registry(
     if seed.versao in {
         _PREVIOUS_BUNDLED_VERSION,
         _BUNDLED_2025_6_VERSION,
+        _BUNDLED_2025_7_VERSION,
         _CURRENT_BUNDLED_VERSION,
     }:
         candidate, additions_2025_5_changed = _add_missing_bundled_rules(
@@ -361,7 +365,11 @@ def _upgrade_bundled_registry(
 
     updates_2025_6_changed = False
     additions_2025_6_changed = False
-    if seed.versao in {_BUNDLED_2025_6_VERSION, _CURRENT_BUNDLED_VERSION}:
+    if seed.versao in {
+        _BUNDLED_2025_6_VERSION,
+        _BUNDLED_2025_7_VERSION,
+        _CURRENT_BUNDLED_VERSION,
+    }:
         candidate, updates_2025_6_changed = _replace_unchanged_2025_5_rules(
             candidate,
             seed,
@@ -373,11 +381,19 @@ def _upgrade_bundled_registry(
         )
 
     additions_2025_7_changed = False
-    if seed.versao == _CURRENT_BUNDLED_VERSION:
+    if seed.versao in {_BUNDLED_2025_7_VERSION, _CURRENT_BUNDLED_VERSION}:
         candidate, additions_2025_7_changed = _add_missing_bundled_rules(
             candidate,
             seed,
             _BUNDLED_2025_7_ADDITION_IDS,
+        )
+
+    additions_2026_1_changed = False
+    if seed.versao == _CURRENT_BUNDLED_VERSION:
+        candidate, additions_2026_1_changed = _add_missing_bundled_rules(
+            candidate,
+            seed,
+            _BUNDLED_2026_1_ADDITION_IDS,
         )
 
     candidate = _upgrade_registry_version(
@@ -390,6 +406,7 @@ def _upgrade_bundled_registry(
         updates_2025_6_changed=updates_2025_6_changed,
         additions_2025_6_changed=additions_2025_6_changed,
         additions_2025_7_changed=additions_2025_7_changed,
+        additions_2026_1_changed=additions_2026_1_changed,
     )
     return candidate if candidate != current else None
 
@@ -467,6 +484,7 @@ def _upgrade_registry_version(
     updates_2025_6_changed: bool,
     additions_2025_6_changed: bool,
     additions_2025_7_changed: bool,
+    additions_2026_1_changed: bool,
 ) -> RegistroRegrasConformidade:
     if candidate.regras == seed.regras:
         return replace(candidate, versao=seed.versao)
@@ -479,6 +497,7 @@ def _upgrade_registry_version(
             (updates_2025_6_changed, "atualizacao-2025.6"),
             (additions_2025_6_changed, "adicoes-2025.6"),
             (additions_2025_7_changed, "adicoes-2025.7"),
+            (additions_2026_1_changed, "adicoes-2026.1"),
         )
         if changed
     )
@@ -644,7 +663,15 @@ def _render_rule(
 ) -> list[str]:
     rule = current or historical
     facts = sorted(
-        {item.chave_fato for item in (*rule.aplicabilidade, *rule.excecoes, *rule.requisitos)}
+        {
+            item.chave_fato
+            for item in (
+                *rule.aplicabilidade,
+                *rule.excecoes,
+                *rule.avaliabilidade,
+                *rule.requisitos,
+            )
+        }
     )
     planned = [
         item
@@ -659,6 +686,10 @@ def _render_rule(
     )
     when = _conditions_text(rule.aplicabilidade, empty="aplica-se sem condição adicional")
     unless = _conditions_text(rule.excecoes, empty="nenhuma exceção declarada")
+    evaluate_when = _conditions_text(
+        rule.avaliabilidade,
+        empty="avaliável sem condição adicional",
+    )
     must = _conditions_text(rule.requisitos, empty="nenhum requisito")
     source = f"{rule.fonte.documento}, revisão {rule.fonte.revisao}, item {rule.fonte.item}"
     if rule.fonte.pagina is not None:
@@ -674,10 +705,12 @@ def _render_rule(
         f"- **Descrição:** {_markdown(rule.descricao)}",
         f"- **Processo de análise:** a Regra {number} consiste em avaliar `{_markdown(rule.id)}` "
         f"no escopo {rule.escopo.value}. Primeiro, o analisador verifica when: {when}. Depois, "
-        f"confirma unless: {unless}. Se a regra continuar aplicável, verifica must: {must}.",
+        f"confirma unless: {unless}. Se a regra continuar aplicável, verifica evaluate_when: "
+        f"{evaluate_when}. Somente então verifica must: {must}.",
         f"- **Fatos observados:** {', '.join(f'`{_markdown(item)}`' for item in facts)}.",
-        "- **Resultado:** requisito atendido resulta em CONFORME; requisito ausente, inválido ou "
-        "contraditório resulta em DIVERGÊNCIA.",
+        "- **Resultado:** gate de avaliabilidade não atendido resulta em NAO_AVALIAVEL; requisito "
+        "atendido resulta em CONFORME; requisito ausente, inválido ou contraditório resulta em "
+        "DIVERGÊNCIA.",
         f"- **Fonte registrada:** {_markdown(source)}.",
         "",
     ]

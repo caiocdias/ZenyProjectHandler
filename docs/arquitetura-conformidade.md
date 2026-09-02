@@ -3,8 +3,8 @@
 ## Objetivo
 
 O motor compara fatos rastreáveis do projeto com regras declarativas sem transformar ausência de
-evidência em certeza. A revisão distribuída atual é `cemig-normas-distribuicao-2025.7`, com 41 regras
-habilitadas, e o método de conformidade está na versão `10`.
+evidência em certeza. A revisão distribuída atual é `cemig-normas-distribuicao-2026.1`, com 42 regras
+habilitadas, e o método de conformidade está na versão `12`.
 
 O [catálogo de regras](catalogo-regras-conformidade.md) documenta obrigações e fontes. O
 [inventário normativo](inventario-fontes-normativas.md) registra documentos, revisões, hashes e
@@ -96,6 +96,7 @@ o que foi observado; ele não contém a obrigação normativa.
 - fonte com documento, revisão, item, página e URL;
 - `when`, condições de aplicabilidade;
 - `unless`, exceções que precisam de prova positiva;
+- `evaluate_when`, gate opcional de fatos mínimos para uma conclusão;
 - `must`, requisitos avaliados quando a regra se aplica;
 - estado `enabled`.
 
@@ -105,8 +106,8 @@ O JSON não aceita expressão executável nem chamada arbitrária de Python.
 ### Achado
 
 `AchadoConformidade` admite `CONFORME`, `DIVERGENCIA` ou `NAO_AVALIAVEL` e registra a regra e o alvo,
-condições avaliadas, fatos participantes, valor observado, valor esperado e fonte. A interface
-continua capaz de apresentar os três estados; o avaliador vigente não cria `NAO_AVALIAVEL`.
+condições avaliadas, fatos participantes, valor observado, valor esperado e fonte. O terceiro estado
+é produzido quando uma regra aplicável não atende ao gate explícito `evaluate_when`.
 
 ## Semântica da avaliação
 
@@ -114,11 +115,12 @@ continua capaz de apresentar os três estados; o avaliador vigente não cria `NA
 2. Todas as condições `when` são combinadas por E; se alguma falha, o alvo é ignorado para a regra.
 3. Condição sem fatos falha, exceto `AUSENTE`, que é atendida justamente quando não há valor.
 4. Se todas as condições `unless` são atendidas, a regra é dispensada para o alvo.
-5. Todos os requisitos `must` precisam ser atendidos. Falha ou ausência de um requisito produz
+5. Se alguma condição `evaluate_when` não é atendida, o alvo recebe `NAO_AVALIAVEL`; essa falha não
+   é tratada como descumprimento do requisito.
+6. Todos os requisitos `must` precisam ser atendidos. Falha ou ausência de um requisito produz
    `DIVERGENCIA`; todos atendidos produzem `CONFORME`.
-6. O registro deve usar um fato de aplicabilidade resolvida quando a falta de evidência ainda não
-   autoriza avaliar o requisito. Essa guarda é o que impede uma divergência presumida fora do escopo
-   conhecido.
+7. O registro usa `when` para delimitar escopo e `evaluate_when` quando a regra já se aplica, mas a
+   falta de evidência ainda não autoriza avaliar o requisito.
 
 O avaliador genérico está em `application/compliance_evaluation.py`. Ele não conhece geometria,
 topologia, PDF, SQL Server, mercado nem normas específicas. As guardas
@@ -148,7 +150,7 @@ sessão semântica e seus alvos. A composição é explícita no bootstrap:
 |---|---|---|
 | documental | `application/document_compliance.py` | nomes e conteúdo de documentos, anexos identificados |
 | regional | `application/project_compliance.py` | cabeçalho, formato, escala, serviços, impacto/servidão e resultados das ações |
-| vãos | `application/span_compliance.py` | tecnologia, comprimento, origem da medida e exceções comprovadas |
+| vãos | `application/span_compliance.py` | tipo/modalidade do trecho e comprimentos separados de rede e ramal |
 | topológica | `application/topology_compliance.py` | ângulos, continuidade, componentes, periodicidade e coerência entre elementos |
 
 Os provedores publicam fatos e proveniência; condições normativas permanecem no JSON. Adicionar uma
@@ -156,9 +158,9 @@ família não exige alterar o avaliador.
 
 ## Contrato topológico aprovado para ramais
 
-O [ADR 0015](adr/0015-pontos-de-entrega-ramais-e-alteracao-de-vao.md) aprova a fronteira que será
-implementada pelas etapas E04–E08 do roadmap de correção de ramais. Até essas etapas alterarem e
-versionarem o código, esta seção é contrato de evolução e não descrição de um detector já ativo.
+O [ADR 0015](adr/0015-pontos-de-entrega-ramais-e-alteracao-de-vao.md) define a fronteira implementada
+pelas etapas E04–E07 do roadmap de correção de ramais; sua projeção pública permanece reservada à
+E08.
 
 - redução de comprimento usa a situação pública `ALTERAR`; a medida vigente alimenta o cabo e a
   medida substituída permanece somente como evidência auditável, nunca como `REMOVER`;
@@ -169,6 +171,12 @@ versionarem o código, esta seção é contrato de evolução e não descrição
 - somente `REDE_DISTRIBUICAO` participa do grafo usado por fim/transição, ângulo de equipamento e
   compatibilidade estrutura–cabo. Ramal e trecho desconhecido não contam no grau nem fabricam fatos
   topológicos;
+- fatos genéricos `vao.*` e `cabo.tecnologia` também são publicados somente para
+  `REDE_DISTRIBUICAO`; o ramal usa fatos próprios `ramal.*`;
+- a regra ND-5.1 de 30 m usa ramal aéreo com modalidade e comprimento resolvidos. Falta de qualquer
+  um produz `NAO_AVALIAVEL`; ramal subterrâneo é dispensado;
+- cabo multiplex e ancoragem permanecem fatos planejados, sem requisito automatizado, até existir
+  evidência positiva inequívoca. Nenhum limite angular foi criado para o ramal;
 - projetos persistidos sem os campos novos são lidos como desconhecidos e exigem nova análise
   semântica, seguida de nova conformidade, para obter classificações resolvidas. Não há backfill por
   proximidade nem mutação de snapshots históricos.

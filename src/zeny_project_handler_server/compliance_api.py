@@ -315,7 +315,12 @@ class DocumentationComplianceApiService:
                 fact_keys=tuple(
                     dict.fromkeys(
                         item.chave_fato
-                        for item in (*rule.aplicabilidade, *rule.excecoes, *rule.requisitos)
+                        for item in (
+                            *rule.aplicabilidade,
+                            *rule.excecoes,
+                            *rule.avaliabilidade,
+                            *rule.requisitos,
+                        )
                     )
                 ),
                 definition=definitions[rule.id],

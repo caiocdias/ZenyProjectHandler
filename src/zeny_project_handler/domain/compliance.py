@@ -62,6 +62,7 @@ class ResultadoConformidade(StrEnum):
 class GrupoCondicaoConformidade(StrEnum):
     APLICABILIDADE = "APLICABILIDADE"
     EXCECAO = "EXCECAO"
+    AVALIABILIDADE = "AVALIABILIDADE"
     REQUISITO = "REQUISITO"
 
 
@@ -237,6 +238,7 @@ class RegraConformidade:
     requisitos: tuple[CondicaoConformidade, ...]
     aplicabilidade: tuple[CondicaoConformidade, ...] = ()
     excecoes: tuple[CondicaoConformidade, ...] = ()
+    avaliabilidade: tuple[CondicaoConformidade, ...] = ()
     ativa: bool = True
 
     def __post_init__(self) -> None:
@@ -251,6 +253,7 @@ class RegraConformidade:
         object.__setattr__(self, "requisitos", requirements)
         object.__setattr__(self, "aplicabilidade", tuple(self.aplicabilidade))
         object.__setattr__(self, "excecoes", tuple(self.excecoes))
+        object.__setattr__(self, "avaliabilidade", tuple(self.avaliabilidade))
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -293,6 +296,15 @@ class RegistroRegrasConformidade:
                     },
                     "when": [_condition_payload(item) for item in rule.aplicabilidade],
                     "unless": [_condition_payload(item) for item in rule.excecoes],
+                    **(
+                        {
+                            "evaluate_when": [
+                                _condition_payload(item) for item in rule.avaliabilidade
+                            ]
+                        }
+                        if rule.avaliabilidade
+                        else {}
+                    ),
                     "must": [_condition_payload(item) for item in rule.requisitos],
                 }
                 for rule in self.regras

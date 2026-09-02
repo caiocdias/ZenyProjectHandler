@@ -5,9 +5,9 @@ incluindo descrição, `when`, `unless`, `must`, operadores e URL — está em
 `src/zeny_project_handler/adapters/compliance/data/regras_conformidade_v1.json`. Evitar reproduzir
 essas condições aqui reduz o risco de divergência entre documentação e código.
 
-- Versão do seed: `cemig-normas-distribuicao-2025.7`.
-- Regras: 41 ativas, 0 inativas.
-- Método de conformidade: versão `9`.
+- Versão do seed: `cemig-normas-distribuicao-2026.1`.
+- Regras: 42 ativas, 0 inativas.
+- Método de conformidade: versão `12`.
 - Escopos usados pelo seed: `PROJETO` e `REGIAO`.
 - Fontes e cobertura normativa: [inventario-fontes-normativas.md](inventario-fontes-normativas.md).
 
@@ -16,6 +16,8 @@ essas condições aqui reduz o risco de divergência entre documentação e cód
 - IDs técnicos são estáveis e recebem números de exibição permanentes no SQLite.
 - Todas as condições `when` precisam ser atendidas para a regra ser aplicada ao alvo.
 - Todas as condições `unless` atendidas dispensam a regra naquele alvo.
+- Condições opcionais `evaluate_when` são verificadas depois da aplicabilidade e das exceções. Se
+  alguma não for atendida, a regra produz `NAO_AVALIAVEL`; seus requisitos não viram divergência.
 - Todos os requisitos `must` precisam ser atendidos; ausência, contradição ou valor inválido em um
   requisito de uma regra aplicável produz `DIVERGENCIA`.
 - Regras cujo escopo ainda não pode ser caracterizado usam fatos de guarda em `when`; a falha da
@@ -28,6 +30,13 @@ essas condições aqui reduz o risco de divergência entre documentação e cód
 - Para essas duas regras, zero linha em `vBIAcoes` e coleção vazia significam requisito não atendido;
   erro ODBC interrompe a execução e não vira divergência. O resultado SQL não possui geometria, por
   isso a evidência do gatilho ancora o callout.
+- Fatos `vao.*` e `cabo.tecnologia` usados por regras de rede são publicados somente para cabos
+  confirmados como `REDE_DISTRIBUICAO`. Ramais e trechos desconhecidos não alimentam comprimento de
+  vão, ângulo de equipamento ou compatibilidade estrutura–cabo da rede.
+- A Regra 42 usa apenas `trecho.tipo=RAMAL_CONEXAO`, modalidade aérea positiva e comprimento
+  resolvido. Ela vale nos dois mercados cadastrados, considera 30 m conforme, sinaliza valor acima
+  do limite e produz `NAO_AVALIAVEL` quando modalidade ou comprimento não estão resolvidos. Ramal
+  subterrâneo fica fora dessa regra.
 
 ## Regras distribuídas
 
@@ -74,6 +83,20 @@ essas condições aqui reduz o risco de divergência entre documentação e cód
 | Regra 39 | `nd31.rede.compacta-aterramento-temporario-160m` | Pontos periódicos de aterramento temporário da rede compacta | ATIVA | PROJETO | ALERTA | CEMIG ND-3.1, Jul/2025, Dimensionamento Elétrico, item 7, p. 57 |
 | Regra 40 | `bi.acoes.impacto-ambiental` | IMPACTO AMBIENTAL PENDENTE | ATIVA | PROJETO | ERRO | Controle operacional de ações BI, 2026-08-28, AVALIAR IMPACTO AMBIENTAL |
 | Regra 41 | `bi.acoes.falta-servidao` | FALTA SERVIDÃO PENDENTE | ATIVA | PROJETO | ERRO | Controle operacional de ações BI, 2026-08-28, FALTA SERVIDÃO |
+| Regra 42 | `nd51.ramal-conexao-aereo-comprimento` | Comprimento máximo do ramal de conexão aéreo | ATIVA | REGIAO | ERRO | CEMIG ND-5.1, Mar/2026, itens 5.1.3 e 5.1.4, p. 33 |
+
+## Candidatos do ramal ainda não avaliáveis
+
+A ND-5.1 Mar/2026 também fundamenta candidatos relativos ao cabo multiplex e ao sistema próprio de
+ancoragem do ramal aéreo. Eles não foram convertidos em requisitos ativos porque o pipeline não
+publica fatos positivos, inequívocos e navegáveis que distingam esses elementos no ramal. As chaves
+`ramal.cabo_multiplex_confirmado` e `ramal.ancoragem_confirmada` permanecem `PLANEJADO`; portanto o
+estado dessas verificações é `NAO_AVALIAVEL`, sem presumir ausência nem criar divergência. Ativação
+futura exige primeiro provedores positivos e testes com negativos ambíguos.
+
+Nenhum limite angular foi criado para o ramal, e a matriz estrutura–cabo e o ângulo de equipamento
+da rede não são reutilizados para ele. O registro contém somente uma paráfrase curta e o localizador
+da fonte oficial; não incorpora conteúdo de normas ABNT protegidas.
 
 ## Manutenção
 

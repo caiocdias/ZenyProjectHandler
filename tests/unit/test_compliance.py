@@ -17,7 +17,9 @@ from zeny_project_handler.application.analysis_regions import RegiaoAnalise
 from zeny_project_handler.application.compliance_evaluation import avaliar_regras_conformidade
 from zeny_project_handler.application.human_review import SessaoRevisao
 from zeny_project_handler.application.project_compliance import (
+    _cable_technology_facts,
     _document_control_facts,
+    _region_fact_context,
     _region_facts,
     analisar_conformidade_projeto,
     detectar_gatilhos_acoes_projeto,
@@ -51,9 +53,10 @@ from zeny_project_handler.domain.enums import (
     SituacaoProjeto,
     TipoEvidencia,
     TipoOrigemPdf,
+    TipoTrechoRede,
 )
 from zeny_project_handler.domain.market import Mercado
-from zeny_project_handler.domain.project import Poste, Projeto
+from zeny_project_handler.domain.project import Cabo, Poste, Projeto
 from zeny_project_handler.domain.project_metadata import MetadadosProjeto
 from zeny_project_handler.domain.values import (
     CaixaPagina,
@@ -667,8 +670,6 @@ def test_region_facts_preserve_semantic_order_and_deterministic_ids() -> None:
         "regiao.equipamento_classe",
         "rede.contexto_urbano",
         "regiao.risco_abalroamento_avaliado",
-        "cabo.tecnologia",
-        "cabo.instalar_tecnologia",
         "regiao.transformador_trifasico_poste_existente_avaliavel",
     ]
     assert len({fact.id for fact in first}) == len(first)
@@ -680,8 +681,6 @@ def test_region_facts_preserve_semantic_order_and_deterministic_ids() -> None:
         "TRANSFORMADOR",
         True,
         True,
-        "PROTEGIDA",
-        "PROTEGIDA",
         False,
     ]
 
@@ -798,7 +797,7 @@ def test_existing_when_semantics_select_only_rules_for_external_market(
     assert opposite_rule not in finding_ids
 
 
-def test_installation_cable_fact_does_not_reclassify_existing_cable_as_new_work() -> None:
+def test_unconfirmed_cable_does_not_publish_network_rule_facts() -> None:
     session = _session_with_document_controls()
     cable = next(
         item
@@ -830,8 +829,50 @@ def test_installation_cable_fact_does_not_reclassify_existing_cable_as_new_work(
         region_targets={region.id: target},
     )
 
-    assert any(item.chave == "cabo.tecnologia" for item in facts)
-    assert all(item.chave != "cabo.instalar_tecnologia" for item in facts)
+    assert all(item.chave not in {"cabo.tecnologia", "cabo.instalar_tecnologia"} for item in facts)
+
+
+@pytest.mark.parametrize(
+    ("segment_type", "expected"),
+    (
+        (TipoTrechoRede.REDE_DISTRIBUICAO, True),
+        (TipoTrechoRede.RAMAL_CONEXAO, False),
+        (TipoTrechoRede.DESCONHECIDO, False),
+    ),
+)
+def test_cable_rule_facts_require_a_confirmed_distribution_network_segment(
+    segment_type: TipoTrechoRede,
+    expected: bool,
+) -> None:
+    session = _session_with_document_controls()
+    proposal = next(
+        item
+        for item in session.propostas
+        if isinstance(item, PropostaElemento) and item.categoria is CategoriaElemento.CABO
+    )
+    assert proposal.tipo_catalogo_sugerido_id is not None
+    confirmed = Cabo(
+        id=uuid4(),
+        tipo_catalogo_id=proposal.tipo_catalogo_sugerido_id,
+        situacao=proposal.situacao_projeto,
+        ponto_origem_id=uuid4(),
+        ponto_destino_id=uuid4(),
+        tipo_trecho=segment_type,
+    )
+    context = replace(
+        _region_fact_context(session, Mercado.URBANO),
+        confirmed_elements_by_proposal={proposal.id: confirmed},
+    )
+
+    facts = _cable_technology_facts(
+        uuid4(),
+        (proposal,),
+        session,
+        context,
+    )
+
+    assert bool(facts) is expected
+    assert all(item.chave == "cabo.tecnologia" for item in facts)
 
 
 def test_region_facts_publish_unambiguous_rural_structure_post_compatibility() -> None:
