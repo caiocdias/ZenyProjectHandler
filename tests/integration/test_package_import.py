@@ -27,7 +27,7 @@ def _asset_payload(file_name: str) -> bytes:
 
 @pytest.mark.integration
 def test_package_exposes_version() -> None:
-    assert zeny_project_handler.__version__ == "0.3.0"
+    assert zeny_project_handler.__version__ == "0.4.0"
 
 
 @pytest.mark.integration

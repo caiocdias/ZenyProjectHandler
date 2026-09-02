@@ -15,7 +15,7 @@ Estado versionado relevante:
 
 | Componente | Versão atual |
 |---|---|
-| Pacote Python | `0.3.0` |
+| Pacote Python | `0.4.0` |
 | Catálogo técnico | `2` |
 | Registro de interpretação | `1.6.0` |
 | Registro de conformidade distribuído | `cemig-normas-distribuicao-2026.1` |

@@ -284,10 +284,10 @@ smoke opcional, somente leitura, sobre todos os exemplos disponíveis:
 Para montar cliente e kit servidor oficiais com versão igual aos manifestos do produto:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\build_release.py --version 0.3.0
+.\.venv\Scripts\python.exe scripts\build_release.py --version 0.4.0
 ```
 
-O comando recompõe `dist/release/0.3.0/`, gera os dois SBOMs, notas, manifesto e hashes e executa a
+O comando recompõe `dist/release/0.4.0/`, gera os dois SBOMs, notas, manifesto e hashes e executa a
 inspeção estática dos artefatos. A validação de distribuição carrega o archive num host Docker
 temporário sem fonte e abre o executável num diretório cliente sem checkout/Python no `PATH`.
 

@@ -15,8 +15,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SEMVER = re.compile(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\Z")
-API_VERSION = "1.1.0"
-MIN_COMPATIBLE_API_VERSION = "1.0.0"
+API_VERSION = "1.3.0"
+MIN_COMPATIBLE_API_VERSION = "1.3.0"
 MAX_COMPATIBLE_API_VERSION = "1.999.999"
 VOLUME_FORMAT_VERSION = 1
 ALEMBIC_REVISION = "0009_remote_jobs"
@@ -385,24 +385,21 @@ def _write_release_notes(path: Path, version: str, image: str, digest: str) -> N
   `{MAX_COMPATIBLE_API_VERSION}`.
 - Volume: formato `{VOLUME_FORMAT_VERSION}`; revisão Alembic `{ALEMBIC_REVISION}`.
 
-Esta release adiciona ao projeto uma coleção persistente de códigos de serviço de quatro dígitos,
-editável no cliente e exposta pelas rotas aditivas `GET`/`PUT`
-`/api/v1/projects/{{project_id}}/service-codes`. A API permanece compatível dentro da v1.
+Esta release adiciona busca e troca da NS do projeto com sincronização dos dados remotos e um painel
+**GMAX** somente leitura. O painel apresenta mercado, NS encontradas nos cabeçalhos e os checks de
+impacto ambiental e servidão, incluindo estados de consulta, ausência de linha, resultado
+desatualizado e divergência de NS.
 
-Quando o PDF indicar impacto ambiental ou servidão, a conformidade verifica no SQL Server se as
-ações operacionais correspondentes foram concluídas. A ausência de ação gera, respectivamente,
-`IMPACTO AMBIENTAL PENDENTE` ou `FALTA SERVIDÃO PENDENTE`, ancoradas na evidência do PDF. Lista de
-serviços vazia produz a pendência sem SQL inválido; falha ODBC encerra a análise sem snapshot
-parcial.
+A interpretação preserva ocorrências qualificadas de estruturas e amplia a reconstrução
+determinística da topologia de pontos de entrega, ramais, postes, estruturas e vãos. A conformidade
+passa a avaliar caminhos topológicos e ramais com evidências rastreáveis no PDF. O registro
+distribuído `cemig-normas-distribuicao-2026.1` contém 42 regras habilitadas e usa o método de
+conformidade 12.
 
-A classificação rural/urbana e as ações concluídas consultam o SQL Server externo somente pelo
-servidor. O administrador deve configurar a conexão ODBC com TLS e login de `SELECT` mínimo no
-`.env`; falha, ausência ou resposta inválida interrompe a análise sem fallback. Depois de alterar a
-NS, os serviços ou o cadastro externo, execute novamente **Analisar conformidade** para criar o
-snapshot atualizado.
-
-Antes da implantação em produção, a homologação deve confirmar o tipo físico de
-`TSERVICOS_CT_COD`, a permissão mínima de leitura e casos sanitizados com e sem linha em `vBIAcoes`.
+A API pública está na versão `1.3.0` e eleva o piso compatível para `1.3.0`; por isso, cliente e
+servidor desta release devem ser atualizados em conjunto. A classificação rural/urbana e os checks
+do GMAX continuam consultando o SQL Server exclusivamente pelo servidor. Falha, ausência ou resposta
+inválida interrompe a análise sem fallback nem snapshot parcial.
 
 O cliente deve ser distribuído somente aos usuários finais; o kit servidor, somente aos
 administradores. Ambos podem receber também os três arquivos comuns de notas e integridade. Não

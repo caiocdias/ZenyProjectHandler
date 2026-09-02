@@ -126,7 +126,7 @@ def test_compatibility_negotiation_refuses_incompatible_release_before_data(
 ) -> None:
     with pytest.raises(
         ConnectionError,
-        match=r"Cliente 0\.3\.0 \(API 1\.3\.0\); servidor .*API",
+        match=r"Cliente 0\.4\.0 \(API 1\.3\.0\); servidor .*API",
     ):
         _validate_session(session)
 
