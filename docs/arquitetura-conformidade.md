@@ -159,8 +159,8 @@ família não exige alterar o avaliador.
 ## Contrato topológico aprovado para ramais
 
 O [ADR 0015](adr/0015-pontos-de-entrega-ramais-e-alteracao-de-vao.md) define a fronteira implementada
-pelas etapas E04–E07 do roadmap de correção de ramais; sua projeção pública permanece reservada à
-E08.
+pelas etapas E04–E08 do roadmap de correção de ramais, incluindo sua projeção pública coordenada na
+API, no cliente e nas exportações.
 
 - redução de comprimento usa a situação pública `ALTERAR`; a medida vigente alimenta o cabo e a
   medida substituída permanece somente como evidência auditável, nunca como `REMOVER`;

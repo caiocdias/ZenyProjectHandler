@@ -316,6 +316,25 @@ def _build_mt_topology(
     facts: _TopologyFactCollector,
     active_cables: tuple[Cabo, ...],
 ) -> _MtTopology:
+    grouped, unresolved_poles = _group_mt_network_cables(state, facts, active_cables)
+    unresolved_poles.update(_poles_near_geometric_cables(state))
+    edges, incomplete_edge_poles = _build_mt_network_edges(grouped, facts)
+    unresolved_poles.update(incomplete_edge_poles)
+    by_pole = _index_mt_edges_by_pole(edges)
+    return _MtTopology(
+        edges_by_pole={
+            pole_id: tuple(sorted(items, key=lambda item: tuple(map(str, item.pole_ids))))
+            for pole_id, items in by_pole.items()
+        },
+        component_complete_by_pole=_mt_component_completeness(by_pole, unresolved_poles),
+    )
+
+
+def _group_mt_network_cables(
+    state: _TopologyState,
+    facts: _TopologyFactCollector,
+    active_cables: tuple[Cabo, ...],
+) -> tuple[dict[tuple[str, str], list[Cabo]], set[UUID]]:
     grouped: dict[tuple[str, str], list[Cabo]] = defaultdict(list)
     unresolved_poles: set[UUID] = set()
     for cable in active_cables:
@@ -344,15 +363,24 @@ def _build_mt_topology(
             first_key, second_key = sorted((str(first), str(second)))
             key = (first_key, second_key)
             grouped[key].append(cable)
+    return grouped, unresolved_poles
 
-    for proposal in state.geometric_cables:
-        unresolved_poles.update(
-            pole.id
-            for pole in state.poles.values()
-            if _endpoint_is_near(pole.geometria, proposal.geometria)
-        )
 
+def _poles_near_geometric_cables(state: _TopologyState) -> set[UUID]:
+    return {
+        pole.id
+        for proposal in state.geometric_cables
+        for pole in state.poles.values()
+        if _endpoint_is_near(pole.geometria, proposal.geometria)
+    }
+
+
+def _build_mt_network_edges(
+    grouped: Mapping[tuple[str, str], list[Cabo]],
+    facts: _TopologyFactCollector,
+) -> tuple[tuple[_MtNetworkEdge, ...], set[UUID]]:
     edges: list[_MtNetworkEdge] = []
+    incomplete_poles: set[UUID] = set()
     for key in sorted(grouped):
         cables = tuple(dict.fromkeys(grouped[key]))
         pole_ids = (UUID(key[0]), UUID(key[1]))
@@ -360,7 +388,7 @@ def _build_mt_topology(
         technologies.discard("")
         complete = len(technologies) == 1
         if not complete:
-            unresolved_poles.update(pole_ids)
+            incomplete_poles.update(pole_ids)
         edges.append(
             _MtNetworkEdge(
                 pole_ids=pole_ids,
@@ -369,37 +397,51 @@ def _build_mt_topology(
                 complete=complete,
             )
         )
+    return tuple(edges), incomplete_poles
 
+
+def _index_mt_edges_by_pole(
+    edges: tuple[_MtNetworkEdge, ...],
+) -> dict[UUID, list[_MtNetworkEdge]]:
     by_pole: dict[UUID, list[_MtNetworkEdge]] = defaultdict(list)
     for edge in edges:
         for pole_id in edge.pole_ids:
             by_pole[pole_id].append(edge)
+    return by_pole
+
+
+def _mt_component_completeness(
+    by_pole: Mapping[UUID, list[_MtNetworkEdge]],
+    unresolved_poles: set[UUID],
+) -> dict[UUID, bool]:
     component_complete: dict[UUID, bool] = {}
     remaining = set(by_pole)
     while remaining:
-        pending = [min(remaining, key=str)]
-        component_poles: set[UUID] = set()
-        component_edges: set[_MtNetworkEdge] = set()
-        while pending:
-            pole_id = pending.pop()
-            if pole_id in component_poles:
-                continue
-            component_poles.add(pole_id)
-            for edge in by_pole[pole_id]:
-                component_edges.add(edge)
-                pending.extend(item for item in edge.pole_ids if item not in component_poles)
+        component_poles, component_edges = _collect_mt_component(min(remaining, key=str), by_pole)
         complete = not component_poles.intersection(unresolved_poles) and all(
             edge.complete for edge in component_edges
         )
         component_complete.update(dict.fromkeys(component_poles, complete))
         remaining.difference_update(component_poles)
-    return _MtTopology(
-        edges_by_pole={
-            pole_id: tuple(sorted(items, key=lambda item: tuple(map(str, item.pole_ids))))
-            for pole_id, items in by_pole.items()
-        },
-        component_complete_by_pole=component_complete,
-    )
+    return component_complete
+
+
+def _collect_mt_component(
+    initial_pole_id: UUID,
+    by_pole: Mapping[UUID, list[_MtNetworkEdge]],
+) -> tuple[set[UUID], set[_MtNetworkEdge]]:
+    pending = [initial_pole_id]
+    component_poles: set[UUID] = set()
+    component_edges: set[_MtNetworkEdge] = set()
+    while pending:
+        pole_id = pending.pop()
+        if pole_id in component_poles:
+            continue
+        component_poles.add(pole_id)
+        for edge in by_pole[pole_id]:
+            component_edges.add(edge)
+            pending.extend(item for item in edge.pole_ids if item not in component_poles)
+    return component_poles, component_edges
 
 
 def _add_project_topology_facts(

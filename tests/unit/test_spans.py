@@ -475,6 +475,101 @@ def test_automatic_promotion_separates_delivery_from_nearby_real_pole_and_is_ide
     assert span.tipo_trecho is TipoTrechoRede.RAMAL_CONEXAO
 
 
+def test_e09_delivery_marker_uses_nearest_point_label_not_sprawling_region(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    project = complete_project(catalogo_inicial)
+    execution_id = uuid4()
+    page_id = project.ordem_leitura_paginas[0]
+    delivery_anchor = text_evidence(
+        execution_id=execution_id,
+        page_id=page_id,
+        key="e09-delivery-anchor",
+        text="P1",
+        x="0.38",
+        y="0.32",
+    )
+    network_anchor = text_evidence(
+        execution_id=execution_id,
+        page_id=page_id,
+        key="e09-network-anchor",
+        text="P2",
+        x="0.57",
+        y="0.23",
+    )
+    standard_marker = text_evidence(
+        execution_id=execution_id,
+        page_id=page_id,
+        key="e09-standard-marker",
+        text="PADRÃO",
+        x="0.38",
+        y="0.34",
+    )
+    pole_type_id = catalogo_inicial.itens_ativos(CategoriaElemento.POSTE)[0].id
+    cable_type_id = catalogo_inicial.itens_ativos(CategoriaElemento.CABO)[0].id
+    delivery_symbol = _element_proposal(
+        execution_id,
+        delivery_anchor.id,
+        page_id,
+        category=CategoriaElemento.POSTE,
+        catalog_item_id=pole_type_id,
+        x="0.43",
+        y="0.28",
+        attributes=(("identificador_operacional", "P1"),),
+    )
+    network_pole = replace(
+        _element_proposal(
+            execution_id,
+            network_anchor.id,
+            page_id,
+            category=CategoriaElemento.POSTE,
+            catalog_item_id=pole_type_id,
+            x="0.57",
+            y="0.23",
+            attributes=(("identificador_operacional", "P2"),),
+        ),
+        geometria=GeometriaDocumento.caixa(
+            page_id,
+            PontoNormalizado(Decimal("0.42"), Decimal("0.21")),
+            PontoNormalizado(Decimal("0.67"), Decimal("0.37")),
+        ),
+    )
+    cable = PropostaElemento(
+        id=uuid4(),
+        execucao_id=execution_id,
+        categoria=CategoriaElemento.CABO,
+        situacao_projeto=SituacaoProjeto.INSTALAR,
+        estado_revisao=EstadoRevisao.PROPOSTA,
+        evidencia_ids=(delivery_anchor.id, network_anchor.id),
+        geometria=GeometriaDocumento.polilinha(
+            page_id,
+            (
+                PontoNormalizado(Decimal("0.43"), Decimal("0.28")),
+                PontoNormalizado(Decimal("0.57"), Decimal("0.23")),
+            ),
+        ),
+        tipo_catalogo_sugerido_id=cable_type_id,
+        atributos_sugeridos=(
+            ("geometria_cabo_origem", "vetor_associado_geometricamente"),
+            ("ponto_operacional_origem", "P1"),
+            ("ponto_operacional_destino", "P2"),
+        ),
+        confianca=Decimal("0.90"),
+    )
+
+    proposals = classificar_pontos_de_entrega(
+        (delivery_symbol, network_pole, cable),
+        (delivery_anchor, network_anchor, standard_marker),
+    )
+
+    classified_delivery = next(item for item in proposals if item.id == delivery_symbol.id)
+    classified_network = next(item for item in proposals if item.id == network_pole.id)
+    classified_cable = next(item for item in proposals if item.id == cable.id)
+    assert dict(classified_delivery.atributos_sugeridos)["tipo_ponto_rede"] == "ENTREGA"
+    assert "tipo_ponto_rede" not in dict(classified_network.atributos_sugeridos)
+    assert dict(classified_cable.atributos_sugeridos)["tipo_ponto_operacional_origem"] == "ENTREGA"
+
+
 def test_automatic_promotion_keeps_unproved_endpoint_unknown(
     catalogo_inicial: CatalogoTecnico,
 ) -> None:

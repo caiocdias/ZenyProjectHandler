@@ -1481,6 +1481,11 @@
             "title": "End Label",
             "type": "string"
           },
+          "end_point_id": {
+            "format": "uuid",
+            "title": "End Point Id",
+            "type": "string"
+          },
           "evidence": {
             "items": {
               "$ref": "#/components/schemas/EvidenceNavigationDto"
@@ -1562,6 +1567,15 @@
             "title": "Span Id",
             "type": "string"
           },
+          "span_type": {
+            "$ref": "#/components/schemas/SpanType"
+          },
+          "span_type_label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Span Type Label",
+            "type": "string"
+          },
           "start_element_id": {
             "anyOf": [
               {
@@ -1577,12 +1591,21 @@
             "minLength": 1,
             "title": "Start Label",
             "type": "string"
+          },
+          "start_point_id": {
+            "format": "uuid",
+            "title": "Start Point Id",
+            "type": "string"
           }
         },
         "required": [
           "span_id",
+          "start_point_id",
+          "end_point_id",
           "cable_element_id",
           "label",
+          "span_type",
+          "span_type_label",
           "situation",
           "situation_label",
           "start_label",
@@ -1966,7 +1989,8 @@
         "enum": [
           "EXISTING",
           "INSTALL",
-          "REMOVE"
+          "REMOVE",
+          "CHANGE"
         ],
         "title": "ElementSituation",
         "type": "string"
@@ -3916,6 +3940,12 @@
           },
           "situation": {
             "$ref": "#/components/schemas/ElementSituation"
+          },
+          "situation_label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Situation Label",
+            "type": "string"
           }
         },
         "required": [
@@ -3925,6 +3955,7 @@
           "label",
           "category",
           "situation",
+          "situation_label",
           "review_state"
         ],
         "title": "ReviewOverlayDto",
@@ -4734,6 +4765,15 @@
         "title": "SpanLengthSource",
         "type": "string"
       },
+      "SpanType": {
+        "enum": [
+          "DISTRIBUTION_NETWORK",
+          "CONNECTION_BRANCH",
+          "UNKNOWN"
+        ],
+        "title": "SpanType",
+        "type": "string"
+      },
       "UnlockPdfRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5010,13 +5050,13 @@
     "contact": {
       "name": "Zeny Project Handler"
     },
-    "description": "Compatibilidade é preservada dentro da versão principal v1. Campos opcionais e operações podem ser adicionados; remover, renomear ou mudar a semântica de campos, enums ou rotas exige uma nova versão principal. O cliente deve negociar a faixa informada por GET /api/v1/session.",
+    "description": "Compatibilidade é preservada dentro da versão principal v1 pela faixa negociada. Campos opcionais e operações podem ser adicionados; novos valores fechados ou campos obrigatórios elevam o piso compatível. Remover, renomear ou mudar a semântica existente de campos, enums ou rotas exige uma nova versão principal. O cliente deve negociar a faixa informada por GET /api/v1/session.",
     "license": {
       "name": "Proprietary project contract"
     },
     "summary": "Contrato HTTP v1 do cliente magro e do servidor Zeny.",
     "title": "Zeny Project Handler API",
-    "version": "1.2.0"
+    "version": "1.3.0"
   },
   "openapi": "3.1.0",
   "paths": {

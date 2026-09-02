@@ -189,7 +189,9 @@ def _is_installation_bag(evidence: EvidenciaDocumento) -> bool:
     }
     points = _distinct_consecutive_points(evidence.geometria)
     if operations in ({"qu"}, {"re"}):
-        shape_is_supported = len(points) >= 3
+        shape_is_supported = (
+            evidence.geometria.tipo is TipoGeometria.CAIXA and len(points) == 2
+        ) or len(points) >= 3
     else:
         shape_is_supported = operations == {"l"} and len(points) >= 4
     if not shape_is_supported:
@@ -198,10 +200,20 @@ def _is_installation_bag(evidence: EvidenciaDocumento) -> bool:
         color
         for color in _color_values(evidence)
         if (rgb := _rgb(color)) is not None
-        and 96 <= rgb[0] <= 176
-        and rgb[1] <= 48
-        and rgb[2] <= 80
-        and rgb[0] - max(rgb[1], rgb[2]) >= 48
+        and (
+            (
+                96 <= rgb[0] <= 176
+                and rgb[1] <= 48
+                and rgb[2] <= 80
+                and rgb[0] - max(rgb[1], rgb[2]) >= 48
+            )
+            or (
+                rgb[0] <= 48
+                and 96 <= rgb[1] <= 176
+                and rgb[2] <= 48
+                and rgb[1] - max(rgb[0], rgb[2]) >= 48
+            )
+        )
     )
     if not colors:
         return False

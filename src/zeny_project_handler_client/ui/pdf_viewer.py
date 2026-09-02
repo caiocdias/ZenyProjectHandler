@@ -442,6 +442,7 @@ class PdfGraphicsView(QGraphicsView):
             item.setCursor(Qt.CursorShape.PointingHandCursor)
             item.setToolTip(
                 f"Abrir {proposal.category.value} na revisão · "
+                f"{proposal.situation_label} · "
                 f"{proposal.review_state.value} · "
                 f"confiança {proposal.confidence if proposal.confidence is not None else '-'}"
             )

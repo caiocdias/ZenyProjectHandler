@@ -35,6 +35,7 @@ from zeny_project_handler_contracts.enums import (
     ReviewReferenceKind,
     ReviewState,
     SpanLengthSource,
+    SpanType,
 )
 
 
@@ -90,6 +91,7 @@ class ReviewOverlayDto(ContractModel):
     label: NonEmptyString
     category: ElementCategory
     situation: ElementSituation
+    situation_label: NonEmptyString
     review_state: ReviewState
     confidence: DecimalString | None = None
 
@@ -164,10 +166,14 @@ class AnalysisRegionDto(ContractModel):
 class DetectedSpanDto(ContractModel):
     span_id: UUID
     proposal_id: ProposalId | None = None
+    start_point_id: UUID
+    end_point_id: UUID
     start_element_id: ElementId | None = None
     end_element_id: ElementId | None = None
     cable_element_id: ElementId
     label: NonEmptyString
+    span_type: SpanType
+    span_type_label: NonEmptyString
     situation: ElementSituation
     situation_label: NonEmptyString
     start_label: NonEmptyString

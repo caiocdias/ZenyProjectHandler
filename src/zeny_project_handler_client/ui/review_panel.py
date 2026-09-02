@@ -123,6 +123,12 @@ class ReviewPanelWidget(QWidget):
         for state in ReviewState:
             self._state_filter.addItem(_state_label(state), state.value)
         filter_row.addWidget(self._state_filter)
+        self._situation_filter = QComboBox()
+        self._situation_filter.setObjectName("reviewSituationFilter")
+        self._situation_filter.addItem("Todas as situações", None)
+        for situation in ElementSituation:
+            self._situation_filter.addItem(_situation_label(situation), situation.value)
+        filter_row.addWidget(self._situation_filter)
 
         self._results_tabs = QTabWidget()
         self._results_tabs.setObjectName("analysisResultTabs")
@@ -178,22 +184,24 @@ class ReviewPanelWidget(QWidget):
         spans_layout = QVBoxLayout(spans_page)
         spans_layout.setContentsMargins(0, 0, 0, 0)
         spans_guidance = QLabel(
-            "Um vão é exibido quando o desenho permite associar as duas extremidades "
-            "de um cabo a postes distintos. O comprimento prioriza a anotação do desenho "
-            "e, na ausência dela, a distância entre coordenadas."
+            "Um trecho é exibido quando o desenho permite associar as duas extremidades "
+            "de um cabo a pontos da rede. O tipo, os endpoints e a situação vêm do servidor; "
+            "o comprimento prioriza a anotação do desenho e, na ausência dela, a distância "
+            "entre coordenadas."
         )
         spans_guidance.setObjectName("spanResultsGuidance")
         spans_guidance.setProperty("role", "hint")
         spans_guidance.setWordWrap(True)
         spans_layout.addWidget(spans_guidance)
-        self._span_table = QTableWidget(0, 9)
+        self._span_table = QTableWidget(0, 10)
         self._span_table.setObjectName("analysisSpanTable")
         self._span_table.setHorizontalHeaderLabels(
             (
                 "Vão",
+                "Tipo",
                 "Situação",
-                "Poste de origem",
-                "Poste de destino",
+                "Ponto de origem",
+                "Ponto de destino",
                 "Cabo",
                 "Comprimento",
                 "Fonte",
@@ -207,7 +215,7 @@ class ReviewPanelWidget(QWidget):
         self._span_table.verticalHeader().setVisible(False)
         span_header = self._span_table.horizontalHeader()
         span_header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        span_header.setSectionResizeMode(7, QHeaderView.ResizeMode.Stretch)
+        span_header.setSectionResizeMode(8, QHeaderView.ResizeMode.Stretch)
         span_header.setStretchLastSection(False)
         self._spans_word_wrap = TableWordWrapController(
             self._span_table,
@@ -328,6 +336,7 @@ class ReviewPanelWidget(QWidget):
         self._project.currentIndexChanged.connect(self._load_selected_project)
         self._category_filter.currentIndexChanged.connect(self._refresh_proposals)
         self._state_filter.currentIndexChanged.connect(self._refresh_proposals)
+        self._situation_filter.currentIndexChanged.connect(self._refresh_proposals)
         self._results_tabs.currentChanged.connect(self._refresh_visible_word_wrap)
         self._tree.itemSelectionChanged.connect(self._select_tree_proposal)
         self._table.itemSelectionChanged.connect(self._select_table_proposal)
@@ -438,12 +447,22 @@ class ReviewPanelWidget(QWidget):
         session = self._session
         return (*session.proposals, *session.relations) if session is not None else ()
 
-    def _filtered_items(self, *, category: object, state: object) -> tuple[ReviewItem, ...]:
+    def _filtered_items(
+        self,
+        *,
+        category: object,
+        state: object,
+        situation: object,
+    ) -> tuple[ReviewItem, ...]:
         return tuple(
             item
             for item in self._all_items()
             if (category is None or _proposal_category(item) == category)
             and (state is None or item.review_state.value == state)
+            and (
+                situation is None
+                or (isinstance(item, ReviewProposalDto) and item.situation.value == situation)
+            )
         )
 
     def _refresh_proposals(self) -> None:
@@ -453,6 +472,7 @@ class ReviewPanelWidget(QWidget):
         filtered = self._filtered_items(
             category=self._category_filter.currentData(),
             state=self._state_filter.currentData(),
+            situation=self._situation_filter.currentData(),
         )
         if self._selected_proposal_id is not None and all(
             _proposal_id(item) != self._selected_proposal_id for item in filtered
@@ -490,6 +510,7 @@ class ReviewPanelWidget(QWidget):
             self._span_table.insertRow(row)
             values = (
                 span.label,
+                span.span_type_label,
                 span.situation_label,
                 span.start_label,
                 span.end_label,
@@ -517,7 +538,7 @@ class ReviewPanelWidget(QWidget):
             if span.proposal_id is not None:
                 button.setProperty("proposalId", str(span.proposal_id.root))
             self._span_visibility_buttons[span.span_id] = button
-            self._span_table.setCellWidget(row, 8, button)
+            self._span_table.setCellWidget(row, 9, button)
         self._spans_word_wrap.refresh()
 
     def _refresh_visible_word_wrap(self, index: int) -> None:
@@ -562,6 +583,7 @@ class ReviewPanelWidget(QWidget):
             for item in self._filtered_items(
                 category=self._category_filter.currentData(),
                 state=self._state_filter.currentData(),
+                situation=self._situation_filter.currentData(),
             )
             if isinstance(item, ReviewProposalDto)
         )
@@ -1217,6 +1239,7 @@ def _situation_label(value: ElementSituation) -> str:
         ElementSituation.EXISTING: "Existente",
         ElementSituation.INSTALL: "A instalar",
         ElementSituation.REMOVE: "A remover",
+        ElementSituation.CHANGE: "A alterar",
     }[value]
 
 

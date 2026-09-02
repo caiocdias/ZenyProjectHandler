@@ -1,13 +1,16 @@
 # Inventário de paridade cliente-servidor
 
-- Estado: fronteira cliente-servidor vigente com contrato API `1.2.0`
-- Data da revisão: 2026-09-01
+- Estado: fronteira cliente-servidor vigente com contrato API `1.3.0`
+- Data da revisão: 2026-09-02
 - Runtime caracterizado: cliente Qt magro e servidor protegido como fonte principal
 - Linha de base histórica: 618 testes aprovados; cobertura total 87,08%; Pytest em 128,11 s
 - Gate E05: 856 testes aprovados; cobertura total 86,61%; Pytest em 178,00 s;
   `RESULTADO FINAL: APROVADO`
 - Gate E06: 897 testes aprovados; cobertura total 86,88%; Pytest em 311,09 s;
   `RESULTADO FINAL: APROVADO`
+- Gate E08: suíte obrigatória com 62 testes aprovados em 12,26 s; suíte completa com 955 testes
+  aprovados em 137,33 s; mypy aprovado em 306 arquivos fonte; Ruff check aprovado e 15 arquivos
+  Python alterados com formatação verificada.
 
 ## Finalidade e convenções
 
@@ -134,11 +137,11 @@ protegidas são `401 AUTHENTICATION_FAILED`, `404 RESOURCE_NOT_FOUND`,
 | Ação visível atual | Método atual | Caracterização existente | Endpoint atual | DTO esperado |
 |---|---|---|---|---|
 | atualizar lista e abrir projeto analisado | `ReviewPanelWidget.atualizar_projetos` / `abrir_projeto` → `ServicoRevisaoHumana.listar_projetos` / `carregar_sessao` | `tests/integration/test_review_panel.py::test_results_panel_groups_relationships_and_links_elements_to_pdf` | `GET /api/v1/review/projects` e `GET /api/v1/projects/{project_id}/review-session` | `ReviewProjectSummaryListResponse`, `ReviewSessionResponse` |
-| filtrar localmente por classe e estado | `_refresh_proposals` / `_filtered_proposals` | `tests/integration/test_review_panel.py::test_review_tables_toggle_word_wrap_and_keep_interactions_after_reload` | nenhum; filtro sobre a projeção carregada | campos `category` e `review_state` em `ReviewProposalDto` |
+| filtrar localmente por classe, estado de revisão e situação da obra | `_refresh_proposals` / `_filtered_items` | `tests/integration/test_review_panel.py::test_results_panel_groups_relationships_and_links_elements_to_pdf` | nenhum; filtro sobre a projeção carregada | campos fechados `category`, `review_state` e `situation` em `ReviewProposalDto`; `CHANGE` é apresentado como `A alterar` |
 | ver regiões, elementos e relações | `_populate_result_tree` e `_region_label` | `tests/integration/test_review_panel.py::test_results_panel_groups_relationships_and_links_elements_to_pdf` | `GET /api/v1/projects/{project_id}/review-session` | `AnalysisRegionDto`, `ReviewProposalDto`, `ReviewRelationDto` |
-| ver vãos e origem do comprimento | `_refresh_spans` | `tests/integration/test_review_panel.py::test_results_panel_has_span_tab_with_situation_cable_and_length_source` | mesma sessão de revisão | `DetectedSpanDto` |
+| ver vãos, tipo topológico, endpoints e origem do comprimento | `_refresh_spans` | `tests/integration/test_review_panel.py::test_results_panel_has_span_tab_with_situation_cable_and_length_source`; `tests/server/test_review_api.py::test_span_projection_exposes_type_change_and_delivery_endpoint` | mesma sessão de revisão | `DetectedSpanDto` com `SpanType`, rótulo do tipo, IDs dos pontos e rótulos de endpoint calculados pelo servidor |
 | selecionar item e navegar até evidência no PDF | `_select_tree_proposal`, `_select_span`, `_select_proposal_id` | `tests/integration/test_review_panel.py::test_results_panel_groups_relationships_and_links_elements_to_pdf` | metadados de navegação na sessão; raster pelo visualizador | `EvidenceNavigationDto` |
-| mostrar/ocultar região, elemento ou vão | `_set_region_visible`, `_set_element_visible`, `_set_span_visible` | `tests/integration/test_review_panel.py::test_result_visibility_can_hide_a_whole_point_or_one_element` | nenhum; visibilidade é estado visual local | IDs e geometrias normalizadas nos DTOs de revisão |
+| mostrar/ocultar região, elemento ou vão | `_set_region_visible`, `_set_element_visible`, `_set_span_visible` | `tests/integration/test_review_panel.py::test_result_visibility_can_hide_a_whole_point_or_one_element` | nenhum; visibilidade é estado visual local | IDs e geometrias normalizadas nos DTOs de revisão; overlays carregam `situation=CHANGE` e `situation_label=A alterar` sem derivação local |
 | aceitar ou ajustar elemento/relação | `aceitar_selecionada` → `confirmar_elemento` / `confirmar_relacao` | `tests/integration/test_human_review.py::test_accept_adjust_reject_and_reopen_preserve_immutable_history` | `POST /api/v1/review/proposals/{proposal_id}/accept` | `AcceptReviewProposalRequest` → `ReviewDecisionResponse` |
 | rejeitar proposta | `rejeitar_selecionada` → `ServicoRevisaoHumana.rejeitar` | `tests/integration/test_human_review.py::test_accept_adjust_reject_and_reopen_preserve_immutable_history` | `POST /api/v1/review/proposals/{proposal_id}/reject` | `RejectReviewProposalRequest` → `ReviewDecisionResponse` |
 | criar elemento manual | `criar_elemento_manual` → `ServicoRevisaoHumana.criar_elemento_manual` | `tests/integration/test_human_review.py::test_confirm_relation_and_manual_creations_are_persisted_with_author` | `POST /api/v1/projects/{project_id}/review/elements` | `CreateManualElementRequest` → `ReviewDecisionResponse` |
@@ -176,7 +179,7 @@ protegidas são `401 AUTHENTICATION_FAILED`, `404 RESOURCE_NOT_FOUND`,
 |---|---|---|---|---|
 | selecionar projeto para exportação | `PortabilityPanelWidget.atualizar_projetos` → `PortabilityGateway.list_projects` | `tests/integration/test_portability_panel.py::test_panel_exposes_only_user_deliverables` | `GET /api/v1/projects` | `ProjectSummaryListResponse` |
 | baixar PDF com anotações | `_export(ANNOTATED_PDF)` → criação e download autenticado | `tests/server/test_deliverable_exports.py::test_pdf_callout_is_a_downloadable_annotation_even_on_rotated_page` | `POST /api/v1/projects/{project_id}/deliverable-exports` e `GET /api/v1/downloads/{download_id}` | `CreateDeliverableExportRequest`, `DownloadMetadataDto` |
-| baixar Resultados | `_export(RESULTS_XLSX)` → planilhas Elementos e Vãos | `tests/server/test_deliverable_exports.py::test_server_generates_pdf_and_three_real_xlsx_deliverables` | mesmos endpoints de criação/download | `CreateDeliverableExportRequest`, `DownloadMetadataDto` |
+| baixar Resultados | `_export(RESULTS_XLSX)` → planilhas Elementos e Vãos; Vãos inclui **Tipo** e endpoints como pontos | `tests/server/test_deliverable_exports.py::test_server_generates_pdf_and_three_real_xlsx_deliverables`; `::test_results_span_sheet_presents_the_public_review_contract` | mesmos endpoints de criação/download | `CreateDeliverableExportRequest`, `DownloadMetadataDto`; linhas compiladas do mesmo `DetectedSpanDto` usado pelo painel |
 | baixar Documentação | `_export(DOCUMENTATION_XLSX)` → planilha Documentação | mesmo teste de entregáveis reais | mesmos endpoints de criação/download | `CreateDeliverableExportRequest`, `DownloadMetadataDto` |
 | baixar Conformidade | `_export(COMPLIANCE_XLSX)` → planilhas Conformidade e Regras | mesmo teste de entregáveis reais | mesmos endpoints de criação/download | `CreateDeliverableExportRequest`, `DownloadMetadataDto` |
 | acompanhar e cancelar download | `_show_progress`, `cancelar_operacao`, `_DeliverableExportWorker` | `tests/integration/test_portability_panel.py::test_each_action_downloads_the_server_compiled_file` | download autenticado e cancelamento local antes da publicação | `DownloadMetadataDto` |

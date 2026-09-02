@@ -222,7 +222,7 @@ def test_interpreter_version_change_invalidates_completed_semantic_result(
     current = _runner(engine).executar(project.id, source_execution.id)
 
     assert legacy.execucao.versao_metodo == "20.0"
-    assert current.execucao.versao_metodo == "21.0"
+    assert current.execucao.versao_metodo == "21.1"
     assert current.execucao.id != legacy.execucao.id
     assert not current.resultado_reutilizado
 

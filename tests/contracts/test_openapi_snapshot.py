@@ -49,8 +49,28 @@ def test_openapi_covers_every_minimum_group_and_expected_operation() -> None:
     } <= tags
     assert schema["info"]["version"] == API_VERSION
     assert schema["openapi"].startswith("3.1.")
-    assert API_VERSION == "1.2.0"
+    assert API_VERSION == "1.3.0"
     assert len(operations) == 56
+
+
+def test_review_contract_exposes_closed_span_type_change_and_endpoint_points() -> None:
+    schemas = build_openapi_schema()["components"]["schemas"]
+    span = schemas["DetectedSpanDto"]
+    overlay = schemas["ReviewOverlayDto"]
+
+    assert schemas["ElementSituation"]["enum"] == ["EXISTING", "INSTALL", "REMOVE", "CHANGE"]
+    assert schemas["SpanType"]["enum"] == [
+        "DISTRIBUTION_NETWORK",
+        "CONNECTION_BRANCH",
+        "UNKNOWN",
+    ]
+    assert {
+        "start_point_id",
+        "end_point_id",
+        "span_type",
+        "span_type_label",
+    } <= set(span["required"])
+    assert "situation_label" in overlay["required"]
 
 
 def test_every_business_operation_is_bearer_protected() -> None:

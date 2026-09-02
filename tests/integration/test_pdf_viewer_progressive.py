@@ -363,11 +363,14 @@ def test_rotated_overlays_remain_aligned_and_review_link_is_clickable(
         link_geometry=geometry_dto,
         label="Poste",
         category=ElementCategory.POLE,
-        situation=ElementSituation.INSTALL,
+        situation=ElementSituation.CHANGE,
+        situation_label="A alterar",
         review_state=ReviewState.PENDING,
         confidence="0.9",
     )
     viewer.definir_propostas_revisao((proposal,))
+    marker = viewer.view._review_items[str(proposal_id.root)]
+    assert "A alterar" in marker.toolTip()
 
     for rotation in (90, 180, 270, 0):
         viewer._rotate_page()

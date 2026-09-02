@@ -70,6 +70,7 @@ from zeny_project_handler_contracts.enums import (
     ReviewGeometryKind,
     ReviewState,
     SpanLengthSource,
+    SpanType,
     UploadState,
 )
 from zeny_project_handler_contracts.errors import ErrorCode, ErrorEnvelope
@@ -100,6 +101,7 @@ from zeny_project_handler_contracts.projects import (
 )
 from zeny_project_handler_contracts.review import (
     AnalysisRegionDto,
+    DetectedSpanDto,
     ReviewGeometryDto,
     ReviewOverlayDto,
     ReviewProposalDto,
@@ -213,9 +215,30 @@ def _representative_models() -> list[ContractModel]:
             label="Poste 1",
             category=ElementCategory.POLE,
             situation=ElementSituation.INSTALL,
+            situation_label="A instalar",
             review_state=ReviewState.PENDING,
             confidence="0.92",
         ),
+    )
+    span = DetectedSpanDto(
+        span_id=UUIDS[19],
+        start_point_id=UUIDS[20],
+        end_point_id=UUIDS[21],
+        cable_element_id=ElementId(UUIDS[22]),
+        label="V1-2",
+        span_type=SpanType.CONNECTION_BRANCH,
+        span_type_label="Ramal de conexão",
+        situation=ElementSituation.CHANGE,
+        situation_label="A alterar",
+        start_label="Poste P1",
+        end_label="Padrão do cliente",
+        cable_label="B-4 CAA — Cabo multiplexado",
+        length="269",
+        length_label="269,00 m",
+        length_source=SpanLengthSource.DRAWING_LABEL,
+        length_source_label="Anotação do desenho",
+        page_label="Folha 1",
+        evidence=(),
     )
     review = ReviewSessionResponse(
         review_session_id=ReviewSessionId(UUIDS[8]),
@@ -244,7 +267,7 @@ def _representative_models() -> list[ContractModel]:
         ),
         proposals=(proposal,),
         relations=(),
-        spans=(),
+        spans=(span,),
         audit=(),
     )
     documentation = DocumentationResponse(
@@ -515,10 +538,11 @@ def test_enum_values_are_stable() -> None:
         IntegrityState: ["INTACT", "DEGRADED", "INVALID"],
         OcrStatus: ["AVAILABLE", "UNAVAILABLE", "DEGRADED"],
         ElementCategory: ["POLE", "MV_STRUCTURE", "LV_STRUCTURE", "CABLE", "EQUIPMENT"],
-        ElementSituation: ["EXISTING", "INSTALL", "REMOVE"],
+        ElementSituation: ["EXISTING", "INSTALL", "REMOVE", "CHANGE"],
         ReviewState: ["PENDING", "CONFLICTING", "ACCEPTED", "ADJUSTED", "REJECTED"],
         ReviewDecision: ["ACCEPT", "ADJUST", "REJECT", "CREATE_MANUAL"],
         SpanLengthSource: ["DRAWING_LABEL", "COORDINATE_DISTANCE", "UNAVAILABLE"],
+        SpanType: ["DISTRIBUTION_NETWORK", "CONNECTION_BRANCH", "UNKNOWN"],
         DocumentationFieldStatus: ["PRESENT", "ABSENT", "UNCERTAIN"],
         ComplianceStatus: ["COMPLIANT", "DIVERGENCE", "NOT_EVALUABLE"],
         ComplianceTargetScope: ["PROJECT", "DOCUMENT", "PAGE", "REGION", "ELEMENT"],
@@ -546,6 +570,20 @@ def test_enum_values_are_stable() -> None:
     assert {
         enum_type: [member.value for member in enum_type] for enum_type in gmax_expected
     } == gmax_expected
+
+
+def test_span_contract_requires_new_fields_and_rejects_open_values() -> None:
+    review = cast(ReviewSessionResponse, _representative_models()[5])
+    span = review.spans[0]
+    payload = span.model_dump(mode="json")
+
+    without_type = dict(payload)
+    without_type.pop("span_type")
+    with pytest.raises(ValidationError):
+        DetectedSpanDto.model_validate(without_type)
+
+    with pytest.raises(ValidationError):
+        DetectedSpanDto.model_validate({**payload, "span_type": "CLIENT_INFERRED"})
 
 
 def test_gmax_contract_enforces_result_nullability_and_canonical_checks() -> None:

@@ -14,13 +14,27 @@ falha diante de qualquer alteração não revisada.
 
 ## Compatibilidade
 
-- versão atual: `1.2.0`;
+- versão atual: `1.3.0`;
 - prefixo protegido: `/api/v1`;
-- faixa inicialmente negociada: `1.0.0` a `1.999.999`;
+- faixa negociada: `1.3.0` a `1.999.999`;
 - adições compatíveis podem introduzir rotas e campos opcionais dentro de v1;
-- remoção, renomeação ou mudança semântica de rota, campo obrigatório, enum ou código de erro exige
+- novos valores de enum fechado ou campos obrigatórios elevam o piso compatível antes de serem
+  emitidos; remoção, renomeação ou mudança semântica de rota, campo, enum ou código de erro exige
   nova versão principal;
 - o cliente consulta `GET /api/v1/session` antes de carregar dados e recusa uma faixa incompatível.
+
+A versão `1.3.0` eleva o piso nos dois lados porque a sessão de revisão passa a emitir `CHANGE` em
+`ElementSituation`, o enum fechado `SpanType` e campos obrigatórios de tipo e endpoints no
+`DetectedSpanDto`. Assim, cliente `1.2.x` não recebe o novo valor fechado e cliente `1.3.x` não tenta
+interpretar uma sessão antiga sem esses campos. Projetos persistidos continuam legíveis; sem nova
+análise, tipos de trecho ausentes são projetados como `UNKNOWN`, conforme o ADR 0015.
+
+Na sessão de revisão, `SpanType` possui `DISTRIBUTION_NETWORK`, `CONNECTION_BRANCH` e `UNKNOWN`. Cada
+vão inclui `span_type`, `span_type_label`, `start_point_id` e `end_point_id`; os campos antigos
+`start_element_id` e `end_element_id` permanecem para postes e ficam nulos quando o endpoint não é
+um elemento. Um `TipoPontoRede.ENTREGA` recebe do servidor o rótulo público `Padrão do cliente`.
+`ReviewOverlayDto` também recebe `situation_label`, permitindo que o cliente apresente `A alterar`
+sem reinterpretar a situação.
 
 Os códigos de serviço usam as operações aditivas `GET` e `PUT`
 `/api/v1/projects/{project_id}/service-codes`. O detalhe do projeto e o PATCH da NS preservam a

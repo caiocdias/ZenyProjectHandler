@@ -60,12 +60,27 @@ def filtrar_propostas_identificadas(
         raise ValueError("Distância máxima do identificador deve ser positiva")
     pole_labels, span_labels = _operational_labels(evidencias)
     identified: list[PropostaElemento] = []
+    deferred_equipment: list[PropostaElemento] = []
     for proposal in propostas:
         if proposal.categoria is CategoriaElemento.CABO:
             identified.append(proposal)
             continue
+        if proposal.categoria is CategoriaElemento.EQUIPAMENTO:
+            deferred_equipment.append(proposal)
+            continue
         labels = pole_labels if proposal.categoria in _POLE_IDENTIFIED_CATEGORIES else ()
         nearest = _nearest_label(proposal, labels, distancia_maxima)
+        if nearest is not None:
+            identified.append(_with_operational_label(proposal, nearest))
+    anchors = tuple(
+        proposal
+        for proposal in identified
+        if proposal.categoria in _POLE_IDENTIFIED_CATEGORIES
+        and proposal.categoria is not CategoriaElemento.EQUIPAMENTO
+    )
+    for proposal in deferred_equipment:
+        nearest = _nearest_anchor_label(proposal, anchors, pole_labels, distancia_maxima)
+        nearest = nearest or _nearest_label(proposal, pole_labels, distancia_maxima)
         if nearest is not None:
             identified.append(_with_operational_label(proposal, nearest))
     return _select_unique_identifier_occurrences(
@@ -291,6 +306,30 @@ def _nearest_label(
             str(label.evidence.id),
         ),
     )
+
+
+def _nearest_anchor_label(
+    proposal: PropostaElemento,
+    anchors: tuple[PropostaElemento, ...],
+    labels: tuple[_OperationalLabel, ...],
+    maximum_distance: float,
+) -> _OperationalLabel | None:
+    labels_by_id = {str(label.evidence.id): label for label in labels}
+    eligible: list[tuple[float, _OperationalLabel]] = []
+    for anchor in anchors:
+        label_id = dict(anchor.atributos_sugeridos).get("evidencia_identificador_id")
+        label = labels_by_id.get(str(label_id))
+        if label is None:
+            continue
+        distance = _proposal_distance(proposal, anchor)
+        if distance <= _maximum_distance_for_label(label, maximum_distance):
+            eligible.append((distance, label))
+    if not eligible:
+        return None
+    return min(
+        eligible,
+        key=lambda item: (item[0], item[1].value, str(item[1].evidence.id)),
+    )[1]
 
 
 def _maximum_distance_for_label(

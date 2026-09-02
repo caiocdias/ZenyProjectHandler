@@ -75,6 +75,7 @@ class ElementSituation(StrEnum):
     EXISTING = "EXISTING"
     INSTALL = "INSTALL"
     REMOVE = "REMOVE"
+    CHANGE = "CHANGE"
 
 
 class ReviewState(StrEnum):
@@ -114,6 +115,12 @@ class SpanLengthSource(StrEnum):
     DRAWING_LABEL = "DRAWING_LABEL"
     COORDINATE_DISTANCE = "COORDINATE_DISTANCE"
     UNAVAILABLE = "UNAVAILABLE"
+
+
+class SpanType(StrEnum):
+    DISTRIBUTION_NETWORK = "DISTRIBUTION_NETWORK"
+    CONNECTION_BRANCH = "CONNECTION_BRANCH"
+    UNKNOWN = "UNKNOWN"
 
 
 class DocumentationFieldStatus(StrEnum):

@@ -33,9 +33,9 @@ Estado versionado relevante:
 - pontos de rede, terminais e conexões internas quando disponíveis;
 - registros de revisão manual e fotos gerenciadas associadas a elementos.
 
-Cada elemento possui ID, item do catálogo quando classificado, situação `EXISTENTE`, `INSTALAR` ou
-`REMOVER`, geometria opcional e proveniência. Referências internas são validadas pelo agregado: não
-podem apontar para outro projeto, documento ou página.
+Cada elemento possui ID, item do catálogo quando classificado, situação `EXISTENTE`, `INSTALAR`,
+`REMOVER` ou `ALTERAR`, geometria opcional e proveniência. Referências internas são validadas pelo
+agregado: não podem apontar para outro projeto, documento ou página.
 
 O diagrama resumido está em [modelo-entidades.mmd](modelo-entidades.mmd). O domínio fica em
 `src/zeny_project_handler/domain` e não depende de Qt, SQLAlchemy, PyMuPDF ou Tesseract.
@@ -207,13 +207,14 @@ Nenhuma região, vão, classificação, vínculo ou rótulo técnico é derivado
 ## Regiões e vãos
 
 `RegiaoAnalise` é uma projeção derivada e determinística que agrupa propostas próximas na mesma
-página. Ela pode reunir itens existentes, a instalar e a remover, relações e coordenadas UTM. Não é
-persistida como uma segunda fonte de verdade.
+página. Ela pode reunir itens existentes, a instalar, a remover e a alterar, relações e coordenadas
+UTM. Não é persistida como uma segunda fonte de verdade.
 
-`VaoDetectado` é derivado quando um cabo liga dois postes distintos ou quando o desenho fornece um
-identificador operacional inequívoco. A medida usa, nesta ordem, o comprimento informado no
-desenho e a distância entre coordenadas compatíveis dos postes. A origem da medida e as evidências
-permanecem registradas; um comprimento não é inventado quando nenhuma fonte é suficiente.
+`VaoDetectado` é derivado quando um cabo liga dois pontos de rede distintos e há dois postes, um
+endpoint de entrega ou um identificador operacional inequívoco. A medida usa, nesta ordem, o
+comprimento informado no desenho e a distância entre coordenadas compatíveis dos postes. A origem
+da medida e as evidências permanecem registradas; um comprimento não é inventado quando nenhuma
+fonte é suficiente.
 
 ### Alteração, ponto de entrega e ramal
 
@@ -225,9 +226,9 @@ traçado, `comprimento_m` recebe a vigente e a proposta conserva IDs navegáveis
 da marca de supersessão. Paralelas, cruzamentos e rótulos empatados permanecem sem associação.
 
 O [ADR 0015](adr/0015-pontos-de-entrega-ramais-e-alteracao-de-vao.md) aprova o contrato topológico
-interno implementado por E05–E07 e que E08 exporá:
+implementado por E05–E08 e exposto de forma coordenada pela API, cliente e exportações:
 
-- `ALTERAR` será uma situação pública distinta para o ativo que permanece com comprimento, traçado
+- `ALTERAR` é uma situação pública distinta para o ativo que permanece com comprimento, traçado
   ou configuração substituídos. Uma medida antiga riscada não torna o cabo `REMOVER`;
 - um `P<n>` com evidência inequívoca de `PADRÃO` materializa
   `TipoPontoRede.ENTREGA`, `poste_id=None`, apresentado como **Padrão do cliente**. O poste real
@@ -246,10 +247,25 @@ interno implementado por E05–E07 e que E08 exporá:
   e `ALTERAR` exigirão reanálise semântica explícita e nova conformidade; snapshots históricos não
   serão reescritos.
 
-Os campos topológicos já são produzidos e persistidos internamente pelo servidor. Sua projeção
-pública e a de `ALTERAR` serão implementadas em E08 e apenas apresentadas por API, cliente e
-exportações. Até lá, nenhum consumidor deve simular o contrato no cliente; dados antigos recebem
-`DESCONHECIDO` e exigem reanálise semântica explícita para obter classificação resolvida.
+Na API `1.3.0`, `ElementSituation.CHANGE` representa `ALTERAR`, e `SpanType` fecha os valores
+`DISTRIBUTION_NETWORK`, `CONNECTION_BRANCH` e `UNKNOWN`. `DetectedSpanDto` expõe o enum e seu rótulo
+pronto, os IDs dos dois pontos e mantém opcionais os IDs de elementos/postes. Um endpoint
+`TipoPontoRede.ENTREGA` é apresentado exatamente como **Padrão do cliente**, nunca como `-` ou como
+poste. A tabela **Vãos** usa as colunas **Tipo**, **Situação**, **Ponto de origem** e **Ponto de
+destino**; a aba **Vãos** da planilha Resultados replica os mesmos valores do DTO.
+
+O filtro de situação inclui **A alterar**. Resumos de região e overlays transportam a mesma situação
+e seu rótulo calculado pelo servidor. Quando uma região geométrica contém o padrão e um poste
+vizinho, a projeção do servidor os separa em dois nós determinísticos: o nó do padrão conserva
+somente o marcador de entrega e o ramal que termina nele; poste, estruturas e equipamentos continuam
+visíveis em um nó vizinho separado.
+
+O cliente não classifica o trecho nem deduz o endpoint pela presença de poste, rótulo `V` ou
+proximidade. Dados antigos sem `tipo_trecho` continuam legíveis como `UNKNOWN` e exigem reanálise
+semântica explícita para obter classificação resolvida. Como `CHANGE` e os campos obrigatórios do
+vão não são compreendidos pela API `1.2.x`, a negociação de sessão eleva o piso compatível para
+`1.3.0`: cliente e servidor antigos são recusados antes da leitura da sessão, sem tradução para
+`EXISTING` ou `REMOVE` e sem reescrever snapshots históricos.
 
 ## Documentação e conformidade
 

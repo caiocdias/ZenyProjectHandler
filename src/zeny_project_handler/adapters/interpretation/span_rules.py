@@ -23,7 +23,7 @@ from .rule_support import center, normalized_text, point_distance, situation_fro
 
 _MAXIMUM_ANNOTATION_DISTANCE = 0.055
 _MINIMUM_ENDPOINT_DISTANCE = 0.035
-_MINIMUM_CABLE_PATH_LENGTH = 0.06
+_MINIMUM_CABLE_PATH_LENGTH = 0.05
 _MAXIMUM_PATH_ENDPOINT_DISTANCE = 0.10
 _MAXIMUM_CABLE_LABEL_DISTANCE = 0.045
 _MAXIMUM_SPAN_IDENTIFIER_DISTANCE = 0.060
@@ -267,16 +267,20 @@ def _associate_cable(
         cable.justificativa or "",
         "O rótulo do cabo foi associado ao traçado por geometria e orientação sem empate.",
     ]
-    origin_label = _pole_identifier(endpoint_poles[0])
-    destination_label = _pole_identifier(endpoint_poles[1])
-    if origin_label is not None and destination_label is not None:
-        attributes.update(
-            {
-                "ponto_operacional_origem": origin_label,
-                "ponto_operacional_destino": destination_label,
-            }
-        )
     if identifier_label is not None:
+        identifier_endpoints = _identifier_endpoint_labels(identifier_label.value)
+        origin_label = _pole_identifier(endpoint_poles[0])
+        destination_label = _pole_identifier(endpoint_poles[1])
+        if identifier_endpoints is not None:
+            origin_label = origin_label or identifier_endpoints[0]
+            destination_label = destination_label or identifier_endpoints[1]
+        if origin_label is not None and destination_label is not None:
+            attributes.update(
+                {
+                    "ponto_operacional_origem": origin_label,
+                    "ponto_operacional_destino": destination_label,
+                }
+            )
         attributes.update(
             {
                 "identificador_operacional": identifier_label.value,
@@ -431,9 +435,13 @@ def _oriented_path(
     endpoints = path.endpoint_poles
     if label is None:
         return geometry, endpoints
-    match = _SPAN_IDENTIFIER_PATTERN.fullmatch(label.value)
-    origin_label = f"P{int(match.group(1))}" if match is not None else None
-    if origin_label is not None and _pole_identifier(endpoints[1]) == origin_label:
+    identifier_endpoints = _identifier_endpoint_labels(label.value)
+    if identifier_endpoints is None:
+        return geometry, endpoints
+    origin_label, destination_label = identifier_endpoints
+    first_label = _pole_identifier(endpoints[0])
+    second_label = _pole_identifier(endpoints[1])
+    if first_label == destination_label or second_label == origin_label:
         return (
             GeometriaDocumento.polilinha(
                 geometry.pagina_id,
@@ -442,6 +450,13 @@ def _oriented_path(
             (endpoints[1], endpoints[0]),
         )
     return geometry, endpoints
+
+
+def _identifier_endpoint_labels(identifier: str) -> tuple[str, str] | None:
+    match = _SPAN_IDENTIFIER_PATTERN.fullmatch(identifier)
+    if match is None:
+        return None
+    return f"P{int(match.group(1))}", f"P{int(match.group(2))}"
 
 
 def _pole_identifier(proposal: PropostaElemento | None) -> str | None:
@@ -634,8 +649,33 @@ def _supersession_marker(
             continue
         if not _point_overlaps_measurement(projected, measurement.geometria):
             continue
+        nearest_measurement = _nearest_measurement_for_marker(item, evidence)
+        if nearest_measurement is None or nearest_measurement.id != measurement.id:
+            continue
         candidates.append((distance, str(item.id), item))
     return min(candidates, default=(0.0, "", None))[2]
+
+
+def _nearest_measurement_for_marker(
+    marker: EvidenciaDocumento,
+    evidence: tuple[EvidenciaDocumento, ...],
+) -> EvidenciaDocumento | None:
+    candidates: list[tuple[float, str, EvidenciaDocumento]] = []
+    for item in evidence:
+        if item.pagina_id != marker.pagina_id or _measurement_value(item) is None:
+            continue
+        distance, projected, _ = _distance_to_geometry(center(item.geometria), marker.geometria)
+        if distance > _MAXIMUM_SUPERSESSION_MARK_DISTANCE:
+            continue
+        if not _point_overlaps_measurement(projected, item.geometria):
+            continue
+        candidates.append((distance, str(item.id), item))
+    ranked = sorted(candidates)
+    if not ranked:
+        return None
+    if len(ranked) > 1 and ranked[1][0] - ranked[0][0] <= _MEASUREMENT_AMBIGUITY_MARGIN:
+        return None
+    return ranked[0][2]
 
 
 def _point_overlaps_measurement(

@@ -163,8 +163,8 @@ limpa do Codex, atualize sua tag e preencha **Evidências e handoff** antes de i
 | E05 | Ponto de padrão e ramal no domínio topológico | #concluida | E01, E04 | ponto `ENTREGA` e tipo de vão/trecho derivados |
 | E06 | Fim/transição, ângulo e compatibilidade pela topologia | #concluida | E05 | fatos fail-closed apenas sobre rede resolvida |
 | E07 | Conformidade específica do ramal | #concluida | E05, E06 | registro ND-5.1 e guardas de aplicabilidade |
-| E08 | Contratos, cliente e exportações | #pendente | E04, E05, E07 | DTO/UI/XLSX/OpenAPI coerentes |
-| E09 | Gate integrado e homologação dos exemplos | #pendente | E02–E08 | validação global e handoff final |
+| E08 | Contratos, cliente e exportações | #concluida | E04, E05, E07 | DTO/UI/XLSX/OpenAPI coerentes |
+| E09 | Gate integrado e homologação dos exemplos | #concluida | E02–E08 | validação global e handoff final |
 
 ### Matriz de cobertura do pedido
 
@@ -898,7 +898,7 @@ duas aplicabilidades. Fonte mudar; mitigar registrando hash/revisão de E01.
   UI e exportações. O cliente não deve reconstruir tipo/modalidade nem voltar a consumir ramal como
   vão de rede. Nenhum commit, push, publicação, implantação ou outra ação externa foi executado.
 
-## E08 — Contratos, cliente e exportações — #pendente
+## E08 — Contratos, cliente e exportações — #concluida
 
 **Objetivo:** expor tipo do vão/ponto e alteração escolhida em E01 de forma coerente no contrato,
 servidor, painel Resultados e planilhas, sem derivação semântica no cliente.
@@ -934,12 +934,12 @@ Exponha pelo servidor o tipo fechado de vão e seu rótulo, identifique endpoint
 
 **Critérios de aceite:**
 
-- [ ] DTO/OpenAPI distinguem rede, ramal e desconhecido; cliente não deriva o valor.
-- [ ] Endpoint de entrega aparece como `Padrão do cliente`, não `-` ou poste.
-- [ ] Redução de vão não aparece `A remover` e sua alteração é visível conforme ADR.
-- [ ] Tabela e XLSX possuem coluna Tipo; valores coincidem com a sessão do servidor.
-- [ ] Estruturas/equipamentos não aparecem sob o nó do padrão incorreto.
-- [ ] Contratos, API, cliente e exportação têm testes de paridade.
+- [x] DTO/OpenAPI distinguem rede, ramal e desconhecido; cliente não deriva o valor.
+- [x] Endpoint de entrega aparece como `Padrão do cliente`, não `-` ou poste.
+- [x] Redução de vão não aparece `A remover` e sua alteração é visível conforme ADR.
+- [x] Tabela e XLSX possuem coluna Tipo; valores coincidem com a sessão do servidor.
+- [x] Estruturas/equipamentos não aparecem sob o nó do padrão incorreto.
+- [x] Contratos, API, cliente e exportação têm testes de paridade.
 
 **Validação obrigatória:**
 
@@ -958,9 +958,45 @@ estratégia no ADR e atualizar este roadmap antes de prosseguir.
 **Riscos e mitigação:** quebrar cliente antigo ao adicionar enum; mitigar com a estratégia de versão
 do ADR e teste de contrato. Desalinhamento XLSX/UI; mitigar projetando ambos do mesmo DTO canônico.
 
-**Evidências e handoff:** ainda não iniciado.
+**Evidências e handoff (02/09/2026):**
 
-## E09 — Gate integrado e homologação dos exemplos — #pendente
+- **Pré-auditoria:** não há `AGENTS.md` aplicável; E04, E05 e E07 estavam `#concluida`, o worktree
+  estava limpo em `main...origin/main` e a suíte obrigatória de linha de base terminou com
+  `56 passed in 8.06s`. Foram lidos o roadmap/handoffs, ADR 0015, contratos, servidor, cliente,
+  exportações, OpenAPI e testes indicados antes das alterações.
+- **Contrato e compatibilidade:** a API passou de `1.2.0` para `1.3.0` e elevou o piso negociado a
+  `1.3.0`. `ElementSituation.CHANGE`, o enum fechado `SpanType` e os campos obrigatórios
+  `span_type`, `span_type_label`, `start_point_id` e `end_point_id` foram publicados; overlays
+  também transportam `situation_label`. Testes provam que consumidores `1.2.x` são recusados antes
+  de ler valores fechados novos e que o cliente `1.3.x` recusa servidor antigo. Dados persistidos
+  antigos permanecem legíveis como `UNKNOWN`; classificação resolvida exige reanálise explícita,
+  sem backfill ou reescrita de snapshots, conforme o ADR.
+- **Servidor e HTTP:** a sessão projeta `TipoTrechoRede` como rede de distribuição, ramal de conexão
+  ou desconhecido, com rótulo pronto; `ALTERAR` sai como `CHANGE`/`A alterar`. IDs dos pontos são
+  preservados e um endpoint `ENTREGA` aparece exatamente como `Padrão do cliente`, inclusive nas
+  referências e propostas. Uma região mista é separada por IDs determinísticos para que marcador e
+  cabo do padrão não tenham poste, estrutura ou equipamento vizinho como filhos do mesmo nó.
+- **Cliente e exportação:** o painel apenas apresenta os rótulos canônicos recebidos, ganhou filtro
+  de situação com `A alterar` e a tabela Vãos ganhou `Tipo`, `Ponto de origem` e `Ponto de destino`.
+  O tooltip do overlay usa `situation_label`. A planilha Resultados/Vãos usa o mesmo
+  `DetectedSpanDto`, com teste de paridade campo a campo para tipo, situação, endpoints, cabo,
+  comprimento, fonte, folha e ID.
+- **Documentação:** o snapshot `docs/api/openapi-v1.json`, `docs/api/README.md`, a especificação
+  funcional e o inventário de paridade foram atualizados atomicamente para a API `1.3.0`, incluindo
+  a estratégia para consumidores e projetos antigos.
+- **Validações finais:** a suíte obrigatória exata de E08, com `--basetemp
+  tmp\\pytest-e08-required-final`, terminou com `62 passed in 12.26s`; a suíte pytest completa, com
+  `--basetemp tmp\\pytest-e08-full-final`, terminou com `955 passed in 137.33s`. `python -m mypy`
+  retornou `Success: no issues found in 306 source files`; `ruff check src tests` retornou
+  `All checks passed!`; os 15 arquivos Python alterados passaram em `ruff format --check` e
+  `git diff --check` não encontrou erro.
+- **Handoff para E09:** preservar API/piso `1.3.0`, valores `CHANGE`/`SpanType`, rótulos fornecidos
+  pelo servidor e a separação determinística do nó de entrega. Na homologação dos PDFs reais,
+  confirmar V1-2/V4-5 como ramais, P1/P5 como `Padrão do cliente` e redução de vão como `A alterar`,
+  além dos demais critérios próprios de E09; então executar o smoke e `IniciarTestes.bat` exigidos
+  por aquela etapa. Nenhum commit, push, publicação ou implantação foi executado em E08.
+
+## E09 — Gate integrado e homologação dos exemplos — #concluida
 
 **Objetivo:** provar a definição global de pronto no gate versionado e nos dois PDFs locais, revisar
 visualmente resultados/callouts e deixar documentação/handoff final reproduzíveis.
@@ -997,11 +1033,11 @@ Atualize documentação, versões e o roadmap apenas se necessário para refleti
 
 **Critérios de aceite:**
 
-- [ ] Cada item da definição global de pronto possui teste sintético e resultado local correspondente.
-- [ ] Ambos os PDFs passam a matriz esperada e permanecem byte a byte inalterados.
-- [ ] Nenhum falso callout citado pelo usuário permanece; verdadeiros positivos de controle permanecem.
-- [ ] Smoke, suítes dirigidas e gate completo passam sem teste obrigatório omitido.
-- [ ] Roadmap, ADR, inventários, catálogo de regras, OpenAPI e README/especificação estão coerentes.
+- [x] Cada item da definição global de pronto possui teste sintético e resultado local correspondente.
+- [x] Ambos os PDFs passam a matriz esperada e permanecem byte a byte inalterados.
+- [x] Nenhum falso callout citado pelo usuário permanece; verdadeiros positivos de controle permanecem.
+- [x] Smoke, suítes dirigidas e gate completo passam sem teste sintético obrigatório omitido.
+- [x] Roadmap, ADR, inventários, catálogo de regras, OpenAPI e README/especificação estão coerentes.
 
 **Validação obrigatória:**
 
@@ -1015,12 +1051,129 @@ Resultado esperado: códigos de saída zero, nenhuma alteração nos PDFs e insp
 a matriz. Aviso de cache do Pytest deve ser registrado e corrigido se comprometer o gate, mas não é
 sozinho evidência de falha funcional.
 
-**Bloqueios:** os dois PDFs locais são obrigatórios para a homologação final, embora nunca sejam
-versionados. Ausência deles bloqueia somente E09 e deve ser resolvida recolocando as cópias locais
-autorizadas em `examples/`.
+**Bloqueios:** nenhum.
 
 **Riscos e mitigação:** smoke atual verifica contagens, não semântica; mitigar com inspeção dos DTOs e
 callouts e registrar o procedimento/comando no handoff. Corrigir nova regressão ampliando escopo;
 mitigar criando etapa adicional com ID novo antes de editar comportamento não planejado.
 
-**Evidências e handoff:** ainda não iniciado.
+**Evidências e handoff (retomada em 02/09/2026):**
+
+- **Início da auditoria:** o índice e o detalhe foram sincronizados em `#em-andamento` após a leitura
+  integral do roadmap e de todos os handoffs. Não há `AGENTS.md` na raiz, nos pais verificáveis nem
+  nos subdiretórios do repositório. O worktree já continha alterações não commitadas de E08 em
+  contratos, servidor, cliente, testes e documentação; elas serão preservadas e distinguidas das
+  mudanças estritamente necessárias em E09.
+- **Bloqueio da homologação real:** os caminhos obrigatórios
+  `examples/PROJETO DE REDE - 1255651475.pdf` e
+  `examples/PROJETO DE REDE - 1255839633.pdf` não existem; `examples/` contém somente o
+  `README.md` versionado. Sem os arquivos não é possível registrar hash/tamanho/mtime, executar a
+  análise completa, inspecionar DTOs/callouts nem confirmar a matriz técnica real. Ação de
+  desbloqueio: recolocar as duas cópias locais autorizadas, com esses nomes, em `examples/` e
+  reexecutar E09 desde a captura de integridade anterior à análise. O gate sintético continuará a
+  ser executado e documentado, mas não substitui essa homologação.
+- **Dependências e versões:** E02–E08 permanecem `#concluida` no índice e nos detalhes, com critérios
+  marcados e handoffs preenchidos. Código e testes confirmam analisadores de estrutura `2.0`, cabo
+  `4.1` e equipamento `3.3`, interpretador `21.1`, registro de interpretação `1.6.0`, registro de
+  conformidade `cemig-normas-distribuicao-2026.1` com 42 regras, método de conformidade `12` e API,
+  piso negociado e OpenAPI `1.3.0`. A suíte dirigida ampliada das áreas de E02–E08 terminou com
+  `363 passed in 27.43s`.
+- **Cobertura sintética da definição global de pronto:** `test_e04_span_reduction_*` cobre cabo
+  `ALTERAR`, 269 m vigente, 321 m substituído, proveniência e negativos de paralelas/cruzamentos;
+  `test_e01_structure_fixture_*` cobre uma `N(2)`, duas `CM3`, duas `S3R`, duplicata OCR e negativos
+  para `N-(4 CAA)`/texto comum; `test_e03_switch_bags_*` cobre chaves 2H/5H completas, bolsas
+  vinculadas, versões sem bolsa, bolsa vizinha, medida riscada e rejeição do fragmento `-300A`;
+  `test_automatic_promotion_separates_delivery_*` cobre P1/P5 como entrega, ramal, poste vizinho e
+  endpoint não comprovado. Os testes topológicos cobrem ramal fora do grau, ângulo, fim/transição e
+  compatibilidade, topologia incompleta fail-closed e controles positivos de terminal/transição. Os
+  testes do provedor de vãos cobrem 10/23/30/30,01 m, dois mercados, modalidade/comprimento
+  desconhecidos e exclusão da regra de rede. Contratos, OpenAPI, painel e XLSX cobrem `CHANGE`, tipo
+  do trecho, endpoints e `Padrão do cliente`. Todas são fixtures sintéticas sem dependência de
+  `examples/`.
+- **Comandos obrigatórios:** `scripts/smoke_examples.py` terminou com código zero e a mensagem
+  `Nenhum PDF local encontrado`, o que valida o comportamento do script, não a matriz real. A suíte
+  dirigida exata de E09 terminou com `167 passed in 15.76s`. A primeira execução de
+  `IniciarTestes.bat` foi corretamente reprovada por um arquivo fora da formatação Ruff e
+  complexidade `E (31)` em `_build_mt_topology`; não foi usada como evidência de sucesso.
+- **Correção do gate:** `topology_compliance.py` teve apenas a montagem do grafo MT decomposta em
+  auxiliares, preservando seleção de rede, arestas, tecnologias, incompletude e componentes. O teste
+  de recurso do registro recebeu formatação mecânica. Depois disso, o gate de complexidade aprovou
+  2.637 funções/métodos e a suíte topológica afetada terminou com `74 passed in 10.69s`.
+- **Gate final:** a segunda execução integral de `IniciarTestes.bat` terminou
+  `RESULTADO FINAL: APROVADO`: dependências íntegras; Ruff check aprovado; 321 arquivos formatados;
+  mypy sem problemas em 306 arquivos fonte; gate do cliente aprovado; `955 passed in 168.43s`,
+  cobertura total `86,97%` acima de `85,01%`; complexidade aprovada em 2.637 funções/métodos.
+- **Documentação e versões:** `README.md` foi sincronizado para 42 regras, seed 2026.1 e método 12;
+  `docs/especificacao-funcional.md` passou a listar `ALTERAR` como situação vigente; e
+  `docs/arquitetura-conformidade.md` deixou de tratar a projeção pública de E08 como futura. ADR,
+  inventário normativo, catálogo, inventário de paridade, documentação da API e OpenAPI já estavam
+  coerentes. Naquela rodada sem os PDFs, não foi necessário alterar versões.
+- **Integridade/limitação final:** a verificação posterior repetiu `Missing=true` para os dois
+  caminhos, idêntica à anterior. Como os arquivos nunca estiveram disponíveis, nenhum conteúdo ou
+  PII dos exemplos foi lido ou registrado e não existe hash/tamanho/mtime a comparar. Handoff:
+  reabrir E09 após repor os PDFs; não repetir trabalho sintético salvo se o código mudar, mas executar
+  novamente os três comandos obrigatórios e só então preencher a matriz real e marcar `#concluida`.
+  Nenhum commit, push, publicação ou implantação foi executado.
+- **Retomada da homologação real:** as duas cópias autorizadas foram repostas nos caminhos exatos.
+  Antes da análise, `1255651475` possuía 3.920.101 bytes, `mtime` UTC
+  `2026-09-02T15:58:17.9323527Z` e SHA-256
+  `b1d6bd3d9f4b3fff8334ffbfb22b56e79f8a88f231ea237408c17ca551569c6d`; `1255839633`
+  possuía 2.566.204 bytes, `mtime` UTC `2026-09-02T15:58:02.0814356Z` e SHA-256
+  `ab6c8fb160f1b454fa605791dbdc0379e571fff61e397e347371b40447f7ab6d`. Os hashes coincidem
+  com os registrados em E01. E09 voltou a `#em-andamento` para executar análise, inspeção e gates.
+- **Inspeção completa e privacidade:** cada PDF, ambos de uma página, foi renderizado integralmente a
+  300 dpi e revisto novamente em recortes a 600 dpi; a análise automática percorreu extração,
+  interpretação, promoção, vãos, regiões, fatos, achados e callouts nos mercados rural e urbano. O
+  OCR condicional permaneceu desativado porque o runtime não dispõe dos dados de idioma português;
+  os dois arquivos têm conteúdo técnico nativo suficiente e terminaram sem diagnóstico. Somente
+  rótulos, contagens e estados técnicos foram registrados, sem nomes, endereços, telefones,
+  coordenadas ou outros dados pessoais.
+- **Matriz real `1255651475`:** 1.323 evidências, 13 propostas e 11 relações. Os cabos principais
+  `N-(4 CAA)` e `B-4 CAA` no traçado reduzido ficaram `ALTERAR`, nunca `REMOVER`, com `269 m`
+  vigente e `321 m` substituído auditável; `V1-2` ficou `RAMAL_CONEXAO`, ligando a entrega `P1` ao
+  poste `P2`; e `100A-10KA-2H` ficou `INSTALAR`.
+- **Matriz real `1255839633`:** 515 evidências, 41 propostas e 57 relações. Sobreviveram uma `N`
+  com qualificador `2`, exatamente duas `CM3` e duas `S3R` no cluster `P3`, a chave
+  `100A-10KA-5H` como `INSTALAR` e `V4-5` como `RAMAL_CONEXAO` do poste `P4` à entrega `P5`.
+  Nenhum equipamento `-300A` foi promovido.
+- **Callouts e controles:** a projeção de callouts confirmou zero divergência/callout das famílias
+  fim/transição, ângulo e compatibilidade nos alvos dos relatos (`P2` no primeiro exemplo e
+  `P2`/`P4`/`P5` no segundo), em ambos os mercados. Um achado de compatibilidade separado permanece
+  em `P1` do segundo arquivo; seus pares usam exclusivamente `REDE_DISTRIBUICAO`, não `V4-5`, e
+  portanto ele não é o falso positivo derivado do ramal. As regressões sintéticas mantêm controles
+  positivos de fim, transição, ângulo e incompatibilidade real, além dos negativos de ramal e
+  topologia incompleta.
+- **Divergências integradas corrigidas:** a homologação exigiu aceitar o traçado curto real do ramal,
+  orientar e completar endpoints pelo identificador `V<n>-<n>`, atribuir cada marca vinho somente à
+  medida mais próxima sem empate, vincular equipamento ao cluster físico identificado, reconhecer a
+  caixa verde parcial real da chave 2H e associar `PADRÃO` ao rótulo `P<n>` mais próximo em vez do
+  envelope amplo da região. As mudanças estão em `span_rules.py`, `operational_labels.py`,
+  `rule_support.py` e `analysis_regions.py`; analisador de cabo, equipamento e interpretador foram
+  incrementados respectivamente para `4.1`, `3.3` e `21.1` para invalidar resultados anteriores.
+- **Regressões E09:** `test_e09_supersession_marker_belongs_only_to_the_closest_measurement`,
+  `test_e09_short_span_identifier_supplies_missing_delivery_endpoint`,
+  `test_e09_green_equipment_bag_requires_geometric_overlap`,
+  `test_e09_equipment_uses_the_nearest_identified_asset_cluster` e
+  `test_e09_delivery_marker_uses_nearest_point_label_not_sprawling_region` cobrem as diferenças entre
+  as fixtures existentes e as geometrias reais, mantendo negativos de proximidade, ambiguidade e
+  captura pelo objeto vizinho.
+- **Validações finais após as correções:** a matriz assertiva real terminou `APROVADO`; o smoke
+  repetido aprovou os dois PDFs com zero falhas; e a suíte dirigida obrigatória exata terminou com
+  `173 passed in 12.17s`. A primeira execução integral posterior às correções teve 961 testes
+  aprovados, mas foi corretamente reprovada por complexidade `E (32)` na função ampliada de entrega
+  e não foi usada como sucesso. Após decomposição semântica neutra, 92 testes afetados passaram e o
+  gate de complexidade isolado aprovou 2.642 funções/métodos.
+- **Gate integrado definitivo:** a reexecução completa de `IniciarTestes.bat` terminou
+  `RESULTADO FINAL: APROVADO`: dependências íntegras; Ruff check aprovado; 321 arquivos formatados;
+  mypy sem problemas em 306 arquivos fonte; gate do cliente magro aprovado; `961 passed in
+  166.01s`; cobertura total `86,97%` acima do piso `85,01%`; complexidade aprovada em 2.642
+  funções/métodos. `git diff --check` também terminou limpo.
+- **Integridade posterior e handoff final:** depois de toda a análise, os dois arquivos repetiram
+  exatamente tamanho, `mtime` UTC e SHA-256 anteriores: 3.920.101 bytes,
+  `2026-09-02T15:58:17.9323527Z`,
+  `b1d6bd3d9f4b3fff8334ffbfb22b56e79f8a88f231ea237408c17ca551569c6d`; e 2.566.204 bytes,
+  `2026-09-02T15:58:02.0814356Z`,
+  `ab6c8fb160f1b454fa605791dbdc0379e571fff61e397e347371b40447f7ab6d`. API/piso/OpenAPI `1.3.0`,
+  registro de interpretação `1.6.0`, registro de conformidade `cemig-normas-distribuicao-2026.1`, 42
+  regras e método `12` permaneceram coerentes. As alterações preexistentes foram preservadas e não
+  houve commit, push, publicação ou implantação.

@@ -270,6 +270,7 @@ def _results_sheets(session: ReviewSessionResponse) -> tuple[WorksheetData, Work
     span_rows = tuple(
         (
             item.label,
+            item.span_type_label,
             item.situation_label,
             item.start_label,
             item.end_label,
@@ -307,9 +308,10 @@ def _results_sheets(session: ReviewSessionResponse) -> tuple[WorksheetData, Work
             "Vãos",
             (
                 "Vão",
+                "Tipo",
                 "Situação",
-                "Poste de origem",
-                "Poste de destino",
+                "Ponto de origem",
+                "Ponto de destino",
                 "Cabo",
                 "Comprimento",
                 "Fonte",

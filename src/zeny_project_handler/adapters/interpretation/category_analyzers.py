@@ -328,7 +328,7 @@ class AnalisadorEstruturaBt(_AnalisadorEstruturaPorCodigo):
 
 class AnalisadorCabo(AnalisadorCatalogoPorCodigo):
     nome = "cabo-codigo-e-nomenclatura"
-    versao = "4.0"
+    versao = "4.1"
     categoria = CategoriaElemento.CABO
 
     def analisar(
@@ -391,7 +391,7 @@ class AnalisadorCabo(AnalisadorCatalogoPorCodigo):
 
 class AnalisadorEquipamento(AnalisadorCatalogoPorCodigo):
     nome = "equipamento-codigo-e-nomenclatura"
-    versao = "3.2"
+    versao = "3.3"
     categoria = CategoriaElemento.EQUIPAMENTO
 
     def _matches_catalog_item(self, text: str, item: ItemCatalogoType) -> bool:

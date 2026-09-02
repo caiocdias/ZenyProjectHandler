@@ -70,6 +70,7 @@ from zeny_project_handler_contracts.enums import (
     ReviewGeometryKind,
     ReviewState,
     SpanLengthSource,
+    SpanType,
 )
 from zeny_project_handler_contracts.review import AnalysisRegionDto, DetectedSpanDto
 from zeny_project_handler_server.review_api import ReviewApiService, _proposal_label
@@ -94,8 +95,12 @@ def _span_dto(
     return DetectedSpanDto(
         span_id=uuid4(),
         proposal_id=proposal_id,
+        start_point_id=uuid4(),
+        end_point_id=uuid4(),
         cable_element_id=ElementId(uuid4()),
         label="V1-2",
+        span_type=SpanType.CONNECTION_BRANCH,
+        span_type_label="Ramal de conexão",
         situation=situation,
         situation_label=situation_label,
         start_label="Poste P1",
@@ -337,6 +342,16 @@ def test_results_panel_groups_relationships_and_links_elements_to_pdf(
     assert filtered_region is not None and filtered_region.childCount() == 1
     state_filter.setCurrentIndex(0)
 
+    situation_filter = panel.findChild(QComboBox, "reviewSituationFilter")
+    assert situation_filter is not None
+    situation_filter.setCurrentIndex(situation_filter.findData(ElementSituation.REMOVE.value))
+    filtered_region = tree.topLevelItem(0)
+    assert filtered_region is not None and filtered_region.childCount() == 1
+    assert all(
+        item.situation is ElementSituation.REMOVE for item in panel._viewer._review_proposals
+    )
+    situation_filter.setCurrentIndex(0)
+
     region_item = tree.topLevelItem(0)
     assert region_item is not None
     pole_item = region_item.child(0)
@@ -429,6 +444,7 @@ def test_results_panel_keeps_recognized_point_without_elements(
         (SituacaoProjeto.INSTALAR, "A instalar"),
         (SituacaoProjeto.REMOVER, "A remover"),
         (SituacaoProjeto.EXISTENTE, "Existente"),
+        (SituacaoProjeto.ALTERAR, "A alterar"),
     ),
 )
 def test_results_panel_has_span_tab_with_situation_cable_and_length_source(
@@ -449,6 +465,7 @@ def test_results_panel_has_span_tab_with_situation_cable_and_length_source(
         SituacaoProjeto.INSTALAR: ElementSituation.INSTALL,
         SituacaoProjeto.REMOVER: ElementSituation.REMOVE,
         SituacaoProjeto.EXISTENTE: ElementSituation.EXISTING,
+        SituacaoProjeto.ALTERAR: ElementSituation.CHANGE,
     }[cable_situation]
     panel._session = panel._session.model_copy(
         update={
@@ -473,9 +490,10 @@ def test_results_panel_has_span_tab_with_situation_cable_and_length_source(
         headers.append(header.text())
     assert headers == [
         "Vão",
+        "Tipo",
         "Situação",
-        "Poste de origem",
-        "Poste de destino",
+        "Ponto de origem",
+        "Ponto de destino",
         "Cabo",
         "Comprimento",
         "Fonte",
@@ -483,17 +501,19 @@ def test_results_panel_has_span_tab_with_situation_cable_and_length_source(
         "Exibir",
     ]
     identifier_item = table.item(0, 0)
-    situation_item = table.item(0, 1)
-    cable_item = table.item(0, 4)
-    length_item = table.item(0, 5)
-    source_item = table.item(0, 6)
+    type_item = table.item(0, 1)
+    situation_item = table.item(0, 2)
+    cable_item = table.item(0, 5)
+    length_item = table.item(0, 6)
+    source_item = table.item(0, 7)
     assert identifier_item is not None and identifier_item.text() == "V1-2"
+    assert type_item is not None and type_item.text() == "Ramal de conexão"
     assert situation_item is not None and situation_item.text() == expected_situation
     assert cable_item is not None
     assert cable_item.text() == "B-2-CAA — Cabo protegido"
     assert length_item is not None and length_item.text() == "31,50 m"
     assert source_item is not None and source_item.text() == "Comprimento informado"
-    visibility = table.cellWidget(0, 8)
+    visibility = table.cellWidget(0, 9)
     assert isinstance(visibility, QToolButton)
     assert visibility.property("spanId")
     assert visibility.isChecked()
@@ -571,13 +591,13 @@ def test_review_tables_toggle_word_wrap_and_keep_interactions_after_reload(
     panel._refresh_spans()
     tabs.setCurrentIndex(1)
     assert spans.rowCount() == 1
-    spans.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Interactive)
-    spans.setColumnWidth(4, 90)
-    cable_cell = spans.item(0, 4)
+    spans.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Interactive)
+    spans.setColumnWidth(5, 90)
+    cable_cell = spans.item(0, 5)
     assert isinstance(cable_cell, QTableWidgetItem)
     cable_cell.setText(_LONG_CELL_TEXT)
     spans.selectRow(0)
-    span_visibility = spans.cellWidget(0, 8)
+    span_visibility = spans.cellWidget(0, 9)
     compact_span_height = spans.rowHeight(0)
 
     spans_toggle.click()
@@ -586,12 +606,12 @@ def test_review_tables_toggle_word_wrap_and_keep_interactions_after_reload(
     assert spans.wordWrap()
     assert spans.textElideMode() is Qt.TextElideMode.ElideNone
     assert spans.currentRow() == 0
-    assert spans.cellWidget(0, 8) is span_visibility
+    assert spans.cellWidget(0, 9) is span_visibility
 
     panel._refresh_spans()
     qtbot.waitUntil(lambda: spans.rowHeight(0) > compact_span_height)
     assert spans_toggle.isChecked()
-    assert isinstance(spans.cellWidget(0, 8), QToolButton)
+    assert isinstance(spans.cellWidget(0, 9), QToolButton)
 
     spans.selectRow(0)
     spans_toggle.click()
@@ -622,7 +642,7 @@ def test_span_visibility_button_hides_matching_cable_overlay(
     panel._refresh_spans()
     panel._refresh_proposals()
 
-    visibility = table.cellWidget(0, 8)
+    visibility = table.cellWidget(0, 9)
     assert isinstance(visibility, QToolButton)
     proposal_id = str(proposal.proposal_id.root)
     assert proposal_id in panel._viewer.view._review_items

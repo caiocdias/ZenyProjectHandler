@@ -33,8 +33,8 @@ apresenta os DTOs e rasters recebidos pela API autenticada.
   executada, sem linha, com linha, resultado desatualizado e bloqueio por divergência da NS.
 - Motor declarativo de conformidade executado no servidor, com quatro famílias de provedores de
   fatos, snapshots persistidos e callouts normalizados compilados para a camada vetorial do cliente.
-  O seed atual é `cemig-normas-distribuicao-2025.7`, com 41 regras habilitadas, e o método de
-  conformidade está na versão `10`. O mercado rural/urbano e a conclusão das ações operacionais
+  O seed atual é `cemig-normas-distribuicao-2026.1`, com 42 regras habilitadas, e o método de
+  conformidade está na versão `12`. O mercado rural/urbano e a conclusão das ações operacionais
   aplicáveis vêm exclusivamente do SQL Server.
 - Painel **Exportar**: o servidor compila o PDF na ordem das folhas, incorpora as anotações de
   conformidade e gera planilhas Excel de **Resultados** (Elementos e Vãos), **Documentação** e
@@ -45,7 +45,7 @@ apresenta os DTOs e rasters recebidos pela API autenticada.
   antes da prontidão.
 - Temas claro e escuro, painéis acopláveis e restauração do estado da interface.
 
-As 41 regras são executáveis, mas um achado só é criado para alvos que satisfazem todas as condições
+As 42 regras são executáveis, mas um achado só é criado para alvos que satisfazem todas as condições
 de aplicabilidade declaradas. Por isso o registro usa fatos de guarda para não aplicar uma obrigação
 fora do subconjunto que o pipeline consegue caracterizar. Em um alvo aplicável, a ausência de um
 fato declarado como requisito pode produzir divergência — por exemplo, quando a própria regra exige
@@ -316,7 +316,7 @@ sanitizados com e sem linha antes da produção.
 - [Modelo de entidades](docs/modelo-entidades.mmd): visão estrutural do domínio.
 - [Arquitetura de conformidade](docs/arquitetura-conformidade.md): fluxo de fatos, regras, snapshots e
   callouts.
-- [Catálogo de regras](docs/catalogo-regras-conformidade.md): as 41 regras do seed e suas fontes.
+- [Catálogo de regras](docs/catalogo-regras-conformidade.md): as 42 regras do seed e suas fontes.
 - [Inventário normativo](docs/inventario-fontes-normativas.md): documentos, revisões, hashes e escopo
   da auditoria normativa.
 - [Operação do servidor](docs/operacao-servidor.md): instalação, LAN, volume, cutover, atualização,

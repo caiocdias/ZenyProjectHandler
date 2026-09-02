@@ -595,8 +595,13 @@ def test_e04_span_reduction_keeps_current_length_and_does_not_capture_service_dr
     assert connected_labels == {"P1", "P2"}
     service_drop_cable = next(item for item in cables if item.id != cable.id)
     service_drop_attributes = dict(service_drop_cable.atributos_sugeridos)
-    assert service_drop_cable.geometria == evidence["service_drop"].geometria
+    assert service_drop_cable.geometria == GeometriaDocumento.polilinha(
+        evidence["service_drop"].pagina_id,
+        tuple(reversed(evidence["service_drop"].geometria.pontos)),
+    )
     assert service_drop_attributes["identificador_operacional"] == "V1-2"
+    assert service_drop_attributes["ponto_operacional_origem"] == "P1"
+    assert service_drop_attributes["ponto_operacional_destino"] == "P2"
     assert service_drop_attributes["evidencia_identificador_id"] == str(
         evidence["span_identifier"].id
     )
@@ -658,6 +663,39 @@ def test_e04_extracted_span_change_fixture_preserves_supersession_evidence(
     supersession_id = UUID(str(attributes["evidencia_supersessao_id"]))
     supersession = next(item for item in extraction.evidencias if item.id == supersession_id)
     assert dict(supersession.atributos_extraidos).get("cor_contorno") == "#8C0033"
+
+
+def test_e09_supersession_marker_belongs_only_to_the_closest_measurement(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    request, evidence = _e04_span_change_request(catalogo_inicial)
+    current = replace(
+        evidence["current_length"],
+        geometria=GeometriaDocumento.ponto(
+            evidence["current_length"].pagina_id,
+            PontoNormalizado(Decimal("0.40"), Decimal("0.481")),
+        ),
+    )
+    request = replace(
+        request,
+        evidencias=tuple(
+            current if item.id == evidence["current_length"].id else item
+            for item in request.evidencias
+        ),
+    )
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
+
+    cable = next(
+        item
+        for item in result.elementos
+        if dict(item.atributos_sugeridos).get("alteracao_cabo") == "REDUCAO_COMPRIMENTO"
+    )
+    attributes = dict(cable.atributos_sugeridos)
+    assert cable.situacao_projeto is SituacaoProjeto.ALTERAR
+    assert attributes["comprimento_m"] == Decimal("269")
+    assert attributes["comprimento_substituido_m"] == Decimal("321")
+    assert attributes["evidencia_comprimento_id"] == str(current.id)
 
 
 @pytest.mark.parametrize("case", ("parallel", "crossing"))
@@ -1636,6 +1674,86 @@ def test_e05_delivery_cluster_cannot_receive_structures_or_equipment(
     assert all(relation.destino_referencia_id != delivery_symbol.id for relation in result.relacoes)
 
 
+def test_e09_short_span_identifier_supplies_missing_delivery_endpoint(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    request = _request(catalogo_inicial)
+    page_id = request.evidencias[0].pagina_id
+    pole_code = request.evidencias[0].conteudo_bruto or "11-300"
+    cable_code = request.evidencias[3].conteudo_bruto or "A-4 CA"
+    evidence = (
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e09-short-p2-pole",
+            text=pole_code,
+            x="0.50",
+            y="0.50",
+            color="#008000",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e09-short-p2-label",
+            text="P2",
+            x="0.50",
+            y="0.48",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e09-short-p1-label",
+            text="P1",
+            x="0.45",
+            y="0.46",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e09-short-standard",
+            text="PADRÃO",
+            x="0.44",
+            y="0.44",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e09-short-cable-label",
+            text=cable_code,
+            x="0.47",
+            y="0.48",
+            color="#008000",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e09-short-span-label",
+            text="V1-2",
+            x="0.46",
+            y="0.49",
+        ),
+        vector_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e09-short-service-drop",
+            points=(("0.45", "0.47"), ("0.50", "0.50")),
+            color="#008000",
+        ),
+    )
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(
+        replace(request, evidencias=evidence)
+    )
+
+    cable = next(item for item in result.elementos if item.categoria is CategoriaElemento.CABO)
+    attributes = dict(cable.atributos_sugeridos)
+    assert attributes["identificador_operacional"] == "V1-2"
+    assert attributes["ponto_operacional_origem"] == "P1"
+    assert attributes["ponto_operacional_destino"] == "P2"
+    assert attributes["tipo_ponto_operacional_origem"] == "ENTREGA"
+    assert "tipo_ponto_operacional_destino" not in attributes
+
+
 def test_pole_format_resolves_dimension_to_exact_catalog_item(
     catalogo_inicial: CatalogoTecnico,
 ) -> None:
@@ -1867,6 +1985,139 @@ def test_dark_red_bubble_forces_installation_regardless_of_equipment_text_color(
     assert equipment.situacao_projeto is SituacaoProjeto.INSTALAR
     assert bubble.id in equipment.evidencia_ids
     assert dict(equipment.atributos_sugeridos)["situacao_inferida_bolha"] is True
+
+
+@pytest.mark.parametrize(("marker_x", "expected"), (("0.24", True), ("0.34", False)))
+def test_e09_green_equipment_bag_requires_geometric_overlap(
+    catalogo_inicial: CatalogoTecnico,
+    marker_x: str,
+    expected: bool,
+) -> None:
+    request = _request(catalogo_inicial)
+    source = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=request.evidencias[0].pagina_id,
+        key=f"e09-black-equipment-{marker_x}",
+        text="100A/10KA/2H",
+        x="0.24",
+        y="0.20",
+        color="#000000",
+    )
+    marker = replace(
+        vector_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=source.pagina_id,
+            key=f"e09-green-equipment-marker-{marker_x}",
+            points=(
+                (str(Decimal(marker_x) - Decimal("0.02")), "0.18"),
+                (str(Decimal(marker_x) + Decimal("0.02")), "0.18"),
+                (str(Decimal(marker_x) + Decimal("0.02")), "0.22"),
+                (str(Decimal(marker_x) - Decimal("0.02")), "0.22"),
+            ),
+            color="#008000",
+        ),
+        geometria=GeometriaDocumento.caixa(
+            source.pagina_id,
+            PontoNormalizado(Decimal(marker_x) - Decimal("0.02"), Decimal("0.18")),
+            PontoNormalizado(Decimal(marker_x) + Decimal("0.02"), Decimal("0.22")),
+        ),
+        atributos_extraidos=(
+            ("cor_contorno", "#008000"),
+            ("operacoes", "qu"),
+        ),
+    )
+    point_label = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=source.pagina_id,
+        key=f"e09-green-equipment-point-{marker_x}",
+        text="P13",
+        x="0.24",
+        y="0.17",
+    )
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(
+        replace(request, evidencias=(source, marker, point_label))
+    )
+
+    equipment = next(
+        item for item in result.elementos if item.categoria is CategoriaElemento.EQUIPAMENTO
+    )
+    expected_situation = SituacaoProjeto.INSTALAR if expected else SituacaoProjeto.EXISTENTE
+    assert equipment.situacao_projeto is expected_situation
+    assert (marker.id in equipment.evidencia_ids) is expected
+
+
+def test_e09_equipment_uses_the_nearest_identified_asset_cluster(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    request = _request(catalogo_inicial)
+    page_id = request.evidencias[0].pagina_id
+    pole_code = request.evidencias[0].conteudo_bruto or "11-300"
+    evidence = (
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e09-cluster-p1-pole",
+            text=pole_code,
+            x="0.23",
+            y="0.15",
+            color="#008000",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e09-cluster-p1-label",
+            text="P1",
+            x="0.19",
+            y="0.11",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e09-cluster-p2-pole",
+            text=pole_code,
+            x="0.30",
+            y="0.30",
+            color="#008000",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e09-cluster-p2-label",
+            text="P2",
+            x="0.29",
+            y="0.275",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e09-cluster-switch",
+            text="100A-10KA-5H",
+            x="0.28",
+            y="0.20",
+            color="#008000",
+        ),
+    )
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(
+        replace(request, evidencias=evidence)
+    )
+
+    equipment = next(
+        item for item in result.elementos if item.categoria is CategoriaElemento.EQUIPAMENTO
+    )
+    assert dict(equipment.atributos_sugeridos)["identificador_operacional"] == "P1"
+    poles = {
+        dict(item.atributos_sugeridos).get("identificador_operacional"): item.id
+        for item in result.elementos
+        if item.categoria is CategoriaElemento.POSTE
+    }
+    relation = next(
+        item
+        for item in result.relacoes
+        if item.origem_referencia_id == equipment.id and item.tipo_relacao == "INSTALADO_EM"
+    )
+    assert relation.destino_referencia_id == poles["P1"]
 
 
 def test_unidentified_cable_with_valid_trace_remains_without_span_identifier(

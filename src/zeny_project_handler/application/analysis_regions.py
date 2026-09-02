@@ -189,12 +189,12 @@ def detectar_pontos_de_entrega(
         if item.tipo in {TipoEvidencia.TEXTO, TipoEvidencia.OCR}
         and _texto_padrao(item.conteudo_bruto)
     )
-    qualificadores_por_regiao: dict[UUID, list[EvidenciaDocumento]] = {}
-    for qualificador in qualificadores:
-        regiao = _regiao_unica_proxima(qualificador.geometria, regioes_rotuladas)
-        if regiao is not None:
-            qualificadores_por_regiao.setdefault(regiao.id, []).append(qualificador)
     ancoras = _point_anchors(evidencias_projeto)
+    qualificadores_por_regiao = _qualificadores_entrega_por_regiao(
+        qualificadores,
+        ancoras,
+        regioes_rotuladas,
+    )
     propostas_por_id = {item.id: item for item in propostas}
     evidencias_por_id = {str(item.id): item for item in evidencias_projeto}
     detectados: list[PontoEntregaDetectado] = []
@@ -202,45 +202,12 @@ def detectar_pontos_de_entrega(
         marcadores = qualificadores_por_regiao.get(regiao.id, ())
         if not marcadores or regiao.rotulo_ponto is None:
             continue
-        ancora = min(
-            (
-                item
-                for item in ancoras
-                if item.label == regiao.rotulo_ponto and item.geometry.pagina_id == regiao.pagina_id
-            ),
-            key=lambda item: (
-                _box_gap(item.geometry, regiao.geometria),
-                str(item.evidence_id),
-            ),
-            default=None,
+        ancora = _ancora_entrega_da_regiao(
+            regiao,
+            ancoras,
+            propostas_por_id,
+            evidencias_por_id,
         )
-        if ancora is None:
-            ancora = min(
-                (
-                    _PointAnchor(
-                        label=regiao.rotulo_ponto,
-                        geometry=evidencia.geometria,
-                        evidence_id=evidencia.id,
-                    )
-                    for elemento_id in regiao.elemento_ids
-                    if (proposta := propostas_por_id.get(elemento_id)) is not None
-                    if dict(proposta.atributos_sugeridos).get("identificador_operacional")
-                    == regiao.rotulo_ponto
-                    if (
-                        evidencia := evidencias_por_id.get(
-                            str(
-                                dict(proposta.atributos_sugeridos).get("evidencia_identificador_id")
-                            )
-                        )
-                    )
-                    is not None
-                ),
-                key=lambda item: (
-                    _box_gap(item.geometry, regiao.geometria),
-                    str(item.evidence_id),
-                ),
-                default=None,
-            )
         if ancora is None:
             continue
         evidence_ids = tuple(
@@ -270,6 +237,66 @@ def detectar_pontos_de_entrega(
     )
 
 
+def _qualificadores_entrega_por_regiao(
+    qualificadores: tuple[EvidenciaDocumento, ...],
+    ancoras: tuple[_PointAnchor, ...],
+    regioes: tuple[RegiaoAnalise, ...],
+) -> dict[UUID, list[EvidenciaDocumento]]:
+    resultado: dict[UUID, list[EvidenciaDocumento]] = {}
+    for qualificador in qualificadores:
+        ancora = _ancora_ponto_unica_proxima(qualificador.geometria, ancoras)
+        if ancora is None:
+            continue
+        regioes_da_ancora = tuple(
+            regiao
+            for regiao in regioes
+            if regiao.pagina_id == ancora.geometry.pagina_id and regiao.rotulo_ponto == ancora.label
+        )
+        if len(regioes_da_ancora) == 1:
+            resultado.setdefault(regioes_da_ancora[0].id, []).append(qualificador)
+    return resultado
+
+
+def _ancora_entrega_da_regiao(
+    regiao: RegiaoAnalise,
+    ancoras: tuple[_PointAnchor, ...],
+    propostas_por_id: dict[UUID, PropostaElemento],
+    evidencias_por_id: dict[str, EvidenciaDocumento],
+) -> _PointAnchor | None:
+    ancora = min(
+        (
+            item
+            for item in ancoras
+            if item.label == regiao.rotulo_ponto and item.geometry.pagina_id == regiao.pagina_id
+        ),
+        key=lambda item: (_box_gap(item.geometry, regiao.geometria), str(item.evidence_id)),
+        default=None,
+    )
+    if ancora is not None or regiao.rotulo_ponto is None:
+        return ancora
+    return min(
+        (
+            _PointAnchor(
+                label=regiao.rotulo_ponto,
+                geometry=evidencia.geometria,
+                evidence_id=evidencia.id,
+            )
+            for elemento_id in regiao.elemento_ids
+            if (proposta := propostas_por_id.get(elemento_id)) is not None
+            if dict(proposta.atributos_sugeridos).get("identificador_operacional")
+            == regiao.rotulo_ponto
+            if (
+                evidencia := evidencias_por_id.get(
+                    str(dict(proposta.atributos_sugeridos).get("evidencia_identificador_id"))
+                )
+            )
+            is not None
+        ),
+        key=lambda item: (_box_gap(item.geometry, regiao.geometria), str(item.evidence_id)),
+        default=None,
+    )
+
+
 def _entrega_unica_proxima(
     rotulo: str,
     pagina_id: UUID,
@@ -286,18 +313,18 @@ def _entrega_unica_proxima(
     return candidatas[0] if len(candidatas) == 1 else None
 
 
-def _regiao_unica_proxima(
+def _ancora_ponto_unica_proxima(
     geometria: GeometriaDocumento,
-    regioes: tuple[RegiaoAnalise, ...],
-) -> RegiaoAnalise | None:
+    ancoras: tuple[_PointAnchor, ...],
+) -> _PointAnchor | None:
     candidatas = sorted(
         (
-            (_box_gap(geometria, regiao.geometria), regiao)
-            for regiao in regioes
-            if regiao.pagina_id == geometria.pagina_id
-            and _box_gap(geometria, regiao.geometria) <= _POINT_QUALIFIER_DISTANCE
+            (_box_gap(geometria, ancora.geometry), ancora)
+            for ancora in ancoras
+            if ancora.geometry.pagina_id == geometria.pagina_id
+            and _box_gap(geometria, ancora.geometry) <= _POINT_QUALIFIER_DISTANCE
         ),
-        key=lambda item: (item[0], str(item[1].id)),
+        key=lambda item: (item[0], item[1].label, str(item[1].evidence_id)),
     )
     if not candidatas:
         return None

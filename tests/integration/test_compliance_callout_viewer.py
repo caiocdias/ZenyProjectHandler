@@ -834,6 +834,7 @@ def _proposal_at(page_id: UUID, *, x: str, y: str) -> ReviewOverlayDto:
         label="Poste",
         category=ElementCategory.POLE,
         situation=ElementSituation.INSTALL,
+        situation_label="A instalar",
         review_state=ReviewState.PENDING,
         confidence="0.9",
     )

@@ -9,13 +9,23 @@ import pytest
 from fastapi.testclient import TestClient
 
 from tests.factories import complete_analysis, complete_project
+from zeny_project_handler.adapters.catalog import carregar_catalogo_inicial
 from zeny_project_handler.adapters.persistence import SqlAlchemyUnitOfWork
-from zeny_project_handler.application.human_review import ServicoRevisaoHumana
+from zeny_project_handler.application.analysis_regions import RegiaoAnalise
+from zeny_project_handler.application.human_review import ServicoRevisaoHumana, SessaoRevisao
 from zeny_project_handler.application.spans import detectar_vaos
-from zeny_project_handler.domain.enums import EstadoRevisao
+from zeny_project_handler.domain.enums import (
+    CategoriaElemento,
+    EstadoRevisao,
+    SituacaoProjeto,
+    TipoPontoRede,
+    TipoTrechoRede,
+)
+from zeny_project_handler.domain.project import Cabo
 from zeny_project_handler_server.app import create_app
 from zeny_project_handler_server.composition import ServerRuntime, compose_server_runtime
 from zeny_project_handler_server.config import ServerSettings
+from zeny_project_handler_server.review_api import _session_dto, _span_dto
 
 pytestmark = pytest.mark.integration
 
@@ -106,6 +116,11 @@ def test_remote_review_projects_projection_conflict_manual_audit_and_restart(
         assert first_session["review_session_id"] == second_session["review_session_id"]
         assert {item["region_id"] for item in first_session["regions"]} == expected_region_ids
         assert {item["span_id"] for item in first_session["spans"]} == expected_span_ids
+        projected_span = first_session["spans"][0]
+        assert projected_span["span_type"] == "UNKNOWN"
+        assert projected_span["span_type_label"] == "Desconhecido"
+        assert projected_span["start_point_id"]
+        assert projected_span["end_point_id"]
         assert first_session["page_order"]
         assert first_session["catalog_items"]
         assert first_session["references"]
@@ -275,6 +290,115 @@ def test_review_session_bounds_raw_vector_content_used_as_navigation_label(
     label = proposal["evidence"][0]["label"]
     assert label == f"{raw_vector_commands[:499]}…"
     assert len(label) == 500
+
+
+def test_span_projection_exposes_type_change_and_delivery_endpoint() -> None:
+    catalog = carregar_catalogo_inicial()
+    project = complete_project(catalog)
+    cable = next(item for item in project.elementos if isinstance(item, Cabo))
+    destination = next(item for item in project.pontos_rede if item.id == cable.ponto_destino_id)
+    delivery = replace(destination, poste_id=None, tipo=TipoPontoRede.ENTREGA, nome="P2")
+    changed_cable = replace(
+        cable,
+        situacao=SituacaoProjeto.ALTERAR,
+        tipo_trecho=TipoTrechoRede.RAMAL_CONEXAO,
+        identificador_operacional="V1-2",
+    )
+    project = replace(
+        project,
+        elementos=tuple(
+            changed_cable if item.id == changed_cable.id else item for item in project.elementos
+        ),
+        pontos_rede=tuple(
+            delivery if item.id == delivery.id else item for item in project.pontos_rede
+        ),
+    )
+    span = next(item for item in detectar_vaos(project) if item.cabo_id == changed_cable.id)
+    dto = _span_dto(
+        span,
+        index=1,
+        project=project,
+        catalog=catalog,
+        decisions=(),
+        page_number={project.documentos[0].paginas[0].id: 1},
+    )
+
+    assert dto.start_point_id == cable.ponto_origem_id
+    assert dto.end_point_id == delivery.id
+    assert dto.span_type.value == "CONNECTION_BRANCH"
+    assert dto.span_type_label == "Ramal de conexão"
+    assert dto.situation.value == "CHANGE"
+    assert dto.situation_label == "A alterar"
+    assert dto.end_element_id is None
+    assert dto.end_label == "Padrão do cliente"
+
+
+def test_delivery_region_projection_separates_neighboring_pole_elements() -> None:
+    catalog = carregar_catalogo_inicial()
+    project = complete_project(catalog)
+    execution, evidence, template, _relation, _decision = complete_analysis(project)
+    delivery = replace(
+        template,
+        id=uuid4(),
+        codigo_observado="P1",
+        atributos_sugeridos=(
+            ("identificador_operacional", "P1"),
+            ("tipo_ponto_rede", TipoPontoRede.ENTREGA.value),
+        ),
+    )
+    neighbor_pole = replace(
+        template,
+        id=uuid4(),
+        codigo_observado="11-300",
+        atributos_sugeridos=(("identificador_operacional", "P2"),),
+    )
+    equipment = replace(
+        template,
+        id=uuid4(),
+        categoria=CategoriaElemento.EQUIPAMENTO,
+        tipo_catalogo_sugerido_id=catalog.itens_ativos(CategoriaElemento.EQUIPAMENTO)[0].id,
+        codigo_observado="100A-10KA-2H",
+        atributos_sugeridos=(),
+    )
+    region = RegiaoAnalise(
+        id=uuid4(),
+        pagina_id=evidence.pagina_id,
+        geometria=template.geometria,
+        elemento_ids=(delivery.id, neighbor_pole.id, equipment.id),
+        rotulo_ponto="P1",
+    )
+    session = SessaoRevisao(
+        projeto=project,
+        catalogo=catalog,
+        execucoes=(execution,),
+        propostas=(delivery, neighbor_pole, equipment),
+        regioes=(region,),
+        evidencias=(evidence,),
+        decisoes=(),
+        fontes_pdf=(),
+    )
+
+    response = _session_dto(session, project_version=1)
+
+    assert len(response.regions) == 2
+    delivery_region = next(item for item in response.regions if item.label == "P1")
+    neighbor_region = next(
+        item for item in response.regions if item.label.startswith("Poste vizinho")
+    )
+    assert tuple(item.root for item in delivery_region.proposal_ids) == (delivery.id,)
+    assert tuple(item.root for item in neighbor_region.proposal_ids) == (
+        neighbor_pole.id,
+        equipment.id,
+    )
+    delivery_proposal = next(
+        item for item in response.proposals if item.proposal_id.root == delivery.id
+    )
+    assert delivery_proposal.label == "Padrão do cliente"
+    assert all(
+        item.proposal_id not in delivery_region.proposal_ids
+        for item in response.proposals
+        if item.proposal_id.root in {neighbor_pole.id, equipment.id}
+    )
 
 
 def test_review_routes_require_authentication(tmp_path: Path) -> None:

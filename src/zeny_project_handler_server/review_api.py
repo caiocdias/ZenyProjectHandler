@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
 from hashlib import sha256
@@ -35,10 +36,13 @@ from zeny_project_handler.domain.enums import (
     SituacaoProjeto,
     TipoDecisaoRevisao,
     TipoGeometria,
+    TipoPontoRede,
+    TipoTrechoRede,
 )
 from zeny_project_handler.domain.project import (
     Cabo,
     ElementoProjetoType,
+    PontoRede,
     Poste,
     Projeto,
 )
@@ -70,6 +74,7 @@ from zeny_project_handler_contracts.enums import (
     ReviewReferenceKind,
     ReviewState,
     SpanLengthSource,
+    SpanType,
 )
 from zeny_project_handler_contracts.review import (
     AcceptReviewProposalRequest,
@@ -484,6 +489,18 @@ def _session_dto(session: SessaoRevisao, *, project_version: int) -> ReviewSessi
         )
         for index, item in enumerate(detectar_vaos(project), start=1)
     )
+    proposal_dto_by_id = {item.proposal_id.root: item for item in proposal_dtos}
+    region_dtos = tuple(
+        dto
+        for index, region in enumerate(session.regioes, start=1)
+        for dto in _region_dtos(
+            region,
+            index=index,
+            session=session,
+            proposal_dtos=proposal_dto_by_id,
+            document_by_page=document_by_page,
+        )
+    )
     signature = _semantic_signature(session, project_version=project_version, spans=spans)
     return ReviewSessionResponse(
         review_session_id=ReviewSessionId(uuid5(_SESSION_NAMESPACE, signature)),
@@ -525,16 +542,7 @@ def _session_dto(session: SessaoRevisao, *, project_version: int) -> ReviewSessi
             )
             for item in project.relacoes_confirmadas
         ),
-        regions=tuple(
-            _region_dto(
-                region,
-                index=index,
-                session=session,
-                proposal_dtos={item.proposal_id.root: item for item in proposal_dtos},
-                document_by_page=document_by_page,
-            )
-            for index, region in enumerate(session.regioes, start=1)
-        ),
+        regions=region_dtos,
         proposals=proposal_dtos,
         relations=relation_dtos,
         spans=spans,
@@ -608,6 +616,7 @@ def _proposal_dto(
             label=label,
             category=_category(proposal.categoria),
             situation=_situation(proposal.situacao_projeto),
+            situation_label=_situation_label(proposal.situacao_projeto),
             review_state=state,
             confidence=confidence,
         ),
@@ -690,6 +699,100 @@ def _region_dto(
     )
 
 
+def _region_dtos(
+    region: Any,
+    *,
+    index: int,
+    session: SessaoRevisao,
+    proposal_dtos: dict[UUID, ReviewProposalDto],
+    document_by_page: dict[UUID, Any],
+) -> tuple[AnalysisRegionDto, ...]:
+    """Separe a apresentação do padrão dos elementos instalados no poste vizinho."""
+    element_proposals = {
+        item.id: item for item in session.propostas if isinstance(item, PropostaElemento)
+    }
+    relation_proposals = {
+        item.id: item for item in session.propostas if isinstance(item, PropostaRelacao)
+    }
+    delivery_ids = tuple(
+        proposal_id
+        for proposal_id in region.elemento_ids
+        if (proposal := element_proposals.get(proposal_id)) is not None
+        and _belongs_to_delivery_region(proposal, region.rotulo_ponto)
+    )
+    delivery_id_set = set(delivery_ids)
+    neighbor_ids = tuple(
+        proposal_id for proposal_id in region.elemento_ids if proposal_id not in delivery_id_set
+    )
+    if not delivery_ids or not neighbor_ids:
+        return (
+            _region_dto(
+                region,
+                index=index,
+                session=session,
+                proposal_dtos=proposal_dtos,
+                document_by_page=document_by_page,
+            ),
+        )
+
+    delivery_region = replace(
+        region,
+        elemento_ids=delivery_ids,
+        vinculo_ids=_region_relation_ids(region.vinculo_ids, delivery_ids, relation_proposals),
+    )
+    neighbor_label = (
+        f"Poste vizinho de {region.rotulo_ponto}"
+        if region.rotulo_ponto
+        else "Poste vizinho ao padrão"
+    )
+    neighbor_region = replace(
+        region,
+        id=uuid5(region.id, "apresentacao:poste-vizinho"),
+        elemento_ids=neighbor_ids,
+        vinculo_ids=_region_relation_ids(region.vinculo_ids, neighbor_ids, relation_proposals),
+        rotulo_ponto=neighbor_label,
+    )
+    return tuple(
+        _region_dto(
+            projected,
+            index=index,
+            session=session,
+            proposal_dtos=proposal_dtos,
+            document_by_page=document_by_page,
+        )
+        for projected in (delivery_region, neighbor_region)
+    )
+
+
+def _belongs_to_delivery_region(proposal: PropostaElemento, point_label: str | None) -> bool:
+    attributes = dict(proposal.atributos_sugeridos)
+    if attributes.get("tipo_ponto_rede") == TipoPontoRede.ENTREGA.value:
+        return True
+    if proposal.categoria is not CategoriaElemento.CABO:
+        return False
+    return any(
+        attributes.get(f"tipo_ponto_operacional_{suffix}") == TipoPontoRede.ENTREGA.value
+        and (point_label is None or attributes.get(f"ponto_operacional_{suffix}") == point_label)
+        for suffix in ("origem", "destino")
+    )
+
+
+def _region_relation_ids(
+    relation_ids: tuple[UUID, ...],
+    element_ids: tuple[UUID, ...],
+    relations: dict[UUID, PropostaRelacao],
+) -> tuple[UUID, ...]:
+    retained = set(element_ids)
+    return tuple(
+        relation_id
+        for relation_id in relation_ids
+        if (relation := relations.get(relation_id)) is not None
+        and (
+            relation.origem_referencia_id in retained or relation.destino_referencia_id in retained
+        )
+    )
+
+
 def _span_dto(
     span: VaoDetectado,
     *,
@@ -700,8 +803,19 @@ def _span_dto(
     page_number: dict[UUID, int],
 ) -> DetectedSpanDto:
     elements = {item.id: item for item in project.elementos}
-    origin = elements.get(span.poste_origem_id) if span.poste_origem_id is not None else None
-    destination = elements.get(span.poste_destino_id) if span.poste_destino_id is not None else None
+    points = {item.id: item for item in project.pontos_rede}
+    origin_point = points.get(span.ponto_origem_id)
+    destination_point = points.get(span.ponto_destino_id)
+    origin = (
+        elements.get(origin_point.poste_id)
+        if origin_point is not None and origin_point.poste_id is not None
+        else None
+    )
+    destination = (
+        elements.get(destination_point.poste_id)
+        if destination_point is not None and destination_point.poste_id is not None
+        else None
+    )
     cable = elements.get(span.cabo_id)
     proposal_id = next(
         (item.proposta_id for item in decisions if item.elemento_confirmado_id == span.cabo_id),
@@ -728,6 +842,8 @@ def _span_dto(
     return DetectedSpanDto(
         span_id=span.id,
         proposal_id=ProposalId(proposal_id) if proposal_id is not None else None,
+        start_point_id=span.ponto_origem_id,
+        end_point_id=span.ponto_destino_id,
         start_element_id=(
             ElementId(span.poste_origem_id) if span.poste_origem_id is not None else None
         ),
@@ -736,10 +852,12 @@ def _span_dto(
         ),
         cable_element_id=ElementId(span.cabo_id),
         label=label,
+        span_type=_span_type(span.tipo_trecho),
+        span_type_label=_span_type_label(span.tipo_trecho),
         situation=_situation(span.situacao),
         situation_label=_situation_label(span.situacao),
-        start_label=_project_element_label(origin, catalog=catalog),
-        end_label=_project_element_label(destination, catalog=catalog),
+        start_label=_span_endpoint_label(origin_point, origin, catalog=catalog),
+        end_label=_span_endpoint_label(destination_point, destination, catalog=catalog),
         cable_label=_project_element_label(cable, catalog=catalog),
         length=decimal_string(span.comprimento_m) if span.comprimento_m is not None else None,
         length_label=(
@@ -809,7 +927,7 @@ def _references(project: Projeto) -> tuple[ReviewReferenceDto, ...]:
         ReviewReferenceDto(
             reference_id=item.id,
             kind=ReviewReferenceKind.NETWORK_POINT,
-            label=item.nome,
+            label=("Padrão do cliente" if item.tipo is TipoPontoRede.ENTREGA else item.nome),
         )
         for item in project.pontos_rede
     )
@@ -1000,6 +1118,7 @@ def _situation(value: SituacaoProjeto) -> ElementSituation:
         SituacaoProjeto.EXISTENTE: ElementSituation.EXISTING,
         SituacaoProjeto.INSTALAR: ElementSituation.INSTALL,
         SituacaoProjeto.REMOVER: ElementSituation.REMOVE,
+        SituacaoProjeto.ALTERAR: ElementSituation.CHANGE,
     }[value]
 
 
@@ -1008,6 +1127,7 @@ def _domain_situation(value: ElementSituation) -> SituacaoProjeto:
         ElementSituation.EXISTING: SituacaoProjeto.EXISTENTE,
         ElementSituation.INSTALL: SituacaoProjeto.INSTALAR,
         ElementSituation.REMOVE: SituacaoProjeto.REMOVER,
+        ElementSituation.CHANGE: SituacaoProjeto.ALTERAR,
     }[value]
 
 
@@ -1016,6 +1136,23 @@ def _situation_label(value: SituacaoProjeto) -> str:
         SituacaoProjeto.INSTALAR: "A instalar",
         SituacaoProjeto.REMOVER: "A remover",
         SituacaoProjeto.EXISTENTE: "Existente",
+        SituacaoProjeto.ALTERAR: "A alterar",
+    }[value]
+
+
+def _span_type(value: TipoTrechoRede) -> SpanType:
+    return {
+        TipoTrechoRede.REDE_DISTRIBUICAO: SpanType.DISTRIBUTION_NETWORK,
+        TipoTrechoRede.RAMAL_CONEXAO: SpanType.CONNECTION_BRANCH,
+        TipoTrechoRede.DESCONHECIDO: SpanType.UNKNOWN,
+    }[value]
+
+
+def _span_type_label(value: TipoTrechoRede) -> str:
+    return {
+        TipoTrechoRede.REDE_DISTRIBUICAO: "Rede de distribuição",
+        TipoTrechoRede.RAMAL_CONEXAO: "Ramal de conexão",
+        TipoTrechoRede.DESCONHECIDO: "Desconhecido",
     }[value]
 
 
@@ -1030,6 +1167,8 @@ def _category_label(value: CategoriaElemento) -> str:
 
 
 def _proposal_label(proposal: PropostaElemento, catalog: CatalogoTecnico) -> str:
+    if dict(proposal.atributos_sugeridos).get("tipo_ponto_rede") == TipoPontoRede.ENTREGA.value:
+        return "Padrão do cliente"
     if proposal.categoria is CategoriaElemento.EQUIPAMENTO:
         category = _equipment_type_label(proposal, catalog)
         if dict(proposal.atributos_sugeridos).get("reconhecido_por_simbologia") is True:
@@ -1097,6 +1236,21 @@ def _project_element_label(
     return element.codigo_observado or element.identificador_operacional or str(element.id)
 
 
+def _span_endpoint_label(
+    point: PontoRede | None,
+    element: ElementoProjetoType | None,
+    *,
+    catalog: CatalogoTecnico,
+) -> str:
+    if point is None:
+        return "-"
+    if point.tipo is TipoPontoRede.ENTREGA:
+        return "Padrão do cliente"
+    if element is not None:
+        return _project_element_label(element, catalog=catalog)
+    return point.nome
+
+
 def _relationship_labels(
     element: PropostaElemento,
     relation_ids: tuple[UUID, ...],
@@ -1129,6 +1283,7 @@ def _region_action_counts(proposals: tuple[ReviewProposalDto, ...]) -> str:
     for situation, singular, plural in (
         (ElementSituation.REMOVE, "remover", "remover"),
         (ElementSituation.INSTALL, "instalar", "instalar"),
+        (ElementSituation.CHANGE, "alterar", "alterar"),
         (ElementSituation.EXISTING, "existente", "existentes"),
     ):
         count = sum(item.situation is situation for item in proposals)
@@ -1142,6 +1297,7 @@ def _region_summary(proposals: tuple[ReviewProposalDto, ...]) -> str:
     for situation, verb in (
         (ElementSituation.REMOVE, "Remover"),
         (ElementSituation.INSTALL, "Instalar"),
+        (ElementSituation.CHANGE, "Alterar"),
         (ElementSituation.EXISTING, "Existente"),
     ):
         labels = tuple(item.label for item in proposals if item.situation is situation)

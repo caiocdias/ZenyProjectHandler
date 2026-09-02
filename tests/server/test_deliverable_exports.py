@@ -14,18 +14,35 @@ from fastapi.testclient import TestClient
 
 from tests.market_fakes import FakeClassificadorMercado
 from tests.pdf_fixtures import create_analysis_pdf
-from zeny_project_handler_contracts.base import CalloutId, DocumentId, FindingId, PageId
+from zeny_project_handler_contracts.base import (
+    CalloutId,
+    DocumentId,
+    ElementId,
+    FindingId,
+    PageId,
+    ProjectId,
+    ReviewSessionId,
+)
 from zeny_project_handler_contracts.common import (
     EvidenceNavigationDto,
     NormalizedBoxDto,
     NormalizedPointDto,
 )
 from zeny_project_handler_contracts.compliance import ComplianceCalloutDto
-from zeny_project_handler_contracts.enums import ComplianceStatus
+from zeny_project_handler_contracts.enums import (
+    ComplianceStatus,
+    ElementSituation,
+    SpanLengthSource,
+    SpanType,
+)
+from zeny_project_handler_contracts.review import DetectedSpanDto, ReviewSessionResponse
 from zeny_project_handler_server.app import create_app
 from zeny_project_handler_server.composition import compose_server_runtime
 from zeny_project_handler_server.config import ServerSettings
-from zeny_project_handler_server.deliverable_exports import _add_callout_annotation
+from zeny_project_handler_server.deliverable_exports import (
+    _add_callout_annotation,
+    _results_sheets,
+)
 
 PASSWORD = "senha segura para exportar arquivos finais"
 AUTH = {"Authorization": f"Bearer {PASSWORD}"}
@@ -94,6 +111,88 @@ def _sheet_names(content: bytes) -> tuple[str, ...]:
     )
 
 
+def _sheet_rows(content: bytes, sheet_index: int) -> tuple[tuple[str, ...], ...]:
+    with ZipFile(BytesIO(content)) as archive:
+        root = ElementTree.fromstring(archive.read(f"xl/worksheets/sheet{sheet_index}.xml"))
+    return tuple(
+        tuple(
+            (cell.findtext(f"{{{_SPREADSHEET_NS}}}is/{{{_SPREADSHEET_NS}}}t") or "")
+            for cell in row.findall(f"{{{_SPREADSHEET_NS}}}c")
+        )
+        for row in root.findall(f"{{{_SPREADSHEET_NS}}}sheetData/{{{_SPREADSHEET_NS}}}row")
+    )
+
+
+def test_results_span_sheet_presents_the_public_review_contract() -> None:
+    span_id = uuid4()
+    span = DetectedSpanDto(
+        span_id=span_id,
+        start_point_id=uuid4(),
+        end_point_id=uuid4(),
+        cable_element_id=ElementId(uuid4()),
+        label="V1-2",
+        span_type=SpanType.CONNECTION_BRANCH,
+        span_type_label="Ramal de conexão",
+        situation=ElementSituation.CHANGE,
+        situation_label="A alterar",
+        start_label="Poste P1",
+        end_label="Padrão do cliente",
+        cable_label="B-4 CAA — Cabo multiplexado",
+        length="27.5",
+        length_label="27,50 m",
+        length_source=SpanLengthSource.DRAWING_LABEL,
+        length_source_label="Anotação do desenho",
+        page_label="Folha 1",
+        evidence=(),
+    )
+    session = ReviewSessionResponse(
+        review_session_id=ReviewSessionId(uuid4()),
+        project_id=ProjectId(uuid4()),
+        service_note="0001234567",
+        project_version=1,
+        semantic_signature="semantic-e08",
+        page_order=(),
+        catalog_items=(),
+        references=(),
+        confirmed_elements=(),
+        confirmed_relations=(),
+        regions=(),
+        proposals=(),
+        relations=(),
+        spans=(span,),
+        audit=(),
+    )
+
+    span_sheet = _results_sheets(session)[1]
+
+    assert span_sheet.headers == (
+        "Vão",
+        "Tipo",
+        "Situação",
+        "Ponto de origem",
+        "Ponto de destino",
+        "Cabo",
+        "Comprimento",
+        "Fonte",
+        "Folha",
+        "ID do vão",
+    )
+    assert span_sheet.rows == (
+        (
+            "V1-2",
+            "Ramal de conexão",
+            "A alterar",
+            "Poste P1",
+            "Padrão do cliente",
+            "B-4 CAA — Cabo multiplexado",
+            "27,50 m",
+            "Anotação do desenho",
+            "Folha 1",
+            str(span_id),
+        ),
+    )
+
+
 def test_server_generates_pdf_and_three_real_xlsx_deliverables(tmp_path: Path) -> None:
     settings = ServerSettings(
         password=PASSWORD,
@@ -150,6 +249,19 @@ def test_server_generates_pdf_and_three_real_xlsx_deliverables(tmp_path: Path) -
             "RESULTS_XLSX",
         )
         assert _sheet_names(results_content) == ("Elementos", "Vãos")
+        span_rows = _sheet_rows(results_content, 2)
+        assert span_rows[0] == (
+            "Vão",
+            "Tipo",
+            "Situação",
+            "Ponto de origem",
+            "Ponto de destino",
+            "Cabo",
+            "Comprimento",
+            "Fonte",
+            "Folha",
+            "ID do vão",
+        )
         _documentation_metadata, documentation_content = _create_export(
             client,
             project_id,
