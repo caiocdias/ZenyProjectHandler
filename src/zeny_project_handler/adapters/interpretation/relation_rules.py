@@ -20,6 +20,8 @@ from zeny_project_handler.domain.interpretation import (
 
 from .rule_support import center, geometry_distance, point_distance
 
+_INSTALLATION_RELATIONS = {"INSTALADA_EM", "INSTALADO_EM"}
+
 
 def mark_conflicts(
     proposals: tuple[PropostaElemento, ...],
@@ -70,6 +72,12 @@ def _relation_targets(
     same_page = tuple(
         item for item in destinations if item.geometria.pagina_id == origin.geometria.pagina_id
     )
+    if rule.tipo_relacao.upper() in _INSTALLATION_RELATIONS:
+        same_page = tuple(
+            item
+            for item in same_page
+            if dict(item.atributos_sugeridos).get("tipo_ponto_rede") != "ENTREGA"
+        )
     if rule.estrategia == "CENTROS_PROXIMOS":
         same_situation = tuple(
             item for item in same_page if item.situacao_projeto is origin.situacao_projeto

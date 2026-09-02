@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import replace
 
+from zeny_project_handler.application.analysis_regions import classificar_pontos_de_entrega
 from zeny_project_handler.application.document_zones import (
     evidencias_sem_anotacoes_de_revisao,
     evidencias_sem_cabecalho,
@@ -40,7 +41,7 @@ _MAXIMUM_DUPLICATE_OCCURRENCE_AXIS_DISTANCE = 0.015
 
 class InterpretadorRegrasExplicitas:
     nome = "regras-explicitas-cemig"
-    versao = "18.0"
+    versao = "21.0"
 
     def __init__(
         self,
@@ -98,6 +99,10 @@ class InterpretadorRegrasExplicitas:
                 proposals_with_paths,
                 project_request.evidencias,
             ),
+            project_request.evidencias,
+        )
+        elements = classificar_pontos_de_entrega(
+            elements,
             project_request.evidencias,
         )
         relations = (

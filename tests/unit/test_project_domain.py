@@ -13,10 +13,12 @@ from zeny_project_handler.domain.documents import DocumentoProjeto, PaginaDocume
 from zeny_project_handler.domain.enums import (
     CategoriaElemento,
     EstadoConexao,
+    ModalidadeTrecho,
     NivelRede,
     SituacaoProjeto,
     TipoAcaoRevisaoManual,
     TipoPontoRede,
+    TipoTrechoRede,
     TipoVinculoObra,
 )
 from zeny_project_handler.domain.errors import DomainValidationError
@@ -458,6 +460,7 @@ def test_network_point_can_represent_delivery_without_a_pole(
         situacao=SituacaoProjeto.INSTALAR,
         ponto_origem_id=existing_point.id,
         ponto_destino_id=delivery_point.id,
+        tipo_trecho=TipoTrechoRede.RAMAL_CONEXAO,
     )
     complete = replace(
         project,
@@ -467,8 +470,49 @@ def test_network_point_can_represent_delivery_without_a_pole(
 
     validar_projeto_com_catalogo(complete, catalogo_inicial)
     assert delivery_point.poste_id is None
+    assert branch.tipo_trecho is TipoTrechoRede.RAMAL_CONEXAO
+    assert branch.modalidade is ModalidadeTrecho.DESCONHECIDO
     with pytest.raises(DomainValidationError, match="Ponto de poste"):
         replace(delivery_point, tipo=TipoPontoRede.POSTE)
+    with pytest.raises(DomainValidationError, match="Ponto de entrega"):
+        replace(delivery_point, poste_id=existing_point.poste_id)
+    installed_structure = next(item for item in complete.elementos if isinstance(item, EstruturaMt))
+    invalid_installation = RelacaoConfirmada(
+        id=uuid4(),
+        tipo_relacao="INSTALADA_EM",
+        origem_id=installed_structure.id,
+        destino_id=delivery_point.id,
+    )
+    with pytest.raises(DomainValidationError, match="ponto de entrega"):
+        replace(complete, relacoes_confirmadas=(invalid_installation,))
+
+
+def test_cable_topological_type_is_closed_and_legacy_default_is_unknown(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    project = valid_project(catalogo_inicial)
+    cable = next(item for item in project.elementos if isinstance(item, Cabo))
+
+    assert cable.tipo_trecho is TipoTrechoRede.DESCONHECIDO
+    assert cable.modalidade is ModalidadeTrecho.DESCONHECIDO
+    network_cable = replace(cable, tipo_trecho=TipoTrechoRede.REDE_DISTRIBUICAO)
+    network_project = replace(
+        project,
+        elementos=tuple(
+            network_cable if item.id == cable.id else item for item in project.elementos
+        ),
+    )
+    validar_projeto_com_catalogo(network_project, catalogo_inicial)
+    with pytest.raises(DomainValidationError, match="exatamente um ponto de entrega"):
+        replace(
+            project,
+            elementos=tuple(
+                replace(cable, tipo_trecho=TipoTrechoRede.RAMAL_CONEXAO)
+                if item.id == cable.id
+                else item
+                for item in project.elementos
+            ),
+        )
 
 
 def test_cable_preserves_ordered_intermediate_network_points(

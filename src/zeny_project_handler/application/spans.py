@@ -1,4 +1,4 @@
-"""Projeção dos vãos físicos reconhecidos entre postes do projeto."""
+"""Projeção dos trechos físicos reconhecidos entre pontos do projeto."""
 
 from __future__ import annotations
 
@@ -6,7 +6,13 @@ from dataclasses import dataclass
 from decimal import Decimal
 from uuid import UUID, uuid5
 
-from zeny_project_handler.domain.enums import OrigemComprimentoVao, SituacaoProjeto
+from zeny_project_handler.domain.enums import (
+    ModalidadeTrecho,
+    OrigemComprimentoVao,
+    SituacaoProjeto,
+    TipoPontoRede,
+    TipoTrechoRede,
+)
 from zeny_project_handler.domain.project import Cabo, Poste, Projeto
 from zeny_project_handler.domain.values import GeometriaDocumento
 
@@ -17,14 +23,20 @@ class VaoDetectado:
 
     id: UUID
     cabo_id: UUID
+    ponto_origem_id: UUID
+    ponto_destino_id: UUID
     poste_origem_id: UUID | None
     poste_destino_id: UUID | None
     situacao: SituacaoProjeto
     geometria: GeometriaDocumento | None
+    tipo_trecho: TipoTrechoRede = TipoTrechoRede.DESCONHECIDO
+    modalidade: ModalidadeTrecho = ModalidadeTrecho.DESCONHECIDO
     comprimento_m: Decimal | None = None
     origem_comprimento: OrigemComprimentoVao | None = None
 
     def __post_init__(self) -> None:
+        if self.ponto_origem_id == self.ponto_destino_id:
+            raise ValueError("Vão deve ligar dois pontos distintos")
         if self.poste_origem_id is not None and self.poste_origem_id == self.poste_destino_id:
             raise ValueError("Vão deve ligar dois postes distintos")
         if self.comprimento_m is None and self.origem_comprimento is not None:
@@ -59,17 +71,26 @@ def detectar_vaos(projeto: Projeto) -> tuple[VaoDetectado, ...]:
             cabo.identificador_operacional
             and cabo.identificador_operacional.upper().startswith("V")
         )
-        if (poste_origem is None or poste_destino is None) and not identified_span:
+        has_delivery_endpoint = TipoPontoRede.ENTREGA in {origem.tipo, destino.tipo}
+        if (
+            (poste_origem is None or poste_destino is None)
+            and not identified_span
+            and not has_delivery_endpoint
+        ):
             continue
         comprimento, fonte = _comprimento(cabo, poste_origem, poste_destino)
         vaos.append(
             VaoDetectado(
                 id=uuid5(cabo.id, "vao-detectado"),
                 cabo_id=cabo.id,
+                ponto_origem_id=origem.id,
+                ponto_destino_id=destino.id,
                 poste_origem_id=origem.poste_id,
                 poste_destino_id=destino.poste_id,
                 situacao=cabo.situacao,
                 geometria=cabo.geometria,
+                tipo_trecho=cabo.tipo_trecho,
+                modalidade=cabo.modalidade,
                 comprimento_m=comprimento,
                 origem_comprimento=fonte,
             )

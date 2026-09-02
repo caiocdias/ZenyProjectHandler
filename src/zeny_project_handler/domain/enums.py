@@ -7,6 +7,7 @@ class SituacaoProjeto(StrEnum):
     EXISTENTE = "EXISTENTE"
     INSTALAR = "INSTALAR"
     REMOVER = "REMOVER"
+    ALTERAR = "ALTERAR"
 
 
 class EstadoRevisao(StrEnum):
@@ -50,6 +51,18 @@ class TipoPontoRede(StrEnum):
     CAIXA_PASSAGEM = "CAIXA_PASSAGEM"
     TRANSICAO = "TRANSICAO"
     OUTRO = "OUTRO"
+
+
+class TipoTrechoRede(StrEnum):
+    REDE_DISTRIBUICAO = "REDE_DISTRIBUICAO"
+    RAMAL_CONEXAO = "RAMAL_CONEXAO"
+    DESCONHECIDO = "DESCONHECIDO"
+
+
+class ModalidadeTrecho(StrEnum):
+    AEREO = "AEREO"
+    SUBTERRANEO = "SUBTERRANEO"
+    DESCONHECIDO = "DESCONHECIDO"
 
 
 class OrigemComprimentoVao(StrEnum):

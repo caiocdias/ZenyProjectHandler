@@ -172,20 +172,34 @@ def create_e01_switch_bags_pdf(path: Path) -> Path:
     """Crie chaves com bolsas parciais e controles sem vínculo geométrico."""
     document = pymupdf.open()
     try:
-        page = _new_e01_page(document, "CHAVES E BOLSAS SINTETICAS", height=390)
-        positive_labels = (("100A-10KA-2H", 74.0), ("100A-10KA-5H", 132.0))
-        for label, baseline in positive_labels:
-            page.insert_text((48, baseline), label, fontsize=11)
-            _draw_partial_bag(page, x=48, baseline=baseline, label=label, suffix=label[-5:])
-        page.insert_text((48, 190), "100A-10KA-2H", fontsize=11)
-        page.insert_text((48, 232), "100A-10KA-5H", fontsize=11)
-        page.insert_text((270, 190), "IDTESTE-300A-12T", fontsize=11)
-        page.insert_text((270, 232), "MARCA SEM EQUIPAMENTO", fontsize=9)
+        page = _new_e01_page(document, "CHAVES E BOLSAS SINTETICAS", height=430)
+        page.insert_text((48, 74), "100A-10KA-2H", fontsize=11)
+        _draw_partial_bag(
+            page,
+            x=48,
+            baseline=74,
+            label="100A-10KA-2H",
+            suffix="KA-2H",
+        )
+        page.insert_text((220, 150), "100A-10KA-5H", fontsize=11, rotate=90)
+        _draw_rotated_partial_bag(
+            page,
+            x=220,
+            baseline=150,
+            label="100A-10KA-5H",
+            suffix="KA-5H",
+        )
+        page.insert_text((48, 230), "100A-10KA-2H", fontsize=11)
+        page.insert_text((48, 282), "100A-10KA-5H", fontsize=11)
+        page.insert_text((270, 230), "280835-300A-12T", fontsize=11)
+        page.insert_text((130, 230), "OBJETO VIZINHO", fontsize=9)
         page.draw_polyline(
-            [(268, 240), (268, 218), (410, 218), (410, 240)],
+            [(126, 236), (126, 216), (190, 216), (190, 236)],
             color=_E01_BURGUNDY,
             width=1.4,
         )
+        page.insert_text((270, 344), "321 m", fontsize=11)
+        page.draw_line((266, 338), (314, 338), color=_E01_BURGUNDY, width=2)
         document.save(path)
     finally:
         document.close()
@@ -198,12 +212,12 @@ def create_e01_span_change_pdf(path: Path) -> Path:
     try:
         page = _new_e01_page(document, "ALTERACAO DE MEDIDA SINTETICA")
         page.draw_line((42, 188), (548, 188), color=(0.1, 0.45, 0.1), width=2)
-        page.insert_text((70, 92), "321 m", fontsize=12)
-        page.draw_line((66, 86), (118, 86), color=_E01_BURGUNDY, width=2)
-        page.insert_text((162, 92), "269 m", fontsize=12)
+        page.insert_text((70, 182), "321 m", fontsize=12)
+        page.draw_line((66, 176), (118, 176), color=_E01_BURGUNDY, width=2)
+        page.insert_text((162, 182), "269 m", fontsize=12)
         page.insert_text((70, 136), "42 m", fontsize=12)
         page.draw_line((66, 146), (112, 146), color=_E01_BURGUNDY, width=2)
-        page.insert_text((70, 210), "CABO COLINEAR", fontsize=9)
+        page.insert_text((70, 202), "A-4 CA", fontsize=9)
         document.save(path)
     finally:
         document.close()
@@ -436,6 +450,30 @@ def _draw_partial_bag(
             (right, baseline - 14),
             (right, baseline + 4),
             (left, baseline + 4),
+        ],
+        color=_E01_BURGUNDY,
+        width=1.4,
+    )
+
+
+def _draw_rotated_partial_bag(
+    page: pymupdf.Page,
+    *,
+    x: float,
+    baseline: float,
+    label: str,
+    suffix: str,
+) -> None:
+    label_width = pymupdf.get_text_length(label, fontname="helv", fontsize=11)
+    suffix_width = pymupdf.get_text_length(suffix, fontname="helv", fontsize=11)
+    top = baseline - label_width - 3
+    bottom = top + suffix_width + 5
+    page.draw_polyline(
+        [
+            (x - 14, bottom),
+            (x - 14, top),
+            (x + 4, top),
+            (x + 4, bottom),
         ],
         color=_E01_BURGUNDY,
         width=1.4,

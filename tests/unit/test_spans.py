@@ -7,7 +7,9 @@ from uuid import UUID, uuid4
 
 import pytest
 from tests.factories import complete_project
+from tests.interpretation_factories import text_evidence
 
+from zeny_project_handler.application.analysis_regions import classificar_pontos_de_entrega
 from zeny_project_handler.application.automatic_promotion import (
     promover_resultado_automatico,
 )
@@ -17,11 +19,18 @@ from zeny_project_handler.domain.catalog import CatalogoTecnico, ExtraAttributes
 from zeny_project_handler.domain.enums import (
     CategoriaElemento,
     EstadoRevisao,
+    ModalidadeTrecho,
     OrigemComprimentoVao,
     SituacaoProjeto,
     TipoPontoRede,
+    TipoTrechoRede,
 )
-from zeny_project_handler.domain.project import Cabo
+from zeny_project_handler.domain.project import (
+    Cabo,
+    Equipamento,
+    EstruturaMt,
+    Poste,
+)
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 
 
@@ -33,8 +42,31 @@ def test_existing_informed_cable_is_exposed_as_a_span(
     spans = detectar_vaos(project)
 
     assert len(spans) == 1
+    cable = next(item for item in project.elementos if isinstance(item, Cabo))
+    assert spans[0].ponto_origem_id == cable.ponto_origem_id
+    assert spans[0].ponto_destino_id == cable.ponto_destino_id
+    assert spans[0].tipo_trecho is TipoTrechoRede.DESCONHECIDO
+    assert spans[0].modalidade is ModalidadeTrecho.DESCONHECIDO
     assert spans[0].comprimento_m == Decimal("31.5")
     assert spans[0].origem_comprimento is OrigemComprimentoVao.INFORMADO
+
+
+def test_altered_cable_is_exposed_as_altered_span(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    project = complete_project(catalogo_inicial)
+    project = replace(
+        project,
+        elementos=tuple(
+            replace(item, situacao=SituacaoProjeto.ALTERAR) if isinstance(item, Cabo) else item
+            for item in project.elementos
+        ),
+    )
+
+    spans = detectar_vaos(project)
+
+    assert len(spans) == 1
+    assert spans[0].situacao is SituacaoProjeto.ALTERAR
 
 
 def test_identified_span_is_kept_when_one_endpoint_has_no_classified_pole(
@@ -62,6 +94,8 @@ def test_identified_span_is_kept_when_one_endpoint_has_no_classified_pole(
     assert len(spans) == 1
     assert spans[0].poste_origem_id is not None
     assert spans[0].poste_destino_id is None
+    assert spans[0].ponto_destino_id == destination.id
+    assert spans[0].tipo_trecho is TipoTrechoRede.DESCONHECIDO
 
 
 def test_unidentified_cable_without_both_classified_poles_is_not_a_span(
@@ -112,6 +146,8 @@ def test_detected_span_validates_endpoints_and_length_metadata() -> None:
         VaoDetectado(
             id=uuid4(),
             cabo_id=cable_id,
+            ponto_origem_id=uuid4(),
+            ponto_destino_id=uuid4(),
             poste_origem_id=pole_id,
             poste_destino_id=pole_id,
             situacao=SituacaoProjeto.EXISTENTE,
@@ -121,6 +157,8 @@ def test_detected_span_validates_endpoints_and_length_metadata() -> None:
         VaoDetectado(
             id=uuid4(),
             cabo_id=cable_id,
+            ponto_origem_id=uuid4(),
+            ponto_destino_id=uuid4(),
             poste_origem_id=None,
             poste_destino_id=None,
             situacao=SituacaoProjeto.EXISTENTE,
@@ -131,6 +169,8 @@ def test_detected_span_validates_endpoints_and_length_metadata() -> None:
         VaoDetectado(
             id=uuid4(),
             cabo_id=cable_id,
+            ponto_origem_id=uuid4(),
+            ponto_destino_id=uuid4(),
             poste_origem_id=None,
             poste_destino_id=None,
             situacao=SituacaoProjeto.EXISTENTE,
@@ -140,15 +180,32 @@ def test_detected_span_validates_endpoints_and_length_metadata() -> None:
 
 
 @pytest.mark.parametrize(
-    ("cable_attributes", "expected_length", "expected_source"),
+    ("cable_attributes", "situation", "expected_length", "expected_source"),
     (
-        ((), Decimal("50.00"), OrigemComprimentoVao.COORDENADAS),
+        (
+            (),
+            SituacaoProjeto.INSTALAR,
+            Decimal("50.00"),
+            OrigemComprimentoVao.COORDENADAS,
+        ),
         (
             (
                 ("comprimento_m", Decimal("42.5")),
                 ("comprimento_origem", "anotacao_desenho"),
             ),
+            SituacaoProjeto.INSTALAR,
             Decimal("42.5"),
+            OrigemComprimentoVao.ANOTACAO_DESENHO,
+        ),
+        (
+            (
+                ("comprimento_m", Decimal("269")),
+                ("comprimento_origem", "anotacao_desenho"),
+                ("comprimento_substituido_m", Decimal("321")),
+                ("alteracao_cabo", "REDUCAO_COMPRIMENTO"),
+            ),
+            SituacaoProjeto.ALTERAR,
+            Decimal("269"),
             OrigemComprimentoVao.ANOTACAO_DESENHO,
         ),
     ),
@@ -156,6 +213,7 @@ def test_detected_span_validates_endpoints_and_length_metadata() -> None:
 def test_automatic_analysis_materializes_span_length(
     catalogo_inicial: CatalogoTecnico,
     cable_attributes: ExtraAttributes,
+    situation: SituacaoProjeto,
     expected_length: Decimal,
     expected_source: OrigemComprimentoVao,
 ) -> None:
@@ -199,7 +257,7 @@ def test_automatic_analysis_materializes_span_length(
         id=uuid4(),
         execucao_id=execution_id,
         categoria=CategoriaElemento.CABO,
-        situacao_projeto=SituacaoProjeto.INSTALAR,
+        situacao_projeto=situation,
         estado_revisao=EstadoRevisao.PROPOSTA,
         evidencia_ids=(evidence_id,),
         geometria=GeometriaDocumento.polilinha(
@@ -238,10 +296,272 @@ def test_automatic_analysis_materializes_span_length(
     spans = detectar_vaos(promoted.projeto)
     assert confirmed_cable.comprimento_m == expected_length
     assert confirmed_cable.origem_comprimento is expected_source
+    assert confirmed_cable.situacao is situation
+    assert confirmed_cable.tipo_trecho is TipoTrechoRede.REDE_DISTRIBUICAO
+    assert confirmed_cable.modalidade is ModalidadeTrecho.DESCONHECIDO
     assert len(spans) == 1
     assert spans[0].cabo_id == confirmed_cable.id
     assert spans[0].comprimento_m == expected_length
     assert spans[0].origem_comprimento is expected_source
+    assert spans[0].situacao is situation
+    assert spans[0].tipo_trecho is TipoTrechoRede.REDE_DISTRIBUICAO
+    assert spans[0].modalidade is ModalidadeTrecho.DESCONHECIDO
+
+
+@pytest.mark.parametrize("delivery_label", ("P1", "P5"))
+def test_automatic_promotion_separates_delivery_from_nearby_real_pole_and_is_idempotent(
+    catalogo_inicial: CatalogoTecnico,
+    delivery_label: str,
+) -> None:
+    base = complete_project(catalogo_inicial)
+    project = replace(
+        base,
+        elementos=(),
+        pontos_rede=(),
+        terminais=(),
+        conexoes_internas=(),
+        vinculos_obra=(),
+        relacoes_confirmadas=(),
+        historico_revisao_manual=(),
+    )
+    execution_id = uuid4()
+    page_id = project.ordem_leitura_paginas[0]
+    real_anchor = text_evidence(
+        execution_id=execution_id,
+        page_id=page_id,
+        key=f"{delivery_label}-real-anchor",
+        text="P2",
+        x="0.20",
+        y="0.40",
+    )
+    delivery_anchor = text_evidence(
+        execution_id=execution_id,
+        page_id=page_id,
+        key=f"{delivery_label}-delivery-anchor",
+        text=delivery_label,
+        x="0.80",
+        y="0.40",
+    )
+    standard_marker = text_evidence(
+        execution_id=execution_id,
+        page_id=page_id,
+        key=f"{delivery_label}-standard-marker",
+        text="PADRÃO",
+        x="0.82",
+        y="0.40",
+    )
+    pole_type_id = catalogo_inicial.itens_ativos(CategoriaElemento.POSTE)[0].id
+    cable_type_id = catalogo_inicial.itens_ativos(CategoriaElemento.CABO)[0].id
+    structure_type_id = catalogo_inicial.itens_ativos(CategoriaElemento.ESTRUTURA_MT)[0].id
+    equipment_type_id = catalogo_inicial.itens_ativos(CategoriaElemento.EQUIPAMENTO)[0].id
+    real_pole = _element_proposal(
+        execution_id,
+        real_anchor.id,
+        page_id,
+        category=CategoriaElemento.POSTE,
+        catalog_item_id=pole_type_id,
+        x="0.20",
+        y="0.40",
+        attributes=(("identificador_operacional", "P2"),),
+    )
+    delivery_symbol = _element_proposal(
+        execution_id,
+        delivery_anchor.id,
+        page_id,
+        category=CategoriaElemento.POSTE,
+        catalog_item_id=pole_type_id,
+        x="0.80",
+        y="0.40",
+        attributes=(("identificador_operacional", delivery_label),),
+    )
+    structure = _element_proposal(
+        execution_id,
+        real_anchor.id,
+        page_id,
+        category=CategoriaElemento.ESTRUTURA_MT,
+        catalog_item_id=structure_type_id,
+        x="0.21",
+        y="0.40",
+        attributes=(("identificador_operacional", "P2"),),
+    )
+    equipment = _element_proposal(
+        execution_id,
+        real_anchor.id,
+        page_id,
+        category=CategoriaElemento.EQUIPAMENTO,
+        catalog_item_id=equipment_type_id,
+        x="0.22",
+        y="0.40",
+        attributes=(("identificador_operacional", "P2"),),
+    )
+    cable = PropostaElemento(
+        id=uuid4(),
+        execucao_id=execution_id,
+        categoria=CategoriaElemento.CABO,
+        situacao_projeto=SituacaoProjeto.INSTALAR,
+        estado_revisao=EstadoRevisao.PROPOSTA,
+        evidencia_ids=(real_anchor.id, delivery_anchor.id),
+        geometria=GeometriaDocumento.polilinha(
+            page_id,
+            (
+                PontoNormalizado(Decimal("0.20"), Decimal("0.40")),
+                PontoNormalizado(Decimal("0.80"), Decimal("0.40")),
+            ),
+        ),
+        tipo_catalogo_sugerido_id=cable_type_id,
+        atributos_sugeridos=(
+            ("geometria_cabo_origem", "vetor_associado_geometricamente"),
+            ("ponto_operacional_origem", "P2"),
+            ("ponto_operacional_destino", delivery_label),
+        ),
+        confianca=Decimal("0.90"),
+    )
+    proposals = classificar_pontos_de_entrega(
+        (real_pole, delivery_symbol, structure, equipment, cable),
+        (real_anchor, delivery_anchor, standard_marker),
+    )
+    classified_delivery = next(item for item in proposals if item.id == delivery_symbol.id)
+    classified_cable = next(item for item in proposals if item.id == cable.id)
+    assert dict(classified_delivery.atributos_sugeridos)["tipo_ponto_rede"] == "ENTREGA"
+    assert dict(classified_cable.atributos_sugeridos)["tipo_ponto_operacional_destino"] == "ENTREGA"
+
+    relations = (
+        _relation_proposal(execution_id, structure.id, delivery_symbol.id, "INSTALADA_EM"),
+        _relation_proposal(execution_id, equipment.id, delivery_symbol.id, "INSTALADO_EM"),
+        _relation_proposal(execution_id, cable.id, real_pole.id, "CONECTA"),
+        _relation_proposal(execution_id, cable.id, delivery_symbol.id, "CONECTA"),
+    )
+    promoted = promover_resultado_automatico(
+        project,
+        catalogo_inicial,
+        proposals,
+        relations,
+        promovido_em=datetime(2026, 9, 1, 23, tzinfo=UTC),
+    )
+    repeated = promover_resultado_automatico(
+        promoted.projeto,
+        catalogo_inicial,
+        proposals,
+        relations,
+        promovido_em=datetime(2026, 9, 1, 23, tzinfo=UTC),
+    )
+
+    assert repeated.projeto == promoted.projeto
+    poles = tuple(item for item in promoted.projeto.elementos if isinstance(item, Poste))
+    assert len(poles) == 1
+    assert poles[0].identificador_operacional == "P2"
+    assert all(item.identificador_operacional != delivery_label for item in poles)
+    delivery_point = next(
+        point for point in promoted.projeto.pontos_rede if point.tipo is TipoPontoRede.ENTREGA
+    )
+    assert delivery_point.poste_id is None
+    assert delivery_label in delivery_point.nome
+    confirmed_cable = next(item for item in promoted.projeto.elementos if isinstance(item, Cabo))
+    assert confirmed_cable.tipo_trecho is TipoTrechoRede.RAMAL_CONEXAO
+    assert confirmed_cable.modalidade is ModalidadeTrecho.DESCONHECIDO
+    assert {
+        item.poste_id
+        for item in promoted.projeto.elementos
+        if isinstance(item, (EstruturaMt, Equipamento))
+    } == {poles[0].id}
+    assert all(
+        relation.destino_id != delivery_point.id
+        for relation in promoted.projeto.relacoes_confirmadas
+        if relation.tipo_relacao in {"INSTALADA_EM", "INSTALADO_EM"}
+    )
+    span = detectar_vaos(promoted.projeto)[0]
+    assert span.ponto_destino_id == delivery_point.id
+    assert span.poste_destino_id is None
+    assert span.tipo_trecho is TipoTrechoRede.RAMAL_CONEXAO
+
+
+def test_automatic_promotion_keeps_unproved_endpoint_unknown(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    base = complete_project(catalogo_inicial)
+    project = replace(
+        base,
+        elementos=(),
+        pontos_rede=(),
+        terminais=(),
+        conexoes_internas=(),
+        vinculos_obra=(),
+        relacoes_confirmadas=(),
+        historico_revisao_manual=(),
+    )
+    execution_id = uuid4()
+    evidence_id = uuid4()
+    page_id = project.ordem_leitura_paginas[0]
+    real_pole = _element_proposal(
+        execution_id,
+        evidence_id,
+        page_id,
+        category=CategoriaElemento.POSTE,
+        catalog_item_id=catalogo_inicial.itens_ativos(CategoriaElemento.POSTE)[0].id,
+        x="0.20",
+        y="0.40",
+        attributes=(("identificador_operacional", "P2"),),
+    )
+    cable = PropostaElemento(
+        id=uuid4(),
+        execucao_id=execution_id,
+        categoria=CategoriaElemento.CABO,
+        situacao_projeto=SituacaoProjeto.INSTALAR,
+        estado_revisao=EstadoRevisao.PROPOSTA,
+        evidencia_ids=(evidence_id,),
+        geometria=GeometriaDocumento.polilinha(
+            page_id,
+            (
+                PontoNormalizado(Decimal("0.20"), Decimal("0.40")),
+                PontoNormalizado(Decimal("0.80"), Decimal("0.40")),
+            ),
+        ),
+        tipo_catalogo_sugerido_id=catalogo_inicial.itens_ativos(CategoriaElemento.CABO)[0].id,
+        atributos_sugeridos=(
+            ("geometria_cabo_origem", "vetor_associado_geometricamente"),
+            ("identificador_operacional", "V2-9"),
+            ("ponto_operacional_origem", "P2"),
+            ("ponto_operacional_destino", "P9"),
+        ),
+        confianca=Decimal("0.90"),
+    )
+    promoted = promover_resultado_automatico(
+        project,
+        catalogo_inicial,
+        (real_pole, cable),
+        (_relation_proposal(execution_id, cable.id, real_pole.id, "CONECTA"),),
+        promovido_em=datetime(2026, 9, 1, 23, tzinfo=UTC),
+    )
+
+    confirmed_cable = next(item for item in promoted.projeto.elementos if isinstance(item, Cabo))
+    destination = next(
+        point
+        for point in promoted.projeto.pontos_rede
+        if point.id == confirmed_cable.ponto_destino_id
+    )
+    assert destination.tipo is TipoPontoRede.CONEXAO
+    assert destination.poste_id is None
+    assert confirmed_cable.tipo_trecho is TipoTrechoRede.DESCONHECIDO
+    span = detectar_vaos(promoted.projeto)[0]
+    assert span.ponto_destino_id == destination.id
+    assert span.tipo_trecho is TipoTrechoRede.DESCONHECIDO
+
+
+def _relation_proposal(
+    execution_id: UUID,
+    origin_id: UUID,
+    destination_id: UUID,
+    relation_type: str,
+) -> PropostaRelacao:
+    return PropostaRelacao(
+        id=uuid4(),
+        execucao_id=execution_id,
+        origem_referencia_id=origin_id,
+        destino_referencia_id=destination_id,
+        tipo_relacao=relation_type,
+        evidencia_ids=(uuid4(),),
+        confianca=Decimal("0.80"),
+    )
 
 
 def _element_proposal(

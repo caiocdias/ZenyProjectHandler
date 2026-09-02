@@ -42,6 +42,7 @@ from zeny_project_handler.domain.enums import (
     EstadoConexao,
     EstadoExecucaoAnalise,
     EstadoRevisao,
+    ModalidadeTrecho,
     NivelRede,
     OrigemComprimentoVao,
     SituacaoProjeto,
@@ -52,6 +53,7 @@ from zeny_project_handler.domain.enums import (
     TipoGeometria,
     TipoOrigemPdf,
     TipoPontoRede,
+    TipoTrechoRede,
     TipoVinculoObra,
 )
 from zeny_project_handler.domain.operations import VinculoObra
@@ -131,6 +133,7 @@ _ENUM_CLASSES: dict[str, type[Enum]] = {
         EstadoExecucaoAnalise,
         EstadoRevisao,
         GrupoCondicaoConformidade,
+        ModalidadeTrecho,
         NivelRede,
         OrigemComprimentoVao,
         OperadorCondicao,
@@ -147,6 +150,7 @@ _ENUM_CLASSES: dict[str, type[Enum]] = {
         TipoEscopoConformidade,
         TipoOrigemPdf,
         TipoPontoRede,
+        TipoTrechoRede,
         TipoVinculoObra,
     )
 }

@@ -55,19 +55,16 @@ def filtrar_propostas_identificadas(
     *,
     distancia_maxima: float = _MAXIMUM_IDENTIFIER_DISTANCE,
 ) -> tuple[PropostaElemento, ...]:
-    """Mantenha somente ativos vinculados a um identificador operacional numerado."""
+    """Filtre ativos pontuais; cabos aguardam associação independente com o traçado."""
     if distancia_maxima <= 0:
         raise ValueError("Distância máxima do identificador deve ser positiva")
     pole_labels, span_labels = _operational_labels(evidencias)
     identified: list[PropostaElemento] = []
     for proposal in propostas:
-        labels = (
-            pole_labels
-            if proposal.categoria in _POLE_IDENTIFIED_CATEGORIES
-            else span_labels
-            if proposal.categoria is CategoriaElemento.CABO
-            else ()
-        )
+        if proposal.categoria is CategoriaElemento.CABO:
+            identified.append(proposal)
+            continue
+        labels = pole_labels if proposal.categoria in _POLE_IDENTIFIED_CATEGORIES else ()
         nearest = _nearest_label(proposal, labels, distancia_maxima)
         if nearest is not None:
             identified.append(_with_operational_label(proposal, nearest))

@@ -10,7 +10,12 @@ from decimal import Decimal
 
 from zeny_project_handler.domain.analysis import EvidenciaDocumento
 from zeny_project_handler.domain.catalog import AssinaturaSimbologia, CatalogoTecnico
-from zeny_project_handler.domain.enums import CategoriaElemento, SituacaoProjeto, TipoEvidencia
+from zeny_project_handler.domain.enums import (
+    CategoriaElemento,
+    SituacaoProjeto,
+    TipoEvidencia,
+    TipoGeometria,
+)
 from zeny_project_handler.domain.values import GeometriaDocumento
 
 
@@ -143,18 +148,28 @@ def situation_from_evidence(
 def project_situation_override(
     source: EvidenciaDocumento,
     evidence: tuple[EvidenciaDocumento, ...],
+    category: CategoriaElemento,
 ) -> tuple[SituacaoProjeto, EvidenciaDocumento | None] | None:
     """Aplique marcações explícitas do desenho antes da inferência por cor."""
-    bubbles = tuple(
-        item
-        for item in evidence
-        if item.pagina_id == source.pagina_id
-        and _is_installation_bubble(item)
-        and _geometry_center_is_inside(source.geometria, item.geometria)
-    )
-    if bubbles:
-        bubble = min(bubbles, key=lambda item: _geometry_area(item.geometria))
-        return SituacaoProjeto.INSTALAR, bubble
+    if category is CategoriaElemento.EQUIPAMENTO:
+        installation_markers = tuple(
+            item
+            for item in evidence
+            if item.pagina_id == source.pagina_id
+            and _is_installation_bag(item)
+            and _installation_bag_matches_source(source.geometria, item.geometria)
+        )
+    else:
+        installation_markers = tuple(
+            item
+            for item in evidence
+            if item.pagina_id == source.pagina_id
+            and _is_legacy_installation_bubble(item)
+            and _geometry_center_is_inside_bounds(source.geometria, item.geometria)
+        )
+    if installation_markers:
+        marker = min(installation_markers, key=lambda item: _geometry_area(item.geometria))
+        return SituacaoProjeto.INSTALAR, marker
     forced = dict(source.atributos_extraidos).get("situacao_projeto_forcada")
     try:
         situation = SituacaoProjeto(str(forced)) if forced is not None else None
@@ -163,7 +178,40 @@ def project_situation_override(
     return (situation, None) if situation is not None else None
 
 
-def _is_installation_bubble(evidence: EvidenciaDocumento) -> bool:
+def _is_installation_bag(evidence: EvidenciaDocumento) -> bool:
+    if evidence.tipo is not TipoEvidencia.VETOR:
+        return False
+    attributes = dict(evidence.atributos_extraidos)
+    operations = {
+        operation.strip()
+        for operation in str(attributes.get("operacoes") or "").split(",")
+        if operation.strip()
+    }
+    points = _distinct_consecutive_points(evidence.geometria)
+    if operations in ({"qu"}, {"re"}):
+        shape_is_supported = len(points) >= 3
+    else:
+        shape_is_supported = operations == {"l"} and len(points) >= 4
+    if not shape_is_supported:
+        return False
+    colors = tuple(
+        color
+        for color in _color_values(evidence)
+        if (rgb := _rgb(color)) is not None
+        and 96 <= rgb[0] <= 176
+        and rgb[1] <= 48
+        and rgb[2] <= 80
+        and rgb[0] - max(rgb[1], rgb[2]) >= 48
+    )
+    if not colors:
+        return False
+    left, top, right, bottom = _geometry_bounds(evidence.geometria)
+    width = right - left
+    height = bottom - top
+    return min(width, height) >= 0.0005 and max(width, height) <= 0.20
+
+
+def _is_legacy_installation_bubble(evidence: EvidenciaDocumento) -> bool:
     if evidence.tipo is not TipoEvidencia.VETOR:
         return False
     attributes = dict(evidence.atributos_extraidos)
@@ -190,6 +238,29 @@ def _is_installation_bubble(evidence: EvidenciaDocumento) -> bool:
     return min(width, height) >= 0.0005 and max(width, height) <= 0.20
 
 
+def _distinct_consecutive_points(
+    geometry: GeometriaDocumento,
+) -> tuple[tuple[float, float], ...]:
+    points: list[tuple[float, float]] = []
+    for point in geometry.pontos:
+        normalized = (float(point.x), float(point.y))
+        if not points or normalized != points[-1]:
+            points.append(normalized)
+    if len(points) > 1 and points[0] == points[-1]:
+        points.pop()
+    return tuple(points)
+
+
+def _installation_bag_matches_source(
+    source: GeometriaDocumento,
+    bag: GeometriaDocumento,
+) -> bool:
+    """Vincule bolsa total ou parcial pela própria ocorrência, inclusive rotacionada."""
+    return _geometry_contains_point(bag, center(source)) or _geometry_contains_point(
+        source, center(bag)
+    )
+
+
 def _geometry_bounds(geometry: GeometriaDocumento) -> tuple[float, float, float, float]:
     x_values = [float(point.x) for point in geometry.pontos]
     y_values = [float(point.y) for point in geometry.pontos]
@@ -201,7 +272,37 @@ def _geometry_area(geometry: GeometriaDocumento) -> float:
     return (right - left) * (bottom - top)
 
 
-def _geometry_center_is_inside(
+def _geometry_contains_point(
+    geometry: GeometriaDocumento,
+    point: tuple[float, float],
+) -> bool:
+    left, top, right, bottom = _geometry_bounds(geometry)
+    x, y = point
+    tolerance = 0.001
+    if not (
+        left - tolerance <= x <= right + tolerance and top - tolerance <= y <= bottom + tolerance
+    ):
+        return False
+    if geometry.tipo is not TipoGeometria.POLIGONO:
+        return True
+    vertices = _distinct_consecutive_points(geometry)
+    if len(vertices) < 3:
+        return True
+    inside = False
+    previous_x, previous_y = vertices[-1]
+    for current_x, current_y in vertices:
+        crosses = (current_y > y) != (previous_y > y)
+        if crosses:
+            intersection_x = (previous_x - current_x) * (y - current_y) / (
+                previous_y - current_y
+            ) + current_x
+            if x <= intersection_x + tolerance:
+                inside = not inside
+        previous_x, previous_y = current_x, current_y
+    return inside
+
+
+def _geometry_center_is_inside_bounds(
     source: GeometriaDocumento,
     container: GeometriaDocumento,
 ) -> bool:

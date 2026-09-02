@@ -148,7 +148,15 @@ def test_seed_has_configurable_options_and_all_symbol_combinations(
     assert len(catalogo_inicial.assinaturas_simbologia) == 5
     assert {
         signature.situacao_projeto for signature in catalogo_inicial.assinaturas_simbologia
-    } == set(SituacaoProjeto)
+    } == {
+        SituacaoProjeto.EXISTENTE,
+        SituacaoProjeto.INSTALAR,
+        SituacaoProjeto.REMOVER,
+    }
+    assert all(
+        signature.situacao_projeto is not SituacaoProjeto.ALTERAR
+        for signature in catalogo_inicial.assinaturas_simbologia
+    )
     assert all(
         signature.categoria_elemento is None
         for signature in catalogo_inicial.assinaturas_simbologia

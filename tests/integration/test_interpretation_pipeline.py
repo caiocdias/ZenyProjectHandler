@@ -11,7 +11,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import Engine
 from tests.factories import complete_project
-from tests.interpretation_factories import text_evidence
+from tests.interpretation_factories import text_evidence, vector_evidence
 
 from zeny_project_handler.adapters.interpretation import (
     InterpretadorRegrasExplicitas,
@@ -47,6 +47,10 @@ class FailingInterpreter:
 
     def interpretar(self, _request, *, cancelado=None) -> Never:  # type: ignore[no-untyped-def]
         raise RuntimeError("regra indisponível")
+
+
+class PreviousVersionInterpreter(InterpretadorRegrasExplicitas):
+    versao = "20.0"
 
 
 @pytest.fixture
@@ -123,6 +127,13 @@ def interpretation_context(
         x="0.40",
         y="0.18",
     )
+    cable_path = vector_evidence(
+        execution_id=source_execution.id,
+        page_id=page_id,
+        key="cable-path",
+        points=(("0.20", "0.20"), ("0.60", "0.20")),
+        color="#008000",
+    )
     evidence = (
         *evidence,
         coordinate_east,
@@ -130,6 +141,7 @@ def interpretation_context(
         point_label,
         equipment_point_label,
         span_label,
+        cable_path,
     )
     with SqlAlchemyUnitOfWork(engine) as work:
         work.catalogos.salvar(catalogo_inicial)
@@ -192,6 +204,27 @@ def test_pipeline_persists_cross_run_provenance_and_reuses_completed_result(
             work.decisoes_revisao.obter_da_proposta(item.id) for item in first.elementos
         )
         assert all(item is not None and item.revisor == "Análise automática" for item in decisions)
+
+
+def test_interpreter_version_change_invalidates_completed_semantic_result(
+    interpretation_context: tuple[Engine, Projeto, ExecucaoAnalise],
+) -> None:
+    engine, project, source_execution = interpretation_context
+    registry = carregar_registro_regras_inicial()
+    legacy_runner = ExecutarPipelineInterpretacao(
+        PreviousVersionInterpreter(registry),
+        registry,
+        lambda: SqlAlchemyUnitOfWork(engine),
+        relogio=lambda: datetime(2026, 7, 21, 12, 30, tzinfo=UTC),
+    )
+
+    legacy = legacy_runner.executar(project.id, source_execution.id)
+    current = _runner(engine).executar(project.id, source_execution.id)
+
+    assert legacy.execucao.versao_metodo == "20.0"
+    assert current.execucao.versao_metodo == "21.0"
+    assert current.execucao.id != legacy.execucao.id
+    assert not current.resultado_reutilizado
 
 
 def test_cancelled_pipeline_resumes_with_same_identity_without_duplicates(

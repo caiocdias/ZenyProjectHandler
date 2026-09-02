@@ -17,7 +17,7 @@ Estado versionado relevante:
 |---|---|
 | Pacote Python | `0.3.0` |
 | Catálogo técnico | `2` |
-| Registro de interpretação | `1.4.0` |
+| Registro de interpretação | `1.6.0` |
 | Registro de conformidade distribuído | `cemig-normas-distribuicao-2025.7` |
 | Método de conformidade | `10` |
 | Migração SQLite mais recente | `0009_remote_jobs` |
@@ -140,7 +140,7 @@ diagnóstico; texto e recursos nativos continuam disponíveis.
 
 ## Interpretação semântica
 
-O registro `regras_interpretacao_v1.json`, hoje na versão `1.4.0`, possui cinco regras de
+O registro `regras_interpretacao_v1.json`, hoje na versão `1.6.0`, possui cinco regras de
 reconhecimento por categoria e sete regras de relação. O pipeline:
 
 1. filtra conteúdo que não pode fundamentar resultado técnico;
@@ -159,6 +159,12 @@ O código unitário `N` só é reconhecido nessa forma qualificada; textos comun
 `N-(4 CAA)` não criam estrutura. Ocorrências do mesmo código e ponto continuam distintas quando têm
 qualificador ou geometria próprios, enquanto texto nativo e OCR da mesma ocorrência são consolidados
 com todas as evidências. A identidade e a ordenação resultantes independem da ordem das evidências.
+
+Nomenclaturas de chave no formato amperagem–capacidade de interrupção–número de elos são
+reconhecidas como uma ocorrência completa. Uma bolsa vinho total, parcial ou rotacionada muda a
+situação para `INSTALAR` somente quando sua geometria contém o rótulo ou tem o próprio centro sobre
+ele. Traço isolado, bolsa de outro objeto e fragmento de identificador hifenizado não propagam
+situação nem criam chave.
 
 Uma execução concluída é idempotente para o mesmo projeto, extração, catálogo, registro e
 configuração. Cancelamento ou falha não publica um conjunto parcial como concluído.
@@ -211,18 +217,24 @@ permanecem registradas; um comprimento não é inventado quando nenhuma fonte é
 
 ### Evolução aprovada para alteração, ponto de entrega e ramal
 
-O comportamento vigente acima ainda usa as três situações do domínio e não classifica o tipo do
-trecho. O [ADR 0015](adr/0015-pontos-de-entrega-ramais-e-alteracao-de-vao.md) aprova o contrato que as
-etapas E04–E08 do roadmap de correção de ramais implementarão e versionarão:
+O domínio e o interpretador já usam `ALTERAR` na redução de comprimento. Rótulo técnico, traçado,
+identificador `V<n>-<n>` e medida são associados separadamente por geometria; um cabo com traçado
+inequívoco pode permanecer sem identificador. Uma marca vinho que cruza uma medida torna somente
+essa medida substituída. Quando medida substituída e vigente pertencem sem ambiguidade ao mesmo
+traçado, `comprimento_m` recebe a vigente e a proposta conserva IDs navegáveis da medida anterior e
+da marca de supersessão. Paralelas, cruzamentos e rótulos empatados permanecem sem associação.
+
+O [ADR 0015](adr/0015-pontos-de-entrega-ramais-e-alteracao-de-vao.md) aprova ainda o contrato
+topológico interno implementado por E05 e que as etapas E06–E08 consumirão e exporão:
 
 - `ALTERAR` será uma situação pública distinta para o ativo que permanece com comprimento, traçado
   ou configuração substituídos. Uma medida antiga riscada não torna o cabo `REMOVER`;
-- um `P<n>` com evidência inequívoca de `PADRÃO` materializará
+- um `P<n>` com evidência inequívoca de `PADRÃO` materializa
   `TipoPontoRede.ENTREGA`, `poste_id=None`, apresentado como **Padrão do cliente**. O poste real
   próximo permanece separado e conserva suas estruturas e equipamentos;
-- `TipoTrechoRede` distinguirá `REDE_DISTRIBUICAO`, `RAMAL_CONEXAO` e `DESCONHECIDO` em `Cabo` e
-  `VaoDetectado`. Um ramal resolvido preservará o endpoint de entrega sem exigir dois postes;
-- `ModalidadeTrecho` distinguirá `AEREO`, `SUBTERRANEO` e `DESCONHECIDO` sem ser deduzida do tipo
+- `TipoTrechoRede` distingue `REDE_DISTRIBUICAO`, `RAMAL_CONEXAO` e `DESCONHECIDO` em `Cabo` e
+  `VaoDetectado`. Um ramal resolvido preserva o endpoint de entrega sem exigir dois postes;
+- `ModalidadeTrecho` distingue `AEREO`, `SUBTERRANEO` e `DESCONHECIDO` sem ser deduzida do tipo
   topológico. Regras dependentes de modalidade ficarão não avaliáveis quando ela não estiver
   resolvida;
 - um ramal não participará do grau, fim/transição, ângulo ou compatibilidade da rede de distribuição.
@@ -231,8 +243,10 @@ etapas E04–E08 do roadmap de correção de ramais implementarão e versionarã
   e `ALTERAR` exigirão reanálise semântica explícita e nova conformidade; snapshots históricos não
   serão reescritos.
 
-Esses valores serão produzidos pelo servidor e apenas apresentados por API, cliente e exportações.
-Até a conclusão das etapas citadas, nenhum consumidor deve simular o contrato no cliente.
+Os campos topológicos já são produzidos e persistidos internamente pelo servidor. Sua projeção
+pública e a de `ALTERAR` serão implementadas em E08 e apenas apresentadas por API, cliente e
+exportações. Até lá, nenhum consumidor deve simular o contrato no cliente; dados antigos recebem
+`DESCONHECIDO` e exigem reanálise semântica explícita para obter classificação resolvida.
 
 ## Documentação e conformidade
 

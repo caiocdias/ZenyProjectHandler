@@ -158,9 +158,9 @@ limpa do Codex, atualize sua tag e preencha **Evidências e handoff** antes de i
 |---|---|---|---|---|
 | E01 | Contrato normativo, decisão de domínio e fixtures | #concluida | nenhuma | ADR, inventário ND-5.1 e corpus sintético sanitizado |
 | E02 | Estruturas `N(x)` e ocorrências repetidas | #concluida | E01 | parser contextual e cardinalidade física preservada |
-| E03 | Chaves e bolsas de instalação | #pendente | E01, E02 | nomenclatura completa e situação de instalação robusta |
-| E04 | Redução de vão e associação cabo–traçado | #pendente | E01, E02, E03 | medida vigente, alteração explícita e cabo no traçado correto |
-| E05 | Ponto de padrão e ramal no domínio topológico | #pendente | E01, E04 | ponto `ENTREGA` e tipo de vão/trecho derivados |
+| E03 | Chaves e bolsas de instalação | #concluida | E01, E02 | nomenclatura completa e situação de instalação robusta |
+| E04 | Redução de vão e associação cabo–traçado | #concluida | E01, E02, E03 | medida vigente, alteração explícita e cabo no traçado correto |
+| E05 | Ponto de padrão e ramal no domínio topológico | #concluida | E01, E04 | ponto `ENTREGA` e tipo de vão/trecho derivados |
 | E06 | Fim/transição, ângulo e compatibilidade pela topologia | #pendente | E05 | fatos fail-closed apenas sobre rede resolvida |
 | E07 | Conformidade específica do ramal | #pendente | E05, E06 | registro ND-5.1 e guardas de aplicabilidade |
 | E08 | Contratos, cliente e exportações | #pendente | E04, E05, E07 | DTO/UI/XLSX/OpenAPI coerentes |
@@ -378,7 +378,7 @@ geométrica, origem e evidência-alvo em vez de código/poste apenas.
   a correção de bolsas/chaves pode reutilizar a consolidação geométrica, mas não deve voltar a
   deduplicar estruturas apenas por código, ponto e situação. Nenhum bloqueio residual conhecido.
 
-## E03 — Chaves e bolsas de instalação — #pendente
+## E03 — Chaves e bolsas de instalação — #concluida
 
 **Objetivo:** reconhecer as nomenclaturas completas `100A-10KA-2H` e `100A-10KA-5H`, associar a
 bolsa à ocorrência correta mesmo quando parcial/rotacionada e impedir promoção de fragmentos de
@@ -417,12 +417,12 @@ Garanta que 100A-10KA-2H e 100A-10KA-5H sejam ocorrências completas de chave e 
 
 **Critérios de aceite:**
 
-- [ ] As chaves `2H` e `5H` são reconhecidas como uma ocorrência completa cada.
-- [ ] Com bolsa vinculada, a situação é instalar; sem bolsa e sem outra marca, não é inferida
+- [x] As chaves `2H` e `5H` são reconhecidas como uma ocorrência completa cada.
+- [x] Com bolsa vinculada, a situação é instalar; sem bolsa e sem outra marca, não é inferida
   instalação.
-- [ ] Bolsa parcial/rotacionada funciona; bolsa de objeto vizinho não vaza situação.
-- [ ] `280835-300A-12T` não produz proposta fragmentária `-300A` como chave.
-- [ ] Cache/versões impedem reutilizar evidência antiga incompatível.
+- [x] Bolsa parcial/rotacionada funciona; bolsa de objeto vizinho não vaza situação.
+- [x] `280835-300A-12T` não produz proposta fragmentária `-300A` como chave.
+- [x] Cache/versões impedem reutilizar evidência antiga incompatível.
 
 **Validação obrigatória:**
 
@@ -439,9 +439,45 @@ documentar a evidência e corrigir a extração nesta etapa, não compensar com 
 **Riscos e mitigação:** aumentar recall e criar falsas chaves; mitigar exigindo assinatura completa e
 contexto operacional. Alterar cache sem versão; mitigar com teste explícito da assinatura.
 
-**Evidências e handoff:** ainda não iniciado.
+**Evidências e handoff (01/09/2026):**
 
-## E04 — Redução de vão e associação cabo–traçado — #pendente
+- **Pré-auditoria:** não existe `AGENTS.md` na raiz nem em subdiretórios do repositório; a busca
+  recursiva foi vazia. O worktree estava limpo, `HEAD` e `origin/main` estavam em `a28f7b1`, E01/E02
+  estavam concluídas e as versões encontradas coincidiam com seus handoffs. Foram lidos ADR 0015,
+  módulos de extração/interpretação, catálogo técnico e testes citados antes da primeira edição.
+- **Implementação:** `rule_support.py` reconhece como bolsa de equipamento um retângulo/quadrilátero
+  vinho ou uma polilinha parcial de três lados e exige vínculo geométrico pela ocorrência: centro do
+  rótulo dentro da bolsa ou centro da bolsa sobre a geometria do rótulo. Isso cobre rotação sem raio
+  de proximidade; um traço de dois pontos não é bolsa. O comportamento anterior de bolha fechada das
+  outras categorias foi preservado. `category_analyzers.py` mantém a nomenclatura completa
+  amperagem–kA–capacidade e aplica limites mais estritos somente ao alias sem hífen inicial, impedindo
+  que `-300A`/`300A` seja recortado de `280835-300A-12T`.
+- **Fixtures e testes:** `tests/pdf_fixtures.py` passou a conter `100A-10KA-2H` com bolsa parcial,
+  `100A-10KA-5H` e bolsa parciais rotacionadas, as duas chaves sem bolsa, uma bolsa de outro objeto,
+  a medida `321 m` riscada e o identificador `280835-300A-12T`. Os testes em
+  `test_pymupdf_analyzer.py` confirmam texto/rotação/geometria; `test_rule_based_interpreter.py` prova
+  duas ocorrências completas a instalar, duas existentes e ausência de vazamento/fragmento;
+  `test_interpretation_pipeline.py` prova que a versão semântica anterior não é reutilizada.
+- **Versões e cache:** somente as camadas semânticas alteradas foram incrementadas: analisador de
+  equipamento `3.2`, interpretador `19.0` e registro `1.5.0`. O registro empacotado, seu teste e
+  `docs/especificacao-funcional.md` foram sincronizados. `PyMuPdfDocumentAnalyzer` permaneceu em
+  `1.11.0`, pois `pymupdf_page_extractors.py`, `pymupdf_ocr.py` e `pymupdf_analyzer.py` já preservavam
+  todos os textos, vetores e rotações necessários e não mudaram; portanto o cache nativo compatível
+  não foi invalidado artificialmente.
+- **Validações:** antes da edição, a seleção obrigatória com temporário local terminou com
+  `103 passed in 3.10s`. O comando Pytest literal pós-mudança executou 58 casos e encontrou 47 erros
+  de setup, todos `PermissionError` no temporário global `pytest-of-Caio`, sem falha de asserção. A
+  seleção obrigatória final com `-p no:cacheprovider --basetemp tmp\\pytest-e03-required-final`
+  terminou com `105 passed in 3.93s`. O foco novo terminou com `4 passed in 0.95s`; o teste do recurso
+  versionado, `1 passed in 0.02s`. O `ruff check` obrigatório terminou com `All checks passed!`,
+  `ruff format --check` confirmou sete arquivos formatados e `git diff --check` saiu com código zero.
+- **Handoff para E04:** preservar o vínculo de bolsa estritamente geométrico, os limites de alias e
+  as versões acima. A E04 pode consumir as mesmas geometrias vinho para medidas riscadas, mas não
+  deve reutilizar a classificação de bolsa: traço de medida continua evidência de supersessão local,
+  nunca situação da chave/cabo. Nenhum bloqueio residual conhecido; nenhum commit ou ação externa
+  foi executado.
+
+## E04 — Redução de vão e associação cabo–traçado — #concluida
 
 **Objetivo:** separar evidência de situação, rótulo, traçado e medida para reconhecer a redução de vão
 como alteração do cabo sobrevivente, associar `269 m` como vigente, rejeitar `321 m` substituído e não
@@ -480,11 +516,11 @@ Implemente associação geométrica de rótulo, traçado, identificador e compri
 
 **Critérios de aceite:**
 
-- [ ] A medida vigente é `269 m`; `321 m` permanece auditável como substituída e não vira comprimento.
-- [ ] Cabos principais não recebem situação `REMOVER` por causa da medida riscada.
-- [ ] Cabos principais não recebem `identificador_operacional=V1-2` se não pertencem ao traçado.
-- [ ] O ramal e os cabos de rede usam geometrias distintas e relações coerentes.
-- [ ] Casos ambíguos não são resolvidos apenas pela menor distância.
+- [x] A medida vigente é `269 m`; `321 m` permanece auditável como substituída e não vira comprimento.
+- [x] Cabos principais não recebem situação `REMOVER` por causa da medida riscada.
+- [x] Cabos principais não recebem `identificador_operacional=V1-2` se não pertencem ao traçado.
+- [x] O ramal e os cabos de rede usam geometrias distintas e relações coerentes.
+- [x] Casos ambíguos não são resolvidos apenas pela menor distância.
 
 **Validação obrigatória:**
 
@@ -496,16 +532,62 @@ Implemente associação geométrica de rótulo, traçado, identificador e compri
 Resultado esperado: testes passam e a fixture de redução demonstra medida vigente, supersessão e
 associação ao traçado correto.
 
-**Bloqueios:** a representação deve estar decidida no ADR de E01; dependência incompleta mantém E04
-pendente, não bloqueada.
+**Bloqueios:** nenhum bloqueio conhecido; o ADR 0015 e E01–E03 estavam concluídos antes da edição.
 
 **Riscos e mitigação:** tolerâncias dependentes do formato A3/A4; mitigar usando coordenadas
 normalizadas e testes em proporções diferentes. Geometria excessivamente rígida; mitigar com casos
 rotacionados e ordem de pontos invertida.
 
-**Evidências e handoff:** ainda não iniciado.
+**Evidências e handoff (01/09/2026):**
 
-## E05 — Ponto de padrão e ramal no domínio topológico — #pendente
+- **Pré-auditoria:** não existe `AGENTS.md` na raiz, em subdiretórios nem nos pais acessíveis. E01–E03
+  estavam `#concluida`; registro `1.5.0`, interpretador `19.0` e analisador de equipamento `3.2`
+  coincidiam com os handoffs. `HEAD` e `origin/main` não divergiam (`0/0`). As alterações
+  preexistentes de E02/E03 em documentação, interpretação e fixtures/testes foram lidas pelos diffs
+  e preservadas. O gate dirigido anterior à implementação terminou com `66 passed`.
+- **Associação geométrica:** `span_rules.py` agora separa rótulo técnico, traçado vetorial,
+  identificador `V<n>-<n>` e medida. Traçados abertos, sólidos e não vinho são canonizados mesmo com
+  pontos invertidos; a seleção combina distância perpendicular, orientação quando o OCR é linear e
+  endpoints operacionais, e recusa candidatos dentro da margem de ambiguidade. O identificador é
+  primeiro ligado ao traçado e só chega ao cabo que foi ligado ao mesmo traçado. Assim, o cabo
+  principal fica no vetor de rede e sem `V1-2`, enquanto o cabo do ramal conserva sua geometria e o
+  identificador. Um cabo com traçado inequívoco permanece válido sem identificador operacional.
+- **Redução e proveniência:** vetores vinho não são candidatos a cabo. Uma marca vinho curta só
+  supersede a medida cuja geometria ela cruza. `269 m` alimenta `comprimento_m`; `321 m`, a marca e o
+  traçado permanecem em `evidencia_ids` e nos atributos `comprimento_substituido_m`,
+  `evidencia_comprimento_substituido_id` e `evidencia_supersessao_id`. O ativo recebe
+  `SituacaoProjeto.ALTERAR` e `alteracao_cabo=REDUCAO_COMPRIMENTO`, nunca `REMOVER`. IDs, ordem e
+  resultado são idempotentes em reexecução e permutação das evidências.
+- **Pipeline e domínio:** `category_analyzers.py` deixou de escolher vetor/medida por contexto antes
+  da associação; `operational_labels.py` não exige mais `V` para preservar um cabo traçado.
+  `domain/enums.py` ganhou `ALTERAR`; promoção, `Cabo`, `VaoDetectado` e o codec JSON foram cobertos
+  por regressão. As regras e assinaturas do catálogo continuam limitadas às três situações visuais
+  de origem, impedindo inferir `ALTERAR` por cor. `relation_rules.py` consome os endpoints navegáveis
+  do traçado principal e mantém as relações `CONECTA` em `P1`/`P2`.
+- **Fixtures, negativos e versões:** a fixture sanitizada `create_e01_span_change_pdf` passou a
+  posicionar `A-4 CA`, `321 m` riscado e `269 m` vigente junto ao mesmo traçado. Os testes cobrem a
+  extração PDF, rede versus ramal, paralelas, cruzamento, dois rótulos `V` ambíguos, cabo sem `V`,
+  pontos invertidos, evidências navegáveis, repetição e permutação. Foram incrementados somente os
+  componentes semânticos afetados: analisador de cabo `4.0`, interpretador `20.0` e registro
+  `1.6.0`; recurso empacotado, teste de versão e `docs/especificacao-funcional.md` foram sincronizados.
+- **Contratos:** `domain_json.py`, `zeny_project_handler_contracts/enums.py`, DTOs de revisão,
+  mapeamentos do servidor e apresentação do cliente foram inspecionados conforme o ADR. E04 alterou
+  e testou o enum/codec internos; a projeção pública coordenada de `ALTERAR` continua deliberadamente
+  em E08, que deve atualizar contrato, API, cliente, exportações, versão principal e OpenAPI de forma
+  atômica, sem traduzir o valor para `EXISTING` ou `REMOVE`.
+- **Validações:** gate obrigatório final com temporário local: `73 passed in 2.45s`; testes
+  complementares de extração, codec, catálogo, domínio e recurso versionado: `92 passed in 2.96s`;
+  suíte Pytest completa: `917 passed in 136.41s`. `mypy` terminou com `Success: no issues found in
+  306 source files`; `ruff check src tests` terminou com `All checks passed!`; a formatação Ruff e
+  `git diff --check` ficaram limpos após o ajuste mecânico final.
+- **Handoff para E05:** consumir `geometria_cabo_origem=vetor_associado_geometricamente`,
+  `evidencia_geometria_id` e os endpoints operacionais já orientados para classificar rede/ramal e
+  materializar `ENTREGA`. Preservar a associação fail-closed e os atributos de supersessão; não
+  converter marca vinho em situação visual, não exigir `V` para cabo de rede e não antecipar no
+  cliente a evolução pública reservada à E08. Nenhum commit, push, publicação ou implantação foi
+  executado.
+
+## E05 — Ponto de padrão e ramal no domínio topológico — #concluida
 
 **Objetivo:** materializar `PADRÃO` como ponto de entrega sem poste, derivar rede versus ramal pela
 topologia dos endpoints e impedir que estruturas/equipamentos do poste próximo migrem para o padrão.
@@ -546,12 +628,12 @@ Use TipoPontoRede.ENTREGA para um identificador P cujo cluster contém PADRÃO, 
 
 **Critérios de aceite:**
 
-- [ ] `P1/P5 PADRÃO` materializa ponto `ENTREGA` sem criar `Poste` fictício.
-- [ ] O poste próximo mantém estruturas/equipamentos corretos; o padrão não os herda.
-- [ ] Trecho poste–entrega vira `RAMAL_CONEXAO`; poste–poste resolvido vira
+- [x] `P1/P5 PADRÃO` materializa ponto `ENTREGA` sem criar `Poste` fictício.
+- [x] O poste próximo mantém estruturas/equipamentos corretos; o padrão não os herda.
+- [x] Trecho poste–entrega vira `RAMAL_CONEXAO`; poste–poste resolvido vira
   `REDE_DISTRIBUICAO`; ambíguo vira `DESCONHECIDO`.
-- [ ] `detectar_vaos()` preserva endpoint de entrega e tipo sem exigir dois postes.
-- [ ] Codec/persistência e promoção repetida passam sem duplicação ou quebra de dados anteriores.
+- [x] `detectar_vaos()` preserva endpoint de entrega e tipo sem exigir dois postes.
+- [x] Codec/persistência e promoção repetida passam sem duplicação ou quebra de dados anteriores.
 
 **Validação obrigatória:**
 
@@ -568,7 +650,49 @@ estratégia de reanálise/migração registrada no ADR nesta etapa.
 **Riscos e mitigação:** todo rótulo “PADRÃO” na página capturar o `P` errado; mitigar por cluster e
 geometria. Inferir ramal só por cabo BT; mitigar exigindo endpoint `ENTREGA` ou evidência equivalente.
 
-**Evidências e handoff:** ainda não iniciado.
+**Evidências e handoff (01/09/2026):**
+
+- **Pré-auditoria:** não existe `AGENTS.md` na raiz nem nos pais acessíveis. E01 e E04 estavam
+  `#concluida`; o ADR 0015 e os handoffs anteriores foram lidos. `HEAD` e `origin/main` não
+  divergiam (`0/0`). O worktree continha as mudanças não commitadas de E02–E04 em documentação,
+  interpretação, domínio, fixtures e testes; os diffs foram inspecionados e preservados. O baseline
+  obrigatório terminou com `104 passed in 5.52s` e o `mypy` inicial não encontrou erros.
+- **Contrato de domínio e compatibilidade:** `TipoTrechoRede` agora fecha
+  `REDE_DISTRIBUICAO`, `RAMAL_CONEXAO` e `DESCONHECIDO`; `ModalidadeTrecho` permanece dimensão
+  separada com `AEREO`, `SUBTERRANEO` e `DESCONHECIDO`. `Cabo` persiste ambos com padrão
+  `DESCONHECIDO`, e `PontoRede.ENTREGA` exige `poste_id=None`. O codec registra os dois enums e o
+  teste remove os campos de um payload anterior para provar leitura aditiva como desconhecido, sem
+  backfill. O interpretador foi incrementado de `20.0` para `21.0`, invalidando a sessão semântica
+  anterior e exigindo reanálise conforme o ADR; registro declarativo `1.6.0` não mudou.
+- **Cluster, promoção e relações:** `analysis_regions.py` normaliza `PADRÃO`/`PADRAO`, rejeita
+  legenda e empate e só qualifica o `P<n>` do cluster único. Um endpoint de cabo só recebe a
+  qualificação quando o traçado veio de `vetor_associado_geometricamente` de E04, o rótulo
+  operacional coincide e a extremidade está geometricamente no mesmo cluster. A promoção não cria
+  `Poste` para esse símbolo: cria `PontoRede(ENTREGA, poste_id=None)`, mantém o poste real e seus
+  dependentes, deriva rede apenas de dois postes e ramal apenas de um poste mais uma entrega.
+  `relation_rules.py` exclui a entrega de `INSTALADA_EM`/`INSTALADO_EM`, e o agregado rejeita uma
+  relação confirmada desse tipo para a entrega.
+- **Vãos e IDs:** `VaoDetectado` preserva `ponto_origem_id`, `ponto_destino_id`, `tipo_trecho` e
+  `modalidade`, inclusive quando um endpoint de entrega não possui poste. IDs continuam derivados
+  por `uuid5`; a segunda promoção do mesmo resultado produz projeto idêntico, sem elementos, pontos
+  ou relações duplicados. Endpoint identificado sem prova de `PADRÃO` permanece `CONEXAO` e o
+  trecho fica `DESCONHECIDO`; modalidade não é inferida do tipo topológico.
+- **Regressões:** testes cobrem P1 e P5 como padrão, poste real próximo com estrutura/equipamento,
+  `RAMAL_CONEXAO`, `REDE_DISTRIBUICAO`, endpoint desconhecido, legenda negativa, codec legado,
+  IDs de endpoint em vãos e reexecução idempotente. A suíte focada com regiões terminou com
+  `103 passed in 2.64s`.
+- **Validações:** o comando Pytest obrigatório, executado com `-p no:cacheprovider --basetemp
+  tmp\\pytest-e05-required-final` porque o temporário global é restrito, terminou com
+  `110 passed in 4.20s`. `python -m mypy` terminou com `Success: no issues found in 306 source
+  files`; Ruff dirigido retornou `All checks passed!` e 13 arquivos formatados. A suíte Pytest
+  completa terminou com `923 passed in 120.71s`; `git diff --check` ficou limpo. Nenhum commit,
+  push, publicação, implantação ou outra ação externa foi executado.
+- **Handoff para E06:** consumir diretamente `Cabo.tipo_trecho`/`VaoDetectado.tipo_trecho` e montar
+  grau, percurso, fim/transição, deflexão e compatibilidade somente com `REDE_DISTRIBUICAO`.
+  `RAMAL_CONEXAO` e `DESCONHECIDO` ficam fora desses cálculos; `modalidade=DESCONHECIDO` não deve ser
+  convertida em aéreo por inferência. Preservar os IDs de ponto agora expostos, o fail-closed do
+  cluster, os defaults legados e o interpretador `21.0`. A projeção pública permanece reservada à
+  E08.
 
 ## E06 — Fim/transição, ângulo e compatibilidade pela topologia — #pendente
 

@@ -17,11 +17,13 @@ from zeny_project_handler.domain.catalog import CatalogoTecnico, TipoCabo
 from zeny_project_handler.domain.enums import (
     CategoriaElemento,
     EstadoRevisao,
+    ModalidadeTrecho,
     NivelRede,
     OrigemComprimentoVao,
     TipoDecisaoRevisao,
     TipoGeometria,
     TipoPontoRede,
+    TipoTrechoRede,
 )
 from zeny_project_handler.domain.project import (
     Cabo,
@@ -67,7 +69,10 @@ def promover_resultado_automatico(
         and item.categoria is proposal.categoria
     }
     poles = tuple(
-        proposal for proposal in cataloged.values() if proposal.categoria is CategoriaElemento.POSTE
+        proposal
+        for proposal in cataloged.values()
+        if proposal.categoria is CategoriaElemento.POSTE
+        and dict(proposal.atributos_sugeridos).get("tipo_ponto_rede") != TipoPontoRede.ENTREGA.value
     )
     relation_index = _relations_by_origin(relacoes)
     existing_elements = {element.id: element for element in projeto.elementos}
@@ -235,7 +240,35 @@ def _dependent_element(
         return None
     geometry = _cable_geometry(proposal.geometria)
     level = _network_level(catalog, cable_type.nivel_tensao_opcao_id)
-    endpoint_poles = _endpoint_poles(geometry, pole_proposals, element_ids)
+    attributes = dict(proposal.atributos_sugeridos)
+    explicit_endpoint_types: tuple[TipoPontoRede | None, TipoPontoRede | None] = (
+        (
+            TipoPontoRede.ENTREGA
+            if attributes.get("tipo_ponto_operacional_origem") == TipoPontoRede.ENTREGA.value
+            else None
+        ),
+        (
+            TipoPontoRede.ENTREGA
+            if attributes.get("tipo_ponto_operacional_destino") == TipoPontoRede.ENTREGA.value
+            else None
+        ),
+    )
+    endpoint_poles = _endpoint_poles(
+        geometry,
+        pole_proposals,
+        element_ids,
+        explicit_endpoint_types,
+    )
+    endpoint_types: tuple[TipoPontoRede, TipoPontoRede] = (
+        explicit_endpoint_types[0]
+        or (TipoPontoRede.POSTE if endpoint_poles[0] is not None else TipoPontoRede.CONEXAO),
+        explicit_endpoint_types[1]
+        or (TipoPontoRede.POSTE if endpoint_poles[1] is not None else TipoPontoRede.CONEXAO),
+    )
+    endpoint_labels = tuple(
+        _normalized_attribute(attributes.get(f"ponto_operacional_{suffix}"))
+        for suffix in ("origem", "destino")
+    )
     points = tuple(
         _network_point(
             element_id,
@@ -244,6 +277,8 @@ def _dependent_element(
             level,
             cable_type,
             endpoint_poles[index],
+            endpoint_types[index],
+            endpoint_labels[index],
         )
         for index in range(2)
     )
@@ -258,6 +293,8 @@ def _dependent_element(
             geometria=geometry,
             ponto_origem_id=points[0].id,
             ponto_destino_id=points[1].id,
+            tipo_trecho=_network_segment_type(endpoint_types),
+            modalidade=ModalidadeTrecho.DESCONHECIDO,
             comprimento_m=span_length,
             origem_comprimento=length_origin,
             postes_apoio_ids=pole_ids,
@@ -309,10 +346,14 @@ def _endpoint_poles(
     geometry: GeometriaDocumento,
     poles: tuple[PropostaElemento, ...],
     element_ids: dict[UUID, UUID],
+    explicit_types: tuple[TipoPontoRede | None, TipoPontoRede | None],
 ) -> tuple[UUID | None, UUID | None]:
     remaining = list(poles)
     selected: list[UUID | None] = []
-    for point in (geometry.pontos[0], geometry.pontos[-1]):
+    for index, point in enumerate((geometry.pontos[0], geometry.pontos[-1])):
+        if explicit_types[index] is TipoPontoRede.ENTREGA:
+            selected.append(None)
+            continue
         nearest = min(
             remaining,
             key=lambda pole: _point_distance(point, pole.geometria),
@@ -331,19 +372,42 @@ def _network_point(
     level: NivelRede,
     cable_type: TipoCabo,
     pole_id: UUID | None,
+    point_type: TipoPontoRede,
+    operational_label: str | None,
 ) -> PontoRede:
     suffix = "origem" if index == 0 else "destino"
     point = geometry.pontos[0] if index == 0 else geometry.pontos[-1]
     return PontoRede(
         id=uuid5(cable_id, f"ponto-{suffix}"),
         poste_id=pole_id,
-        nome=f"{cable_id}-{suffix}",
+        nome=(
+            f"{operational_label} - Padrão do cliente"
+            if point_type is TipoPontoRede.ENTREGA and operational_label
+            else operational_label or f"{cable_id}-{suffix}"
+        ),
         nivel_rede=level,
         nivel_tensao_opcao_id=cable_type.nivel_tensao_opcao_id,
         configuracao_fases_opcao_id=cable_type.configuracao_fases_opcao_id,
-        tipo=TipoPontoRede.POSTE if pole_id is not None else TipoPontoRede.CONEXAO,
+        tipo=point_type,
         geometria=GeometriaDocumento.ponto(geometry.pagina_id, point),
     )
+
+
+def _network_segment_type(
+    endpoint_types: tuple[TipoPontoRede, TipoPontoRede],
+) -> TipoTrechoRede:
+    delivery_count = endpoint_types.count(TipoPontoRede.ENTREGA)
+    pole_count = endpoint_types.count(TipoPontoRede.POSTE)
+    if delivery_count == 1 and pole_count == 1:
+        return TipoTrechoRede.RAMAL_CONEXAO
+    if pole_count == 2:
+        return TipoTrechoRede.REDE_DISTRIBUICAO
+    return TipoTrechoRede.DESCONHECIDO
+
+
+def _normalized_attribute(value: object) -> str | None:
+    normalized = str(value).strip() if value is not None else ""
+    return normalized or None
 
 
 def _coordinate(proposal: PropostaElemento) -> CoordenadaCampo | None:

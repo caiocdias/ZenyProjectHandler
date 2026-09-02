@@ -479,14 +479,21 @@ class CatalogoTecnico:
     @staticmethod
     def _validate_symbol_rules(rules: tuple[RegraSimbologia, ...]) -> None:
         combinations = {(rule.categoria_elemento, rule.situacao_projeto) for rule in rules}
+        source_drawing_situations = {
+            SituacaoProjeto.EXISTENTE,
+            SituacaoProjeto.INSTALAR,
+            SituacaoProjeto.REMOVER,
+        }
         expected = {
-            (category, situation) for category in CategoriaElemento for situation in SituacaoProjeto
+            (category, situation)
+            for category in CategoriaElemento
+            for situation in source_drawing_situations
         }
         if len(combinations) != len(rules):
             raise DomainValidationError("Regras de simbologia não podem repetir combinações")
         if combinations != expected:
             raise DomainValidationError(
-                "Catálogo deve possuir simbologia para toda categoria e situação"
+                "Catálogo deve possuir simbologia para toda categoria e situação de origem"
             )
 
     @staticmethod
@@ -509,8 +516,15 @@ class CatalogoTecnico:
         if len(keys) != len(signatures):
             raise DomainValidationError("Assinaturas visuais não podem ser duplicadas")
         covered_situations = {signature.situacao_projeto for signature in signatures}
-        if covered_situations != set(SituacaoProjeto):
-            raise DomainValidationError("Assinaturas visuais devem cobrir todas as situações")
+        source_drawing_situations = {
+            SituacaoProjeto.EXISTENTE,
+            SituacaoProjeto.INSTALAR,
+            SituacaoProjeto.REMOVER,
+        }
+        if covered_situations != source_drawing_situations:
+            raise DomainValidationError(
+                "Assinaturas visuais devem cobrir todas as situações de origem"
+            )
 
     def itens_ativos(self, categoria: CategoriaElemento) -> tuple[ItemCatalogoType, ...]:
         return tuple(item for item in self.itens if item.ativo and item.categoria is categoria)

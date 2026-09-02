@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import math
 import re
+import unicodedata
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from uuid import UUID, uuid5
 
@@ -16,7 +17,11 @@ from zeny_project_handler.domain.analysis import (
     ReferenciaProposta,
 )
 from zeny_project_handler.domain.documents import DocumentoProjeto
-from zeny_project_handler.domain.enums import CategoriaElemento, TipoEvidencia
+from zeny_project_handler.domain.enums import (
+    CategoriaElemento,
+    TipoEvidencia,
+    TipoPontoRede,
+)
 from zeny_project_handler.domain.values import (
     CoordenadaCampo,
     GeometriaDocumento,
@@ -30,6 +35,8 @@ _DEFAULT_REGION_DISTANCE = 0.10
 _COORDINATE_REGION_DISTANCE = 0.18
 _POINT_ANCHOR_DISTANCE = 0.10
 _POINT_COMPONENT_ATTACHMENT_DISTANCE = 0.06
+_POINT_QUALIFIER_DISTANCE = 0.10
+_POINT_QUALIFIER_AMBIGUITY_MARGIN = 0.005
 _POINT_LABEL_PATTERN = re.compile(
     r"^\s*(?:PONTO\s+)?P\s*[-.:]?\s*0*(\d{1,4})\s*$",
     re.IGNORECASE,
@@ -73,6 +80,249 @@ class _CoordinateCandidate:
 class _PointAnchor:
     label: str
     geometry: GeometriaDocumento
+    evidence_id: UUID
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PontoEntregaDetectado:
+    """Cluster operacional que prova um ponto de entrega navegável."""
+
+    rotulo_ponto: str
+    pagina_id: UUID
+    geometria: GeometriaDocumento
+    elemento_ids: tuple[UUID, ...]
+    evidencia_ids: tuple[UUID, ...]
+    evidencia_padrao_id: UUID
+
+
+def classificar_pontos_de_entrega(
+    propostas: tuple[PropostaElemento, ...],
+    evidencias: tuple[EvidenciaDocumento, ...],
+) -> tuple[PropostaElemento, ...]:
+    """Anote somente o ponto P e o endpoint geometricamente ligados a PADRÃO."""
+    entregas = detectar_pontos_de_entrega(propostas, evidencias)
+    entrega_por_elemento = {
+        elemento_id: entrega for entrega in entregas for elemento_id in entrega.elemento_ids
+    }
+    classificados: list[PropostaElemento] = []
+    for proposta in propostas:
+        atributos = dict(proposta.atributos_sugeridos)
+        evidencias_adicionais: set[UUID] = set()
+        justificativas: list[str] = []
+        entrega = entrega_por_elemento.get(proposta.id)
+        if (
+            proposta.categoria is CategoriaElemento.POSTE
+            and entrega is not None
+            and atributos.get("identificador_operacional") == entrega.rotulo_ponto
+        ):
+            atributos.update(
+                {
+                    "tipo_ponto_rede": TipoPontoRede.ENTREGA.value,
+                    "evidencia_padrao_id": str(entrega.evidencia_padrao_id),
+                }
+            )
+            evidencias_adicionais.update(entrega.evidencia_ids)
+            justificativas.append(
+                f"O cluster de {entrega.rotulo_ponto} contém evidência inequívoca de PADRÃO."
+            )
+        if (
+            proposta.categoria is CategoriaElemento.CABO
+            and atributos.get("geometria_cabo_origem") == "vetor_associado_geometricamente"
+        ):
+            for indice, sufixo in enumerate(("origem", "destino")):
+                rotulo = atributos.get(f"ponto_operacional_{sufixo}")
+                if not isinstance(rotulo, str):
+                    continue
+                ponto = proposta.geometria.pontos[0 if indice == 0 else -1]
+                entrega_endpoint = _entrega_unica_proxima(
+                    rotulo,
+                    proposta.geometria.pagina_id,
+                    (float(ponto.x), float(ponto.y)),
+                    entregas,
+                )
+                if entrega_endpoint is None:
+                    continue
+                atributos.update(
+                    {
+                        f"tipo_ponto_operacional_{sufixo}": TipoPontoRede.ENTREGA.value,
+                        f"evidencia_padrao_{sufixo}_id": str(entrega_endpoint.evidencia_padrao_id),
+                    }
+                )
+                evidencias_adicionais.update(entrega_endpoint.evidencia_ids)
+                justificativas.append(
+                    f"A extremidade {rotulo} coincide geometricamente com seu cluster PADRÃO."
+                )
+        if not evidencias_adicionais:
+            classificados.append(proposta)
+            continue
+        classificados.append(
+            replace(
+                proposta,
+                evidencia_ids=tuple(
+                    sorted({*proposta.evidencia_ids, *evidencias_adicionais}, key=str)
+                ),
+                atributos_sugeridos=tuple(sorted(atributos.items())),
+                justificativa=" ".join(
+                    parte for parte in (proposta.justificativa, *justificativas) if parte
+                ),
+            )
+        )
+    return tuple(classificados)
+
+
+def detectar_pontos_de_entrega(
+    propostas: tuple[PropostaElemento, ...],
+    evidencias: tuple[EvidenciaDocumento, ...],
+) -> tuple[PontoEntregaDetectado, ...]:
+    """Resolva P + PADRÃO por cluster; empate ou distância excessiva falha fechado."""
+    evidencias_projeto = evidencias_sem_anotacoes_de_revisao(evidencias)
+    regioes = agrupar_regioes_da_analise(
+        propostas,
+        evidencias_projeto,
+        (),
+        ordem_paginas=tuple(dict.fromkeys(item.pagina_id for item in evidencias_projeto)),
+    )
+    regioes_rotuladas = tuple(regiao for regiao in regioes if regiao.rotulo_ponto)
+    qualificadores = tuple(
+        item
+        for item in evidencias_projeto
+        if item.tipo in {TipoEvidencia.TEXTO, TipoEvidencia.OCR}
+        and _texto_padrao(item.conteudo_bruto)
+    )
+    qualificadores_por_regiao: dict[UUID, list[EvidenciaDocumento]] = {}
+    for qualificador in qualificadores:
+        regiao = _regiao_unica_proxima(qualificador.geometria, regioes_rotuladas)
+        if regiao is not None:
+            qualificadores_por_regiao.setdefault(regiao.id, []).append(qualificador)
+    ancoras = _point_anchors(evidencias_projeto)
+    propostas_por_id = {item.id: item for item in propostas}
+    evidencias_por_id = {str(item.id): item for item in evidencias_projeto}
+    detectados: list[PontoEntregaDetectado] = []
+    for regiao in regioes_rotuladas:
+        marcadores = qualificadores_por_regiao.get(regiao.id, ())
+        if not marcadores or regiao.rotulo_ponto is None:
+            continue
+        ancora = min(
+            (
+                item
+                for item in ancoras
+                if item.label == regiao.rotulo_ponto and item.geometry.pagina_id == regiao.pagina_id
+            ),
+            key=lambda item: (
+                _box_gap(item.geometry, regiao.geometria),
+                str(item.evidence_id),
+            ),
+            default=None,
+        )
+        if ancora is None:
+            ancora = min(
+                (
+                    _PointAnchor(
+                        label=regiao.rotulo_ponto,
+                        geometry=evidencia.geometria,
+                        evidence_id=evidencia.id,
+                    )
+                    for elemento_id in regiao.elemento_ids
+                    if (proposta := propostas_por_id.get(elemento_id)) is not None
+                    if dict(proposta.atributos_sugeridos).get("identificador_operacional")
+                    == regiao.rotulo_ponto
+                    if (
+                        evidencia := evidencias_por_id.get(
+                            str(
+                                dict(proposta.atributos_sugeridos).get("evidencia_identificador_id")
+                            )
+                        )
+                    )
+                    is not None
+                ),
+                key=lambda item: (
+                    _box_gap(item.geometry, regiao.geometria),
+                    str(item.evidence_id),
+                ),
+                default=None,
+            )
+        if ancora is None:
+            continue
+        evidence_ids = tuple(
+            sorted(
+                {ancora.evidence_id, *(item.id for item in marcadores)},
+                key=str,
+            )
+        )
+        detectados.append(
+            PontoEntregaDetectado(
+                rotulo_ponto=regiao.rotulo_ponto,
+                pagina_id=regiao.pagina_id,
+                geometria=ancora.geometry,
+                elemento_ids=regiao.elemento_ids,
+                evidencia_ids=evidence_ids,
+                evidencia_padrao_id=min((item.id for item in marcadores), key=str),
+            )
+        )
+    por_chave: dict[tuple[UUID, str], list[PontoEntregaDetectado]] = {}
+    for detectado in detectados:
+        por_chave.setdefault((detectado.pagina_id, detectado.rotulo_ponto), []).append(detectado)
+    return tuple(
+        sorted(
+            (itens[0] for itens in por_chave.values() if len(itens) == 1),
+            key=lambda item: (str(item.pagina_id), item.rotulo_ponto),
+        )
+    )
+
+
+def _entrega_unica_proxima(
+    rotulo: str,
+    pagina_id: UUID,
+    ponto: tuple[float, float],
+    entregas: tuple[PontoEntregaDetectado, ...],
+) -> PontoEntregaDetectado | None:
+    candidatas = tuple(
+        item
+        for item in entregas
+        if item.rotulo_ponto == rotulo
+        and item.pagina_id == pagina_id
+        and math.dist(ponto, _center(item.geometria)) <= _POINT_QUALIFIER_DISTANCE
+    )
+    return candidatas[0] if len(candidatas) == 1 else None
+
+
+def _regiao_unica_proxima(
+    geometria: GeometriaDocumento,
+    regioes: tuple[RegiaoAnalise, ...],
+) -> RegiaoAnalise | None:
+    candidatas = sorted(
+        (
+            (_box_gap(geometria, regiao.geometria), regiao)
+            for regiao in regioes
+            if regiao.pagina_id == geometria.pagina_id
+            and _box_gap(geometria, regiao.geometria) <= _POINT_QUALIFIER_DISTANCE
+        ),
+        key=lambda item: (item[0], str(item[1].id)),
+    )
+    if not candidatas:
+        return None
+    if (
+        len(candidatas) > 1
+        and candidatas[1][0] - candidatas[0][0] <= _POINT_QUALIFIER_AMBIGUITY_MARGIN
+    ):
+        return None
+    return candidatas[0][1]
+
+
+def _texto_padrao(value: str | None) -> bool:
+    if not value:
+        return False
+    decomposed = unicodedata.normalize("NFKD", value)
+    normalized = "".join(
+        character for character in decomposed if not unicodedata.combining(character)
+    )
+    normalized = " ".join(normalized.upper().split())
+    return bool(
+        re.fullmatch(
+            r"(?:(?:PONTO\s+)?P\s*[-.:]?\s*0*\d{1,4}\s+)?PADRAO(?: DO CLIENTE)?",
+            normalized,
+        )
+    )
 
 
 def agrupar_regioes_da_analise(
@@ -264,7 +514,13 @@ def _point_anchors(
         if match is None:
             continue
         label = f"P{int(match.group(1))}"
-        anchors.append(_PointAnchor(label=label, geometry=item.geometria))
+        anchors.append(
+            _PointAnchor(
+                label=label,
+                geometry=item.geometria,
+                evidence_id=item.id,
+            )
+        )
     return tuple(anchors)
 
 

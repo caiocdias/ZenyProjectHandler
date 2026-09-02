@@ -34,7 +34,6 @@ from .rule_support import (
     situation_from_evidence,
     structure_tokens,
 )
-from .span_rules import detectar_comprimento_anotado
 
 _POLE_DIMENSION_PATTERN = re.compile(
     r"(?<!\d)(9|10|11|12|13|15|18)\s*M?(?:\s*[-/:X]\s*|\s+)"
@@ -115,12 +114,16 @@ class AnalisadorCatalogoPorCodigo:
         item: ItemCatalogoType,
         ambiguous: bool,
     ) -> PropostaElemento:
-        contextual = nearest_context_evidence(
-            evidence,
-            request.evidencias,
-            rule.distancia_contexto_maxima,
+        contextual = (
+            None
+            if self.categoria is CategoriaElemento.CABO
+            else nearest_context_evidence(
+                evidence,
+                request.evidencias,
+                rule.distancia_contexto_maxima,
+            )
         )
-        override = project_situation_override(evidence, request.evidencias)
+        override = project_situation_override(evidence, request.evidencias, self.categoria)
         situation = override[0] if override is not None else None
         if situation is None and contextual is not None:
             situation = situation_from_evidence(contextual, self.categoria, request.catalogo)
@@ -325,7 +328,7 @@ class AnalisadorEstruturaBt(_AnalisadorEstruturaPorCodigo):
 
 class AnalisadorCabo(AnalisadorCatalogoPorCodigo):
     nome = "cabo-codigo-e-nomenclatura"
-    versao = "3.0"
+    versao = "4.0"
     categoria = CategoriaElemento.CABO
 
     def analisar(
@@ -354,17 +357,6 @@ class AnalisadorCabo(AnalisadorCatalogoPorCodigo):
                     evidence,
                     self.categoria,
                 )
-                contextual = nearest_context_evidence(
-                    evidence,
-                    solicitacao.evidencias,
-                    regra.distancia_contexto_maxima,
-                )
-                geometry = (
-                    contextual.geometria
-                    if contextual is not None
-                    and contextual.geometria.tipo is TipoGeometria.POLILINHA
-                    else evidence.geometria
-                )
                 proposals.append(
                     PropostaElemento(
                         id=uuid5(
@@ -376,7 +368,7 @@ class AnalisadorCabo(AnalisadorCatalogoPorCodigo):
                         situacao_projeto=situation,
                         estado_revisao=EstadoRevisao.CONFLITANTE,
                         evidencia_ids=evidence_ids,
-                        geometria=geometry,
+                        geometria=evidence.geometria,
                         codigo_observado=observed,
                         atributos_sugeridos=(
                             ("catalogo_nao_localizado", True),
@@ -390,17 +382,16 @@ class AnalisadorCabo(AnalisadorCatalogoPorCodigo):
                         ),
                     )
                 )
-        with_lengths = tuple(_with_nearby_span_length(item, solicitacao) for item in proposals)
         return tuple(
             item
-            for item in with_lengths
+            for item in proposals
             if item.confianca is None or item.confianca >= solicitacao.configuracao.confianca_minima
         )
 
 
 class AnalisadorEquipamento(AnalisadorCatalogoPorCodigo):
     nome = "equipamento-codigo-e-nomenclatura"
-    versao = "3.1"
+    versao = "3.2"
     categoria = CategoriaElemento.EQUIPAMENTO
 
     def _matches_catalog_item(self, text: str, item: ItemCatalogoType) -> bool:
@@ -412,18 +403,19 @@ class AnalisadorEquipamento(AnalisadorCatalogoPorCodigo):
         }
         if catalog_nomenclature is not None and catalog_nomenclature in observed_nomenclatures:
             return True
-        aliases = {item.codigo}
+        aliases = {(item.codigo, False)}
         if item.codigo.startswith("-"):
-            aliases.add(item.codigo[1:])
-        aliases.update(alias.replace(",", ".") for alias in tuple(aliases))
+            aliases.add((item.codigo[1:], True))
+        aliases.update((alias.replace(",", "."), strict) for alias, strict in tuple(aliases))
         return any(
             re.search(
-                rf"(?<![A-Z0-9]){re.escape(normalized_text(alias))}"
-                rf"(?:\s*KVA)?(?![A-Z0-9])",
+                rf"(?<![A-Z0-9{'-' if strict else ''}])"
+                rf"{re.escape(normalized_text(alias))}(?:\s*KVA)?"
+                rf"(?![A-Z0-9{'-' if strict else ''}])",
                 normalized,
             )
             is not None
-            for alias in aliases
+            for alias, strict in aliases
         )
 
     def analisar(
@@ -624,12 +616,16 @@ def _situation_and_evidence(
     evidence: EvidenciaDocumento,
     category: CategoriaElemento,
 ) -> tuple[SituacaoProjeto, tuple[UUID, ...]]:
-    contextual = nearest_context_evidence(
-        evidence,
-        request.evidencias,
-        rule.distancia_contexto_maxima,
+    contextual = (
+        None
+        if category is CategoriaElemento.CABO
+        else nearest_context_evidence(
+            evidence,
+            request.evidencias,
+            rule.distancia_contexto_maxima,
+        )
     )
-    override = project_situation_override(evidence, request.evidencias)
+    override = project_situation_override(evidence, request.evidencias, category)
     situation = override[0] if override is not None else None
     if situation is None:
         situation = (
@@ -716,29 +712,6 @@ def _with_nearby_coordinate(
     return replace(
         proposal,
         evidencia_ids=tuple(sorted({*proposal.evidencia_ids, *evidence_ids}, key=str)),
-        atributos_sugeridos=tuple(attributes.items()),
-    )
-
-
-def _with_nearby_span_length(
-    proposal: PropostaElemento,
-    request: SolicitacaoInterpretacao,
-) -> PropostaElemento:
-    detected = detectar_comprimento_anotado(proposal.geometria, request.evidencias)
-    if detected is None:
-        return proposal
-    length, evidence = detected
-    attributes = dict(proposal.atributos_sugeridos)
-    attributes.update(
-        {
-            "comprimento_m": length,
-            "comprimento_origem": "anotacao_desenho",
-            "evidencia_comprimento_id": str(evidence.id),
-        }
-    )
-    return replace(
-        proposal,
-        evidencia_ids=tuple(sorted({*proposal.evidencia_ids, evidence.id}, key=str)),
         atributos_sugeridos=tuple(attributes.items()),
     )
 

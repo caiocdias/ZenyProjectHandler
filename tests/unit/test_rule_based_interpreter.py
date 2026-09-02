@@ -4,11 +4,15 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-from uuid import uuid4, uuid5
+from uuid import UUID, uuid4, uuid5
 
 import pytest
 from tests.interpretation_factories import image_evidence, text_evidence, vector_evidence
-from tests.pdf_fixtures import create_e01_structure_occurrences_pdf
+from tests.pdf_fixtures import (
+    create_e01_span_change_pdf,
+    create_e01_structure_occurrences_pdf,
+    create_e01_switch_bags_pdf,
+)
 
 from zeny_project_handler.adapters.analysis import PyMuPdfDocumentAnalyzer
 from zeny_project_handler.adapters.interpretation import (
@@ -17,7 +21,7 @@ from zeny_project_handler.adapters.interpretation import (
 )
 from zeny_project_handler.adapters.interpretation.rule_based import AnalisadorEstruturaMt
 from zeny_project_handler.adapters.pdf import PyMuPdfReader
-from zeny_project_handler.domain.analysis import OrigemObjetoPdf
+from zeny_project_handler.domain.analysis import EvidenciaDocumento, OrigemObjetoPdf
 from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.domain.enums import (
     CategoriaElemento,
@@ -510,8 +514,7 @@ def test_cable_uses_solid_path_between_same_situation_poles(
     assert all(solid_path.id in item.evidencia_ids for item in cables)
     assert all(dashed_path.id not in item.evidencia_ids for item in cables)
     assert {dict(item.atributos_sugeridos)["geometria_cabo_origem"] for item in cables} == {
-        "vetor_ligando_postes",
-        "vetor_compartilhado_do_vao",
+        "vetor_associado_geometricamente"
     }
     assert all(item.evidencia_ids == tuple(sorted(item.evidencia_ids, key=str)) for item in cables)
     assert all(
@@ -535,6 +538,417 @@ def test_cable_uses_solid_path_between_same_situation_poles(
             and proposals_by_id[relation.destino_referencia_id].categoria is CategoriaElemento.POSTE
         }
         assert connected_pole_ids == installed_pole_ids
+
+
+def test_e04_span_reduction_keeps_current_length_and_does_not_capture_service_drop_label(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    request, evidence = _e04_span_change_request(catalogo_inicial)
+    interpreter = InterpretadorRegrasExplicitas(request.registro)
+
+    result = interpreter.interpretar(request)
+    repeated = interpreter.interpretar(request)
+    permuted = interpreter.interpretar(
+        replace(request, evidencias=tuple(reversed(request.evidencias)))
+    )
+
+    assert result == repeated
+    assert result == permuted
+    cables = tuple(item for item in result.elementos if item.categoria is CategoriaElemento.CABO)
+    assert len(cables) == 2
+    cable = next(
+        item
+        for item in cables
+        if dict(item.atributos_sugeridos).get("alteracao_cabo") == "REDUCAO_COMPRIMENTO"
+    )
+    attributes = dict(cable.atributos_sugeridos)
+    assert cable.situacao_projeto is SituacaoProjeto.ALTERAR
+    assert attributes["comprimento_m"] == Decimal("269")
+    assert attributes["comprimento_substituido_m"] == Decimal("321")
+    assert attributes["alteracao_cabo"] == "REDUCAO_COMPRIMENTO"
+    assert attributes["evidencia_comprimento_id"] == str(evidence["current_length"].id)
+    assert attributes["evidencia_comprimento_substituido_id"] == str(
+        evidence["superseded_length"].id
+    )
+    assert attributes["evidencia_supersessao_id"] == str(evidence["strike"].id)
+    assert "identificador_operacional" not in attributes
+    assert "evidencia_identificador_id" not in attributes
+    assert evidence["span_identifier"].id not in cable.evidencia_ids
+    assert evidence["service_drop"].id not in cable.evidencia_ids
+    assert cable.geometria == GeometriaDocumento.polilinha(
+        evidence["main_path"].pagina_id,
+        tuple(reversed(evidence["main_path"].geometria.pontos)),
+    )
+    assert {
+        evidence["main_path"].id,
+        evidence["current_length"].id,
+        evidence["superseded_length"].id,
+        evidence["strike"].id,
+    }.issubset(cable.evidencia_ids)
+    connected_labels = {
+        dict(element.atributos_sugeridos).get("identificador_operacional")
+        for relation in result.relacoes
+        if relation.origem_referencia_id == cable.id and relation.tipo_relacao == "CONECTA"
+        for element in result.elementos
+        if element.id == relation.destino_referencia_id
+    }
+    assert connected_labels == {"P1", "P2"}
+    service_drop_cable = next(item for item in cables if item.id != cable.id)
+    service_drop_attributes = dict(service_drop_cable.atributos_sugeridos)
+    assert service_drop_cable.geometria == evidence["service_drop"].geometria
+    assert service_drop_attributes["identificador_operacional"] == "V1-2"
+    assert service_drop_attributes["evidencia_identificador_id"] == str(
+        evidence["span_identifier"].id
+    )
+    assert "comprimento_m" not in service_drop_attributes
+
+
+def test_e04_extracted_span_change_fixture_preserves_supersession_evidence(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    fixture_path = create_e01_span_change_pdf(tmp_path / "e04-span-change.pdf")
+    inspection = PyMuPdfReader().inspecionar(fixture_path)
+    project_id = uuid4()
+    extraction_id = uuid4()
+    extraction = PyMuPdfDocumentAnalyzer().analisar(
+        SolicitacaoAnaliseDocumento(
+            projeto_id=project_id,
+            documento=inspection.documento,
+            fonte=ReferenciaFontePdf(
+                documento_id=inspection.documento.id,
+                projeto_id=project_id,
+                caminho_canonico=fixture_path,
+                sha256=inspection.documento.sha256,
+                tamanho_bytes=inspection.tamanho_bytes,
+                modificado_em_ns=inspection.modificado_em_ns,
+            ),
+            execucao_id=extraction_id,
+            criada_em=datetime(2026, 9, 1, 22, tzinfo=UTC),
+        )
+    )
+    registry = carregar_registro_regras_inicial()
+    result = InterpretadorRegrasExplicitas(registry).interpretar(
+        SolicitacaoInterpretacao(
+            projeto_id=project_id,
+            execucao_id=uuid4(),
+            execucao_extracao_id=extraction_id,
+            catalogo=catalogo_inicial,
+            evidencias=extraction.evidencias,
+            registro=registry,
+        )
+    )
+
+    cable = next(item for item in result.elementos if item.categoria is CategoriaElemento.CABO)
+    attributes = dict(cable.atributos_sugeridos)
+    evidence_by_content = {
+        item.conteudo_bruto: item
+        for item in extraction.evidencias
+        if item.conteudo_bruto in {"321 m", "269 m"}
+    }
+    assert cable.situacao_projeto is SituacaoProjeto.ALTERAR
+    assert attributes["comprimento_m"] == Decimal("269")
+    assert attributes["comprimento_substituido_m"] == Decimal("321")
+    assert attributes["evidencia_comprimento_id"] == str(evidence_by_content["269 m"].id)
+    assert attributes["evidencia_comprimento_substituido_id"] == str(
+        evidence_by_content["321 m"].id
+    )
+    assert evidence_by_content["269 m"].id in cable.evidencia_ids
+    assert evidence_by_content["321 m"].id in cable.evidencia_ids
+    supersession_id = UUID(str(attributes["evidencia_supersessao_id"]))
+    supersession = next(item for item in extraction.evidencias if item.id == supersession_id)
+    assert dict(supersession.atributos_extraidos).get("cor_contorno") == "#8C0033"
+
+
+@pytest.mark.parametrize("case", ("parallel", "crossing"))
+def test_e04_ambiguous_parallel_or_crossing_paths_do_not_capture_cable_label(
+    catalogo_inicial: CatalogoTecnico,
+    case: str,
+) -> None:
+    request, label = _e04_ambiguous_paths_request(catalogo_inicial, case)
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
+
+    cable = next(item for item in result.elementos if item.categoria is CategoriaElemento.CABO)
+    attributes = dict(cable.atributos_sugeridos)
+    assert cable.geometria == label.geometria
+    assert "evidencia_geometria_id" not in attributes
+    assert "identificador_operacional" not in attributes
+
+
+def test_e04_ambiguous_span_labels_leave_geometrically_valid_cable_unidentified(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    request, path = _e04_ambiguous_identifier_request(catalogo_inicial)
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
+
+    cable = next(item for item in result.elementos if item.categoria is CategoriaElemento.CABO)
+    attributes = dict(cable.atributos_sugeridos)
+    assert cable.geometria == path.geometria
+    assert attributes["evidencia_geometria_id"] == str(path.id)
+    assert "identificador_operacional" not in attributes
+    assert "evidencia_identificador_id" not in attributes
+
+
+def _e04_span_change_request(
+    catalog: CatalogoTecnico,
+) -> tuple[SolicitacaoInterpretacao, dict[str, EvidenciaDocumento]]:
+    request = _request(catalog)
+    page_id = request.evidencias[0].pagina_id
+    pole_code = request.evidencias[0].conteudo_bruto
+    cable_code = request.evidencias[3].conteudo_bruto
+    assert pole_code is not None and cable_code is not None
+    cable_label = replace(
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e04-cable-label",
+            text=cable_code,
+            x="0.52",
+            y="0.47",
+            color="#008000",
+        ),
+        tipo=TipoEvidencia.OCR,
+        atributos_extraidos=(
+            ("cor_preenchimento", "#008000"),
+            ("motor_ocr", "tesseract-rotulo-linear-retificado"),
+            ("rotacao_graus", Decimal(0)),
+        ),
+    )
+    service_drop_label = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=page_id,
+        key="e04-service-drop-cable-label",
+        text=cable_code,
+        x="0.89",
+        y="0.58",
+    )
+    main_path = vector_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=page_id,
+        key="e04-main-path-reversed",
+        points=(("0.82", "0.50"), ("0.18", "0.50")),
+        color="#008000",
+    )
+    service_drop = vector_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=page_id,
+        key="e04-service-drop",
+        points=(("0.82", "0.50"), ("0.95", "0.68")),
+    )
+    superseded_length = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=page_id,
+        key="e04-superseded-length",
+        text="321 m",
+        x="0.40",
+        y="0.47",
+    )
+    current_length = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=page_id,
+        key="e04-current-length",
+        text="269 m",
+        x="0.62",
+        y="0.47",
+    )
+    strike = vector_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=page_id,
+        key="e04-local-strike",
+        points=(("0.37", "0.47"), ("0.43", "0.47")),
+        color="#8C0033",
+    )
+    span_identifier = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=page_id,
+        key="e04-service-drop-identifier",
+        text="V1-2",
+        x="0.90",
+        y="0.61",
+    )
+    evidence = (
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e04-pole-1",
+            text=pole_code,
+            x="0.18",
+            y="0.50",
+            color="#008000",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e04-pole-2",
+            text=pole_code,
+            x="0.82",
+            y="0.50",
+            color="#008000",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e04-point-1",
+            text="P1",
+            x="0.18",
+            y="0.48",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e04-point-2",
+            text="P2",
+            x="0.82",
+            y="0.48",
+        ),
+        cable_label,
+        service_drop_label,
+        main_path,
+        service_drop,
+        superseded_length,
+        current_length,
+        strike,
+        span_identifier,
+    )
+    return replace(request, evidencias=evidence), {
+        "main_path": main_path,
+        "service_drop": service_drop,
+        "superseded_length": superseded_length,
+        "current_length": current_length,
+        "strike": strike,
+        "span_identifier": span_identifier,
+    }
+
+
+def _e04_ambiguous_paths_request(
+    catalog: CatalogoTecnico,
+    case: str,
+) -> tuple[SolicitacaoInterpretacao, EvidenciaDocumento]:
+    request = _request(catalog)
+    page_id = request.evidencias[0].pagina_id
+    pole_code = request.evidencias[0].conteudo_bruto
+    cable_code = request.evidencias[3].conteudo_bruto
+    assert pole_code is not None and cable_code is not None
+    paths = (
+        (
+            (("0.20", "0.47"), ("0.80", "0.47")),
+            (("0.20", "0.53"), ("0.80", "0.53")),
+        )
+        if case == "parallel"
+        else (
+            (("0.20", "0.30"), ("0.80", "0.70")),
+            (("0.20", "0.70"), ("0.80", "0.30")),
+        )
+    )
+    endpoint_coordinates = tuple(point for path in paths for point in path)
+    pole_evidence = tuple(
+        item
+        for index, (x, y) in enumerate(endpoint_coordinates, start=1)
+        for item in (
+            text_evidence(
+                execution_id=request.execucao_extracao_id,
+                page_id=page_id,
+                key=f"e04-{case}-pole-{index}",
+                text=pole_code,
+                x=x,
+                y=y,
+                color="#008000",
+            ),
+            text_evidence(
+                execution_id=request.execucao_extracao_id,
+                page_id=page_id,
+                key=f"e04-{case}-point-{index}",
+                text=f"P{index}",
+                x=x,
+                y=str(Decimal(y) - Decimal("0.02")),
+            ),
+        )
+    )
+    label = text_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=page_id,
+        key=f"e04-{case}-cable-label",
+        text=cable_code,
+        x="0.50",
+        y="0.50",
+        color="#008000",
+    )
+    path_evidence = tuple(
+        vector_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key=f"e04-{case}-path-{index}",
+            points=points,
+            color="#008000",
+        )
+        for index, points in enumerate(paths, start=1)
+    )
+    return replace(request, evidencias=(*pole_evidence, label, *path_evidence)), label
+
+
+def _e04_ambiguous_identifier_request(
+    catalog: CatalogoTecnico,
+) -> tuple[SolicitacaoInterpretacao, EvidenciaDocumento]:
+    request = _request(catalog)
+    page_id = request.evidencias[0].pagina_id
+    pole_code = request.evidencias[0].conteudo_bruto
+    cable_code = request.evidencias[3].conteudo_bruto
+    assert pole_code is not None and cable_code is not None
+    path = vector_evidence(
+        execution_id=request.execucao_extracao_id,
+        page_id=page_id,
+        key="e04-ambiguous-identifier-path",
+        points=(("0.20", "0.50"), ("0.80", "0.50")),
+        color="#008000",
+    )
+    evidence = (
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e04-ambiguous-identifier-pole",
+            text=pole_code,
+            x="0.20",
+            y="0.50",
+            color="#008000",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e04-ambiguous-identifier-point",
+            text="P1",
+            x="0.20",
+            y="0.48",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e04-ambiguous-identifier-cable",
+            text=cable_code,
+            x="0.50",
+            y="0.47",
+            color="#008000",
+        ),
+        path,
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e04-ambiguous-identifier-v12",
+            text="V1-2",
+            x="0.50",
+            y="0.46",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e04-ambiguous-identifier-v13",
+            text="V1-3",
+            x="0.50",
+            y="0.46",
+        ),
+    )
+    return replace(request, evidencias=evidence), path
 
 
 def test_rule_interpreter_is_deterministic_and_does_not_match_code_as_substring(
@@ -668,6 +1082,139 @@ def test_e01_structure_fixture_preserves_physical_occurrences_and_qualifiers(
     assert any(physical_s3r[1].id in item.evidencia_ids for item in s3r)
     assert len({item.id for item in structures}) == len(structures)
     assert all("identidade_ocorrencia" in dict(item.atributos_sugeridos) for item in structures)
+
+
+def test_e03_switch_bags_apply_only_to_the_geometrically_linked_full_nomenclature(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    fixture_path = create_e01_switch_bags_pdf(tmp_path / "e03-switches.pdf")
+    inspection = PyMuPdfReader().inspecionar(fixture_path)
+    project_id = uuid4()
+    extraction_id = uuid4()
+    extraction = PyMuPdfDocumentAnalyzer().analisar(
+        SolicitacaoAnaliseDocumento(
+            projeto_id=project_id,
+            documento=inspection.documento,
+            fonte=ReferenciaFontePdf(
+                documento_id=inspection.documento.id,
+                projeto_id=project_id,
+                caminho_canonico=fixture_path,
+                sha256=inspection.documento.sha256,
+                tamanho_bytes=inspection.tamanho_bytes,
+                modificado_em_ns=inspection.modificado_em_ns,
+            ),
+            execucao_id=extraction_id,
+            criada_em=datetime(2026, 9, 1, 21, tzinfo=UTC),
+        )
+    )
+    technical_labels = tuple(
+        sorted(
+            (
+                item
+                for item in extraction.evidencias
+                if item.tipo is TipoEvidencia.TEXTO
+                and item.conteudo_bruto
+                in {
+                    "100A-10KA-2H",
+                    "100A-10KA-5H",
+                    "280835-300A-12T",
+                    "321 m",
+                }
+            ),
+            key=lambda item: (
+                min(point.y for point in item.geometria.pontos),
+                min(point.x for point in item.geometria.pontos),
+                item.conteudo_bruto or "",
+            ),
+        )
+    )
+    point_labels = tuple(
+        text_evidence(
+            execution_id=extraction_id,
+            page_id=item.pagina_id,
+            key=f"e03-point-{index}",
+            text=f"P{20 + index}",
+            x=str(
+                (
+                    min(point.x for point in item.geometria.pontos)
+                    + max(point.x for point in item.geometria.pontos)
+                )
+                / 2
+            ),
+            y=str(
+                (
+                    min(point.y for point in item.geometria.pontos)
+                    + max(point.y for point in item.geometria.pontos)
+                )
+                / 2
+            ),
+        )
+        for index, item in enumerate(technical_labels)
+    )
+    registry = carregar_registro_regras_inicial()
+    request = SolicitacaoInterpretacao(
+        projeto_id=project_id,
+        execucao_id=uuid4(),
+        execucao_extracao_id=extraction_id,
+        catalogo=catalogo_inicial,
+        evidencias=(*extraction.evidencias, *point_labels),
+        registro=registry,
+    )
+
+    result = InterpretadorRegrasExplicitas(registry).interpretar(request)
+
+    equipment = tuple(
+        item for item in result.elementos if item.categoria is CategoriaElemento.EQUIPAMENTO
+    )
+    assert [item.codigo_observado for item in equipment].count("100A-10KA-2H") == 2
+    assert [item.codigo_observado for item in equipment].count("100A-10KA-5H") == 2
+    assert {item.codigo_observado for item in equipment} == {
+        "100A-10KA-2H",
+        "100A-10KA-5H",
+    }
+    assert [item.situacao_projeto for item in equipment].count(SituacaoProjeto.INSTALAR) == 2
+    assert [item.situacao_projeto for item in equipment].count(SituacaoProjeto.EXISTENTE) == 2
+    installed = tuple(
+        item for item in equipment if item.situacao_projeto is SituacaoProjeto.INSTALAR
+    )
+    assert {item.codigo_observado for item in installed} == {
+        "100A-10KA-2H",
+        "100A-10KA-5H",
+    }
+    assert all(
+        dict(item.atributos_sugeridos)["situacao_inferida_bolha"] is True for item in installed
+    )
+    negative_ids = {
+        item.id for item in technical_labels if item.conteudo_bruto in {"280835-300A-12T", "321 m"}
+    }
+    assert not any(negative_ids & set(item.evidencia_ids) for item in equipment)
+    burgundy_vectors = {
+        item.id
+        for item in extraction.evidencias
+        if item.tipo is TipoEvidencia.VETOR
+        and dict(item.atributos_extraidos).get("cor_contorno") == "#8C0033"
+    }
+    used_bags = burgundy_vectors & {
+        evidence_id for item in installed for evidence_id in item.evidencia_ids
+    }
+    assert len(used_bags) == 2
+    assert len(burgundy_vectors - used_bags) == 2
+    unlinked_bags = tuple(
+        item
+        for item in extraction.evidencias
+        if item.id in burgundy_vectors - used_bags
+        and dict(item.atributos_extraidos).get("operacoes") == "l,l,l"
+    )
+    assert len(unlinked_bags) == 1
+    unlinked_x = [point.x for point in unlinked_bags[0].geometria.pontos]
+    unlinked_y = [point.y for point in unlinked_bags[0].geometria.pontos]
+    assert Decimal("0.0005") <= min(
+        max(unlinked_x) - min(unlinked_x), max(unlinked_y) - min(unlinked_y)
+    )
+    assert max(max(unlinked_x) - min(unlinked_x), max(unlinked_y) - min(unlinked_y)) <= Decimal(
+        "0.20"
+    )
 
 
 def test_header_rows_are_not_interpreted_as_project_equipment(
@@ -969,6 +1516,126 @@ def test_installed_assets_are_related_to_installed_pole_instead_of_nearer_remove
     assert set(related.values()) == {installed_pole.id}
 
 
+def test_e05_delivery_cluster_cannot_receive_structures_or_equipment(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    request = _request(catalogo_inicial)
+    page_id = request.evidencias[0].pagina_id
+    pole_code = request.evidencias[0].conteudo_bruto or "11-300"
+    structure_code = request.evidencias[1].conteudo_bruto or "U3"
+    equipment_code = request.evidencias[5].conteudo_bruto or "TR-37"
+    evidence = (
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e05-real-pole",
+            text=pole_code,
+            x="0.74",
+            y="0.40",
+            color="#008000",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e05-delivery-symbol",
+            text=pole_code,
+            x="0.80",
+            y="0.40",
+            color="#008000",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e05-structure",
+            text=structure_code,
+            x="0.78",
+            y="0.40",
+            color="#008000",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e05-equipment",
+            text=equipment_code,
+            x="0.78",
+            y="0.41",
+            color="#008000",
+        ),
+        image_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e05-equipment-image",
+            x="0.78",
+            y="0.41",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e05-real-label",
+            text="P4",
+            x="0.74",
+            y="0.38",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e05-delivery-label",
+            text="P5",
+            x="0.80",
+            y="0.38",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e05-standard-marker",
+            text="PADRÃO",
+            x="0.82",
+            y="0.40",
+        ),
+        text_evidence(
+            execution_id=request.execucao_extracao_id,
+            page_id=page_id,
+            key="e05-standard-legend-negative",
+            text="LEGENDA: PADRAO DE COR",
+            x="0.50",
+            y="0.10",
+        ),
+    )
+
+    result = InterpretadorRegrasExplicitas(request.registro).interpretar(
+        replace(request, evidencias=evidence)
+    )
+
+    poles = tuple(item for item in result.elementos if item.categoria is CategoriaElemento.POSTE)
+    real_pole = next(
+        item
+        for item in poles
+        if dict(item.atributos_sugeridos).get("identificador_operacional") == "P4"
+    )
+    delivery_symbol = next(
+        item
+        for item in poles
+        if dict(item.atributos_sugeridos).get("identificador_operacional") == "P5"
+    )
+    assert dict(delivery_symbol.atributos_sugeridos)["tipo_ponto_rede"] == "ENTREGA"
+    assert "tipo_ponto_rede" not in dict(real_pole.atributos_sugeridos)
+    dependents = {
+        item.id
+        for item in result.elementos
+        if item.categoria in {CategoriaElemento.ESTRUTURA_MT, CategoriaElemento.EQUIPAMENTO}
+    }
+    installation_relations = tuple(
+        relation
+        for relation in result.relacoes
+        if relation.origem_referencia_id in dependents
+        and relation.tipo_relacao in {"INSTALADA_EM", "INSTALADO_EM"}
+    )
+    assert dependents
+    assert {relation.origem_referencia_id for relation in installation_relations} == dependents
+    assert {relation.destino_referencia_id for relation in installation_relations} == {real_pole.id}
+    assert all(relation.destino_referencia_id != delivery_symbol.id for relation in result.relacoes)
+
+
 def test_pole_format_resolves_dimension_to_exact_catalog_item(
     catalogo_inicial: CatalogoTecnico,
 ) -> None:
@@ -1202,7 +1869,7 @@ def test_dark_red_bubble_forces_installation_regardless_of_equipment_text_color(
     assert dict(equipment.atributos_sugeridos)["situacao_inferida_bolha"] is True
 
 
-def test_unidentified_electrical_references_are_not_project_elements(
+def test_unidentified_cable_with_valid_trace_remains_without_span_identifier(
     catalogo_inicial: CatalogoTecnico,
 ) -> None:
     request = _request(catalogo_inicial)
@@ -1210,7 +1877,11 @@ def test_unidentified_electrical_references_are_not_project_elements(
 
     result = InterpretadorRegrasExplicitas(request.registro).interpretar(references_only)
 
-    assert result.elementos == ()
+    assert len(result.elementos) == 1
+    cable = result.elementos[0]
+    assert cable.categoria is CategoriaElemento.CABO
+    assert cable.geometria.tipo is TipoGeometria.POLILINHA
+    assert "identificador_operacional" not in dict(cable.atributos_sugeridos)
     assert result.relacoes == ()
 
 
@@ -1421,13 +2092,9 @@ def test_operational_identifiers_can_share_text_with_the_catalog_nomenclature(
 
     result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
 
-    assert {
-        (item.categoria, dict(item.atributos_sugeridos)["identificador_operacional"])
-        for item in result.elementos
-    } == {
-        (CategoriaElemento.POSTE, "P13"),
-        (CategoriaElemento.CABO, "V3-4"),
-    }
+    assert len(result.elementos) == 1
+    assert result.elementos[0].categoria is CategoriaElemento.POSTE
+    assert dict(result.elementos[0].atributos_sugeridos)["identificador_operacional"] == "P13"
 
 
 def test_point_reference_inside_instruction_does_not_identify_nearby_asset(

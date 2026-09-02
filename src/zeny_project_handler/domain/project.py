@@ -15,12 +15,14 @@ from zeny_project_handler.domain.documents import DocumentoProjeto
 from zeny_project_handler.domain.enums import (
     CategoriaElemento,
     EstadoConexao,
+    ModalidadeTrecho,
     NivelRede,
     OrigemComprimentoVao,
     SituacaoProjeto,
     TipoAcaoRevisaoManual,
     TipoGeometria,
     TipoPontoRede,
+    TipoTrechoRede,
     TipoVinculoObra,
 )
 from zeny_project_handler.domain.errors import DomainValidationError
@@ -158,6 +160,8 @@ class Cabo(ElementoProjeto):
 
     ponto_origem_id: UUID
     ponto_destino_id: UUID
+    tipo_trecho: TipoTrechoRede = TipoTrechoRede.DESCONHECIDO
+    modalidade: ModalidadeTrecho = ModalidadeTrecho.DESCONHECIDO
     comprimento_m: Decimal | None = None
     origem_comprimento: OrigemComprimentoVao | None = None
     postes_apoio_ids: tuple[UUID, ...] = ()
@@ -257,6 +261,8 @@ class PontoRede:
         object.__setattr__(self, "nome", required_text(self.nome, field_name="nome"))
         if self.tipo is TipoPontoRede.POSTE and self.poste_id is None:
             raise DomainValidationError("Ponto de poste deve referenciar um poste")
+        if self.tipo is TipoPontoRede.ENTREGA and self.poste_id is not None:
+            raise DomainValidationError("Ponto de entrega não pode referenciar um poste")
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -426,6 +432,15 @@ class Projeto:
                 raise DomainValidationError(
                     "Relação confirmada deve referenciar entidades existentes no projeto"
                 )
+            destination_point = point_by_id.get(relation.destino_id)
+            if (
+                relation.tipo_relacao.upper() in {"INSTALADA_EM", "INSTALADO_EM"}
+                and destination_point is not None
+                and destination_point.tipo is TipoPontoRede.ENTREGA
+            ):
+                raise DomainValidationError(
+                    "Estruturas e equipamentos não podem ser instalados em ponto de entrega"
+                )
         created_ids = {element.id for element in elements} | {
             relation.id for relation in confirmed_relations
         }
@@ -479,6 +494,19 @@ class Projeto:
             raise DomainValidationError("Postes de apoio do cabo devem existir no projeto")
         if any(point_id not in point_by_id for point_id in cable.pontos_intermediarios_ids):
             raise DomainValidationError("Pontos intermediários do cabo devem existir no projeto")
+        endpoint_points = (
+            point_by_id[cable.ponto_origem_id],
+            point_by_id[cable.ponto_destino_id],
+        )
+        delivery_count = sum(point.tipo is TipoPontoRede.ENTREGA for point in endpoint_points)
+        if cable.tipo_trecho is TipoTrechoRede.RAMAL_CONEXAO and delivery_count != 1:
+            raise DomainValidationError(
+                "Ramal de conexão deve possuir exatamente um ponto de entrega"
+            )
+        if cable.tipo_trecho is TipoTrechoRede.REDE_DISTRIBUICAO and delivery_count:
+            raise DomainValidationError(
+                "Rede de distribuição não pode terminar em ponto de entrega"
+            )
 
     @staticmethod
     def _validate_structure(

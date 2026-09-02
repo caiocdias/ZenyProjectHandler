@@ -1,15 +1,23 @@
 import json
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any, cast
 from uuid import UUID
 
 import pytest
+from tests.factories import complete_project
 
 from zeny_project_handler.adapters.persistence.domain_json import dumps_domain, loads_domain
 from zeny_project_handler.adapters.persistence.errors import DomainCodecError
-from zeny_project_handler.domain.enums import OrigemComprimentoVao, SituacaoProjeto
-from zeny_project_handler.domain.project import Projeto
+from zeny_project_handler.domain.catalog import CatalogoTecnico
+from zeny_project_handler.domain.enums import (
+    ModalidadeTrecho,
+    OrigemComprimentoVao,
+    SituacaoProjeto,
+    TipoTrechoRede,
+)
+from zeny_project_handler.domain.project import Cabo, Projeto
 
 
 def test_codec_supports_tagged_values_lists_and_dictionaries() -> None:
@@ -20,7 +28,10 @@ def test_codec_supports_tagged_values_lists_and_dictionaries() -> None:
             datetime(2026, 7, 21, tzinfo=UTC),
             date(2026, 7, 21),
             SituacaoProjeto.INSTALAR,
+            SituacaoProjeto.ALTERAR,
             OrigemComprimentoVao.ANOTACAO_DESENHO,
+            TipoTrechoRede.RAMAL_CONEXAO,
+            ModalidadeTrecho.AEREO,
         ]
     }
 
@@ -69,3 +80,37 @@ def test_project_codec_preserves_service_codes_and_loads_legacy_payload() -> Non
     loaded = loads_domain(json.dumps(legacy), Projeto)
 
     assert loaded.codigos_servico == ()
+
+
+def test_cable_codec_preserves_type_and_loads_missing_fields_as_unknown(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    project = complete_project(catalogo_inicial)
+    cable = next(item for item in project.elementos if isinstance(item, Cabo))
+    typed_cable = replace(
+        cable,
+        tipo_trecho=TipoTrechoRede.REDE_DISTRIBUICAO,
+        modalidade=ModalidadeTrecho.AEREO,
+    )
+    typed_project = replace(
+        project,
+        elementos=tuple(typed_cable if item.id == cable.id else item for item in project.elementos),
+    )
+
+    loaded = loads_domain(dumps_domain(typed_project), Projeto)
+    loaded_cable = next(item for item in loaded.elementos if isinstance(item, Cabo))
+    assert loaded_cable.tipo_trecho is TipoTrechoRede.REDE_DISTRIBUICAO
+    assert loaded_cable.modalidade is ModalidadeTrecho.AEREO
+
+    legacy = cast(dict[str, Any], json.loads(dumps_domain(typed_project)))
+    project_fields = cast(dict[str, Any], legacy["fields"])
+    elements = cast(dict[str, Any], project_fields["elementos"])["$tuple"]
+    legacy_cable = next(item for item in elements if item.get("$type") == "Cabo")
+    cable_fields = cast(dict[str, Any], legacy_cable["fields"])
+    cable_fields.pop("tipo_trecho")
+    cable_fields.pop("modalidade")
+
+    legacy_loaded = loads_domain(json.dumps(legacy), Projeto)
+    legacy_loaded_cable = next(item for item in legacy_loaded.elementos if isinstance(item, Cabo))
+    assert legacy_loaded_cable.tipo_trecho is TipoTrechoRede.DESCONHECIDO
+    assert legacy_loaded_cable.modalidade is ModalidadeTrecho.DESCONHECIDO

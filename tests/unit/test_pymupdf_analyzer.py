@@ -345,11 +345,14 @@ def test_e01_switch_fixture_extracts_bagged_and_unbagged_inputs(tmp_path: Path) 
         and dict(item.atributos_extraidos).get("cor_contorno") == "#8C0033"
     ]
     assert all(len(occurrences) == 2 for occurrences in switches.values())
-    assert len(bags) == 3
+    assert len(bags) == 4
     for occurrences in switches.values():
         assert any(_geometries_overlap(occurrences[0].geometria, bag.geometria) for bag in bags)
         assert not any(_geometries_overlap(occurrences[1].geometria, bag.geometria) for bag in bags)
-    assert any(item.conteudo_bruto == "IDTESTE-300A-12T" for item in result.evidencias)
+    rotated = switches["100A-10KA-5H"][0]
+    assert abs(Decimal(str(dict(rotated.atributos_extraidos)["rotacao_graus"]))) == Decimal(90)
+    assert any(item.conteudo_bruto == "280835-300A-12T" for item in result.evidencias)
+    assert any(item.conteudo_bruto == "321 m" for item in result.evidencias)
 
 
 def test_e01_span_change_fixture_extracts_superseded_and_current_measurements(
