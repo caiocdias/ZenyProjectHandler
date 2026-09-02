@@ -49,6 +49,8 @@ from zeny_project_handler.domain.enums import (
     SituacaoProjeto,
     TipoDecisaoRevisao,
     TipoEvidencia,
+    TipoPontoRede,
+    TipoTrechoRede,
 )
 from zeny_project_handler.domain.market import Mercado
 from zeny_project_handler.domain.project import (
@@ -120,6 +122,71 @@ def test_structure_cable_pair_is_evaluated_against_catalog(
     assert finding.resultado is (
         ResultadoConformidade.DIVERGENCIA if expected else ResultadoConformidade.CONFORME
     )
+
+
+@pytest.mark.parametrize(
+    "segment_type",
+    (TipoTrechoRede.RAMAL_CONEXAO, TipoTrechoRede.DESCONHECIDO),
+)
+def test_non_network_cable_is_not_supported_by_structure_compatibility_matrix(
+    segment_type: TipoTrechoRede,
+) -> None:
+    fixture = _fixture(compatible=True)
+    session = fixture.session
+    structure = next(
+        item for item in session.projeto.elementos if isinstance(item, (EstruturaMt, EstruturaBt))
+    )
+    incompatible = next(
+        item
+        for item in session.catalogo.itens_ativos(CategoriaElemento.CABO)
+        if isinstance(item, TipoCabo)
+        and (structure.tipo_catalogo_id, item.id)
+        not in {
+            (entry.tipo_estrutura_id, entry.tipo_cabo_id)
+            for entry in session.catalogo.compatibilidades
+        }
+    )
+    origin = next(point for point in session.projeto.pontos_rede if point.nome == "P1-A")
+    extra_points: tuple[PontoRede, ...] = ()
+    if segment_type is TipoTrechoRede.RAMAL_CONEXAO:
+        destination = PontoRede(
+            id=_id("unsupported-service-drop-point"),
+            poste_id=None,
+            nome="Padrão do cliente",
+            nivel_rede=origin.nivel_rede,
+            nivel_tensao_opcao_id=origin.nivel_tensao_opcao_id,
+            configuracao_fases_opcao_id=origin.configuracao_fases_opcao_id,
+            tipo=TipoPontoRede.ENTREGA,
+            geometria=_geometry_point(session.projeto.documentos[0].paginas[0].id, 0.5, 0.1),
+        )
+        extra_points = (destination,)
+    else:
+        destination = next(point for point in session.projeto.pontos_rede if point.nome == "P2")
+    unsupported = Cabo(
+        id=_id(f"unsupported-{segment_type.value}"),
+        tipo_catalogo_id=incompatible.id,
+        situacao=SituacaoProjeto.INSTALAR,
+        geometria=_line(session.projeto.documentos[0].paginas[0].id, (0.5, 0.5), (0.5, 0.1)),
+        ponto_origem_id=origin.id,
+        ponto_destino_id=destination.id,
+        tipo_trecho=segment_type,
+    )
+    fixture = replace(
+        fixture,
+        session=replace(
+            session,
+            projeto=replace(
+                session.projeto,
+                elementos=(*session.projeto.elementos, unsupported),
+                pontos_rede=(*session.projeto.pontos_rede, *extra_points),
+            ),
+        ),
+    )
+
+    facts = _facts_by_key(fixture)
+
+    assert facts["regiao.estrutura_cabo_avaliada"] is True
+    assert facts["regiao.estrutura_cabo_incompativel"] is False
 
 
 def test_installed_post_equipment_post_and_symbol_facts_are_published() -> None:
@@ -290,7 +357,7 @@ def test_plain_text_equipment_label_does_not_count_as_symbol() -> None:
     assert facts["regiao.aterramento_presente"] is False
 
 
-def test_unconfirmed_cable_geometry_is_used_as_incidence_fallback() -> None:
+def test_unconfirmed_cable_geometry_makes_topology_incomplete_without_inference() -> None:
     fixture = _fixture(compatible=True)
     cable_ids = {item.id for item in fixture.session.projeto.elementos if isinstance(item, Cabo)}
     session = replace(
@@ -309,13 +376,25 @@ def test_unconfirmed_cable_geometry_is_used_as_incidence_fallback() -> None:
     )
     fallback_fixture = replace(fixture, session=session)
 
-    facts = _facts_by_key(fallback_fixture)
+    produced_facts = prover_fatos_topologicos(
+        ContextoProvedorFatos(
+            fallback_fixture.session,
+            (fallback_fixture.target,),
+            Mercado.URBANO,
+        )
+    )
+    facts = {fact.chave: fact.valor for fact in produced_facts}
 
-    assert facts["conexao.angulo_graus"] == Decimal(0)
+    assert facts["regiao.topologia_mt_avaliavel"] is False
+    assert facts["regiao.componente_mt_completo"] is False
+    assert "conexao.angulo_graus" not in facts
+    assert "regiao.fim_rede" not in facts
+    assert "regiao.transicao_rede" not in facts
+    assert "regiao.para_raios_mt_requerido" not in facts
     assert "regiao.estrutura_cabo_avaliada" not in facts
 
 
-def test_geometric_cable_complements_confirmed_topology_for_mt_transition() -> None:
+def test_geometric_cable_cannot_complete_confirmed_topology_for_mt_transition() -> None:
     fixture = _fixture(compatible=True)
     session = fixture.session
     option_codes = {
@@ -381,12 +460,14 @@ def test_geometric_cable_complements_confirmed_topology_for_mt_transition() -> N
 
     facts = _facts_by_key(fixture)
 
-    assert facts["regiao.transicao_rede"] is True
-    assert facts["conexao.angulo_graus"] == Decimal(90)
-    assert facts["regiao.para_raios_mt_requerido"] is True
+    assert facts["regiao.topologia_mt_avaliavel"] is False
+    assert facts["regiao.componente_mt_completo"] is False
+    assert "regiao.transicao_rede" not in facts
+    assert "conexao.angulo_graus" not in facts
+    assert "regiao.para_raios_mt_requerido" not in facts
 
 
-def test_single_geometric_mt_cable_is_recognized_as_line_end() -> None:
+def test_single_geometric_mt_cable_is_not_recognized_as_line_end() -> None:
     fixture = _fixture(compatible=True)
     session = fixture.session
     option_codes = {
@@ -443,7 +524,309 @@ def test_single_geometric_mt_cable_is_recognized_as_line_end() -> None:
 
     facts = _facts_by_key(fixture)
 
+    assert facts["regiao.topologia_mt_avaliavel"] is False
+    assert facts["regiao.componente_mt_completo"] is False
+    assert "regiao.fim_rede" not in facts
+    assert "regiao.para_raios_mt_requerido" not in facts
+
+
+def test_intermediate_p2_with_two_same_technology_mt_edges_is_not_terminal_or_transition() -> None:
+    fixture = _with_mt_technologies(_fixture(compatible=True), ("CONVENCIONAL", "CONVENCIONAL"))
+
+    facts = _facts_by_key(fixture)
+
+    assert facts["regiao.topologia_mt_avaliavel"] is True
+    assert facts["regiao.componente_mt_completo"] is True
+    assert facts["regiao.fim_rede"] is False
+    assert facts["regiao.transicao_rede"] is False
+    assert facts["conexao.angulo_graus"] == Decimal(0)
+    assert "regiao.para_raios_mt_requerido" not in facts
+
+
+def test_parallel_mt_cables_on_same_route_count_as_one_physical_edge() -> None:
+    fixture = _with_mt_technologies(_fixture(compatible=True), ("CONVENCIONAL", "CONVENCIONAL"))
+    session = fixture.session
+    first = next(item for item in session.projeto.elementos if isinstance(item, Cabo))
+    parallel = replace(first, id=_id("parallel-cable"))
+    fixture = replace(
+        fixture,
+        session=replace(
+            session,
+            projeto=replace(
+                session.projeto,
+                elementos=(*session.projeto.elementos, parallel),
+            ),
+        ),
+    )
+
+    produced = prover_fatos_topologicos(
+        ContextoProvedorFatos(fixture.session, (fixture.target,), Mercado.URBANO)
+    )
+    facts = {fact.chave: fact.valor for fact in produced}
+    angles = {fact.valor for fact in produced if fact.chave == "conexao.angulo_graus"}
+
+    assert facts["regiao.topologia_mt_avaliavel"] is True
+    assert facts["regiao.fim_rede"] is False
+    assert facts["regiao.transicao_rede"] is False
+    assert angles == {Decimal(0)}
+
+
+def test_known_service_drop_does_not_change_mt_degree_transition_or_angle() -> None:
+    fixture = _with_mt_technologies(_fixture(compatible=True), ("CONVENCIONAL", "CONVENCIONAL"))
+    session = fixture.session
+    cables = tuple(item for item in session.projeto.elementos if isinstance(item, Cabo))
+    center_point = next(
+        point for point in session.projeto.pontos_rede if point.id == cables[0].ponto_origem_id
+    )
+    delivery = PontoRede(
+        id=_id("service-drop-delivery"),
+        poste_id=None,
+        nome="Padrão do cliente",
+        nivel_rede=NivelRede.MT,
+        nivel_tensao_opcao_id=center_point.nivel_tensao_opcao_id,
+        configuracao_fases_opcao_id=center_point.configuracao_fases_opcao_id,
+        tipo=TipoPontoRede.ENTREGA,
+        geometria=_geometry_point(center_point.geometria.pagina_id, 0.5, 0.1)
+        if center_point.geometria is not None
+        else None,
+    )
+    service_drop = Cabo(
+        id=_id("service-drop"),
+        tipo_catalogo_id=cables[0].tipo_catalogo_id,
+        situacao=SituacaoProjeto.INSTALAR,
+        geometria=_line(session.projeto.documentos[0].paginas[0].id, (0.5, 0.5), (0.5, 0.1)),
+        ponto_origem_id=center_point.id,
+        ponto_destino_id=delivery.id,
+        tipo_trecho=TipoTrechoRede.RAMAL_CONEXAO,
+    )
+    fixture = replace(
+        fixture,
+        session=replace(
+            session,
+            projeto=replace(
+                session.projeto,
+                elementos=(*session.projeto.elementos, service_drop),
+                pontos_rede=(*session.projeto.pontos_rede, delivery),
+            ),
+        ),
+    )
+
+    facts = _facts_by_key(fixture)
+
+    assert facts["regiao.topologia_mt_avaliavel"] is True
+    assert facts["regiao.componente_mt_completo"] is True
+    assert facts["regiao.fim_rede"] is False
+    assert facts["regiao.transicao_rede"] is False
+    assert facts["conexao.angulo_graus"] == Decimal(0)
+    assert "regiao.para_raios_mt_requerido" not in facts
+
+
+def test_true_terminal_requires_one_edge_in_a_complete_mt_component() -> None:
+    fixture = _with_mt_technologies(_fixture(compatible=True), ("CONVENCIONAL", "CONVENCIONAL"))
+    session = fixture.session
+    cables = tuple(item for item in session.projeto.elementos if isinstance(item, Cabo))
+    removed = cables[1]
+    removed_proposal_ids = {
+        decision.proposta_id
+        for decision in session.decisoes
+        if decision.elemento_confirmado_id == removed.id
+    }
+    fixture = replace(
+        fixture,
+        session=replace(
+            session,
+            projeto=replace(
+                session.projeto,
+                elementos=tuple(
+                    item for item in session.projeto.elementos if item.id != removed.id
+                ),
+            ),
+            propostas=tuple(
+                item for item in session.propostas if item.id not in removed_proposal_ids
+            ),
+            decisoes=tuple(
+                item for item in session.decisoes if item.elemento_confirmado_id != removed.id
+            ),
+            regioes=(
+                replace(
+                    session.regioes[0],
+                    elemento_ids=tuple(
+                        item
+                        for item in session.regioes[0].elemento_ids
+                        if item not in removed_proposal_ids
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    facts = _facts_by_key(fixture)
+
+    assert facts["regiao.topologia_mt_avaliavel"] is True
+    assert facts["regiao.componente_mt_completo"] is True
+    assert facts["regiao.fim_rede"] is True
+    assert facts["regiao.transicao_rede"] is False
     assert facts["regiao.para_raios_mt_requerido"] is True
+
+
+def test_true_transition_requires_exactly_two_continuous_mt_technologies() -> None:
+    fixture = _with_mt_technologies(_fixture(compatible=True), ("CONVENCIONAL", "PROTEGIDA"))
+
+    facts = _facts_by_key(fixture)
+
+    assert facts["regiao.topologia_mt_avaliavel"] is True
+    assert facts["regiao.componente_mt_completo"] is True
+    assert facts["regiao.fim_rede"] is False
+    assert facts["regiao.transicao_rede"] is True
+    assert facts["conexao.angulo_graus"] == Decimal(0)
+    assert facts["regiao.para_raios_mt_requerido"] is True
+
+
+def test_unknown_edge_makes_mt_component_not_evaluable_without_counting_degree() -> None:
+    fixture = _with_mt_technologies(_fixture(compatible=True), ("CONVENCIONAL", "CONVENCIONAL"))
+    session = fixture.session
+    catalog = session.catalogo
+    post_type = fixture.post_type
+    page_id = session.projeto.documentos[0].paginas[0].id
+    center_point = next(point for point in session.projeto.pontos_rede if point.nome == "P1-A")
+    unknown_pole = Poste(
+        id=_id("unknown-edge-pole"),
+        tipo_catalogo_id=post_type.id,
+        situacao=SituacaoProjeto.EXISTENTE,
+        geometria=_geometry_point(page_id, 0.5, 0.1),
+    )
+    unknown_point = PontoRede(
+        id=_id("unknown-edge-point"),
+        poste_id=unknown_pole.id,
+        nome="P4",
+        nivel_rede=NivelRede.MT,
+        nivel_tensao_opcao_id=center_point.nivel_tensao_opcao_id,
+        configuracao_fases_opcao_id=center_point.configuracao_fases_opcao_id,
+        geometria=unknown_pole.geometria,
+    )
+    cable_type = next(
+        item
+        for item in catalog.itens_ativos(CategoriaElemento.CABO)
+        if isinstance(item, TipoCabo)
+        and item.id
+        == next(
+            cable.tipo_catalogo_id for cable in session.projeto.elementos if isinstance(cable, Cabo)
+        )
+    )
+    unknown = Cabo(
+        id=_id("unknown-edge"),
+        tipo_catalogo_id=cable_type.id,
+        situacao=SituacaoProjeto.INSTALAR,
+        geometria=_line(page_id, (0.5, 0.5), (0.5, 0.1)),
+        ponto_origem_id=center_point.id,
+        ponto_destino_id=unknown_point.id,
+        tipo_trecho=TipoTrechoRede.DESCONHECIDO,
+    )
+    fixture = replace(
+        fixture,
+        session=replace(
+            session,
+            projeto=replace(
+                session.projeto,
+                elementos=(*session.projeto.elementos, unknown_pole, unknown),
+                pontos_rede=(*session.projeto.pontos_rede, unknown_point),
+            ),
+        ),
+    )
+
+    facts = _facts_by_key(fixture)
+
+    assert facts["regiao.topologia_mt_avaliavel"] is False
+    assert facts["regiao.componente_mt_completo"] is False
+    assert "regiao.fim_rede" not in facts
+    assert "regiao.transicao_rede" not in facts
+    assert "conexao.angulo_graus" not in facts
+    assert "regiao.para_raios_mt_requerido" not in facts
+
+
+@pytest.mark.parametrize("structure_code", ("U4", "CM3", "S3R"))
+def test_isolated_anchor_structure_never_proves_terminal_or_transition(
+    structure_code: str,
+) -> None:
+    fixture = _fixture(compatible=True)
+    session = fixture.session
+    structure_type = next(
+        item
+        for item in session.catalogo.itens
+        if isinstance(item, (TipoEstruturaMt, TipoEstruturaBt))
+        and item.ativo
+        and item.codigo == structure_code
+    )
+    structure = next(
+        item for item in session.projeto.elementos if isinstance(item, (EstruturaMt, EstruturaBt))
+    )
+    structure_class = EstruturaMt if isinstance(structure_type, TipoEstruturaMt) else EstruturaBt
+    replacement_structure = structure_class(
+        id=structure.id,
+        tipo_catalogo_id=structure_type.id,
+        situacao=structure.situacao,
+        geometria=structure.geometria,
+        poste_id=structure.poste_id,
+        pontos_fixados_ids=structure.pontos_fixados_ids,
+    )
+    cable_ids = {item.id for item in session.projeto.elementos if isinstance(item, Cabo)}
+    cable_proposal_ids = {
+        decision.proposta_id
+        for decision in session.decisoes
+        if decision.elemento_confirmado_id in cable_ids
+    }
+    fixture = replace(
+        fixture,
+        session=replace(
+            session,
+            projeto=replace(
+                session.projeto,
+                elementos=tuple(
+                    replacement_structure if item.id == structure.id else item
+                    for item in session.projeto.elementos
+                    if item.id not in cable_ids
+                ),
+            ),
+            propostas=tuple(
+                replace(
+                    item,
+                    categoria=replacement_structure.categoria,
+                    tipo_catalogo_sugerido_id=structure_type.id,
+                )
+                if item.id
+                in {
+                    decision.proposta_id
+                    for decision in session.decisoes
+                    if decision.elemento_confirmado_id == structure.id
+                }
+                and isinstance(item, PropostaElemento)
+                else item
+                for item in session.propostas
+                if item.id not in cable_proposal_ids
+            ),
+            decisoes=tuple(
+                item for item in session.decisoes if item.elemento_confirmado_id not in cable_ids
+            ),
+            regioes=(
+                replace(
+                    session.regioes[0],
+                    elemento_ids=tuple(
+                        item
+                        for item in session.regioes[0].elemento_ids
+                        if item not in cable_proposal_ids
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    facts = _facts_by_key(fixture)
+
+    assert facts["regiao.topologia_mt_avaliavel"] is False
+    assert facts["regiao.componente_mt_completo"] is False
+    assert "regiao.fim_rede" not in facts
+    assert "regiao.transicao_rede" not in facts
+    assert "regiao.para_raios_mt_requerido" not in facts
 
 
 @dataclass(frozen=True, slots=True)
@@ -452,6 +835,60 @@ class _Fixture:
     target: AlvoConformidade
     post_type: TipoPoste
     post_format: str
+
+
+def _with_mt_technologies(
+    fixture: _Fixture,
+    technologies: tuple[str, str],
+) -> _Fixture:
+    session = fixture.session
+    option_codes = {
+        option.id: option.codigo
+        for group in session.catalogo.grupos_opcao
+        for option in group.opcoes
+    }
+    cable_types = tuple(
+        next(
+            item
+            for item in session.catalogo.itens_ativos(CategoriaElemento.CABO)
+            if isinstance(item, TipoCabo)
+            and option_codes[item.nivel_tensao_opcao_id] == "MT"
+            and (
+                option_codes[item.tecnologia_rede_opcao_id].startswith(technology)
+                if technology == "CONVENCIONAL"
+                else option_codes[item.tecnologia_rede_opcao_id] == technology
+            )
+        )
+        for technology in technologies
+    )
+    cables = tuple(item for item in session.projeto.elementos if isinstance(item, Cabo))
+    type_by_cable = dict(zip((item.id for item in cables), cable_types, strict=True))
+    proposal_type = {
+        decision.proposta_id: type_by_cable[decision.elemento_confirmado_id]
+        for decision in session.decisoes
+        if decision.elemento_confirmado_id in type_by_cable
+    }
+    return replace(
+        fixture,
+        session=replace(
+            session,
+            projeto=replace(
+                session.projeto,
+                elementos=tuple(
+                    replace(item, tipo_catalogo_id=type_by_cable[item.id].id)
+                    if isinstance(item, Cabo) and item.id in type_by_cable
+                    else item
+                    for item in session.projeto.elementos
+                ),
+            ),
+            propostas=tuple(
+                replace(item, tipo_catalogo_sugerido_id=proposal_type[item.id].id)
+                if isinstance(item, PropostaElemento) and item.id in proposal_type
+                else item
+                for item in session.propostas
+            ),
+        ),
+    )
 
 
 def _fixture(*, compatible: bool) -> _Fixture:
@@ -566,6 +1003,7 @@ def _fixture(*, compatible: bool) -> _Fixture:
             geometria=cable_geometries[index],
             ponto_origem_id=network_points[index * 2].id,
             ponto_destino_id=network_points[index * 2 + 1].id,
+            tipo_trecho=TipoTrechoRede.REDE_DISTRIBUICAO,
         )
         for index in range(2)
     )

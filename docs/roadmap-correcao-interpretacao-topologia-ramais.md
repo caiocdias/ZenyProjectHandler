@@ -161,7 +161,7 @@ limpa do Codex, atualize sua tag e preencha **Evidências e handoff** antes de i
 | E03 | Chaves e bolsas de instalação | #concluida | E01, E02 | nomenclatura completa e situação de instalação robusta |
 | E04 | Redução de vão e associação cabo–traçado | #concluida | E01, E02, E03 | medida vigente, alteração explícita e cabo no traçado correto |
 | E05 | Ponto de padrão e ramal no domínio topológico | #concluida | E01, E04 | ponto `ENTREGA` e tipo de vão/trecho derivados |
-| E06 | Fim/transição, ângulo e compatibilidade pela topologia | #pendente | E05 | fatos fail-closed apenas sobre rede resolvida |
+| E06 | Fim/transição, ângulo e compatibilidade pela topologia | #concluida | E05 | fatos fail-closed apenas sobre rede resolvida |
 | E07 | Conformidade específica do ramal | #pendente | E05, E06 | registro ND-5.1 e guardas de aplicabilidade |
 | E08 | Contratos, cliente e exportações | #pendente | E04, E05, E07 | DTO/UI/XLSX/OpenAPI coerentes |
 | E09 | Gate integrado e homologação dos exemplos | #pendente | E02–E08 | validação global e handoff final |
@@ -694,7 +694,7 @@ geometria. Inferir ramal só por cabo BT; mitigar exigindo endpoint `ENTREGA` ou
   cluster, os defaults legados e o interpretador `21.0`. A projeção pública permanece reservada à
   E08.
 
-## E06 — Fim/transição, ângulo e compatibilidade pela topologia — #pendente
+## E06 — Fim/transição, ângulo e compatibilidade pela topologia — #concluida
 
 **Objetivo:** calcular terminal, transição, ângulo e compatibilidade somente sobre componentes de rede
 de distribuição completos, excluindo ramais e suspendendo conclusões quando faltarem arestas.
@@ -732,11 +732,11 @@ Refatore os fatos para operar somente sobre trechos REDE_DISTRIBUICAO. RAMAL_CON
 
 **Critérios de aceite:**
 
-- [ ] Poste intermediário com duas arestas MT de mesma tecnologia não é fim nem transição.
-- [ ] Estrutura de ancoragem sem topologia completa não gera para-raios obrigatório.
-- [ ] Ramal não altera grau, ângulo nem compatibilidade da rede.
-- [ ] Fim real e transição real continuam reconhecidos com evidência navegável.
-- [ ] Topologia incompleta publica não avaliabilidade e não um booleano falso/verdadeiro inventado.
+- [x] Poste intermediário com duas arestas MT de mesma tecnologia não é fim nem transição.
+- [x] Estrutura de ancoragem sem topologia completa não gera para-raios obrigatório.
+- [x] Ramal não altera grau, ângulo nem compatibilidade da rede.
+- [x] Fim real e transição real continuam reconhecidos com evidência navegável.
+- [x] Topologia incompleta publica não avaliabilidade e não um booleano falso/verdadeiro inventado.
 
 **Validação obrigatória:**
 
@@ -753,7 +753,45 @@ Resultado esperado: todos passam e os testes demonstram verdadeiros positivos e 
 com todas as arestas resolvidas. Contar cabos paralelos como grau múltiplo; mitigar agrupando percurso
 físico conforme `_route_groups()`.
 
-**Evidências e handoff:** ainda não iniciado.
+**Evidências e handoff (02/09/2026):**
+
+- **Pré-auditoria:** não há `AGENTS.md` na raiz nem em seus pais aplicáveis; os únicos arquivos com
+  esse nome encontrados pertencem a outros projetos no Desktop. E05 estava `#concluida` no índice e
+  no detalhe, com ADR 0015 e handoff preenchidos. O worktree estava limpo antes da E06. O baseline
+  obrigatório, reexecutado com autorização porque o launcher do Python 3.13 fica fora da sandbox,
+  terminou com `62 passed in 12.02s`.
+- **Grafo tipado e fail-closed:** incidência, caminhos, extensão de rede, grau e componentes agora
+  consomem somente `Cabo.tipo_trecho=REDE_DISTRIBUICAO`. Arestas são agrupadas pelo par físico de
+  postes, de modo que cabos paralelos não aumentam o grau. `RAMAL_CONEXAO` é ignorado por completo;
+  `DESCONHECIDO` e proposta geométrica de cabo ainda não confirmada não contam como aresta, mas
+  tornam incompleto o componente local que poderiam alterar.
+- **Completude e conclusões:** o provedor publica `regiao.topologia_mt_avaliavel` e
+  `regiao.componente_mt_completo`. A completude exige percurso entre postes, endpoints MT e nível e
+  família tecnológica catalogados. Somente componente completo publica `regiao.fim_rede` e
+  `regiao.transicao_rede`; fim exige grau físico um, e transição exige exatamente duas arestas MT
+  contínuas convencional/protegida. Topologia incompleta omite fim, transição, ângulo e requisito de
+  para-raios, em vez de inferir um resultado a partir de estrutura ou cabo geométrico isolado.
+- **Ângulo, compatibilidade e proveniência:** deflexões usam apenas direções das arestas MT da rede
+  fisicamente incidentes no poste. A matriz estrutura–cabo recebe somente cabos de distribuição
+  suportados pelo percurso do poste; ramais e desconhecidos não formam pares. Fatos positivos
+  preservam proposta do poste e propostas confirmadas dos cabos como evidências navegáveis. O
+  catálogo de fatos registra as três novas chaves como disponíveis, sem alterar o conteúdo
+  normativo declarativo reservado à E07.
+- **Versão e regressões:** `VERSAO_METODO_CONFORMIDADE` passou de `10` para `11`, invalidando
+  execuções antigas sem mutá-las. Testes cobrem P2 intermediário, cabos paralelos, derivação com
+  ramal, terminal real, transição real, aresta desconhecida, ausência de cabo com U4/CM3/S3R,
+  proposta geométrica não confirmada, exclusão da matriz estrutura–cabo e da extensão de rede.
+- **Validações:** o Pytest obrigatório final terminou com `74 passed in 9.31s`; o Ruff obrigatório
+  (`ruff check ...topology_compliance.py tests`) retornou `All checks passed!`; a suíte focada
+  ampliada terminou com `129 passed in 7.76s`; `python -m mypy` terminou com
+  `Success: no issues found in 306 source files`; a suíte completa final terminou com
+  `935 passed in 95.53s`. Os sete arquivos Python alterados foram formatados pelo Ruff.
+- **Handoff para E07:** implementar apenas fatos e regras próprias do ramal com a ND-5.1, consumindo
+  `RAMAL_CONEXAO` e modalidade resolvida sem recolocá-los no grafo da rede. Preservar as ausências
+  deliberadas de fim/transição/ângulo/requisito de para-raios quando
+  `regiao.topologia_mt_avaliavel=false`, a versão de método `11` e a separação entre conteúdo
+  normativo do registro e fatos topológicos. Nenhum commit, push, publicação ou implantação foi
+  executado.
 
 ## E07 — Conformidade específica do ramal — #pendente
 

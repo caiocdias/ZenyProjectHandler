@@ -8,6 +8,7 @@ from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
+from itertools import pairwise
 from typing import Protocol
 from uuid import UUID
 
@@ -30,6 +31,7 @@ from zeny_project_handler.domain.enums import (
     EstadoRevisao,
     NivelRede,
     SituacaoProjeto,
+    TipoTrechoRede,
 )
 from zeny_project_handler.domain.project import (
     Cabo,
@@ -61,6 +63,11 @@ class _GeometryCarrier(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class _EdgeDirection:
+    geometria: GeometriaDocumento | None
+
+
+@dataclass(frozen=True, slots=True)
 class _RouteGroup:
     key: tuple[str, ...]
     pole_path: tuple[UUID, ...]
@@ -74,6 +81,20 @@ class _RouteEdge:
     first_pole_id: UUID
     second_pole_id: UUID
     length_m: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class _MtNetworkEdge:
+    pole_ids: tuple[UUID, UUID]
+    cables: tuple[Cabo, ...]
+    technology: str
+    complete: bool
+
+
+@dataclass(frozen=True, slots=True)
+class _MtTopology:
+    edges_by_pole: dict[UUID, tuple[_MtNetworkEdge, ...]]
+    component_complete_by_pole: dict[UUID, bool]
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,6 +116,7 @@ class _TopologyState:
     items: dict[UUID, ItemCatalogoType]
     option_codes: dict[UUID, str]
     points: dict[UUID, PontoRede]
+    poles: dict[UUID, Poste]
     pole_types: dict[UUID, TipoPoste]
     compatible: set[tuple[UUID, UUID]]
     page_sizes: dict[UUID, tuple[Decimal, Decimal]]
@@ -106,6 +128,7 @@ class _TopologyState:
 @dataclass(frozen=True, slots=True)
 class _TopologyAssociations:
     incident: dict[UUID, list[Cabo]]
+    mt_topology: _MtTopology
     proposal_poles: dict[UUID, UUID]
     classes_by_pole: dict[UUID, dict[str, list[PropostaElemento]]]
     grounded_poles: set[UUID]
@@ -221,6 +244,7 @@ def _build_topology_state(context: ContextoProvedorFatos) -> _TopologyState:
         items=items,
         option_codes=option_codes,
         points={point.id: point for point in session.projeto.pontos_rede},
+        poles={item.id: item for item in session.projeto.elementos if isinstance(item, Poste)},
         pole_types={
             item.id: item for item in session.catalogo.itens if isinstance(item, TipoPoste)
         },
@@ -247,12 +271,17 @@ def _build_topology_associations(
     facts: _TopologyFactCollector,
 ) -> _TopologyAssociations:
     incident: dict[UUID, list[Cabo]] = defaultdict(list)
-    for element in state.confirmed.values():
-        if isinstance(element, Cabo) and element.situacao is not SituacaoProjeto.REMOVER:
-            for point_id in (element.ponto_origem_id, element.ponto_destino_id):
-                point = state.points.get(point_id)
-                if point and point.poste_id:
-                    incident[point.poste_id].append(element)
+    active_cables = tuple(
+        element
+        for element in state.confirmed.values()
+        if isinstance(element, Cabo) and element.situacao is not SituacaoProjeto.REMOVER
+    )
+    network_cables = tuple(
+        cable for cable in active_cables if cable.tipo_trecho is TipoTrechoRede.REDE_DISTRIBUICAO
+    )
+    for cable in network_cables:
+        for pole_id in dict.fromkeys(_pole_path(cable, state.points)):
+            incident[pole_id].append(cable)
     proposal_poles = _associate_proposals_to_poles(
         tuple(state.proposals.values()),
         state.by_proposal,
@@ -263,21 +292,113 @@ def _build_topology_associations(
         lambda: defaultdict(list)
     )
     for proposal in state.proposals.values():
-        pole_id = proposal_poles.get(proposal.id)
+        associated_pole_id = proposal_poles.get(proposal.id)
         equipment_class = facts.equipment_class(proposal)
         if (
-            pole_id is not None
+            associated_pole_id is not None
             and equipment_class
             and proposal.situacao_projeto is not SituacaoProjeto.REMOVER
         ):
-            classes_by_pole[pole_id][equipment_class].append(proposal)
+            classes_by_pole[associated_pole_id][equipment_class].append(proposal)
     return _TopologyAssociations(
         incident=incident,
+        mt_topology=_build_mt_topology(state, facts, active_cables),
         proposal_poles=proposal_poles,
         classes_by_pole=classes_by_pole,
         grounded_poles={
             pole_id for pole_id, classes in classes_by_pole.items() if classes.get("ATERRAMENTO")
         },
+    )
+
+
+def _build_mt_topology(
+    state: _TopologyState,
+    facts: _TopologyFactCollector,
+    active_cables: tuple[Cabo, ...],
+) -> _MtTopology:
+    grouped: dict[tuple[str, str], list[Cabo]] = defaultdict(list)
+    unresolved_poles: set[UUID] = set()
+    for cable in active_cables:
+        path = _pole_path(cable, state.points)
+        if cable.tipo_trecho is TipoTrechoRede.RAMAL_CONEXAO:
+            continue
+        if cable.tipo_trecho is TipoTrechoRede.DESCONHECIDO:
+            unresolved_poles.update(path)
+            continue
+        level = facts.cable_level(cable)
+        if not level:
+            unresolved_poles.update(path)
+            continue
+        if level != "MT":
+            continue
+        points = tuple(state.points.get(point_id) for point_id in cable.percurso_pontos_ids)
+        technology = _technology_family(facts.cable_technology(cable))
+        if (
+            len(path) < 2
+            or not technology
+            or any(point is None or point.nivel_rede is not NivelRede.MT for point in points)
+        ):
+            unresolved_poles.update(path)
+            continue
+        for first, second in pairwise(path):
+            first_key, second_key = sorted((str(first), str(second)))
+            key = (first_key, second_key)
+            grouped[key].append(cable)
+
+    for proposal in state.geometric_cables:
+        unresolved_poles.update(
+            pole.id
+            for pole in state.poles.values()
+            if _endpoint_is_near(pole.geometria, proposal.geometria)
+        )
+
+    edges: list[_MtNetworkEdge] = []
+    for key in sorted(grouped):
+        cables = tuple(dict.fromkeys(grouped[key]))
+        pole_ids = (UUID(key[0]), UUID(key[1]))
+        technologies = {_technology_family(facts.cable_technology(cable)) for cable in cables}
+        technologies.discard("")
+        complete = len(technologies) == 1
+        if not complete:
+            unresolved_poles.update(pole_ids)
+        edges.append(
+            _MtNetworkEdge(
+                pole_ids=pole_ids,
+                cables=cables,
+                technology=next(iter(technologies)) if complete else "",
+                complete=complete,
+            )
+        )
+
+    by_pole: dict[UUID, list[_MtNetworkEdge]] = defaultdict(list)
+    for edge in edges:
+        for pole_id in edge.pole_ids:
+            by_pole[pole_id].append(edge)
+    component_complete: dict[UUID, bool] = {}
+    remaining = set(by_pole)
+    while remaining:
+        pending = [min(remaining, key=str)]
+        component_poles: set[UUID] = set()
+        component_edges: set[_MtNetworkEdge] = set()
+        while pending:
+            pole_id = pending.pop()
+            if pole_id in component_poles:
+                continue
+            component_poles.add(pole_id)
+            for edge in by_pole[pole_id]:
+                component_edges.add(edge)
+                pending.extend(item for item in edge.pole_ids if item not in component_poles)
+        complete = not component_poles.intersection(unresolved_poles) and all(
+            edge.complete for edge in component_edges
+        )
+        component_complete.update(dict.fromkeys(component_poles, complete))
+        remaining.difference_update(component_poles)
+    return _MtTopology(
+        edges_by_pole={
+            pole_id: tuple(sorted(items, key=lambda item: tuple(map(str, item.pole_ids))))
+            for pole_id, items in by_pole.items()
+        },
+        component_complete_by_pole=component_complete,
     )
 
 
@@ -289,7 +410,9 @@ def _add_project_topology_facts(
     active_cables = tuple(
         element
         for element in state.confirmed.values()
-        if isinstance(element, Cabo) and element.situacao is not SituacaoProjeto.REMOVER
+        if isinstance(element, Cabo)
+        and element.situacao is not SituacaoProjeto.REMOVER
+        and element.tipo_trecho is TipoTrechoRede.REDE_DISTRIBUICAO
     )
     compact_cables = tuple(
         cable for cable in active_cables if facts.cable_technology(cable) == "PROTEGIDA"
@@ -524,98 +647,123 @@ def _add_region_connection_facts(
 ) -> set[UUID]:
     required_mt_poles: set[UUID] = set()
     for pole_proposal, pole in region_poles:
-        candidates = _cable_candidates_for_pole(state, associations, pole)
-        geometric_evidence = tuple(
-            candidate for candidate in candidates if isinstance(candidate, PropostaElemento)
+        edges = associations.mt_topology.edges_by_pole.get(pole.id, ())
+        complete = associations.mt_topology.component_complete_by_pole.get(pole.id, False)
+        cables = tuple(dict.fromkeys(cable for edge in edges for cable in edge.cables))
+        cable_evidence = _confirmed_cable_proposals(state, cables)
+        topology_evidence = (pole_proposal, *cable_evidence)
+        facts.add(
+            target_id,
+            "regiao.topologia_mt_avaliavel",
+            complete,
+            topology_evidence,
+            pole.geometria,
         )
-        transition, angles = _connection_assessment(state, facts, pole, candidates)
+        facts.add(
+            target_id,
+            "regiao.componente_mt_completo",
+            complete,
+            topology_evidence,
+            pole.geometria,
+        )
+        if not complete:
+            continue
+        transition, angles = _connection_assessment(state, pole, edges)
+        line_end = len(edges) == 1
+        facts.add(
+            target_id,
+            "regiao.fim_rede",
+            line_end,
+            topology_evidence,
+            pole.geometria,
+        )
+        facts.add(
+            target_id,
+            "regiao.transicao_rede",
+            transition,
+            topology_evidence,
+            pole.geometria,
+        )
         for angle in sorted(angles):
             facts.add(
                 target_id,
                 "conexao.angulo_graus",
                 angle,
-                (pole_proposal, *geometric_evidence),
+                topology_evidence,
                 pole.geometria,
             )
-        if transition:
-            facts.add(
-                target_id,
-                "regiao.transicao_rede",
-                True,
-                (pole_proposal, *geometric_evidence),
-                pole.geometria,
-            )
-        incident_mt = tuple(
-            candidate for candidate in candidates if facts.cable_level(candidate) == "MT"
-        )
-        if transition or len(incident_mt) == 1:
+        if transition or line_end:
             required_mt_poles.add(pole.id)
             facts.add(
                 target_id,
                 "regiao.para_raios_mt_requerido",
                 True,
-                (pole_proposal, *geometric_evidence),
+                topology_evidence,
                 pole.geometria,
             )
     return required_mt_poles
 
 
-def _cable_candidates_for_pole(
-    state: _TopologyState,
-    associations: _TopologyAssociations,
-    pole: Poste,
-) -> list[Cabo | PropostaElemento]:
-    candidates: list[Cabo | PropostaElemento] = list(associations.incident.get(pole.id, ()))
-    identities = {_cable_candidate_identity(candidate) for candidate in candidates}
-    for candidate in sorted(state.geometric_cables, key=lambda item: str(item.id)):
-        identity = _cable_candidate_identity(candidate)
-        if identity not in identities and _endpoint_is_near(pole.geometria, candidate.geometria):
-            identities.add(identity)
-            candidates.append(candidate)
-    return candidates
-
-
 def _connection_assessment(
     state: _TopologyState,
-    facts: _TopologyFactCollector,
     pole: Poste,
-    candidates: list[Cabo | PropostaElemento],
+    edges: tuple[_MtNetworkEdge, ...],
 ) -> tuple[bool, set[Decimal]]:
-    transition_pairs = tuple(
-        (first, second)
-        for first_index, first in enumerate(candidates)
-        for second in candidates[first_index + 1 :]
-        if facts.cable_level(first) == facts.cable_level(second) == "MT"
-        and _is_transition_pair(
-            facts.cable_technology(first),
-            facts.cable_technology(second),
-        )
+    transition = len(edges) == 2 and _is_transition_pair(
+        edges[0].technology,
+        edges[1].technology,
     )
-    if transition_pairs:
-        angles = {
-            angle
-            for first, second in transition_pairs
-            if (
-                angle := _deflection_angle(
-                    pole.geometria,
-                    (first, second),
-                    page_sizes=state.page_sizes,
-                )
-            )
-            is not None
-        }
-        return True, angles
-    angles = {
-        angle
-        for level in {facts.cable_level(item) for item in candidates}
-        if level
-        for angle in _deflection_angles(
+    directions = tuple(_edge_direction(state, pole, edge) for edge in edges)
+    if any(item.geometria is None for item in directions):
+        return transition, set()
+    return transition, set(
+        _deflection_angles(
             pole.geometria,
-            tuple(item for item in candidates if facts.cable_level(item) == level),
+            directions,
             page_sizes=state.page_sizes,
         )
-    }
-    return False, angles
+    )
+
+
+def _edge_direction(
+    state: _TopologyState,
+    pole: Poste,
+    edge: _MtNetworkEdge,
+) -> _EdgeDirection:
+    other_id = edge.pole_ids[1] if edge.pole_ids[0] == pole.id else edge.pole_ids[0]
+    other = state.poles.get(other_id)
+    if (
+        pole.geometria is None
+        or other is None
+        or other.geometria is None
+        or pole.geometria.pagina_id != other.geometria.pagina_id
+    ):
+        return _EdgeDirection(None)
+    return _EdgeDirection(
+        GeometriaDocumento.polilinha(
+            pole.geometria.pagina_id,
+            (_center(pole.geometria), _center(other.geometria)),
+        )
+    )
+
+
+def _confirmed_cable_proposals(
+    state: _TopologyState,
+    cables: tuple[Cabo, ...],
+) -> tuple[PropostaElemento, ...]:
+    cable_ids = {cable.id for cable in cables}
+    return tuple(
+        sorted(
+            (
+                proposal
+                for proposal_id, confirmed in state.by_proposal.items()
+                if isinstance(confirmed, Cabo)
+                and confirmed.id in cable_ids
+                and (proposal := state.proposals.get(proposal_id)) is not None
+            ),
+            key=lambda item: str(item.id),
+        )
+    )
 
 
 def _add_transformer_facts(
@@ -764,7 +912,9 @@ def medir_extensao_rede_instalar(
     cables = tuple(
         item
         for item in projeto.elementos
-        if isinstance(item, Cabo) and item.situacao is SituacaoProjeto.INSTALAR
+        if isinstance(item, Cabo)
+        and item.situacao is SituacaoProjeto.INSTALAR
+        and item.tipo_trecho is TipoTrechoRede.REDE_DISTRIBUICAO
     )
     if not cables:
         return None, False, None
@@ -881,14 +1031,9 @@ def _is_transition_pair(first: str, second: str) -> bool:
     )
 
 
-def _cable_candidate_identity(cable: Cabo | PropostaElemento) -> tuple[object, ...]:
-    catalog_id = (
-        cable.tipo_catalogo_id if isinstance(cable, Cabo) else cable.tipo_catalogo_sugerido_id
-    )
-    geometry = cable.geometria
-    if geometry is None:
-        return ("id", cable.id)
-    return ("geometry", catalog_id, geometry.pagina_id, geometry.pontos)
+def _technology_family(value: str) -> str:
+    normalized = _normalize_class(value)
+    return "CONVENCIONAL" if normalized.startswith("CONVENCIONAL") else normalized
 
 
 def _structure_uses_cable(

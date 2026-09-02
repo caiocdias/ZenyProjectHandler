@@ -530,7 +530,30 @@ CATALOGO_FATOS_CONFORMIDADE = (
         _REGION,
         TipoValorFato.NUMERO,
         _NUMERO,
-        "Deflexão calculada da conexão, em graus.",
+        "Deflexão calculada entre arestas resolvidas da rede de distribuição, em graus.",
+    ),
+    _fact(
+        "regiao.topologia_mt_avaliavel",
+        _REGION,
+        TipoValorFato.BOOLEANO,
+        _BOOLEANO,
+        "Indica que a topologia MT no poste possui componente completo e pode concluir fim ou "
+        "transição.",
+    ),
+    _fact(
+        "regiao.componente_mt_completo",
+        _REGION,
+        TipoValorFato.BOOLEANO,
+        _BOOLEANO,
+        "Indica que endpoints, nível e tecnologia de todas as arestas do componente MT foram "
+        "resolvidos.",
+    ),
+    _fact(
+        "regiao.fim_rede",
+        _REGION,
+        TipoValorFato.BOOLEANO,
+        _BOOLEANO,
+        "Indica grau topológico um em componente MT completo da rede de distribuição.",
     ),
     _fact(
         "regiao.poste_instalar_altura_m",

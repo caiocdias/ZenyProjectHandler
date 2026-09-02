@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import NAMESPACE_URL, UUID, uuid5
@@ -29,6 +30,8 @@ from zeny_project_handler.domain.enums import (
     NivelRede,
     SituacaoProjeto,
     TipoEvidencia,
+    TipoPontoRede,
+    TipoTrechoRede,
 )
 from zeny_project_handler.domain.market import Mercado
 from zeny_project_handler.domain.project import Cabo, EstruturaMt, PontoRede, Poste, Projeto
@@ -83,6 +86,49 @@ def test_installed_extension_deduplicates_parallel_pole_route() -> None:
     length, complete, _geometry = medir_extensao_rede_instalar(project)
 
     assert length == Decimal(200)
+    assert complete is True
+
+
+def test_installed_extension_uses_only_distribution_network_segments() -> None:
+    cables, points, pole_ids = _network(((0, 1, 100), (2, 3, 800), (4, 5, 900)))
+    catalog = carregar_catalogo_inicial()
+    post_type = next(
+        item
+        for item in catalog.itens_ativos(CategoriaElemento.POSTE)
+        if isinstance(item, TipoPoste)
+    )
+    delivery_point_id = cables[2].ponto_destino_id
+    typed_points = tuple(
+        replace(point, poste_id=None, tipo=TipoPontoRede.ENTREGA)
+        if point.id == delivery_point_id
+        else point
+        for point in points.values()
+    )
+    typed_cables = (
+        cables[0],
+        replace(cables[1], tipo_trecho=TipoTrechoRede.DESCONHECIDO),
+        replace(cables[2], tipo_trecho=TipoTrechoRede.RAMAL_CONEXAO),
+    )
+    poles = tuple(
+        Poste(
+            id=pole_id,
+            tipo_catalogo_id=post_type.id,
+            situacao=SituacaoProjeto.INSTALAR,
+        )
+        for pole_id in pole_ids
+    )
+    project = Projeto(
+        id=_id("typed-extension-project"),
+        nome="Extensão apenas da rede de distribuição",
+        catalogo_versao_id=catalog.id,
+        criado_em=_NOW,
+        elementos=(*poles, *typed_cables),
+        pontos_rede=typed_points,
+    )
+
+    length, complete, _geometry = medir_extensao_rede_instalar(project)
+
+    assert length == Decimal(100)
     assert complete is True
 
 
@@ -265,6 +311,7 @@ def _provider_session(
             ),
             ponto_origem_id=cable.ponto_origem_id,
             ponto_destino_id=cable.ponto_destino_id,
+            tipo_trecho=cable.tipo_trecho,
             comprimento_m=cable.comprimento_m,
         )
         for cable in cables
@@ -392,6 +439,7 @@ def _network(
             situacao=SituacaoProjeto.INSTALAR,
             ponto_origem_id=point_by_pole[by_node[first]].id,
             ponto_destino_id=point_by_pole[by_node[second]].id,
+            tipo_trecho=TipoTrechoRede.REDE_DISTRIBUICAO,
             comprimento_m=Decimal(length),
         )
         for index, (first, second, length) in enumerate(edges)

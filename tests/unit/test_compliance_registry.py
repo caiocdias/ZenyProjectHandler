@@ -67,6 +67,12 @@ def test_fact_catalog_covers_current_and_planned_seed_vocabulary() -> None:
     assert definitions["conexao.angulo_graus"].disponibilidade is (
         DisponibilidadeProvedorFato.DISPONIVEL
     )
+    for key in (
+        "regiao.topologia_mt_avaliavel",
+        "regiao.componente_mt_completo",
+        "regiao.fim_rede",
+    ):
+        assert definitions[key].disponibilidade is DisponibilidadeProvedorFato.DISPONIVEL
     warnings = validar_semantica_registro(registry)
     assert not any("conexao.angulo_graus" in item for item in warnings)
     assert all("vao.comprimento_m" not in item for item in warnings)
