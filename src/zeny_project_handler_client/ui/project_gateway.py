@@ -34,9 +34,11 @@ from zeny_project_handler_contracts.projects import (
     CreateProjectRequest,
     DeleteProjectResponse,
     ProjectDetailResponse,
+    ProjectMarketResponse,
     ProjectServiceCodesResponse,
     ProjectSummaryListResponse,
     ReplaceProjectServiceCodesRequest,
+    UpdateProjectMarketRequest,
     UpdateProjectRequest,
 )
 from zeny_project_handler_contracts.session import SessionCapabilitiesResponse
@@ -76,6 +78,12 @@ class ProjectGateway(Protocol):
     ) -> ProjectDetailResponse: ...
 
     def get_project(self, project_id: UUID) -> ProjectDetailResponse: ...
+
+    def get_market(self, project_id: UUID) -> ProjectMarketResponse: ...
+
+    def update_market(
+        self, project_id: UUID, request: UpdateProjectMarketRequest
+    ) -> ProjectMarketResponse: ...
 
     def find_project_by_service_note(self, service_note: str) -> ProjectDetailResponse | None: ...
 
@@ -238,6 +246,18 @@ class HttpProjectGateway:
             if error.status_code == 404 and error.code is ErrorCode.RESOURCE_NOT_FOUND:
                 return None
             raise
+
+    def get_market(self, project_id: UUID) -> ProjectMarketResponse:
+        return self._json_model(
+            "GET", f"{API_V1_PREFIX}/projects/{project_id}/market", None, ProjectMarketResponse
+        )
+
+    def update_market(
+        self, project_id: UUID, request: UpdateProjectMarketRequest
+    ) -> ProjectMarketResponse:
+        return self._json_model(
+            "PUT", f"{API_V1_PREFIX}/projects/{project_id}/market", request, ProjectMarketResponse
+        )
 
     def get_service_codes(self, project_id: UUID) -> ProjectServiceCodesResponse:
         return self._json_model(

@@ -293,12 +293,19 @@ def test_cancel_and_resume_pipeline_reuses_completed_work_without_duplicates(
             cancelado=cancellation.is_set,
         )
 
+    assert market_classifier.consultas == []
     resumed = service.executar_pipeline(project.projeto.id)
+    initialized_market = service.abrir_projeto(project.projeto.id).projeto.classificacao_mercado
+    assert initialized_market is not None
     repeated = service.executar_pipeline(project.projeto.id)
+    assert (
+        service.abrir_projeto(project.projeto.id).projeto.classificacao_mercado
+        == initialized_market
+    )
 
     assert resumed.execucoes_interpretacao == repeated.execucoes_interpretacao
     assert resumed.execucao_conformidade_id == repeated.execucao_conformidade_id
-    assert market_classifier.consultas == ["0000000237", "0000000237"]
+    assert market_classifier.consultas == ["0000000237"]
     assert resumed.documentos_processados == 2
     with SqlAlchemyUnitOfWork(engine) as work:
         runs = work.execucoes_analise.listar_do_projeto(project.projeto.id)

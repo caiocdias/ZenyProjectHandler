@@ -1,7 +1,8 @@
 # Zeny Project Handler — Mercado editável, painéis e leitura de redes
 
 Data: 10/09/2026. Base inicial: `336afba`. E01 diagnosticada em `4ce5b50`; E02 entregue
-em `101c721`. E03 concluída sobre `101c721`, com alterações locais sem commit. Demais etapas pendentes.
+em `101c721`; E03 integrada em `4f48c93`. E04 concluída sobre `4f48c93`, sem commit.
+Demais etapas pendentes.
 
 ## Objetivo e uso
 
@@ -150,7 +151,7 @@ Hipóteses de produto adotadas para tornar o plano executável, ajustáveis com 
 | E01 | Diagnóstico e referência da NS 1256148225 | #concluida | Nenhuma | Inventário e perdas por fase |
 | E02 | Classificação persistida e API | #concluida | Nenhuma | Inicialização SQL e alteração versionada |
 | E03 | Conformidade Rural, Urbano e Ambos | #concluida | E02 | Aplicabilidade e snapshots coerentes |
-| E04 | Escolha do técnico na interface | #pendente | E02, E03 | Seletor e proveniência em Projeto/GMAX |
+| E04 | Escolha do técnico na interface | #concluida | E02, E03 | Seletor e proveniência em Projeto/GMAX |
 | E05 | Rolagem independente dos painéis | #pendente | Nenhuma | Cartões legíveis em docks pequenos |
 | E06 | Marca-texto por situação | #pendente | Nenhuma | Realce navegável com transparência |
 | E07 | Extração robusta de evidências | #pendente | E01 | OCR/geometria com cobertura mensurada |
@@ -513,7 +514,7 @@ O gate integral com cobertura e a homologação visual/local permanecem em E09; 
 executados nem declarados atendidos por E03. Sem bloqueios remanescentes. Nenhum commit,
 publicação ou migração operacional realizada.
 
-## E04 — Escolha do técnico na interface — #pendente
+## E04 — Escolha do técnico na interface — #concluida
 
 **Objetivo:** permitir salvar Rural, Urbano ou Ambos pelo painel Projeto e conferir a origem.
 **Por que agora:** E02/E03 tornam a escolha persistida e avaliável.
@@ -540,10 +541,10 @@ Execute E04 — Escolha do técnico na interface de docs/roadmap-mercado-paineis
 
 **Critérios de aceite:**
 
-- [ ] Técnico salva as três opções e as encontra após reabertura/reconexão.
-- [ ] UI distingue banco e escolha manual e informa falha/conflito sem mostrar salvamento falso.
-- [ ] Troca rápida de projeto não mistura valores; GMAX/conformidade se atualizam coerentemente.
-- [ ] Controles têm rótulos e navegação por teclado e não bloqueiam a thread gráfica.
+- [x] Técnico salva as três opções e as encontra após reabertura/reconexão.
+- [x] UI distingue banco e escolha manual e informa falha/conflito sem mostrar salvamento falso.
+- [x] Troca rápida de projeto não mistura valores; GMAX/conformidade se atualizam coerentemente.
+- [x] Controles têm rótulos e navegação por teclado e não bloqueiam a thread gráfica.
 
 **Validação obrigatória:**
 `python -m pytest tests/integration/test_project_http_gateway.py tests/unit/test_project_panel_remote_boundary.py tests/integration/test_gmax_panel.py tests/integration/test_client_reconnection.py tests/integration/test_window.py`.
@@ -552,8 +553,88 @@ e escuro; todos aprovados. Não exigir banco operacional para testar UI.
 **Bloqueios:** nenhum bloqueio conhecido.
 **Riscos e mitigação:** estado local divergir do servidor; recarregar DTO canônico após mutação
 e usar descarte de respostas antigas existente.
-**Evidências e handoff:** ainda não executada. Registrar controles, comportamento em conflitos,
-capturas locais e validações de gateway/UI.
+**Evidências e handoff — 10/09/2026:**
+
+- Base `HEAD=4f48c93`, Git inicial limpo. E02 (`101c721`) e E03 (`4f48c93`) concluídas e
+  integradas; cabeçalho corrigido para refletir os commits, sem alterar evidências históricas.
+  Nenhum `AGENTS.md` encontrado na hierarquia ou checkout. README, roadmap, painéis, gateways,
+  contratos e testes relacionados inspecionados. Execução local única, sem agentes nem trabalho
+  paralelo em E05. Estado mudou para `#em-andamento` no índice e detalhe antes da implementação.
+- `src/zeny_project_handler_client/ui/project_gateway.py`: `get_market` e `update_market` usam
+  GET/PUT autenticados de `/market` e os DTOs existentes, com `expected_project_version`.
+  Sem alteração da API 1.4.0, schemas, SQL, domínio, regras, OCR ou persistência do servidor.
+  PUT continua sem repetição automática, inclusive após timeout.
+- Novo `ui/project_market.py`: cartão `projectMarketGroup`, combo `projectMarketCombo`, ações
+  `projectMarketSave`, `projectMarketCancel` e `projectMarketRefresh`, rótulos acessíveis, buddy
+  e atalhos. Mostra banco inicial, valor salvo, origem e horário UTC. Cancelar descarta somente
+  a seleção ainda não enviada; envio em curso aguarda confirmação. Permite confirmar o mesmo
+  valor inicial como escolha manual. Erro/conflito limpa valores não confirmados e exige
+  Atualizar mercado antes de novo envio; carregamento/não inicializado não presume uma opção.
+- Novo `ui/remote_read.py`: trabalho HTTP finito fora da thread Qt, sem capturar widgets.
+  Threads permanecem vivas até término/timeout, mesmo após fechamento; callbacks são invalidados
+  por geração. Troca de projeto/NS, atualização, fechamento e desconexão descartam respostas
+  antigas. Desconexão durante PUT não promete desfazer a escrita; reconectar relê o valor salvo.
+- `ui/project_panel.py`: carrega mercado ao ativar/reabrir, após serviços e término de pipeline
+  ou conformidade (sucesso/falha/cancelamento); reconexão relê também o projeto ativo.
+  A versão confirmada acompanha a sessão, sem rebaixá-la com resposta anterior. Durante envio,
+  CRUD, serviços, folhas e análise ficam bloqueados; Projeto mantém os estados do cartão visíveis.
+- `ui/main_window.py`, `gmax_panel.py` e `documentation_panel.py`: leitura confirmada do mercado
+  dispara releitura assíncrona de GMAX/conformidade. Isso cobre também atualização após conflito.
+  GMAX separa escolha do projeto e banco/efetivo/origem da última execução. Snapshot stale mantém
+  sua proveniência anterior; erro não o reapresenta como atual. Gerações impedem aplicar leituras
+  anteriores após mudança/reconexão. Não há criação implícita de job nem avaliação local.
+  `documentation_gateway.py` foi inspecionado e seu contrato existente permaneceu suficiente.
+- Testes novos `tests/integration/test_project_market_ui.py` e `test_project_market_http.py`:
+  três escolhas, confirmação do valor inicial, cancelamento de seleção, erro/tentativa, ausência
+  de inicialização, 404, conflitos, DTO de outro projeto/NS, respostas atrasadas no mesmo e em
+  outro projeto, desconexão durante PUT, responsividade Qt, temas, dois clientes HTTP, snapshot
+  stale, reexecução explícita e restauração após reinício de servidor/cliente. SQL fake e PDFs
+  sintéticos; nenhuma dependência operacional. `tests/remote_gateways.py` acompanha o protocolo;
+  `tests/unit/test_project_panel_remote_boundary.py` inclui os novos módulos.
+- A regressão ampliada encontrou em `tests/integration/test_mvp_workflow.py` uma expectativa
+  anterior a E02: duas consultas SQL ao repetir o pipeline. `git show HEAD:...` confirmou que
+  ela já estava no checkout inicial. Atualizada para uma consulta e igualdade da classificação
+  persistida entre retomada/repetição, verificando ainda zero consultas antes do cancelamento.
+  Nenhum ajuste no backend. Rodada focada após correção: **18 testes aprovados em 5,57 s**.
+- Documentação: `README.md`, `docs/especificacao-funcional.md` e este roadmap.
+- Inspeção visual: capturas Qt reais em `tmp/e04-visual/`, com `{claro,escuro}` para `salvo`,
+  `falha`, `desconectado`, `reconectado` e `janela-stale`. Os oito estados do cartão e as duas
+  janelas completas foram abertos e inspecionados. Texto, rótulos, ações e proveniência legíveis
+  nos dois temas; GMAX mostra Projeto Ambos e última execução Urbano/banco, marcada stale.
+  O primeiro offscreen não encontrou fontes e gerou quadrados: capturas rejeitadas e substituídas
+  após carregar `C:/Windows/Fonts/segoeui.ttf` apenas no teste de captura. Nenhuma alteração de
+  fontes de produção. O tamanho mínimo atual dos docks expande a janela; rolagem/janela reduzida
+  continua no escopo de E05, sem antecipar suas alterações.
+
+Comandos finais na raiz, todos aprovados:
+
+```powershell
+$env:ZENY_E04_CAPTURE_DIR = 'tmp/e04-visual'
+.venv/Scripts/python.exe -m pytest tests/integration/test_project_http_gateway.py tests/unit/test_project_panel_remote_boundary.py tests/integration/test_gmax_panel.py tests/integration/test_client_reconnection.py tests/integration/test_window.py tests/integration/test_project_market_ui.py tests/integration/test_project_market_http.py tests/integration/test_mvp_workflow.py tests/integration/test_compliance_visibility.py tests/integration/test_compliance_rules_panel.py tests/server/test_project_market_api.py --basetemp=tmp/e4e -p no:cacheprovider -q --tb=short --show-capture=no
+.venv/Scripts/python.exe -m ruff check .
+.venv/Scripts/python.exe -m ruff format --check .
+.venv/Scripts/python.exe -m mypy
+.venv/Scripts/python.exe -m pip check
+.venv/Scripts/python.exe scripts/complexity_gate.py src
+.venv/Scripts/python.exe scripts/client_artifact_gate.py --source-only
+git diff --check
+```
+
+Resultado consolidado: **82 testes aprovados em 82,52 s**, incluindo todos os obrigatórios de
+E04, 11 casos novos de UI/HTTP, regressões documentais e API de mercado. Log local ignorado:
+`tmp/e04-final-tests.txt`. Ruff aprovado; **331 arquivos formatados**; Mypy sem erros em
+**315 arquivos**; dependências íntegras; complexidade aprovada (**2.707 funções**, nenhuma E/F);
+fronteira do cliente e diff aprovados. Falhas exploratórias de importação, fixture de enum,
+retenção do widget de captura, espera por callbacks e formatação foram corrigidas. A expectativa
+herdada de repetição SQL também foi corrigida e verificada. Não restam falhas ou validações
+obrigatórias de E04 pendentes. Critérios de aceite acima atendidos por testes e inspeção visual;
+índice/detalhe atualizados para `#concluida` somente após esses resultados.
+
+Handoff E05: preservar nomes dos controles, a separação banco/projeto/snapshot, descarte por
+geração e bloqueios de envio. Incluir o cartão `ProjectMarketWidget` na rolagem do painel Projeto
+e impedir que rolar o painel altere inadvertidamente o combo. E09 conserva o gate integral com
+cobertura e a homologação do PDF/OCR real; não executados nem reivindicados por E04. Sem commit,
+publicação, migração ou alteração de dados operacionais.
 
 ## E05 — Rolagem independente dos painéis — #pendente
 

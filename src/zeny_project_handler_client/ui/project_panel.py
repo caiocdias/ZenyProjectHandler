@@ -55,11 +55,13 @@ from zeny_project_handler_contracts.jobs import JobResultResponse
 from zeny_project_handler_contracts.projects import (
     ProjectDetailDto,
     ProjectDetailResponse,
+    ProjectMarketResponse,
     ProjectSummaryListResponse,
 )
 from zeny_project_handler_contracts.session import SessionCapabilitiesResponse
 
 from .project_gateway import ProjectGateway, ProjectGatewayError
+from .project_market import ProjectMarketWidget
 from .project_search import ProjectSearchThread
 
 T = TypeVar("T")
@@ -281,6 +283,12 @@ class ProjectPanelWidget(QWidget):
         project_actions.addWidget(self._delete_project, 1, 1)
         project_layout.addLayout(project_actions)
         layout.addWidget(self._project_box)
+
+        self.market = ProjectMarketWidget(self._gateway)
+        self.market.loaded.connect(self._market_loaded)
+        self.market.busy_changed.connect(self._market_busy_changed)
+        self.market.status_changed.connect(self.status_changed)
+        layout.addWidget(self.market)
 
         self._service_box = QGroupBox("Serviços do projeto")
         self._service_box.setObjectName("mvpProjectServiceCodesBox")
@@ -738,6 +746,7 @@ class ProjectPanelWidget(QWidget):
             return
         self._session = session.model_copy(update={"project_version": response.project_version})
         self._set_service_codes(response.service_codes)
+        self.market.open_project(self._session)
         self._service_code.clear()
         self.status_changed.emit("Serviços do projeto atualizados")
 
@@ -1045,6 +1054,7 @@ class ProjectPanelWidget(QWidget):
         return finished
 
     def shutdown_polling(self, timeout_ms: int = 1_000) -> bool:
+        self.market.set_connected(False)
         self._search_stopped = True
         self._connection_generation += 1
         self._search_generation += 1
@@ -1066,6 +1076,17 @@ class ProjectPanelWidget(QWidget):
         """Retome a observação global usando o gateway reconectável já atualizado."""
         self._search_stopped = False
         self._connection_generation += 1
+        self.market.set_connected(True)
+        session = self._session
+        if session is not None:
+            response = self._action(
+                lambda: self._gateway.get_project(session.project_id.root),
+                mostrar_erro=False,
+            )
+            if response is not None:
+                self._activate(response.project)
+            else:
+                self._reset_to_initial_state()
         self._schedule_search()
         thread = self._global_poll_thread
         if thread is not None and thread.isRunning():
@@ -1136,6 +1157,28 @@ class ProjectPanelWidget(QWidget):
             if response is not None:
                 self._session = response.project
                 self._show_summary(self._session)
+                self.market.open_project(self._session)
+
+    @Slot(object)
+    def _market_loaded(self, response: object) -> None:
+        session = self._session
+        if not isinstance(response, ProjectMarketResponse) or session is None:
+            return
+        if response.project_id != session.project_id:
+            return
+        if response.project_version < session.project_version:
+            self.market.reload()
+            return
+        self._session = session.model_copy(update={"project_version": response.project_version})
+
+    @Slot(bool)
+    def _market_busy_changed(self, busy: bool) -> None:
+        self._apply_operation_state()
+        self.busy_changed.emit(busy)
+
+    def atualizar_mercado_apos_conformidade(self, project_id: object, _status: object) -> None:
+        if project_id == self.projeto_ativo_id:
+            self.market.reload()
 
     @Slot(object)
     def _session_received(self, response: object) -> None:
@@ -1157,6 +1200,8 @@ class ProjectPanelWidget(QWidget):
             or self.processando
             or self._project_action_active
         )
+        self.market.set_blocked(blocked)
+        blocked = blocked or self.market.saving
         has_session = self._session is not None
         self._project_box.setEnabled(not blocked)
         self._rename_project.setEnabled(has_session and not blocked)
@@ -1236,6 +1281,7 @@ class ProjectPanelWidget(QWidget):
     def _activate(self, session: ProjectDetailDto) -> None:
         self._session = session
         self._load_service_codes(session.project_id.root)
+        self.market.open_project(self._session or session)
         project_id = str(session.project_id.root)
         self._settings.setValue("last_project_id", project_id)
         self._settings.sync()
@@ -1337,6 +1383,7 @@ class ProjectPanelWidget(QWidget):
             return None
 
     def _show_empty_state(self) -> None:
+        self.market.clear()
         self._project_box.setTitle("Projeto")
         self._clear_service_codes()
         self._updating_page_order = True

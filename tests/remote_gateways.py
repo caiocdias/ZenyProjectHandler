@@ -66,8 +66,10 @@ from zeny_project_handler_contracts.portability import (
 from zeny_project_handler_contracts.projects import (
     DeleteProjectResponse,
     ProjectDetailResponse,
+    ProjectMarketResponse,
     ProjectServiceCodesResponse,
     ProjectSummaryListResponse,
+    UpdateProjectMarketRequest,
 )
 from zeny_project_handler_contracts.review import (
     AcceptReviewProposalRequest,
@@ -115,6 +117,24 @@ class DirectProjectGateway:
 
     def session(self) -> SessionCapabilitiesResponse:
         return self._runtime.session_capabilities()
+
+    def get_market(self, project_id: UUID) -> ProjectMarketResponse:
+        try:
+            return self._projects.get_market(project_id)
+        except ApiError as error:
+            raise _project_error(error) from None
+
+    def update_market(
+        self, project_id: UUID, request: UpdateProjectMarketRequest
+    ) -> ProjectMarketResponse:
+        try:
+            return self._projects.update_market(
+                project_id,
+                effective_market=request.effective_market,
+                expected_version=request.expected_project_version,
+            )
+        except ApiError as error:
+            raise _project_error(error) from None
 
     def list_projects(
         self,

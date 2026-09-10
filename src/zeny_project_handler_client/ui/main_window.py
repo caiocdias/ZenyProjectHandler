@@ -443,9 +443,19 @@ class MainWindow(QMainWindow):
             self.project_panel.project_cleared.connect(self.review_panel.limpar)
             if self.documentation_panel is not None:
                 self.project_panel.project_opened.connect(self.documentation_panel.abrir_projeto)
+                self.project_panel.market.loaded.connect(
+                    self.documentation_panel.atualizar_apos_escolha
+                )
+                self.documentation_panel.compliance_finished.connect(
+                    self.project_panel.atualizar_mercado_apos_conformidade
+                )
                 if self.project_panel.projeto_ativo_id is not None:
                     self.documentation_panel.abrir_projeto(self.project_panel.projeto_ativo_id)
             if self.gmax_panel is not None:
+                self.project_panel.market.invalidated.connect(
+                    self.gmax_panel.invalidar_mercado_atual
+                )
+                self.project_panel.market.loaded.connect(self.gmax_panel.atualizar_apos_escolha)
                 self.project_panel.project_opened.connect(self.gmax_panel.abrir_projeto)
                 self.project_panel.project_cleared.connect(self.gmax_panel.limpar)
                 if self.project_panel.projeto_ativo_id is not None:
@@ -580,13 +590,16 @@ class MainWindow(QMainWindow):
     @Slot(bool)
     def _refresh_operation_controls(self, _busy: bool = False) -> None:
         project_busy = self.project_panel is not None and self.project_panel.processando
+        market_busy = self.project_panel is not None and self.project_panel.market.saving
         portability_busy = self.portability_panel is not None and self.portability_panel.processando
-        busy = project_busy or portability_busy
+        busy = project_busy or portability_busy or market_busy
         if self.project_panel is not None:
             self.project_panel.setEnabled(self._connection_available and not portability_busy)
             self.project_panel.set_global_operation(None)
         if self.portability_panel is not None:
-            self.portability_panel.setEnabled(self._connection_available and not project_busy)
+            self.portability_panel.setEnabled(
+                self._connection_available and not project_busy and not market_busy
+            )
             self.portability_panel.set_global_operation(None)
         self.pdf_viewer.setEnabled(self._connection_available and not portability_busy)
         if self.review_panel is not None:
@@ -616,6 +629,10 @@ class MainWindow(QMainWindow):
                 self.project_panel.restart_polling()
             else:
                 self.project_panel.shutdown_polling()
+                if self.gmax_panel is not None:
+                    self.gmax_panel.limpar()
+                if self.documentation_panel is not None:
+                    self.documentation_panel.limpar()
         self._refresh_operation_controls()
         if available:
             self._refresh_data_panels()

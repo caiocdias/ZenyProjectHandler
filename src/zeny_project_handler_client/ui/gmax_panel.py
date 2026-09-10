@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from functools import partial
 from uuid import UUID
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QGroupBox,
@@ -26,8 +27,10 @@ from zeny_project_handler_contracts.gmax import (
     GmaxSnapshotState,
     GmaxSummaryResponse,
 )
+from zeny_project_handler_contracts.projects import ProjectMarketResponse
 
 from .documentation_gateway import DocumentationGateway, DocumentationGatewayError
+from .remote_read import RemoteRequestThread
 
 _CHECK_LABELS = ("Impacto ambiental", "Servidão")
 _QUERY_LABELS = {
@@ -55,6 +58,7 @@ class GmaxPanelWidget(QWidget):
         self._gateway = gateway
         self._project_id: UUID | None = None
         self._summary: GmaxSummaryResponse | None = None
+        self._generation = 0
         self._build_ui()
         self.limpar()
 
@@ -109,6 +113,10 @@ class GmaxPanelWidget(QWidget):
         market_group = QGroupBox("Mercado")
         market_group.setObjectName("gmaxMarketGroup")
         market_layout = QVBoxLayout(market_group)
+        self._current_market = self._summary_label(
+            "gmaxCurrentMarketLabel", "Mercado salvo no projeto"
+        )
+        market_layout.addWidget(self._current_market)
         self._market = QLabel()
         self._market.setObjectName("gmaxMarketLabel")
         self._market.setProperty("role", "summary")
@@ -153,10 +161,12 @@ class GmaxPanelWidget(QWidget):
         return label
 
     def abrir_projeto(self, projeto_id: UUID) -> None:
+        self._current_market.setText("Projeto: consultando mercado salvo…")
         self._project_id = projeto_id
         self.atualizar()
 
     def atualizar(self) -> None:
+        self._generation += 1
         project_id = self._project_id
         if project_id is None:
             self.limpar()
@@ -172,11 +182,64 @@ class GmaxPanelWidget(QWidget):
         self._summary = summary
         self._populate(summary)
 
+    def mostrar_mercado_atual(self, response: object) -> None:
+        if not isinstance(response, ProjectMarketResponse):
+            return
+        if response.project_id.root != self._project_id:
+            return
+        classification = response.classification
+        if classification is None:
+            self._current_market.setText("Projeto: mercado não inicializado")
+            return
+        source = "técnico" if classification.source == "MANUAL" else "banco"
+        self._current_market.setText(
+            f"Projeto: {classification.effective_market.title()} · Origem: {source}\n"
+            f"Banco inicial: {classification.database_market.title()}"
+        )
+
+    def invalidar_mercado_atual(self) -> None:
+        self._generation += 1
+        self._current_market.setText(
+            "Projeto: mercado salvo ainda não confirmado; consulte Projeto"
+        )
+        if self._project_id is not None:
+            self._show_error("Mercado salvo ainda não confirmado; consulte o painel Projeto.")
+
+    def atualizar_apos_escolha(self, response: object) -> None:
+        if not isinstance(response, ProjectMarketResponse):
+            return
+        if response.project_id.root != self._project_id:
+            return
+        self.mostrar_mercado_atual(response)
+        self._generation += 1
+        self._show_error("Atualizando para o mercado salvo.")
+        self._state.setText("Atualizando conformidade para o mercado salvo…")
+        worker = RemoteRequestThread(
+            self._generation, partial(self._gateway.get_gmax, response.project_id.root)
+        )
+        worker.received.connect(self._market_summary_received)
+        worker.launch()
+
+    @Slot(int, object)
+    def _market_summary_received(self, generation: int, result: object) -> None:
+        if generation != self._generation:
+            return
+        if (
+            not isinstance(result, GmaxSummaryResponse)
+            or result.project_id.root != self._project_id
+        ):
+            self._show_error(str(result))
+            return
+        self._summary = result
+        self._populate(result)
+
     def atualizar_apos_conformidade(self, projeto_id: object, _status: object) -> None:
         if isinstance(projeto_id, UUID) and projeto_id == self._project_id:
             self.atualizar()
 
     def limpar(self) -> None:
+        self._generation += 1
+        self._current_market.setText("Projeto: mercado indisponível")
         self._project_id = None
         self._summary = None
         self._state.setText("Nenhum projeto ativo. Abra um projeto para consultar o resumo GMAX.")
@@ -276,6 +339,13 @@ def _market_text(summary: GmaxSummaryResponse) -> str:
             GmaxMarket.URBANO: "Urbano",
             GmaxMarket.AMBOS: "Ambos",
         }[summary.market]
+        if summary.classification is not None:
+            classification = summary.classification
+            source = "técnico" if classification.source == "MANUAL" else "banco"
+            label = (
+                f"Última execução: {label}\n"
+                f"Banco inicial: {classification.database_market.title()} · Origem: {source}"
+            )
         if summary.snapshot_state is GmaxSnapshotState.STALE:
             return f"{label} — última execução, resultado desatualizado"
         return label

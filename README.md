@@ -152,11 +152,21 @@ mercado no SQL Server e persiste a primeira resposta válida, sem fallback por m
 Falhas iniciais permitem nova tentativa na próxima análise; abrir ou consultar o projeto não
 inicia SQL. Reanálises preservam a escolha, mesmo se o cadastro externo mudar. Trocar a NS limpa
 a classificação, inclusive ao voltar à NS anterior. A API autenticada permite salvar Rural,
-Urbano ou Ambos após a inicialização, com controle de versão e proveniência; o seletor Qt ainda
-não está disponível. Ambos aplica a união das regras rurais e urbanas no projeto inteiro,
+Urbano ou Ambos após a inicialização, com controle de versão e proveniência. No painel **Projeto**,
+o cartão **Mercado do projeto** mostra o banco inicial, o valor salvo, a origem e o horário.
+Use **Escolha do técnico** e **Salvar mercado**; **Cancelar escolha** descarta a seleção ainda
+não enviada. Também é possível confirmar manualmente o mesmo valor inicial do banco.
+O salvamento aguarda confirmação do servidor. Em falha ou conflito, use **Atualizar mercado**
+para conferir o valor persistido antes de escolher novamente; a interface não repete o envio.
+Se a conexão cair durante o envio, ele pode ter sido concluído: reconectar relê o servidor.
+Reabrir, reconectar e terminar uma análise recarregam o mercado. Nenhuma dessas leituras ou
+edições inicia OCR ou conformidade. Ambos aplica a união das regras rurais e urbanas no projeto inteiro,
 com guardas e evidências preservadas, sem duplicar regra comum ou escolher norma prevalente.
 Alterar a escolha torna os resultados anteriores desatualizados e exige reanálise.
-GMAX e resumos expõem a classificação do snapshot, separando banco, efetivo e origem; a planilha
+GMAX distingue o mercado salvo no projeto da classificação da última execução, separando banco,
+efetivo e origem. Após salvar ou atualizar o mercado, GMAX e o aviso de conformidade releem o
+estado persistido; o snapshot anterior mantém sua proveniência e indicação de desatualizado.
+A planilha
 de conformidade inclui a aba Contexto da execução. API e piso compatível: `1.4.0`.
 Quando o PDF contém `Impacto Ambiental: Sim` no cabeçalho ou uma menção positiva a servidão, a
 execução também consulta no máximo uma vez a ação correspondente com a NS e a coleção de serviços

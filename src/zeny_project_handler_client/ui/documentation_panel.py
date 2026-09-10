@@ -8,7 +8,7 @@ from functools import partial
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import Qt, QTimer, Signal, Slot
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -38,6 +38,7 @@ from zeny_project_handler_contracts.enums import (
     DocumentationFieldStatus,
     JobStatus,
 )
+from zeny_project_handler_contracts.projects import ProjectMarketResponse
 from zeny_project_handler_contracts.review import ReviewSessionResponse
 from zeny_project_handler_contracts.rules import (
     ActiveRuleRegistryResponse,
@@ -48,6 +49,7 @@ from zeny_project_handler_contracts.rules import (
 
 from .documentation_gateway import DocumentationGateway, DocumentationGatewayError
 from .pdf_viewer import PdfViewerWidget
+from .remote_read import RemoteRequestThread
 from .table_word_wrap import TableWordWrapController
 from .visibility import visibility_icon
 
@@ -69,6 +71,7 @@ class DocumentationPanelWidget(QWidget):
         self._viewer = viewer
         self._documentation: DocumentationResponse | None = None
         self._result: ComplianceExecutionResponse | None = None
+        self._market_generation = 0
         self._registry: ActiveRuleRegistryResponse | None = None
         self._callouts: tuple[ComplianceCalloutDto, ...] = ()
         self._hidden_finding_ids: set[UUID] = set()
@@ -285,6 +288,7 @@ class DocumentationPanelWidget(QWidget):
             self.limpar()
 
     def limpar(self) -> None:
+        self._market_generation += 1
         signals_were_blocked = self._project.blockSignals(True)
         try:
             self._project.setCurrentIndex(0 if self._project.count() else -1)
@@ -328,12 +332,48 @@ class DocumentationPanelWidget(QWidget):
         self._load_persisted_result()
 
     def _load_persisted_result(self) -> None:
+        self._market_generation += 1
         documentation = self._documentation
         result = (
             self._gateway.get_latest_compliance(documentation.project_id.root)
             if documentation is not None
             else None
         )
+        self._present_persisted_result(result)
+
+    def atualizar_apos_escolha(self, response: object) -> None:
+        if not isinstance(response, ProjectMarketResponse) or self._documentation is None:
+            return
+        if response.project_id != self._documentation.project_id:
+            return
+        self._market_generation += 1
+        self._execution_status.setText("Atualizando o estado da conformidade para o mercado salvo…")
+        worker = RemoteRequestThread(
+            self._market_generation,
+            partial(self._gateway.get_latest_compliance, response.project_id.root),
+        )
+        worker.received.connect(self._market_result_received)
+        worker.launch()
+
+    @Slot(int, object)
+    def _market_result_received(self, generation: int, result: object) -> None:
+        if generation != self._market_generation:
+            return
+        if result is None or (
+            isinstance(result, ComplianceExecutionResponse)
+            and self._documentation is not None
+            and result.execution.project_id == self._documentation.project_id
+        ):
+            self._present_persisted_result(result)
+        else:
+            self._present_persisted_result(None)
+            self._execution_status.setText(
+                "Resultado indisponível para o mercado salvo. Atualize a conformidade."
+            )
+            self.status_changed.emit(str(result))
+
+    def _present_persisted_result(self, result: ComplianceExecutionResponse | None) -> None:
+        documentation = self._documentation
         context = (
             (
                 documentation.project_id.root,

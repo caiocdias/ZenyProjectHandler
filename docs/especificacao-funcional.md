@@ -328,7 +328,18 @@ SQL é persistida com NS e instante; falha inicial mantém o estado vazio e perm
 próxima análise. A API de mercado permite editar a escolha efetiva para Rural/Urbano/Ambos,
 com origem MANUAL, revisão e conflito de versão, preservando o valor recebido do banco.
 Reabrir e reanalisar não sobrescrevem a escolha. Alterar NS invalida a classificação, mesmo
-ao voltar à NS anterior. O seletor Qt pertence a E04. Ambos avalia a união das regras rurais
+ao voltar à NS anterior. No painel Projeto, Mercado do projeto apresenta banco inicial, valor salvo,
+origem e horário; Escolha do técnico permite Rural/Urbano/Ambos com Salvar mercado e Cancelar escolha.
+Cancelar descarta apenas a seleção não enviada; após o envio é necessário aguardar a resposta.
+O mesmo valor inicial pode ser confirmado como escolha manual. Leitura e escrita são assíncronas;
+o envio usa a versão recebida e não é repetido automaticamente. Falhas e conflitos desabilitam a
+edição até Atualizar mercado reler o estado canônico. Reabertura, reconexão e término de análise
+recarregam o valor; respostas de projeto, NS ou solicitação anterior são descartadas. Um envio
+interrompido pela desconexão pode ter sido concluído e é reconciliado pela leitura, sem reenvio.
+O estado não inicializado orienta executar a análise explicitamente, sem presumir Rural/Urbano.
+GMAX distingue escolha atual e contexto da última execução; após leitura/salvamento, GMAX e
+Documentação e conformidade releem o snapshot e seu estado desatualizado. Nenhuma dessas ações
+inicia OCR, SQL ou avaliação normativa no cliente. Ambos avalia a união das regras rurais
 e urbanas em todo o projeto, respeitando suas guardas e evidências; regra comum não duplica
 achado, e regras distintas conservam suas fontes mesmo quando os resultados divergem. Não há
 precedência normativa automática. Uma inicialização bem-sucedida permanece salva mesmo quando
@@ -367,15 +378,16 @@ ou reutiliza a execução idempotente correspondente.
 O dock **GMAX** fica entre **Documentação e conformidade** e **Exportar**. Ele acompanha o projeto
 ativo e consulta somente `GET /api/v1/projects/{project_id}/gmax`; atualizar a aba não cria job,
 não grava dados e não abre conexão com o SQL Server. A apresentação mostra a NS do projeto, todas
-as NS válidas identificadas nos cabeçalhos, a identidade/data da última execução, o mercado e
-exatamente os checks **Impacto ambiental** e **Servidão**.
+as NS válidas identificadas nos cabeçalhos, a identidade/data da última execução, seu mercado e
+exatamente os checks **Impacto ambiental** e **Servidão**. O mercado salvo no projeto chega pela
+leitura de `/market` do painel Projeto, identificado separadamente do contexto da última execução.
 
 Cada check informa, por texto e sem depender de cor, se o gatilho foi detectado no PDF, a ação
 operacional exata, se o `SELECT` não foi executado ou foi executado e, somente nesse último caso,
 se houve **Linha encontrada** ou **Sem linha**. Os motivos não executados permanecem distintos:
 conformidade ainda não executada, gatilho ausente e ausência de códigos de serviço.
 
-`NEVER_EXECUTED` não apresenta mercado nem resultado de linha. `STALE` identifica o mercado, a
+`NEVER_EXECUTED` não apresenta mercado de execução nem resultado de linha. `STALE` identifica o mercado, a
 consulta e a linha como pertencentes à última execução desatualizada, com orientação para
 reanalisar. `BLOCKED_NS_MISMATCH` mostra a divergência, orienta corrigir projeto/PDF e reanalisar e
 não reapresenta mercado ou linha de um snapshot anterior como se fossem atuais. Falha de leitura
