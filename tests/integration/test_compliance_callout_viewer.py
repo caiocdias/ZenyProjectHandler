@@ -367,6 +367,11 @@ def test_callout_anchor_survives_zoom_resize_rotation_tiles_and_page_changes(
         for index, page in enumerate(pages, start=1)
     )
     viewer.definir_callouts_conformidade(callouts)
+    proposals = tuple(_proposal(page.page_id.root) for page in pages)
+    viewer.definir_propostas_revisao(proposals)
+    first_key = str(proposals[0].proposal_id.root)
+    assert set(viewer.view._review_items) == {first_key}
+    original_highlight = viewer.view._review_items[first_key].path()
     _assert_anchor_aligned(viewer, callouts[0])
     _assert_text_fits(viewer, callouts[0])
 
@@ -376,6 +381,10 @@ def test_callout_anchor_survives_zoom_resize_rotation_tiles_and_page_changes(
     _assert_anchor_aligned(viewer, callouts[0])
     viewer.view.definir_zoom(4.0)
     qtbot.waitUntil(lambda: bool(viewer.view._tile_items), timeout=10_000)
+    assert viewer.view._review_items[first_key].path() == original_highlight
+    assert viewer.view._review_highlight_fills
+    assert viewer.view._callout_layer is not None
+    assert viewer.view._callout_layer.zValue() > viewer.view._review_items[first_key].zValue()
     _assert_anchor_aligned(viewer, callouts[0])
     _assert_text_fits(viewer, callouts[0])
     viewer.resize(1024, 720)
@@ -392,11 +401,14 @@ def test_callout_anchor_survives_zoom_resize_rotation_tiles_and_page_changes(
     viewer.ir_para_folha(2)
     _wait_preview(qtbot, viewer, page=2)
     assert set(viewer.view._callout_items) == {str(callouts[1].id)}
+    assert set(viewer.view._review_items) == {str(proposals[1].proposal_id.root)}
     _assert_anchor_aligned(viewer, callouts[1])
     _assert_text_fits(viewer, callouts[1])
     viewer.ir_para_folha(1)
     _wait_preview(qtbot, viewer, page=1)
     assert set(viewer.view._callout_items) == {str(callouts[0].id)}
+    assert set(viewer.view._review_items) == {first_key}
+    assert viewer.view._review_items[first_key].path() == original_highlight
     assert source.read_bytes() == original_pdf
 
 

@@ -358,7 +358,9 @@ def test_results_panel_groups_relationships_and_links_elements_to_pdf(
     tree.setCurrentItem(pole_item)
     assert str(proposal.id) in panel._viewer.view._review_items
     marker = panel._viewer.view._review_items[str(proposal.id)]
-    assert marker.path().boundingRect().height() <= 4
+    assert not panel._viewer._overlays
+    assert marker.path().contains(marker.path().boundingRect().center())
+    assert panel._viewer.view._review_highlight_fills
     tree.clearSelection()
     marker.setSelected(False)
     marker.setSelected(True)
@@ -752,6 +754,7 @@ def test_result_visibility_can_hide_a_whole_point_or_one_element(
     region_button.click()
 
     assert not panel._viewer.view._review_items
+    assert not panel._viewer.view._review_highlight_fills
     assert not pole_button.isEnabled()
 
     region_button.click()

@@ -7,7 +7,7 @@ from threading import Event, get_ident
 from uuid import UUID, uuid4
 
 import pytest
-from PySide6.QtCore import QPoint, Qt, QTimer
+from PySide6.QtCore import QPoint, QPointF, Qt, QTimer
 from pytestqt.qtbot import QtBot
 from tests.pdf_fixtures import TEST_RENDER_BUDGET, create_feature_pdf, create_golden_pdf
 from tests.viewer_gateway import LocalTestPdfViewerGateway
@@ -372,24 +372,25 @@ def test_rotated_overlays_remain_aligned_and_review_link_is_clickable(
     marker = viewer.view._review_items[str(proposal_id.root)]
     assert "A alterar" in marker.toolTip()
 
+    viewer.selecionar_proposta(str(proposal_id.root))
     for rotation in (90, 180, 270, 0):
         viewer._rotate_page()
         _wait_preview(qtbot, viewer, rotation=rotation)
         transformer = viewer._current_transformer
         assert transformer is not None
         marker = viewer.view._review_items[str(proposal_id.root)]
+        assert marker.isSelected()
         pixels = tuple(transformer.normalizado_para_pixel(point) for point in geometry.pontos)
-        expected_left = min(point.x for point in pixels)
-        expected_bottom = min(
-            float(transformer.altura_pixels) - 2,
-            max(point.y for point in pixels) + 5,
+        midpoint = QPointF(
+            (pixels[0].x + pixels[1].x) / 2,
+            (pixels[0].y + pixels[1].y) / 2,
         )
-        path_start = marker.path().elementAt(0)
-        assert path_start.x == pytest.approx(expected_left)
-        assert path_start.y == pytest.approx(expected_bottom)
+        assert marker.path().contains(midpoint)
+        assert not marker.path().contains(QPointF(pixels[0].x, pixels[1].y))
 
     marker = viewer.view._review_items[str(proposal_id.root)]
-    target = viewer.view.mapFromScene(marker.mapToScene(marker.path().pointAtPercent(0.5)))
+    marker.setSelected(False)
+    target = viewer.view.mapFromScene(marker.mapToScene(marker.path().boundingRect().center()))
     with qtbot.waitSignal(viewer.proposal_selected, timeout=1_000) as selected:
         qtbot.mouseClick(  # type: ignore[no-untyped-call]
             viewer.view.viewport(),

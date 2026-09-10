@@ -1314,7 +1314,12 @@ def _cable_label_geometry(
         return None
     attributes = dict(proposal.atributos_sugeridos)
     explicit = _safe_uuid(attributes.get("evidencia_rotulo_id"))
-    if explicit is not None and (evidence := evidence_by_id.get(explicit)) is not None:
+    if (
+        explicit is not None
+        and explicit in proposal.evidencia_ids
+        and (evidence := evidence_by_id.get(explicit)) is not None
+        and evidence.pagina_id == proposal.geometria.pagina_id
+    ):
         return evidence.geometria
     excluded = {
         identifier

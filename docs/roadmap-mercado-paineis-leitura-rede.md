@@ -153,7 +153,7 @@ Hipóteses de produto adotadas para tornar o plano executável, ajustáveis com 
 | E03 | Conformidade Rural, Urbano e Ambos | #concluida | E02 | Aplicabilidade e snapshots coerentes |
 | E04 | Escolha do técnico na interface | #concluida | E02, E03 | Seletor e proveniência em Projeto/GMAX |
 | E05 | Rolagem independente dos painéis | #concluida | Nenhuma | Cinco painéis; matriz 8/8 e gate aprovados |
-| E06 | Marca-texto por situação | #pendente | Nenhuma | Realce navegável com transparência |
+| E06 | Marca-texto por situação | #concluida | Nenhuma | Realce 25%; matriz 24/24 e gate aprovados |
 | E07 | Extração robusta de evidências | #pendente | E01 | OCR/geometria com cobertura mensurada |
 | E08 | Associação de elementos e vãos | #pendente | E01, E07 | Ocorrências e topologia recuperadas |
 | E09 | Homologação integrada | #pendente | E03, E04, E05, E06, E08 | Aceite completo e relatório final |
@@ -690,7 +690,7 @@ logs e inspeção de 128 contatos constam no handoff. Aceite: 82 testes direcion
 14 testes nativos em cada escala, oito combinações visuais e verificações estáticas aprovados.
 Conclusão em 10/09/2026 após essas validações. Nenhum commit/publicação nesta retomada.
 
-## E06 — Marca-texto por situação — #pendente
+## E06 — Marca-texto por situação — #concluida
 
 **Objetivo:** tornar visível o que foi identificado no PDF com cor operacional e transparência.
 **Por que agora:** os DTOs já fornecem situação e geometria; é independente das correções de OCR.
@@ -723,21 +723,31 @@ Execute E06 — Marca-texto por situação de docs/roadmap-mercado-paineis-leitu
 
 **Critérios de aceite:**
 
-- [ ] As quatro situações têm cor e legenda corretas, sem depender do estado de aprovação.
-- [ ] Texto/desenho permanece legível, realce acompanha evidência e colchetes foram substituídos.
-- [ ] Seleção PDF↔Resultados, visibilidade e rejeição funcionam sem realce órfão.
-- [ ] Zoom, rotação e troca de tiles/página não deslocam marcação nem ocultam callouts.
+- [x] As quatro situações têm cor e legenda corretas, sem depender do estado de aprovação.
+- [x] Texto/desenho permanece legível, realce acompanha evidência e colchetes foram substituídos.
+- [x] Seleção PDF↔Resultados, visibilidade e rejeição funcionam sem realce órfão.
+- [x] Zoom, rotação e troca de tiles/página não deslocam marcação nem ocultam callouts.
 
 **Validação obrigatória:** `python -m pytest tests/integration/test_pdf_viewer_progressive.py tests/integration/test_pdf_viewer_http_gateway.py tests/integration/test_compliance_callout_viewer.py tests/integration/test_compliance_visibility.py tests/unit/test_pdf_coordinates.py tests/unit/test_pdf_rendering_budget.py tests/server/test_review_api.py`.
 Adicionar casos de polígonos inclinados, linhas/pontos, sobreposição e situações; inspecionar
 temas claro/escuro, zoom 50/100/200% e rotações 0/90/180/270°. Usar fixtures com as três cores
 pedidas e Alterar; a NS real complementa a inspeção após E08. Todos os testes aprovados.
-**Bloqueios:** nenhum bloqueio conhecido.
+**Bloqueios:** nenhum pendente. A restrição de escrita em `C:\tmp` foi comprovada e
+resolvida por execução autorizada do gate fora do sandbox; diferença de formatação corrigida
+antes da execução final integral aprovada.
 **Riscos e mitigação:** geometria ampla comunica leitura inexistente; ancorar nas evidências
 efetivas e preservar orientação. Cores do PDF se confundem com overlay; validar transparência,
 legenda e alternância de visibilidade.
-**Evidências e handoff:** ainda não executada. Registrar mapeamento final, opacidade, geometria,
-inspeções e eventuais mudanças aditivas no DTO com snapshot/testes de contrato.
+**Evidências e handoff:** concluída em 10/09/2026 sobre `80caf33`, Git inicialmente limpo e
+`HEAD...origin/main = 0 0`, sem AGENTS.md aplicável. Implementação, decisões e comandos em
+[e06-marca-texto-situacao.md](e06-marca-texto-situacao.md). Realces localizados por situação,
+opacidade 25%, união por cor, seleção separada e rejeitadas sem preenchimento. Contrato
+preservado; projeção valida vínculo/página do rótulo. Validação direcionada final: 142 testes
+aprovados; matriz visual sintética Qt 24/24 inspecionada (temas claro/escuro, zoom 50/100/200%,
+rotações 0/90/180/270°, com tiles e callouts). `IniciarTestes.bat`: saída 0, 1.144 testes
+aprovados em 549,75 s, cobertura 87,37%; dependências, Ruff, formatação, Mypy, fronteira do cliente
+magro e complexidade aprovados. Relatório local `tmp/e06/gate-final.txt`. Sem commit/publicação.
+A inspeção complementar da NS permanece em E08/E09 conforme planejado, sem pendência da E06.
 
 ## E07 — Extração robusta de evidências — #pendente
 

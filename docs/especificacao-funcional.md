@@ -218,6 +218,21 @@ originaram a entidade. O painel de resultados permite:
 - criar elemento ou relação manual;
 - ocultar temporariamente uma região, um elemento ou um vão no visualizador.
 
+No PDF, as identificações usam marca-texto com opacidade de 25%: verde para instalar,
+amarelo para existente, vermelho para remover e azul para alterar. A legenda permanece no
+visualizador. O realce acompanha a caixa ou o polígono da evidência; linhas recebem uma faixa
+estreita e pontos recebem uma marca compacta. Para cabos com rótulo identificado, destaca-se
+o rótulo localizado, preservando o traçado usado na revisão. Regiões de agrupamento não são
+preenchidas como se tivessem sido inteiramente lidas.
+
+A situação operacional não representa aprovação: seleção usa contorno escuro e rejeitadas
+ficam sem preenchimento, com contorno tracejado e acesso à revisão. Filtros e controles de
+visibilidade removem também os preenchimentos correspondentes. Evidências sobrepostas da
+mesma situação não intensificam a cor; situações distintas podem se misturar na interseção,
+com a situação individual disponível no tooltip e em Resultados. Ausência de marca não prova
+ausência de ativo. Os realces são locais à visualização: originais e exportação PDF mantêm
+seu comportamento anterior, incluindo os callouts exportados.
+
 Revisões persistem a autoria, o instante, a decisão, o conteúdo anterior e o conteúdo confirmado.
 Uma proposta de outro projeto ou uma referência incompatível é recusada.
 

@@ -64,7 +64,12 @@ from zeny_project_handler_contracts.common import (
     NormalizedPointDto,
 )
 from zeny_project_handler_contracts.compliance import ComplianceCalloutDto
-from zeny_project_handler_contracts.enums import ComplianceStatus, ReviewGeometryKind, ReviewState
+from zeny_project_handler_contracts.enums import (
+    ComplianceStatus,
+    ElementSituation,
+    ReviewGeometryKind,
+    ReviewState,
+)
 from zeny_project_handler_contracts.errors import ErrorCode
 from zeny_project_handler_contracts.exports import CalloutPositionOverrideDto
 from zeny_project_handler_contracts.review import ReviewGeometryDto, ReviewOverlayDto
@@ -89,6 +94,7 @@ from .pdf_rendering import (
     regioes_tiles_priorizadas,
 )
 from .responsive_row import ResponsiveRowLayout
+from .visibility import review_highlight_color, review_highlight_legend
 
 _FONTE_CALLOUT_REGISTRO_TENTADO = False
 
@@ -157,12 +163,30 @@ class _GraficosCallout:
 
 
 class ReviewLinkItem(QGraphicsPathItem):
-    """Sublinhado com área de clique confortável, mesmo em zoom reduzido."""
+    """Área identificada com seleção pelo traçado, sem caixa envolvente fictícia."""
 
     def shape(self) -> QPainterPath:
         stroker = QPainterPathStroker()
         stroker.setWidth(14)
-        return stroker.createStroke(self.path())
+        return self.path().united(stroker.createStroke(self.path()))
+
+    def boundingRect(self) -> QRectF:  # noqa: N802 - API Qt
+        # A indexação da cena também precisa abranger a margem de clique.
+        return self.shape().boundingRect()
+
+    def paint(
+        self,
+        painter: QPainter,
+        _option: QStyleOptionGraphicsItem,
+        _widget: QWidget | None = None,
+    ) -> None:
+        # A seleção acompanha o polígono/faixa; o retângulo padrão Qt sugeriria
+        # leitura de toda a caixa envolvente de um traçado diagonal.
+        painter.save()
+        painter.setPen(self.pen())
+        painter.setBrush(self.brush())
+        painter.drawPath(self.path())
+        painter.restore()
 
 
 class CalloutLinkItem(QGraphicsPathItem):
@@ -283,6 +307,7 @@ class PdfGraphicsView(QGraphicsView):
         self._tile_items: dict[ChaveCacheRenderizacao, QGraphicsPixmapItem] = {}
         self._overlay_items: list[QGraphicsPathItem] = []
         self._review_items: dict[str, QGraphicsPathItem] = {}
+        self._review_highlight_fills: dict[ElementSituation, QGraphicsPathItem] = {}
         self._review_geometries: dict[str, PresentationGeometry] = {}
         self._review_transformer: TransformadorViewport | None = None
         self._callout_layer: QGraphicsRectItem | None = None
@@ -305,6 +330,7 @@ class PdfGraphicsView(QGraphicsView):
 
     def definir_previa(self, pixmap: QPixmap) -> None:
         self._review_items.clear()
+        self._review_highlight_fills.clear()
         self._review_geometries.clear()
         self._tile_items.clear()
         self._overlay_items.clear()
@@ -341,6 +367,7 @@ class PdfGraphicsView(QGraphicsView):
 
     def limpar(self) -> None:
         self._review_items.clear()
+        self._review_highlight_fills.clear()
         self._review_geometries.clear()
         self._review_transformer = None
         self._tile_items.clear()
@@ -425,17 +452,28 @@ class PdfGraphicsView(QGraphicsView):
             for item in self._review_items.values():
                 self._scene.removeItem(item)
             self._review_items.clear()
+            for fill in self._review_highlight_fills.values():
+                self._scene.removeItem(fill)
+            self._review_highlight_fills.clear()
             self._review_geometries.clear()
         finally:
             self._scene.blockSignals(signals_were_blocked)
         self._review_transformer = transformer
+        fill_paths: dict[ElementSituation, QPainterPath] = {}
         for proposal in proposals:
+            if (
+                proposal.geometry.page_id != transformer.pagina.page_id
+                or proposal.link_geometry.page_id != transformer.pagina.page_id
+            ):
+                continue
             key = str(proposal.proposal_id.root)
             geometry = _review_geometry_to_presentation(proposal.geometry)
             link_geometry = _review_geometry_to_presentation(proposal.link_geometry)
-            item = ReviewLinkItem(
-                _review_link_path(link_geometry, transformer),
-            )
+            path = _review_highlight_path(link_geometry, transformer)
+            if proposal.review_state is not ReviewState.REJECTED:
+                combined = fill_paths.setdefault(proposal.situation, QPainterPath())
+                fill_paths[proposal.situation] = combined.united(path)
+            item = ReviewLinkItem(path)
             item.setPen(_review_link_pen(proposal.review_state))
             self._scene.addItem(item)
             item.setZValue(20)
@@ -452,6 +490,17 @@ class PdfGraphicsView(QGraphicsView):
             item.setData(2, "review_proposal")
             self._review_items[key] = item
             self._review_geometries[key] = geometry
+        for situation in ElementSituation:
+            if situation not in fill_paths:
+                continue
+            fill = self._scene.addPath(
+                fill_paths[situation],
+                QPen(Qt.PenStyle.NoPen),
+                QBrush(review_highlight_color(situation)),
+            )
+            fill.setZValue(19)
+            fill.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+            self._review_highlight_fills[situation] = fill
 
     def selecionar_proposta(self, proposal_id: str) -> None:
         item = self._review_items.get(proposal_id)
@@ -625,6 +674,7 @@ class PdfViewerWidget(QWidget):
         self._rotation = 0
         self._overlays: tuple[tuple[NormalizedPoint, ...], ...] = ()
         self._review_proposals: tuple[ReviewOverlayDto, ...] = ()
+        self._selected_review_proposal_id: str | None = None
         self._review_link_geometries: dict[str, PresentationGeometry] = {}
         self._compliance_callouts: tuple[ComplianceCalloutDto, ...] = ()
         self._callout_position_overrides: dict[str, NormalizedBoxDto] = {}
@@ -718,8 +768,13 @@ class PdfViewerWidget(QWidget):
         self._metadata.setProperty("role", "hint")
         self._metadata.setWordWrap(True)
         layout.addWidget(self._metadata)
+        legend = QLabel(review_highlight_legend())
+        legend.setObjectName("reviewHighlightLegend")
+        legend.setWordWrap(True)
+        legend.setProperty("role", "hint")
+        layout.addWidget(legend)
         self.view = PdfGraphicsView()
-        self.view.proposta_selecionada.connect(self.proposal_selected)
+        self.view.proposta_selecionada.connect(self._proposal_selected)
         self.view.callout_selecionado.connect(self._callout_selected)
         self.view.callout_movido.connect(self._callout_moved)
         layout.addWidget(self.view, 1)
@@ -756,6 +811,7 @@ class PdfViewerWidget(QWidget):
         self._project_pages = ()
         self._overlays = ()
         self._review_proposals = ()
+        self._selected_review_proposal_id = None
         self._review_link_geometries = {}
         self._compliance_callouts = ()
         self._callout_position_overrides.clear()
@@ -1031,6 +1087,7 @@ class PdfViewerWidget(QWidget):
         self._viewer_session_id = viewer_session_id
         self._overlays = ()
         self._review_proposals = ()
+        self._selected_review_proposal_id = None
         self._review_link_geometries = {}
         self._compliance_callouts = ()
         self._callout_position_overrides.clear()
@@ -1069,11 +1126,16 @@ class PdfViewerWidget(QWidget):
         proposals: tuple[ReviewOverlayDto, ...],
     ) -> None:
         self._review_proposals = proposals
+        if not any(
+            str(item.proposal_id.root) == self._selected_review_proposal_id for item in proposals
+        ):
+            self._selected_review_proposal_id = None
         if self._current_transformer is not None:
             self.view.definir_propostas_revisao(
                 proposals,
                 self._current_transformer,
             )
+            self._restore_review_selection()
 
     def definir_callouts_conformidade(
         self,
@@ -1154,7 +1216,21 @@ class PdfViewerWidget(QWidget):
         )
 
     def selecionar_proposta(self, proposal_id: str) -> None:
+        self._selected_review_proposal_id = proposal_id
         self.view.selecionar_proposta(proposal_id)
+
+    def _proposal_selected(self, proposal_id: str) -> None:
+        self._selected_review_proposal_id = proposal_id
+        self.proposal_selected.emit(proposal_id)
+
+    def _restore_review_selection(self) -> None:
+        item = self.view._review_items.get(self._selected_review_proposal_id or "")
+        if item is not None:
+            blocked = self.view.blockSignals(True)
+            try:
+                item.setSelected(True)
+            finally:
+                self.view.blockSignals(blocked)
 
     def geometria_proposta(self, proposal_id: str) -> ReviewGeometryDto | None:
         geometry = self.view.geometria_proposta(proposal_id)
@@ -1332,6 +1408,7 @@ class PdfViewerWidget(QWidget):
             self._review_proposals,
             transformer,
         )
+        self._restore_review_selection()
         self.view.definir_callouts_conformidade(self._compliance_callouts, transformer)
         if self._selected_compliance_callout_id is not None:
             self.view.selecionar_callout(self._selected_compliance_callout_id)
@@ -1702,18 +1779,6 @@ def _review_geometry_from_presentation(value: PresentationGeometry) -> ReviewGeo
     )
 
 
-def _review_color(state: ReviewState, *, alpha: int = 255) -> QColor:
-    colors = {
-        ReviewState.PENDING: (255, 193, 7),
-        ReviewState.CONFLICTING: (255, 69, 58),
-        ReviewState.ACCEPTED: (52, 199, 89),
-        ReviewState.ADJUSTED: (52, 199, 89),
-        ReviewState.REJECTED: (142, 142, 147),
-    }
-    red, green, blue = colors[state]
-    return QColor(red, green, blue, alpha)
-
-
 def _criar_graficos_callout(
     callout: ComplianceCalloutDto,
     transformer: TransformadorViewport,
@@ -1980,64 +2045,46 @@ def _fonte_callout(pixel_size: int) -> QFont:
 
 
 def _review_link_pen(state: ReviewState, *, selected: bool = False) -> QPen:
-    pen = QPen(QColor("#0078d4") if selected else _review_color(state), 5 if selected else 3)
+    if not selected and state is not ReviewState.REJECTED:
+        return QPen(Qt.PenStyle.NoPen)
+    pen = QPen(QColor("#172033") if selected else QColor("#6b7280"), 2.5 if selected else 1)
     pen.setCosmetic(True)
     if state is ReviewState.REJECTED:
         pen.setStyle(Qt.PenStyle.DashLine)
     return pen
 
 
-def _review_link_path(
+def _review_highlight_path(
     geometry: PresentationGeometry,
     transformer: TransformadorViewport,
 ) -> QPainterPath:
+    """Preencha a evidência orientada; linhas nunca viram sua caixa envolvente."""
     pixels = tuple(transformer.normalizado_para_pixel(point) for point in geometry.points)
-    if geometry.kind is ReviewGeometryKind.POLYGON and len(pixels) == 4:
-        return _polygon_review_link_path(pixels)
-    left = min(point.x for point in pixels)
-    right = max(point.x for point in pixels)
-    bottom = max(point.y for point in pixels)
-    minimum_width = 24.0
-    if right - left < minimum_width:
-        center = (left + right) / 2
-        left = max(0.0, center - minimum_width / 2)
-        right = min(float(transformer.largura_pixels), center + minimum_width / 2)
-    baseline = min(float(transformer.altura_pixels) - 2, bottom + 5)
+    first = pixels[0]
+    # Largura em pontos da página, escalada pelo mesmo plano da prévia/tiles.
+    width = 6.0 * transformer.dpi / 72.0
     path = QPainterPath()
-    path.moveTo(left, baseline)
-    path.lineTo(right, baseline)
-    path.moveTo(left, baseline - 4)
-    path.lineTo(left, baseline)
-    path.moveTo(right, baseline - 4)
-    path.lineTo(right, baseline)
-    return path
-
-
-def _polygon_review_link_path(points: tuple[PontoPlano, ...]) -> QPainterPath:
-    top_center = PontoPlano(
-        (points[0].x + points[1].x) / 2,
-        (points[0].y + points[1].y) / 2,
-    )
-    bottom_center = PontoPlano(
-        (points[2].x + points[3].x) / 2,
-        (points[2].y + points[3].y) / 2,
-    )
-    outward_x = bottom_center.x - top_center.x
-    outward_y = bottom_center.y - top_center.y
-    outward_length = math.hypot(outward_x, outward_y)
-    if outward_length <= 1e-9:
-        outward_x, outward_y = 0.0, 1.0
+    if geometry.kind is ReviewGeometryKind.POINT:
+        path.addEllipse(QPointF(first.x, first.y), width / 2, width / 2)
+    elif geometry.kind is ReviewGeometryKind.BOX:
+        path.addRect(
+            QRectF(
+                QPointF(min(point.x for point in pixels), min(point.y for point in pixels)),
+                QPointF(max(point.x for point in pixels), max(point.y for point in pixels)),
+            )
+        )
     else:
-        outward_x /= outward_length
-        outward_y /= outward_length
-
-    start = PontoPlano(points[3].x + outward_x * 4, points[3].y + outward_y * 4)
-    end = PontoPlano(points[2].x + outward_x * 4, points[2].y + outward_y * 4)
-
-    path = QPainterPath(QPointF(start.x, start.y))
-    path.lineTo(end.x, end.y)
-    path.moveTo(start.x - outward_x * 4, start.y - outward_y * 4)
-    path.lineTo(start.x, start.y)
-    path.moveTo(end.x - outward_x * 4, end.y - outward_y * 4)
-    path.lineTo(end.x, end.y)
-    return path
+        path.moveTo(first.x, first.y)
+        for point in pixels[1:]:
+            path.lineTo(point.x, point.y)
+        if geometry.kind is ReviewGeometryKind.POLYGON:
+            path.closeSubpath()
+        else:
+            stroker = QPainterPathStroker()
+            stroker.setWidth(width)
+            stroker.setCapStyle(Qt.PenCapStyle.RoundCap)
+            stroker.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            path = stroker.createStroke(path)
+    page = QPainterPath()
+    page.addRect(QRectF(0, 0, transformer.largura_pixels, transformer.altura_pixels))
+    return path.intersected(page)

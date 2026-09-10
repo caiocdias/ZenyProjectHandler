@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 from uuid import UUID, uuid4
@@ -22,10 +23,11 @@ from zeny_project_handler.domain.enums import (
     TipoTrechoRede,
 )
 from zeny_project_handler.domain.project import Cabo
+from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 from zeny_project_handler_server.app import create_app
 from zeny_project_handler_server.composition import ServerRuntime, compose_server_runtime
 from zeny_project_handler_server.config import ServerSettings
-from zeny_project_handler_server.review_api import _session_dto, _span_dto
+from zeny_project_handler_server.review_api import _cable_label_geometry, _session_dto, _span_dto
 
 pytestmark = pytest.mark.integration
 
@@ -413,3 +415,104 @@ def test_review_routes_require_authentication(tmp_path: Path) -> None:
             client.post(f"/api/v1/review/proposals/{proposal_id}/accept", json={}).status_code
             == 401
         )
+
+
+@pytest.mark.parametrize("label_source", ["explicit", "unrelated", "other_page", "absent"])
+@pytest.mark.parametrize("situation", list(SituacaoProjeto))
+def test_review_highlight_projects_only_related_label_on_same_page(
+    label_source: str, situation: SituacaoProjeto
+) -> None:
+    catalog = carregar_catalogo_inicial()
+    project = complete_project(catalog)
+    execution, evidence, template, _relation, _decision = complete_analysis(project)
+    page_id = evidence.pagina_id
+    label_geometry = GeometriaDocumento.poligono(
+        page_id,
+        tuple(
+            PontoNormalizado(Decimal(x), Decimal(y))
+            for x, y in [("0.40", "0.30"), ("0.60", "0.40"), ("0.58", "0.44"), ("0.38", "0.34")]
+        ),
+    )
+    label = replace(evidence, id=uuid4(), geometria=label_geometry, conteudo_bruto="CABO")
+    explicit_page = uuid4() if label_source == "other_page" else page_id
+    explicit = replace(
+        evidence,
+        id=uuid4(),
+        pagina_id=explicit_page,
+        geometria=GeometriaDocumento.ponto(
+            explicit_page, PontoNormalizado(Decimal("0.8"), Decimal("0.8"))
+        ),
+    )
+    geometry = GeometriaDocumento.polilinha(
+        page_id,
+        (
+            PontoNormalizado(Decimal("0.1"), Decimal("0.1")),
+            PontoNormalizado(Decimal("0.9"), Decimal("0.9")),
+        ),
+    )
+    proposal = replace(
+        template,
+        categoria=CategoriaElemento.CABO,
+        situacao_projeto=situation,
+        geometria=geometry,
+        codigo_observado="CABO",
+        evidencia_ids=(evidence.id, label.id)
+        + ((explicit.id,) if label_source in {"other_page", "absent"} else ()),
+        atributos_sugeridos=(
+            ("evidencia_rotulo_id", str(label.id if label_source == "explicit" else explicit.id)),
+            ("evidencia_identificador_id", str(evidence.id)),
+        ),
+    )
+    session = SessaoRevisao(
+        projeto=project,
+        catalogo=catalog,
+        execucoes=(execution,),
+        propostas=(proposal,),
+        regioes=(),
+        evidencias=(evidence, label) + (() if label_source == "absent" else (explicit,)),
+        decisoes=(),
+        fontes_pdf=(),
+    )
+
+    overlay = _session_dto(session, project_version=1).proposals[0].overlay
+
+    assert overlay.geometry.kind.value == "POLYLINE"
+    assert [(item.x, item.y) for item in overlay.geometry.points] == [
+        ("0.1", "0.1"),
+        ("0.9", "0.9"),
+    ]
+    assert overlay.link_geometry.page_id.root == page_id
+    assert overlay.link_geometry.kind.value == "POLYGON"
+    assert [(item.x, item.y) for item in overlay.link_geometry.points] == [
+        ("0.40", "0.30"),
+        ("0.60", "0.40"),
+        ("0.58", "0.44"),
+        ("0.38", "0.34"),
+    ]
+    assert (
+        overlay.situation.value
+        == {
+            SituacaoProjeto.EXISTENTE: "EXISTING",
+            SituacaoProjeto.INSTALAR: "INSTALL",
+            SituacaoProjeto.REMOVER: "REMOVE",
+            SituacaoProjeto.ALTERAR: "CHANGE",
+        }[situation]
+    )
+    assert overlay.review_state.value == "ACCEPTED"
+
+
+def test_cable_label_does_not_use_identifier_or_length_as_highlight() -> None:
+    project = complete_project(carregar_catalogo_inicial())
+    _execution, evidence, template, _relation, _decision = complete_analysis(project)
+    length = replace(evidence, id=uuid4())
+    proposal = replace(
+        template,
+        categoria=CategoriaElemento.CABO,
+        evidencia_ids=(evidence.id, length.id),
+        atributos_sugeridos=(
+            ("evidencia_identificador_id", str(evidence.id)),
+            ("evidencia_comprimento_id", str(length.id)),
+        ),
+    )
+
+    assert _cable_label_geometry(proposal, {evidence.id: evidence, length.id: length}) is None

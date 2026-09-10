@@ -845,6 +845,7 @@ class ReviewPanelWidget(QWidget):
         self._syncing_selection = True
         try:
             self._selected_proposal_id = _proposal_id(proposal)
+            self._viewer.definir_sobreposicoes_revisao(())
             if isinstance(proposal, ReviewProposalDto):
                 page_number = self._project_page_number(proposal.overlay.geometry.page_id.root)
                 if page_number is not None:
