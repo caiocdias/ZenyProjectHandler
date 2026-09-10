@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFormLayout,
     QGroupBox,
-    QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
@@ -56,6 +55,7 @@ from zeny_project_handler_contracts.review import (
 )
 
 from .pdf_viewer import PdfViewerWidget
+from .responsive_row import ResponsiveRowLayout
 from .review_gateway import ReviewGateway, ReviewGatewayError
 from .table_word_wrap import TableWordWrapController
 from .visibility import visibility_icon
@@ -98,7 +98,7 @@ class ReviewPanelWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
-        project_row = QHBoxLayout()
+        project_row = ResponsiveRowLayout()
         self._project = QComboBox()
         self._project.setObjectName("reviewProjectCombo")
         project_row.addWidget(self._project, 1)
@@ -109,7 +109,7 @@ class ReviewPanelWidget(QWidget):
         layout.addLayout(project_row)
 
         filter_widget = QWidget()
-        filter_row = QHBoxLayout(filter_widget)
+        filter_row = ResponsiveRowLayout(filter_widget)
         filter_row.setContentsMargins(0, 0, 0, 0)
         self._category_filter = QComboBox()
         self._category_filter.setObjectName("reviewCategoryFilter")
@@ -221,7 +221,7 @@ class ReviewPanelWidget(QWidget):
             self._span_table,
             button_name="analysisSpansWordWrapButton",
         )
-        span_actions = QHBoxLayout()
+        span_actions = ResponsiveRowLayout()
         span_actions.addStretch(1)
         span_actions.addWidget(self._spans_word_wrap.button)
         spans_layout.addLayout(span_actions)
@@ -273,7 +273,7 @@ class ReviewPanelWidget(QWidget):
         self._adjust_geometry.setObjectName("reviewAdjustGeometryCheck")
         self._editor_form.addRow(self._adjust_geometry)
         self._geometry_widget = QWidget(editor)
-        geometry_row = QHBoxLayout(self._geometry_widget)
+        geometry_row = ResponsiveRowLayout(self._geometry_widget)
         geometry_row.setContentsMargins(0, 0, 0, 0)
         self._x = _coordinate_spin("reviewXSpin")
         self._y = _coordinate_spin("reviewYSpin")
@@ -291,7 +291,7 @@ class ReviewPanelWidget(QWidget):
         editor.hide()
         layout.addWidget(editor)
 
-        decision_row = QHBoxLayout()
+        decision_row = ResponsiveRowLayout()
         self._accept = QPushButton("Confirmar identificação")
         self._accept.setObjectName("reviewAcceptButton")
         self._accept.setProperty("role", "primary")
@@ -306,7 +306,7 @@ class ReviewPanelWidget(QWidget):
         decision_row.addWidget(self._reject)
         layout.addLayout(decision_row)
 
-        manual_row = QHBoxLayout()
+        manual_row = ResponsiveRowLayout()
         manual_element = QPushButton("Criar elemento manual")
         manual_element.setObjectName("reviewCreateElementButton")
         manual_element.clicked.connect(self.criar_elemento_manual)
@@ -328,7 +328,7 @@ class ReviewPanelWidget(QWidget):
         self._reference_destination = QComboBox()
         self._reference_destination.setObjectName("reviewRelationDestinationCombo")
         self._reference_destination.hide()
-        reference_row = QHBoxLayout()
+        reference_row = ResponsiveRowLayout()
         reference_row.addWidget(self._reference_origin)
         reference_row.addWidget(self._reference_destination)
         layout.addLayout(reference_row)

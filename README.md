@@ -45,6 +45,15 @@ apresenta os DTOs e rasters recebidos pela API autenticada.
   antes da prontidão.
 - Temas claro e escuro, painéis acopláveis e restauração do estado da interface.
 
+Projeto, Resultados, Documentação e conformidade, GMAX e Exportar têm rolagem vertical
+independente. As tabelas e listas mantêm uma área de leitura limitada: a roda percorre suas
+linhas e, ao alcançar uma extremidade, continua no painel. Combos fechados e campos numéricos
+não mudam pela roda; use teclado ou abra a lista para escolher. Tab sai das tabelas (as setas
+continuam navegando pelas células) e revela o controle seguinte. As ações se empilham quando
+falta largura, sem mudar a ordem dos cartões. O estado dos docks continua compatível com as
+preferências salvas. O aceite de E05 e seus limites de resolução estão registrados em
+[e05-rolagem-paineis.md](docs/e05-rolagem-paineis.md).
+
 As 42 regras são executáveis, mas um achado só é criado para alvos que satisfazem todas as condições
 de aplicabilidade declaradas. Por isso o registro usa fatos de guarda para não aplicar uma obrigação
 fora do subconjunto que o pipeline consegue caracterizar. Em um alvo aplicável, a ausência de um

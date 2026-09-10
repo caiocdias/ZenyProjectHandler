@@ -3,7 +3,7 @@
 from functools import partial
 
 from PySide6.QtCore import Signal, Slot
-from PySide6.QtWidgets import QComboBox, QGroupBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
+from PySide6.QtWidgets import QComboBox, QGroupBox, QLabel, QPushButton, QVBoxLayout
 
 from zeny_project_handler_contracts.errors import ErrorCode
 from zeny_project_handler_contracts.projects import (
@@ -14,6 +14,7 @@ from zeny_project_handler_contracts.projects import (
 
 from .project_gateway import ProjectGateway, ProjectGatewayError
 from .remote_read import RemoteRequestThread
+from .responsive_row import ResponsiveRowLayout
 
 
 class ProjectMarketWidget(QGroupBox):
@@ -49,7 +50,7 @@ class ProjectMarketWidget(QGroupBox):
         label.setBuddy(self.choice)
         layout.addWidget(label)
         layout.addWidget(self.choice)
-        actions = QHBoxLayout()
+        actions = ResponsiveRowLayout()
         self.save = QPushButton("&Salvar mercado")
         self.save.setObjectName("projectMarketSave")
         self.cancel = QPushButton("Cancelar escolha")

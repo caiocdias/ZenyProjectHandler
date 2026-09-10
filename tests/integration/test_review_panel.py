@@ -180,7 +180,7 @@ def review_panel_context(
     inspection = reader.inspecionar(source)
     project = Projeto(
         id=uuid4(),
-        nome="Projeto para revisão",
+        nome="0001234567",
         catalogo_versao_id=catalogo_inicial.id,
         criado_em=datetime(2026, 7, 21, 17, tzinfo=UTC),
         documentos=(inspection.documento,),

@@ -9,7 +9,6 @@ from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QGroupBox,
-    QHBoxLayout,
     QHeaderView,
     QLabel,
     QPushButton,
@@ -31,6 +30,7 @@ from zeny_project_handler_contracts.projects import ProjectMarketResponse
 
 from .documentation_gateway import DocumentationGateway, DocumentationGatewayError
 from .remote_read import RemoteRequestThread
+from .responsive_row import ResponsiveRowLayout
 
 _CHECK_LABELS = ("Impacto ambiental", "Servidão")
 _QUERY_LABELS = {
@@ -71,7 +71,7 @@ class GmaxPanelWidget(QWidget):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
 
-        actions = QHBoxLayout()
+        actions = ResponsiveRowLayout()
         title = QLabel("Resumo GMAX")
         title.setObjectName("gmaxTitleLabel")
         title.setProperty("role", "summary")

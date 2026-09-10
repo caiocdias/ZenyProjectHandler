@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QFileDialog,
-    QHBoxLayout,
     QHeaderView,
     QLabel,
     QMessageBox,
@@ -50,6 +49,7 @@ from zeny_project_handler_contracts.rules import (
 from .documentation_gateway import DocumentationGateway, DocumentationGatewayError
 from .pdf_viewer import PdfViewerWidget
 from .remote_read import RemoteRequestThread
+from .responsive_row import ResponsiveRowLayout
 from .table_word_wrap import TableWordWrapController
 from .visibility import visibility_icon
 
@@ -91,7 +91,7 @@ class DocumentationPanelWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
-        project_row = QHBoxLayout()
+        project_row = ResponsiveRowLayout()
         self._project = QComboBox()
         self._project.setObjectName("documentationProjectCombo")
         project_row.addWidget(self._project, 1)
@@ -123,7 +123,7 @@ class DocumentationPanelWidget(QWidget):
         documents_view = QWidget()
         documents_layout = QVBoxLayout(documents_view)
         documents_layout.setContentsMargins(0, 0, 0, 0)
-        documents_actions = QHBoxLayout()
+        documents_actions = ResponsiveRowLayout()
         documents_actions.addStretch(1)
         documents_actions.addWidget(self._documents_word_wrap.button)
         documents_layout.addLayout(documents_actions)
@@ -134,7 +134,7 @@ class DocumentationPanelWidget(QWidget):
         compliance_view.setObjectName("complianceExecutionView")
         self._compliance_view = compliance_view
         compliance_layout = QVBoxLayout(compliance_view)
-        compliance_actions = QHBoxLayout()
+        compliance_actions = ResponsiveRowLayout()
         self._execution_status = QLabel("Nenhuma execução de conformidade persistida")
         self._execution_status.setObjectName("complianceExecutionStatusLabel")
         self._execution_status.setWordWrap(True)
@@ -145,7 +145,7 @@ class DocumentationPanelWidget(QWidget):
         self._analyze_compliance.clicked.connect(self._analyze_current_compliance)
         compliance_actions.addWidget(self._analyze_compliance)
         compliance_layout.addLayout(compliance_actions)
-        visibility_actions = QHBoxLayout()
+        visibility_actions = ResponsiveRowLayout()
         self._show_all_findings = QPushButton("Exibir todos")
         self._show_all_findings.setObjectName("complianceShowAllCalloutsButton")
         self._show_all_findings.setToolTip("Exibir todos os problemas localizáveis no PDF")
@@ -194,7 +194,7 @@ class DocumentationPanelWidget(QWidget):
         self._rules_summary.setObjectName("complianceRulesSummaryLabel")
         self._rules_summary.setWordWrap(True)
         rules_layout.addWidget(self._rules_summary)
-        actions = QHBoxLayout()
+        actions = ResponsiveRowLayout()
         self._import_rules = QPushButton("Importar")
         self._import_rules.setObjectName("complianceRulesImportButton")
         self._import_rules.clicked.connect(self._import_registry)

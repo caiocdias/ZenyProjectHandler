@@ -37,6 +37,7 @@ from .application_icon import carregar_icone_aplicacao
 from .documentation_gateway import DocumentationGateway
 from .documentation_panel import DocumentationPanelWidget
 from .gmax_panel import GmaxPanelWidget
+from .panel_scroll import PanelScrollArea
 from .pdf_gateway import PdfViewerGateway
 from .pdf_viewer import PdfViewerWidget
 from .portability_gateway import PortabilityGateway
@@ -381,7 +382,7 @@ class MainWindow(QMainWindow):
             dock.setAllowedAreas(
                 Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
             )
-            dock.setWidget(self.review_panel)
+            dock.setWidget(PanelScrollArea(self.review_panel, dock.windowTitle(), dock))
             self._register_dock(dock)
             self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
             self.pdf_viewer.proposal_selected.connect(
@@ -403,7 +404,9 @@ class MainWindow(QMainWindow):
             documentation_dock.setAllowedAreas(
                 Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
             )
-            documentation_dock.setWidget(self.documentation_panel)
+            documentation_dock.setWidget(
+                PanelScrollArea(self.documentation_panel, documentation_dock.windowTitle())
+            )
             self._register_dock(documentation_dock)
             self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, documentation_dock)
             if self.review_panel is not None:
@@ -422,7 +425,7 @@ class MainWindow(QMainWindow):
             gmax_dock.setAllowedAreas(
                 Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
             )
-            gmax_dock.setWidget(self.gmax_panel)
+            gmax_dock.setWidget(PanelScrollArea(self.gmax_panel, gmax_dock.windowTitle()))
             self._register_dock(gmax_dock)
             self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, gmax_dock)
             self.documentation_panel.compliance_finished.connect(
@@ -465,7 +468,7 @@ class MainWindow(QMainWindow):
             project_dock.setAllowedAreas(
                 Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
             )
-            project_dock.setWidget(self.project_panel)
+            project_dock.setWidget(PanelScrollArea(self.project_panel, project_dock.windowTitle()))
             self._register_dock(project_dock)
             self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, project_dock)
         if portability_gateway is not None:
@@ -481,7 +484,9 @@ class MainWindow(QMainWindow):
             portability_dock.setAllowedAreas(
                 Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
             )
-            portability_dock.setWidget(self.portability_panel)
+            portability_dock.setWidget(
+                PanelScrollArea(self.portability_panel, portability_dock.windowTitle())
+            )
             self._register_dock(portability_dock)
             self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, portability_dock)
             right_docks.append(portability_dock)

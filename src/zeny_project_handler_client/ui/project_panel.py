@@ -32,7 +32,6 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QGridLayout,
     QGroupBox,
-    QHBoxLayout,
     QInputDialog,
     QLabel,
     QLineEdit,
@@ -63,6 +62,7 @@ from zeny_project_handler_contracts.session import SessionCapabilitiesResponse
 from .project_gateway import ProjectGateway, ProjectGatewayError
 from .project_market import ProjectMarketWidget
 from .project_search import ProjectSearchThread
+from .responsive_row import ResponsiveRowLayout
 
 T = TypeVar("T")
 _NUMERO_NS_PATTERN = r"[0-9]{10}"
@@ -297,7 +297,7 @@ class ProjectPanelWidget(QWidget):
         service_code_label = QLabel("Código do serviço")
         service_code_label.setObjectName("mvpProjectServiceCodeLabel")
         service_layout.addWidget(service_code_label)
-        service_entry = QHBoxLayout()
+        service_entry = ResponsiveRowLayout()
         self._service_code = _AsciiDigitsLineEdit()
         self._service_code.setObjectName("mvpProjectServiceCodeEdit")
         self._service_code.setMaxLength(4)
@@ -356,7 +356,7 @@ class ProjectPanelWidget(QWidget):
         self._pages.model().rowsMoved.connect(self._page_order_changed)
         self._pages.itemSelectionChanged.connect(self._update_order_controls)
         document_layout.addWidget(self._pages)
-        order_actions = QHBoxLayout()
+        order_actions = ResponsiveRowLayout()
         self._move_up = QPushButton("Subir")
         self._move_up.setObjectName("mvpMovePageUpButton")
         self._move_up.clicked.connect(lambda: self._move_selected_page(-1))
@@ -386,7 +386,7 @@ class ProjectPanelWidget(QWidget):
         self._progress.setRange(0, 100)
         self._progress.setValue(0)
         analysis_layout.addWidget(self._progress)
-        analysis_actions = QHBoxLayout()
+        analysis_actions = ResponsiveRowLayout()
         self._run = QPushButton("Analisar projeto")
         self._run.setObjectName("mvpRunAnalysisButton")
         self._run.setProperty("role", "primary")

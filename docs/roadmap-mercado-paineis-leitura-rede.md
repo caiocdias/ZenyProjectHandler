@@ -152,7 +152,7 @@ Hipóteses de produto adotadas para tornar o plano executável, ajustáveis com 
 | E02 | Classificação persistida e API | #concluida | Nenhuma | Inicialização SQL e alteração versionada |
 | E03 | Conformidade Rural, Urbano e Ambos | #concluida | E02 | Aplicabilidade e snapshots coerentes |
 | E04 | Escolha do técnico na interface | #concluida | E02, E03 | Seletor e proveniência em Projeto/GMAX |
-| E05 | Rolagem independente dos painéis | #pendente | Nenhuma | Cartões legíveis em docks pequenos |
+| E05 | Rolagem independente dos painéis | #bloqueada | Nenhuma | Implementada; aceite de DPI/gate pendente |
 | E06 | Marca-texto por situação | #pendente | Nenhuma | Realce navegável com transparência |
 | E07 | Extração robusta de evidências | #pendente | E01 | OCR/geometria com cobertura mensurada |
 | E08 | Associação de elementos e vãos | #pendente | E01, E07 | Ocorrências e topologia recuperadas |
@@ -636,7 +636,7 @@ e impedir que rolar o painel altere inadvertidamente o combo. E09 conserva o gat
 cobertura e a homologação do PDF/OCR real; não executados nem reivindicados por E04. Sem commit,
 publicação, migração ou alteração de dados operacionais.
 
-## E05 — Rolagem independente dos painéis — #pendente
+## E05 — Rolagem independente dos painéis — #bloqueada
 
 **Objetivo:** evitar compressão de cartões e permitir acessar todo o conteúdo de cada dock.
 **Por que agora:** é independente do pipeline e melhora a revisão de resultados extensos.
@@ -664,20 +664,28 @@ Execute E05 — Rolagem independente dos painéis de docs/roadmap-mercado-painei
 
 **Critérios de aceite:**
 
-- [ ] Rolar um painel não altera a posição dos demais nem a página/zoom do PDF.
+- [x] Rolar um painel não altera a posição dos demais nem a página/zoom do PDF.
 - [ ] Cabeçalhos, campos e ações finais ficam acessíveis sem compressão/recorte dos cartões.
-- [ ] Tabelas extensas mantêm rolagem utilizável e não impõem altura ilimitada.
-- [ ] Layout restaurado, docks flutuantes, abas e teclado continuam operantes.
+- [x] Tabelas extensas mantêm rolagem utilizável e não impõem altura ilimitada.
+- [x] Layout restaurado, docks flutuantes, abas e teclado continuam operantes.
 
 **Validação obrigatória:** `python -m pytest tests/integration/test_window.py tests/integration/test_theme.py tests/integration/test_review_panel.py tests/integration/test_gmax_panel.py tests/integration/test_compliance_rules_panel.py tests/integration/test_portability_panel.py`.
 Testar cada dock com dados extensos em 1366×768 e 1920×1080, escala Windows 100% e 150%, temas
 claro/escuro e janela redimensionada; capturar evidência local da matriz. Verificar alcance
 por Tab e scroll com mouse; testes aprovados e nenhuma ação inacessível.
-**Bloqueios:** nenhum bloqueio conhecido.
+**Bloqueios:** aceite em 1366×768/150% reprovado: a janela exige 1080×512 lógicos, embora
+o cenário peça 911×512. A soma dos mínimos da área central/docks impede essa largura. É
+necessário definir uma largura útil do PDF e coordenar a adaptação central com E06; reduzir
+seu mínimo isoladamente tornou o PDF ilegível no ensaio descartado. O gate amplo também
+encontrou falhas E2E reproduzidas em `HEAD`; corrigir/sincronizar os cenários de E04 antes do
+aceite global. Causas, evidências, impacto e desbloqueio detalhados no handoff de E05.
 **Riscos e mitigação:** scroll aninhado ou altura mínima da janela crescer demais; validar
 políticas do conteúdo e do viewport e transição entre tabela e painel.
-**Evidências e handoff:** ainda não executada. Registrar abordagem, matriz, capturas locais,
-testes e tratamento de preferências já salvas.
+**Evidências e handoff:** [e05-rolagem-paineis.md](e05-rolagem-paineis.md). Cinco wrappers
+independentes, linhas adaptáveis, viewports limitados e encaminhamento de roda/Tab implementados.
+Nomes e preferências dos docks preservados, sem mudanças no pipeline ou sobreposições de E06.
+Testes direcionados, comandos, comparação com `897d85c`, matriz nativa Windows, logs e capturas
+locais constam no handoff. Não houve commit/publicação nem aceite integral.
 
 ## E06 — Marca-texto por situação — #pendente
 
