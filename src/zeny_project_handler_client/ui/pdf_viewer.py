@@ -1950,21 +1950,25 @@ def _conter_ponto_pagina(x: float, y: float, bounds: QRectF) -> QPointF:
     )
 
 
-def _fonte_callout(pixel_size: int) -> QFont:
+def preparar_fonte_callout() -> None:
+    """Registre o fallback antes do layout; o registro altera as métricas globais Qt."""
     global _FONTE_CALLOUT_REGISTRO_TENTADO
 
-    family = "Arial"
-    font = QFont(family)
-    font.setPixelSize(pixel_size)
+    font = QFont("Arial")
+    font.setPixelSize(12)
     if QFontInfo(font).exactMatch() or _FONTE_CALLOUT_REGISTRO_TENTADO:
-        return font
+        return
     _FONTE_CALLOUT_REGISTRO_TENTADO = True
     windows_directory = os.environ.get("WINDIR", r"C:\Windows")
     font_path = Path(windows_directory) / "Fonts" / "arial.ttf"
     if font_path.is_file():
         QFontDatabase.addApplicationFont(str(font_path))
-        font = QFont(family)
-        font.setPixelSize(pixel_size)
+
+
+def _fonte_callout(pixel_size: int) -> QFont:
+    preparar_fonte_callout()
+    font = QFont("Arial")
+    font.setPixelSize(pixel_size)
     return font
 
 

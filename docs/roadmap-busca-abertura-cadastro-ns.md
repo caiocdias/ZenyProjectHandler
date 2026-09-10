@@ -116,14 +116,13 @@ os IDs de etapas já executadas e explicitando as novas dependências.
 - [x] NS existente abre diretamente, inclusive após conflito concorrente; não surge uma duplicata.
 - [x] NS ausente só é criada após confirmação e abre com o ID retornado pelo servidor.
 - [x] Erros, ambiguidade, respostas atrasadas e ações repetidas não criam nem ativam projeto indevido.
-- [ ] Alteração de NS, restauração e painéis dependentes passam nas regressões e no teste manual.
-- [ ] Contrato e documentação descrevem o fluxo entregue; validações de E01–E03 foram executadas e aprovadas.
+- [x] Alteração de NS, restauração e painéis dependentes passam nas regressões e no teste manual.
+- [x] Contrato e documentação descrevem o fluxo entregue; validações de E01–E03 foram executadas e aprovadas.
 
 
-Evidências dos cinco requisitos funcionais em E03 (T1–T3 e percurso nativo). Alteração de NS,
-restauração e sincronização passaram nos casos específicos, mas o teste obrigatório de troca de
-tema com projeto/PDF ativo falhou na seleção dirigida. Os dois últimos aceites permanecem abertos
-até sua resolução e repetição integral das validações; o gate completo aprovado não substitui isso.
+Evidências dos sete requisitos em E03 (matriz, T1–T3, percurso nativo e retomada de B01).
+Após corrigir o registro tardio da fonte Qt, a seleção obrigatória passou com 95 testes e o
+gate completo com 994 testes e 87,12% de cobertura. B01 resolvido; nenhuma pendência de aceite.
 
 ## Índice de etapas
 
@@ -131,7 +130,7 @@ até sua resolução e repetição integral das validações; o gate completo ap
 |---|---|---|---|---|
 | E01 | Pesquisa remota por trecho de NS | #concluida | Nenhuma | API e gateway com busca paginada global |
 | E02 | Entrada única para buscar, abrir e criar | #concluida | E01 | Fluxo Qt unificado e redirecionamento direto |
-| E03 | Integração do fluxo e aceite final | #bloqueada | E01, E02 | Regressões de integração e gate global aprovado |
+| E03 | Integração do fluxo e aceite final | #concluida | E01, E02 | Regressões de integração e gate global aprovado |
 
 Execução sequencial: E01 altera gateways e contratos consumidos por E02; E02 e E03 compartilham
 testes de UI e documentação. Não há paralelismo de implementação previsto.
@@ -442,7 +441,7 @@ Nenhum impedimento permanece para os critérios de E02. E03 e o gate global `Ini
 continuam pendentes e não foram executados; a composição Qt + HTTP completa e o aceite global
 pertencem à próxima etapa. Nenhum commit, publicação, implantação ou alteração em produção.
 
-## E03 — Integração do fluxo e aceite final — #bloqueada
+## E03 — Integração do fluxo e aceite final — #concluida
 
 **Objetivo:** comprovar que busca, ativação e criação funcionam juntas através do servidor real de
 teste e mantêm todos os painéis coerentes em concorrência, reconexão e restauração.
@@ -482,7 +481,7 @@ smokes de SQL Server ou exemplos privados, build de release, publicação e impl
 - [x] Alteração de NS preserva controle de versão e rejeita colisão sem alterar os dois projetos.
 - [x] Restauração abre o último projeto válido mesmo fora da primeira página; ID removido é tratado sem sessão residual.
 - [x] Reconexão/fechamento descartam respostas antigas; bloqueio global continua impedindo ações incompatíveis.
-- [ ] Gate completo aprovado e definição global de pronto integralmente satisfeita. **Parcial:** gate aprovado; seleção dirigida obrigatória reprovada (bloqueio abaixo).
+- [x] Gate completo aprovado e definição global de pronto integralmente satisfeita. Seleção dirigida: 95 passed; gate: 994 passed/87,12%; B01 resolvido na retomada abaixo.
 
 **Validação obrigatória:** executar os testes dirigidos antes do gate para diagnosticar regressões:
 
@@ -503,7 +502,10 @@ Documentação/conformidade, GMAX e Exportar com o mesmo projeto. A inspeção r
 disponível; o lançador integrado documentado é efêmero e exige Docker e SQL Server configurados.
 Preferir a aplicação com fixtures sintéticas usada nos testes para não depender dessas integrações.
 
-**Bloqueio de aceite B01 — regressão obrigatória de tema/visualizador:**
+**Bloqueio de aceite B01 — resolvido; registro original preservado:**
+
+Situação atual: correção autorizada e validada na retomada abaixo; nenhum bloqueio restante.
+Os itens a seguir descrevem o diagnóstico e o impacto antes da correção.
 
 - **Causa constatada:** o teste `test_theme_switch_preserves_project_pdf_callout_zoom_selection_and_wrap_toggles`
   falha na seleção dirigida e isoladamente, inclusive no HEAD anterior a E03. O centro horizontal
@@ -537,7 +539,7 @@ Comprove a composição da UI Qt com gateway HTTP e servidor de teste: campo ún
 Execute os comandos e o percurso manual de Validação obrigatória de E03, incluindo IniciarTestes.bat completo. Preencha cada critério da matriz e a definição global de pronto com evidências. Não declare sucesso com teste obrigatório falhando ou não executado, nem substitua o gate completo por validação parcial. Marque #concluida somente após todos os aceites; se houver impedimento real, marque #bloqueada com causa, evidência, impacto e ação de desbloqueio. Sincronize tags e registre arquivos, decisões, comandos, resultados, cobertura e inspeção manual em Evidências e handoff. Não crie commit, publique ou implante sem autorização explícita. Finalize com resumo conciso do resultado, validações e pendências.
 ```
 
-**Evidências e handoff — implementação validada, aceite bloqueado em 10/09/2026:**
+**Evidências e handoff — execução inicial em 10/09/2026 (histórico do bloqueio):**
 
 - Entrada conferida: Git limpo no HEAD `311ebefc15d710c59eeadab99135cd5a969625be`;
   nenhum `AGENTS.md` aplicável na hierarquia ou no repositório. Lidos roadmap completo,
@@ -600,16 +602,16 @@ Execute os comandos e o percurso manual de Validação obrigatória de E03, incl
 | Alterar NS preserva versão e rejeita colisão | T1: colisão sem mudar A/B, escrita obsoleta rejeitada, recarga e incremento de versão; teste do diálogo em E02 e alteração nativa `0000000777` → `0000000778` |
 | Restauração fora da página e ID removido | T1 com fechamento/reabertura e remoção remota; inspeção nativa de restauração da NS `0000000778`, mesmo ID e Exportar sincronizado |
 | Reconexão/fechamento e bloqueio global | T3 nos três contextos; testes existentes de reconexão autenticada, gateway substituído e sinal já enfileirado; nenhuma criação/ativação indevida |
-| Gate e definição global de pronto | **Bloqueado (B01):** gate completo 994 passed/87,13%, todas as seções exit 0; seleção literal obrigatória 94 passed/1 failed. Não há aceite global |
+| Gate e definição global de pronto | **Aprovado após resolução de B01:** seleção literal obrigatória 95 passed; gate completo 994 passed/87,12%, todas as seções exit 0; sete requisitos globais satisfeitos |
 
 **Definição global de pronto — vínculo com as evidências:** entrada única = T1/inspeção Qt;
 consulta global/exata = T1/E01; existente/conflito = T1/T2; criação confirmada = T1/T2/percurso
 nativo; erros/ambiguidade/atrasos/repetição = regressões E01/E02 + T2/T3; alteração/restauração/
 painéis = T1 e inspeção nativa; contrato/documentação/qualidade = snapshot/contratos no gate,
-documentação revisada e resultados abaixo. Os cinco primeiros requisitos globais estão comprovados;
-os dois últimos permanecem abertos por B01. Nenhuma validação falha foi substituída pelo gate completo.
+documentação revisada e resultados abaixo. Os sete requisitos globais estão comprovados após a
+resolução de B01. Seleção dirigida e gate completo foram repetidos e aprovados, sem substituição.
 
-**Comandos e resultados:**
+**Comandos e resultados da execução inicial:**
 
 | Comando na raiz | Resultado/evidência |
 |---|---|
@@ -622,7 +624,7 @@ os dois últimos permanecem abertos por B01. Nenhuma validação falha foi subst
 | `.\.venv\Scripts\python.exe -m tmp.e03_manual` e `.\.venv\Scripts\python.exe -m tmp.e03_manual_restore` | Aplicação nativa `windows`, servidor loopback sintético; percurso manual e restauração executados, janelas/servidores encerrados |
 | `git diff --check` | Exit 0; sem erros de whitespace |
 
-**Diagnóstico, tentativas anteriores e limitação pendente:**
+**Diagnóstico e tentativas da execução inicial:**
 
 - A primeira seleção dirigida foi interrompida após detectar exceção não traduzida no gateway
   direto de revisão; a tradução foi corrigida e toda a seleção reexecutada. As primeiras rodadas
@@ -663,9 +665,56 @@ pelas capturas do controle nativo. O registro HTTP separa os POSTs de preparaç�
 (projeto, PDF e análise) do único POST de cadastro manual e do PATCH. Nenhum uso de SQL Server,
 PDFs privados, produção, commit, publicação, build de release ou implantação.
 
-**Handoff final:** dez arquivos alterados (quatro documentos, quatro arquivos de UI/gateway,
+**Handoff da execução inicial (histórico):** dez arquivos alterados (quatro documentos, quatro arquivos de UI/gateway,
 `tests/integration/test_project_http_gateway.py` e `tests/remote_gateways.py`). Ruff, formatação,
 Mypy, fronteira do cliente, contratos, cobertura e complexidade aprovados no gate completo;
 inspeção manual e cinco novos casos HTTP aprovados. Pendência única de aceite: B01 na seleção
 dirigida, sem modificação do teste preexistente ou do visualizador/tema. Índice/detalhe em
 `#bloqueada`; não há outra etapa em andamento. Nenhum commit, publicação ou implantação.
+
+**Retomada de B01:** correção autorizada pelo usuário em 10/09/2026; Git inicialmente limpo no
+HEAD `90790e1`. Correção e nova validação integral concluídas; evidências anteriores preservadas.
+O relatório do gate anterior foi copiado para `tmp/e03-gate-before-b01.txt`; o atual está em
+`relatorio-testes.txt`.
+
+- Causa isolada: o fallback Arial era registrado por `_fonte_callout()` somente ao desenhar o
+  primeiro callout, depois da construção dos painéis. No Qt offscreen sem Arial inicialmente
+  disponível, `QFontDatabase.addApplicationFont()` muda as métricas globais. A reaplicação do tema
+  recalculava o layout com essas métricas: viewport de 842 × 829 para 1113 × 847, imagem menor
+  que a área disponível e barra horizontal sem intervalo. Repetir `centerOn()` não podia manter
+  o centro anterior. A suíte completa mascarava o defeito por registrar a fonte em testes anteriores.
+- Diagnóstico reproduzível: teste original isolado falhou antes da correção (exit 1,
+  `tmp/b01-before.log`); instrumentação de geometria em `tmp/b01_probe.py` e
+  `tmp/b01-probe.log`. O experimento `tmp/b01_font_probe.py` antecipou somente o registro para o
+  bootstrap, sem mudar o teste original, e passou (1 passed, 3,03 s).
+- Correção restrita a `src/zeny_project_handler_client/ui/pdf_viewer.py` e
+  `src/zeny_project_handler_client/bootstrap.py`: extraído `preparar_fonte_callout()`, chamado
+  após criar/obter QApplication e antes de aplicar o tema/construir a janela. O visualizador
+  mantém a chamada de fallback para uso avulso. Nenhuma tolerância, asserção, seleção de testes,
+  regra de NS, contrato HTTP ou script de gate foi alterado.
+- O teste existente de preservação de projeto/PDF/callout/zoom/seleção/quebra de linhas cobre a
+  regressão; não foi acrescentado um teste que apenas espelhe a nova chamada de inicialização.
+- Inspeção visual complementar: `tmp/b01_visual.py` executou o mesmo teste na plataforma Qt
+  `windows` e capturou `tmp/b01-visual/claro.png`, `escuro.png` e `states.json`. Capturas
+  inspecionadas: mesmo PDF/callout/projeto, viewport 550 × 845 nos dois temas, zoom 1,75,
+  centro (442,286; 196) → (441,714; 196), diferença subpixel de arredondamento. Trata-se de
+  execução automatizada nativa com inspeção das capturas; o percurso manual Qt/HTTP completo
+  registrado acima continua válido e não foi substituído por esta inspeção complementar.
+
+**Validações da retomada:**
+
+| Comando na raiz | Resultado/evidência |
+|---|---|
+| `.\.venv\Scripts\python.exe -m pytest tests/integration/test_window.py::test_theme_switch_preserves_project_pdf_callout_zoom_selection_and_wrap_toggles --basetemp=tmp/b01-fixed-isolated -o cache_dir=tmp/b01-cache --tb=short` | Exit 0; 1 passed em 2,96 s, teste original sem alterações |
+| `.\.venv\Scripts\python.exe -m pytest tests/integration/test_project_http_gateway.py tests/integration/test_client_reconnection.py tests/integration/test_window.py tests/e2e/test_mvp_ui.py tests/server/test_project_document_api.py` | Exit 0; **95 passed em 107,35 s**, sem warnings; `tmp/b01-directed.log` |
+| `$env:QT_QPA_PLATFORM = 'windows'; .\.venv\Scripts\python.exe -m pytest tmp/b01_visual.py --basetemp=tmp/b01-native -o cache_dir=tmp/b01-cache --tb=short` | Exit 0; 1 passed em 4,08 s; um aviso de permissão ao gravar o cache auxiliar do Pytest, sem falha de teste; `tmp/b01-native.log`, capturas e estado em `tmp/b01-visual/` |
+| `.\IniciarTestes.bat` | Exit 0, **APROVADO**; **994 passed em 317,39 s**, sem warnings; cobertura com ramos **87,12%**, piso 85,01%; `relatorio-testes.txt` e `tmp/b01-gate-console.log` |
+| Seções internas do gate completo | Dependências, Ruff, formatação (322 arquivos), Mypy (307 arquivos), fronteira do cliente, Pytest/cobertura e complexidade: todos exit 0; 2661 funções/métodos, nenhum E/F |
+| `git diff --check` | Exit 0; sem erros de whitespace |
+
+**Handoff final — E03 concluída em 10/09/2026:** B01 resolvido pela inicialização antecipada
+da fonte, validada sem modificar o teste preexistente. Esta retomada altera somente
+`bootstrap.py`, `ui/pdf_viewer.py` e este roadmap. Os onze critérios da matriz e os sete da
+definição global de pronto têm evidências; índice e detalhe sincronizados em `#concluida`.
+E01/E02 continuam concluídas e não há pendências. As fixtures e capturas são sintéticas, sem
+SQL Server, PDFs privados ou produção. Nenhum commit, publicação ou implantação nesta retomada.

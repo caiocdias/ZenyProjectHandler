@@ -28,6 +28,7 @@ from zeny_project_handler_client.ui.application_icon import (
 from zeny_project_handler_client.ui.documentation_gateway import DocumentationGateway
 from zeny_project_handler_client.ui.main_window import MainWindow
 from zeny_project_handler_client.ui.pdf_gateway import PdfViewerGateway
+from zeny_project_handler_client.ui.pdf_viewer import preparar_fonte_callout
 from zeny_project_handler_client.ui.portability_gateway import PortabilityGateway
 from zeny_project_handler_client.ui.project_gateway import ProjectGateway
 from zeny_project_handler_client.ui.review_gateway import ReviewGateway
@@ -113,6 +114,7 @@ def _qt_application(
         application = QApplication(arguments)
     else:
         application = cast(QApplication, existing)
+    preparar_fonte_callout()
     application.setApplicationName(settings.application_name)
     application.setOrganizationName(settings.organization_name)
     application.setWindowIcon(carregar_icone_aplicacao())
