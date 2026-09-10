@@ -34,8 +34,8 @@ apresenta os DTOs e rasters recebidos pela API autenticada.
 - Motor declarativo de conformidade executado no servidor, com quatro famílias de provedores de
   fatos, snapshots persistidos e callouts normalizados compilados para a camada vetorial do cliente.
   O seed atual é `cemig-normas-distribuicao-2026.1`, com 42 regras habilitadas, e o método de
-  conformidade está na versão `12`. O mercado rural/urbano e a conclusão das ações operacionais
-  aplicáveis vêm exclusivamente do SQL Server.
+  conformidade está na versão `13`. O SQL Server inicializa o mercado rural/urbano; a classificação
+  efetiva é persistida e editável pela API. As ações operacionais continuam consultadas no SQL.
 - Painel **Exportar**: o servidor compila o PDF na ordem das folhas, incorpora as anotações de
   conformidade e gera planilhas Excel de **Resultados** (Elementos e Vãos), **Documentação** e
   **Conformidade** (Conformidade e Regras). O cliente apenas escolhe o destino e confere tamanho e
@@ -147,10 +147,17 @@ Restaurar o último projeto também usa seu ID; se ele foi removido, a sessão l
 O pipeline principal executa, em ordem, a extração documental, a interpretação semântica, a
 promoção dos resultados e a conformidade. A ação **Analisar conformidade** reaplica as regras aos
 resultados semânticos persistidos; ela não abre o PDF nem repete OCR. Cada uma dessas execuções
-consulta uma vez o mercado da NS vigente no SQL Server, sem cache ou fallback por metadado/PDF.
+usa a classificação efetiva persistida da NS vigente. Quando ainda não inicializada, consulta o
+mercado no SQL Server e persiste a primeira resposta válida, sem fallback por metadado/PDF.
+Falhas iniciais permitem nova tentativa na próxima análise; abrir ou consultar o projeto não
+inicia SQL. Reanálises preservam a escolha, mesmo se o cadastro externo mudar. Trocar a NS limpa
+a classificação, inclusive ao voltar à NS anterior. A API autenticada permite salvar Rural,
+Urbano ou Ambos após a inicialização, com controle de versão e proveniência; o seletor Qt ainda
+não está disponível. Nesta etapa, Ambos é persistido, mas sua avaliação é recusada explicitamente
+até E03. Alterar a escolha torna os resultados anteriores desatualizados e exige reanálise.
 Quando o PDF contém `Impacto Ambiental: Sim` no cabeçalho ou uma menção positiva a servidão, a
 execução também consulta no máximo uma vez a ação correspondente com a NS e a coleção de serviços
-vigentes. Assim, depois que o mercado, a NS, os serviços ou as ações externas mudarem, execute
+vigentes. Assim, depois que a classificação efetiva, a NS, os serviços ou as ações externas mudarem, execute
 **Analisar conformidade** novamente para produzir um snapshot coerente com as entradas atuais.
 
 Antes da primeira consulta SQL, todas as NS válidas dos cabeçalhos PDF são comparadas com a NS do

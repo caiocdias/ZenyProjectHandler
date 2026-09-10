@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from typing import Literal
+from uuid import UUID
+
 from pydantic import Field
 
 from zeny_project_handler_contracts.base import (
@@ -57,6 +60,28 @@ class ProjectServiceCodesResponse(ContractModel):
 
 class ReplaceProjectServiceCodesRequest(ContractModel):
     service_codes: tuple[ServiceCode, ...]
+    expected_project_version: int = Field(ge=0)
+
+
+class ProjectMarketClassificationDto(ContractModel):
+    service_note: NonEmptyString
+    database_market: Literal["RURAL", "URBANO"]
+    effective_market: Literal["RURAL", "URBANO", "AMBOS"]
+    source: Literal["SQL", "MANUAL"]
+    initialized_at: UtcDateTime
+    updated_at: UtcDateTime
+    revision_id: UUID
+    classification_version: int = Field(ge=1)
+
+
+class ProjectMarketResponse(ContractModel):
+    project_id: ProjectId
+    project_version: int = Field(ge=0)
+    classification: ProjectMarketClassificationDto | None
+
+
+class UpdateProjectMarketRequest(ContractModel):
+    effective_market: Literal["RURAL", "URBANO", "AMBOS"]
     expected_project_version: int = Field(ge=0)
 
 

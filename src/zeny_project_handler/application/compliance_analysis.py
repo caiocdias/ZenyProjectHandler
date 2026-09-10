@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime
+from threading import RLock
 from uuid import UUID, uuid5
 
 from zeny_project_handler.domain.compliance import (
@@ -11,7 +13,14 @@ from zeny_project_handler.domain.compliance import (
     RevisaoRegistroConformidade,
     assinatura_conteudo_conformidade,
 )
-from zeny_project_handler.domain.market import DescricaoAcao
+from zeny_project_handler.domain.errors import DomainValidationError
+from zeny_project_handler.domain.market import (
+    ClassificacaoMercado,
+    ClassificacaoProjeto,
+    DescricaoAcao,
+    Mercado,
+)
+from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler.ports.market import (
     ClassificadorMercadoPort,
     DependenciaAcoesError,
@@ -37,7 +46,7 @@ from .project_compliance import (
     detectar_notas_servico_cabecalho,
 )
 
-VERSAO_METODO_CONFORMIDADE = "12"
+VERSAO_METODO_CONFORMIDADE = "13"
 
 
 def resultado_conformidade_desatualizado(
@@ -46,12 +55,20 @@ def resultado_conformidade_desatualizado(
     *,
     numero_ns_atual: str,
     codigos_servico_atuais: tuple[str, ...],
+    classificacao_atual: ClassificacaoProjeto | None = None,
 ) -> bool:
     """Compare método, regras, NS e serviços com os fatos do snapshot."""
 
     if (
         execution.versao_metodo != VERSAO_METODO_CONFORMIDADE
         or execution.assinatura_regras != active_rules_signature
+    ):
+        return True
+    classification_revisions = tuple(
+        str(fact.valor) for fact in execution.fatos if fact.chave == "projeto.classificacao_revisao"
+    )
+    if classificacao_atual is None or classification_revisions != (
+        str(classificacao_atual.revisao),
     ):
         return True
     execution_service_notes = tuple(
@@ -86,12 +103,21 @@ class ExecutarAnaliseConformidade:
         self._action_verifier = verificador_acoes
         self._fact_providers = provedores_fatos
         self._clock = relogio or (lambda: datetime.now(UTC))
+        self._execution_lock = RLock()
 
     def executar(
         self,
         projeto_id: UUID,
         *,
         cancelado: Callable[[], bool] | None = None,
+    ) -> ExecucaoConformidade:
+        # O servidor recusa jobs concorrentes; chamadas diretas ao mesmo caso de uso
+        # também devem publicar uma só inicialização e um só snapshot determinístico.
+        with self._execution_lock:
+            return self._executar(projeto_id, cancelado=cancelado)
+
+    def _executar(
+        self, projeto_id: UUID, *, cancelado: Callable[[], bool] | None
     ) -> ExecucaoConformidade:
         revision = self._capture_active_revision()
         self._ensure_not_cancelled(cancelado)
@@ -107,7 +133,16 @@ class ExecutarAnaliseConformidade:
                 session.projeto.nome,
                 divergent_service_notes,
             )
-        market = self._market_classifier.classificar(session.projeto.nome)
+        project = self._initialize_market(session.projeto)
+        session = replace(session, projeto=project)
+        classification = project.classificacao_mercado
+        assert classification is not None
+        if classification.efetiva is ClassificacaoMercado.AMBOS:
+            raise DomainValidationError(
+                "A avaliação da classificação Ambos ainda não está disponível (E03). "
+                "Nenhum resultado de conformidade foi publicado."
+            )
+        market = Mercado(classification.efetiva.value)
         self._ensure_not_cancelled(cancelado)
         action_context = self._action_context(session, cancelado=cancelado)
         result = analisar_conformidade_projeto(
@@ -132,6 +167,8 @@ class ExecutarAnaliseConformidade:
         )
         self._ensure_not_cancelled(cancelado)
         with self._unit_of_work() as work:
+            if work.projetos.obter(projeto_id) != project:
+                raise DomainValidationError("O projeto mudou durante a análise; execute novamente")
             existing = work.execucoes_conformidade.obter(execution_id)
             if existing is not None:
                 return existing
@@ -177,7 +214,32 @@ class ExecutarAnaliseConformidade:
             revision.assinatura,
             numero_ns_atual=session.projeto.nome,
             codigos_servico_atuais=session.projeto.codigos_servico,
+            classificacao_atual=session.projeto.classificacao_mercado,
         )
+
+    def _initialize_market(self, project: Projeto) -> Projeto:
+        # Jobs do servidor já possuem o token global; não adquirir um segundo token aqui.
+        with self._unit_of_work() as work:
+            current = work.projetos.obter(project.id)
+            if (
+                current is None
+                or replace(project, classificacao_mercado=current.classificacao_mercado) != current
+            ):
+                raise DomainValidationError(
+                    "O projeto mudou antes da classificação; tente novamente"
+                )
+            if current.classificacao_mercado is not None:
+                return current
+            market = self._market_classifier.classificar(current.nome)
+            initialized = replace(
+                current,
+                classificacao_mercado=ClassificacaoProjeto.inicializar(
+                    current.nome, market, self._aware_now()
+                ),
+            )
+            work.projetos.salvar(initialized, esperado=current)
+            work.commit()
+            return initialized
 
     def _action_context(
         self,

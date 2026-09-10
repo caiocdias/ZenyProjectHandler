@@ -3313,6 +3313,104 @@
         "title": "ProjectImportSummaryDto",
         "type": "object"
       },
+      "ProjectMarketClassificationDto": {
+        "additionalProperties": false,
+        "properties": {
+          "classification_version": {
+            "minimum": 1.0,
+            "title": "Classification Version",
+            "type": "integer"
+          },
+          "database_market": {
+            "enum": [
+              "RURAL",
+              "URBANO"
+            ],
+            "title": "Database Market",
+            "type": "string"
+          },
+          "effective_market": {
+            "enum": [
+              "RURAL",
+              "URBANO",
+              "AMBOS"
+            ],
+            "title": "Effective Market",
+            "type": "string"
+          },
+          "initialized_at": {
+            "format": "date-time",
+            "title": "Initialized At",
+            "type": "string"
+          },
+          "revision_id": {
+            "format": "uuid",
+            "title": "Revision Id",
+            "type": "string"
+          },
+          "service_note": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Service Note",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "SQL",
+              "MANUAL"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "service_note",
+          "database_market",
+          "effective_market",
+          "source",
+          "initialized_at",
+          "updated_at",
+          "revision_id",
+          "classification_version"
+        ],
+        "title": "ProjectMarketClassificationDto",
+        "type": "object"
+      },
+      "ProjectMarketResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "classification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProjectMarketClassificationDto"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "project_id": {
+            "$ref": "#/components/schemas/ProjectId"
+          },
+          "project_version": {
+            "minimum": 0.0,
+            "title": "Project Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "project_id",
+          "project_version",
+          "classification"
+        ],
+        "title": "ProjectMarketResponse",
+        "type": "object"
+      },
       "ProjectServiceCodesResponse": {
         "additionalProperties": false,
         "properties": {
@@ -4823,6 +4921,31 @@
           "expires_at"
         ],
         "title": "UnlockViewerPdfResponse",
+        "type": "object"
+      },
+      "UpdateProjectMarketRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "effective_market": {
+            "enum": [
+              "RURAL",
+              "URBANO",
+              "AMBOS"
+            ],
+            "title": "Effective Market",
+            "type": "string"
+          },
+          "expected_project_version": {
+            "minimum": 0.0,
+            "title": "Expected Project Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "effective_market",
+          "expected_project_version"
+        ],
+        "title": "UpdateProjectMarketRequest",
         "type": "object"
       },
       "UpdateProjectRequest": {
@@ -9030,6 +9153,250 @@
         "summary": "Get Project Gmax",
         "tags": [
           "compliance"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_id}/market": {
+      "get": {
+        "operationId": "getProjectMarket",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectMarketResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Credencial Bearer ausente ou inválida."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Recurso não encontrado."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Upload acima do limite configurado."
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Tipo de mídia não suportado."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request inválido para o contrato v1."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Erro interno seguro e correlacionável."
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Get Project Market",
+        "tags": [
+          "projects"
+        ]
+      },
+      "put": {
+        "operationId": "updateProjectMarket",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Project Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProjectMarketRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectMarketResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Credencial Bearer ausente ou inválida."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Recurso não encontrado."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflito de operação ou estado obsoleto."
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Sessão temporária do visualizador expirada."
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Upload acima do limite configurado."
+          },
+          "415": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Tipo de mídia não suportado."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request inválido para o contrato v1."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Erro interno seguro e correlacionável."
+          }
+        },
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "summary": "Update Project Market",
+        "tags": [
+          "projects"
         ]
       }
     },

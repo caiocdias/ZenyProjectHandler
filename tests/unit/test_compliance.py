@@ -746,7 +746,7 @@ def test_external_market_is_the_only_context_source_for_project_and_regions(
     assert all(item.chave == expected_key and item.valor is True for item in context_facts)
     assert all(item.chave != opposite_key for item in result.fatos)
     assert all(item.confianca == Decimal("1") for item in context_facts)
-    assert all(item.origem == "consulta ao cadastro de Notas de Serviço" for item in context_facts)
+    assert all(item.origem == "classificação efetiva do projeto" for item in context_facts)
     assert all(item.evidencia_ids == () and item.geometria is None for item in context_facts)
 
 

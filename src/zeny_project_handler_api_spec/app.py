@@ -55,9 +55,11 @@ from zeny_project_handler_contracts.projects import (
     CreateProjectRequest,
     DeleteProjectResponse,
     ProjectDetailResponse,
+    ProjectMarketResponse,
     ProjectServiceCodesResponse,
     ProjectSummaryListResponse,
     ReplaceProjectServiceCodesRequest,
+    UpdateProjectMarketRequest,
     UpdateProjectRequest,
 )
 from zeny_project_handler_contracts.review import (
@@ -265,6 +267,30 @@ async def replace_project_service_codes(
     project_id: UUID,
     request: ReplaceProjectServiceCodesRequest,
 ) -> ProjectServiceCodesResponse:
+    raise NotImplementedError("Aplicação exclusiva para geração da OpenAPI.")
+
+
+@protected.get(
+    "/projects/{project_id}/market",
+    tags=["projects"],
+    operation_id="getProjectMarket",
+    response_model=ProjectMarketResponse,
+    responses=ERROR_RESPONSES,
+)
+async def get_project_market(project_id: UUID) -> ProjectMarketResponse:
+    raise NotImplementedError("Aplicação exclusiva para geração da OpenAPI.")
+
+
+@protected.put(
+    "/projects/{project_id}/market",
+    tags=["projects"],
+    operation_id="updateProjectMarket",
+    response_model=ProjectMarketResponse,
+    responses=ERROR_RESPONSES,
+)
+async def update_project_market(
+    project_id: UUID, request: UpdateProjectMarketRequest
+) -> ProjectMarketResponse:
     raise NotImplementedError("Aplicação exclusiva para geração da OpenAPI.")
 
 

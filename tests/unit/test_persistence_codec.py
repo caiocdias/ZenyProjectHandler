@@ -17,6 +17,7 @@ from zeny_project_handler.domain.enums import (
     SituacaoProjeto,
     TipoTrechoRede,
 )
+from zeny_project_handler.domain.market import ClassificacaoMercado, ClassificacaoProjeto, Mercado
 from zeny_project_handler.domain.project import Cabo, Projeto
 
 
@@ -80,6 +81,26 @@ def test_project_codec_preserves_service_codes_and_loads_legacy_payload() -> Non
     loaded = loads_domain(json.dumps(legacy), Projeto)
 
     assert loaded.codigos_servico == ()
+
+
+@pytest.mark.parametrize("choice", tuple(ClassificacaoMercado))
+def test_project_classification_codec_preserves_provenance_and_missing_state(
+    choice: ClassificacaoMercado,
+) -> None:
+    now = datetime(2026, 9, 10, tzinfo=UTC)
+    classification = ClassificacaoProjeto.inicializar("1234567890", Mercado.RURAL, now)
+    classification = classification.editar(choice, now)
+    project = Projeto(
+        id=UUID("12345678-1234-5678-1234-567812345678"),
+        nome="1234567890",
+        catalogo_versao_id=UUID("87654321-4321-8765-4321-876543218765"),
+        criado_em=now,
+        classificacao_mercado=classification,
+    )
+    assert loads_domain(dumps_domain(project), Projeto) == project
+    legacy = json.loads(dumps_domain(project))
+    legacy["fields"].pop("classificacao_mercado")
+    assert loads_domain(json.dumps(legacy), Projeto).classificacao_mercado is None
 
 
 def test_cable_codec_preserves_type_and_loads_missing_fields_as_unknown(

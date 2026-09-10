@@ -76,7 +76,7 @@ _KNOWN_DOCUMENT_LABEL_PATTERN = re.compile(
     r")\s*:",
     re.IGNORECASE,
 )
-_MARKET_FACT_ORIGIN = "consulta ao cadastro de Notas de Serviço"
+_MARKET_FACT_ORIGIN = "classificação efetiva do projeto"
 _ACTION_RESULT_FACTS = {
     DescricaoAcao.AVALIAR_IMPACTO_AMBIENTAL: ("projeto.acao_avaliar_impacto_ambiental_concluida"),
     DescricaoAcao.FALTA_SERVIDAO: "projeto.acao_falta_servidao_concluida",
@@ -216,6 +216,21 @@ def analisar_conformidade_projeto(
         metadata_values,
     )
     facts = [_market_context_fact(project_target.id, mercado), *document_facts]
+    classification = sessao.projeto.classificacao_mercado
+    if classification is not None:
+        classification_values: dict[str, JsonPrimitive] = {
+            "classificacao_revisao": str(classification.revisao),
+            "classificacao_versao": classification.versao,
+            "mercado_banco": classification.mercado_banco.value,
+            "classificacao_efetiva": classification.efetiva.value,
+            "classificacao_origem": classification.origem.value,
+            "classificacao_inicializada_em": classification.inicializada_em.isoformat(),
+            "classificacao_alterada_em": classification.alterada_em.isoformat(),
+        }
+        facts.extend(
+            _fact(project_target.id, f"projeto.{key}", value, _MARKET_FACT_ORIGIN)
+            for key, value in classification_values.items()
+        )
     items = list(document_items)
 
     project_service_note = sessao.projeto.nome.strip()

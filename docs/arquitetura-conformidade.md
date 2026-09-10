@@ -4,7 +4,7 @@
 
 O motor compara fatos rastreáveis do projeto com regras declarativas sem transformar ausência de
 evidência em certeza. A revisão distribuída atual é `cemig-normas-distribuicao-2026.1`, com 42 regras
-habilitadas, e o método de conformidade está na versão `12`.
+habilitadas, e o método de conformidade está na versão `13`.
 
 O [catálogo de regras](catalogo-regras-conformidade.md) documenta obrigações e fontes. O
 [inventário normativo](inventario-fontes-normativas.md) registra documentos, revisões, hashes e
@@ -22,7 +22,7 @@ Projeto + sessão semântica persistida
  comparação com a NS do projeto; divergência encerra sem SQL/snapshot
                 |
                 v
- consulta única de mercado por NS no SQL Server
+ inicialização SQL se ausente; classificação efetiva persistida (Ambos bloqueado até E03)
                 |
                 v
  detecção de impacto/servidão nos fatos do PDF
@@ -61,11 +61,25 @@ iguais a `session.projeto.nome` permitem continuar; qualquer valor diferente enc
 detalhe de infraestrutura. Nenhum snapshot novo é criado; uma execução anterior permanece
 inalterada para auditoria.
 
-Depois dessa guarda, o caso de uso chama `ClassificadorMercadoPort` uma vez com o nome/NS vigente do
-projeto. O adaptador SQL Server executa com parâmetro vinculado
+Depois dessa guarda, o caso de uso chama `ClassificadorMercadoPort` somente se o projeto ainda
+não possui classificação inicializada para a NS vigente. O adaptador SQL Server executa com parâmetro vinculado
 `SELECT NOTAS_COD_MERCADO FROM TB_NOTAS WHERE NOTAS_NUM_NS = ?;`, converte a NS de 10 dígitos para
 inteiro somente nessa fronteira e aceita exclusivamente `RURAL` ou `URBANO`. A mesma instância
 composta atende ao pipeline completo e à reanálise explícita.
+
+A primeira resposta válida é salva no JSON do agregado como `ClassificacaoProjeto`: mercado do
+banco, escolha efetiva, origem, instantes, versão e UUID de revisão. Edições preservam a resposta
+inicial e geram nova revisão, mesmo ao escolher o mesmo valor. Trocar NS remove o estado; um
+ciclo novo recebe nova identidade inclusive quando volta à NS anterior. Erros de mercado não
+salvam defaults; a próxima análise tenta novamente. Falha posterior de ação ou cancelamento
+não apaga uma inicialização válida. Ambos é exclusivo da escolha e sua avaliação é recusada
+antes dos provedores, sem selecionar família por default, até E03.
+
+As mutações HTTP e jobs compartilham o coordenador global existente. O caso de uso serializa
+suas chamadas diretas; a gravação inicial compara o agregado esperado e aplica CAS sobre o
+payload SQL para recusar mudanças durante a consulta. A publicação também verifica o agregado
+usado. A revisão/origem/instantes entram nos fatos do projeto; snapshots antigos não são
+reescritos. O codec lê campos antigos ausentes como nulos, sem mudança de esquema/lifecycle.
 
 Na mesma sessão carregada, `detectar_gatilhos_acoes_projeto` procura `Impacto Ambiental` com valor
 normalizado exatamente `SIM` somente na zona de cabeçalho e reutiliza a detecção positiva de
@@ -278,14 +292,14 @@ snapshot concluído. A versão `10` introduz a guarda pré-SQL da NS de cabeçal
 `9` são reconhecidos como desatualizados e só são substituídos por uma reanálise que ultrapasse a
 guarda.
 
-O fato de mercado participa da assinatura da sessão. Se a consulta seguinte mudar de `RURAL` para
-`URBANO` ou vice-versa, a reanálise cria outra identidade. Uma alteração apenas no sistema externo
-não marca automaticamente o snapshot antigo como desatualizado, porque a consulta disponível não
-expõe versão ou evento; é necessário acionar **Analisar conformidade** para capturá-la.
+O contexto efetivo e a revisão da classificação participam da assinatura da sessão. Salvar uma
+escolha marca o snapshot anterior desatualizado e a reanálise cria outra identidade. Uma mudança
+apenas no cadastro externo não altera a escolha persistida e não é capturada nas reanálises;
+o técnico deve editar a classificação pela API quando necessário.
 
 Os fatos `projeto.codigo_servico` e os resultados das ações também participam da assinatura. O
-painel considera desatualizado um resultado cuja assinatura das regras, versão do método, NS ou
-coleção atual de serviços não corresponde ao estado ativo. O snapshot antigo continua visível até
+painel considera desatualizado um resultado cuja assinatura das regras, versão do método, NS,
+revisão de classificação ou coleção atual de serviços não corresponde ao estado ativo. O snapshot antigo continua visível até
 uma reanálise explícita; mudanças externas sem evento continuam exigindo reanálise manual.
 
 ## Projeção GMAX somente leitura

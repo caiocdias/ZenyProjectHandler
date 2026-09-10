@@ -82,9 +82,11 @@ from zeny_project_handler_contracts.projects import (
     CreateProjectRequest,
     DeleteProjectResponse,
     ProjectDetailResponse,
+    ProjectMarketResponse,
     ProjectServiceCodesResponse,
     ProjectSummaryListResponse,
     ReplaceProjectServiceCodesRequest,
+    UpdateProjectMarketRequest,
     UpdateProjectRequest,
 )
 from zeny_project_handler_contracts.review import (
@@ -365,6 +367,30 @@ def create_app(
         return _project_api(request).replace_service_codes(
             project_id,
             service_codes=payload.service_codes,
+            expected_version=payload.expected_project_version,
+        )
+
+    @application.get(
+        f"{API_V1_PREFIX}/projects/{{project_id}}/market",
+        response_model=ProjectMarketResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def get_project_market(request: Request, project_id: UUID) -> ProjectMarketResponse:
+        return _project_api(request).get_market(project_id)
+
+    @application.put(
+        f"{API_V1_PREFIX}/projects/{{project_id}}/market",
+        response_model=ProjectMarketResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def update_project_market(
+        request: Request, project_id: UUID, payload: UpdateProjectMarketRequest
+    ) -> ProjectMarketResponse:
+        return _project_api(request).update_market(
+            project_id,
+            effective_market=payload.effective_market,
             expected_version=payload.expected_project_version,
         )
 

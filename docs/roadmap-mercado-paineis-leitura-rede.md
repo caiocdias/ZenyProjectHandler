@@ -1,6 +1,7 @@
 # Zeny Project Handler — Mercado editável, painéis e leitura de redes
 
-Data: 10/09/2026. Base inicial: `336afba`. E01 diagnosticada em `4ce5b50`; demais etapas pendentes.
+Data: 10/09/2026. Base inicial: `336afba`. E01 diagnosticada em `4ce5b50`; E02 concluída sobre
+`2b00d0b`, com alterações locais sem commit. Demais etapas pendentes.
 
 ## Objetivo e uso
 
@@ -147,7 +148,7 @@ Hipóteses de produto adotadas para tornar o plano executável, ajustáveis com 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E01 | Diagnóstico e referência da NS 1256148225 | #concluida | Nenhuma | Inventário e perdas por fase |
-| E02 | Classificação persistida e API | #pendente | Nenhuma | Inicialização SQL e alteração versionada |
+| E02 | Classificação persistida e API | #concluida | Nenhuma | Inicialização SQL e alteração versionada |
 | E03 | Conformidade Rural, Urbano e Ambos | #pendente | E02 | Aplicabilidade e snapshots coerentes |
 | E04 | Escolha do técnico na interface | #pendente | E02, E03 | Seletor e proveniência em Projeto/GMAX |
 | E05 | Rolagem independente dos painéis | #pendente | Nenhuma | Cartões legíveis em docks pequenos |
@@ -245,7 +246,7 @@ ambiguidades explícitas e produzir padrões sintéticos sem NS/coordenadas reai
   não a recuperação automática dos ativos. Gate global de cobertura/UI fica para E09.
   Nenhum commit ou publicação realizado.
 
-## E02 — Classificação persistida e API — #pendente
+## E02 — Classificação persistida e API — #concluida
 
 **Objetivo:** inicializar pelo SQL e permitir alteração versionada da classificação efetiva.
 **Por que agora:** a conformidade e a interface precisam de uma fonte persistida comum.
@@ -286,10 +287,10 @@ Execute E02 — Classificação persistida e API de docs/roadmap-mercado-paineis
 
 **Critérios de aceite:**
 
-- [ ] Primeira classificação válida é persistida; falha inicial não grava mercado fictício.
-- [ ] Alteração e releitura preservam as três opções; concorrência e troca de NS são testadas.
-- [ ] Reanálise não sobrescreve a escolha e resultado antigo aparece desatualizado.
-- [ ] Dados antigos são legíveis e Ambos não produz avaliação parcial antes de E03.
+- [x] Primeira classificação válida é persistida; falha inicial não grava mercado fictício.
+- [x] Alteração e releitura preservam as três opções; concorrência e troca de NS são testadas.
+- [x] Reanálise não sobrescreve a escolha e resultado antigo aparece desatualizado.
+- [x] Dados antigos são legíveis e Ambos não produz avaliação parcial antes de E03.
 
 **Validação obrigatória:** `python scripts/generate_openapi_v1.py`; depois
 `python -m pytest tests/contracts tests/server/test_project_document_api.py tests/server/test_compliance_api.py tests/integration/test_persistence.py tests/unit/test_persistence_codec.py tests/unit/test_sql_server_market.py tests/server/test_volume_lifecycle.py`.
@@ -299,8 +300,86 @@ diff OpenAPI limitado ao contrato planejado, sem necessidade de SQL real.
 **Bloqueios:** nenhum bloqueio conhecido.
 **Riscos e mitigação:** valor manual perdido por job concorrente; checar versão no servidor e
 guardar proveniência. Dados antigos; testar leitura, inicialização e atualização em cópia.
-**Evidências e handoff:** ainda não executada. Registrar modelo escolhido, endpoints reais,
-política de erro/troca de NS, revisão de migração quando aplicável e testes executados.
+**Evidências e handoff — 10/09/2026:**
+
+- Base verificada: `HEAD=2b00d0b`, `main...origin/main` sem divergência (`0 0` pela referência
+  local), sem alterações preexistentes. Não foi realizado fetch. Não havia `AGENTS.md` na
+  hierarquia consultada nem no checkout. README, roadmap, domínio, persistência/codec,
+  consumidor, API, `stage3_store.py`, contratos e testes foram lidos antes da implementação.
+  Não há dependência de E01 para esta entrega.
+- Domínio em `src/zeny_project_handler/domain/{market,project}.py`: `Mercado` externo continua
+  Rural/Urbano; `ClassificacaoMercado` acrescenta Ambos apenas à escolha. `ClassificacaoProjeto`
+  registra NS, mercado inicial, efetivo, origem SQL/MANUAL, instantes, versão e UUID de revisão.
+  Campo ausente/nulo é não inicializado. Mesmo salvar a mesma escolha registra revisão nova.
+  Trocar NS invalida o campo no agregado, inclusive retorno à NS anterior; manter a NS preserva.
+- Persistência em `adapters/persistence/{domain_json,project_repository}.py` e
+  `ports/persistence.py`: armazenamento aditivo em `projects.payload`, utilizando a versão
+  existente do projeto. Escrita condicional compara o agregado esperado e o payload original,
+  inclusive JSON legado com campo ausente. Nenhum DDL: Alembic permanece `0009_remote_jobs`,
+  formato do volume 1; `stage3_store.py` e lifecycle permanecem inalterados. Cópia consistente
+  de banco com payload anterior foi aberta, inicializada, atualizada e relida. Não se infere
+  escolha humana de snapshots; rollback incompatível exige backup anterior em volume separado.
+- Consumidor em `application/compliance_analysis.py`: primeira resposta SQL válida persiste
+  antes das ações; falha inicial permite nova tentativa. Falha posterior nas ações ou
+  cancelamento conserva a inicialização válida, sem snapshot parcial. Reanálise/reinício
+  não consultam novamente nem sobrescrevem a escolha. NS de cabeçalho continua validada antes
+  do SQL. Chamadas diretas ao mesmo consumidor são serializadas; jobs/mutações HTTP conservam
+  o coordenador global. Testes provocam duas edições e troca de NS durante SQL, sem perda de
+  atualização nem gravação de contexto antigo.
+- Contrato: `GET/PUT /api/v1/projects/{project_id}/market`, implementado em
+  `src/zeny_project_handler_server/{project_api,app}.py`, DTOs em
+  `src/zeny_project_handler_contracts/projects.py`, especificação em
+  `src/zeny_project_handler_api_spec/app.py` e `docs/api/openapi-v1.json`. Leitura sem SQL;
+  escrita exige `expected_project_version`. Respostas 401/404/422, `409 STALE_STATE` e
+  `409 OPERATION_CONFLICT` verificadas. Proveniência não inventa identidade individual para
+  o Bearer compartilhado. API/piso 1.3.0 preservados: duas operações e três schemas novos,
+  nenhum schema ou operação anterior alterado (comparação estrutural UTF-8 com `git show`).
+- Método de conformidade **13**: `application/project_compliance.py` inclui revisão, origem,
+  mercado inicial/efetivo e instantes nos fatos/assinatura. `compliance_analysis.py` e
+  `src/zeny_project_handler_server/compliance_api.py` detectam desatualização por revisão.
+  Histórico anterior permanece imutável; escolha Rural→Urbano→Rural não revive snapshot antigo.
+  Ambos salvo é recusado com `VALIDATION_ERROR` explícito pelo job, sem executar uma família
+  por default e sem publicar resultado parcial. GMAX conserva o último snapshot marcado stale.
+- Regressões novas em `tests/integration/test_persisted_market.py` e
+  `tests/server/test_project_market_api.py`; atualizadas em
+  `tests/integration/test_compliance_analysis.py`, `tests/server/test_jobs_api.py`,
+  `tests/unit/{test_compliance,test_persistence_codec}.py` e
+  `tests/contracts/test_openapi_snapshot.py`. Cobrem erro/tentativa, origem, todas as escolhas,
+  conflitos, reabertura, cópia legada, NS ida/volta, ações ainda atuais e bloqueio de Ambos.
+- Documentação atualizada: `README.md`, `docs/api/README.md`,
+  `docs/especificacao-funcional.md`, `docs/arquitetura-conformidade.md` e este roadmap.
+
+Comandos finais executados na raiz, todos com saída zero:
+
+```powershell
+.venv/Scripts/python.exe scripts/generate_openapi_v1.py
+.venv/Scripts/python.exe -m pytest tests/contracts tests/server/test_project_document_api.py tests/server/test_compliance_api.py tests/integration/test_persistence.py tests/unit/test_persistence_codec.py tests/unit/test_sql_server_market.py tests/server/test_volume_lifecycle.py tests/server/test_project_market_api.py tests/integration/test_persisted_market.py tests/integration/test_compliance_analysis.py tests/unit/test_compliance.py tests/integration/test_project_portability.py tests/server/test_jobs_api.py --basetemp=tmp/e3 -p no:cacheprovider -q --tb=short
+.venv/Scripts/python.exe -m ruff check .
+.venv/Scripts/python.exe -m ruff format --check .
+.venv/Scripts/python.exe -m mypy
+.venv/Scripts/python.exe -m pip check
+.venv/Scripts/python.exe scripts/complexity_gate.py src
+.venv/Scripts/python.exe scripts/client_artifact_gate.py --source-only
+git diff --check
+```
+
+Resultado: **280 testes aprovados em 68,35 s**, incluindo toda a validação obrigatória de E02,
+novas regressões, consumidor, jobs e portabilidade. Ruff aprovado; 326 arquivos formatados;
+Mypy sem erros em 310 arquivos; dependências íntegras; complexidade aprovada (2.673 funções,
+nenhuma E/F); fronteira do cliente aprovada. Log local ignorado: `tmp/e02-validation-final.txt`.
+Rodadas exploratórias corrigiram duas expectativas antigas de consulta/versão, a fixture de
+backup e a serialização de publicação concorrente. Temporários padrão e `C:/tmp` tiveram
+restrição de escrita; uma raiz longa no workspace causou `WinError 3` na portabilidade.
+Usar `tmp/e2` confirmou os 25 testes de portabilidade, e `tmp/e3` aprovou a rodada final completa,
+sem alterar código de portabilidade nem configurações do Windows. Não restam falhas de E02.
+O gate integral com cobertura do roadmap continua pertencendo a E09; não foi executado em E02.
+
+Handoff: E03 deve consumir `classificacao_mercado.efetiva`, implementar união das famílias e
+retirar a guarda de Ambos somente depois das regressões normativas, preservando revisão e
+proveniência. E04 deve usar a nova rota e reler `project_version` após analisar (inicialização
+também incrementa a versão); distinguir mercado inicial/efetivo e tratar rota ausente em
+servidor antigo como indisponibilidade. Não foi criado seletor Qt. Adaptador/SQL externo e
+verificações de ações não foram alterados. Nenhum commit, publicação ou migração operacional.
 
 ## E03 — Conformidade Rural, Urbano e Ambos — #pendente
 

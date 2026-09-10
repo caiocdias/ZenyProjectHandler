@@ -65,7 +65,7 @@ class SqlProjectRepository:
         payloads = self._session.scalars(select(projects.c.payload).order_by(projects.c.created_at))
         return tuple(loads_domain(payload, Projeto) for payload in payloads)
 
-    def salvar(self, project: Projeto) -> None:
+    def salvar(self, project: Projeto, *, esperado: Projeto | None = None) -> None:
         catalog = SqlCatalogRepository(self._session).obter(project.catalogo_versao_id)
         if catalog is None:
             raise PersistenceNotFoundError("Catálogo do projeto não foi persistido")
@@ -75,6 +75,7 @@ class SqlProjectRepository:
 
         payload = dumps_domain(project)
         project_id = str(project.id)
+        expected_payload = self._expected_payload(project.id, esperado)
         existing_catalog_id = self._session.scalar(
             select(projects.c.catalog_id).where(projects.c.id == project_id)
         )
@@ -96,15 +97,30 @@ class SqlProjectRepository:
                 raise PersistenceConflictError(
                     "A versão de catálogo de um projeto persistido não pode ser trocada"
                 )
-            self._session.execute(
-                update(projects)
-                .where(projects.c.id == project_id)
-                .values(version=projects.c.version + 1, **values)
+            statement = update(projects).where(projects.c.id == project_id)
+            if expected_payload is not None:
+                statement = statement.where(projects.c.payload == expected_payload)
+            result = cast(
+                CursorResult[Any],
+                self._session.execute(statement.values(version=projects.c.version + 1, **values)),
             )
+            if result.rowcount != 1:
+                raise PersistenceConflictError("O projeto mudou durante a operação")
 
         self._sync_documents(project)
         self._sync_elements(project)
         self._sync_confirmed_relations(project)
+
+    def _expected_payload(self, project_id: UUID, expected: Projeto | None) -> str | None:
+        if expected is None:
+            return None
+        payload = self._session.scalar(
+            select(projects.c.payload).where(projects.c.id == str(project_id))
+        )
+        # Comparar o domínio permite CAS também sobre JSON legado com campos ausentes.
+        if payload is None or loads_domain(payload, Projeto) != expected:
+            raise PersistenceConflictError("O projeto mudou durante a operação")
+        return str(payload)
 
     def remover(self, project_id: UUID) -> bool:
         persisted_id = str(project_id)

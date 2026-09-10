@@ -26,6 +26,7 @@ from zeny_project_handler.domain.enums import (
     TipoVinculoObra,
 )
 from zeny_project_handler.domain.errors import DomainValidationError
+from zeny_project_handler.domain.market import ClassificacaoProjeto
 from zeny_project_handler.domain.operations import VinculoObra
 from zeny_project_handler.domain.project_metadata import (
     ContatoSolicitante,
@@ -310,9 +311,13 @@ class Projeto:
     historico_revisao_manual: tuple[RegistroRevisaoManual, ...] = ()
     metadados: MetadadosProjeto | None = None
     contato_solicitante: ContatoSolicitante | None = None
+    classificacao_mercado: ClassificacaoProjeto | None = None
 
     def __post_init__(self) -> None:
         name = required_text(self.nome, field_name="nome")
+        if self.classificacao_mercado is not None and self.classificacao_mercado.numero_ns != name:
+            # Toda troca de NS inicia um novo ciclo, inclusive voltar a uma NS anterior.
+            object.__setattr__(self, "classificacao_mercado", None)
         if self.criado_em.tzinfo is None:
             raise DomainValidationError("Data de criação do projeto deve possuir fuso horário")
 

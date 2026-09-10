@@ -56,6 +56,12 @@ from zeny_project_handler.domain.enums import (
     TipoTrechoRede,
     TipoVinculoObra,
 )
+from zeny_project_handler.domain.market import (
+    ClassificacaoMercado,
+    ClassificacaoProjeto,
+    Mercado,
+    OrigemClassificacao,
+)
 from zeny_project_handler.domain.operations import VinculoObra
 from zeny_project_handler.domain.project import (
     Cabo,
@@ -91,6 +97,7 @@ _DOMAIN_CLASSES: dict[str, type[Any]] = {
         AlvoConformidade,
         AvaliacaoCondicaoConformidade,
         Cabo,
+        ClassificacaoProjeto,
         CaixaPagina,
         ConexaoInternaEquipamento,
         ContatoSolicitante,
@@ -129,6 +136,9 @@ _ENUM_CLASSES: dict[str, type[Enum]] = {
     enum_type.__name__: enum_type
     for enum_type in (
         CategoriaElemento,
+        ClassificacaoMercado,
+        Mercado,
+        OrigemClassificacao,
         EstadoConexao,
         EstadoExecucaoAnalise,
         EstadoRevisao,

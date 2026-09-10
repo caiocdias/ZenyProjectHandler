@@ -267,6 +267,7 @@ class DocumentationComplianceApiService:
             active_revision.assinatura,
             numero_ns_atual=session.projeto.nome,
             codigos_servico_atuais=session.projeto.codigos_servico,
+            classificacao_atual=session.projeto.classificacao_mercado,
         )
         return GmaxSummaryResponse(
             project_id=ProjectId(project_id),

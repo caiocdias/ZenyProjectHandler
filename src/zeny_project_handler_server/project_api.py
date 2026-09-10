@@ -42,6 +42,7 @@ from zeny_project_handler.application.project_document_removal import project_wi
 from zeny_project_handler.application.project_portability import ServicoPortabilidadeProjeto
 from zeny_project_handler.domain.documents import DocumentoProjeto
 from zeny_project_handler.domain.enums import EstadoExecucaoAnalise, EstadoRevisao
+from zeny_project_handler.domain.market import ClassificacaoMercado
 from zeny_project_handler.domain.project import ElementoProjetoType, FotoElemento, Projeto
 from zeny_project_handler.domain.project_metadata import (
     normalizar_codigo_servico,
@@ -87,6 +88,8 @@ from zeny_project_handler_contracts.projects import (
     ProjectAnalysisSummaryDto,
     ProjectDetailDto,
     ProjectDetailResponse,
+    ProjectMarketClassificationDto,
+    ProjectMarketResponse,
     ProjectServiceCodesResponse,
     ProjectSummaryDto,
     ProjectSummaryListResponse,
@@ -275,6 +278,51 @@ class ProjectApiService:
     def require_project_version(self, project_id: UUID, expected_version: int) -> None:
         """Valide a precondição do job antes de reservar a operação global."""
         self._require_version(self._snapshot(project_id), expected_version)
+
+    def get_market(self, project_id: UUID) -> ProjectMarketResponse:
+        snapshot = self._snapshot(project_id)
+        classification = snapshot.project.classificacao_mercado
+        return ProjectMarketResponse(
+            project_id=ProjectId(project_id),
+            project_version=snapshot.version,
+            classification=(
+                ProjectMarketClassificationDto.model_validate(
+                    {
+                        "service_note": classification.numero_ns,
+                        "database_market": classification.mercado_banco.value,
+                        "effective_market": classification.efetiva.value,
+                        "source": classification.origem.value,
+                        "initialized_at": classification.inicializada_em,
+                        "updated_at": classification.alterada_em,
+                        "revision_id": classification.revisao,
+                        "classification_version": classification.versao,
+                    }
+                )
+                if classification is not None
+                else None
+            ),
+        )
+
+    def update_market(
+        self, project_id: UUID, *, effective_market: str, expected_version: int
+    ) -> ProjectMarketResponse:
+        choice = ClassificacaoMercado(effective_market)
+        with self._coordinator.adquirir(TipoOperacao.ALTERACAO_PROJETO):
+            snapshot = self._snapshot(project_id)
+            self._require_version(snapshot, expected_version)
+            classification = snapshot.project.classificacao_mercado
+            if classification is None:
+                raise validation_error("Execute a análise para inicializar o mercado pelo SQL.")
+            with self._unit_of_work() as work:
+                work.projetos.salvar(
+                    replace(
+                        snapshot.project,
+                        classificacao_mercado=classification.editar(choice, datetime.now(UTC)),
+                    ),
+                    esperado=snapshot.project,
+                )
+                work.commit()
+            return self.get_market(project_id)
 
     def analysis_passwords(self, project_id: UUID) -> dict[UUID, str]:
         """Copie para o job somente credenciais efêmeras do worker atual."""

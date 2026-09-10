@@ -323,6 +323,15 @@ informa somente a NS do projeto, os valores divergentes e a orientação para co
 reanalisar. Mercado e ações não são consultados, nenhum snapshot parcial é publicado e o snapshot
 anterior, quando existe, permanece inalterado.
 
+A classificação do projeto começa não inicializada. A primeira resposta válida Rural/Urbano do
+SQL é persistida com NS e instante; falha inicial mantém o estado vazio e permite tentar na
+próxima análise. A API de mercado permite editar a escolha efetiva para Rural/Urbano/Ambos,
+com origem MANUAL, revisão e conflito de versão, preservando o valor recebido do banco.
+Reabrir e reanalisar não sobrescrevem a escolha. Alterar NS invalida a classificação, mesmo
+ao voltar à NS anterior. O seletor Qt pertence a E04; até E03, salvar Ambos é permitido, mas
+avaliá-lo termina com erro explícito sem resultado parcial. Uma inicialização bem-sucedida
+permanece salva mesmo quando uma verificação posterior falha.
+
 `Impacto Ambiental: Sim` é gatilho somente quando o rótulo aparece na zona de cabeçalho e o valor
 normalizado é exatamente `SIM`. Uma menção positiva aceita a `SERVIDÃO`, `FAIXA DE SERVIDÃO` ou
 `FAIXA DE DOMÍNIO` em qualquer folha fora de comentários de revisão. Cada gatilho consulta no máximo
@@ -345,8 +354,9 @@ encaminhados ao projetista como pendências. O usuário pode arrastar a caixa de
 enquanto o mesmo projeto permanece aberto.
 
 Uma execução de conformidade guarda a assinatura da sessão semântica, da revisão das regras, do
-método, da NS, dos códigos de serviço e dos resultados externos consultados. Alterar regras, método,
-NS ou serviços marca o snapshot anterior como desatualizado; a reanálise é sempre explícita e cria
+método, da NS, da revisão da classificação, dos códigos de serviço e dos resultados externos
+consultados. Alterar regras, método, NS, classificação ou serviços marca o snapshot anterior
+como desatualizado; a reanálise é sempre explícita e cria
 ou reutiliza a execução idempotente correspondente.
 
 ## GMAX

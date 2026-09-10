@@ -50,7 +50,7 @@ def test_openapi_covers_every_minimum_group_and_expected_operation() -> None:
     assert schema["info"]["version"] == API_VERSION
     assert schema["openapi"].startswith("3.1.")
     assert API_VERSION == "1.3.0"
-    assert len(operations) == 57
+    assert len(operations) == 59
 
 
 def test_review_contract_exposes_closed_span_type_change_and_endpoint_points() -> None:
@@ -81,6 +81,23 @@ def test_every_business_operation_is_bearer_protected() -> None:
         else:
             assert path.startswith("/api/v1/")
             assert operation["security"] == [{"BearerAuth": []}]
+
+
+def test_market_contract_is_additive_closed_and_versioned() -> None:
+    schema = build_openapi_schema()
+    route = schema["paths"]["/api/v1/projects/{project_id}/market"]
+    assert set(route) == {"get", "put"}
+    assert route["get"]["operationId"] == "getProjectMarket"
+    assert route["put"]["operationId"] == "updateProjectMarket"
+    schemas = schema["components"]["schemas"]
+    mutation = schemas["UpdateProjectMarketRequest"]
+    assert mutation["additionalProperties"] is False
+    assert set(mutation["required"]) == {"effective_market", "expected_project_version"}
+    assert mutation["properties"]["effective_market"]["enum"] == ["RURAL", "URBANO", "AMBOS"]
+    classification = schemas["ProjectMarketClassificationDto"]["properties"]
+    assert classification["database_market"]["enum"] == ["RURAL", "URBANO"]
+    assert classification["source"]["enum"] == ["SQL", "MANUAL"]
+    assert "classification" not in schemas["ProjectDetailDto"]["properties"]
 
 
 def test_mutations_expose_error_envelope_idempotency_and_job_semantics() -> None:

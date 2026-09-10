@@ -52,6 +52,44 @@ de outro projeto devolve `409 PROJECT_ALREADY_EXISTS`; `details` contém somente
 `service_note`. Replay com a mesma chave e o mesmo payload continua idempotente, enquanto uma chave
 nova não cria uma segunda NS.
 
+## Classificação persistida do projeto
+
+`GET /api/v1/projects/{project_id}/market` retorna `project_id`, `project_version` e
+`classification`, nula enquanto não inicializada. O GET não consulta SQL nem grava dados.
+Após a primeira análise com mercado SQL válido, `classification` contém `service_note`,
+`database_market` (RURAL/URBANO), `effective_market` (RURAL/URBANO/AMBOS), `source` (SQL/MANUAL),
+`initialized_at`, `updated_at`, `revision_id` e `classification_version`.
+
+`PUT` na mesma rota recebe somente `effective_market` e `expected_project_version`. Escolha
+inválida, campos extras ou edição antes de inicializar retornam `422 VALIDATION_ERROR`;
+versão obsoleta retorna `409 STALE_STATE`. Job ou mutação concorrente usa o bloqueio global
+existente e retorna `409 OPERATION_CONFLICT`. As duas rotas exigem Bearer; projeto ausente é 404.
+O PUT devolve a mesma projeção com nova versão, revisão e origem MANUAL, conservando o mercado
+inicial do SQL e seu instante. Mesmo salvar a mesma opção registra uma nova escolha. Não há
+identidade individual de técnico no Bearer compartilhado; nenhuma é inventada para auditoria.
+
+Inicialização ocorre no consumidor de conformidade após validar as NS dos cabeçalhos. Uma
+resposta SQL válida é persistida antes de consultar ações; falha posterior de ação, cancelamento
+ou avaliação não desfaz a inicialização nem publica conformidade parcial. Erro de mercado deixa
+o estado nulo e a próxima análise tenta novamente. Reanálise/reinício preservam a escolha. Troca
+de NS invalida o estado; retornar à NS anterior também exige consulta inicial nova. Ambos pode
+ser salvo, mas o job de conformidade falha com `VALIDATION_ERROR` explícito até E03.
+
+A revisão da classificação participa dos fatos/assinatura do método 13 e da desatualização em
+documentação, conformidade e GMAX. Snapshots anteriores são imutáveis. O GMAX ainda mostra o
+mercado efetivo do último snapshot Rural/Urbano; E04 apresentará a distinção banco/escolha na UI.
+
+A adição mantém API 1.3.0 e o piso negociado, sem novos campos em DTOs antigos. Clientes atuais
+continuam funcionando e precisam reler a versão do projeto após analisar, pois inicializar
+também incrementa `project_version`. O futuro seletor deve tratar a ausência da rota em servidor
+antigo como recurso indisponível, sem escolha local presumida.
+
+Persistência aditiva no JSON `projects.payload`, sem DDL: campo ausente é não inicializado.
+O head Alembic continua `0009_remote_jobs` e o lifecycle mantém formato 1. Não há conversão de
+snapshots em escolhas humanas. A leitura/atualização foi testada numa cópia de banco legado.
+Um runtime anterior pode desconhecer o novo campo/tipo JSON; rollback usa backup consistente
+anterior em volume separado, sem downgrade destrutivo. Nenhum volume operacional é migrado por E02.
+
 ## Pesquisa de projetos por trecho de NS
 
 `GET /api/v1/projects/search?query=001&limit=50&offset=0` é uma operação autenticada,

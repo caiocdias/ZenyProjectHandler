@@ -370,6 +370,34 @@ def test_explicit_compliance_job_uses_external_market_once_and_persists_snapshot
             item.chave for item in execution.fatos if item.chave.startswith("rede.contexto_")
         } == {"rede.contexto_rural"}
 
+        market_route = f"/api/v1/projects/{project_id}/market"
+        current = client.get(market_route, headers=AUTH).json()
+        assert current["classification"]["source"] == "SQL"
+        saved = client.put(
+            market_route,
+            headers=AUTH,
+            json={
+                "effective_market": "AMBOS",
+                "expected_project_version": current["project_version"],
+            },
+        )
+        assert saved.status_code == 200
+        signature = runtime.compliance_api.semantic_signature(project_id)
+        both_job = client.post(
+            f"/api/v1/projects/{project_id}/compliance-jobs",
+            headers={**AUTH, "Idempotency-Key": "both-refused"},
+            json={"expected_semantic_signature": signature},
+        )
+        assert both_job.status_code == 202
+        failed = _wait_status(client, both_job.json()["job_id"], JobStatus.FAILED)
+        error = cast(dict[str, object], failed["error"])
+        assert error["code"] == "VALIDATION_ERROR"
+        assert "Ambos" in str(error["message"]) and "E03" in str(error["message"])
+        assert failed["result_available"] is False
+        assert runtime.compliance_api.analysis_service.obter_ultima(project_id) == execution
+        assert client.get(f"/api/v1/projects/{project_id}/gmax", headers=AUTH).json()["is_stale"]
+        assert classifier.consultas == ["0001234567"]
+
 
 def test_external_market_failure_finishes_job_safely_without_snapshot_or_secret(
     tmp_path: Path,

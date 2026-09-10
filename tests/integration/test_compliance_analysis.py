@@ -65,7 +65,7 @@ from zeny_project_handler.domain.enums import (
     TipoEvidencia,
     TipoOrigemPdf,
 )
-from zeny_project_handler.domain.market import DescricaoAcao, Mercado
+from zeny_project_handler.domain.market import ClassificacaoMercado, DescricaoAcao, Mercado
 from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler.domain.project_metadata import MetadadosProjeto
 from zeny_project_handler.domain.values import (
@@ -317,12 +317,12 @@ def test_execution_is_deterministic_preserves_history_and_survives_restart(
     first = service.executar(project_id)
     repeated = service.executar(project_id)
 
-    assert VERSAO_METODO_CONFORMIDADE == "12"
+    assert VERSAO_METODO_CONFORMIDADE == "13"
     assert first.versao_metodo == VERSAO_METODO_CONFORMIDADE
     assert repeated.id == first.id
     assert dumps_domain(repeated) == dumps_domain(first)
     assert len(service.listar_historico(project_id)) == 1
-    assert market_classifier.consultas == ["0012345678", "0012345678"]
+    assert market_classifier.consultas == ["0012345678"]
     persisted = service.obter_ultima(project_id)
     assert persisted is not None
     assert "projeto.documentacao_gd_identificada" in {item.chave for item in persisted.fatos}
@@ -387,13 +387,27 @@ def test_market_change_creates_new_snapshot_identity_and_same_market_is_idempote
 
     urban = service.executar(project_id)
     market_classifier.mercado = Mercado.RURAL
+    assert service.executar(project_id) == urban
+    with SqlAlchemyUnitOfWork(engine) as work:
+        project = work.projetos.obter(project_id)
+        assert project is not None and project.classificacao_mercado is not None
+        work.projetos.salvar(
+            replace(
+                project,
+                classificacao_mercado=project.classificacao_mercado.editar(
+                    ClassificacaoMercado.RURAL, _NOW
+                ),
+            )
+        )
+        work.commit()
+    assert service.resultado_desatualizado(urban)
     rural = service.executar(project_id)
     repeated_rural = service.executar(project_id)
 
     assert rural.id != urban.id
     assert repeated_rural.id == rural.id
     assert service.listar_historico(project_id) == (urban, rural)
-    assert market_classifier.consultas == ["0012345678"] * 3
+    assert market_classifier.consultas == ["0012345678"]
     assert {item.chave for item in urban.fatos if item.chave.startswith("rede.contexto_")} == {
         "rede.contexto_urbano"
     }
