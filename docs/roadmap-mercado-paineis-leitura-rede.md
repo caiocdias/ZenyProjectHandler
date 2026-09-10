@@ -154,7 +154,7 @@ Hipóteses de produto adotadas para tornar o plano executável, ajustáveis com 
 | E04 | Escolha do técnico na interface | #concluida | E02, E03 | Seletor e proveniência em Projeto/GMAX |
 | E05 | Rolagem independente dos painéis | #concluida | Nenhuma | Cinco painéis; matriz 8/8 e gate aprovados |
 | E06 | Marca-texto por situação | #concluida | Nenhuma | Realce 25%; matriz 24/24 e gate aprovados |
-| E07 | Extração robusta de evidências | #pendente | E01 | OCR/geometria com cobertura mensurada |
+| E07 | Extração robusta de evidências | #bloqueada | E01 | Robustez corrigida; recuperação integral pendente |
 | E08 | Associação de elementos e vãos | #pendente | E01, E07 | Ocorrências e topologia recuperadas |
 | E09 | Homologação integrada | #pendente | E03, E04, E05, E06, E08 | Aceite completo e relatório final |
 
@@ -749,7 +749,7 @@ aprovados em 549,75 s, cobertura 87,37%; dependências, Ruff, formatação, Mypy
 magro e complexidade aprovados. Relatório local `tmp/e06/gate-final.txt`. Sem commit/publicação.
 A inspeção complementar da NS permanece em E08/E09 conforme planejado, sem pendência da E06.
 
-## E07 — Extração robusta de evidências — #pendente
+## E07 — Extração robusta de evidências — #bloqueada
 
 **Objetivo:** recuperar evidências legíveis hoje omitidas na extração, conforme E01.
 **Por que agora:** baseline e inventário distinguem falha de leitura de falha de associação.
@@ -784,19 +784,46 @@ Execute E07 — Extração robusta de evidências de docs/roadmap-mercado-painei
 
 - [ ] Todas as omissões inequívocas atribuídas à extração em E01 têm evidência recuperada.
 - [ ] Evidências preservam posição/orientação e não duplicam a mesma ocorrência.
-- [ ] Ausência/falha de OCR é diagnosticada e cache antigo não mascara o novo comportamento.
+- [x] Ausência/falha de OCR é diagnosticada e cache antigo não mascara o novo comportamento.
 - [ ] Benchmark com OCR real atende metas/orçamentos de E01 e hash da origem não muda.
 
 **Validação obrigatória:** `python -m pytest tests/unit/test_pymupdf_analyzer.py tests/unit/test_tesseract_ocr.py tests/unit/test_tesseract_runtime.py tests/unit/test_analysis_cache.py tests/unit/test_pdf_coordinates.py tests/integration/test_document_analysis.py`.
 Executar também novas fixtures e o comando de benchmark completo registrado por E01, comparando
 itens, caixas, diagnósticos e desempenho. Todos os testes devem passar; mocks de OCR não
 substituem a comparação local com Tesseract real.
-**Bloqueios:** nenhum bloqueio conhecido; dependência E01 permanece pendência normal.
+**Bloqueios:** a recuperação integral de códigos pequenos/inclinados ainda não foi atingida.
+Evidência, impacto e desbloqueio em [e07-extracao-evidencias.md](e07-extracao-evidencias.md):
+a auditoria identifica omissões textuais inequívocas antes da interpretação, e as molduras
+pequenas continuam sem cobertura localizada garantida. E07 não pode ser aceita e E08 permanece
+pendente. Desbloquear com estratégia de recortes/retificação medida, respeitando os limites
+congelados, e repetir o comparativo por ocorrência. O gate público adicional também teve
+uma falha intermitente de busca HTTP/Qt; a repetição isolada passou, mas o gate não foi aprovado.
 **Riscos e mitigação:** excesso de recortes/DPI e falso texto em fotos; limitar por região,
 medir orçamento e testar controles negativos. Se a investigação revelar frentes independentes
 que não cabem em uma sessão, subdividir antes de iniciar, preservando IDs já executados.
-**Evidências e handoff:** ainda não executada. Registrar perdas recuperadas, remanescentes de
-associação para E08, versão/configuração e comparativos do benchmark.
+**Evidências e handoff:** execução em 10/09/2026 sobre `77258cf`, Git inicialmente limpo e
+nenhum `AGENTS.md` aplicável. E01 conferida com inventário, baseline, comandos, metas e três
+verificações privadas aprovadas; extrator/ports sem divergência desde E01. Especialistas
+separaram runtime TSV, retificação/recortes e revisão; integração/validação no trabalho principal.
+
+- Extrator **1.12.0**: orientação dos recortes densos, geometria normalizada com arredondamento
+  do raster, molduras retraçadas sem reflexão, deduplicação de texto igual por sobreposição,
+  preservação de recortes concluídos em falha e diagnóstico de cobertura parcial.
+- Tesseract solicita TSV sem `configs/tsv`, valida o cabeçalho e altera a assinatura de
+  capacidade. Falhas transitórias não são salvas no cache. Controle sintético com Tesseract
+  real sem `configs/` aprovado. Portas e topologia preservadas.
+- Conjunto obrigatório e regressões novas: **151 aprovados**. Ruff/formatação, Mypy
+  (324 arquivos), dependências, cliente magro e complexidade aprovados. Suíte pública
+  adicional: **1.190 aprovados, 1 falha**, cobertura **87,69%**; repetição isolada da falha:
+  **1 aprovado**. Não há aprovação global, nem conclusão de E07.
+- Benchmark final com OCR real: **23,406 s nativo / 53,959 s OCR**, dentro dos limites;
+  high-water Python **539,85 MiB**, pico Tesseract amostrado **81,79 MiB**, agregado
+  **493,95 MiB**. Hash/tamanho/mtime preservados. OCR **273 → 270** evidências, propostas
+  **3 → 7**, confirmações **0 → 1**; **80/95** ocorrências continuam sem código intacto,
+  incluindo os **37 cabos**. Esses resultados impedem homologar recuperação integral.
+- Arquivos, comandos completos, versões, métricas, falhas e ações de desbloqueio em
+  [e07-extracao-evidencias.md](e07-extracao-evidencias.md). Fixtures públicas sintéticas;
+  PDF, recortes, inventário e snapshots privados permanecem ignorados. Sem commit/publicação.
 
 ## E08 — Associação de elementos e vãos — #pendente
 

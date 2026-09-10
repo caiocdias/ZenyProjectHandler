@@ -36,6 +36,20 @@ _OPERATIONAL_LABEL_PSM = 7
 _OPERATIONAL_BLOCK_PSM = 6
 _IDENTIFIER_WHITELIST = "P0123456789"
 _TECHNICAL_WHITELIST = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789()-/".,:'
+_TSV_COLUMNS = (
+    "level",
+    "page_num",
+    "block_num",
+    "par_num",
+    "line_num",
+    "word_num",
+    "left",
+    "top",
+    "width",
+    "height",
+    "conf",
+    "text",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,7 +209,9 @@ class TesseractCliOcr:
         ]
         if character_whitelist is not None:
             arguments.extend(("-c", f"tessedit_char_whitelist={character_whitelist}"))
-        arguments.append("tsv")
+        # Managed tessdata contains traineddata only; a named config file is optional.
+        # Request the renderer explicitly so missing configs/tsv cannot silently emit text.
+        arguments.extend(("-c", "tessedit_create_tsv=1", "-c", "tessedit_create_txt=0"))
         completed = subprocess.run(
             tuple(arguments),
             input=_ppm_bytes(pagina),
@@ -232,6 +248,7 @@ class TesseractCliOcr:
         return (
             ("agregacao_tsv", "linhas-logicas-v1"),
             ("formato_saida", "tsv"),
+            ("geracao_tsv", "parametro-explicito-sem-config-v1"),
             ("oem", self._oem),
             ("preprocessamento_raster", "ppm-p6-rgb-sem-alpha-v1"),
             ("psm_bloco_operacional", _OPERATIONAL_BLOCK_PSM),
@@ -239,6 +256,7 @@ class TesseractCliOcr:
             ("psm_identificador", _IDENTIFIER_PSM),
             ("psm_rotulo_operacional", _OPERATIONAL_LABEL_PSM),
             ("timeout_reconhecimento_segundos", self._recognition_timeout_seconds),
+            ("validacao_tsv", "cabecalho-obrigatorio-v1"),
             ("whitelist_identificador", _IDENTIFIER_WHITELIST),
             ("whitelist_tecnica", _TECHNICAL_WHITELIST),
         )
@@ -336,8 +354,10 @@ def _tsv_word_groups(tsv: str) -> dict[tuple[str, str, str, str], list[dict[str,
     groups: dict[tuple[str, str, str, str], list[dict[str, str]]] = defaultdict(list)
     lines = tsv.splitlines()
     if not lines:
-        return groups
+        raise ValueError("O motor OCR não retornou o cabeçalho TSV obrigatório")
     header = lines[0].split("\t")
+    if tuple(header) != _TSV_COLUMNS:
+        raise ValueError("O motor OCR retornou um cabeçalho TSV inválido")
     for raw_line in lines[1:]:
         row = _tsv_word_row(header, raw_line)
         if row is None:

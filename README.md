@@ -45,6 +45,12 @@ apresenta os DTOs e rasters recebidos pela API autenticada.
   antes da prontidão.
 - Temas claro e escuro, painéis acopláveis e restauração do estado da interface.
 
+O extrator 1.12.0 orienta recortes densos a partir do texto parcial, preserva evidências de
+recortes concluídos quando o OCR falha e informa regiões sem leitura localizada garantida.
+Falhas transitórias não ficam presas no cache. A recuperação integral da rede de referência
+ainda está bloqueada por lacunas de extração; resultados parciais não significam leitura
+completa. Correções, validações e pendências estão em [E07](docs/e07-extracao-evidencias.md).
+
 Projeto, Resultados, Documentação e conformidade, GMAX e Exportar têm rolagem vertical
 independente. As tabelas e listas mantêm uma área de leitura limitada: a roda percorre suas
 linhas e, ao alcançar uma extremidade, continua no painel. Combos fechados e campos numéricos

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+from dataclasses import replace
 from pathlib import Path
 from subprocess import CompletedProcess, TimeoutExpired
 
@@ -98,6 +100,18 @@ def test_tsv_parser_does_not_treat_literal_quotes_as_csv_quoting() -> None:
     assert [item.texto for item in result] == ['"Seu dia', 'ASTA"']
 
 
+@pytest.mark.parametrize("output", ("", "POSTE 11-300\n", "level\ttext\n5\tPOSTE\n"))
+def test_tsv_parser_rejects_missing_or_incompatible_header(output: str) -> None:
+    with pytest.raises(ValueError, match="cabeçalho TSV"):
+        _parse_tsv(output, width=100, height=100)
+
+
+def test_tsv_parser_accepts_valid_blank_page() -> None:
+    output = "\t".join(ocr_module._TSV_COLUMNS) + "\n1\t1\t0\t0\t0\t0\t0\t0\t100\t100\t-1\t\n"
+
+    assert _parse_tsv(output, width=100, height=100) == ()
+
+
 def test_tsv_parser_preserves_group_order_and_skips_malformed_rows() -> None:
     tsv = "\n".join(
         (
@@ -166,6 +180,15 @@ def test_capability_is_real_normalized_cached_and_stable_across_machine_paths(
     assert first_result.capacidade.versao == "5.4.1.20250101"
     assert first_result.capacidade.idiomas == ("por", "eng")
     assert first_result.capacidade.assinatura() == second_result.capacidade.assinatura()
+    legacy = replace(
+        first_result.capacidade,
+        parametros=tuple(
+            (key, value)
+            for key, value in first_result.capacidade.parametros
+            if key not in ("geracao_tsv", "validacao_tsv")
+        ),
+    )
+    assert first_result.capacidade.assinatura() != legacy.assinatura()
     assert len(calls) == 4
     assert all(timeout == 7 for _, timeout in calls)
 
@@ -362,7 +385,94 @@ def test_general_ocr_pins_tessdata_language_oem_and_has_no_whitelist(
     assert "--tessdata-dir" not in arguments
     assert arguments[arguments.index("-l") + 1] == "eng"
     assert arguments[arguments.index("--oem") + 1] == "2"
-    assert "-c" not in arguments
+    assert not any(item.startswith("tessedit_char_whitelist=") for item in arguments)
+    assert "tessedit_create_tsv=1" in arguments
+    assert "tessedit_create_txt=0" in arguments
+    assert "tsv" not in arguments
+
+
+@pytest.mark.parametrize(
+    "method",
+    (
+        "reconhecer",
+        "reconhecer_identificador",
+        "reconhecer_rotulo_operacional",
+        "reconhecer_bloco_operacional",
+    ),
+)
+def test_ocr_without_named_tsv_config_uses_renderer_flags(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    method: str,
+) -> None:
+    executable, tessdata = _fake_installation(tmp_path / "managed")
+    assert not (tessdata / "configs" / "tsv").exists()
+    tsv = "\t".join(ocr_module._TSV_COLUMNS) + "\n5\t1\t1\t1\t1\t1\t10\t20\t30\t10\t86\tP7\n"
+
+    def fake_run(
+        arguments: tuple[str, ...],
+        **kwargs: object,
+    ) -> CompletedProcess[str] | CompletedProcess[bytes]:
+        if metadata := _metadata_process(arguments, tessdata=tessdata):
+            return metadata
+        assert kwargs["timeout"] == 9
+        assert kwargs["check"] is True
+        # Reproduce the zero-exit plain-text fallback seen in E01 when config is absent.
+        if "tsv" in arguments:
+            return CompletedProcess(arguments, 0, b"P7\n", b"read_params_file: Can't open tsv")
+        assert "tessedit_create_tsv=1" in arguments
+        assert "tessedit_create_txt=0" in arguments
+        return CompletedProcess(arguments, 0, tsv.encode())
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    engine = ocr_module.TesseractCliOcr(executable, recognition_timeout_seconds=9)
+    page = PaginaRasterOcr(
+        pagina_numero=1,
+        largura_pixels=100,
+        altura_pixels=100,
+        stride=300,
+        dados_rgb=b"\xff" * 30000,
+        dpi=450,
+    )
+
+    result = getattr(engine, method)(page)
+
+    assert result[0].texto == "P7"
+    assert result[0].caixa_normalizada == (0.1, 0.2, 0.4, 0.3)
+    assert result[0].confianca == 0.86
+
+
+@pytest.mark.parametrize("failure", ("plain_text", "empty", "timeout"))
+def test_recognition_failure_propagates_instead_of_returning_empty_evidence(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    failure: str,
+) -> None:
+    executable, tessdata = _fake_installation(tmp_path / failure)
+
+    def fake_run(
+        arguments: tuple[str, ...],
+        **_kwargs: object,
+    ) -> CompletedProcess[str] | CompletedProcess[bytes]:
+        if metadata := _metadata_process(arguments, tessdata=tessdata):
+            return metadata
+        if failure == "timeout":
+            raise TimeoutExpired(arguments, 9)
+        return CompletedProcess(arguments, 0, b"P7\n" if failure == "plain_text" else b"")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    engine = ocr_module.TesseractCliOcr(executable, recognition_timeout_seconds=9)
+    page = PaginaRasterOcr(
+        pagina_numero=1,
+        largura_pixels=1,
+        altura_pixels=1,
+        stride=3,
+        dados_rgb=b"\xff\xff\xff",
+        dpi=450,
+    )
+
+    with pytest.raises(TimeoutExpired if failure == "timeout" else ValueError):
+        engine.reconhecer(page)
 
 
 def test_identifier_ocr_uses_single_character_mode_and_whitelist(

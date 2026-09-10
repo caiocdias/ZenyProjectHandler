@@ -48,7 +48,7 @@ class PyMuPdfDocumentAnalyzer:
     """Converte recursos PDF nativos em evidências independentes da biblioteca."""
 
     nome = "pymupdf-nativo"
-    versao = "1.11.0"
+    versao = "1.12.0"
 
     def __init__(
         self,
@@ -154,6 +154,12 @@ class PyMuPdfDocumentAnalyzer:
         self, cache_key: str, extraction: ExtracaoDocumentoNormalizada
     ) -> tuple[DiagnosticoAnalise, ...]:
         if self._cache is None:
+            return ()
+        if any(
+            item.codigo.startswith("analise.ocr") and item.codigo.endswith("falhou")
+            for item in extraction.diagnosticos
+        ):
+            # A transient runtime failure must be retried on the next analysis.
             return ()
         try:
             self._cache.salvar(cache_key, extraction)

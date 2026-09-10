@@ -26,6 +26,7 @@ from zeny_project_handler.ports.analysis import (
     SolicitacaoAnaliseDocumento,
 )
 
+from .pymupdf_orientation import dominant_text_rotation, unrotate_box
 from .pymupdf_support import _extras, _normalized_point
 
 _POINT_IDENTIFIER_PATTERN = re.compile(r"P0*(\d{1,3})", re.IGNORECASE)
@@ -124,6 +125,36 @@ class _OcrDecision:
         return self.use_full_page or bool(self.regional_images)
 
 
+class _PartialOcrError(Exception):
+    """Retain completed tiles while stopping a failed OCR runtime immediately."""
+
+    def __init__(
+        self,
+        candidates: tuple[CandidatoEvidenciaDocumento, ...],
+        row: int,
+        column: int,
+        unread_regions: int,
+    ) -> None:
+        super().__init__("Falha parcial no OCR de recortes")
+        self.candidates = candidates
+        self.row = row
+        self.column = column
+        self.unread_regions = unread_regions
+
+    def diagnostic(self, page_number: int) -> DiagnosticoAnalise:
+        return DiagnosticoAnalise(
+            codigo="analise.ocr_falhou",
+            mensagem=(
+                f"Leitura OCR parcial: falha no recorte da linha {self.row + 1}, "
+                f"coluna {self.column + 1}; {self.unread_regions} recorte(s) sem leitura "
+                "concluída. As evidências dos recortes concluídos e dos demais extratores "
+                "foram mantidas; o OCR localizado não foi executado nesta página."
+            ),
+            extrator="ocr",
+            pagina_numero=page_number,
+        )
+
+
 def _conditional_ocr(
     page: Any,
     page_number: int,
@@ -156,6 +187,8 @@ def _conditional_ocr(
             config,
             decision,
         )
+    except _PartialOcrError as failure:
+        return failure.candidates, (failure.diagnostic(page_number),)
     except Exception:
         return (), (_ocr_failure_diagnostic(page_number),)
     if not decision.dense_vector_content or not isinstance(
@@ -347,6 +380,26 @@ def _linear_label_candidates(
                 pagina_numero=page_number,
             ),
         )
+    skipped = len(
+        tuple(
+            frame
+            for drawing in page.get_drawings()
+            if (frame := _operational_frame(page, drawing)) is not None
+        )
+    ) - len(_linear_cable_frames(page))
+    if skipped:
+        return tuple(candidates), (
+            DiagnosticoAnalise(
+                codigo="analise.ocr_cobertura_parcial",
+                mensagem=(
+                    f"{skipped} molduras não foram selecionadas para OCR localizado pelos "
+                    "limites de dimensão e vizinhança. O OCR geral foi mantido; "
+                    "a leitura dessas regiões não está garantida."
+                ),
+                extrator="ocr-rotulos-lineares",
+                pagina_numero=page_number,
+            ),
+        )
     return tuple(candidates), ()
 
 
@@ -405,25 +458,35 @@ def _extract_ocr_tiled(
     overlap: Decimal,
 ) -> tuple[CandidatoEvidenciaDocumento, ...]:
     step = Decimal(1) / Decimal(divisions)
-    candidates = tuple(
-        candidate
-        for row in range(divisions)
-        for column in range(divisions)
-        for candidate in _extract_ocr_region(
-            page,
-            page_number,
-            engine,
-            dpi,
-            bounds=(
-                max(Decimal(0), Decimal(column) * step - overlap),
-                max(Decimal(0), Decimal(row) * step - overlap),
-                min(Decimal(1), Decimal(column + 1) * step + overlap),
-                min(Decimal(1), Decimal(row + 1) * step + overlap),
-            ),
-            stable_suffix=f"bloco:{row}:{column}",
-        )
-    )
-    return _deduplicate_tiled_candidates(candidates)
+    rotation = dominant_text_rotation(page)
+    candidates: list[CandidatoEvidenciaDocumento] = []
+    for row in range(divisions):
+        for column in range(divisions):
+            try:
+                candidates.extend(
+                    _extract_ocr_region(
+                        page,
+                        page_number,
+                        engine,
+                        dpi,
+                        bounds=(
+                            max(Decimal(0), Decimal(column) * step - overlap),
+                            max(Decimal(0), Decimal(row) * step - overlap),
+                            min(Decimal(1), Decimal(column + 1) * step + overlap),
+                            min(Decimal(1), Decimal(row + 1) * step + overlap),
+                        ),
+                        stable_suffix=f"bloco:{row}:{column}",
+                        rotation_degrees=rotation,
+                    )
+                )
+            except Exception as error:
+                raise _PartialOcrError(
+                    _deduplicate_tiled_candidates(tuple(candidates)),
+                    row,
+                    column,
+                    divisions * divisions - (row * divisions + column),
+                ) from error
+    return _deduplicate_tiled_candidates(tuple(candidates))
 
 
 def _extract_point_identifiers(
@@ -598,7 +661,7 @@ def _extract_linear_operational_labels(
                     chave_estavel=f"p{page_number}:ocr-rotulo-linear:{index}:{label}",
                     pagina_numero=page_number,
                     tipo=TipoEvidencia.OCR,
-                    geometria=_geometry_from_bounds(frame.bounds),
+                    geometria=_geometry_from_rectified_ocr(rectified, best, page),
                     origem_pdf=OrigemObjetoPdf(),
                     conteudo_bruto=label,
                     atributos_extraidos=_extras(
@@ -1215,24 +1278,57 @@ def _equipment_strike_crop(
     )
 
 
+def _frame_corners(items: tuple[Any, ...]) -> tuple[Any, Any, Any] | None:
+    if not items or items[0][0] not in {"re", "qu"}:
+        return None
+    shape = items[0][1]
+    corners = (
+        (shape.ul, shape.ur, shape.lr, shape.ll)
+        if items[0][0] == "qu"
+        else (shape.tl, shape.tr, shape.br, shape.bl)
+    )
+    # Some PDF producers append a partial retrace of a rectangle edge. It is
+    # equivalent to the frame only when both endpoints lie on the same edge.
+    for item in items[1:]:
+        if item[0] != "l" or not any(
+            _line_retraces_edge(item, start, end)
+            for start, end in zip(corners, (*corners[1:], corners[0]), strict=True)
+        ):
+            return None
+    return corners[0], corners[1], corners[3]
+
+
+def _line_retraces_edge(item: Any, start: Any, end: Any) -> bool:
+    delta_x, delta_y = end.x - start.x, end.y - start.y
+    length = hypot(delta_x, delta_y)
+    if length == 0:
+        return False
+    for point in item[1:3]:
+        offset_x, offset_y = point.x - start.x, point.y - start.y
+        projection = (offset_x * delta_x + offset_y * delta_y) / length
+        distance = abs(offset_x * delta_y - offset_y * delta_x) / length
+        if distance > 0.15 or not -0.15 <= projection <= length + 0.15:
+            return False
+    return True
+
+
 def _operational_frame(page: Any, drawing: dict[str, Any]) -> _OperationalFrame | None:
     color = drawing.get("color")
     rectangle = drawing.get("rect")
     items: tuple[Any, ...] = tuple(drawing.get("items") or ())
-    if color is None or rectangle is None or len(items) != 1:
+    if color is None or rectangle is None:
         return None
     if not (
         float(color[1]) >= 0.30
         and float(color[1]) - float(color[0]) >= 0.20
         and float(color[1]) - float(color[2]) >= 0.20
-        and items[0][0] in {"re", "qu"}
     ):
         return None
-    shape = items[0][1]
-    if items[0][0] == "qu":
-        upper_left, upper_right, lower_left = shape.ul, shape.ur, shape.ll
-    else:
-        upper_left, upper_right, lower_left = shape.tl, shape.tr, shape.bl
+    corners = _frame_corners(items)
+    if corners is None:
+        return None
+    upper_left, upper_right, lower_left = (point * page.rotation_matrix for point in corners)
+    rectangle = rectangle * page.rotation_matrix
     top_axis = (
         float(upper_right.x - upper_left.x),
         float(upper_right.y - upper_left.y),
@@ -1250,6 +1346,10 @@ def _operational_frame(page: Any, drawing: dict[str, Any]) -> _OperationalFrame 
     horizontal_axis, vertical_axis = (
         (side_axis, top_axis) if side_length > top_length else (top_axis, side_axis)
     )
+    origin = (float(upper_left.x), float(upper_left.y))
+    if horizontal_axis[0] * vertical_axis[1] - horizontal_axis[1] * vertical_axis[0] < 0:
+        origin = (origin[0] + vertical_axis[0], origin[1] + vertical_axis[1])
+        vertical_axis = (-vertical_axis[0], -vertical_axis[1])
     page_rect = page.rect
     return _OperationalFrame(
         bounds=(
@@ -1258,7 +1358,7 @@ def _operational_frame(page: Any, drawing: dict[str, Any]) -> _OperationalFrame 
             Decimal(str(rectangle.x1 / page_rect.width)),
             Decimal(str(rectangle.y1 / page_rect.height)),
         ),
-        origin=(float(upper_left.x), float(upper_left.y)),
+        origin=origin,
         horizontal_axis=horizontal_axis,
         vertical_axis=vertical_axis,
         width_points=width,
@@ -1413,13 +1513,16 @@ def _geometry_from_rectified_ocr(
         )
     )
     page_rect = page.rect
-    bounds = (
-        Decimal(str((min(point[0] for point in page_points) - page_rect.x0) / page_rect.width)),
-        Decimal(str((min(point[1] for point in page_points) - page_rect.y0) / page_rect.height)),
-        Decimal(str((max(point[0] for point in page_points) - page_rect.x0) / page_rect.width)),
-        Decimal(str((max(point[1] for point in page_points) - page_rect.y0) / page_rect.height)),
+    return GeometriaNormalizada(
+        tipo=TipoGeometria.POLIGONO,
+        pontos=tuple(
+            _normalized_point(
+                (point[0] - page_rect.x0) / page_rect.width,
+                (point[1] - page_rect.y0) / page_rect.height,
+            )
+            for point in page_points
+        ),
     )
-    return _geometry_from_bounds(bounds)
 
 
 def _green_label_bounds(
@@ -1763,7 +1866,11 @@ def _deduplicate_tiled_candidates(
         if duplicate_index is None:
             selected.append(candidate)
             continue
-        if _ocr_confidence(candidate) > _ocr_confidence(selected[duplicate_index]):
+        current = selected[duplicate_index]
+        if (_ocr_confidence(candidate), _candidate_area(candidate)) > (
+            _ocr_confidence(current),
+            _candidate_area(current),
+        ):
             selected[duplicate_index] = candidate
     return tuple(selected)
 
@@ -1807,6 +1914,13 @@ def _candidate_centers_are_close(
 ) -> bool:
     first_bounds = _candidate_bounds(first)
     second_bounds = _candidate_bounds(second)
+    overlap_width = min(first_bounds[2], second_bounds[2]) - max(first_bounds[0], second_bounds[0])
+    overlap_height = min(first_bounds[3], second_bounds[3]) - max(first_bounds[1], second_bounds[1])
+    if overlap_width <= 0 or overlap_height <= 0:
+        return False
+    smaller_area = min(_candidate_area(first), _candidate_area(second))
+    if smaller_area > 0 and overlap_width * overlap_height / smaller_area >= Decimal("0.80"):
+        return True
     return abs(
         (first_bounds[0] + first_bounds[2]) / 2 - (second_bounds[0] + second_bounds[2]) / 2
     ) <= Decimal("0.015") and abs(
@@ -1840,6 +1954,7 @@ def _extract_ocr_region(
     *,
     bounds: tuple[Decimal, Decimal, Decimal, Decimal],
     stable_suffix: str,
+    rotation_degrees: int = 0,
 ) -> tuple[CandidatoEvidenciaDocumento, ...]:
     capability = engine.consultar_capacidade().capacidade
     if capability is None:
@@ -1868,11 +1983,17 @@ def _extract_ocr_region(
         dados_rgb=bytes(pixmap.samples),
         dpi=dpi,
     )
+    if rotation_degrees:
+        raster = _rotate_raster(raster, rotation_degrees)
     candidates = []
     for index, item in enumerate(engine.reconhecer(raster)):
-        x0, y0, x1, y1 = item.caixa_normalizada
-        width = right - left
-        height = bottom - top
+        x0, y0, x1, y1 = unrotate_box(item.caixa_normalizada, rotation_degrees)
+        # O raster inclui arredondamento às bordas dos pixels; use a origem real.
+        scale = dpi / 72
+        left = Decimal(str((pixmap.x / scale - page_rect.x0) / page_rect.width))
+        top = Decimal(str((pixmap.y / scale - page_rect.y0) / page_rect.height))
+        width = Decimal(str(pixmap.width / scale / page_rect.width))
+        height = Decimal(str(pixmap.height / scale / page_rect.height))
         geometry = GeometriaNormalizada(
             tipo=TipoGeometria.CAIXA,
             pontos=(
@@ -1906,6 +2027,7 @@ def _extract_ocr_region(
                     confianca=confidence,
                     dpi=dpi,
                     recorte_normalizado=",".join(map(str, bounds)),
+                    rotacao_raster_graus=rotation_degrees,
                 ),
             )
         )
