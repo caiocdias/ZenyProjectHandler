@@ -1,6 +1,8 @@
+# mypy: disable-error-code="no-untyped-call"
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Iterator, Mapping
+import asyncio
+from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
@@ -10,9 +12,15 @@ from threading import Event, Thread
 from time import monotonic
 from uuid import UUID, uuid4
 
+import pymupdf
 import pytest
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtWidgets import QApplication, QDialog, QLineEdit, QMessageBox, QPushButton
+from pytestqt.qtbot import QtBot
+from starlette.requests import Request
+from starlette.responses import Response
 from tests.market_fakes import FakeClassificadorMercado, FakeVerificadorAcoesConcluidas
 from tests.pdf_fixtures import create_action_requirements_pdf, create_golden_pdf
 from tests.remote_gateways import DirectProjectGateway
@@ -24,11 +32,18 @@ from zeny_project_handler.application.errors import FluxoMvpCanceladoError
 from zeny_project_handler.application.mvp_workflow import ResultadoFluxoMvp
 from zeny_project_handler.domain.enums import CategoriaElemento
 from zeny_project_handler.domain.market import DescricaoAcao
+from zeny_project_handler_client.bootstrap import create_application
+from zeny_project_handler_client.config import ClientSettings
+from zeny_project_handler_client.ui.documentation_gateway import HttpDocumentationGateway
+from zeny_project_handler_client.ui.main_window import MainWindow
+from zeny_project_handler_client.ui.pdf_gateway import HttpPdfViewerGateway
+from zeny_project_handler_client.ui.portability_gateway import HttpPortabilityGateway
 from zeny_project_handler_client.ui.project_gateway import (
     HttpProjectGateway,
     ProjectGateway,
     ProjectGatewayError,
 )
+from zeny_project_handler_client.ui.review_gateway import HttpReviewGateway
 from zeny_project_handler_contracts.enums import (
     AnalysisExecutionState,
     JobStatus,
@@ -515,3 +530,388 @@ def test_project_gateway_retries_reads_but_never_mutations(
     assert search_transport.value.code is ErrorCode.INTERNAL_ERROR
     assert search_transport.value.status_code is None
     assert attempts == ["GET", "GET"]
+
+
+@contextmanager
+def _http_window(base_url: str, directory: Path, qtbot: QtBot) -> Iterator[MainWindow]:
+    app, window = create_application(
+        [],
+        settings=ClientSettings(data_directory=directory, pdf_render_dpi=72),
+        project_gateway=HttpProjectGateway(base_url, PASSWORD),
+        pdf_viewer_gateway=HttpPdfViewerGateway(base_url, PASSWORD),
+        review_gateway=HttpReviewGateway(base_url, PASSWORD),
+        documentation_gateway=HttpDocumentationGateway(base_url, PASSWORD),
+        portability_gateway=HttpPortabilityGateway(base_url, PASSWORD),
+    )
+    qtbot.addWidget(window)
+    window.show()
+    try:
+        yield window
+    finally:
+        window.close()
+        window.release_resources()
+        app.processEvents()
+
+
+def _assert_http_panels(window: MainWindow, project_id: UUID | None, *, analyzed: bool) -> None:
+    panel = window.project_panel
+    review, documentation = window.review_panel, window.documentation_panel
+    export, gmax = window.portability_panel, window.gmax_panel
+    assert panel is not None and review is not None and documentation is not None
+    assert export is not None and gmax is not None
+    assert panel.projeto_ativo_id == project_id
+    assert gmax.projeto_ativo_id == project_id
+    assert export._project.currentData() == (str(project_id) if project_id else None)
+    if project_id is None:
+        assert not panel._settings.contains("last_project_id")
+        assert panel._service_codes == () and panel._pages.count() == 0
+        assert not panel._service_box.isEnabled() and not export._pdf.isEnabled()
+    else:
+        assert panel._settings.value("last_project_id") == str(project_id)
+        assert panel._service_codes == panel._gateway.get_service_codes(project_id).service_codes
+    if analyzed:
+        assert review._session is not None and documentation._documentation is not None
+        assert review._session.project_id.root == project_id
+        assert documentation._documentation.project_id.root == project_id
+        assert review._project.currentData() == str(project_id)
+        assert documentation._project.currentData() == str(project_id)
+        assert window.pdf_viewer.inspecao is not None
+    else:
+        assert review._session is None and documentation._documentation is None
+        assert review._project.currentData() is None
+        assert documentation._project.currentData() is None
+        assert window.pdf_viewer.inspecao is None
+
+
+@pytest.mark.integration
+@pytest.mark.e2e
+def test_qt_http_search_open_create_switch_rename_and_restore(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = ServerSettings(
+        password=PASSWORD,
+        market_sqlserver_connection_string="fixture-market-connection",
+        data_directory=tmp_path / "server",
+    )
+    runtime = compose_server_runtime(settings, market_classifier=FakeClassificadorMercado())
+    assert runtime.project_api is not None
+    seed = runtime.project_api.create_project("9000000000", "qt-seed")
+    with SqlAlchemyUnitOfWork(runtime.core.engine) as work:
+        project = work.projetos.obter(seed.project.project_id.root)
+        assert project is not None
+        for index in range(1, 201):
+            work.projetos.salvar(
+                replace(
+                    project,
+                    id=uuid4(),
+                    nome=f"900000{index:04d}",
+                    criado_em=project.criado_em + timedelta(microseconds=index),
+                )
+            )
+        work.commit()
+    application = create_app(settings, runtime_factory=lambda _settings: runtime)
+    requests: list[tuple[str, str, int]] = []
+
+    @application.middleware("http")
+    async def record(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        response = await call_next(request)
+        requests.append((request.method, request.url.path, response.status_code))
+        return response
+
+    warnings: list[str] = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args: warnings.append(str(args[-1])))
+    with _running_server(application) as url:
+        gateway = HttpProjectGateway(url, PASSWORD)
+        first = seed.project.project_id.root
+        second = gateway.create_project(
+            "0012345678", idempotency_key="qt-target"
+        ).project.project_id.root
+        for index, project_id in enumerate((first, second)):
+            gateway.replace_service_codes(
+                project_id,
+                (f"000{index + 1}",),
+                expected_project_version=gateway.get_project(project_id).project.project_version,
+            )
+            gateway.upload_document(
+                project_id,
+                _search_catalog_pdf(tmp_path / f"{index}.pdf"),
+                idempotency_key=f"qt-pdf-{index}",
+            )
+            job = gateway.create_analysis_job(
+                project_id,
+                expected_project_version=gateway.get_project(project_id).project.project_version,
+                force_reanalysis=False,
+                idempotency_key=f"qt-job-{index}",
+            )
+            _wait_job(gateway, job.job_id.root, JobStatus.SUCCEEDED)
+        assert second not in {item.project_id.root for item in gateway.list_projects().items}
+        directory = tmp_path / "client"
+        with _http_window(url, directory, qtbot) as window:
+            panel = window.project_panel
+            assert panel is not None
+            assert panel.findChild(QLineEdit, "mvpProjectNameEdit") is None
+            assert panel.findChild(QPushButton, "mvpCreateProjectButton") is None
+            monkeypatch.setattr(
+                QMessageBox, "question", lambda *a, **k: pytest.fail("Unexpected dialog")
+            )
+            panel._project_search.setText(seed.project.service_note)
+            panel.abrir_selecionado()
+            qtbot.waitUntil(lambda: not panel._project_action_active)
+            _assert_http_panels(window, first, analyzed=True)
+            requests.clear()
+            panel._project_search.setText("123456")
+            qtbot.waitUntil(lambda: "1 projeto(s)" in panel._search_status.text())
+            _assert_http_panels(window, first, analyzed=True)
+            assert all(method == "GET" for method, _, _ in requests)
+            assert panel._projects.itemData(0) == str(second)
+            panel._projects.setCurrentIndex(0)
+            qtbot.keyClick(panel._project_search, Qt.Key.Key_Return)
+            qtbot.waitUntil(lambda: not panel._project_action_active)
+            _assert_http_panels(window, second, analyzed=True)
+            assert not any(method == "POST" for method, _, _ in requests)
+
+            # Editar a seleção não pode reutilizar o ID da sugestão anterior.
+            panel._project_search.setText("0000000777")
+            qtbot.waitUntil(lambda: "Nenhuma correspondência" in panel._search_status.text())
+            monkeypatch.setattr(
+                QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.No
+            )
+            panel.abrir_selecionado()
+            qtbot.waitUntil(lambda: not panel._project_action_active)
+            _assert_http_panels(window, None, analyzed=False)
+            assert gateway.list_projects(limit=1).page.total == 202
+            assert not any(method == "POST" for method, _, _ in requests)
+
+            panel._project_search.setText("0012345678")
+            panel.abrir_selecionado()
+            qtbot.waitUntil(lambda: not panel._project_action_active)
+            _assert_http_panels(window, second, analyzed=True)
+
+            def confirm(*args: object, **kwargs: object) -> QMessageBox.StandardButton:
+                assert "0000000777" in str(args[2])
+                panel.abrir_selecionado()
+                qtbot.keyClick(panel._project_search, Qt.Key.Key_Return)
+                return QMessageBox.StandardButton.Yes
+
+            monkeypatch.setattr(QMessageBox, "question", confirm)
+            panel._project_search.setText("0000000777")
+            panel.abrir_selecionado()
+            qtbot.waitUntil(lambda: not panel._project_action_active)
+            created = gateway.find_project_by_service_note("0000000777")
+            assert created is not None
+            _assert_http_panels(window, created.project.project_id.root, analyzed=False)
+            posts = [item for item in requests if item[0] == "POST"]
+            assert posts == [("POST", "/api/v1/projects", 201)]
+            assert gateway.list_projects(limit=1).page.total == 203
+
+            panel._project_search.setText("0012345678")
+            panel.abrir_selecionado()
+            qtbot.waitUntil(lambda: not panel._project_action_active)
+            _assert_http_panels(window, second, analyzed=True)
+            original = gateway.get_project(second).project
+
+            def rename(note: str) -> None:
+                def accept() -> None:
+                    dialog = QApplication.activeModalWidget()
+                    assert isinstance(dialog, QDialog)
+                    editor = dialog.findChild(QLineEdit, "mvpRenameServiceNoteEdit")
+                    assert editor is not None
+                    editor.setText(note)
+                    dialog.accept()
+
+                QTimer.singleShot(0, accept)
+                panel.alterar_numero_ns()
+                qtbot.waitUntil(lambda: not panel._project_action_active)
+
+            rename(seed.project.service_note)
+            assert gateway.get_project(second).project == original
+            assert gateway.get_project(first).project.service_note == seed.project.service_note
+            assert warnings
+            warnings.clear()
+            # Outra janela altera a versão antes da confirmação do diálogo.
+            gateway.replace_service_codes(
+                second, ("0009",), expected_project_version=original.project_version
+            )
+            rename("0012345679")
+            assert gateway.get_project(second).project.service_note == original.service_note
+            assert warnings
+            warnings.clear()
+            panel._project_search.setText(original.service_note)
+            panel.abrir_selecionado()
+            qtbot.waitUntil(lambda: not panel._project_action_active)
+            before = gateway.get_project(second).project.project_version
+            rename("0012345679")
+            assert gateway.get_project(second).project.project_version == before + 1
+            assert gateway.get_project(second).project.service_note == "0012345679"
+            _assert_http_panels(window, second, analyzed=True)
+        with _http_window(url, directory, qtbot) as restored:
+            _assert_http_panels(restored, second, analyzed=True)
+        gateway.delete_project(second)
+        with _http_window(url, directory, qtbot) as removed:
+            _assert_http_panels(removed, None, analyzed=False)
+
+
+@pytest.mark.integration
+@pytest.mark.e2e
+def test_two_qt_http_clients_observe_absence_then_open_one_persisted_project(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = ServerSettings(
+        password=PASSWORD,
+        market_sqlserver_connection_string="fixture-market-connection",
+        data_directory=tmp_path / "server",
+    )
+    application = create_app(settings)
+    requests: list[tuple[str, str, int, str | None]] = []
+
+    @application.middleware("http")
+    async def record(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        response = await call_next(request)
+        requests.append(
+            (
+                request.method,
+                request.url.path,
+                response.status_code,
+                request.headers.get("Idempotency-Key"),
+            )
+        )
+        return response
+
+    with (
+        _running_server(application) as url,
+        _http_window(url, tmp_path / "one", qtbot) as one,
+        _http_window(url, tmp_path / "two", qtbot) as two,
+    ):
+        first, second = one.project_panel, two.project_panel
+        assert first is not None and second is not None
+        for panel in (first, second):
+            panel._project_search.setText("0000000042")
+        confirmations: list[object] = []
+
+        def confirm(*args: object, **kwargs: object) -> QMessageBox.StandardButton:
+            confirmations.append(args[0])
+            assert "0000000042" in str(args[2])
+            if args[0] is first:
+                # Barreira na confirmação: ambos os GETs reais retornam 404 antes
+                # de qualquer POST. A segunda janela vence enquanto a primeira espera.
+                second.abrir_selecionado()
+            else:
+                assert args[0] is second
+                assert (
+                    len([r for r in requests if r[1].endswith("/0000000042") and r[2] == 404]) == 2
+                )
+                assert not any(r[0] == "POST" for r in requests)
+            first.abrir_selecionado()  # Reentrada bloqueada durante a confirmação.
+            return QMessageBox.StandardButton.Yes
+
+        monkeypatch.setattr(QMessageBox, "question", confirm)
+        monkeypatch.setattr(QMessageBox, "warning", lambda *a: pytest.fail(str(a)))
+        first.abrir_selecionado()
+        qtbot.waitUntil(
+            lambda: not first._project_action_active and not second._project_action_active
+        )
+        gateway = HttpProjectGateway(url, PASSWORD)
+        stored = gateway.list_projects()
+        assert stored.page.total == 1
+        project_id = stored.items[0].project_id.root
+        _assert_http_panels(one, project_id, analyzed=False)
+        _assert_http_panels(two, project_id, analyzed=False)
+        assert confirmations == [first, second]
+        posts = [r for r in requests if r[0] == "POST"]
+        assert [r[2] for r in posts] == [201, 409]
+        assert len({r[3] for r in posts}) == 2
+
+
+def _search_catalog_pdf(path: Path) -> Path:
+    code = carregar_catalogo_inicial().itens_ativos(CategoriaElemento.POSTE)[0].codigo
+    with pymupdf.open() as document:
+        page = document.new_page(width=240, height=160)
+        page.insert_text((20, 25), "P1")
+        page.insert_text((20, 40), code)
+        document.save(path)
+    return path
+
+
+@pytest.mark.integration
+@pytest.mark.e2e
+@pytest.mark.parametrize("transition", ["edit", "reconnect", "close"])
+def test_qt_http_delayed_search_cannot_cross_input_or_connection_context(
+    qtbot: QtBot,
+    tmp_path: Path,
+    transition: str,
+) -> None:
+    settings = ServerSettings(
+        password=PASSWORD,
+        market_sqlserver_connection_string="fixture-market-connection",
+        data_directory=tmp_path / "server",
+    )
+    application = create_app(settings)
+    entered, release = Event(), Event()
+    queries: list[str] = []
+
+    @application.middleware("http")
+    async def delay(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        response = await call_next(request)
+        if request.url.path.endswith("/search"):
+            query = request.query_params["query"]
+            queries.append(query)
+            if query == "111":
+                entered.set()
+                assert await asyncio.to_thread(release.wait, 10)
+        return response
+
+    with (
+        _running_server(application) as url,
+        _http_window(url, tmp_path / "client", qtbot) as window,
+    ):
+        gateway = HttpProjectGateway(url, PASSWORD)
+        first = gateway.create_project("0000000111", idempotency_key="delay-a")
+        second = gateway.create_project("0000000222", idempotency_key="delay-b")
+        panel = window.project_panel
+        assert panel is not None
+        panel._project_search.setText(first.project.service_note)
+        panel.abrir_selecionado()
+        qtbot.waitUntil(lambda: not panel._project_action_active)
+        panel._project_search.setText("111")
+        qtbot.waitUntil(entered.is_set)
+        worker = panel._search_thread
+        assert worker is not None
+        try:
+            panel._project_search.setText("222")
+            if transition == "reconnect":
+                window.set_connection_available(False, "Desconectado no teste")
+                assert not panel.isEnabled()
+                window.set_connection_available(True, "Reconectado no teste")
+            elif transition == "close":
+                window.close()
+            assert panel.projeto_ativo_id == first.project.project_id.root
+        finally:
+            release.set()
+            assert worker.wait(2000)
+        qtbot.waitUntil(lambda: panel._search_thread is None)
+        if transition == "close":
+            assert panel._search_stopped
+            assert queries == ["111"]
+        else:
+            qtbot.waitUntil(lambda: "1 projeto(s)" in panel._search_status.text())
+            assert panel._project_search.text() == "222"
+            assert panel._projects.itemData(0) == str(second.project.project_id.root)
+            assert panel._projects.currentData() is None
+            assert queries == ["111", "222"]
+            assert panel.projeto_ativo_id == first.project.project_id.root
+            panel.set_global_operation(object())
+            panel.abrir_selecionado()
+            assert panel.projeto_ativo_id == first.project.project_id.root
+            assert not panel._open_project.isEnabled()
+            panel.set_global_operation(None)
+        assert gateway.list_projects().page.total == 2

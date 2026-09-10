@@ -80,7 +80,9 @@ indisponível. O cliente preserva status/código de erros com envelope; falha se
 continuam erros, distintos de uma pesquisa vazia. Não há fallback para filtrar os primeiros 200.
 A resolução exata existente pode continuar disponível; somente seu `404 RESOURCE_NOT_FOUND`
 confirma ausência exata. Mesmo uma pesquisa vazia ou com dez dígitos não substitui essa resolução.
-Consumo visual, debounce e apresentação de indisponibilidade pertencem à E02 do roadmap.
+O campo Qt usa debounce e descarta respostas obsoletas. A abertura usa a resolução exata ou o ID
+selecionado; Exportar também pode consultar `GET /projects/{project_id}` para acompanhar uma NS
+fora da primeira página, sem novo endpoint ou alteração de schema.
 
 ## Projeção GMAX
 

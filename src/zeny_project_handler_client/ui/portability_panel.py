@@ -240,10 +240,19 @@ class PortabilityPanelWidget(QWidget):
         self._apply_action_state()
 
     def abrir_projeto(self, projeto_id: UUID) -> None:
+        self.limpar()
         self.atualizar_projetos()
         index = self._project.findData(str(projeto_id))
-        if index >= 0:
-            self._project.setCurrentIndex(index)
+        if index < 0:
+            try:
+                project = self._gateway.get_project(projeto_id).project
+            except (PortabilityGatewayError, ValueError) as error:
+                self.status_changed.emit(str(error))
+                return
+            self._project_versions[projeto_id] = project.project_version
+            self._project.addItem(project.service_note, str(projeto_id))
+            index = self._project.count() - 1
+        self._project.setCurrentIndex(index)
 
     def limpar(self) -> None:
         signals_were_blocked = self._project.blockSignals(True)

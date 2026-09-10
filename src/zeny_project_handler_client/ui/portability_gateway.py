@@ -36,7 +36,10 @@ from zeny_project_handler_contracts.portability import (
     ConfirmProjectImportRequest,
     ProjectImportPreflightResponse,
 )
-from zeny_project_handler_contracts.projects import ProjectSummaryListResponse
+from zeny_project_handler_contracts.projects import (
+    ProjectDetailResponse,
+    ProjectSummaryListResponse,
+)
 
 _CHUNK_SIZE = 1024 * 1024
 ModelT = TypeVar("ModelT", bound=BaseModel)
@@ -62,6 +65,8 @@ class PortabilityTransferCancelledError(RuntimeError):
 
 
 class PortabilityGateway(Protocol):
+    def get_project(self, project_id: UUID) -> ProjectDetailResponse: ...
+
     def list_projects(
         self,
         *,
@@ -177,6 +182,15 @@ class HttpPortabilityGateway:
         self._host = parsed.hostname
         self._port = parsed.port or (443 if parsed.scheme == "https" else 80)
         self._base_path = parsed.path.rstrip("/")
+
+    def get_project(self, project_id: UUID) -> ProjectDetailResponse:
+        return self._json_model(
+            "GET",
+            f"{API_V1_PREFIX}/projects/{project_id}",
+            None,
+            ProjectDetailResponse,
+            retry_read=True,
+        )
 
     def list_projects(
         self,

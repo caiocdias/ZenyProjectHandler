@@ -111,13 +111,19 @@ os IDs de etapas já executadas e explicitando as novas dependências.
 
 ## Definição global de pronto
 
-- [ ] A mesma entrada busca, abre e inicia cadastro; nenhum segundo campo permanente disputa essa função.
-- [ ] Trechos encontram projetos além dos 200 iniciais; NS completa é resolvida exatamente.
-- [ ] NS existente abre diretamente, inclusive após conflito concorrente; não surge uma duplicata.
-- [ ] NS ausente só é criada após confirmação e abre com o ID retornado pelo servidor.
-- [ ] Erros, ambiguidade, respostas atrasadas e ações repetidas não criam nem ativam projeto indevido.
+- [x] A mesma entrada busca, abre e inicia cadastro; nenhum segundo campo permanente disputa essa função.
+- [x] Trechos encontram projetos além dos 200 iniciais; NS completa é resolvida exatamente.
+- [x] NS existente abre diretamente, inclusive após conflito concorrente; não surge uma duplicata.
+- [x] NS ausente só é criada após confirmação e abre com o ID retornado pelo servidor.
+- [x] Erros, ambiguidade, respostas atrasadas e ações repetidas não criam nem ativam projeto indevido.
 - [ ] Alteração de NS, restauração e painéis dependentes passam nas regressões e no teste manual.
 - [ ] Contrato e documentação descrevem o fluxo entregue; validações de E01–E03 foram executadas e aprovadas.
+
+
+Evidências dos cinco requisitos funcionais em E03 (T1–T3 e percurso nativo). Alteração de NS,
+restauração e sincronização passaram nos casos específicos, mas o teste obrigatório de troca de
+tema com projeto/PDF ativo falhou na seleção dirigida. Os dois últimos aceites permanecem abertos
+até sua resolução e repetição integral das validações; o gate completo aprovado não substitui isso.
 
 ## Índice de etapas
 
@@ -125,7 +131,7 @@ os IDs de etapas já executadas e explicitando as novas dependências.
 |---|---|---|---|---|
 | E01 | Pesquisa remota por trecho de NS | #concluida | Nenhuma | API e gateway com busca paginada global |
 | E02 | Entrada única para buscar, abrir e criar | #concluida | E01 | Fluxo Qt unificado e redirecionamento direto |
-| E03 | Integração do fluxo e aceite final | #pendente | E01, E02 | Regressões de integração e gate global aprovado |
+| E03 | Integração do fluxo e aceite final | #bloqueada | E01, E02 | Regressões de integração e gate global aprovado |
 
 Execução sequencial: E01 altera gateways e contratos consumidos por E02; E02 e E03 compartilham
 testes de UI e documentação. Não há paralelismo de implementação previsto.
@@ -436,7 +442,7 @@ Nenhum impedimento permanece para os critérios de E02. E03 e o gate global `Ini
 continuam pendentes e não foram executados; a composição Qt + HTTP completa e o aceite global
 pertencem à próxima etapa. Nenhum commit, publicação, implantação ou alteração em produção.
 
-## E03 — Integração do fluxo e aceite final — #pendente
+## E03 — Integração do fluxo e aceite final — #bloqueada
 
 **Objetivo:** comprovar que busca, ativação e criação funcionam juntas através do servidor real de
 teste e mantêm todos os painéis coerentes em concorrência, reconexão e restauração.
@@ -466,17 +472,17 @@ smokes de SQL Server ou exemplos privados, build de release, publicação e impl
 
 **Critérios de aceite e matriz integrada:**
 
-- [ ] Base com mais de 200 projetos: fragmento encontra NS fora da página inicial e a ação abre seu ID.
-- [ ] NS nova: pesquisa/GETs sem mutação; confirmação faz um POST e mantém exatamente um cadastro.
-- [ ] Dois clientes: um projeto persistido, ambos terminam no mesmo ID, nenhum retry de criação.
-- [ ] Projeto A ativo, busca por B: digitação mantém A; confirmação de abertura troca todos os painéis para B.
-- [ ] Texto editado após selecionar A não abre A por um ID residual; resposta de A não sobrescreve busca por B.
-- [ ] Timeout, 401, rota de pesquisa indisponível e ambiguidade não oferecem falsa ausência nem POST.
-- [ ] Recusar criação limpa sessão/painéis/last_project_id sem mutação no servidor.
-- [ ] Alteração de NS preserva controle de versão e rejeita colisão sem alterar os dois projetos.
-- [ ] Restauração abre o último projeto válido mesmo fora da primeira página; ID removido é tratado sem sessão residual.
-- [ ] Reconexão/fechamento descartam respostas antigas; bloqueio global continua impedindo ações incompatíveis.
-- [ ] Gate completo aprovado e definição global de pronto integralmente satisfeita.
+- [x] Base com mais de 200 projetos: fragmento encontra NS fora da página inicial e a ação abre seu ID.
+- [x] NS nova: pesquisa/GETs sem mutação; confirmação faz um POST e mantém exatamente um cadastro.
+- [x] Dois clientes: um projeto persistido, ambos terminam no mesmo ID, nenhum retry de criação.
+- [x] Projeto A ativo, busca por B: digitação mantém A; confirmação de abertura troca todos os painéis para B.
+- [x] Texto editado após selecionar A não abre A por um ID residual; resposta de A não sobrescreve busca por B.
+- [x] Timeout, 401, rota de pesquisa indisponível e ambiguidade não oferecem falsa ausência nem POST.
+- [x] Recusar criação limpa sessão/painéis/last_project_id sem mutação no servidor.
+- [x] Alteração de NS preserva controle de versão e rejeita colisão sem alterar os dois projetos.
+- [x] Restauração abre o último projeto válido mesmo fora da primeira página; ID removido é tratado sem sessão residual.
+- [x] Reconexão/fechamento descartam respostas antigas; bloqueio global continua impedindo ações incompatíveis.
+- [ ] Gate completo aprovado e definição global de pronto integralmente satisfeita. **Parcial:** gate aprovado; seleção dirigida obrigatória reprovada (bloqueio abaixo).
 
 **Validação obrigatória:** executar os testes dirigidos antes do gate para diagnosticar regressões:
 
@@ -497,8 +503,25 @@ Documentação/conformidade, GMAX e Exportar com o mesmo projeto. A inspeção r
 disponível; o lançador integrado documentado é efêmero e exige Docker e SQL Server configurados.
 Preferir a aplicação com fixtures sintéticas usada nos testes para não depender dessas integrações.
 
-**Bloqueios:** nenhum bloqueio conhecido. Ambiente indisponível só será bloqueio quando constatado,
-com evidência, impacto e procedimento de desbloqueio registrados.
+**Bloqueio de aceite B01 — regressão obrigatória de tema/visualizador:**
+
+- **Causa constatada:** o teste `test_theme_switch_preserves_project_pdf_callout_zoom_selection_and_wrap_toggles`
+  falha na seleção dirigida e isoladamente, inclusive no HEAD anterior a E03. O centro horizontal
+  do visualizador muda de 358,857 para 300 ao trocar o tema (tolerância ±30). A causa técnica
+  dessa diferença e da aprovação na suíte completa ainda não foi isolada; não atribuir somente
+  ao sandbox ou a E03.
+- **Evidência:** `tests/integration/test_window.py:372`; `tmp/e03-theme.log`, reprodução do HEAD
+  `311ebefc15d710c59eeadab99135cd5a969625be` em `tmp/e03-baseline-result.log` e repetição literal
+  fora do sandbox em `tmp/e03-directed-final.log`: **1 failed, 94 passed, exit 1**. O gate completo
+  em `relatorio-testes.txt` passou com 994 testes/87,13%, mas não elimina a falha dirigida.
+- **Impacto:** os dez critérios funcionais de E03 têm evidência; o aceite obrigatório e a definição
+  global de pronto não estão integralmente satisfeitos. E03 não pode ser declarada concluída.
+- **Desbloqueio:** investigar a dependência de ordem/estado Qt desse teste comparando execução
+  isolada, dirigida e completa no mesmo ambiente, incluindo fontes, layout e eventos pendentes;
+  corrigir a fixture ou o defeito identificado no escopo apropriado, sem relaxar tolerância ou
+  excluir teste. Depois executar novamente a seleção literal de E03 e `IniciarTestes.bat` completo,
+  registrar ambos com exit 0 e só então sincronizar a conclusão. Mudanças independentes no
+  visualizador/tema não foram feitas por estarem fora deste roadmap.
 
 **Riscos e mitigação:** suíte ampla pode revelar falha preexistente; comparar evidências e separar
 causa sem expandir escopo, mantendo o gate como pendência até resolução. Teste só com gateway direto
@@ -514,5 +537,135 @@ Comprove a composição da UI Qt com gateway HTTP e servidor de teste: campo ún
 Execute os comandos e o percurso manual de Validação obrigatória de E03, incluindo IniciarTestes.bat completo. Preencha cada critério da matriz e a definição global de pronto com evidências. Não declare sucesso com teste obrigatório falhando ou não executado, nem substitua o gate completo por validação parcial. Marque #concluida somente após todos os aceites; se houver impedimento real, marque #bloqueada com causa, evidência, impacto e ação de desbloqueio. Sincronize tags e registre arquivos, decisões, comandos, resultados, cobertura e inspeção manual em Evidências e handoff. Não crie commit, publique ou implante sem autorização explícita. Finalize com resumo conciso do resultado, validações e pendências.
 ```
 
-**Evidências e handoff:** não iniciada. Registrar regressões acrescentadas, correções, comandos,
-resultado do gate, cobertura, inspeção manual e aceite de cada requisito global.
+**Evidências e handoff — implementação validada, aceite bloqueado em 10/09/2026:**
+
+- Entrada conferida: Git limpo no HEAD `311ebefc15d710c59eeadab99135cd5a969625be`;
+  nenhum `AGENTS.md` aplicável na hierarquia ou no repositório. Lidos roadmap completo,
+  evidências de E01/E02, README/especificação/API, painel/helper de busca, gateway HTTP,
+  servidor, composição da janela e testes indicados. E01/E02 realmente concluídas: rota,
+  validação, paginação, resolução exata, unicidade, campo único, debounce e invalidadores
+  presentes. Nenhuma divergência impeditiva de dependência. E03 foi marcada em andamento
+  no índice e no detalhe antes das alterações; nenhuma mudança preexistente precisou ser movida.
+- Regressões acrescentadas somente em `tests/integration/test_project_http_gateway.py`:
+  **T1** = `test_qt_http_search_open_create_switch_rename_and_restore`;
+  **T2** = `test_two_qt_http_clients_observe_absence_then_open_one_persisted_project`;
+  **T3** = `test_qt_http_delayed_search_cannot_cross_input_or_connection_context`
+  (`edit`, `reconnect`, `close`). São cinco casos novos. Todos os painéis usam gateways HTTP
+  reais contra Uvicorn em loopback/porta efêmera e SQLite isolado. A fixture semeia 201 projetos,
+  acrescenta B fora da página e produz PDFs públicos sintéticos com item do catálogo; as
+  análises usam classificador de mercado fake, sem SQL Server ou PDFs privados.
+- T1 registra métodos, caminhos e status HTTP. A busca de trecho é somente GET, mantém A
+  ativo, encontra B entre 202 projetos e abre seu ID sem POST/pergunta. Verifica Serviços,
+  visualizador, sessão de Resultados, Documentação, GMAX, Exportar e preferências; recusa limpa
+  tudo sem mutação. A confirmação com reentrada/Enter produz exatamente um POST 201 e total
+  203. Reabrir B e criar um projeto sem análise também verifica ausência de dados residuais.
+  O diálogo de alteração rejeita colisão e versão obsoleta; após recarga incrementa a versão
+  uma vez. Reabrir a janela restaura B fora dos 200; remover B no servidor e restaurar limpa
+  sessão e `last_project_id`.
+- T2 usa a confirmação modal como barreira determinística entre duas janelas Qt: os dois
+  GETs reais de resolução retornam 404 antes de qualquer POST. A segunda janela confirma e
+  vence enquanto a primeira espera; depois a primeira recebe o conflito real. Resultado:
+  dois POSTs, um por cliente, chaves distintas, status 201/409, um projeto persistido, ambos
+  no mesmo ID, nenhuma pergunta de duplicidade e nenhum retry. A simultaneidade dos POSTs
+  no servidor também permanece coberta por
+  `test_two_concurrent_project_creations_publish_only_one_service_note`.
+- T3 retém a resposta HTTP de `111` com `threading.Event`, libera-a somente após editar para
+  `222`, reconectar ou fechar, e usa esperas por condição/evento. A consulta antiga não troca
+  texto, sugestões ou projeto; a nova devolve somente B, sem seleção implícita. Bloqueio global
+  impede a ação. Mantidas as regressões complementares de E02 para entrega Qt já enfileirada,
+  invalidadores de confirmação, erro de gateway antigo, timeout, 401/404/422/500, ambiguidade
+  e conflito sem ID seguro; não foram duplicadas com novos mocks equivalentes.
+- Defeitos reproduzidos por T1 e corrigidos dentro do fluxo: Exportar mantinha A ao abrir B
+  fora da primeira página; Resultados/Documentação podiam reter a sessão de A ao abrir uma NS
+  sem análise. `portability_panel.py` limpa a seleção e busca detalhe/versão pelo ID ausente
+  da lista; `portability_gateway.py` e `tests/remote_gateways.py` reutilizam o GET de detalhe
+  existente, sem novo endpoint/schema. `review_panel.py` limpa a sessão antes da abertura e
+  resolve por ID quando ausente da lista; `documentation_panel.py` limpa antes da troca.
+  O gateway direto de revisão passou a traduzir `ApiError` em `ReviewGatewayError` nessa
+  leitura, assim como a fronteira HTTP. Nenhuma regra de interpretação/conformidade foi alterada.
+- Documentação revisada: `README.md`, `docs/especificacao-funcional.md`, `docs/api/README.md`
+  e este roadmap. API, snapshot e servidor de produção não foram modificados.
+
+**Matriz de aceite com evidência:**
+
+| Critério | Evidência verificável |
+|---|---|
+| Mais de 200 projetos e abertura do ID encontrado | T1: B excluído da listagem inicial, fragmento `123456` retorna B; Enter abre B; percurso nativo com 202 projetos |
+| NS nova, GETs sem mutação e um POST confirmado | T1: métodos somente GET antes da confirmação, recusa sem POST, confirmação/reentrada com um 201 e total 203; captura manual da confirmação |
+| Dois clientes, um cadastro e nenhum retry | T2: dois 404 antes dos POSTs, chaves distintas, 201/409, um ID persistido e ativo nas duas janelas; concorrência real no teste de servidor existente |
+| Digitar B preserva A; abrir troca os painéis | T1 e `_assert_http_panels`: IDs, sessões, Serviços e preferências; inspeção nativa de Resultados, Documentação, GMAX e Exportar |
+| Sem ID residual ou resposta antiga aplicada | T1 edita a sugestão selecionada antes de recusar/criar; T3 e testes de debounce/geração de E02 descartam a entrega antiga |
+| Erros distintos de ausência | Testes `test_http_search_errors_never_become_absence`, `test_project_gateway_retries_reads_but_never_mutations`, `test_search_error_and_exact_error_never_authorize_creation`, `test_search_timeout_allows_exact_open_but_global_operation_blocks_the_action`, resolução ambígua do servidor; todos no gate |
+| Recusa limpa sessão/painéis/preferência sem mutação | T1 e percurso nativo: sessão/seleção/folhas/serviços vazios, revisão/documentação sem sessão, GMAX sem ID, Exportar sem seleção, `last_project_id` removido e nenhum POST |
+| Alterar NS preserva versão e rejeita colisão | T1: colisão sem mudar A/B, escrita obsoleta rejeitada, recarga e incremento de versão; teste do diálogo em E02 e alteração nativa `0000000777` → `0000000778` |
+| Restauração fora da página e ID removido | T1 com fechamento/reabertura e remoção remota; inspeção nativa de restauração da NS `0000000778`, mesmo ID e Exportar sincronizado |
+| Reconexão/fechamento e bloqueio global | T3 nos três contextos; testes existentes de reconexão autenticada, gateway substituído e sinal já enfileirado; nenhuma criação/ativação indevida |
+| Gate e definição global de pronto | **Bloqueado (B01):** gate completo 994 passed/87,13%, todas as seções exit 0; seleção literal obrigatória 94 passed/1 failed. Não há aceite global |
+
+**Definição global de pronto — vínculo com as evidências:** entrada única = T1/inspeção Qt;
+consulta global/exata = T1/E01; existente/conflito = T1/T2; criação confirmada = T1/T2/percurso
+nativo; erros/ambiguidade/atrasos/repetição = regressões E01/E02 + T2/T3; alteração/restauração/
+painéis = T1 e inspeção nativa; contrato/documentação/qualidade = snapshot/contratos no gate,
+documentação revisada e resultados abaixo. Os cinco primeiros requisitos globais estão comprovados;
+os dois últimos permanecem abertos por B01. Nenhuma validação falha foi substituída pelo gate completo.
+
+**Comandos e resultados:**
+
+| Comando na raiz | Resultado/evidência |
+|---|---|
+| `.\.venv\Scripts\python.exe -m pytest tests/integration/test_project_http_gateway.py -k 'test_qt_http or test_two_qt' --basetemp=tmp/e03-fixes -o cache_dir=tmp/e03-cache --tb=short` | Exit 0; 2 passed em 19,29 s após correções de fluxo; `tmp/e03-target.log` |
+| Seleção obrigatória de cinco arquivos com `--basetemp=tmp/e03-directed2 -o cache_dir=tmp/e03-cache --tb=short` | No sandbox: exit 1, 94 passed e 1 failed em 136,32 s; `tmp/e03-directed2.log` |
+| `.\IniciarTestes.bat` (primeira execução, sandbox) | Exit 1; 577 passed, 417 erros de setup por WinError 5 em `C:\tmp\zph-basic-3038`, 2 avisos, cobertura 49,84%; também faltava formatar `tests/remote_gateways.py`, corrigido. Relatório preservado em `tmp/e03-gate-first.txt`; não utilizado como aceite |
+| `.\IniciarTestes.bat` (repetição integral fora do sandbox) | Exit 0, **APROVADO**; **994 passed em 347,78 s**, sem warnings; **87,13%** de cobertura com ramos, piso 85,01%; `relatorio-testes.txt` e `tmp/e03-gate-console2.log` |
+| Seções internas do gate completo | `pip check`, Ruff, formatação (322 arquivos), Mypy (307 arquivos), `client_artifact_gate.py --source-only`, Pytest/cobertura e `complexity_gate.py src`: todos exit 0; 2660 funções/métodos, nenhum E/F |
+| `.\.venv\Scripts\python.exe -m pytest tests/integration/test_project_http_gateway.py tests/integration/test_client_reconnection.py tests/integration/test_window.py tests/e2e/test_mvp_ui.py tests/server/test_project_document_api.py` | **Exit 1; 94 passed, 1 failed em 118,25 s**, sem warnings; falha B01 persistiu fora do sandbox. `tmp/e03-directed-final.log` |
+| `.\.venv\Scripts\python.exe -m tmp.e03_manual` e `.\.venv\Scripts\python.exe -m tmp.e03_manual_restore` | Aplicação nativa `windows`, servidor loopback sintético; percurso manual e restauração executados, janelas/servidores encerrados |
+| `git diff --check` | Exit 0; sem erros de whitespace |
+
+**Diagnóstico, tentativas anteriores e limitação pendente:**
+
+- A primeira seleção dirigida foi interrompida após detectar exceção não traduzida no gateway
+  direto de revisão; a tradução foi corrigida e toda a seleção reexecutada. As primeiras rodadas
+  de T1 identificaram Exportar residual e sessão de Resultados residual; foram corrigidas, não
+  consideradas aprovações parciais. O PDF inicialmente só gráfico não produzia resultados de
+  revisão; a fixture final usa texto sintético do catálogo para verificar sessões reais.
+- No sandbox, `test_theme_switch_preserves_project_pdf_callout_zoom_selection_and_wrap_toggles`
+  falhou em `tests/integration/test_window.py:372` (centro X 300 contra 358,857 ± 30), junto de
+  aviso de fontes Qt indisponíveis. Reproduzido no HEAD intacto por `git archive` em
+  `tmp/e03-baseline`, com `PYTHONPATH` apontando para seu `src`; comando do teste isolado e
+  resultado em `tmp/e03-baseline-result.log`. Não se alterou visualizador/tema nem tolerância.
+  A mesma regressão passou na execução integral fora do sandbox, mas voltou a falhar na seleção
+  literal dirigida também fora dele. B01 permanece pendente; a diferença entre seleções não foi
+  atribuída ao código de E03 nem resolvida pela troca de ambiente.
+- O gate foi repetido integralmente com acesso aos temporários exigidos pelo próprio script;
+  não houve edição do `.bat`, redução de seleção, retirada de gate ou redução de cobertura.
+  A primeira janela nativa lançada no sandbox não era visível ao controle de desktop; o ambiente
+  sintético foi relançado na sessão interativa, sem mudar arquivos ou dados reais do usuário.
+
+**Inspeção manual nativa:** realizada com `computer-use` sobre a janela
+**E03 — Aceite Qt HTTP — dados sintéticos**, Qt 6.11.1, tema claro, cerca de 1500 × 1000 px.
+Campo único, status e ação legíveis; sem segundo campo permanente. Digitado `123456`, observado
+um resultado `0012345678` fora da primeira página sem ativação; seta e Enter abriram diretamente
+PDF/Resultados. Visitadas Documentação/conformidade, GMAX e Exportar: mesma NS do projeto.
+Digitado `0000000777`, confirmado que o anterior permanece ativo; diálogo mostra a NS inteira e
+recusa padrão. Escape recusou e limpou visualizador/painéis/preferência sem POST. Repetida a NS,
+selecionado **Yes** e confirmado: um POST 201 abriu o cadastro. **Alterar NS** exibiu editor
+transitório preenchido; digitação de `0000000778` e Enter enviaram um PATCH 200, mantendo o ID
+`b6e9aa6f-c8b1-5cff-b247-04678006392e`, inclusive em Exportar. Resultados e Documentação vazios
+foram conferidos visualmente. GMAX sem análise apresentou indisponibilidade e removeu os dados
+anteriores, comportamento existente do endpoint; não houve consulta SQL. Fechada e reaberta a
+aplicação/servidor, a NS alterada foi restaurada pelo mesmo ID fora dos 200, com Exportar correto.
+
+Evidências locais ignoradas: harnesses `tmp/e03_manual.py`, `tmp/e03_manual_restore.py`, 17 estados
+em `tmp/e03-manual-02/states.json`, capturas `state-01.png` a `state-17.png`, requisições em
+`requests.json` e `restauracao.txt`; inspeções das abas e dos diálogos também foram realizadas
+pelas capturas do controle nativo. O registro HTTP separa os POSTs de preparação da fixture
+(projeto, PDF e análise) do único POST de cadastro manual e do PATCH. Nenhum uso de SQL Server,
+PDFs privados, produção, commit, publicação, build de release ou implantação.
+
+**Handoff final:** dez arquivos alterados (quatro documentos, quatro arquivos de UI/gateway,
+`tests/integration/test_project_http_gateway.py` e `tests/remote_gateways.py`). Ruff, formatação,
+Mypy, fronteira do cliente, contratos, cobertura e complexidade aprovados no gate completo;
+inspeção manual e cinco novos casos HTTP aprovados. Pendência única de aceite: B01 na seleção
+dirigida, sem modificação do teste preexistente ou do visualizador/tema. Índice/detalhe em
+`#bloqueada`; não há outra etapa em andamento. Nenhum commit, publicação ou implantação.

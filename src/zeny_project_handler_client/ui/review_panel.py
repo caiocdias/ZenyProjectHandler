@@ -408,11 +408,19 @@ class ReviewPanelWidget(QWidget):
             )
 
     def abrir_projeto(self, projeto_id: UUID) -> None:
+        self.limpar()
         self.atualizar_projetos()
         project_index = self._project.findData(str(projeto_id))
         if project_index < 0:
-            self.status_changed.emit("Projeto ainda não possui resultados de análise")
-            return
+            session = self._run_action(
+                lambda: self._gateway.get_session(projeto_id),
+                success_message=None,
+                show_warning=False,
+            )
+            if session is None:
+                return
+            self._project.addItem(session.service_note, str(projeto_id))
+            project_index = self._project.count() - 1
         self._project.blockSignals(True)
         self._project.setCurrentIndex(project_index)
         self._project.blockSignals(False)

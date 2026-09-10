@@ -140,6 +140,10 @@ ausência; servidor sem pesquisa ainda pode permitir a resolução exata.
 **Alterar NS** abre um diálogo preenchido com a NS ativa. Confirmar altera com controle de versão;
 colisão é erro. Cancelar preserva a NS, a versão e a sessão. A pesquisa nunca renomeia um projeto.
 
+Ao abrir uma NS fora da primeira página, Exportar acompanha seu ID e sua versão remotos.
+Trocar para um projeto sem análise limpa os resultados e a documentação do projeto anterior.
+Restaurar o último projeto também usa seu ID; se ele foi removido, a sessão local volta ao início.
+
 O pipeline principal executa, em ordem, a extração documental, a interpretação semântica, a
 promoção dos resultados e a conformidade. A ação **Analisar conformidade** reaplica as regras aos
 resultados semânticos persistidos; ela não abre o PDF nem repete OCR. Cada uma dessas execuções

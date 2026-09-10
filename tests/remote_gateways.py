@@ -247,6 +247,10 @@ class DirectPortabilityGateway:
     def __init__(self, runtime: ServerRuntime) -> None:
         self._runtime = runtime
 
+    def get_project(self, project_id: UUID) -> ProjectDetailResponse:
+        assert self._runtime.project_api is not None
+        return self._runtime.project_api.get_project(project_id)
+
     @property
     def _portability(self) -> PortabilityApiService:
         service = self._runtime.portability_api
@@ -425,7 +429,10 @@ class DirectReviewGateway:
         return self._review.list_projects(limit=limit, offset=offset)
 
     def get_session(self, project_id: UUID) -> ReviewSessionResponse:
-        return self._review.get_session(project_id)
+        try:
+            return self._review.get_session(project_id)
+        except ApiError as error:
+            raise _review_error(error) from None
 
     def accept(
         self,

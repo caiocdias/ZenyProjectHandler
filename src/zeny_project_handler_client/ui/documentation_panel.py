@@ -267,6 +267,7 @@ class DocumentationPanelWidget(QWidget):
         self._refresh_registry(registry)
 
     def abrir_projeto(self, projeto_id: UUID) -> None:
+        self.limpar()
         self.atualizar_projetos()
         index = self._project.findData(str(projeto_id))
         try:

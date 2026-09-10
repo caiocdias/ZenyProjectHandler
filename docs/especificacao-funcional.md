@@ -94,6 +94,11 @@ mantém `expected_project_version`; colisão continua sendo erro, sem mesclagem 
 Cancelar preserva sessão, NS e versão. Abrir, trocar e renomear mantêm os painéis sincronizados e
 a restauração preserva a folha salva do projeto.
 
+A abertura e a restauração por ID não dependem de o projeto constar nos 200 primeiros itens.
+Exportar resolve o detalhe remoto quando necessário e usa sua versão vigente. Ao trocar para
+um projeto sem análise, Resultados e Documentação/conformidade descartam a sessão anterior;
+não apresentam dados de outra NS. Um último ID removido limpa a sessão e a preferência local.
+
 ## PDFs protegidos
 
 PDFs protegidos solicitam senha individualmente. Cada arquivo admite até três tentativas; cancelar
