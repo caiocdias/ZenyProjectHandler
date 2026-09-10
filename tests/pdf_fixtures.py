@@ -17,6 +17,21 @@ TEST_RENDER_BUDGET = OrcamentoRenderizacaoPdf(
 )
 
 
+def create_network_benchmark_pdf(path: Path) -> Path:
+    """Rede pública mínima para verificar a instrumentação até promoção e vãos."""
+    with pymupdf.open() as document:
+        page = document.new_page(width=600, height=400)
+        for x, label in ((100, "P1"), (450, "P2")):
+            page.insert_text((x, 100), label, fontsize=10)
+            page.insert_text((x - 20, 125), "P-9M-150DAN-CIRCULAR", fontsize=8)
+        page.insert_text((260, 100), "V1-2", fontsize=10)
+        page.insert_text((250, 130), "ABC-4 CA", fontsize=10)
+        page.insert_text((265, 145), "35m", fontsize=10)
+        page.draw_line((110, 115), (460, 115), color=(0, 0.5, 0))
+        document.save(path)
+    return path
+
+
 def create_feature_pdf(path: Path) -> Path:
     document = pymupdf.open()
     source_form = pymupdf.open()

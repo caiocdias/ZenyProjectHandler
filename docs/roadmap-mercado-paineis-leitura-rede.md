@@ -1,6 +1,6 @@
 # Zeny Project Handler — Mercado editável, painéis e leitura de redes
 
-Data: 10/09/2026. Base inspecionada: `336afba`. Roadmap novo; implementação não iniciada.
+Data: 10/09/2026. Base inicial: `336afba`. E01 diagnosticada em `4ce5b50`; demais etapas pendentes.
 
 ## Objetivo e uso
 
@@ -146,7 +146,7 @@ Hipóteses de produto adotadas para tornar o plano executável, ajustáveis com 
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E01 | Diagnóstico e referência da NS 1256148225 | #pendente | Nenhuma | Inventário e perdas por fase |
+| E01 | Diagnóstico e referência da NS 1256148225 | #concluida | Nenhuma | Inventário e perdas por fase |
 | E02 | Classificação persistida e API | #pendente | Nenhuma | Inicialização SQL e alteração versionada |
 | E03 | Conformidade Rural, Urbano e Ambos | #pendente | E02 | Aplicabilidade e snapshots coerentes |
 | E04 | Escolha do técnico na interface | #pendente | E02, E03 | Seletor e proveniência em Projeto/GMAX |
@@ -156,7 +156,7 @@ Hipóteses de produto adotadas para tornar o plano executável, ajustáveis com 
 | E08 | Associação de elementos e vãos | #pendente | E01, E07 | Ocorrências e topologia recuperadas |
 | E09 | Homologação integrada | #pendente | E03, E04, E05, E06, E08 | Aceite completo e relatório final |
 
-## E01 — Diagnóstico e referência da NS 1256148225 — #pendente
+## E01 — Diagnóstico e referência da NS 1256148225 — #concluida
 
 **Objetivo:** estabelecer a lista revisável do que o PDF contém e localizar onde elementos e
 vãos desaparecem. **Por que agora:** o smoke nativo produz zero propostas, mas o resultado com
@@ -195,10 +195,10 @@ Execute E01 — Diagnóstico e referência da NS 1256148225 de docs/roadmap-merc
 
 **Critérios de aceite:**
 
-- [ ] Inventário cobre toda a rede visível, com ocorrências inequívocas e ambiguidades separadas.
-- [ ] Há comparação por fase do fluxo completo com OCR real, incluindo promoção e vãos.
-- [ ] Metas, denominadores, casos negativos e orçamento numérico foram fixados e registrados.
-- [ ] PDF permanece com o mesmo SHA-256 e nenhuma informação privada foi adicionada ao Git.
+- [x] Inventário cobre toda a rede visível, com ocorrências inequívocas e ambiguidades separadas.
+- [x] Há comparação por fase do fluxo completo com OCR real, incluindo promoção e vãos.
+- [x] Metas, denominadores, casos negativos e orçamento numérico foram fixados e registrados.
+- [x] PDF permanece com o mesmo SHA-256 e nenhuma informação privada foi adicionada ao Git.
 
 **Validação obrigatória:** `python` nos comandos deste plano significa executar
 `.\.venv\Scripts\python.exe`. Rodar `python -m pytest tests/unit/test_smoke_examples.py`
@@ -209,12 +209,41 @@ e os padrões de `tests/integration/test_interpretation_pipeline.py`, montar exe
 registrar o comando efetivamente usado; ainda não existe comando confirmado para esse benchmark.
 Exigir inspeção visual e hash pré/pós; sucesso do smoke sozinho não atende o aceite.
 
-**Bloqueios:** nenhum bloqueio conhecido; disponibilidade do runtime OCR real ainda não verificada.
-Se faltar, registrar a falha e provisionar conforme configuração do projeto antes de concluir.
+**Bloqueios:** nenhum impedimento remanescente para o diagnóstico. Português ausente foi
+provisionado em `tmp/e01/runtime`; foi necessário copiar `configs/tsv` da instalação local
+para esse runtime temporário. Sem ele, Tesseract retorna texto simples e o adaptador descarta
+a saída sem diagnóstico. A falha foi preservada e encaminhada a E07, sem alterar produção.
 **Riscos e mitigação:** inventário errado ou ajuste específico à NS; revisar recortes, manter
 ambiguidades explícitas e produzir padrões sintéticos sem NS/coordenadas reais.
-**Evidências e handoff:** ainda não executada. Registrar inventário local, resumo sanitizado,
-baseline por fase, comandos completos, versões, metas e casos destinados a E07/E08.
+**Evidências e handoff:** concluídos em 10/09/2026; protocolo, decisões, comandos e limites em
+[e01-diagnostico-leitura-rede.md](e01-diagnostico-leitura-rede.md).
+
+- Git inicial limpo, divergência local `HEAD...origin/main = 0 0`; somente o roadmap difere de
+  `336afba`. Nenhum `AGENTS.md` aplicável encontrado. Código de produção preservado.
+- Inventário privado: `tmp/e01/inventory.json`; 95 ocorrências inequívocas (17 postes,
+  22 estruturas MT, 19 BT, 37 cabos), 18 identificadores, 20 trechos físicos, 18 pares de
+  endpoints visíveis e 19 comprimentos explícitos. Sete rótulos de equipamento e 13 grupos
+  simbólicos têm ambiguidades explícitas, sem presumir quantidade/classe/situação.
+- Baseline `tmp/e01/baseline-final.json`: nativo 3.320 evidências, 8 propostas brutas,
+  zero finais; OCR real 3.593 evidências (273 OCR), 8 propostas brutas, 3 finais sem catálogo,
+  zero confirmações, 4 regiões e zero vãos. Filtros, promoção e projeção executados em bases
+  SQLite novas. Controle de orientação e probes do runtime preservados localmente.
+- Recall das 95 ocorrências = 0%; precisão nas categorias inequívocas indefinida (0/0).
+  Metas: 100% das ocorrências/endpoints/comprimentos inequívocos e zero duplicatas/invenções.
+  Orçamento congelado: 25 s nativo, 60 s OCR, RSS Python 768 MiB, OCR 256 MiB, agregado 1 GiB.
+  Medidos 15,882 s e 38,468 s; memória dentro do orçamento, com limites de amostragem documentados.
+- Ferramenta pública nova `scripts/benchmark_network_pdf.py`; fixture sintética nova em
+  `tests/pdf_fixtures.py`; testes em `tests/unit/test_benchmark_network_pdf.py`.
+  Nenhum PDF real, recorte, transcrição ou coordenada adicionado aos arquivos versionáveis.
+- Validação final: 8 testes públicos e 3 verificações privadas aprovados (11 no total);
+  smoke específico aprovado; benchmark completo com código zero; inspeção visual e hash
+  pré/pós aprovados. Ruff/formatação aprovados; Mypy sem erros em 308 arquivos;
+  `git diff --check` aprovado. Falhas iniciais de ambiente/fixture/checks foram resolvidas
+  e repetidas; resultados finais e escopo exato constam no relatório.
+- Handoff E07: runtime TSV, orientação e guardas dos recortes; E08: filtros por identificador,
+  catálogo de símbolos, relações, entrega e endpoints. A conclusão certifica o diagnóstico,
+  não a recuperação automática dos ativos. Gate global de cobertura/UI fica para E09.
+  Nenhum commit ou publicação realizado.
 
 ## E02 — Classificação persistida e API — #pendente
 
