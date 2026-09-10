@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from threading import RLock
 from typing import Any, Generic, Protocol, TypeVar, cast
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Signal, Slot
 
 from zeny_project_handler_client import __version__ as client_version
 from zeny_project_handler_client.ui.documentation_gateway import (
@@ -39,6 +40,17 @@ class ConnectionEvents(QObject):
     """Transporte seguro de falhas detectadas em workers até a thread Qt."""
 
     lost = Signal(str)
+    failure_detected = Signal(object, str)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.failure_detected.connect(self._deliver_current_failure)
+
+    @Slot(object, str)
+    def _deliver_current_failure(self, is_current: Callable[[], bool], message: str) -> None:
+        # A falha pode ter ficado na fila Qt durante a reconexão.
+        if is_current():
+            self.lost.emit(message)
 
 
 @dataclass(slots=True)
@@ -62,12 +74,16 @@ class ReconnectableGateway(Generic[GatewayT]):
         if not callable(member):
             return member
 
+        def is_current() -> bool:
+            with self._lock:
+                return self._target is target
+
         def guarded(*args: object, **kwargs: object) -> Any:
             try:
                 return member(*args, **kwargs)
             except Exception as error:
                 if _is_connection_failure(error):
-                    self._events.lost.emit(_safe_connection_message(error))
+                    self._events.failure_detected.emit(is_current, _safe_connection_message(error))
                 raise
 
         return guarded

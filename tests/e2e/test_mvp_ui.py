@@ -5,14 +5,18 @@ import json
 from dataclasses import replace
 from functools import partial
 from pathlib import Path
+from threading import Event
 from typing import cast
 from uuid import UUID
 
 import pymupdf
 import pytest
-from PySide6.QtCore import Qt, QThread
+from PySide6.QtCore import Qt, QThread, QTimer
 from PySide6.QtWidgets import (
+    QApplication,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QGroupBox,
     QLabel,
@@ -46,12 +50,25 @@ from zeny_project_handler_contracts.base import ComplianceExecutionId
 from zeny_project_handler_contracts.compliance import ComplianceExecutionResponse
 from zeny_project_handler_contracts.enums import ComplianceStatus
 from zeny_project_handler_contracts.errors import ErrorCode
-from zeny_project_handler_contracts.projects import ProjectServiceCodesResponse
+from zeny_project_handler_contracts.projects import (
+    ProjectDetailResponse,
+    ProjectServiceCodesResponse,
+    ProjectSummaryListResponse,
+)
 
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.e2e,
 ]
+
+
+@pytest.fixture(autouse=True)
+def _accept_creation_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        QMessageBox,
+        "question",
+        lambda *_args, **_kwargs: QMessageBox.StandardButton.Yes,
+    )
 
 
 def _catalog_pdf(path: Path) -> Path:
@@ -83,6 +100,402 @@ def _application_log(*data_directories: Path) -> tuple[dict[str, object], ...]:
     return tuple(payloads)
 
 
+def test_search_debounce_discards_delayed_response_and_preserves_input(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    application_factory: ApplicationFactory,
+) -> None:
+    app, window = application_factory(
+        [], settings=ClientSettings(data_directory=tmp_path / "delay")
+    )
+    qtbot.addWidget(window)
+    window.show()
+    panel = window.project_panel
+    assert isinstance(panel, ProjectPanelWidget)
+    gateway = panel._gateway
+    first = gateway.create_project("0000000111", idempotency_key="delay-first")
+    second = gateway.create_project("0000000222", idempotency_key="delay-second")
+    responses = {note: gateway.search_projects(note) for note in ("111", "222")}
+    entered, release = Event(), Event()
+    calls: list[str] = []
+    threads: list[bool] = []
+
+    def search(query: str, *, limit: int, offset: int) -> ProjectSummaryListResponse:
+        assert (limit, offset) == (200, 0)
+        calls.append(query)
+        threads.append(QThread.currentThread() != app.thread())
+        if query == "111":
+            entered.set()
+            assert release.wait(5)
+        return responses[query]
+
+    monkeypatch.setattr(gateway, "search_projects", search)
+    panel._select_and_activate(first.project)
+    panel._project_search.setText("1")
+    panel._project_search.setText("11")
+    panel._project_search.setText("111")
+    assert calls == []
+    assert panel._search_timer.interval() == 300
+    assert "Aguardando" in panel._search_status.text()
+    qtbot.waitUntil(entered.is_set)
+    assert "Pesquisando" in panel._search_status.text()
+    old_thread = panel._search_thread
+    assert old_thread is not None
+    old_generation = old_thread.generation
+    try:
+        panel._project_search.setText("222")
+        panel._project_search.setCursorPosition(1)
+        app.processEvents()
+        assert calls == ["111"]
+        assert panel.projeto_ativo_id == first.project.project_id.root
+        # Uma entrega já enfileirada também precisa passar pela verificação de geração.
+        panel._search_received(old_generation, "111", responses["111"])
+        assert panel._project_search.text() == "222"
+        assert "Aguardando" in panel._search_status.text()
+    finally:
+        release.set()
+    qtbot.waitUntil(lambda: calls == ["111", "222"] and panel._search_thread is None)
+    assert threads == [True, True]
+    assert panel._project_search.text() == "222"
+    assert panel._project_search.cursorPosition() == 1
+    assert panel._projects.count() == 1
+    assert panel._projects.itemData(0) == str(second.project.project_id.root)
+    assert panel._projects.currentData() is None  # Nenhum primeiro resultado implícito.
+    assert panel.projeto_ativo_id == first.project.project_id.root
+    assert gateway.list_projects().page.total == 2
+
+
+@pytest.mark.parametrize("close", [False, True])
+def test_search_response_is_discarded_after_reconnection_or_close(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    application_factory: ApplicationFactory,
+    close: bool,
+) -> None:
+    app, window = application_factory(
+        [], settings=ClientSettings(data_directory=tmp_path / "context")
+    )
+    qtbot.addWidget(window)
+    panel = window.project_panel
+    assert isinstance(panel, ProjectPanelWidget)
+    response = panel._gateway.list_projects()
+    entered, release = Event(), Event()
+
+    def delayed(query: str, *, limit: int, offset: int) -> ProjectSummaryListResponse:
+        entered.set()
+        assert release.wait(5)
+        return response
+
+    monkeypatch.setattr(panel._gateway, "search_projects", delayed)
+    panel._project_search.setText("123")
+    qtbot.waitUntil(entered.is_set)
+    worker = panel._search_thread
+    assert worker is not None
+    generation = worker.generation
+    try:
+        if close:
+            window.close()
+        else:
+            window.set_connection_available(False, "Teste de desconexão")
+            window.set_connection_available(True, "Teste de reconexão")
+        status = panel._search_status.text()
+        panel._search_received(generation, "123", response)
+        assert panel._search_status.text() == status
+        assert panel.projeto_ativo_id is None
+    finally:
+        release.set()
+        assert worker.wait(2000)
+    app.processEvents()
+    if not close:
+        qtbot.waitUntil(lambda: "Nenhuma correspondência" in panel._search_status.text())
+    else:
+        assert panel._search_stopped
+        assert not panel._search_timer.isActive()
+        assert panel._search_thread is None
+
+
+@pytest.mark.parametrize(
+    "code,status",
+    [
+        (ErrorCode.RESOURCE_NOT_FOUND, 404),
+        (ErrorCode.AUTHENTICATION_FAILED, 401),
+        (ErrorCode.VALIDATION_ERROR, 422),
+        (ErrorCode.INTERNAL_ERROR, 500),
+        (ErrorCode.INTEGRITY_ERROR, 409),
+    ],
+)
+def test_search_error_and_exact_error_never_authorize_creation(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    application_factory: ApplicationFactory,
+    code: ErrorCode,
+    status: int,
+) -> None:
+    _app, window = application_factory(
+        [], settings=ClientSettings(data_directory=tmp_path / "errors")
+    )
+    qtbot.addWidget(window)
+    panel = window.project_panel
+    assert isinstance(panel, ProjectPanelWidget)
+    calls: list[str] = []
+    warnings: list[str] = []
+
+    def fail(*_args: object, **_kwargs: object) -> ProjectSummaryListResponse:
+        raise ProjectGatewayError(code, "Falha sintética", status_code=status)
+
+    monkeypatch.setattr(panel._gateway, "search_projects", fail)
+    monkeypatch.setattr(panel._gateway, "find_project_by_service_note", fail)
+    monkeypatch.setattr(panel._gateway, "create_project", lambda *a, **k: calls.append("POST"))
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: calls.append("pergunta"))
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a: warnings.append(str(a[-1])))
+    panel._project_search.setText("0000000007")
+    qtbot.waitUntil(lambda: "Pesquisa indisponível" in panel._search_status.text())
+    panel.abrir_selecionado()
+    qtbot.waitUntil(lambda: not panel._project_action_active)
+    assert calls == []
+    assert warnings == ["Falha sintética"]
+    assert panel.projeto_ativo_id is None
+
+
+def test_search_timeout_allows_exact_open_but_global_operation_blocks_the_action(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    application_factory: ApplicationFactory,
+) -> None:
+    _app, window = application_factory(
+        [], settings=ClientSettings(data_directory=tmp_path / "timeout")
+    )
+    qtbot.addWidget(window)
+    panel = window.project_panel
+    assert isinstance(panel, ProjectPanelWidget)
+    existing = panel._gateway.create_project("0000000007", idempotency_key="timeout-existing")
+    calls: list[str] = []
+
+    def fail(*args: object, **kwargs: object) -> ProjectSummaryListResponse:
+        raise TimeoutError("Servidor lento")
+
+    def find(note: str) -> ProjectDetailResponse:
+        calls.append(note)
+        return existing
+
+    monkeypatch.setattr(panel._gateway, "search_projects", fail)
+    monkeypatch.setattr(panel._gateway, "find_project_by_service_note", find)
+    monkeypatch.setattr(
+        panel._gateway, "create_project", lambda *a, **k: pytest.fail("POST indevido")
+    )
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: pytest.fail("Pergunta indevida"))
+    panel._project_search.setText(existing.project.service_note)
+    qtbot.waitUntil(lambda: "Pesquisa indisponível" in panel._search_status.text())
+    panel.set_global_operation(object())
+    panel.abrir_selecionado()
+    assert calls == []
+    assert not panel._open_project.isEnabled()
+    panel.set_global_operation(None)
+    panel.abrir_selecionado()
+    qtbot.waitUntil(lambda: not panel._project_action_active)
+    assert calls == [existing.project.service_note]
+    assert panel.projeto_ativo_id == existing.project.project_id.root
+
+
+def test_empty_suggestions_still_require_exact_resolution_and_repeated_enter_is_one_post(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    application_factory: ApplicationFactory,
+) -> None:
+    _app, window = application_factory(
+        [], settings=ClientSettings(data_directory=tmp_path / "repeat")
+    )
+    qtbot.addWidget(window)
+    window.show()
+    panel = window.project_panel
+    assert isinstance(panel, ProjectPanelWidget)
+    assert panel.findChild(QLineEdit, "mvpProjectNameEdit") is None
+    assert panel.findChild(QPushButton, "mvpCreateProjectButton") is None
+    gateway = panel._gateway
+    real_find, real_create = gateway.find_project_by_service_note, gateway.create_project
+    calls: list[str] = []
+
+    def find(note: str) -> ProjectDetailResponse | None:
+        calls.append(f"GET {note}")
+        return real_find(note)
+
+    def create(note: str, *, idempotency_key: str) -> ProjectDetailResponse:
+        calls.append(f"POST {note}")
+        panel.abrir_selecionado()
+        qtbot.keyClick(panel._project_search, Qt.Key.Key_Return)
+        return real_create(note, idempotency_key=idempotency_key)
+
+    def confirm(*args: object, **kwargs: object) -> QMessageBox.StandardButton:
+        assert "0000000007" in str(args[2])
+        assert args[-1] == QMessageBox.StandardButton.No
+        calls.append("confirmação")
+        panel.abrir_selecionado()
+        qtbot.keyClick(panel._project_search, Qt.Key.Key_Return)
+        qtbot.mouseClick(panel._open_project, Qt.MouseButton.LeftButton)
+        return QMessageBox.StandardButton.Yes
+
+    monkeypatch.setattr(gateway, "find_project_by_service_note", find)
+    monkeypatch.setattr(gateway, "create_project", create)
+    monkeypatch.setattr(QMessageBox, "question", confirm)
+    panel._project_search.setText("0000000007")
+    qtbot.waitUntil(lambda: "Nenhuma correspondência" in panel._search_status.text())
+    assert calls == []
+    qtbot.keyClick(panel._project_search, Qt.Key.Key_Return)
+    qtbot.waitUntil(lambda: not panel._project_action_active)
+    assert calls == ["GET 0000000007", "confirmação", "POST 0000000007"]
+    assert panel._session is not None and panel._session.service_note == "0000000007"
+    assert gateway.list_projects().page.total == 1
+
+
+@pytest.mark.parametrize("invalidate", ["text", "connection", "operation", "close"])
+def test_creation_confirmation_cannot_outlive_its_intent(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    application_factory: ApplicationFactory,
+    invalidate: str,
+) -> None:
+    _app, window = application_factory(
+        [], settings=ClientSettings(data_directory=tmp_path / "intent")
+    )
+    qtbot.addWidget(window)
+    panel = window.project_panel
+    assert isinstance(panel, ProjectPanelWidget)
+    calls: list[str] = []
+
+    def confirm(*args: object, **kwargs: object) -> QMessageBox.StandardButton:
+        if invalidate == "text":
+            panel._project_search.setText("0000000008")
+            panel._project_search.setText("0000000007")
+        elif invalidate == "connection":
+            panel.shutdown_polling()
+            panel.restart_polling()
+        elif invalidate == "operation":
+            panel.set_global_operation(object())
+        else:
+            window.close()
+        return QMessageBox.StandardButton.Yes
+
+    monkeypatch.setattr(QMessageBox, "question", confirm)
+    monkeypatch.setattr(panel._gateway, "create_project", lambda *a, **k: calls.append("POST"))
+    panel._project_search.setText("0000000007")
+    panel.abrir_selecionado()
+    qtbot.waitUntil(lambda: not panel._project_action_active)
+    assert calls == []
+    assert panel.projeto_ativo_id is None
+
+
+@pytest.mark.parametrize("resolution", ["found", "missing", "ambiguous"])
+def test_conflict_without_safe_id_only_retries_exact_read(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    application_factory: ApplicationFactory,
+    resolution: str,
+) -> None:
+    _app, window = application_factory(
+        [], settings=ClientSettings(data_directory=tmp_path / "conflict-resolution")
+    )
+    qtbot.addWidget(window)
+    panel = window.project_panel
+    assert isinstance(panel, ProjectPanelWidget)
+    existing = panel._gateway.create_project("0000000007", idempotency_key="winner")
+    calls: list[str] = []
+    warnings: list[str] = []
+
+    def find(note: str) -> ProjectDetailResponse | None:
+        calls.append("GET")
+        if len(calls) == 1 or resolution == "missing":
+            return None
+        if resolution == "ambiguous":
+            raise ProjectGatewayError(ErrorCode.INTEGRITY_ERROR, "NS ambígua", status_code=409)
+        return existing
+
+    def create(note: str, *, idempotency_key: str) -> ProjectDetailResponse:
+        calls.append("POST")
+        raise ProjectGatewayError(
+            ErrorCode.PROJECT_ALREADY_EXISTS,
+            "Conflito",
+            status_code=409,
+            details={"project_id": "inválido"},
+        )
+
+    monkeypatch.setattr(panel._gateway, "find_project_by_service_note", find)
+    monkeypatch.setattr(panel._gateway, "create_project", create)
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a: warnings.append(str(a[-1])))
+    panel._project_search.setText(existing.project.service_note)
+    panel.abrir_selecionado()
+    qtbot.waitUntil(lambda: not panel._project_action_active)
+    assert calls == ["GET", "POST", "GET"]
+    if resolution == "found":
+        assert panel.projeto_ativo_id == existing.project.project_id.root
+        assert not warnings
+    else:
+        assert panel.projeto_ativo_id is None
+        assert warnings
+
+
+def test_rename_dialog_preserves_session_on_cancel_and_uses_current_version(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    application_factory: ApplicationFactory,
+) -> None:
+    _app, window = application_factory(
+        [], settings=ClientSettings(data_directory=tmp_path / "rename")
+    )
+    qtbot.addWidget(window)
+    panel = window.project_panel
+    assert isinstance(panel, ProjectPanelWidget)
+    first = panel._gateway.create_project("0000000007", idempotency_key="rename-first")
+    second = panel._gateway.create_project("0000000008", idempotency_key="rename-second")
+    panel._select_and_activate(first.project)
+    original_session = panel._session
+    warnings: list[str] = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args: warnings.append(str(args[-1])))
+
+    def interact(note: str, accept: bool) -> None:
+        dialog = QApplication.activeModalWidget()
+        assert isinstance(dialog, QDialog)
+        assert dialog.objectName() == "mvpRenameServiceNoteDialog"
+        editor = dialog.findChild(QLineEdit, "mvpRenameServiceNoteEdit")
+        buttons = dialog.findChild(QDialogButtonBox)
+        assert editor is not None and buttons is not None
+        assert panel._session is not None and editor.text() == panel._session.service_note
+        editor.setText("123")
+        assert not buttons.button(QDialogButtonBox.StandardButton.Ok).isEnabled()
+        editor.setText(note)
+        qtbot.keyClick(dialog, Qt.Key.Key_Return if accept else Qt.Key.Key_Escape)
+
+    QTimer.singleShot(0, lambda: interact("0000000009", False))
+    panel.alterar_numero_ns()
+    qtbot.waitUntil(lambda: not panel._project_action_active)
+    assert panel._session is original_session
+    assert panel._settings.value("last_project_id") == str(first.project.project_id.root)
+    assert panel._project_search.text() == "0000000007"
+    assert panel._gateway.get_project(first.project.project_id.root) == first
+
+    QTimer.singleShot(0, lambda: interact("0000000009", True))
+    panel.alterar_numero_ns()
+    qtbot.waitUntil(lambda: not panel._project_action_active)
+    assert panel._session is not None
+    assert panel._session.service_note == "0000000009"
+    assert panel._session.project_version == first.project.project_version + 1
+    assert panel._projects.currentData() == str(first.project.project_id.root)
+
+    QTimer.singleShot(0, lambda: interact(second.project.service_note, True))
+    panel.alterar_numero_ns()
+    qtbot.waitUntil(lambda: not panel._project_action_active)
+    assert warnings
+    assert panel._session.service_note == "0000000009"
+    assert panel._gateway.get_project(second.project.project_id.root) == second
+
+
 def test_user_can_reorder_project_pdfs_and_reopen_in_reading_order(
     qtbot: QtBot,
     tmp_path: Path,
@@ -97,16 +510,17 @@ def test_user_can_reorder_project_pdfs_and_reopen_in_reading_order(
     panel = window.project_panel
     assert isinstance(panel, ProjectPanelWidget)
 
-    name = panel.findChild(QLineEdit, "mvpProjectNameEdit")
-    create = panel.findChild(QPushButton, "mvpCreateProjectButton")
+    name = panel.findChild(QLineEdit, "mvpProjectSearchEdit")
+    create = panel.findChild(QPushButton, "mvpOpenProjectButton")
     assert name is not None and create is not None
     assert name.inputMask() == ""
     assert name.maxLength() == 10
     assert name.validator() is not None
-    assert name.placeholderText() == "Número da NS"
+    assert name.placeholderText() == "Pesquisar ou cadastrar NS"
     name.setText("0000000082")
     assert name.hasAcceptableInput()
     qtbot.mouseClick(create, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: not panel._project_action_active)
     project_combo = panel.findChild(QComboBox, "mvpProjectCombo")
     assert project_combo is not None
     project_id = project_combo.currentData()
@@ -197,12 +611,13 @@ def test_project_service_codes_ui_is_remote_canonical_accessible_and_conflict_sa
     assert service_field.validator() is not None
     assert service_field.placeholderText() == "0000"
 
-    name = panel.findChild(QLineEdit, "mvpProjectNameEdit")
-    create = panel.findChild(QPushButton, "mvpCreateProjectButton")
+    name = panel.findChild(QLineEdit, "mvpProjectSearchEdit")
+    create = panel.findChild(QPushButton, "mvpOpenProjectButton")
     project_combo = panel.findChild(QComboBox, "mvpProjectCombo")
     assert name is not None and create is not None and project_combo is not None
     name.setText("0000000701")
     qtbot.mouseClick(create, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: not panel._project_action_active)
     first_project_id = UUID(str(project_combo.currentData()))
     assert service_box.isEnabled()
     initial_version = panel._session.project_version if panel._session is not None else -1
@@ -267,6 +682,7 @@ def test_project_service_codes_ui_is_remote_canonical_accessible_and_conflict_sa
     qtbot.mouseClick(add_service, Qt.MouseButton.LeftButton)
     name.setText("0000000702")
     qtbot.mouseClick(create, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: not panel._project_action_active)
     second_project_id = UUID(str(project_combo.currentData()))
     assert service_list.count() == 0
     service_field.setText("1234")
@@ -275,10 +691,12 @@ def test_project_service_codes_ui_is_remote_canonical_accessible_and_conflict_sa
     first_index = project_combo.findData(str(first_project_id))
     project_combo.setCurrentIndex(first_index)
     panel.abrir_selecionado()
+    qtbot.waitUntil(lambda: not panel._project_action_active)
     assert [service_list.item(index).text() for index in range(service_list.count())] == ["0007"]
     second_index = project_combo.findData(str(second_project_id))
     project_combo.setCurrentIndex(second_index)
     panel.abrir_selecionado()
+    qtbot.waitUntil(lambda: not panel._project_action_active)
     assert [service_list.item(index).text() for index in range(service_list.count())] == ["1234"]
 
     assert panel._session is not None
@@ -373,23 +791,34 @@ def test_project_combo_searches_only_digits_without_inserting_or_losing_ids(
         )
     hidden = gateway.create_project("0000009999", idempotency_key="search-hidden")
     panel.atualizar_projetos()
-    assert combo.count() == 201
+    assert combo.count() == 200
     assert combo.findData(str(first.project.project_id.root)) >= 0
     assert combo.findData(str(second.project.project_id.root)) >= 0
     assert combo.findData(str(hidden.project.project_id.root)) < 0
-    combo.setEditText(hidden.project.service_note)
-    qtbot.mouseClick(open_button, Qt.MouseButton.LeftButton)
-    assert panel.projeto_ativo_id == hidden.project.project_id.root
-    assert combo.findData(str(hidden.project.project_id.root)) < 0
-
-    item_ids = {combo.itemText(index): combo.itemData(index) for index in range(1, combo.count())}
+    monkeypatch.setattr(
+        gateway, "create_project", lambda *a, **k: pytest.fail("NS existente não permite POST")
+    )
+    monkeypatch.setattr(
+        QMessageBox, "question", lambda *a, **k: pytest.fail("NS existente abre sem pergunta")
+    )
+    item_ids = {combo.itemText(index): combo.itemData(index) for index in range(combo.count())}
     assert item_ids[first.project.service_note] == str(first.project.project_id.root)
     assert item_ids[second.project.service_note] == str(second.project.project_id.root)
-    assert hidden.project.service_note not in item_ids
-    original_count = combo.count()
+    combo.setEditText(hidden.project.service_note)
+    qtbot.mouseClick(open_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: not panel._project_action_active)
+    assert panel.projeto_ativo_id == hidden.project.project_id.root
+    assert combo.findData(str(hidden.project.project_id.root)) >= 0
+
+    search.setText("9999")
+    qtbot.waitUntil(lambda: combo.count() == 1 and combo.itemText(0) == hidden.project.service_note)
+    assert panel.projeto_ativo_id == hidden.project.project_id.root
+    assert search.text() == "9999"
     search.clear()
     qtbot.keyClicks(search, "456a78")
     assert search.text() == "45678"
+    qtbot.waitUntil(lambda: combo.count() == 2)
+    assert panel.projeto_ativo_id == hidden.project.project_id.root
     completer = combo.completer()
     assert completer is not None
     completer.setCompletionPrefix(search.text())
@@ -398,11 +827,11 @@ def test_project_combo_searches_only_digits_without_inserting_or_losing_ids(
         str(completion_model.index(row, 0).data()) for row in range(completion_model.rowCount())
     }
     assert suggestions == {first.project.service_note, second.project.service_note}
-    assert combo.count() == original_count
+    assert combo.count() == 2
     search.clear()
     qtbot.keyClicks(search, "123456789012")
     assert search.text() == "1234567890"
-    assert combo.count() == original_count
+    assert combo.count() == 2
 
     def unexpected_resolution(_service_note: str) -> object:
         raise AssertionError("Uma opção selecionada deve abrir pelo ID preservado")
@@ -411,8 +840,16 @@ def test_project_combo_searches_only_digits_without_inserting_or_losing_ids(
     selected_index = combo.findData(str(second.project.project_id.root))
     combo.setCurrentIndex(selected_index)
     qtbot.mouseClick(open_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: not panel._project_action_active)
     assert panel.projeto_ativo_id == second.project.project_id.root
     assert combo.currentData() == str(second.project.project_id.root)
+
+    search.clear()
+    assert combo.currentData() is None
+    qtbot.waitUntil(lambda: "200 de 201" in panel._search_status.text())
+    assert "Refine" in panel._search_status.text()
+    assert search.text() == ""
+    assert panel.projeto_ativo_id == second.project.project_id.root
 
 
 def test_project_open_create_dialogs_and_refusals_return_to_initial_state(
@@ -432,8 +869,8 @@ def test_project_open_create_dialogs_and_refusals_return_to_initial_state(
     existing = gateway.create_project("0000000801", idempotency_key="dialog-existing")
     panel.atualizar_projetos()
     combo = panel.findChild(QComboBox, "mvpProjectCombo")
-    service_note = panel.findChild(QLineEdit, "mvpProjectNameEdit")
-    create_button = panel.findChild(QPushButton, "mvpCreateProjectButton")
+    service_note = panel.findChild(QLineEdit, "mvpProjectSearchEdit")
+    create_button = panel.findChild(QPushButton, "mvpOpenProjectButton")
     open_button = panel.findChild(QPushButton, "mvpOpenProjectButton")
     run_button = panel.findChild(QPushButton, "mvpRunAnalysisButton")
     rename_button = panel.findChild(QPushButton, "mvpRenameProjectButton")
@@ -476,6 +913,7 @@ def test_project_open_create_dialogs_and_refusals_return_to_initial_state(
 
     combo.setCurrentIndex(combo.findData(str(existing.project.project_id.root)))
     panel.abrir_selecionado()
+    qtbot.waitUntil(lambda: not panel._project_action_active)
     assert panel.projeto_ativo_id == existing.project.project_id.root
     assert panel._settings.contains("last_project_id")
     source = create_golden_pdf(tmp_path / "residual.pdf")
@@ -494,8 +932,9 @@ def test_project_open_create_dialogs_and_refusals_return_to_initial_state(
     documentation._project.setCurrentIndex(documentation._project.count() - 1)
     assert export._project.currentData() == str(existing.project.project_id.root)
 
-    service_note.setText(existing.project.service_note)
+    service_note.setText("0000000802")
     qtbot.mouseClick(create_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: not panel._project_action_active)
 
     assert create_calls == []
     assert gateway.list_projects(limit=1, offset=0).page.total == 1
@@ -525,6 +964,7 @@ def test_project_open_create_dialogs_and_refusals_return_to_initial_state(
     answers.append(QMessageBox.StandardButton.Yes)
     service_note.setText(existing.project.service_note)
     qtbot.mouseClick(create_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: not panel._project_action_active)
     assert create_calls == []
     assert gateway.list_projects(limit=1, offset=0).page.total == 1
     assert panel.projeto_ativo_id == existing.project.project_id.root
@@ -533,6 +973,7 @@ def test_project_open_create_dialogs_and_refusals_return_to_initial_state(
     answers.append(QMessageBox.StandardButton.No)
     combo.setEditText(missing)
     qtbot.mouseClick(open_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: not panel._project_action_active)
     assert create_calls == []
     assert gateway.list_projects(limit=1, offset=0).page.total == 1
     assert panel.projeto_ativo_id is None
@@ -542,6 +983,7 @@ def test_project_open_create_dialogs_and_refusals_return_to_initial_state(
     answers.append(QMessageBox.StandardButton.Yes)
     combo.setEditText(created_from_open)
     qtbot.mouseClick(open_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: not panel._project_action_active)
     assert create_calls == [created_from_open]
     assert gateway.list_projects(limit=1, offset=0).page.total == 2
     assert panel._session is not None
@@ -550,21 +992,19 @@ def test_project_open_create_dialogs_and_refusals_return_to_initial_state(
     before_find = len(find_calls)
     combo.setEditText("123")
     qtbot.mouseClick(open_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: not panel._project_action_active)
     service_note.setText("123")
     qtbot.mouseClick(create_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: not panel._project_action_active)
     assert len(find_calls) == before_find
     assert create_calls == [created_from_open]
     assert any("exatamente 10 dígitos" in message for message in warnings)
-    assert (
-        questions.count(
-            "Já existe um projeto para a Nota de Serviço informada. Deseja abrir esse projeto?"
-        )
-        == 2
-    )
-    assert questions.count("A Nota de Serviço não existe. Deseja criar o projeto da nota?") == 2
+    assert not any("Deseja abrir" in question for question in questions)
+    assert sum("Deseja criar" in question for question in questions) == 3
+    assert any(created_from_open in question for question in questions)
 
 
-def test_project_creation_race_reuses_existing_dialog_without_repeating_post(
+def test_project_creation_race_opens_winner_without_repeating_post(
     qtbot: QtBot,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -607,25 +1047,17 @@ def test_project_creation_race_reuses_existing_dialog_without_repeating_post(
         return answers.pop(0)
 
     monkeypatch.setattr(QMessageBox, "question", answer_question)
-    service_note = panel.findChild(QLineEdit, "mvpProjectNameEdit")
-    create_button = panel.findChild(QPushButton, "mvpCreateProjectButton")
+    service_note = panel.findChild(QLineEdit, "mvpProjectSearchEdit")
+    create_button = panel.findChild(QPushButton, "mvpOpenProjectButton")
     assert service_note is not None and create_button is not None
 
     service_note.setText(existing.project.service_note)
     qtbot.mouseClick(create_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: not panel._project_action_active)
     assert create_calls == [existing.project.service_note]
     assert panel.projeto_ativo_id == existing.project.project_id.root
-
-    service_note.setText(existing.project.service_note)
-    qtbot.mouseClick(create_button, Qt.MouseButton.LeftButton)
-    assert create_calls == [existing.project.service_note, existing.project.service_note]
-    assert panel.projeto_ativo_id is None
-    assert (
-        questions.count(
-            "Já existe um projeto para a Nota de Serviço informada. Deseja abrir esse projeto?"
-        )
-        == 2
-    )
+    assert sum("Deseja criar" in question for question in questions) == 1
+    assert not any("Deseja abrir" in question for question in questions)
 
 
 def test_environmental_actions_full_client_matrix_uses_current_service_codes(
@@ -654,8 +1086,8 @@ def test_environmental_actions_full_client_matrix_uses_current_service_codes(
     panel = window.project_panel
     assert isinstance(panel, ProjectPanelWidget)
 
-    name = panel.findChild(QLineEdit, "mvpProjectNameEdit")
-    create = panel.findChild(QPushButton, "mvpCreateProjectButton")
+    name = panel.findChild(QLineEdit, "mvpProjectSearchEdit")
+    create = panel.findChild(QPushButton, "mvpOpenProjectButton")
     project_combo = panel.findChild(QComboBox, "mvpProjectCombo")
     service_field = panel.findChild(QLineEdit, "mvpProjectServiceCodeEdit")
     service_list = panel.findChild(QListWidget, "mvpProjectServiceCodeList")
@@ -664,6 +1096,7 @@ def test_environmental_actions_full_client_matrix_uses_current_service_codes(
     assert service_field is not None and service_list is not None and add_service is not None
     name.setText("0000007401")
     qtbot.mouseClick(create, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: not panel._project_action_active)
     project_id = UUID(str(project_combo.currentData()))
     for code in ("0007", "9012"):
         service_field.setText(code)
@@ -869,11 +1302,12 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
     panel = window.project_panel
     assert isinstance(panel, ProjectPanelWidget)
 
-    name = panel.findChild(QLineEdit, "mvpProjectNameEdit")
-    create = panel.findChild(QPushButton, "mvpCreateProjectButton")
+    name = panel.findChild(QLineEdit, "mvpProjectSearchEdit")
+    create = panel.findChild(QPushButton, "mvpOpenProjectButton")
     assert name is not None and create is not None
     name.setText("0000000139")
     qtbot.mouseClick(create, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: not panel._project_action_active)
     project_combo = panel.findChild(QComboBox, "mvpProjectCombo")
     assert project_combo is not None
     project_id = project_combo.currentData()
@@ -906,6 +1340,7 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
         work.commit()
     persistence.dispose()
     panel.abrir_selecionado()
+    qtbot.waitUntil(lambda: not panel._project_action_active)
 
     run = panel.findChild(QPushButton, "mvpRunAnalysisButton")
     assert run is not None

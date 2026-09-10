@@ -20,11 +20,16 @@ pytestmark = pytest.mark.integration
 
 
 def _create_project(qtbot: QtBot, panel: ProjectPanelWidget, name: str) -> None:
-    name_edit = panel.findChild(QLineEdit, "mvpProjectNameEdit")
-    create_button = panel.findChild(QPushButton, "mvpCreateProjectButton")
+    name_edit = panel.findChild(QLineEdit, "mvpProjectSearchEdit")
+    create_button = panel.findChild(QPushButton, "mvpOpenProjectButton")
     assert name_edit is not None and create_button is not None
     name_edit.setText(name)
-    qtbot.mouseClick(create_button, Qt.MouseButton.LeftButton)
+    with pytest.MonkeyPatch.context() as creation_patch:
+        creation_patch.setattr(
+            QMessageBox, "question", lambda *_args, **_kwargs: QMessageBox.StandardButton.Yes
+        )
+        qtbot.mouseClick(create_button, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: not panel._project_action_active)
 
 
 def _add_button(panel: ProjectPanelWidget) -> QPushButton:

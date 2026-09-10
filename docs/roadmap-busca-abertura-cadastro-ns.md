@@ -124,7 +124,7 @@ os IDs de etapas já executadas e explicitando as novas dependências.
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E01 | Pesquisa remota por trecho de NS | #concluida | Nenhuma | API e gateway com busca paginada global |
-| E02 | Entrada única para buscar, abrir e criar | #pendente | E01 | Fluxo Qt unificado e redirecionamento direto |
+| E02 | Entrada única para buscar, abrir e criar | #concluida | E01 | Fluxo Qt unificado e redirecionamento direto |
 | E03 | Integração do fluxo e aceite final | #pendente | E01, E02 | Regressões de integração e gate global aprovado |
 
 Execução sequencial: E01 altera gateways e contratos consumidos por E02; E02 e E03 compartilham
@@ -261,7 +261,7 @@ pode continuar disponível em servidor antigo. Debounce, workers, mensagens visu
 permanecem pendentes em E02; páginas são determinísticas para dados estáveis, sem snapshot reservado
 entre requisições. E02/E03 e o aceite global não foram executados nesta etapa.
 
-## E02 — Entrada única para buscar, abrir e criar — #pendente
+## E02 — Entrada única para buscar, abrir e criar — #concluida
 
 **Objetivo:** entregar o campo único e abrir diretamente a NS existente em qualquer tentativa de cadastro.
 
@@ -301,16 +301,16 @@ adicionar um novo sistema geral de tarefas assíncronas.
 
 **Critérios de aceite:**
 
-- [ ] Uma única entrada visível recebe NS para buscar, abrir ou criar; botão e Enter são equivalentes.
-- [ ] Digitar não cria, renomeia ou troca o projeto ativo; pesquisa parcial remota apresenta resultados.
-- [ ] NS completa existente, inclusive fora dos 200 iniciais, abre sem diálogo e sem POST.
-- [ ] NS ausente exibe a confirmação correta, faz um POST após aceitar e ativa o ID retornado.
-- [ ] Conflito concorrente abre o projeto vencedor; clique/Enter repetidos não duplicam requisições.
-- [ ] Erro de consulta e integridade ambígua nunca são tratados como ausência ou sucesso.
-- [ ] Resposta antiga não muda sugestões, disponibilidade de criação ou projeto ativo da consulta atual.
-- [ ] Alterar NS continua disponível só com projeto ativo; cancelar não renomeia nem limpa a sessão.
-- [ ] Teclado, foco, zeros iniciais, bloqueios e limpeza na recusa mantêm comportamento verificável.
-- [ ] Recusa e troca sincronizam visualizador, serviços e os demais painéis pelo mecanismo existente.
+- [x] Uma única entrada visível recebe NS para buscar, abrir ou criar; botão e Enter são equivalentes.
+- [x] Digitar não cria, renomeia ou troca o projeto ativo; pesquisa parcial remota apresenta resultados.
+- [x] NS completa existente, inclusive fora dos 200 iniciais, abre sem diálogo e sem POST.
+- [x] NS ausente exibe a confirmação correta, faz um POST após aceitar e ativa o ID retornado.
+- [x] Conflito concorrente abre o projeto vencedor; clique/Enter repetidos não duplicam requisições.
+- [x] Erro de consulta e integridade ambígua nunca são tratados como ausência ou sucesso.
+- [x] Resposta antiga não muda sugestões, disponibilidade de criação ou projeto ativo da consulta atual.
+- [x] Alterar NS continua disponível só com projeto ativo; cancelar não renomeia nem limpa a sessão.
+- [x] Teclado, foco, zeros iniciais, bloqueios e limpeza na recusa mantêm comportamento verificável.
+- [x] Recusa e troca sincronizam visualizador, serviços e os demais painéis pelo mecanismo existente.
 
 **Validação obrigatória:**
 
@@ -343,8 +343,98 @@ Marque E02 #em-andamento no índice e no detalhe. Torne o seletor editável a ú
 Atualize os testes necessários, o guia Como usar, README e especificação funcional com o comportamento final. Execute todos os comandos e a inspeção manual da Validação obrigatória de E02; teste atrasos de resposta e disparos repetidos deterministicamente. Não declare sucesso com validações obrigatórias falhando ou não executadas. Marque #concluida apenas após aceite; impedimento real exige #bloqueada com causa, evidência, impacto e ação de desbloqueio. Sincronize as tags e preencha Evidências e handoff com arquivos, decisões, comandos, resultados e observações de UI. Não crie commit, publique ou implante sem autorização explícita. Finalize com resumo conciso de mudanças, validações e pendências.
 ```
 
-**Evidências e handoff:** não iniciada. Registrar componentes e objectNames finais, transições de
-estado, estratégia de workers, validações automáticas/manuais e pendências de integração para E03.
+**Evidências e handoff — concluída em 10/09/2026:**
+
+- Entrada conferida: Git limpo, nenhum `AGENTS.md` aplicável encontrado na hierarquia ou no
+  repositório. Lidos roadmap, painel/gateway, integração da janela, testes e documentação do fluxo.
+  E01 confirmada pelo contrato implementado no protocolo/HTTP/gateway direto, rota filtrada antes
+  da paginação e evidências anteriores de 78 testes, snapshot, Ruff e Mypy. As validações de E01
+  não foram apresentadas como novas execuções nesta etapa; não houve alteração de API ou servidor.
+- Implementação: `src/zeny_project_handler_client/ui/project_panel.py` e novo helper
+  `src/zeny_project_handler_client/ui/project_search.py`. Mantidos `mvpProjectCombo` e
+  `mvpOpenProjectButton` (agora **Abrir ou criar**); editor único `mvpProjectSearchEdit`, status
+  `mvpProjectSearchStatus`, diálogo `mvpRenameServiceNoteDialog` e editor transitório
+  `mvpRenameServiceNoteEdit`. Removidos `mvpProjectNameEdit`, `mvpCreateProjectButton` e o diálogo
+  de abertura de duplicidade. O título do grupo informa a NS ativa enquanto outra NS é pesquisada.
+- Sugestões: debounce de 300 ms; campo vazio lista, trecho usa `search_projects(limit=200, offset=0)`.
+  Uma leitura em voo por painel, coalescendo consultas intermediárias. O callable do gateway é
+  capturado antes de iniciar a QThread; texto, cursor/seleção, geração e contexto são preservados.
+  Estados: aguardando, pesquisando, resultados/total, refinamento, nenhuma correspondência e
+  indisponibilidade. Nenhuma primeira sugestão é selecionada automaticamente; editar remove o ID
+  vinculado ao texto anterior. A carga inicial/atualização explícita da lista e o CRUD mantêm o
+  caminho síncrono existente; as consultas disparadas pela digitação são executadas fora da UI.
+- Fechamento/desconexão invalidam consultas e confirmações e solicitam interrupção do worker.
+  Uma leitura HTTP já em voo não é terminada à força: pode concluir pelo timeout/retry de leitura
+  já definido no gateway. A thread sem parent de widget é retida até terminar, não acessa widgets
+  no trabalho remoto e descarta entregas obsoletas. A consulta mais recente aguarda a leitura
+  anterior terminar, sem bloquear a thread gráfica. Não existe retry automático de `POST`.
+- Divergência relevante encontrada na integração: o proxy reconectável emitia perda de conexão
+  por falha de qualquer alvo antigo. Ajuste restrito em `src/zeny_project_handler_client/connection.py`:
+  a entrega da falha na thread Qt verifica se o alvo ainda é o vigente, inclusive quando o sinal
+  já estava enfileirado durante a reconexão. Dois testes determinísticos em
+  `tests/integration/test_client_reconnection.py` cobrem erro após substituição e erro já enfileirado;
+  falhas do alvo vigente continuam bloqueando a conexão.
+- Ação única: ID explicitamente selecionado ou resolução exata dos dez dígitos. Existente abre sem
+  pergunta/POST; ausência exata pede confirmação exibindo a NS e padrão **Não**. Guarda de ação
+  cobre modal, criação e sinais duplicados de Enter no mesmo evento Qt. A confirmação é invalidada
+  mesmo ao editar e voltar ao texto original. Conflito abre o ID seguro; sem ID válido, somente
+  resolução exata de leitura. Ausência ou ambiguidade nessa leitura não repete `POST`.
+- Alterar NS usa diálogo com **Alterar NS**/**Cancelar**, validação ASCII e a versão da sessão.
+  Cancelamento preserva a mesma sessão/versão; colisão não troca nem mescla projetos. A abertura
+  reutiliza ativação canônica e sincroniza Resultados antes de restaurar a folha salva. Restauração
+  consulta o ID salvo diretamente, sem depender de estar na lista inicial. A recusa remove seleção,
+  sessão e `last_project_id` e emite a limpeza canônica. `main_window.py` foi inspecionado; seus
+  sinais existentes atendem à sincronização, sem necessidade de editar a janela.
+- Testes: `tests/e2e/test_mvp_ui.py` cobre 201 projetos, busca remota, abertura exata fora da página
+  sem POST/pergunta, zeros, ID residual, total 200/201, lista vazia, timeout, 401/404/422/500,
+  ambiguidade, conflitos com/sem ID, um POST apesar de disparos repetidos, invalidadores de
+  confirmação, atrasos com `threading.Event`, reconexão/fechamento, versão/cancelamento/colisão
+  da alteração, recusa e painéis. `tests/integration/test_window.py` migra a regressão de clipboard
+  para o campo único; `tests/unit/test_project_panel_remote_boundary.py` inclui o novo helper.
+  A remoção de controles exigiu adaptar apenas os helpers de criação em
+  `tests/e2e/test_span_compliance_ui.py` e `tests/integration/test_protected_pdf_ui.py`, com confirmação
+  explícita nas fixtures e espera pelo fim da ação; nenhuma regra desses fluxos foi alterada.
+- Documentação final: guia **Como usar** do painel, `README.md` e `docs/especificacao-funcional.md`.
+
+Comandos finais executados na raiz:
+
+| Comando | Resultado |
+|---|---|
+| `.\.venv\Scripts\python.exe -m pytest tests/e2e/test_mvp_ui.py tests/integration/test_window.py tests/unit/test_project_panel_remote_boundary.py tests/integration/test_client_reconnection.py --basetemp=tmp/e02-acceptance-15 -o cache_dir=tmp/e02-cache-15` | Exit 0; 52 passed em 66,70 s, sem warnings |
+| `.\.venv\Scripts\python.exe -m ruff check .` | Exit 0; All checks passed |
+| `.\.venv\Scripts\python.exe -m ruff format --check .` | Exit 0; 322 arquivos formatados |
+| `.\.venv\Scripts\python.exe -m mypy` | Exit 0; nenhum erro em 307 arquivos |
+| `.\.venv\Scripts\python.exe -m pytest tests/e2e/test_span_compliance_ui.py tests/integration/test_protected_pdf_ui.py --basetemp=tmp/e02-adapted-12 -o cache_dir=tmp/e02-cache-12` | Exit 0; 3 passed em 9,93 s |
+| `.\.venv\Scripts\python.exe -m pytest tests/unit/test_client_connection.py --basetemp=tmp/e02-connection-13 -o cache_dir=tmp/e02-cache-13` | Exit 0; 7 passed em 0,23 s |
+| `$env:QT_QPA_PLATFORM = 'windows'` seguido de `.\.venv\Scripts\python.exe -m pytest tmp/e02_visual_inspection.py --basetemp=tmp/e02-visual-native-14 -o cache_dir=tmp/e02-cache-14` | Exit 0; 1 passed em 6,08 s, sem warnings; capturas e navegação Qt nativa |
+| `git diff --check` | Exit 0; sem falhas de whitespace |
+
+A execução literal do Pytest obrigatório também foi tentada: 1 passed, 48 erros de setup e dois
+avisos de cache por `WinError 5` em `%TEMP%\pytest-of-Caio Cezar Dias` e no cache preexistente.
+Resolvido com diretórios novos sob `tmp/`, mantendo a seleção completa e a configuração versionada.
+Na primeira rodada funcional houve duas regressões, corrigidas e revalidadas: ID residual na recusa
+e perda da folha salva pela atualização de Resultados. Uma expectativa antiga de lista estática foi
+ajustada para aguardar a pesquisa remota. Ruff/formatação intermediários foram corrigidos; os
+resultados da tabela correspondem à validação final (a última formatação só ajustou concatenação
+de strings, sem mudança de comportamento).
+
+Inspeção visual manual das capturas dos widgets Qt reais, com fixtures sintéticas e plataforma
+`windows`: `tmp/e02-ui/claro-janela.png`, `escuro-janela.png`, `claro-inicial.png`,
+`escuro-inicial.png`, `claro-estreito.png`, `escuro-estreito.png`, `escuro-sem-correspondencia.png`,
+`claro-alterar-ns.png` e `escuro-alterar-ns.png`; observações em `tmp/e02-ui/observacoes.txt`.
+Campo, status, ação e diálogo legíveis nos dois temas, sem segundo campo permanente de NS;
+conferidas janela normal e largura reduzida de 340 px. O título mantém a NS ativa enquanto `999`
+não encontra correspondências. Eventos Qt de teclado verificaram: digitar `0007` só pesquisa;
+seta para baixo seleciona sem ativar; Enter abre o ID correto; Tab leva à ação; Escape no diálogo
+preserva sessão nos dois temas. A primeira captura `offscreen` não tinha fontes utilizáveis e o
+foco do dock flutuante não estava ativo: foi descartada e substituída pelas capturas nativas.
+Observação fora dos controles de E02: em altura restrita, o texto auxiliar de **Folhas PDF** pode
+ficar cortado verticalmente; não houve reformulação desse bloco. As evidências e o harness em
+`tmp/` são locais/ignorados, não constituem arquivos de distribuição.
+
+Nenhum impedimento permanece para os critérios de E02. E03 e o gate global `IniciarTestes.bat`
+continuam pendentes e não foram executados; a composição Qt + HTTP completa e o aceite global
+pertencem à próxima etapa. Nenhum commit, publicação, implantação ou alteração em produção.
 
 ## E03 — Integração do fluxo e aceite final — #pendente
 

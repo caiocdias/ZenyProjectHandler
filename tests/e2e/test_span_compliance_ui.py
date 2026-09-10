@@ -242,14 +242,19 @@ def _create_project_with_pdf(
     source: Path,
 ) -> UUID:
     assert isinstance(panel, ProjectPanelWidget)
-    name = panel.findChild(QLineEdit, "mvpProjectNameEdit")
-    create = panel.findChild(QPushButton, "mvpCreateProjectButton")
+    name = panel.findChild(QLineEdit, "mvpProjectSearchEdit")
+    create = panel.findChild(QPushButton, "mvpOpenProjectButton")
     add_pdf = panel.findChild(QPushButton, "mvpAddPdfsButton")
     project_combo = panel.findChild(QComboBox, "mvpProjectCombo")
     assert name is not None and create is not None and add_pdf is not None
     assert project_combo is not None
     name.setText("0000000224")
-    qtbot.mouseClick(create, Qt.MouseButton.LeftButton)
+    with pytest.MonkeyPatch.context() as creation_patch:
+        creation_patch.setattr(
+            QMessageBox, "question", lambda *_args, **_kwargs: QMessageBox.StandardButton.Yes
+        )
+        qtbot.mouseClick(create, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: not panel._project_action_active)
     monkeypatch.setattr(
         QFileDialog,
         "getOpenFileNames",

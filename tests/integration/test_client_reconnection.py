@@ -7,7 +7,7 @@ from socket import create_server
 from threading import Event, Thread
 
 import pytest
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QCoreApplication, QSettings
 from PySide6.QtWidgets import QDialog, QWidget
 from pytestqt.qtbot import QtBot
 from uvicorn import Config, Server
@@ -18,12 +18,55 @@ from zeny_project_handler_client.bootstrap import (
     create_application,
 )
 from zeny_project_handler_client.config import ClientSettings
+from zeny_project_handler_client.connection import ConnectionEvents, ReconnectableGateway
 from zeny_project_handler_client.ui.project_gateway import ProjectGatewayError
+from zeny_project_handler_client.ui.project_search import ProjectSearchThread
+from zeny_project_handler_contracts.errors import ErrorCode
+from zeny_project_handler_contracts.projects import ProjectSummaryListResponse
 from zeny_project_handler_contracts.session import SessionCapabilitiesResponse
 from zeny_project_handler_server.app import create_app
 from zeny_project_handler_server.config import ServerSettings
 
 PASSWORD = "senha runtime exclusiva do teste de reconexão"
+
+
+@pytest.mark.parametrize("already_queued", [False, True])
+def test_obsolete_search_failure_does_not_disconnect_replaced_gateway(
+    qtbot: QtBot,
+    already_queued: bool,
+) -> None:
+    entered, release = Event(), Event()
+    lost: list[str] = []
+    events = ConnectionEvents()
+    events.lost.connect(lost.append)
+
+    class DelayedGateway:
+        def search_projects(self, query: str) -> ProjectSummaryListResponse:
+            entered.set()
+            assert release.wait(5)
+            raise ProjectGatewayError(
+                ErrorCode.AUTHENTICATION_FAILED, "Sessão antiga", status_code=401
+            )
+
+    proxy = ReconnectableGateway(events, DelayedGateway())
+    read = proxy.search_projects
+    worker = ProjectSearchThread(0, "123", lambda: read("123"))
+    worker.launch()
+    qtbot.waitUntil(entered.is_set)
+    try:
+        if already_queued:
+            release.set()
+            assert worker.wait(2000)  # A UI ainda não consumiu o sinal enfileirado.
+        proxy.replace(DelayedGateway())
+    finally:
+        release.set()
+        assert worker.wait(2000)
+    QCoreApplication.processEvents()
+    assert lost == []
+    # Erros do alvo vigente continuam desconectando o cliente.
+    with pytest.raises(ProjectGatewayError):
+        proxy.search_projects("123")
+    assert len(lost) == 1
 
 
 class _AutomaticConnectionDialog(QDialog):

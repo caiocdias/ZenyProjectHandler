@@ -10,13 +10,25 @@ from threading import Event
 from typing import Any, TypeVar
 from uuid import UUID, uuid4
 
-from PySide6.QtCore import QObject, QRegularExpression, QSettings, Qt, QThread, QTimer, Signal, Slot
+from PySide6.QtCore import (
+    QObject,
+    QRegularExpression,
+    QSettings,
+    QSignalBlocker,
+    Qt,
+    QThread,
+    QTimer,
+    Signal,
+    Slot,
+)
 from PySide6.QtGui import QKeyEvent, QKeySequence, QRegularExpressionValidator
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QComboBox,
     QCompleter,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QGridLayout,
     QGroupBox,
@@ -40,10 +52,15 @@ from zeny_project_handler_contracts.enums import (
 )
 from zeny_project_handler_contracts.errors import ErrorCode
 from zeny_project_handler_contracts.jobs import JobResultResponse
-from zeny_project_handler_contracts.projects import ProjectDetailDto
+from zeny_project_handler_contracts.projects import (
+    ProjectDetailDto,
+    ProjectDetailResponse,
+    ProjectSummaryListResponse,
+)
 from zeny_project_handler_contracts.session import SessionCapabilitiesResponse
 
 from .project_gateway import ProjectGateway, ProjectGatewayError
+from .project_search import ProjectSearchThread
 
 T = TypeVar("T")
 _NUMERO_NS_PATTERN = r"[0-9]{10}"
@@ -187,6 +204,15 @@ class ProjectPanelWidget(QWidget):
         self._global_poll_stop = Event()
         self._global_poll_thread: QThread | None = None
         self._global_poll_worker: _GlobalOperationPollingWorker | None = None
+        self._search_generation = 0
+        self._connection_generation = 0
+        self._search_stopped = False
+        self._search_thread: ProjectSearchThread | None = None
+        self._project_action_active = False
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(300)
+        self._search_timer.timeout.connect(self._search_projects)
         self._build_ui()
         self._viewer.page_changed.connect(self._remember_page)
         self.atualizar_projetos(restaurar_ultimo=True, mostrar_erro=False)
@@ -218,43 +244,32 @@ class ProjectPanelWidget(QWidget):
                 self._project_search,
             )
         )
-        self._project_search.setPlaceholderText("Pesquise a NS")
+        self._project_search.setObjectName("mvpProjectSearchEdit")
+        self._project_search.setPlaceholderText("Pesquisar ou cadastrar NS")
         self._project_search.setToolTip("Pesquise por até 10 dígitos da NS")
-        self._project_search.setAccessibleName("Pesquisar projeto pela NS")
+        self._project_search.setAccessibleName("Pesquisar ou cadastrar NS")
         self._projects.setLineEdit(self._project_search)
         completer = QCompleter(self._projects.model(), self._projects)
         completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
         completer.setFilterMode(Qt.MatchFlag.MatchContains)
         completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         self._projects.setCompleter(completer)
+        self._project_search.textChanged.connect(self._schedule_search)
+        self._project_search.returnPressed.connect(self.abrir_selecionado)
         project_layout.addWidget(self._projects)
-        service_note_label = QLabel("Número da NS")
-        service_note_label.setObjectName("mvpProjectServiceNoteLabel")
-        project_layout.addWidget(service_note_label)
-        self._service_note = _AsciiDigitsLineEdit()
-        self._service_note.setObjectName("mvpProjectNameEdit")
-        self._service_note.setMaxLength(10)
-        self._service_note.setValidator(
-            QRegularExpressionValidator(
-                QRegularExpression(_NUMERO_NS_PATTERN),
-                self._service_note,
-            )
-        )
-        self._service_note.setPlaceholderText("Número da NS")
-        self._service_note.setToolTip("Informe os 10 dígitos do número da NS")
-        self._service_note.setAccessibleName("Número da NS")
-        project_layout.addWidget(self._service_note)
+        self._search_status = QLabel("Informe uma NS ou selecione um projeto")
+        self._search_status.setObjectName("mvpProjectSearchStatus")
+        self._search_status.setWordWrap(True)
+        self._search_status.setProperty("role", "hint")
+        project_layout.addWidget(self._search_status)
         project_actions = QGridLayout()
         project_actions.setHorizontalSpacing(8)
         project_actions.setVerticalSpacing(8)
-        self._create_project = QPushButton("Criar")
-        self._create_project.setObjectName("mvpCreateProjectButton")
-        self._create_project.clicked.connect(self.criar_projeto)
-        project_actions.addWidget(self._create_project, 0, 0)
-        self._open_project = QPushButton("Abrir")
+        self._open_project = QPushButton("Abrir ou criar")
         self._open_project.setObjectName("mvpOpenProjectButton")
+        self._open_project.setProperty("role", "primary")
         self._open_project.clicked.connect(self.abrir_selecionado)
-        project_actions.addWidget(self._open_project, 0, 1)
+        project_actions.addWidget(self._open_project, 0, 0, 1, 2)
         self._rename_project = QPushButton("Alterar NS")
         self._rename_project.setObjectName("mvpRenameProjectButton")
         self._rename_project.clicked.connect(self.alterar_numero_ns)
@@ -386,150 +401,293 @@ class ProjectPanelWidget(QWidget):
         layout.addStretch(1)
         self._apply_operation_state()
 
+    def _schedule_search(self, _text: str = "") -> None:
+        self._search_generation += 1
+        text = self._project_search.text()
+        index = self._projects.currentIndex()
+        if index >= 0 and text != self._projects.itemText(index):
+            cursor = self._project_search.cursorPosition()
+            with QSignalBlocker(self._projects), QSignalBlocker(self._project_search):
+                self._projects.setCurrentIndex(-1)
+                self._projects.setEditText(text)
+                self._project_search.setCursorPosition(cursor)
+        if self._search_stopped:
+            return
+        self._search_status.setText("Aguardando pesquisa…")
+        self._search_timer.start()
+
+    def _search_projects(self) -> None:
+        if self._search_stopped or not self.isEnabled():
+            return
+        # Uma leitura por painel; a consulta mais recente substitui as intermediárias.
+        if self._search_thread is not None:
+            return
+        query = self._project_search.text()
+        if query and not (len(query) <= 10 and query.isascii() and query.isdigit()):
+            self._search_status.setText("Pesquise usando até 10 dígitos")
+            return
+        read = (
+            partial(self._gateway.search_projects, query, limit=200, offset=0)
+            if query
+            else partial(self._gateway.list_projects, limit=200, offset=0)
+        )
+        thread = ProjectSearchThread(self._search_generation, query, read)
+        thread.received.connect(self._search_received)
+        thread.finished.connect(self._search_finished)
+        self._search_thread = thread
+        self._search_status.setText("Pesquisando…")
+        thread.launch()
+
+    @Slot(int, str, object)
+    def _search_received(self, generation: int, query: str, result: object) -> None:
+        if (
+            self._search_stopped
+            or generation != self._search_generation
+            or query != self._project_search.text()
+            or not self.isEnabled()
+            or self._project_action_active
+        ):
+            return
+        if not isinstance(result, ProjectSummaryListResponse):
+            self._replace_suggestions(None)
+            self._search_status.setText(
+                f"Pesquisa indisponível: {result}. Informe a NS completa para tentar abrir."
+            )
+            return
+        self._replace_suggestions(result)
+        total = result.page.total
+        shown = len(result.items)
+        if total == 0:
+            message = "Nenhuma correspondência. Informe a NS completa e use Abrir ou criar."
+        elif total > shown:
+            message = f"Exibindo {shown} de {total} projetos. Refine a pesquisa."
+        else:
+            message = f"{total} projeto(s) encontrado(s). Selecione e use Abrir ou criar."
+        self._search_status.setText(message)
+        completer = self._projects.completer()
+        if query and shown and self._project_search.hasFocus() and completer is not None:
+            completer.setCompletionPrefix(query)
+            completer.complete()
+
+    @Slot()
+    def _search_finished(self) -> None:
+        thread = self._search_thread
+        if thread is None:
+            return
+        generation = thread.generation
+        self._search_thread = None
+        if (
+            not self._search_stopped
+            and generation != self._search_generation
+            and not self._search_timer.isActive()
+        ):
+            self._search_timer.start()
+
+    def _replace_suggestions(self, response: ProjectSummaryListResponse | None) -> None:
+        text = self._project_search.text()
+        cursor = self._project_search.cursorPosition()
+        selection_start = self._project_search.selectionStart()
+        selection_length = len(self._project_search.selectedText())
+        selected_id = self._selected_project_id()
+        with QSignalBlocker(self._projects), QSignalBlocker(self._project_search):
+            self._projects.clear()
+            if response is not None:
+                for item in response.items:
+                    self._projects.addItem(item.service_note, str(item.project_id.root))
+            index = self._projects.findData(str(selected_id)) if selected_id is not None else -1
+            self._projects.setCurrentIndex(index)
+            self._projects.setEditText(text)
+            self._project_search.setCursorPosition(cursor)
+            if selection_start >= 0:
+                self._project_search.setSelection(selection_start, selection_length)
+
     def atualizar_projetos(
         self,
         *,
         restaurar_ultimo: bool = False,
         mostrar_erro: bool = True,
     ) -> None:
-        selected_id = self._selected_project_id()
-        if selected_id is None and self._session is not None:
-            selected_id = self._session.project_id.root
-        selected = str(selected_id) if selected_id is not None else None
-        if restaurar_ultimo:
-            selected = self._settings.value("last_project_id")
+        # Atualizações de lista nunca ativam uma sugestão implicitamente.
         response = self._action(
             lambda: self._gateway.list_projects(limit=200, offset=0),
             mostrar_erro=mostrar_erro,
         )
-        if response is None:
-            return
-        selected_index = -1
-        signals_were_blocked = self._projects.blockSignals(True)
-        try:
-            self._projects.clear()
-            self._projects.addItem("Selecione um projeto", None)
-            for summary in response.items:
-                self._projects.addItem(summary.service_note, str(summary.project_id.root))
-            if selected is not None:
-                selected_index = self._projects.findData(str(selected))
-            if selected_index >= 0:
-                self._projects.setCurrentIndex(selected_index)
-            elif self._session is not None and str(self._session.project_id.root) == str(selected):
-                self._projects.setCurrentIndex(-1)
-                self._projects.setEditText(self._session.service_note)
-            else:
-                self._clear_project_selection()
-        finally:
-            self._projects.blockSignals(signals_were_blocked)
-        if selected_index >= 0:
-            self.abrir_selecionado()
+        if response is not None:
+            self._replace_suggestions(response)
+        if restaurar_ultimo:
+            saved = self._settings.value("last_project_id")
+            if saved is not None:
+                try:
+                    project_id = UUID(str(saved))
+                except ValueError:
+                    self._reset_to_initial_state()
+                else:
+                    restored = self._action(
+                        lambda: self._gateway.get_project(project_id),
+                        mostrar_erro=mostrar_erro,
+                    )
+                    if restored is not None:
+                        self._select_and_activate(restored.project)
+                    else:
+                        self._reset_to_initial_state()
+        elif self._project_search.text():
+            self._schedule_search()
 
-    def criar_projeto(self) -> None:
-        numero_ns = self._service_note.text()
-        if not self._service_note.hasAcceptableInput():
-            self._warn("Informe o número da NS com exatamente 10 dígitos")
-            return
-        try:
-            existing = self._gateway.find_project_by_service_note(numero_ns)
-        except Exception as error:
-            self._warn(str(error).strip() or type(error).__name__)
-            return
-        if existing is not None:
-            self._offer_open_existing(existing.project.project_id.root)
-            return
-        self._create_project_once(numero_ns)
-
-    def _create_project_once(self, numero_ns: str) -> None:
-        try:
-            response = self._gateway.create_project(
-                numero_ns,
-                idempotency_key=f"project-{uuid4()}",
-            )
-        except ProjectGatewayError as error:
-            if error.code is ErrorCode.PROJECT_ALREADY_EXISTS:
-                project_id = _project_id_from_conflict(error)
-                if project_id is not None:
-                    self._offer_open_existing(project_id)
-                    return
-            self._warn(str(error).strip() or type(error).__name__)
-            return
-        except Exception as error:
-            self._warn(str(error).strip() or type(error).__name__)
-            return
-        self._service_note.clear()
-        self.atualizar_projetos()
-        self._select_and_activate(response.project)
-        self.status_changed.emit("Projeto criado e pronto para receber PDFs")
+    def _intent_valid(self, context: tuple[int, int], numero_ns: str) -> bool:
+        return (
+            context == (self._connection_generation, self._search_generation)
+            and not self._search_stopped
+            and self.isEnabled()
+            and self._project_search.text() == numero_ns
+            and self._server_operation is None
+            and self._external_operation is None
+            and not self.processando
+        )
 
     def abrir_selecionado(self) -> None:
-        project_id = self._selected_project_id()
-        if project_id is not None:
-            self._open_project_id(project_id)
+        numero_ns = self._project_search.text()
+        context = (self._connection_generation, self._search_generation)
+        if self._project_action_active or not self._intent_valid(context, numero_ns):
             return
-        numero_ns = self._project_search.text().strip()
-        if not _is_complete_service_note(numero_ns):
-            self._warn("Selecione um projeto ou informe a NS com exatamente 10 dígitos")
-            return
+        self._project_action_active = True
+        self._apply_operation_state()
         try:
-            response = self._gateway.find_project_by_service_note(numero_ns)
+            if not _is_complete_service_note(numero_ns):
+                self._warn("Selecione um projeto ou informe a NS com exatamente 10 dígitos")
+                return
+            self._search_status.setText("Resolvendo NS…")
+            project_id = self._selected_project_id()
+            response = (
+                self._gateway.get_project(project_id)
+                if project_id is not None
+                else self._gateway.find_project_by_service_note(numero_ns)
+            )
+            if not self._intent_valid(context, numero_ns):
+                return
+            if response is not None:
+                self._select_and_activate(response.project)
+                self._search_status.setText("Projeto existente aberto")
+                self.status_changed.emit("Projeto existente aberto")
+            else:
+                self._offer_create_missing(numero_ns, context)
         except Exception as error:
-            self._warn(str(error).strip() or type(error).__name__)
-            return
-        if response is None:
-            self._offer_create_missing(numero_ns)
-            return
-        self._select_and_activate(response.project)
+            if self._intent_valid(context, numero_ns):
+                self._search_status.setText("Não foi possível abrir ou criar a NS")
+                self._warn(str(error).strip() or type(error).__name__)
+        finally:
+            # QComboBox pode emitir returnPressed duas vezes no mesmo evento.
+            QTimer.singleShot(0, self, self._finish_project_action)
 
-    def _open_project_id(self, project_id: UUID) -> None:
-        response = self._action(lambda: self._gateway.get_project(project_id))
-        if response is not None:
+    def _finish_project_action(self) -> None:
+        self._project_action_active = False
+        self._apply_operation_state()
+
+    def _create_project_once(self, numero_ns: str, context: tuple[int, int]) -> None:
+        self._search_status.setText("Criando projeto…")
+        try:
+            response: ProjectDetailResponse | None = self._gateway.create_project(
+                numero_ns, idempotency_key=f"project-{uuid4()}"
+            )
+        except ProjectGatewayError as error:
+            if error.code is not ErrorCode.PROJECT_ALREADY_EXISTS:
+                raise
+            if not self._intent_valid(context, numero_ns):
+                return
+            project_id = _project_id_from_conflict(error)
+            response = (
+                self._gateway.get_project(project_id)
+                if project_id is not None
+                else self._gateway.find_project_by_service_note(numero_ns)
+            )
+            if response is None or response.project.service_note != numero_ns:
+                raise error
+        if response is not None and self._intent_valid(context, numero_ns):
             self._select_and_activate(response.project)
+            self._search_status.setText("Projeto aberto e pronto para receber PDFs")
+            self.status_changed.emit("Projeto aberto e pronto para receber PDFs")
 
-    def _offer_create_missing(self, numero_ns: str) -> None:
+    def _offer_create_missing(self, numero_ns: str, context: tuple[int, int]) -> None:
         confirmation = QMessageBox.question(
             self,
             "Nota de Serviço não cadastrada",
-            "A Nota de Serviço não existe. Deseja criar o projeto da nota?",
+            f"A NS {numero_ns} não existe. Deseja criar o projeto dessa nota?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
-        if confirmation == QMessageBox.StandardButton.Yes:
-            self._create_project_once(numero_ns)
+        if not self._intent_valid(context, numero_ns):
             return
-        self._reset_to_initial_state()
-
-    def _offer_open_existing(self, project_id: UUID) -> None:
-        confirmation = QMessageBox.question(
-            self,
-            "Projeto já cadastrado",
-            "Já existe um projeto para a Nota de Serviço informada. Deseja abrir esse projeto?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
         if confirmation == QMessageBox.StandardButton.Yes:
-            self._open_project_id(project_id)
-            return
-        self._reset_to_initial_state()
+            self._create_project_once(numero_ns, context)
+        else:
+            self._reset_to_initial_state()
 
     def alterar_numero_ns(self) -> None:
         session = self._session
-        numero_ns = self._service_note.text()
-        if session is None or not self._service_note.hasAcceptableInput():
-            self._warn("Selecione o projeto e informe o número da NS com exatamente 10 dígitos")
+        context = self._connection_generation
+        if session is None or self._project_action_active or not self._rename_project.isEnabled():
             return
-        response = self._action(
-            lambda: self._gateway.update_project(
-                session.project_id.root,
-                numero_ns,
-                expected_project_version=session.project_version,
+        self._project_action_active = True
+        self._apply_operation_state()
+        try:
+            dialog = QDialog(self)
+            dialog.setObjectName("mvpRenameServiceNoteDialog")
+            dialog.setWindowTitle("Alterar NS")
+            layout = QVBoxLayout(dialog)
+            layout.addWidget(QLabel("Nova NS (10 dígitos)"))
+            editor = _AsciiDigitsLineEdit()
+            editor.setObjectName("mvpRenameServiceNoteEdit")
+            editor.setAccessibleName("Nova NS")
+            editor.setMaxLength(10)
+            editor.setValidator(
+                QRegularExpressionValidator(QRegularExpression(_NUMERO_NS_PATTERN), editor)
             )
-        )
-        if response is not None:
-            self._service_note.clear()
-            self.atualizar_projetos()
-            self._select_and_activate(response.project)
-            self._review_panel.atualizar_projetos()
+            editor.setText(session.service_note)
+            layout.addWidget(editor)
+            buttons = QDialogButtonBox(
+                QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+            )
+            buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Alterar NS")
+            buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Cancelar")
+            buttons.accepted.connect(dialog.accept)
+            buttons.rejected.connect(dialog.reject)
+            editor.textChanged.connect(
+                lambda: buttons.button(QDialogButtonBox.StandardButton.Ok).setEnabled(
+                    editor.hasAcceptableInput()
+                )
+            )
+            layout.addWidget(buttons)
+            editor.selectAll()
+            editor.setFocus()
+            accepted = dialog.exec() == QDialog.DialogCode.Accepted
+            numero_ns = editor.text()
+            dialog.deleteLater()
+            if (
+                not accepted
+                or not _is_complete_service_note(numero_ns)
+                or context != self._connection_generation
+                or self._search_stopped
+                or self._session is not session
+                or not self.isEnabled()
+                or self._server_operation is not None
+                or self._external_operation is not None
+            ):
+                return
+            response = self._action(
+                lambda: self._gateway.update_project(
+                    session.project_id.root,
+                    numero_ns,
+                    expected_project_version=session.project_version,
+                )
+            )
+            if (
+                response is not None
+                and context == self._connection_generation
+                and not self._search_stopped
+            ):
+                self._select_and_activate(response.project)
+                self._review_panel.atualizar_projetos()
+        finally:
+            QTimer.singleShot(0, self, self._finish_project_action)
 
     def adicionar_codigo_servico(self) -> None:
         session = self._session
@@ -887,6 +1045,13 @@ class ProjectPanelWidget(QWidget):
         return finished
 
     def shutdown_polling(self, timeout_ms: int = 1_000) -> bool:
+        self._search_stopped = True
+        self._connection_generation += 1
+        self._search_generation += 1
+        self._search_timer.stop()
+        if self._search_thread is not None:
+            self._search_thread.requestInterruption()
+        self._search_status.setText("Pesquisa interrompida")
         self._global_poll_stop.set()
         thread = self._global_poll_thread
         if thread is None or not thread.isRunning():
@@ -899,6 +1064,9 @@ class ProjectPanelWidget(QWidget):
 
     def restart_polling(self) -> None:
         """Retome a observação global usando o gateway reconectável já atualizado."""
+        self._search_stopped = False
+        self._connection_generation += 1
+        self._schedule_search()
         thread = self._global_poll_thread
         if thread is not None and thread.isRunning():
             return
@@ -987,6 +1155,7 @@ class ProjectPanelWidget(QWidget):
             self._server_operation is not None
             or self._external_operation is not None
             or self.processando
+            or self._project_action_active
         )
         has_session = self._session is not None
         self._project_box.setEnabled(not blocked)
@@ -1021,7 +1190,10 @@ class ProjectPanelWidget(QWidget):
         QMessageBox.information(
             self,
             "Como usar o projeto",
-            "1. Crie ou abra um projeto no servidor.\n"
+            "1. Pesquise ou cadastre a NS no campo único; digitar só pesquisa.\n"
+            "Use Abrir ou criar ou Enter: existente abre diretamente; nova exige confirmação.\n"
+            "Recusar criação limpa a sessão local. Alterar NS abre um diálogo; "
+            "cancelar preserva o projeto.\n"
             "2. Cadastre os códigos de serviço com quatro dígitos.\n"
             "3. Selecione um ou vários PDFs para upload.\n"
             "4. Execute a análise remota e acompanhe o progresso.\n"
@@ -1035,8 +1207,10 @@ class ProjectPanelWidget(QWidget):
         if index >= 0:
             self._projects.setCurrentIndex(index)
         else:
-            self._projects.setCurrentIndex(-1)
-            self._projects.setEditText(session.service_note)
+            self._projects.addItem(session.service_note, str(session.project_id.root))
+            self._projects.setCurrentIndex(self._projects.count() - 1)
+        self._projects.setItemText(self._projects.currentIndex(), session.service_note)
+        self._projects.setEditText(session.service_note)
         self._activate(session)
 
     def _selected_project_id(self) -> UUID | None:
@@ -1054,7 +1228,7 @@ class ProjectPanelWidget(QWidget):
     def _clear_project_selection(self) -> None:
         signals_were_blocked = self._projects.blockSignals(True)
         try:
-            self._projects.setCurrentIndex(0 if self._projects.count() else -1)
+            self._projects.setCurrentIndex(-1)
             self._projects.clearEditText()
         finally:
             self._projects.blockSignals(signals_were_blocked)
@@ -1065,8 +1239,9 @@ class ProjectPanelWidget(QWidget):
         project_id = str(session.project_id.root)
         self._settings.setValue("last_project_id", project_id)
         self._settings.sync()
+        saved_page = int(str(self._settings.value(f"projects/{project_id}/page", 1)))
+        self._review_panel.abrir_projeto(session.project_id.root)
         if session.pages:
-            saved_page = int(str(self._settings.value(f"projects/{project_id}/page", 1)))
             if self._viewer.carregar_projeto_remoto(session.project_id.root):
                 self._viewer.ir_para_folha(saved_page)
             else:
@@ -1126,6 +1301,7 @@ class ProjectPanelWidget(QWidget):
         )
 
     def _show_summary(self, session: ProjectDetailDto) -> None:
+        self._project_box.setTitle(f"Projeto · NS ativa {session.service_note}")
         analysis = session.analysis
         extraction = _state_label(analysis.last_extraction)
         interpretation = _state_label(analysis.last_interpretation)
@@ -1161,6 +1337,7 @@ class ProjectPanelWidget(QWidget):
             return None
 
     def _show_empty_state(self) -> None:
+        self._project_box.setTitle("Projeto")
         self._clear_service_codes()
         self._updating_page_order = True
         self._pages.clear()
@@ -1173,7 +1350,6 @@ class ProjectPanelWidget(QWidget):
 
     def _reset_to_initial_state(self) -> None:
         self._session = None
-        self._service_note.clear()
         self._clear_project_selection()
         self._settings.remove("last_project_id")
         self._settings.sync()

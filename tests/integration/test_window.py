@@ -411,7 +411,7 @@ def test_service_note_is_plain_numeric_field_with_predictable_clipboard_shortcut
     )
     qtbot.addWidget(window)
     window.show()
-    field = window.findChild(QLineEdit, "mvpProjectNameEdit")
+    field = window.findChild(QLineEdit, "mvpProjectSearchEdit")
     assert field is not None
     assert field.inputMask() == ""
     assert field.maxLength() == 10
@@ -421,7 +421,7 @@ def test_service_note_is_plain_numeric_field_with_predictable_clipboard_shortcut
     try:
         qtbot.keyClicks(field, "12a34")  # type: ignore[no-untyped-call]
         assert field.text() == "1234"
-        assert not field.hasAcceptableInput()
+        assert field.hasAcceptableInput()  # Fragmentos são válidos para pesquisa.
 
         field.clear()
         qtbot.keyClicks(field, "1234567890123")  # type: ignore[no-untyped-call]

@@ -43,9 +43,15 @@ O diagrama resumido está em [modelo-entidades.mmd](modelo-entidades.mmd). O dom
 ## Projetos e documentos
 
 - Um projeto é criado a partir de uma NS normalizada e pode ter a NS alterada depois.
-- O seletor de projetos aceita pesquisa local por até dez dígitos da NS, sem inserir opções
-  provisórias nem dissociar cada opção de seu ID remoto. Uma NS completa também é resolvida
-  exatamente no servidor, mesmo quando o projeto não está entre os 200 itens carregados.
+- O seletor editável **Pesquisar ou cadastrar NS** é a única entrada permanente de NS.
+  Pesquisa trechos de 1–10 dígitos ASCII em todos os projetos do servidor, preservando zeros e
+  IDs remotos. A consulta usa debounce de 300 ms e trabalho fora da thread gráfica, com uma
+  leitura de sugestões por vez. Campo vazio usa a listagem inicial. Digitar nunca cria,
+  renomeia nem troca o projeto ativo; editar o texto invalida o vínculo com a seleção anterior.
+- O status distingue espera, pesquisa, resultados, total/truncamento (até 200 sugestões), nenhuma
+  correspondência e erro. Quando houver mais resultados, orienta refinar. Respostas obsoletas
+  por texto, geração ou contexto de conexão/fechamento não atualizam o painel. Uma leitura já
+  iniciada pode terminar pelo timeout do gateway, sem acessar widgets fechados.
 - A caixa **Serviços do projeto**, entre **Projeto** e **Folhas PDF**, consulta e substitui uma
   coleção canônica pelo servidor. Cada código possui exatamente quatro dígitos ASCII, conserva
   zeros à esquerda, e projetos legados abrem com coleção vazia.
@@ -63,17 +69,30 @@ temporária limitada, validado e publicado atomicamente na área gerenciada do s
 leva bytes e nome de exibição, nunca caminho local. A origem escolhida no cliente não é alterada e a
 cópia gerenciada continua disponível se essa origem for movida ou apagada.
 
-**Abrir** usa o ID de uma opção realmente selecionada ou exige os dez dígitos pesquisados. Se a NS
-completa não existir, a interface informa a ausência e pergunta se deve criar o projeto; aceitar
-faz uma única criação e abre o resultado. **Criar** resolve primeiro a NS informada: quando ela já
-existe, não envia criação e pergunta se deve abrir o ID existente. Um conflito
-`PROJECT_ALREADY_EXISTS` ocorrido entre a resolução e o `POST` usa o mesmo diálogo e não repete a
-criação automaticamente.
+**Abrir ou criar** e Enter executam a mesma ação: usam o ID de uma sugestão realmente selecionada
+ou exigem os dez dígitos e resolvem a NS exatamente no servidor, inclusive fora da página inicial.
+NS existente abre diretamente, sem pergunta e sem `POST`. Somente ausência exata confirmada permite
+perguntar se deve criar; a confirmação exibe a NS completa e tem recusa como padrão. Aceitar faz
+uma única criação e ativa o ID retornado. Durante essa ação os controles ficam bloqueados; sinais
+repetidos de botão/Enter não repetem a requisição. Mudança do texto (mesmo se voltar ao original),
+desconexão, fechamento ou bloqueio global invalidam uma confirmação ainda aberta.
 
-Recusar qualquer uma dessas propostas retorna ao estado inicial: não há projeto ativo, pesquisa,
-NS, serviços nem folhas selecionados; `last_project_id` é removido; visualizador, Resultados,
-Documentação/conformidade, GMAX e Exportar deixam de apontar para o projeto; ações dependentes
-ficam desabilitadas. Essa transição é somente local e não exclui nem altera projeto no servidor.
+Um conflito `PROJECT_ALREADY_EXISTS` entre resolução e `POST` abre diretamente o projeto existente,
+sem repetir criação. Usa o ID seguro do conflito; se ele estiver ausente/inválido, permite somente
+nova resolução exata de leitura. Erro HTTP, timeout, autenticação, rota de pesquisa indisponível,
+integridade ambígua ou lista vazia não significam ausência. A resolução exata pode continuar
+operante em servidor sem a rota de pesquisa; nenhum primeiro resultado é escolhido implicitamente.
+
+Recusar criação retorna ao estado inicial: não há projeto ativo, pesquisa, NS, serviços nem folhas
+selecionados; `last_project_id` é removido; visualizador, Resultados, Documentação/conformidade,
+GMAX e Exportar deixam de apontar para o projeto; ações dependentes ficam desabilitadas. Essa
+transição é somente local e não exclui nem altera projeto no servidor.
+
+**Alterar NS**, disponível apenas com projeto ativo e sem operação incompatível, abre um diálogo
+específico preenchido com a NS ativa. A nova NS exige dez dígitos ASCII e preserva zeros. O envio
+mantém `expected_project_version`; colisão continua sendo erro, sem mesclagem ou troca de projeto.
+Cancelar preserva sessão, NS e versão. Abrir, trocar e renomear mantêm os painéis sincronizados e
+a restauração preserva a folha salva do projeto.
 
 ## PDFs protegidos
 

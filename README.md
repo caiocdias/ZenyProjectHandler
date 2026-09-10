@@ -110,7 +110,7 @@ na próxima execução local. O `compose.yaml` operacional continua separado e p
 
 ## Fluxo de uso
 
-1. No painel **Projeto**, crie ou abra um projeto usando a NS.
+1. No painel **Projeto**, use **Pesquisar ou cadastrar NS** e confirme em **Abrir ou criar** ou Enter.
 2. Em **Serviços do projeto**, cadastre os códigos aplicáveis com exatamente quatro dígitos; por
    exemplo, `0007` permanece texto e conserva o zero inicial.
 3. Adicione um ou mais PDFs e ajuste a ordem das folhas, se necessário.
@@ -124,11 +124,21 @@ na próxima execução local. O `compose.yaml` operacional continua separado e p
    encontrou linha. A aba apenas lê o último resumo persistido e não inicia uma análise.
 8. Use **Exportar** para baixar o PDF anotado ou as planilhas `.xlsx` na própria máquina.
 
-O seletor de projetos pesquisa até dez dígitos da NS e resolve uma NS completa diretamente no
-servidor, inclusive fora da primeira página carregada. **Criar** uma NS existente oferece abrir o
-projeto encontrado; **Abrir** uma NS inexistente oferece criá-la. Recusar qualquer proposta volta ao
-estado inicial sem mutação remota. Se outro cliente vencer a corrida de criação, o conflito do
-servidor segue o mesmo fluxo e não repete o `POST`.
+O campo único pesquisa trechos de um a dez dígitos ASCII em todos os projetos do servidor,
+com debounce de 300 ms e consulta fora da thread gráfica. Digitar apenas pesquisa: o projeto ativo
+continua aberto. O status mostra pesquisa, resultados, total (até 200 sugestões; refine quando
+necessário), nenhuma correspondência ou indisponibilidade. Respostas antigas são descartadas ao
+editar, desconectar ou fechar. Campo vazio consulta a listagem inicial.
+
+**Abrir ou criar** e Enter usam o ID da sugestão selecionada ou resolvem a NS completa exatamente.
+Uma NS existente abre diretamente, sem pergunta nem criação. Uma NS ausente exige confirmação
+com seus dez dígitos antes de um único `POST`; zeros iniciais são preservados. Recusar a criação
+limpa a sessão e os painéis locais, sem mutação remota. Se outro cliente criar primeiro, o conflito
+abre o projeto existente sem repetir o `POST`. Erros, ambiguidade e sugestões vazias nunca provam
+ausência; servidor sem pesquisa ainda pode permitir a resolução exata.
+
+**Alterar NS** abre um diálogo preenchido com a NS ativa. Confirmar altera com controle de versão;
+colisão é erro. Cancelar preserva a NS, a versão e a sessão. A pesquisa nunca renomeia um projeto.
 
 O pipeline principal executa, em ordem, a extração documental, a interpretação semântica, a
 promoção dos resultados e a conformidade. A ação **Analisar conformidade** reaplica as regras aos
