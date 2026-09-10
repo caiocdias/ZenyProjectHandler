@@ -138,7 +138,10 @@ def test_each_dock_scrolls_independently_and_reveals_keyboard_focus(
     assert window.pdf_viewer.view.mapToScene(QPoint(0, 0)) == scene_position
 
     # Percorre a ordem real de Tab, inclusive ações após tabelas e cartões.
+    dock.activateWindow()
+    qtbot.waitUntil(dock.isActiveWindow)
     area.setFocus()
+    qtbot.waitUntil(area.hasFocus)
     visited: set[str] = set()
     for _ in range(100):
         qtbot.keyClick(QApplication.focusWidget() or area, Qt.Key.Key_Tab)  # type: ignore[no-untyped-call]
@@ -279,6 +282,40 @@ def test_floating_tabbed_and_saved_docks_keep_identity(
     )
 
 
+def test_reduced_window_keeps_pdf_controls_and_dock_layout_after_resize(
+    qtbot: QtBot,
+    tmp_path: Path,
+    application_factory: ApplicationFactory,
+) -> None:
+    app, window = application_factory([], settings=ClientSettings(data_directory=tmp_path))
+    qtbot.addWidget(window)
+    window.show()
+    state = window.saveState()
+    wide = (
+        min(1920, window.screen().availableGeometry().width())
+        if app.platformName() == "windows"
+        else 1920
+    )
+    for width in (911, wide, 911):
+        window.resize(width, 512)
+        app.processEvents()
+        assert window.width() == width
+        viewer = window.pdf_viewer
+        assert viewer.view.viewport().width() >= 330
+        assert viewer.view.viewport().height() >= 200
+        buttons = viewer.findChildren(QPushButton)
+        for button in buttons:
+            assert button.width() >= button.minimumSizeHint().width()
+            assert viewer.rect().contains(button.geometry())
+            assert button.geometry().bottom() < viewer.view.y()
+        for index, button in enumerate(buttons):
+            assert all(
+                not button.geometry().intersects(other.geometry()) for other in buttons[index + 1 :]
+            )
+        assert window.restoreState(state)
+        assert all(not _area(window, name)[0].isFloating() for name in DOCKS)
+
+
 @pytest.mark.parametrize("resolution", [(1366, 768), (1920, 1080)])
 @pytest.mark.parametrize("theme", list(Tema))
 def test_visual_matrix(
@@ -295,8 +332,11 @@ def test_visual_matrix(
     width, height = (round(value / scale) for value in resolution)
     window.resize(width, height)
     window.show()
+    window.pdf_viewer.carregar_pdf(create_feature_pdf(tmp_path / "visual-scroll.pdf"))
+    qtbot.waitUntil(lambda: window.pdf_viewer.inspecao is not None)
     output = os.environ.get("E05_CAPTURE_DIR")
     compressed: list[str] = []
+    clipped_labels: list[str] = []
     for name in DOCKS:
         dock, area = _area(window, name)
         panel = area.widget()
@@ -326,6 +366,14 @@ def test_visual_matrix(
             for page in pages:
                 if tabs:
                     tabs[0].setCurrentIndex(page)
+                app.processEvents()
+                for label in panel.findChildren(QLabel):
+                    if (
+                        label.isVisible()
+                        and label.wordWrap()
+                        and label.height() < label.heightForWidth(label.width())
+                    ):
+                        clipped_labels.append(f"{name}/{state}/{page}: {label.objectName()}")
                 for edge in ("top", "bottom"):
                     app.processEvents()
                     area.verticalScrollBar().setValue(
@@ -341,6 +389,11 @@ def test_visual_matrix(
                         assert window.grab().save(
                             str(directory / f"{name}-{state}-{page}-{edge}.png")
                         )
+                        panel_directory = directory / "panels"
+                        panel_directory.mkdir(exist_ok=True)
+                        assert dock.grab().save(
+                            str(panel_directory / f"{name}-{state}-{page}-{edge}.png")
+                        )
     if output:
         screen = window.screen()
         metadata = {
@@ -351,10 +404,18 @@ def test_visual_matrix(
             "screen_logical_dpi": screen.logicalDotsPerInch(),
             "central_minimum_width": window.pdf_viewer.minimumSizeHint().width(),
             "compressed_cards": compressed,
+            "clipped_labels": clipped_labels,
+            "pdf_viewport": [
+                window.pdf_viewer.view.viewport().width(),
+                window.pdf_viewer.view.viewport().height(),
+            ],
         }
         (directory / "metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     assert not compressed
+    assert not clipped_labels
     assert window.size().width() == width
+    assert window.pdf_viewer.view.viewport().width() >= 330
+    assert window.pdf_viewer.view.viewport().height() >= 200
     # O Windows reserva a moldura nativa quando o tamanho pedido ocupa a tela inteira.
     if app.platformName() == "windows":
         assert height - 40 <= window.height() <= height

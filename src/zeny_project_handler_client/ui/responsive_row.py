@@ -1,25 +1,30 @@
 """Linhas de controles que se empilham quando o dock perde largura."""
 
 from PySide6.QtCore import QRect, QSize
-from PySide6.QtWidgets import QAbstractButton, QBoxLayout, QHBoxLayout, QSizePolicy
+from PySide6.QtWidgets import QAbstractButton, QBoxLayout, QHBoxLayout, QLabel, QSizePolicy
 
 
 class ResponsiveRowLayout(QHBoxLayout):
     """Preserve a geometria nativa do Qt e a ordem ao empilhar uma linha estreita."""
 
-    def _sizes(self) -> list[QSize]:
+    def _sizes(self, *, preferred_labels: bool = False) -> list[QSize]:
         sizes = []
         for index in range(self.count()):
             item = self.itemAt(index)
             if item is not None and not item.isEmpty():
                 size = item.minimumSize()
-                if isinstance(item.widget(), QAbstractButton):
+                widget = item.widget()
+                if isinstance(widget, QAbstractButton) or (
+                    preferred_labels and isinstance(widget, QLabel) and widget.wordWrap()
+                ):
                     size = size.expandedTo(item.sizeHint())
                 sizes.append(size)
         return sizes
 
     def _fits(self, width: int) -> bool:
-        sizes = self._sizes()
+        # Mensagens devem manter largura de leitura quando dividem a linha com ações.
+        # Essa preferência não aumenta o mínimo intrínseco do painel rolável.
+        sizes = self._sizes(preferred_labels=True)
         margins = self.contentsMargins()
         needed = sum(size.width() for size in sizes) + max(0, len(sizes) - 1) * self.spacing()
         return needed <= width - margins.left() - margins.right()

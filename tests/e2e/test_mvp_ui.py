@@ -455,6 +455,8 @@ def test_rename_dialog_preserves_session_on_cancel_and_uses_current_version(
     first = panel._gateway.create_project("0000000007", idempotency_key="rename-first")
     second = panel._gateway.create_project("0000000008", idempotency_key="rename-second")
     panel._select_and_activate(first.project)
+    # A leitura do mercado atualiza o DTO da sessão antes de testar o cancelamento.
+    qtbot.waitUntil(lambda: not panel.market._pending)
     original_session = panel._session
     warnings: list[str] = []
     monkeypatch.setattr(QMessageBox, "warning", lambda *args: warnings.append(str(args[-1])))
@@ -587,7 +589,12 @@ def test_project_service_codes_ui_is_remote_canonical_accessible_and_conflict_sa
         widget = layout_item.widget()
         if isinstance(widget, QGroupBox):
             group_titles.append(widget.title())
-    assert group_titles[:3] == ["Projeto", "Serviços do projeto", "Folhas PDF"]
+    assert group_titles[:4] == [
+        "Projeto",
+        "Mercado do projeto",
+        "Serviços do projeto",
+        "Folhas PDF",
+    ]
 
     service_box = panel.findChild(QGroupBox, "mvpProjectServiceCodesBox")
     service_field = panel.findChild(QLineEdit, "mvpProjectServiceCodeEdit")
@@ -1160,6 +1167,17 @@ def test_environmental_actions_full_client_matrix_uses_current_service_codes(
         impact_completed: bool,
         servitude_completed: bool,
     ) -> ComplianceExecutionResponse:
+        # O fim da análise dispara novas leituras do mercado e do resumo GMAX.
+        qtbot.waitUntil(
+            lambda: (
+                not panel.market._pending
+                and documentation._result is not None
+                and gmax._summary is not None
+                and gmax._summary.last_execution_id == documentation._result.execution.execution_id
+                and "Resultado atual" in gmax_state.text()
+            ),
+            timeout=10_000,
+        )
         result = documentation._result
         assert isinstance(result, ComplianceExecutionResponse)
         by_rule = {item.rule_id: item for item in result.findings if item.rule_id in action_rules}
@@ -1221,7 +1239,9 @@ def test_environmental_actions_full_client_matrix_uses_current_service_codes(
             assert window.pdf_viewer.folha_atual == 1
             assert str(callout.callout_id.root) in window.pdf_viewer.view._callout_items
         assert "Resultado atual" in gmax_state.text()
-        assert gmax_market.text() == "Urbano"
+        assert gmax_market.text() == (
+            "Última execução: Urbano\nBanco inicial: Urbano · Origem: banco"
+        )
         query_cells = tuple(gmax_checks.item(row, 3) for row in range(gmax_checks.rowCount()))
         result_cells = tuple(gmax_checks.item(row, 4) for row in range(gmax_checks.rowCount()))
         assert all(cell is not None for cell in (*query_cells, *result_cells))
@@ -1382,6 +1402,10 @@ def test_user_can_create_import_analyze_review_and_reopen_from_ui(
     assert compliance_tree is not None
     assert compliance_status is not None
     assert reapply is not None
+    qtbot.waitUntil(
+        lambda: not panel.market._pending and "Resultado atual" in compliance_status.text(),
+        timeout=10_000,
+    )
     assert compliance_tree.topLevelItemCount() >= 1
     divergence = compliance_tree.topLevelItem(0)
     assert divergence is not None

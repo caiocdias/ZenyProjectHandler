@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QTextEdit,
-    QVBoxLayout,
     QWidget,
 )
 
@@ -79,8 +78,6 @@ class PanelScrollArea(QScrollArea):
                 widget.setTabChangesFocus(True)
             return
         layout = widget.layout()
-        if isinstance(layout, QVBoxLayout):
-            layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         if isinstance(layout, QFormLayout):
             layout.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         for child in widget.findChildren(

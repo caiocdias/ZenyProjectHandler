@@ -51,7 +51,8 @@ linhas e, ao alcançar uma extremidade, continua no painel. Combos fechados e ca
 não mudam pela roda; use teclado ou abra a lista para escolher. Tab sai das tabelas (as setas
 continuam navegando pelas células) e revela o controle seguinte. As ações se empilham quando
 falta largura, sem mudar a ordem dos cartões. O estado dos docks continua compatível com as
-preferências salvas. O aceite de E05 e seus limites de resolução estão registrados em
+preferências salvas. Em janelas estreitas, a barra do PDF ocupa duas linhas para manter uma
+área útil do documento. A matriz de resolução/DPI e as evidências de E05 estão registradas em
 [e05-rolagem-paineis.md](docs/e05-rolagem-paineis.md).
 
 As 42 regras são executáveis, mas um achado só é criado para alvos que satisfazem todas as condições
