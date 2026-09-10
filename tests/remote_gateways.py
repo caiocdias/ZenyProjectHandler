@@ -124,6 +124,14 @@ class DirectProjectGateway:
     ) -> ProjectSummaryListResponse:
         return self._projects.list_projects(limit=limit, offset=offset)
 
+    def search_projects(
+        self, query: str, *, limit: int = 200, offset: int = 0
+    ) -> ProjectSummaryListResponse:
+        try:
+            return self._projects.search_projects(query, limit=limit, offset=offset)
+        except ApiError as error:
+            raise _project_error(error) from None
+
     def create_project(
         self,
         service_note: str,

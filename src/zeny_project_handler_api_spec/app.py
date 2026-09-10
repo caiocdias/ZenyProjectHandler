@@ -184,6 +184,26 @@ async def list_projects(
     raise NotImplementedError("Aplicação exclusiva para geração da OpenAPI.")
 
 
+@protected.get(
+    "/projects/search",
+    tags=["projects"],
+    operation_id="searchProjects",
+    response_model=ProjectSummaryListResponse,
+    responses=ERROR_RESPONSES,
+    description=(
+        "Pesquisa global por trecho de NS, preservando zeros iniciais. Filtra antes de contar "
+        "e paginar; ordena por criação e ID em ordem crescente. Lista vazia não comprova "
+        "ausência exata de NS. Rota indisponível deve ser tratada como erro de pesquisa."
+    ),
+)
+async def search_projects(
+    query: Annotated[str, Query(pattern=r"^[0-9]{1,10}$")],
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> ProjectSummaryListResponse:
+    raise NotImplementedError("Aplicação exclusiva para geração da OpenAPI.")
+
+
 @protected.post(
     "/projects",
     tags=["projects"],

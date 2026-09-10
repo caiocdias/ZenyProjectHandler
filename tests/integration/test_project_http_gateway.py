@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from socket import create_server
 from threading import Event, Thread
@@ -12,6 +12,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from tests.market_fakes import FakeClassificadorMercado, FakeVerificadorAcoesConcluidas
 from tests.pdf_fixtures import create_action_requirements_pdf, create_golden_pdf
 from tests.remote_gateways import DirectProjectGateway
@@ -23,7 +24,11 @@ from zeny_project_handler.application.errors import FluxoMvpCanceladoError
 from zeny_project_handler.application.mvp_workflow import ResultadoFluxoMvp
 from zeny_project_handler.domain.enums import CategoriaElemento
 from zeny_project_handler.domain.market import DescricaoAcao
-from zeny_project_handler_client.ui.project_gateway import HttpProjectGateway, ProjectGatewayError
+from zeny_project_handler_client.ui.project_gateway import (
+    HttpProjectGateway,
+    ProjectGateway,
+    ProjectGatewayError,
+)
 from zeny_project_handler_contracts.enums import (
     AnalysisExecutionState,
     JobStatus,
@@ -60,6 +65,127 @@ class CancelOnlyRunner:
         while not cancelled():
             tick.wait(0.01)
         raise FluxoMvpCanceladoError("Cancelada em ponto seguro")
+
+
+@pytest.mark.integration
+def test_http_and_direct_search_filter_globally_before_pagination(tmp_path: Path) -> None:
+    settings = ServerSettings(
+        password=PASSWORD,
+        market_sqlserver_connection_string="fixture-market-connection",
+        data_directory=tmp_path / "server-data",
+    )
+    runtime = compose_server_runtime(settings, market_classifier=FakeClassificadorMercado())
+    assert runtime.project_api is not None
+    seed = runtime.project_api.create_project("9000009999", "search-seed")
+    expected_ids = [UUID(int=index) for index in (1, 2, 3)]
+    with SqlAlchemyUnitOfWork(runtime.core.engine) as work:
+        project = work.projetos.obter(seed.project.project_id.root)
+        assert project is not None
+        for index in range(201):
+            work.projetos.salvar(
+                replace(
+                    project,
+                    id=uuid4(),
+                    nome=f"900000{index:04d}",
+                    criado_em=project.criado_em + timedelta(microseconds=index + 1),
+                )
+            )
+        # Inserção fora da ordem de ID e data empatada exercitam o desempate.
+        for index in (3, 1, 2):
+            work.projetos.salvar(
+                replace(
+                    project,
+                    id=UUID(int=index),
+                    nome=f"00123400{index:02d}",
+                    criado_em=project.criado_em + timedelta(seconds=1),
+                )
+            )
+        work.commit()
+
+    direct = DirectProjectGateway(runtime)
+    application = create_app(settings, runtime_factory=lambda _settings: runtime)
+    with _running_server(application) as base_url:
+        http = HttpProjectGateway(base_url, PASSWORD)
+        gateways: tuple[ProjectGateway, ...] = (direct, http)
+        for gateway in gateways:
+            first_page = gateway.list_projects()
+            assert first_page.page.total == 205
+            assert len(first_page.items) == 200
+            assert not set(expected_ids) & {item.project_id.root for item in first_page.items}
+            found_ids: list[UUID] = []
+            for offset in range(3):
+                found = gateway.search_projects("123400", limit=1, offset=offset)
+                assert found.page.total == 3
+                assert found.page.limit == 1
+                assert found.page.offset == offset
+                found_ids.extend(item.project_id.root for item in found.items)
+            assert found_ids == expected_ids
+            past_end = gateway.search_projects("123400", limit=1, offset=3)
+            assert past_end.items == ()
+            assert past_end.page.total == 3
+            empty = gateway.search_projects("888")
+            assert empty.items == ()
+            assert empty.page.total == 0
+            for query in ("0", "0012340001", "123400"):
+                assert gateway.search_projects(query) == direct.search_projects(query)
+            for query, limit, offset in (
+                ("", 200, 0),
+                ("\uff11\uff12", 200, 0),
+                ("1\n", 200, 0),
+                ("12345678901", 200, 0),
+                ("%", 200, 0),
+                ("0", 0, 0),
+                ("0", 201, 0),
+                ("0", 1, -1),
+            ):
+                with pytest.raises(ProjectGatewayError) as invalid:
+                    gateway.search_projects(query, limit=limit, offset=offset)
+                assert invalid.value.code is ErrorCode.VALIDATION_ERROR
+                assert invalid.value.status_code == 422
+
+        with pytest.raises(ProjectGatewayError) as unauthorized:
+            HttpProjectGateway(base_url, "incorrect").search_projects("0")
+        assert unauthorized.value.code is ErrorCode.AUTHENTICATION_FAILED
+        assert unauthorized.value.status_code == 401
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "failure", ("missing-route", "resource-envelope", "legacy-dynamic", "server")
+)
+def test_http_search_errors_never_become_absence(failure: str) -> None:
+    application = FastAPI()
+    expected_status = 404
+    expected_code = ErrorCode.INTERNAL_ERROR
+    if failure != "missing-route":
+        expected_status = (
+            500 if failure == "server" else 422 if failure == "legacy-dynamic" else 404
+        )
+        expected_code = (
+            ErrorCode.INTERNAL_ERROR
+            if failure == "server"
+            else ErrorCode.VALIDATION_ERROR
+            if failure == "legacy-dynamic"
+            else ErrorCode.RESOURCE_NOT_FOUND
+        )
+
+        @application.get("/api/v1/projects/search")
+        def unavailable() -> JSONResponse:
+            return JSONResponse(
+                status_code=expected_status,
+                content={
+                    "code": expected_code.value,
+                    "message": "Pesquisa indisponível",
+                    "correlation_id": str(UUID(int=1)),
+                    "details": None,
+                },
+            )
+
+    with _running_server(application) as base_url:
+        with pytest.raises(ProjectGatewayError) as error:
+            HttpProjectGateway(base_url, PASSWORD).search_projects("001")
+        assert error.value.status_code == expected_status
+        assert error.value.code is expected_code
 
 
 @pytest.mark.integration
@@ -381,4 +507,11 @@ def test_project_gateway_retries_reads_but_never_mutations(
     with pytest.raises(ProjectGatewayError) as transport:
         gateway.find_project_by_service_note("0000000011")
     assert transport.value.code is ErrorCode.INTERNAL_ERROR
+    assert attempts == ["GET", "GET"]
+
+    attempts.clear()
+    with pytest.raises(ProjectGatewayError) as search_transport:
+        gateway.search_projects("001")
+    assert search_transport.value.code is ErrorCode.INTERNAL_ERROR
+    assert search_transport.value.status_code is None
     assert attempts == ["GET", "GET"]

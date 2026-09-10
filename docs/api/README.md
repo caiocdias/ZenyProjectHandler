@@ -52,6 +52,36 @@ de outro projeto devolve `409 PROJECT_ALREADY_EXISTS`; `details` contém somente
 `service_note`. Replay com a mesma chave e o mesmo payload continua idempotente, enquanto uma chave
 nova não cria uma segunda NS.
 
+## Pesquisa de projetos por trecho de NS
+
+`GET /api/v1/projects/search?query=001&limit=50&offset=0` é uma operação autenticada,
+somente leitura, que retorna o DTO existente `ProjectSummaryListResponse` (`items` e `page`).
+`query` é obrigatório e aceita de 1 a 10 dígitos ASCII, sem espaços ou normalização numérica;
+zeros iniciais são preservados. Consulta vazia, letras, dígitos Unicode e mais de dez caracteres
+retornam `422 VALIDATION_ERROR`. Campo vazio deve usar a listagem existente `/projects`.
+
+A correspondência é por trecho em qualquer posição da NS, em todos os projetos. O SQLite filtra
+antes de contar e paginar; somente os IDs da página são carregados para projeção. A ordem é
+`created_at` crescente, com desempate por ID crescente. `limit` vai de 1 a 200 (padrão HTTP 50),
+`offset` é não negativo (padrão 0) e `page.total` conta somente as correspondências. Sem resultados,
+retorna `200` com `items=[]` e total zero; offset além do fim retorna lista vazia preservando o total.
+Com dados estáveis, páginas consecutivas não repetem IDs. Alterações entre requisições podem mudar
+o total e a composição das páginas; esta paginação não reserva um snapshot entre requisições.
+
+A adição mantém API `1.3.0`, piso negociado e schemas anteriores: não há migração de dados,
+novo enum ou campo obrigatório em respostas existentes. Clientes anteriores seguem usando as
+operações atuais. `ProjectGateway.search_projects(query, *, limit=200, offset=0)` propaga
+`ProjectGatewayError`; não converte falhas em lista vazia, `None` ou NS ausente.
+
+Servidor antigo sem a rota pode responder `404` (com ou sem envelope) ou `422` se sua rota dinâmica
+`/projects/{project_id}` interpretar `search` como UUID inválido. Ambos significam pesquisa
+indisponível. O cliente preserva status/código de erros com envelope; falha sem envelope usa
+`INTERNAL_ERROR` com o status recebido. Autenticação (`401`), falhas do servidor e timeout também
+continuam erros, distintos de uma pesquisa vazia. Não há fallback para filtrar os primeiros 200.
+A resolução exata existente pode continuar disponível; somente seu `404 RESOURCE_NOT_FOUND`
+confirma ausência exata. Mesmo uma pesquisa vazia ou com dez dígitos não substitui essa resolução.
+Consumo visual, debounce e apresentação de indisponibilidade pertencem à E02 do roadmap.
+
 ## Projeção GMAX
 
 `GET /api/v1/projects/{project_id}/gmax` devolve `GmaxSummaryResponse`, uma projeção autenticada e

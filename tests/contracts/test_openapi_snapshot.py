@@ -50,7 +50,7 @@ def test_openapi_covers_every_minimum_group_and_expected_operation() -> None:
     assert schema["info"]["version"] == API_VERSION
     assert schema["openapi"].startswith("3.1.")
     assert API_VERSION == "1.3.0"
-    assert len(operations) == 56
+    assert len(operations) == 57
 
 
 def test_review_contract_exposes_closed_span_type_change_and_endpoint_points() -> None:
@@ -173,6 +173,26 @@ def test_exact_service_note_operation_and_project_conflict_are_additive() -> Non
     assert parameter["required"] is True
     assert parameter["schema"]["pattern"] == "^[0-9]{10}$"
     assert "PROJECT_ALREADY_EXISTS" in schema["components"]["schemas"]["ErrorCode"]["enum"]
+
+
+def test_search_operation_is_additive_strict_and_paginated() -> None:
+    schema = build_openapi_schema()
+    operation = schema["paths"]["/api/v1/projects/search"]["get"]
+    parameters = {item["name"]: item for item in operation["parameters"]}
+    assert operation["operationId"] == "searchProjects"
+    assert operation["responses"]["200"]["content"]["application/json"]["schema"] == {
+        "$ref": "#/components/schemas/ProjectSummaryListResponse"
+    }
+    assert set(parameters) == {"query", "limit", "offset"}
+    assert all(item["in"] == "query" for item in parameters.values())
+    assert parameters["query"]["required"] is True
+    assert parameters["query"]["schema"]["type"] == "string"
+    assert parameters["query"]["schema"]["pattern"] == "^[0-9]{1,10}$"
+    assert parameters["limit"]["schema"]["default"] == 50
+    assert parameters["limit"]["schema"]["minimum"] == 1
+    assert parameters["limit"]["schema"]["maximum"] == 200
+    assert parameters["offset"]["schema"]["default"] == 0
+    assert parameters["offset"]["schema"]["minimum"] == 0
 
 
 def test_gmax_operation_exposes_closed_read_model() -> None:

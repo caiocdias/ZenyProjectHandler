@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
@@ -12,7 +13,7 @@ from uuid import UUID, uuid5
 
 from fastapi import UploadFile
 from pydantic import BaseModel
-from sqlalchemy import Engine, select
+from sqlalchemy import Engine, func, select
 
 from zeny_project_handler.adapters.pdf.errors import PdfProtegidoError
 from zeny_project_handler.adapters.pdf.pymupdf_reader import PyMuPdfReader
@@ -200,6 +201,29 @@ class ProjectApiService:
         return ProjectSummaryListResponse(
             items=items,
             page=PageMetadataDto(limit=limit, offset=offset, total=len(snapshots)),
+        )
+
+    def search_projects(self, query: str, *, limit: int, offset: int) -> ProjectSummaryListResponse:
+        if re.fullmatch(r"[0-9]{1,10}", query) is None:
+            raise validation_error("A pesquisa deve conter de 1 a 10 dígitos ASCII.")
+        if not 1 <= limit <= 200 or offset < 0:
+            raise validation_error("A paginação da pesquisa está fora dos limites permitidos.")
+        matches = projects.c.name.contains(query)
+        with self._engine.connect() as connection:
+            total = connection.scalar(select(func.count()).select_from(projects).where(matches))
+            project_ids = tuple(
+                UUID(value)
+                for value in connection.scalars(
+                    select(projects.c.id)
+                    .where(matches)
+                    .order_by(projects.c.created_at, projects.c.id)
+                    .limit(limit)
+                    .offset(offset)
+                )
+            )
+        return ProjectSummaryListResponse(
+            items=tuple(self._project_summary(self._snapshot(item)) for item in project_ids),
+            page=PageMetadataDto(limit=limit, offset=offset, total=total or 0),
         )
 
     def create_project(self, service_note: str, idempotency_key: str) -> ProjectDetailResponse:

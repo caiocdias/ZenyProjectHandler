@@ -64,6 +64,10 @@ class ProjectGateway(Protocol):
 
     def list_projects(self, *, limit: int = 200, offset: int = 0) -> ProjectSummaryListResponse: ...
 
+    def search_projects(
+        self, query: str, *, limit: int = 200, offset: int = 0
+    ) -> ProjectSummaryListResponse: ...
+
     def create_project(
         self,
         service_note: str,
@@ -185,6 +189,17 @@ class HttpProjectGateway:
         return self._json_model(
             "GET",
             f"{API_V1_PREFIX}/projects?{query}",
+            None,
+            ProjectSummaryListResponse,
+        )
+
+    def search_projects(
+        self, query: str, *, limit: int = 200, offset: int = 0
+    ) -> ProjectSummaryListResponse:
+        parameters = urlencode({"query": query, "limit": limit, "offset": offset})
+        return self._json_model(
+            "GET",
+            f"{API_V1_PREFIX}/projects/search?{parameters}",
             None,
             ProjectSummaryListResponse,
         )

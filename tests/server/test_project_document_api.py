@@ -98,6 +98,11 @@ def test_service_note_exact_resolution_and_historical_ambiguity(tmp_path: Path) 
         assert outside_first_page.status_code == 200
         assert outside_first_page.json()["project"]["service_note"] == "0000000199"
 
+        searched = client.get("/api/v1/projects/search", params={"query": "0199"}, headers=AUTH)
+        assert searched.status_code == 200
+        assert searched.json()["page"] == {"limit": 50, "offset": 0, "total": 1}
+        assert [item["service_note"] for item in searched.json()["items"]] == ["0000000199"]
+
         with SqlAlchemyUnitOfWork(runtime.core.engine) as work:
             project = work.projetos.obter(project_id)
             assert project is not None
@@ -109,6 +114,58 @@ def test_service_note_exact_resolution_and_historical_ambiguity(tmp_path: Path) 
         assert ambiguous.json()["code"] == "INTEGRITY_ERROR"
         assert ambiguous.json()["details"] is None
         assert str(project_id) not in ambiguous.text
+
+
+def test_project_search_validates_query_pagination_and_distinguishes_empty_results(
+    tmp_path: Path,
+) -> None:
+    application = create_app(_settings(tmp_path / "server-data"))
+    with TestClient(application) as client:
+        route = "/api/v1/projects/search"
+        _create_project(client)
+        for query in ("0", "0001234567", "012345"):
+            found = client.get(route, params={"query": query}, headers=AUTH)
+            assert found.status_code == 200
+            assert found.json()["items"][0]["service_note"] == "0001234567"
+        for query in (
+            "",
+            "12345678901",
+            "a",
+            "\uff11\uff12",
+            "\u0661\u0662",
+            " 1",
+            "1 ",
+            "1\n",
+            "%",
+            "_",
+            "+1",
+        ):
+            invalid = client.get(route, params={"query": query}, headers=AUTH)
+            assert invalid.status_code == 422, query
+            assert invalid.json()["code"] == "VALIDATION_ERROR"
+        for params in (
+            {},
+            {"query": "0", "limit": "0"},
+            {"query": "0", "limit": "201"},
+            {"query": "0", "limit": "abc"},
+            {"query": "0", "offset": "-1"},
+            {"query": "0", "offset": "1.5"},
+        ):
+            invalid = client.get(route, params=params, headers=AUTH)
+            assert invalid.status_code == 422
+            assert invalid.json()["code"] == "VALIDATION_ERROR"
+
+        empty = client.get(route, params={"query": "999"}, headers=AUTH)
+        assert empty.status_code == 200
+        assert empty.json() == {"items": [], "page": {"limit": 50, "offset": 0, "total": 0}}
+        past_end = client.get(route, params={"query": "0", "offset": 1}, headers=AUTH)
+        assert past_end.status_code == 200
+        assert past_end.json() == {"items": [], "page": {"limit": 50, "offset": 1, "total": 1}}
+        unauthorized = client.get(
+            route, params={"query": "0"}, headers={"Authorization": "Bearer incorrect"}
+        )
+        assert unauthorized.status_code == 401
+        assert unauthorized.json()["code"] == "AUTHENTICATION_FAILED"
 
 
 def test_project_service_note_conflict_replay_rename_and_safe_details(tmp_path: Path) -> None:
@@ -572,6 +629,7 @@ def test_restart_expires_abandoned_protected_upload_without_orphan(tmp_path: Pat
     ("method", "path"),
     (
         ("GET", "/api/v1/projects"),
+        ("GET", "/api/v1/projects/search?query=0"),
         ("POST", "/api/v1/projects"),
         ("GET", "/api/v1/projects/by-service-note/0001234567"),
         ("GET", f"/api/v1/projects/{uuid4()}"),

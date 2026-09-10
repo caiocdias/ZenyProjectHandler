@@ -290,6 +290,20 @@ def create_app(
     ) -> ProjectSummaryListResponse:
         return _project_api(request).list_projects(limit=limit, offset=offset)
 
+    @application.get(
+        f"{API_V1_PREFIX}/projects/search",
+        response_model=ProjectSummaryListResponse,
+        dependencies=protected,
+        include_in_schema=False,
+    )
+    async def search_projects(
+        request: Request,
+        query: Annotated[str, Query(pattern=r"^[0-9]{1,10}$")],
+        limit: int = Query(default=50, ge=1, le=200),
+        offset: int = Query(default=0, ge=0),
+    ) -> ProjectSummaryListResponse:
+        return _project_api(request).search_projects(query, limit=limit, offset=offset)
+
     @application.post(
         f"{API_V1_PREFIX}/projects",
         status_code=status.HTTP_201_CREATED,
