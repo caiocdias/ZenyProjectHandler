@@ -317,7 +317,7 @@ def test_execution_is_deterministic_preserves_history_and_survives_restart(
     first = service.executar(project_id)
     repeated = service.executar(project_id)
 
-    assert VERSAO_METODO_CONFORMIDADE == "13"
+    assert VERSAO_METODO_CONFORMIDADE == "14"
     assert first.versao_metodo == VERSAO_METODO_CONFORMIDADE
     assert repeated.id == first.id
     assert dumps_domain(repeated) == dumps_domain(first)
@@ -1065,7 +1065,17 @@ def test_gmax_prioritizes_current_ns_block_and_hides_previous_results(
     engine.dispose()
 
 
-@pytest.mark.parametrize("inconsistency", ["market", "action"])
+@pytest.mark.parametrize(
+    "inconsistency",
+    [
+        "market",
+        "action",
+        "classification_missing",
+        "classification_invalid",
+        "classification_mismatch",
+        "both_without_classification",
+    ],
+)
 def test_gmax_fails_closed_for_impossible_snapshot_cardinality(
     tmp_path: Path,
     catalogo_inicial: CatalogoTecnico,
@@ -1086,13 +1096,35 @@ def test_gmax_fails_closed_for_impossible_snapshot_cardinality(
             item for item in execution.fatos if item.chave.startswith("rede.contexto_")
         )
         invalid_facts = (*execution.fatos, market_fact)
-    else:
+    elif inconsistency == "action":
         action_fact = next(
             item
             for item in execution.fatos
             if item.chave == "projeto.acao_avaliar_impacto_ambiental_concluida"
         )
         invalid_facts = (*execution.fatos, action_fact)
+    elif inconsistency == "classification_missing":
+        invalid_facts = tuple(
+            item for item in execution.fatos if item.chave != "projeto.mercado_banco"
+        )
+    elif inconsistency in {"classification_invalid", "classification_mismatch"}:
+        invalid_facts = tuple(
+            replace(item, valor="INVALID" if inconsistency == "classification_invalid" else "AMBOS")
+            if item.chave == "projeto.classificacao_efetiva"
+            else item
+            for item in execution.fatos
+        )
+    else:
+        market_fact = next(item for item in execution.fatos if item.chave == "rede.contexto_urbano")
+        invalid_facts = (
+            *tuple(
+                item
+                for item in execution.fatos
+                if not item.chave.startswith("projeto.classificacao_")
+                and item.chave != "projeto.mercado_banco"
+            ),
+            replace(market_fact, id=uuid4(), chave="rede.contexto_rural"),
+        )
     invalid_execution = replace(execution, fatos=invalid_facts)
     monkeypatch.setattr(service, "obter_ultima", lambda _project_id: invalid_execution)
     gateway = _gmax_gateway(engine, tmp_path / "data", service, registry)

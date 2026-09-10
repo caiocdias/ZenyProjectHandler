@@ -49,7 +49,7 @@ def test_openapi_covers_every_minimum_group_and_expected_operation() -> None:
     } <= tags
     assert schema["info"]["version"] == API_VERSION
     assert schema["openapi"].startswith("3.1.")
-    assert API_VERSION == "1.3.0"
+    assert API_VERSION == "1.4.0"
     assert len(operations) == 59
 
 
@@ -98,6 +98,17 @@ def test_market_contract_is_additive_closed_and_versioned() -> None:
     assert classification["database_market"]["enum"] == ["RURAL", "URBANO"]
     assert classification["source"]["enum"] == ["SQL", "MANUAL"]
     assert "classification" not in schemas["ProjectDetailDto"]["properties"]
+
+
+def test_snapshot_classification_and_both_are_exposed_without_fictitious_database_market() -> None:
+    schemas = build_openapi_schema()["components"]["schemas"]
+    assert schemas["GmaxMarket"]["enum"] == ["RURAL", "URBANO", "AMBOS"]
+    for name in ("GmaxSummaryResponse", "ComplianceExecutionSummaryDto"):
+        assert schemas[name]["properties"]["classification"]["anyOf"] == [
+            {"$ref": "#/components/schemas/ProjectMarketClassificationDto"},
+            {"type": "null"},
+        ]
+        assert "classification" not in schemas[name]["required"]
 
 
 def test_mutations_expose_error_envelope_idempotency_and_job_semantics() -> None:

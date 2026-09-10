@@ -385,17 +385,23 @@ def test_explicit_compliance_job_uses_external_market_once_and_persists_snapshot
         signature = runtime.compliance_api.semantic_signature(project_id)
         both_job = client.post(
             f"/api/v1/projects/{project_id}/compliance-jobs",
-            headers={**AUTH, "Idempotency-Key": "both-refused"},
+            headers={**AUTH, "Idempotency-Key": "both-evaluated"},
             json={"expected_semantic_signature": signature},
         )
         assert both_job.status_code == 202
-        failed = _wait_status(client, both_job.json()["job_id"], JobStatus.FAILED)
-        error = cast(dict[str, object], failed["error"])
-        assert error["code"] == "VALIDATION_ERROR"
-        assert "Ambos" in str(error["message"]) and "E03" in str(error["message"])
-        assert failed["result_available"] is False
-        assert runtime.compliance_api.analysis_service.obter_ultima(project_id) == execution
-        assert client.get(f"/api/v1/projects/{project_id}/gmax", headers=AUTH).json()["is_stale"]
+        completed = _wait_status(client, both_job.json()["job_id"], JobStatus.SUCCEEDED)
+        assert completed["result_available"] is True
+        both = runtime.compliance_api.analysis_service.obter_ultima(project_id)
+        assert both is not None and both.id != execution.id
+        assert {item.chave for item in both.fatos if item.chave.startswith("rede.contexto_")} == {
+            "rede.contexto_rural",
+            "rede.contexto_urbano",
+        }
+        summary = client.get(f"/api/v1/projects/{project_id}/gmax", headers=AUTH).json()
+        assert not summary["is_stale"]
+        assert summary["market"] == "AMBOS"
+        assert summary["classification"] == saved.json()["classification"]
+        assert runtime.compliance_api.analysis_service.listar_historico(project_id)[0] == execution
         assert classifier.consultas == ["0001234567"]
 
 

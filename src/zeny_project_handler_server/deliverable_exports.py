@@ -347,7 +347,7 @@ def _documentation_sheet(documentation: DocumentationResponse) -> WorksheetData:
 def _compliance_sheets(
     result: ComplianceExecutionResponse | None,
     registry: ActiveRuleRegistryResponse,
-) -> tuple[WorksheetData, WorksheetData]:
+) -> tuple[WorksheetData, ...]:
     finding_rows = (
         tuple(
             (
@@ -426,7 +426,37 @@ def _compliance_sheets(
             ),
             rule_rows,
         ),
+        _compliance_context_sheet(result),
     )
+
+
+def _compliance_context_sheet(result: ComplianceExecutionResponse | None) -> WorksheetData:
+    rows: list[tuple[str, ...]] = []
+    if result is not None:
+        execution = result.execution
+        rows.extend(
+            (
+                ("Execução", str(execution.execution_id.root)),
+                ("Método", execution.method_version),
+                ("Assinatura", execution.semantic_signature),
+                ("Desatualizado", "Sim" if execution.is_stale else "Não"),
+            )
+        )
+        classification = execution.classification
+        if classification is not None:
+            rows.extend(
+                (
+                    ("NS da classificação", classification.service_note),
+                    ("Mercado inicial do banco", classification.database_market),
+                    ("Classificação efetiva", classification.effective_market),
+                    ("Origem", classification.source),
+                    ("Revisão da classificação", str(classification.revision_id)),
+                    ("Versão da classificação", str(classification.classification_version)),
+                    ("Inicializada em", classification.initialized_at.isoformat()),
+                    ("Alterada em", classification.updated_at.isoformat()),
+                )
+            )
+    return WorksheetData("Contexto da execução", ("Campo", "Valor"), tuple(rows))
 
 
 def _callout_positions(

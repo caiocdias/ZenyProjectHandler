@@ -274,6 +274,7 @@ def _market_text(summary: GmaxSummaryResponse) -> str:
         label = {
             GmaxMarket.RURAL: "Rural",
             GmaxMarket.URBANO: "Urbano",
+            GmaxMarket.AMBOS: "Ambos",
         }[summary.market]
         if summary.snapshot_state is GmaxSnapshotState.STALE:
             return f"{label} — última execução, resultado desatualizado"

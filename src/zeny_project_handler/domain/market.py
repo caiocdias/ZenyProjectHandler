@@ -21,6 +21,13 @@ class ClassificacaoMercado(StrEnum):
     URBANO = "URBANO"
     AMBOS = "AMBOS"
 
+    @property
+    def contextos(self) -> tuple[Mercado, ...]:
+        """Famílias aplicáveis ao projeto inteiro, sem precedência normativa."""
+        if self is ClassificacaoMercado.AMBOS:
+            return (Mercado.RURAL, Mercado.URBANO)
+        return (Mercado(self.value),)
+
 
 class OrigemClassificacao(StrEnum):
     SQL = "SQL"

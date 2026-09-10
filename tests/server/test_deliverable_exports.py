@@ -5,7 +5,7 @@ from io import BytesIO
 from pathlib import Path
 from time import monotonic, sleep
 from typing import cast
-from uuid import uuid4
+from uuid import UUID, uuid4
 from xml.etree import ElementTree
 from zipfile import ZipFile
 
@@ -230,7 +230,11 @@ def test_server_generates_pdf_and_three_real_xlsx_deliverables(tmp_path: Path) -
             "COMPLIANCE_XLSX",
         )
         assert str(compliance_metadata["mime_type"]).endswith("spreadsheetml.sheet")
-        assert _sheet_names(compliance_content) == ("Conformidade", "Regras")
+        assert _sheet_names(compliance_content) == (
+            "Conformidade",
+            "Regras",
+            "Contexto da execução",
+        )
 
         analysis = client.post(
             f"/api/v1/projects/{project_id}/analysis-jobs",
@@ -241,6 +245,60 @@ def test_server_generates_pdf_and_three_real_xlsx_deliverables(tmp_path: Path) -
         _wait_job(client, str(analysis.json()["job_id"]))
         current = client.get(f"/api/v1/projects/{project_id}", headers=AUTH)
         analyzed_version = int(current.json()["project"]["project_version"])
+
+        assert runtime.compliance_api is not None
+        # Inicializar pelo mesmo job público e depois editar Ambos com versão atual.
+        compliance = client.post(
+            f"/api/v1/projects/{project_id}/compliance-jobs",
+            headers={**AUTH, "Idempotency-Key": "deliverable-compliance-initial"},
+            json={
+                "expected_semantic_signature": runtime.compliance_api.semantic_signature(
+                    UUID(project_id)
+                )
+            },
+        )
+        assert compliance.status_code == 202, compliance.text
+        _wait_job(client, str(compliance.json()["job_id"]))
+        market_route = f"/api/v1/projects/{project_id}/market"
+        initial = client.get(market_route, headers=AUTH).json()
+        edited = client.put(
+            market_route,
+            headers=AUTH,
+            json={
+                "expected_project_version": initial["project_version"],
+                "effective_market": "AMBOS",
+            },
+        )
+        assert edited.status_code == 200, edited.text
+        analyzed_version = edited.json()["project_version"]
+        _, old_export = _create_export(client, project_id, analyzed_version, "COMPLIANCE_XLSX")
+        assert ("Desatualizado", "Sim") in _sheet_rows(old_export, 3)
+        assert ("Classificação efetiva", "URBANO") in _sheet_rows(old_export, 3)
+        compliance = client.post(
+            f"/api/v1/projects/{project_id}/compliance-jobs",
+            headers={**AUTH, "Idempotency-Key": "deliverable-compliance-both"},
+            json={
+                "expected_semantic_signature": runtime.compliance_api.semantic_signature(
+                    UUID(project_id)
+                )
+            },
+        )
+        assert compliance.status_code == 202, compliance.text
+        _wait_job(client, str(compliance.json()["job_id"]))
+        latest = client.get(f"/api/v1/projects/{project_id}/compliance/latest", headers=AUTH)
+        assert latest.status_code == 200, latest.text
+        _, combined_export = _create_export(client, project_id, analyzed_version, "COMPLIANCE_XLSX")
+        context_rows = _sheet_rows(combined_export, 3)
+        assert ("Desatualizado", "Não") in context_rows
+        assert ("Classificação efetiva", "AMBOS") in context_rows
+        assert ("Mercado inicial do banco", "URBANO") in context_rows
+        assert ("Origem", "MANUAL") in context_rows
+        assert ("Método", "14") in context_rows
+        rows = _sheet_rows(combined_export, 1)[1:]
+        assert {row[12] for row in rows} == {
+            item["finding_id"] for item in latest.json()["findings"]
+        }
+        assert len(rows) == len(latest.json()["findings"])
 
         _results_metadata, results_content = _create_export(
             client,

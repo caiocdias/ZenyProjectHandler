@@ -11,7 +11,7 @@ from uuid import UUID, uuid5
 from zeny_project_handler.domain.analysis import EvidenciaDocumento
 from zeny_project_handler.domain.catalog import JsonPrimitive
 from zeny_project_handler.domain.compliance import AlvoConformidade, FatoConformidade
-from zeny_project_handler.domain.market import DescricaoAcao, Mercado
+from zeny_project_handler.domain.market import ClassificacaoMercado, DescricaoAcao, Mercado
 from zeny_project_handler.domain.values import GeometriaDocumento
 
 from .human_review import SessaoRevisao
@@ -81,7 +81,7 @@ class ContextoProvedorFatos:
 
     sessao: SessaoRevisao
     alvos: tuple[AlvoConformidade, ...]
-    mercado: Mercado
+    mercado: ClassificacaoMercado | Mercado
     acoes_projeto: ContextoAcoesProjeto | None = None
 
 

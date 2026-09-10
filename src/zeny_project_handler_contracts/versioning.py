@@ -1,8 +1,8 @@
 """Versão e política de compatibilidade da API pública."""
 
-API_VERSION = "1.3.0"
+API_VERSION = "1.4.0"
 API_V1_PREFIX = "/api/v1"
-MIN_COMPATIBLE_API_VERSION = "1.3.0"
+MIN_COMPATIBLE_API_VERSION = "1.4.0"
 MAX_COMPATIBLE_API_VERSION = "1.999.999"
 API_COMPATIBILITY_POLICY = (
     "Compatibilidade é preservada dentro da versão principal v1 pela faixa negociada. Campos "

@@ -20,9 +20,9 @@ from zeny_project_handler.adapters.persistence.domain_json import dumps_domain
 from zeny_project_handler.adapters.persistence.errors import PersistenceConflictError
 from zeny_project_handler.adapters.persistence.schema import projects
 from zeny_project_handler.application.compliance_analysis import ExecutarAnaliseConformidade
+from zeny_project_handler.application.errors import NotaServicoCabecalhoDivergenteError
 from zeny_project_handler.application.human_review import ServicoRevisaoHumana
 from zeny_project_handler.domain.catalog import CatalogoTecnico
-from zeny_project_handler.domain.errors import DomainValidationError
 from zeny_project_handler.domain.market import ClassificacaoMercado, Mercado
 from zeny_project_handler.ports.market import DependenciaAcoesError, DependenciaMercadoError
 
@@ -52,7 +52,7 @@ def test_initial_failure_retry_legacy_copy_and_restart(
     classifier.erro = None
     first = service.executar(project_id)
     assert not service.resultado_desatualizado(first)
-    assert service.resultado_desatualizado(replace(first, versao_metodo="12"))
+    assert service.resultado_desatualizado(replace(first, versao_metodo="13"))
     assert classifier.consultas == [legacy.nome] * 2
     engine.dispose()
 
@@ -80,7 +80,7 @@ def test_initial_failure_retry_legacy_copy_and_restart(
             reopened.dispose()
 
 
-def test_choices_mark_snapshots_stale_and_both_refuses_evaluation(
+def test_choices_mark_snapshots_stale_and_evaluate_without_rewriting_history(
     tmp_path: Path,
     catalogo_inicial: CatalogoTecnico,
 ) -> None:
@@ -100,6 +100,7 @@ def test_choices_mark_snapshots_stale_and_both_refuses_evaluation(
         ClassificacaoMercado.URBANO,
         ClassificacaoMercado.AMBOS,
     ):
+        previous_classification = gateway.get_gmax(project_id).classification
         with SqlAlchemyUnitOfWork(engine) as work:
             project = work.projetos.obter(project_id)
             assert project is not None and project.classificacao_mercado is not None
@@ -115,19 +116,50 @@ def test_choices_mark_snapshots_stale_and_both_refuses_evaluation(
             work.commit()
         assert service.resultado_desatualizado(first)
         assert gateway.get_gmax(project_id).is_stale
-        if choice is ClassificacaoMercado.AMBOS:
-            history = service.listar_historico(project_id)
-            with pytest.raises(DomainValidationError, match=r"Ambos.*E03"):
-                service.executar(project_id)
-            assert service.listar_historico(project_id) == history
-        else:
-            result = service.executar(project_id)
-            assert result.id != first.id
-            assert not service.resultado_desatualizado(result)
-            assert not gateway.get_gmax(project_id).is_stale
-    assert len(verifier.consultas) == 3
+        assert gateway.get_gmax(project_id).classification == previous_classification
+        result = service.executar(project_id)
+        assert result.id != first.id
+        assert not service.resultado_desatualizado(result)
+        summary = gateway.get_gmax(project_id)
+        assert not summary.is_stale
+        assert summary.market is not None and summary.market.value == choice.value
+        assert summary.classification is not None
+        assert summary.classification.database_market == "URBANO"
+        assert summary.classification.effective_market == choice.value
+        assert summary.classification.source == "MANUAL"
+    assert len(verifier.consultas) == 4
     assert len(classifier.consultas) == 1
     assert dumps_domain(service.listar_historico(project_id)[0]) == first_payload
+    engine.dispose()
+
+
+def test_legacy_snapshot_projects_original_context_without_inventing_provenance(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    engine, project_id, service, registry, _ = _prepare_context(tmp_path, catalogo_inicial)
+    current = service.executar(project_id)
+    legacy = replace(
+        current,
+        versao_metodo="12",
+        fatos=tuple(
+            item
+            for item in current.fatos
+            if not item.chave.startswith("projeto.classificacao_")
+            and item.chave != "projeto.mercado_banco"
+        ),
+    )
+    original = dumps_domain(legacy)
+    monkeypatch.setattr(service, "obter_ultima", lambda _: legacy)
+    gateway = _gmax_gateway(engine, tmp_path, service, registry)
+    summary = gateway.get_gmax(project_id)
+    assert summary.is_stale
+    assert summary.market is not None and summary.market.value == "URBANO"
+    assert summary.classification is None
+    latest = gateway.get_latest_compliance(project_id)
+    assert latest is not None and latest.execution.classification is None
+    assert dumps_domain(legacy) == original
     engine.dispose()
 
 
@@ -170,6 +202,61 @@ def test_successful_initialization_survives_action_failure(
     service.executar(project_id)
     assert len(classifier.consultas) == 1
     assert len(verifier.consultas) == 2
+    engine.dispose()
+
+
+@pytest.mark.parametrize("failure", ["action", "header"])
+def test_both_preserves_guards_and_does_not_publish_partial_snapshot(
+    tmp_path: Path,
+    catalogo_inicial: CatalogoTecnico,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    verifier = FakeVerificadorAcoesConcluidas(resultado=True)
+    engine, project_id, service, _, classifier = _prepare_context(
+        tmp_path,
+        catalogo_inicial,
+        codigos_servico=("0007",),
+        extra_evidence=(("Impacto Ambiental: Sim", "0.70", "0.88"),),
+        action_verifier=verifier,
+    )
+    first = service.executar(project_id)
+    with SqlAlchemyUnitOfWork(engine) as work:
+        project = work.projetos.obter(project_id)
+        assert project is not None and project.classificacao_mercado is not None
+        updated = replace(
+            project,
+            classificacao_mercado=project.classificacao_mercado.editar(
+                ClassificacaoMercado.AMBOS,
+                _NOW,
+            ),
+        )
+        work.projetos.salvar(updated)
+        work.commit()
+    if failure == "action":
+        verifier.erro = DependenciaAcoesError("Falha nas ações em Ambos")
+        with pytest.raises(DependenciaAcoesError):
+            service.executar(project_id)
+        assert len(verifier.consultas) == 2
+    else:
+        review = ServicoRevisaoHumana(lambda: SqlAlchemyUnitOfWork(engine))
+        session = review.carregar_sessao_semantica(project_id)
+        header = session.evidencias[0]
+        session = replace(
+            session,
+            evidencias=(
+                replace(header, conteudo_bruto="NS: 9999999999"),
+                *session.evidencias[1:],
+            ),
+        )
+        monkeypatch.setattr(service, "_load_semantic_session", lambda _: session)
+        with pytest.raises(NotaServicoCabecalhoDivergenteError):
+            service.executar(project_id)
+        assert len(verifier.consultas) == 1
+    assert service.listar_historico(project_id) == (first,)
+    assert classifier.consultas == ["0012345678"]
+    with SqlAlchemyUnitOfWork(engine) as work:
+        assert work.projetos.obter(project_id) == updated
     engine.dispose()
 
 

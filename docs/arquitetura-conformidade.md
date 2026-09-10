@@ -4,7 +4,7 @@
 
 O motor compara fatos rastreáveis do projeto com regras declarativas sem transformar ausência de
 evidência em certeza. A revisão distribuída atual é `cemig-normas-distribuicao-2026.1`, com 42 regras
-habilitadas, e o método de conformidade está na versão `13`.
+habilitadas, e o método de conformidade está na versão `14`.
 
 O [catálogo de regras](catalogo-regras-conformidade.md) documenta obrigações e fontes. O
 [inventário normativo](inventario-fontes-normativas.md) registra documentos, revisões, hashes e
@@ -22,7 +22,7 @@ Projeto + sessão semântica persistida
  comparação com a NS do projeto; divergência encerra sem SQL/snapshot
                 |
                 v
- inicialização SQL se ausente; classificação efetiva persistida (Ambos bloqueado até E03)
+ inicialização SQL se ausente; classificação efetiva persistida (Rural, Urbano ou união em Ambos)
                 |
                 v
  detecção de impacto/servidão nos fatos do PDF
@@ -72,8 +72,18 @@ banco, escolha efetiva, origem, instantes, versão e UUID de revisão. Edições
 inicial e geram nova revisão, mesmo ao escolher o mesmo valor. Trocar NS remove o estado; um
 ciclo novo recebe nova identidade inclusive quando volta à NS anterior. Erros de mercado não
 salvam defaults; a próxima análise tenta novamente. Falha posterior de ação ou cancelamento
-não apaga uma inicialização válida. Ambos é exclusivo da escolha e sua avaliação é recusada
-antes dos provedores, sem selecionar família por default, até E03.
+não apaga uma inicialização válida. Ambos é exclusivo da escolha e ativa as duas famílias
+no projeto inteiro, sem delimitação geográfica nem precedência entre normas.
+
+`ClassificacaoMercado.contextos` fornece pertencimento explícito às famílias. O analisador
+prioriza a classificação persistida quando presente e fornece uma só entrada aos provedores.
+Projeto e regiões recebem os dois fatos positivos em Ambos; o provedor de transformador em
+poste existente verifica a presença do contexto urbano, sem produzir um falso impeditivo
+rural. Os demais provedores de documento, vão e topologia são independentes do mercado.
+O avaliador percorre cada regra/alvo uma vez: regras comuns não duplicam; achados de regras
+distintas preservam identidade, fonte e condições mesmo com resultados divergentes. Guardas,
+exceções, não avaliável e exclusões de ramais permanecem no catálogo e nos provedores existentes.
+Nenhuma regra ou referência normativa foi acrescentada ou alterada nesta etapa.
 
 As mutações HTTP e jobs compartilham o coordenador global existente. O caso de uso serializa
 suas chamadas diretas; a gravação inicial compara o agregado esperado e aplica CAS sobre o
@@ -321,10 +331,22 @@ Os checks são fixos e ordenados: impacto ambiental (`AVALIAR IMPACTO AMBIENTAL`
 (`FALTA SERVIDÃO`). O fato positivo do gatilho e a presença de códigos distinguem
 `NOT_EXECUTED_NO_TRIGGER` e `NOT_EXECUTED_NO_SERVICE_CODES`. Somente gatilho mais códigos exige um
 único fato booleano da ação e produz `EXECUTED`, com `row_found=false` para zero linha ou `true`
-para uma ou mais linhas. Nos demais estados `row_found` é nulo. Mercado exige exatamente um fato
-verdadeiro `rede.contexto_rural` ou `rede.contexto_urbano` no alvo do projeto; alvo, mercado ou
-resultado com cardinalidade impossível devolve `INTEGRITY_ERROR`, sem fallback para fatos regionais
-ou metadados.
+para uma ou mais linhas. Nos demais estados `row_found` é nulo. Mercado exige um fato verdadeiro
+por família aplicável no alvo do projeto: Rural/Urbano têm um, Ambos tem os dois, sem duplicatas.
+A combinação deve concordar com `classification.effective_market`. `classification` transporta
+os fatos de proveniência do snapshot (banco, efetivo, origem, NS, revisão, versão e instantes),
+nunca valores do agregado atual sobrepostos ao histórico. Snapshots anteriores a E02 mantêm
+`classification=null` e o contexto original, sem inferir proveniência; método 13 ou anterior
+fica stale diante do método 14. Proveniência parcial/inválida ou cardinalidade impossível
+devolve `INTEGRITY_ERROR`, sem fallback para fatos regionais ou metadados. No bloqueio por NS
+ou ausência de execução, `classification` também é nulo.
+
+Os resumos de conformidade e histórico incluem a mesma `classification` opcional. A exportação
+XLSX mantém achados e regras e acrescenta Contexto da execução com versão do método, assinatura,
+identidade, estado stale e proveniência. Os achados/callouts continuam derivados do snapshot,
+sem regravação de execuções antigas. API e piso negociado 1.4.0 protegem clientes anteriores
+ao novo valor fechado `GmaxMarket.AMBOS`; o rótulo básico Ambos já é reconhecido pelo cliente.
+O seletor e a apresentação completa de proveniência na UI permanecem em E04.
 
 ## Callouts e interface
 

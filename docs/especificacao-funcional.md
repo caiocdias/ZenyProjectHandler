@@ -328,9 +328,12 @@ SQL é persistida com NS e instante; falha inicial mantém o estado vazio e perm
 próxima análise. A API de mercado permite editar a escolha efetiva para Rural/Urbano/Ambos,
 com origem MANUAL, revisão e conflito de versão, preservando o valor recebido do banco.
 Reabrir e reanalisar não sobrescrevem a escolha. Alterar NS invalida a classificação, mesmo
-ao voltar à NS anterior. O seletor Qt pertence a E04; até E03, salvar Ambos é permitido, mas
-avaliá-lo termina com erro explícito sem resultado parcial. Uma inicialização bem-sucedida
-permanece salva mesmo quando uma verificação posterior falha.
+ao voltar à NS anterior. O seletor Qt pertence a E04. Ambos avalia a união das regras rurais
+e urbanas em todo o projeto, respeitando suas guardas e evidências; regra comum não duplica
+achado, e regras distintas conservam suas fontes mesmo quando os resultados divergem. Não há
+precedência normativa automática. Uma inicialização bem-sucedida permanece salva mesmo quando
+uma verificação posterior falha. GMAX e resumos mostram a proveniência da classificação do
+snapshot; a exportação de conformidade inclui Contexto da execução e sinaliza desatualização.
 
 `Impacto Ambiental: Sim` é gatilho somente quando o rótulo aparece na zona de cabeçalho e o valor
 normalizado é exatamente `SIM`. Uma menção positiva aceita a `SERVIDÃO`, `FAIXA DE SERVIDÃO` ou

@@ -34,7 +34,7 @@ apresenta os DTOs e rasters recebidos pela API autenticada.
 - Motor declarativo de conformidade executado no servidor, com quatro famílias de provedores de
   fatos, snapshots persistidos e callouts normalizados compilados para a camada vetorial do cliente.
   O seed atual é `cemig-normas-distribuicao-2026.1`, com 42 regras habilitadas, e o método de
-  conformidade está na versão `13`. O SQL Server inicializa o mercado rural/urbano; a classificação
+  conformidade está na versão `14`. O SQL Server inicializa o mercado rural/urbano; a classificação
   efetiva é persistida e editável pela API. As ações operacionais continuam consultadas no SQL.
 - Painel **Exportar**: o servidor compila o PDF na ordem das folhas, incorpora as anotações de
   conformidade e gera planilhas Excel de **Resultados** (Elementos e Vãos), **Documentação** e
@@ -153,8 +153,11 @@ Falhas iniciais permitem nova tentativa na próxima análise; abrir ou consultar
 inicia SQL. Reanálises preservam a escolha, mesmo se o cadastro externo mudar. Trocar a NS limpa
 a classificação, inclusive ao voltar à NS anterior. A API autenticada permite salvar Rural,
 Urbano ou Ambos após a inicialização, com controle de versão e proveniência; o seletor Qt ainda
-não está disponível. Nesta etapa, Ambos é persistido, mas sua avaliação é recusada explicitamente
-até E03. Alterar a escolha torna os resultados anteriores desatualizados e exige reanálise.
+não está disponível. Ambos aplica a união das regras rurais e urbanas no projeto inteiro,
+com guardas e evidências preservadas, sem duplicar regra comum ou escolher norma prevalente.
+Alterar a escolha torna os resultados anteriores desatualizados e exige reanálise.
+GMAX e resumos expõem a classificação do snapshot, separando banco, efetivo e origem; a planilha
+de conformidade inclui a aba Contexto da execução. API e piso compatível: `1.4.0`.
 Quando o PDF contém `Impacto Ambiental: Sim` no cabeçalho ou uma menção positiva a servidão, a
 execução também consulta no máximo uma vez a ação correspondente com a NS e a coleção de serviços
 vigentes. Assim, depois que a classificação efetiva, a NS, os serviços ou as ações externas mudarem, execute

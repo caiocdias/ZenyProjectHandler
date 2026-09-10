@@ -11,6 +11,7 @@ from threading import Event, RLock
 from typing import cast
 from uuid import UUID, uuid4
 
+from pydantic import ValidationError
 from sqlalchemy import Engine
 
 from zeny_project_handler.adapters.compliance import registro_conformidade_e_avisos_de_dict
@@ -104,6 +105,7 @@ from zeny_project_handler_contracts.gmax import (
     GmaxSnapshotState,
     GmaxSummaryResponse,
 )
+from zeny_project_handler_contracts.projects import ProjectMarketClassificationDto
 from zeny_project_handler_contracts.review import ReviewProjectSummaryListResponse
 from zeny_project_handler_contracts.rules import (
     ActiveRuleRegistryResponse,
@@ -279,6 +281,7 @@ class DocumentationComplianceApiService:
             last_executed_at=last_executed_at,
             is_stale=is_stale,
             market=_gmax_market(project_facts),
+            classification=_snapshot_classification(project_facts),
             checks=_gmax_checks(project_facts, detected_now),
         )
 
@@ -513,6 +516,9 @@ class DocumentationComplianceApiService:
             rule_registry_revision=execution.versao_regras,
             semantic_signature=execution.assinatura_sessao,
             method_version=execution.versao_metodo,
+            classification=_snapshot_classification(
+                _gmax_project_facts(execution, execution.projeto_id)
+            ),
             is_stale=self._analysis.resultado_desatualizado(execution),
             compliant_count=sum(
                 item.resultado is ResultadoConformidade.CONFORME for item in execution.achados
@@ -554,11 +560,54 @@ def _gmax_project_facts(
     return tuple(item for item in execution.fatos if item.alvo_id == target_id)
 
 
+def _snapshot_classification(
+    facts: tuple[FatoConformidade, ...],
+) -> ProjectMarketClassificationDto | None:
+    keys = {
+        "service_note": "projeto.nota_servico",
+        "database_market": "projeto.mercado_banco",
+        "effective_market": "projeto.classificacao_efetiva",
+        "source": "projeto.classificacao_origem",
+        "initialized_at": "projeto.classificacao_inicializada_em",
+        "updated_at": "projeto.classificacao_alterada_em",
+        "revision_id": "projeto.classificacao_revisao",
+        "classification_version": "projeto.classificacao_versao",
+    }
+    # Snapshots anteriores à classificação persistida não têm proveniência recuperável.
+    classification_keys = set(keys.values()) - {"projeto.nota_servico"}
+    if not any(item.chave in classification_keys for item in facts):
+        return None
+    values = {
+        key: tuple(item.valor for item in facts if item.chave == fact_key)
+        for key, fact_key in keys.items()
+    }
+    if any(len(items) != 1 for items in values.values()):
+        raise _gmax_integrity_error()
+    try:
+        return ProjectMarketClassificationDto.model_validate(
+            {key: items[0] for key, items in values.items()}
+        )
+    except ValidationError as error:
+        raise _gmax_integrity_error() from error
+
+
 def _gmax_market(facts: tuple[FatoConformidade, ...]) -> GmaxMarket:
     market_facts = tuple(item for item in facts if item.chave in _GMAX_MARKET_FACTS)
-    if len(market_facts) != 1 or market_facts[0].valor is not True:
+    keys = {item.chave for item in market_facts}
+    if (
+        not keys
+        or len(keys) != len(market_facts)
+        or any(item.valor is not True for item in market_facts)
+    ):
         raise _gmax_integrity_error()
-    return _GMAX_MARKET_FACTS[market_facts[0].chave]
+    market = GmaxMarket.AMBOS if len(keys) == 2 else _GMAX_MARKET_FACTS[next(iter(keys))]
+    classification = _snapshot_classification(facts)
+    if classification is None:
+        if market is GmaxMarket.AMBOS:
+            raise _gmax_integrity_error()
+    elif classification.effective_market != market.value:
+        raise _gmax_integrity_error()
+    return market
 
 
 def _gmax_checks(

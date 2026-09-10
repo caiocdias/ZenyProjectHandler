@@ -14,14 +14,24 @@ falha diante de qualquer alteração não revisada.
 
 ## Compatibilidade
 
-- versão atual: `1.3.0`;
+- versão atual: `1.4.0`;
 - prefixo protegido: `/api/v1`;
-- faixa negociada: `1.3.0` a `1.999.999`;
+- faixa negociada: `1.4.0` a `1.999.999`;
 - adições compatíveis podem introduzir rotas e campos opcionais dentro de v1;
 - novos valores de enum fechado ou campos obrigatórios elevam o piso compatível antes de serem
   emitidos; remoção, renomeação ou mudança semântica de rota, campo, enum ou código de erro exige
   nova versão principal;
 - o cliente consulta `GET /api/v1/session` antes de carregar dados e recusa uma faixa incompatível.
+
+A versão `1.4.0` eleva o piso nos dois lados para emitir `GmaxMarket.AMBOS`. GMAX e
+`ComplianceExecutionSummaryDto` acrescentam `classification` opcional com o mesmo schema
+`ProjectMarketClassificationDto`. Esse campo descreve a classificação **da execução**, não a
+escolha atual se o snapshot estiver stale. O mercado do banco continua fechado em Rural/Urbano.
+O contexto é validado contra a escolha efetiva do snapshot; proveniência parcial/inválida,
+duplicatas ou divergência entre famílias e escolha devolvem `INTEGRITY_ERROR` no GMAX.
+Histórico anterior a E02 conserva `classification=null`; nenhum registro é reescrito.
+GMAX sem execução ou bloqueado por NS não expõe classificação. Para a escolha atual, use a rota
+`/market`. Clientes e servidores anteriores a 1.4 são recusados na negociação de sessão.
 
 A versão `1.3.0` eleva o piso nos dois lados porque a sessão de revisão passa a emitir `CHANGE` em
 `ElementSituation`, o enum fechado `SpanType` e campos obrigatórios de tipo e endpoints no
@@ -72,15 +82,17 @@ Inicialização ocorre no consumidor de conformidade após validar as NS dos cab
 resposta SQL válida é persistida antes de consultar ações; falha posterior de ação, cancelamento
 ou avaliação não desfaz a inicialização nem publica conformidade parcial. Erro de mercado deixa
 o estado nulo e a próxima análise tenta novamente. Reanálise/reinício preservam a escolha. Troca
-de NS invalida o estado; retornar à NS anterior também exige consulta inicial nova. Ambos pode
-ser salvo, mas o job de conformidade falha com `VALIDATION_ERROR` explícito até E03.
+de NS invalida o estado; retornar à NS anterior também exige consulta inicial nova. Ambos
+é avaliável e aplica a união das regras rurais e urbanas, uma vez por regra/alvo, preservando
+guardas, evidências, exclusões de ramais e achados distintos sem precedência normativa.
 
-A revisão da classificação participa dos fatos/assinatura do método 13 e da desatualização em
-documentação, conformidade e GMAX. Snapshots anteriores são imutáveis. O GMAX ainda mostra o
-mercado efetivo do último snapshot Rural/Urbano; E04 apresentará a distinção banco/escolha na UI.
+A revisão da classificação participa dos fatos/assinatura do método 14 e da desatualização em
+documentação, conformidade e GMAX. Snapshots anteriores são imutáveis. O GMAX mostra o mercado
+efetivo Rural/Urbano/Ambos e a classificação do último snapshot. E04 apresentará a proveniência
+completa na UI; a planilha de conformidade já inclui a aba Contexto da execução.
 
-A adição mantém API 1.3.0 e o piso negociado, sem novos campos em DTOs antigos. Clientes atuais
-continuam funcionando e precisam reler a versão do projeto após analisar, pois inicializar
+A rota de mercado adicionada em E02 preservou os DTOs anteriores. A evolução de E03 exige
+API/piso 1.4.0. Clientes precisam reler a versão do projeto após analisar, pois inicializar
 também incrementa `project_version`. O futuro seletor deve tratar a ausência da rota em servidor
 antigo como recurso indisponível, sem escolha local presumida.
 
@@ -106,7 +118,7 @@ retorna `200` com `items=[]` e total zero; offset além do fim retorna lista vaz
 Com dados estáveis, páginas consecutivas não repetem IDs. Alterações entre requisições podem mudar
 o total e a composição das páginas; esta paginação não reserva um snapshot entre requisições.
 
-A adição mantém API `1.3.0`, piso negociado e schemas anteriores: não há migração de dados,
+Essa rota foi adicionada sob API `1.3.0`, preservando os schemas anteriores: não há migração de dados,
 novo enum ou campo obrigatório em respostas existentes. Clientes anteriores seguem usando as
 operações atuais. `ProjectGateway.search_projects(query, *, limit=200, offset=0)` propaga
 `ProjectGatewayError`; não converte falhas em lista vazia, `None` ou NS ausente.

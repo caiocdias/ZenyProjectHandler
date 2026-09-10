@@ -594,6 +594,16 @@
       "ComplianceExecutionSummaryDto": {
         "additionalProperties": false,
         "properties": {
+          "classification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProjectMarketClassificationDto"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "completed_at": {
             "format": "date-time",
             "title": "Completed At",
@@ -2303,7 +2313,8 @@
       "GmaxMarket": {
         "enum": [
           "RURAL",
-          "URBANO"
+          "URBANO",
+          "AMBOS"
         ],
         "title": "GmaxMarket",
         "type": "string"
@@ -2472,6 +2483,16 @@
             ],
             "title": "Checks",
             "type": "array"
+          },
+          "classification": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProjectMarketClassificationDto"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "header_service_notes": {
             "items": {
@@ -5179,7 +5200,7 @@
     },
     "summary": "Contrato HTTP v1 do cliente magro e do servidor Zeny.",
     "title": "Zeny Project Handler API",
-    "version": "1.3.0"
+    "version": "1.4.0"
   },
   "openapi": "3.1.0",
   "paths": {

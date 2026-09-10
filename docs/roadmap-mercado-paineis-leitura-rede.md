@@ -1,7 +1,7 @@
 # Zeny Project Handler — Mercado editável, painéis e leitura de redes
 
-Data: 10/09/2026. Base inicial: `336afba`. E01 diagnosticada em `4ce5b50`; E02 concluída sobre
-`2b00d0b`, com alterações locais sem commit. Demais etapas pendentes.
+Data: 10/09/2026. Base inicial: `336afba`. E01 diagnosticada em `4ce5b50`; E02 entregue
+em `101c721`. E03 concluída sobre `101c721`, com alterações locais sem commit. Demais etapas pendentes.
 
 ## Objetivo e uso
 
@@ -18,7 +18,7 @@ obrigatória falhando ou não executada. Um bloqueio exige causa, evidência, im
 desbloqueio. A ordem padrão é a do índice; o paralelismo listado é possibilidade técnica, não
 instrução para criar agentes ou tarefas.
 
-## Contexto confirmado
+## Contexto confirmado na elaboração (antes de E02)
 
 - Python 3.11–3.13; cliente PySide6, contratos Pydantic, servidor FastAPI, persistência
   SQLAlchemy/Alembic/SQLite, extração PyMuPDF e OCR Tesseract. Comandos em `README.md`,
@@ -149,7 +149,7 @@ Hipóteses de produto adotadas para tornar o plano executável, ajustáveis com 
 |---|---|---|---|---|
 | E01 | Diagnóstico e referência da NS 1256148225 | #concluida | Nenhuma | Inventário e perdas por fase |
 | E02 | Classificação persistida e API | #concluida | Nenhuma | Inicialização SQL e alteração versionada |
-| E03 | Conformidade Rural, Urbano e Ambos | #pendente | E02 | Aplicabilidade e snapshots coerentes |
+| E03 | Conformidade Rural, Urbano e Ambos | #concluida | E02 | Aplicabilidade e snapshots coerentes |
 | E04 | Escolha do técnico na interface | #pendente | E02, E03 | Seletor e proveniência em Projeto/GMAX |
 | E05 | Rolagem independente dos painéis | #pendente | Nenhuma | Cartões legíveis em docks pequenos |
 | E06 | Marca-texto por situação | #pendente | Nenhuma | Realce navegável com transparência |
@@ -381,7 +381,7 @@ também incrementa a versão); distinguir mercado inicial/efetivo e tratar rota 
 servidor antigo como indisponibilidade. Não foi criado seletor Qt. Adaptador/SQL externo e
 verificações de ações não foram alterados. Nenhum commit, publicação ou migração operacional.
 
-## E03 — Conformidade Rural, Urbano e Ambos — #pendente
+## E03 — Conformidade Rural, Urbano e Ambos — #concluida
 
 **Objetivo:** avaliar a união das regras de Rural e Urbano usando o contexto efetivo persistido.
 **Por que agora:** E02 fornece a classificação e suas transições.
@@ -412,10 +412,10 @@ Execute E03 — Conformidade Rural, Urbano e Ambos de docs/roadmap-mercado-paine
 
 **Critérios de aceite:**
 
-- [ ] Fixtures aplicáveis geram os achados rurais e urbanos em Ambos, incluindo guardas especiais.
-- [ ] Rural e Urbano isolados preservam resultados esperados; regras comuns não duplicam.
-- [ ] Alteração da escolha invalida o snapshot; reexecução e exportação refletem o novo contexto.
-- [ ] Falta de evidência, conflito de NS e falhas nas ações mantêm tratamento explícito.
+- [x] Fixtures aplicáveis geram os achados rurais e urbanos em Ambos, incluindo guardas especiais.
+- [x] Rural e Urbano isolados preservam resultados esperados; regras comuns não duplicam.
+- [x] Alteração da escolha invalida o snapshot; reexecução e exportação refletem o novo contexto.
+- [x] Falta de evidência, conflito de NS e falhas nas ações mantêm tratamento explícito.
 
 **Validação obrigatória:** `python -m pytest tests/unit/test_compliance.py tests/unit/test_transformer_compliance_provider.py tests/unit/test_span_compliance_provider.py tests/unit/test_topology_compliance.py tests/unit/test_compliance_catalog_parity.py tests/integration/test_compliance_analysis.py tests/server/test_compliance_api.py tests/server/test_deliverable_exports.py`.
 Se DTOs mudarem, regenerar OpenAPI com `python scripts/generate_openapi_v1.py` e executar
@@ -424,8 +424,94 @@ não somente contagem total; todos os testes devem passar.
 **Bloqueios:** nenhum bloqueio conhecido.
 **Riscos e mitigação:** emitir os dois fatos e esquecer exclusões binárias; revisar todos os
 consumidores de mercado e testar contextos combinados, com e sem evidência suficiente.
-**Evidências e handoff:** ainda não executada. Registrar matriz, consumidores alterados,
-versão do método, assinaturas e comportamento de histórico/exportação.
+**Evidências e handoff — 10/09/2026:**
+
+- Base `HEAD=101c721`, Git inicial limpo, `HEAD...origin/main = 0 0` pela referência local,
+  sem fetch. Nenhum `AGENTS.md` encontrado na hierarquia aplicável ou no checkout. E02 estava
+  concluída e integrada; a indicação inicial de alterações locais de E02 foi corrigida no
+  cabeçalho, preservando suas evidências históricas. Domínio, consumidor, provedores regionais,
+  documentais, de vãos e topologia, avaliador, registro, GMAX, contratos, exportador e testes
+  foram inspecionados; os consumidores de mercado foram auditados com `rg` em todo `src`.
+  E03 passou por `#em-andamento` no índice/detalhe antes da implementação.
+- `domain/market.py`: `ClassificacaoMercado.contextos` representa Rural/Urbano e a união em
+  Ambos. `Mercado` externo continua binário. `application/{project_compliance,
+  compliance_fact_providers}.py`: a classificação persistida prevalece na entrada, ambos os
+  fatos positivos chegam ao projeto e a todas as regiões, e o desvio do transformador em
+  poste existente usa presença do contexto urbano. Não há fato rural falso que impeça o ramo
+  urbano. Documento/vão/topologia não têm outros desvios binários a alterar.
+- `application/compliance_analysis.py`: retirada a guarda provisória; método **14** consome
+  a escolha persistida, mantendo SQL inicial, NS antes do SQL, ações atuais, cancelamento e
+  publicação atômica. Revisão/origem/banco/efetivo/instantes continuam nos fatos e assinatura.
+  Método 13 ou anterior é stale, sem modificar execuções existentes. Os testes comprovam
+  histórico imutável, reanálise determinística, preservação das escolhas e leitura legada.
+- O avaliador e o catálogo de **42 regras** permanecem intactos. Uma passagem por regra/alvo
+  conserva regras comuns uma vez e regras distintas separadas, sem nova norma ou precedência.
+  A matriz nova `tests/unit/test_combined_market_compliance.py` compara mapas de achados
+  completos por `(regra_id, alvo_id)`, incluindo resultado, fonte, condições e referências.
+  Cobre múltiplas regiões, fonte persistida, topologia rural/urbana, transformadores 75/150 kVA,
+  poste novo/existente, vínculos ausentes/ambíguos, limiares/exceções de vãos e ramais
+  aéreos/subterrâneos/desconhecidos. Um cabo CAA acima de 80 m conserva simultaneamente o
+  achado rural conforme e o urbano divergente no mesmo alvo, com fontes/IDs distintos.
+- `src/zeny_project_handler_server/compliance_api.py`: GMAX aceita exatamente os contextos
+  da escolha efetiva do snapshot, rejeita duplicatas e proveniência parcial/inválida, e
+  projeta `classification` a partir dos fatos. Esse mesmo campo aparece nos resumos/histórico.
+  Stale conserva a proveniência anterior; projeto atual não é sobreposto ao snapshot.
+  Histórico anterior a E02 tem classificação nula; bloqueio de NS/sem execução não expõe
+  classificação. Leituras não fazem SQL nem escrevem dados.
+- `src/zeny_project_handler_contracts/{gmax,compliance,versioning}.py`: novo enum fechado
+  `GmaxMarket.AMBOS` e campo opcional `classification`, reutilizando
+  `ProjectMarketClassificationDto`. API/piso **1.4.0**, conforme política do repositório para
+  enums fechados. OpenAPI regenerada: rotas idênticas, nenhum schema novo/removido; somente
+  `GmaxMarket`, `GmaxSummaryResponse`, `ComplianceExecutionSummaryDto` e `info.version` mudaram.
+  Negociação rejeita API 1.3; cliente recebe somente o mapeamento básico do rótulo Ambos em
+  `ui/gmax_panel.py`, sem antecipar o seletor E04.
+- `src/zeny_project_handler_server/deliverable_exports.py`: XLSX de conformidade acrescenta
+  Contexto da execução, com identidade/método/assinatura/stale e proveniência. Achados e
+  callouts continuam vindo do snapshot. Teste HTTP real com SQL fake inicializa, salva Ambos,
+  exporta o snapshot stale, reexecuta e baixa XLSX; IDs e quantidade de achados são iguais aos
+  da API, com Ambos/MANUAL/banco original e método 14. PDF anotado e demais planilhas mantidos.
+- Regressões atualizadas em `tests/integration/{test_compliance_analysis,test_persisted_market,
+  test_gmax_panel}.py`, `tests/server/{test_jobs_api,test_deliverable_exports}.py`,
+  `tests/contracts/{test_models,test_openapi_snapshot}.py` e
+  `tests/unit/test_client_connection.py`. Comprovam falha de ações em Ambos e divergência de NS
+  sem publicação parcial, escolhas/versionamento, GMAX consistente, DTO/legado e negociação.
+  Documentação: `README.md`, `docs/{arquitetura-conformidade,especificacao-funcional}.md`,
+  `docs/api/README.md`, OpenAPI e este roadmap.
+
+Comandos executados na raiz (Python da `.venv`), todos aprovados na validação final:
+
+```powershell
+.venv/Scripts/python.exe scripts/generate_openapi_v1.py
+.venv/Scripts/python.exe -m pytest tests/unit/test_compliance.py tests/unit/test_transformer_compliance_provider.py tests/unit/test_span_compliance_provider.py tests/unit/test_topology_compliance.py tests/unit/test_compliance_catalog_parity.py tests/integration/test_compliance_analysis.py tests/server/test_compliance_api.py tests/server/test_deliverable_exports.py tests/contracts tests/unit/test_combined_market_compliance.py tests/unit/test_topology_path_compliance.py tests/integration/test_persisted_market.py tests/server/test_project_market_api.py tests/server/test_jobs_api.py tests/unit/test_client_connection.py tests/integration/test_gmax_panel.py --basetemp=tmp/e37 -p no:cacheprovider -q --tb=short
+.venv/Scripts/python.exe -m pytest tests/unit/test_combined_market_compliance.py tests/integration/test_persisted_market.py --basetemp=tmp/e38 -p no:cacheprovider -q --tb=short
+.venv/Scripts/python.exe -m ruff check .
+.venv/Scripts/python.exe -m ruff format --check .
+.venv/Scripts/python.exe -m mypy
+.venv/Scripts/python.exe -m pip check
+.venv/Scripts/python.exe scripts/complexity_gate.py src
+.venv/Scripts/python.exe scripts/client_artifact_gate.py --source-only
+git diff --check
+```
+
+Resultado consolidado: **277 testes aprovados em 30,56 s**, cobrindo todos os obrigatórios e
+contratos. Rodada focada final: **43 aprovados em 6,73 s**, após explicitar a fixture com duas
+regiões e o estreitamento de tipo da resposta legada. Ruff aprovado; **327 arquivos formatados**;
+Mypy sem erros em **311 arquivos**; dependências íntegras; complexidade aprovada (**2.676 funções**,
+nenhuma E/F); fronteira do cliente aprovada. Logs locais ignorados:
+`tmp/e03-final-tests.txt`, `tmp/e03-final-regressions.txt`. Rodadas exploratórias ajustaram
+expectativas antigas do enum/guarda, o payload do teste do job para `expected_semantic_signature`,
+tipos de propostas e formatação. Todas essas falhas foram corrigidas e verificadas; nenhuma
+validação obrigatória ficou pendente. Nenhum dado privado ou arquivo operacional foi adicionado.
+
+Handoff E04: usar API 1.4.0 e a rota `/market` para a escolha atual; reler `project_version`
+após inicialização/análise. GMAX `classification` pertence ao último snapshot e pode diferir da
+escolha atual enquanto stale; jamais misturar suas proveniências. Exibir banco/efetivo/origem e
+permitir as três opções no seletor, com conflito de versão e reexecução. Novos resultados usam
+método 14; reanalisar projetos com snapshots anteriores. Não há DDL nem migração de dados;
+rollback de cliente/servidor deve respeitar o piso compatível e o significado dos snapshots.
+O gate integral com cobertura e a homologação visual/local permanecem em E09; não foram
+executados nem declarados atendidos por E03. Sem bloqueios remanescentes. Nenhum commit,
+publicação ou migração operacional realizada.
 
 ## E04 — Escolha do técnico na interface — #pendente
 

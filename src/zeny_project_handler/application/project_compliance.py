@@ -39,7 +39,7 @@ from zeny_project_handler.domain.enums import (
     TipoOrigemPdf,
     TipoTrechoRede,
 )
-from zeny_project_handler.domain.market import DescricaoAcao, Mercado
+from zeny_project_handler.domain.market import ClassificacaoMercado, DescricaoAcao, Mercado
 from zeny_project_handler.domain.project import Cabo, ElementoProjetoType, Equipamento, Poste
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 
@@ -157,7 +157,7 @@ class _RegionFactContext:
     equipment_class_options: dict[UUID, str]
     phase_options: dict[UUID, str]
     post_format_options: dict[UUID, str]
-    mercado: Mercado
+    mercado: ClassificacaoMercado | Mercado
     text_evidence: tuple[EvidenciaDocumento, ...]
     evidence: tuple[EvidenciaDocumento, ...]
 
@@ -196,10 +196,12 @@ def analisar_conformidade_projeto(
     sessao: SessaoRevisao,
     registro: RegistroRegrasConformidade,
     *,
-    mercado: Mercado,
+    mercado: ClassificacaoMercado | Mercado,
     acoes_projeto: ContextoAcoesProjeto | None = None,
     provedores_fatos: tuple[ProvedorFatosConformidade, ...] | None = None,
 ) -> ResultadoConformidadeProjeto:
+    if sessao.projeto.classificacao_mercado is not None:
+        mercado = sessao.projeto.classificacao_mercado.efetiva
     targets = _targets(sessao)
     project_target = next(item for item in targets if item.tipo is TipoEscopoConformidade.PROJETO)
     document_targets = {
@@ -215,7 +217,7 @@ def analisar_conformidade_projeto(
         header_service_notes,
         metadata_values,
     )
-    facts = [_market_context_fact(project_target.id, mercado), *document_facts]
+    facts = [*_market_context_facts(project_target.id, mercado), *document_facts]
     classification = sessao.projeto.classificacao_mercado
     if classification is not None:
         classification_values: dict[str, JsonPrimitive] = {
@@ -1271,7 +1273,7 @@ def _signature_item(
 def _region_facts(
     session: SessaoRevisao,
     *,
-    mercado: Mercado,
+    mercado: ClassificacaoMercado | Mercado,
     region_targets: dict[UUID | None, AlvoConformidade],
 ) -> tuple[FatoConformidade, ...]:
     context = _region_fact_context(session, mercado)
@@ -1291,7 +1293,7 @@ def _region_facts(
         )
         facts.append(_equipment_install_fact(target.id, proposals, context.evidence))
         facts.extend(_equipment_class_facts(target.id, proposals, session, context))
-        facts.append(_market_context_fact(target.id, context.mercado))
+        facts.extend(_market_context_facts(target.id, context.mercado))
         facts.extend(_risk_facts(target.id, nearby_text))
         facts.extend(_cable_technology_facts(target.id, proposals, session, context))
         facts.extend(_installed_cable_technology_facts(target.id, proposals, session, context))
@@ -1324,7 +1326,9 @@ def provedores_fatos_padrao() -> tuple[ProvedorFatosConformidade, ...]:
     )
 
 
-def _region_fact_context(session: SessaoRevisao, mercado: Mercado) -> _RegionFactContext:
+def _region_fact_context(
+    session: SessaoRevisao, mercado: ClassificacaoMercado | Mercado
+) -> _RegionFactContext:
     review_evidence_ids = {
         item.id for item in session.evidencias if evidencia_eh_anotacao_de_revisao(item)
     }
@@ -1429,16 +1433,21 @@ def _equipment_class_facts(
     return tuple(facts)
 
 
-def _market_context_fact(target_id: UUID, mercado: Mercado) -> FatoConformidade:
-    return _fact(
-        target_id,
-        {
-            Mercado.URBANO: "rede.contexto_urbano",
-            Mercado.RURAL: "rede.contexto_rural",
-        }[mercado],
-        True,
-        _MARKET_FACT_ORIGIN,
-        confidence=Decimal("1"),
+def _market_context_facts(
+    target_id: UUID, mercado: ClassificacaoMercado | Mercado
+) -> tuple[FatoConformidade, ...]:
+    return tuple(
+        _fact(
+            target_id,
+            {
+                Mercado.URBANO: "rede.contexto_urbano",
+                Mercado.RURAL: "rede.contexto_rural",
+            }[context],
+            True,
+            _MARKET_FACT_ORIGIN,
+            confidence=Decimal("1"),
+        )
+        for context in ClassificacaoMercado(mercado).contextos
     )
 
 
@@ -1605,7 +1614,7 @@ def _existing_post_transformer_facts(
     )
     candidates = _transformer_candidates(equipment_proposals, session, context)
     applicability_evidence = _proposals_evidence(equipment_proposals, context.evidence)
-    if context.mercado is Mercado.RURAL or not candidates:
+    if Mercado.URBANO not in ClassificacaoMercado(context.mercado).contextos or not candidates:
         return _transformer_applicability_facts(
             target_id,
             value=False,
@@ -1613,7 +1622,7 @@ def _existing_post_transformer_facts(
             evidence=applicability_evidence,
             confidence=Decimal("0.98"),
         )
-    if context.mercado is not Mercado.URBANO or len(candidates) != 1:
+    if len(candidates) != 1:
         return ()
 
     pair = _confirmed_transformer_post_pair(candidates[0], proposals, session, context)

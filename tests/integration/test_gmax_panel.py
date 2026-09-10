@@ -179,15 +179,18 @@ def _table_text(table: QTableWidget, row: int, column: int) -> str:
     return item.text()
 
 
+@pytest.mark.parametrize("choice,label", [(GmaxMarket.RURAL, "Rural"), (GmaxMarket.AMBOS, "Ambos")])
 def test_gmax_panel_is_read_only_accessible_and_maps_current_select_results(
     qtbot: QtBot,
+    choice: GmaxMarket,
+    label: str,
 ) -> None:
     project_id = uuid4()
     gateway = _GmaxGatewayStub(
         _summary(
             project_id,
             GmaxSnapshotState.CURRENT,
-            market=GmaxMarket.RURAL,
+            market=choice,
             query_states=(GmaxQueryState.EXECUTED, GmaxQueryState.EXECUTED),
             rows=(False, True),
             detected=(True, True),
@@ -208,7 +211,7 @@ def test_gmax_panel_is_read_only_accessible_and_maps_current_select_results(
     assert gateway.unexpected_calls == []
     assert panel.projeto_ativo_id == project_id
     assert "Resultado atual" in state.text()
-    assert market.text() == "Rural"
+    assert market.text() == label
     assert table.rowCount() == 2
     assert [_table_text(table, row, 0) for row in range(2)] == [
         "Impacto ambiental",

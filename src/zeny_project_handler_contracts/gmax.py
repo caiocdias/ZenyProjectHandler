@@ -14,6 +14,7 @@ from zeny_project_handler_contracts.base import (
     ProjectId,
     UtcDateTime,
 )
+from zeny_project_handler_contracts.projects import ProjectMarketClassificationDto
 
 ServiceNote = Annotated[str, Field(pattern=r"^[0-9]{10}$")]
 
@@ -46,6 +47,7 @@ class GmaxCheckType(StrEnum):
 class GmaxMarket(StrEnum):
     RURAL = "RURAL"
     URBANO = "URBANO"
+    AMBOS = "AMBOS"
 
 
 class GmaxCheckDto(ContractModel):
@@ -110,4 +112,5 @@ class GmaxSummaryResponse(ContractModel):
     last_executed_at: UtcDateTime | None = None
     is_stale: bool
     market: GmaxMarket | None = None
+    classification: ProjectMarketClassificationDto | None = None
     checks: tuple[GmaxImpactCheckDto, GmaxServitudeCheckDto]

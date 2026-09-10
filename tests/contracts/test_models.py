@@ -565,7 +565,7 @@ def test_enum_values_are_stable() -> None:
             "EXECUTED",
         ],
         GmaxCheckType: ["IMPACTO_AMBIENTAL", "SERVIDAO"],
-        GmaxMarket: ["RURAL", "URBANO"],
+        GmaxMarket: ["RURAL", "URBANO", "AMBOS"],
     }
     assert {
         enum_type: [member.value for member in enum_type] for enum_type in gmax_expected

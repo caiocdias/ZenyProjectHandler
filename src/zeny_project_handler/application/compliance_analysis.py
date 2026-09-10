@@ -15,10 +15,8 @@ from zeny_project_handler.domain.compliance import (
 )
 from zeny_project_handler.domain.errors import DomainValidationError
 from zeny_project_handler.domain.market import (
-    ClassificacaoMercado,
     ClassificacaoProjeto,
     DescricaoAcao,
-    Mercado,
 )
 from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler.ports.market import (
@@ -46,7 +44,7 @@ from .project_compliance import (
     detectar_notas_servico_cabecalho,
 )
 
-VERSAO_METODO_CONFORMIDADE = "13"
+VERSAO_METODO_CONFORMIDADE = "14"
 
 
 def resultado_conformidade_desatualizado(
@@ -137,18 +135,12 @@ class ExecutarAnaliseConformidade:
         session = replace(session, projeto=project)
         classification = project.classificacao_mercado
         assert classification is not None
-        if classification.efetiva is ClassificacaoMercado.AMBOS:
-            raise DomainValidationError(
-                "A avaliação da classificação Ambos ainda não está disponível (E03). "
-                "Nenhum resultado de conformidade foi publicado."
-            )
-        market = Mercado(classification.efetiva.value)
         self._ensure_not_cancelled(cancelado)
         action_context = self._action_context(session, cancelado=cancelado)
         result = analisar_conformidade_projeto(
             session,
             revision.registro,
-            mercado=market,
+            mercado=classification.efetiva,
             acoes_projeto=action_context,
             provedores_fatos=self._fact_providers,
         )

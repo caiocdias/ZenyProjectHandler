@@ -21,6 +21,7 @@ from zeny_project_handler_contracts.common import (
     PageMetadataDto,
 )
 from zeny_project_handler_contracts.enums import ComplianceStatus, ComplianceTargetScope
+from zeny_project_handler_contracts.projects import ProjectMarketClassificationDto
 
 
 class ComplianceCalloutDto(ContractModel):
@@ -62,6 +63,7 @@ class ComplianceExecutionSummaryDto(ContractModel):
     project_id: ProjectId
     rule_registry_revision: NonEmptyString
     semantic_signature: NonEmptyString
+    classification: ProjectMarketClassificationDto | None = None
     method_version: NonEmptyString
     is_stale: bool
     compliant_count: int = Field(ge=0)
