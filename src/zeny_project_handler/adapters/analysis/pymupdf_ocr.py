@@ -26,6 +26,7 @@ from zeny_project_handler.ports.analysis import (
     SolicitacaoAnaliseDocumento,
 )
 
+from .pymupdf_ocr_batch import MAXIMUM_BATCH_REGIONS, pack_ocr_rows
 from .pymupdf_orientation import dominant_text_rotation, unrotate_box
 from .pymupdf_support import _extras, _normalized_point
 
@@ -380,20 +381,37 @@ def _linear_label_candidates(
                 pagina_numero=page_number,
             ),
         )
-    skipped = len(
-        tuple(
-            frame
-            for drawing in page.get_drawings()
-            if (frame := _operational_frame(page, drawing)) is not None
+    selected_frames = _linear_cable_frames(page)
+    remaining_frames = tuple(
+        frame
+        for drawing in page.get_drawings()
+        if (frame := _operational_frame(page, drawing)) is not None and frame not in selected_frames
+    )
+    try:
+        batched, processed = _extract_remaining_frame_labels(
+            page, page_number, ocr_engine, config.dpi_ocr_rotulos_inclinados, remaining_frames
         )
-    ) - len(_linear_cable_frames(page))
+        candidates.extend(batched)
+    except Exception:
+        return tuple(candidates), (
+            DiagnosticoAnalise(
+                codigo="analise.ocr_rotulos_lineares_falhou",
+                mensagem=(
+                    "A leitura em lote das molduras pequenas falhou; "
+                    "as evidências anteriores foram mantidas."
+                ),
+                extrator="ocr-molduras-lote",
+                pagina_numero=page_number,
+            ),
+        )
+    skipped = len(remaining_frames) - processed
     if skipped:
         return tuple(candidates), (
             DiagnosticoAnalise(
                 codigo="analise.ocr_cobertura_parcial",
                 mensagem=(
-                    f"{skipped} molduras não foram selecionadas para OCR localizado pelos "
-                    "limites de dimensão e vizinhança. O OCR geral foi mantido; "
+                    f"{skipped} molduras não foram processadas por excederem o limite "
+                    "do lote de recortes. O OCR geral foi mantido; "
                     "a leitura dessas regiões não está garantida."
                 ),
                 extrator="ocr-rotulos-lineares",
@@ -401,6 +419,62 @@ def _linear_label_candidates(
             ),
         )
     return tuple(candidates), ()
+
+
+def _extract_remaining_frame_labels(
+    page: Any,
+    page_number: int,
+    engine: MotorOcrPort,
+    dpi: int,
+    frames: tuple[_OperationalFrame, ...],
+) -> tuple[tuple[CandidatoEvidenciaDocumento, ...], int]:
+    regions = tuple(
+        _rectified_frame_region(page, page_number, frame, dpi, isolate="green", padding=False)
+        for frame in frames[:MAXIMUM_BATCH_REGIONS]
+    )
+    batch = pack_ocr_rows(tuple(region.raster for region in regions))
+    if batch is None:
+        return (), 0
+    candidates: list[CandidatoEvidenciaDocumento] = []
+    for item in engine.reconhecer(batch.raster):
+        located = batch.locate(item)
+        if located is None:
+            continue
+        index, local_item = located
+        frame = frames[index]
+        candidates.append(
+            CandidatoEvidenciaDocumento(
+                chave_estavel=(
+                    f"p{page_number}:ocr-moldura-lote:{index}:"
+                    f"{local_item.caixa_normalizada}:{local_item.texto}"
+                ),
+                pagina_numero=page_number,
+                tipo=TipoEvidencia.OCR,
+                geometria=_geometry_from_rectified_ocr(regions[index], local_item, page),
+                origem_pdf=OrigemObjetoPdf(),
+                conteudo_bruto=local_item.texto,
+                atributos_extraidos=_extras(
+                    motor_ocr="tesseract-moldura-retificada-lote",
+                    confianca=(
+                        Decimal(str(local_item.confianca))
+                        if local_item.confianca is not None
+                        else None
+                    ),
+                    dpi=dpi,
+                    rotacao_original_graus=Decimal(
+                        str(
+                            round(
+                                degrees(atan2(frame.horizontal_axis[1], frame.horizontal_axis[0])),
+                                3,
+                            )
+                        )
+                    ),
+                    pre_processamento="retificacao_afim_isolamento_verde_e_lote",
+                    indice_recorte=index,
+                ),
+            )
+        )
+    return _deduplicate_tiled_candidates(tuple(candidates)), len(batch.boxes)
 
 
 def _marked_equipment_candidates(
@@ -1892,6 +1966,7 @@ def _is_general_ocr_candidate(candidate: CandidatoEvidenciaDocumento) -> bool:
         "tesseract-identificador-vetorial-localizado",
         "tesseract-rotulo-linear-retificado",
         "tesseract-rotulo-operacional-localizado",
+        "tesseract-moldura-retificada-lote",
     }
 
 

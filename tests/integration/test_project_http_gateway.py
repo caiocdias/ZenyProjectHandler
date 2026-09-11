@@ -882,6 +882,16 @@ def test_qt_http_delayed_search_cannot_cross_input_or_connection_context(
         panel._project_search.setText(first.project.service_note)
         panel.abrir_selecionado()
         qtbot.waitUntil(lambda: not panel._project_action_active)
+        qtbot.waitUntil(
+            lambda: (
+                first.project.service_note in queries
+                and panel._search_thread is None
+                and not panel._search_timer.isActive()
+            )
+        )
+        # A pesquisa da preparação pode terminar durante a abertura síncrona.
+        # Só delimite a fase atrasada depois de consumir também o término no Qt.
+        queries.clear()
         panel._project_search.setText("111")
         qtbot.waitUntil(entered.is_set)
         worker = panel._search_thread

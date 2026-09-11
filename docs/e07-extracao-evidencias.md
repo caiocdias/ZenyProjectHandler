@@ -1,8 +1,138 @@
 # E07 — Extração robusta de evidências
 
-Execução em 10/09/2026 sobre `77258cf`, sem commit. Estado e aceite no
+Execução inicial em 10/09/2026 sobre `77258cf`; retomada em 11/09/2026 sobre `7fd1b7f`.
+Estado e aceite no
 [roadmap](roadmap-mercado-paineis-leitura-rede.md). A recuperação integral exigida por E01
 ainda não foi demonstrada; os ganhos abaixo não certificam a leitura completa da rede.
+
+## Retomada de 11/09/2026
+
+O checkout estava limpo. O PDF original continua disponível, mas `tmp/e01/`, `tmp/e07/`
+e `tmp/e07-review/` citados na execução anterior não estão neste checkout. Portanto, o
+inventário por ocorrência, o baseline privado e os scripts locais anteriores não puderam
+ser revalidados. Os denominadores e limites publicados de E01 foram preservados. Uma nova
+execução da versão 1.12.0 reproduziu exatamente suas contagens publicadas: 3.590 evidências,
+270 OCR, sete propostas, uma confirmação e zero vãos. Isso recupera um ponto de comparação
+do código anterior, mas não substitui a revisão geométrica das 95 ocorrências.
+
+O ambiente `.venv` usa Python 3.13.14; o acesso ao executável da Microsoft Store exige
+execução fora do isolamento do Codex nesta máquina. Não foi necessário recriar o ambiente.
+O português do Tesseract foi provisionado pelo mecanismo existente, com hash fixado, em
+`tmp/e07-unblock/runtime`. Nenhum dado do PDF foi enviado a serviço externo.
+
+### Mudanças da retomada
+
+- Extrator **1.13.0**: invalida o cache da versão anterior. As molduras que passam pelos
+  limites geométricos existentes, mas ficam fora dos grupos de cabos, recebem uma leitura
+  em lote. Não foram relaxados os limites de dimensão, cor ou proporção dos símbolos.
+- Novo `pymupdf_ocr_batch.py`: empacota no máximo 48 recortes e oito milhões de pixels por
+  página, com margens brancas, sem reamostragem e com uma chamada adicional de OCR. Textos
+  que cruzam recortes ou caem nas margens são rejeitados. A ordem devolvida pelo Tesseract
+  não interfere na associação espacial; códigos iguais em posições diferentes permanecem.
+- A geometria retorna ao recorte retificado e depois aos quatro cantos na página original.
+  Texto bruto, confiança, DPI, índice do recorte, giro e processamento ficam registrados.
+  O lote não presume categoria ou situação, nem corrige caracteres para produzir um código
+  esperado. Também não apaga texto geral diferente apenas por proximidade.
+- Molduras além do orçamento mantêm diagnóstico de cobertura parcial. Falha no lote conserva
+  as evidências anteriores e usa o diagnóstico de falha transitória já excluído do cache.
+- O teste HTTP/Qt espera a pesquisa inicial terminar no servidor e no Qt antes de limpar a
+  observação e iniciar o cenário atrasado. As verificações de edição, reconexão e fechamento
+  permanecem. Forçar essa pesquisa inicial reproduziu o erro nas três variantes antes da
+  correção; os 13 testes do módulo passaram após corrigir a sincronização.
+
+### Auditoria local
+
+A inspeção visual das 42 molduras explica a perda anterior: há rótulos reais de postes,
+estruturas e cabos abaixo dos 12 pontos que iniciavam os grupos localizados. Uma moldura
+tem sobreposição de símbolos e foi excluída somente da nova auditoria exploratória, sem
+alterar qualquer exclusão ou denominador de E01. Nas outras 41, a conferência exige o código
+intacto e o centro da evidência dentro da moldura, com correspondência um a um. Essa é uma
+métrica de presença textual em um subconjunto; não certifica situação, catálogo ou topologia.
+
+| Medida nesta máquina | 1.12.0 reproduzida | 1.13.0 final |
+|---|---:|---:|
+| Evidências OCR | 270 | 312 |
+| Propostas finais | 7 | 33 |
+| Confirmações automáticas | 1 | 27 |
+| Vãos projetados, sem homologação de associação | 0 | 6 |
+| Rótulos intactos no subconjunto visual | 1/41 | 33/41 |
+| Tempo nativo, limite 25 s | 12,435 s | 19,652 s |
+| Tempo com OCR, limite 60 s | 29,537 s | 47,957 s |
+
+Os oito rótulos restantes do subconjunto têm troca de caracteres, parênteses mal lidos ou
+dígitos truncados. Os outros itens do inventário integral não foram homologados nesta auditoria.
+O lote leu todas as 42 molduras selecionadas, por isso o diagnóstico anterior de molduras
+não processadas desapareceu; isso não significa ausência de erros de reconhecimento.
+
+Medição final isolada: **515,88 MiB** de high-water Python (limite 768 MiB), **445,88 MiB**
+de RSS Python amostrado, **80,26 MiB** de Tesseract (limite 256 MiB) e **445,88 MiB**
+agregados amostrados (limite 1 GiB). Foram 339 amostras, com no máximo dois processos Python,
+`python` e `python3.13`. O primeiro monitor contava apenas o launcher; sua medição inválida
+foi preservada em `memory-incomplete.json` e substituída pela repetição em `memory-final.json`.
+Os picos amostrados podem subestimar eventos menores que 200 ms, como no protocolo E01.
+
+Os tempos variaram também no caminho nativo, cujo comportamento não mudou; a diferença
+total não deve ser atribuída apenas à chamada adicional de OCR. Ambos os limites congelados
+foram atendidos. O snapshot final, sua auditoria e o stderr vazio estão em
+`benchmark-final.json`, `audit-frames.json` e `benchmark-final-stderr.log`. Hash, tamanho e
+mtime da origem foram preservados; SHA-256 permanece
+`1e824e972d5cfc0b19fbcae774321d371cff30f6a8d1dfcb3673db858e6c77df`.
+
+### Validação da retomada
+
+- Conjunto obrigatório de extração, fixtures novas e ferramentas: **162 aprovados**,
+  `tmp/e07-unblock/required.log` (19,99 s).
+- Módulo HTTP/Qt: **13 aprovados**, `http-green.log` (22,70 s). A reprodução determinística
+  anterior registrou **três falhas** com a consulta da preparação indevidamente contada,
+  `http-red.log` (12,05 s).
+- Suíte pública completa: **1.202 aprovados**, **87,71%** de cobertura, 409,40 s,
+  `gate.log`; a falha HTTP/Qt anterior não se repetiu. Dependências, cliente magro e
+  complexidade E/F passaram na mesma execução.
+- Ruff e formatação finais: **343 arquivos**, aprovados. Mypy final: **326 arquivos sem
+  erros**. O primeiro `IniciarTestes.bat` terminou reprovado exclusivamente por uma anotação
+  de tipo no teste novo (`replace` com dicionário genérico), encontrada antes da correção.
+  Após corrigir a anotação, Mypy foi repetido com aprovação (`mypy-final.log`); lint,
+  formatação e Mypy foram conferidos novamente após a suíte. O log original foi preservado,
+  sem apresentá-lo como uma execução integral aprovada do `.bat`.
+
+Comandos reproduzíveis, na raiz:
+
+```powershell
+.\.venv\Scripts\python.exe -c 'from pathlib import Path; from zeny_project_handler.adapters.analysis.tesseract_runtime import provision_portuguese_language; print(provision_portuguese_language(Path("tmp/e07-unblock/runtime")))'
+.\.venv\Scripts\python.exe -m pytest tests/integration/test_project_http_gateway.py -q
+.\.venv\Scripts\python.exe -m pytest tests/unit/test_pymupdf_analyzer.py tests/unit/test_tesseract_ocr.py tests/unit/test_tesseract_runtime.py tests/unit/test_analysis_cache.py tests/unit/test_pdf_coordinates.py tests/integration/test_document_analysis.py tests/unit/test_pymupdf_orientation.py tests/unit/test_pymupdf_frames.py tests/unit/test_pymupdf_ocr_failures.py tests/unit/test_pymupdf_ocr_batch.py tests/unit/test_benchmark_network_pdf.py tests/unit/test_smoke_examples.py -q
+.\IniciarTestes.bat
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m ruff format --check .
+.\.venv\Scripts\python.exe -m mypy --cache-dir tmp/e07-unblock/mypy-cache
+.\tmp\e07-unblock\monitor_benchmark.ps1
+.\.venv\Scripts\python.exe tmp/e07-unblock/audit_frames.py
+git diff --check
+```
+
+O monitor executa `python -m scripts.benchmark_network_pdf` com o PDF de E01, saída
+`tmp/e07-unblock/benchmark-final.json`, runtime `tmp/e07-unblock/runtime` e SQLite novo,
+sem cache, SQL, HTTP ou UI. Mede a cada 200 ms e deve rodar sem outros processos Python ou
+Tesseract. A auditoria e o monitor permanecem privados e locais, como a referência E01.
+`git diff --check` final aprovado; nenhum PDF, raster, snapshot ou inventário privado foi
+incluído nos arquivos versionados. Sem commit ou publicação.
+
+### Bloqueio remanescente
+
+Para concluir E07 ainda é necessário recuperar o `inventory.json` original ou reconstruí-lo
+por revisão integral do mesmo PDF, reconciliando explicitamente os 95 itens, 18 identificadores,
+18 pares de endpoints e 19 comprimentos com os denominadores publicados. Depois, corrigir as
+leituras incompletas e as classes fora dessas molduras, medir a correspondência por ocorrência
+e repetir a aceitação completa. Não reduzir metas nem confundir as confirmações automáticas
+do pipeline com homologação humana. E08 continua pendente até esse aceite.
+
+Arquivos privados desta retomada ficam em `tmp/e07-unblock/`: `benchmark-before.json`,
+`benchmark-after.json` (exploratório), `inspect_frames.py`, `frames.json`, `frames.png`,
+`probe_batch.py`, `batch-result.json`, `audit_frames.py` e os logs. O snapshot exploratório
+foi feito antes de conservar textos gerais divergentes na deduplicação; não é a medição
+final da versão 1.13.0.
+
+## Registro da execução inicial de 10/09/2026
 
 ## Dependência e limites
 

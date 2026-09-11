@@ -154,7 +154,7 @@ Hipóteses de produto adotadas para tornar o plano executável, ajustáveis com 
 | E04 | Escolha do técnico na interface | #concluida | E02, E03 | Seletor e proveniência em Projeto/GMAX |
 | E05 | Rolagem independente dos painéis | #concluida | Nenhuma | Cinco painéis; matriz 8/8 e gate aprovados |
 | E06 | Marca-texto por situação | #concluida | Nenhuma | Realce 25%; matriz 24/24 e gate aprovados |
-| E07 | Extração robusta de evidências | #bloqueada | E01 | Robustez corrigida; recuperação integral pendente |
+| E07 | Extração robusta de evidências | #bloqueada | E01 | OCR em lote validado; recuperação integral pendente |
 | E08 | Associação de elementos e vãos | #pendente | E01, E07 | Ocorrências e topologia recuperadas |
 | E09 | Homologação integrada | #pendente | E03, E04, E05, E06, E08 | Aceite completo e relatório final |
 
@@ -791,13 +791,16 @@ Execute E07 — Extração robusta de evidências de docs/roadmap-mercado-painei
 Executar também novas fixtures e o comando de benchmark completo registrado por E01, comparando
 itens, caixas, diagnósticos e desempenho. Todos os testes devem passar; mocks de OCR não
 substituem a comparação local com Tesseract real.
-**Bloqueios:** a recuperação integral de códigos pequenos/inclinados ainda não foi atingida.
-Evidência, impacto e desbloqueio em [e07-extracao-evidencias.md](e07-extracao-evidencias.md):
-a auditoria identifica omissões textuais inequívocas antes da interpretação, e as molduras
-pequenas continuam sem cobertura localizada garantida. E07 não pode ser aceita e E08 permanece
-pendente. Desbloquear com estratégia de recortes/retificação medida, respeitando os limites
-congelados, e repetir o comparativo por ocorrência. O gate público adicional também teve
-uma falha intermitente de busca HTTP/Qt; a repetição isolada passou, mas o gate não foi aprovado.
+**Bloqueios:** a recuperação integral ainda não foi atingida. Na retomada de 11/09/2026,
+as 42 molduras antes excluídas passaram pelo OCR em lote; em um subconjunto visual de 41
+rótulos, a presença textual por ocorrência melhorou de 1/41 para 33/41, mas oito leituras
+continuam incorretas/incompletas. O inventário original `tmp/e01/inventory.json` não está
+neste checkout; o novo subconjunto não substitui as 95 ocorrências nem reduz a meta.
+E07 não pode ser aceita e E08 permanece pendente. Para desbloquear: recuperar ou reconstruir
+o inventário integral, reconciliar seus denominadores publicados, corrigir as classes restantes
+de perda e repetir a comparação completa dentro dos limites congelados. A falha intermitente
+HTTP/Qt foi corrigida; a suíte pública da retomada passou nos 1.202 testes. Ver evidências,
+limites da auditoria e validações em [e07-extracao-evidencias.md](e07-extracao-evidencias.md).
 **Riscos e mitigação:** excesso de recortes/DPI e falso texto em fotos; limitar por região,
 medir orçamento e testar controles negativos. Se a investigação revelar frentes independentes
 que não cabem em uma sessão, subdividir antes de iniciar, preservando IDs já executados.
@@ -805,6 +808,20 @@ que não cabem em uma sessão, subdividir antes de iniciar, preservando IDs já 
 nenhum `AGENTS.md` aplicável. E01 conferida com inventário, baseline, comandos, metas e três
 verificações privadas aprovadas; extrator/ports sem divergência desde E01. Especialistas
 separaram runtime TSV, retificação/recortes e revisão; integração/validação no trabalho principal.
+
+**Retomada em 11/09/2026 sobre `7fd1b7f`:** extrator **1.13.0**, com lote de até 48 recortes
+e oito milhões de pixels, geometria por ocorrência e diagnóstico ao exceder o orçamento.
+Nenhuma alteração em interpretação/topologia, normas ou PDF. Runtime português provisionado
+localmente. **162 testes obrigatórios aprovados**, **13 HTTP/Qt aprovados**, suíte pública
+**1.202 aprovados / 87,71% de cobertura**; Ruff/formatação e Mypy finais aprovados.
+A execução do `.bat` havia registrado um erro de tipagem no teste novo; a correção e a
+repetição aprovada do Mypy estão documentadas, sem reclassificar o log antigo. Benchmark
+final: **312 evidências OCR, 33 propostas, 27 confirmações automáticas e seis vãos**, com
+hash/tamanho/mtime preservados. Tempos **19,652 s nativo / 47,957 s OCR**; high-water Python
+**515,88 MiB**, Tesseract amostrado **80,26 MiB**, agregado **445,88 MiB**, dentro dos limites.
+Contagens não certificam classificação/associação correta.
+Artefatos locais da retomada em `tmp/e07-unblock/`; comparação, limites e comandos no handoff.
+Os itens abaixo preservam o histórico de 10/09/2026 e não são as métricas atuais.
 
 - Extrator **1.12.0**: orientação dos recortes densos, geometria normalizada com arredondamento
   do raster, molduras retraçadas sem reflexão, deduplicação de texto igual por sobreposição,

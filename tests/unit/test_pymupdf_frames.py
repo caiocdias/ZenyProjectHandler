@@ -93,18 +93,19 @@ def test_small_or_square_symbols_do_not_become_label_frames(
         assert _operational_frame(page, page.get_drawings()[0]) is None
 
 
-def test_small_frame_does_not_start_unbounded_targeted_ocr() -> None:
+def test_small_frame_receives_one_bounded_ocr_call() -> None:
     with pymupdf.open() as document:
         page = document.new_page(width=100, height=100)
         page.draw_rect((10, 10, 18, 12), color=(0, 0.5, 0))
         assert _operational_frame(page, page.get_drawings()[0]) is not None
         assert _linear_cable_frames(page) == ()
+        engine = CharacterizationOcr()
         candidates, diagnostics = _linear_label_candidates(
-            page, 1, CharacterizationOcr(), ConfiguracaoAnaliseDocumento()
+            page, 1, engine, ConfiguracaoAnaliseDocumento()
         )
         assert candidates == ()
-        assert [item.codigo for item in diagnostics] == ["analise.ocr_cobertura_parcial"]
-        assert "1 molduras" in diagnostics[0].mensagem
+        assert diagnostics == ()
+        assert len(engine.pages) == 1
 
 
 def test_rectified_crop_at_page_edge_keeps_geometry_normalized() -> None:
