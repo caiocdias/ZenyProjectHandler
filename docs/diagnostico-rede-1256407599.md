@@ -1,0 +1,110 @@
+# Diagnóstico de leitura do projeto 1256407599
+
+Verificação de 14/09/2026 no checkout `9cb0ef7`, inicialmente limpo. Pacote `0.4.0`,
+extrator `1.14.0`, interpretador `22.0`. Nenhum `AGENTS.md` aplicável encontrado.
+Teste do código atual, não do executável distribuído na release 0.4.
+
+## Resultado
+
+**Leitura parcial; não atende à leitura integral do projeto.** O PDF abre e renderiza.
+OCR recupera os cinco identificadores P1–P5, quatro identificadores de vãos e as medidas
+14, 100, 80, 57, 36 e 83 m. Entretanto, há informação visível ignorada, associação
+ao ponto errado, duplicação e topologia incompleta. Não foi produzido um denominador
+integral de ocorrências: as contagens abaixo não são métricas de precisão/recall.
+
+Fonte: `examples/PROJETO DE REDE 1256407599.pdf`, 988.018 bytes, uma página de
+595 × 842 pontos. SHA-256:
+`0793c292df9722ff48df31ab052018d4233ad3541706f50f53e994cc1670af06`.
+Hash, tamanho e mtime preservados pelo benchmark. A cópia contém carimbo de revisão
+de 14/09/2026; não foi comparada byte a byte à cópia usada na release anterior.
+Logo, não se atribui toda diferença observada exclusivamente à evolução do código.
+
+## Execução reproduzível
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.benchmark_network_pdf 'examples/PROJETO DE REDE 1256407599.pdf' --output tmp/rede-1256407599/benchmark.json --runtime-directory tmp/e01/runtime
+.\.venv\Scripts\python.exe -m pytest tests/unit/test_benchmark_network_pdf.py tests/unit/test_smoke_examples.py -q -p no:cacheprovider --basetemp tmp/rede-1256407599/pytest
+pdftoppm -scale-to 2400 -singlefile -png 'examples/PROJETO DE REDE 1256407599.pdf' 'tmp/rede-1256407599/poppler'
+```
+
+O runtime local existente usa Tesseract com português e inglês; o controle sintético
+funcional do OCR passou. O benchmark usa SQLite novo por variante, extração,
+interpretação, promoção, regiões, vãos, DTOs de Resultados e verificação do XLSX.
+Não executa HTTP, cliente Qt, inspeção documental completa ou conformidade/SQL.
+Se o runtime não estiver disponível em outra máquina, usar o procedimento de
+`docs/e01-diagnostico-leitura-rede.md`, sem considerar ausência de OCR como teste aprovado.
+
+| Medida | Sem OCR | Com OCR |
+|---|---:|---:|
+| Evidências | 1.821 | 2.049 |
+| Evidências OCR | 0 | 228 |
+| Propostas antes do filtro | 9 | 48 |
+| Propostas finais | 0 | 38 |
+| Relações propostas | 0 | 48 |
+| Elementos confirmados | 0 | 10 |
+| Regiões | 0 | 11 |
+| Linhas de Vãos | 0 | 8 |
+| Diagnósticos do pipeline | 0 | 0 |
+| Tempo até regiões/vãos | 11,961 s | 121,184 s |
+| Tempo incluindo Resultados/XLSX | 14,354 s | 122,921 s |
+
+Extração/persistência consumiu 116,247 s na variante OCR. Esta execução não foi
+um benchmark de desempenho isolado: houve inspeção/renderização concorrente.
+Não há medição de pico de memória nem conclusão sobre regressão de desempenho.
+Medições futuras isoladas servem à observabilidade e ao planejamento de recursos.
+Conforme a diretriz posterior do usuário, duração não é critério de aceite: cinco
+minutos ou mais são aceitáveis para obter leitura confiável.
+
+As 38 propostas são 6 postes, 7 estruturas MT, 6 BT, 12 cabos e 7 equipamentos.
+Os 10 confirmados são cabos; nenhum poste foi promovido. O XLSX conferiu com os DTOs:
+38 linhas em Elementos e 8 em Vãos. Concordância entre saídas não certifica correção.
+Oito testes das ferramentas de benchmark/smoke passaram em 4,34 s. O gate completo
+não foi repetido: esta tarefa altera somente documentação.
+
+## Divergências verificadas
+
+| Caso | Evidência visual e saída atual | Camada a investigar |
+|---|---|---|
+| D01 — Revisão do cabo V3-4 | Com anotações, lê-se `ABCN-16(16)`; sem anotações, `ABCN-35(70)`. O segundo foi confirmado, com 14 m, sem diagnóstico da divergência. | Seleção de conteúdo técnico vigente, antes do reconhecimento/catalogação |
+| D02 — Neutro de V2-3 | Duas propostas `N- (1N5)` foram confirmadas para o mesmo identificador, situação e geometria, ambas com 100 m. O desenho mostra um rótulo de neutro nesse trecho. | Consolidação por ocorrência e promoção |
+| D03 — Ponto existente acima de P5 | `N2-10-300`, `S3R` e `100A-10kA-1H` pertencem visualmente ao ponto existente ligado a P5 pelo trecho de 36 m; propostas recebem identificador P5. | Associação por proximidade e pontos sem `P<n>` |
+| D04 — Situações de N4 | P5 mostra N4 riscado em vermelho e N4 verde junto a N3(2); a saída contém apenas N4 `EXISTENTE`, sem as duas ocorrências operacionais correspondentes. | Cor/risco, extração e preservação das ocorrências |
+| D05 — Transformador | `TR-3-45` é recuperado como texto OCR, mas não aparece nem nas propostas brutas nem nas finais. | Interpretação do código; catálogo sem escolha arbitrária |
+| D06 — Conectividade | Oito linhas de Vãos cobrem quatro traçados com 14/100/80/57 m, todas com tipo e modalidade `DESCONHECIDO`. Cabos existentes de 36 e 83 m são confirmados, mas não chegam à tabela Vãos. | Projeção/topologia e política de exibição de existentes |
+
+D01 não é uma simples troca de algarismos pelo OCR: a comparação dos dois rasters
+mostra os dois conteúdos. Há 28 anotações PDF, incluindo Stamp, Ink, FreeText e Square.
+`_semantic_page_pixmap` em `adapters/analysis/pymupdf_ocr.py` usa `annots=False`;
+`application/document_zones.py` exclui anotações de revisão, com exceção técnica para
+AutoCAD SHX. O comportamento evita transformar comentários em ativos, mas precisa
+representar explicitamente revisões técnicas e conteúdo encoberto. Não basta ligar
+todas as anotações no OCR nem assumir que o último carimbo aprova uma revisão.
+
+D03 é compatível com a busca de identificadores próximos em
+`adapters/interpretation/operational_labels.py`; a causa precisa ser reproduzida em
+fixture antes de editar. D06 exige distinguir linha por cabo de trecho físico:
+duas linhas para fase/neutro não são necessariamente duplicatas; D02 é um caso
+separado de repetição do mesmo neutro. A ausência de classificação de poste/padrão
+não deve ser preenchida por adivinhação (ADR 0015).
+
+## Cobertura visual e limites
+
+Conferidos a página completa com PyMuPDF e Poppler, recortes de P3/P4, P2, P1/P5 e
+rede existente, e o recorte P3/P4 sem anotações. Há também cabeçalho, notas,
+servidão, quadro de vão regulador, quadro de CHI, fotografias e assinaturas.
+OCR contém NS, impacto ambiental negativo e menção à servidão; não foi verificado
+se todos esses campos chegam corretamente ao painel documental. Fotografias e
+assinaturas visíveis não constituem comprovação automática de conteúdo/autenticidade.
+
+Poppler saiu com código zero e produziu imagem legível, com avisos de fontes
+Symbol/ArialUnicode e streams Flate. Eles não impediram esta inspeção; não houve
+reescrita ou reparo da fonte. Os 14 tokens de `get_text('words')`, 1.624 desenhos e
+zero imagens de `get_images()` não descrevem sozinhos o conteúdo visível: várias
+imagens estão em aparências de anotações.
+
+Artefatos privados em `tmp/rede-1256407599/`: `benchmark.json`, `page-1.txt`,
+`page-1.png`, `poppler.png`, `top.png`, `middle.png`, `bottom.png`, `header.png` e
+`top-without-annotations.png`. Permanecem ignorados; o PDF real não é fixture pública.
+O plano de correção foi incorporado como E10–E15, incluindo E12A/E12B para
+experimentação de algoritmos alternativos e reconciliação entre métodos, em
+[roadmap-mercado-paineis-leitura-rede.md](roadmap-mercado-paineis-leitura-rede.md).

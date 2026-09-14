@@ -4,12 +4,49 @@ Data: 10/09/2026. Base inicial: `336afba`. E01 diagnosticada em `4ce5b50`; E02 e
 em `101c721`; E03 integrada em `4f48c93`; E04 integrada em `897d85c`.
 E05 concluída sobre `7dd6fbe`, com correções sem commit. Demais estados conforme o índice.
 
+Extensão em 14/09/2026, base `9cb0ef7`: E10–E15 tratam a leitura do novo exemplo
+1256407599. O [diagnóstico reproduzido](diagnostico-rede-1256407599.md) confirma leitura
+parcial com OCR. Estados e evidências de E01–E09 permanecem preservados; os limites
+históricos de tempo são substituídos, para trabalho futuro, pela diretriz abaixo.
+
+## Diretriz vigente: confiabilidade, evolução vertical e horizontal
+
+Atualizada por solicitação do usuário em 14/09/2026. Esta diretriz prevalece sobre
+metas de tempo nos prompts, critérios e handoffs antigos, inclusive em retomadas
+de E08/E09. Tempos e aprovações anteriores permanecem como registro histórico.
+
+- **Vertical:** aprimorar precisão e cobertura dos algoritmos atuais, incluindo
+  segmentação/OCR, camadas do PDF, situações, deduplicação, associação e topologia.
+- **Horizontal:** implementar e experimentar algoritmos distintos dos atuais,
+  compará-los na mesma referência e integrar os que apresentarem ganho comprovado.
+  Alterar apenas DPI, parâmetros ou heurísticas do mesmo método não cumpre essa
+  frente. E12A e E12B tornam experimentação e reconciliação entregas obrigatórias.
+- **Tempo:** não é critério de aceite, ranking de métodos ou bloqueio. Uma análise
+  de cinco minutos é aceitável; 300 segundos não é um teto. Não encerrar tentativas,
+  reduzir resolução/cobertura ou escolher método menos confiável para cumprir os
+  antigos 25/60 segundos. Medir duração apenas para observabilidade e planejamento.
+- **Operação:** manter memória controlada, progresso, cancelamento e recuperação de
+  falhas. Timeouts servem para detectar travamento, devem ser adequados ao método e
+  permitir análise longa saudável. Um limite atingido produz resultado incompleto
+  explícito, nunca confirmação de leitura integral ou reutilização como sucesso.
+- **Confiabilidade:** exigir evidência por item e avaliar falsos positivos, omissões,
+  código/situação exatos, relações, medidas e resultados completos. Confiança declarada
+  pelo OCR e concordância entre métodos não bastam; medir erros também nos casos
+  confirmados automaticamente. Preservar divergências e encaminhar ambiguidades
+  reais à revisão, sem transformar defeitos de software em exclusões do inventário.
+
+O objetivo é leitura integral confiável no conjunto validado. Aprovar um PDF ou
+um conjunto finito não demonstra infalibilidade em projetos nunca vistos; manter
+casos de avaliação separados dos ajustes e registrar os limites da evidência.
+
 ## Objetivo e uso
 
 Permitir que o técnico ajuste a classificação inicial do banco para Rural, Urbano ou Ambos;
 aplicar as duas famílias de normas em Ambos; manter cartões legíveis com rolagem independente
 por painel; substituir os colchetes dos elementos por marca-texto por situação; e melhorar a
 extração e a associação de elementos e vãos usando a NS 1256148225 como caso de verificação.
+O escopo adicional usa a NS 1256407599 para cobrir revisões técnicas em anotações,
+ocorrências, associações e topologia que o primeiro exemplo não homologou.
 
 Execute uma etapa por sessão limpa aberta na raiz do repositório, copiando seu prompt. Leia as
 instruções locais e confira dependências, código e Git antes de trabalhar. Atualize a tag no
@@ -157,6 +194,14 @@ Hipóteses de produto adotadas para tornar o plano executável, ajustáveis com 
 | E07 | Extração robusta de evidências | #concluida | E01 | 95 ocorrências, 18 identificadores e 19 comprimentos com evidência recuperada |
 | E08 | Associação de elementos e vãos | #bloqueada | E01, E07 | 95 ocorrências; 18/19 comprimentos; classificação/topologia pendentes |
 | E09 | Homologação integrada | #bloqueada | E03, E04, E05, E06, E08 | Gate aprovado; E08 e realce simbólico impedem aceite |
+| E10 | Referência integral do segundo PDF | #pendente | Nenhuma | Inventário por camada e medições isoladas |
+| E11 | Revisões técnicas e conteúdo vigente | #pendente | E10 | Revisão explícita de sobreposições sem promover comentários |
+| E12 | Precisão dos extratores atuais | #pendente | E10, E11 | Melhorias verticais medidas por ocorrência |
+| E12A | Experimentação de algoritmos alternativos | #pendente | E12 | Comparação executada de métodos distintos |
+| E12B | Reconciliação e confiança entre métodos | #pendente | E12A | Métodos úteis integrados e conflitos rastreáveis |
+| E13 | Ocorrências e associação aos pontos corretos | #pendente | E12B | Catálogo, situação, vínculos e deduplicação rastreáveis |
+| E14 | Topologia e projeção dos trechos | #pendente | E13 | Continuidade e vãos existentes/novos coerentes |
+| E15 | Aceite integral do segundo PDF | #pendente | E11, E12, E12A, E12B, E13, E14 | Precisão vertical/horizontal, revisão visual e integração |
 
 ## E01 — Diagnóstico e referência da NS 1256148225 — #concluida
 
@@ -894,7 +939,7 @@ compartilhadas. **Escopo:** `adapters/interpretation/rule_based.py`, `category_a
 **Prompt para uma sessão limpa:**
 
 ```text
-Execute E08 — Associação de elementos e vãos de docs/roadmap-mercado-paineis-leitura-rede.md. Leia primeiro AGENTS.md aplicáveis, roadmap e handoffs de E01/E07, ADR 0015, adaptadores de interpretação, analysis_regions.py, automatic_promotion.py, spans.py, pipeline e testes; confira git status. Verifique E01/E07 concluídas e código sem divergência não tratada. Preserve mudanças preexistentes e marque E08 em andamento no índice e detalhe. Recupere as ocorrências e os vãos inequívocos do inventário, corrigindo apenas perdas demonstradas de normalização, associação, promoção e endpoints. Crie regressões sintéticas com controles negativos, preserve qualificadores, situações, comprimentos substituídos, rede/ramal/padrão, revisão humana e identidades determinísticas. Não invente cabos, medidas ou vínculos por proximidade; torne ambiguidade revisável. Atualize versões/assinaturas, documentação e testes necessários. Execute as validações obrigatórias e benchmark completo até Resultados/exportação, cumprindo metas E01. Só marque concluída após aceite; se houver impedimento real, marque bloqueada com causa, evidência, impacto e desbloqueio. Preencha Evidências e handoff com arquivos, decisões, comandos, métricas e casos remanescentes. Não declare sucesso com validação falhando ou não executada; não crie commit nem publique. Termine com resumo conciso de mudanças, validações e pendências.
+Execute E08 — Associação de elementos e vãos de docs/roadmap-mercado-paineis-leitura-rede.md. Leia primeiro AGENTS.md aplicáveis, roadmap e handoffs de E01/E07, ADR 0015, adaptadores de interpretação, analysis_regions.py, automatic_promotion.py, spans.py, pipeline e testes; confira git status. Verifique E01/E07 concluídas e código sem divergência não tratada. Preserve mudanças preexistentes e marque E08 em andamento no índice e detalhe. Recupere as ocorrências e os vãos inequívocos do inventário, corrigindo apenas perdas demonstradas de normalização, associação, promoção e endpoints. Crie regressões sintéticas com controles negativos, preserve qualificadores, situações, comprimentos substituídos, rede/ramal/padrão, revisão humana e identidades determinísticas. Não invente cabos, medidas ou vínculos por proximidade; torne ambiguidade revisável. Atualize versões/assinaturas, documentação e testes necessários. Execute as validações obrigatórias e benchmark completo até Resultados/exportação, cumprindo metas de qualidade E01. A diretriz vigente substitui os limites históricos de tempo: duração não reprova a leitura, inclusive acima de cinco minutos; preserve progresso, memória e cancelamento. Só marque concluída após aceite; se houver impedimento real, marque bloqueada com causa, evidência, impacto e desbloqueio. Preencha Evidências e handoff com arquivos, decisões, comandos, métricas e casos remanescentes. Não declare sucesso com validação falhando ou não executada; não crie commit nem publique. Termine com resumo conciso de mudanças, validações e pendências.
 ```
 
 **Critérios de aceite:**
@@ -906,8 +951,8 @@ Execute E08 — Associação de elementos e vãos de docs/roadmap-mercado-painei
 
 **Validação obrigatória:** `python -m pytest tests/unit/test_rule_based_interpreter.py tests/unit/test_spans.py tests/unit/test_analysis_regions.py tests/unit/test_topology_path_compliance.py tests/integration/test_interpretation_pipeline.py tests/integration/test_human_review.py tests/server/test_review_api.py tests/server/test_deliverable_exports.py tests/e2e/test_span_compliance_ui.py`.
 Executar novas regressões e benchmark E01 com OCR real, promoção e vãos. Exigir precisão/recall
-por categoria, correspondência dos endpoints/comprimentos, duplicatas e desempenho dentro das
-metas, além de navegação visual amostrada em cada classe de correção. Testes todos aprovados.
+por categoria, correspondência dos endpoints/comprimentos e duplicatas; registrar duração
+apenas como telemetria, além de navegação visual amostrada em cada classe de correção. Testes todos aprovados.
 **Bloqueios:** falta evidência técnica de padrão no endpoint junto à casa e de formato/material
 para escolher os 17 modelos de poste; a ocorrência não basta para inventar essas classes
 (ADR 0015 e candidatos preservados nas propostas). Isso impede certificar ramal/rede resolvidos.
@@ -966,7 +1011,7 @@ sanitizado de validação em `docs/` (arquivo novo, se necessário).
 **Prompt para uma sessão limpa:**
 
 ```text
-Execute E09 — Homologação integrada de docs/roadmap-mercado-paineis-leitura-rede.md. Leia primeiro AGENTS.md aplicáveis, roadmap inteiro, handoffs E01–E08, README.md, docs/especificacao-funcional.md e testes de integração/e2e; confira git status. Verifique E03/E04/E05/E06/E08 e dependências concluídas e código coerente com as evidências. Preserve alterações preexistentes e marque E09 em andamento no índice e detalhe. Valide em ambiente isolado o fluxo de inicialização SQL, escolha Rural/Urbano/Ambos, persistência, conflitos, reconexão, reanálise, snapshots e exportação. Execute benchmark com OCR real da NS 1256148225 e verifique marca-textos, navegação e rolagem dos cinco painéis conforme as matrizes visuais. Execute o gate público completo; mantenha PDFs reais opcionais e fora do Git. Corrija regressões de integração dentro do escopo e atualize documentação do comportamento final, sem diminuir metas. Só marque concluída após satisfazer toda a definição global de pronto e validações; se houver impedimento real, marque bloqueada com causa, evidência, impacto e desbloqueio. Preencha Evidências e handoff com arquivos, decisões, comandos, métricas e inspeções. Não declare sucesso com validações falhando ou não executadas. Não crie commit, release, publicação ou migração operacional. Termine com resumo conciso de mudanças, validações e pendências.
+Execute E09 — Homologação integrada de docs/roadmap-mercado-paineis-leitura-rede.md. Leia primeiro AGENTS.md aplicáveis, roadmap inteiro, handoffs E01–E08, README.md, docs/especificacao-funcional.md e testes de integração/e2e; confira git status. Verifique E03/E04/E05/E06/E08 e dependências concluídas e código coerente com as evidências. Preserve alterações preexistentes e marque E09 em andamento no índice e detalhe. Valide em ambiente isolado o fluxo de inicialização SQL, escolha Rural/Urbano/Ambos, persistência, conflitos, reconexão, reanálise, snapshots e exportação. Execute benchmark com OCR real da NS 1256148225 e verifique marca-textos, navegação e rolagem dos cinco painéis conforme as matrizes visuais. Execute o gate público completo; mantenha PDFs reais opcionais e fora do Git. Corrija regressões de integração dentro do escopo e atualize documentação do comportamento final, sem diminuir metas de qualidade. Conforme a diretriz vigente, tempo não é critério de aceite, e cinco minutos não é teto; preserve memória, progresso e cancelamento. Só marque concluída após satisfazer toda a definição global de pronto e validações; se houver impedimento real, marque bloqueada com causa, evidência, impacto e desbloqueio. Preencha Evidências e handoff com arquivos, decisões, comandos, métricas e inspeções. Não declare sucesso com validações falhando ou não executadas. Não crie commit, release, publicação ou migração operacional. Termine com resumo conciso de mudanças, validações e pendências.
 ```
 
 **Critérios de aceite:**
@@ -1013,3 +1058,486 @@ Asserções de interação/rolagem passaram; **aceite visual real reprovado pela
 equipamento**. Handoff final: [e09-homologacao-integrada.md](e09-homologacao-integrada.md).
 Nenhuma alteração de produção, commit, release, publicação ou migração operacional.
 PDFs e dados privados ignorados.
+
+## Contexto e aceite da extensão E10–E15
+
+Esta extensão é planejamento, sem implementação de produção nesta tarefa. Leia
+`docs/diagnostico-rede-1256407599.md` antes de executar as etapas. Na base `9cb0ef7`,
+o PDF tem uma página, 988.018 bytes e 28 anotações; o extrator é `1.14.0` e o
+interpretador `22.0`. O benchmark com OCR real produziu 38 propostas, 10 cabos
+confirmados e 8 linhas de Vãos, com erros D01–D06 detalhados no diagnóstico.
+Os oito testes das ferramentas passaram; não houve homologação integral.
+
+**Escopo incluído:** camada técnica vigente, extração, interpretação, catalogação,
+associação, promoção, topologia, revisão humana, projeções, detecção documental e
+exportação das informações suportadas pelo produto. Cada informação relevante
+legível deve estar representada ou ter ambiguidade/limitação explícita e navegável.
+Inclui evolução vertical dos métodos atuais e horizontal por algoritmos distintos,
+com comparação experimental obrigatória e reconciliação orientada por evidências.
+**Fora de escopo:** reconstrução artística, interpretação irrestrita de fotografias,
+autenticação de assinaturas, inclusão de normas sem fonte, alteração do PDF,
+OCR externo, publicação/release e implementação durante a elaboração do roadmap.
+
+**Invariantes:** aplicar as restrições globais acima; manter cliente magro,
+identidades e decisões humanas, original intacto e dados reais ignorados. Não
+promover texto de comentário, carimbo ou fotografia como ativo; não escolher cabo,
+modelo de poste ou padrão por conveniência. Não elevar E08/E09 a concluídas pela
+aprovação deste segundo exemplo. Usar fixtures sintéticas públicas e manter o
+gate independente de `examples/`. Testes/documentação acompanham cada mudança.
+
+**Hipóteses e decisões em aberto:**
+
+- A cópia atual foi revisada e não tem identidade comprovada com o arquivo da
+  release antiga. Impacto: o baseline vale para o hash registrado, sem promessa
+  de medir ganho entre releases sobre entrada idêntica.
+- Parte do conteúdo vigente está em anotações. A política padrão proposta é
+  detectar conflito e exigir revisão técnica explícita quando a autoridade da
+  sobreposição for ambígua, preservando os dois valores. E10 documenta essa
+  decisão antes de E11; a data de um carimbo não basta para aceitar conteúdo.
+- A referência integral de ocorrências/campos e a classificação de pontos ainda
+  não foram auditadas. Impacto: E10 fixa denominadores antes de correções; nenhum
+  percentual de cobertura pode ser inferido das 38 propostas.
+- E08/E09 contêm trabalho e bloqueios relacionados, mas seus estados não impedem
+  iniciar o diagnóstico do segundo PDF. E13/E14 devem conferir alterações nessa
+  base e reutilizar correções aplicáveis, evitando implementações concorrentes.
+- O tempo OCR observado inclui inspeção concorrente. E10 registra duração e memória
+  como telemetria; não fixa SLA nem limite de duração. Cinco minutos ou mais são
+  aceitáveis se necessários à confiabilidade. A memória e os mecanismos de
+  recuperação devem permitir executar o método sem perder evidências.
+- Métodos alternativos ainda não foram selecionados nem instalados. E12A verifica
+  licença, execução local, hardware e capacidade de produzir evidência antes da
+  escolha. Ausência de GPU não justifica omitir a frente horizontal: experimentar
+  alternativas compatíveis ou registrar impedimento concreto e opção de desbloqueio.
+
+**Definição de pronto da extensão:** inventário E10 congelado e reconciliado,
+100% dos itens legíveis e inequívocos recuperados com código, situação, geometria
+e relações corretos; divergências de revisão explícitas; zero duplicatas/falsos
+positivos conhecidos nos controles; ambiguidades reais separadas de defeitos de
+software, sem reduzir denominadores para aceitar omissões. Verificar rede nova,
+existente e ligação ao consumidor, campos documentais suportados, navegação e
+concordância HTTP/Resultados/XLSX. Comprovar comparação vertical/horizontal,
+reconciliação por evidência e qualidade em casos reservados; preservar cache/cancelamento e
+gate público completo com cobertura mínima de 85,01%. O aceite se limita à
+informação sustentada pela fonte; classificação não demonstrável deve continuar
+revisável, sem ser apresentada como resolvida. E15 registra isso por item.
+
+Execute uma etapa por sessão limpa. A ordem preferencial é
+E10→E11→E12→E12A→E12B→E13→E14→E15. Os IDs existentes são preservados; E12A/E12B
+são novas etapas, posicionadas antes de seus consumidores. Nesta execução
+não há execução paralela de código prevista, pois as etapas compartilham os
+extratores e as projeções. As dependências pendentes não são bloqueios reais.
+
+## E10 — Referência integral do segundo PDF — #pendente
+
+**Objetivo:** transformar o diagnóstico amostral em referência auditável de toda a
+página e medir o custo real por fase antes de modificar heurísticas.
+**Por que agora:** faltam denominadores e a política para revisões sobrepostas.
+**Dependências e paralelismo:** nenhuma; ler os resultados de E01/E07/E08/E09 sem
+alterar seus estados. Inventário e benchmark usam a mesma cópia identificada.
+**Escopo:** diagnóstico do segundo PDF, `scripts/benchmark_network_pdf.py`,
+`tests/unit/test_benchmark_network_pdf.py`, `tests/pdf_fixtures.py`, anotações e
+DTOs produzidos. Dados completos em `tmp/rede-1256407599/`.
+**Fora de escopo:** corrigir extrator, catálogo ou associação nesta etapa.
+
+**Passos de implementação:**
+
+1. Inventariar a página com e sem anotações: ocorrências físicas, qualificadores,
+   códigos, situações, pontos sem identificador, cabos, medidas, quadros, cabeçalho,
+   notas, servidão, fotos e assinaturas. Separar representação repetida de ocorrência
+   distinta, com ROIs e evidência do julgamento.
+2. Rastrear cada item até evidências, propostas, promoção, DTO e XLSX; classificar
+   perdido, incorreto, duplicado, ambíguo ou correto. Incluir obrigatoriamente D01–D06.
+3. Definir contrato de tratamento da revisão técnica: detectar conflito primeiro,
+   preservar proveniência/valor anterior e permitir decisão explícita. Documentar
+   impacto em UI/DTO/cache antes de E11; não aceitar todo Stamp como técnico.
+4. Repetir benchmark isolado, registrar chamadas/tempo OCR, memória Python/Tesseract
+   e custo de anotações em três execuções, sem limiar de aprovação por tempo. Acrescentar
+   instrumentação opt-in e teste sintético ao benchmark se necessária.
+5. Registrar inventário privado e resumo sanitizado no diagnóstico; fixar as metas
+   de precisão/recall por categoria, campos e topologia, sem incluir dados pessoais.
+6. Separar exemplos de ajuste e avaliação reservada por documento ou família
+   sintética, evitando recortes quase idênticos em ambos. Incluir o PDF anterior
+   quando disponível, casos negativos e variações de orientação/cor/escala/revisão.
+   Fixar também erro entre confirmações automáticas, cobertura automática, taxa de
+   revisão e leitura exata do projeto inteiro; não aceitar abstenção generalizada.
+
+**Prompt para uma sessão limpa:**
+
+```text
+Execute E10 — Referência integral do segundo PDF de docs/roadmap-mercado-paineis-leitura-rede.md. Leia AGENTS.md aplicáveis, roadmap, docs/diagnostico-rede-1256407599.md, docs/e01-diagnostico-leitura-rede.md, scripts/benchmark_network_pdf.py, tests/unit/test_benchmark_network_pdf.py e git status. Não há dependências de execução; confira a revisão atual, divergências do plano e preserve mudanças preexistentes. Marque E10 como #em-andamento no índice e detalhe. Inventarie toda a página do PDF local 1256407599 com e sem anotações, incluindo D01–D06, situações, cabos, pontos, quadros e documentação. Rastreie itens até evidência/proposta/ativo/DTO/XLSX; não infira recall por contagem. Fixe a política de revisão técnica, denominadores e metas de qualidade, com casos reservados por documento/família e métricas de erro entre confirmações, cobertura automática e revisão. Registre três benchmarks isolados e memória; tempo é apenas telemetria, sem teto de 60 ou 300 segundos. Mantenha artefatos privados em tmp e implemente apenas instrumentação opt-in e testes sintéticos necessários, sem corrigir o pipeline. Execute as validações de E10 e atualize documentação. Só use #concluida com todos os critérios e validações aprovados; não declare sucesso com testes falhando ou não executados. Se um impedimento real surgir, use #bloqueada com causa, evidência, impacto e ação de desbloqueio. Preencha Evidências e handoff com arquivos, decisões, comandos, resultados e itens para E11. Não faça commit ou ação externa. Termine com resumo conciso de mudanças, validações e pendências.
+```
+
+**Critérios de aceite:**
+
+- [ ] Inventário cobre toda a página, distingue camadas e fixa denominadores por classe.
+- [ ] D01–D06 têm cadeia de evidência e a política de revisão está documentada.
+- [ ] Três medições isoladas e memória ficam registradas, sem limite de tempo para aceite.
+- [ ] Casos reservados e métricas de qualidade/confirmados/revisão estão congelados.
+- [ ] Testes do benchmark passam sem exigir arquivo privado.
+
+**Validação obrigatória:** executar o comando OCR do diagnóstico três vezes, com
+saídas distintas em `tmp/rede-1256407599/`; conferir hash/tamanho/mtime. Rodar
+`python -m pytest tests/unit/test_benchmark_network_pdf.py tests/unit/test_smoke_examples.py`.
+Inspecionar todos os recortes do inventário e conferir cada vínculo ao snapshot.
+**Bloqueios:** nenhum bloqueio conhecido; PDF e OCR estavam disponíveis nesta auditoria.
+**Riscos e mitigação:** denominador baseado na saída ocultar perdas; inventariar primeiro
+pelo desenho. Confundir revisões com comentários; registrar ambos e a autoridade conhecida.
+**Evidências e handoff:** ainda não executada. Insumo: diagnóstico de 14/09/2026.
+
+## E11 — Revisões técnicas e conteúdo vigente — #pendente
+
+**Objetivo:** representar conteúdo técnico sobreposto e conflitos com a camada base,
+sem promover anotações comuns nem usar silenciosamente valores encobertos.
+**Por que agora:** D01 impede considerar o raster técnico atual igual ao PDF exibido.
+**Dependências e paralelismo:** E10; implementação sequencial, pois altera origem de
+evidências e revisão consumidas pelas etapas seguintes.
+**Escopo:** `adapters/analysis/pymupdf_ocr.py`, `pymupdf_page_extractors.py`,
+`application/document_zones.py`, `human_review.py`, `automatic_promotion.py`,
+`src/zeny_project_handler_server/review_api.py`, contratos/clientes afetados pela
+política E10. Paths de domínio e persistência adicionais serão localizados antes de editar.
+**Fora de escopo:** considerar toda anotação aprovada ou reescrever/achatar o PDF original.
+
+**Passos de implementação:**
+
+1. Criar fixture sintética de código base coberto por revisão, mais comentários,
+   Stamp de revisão, assinatura, foto, Ink e SHX como controles separados.
+2. Extrair aparências técnicas com proveniência e detectar ocultação/conflito.
+   Preservar valor base e sobreposto; aplicar somente a decisão rastreável prevista
+   por E10. Na ambiguidade, impedir confirmação automática do valor encoberto.
+3. Persistir e projetar a decisão de revisão necessária em API/UI e exportação;
+   tornar ambos os valores navegáveis e preservar histórico/reanálises.
+4. Versionar assinaturas afetadas, documentar comportamento e executar regressões.
+
+**Prompt para uma sessão limpa:**
+
+```text
+Execute E11 — Revisões técnicas e conteúdo vigente de docs/roadmap-mercado-paineis-leitura-rede.md. Leia AGENTS.md aplicáveis, roadmap, diagnóstico e handoff E10, adapters/analysis/pymupdf_ocr.py e pymupdf_page_extractors.py, application/document_zones.py, human_review.py, automatic_promotion.py, review_api.py e git status. Confirme E10 concluída, política definida e código sem divergência não tratada. Preserve mudanças existentes e marque E11 #em-andamento no índice e detalhe. Implemente evidência da revisão técnica sobreposta e tratamento explícito do conflito ABCN base/revisado, com proveniência e revisão humana quando necessário; comentários comuns não viram ativos. Atualize persistência/DTO/UI somente conforme a política E10, mantendo histórico e compatibilidade. Crie fixtures sintéticas de sobreposição, comentários, fotos, carimbo e SHX; atualize versões, documentação e execute validações E11. Não reescreva o PDF. Só marque #concluida após aceite e todos os testes obrigatórios aprovados; não declare sucesso com testes falhando ou não executados. Use #bloqueada apenas para impedimento real, documentando causa, evidência, impacto e desbloqueio. Preencha Evidências e handoff com arquivos, decisões, migração se necessária, comandos e resultados. Não faça commit nem publicação. Termine com resumo conciso de mudanças, validações e pendências.
+```
+
+**Critérios de aceite:**
+
+- [ ] D01 apresenta os valores base e visível com origem; não confirma o antigo silenciosamente.
+- [ ] Decisão técnica persiste e sobrevive à reanálise; comentários/fotos/carimbo não criam ativos.
+- [ ] SHX continua recuperável e cache antigo não oculta a mudança.
+
+**Validação obrigatória:** `python -m pytest tests/unit/test_pymupdf_analyzer.py tests/unit/test_rule_based_interpreter.py tests/unit/test_analysis_cache.py tests/integration/test_human_review.py tests/server/test_review_api.py tests/server/test_deliverable_exports.py`.
+Acrescentar novas regressões sintéticas e teste da UI alterada; descobrir seu comando
+nos testes existentes do painel antes de editar. Repetir D01 sobre a fonte real.
+**Migração/rollback:** se o contrato mudar, evolução aditiva com campos antigos
+legíveis e decisão ausente como não resolvida; sem backfill de autoridade. Incrementar
+compatibilidade se necessário; documentar retorno de versão sem perder decisões.
+**Bloqueios:** nenhum bloqueio conhecido; decisão de E10 é dependência.
+**Riscos e mitigação:** sobreposição mal classificada gerar ativo; revisão explícita,
+negativos e rastreabilidade. Não usar a anotação como instrução executável.
+**Evidências e handoff:** ainda não executada.
+
+## E12 — Precisão dos extratores atuais — #pendente
+
+**Objetivo:** recuperar os tokens técnicos do inventário com geometria, cor e risco
+preservados, aprimorando os algoritmos atuais sem limitar a duração da análise.
+Esta etapa mede a frente vertical; perdas que exigem método diferente passam
+explicitamente a E12A/E12B, sem serem declaradas resolvidas.
+**Por que agora:** E11 define quais camadas podem fornecer evidência técnica vigente.
+**Dependências e paralelismo:** E10/E11; conflita com qualquer edição paralela nos extratores.
+**Escopo:** `adapters/analysis/pymupdf_glyph_ocr.py`, `pymupdf_ocr.py`,
+`pymupdf_ocr_batch.py`, `pymupdf_symbols.py`, `tesseract_ocr.py`, cache e benchmark.
+**Fora de escopo:** promover ativos para elevar contagens, escolher catálogo ou conectar pontos.
+
+**Passos de implementação:**
+
+1. Reproduzir perdas E10 em fixtures, incluindo N4 verde/vermelho, rótulos inclinados,
+   códigos CA/CAA, medidas, quadros e objetos sobrepostos. Conservar cor/risco como
+   evidência por ocorrência, sem propagar a situação a elementos vizinhos.
+2. Corrigir segmentação/recortes e reconciliação das leituras; código incerto não
+   deve ser completado usando o catálogo. TR-3-45 já extraído segue para E13.
+3. Explorar resolução, múltiplas passagens, orientação e recortes adicionais quando
+   melhorarem a qualidade. Agrupar trabalho somente sem perda de evidências;
+   preservar cancelamento, cobertura parcial explícita e memória controlada.
+   Ajustar timeouts que interrompam trabalho saudável, sem criar teto global.
+4. Versionar cache/extrator, medir novamente e documentar ganhos/perdas por item.
+
+**Prompt para uma sessão limpa:**
+
+```text
+Execute E12 — Precisão dos extratores atuais de docs/roadmap-mercado-paineis-leitura-rede.md. Leia AGENTS.md aplicáveis, roadmap, diagnóstico, handoffs E10/E11, adapters/analysis/pymupdf_glyph_ocr.py, pymupdf_ocr.py, pymupdf_ocr_batch.py, pymupdf_symbols.py, tesseract_ocr.py, testes de extração/cache e git status. Confirme E10/E11 concluídas e verifique divergências do código. Preserve mudanças preexistentes e marque E12 #em-andamento no índice e detalhe. Corrija somente perdas de tokens/geometria/cor/risco demonstradas no inventário, mantendo situações separadas e códigos literais; não implemente catálogo ou associação. Priorize qualidade: permita mais resolução e passagens, não use tempo como limite ou aceite e ajuste timeouts para execução longa saudável. Preserve memória, diagnóstico e cancelamento. Compare o baseline com as melhorias verticais e entregue perdas remanescentes à experimentação E12A, sem alegar que foram resolvidas. Crie regressões sintéticas positivas e negativas, atualize versões/cache/documentação e execute validações E12 com benchmark real isolado. Só marque #concluida com correções verticais previstas e validações aprovadas; registre explicitamente lacunas para E12A/E12B, sem alterar o denominador global; não declare sucesso com testes falhando ou não executados. Se houver impedimento real, use #bloqueada e registre causa, evidência, impacto e desbloqueio. Preencha Evidências e handoff com arquivos, decisões, comandos, tempos, memória e tokens remanescentes. Não faça commit nem ação externa. Termine com resumo conciso de mudanças, validações e pendências.
+```
+
+**Critérios de aceite:**
+
+- [ ] Casos atribuídos às correções verticais têm evidência correta e navegável;
+      baseline/melhorias são comparados e perdas para métodos alternativos ficam listadas.
+- [ ] Leituras parciais/ambíguas são explícitas; controles não criam texto técnico falso.
+- [ ] Cancelamento, memória e cache mantêm os contratos em análise longa; tempo não reprova.
+
+**Validação obrigatória:** `python -m pytest tests/unit/test_pymupdf_analyzer.py tests/unit/test_pymupdf_ocr_failures.py tests/unit/test_pymupdf_ocr_batch.py tests/unit/test_tesseract_ocr.py tests/unit/test_analysis_cache.py tests/integration/test_document_analysis.py tests/unit/test_benchmark_network_pdf.py`.
+Executar novas regressões e benchmark isolado E10; comparar inventário e inspecionar
+as ROIs corrigidas. Registrar duração sem gate e conferir fonte intacta.
+**Bloqueios:** nenhum bloqueio conhecido.
+**Riscos e mitigação:** melhorar só os casos conhecidos; comparar por ocorrência e
+reservar a avaliação final. Não truncar tentativas por velocidade.
+**Evidências e handoff:** ainda não executada.
+
+## E12A — Experimentação de algoritmos alternativos — #pendente
+
+**Objetivo:** executar uma comparação reproduzível com pelo menos duas abordagens
+algoritmicamente distintas das atuais, identificando ganhos complementares e erros.
+**Por que agora:** E10 fixa a referência, E11 trata revisões e E12 mede o limite da
+melhoria vertical; trocar parâmetros do mesmo método já não basta para este aceite.
+**Dependências e paralelismo:** E12; usar E10/E11 como insumos. Experimentos não
+alteram a promoção de produção; executar medições separadamente para atribuir resultados.
+**Escopo:** `src/zeny_project_handler/ports/analysis.py`, `ports/interpretation.py`,
+adaptadores de análise/interpretação, `scripts/benchmark_network_pdf.py` e fixtures.
+Novos adaptadores e testes são caminhos a definir conforme os candidatos; registrar
+a localização escolhida no handoff. Não há motor alternativo escolhido ou instalado.
+**Fora de escopo:** listar alternativas sem executá-las, usar somente variações de
+Tesseract, enviar PDFs a serviços externos ou promover saídas experimentais.
+
+**Passos de implementação:**
+
+1. Inspecionar as portas reais e definir matriz de candidatos: obrigatoriamente
+   um reconhecedor local independente de Tesseract e uma abordagem diferente para
+   associação e topologia, com segmentação adicional se necessária. Exemplos de famílias a investigar são
+   reconhecimento visual de sequências, componentes/glifos vetoriais e associação
+   global por grafo/restrições em vez de apenas decisões locais por proximidade.
+   Confirmar capacidades na documentação primária durante a execução; nomes de
+   ferramentas, licenças, modelos e requisitos de hardware ainda são decisões abertas.
+2. Implementar protótipos isolados, com dependências/modelos versionados e execução
+   local, preservando código literal, coordenadas e origem. Transformar resposta
+   sem evidência localizável em hipótese não confirmável, nunca fato técnico.
+3. Rodar os candidatos e os baselines original/vertical sobre a mesma referência
+   de desenvolvimento e controles sintéticos. Registrar precisão/recall por classe,
+   código/situação exatos, endpoints, medidas, duplicatas e falhas correlacionadas.
+   Manter os casos reservados sem ajustes; a avaliação final ocorre em E15.
+4. Produzir matriz por ocorrência de acerto/erro exclusivo ou compartilhado. Escolher
+   candidatos por ganho de qualidade, documentando os rejeitados e motivos; registrar
+   tempo apenas como telemetria, mesmo acima de cinco minutos. Entregar os candidatos
+   úteis para E12B/E13/E14, com protocolo reproduzível.
+
+**Prompt para uma sessão limpa:**
+
+```text
+Execute E12A — Experimentação de algoritmos alternativos de docs/roadmap-mercado-paineis-leitura-rede.md. Leia AGENTS.md aplicáveis, roadmap e diretriz vigente, diagnóstico, handoffs E10/E11/E12, src/zeny_project_handler/ports/analysis.py, ports/interpretation.py, adaptadores, scripts/benchmark_network_pdf.py, fixtures e git status. Confirme E12 concluída, insumos disponíveis e ausência de divergência não tratada; preserve mudanças existentes e marque E12A #em-andamento no índice e detalhe. Implemente e execute pelo menos dois candidatos distintos: um reconhecedor local independente de Tesseract e um algoritmo alternativo de associação e topologia, com segmentação adicional se necessária. Mudança de parâmetros não conta. Investigue documentação primária, licença, hardware e modelos; não envie PDFs a serviços externos. Preserve evidência geométrica, mantenha experimentos fora da promoção de produção e compare original, vertical e alternativas na mesma referência de desenvolvimento com controles negativos. Registre métricas por item e erros correlacionados; reserve casos E10 sem ajustar neles. Escolha por confiabilidade, não por tempo; cinco minutos não é teto. Crie testes sintéticos, registre comandos reais dos novos adaptadores e execute validações E12A. Atualize documentação e Evidências e handoff com arquivos, versões, modelos, decisões, métricas, rejeições e candidatos para integração. Só use #concluida com comparação executada e validações aprovadas; não declare sucesso com testes falhando ou não executados. Se houver impedimento real, use #bloqueada com causa, evidência, impacto e desbloqueio. Não faça commit ou publicação. Termine com resumo conciso de mudanças, validações e pendências.
+```
+
+**Critérios de aceite:**
+
+- [ ] Dois candidatos das famílias exigidas implementados e efetivamente executados.
+- [ ] Baselines e candidatos comparados por ocorrência com controles positivos/negativos.
+- [ ] Versões, dependências, comandos, erros complementares/correlacionados e decisões registrados.
+- [ ] Casos reservados preservados; nenhum candidato aceito por rapidez ou confiança autodeclarada.
+
+**Validação obrigatória:** `python -m pytest tests/unit/test_benchmark_network_pdf.py tests/unit/test_pymupdf_analyzer.py tests/unit/test_rule_based_interpreter.py` e testes sintéticos dos adaptadores novos. Os comandos de execução de cada candidato ainda precisam ser definidos: criar uma entrada opt-in no benchmark ou script dedicado, documentar argumentos e registrá-los antes de comparar. Executar controles com os motores reais; mocks não validam capacidade. Repetir a comparação local da referência E10 sem tocar a origem.
+**Bloqueios:** nenhum bloqueio confirmado. Se faltar runtime/modelo compatível,
+registrar tentativa, erro e alternativa local; não considerar pesquisa bibliográfica
+ou indisponibilidade como experimentação concluída.
+**Riscos e mitigação:** erros correlacionados parecerem consenso; registrar sua
+distribuição. Sobreajuste ao PDF; separar casos reservados por documento/família.
+**Evidências e handoff:** ainda não executada; sem biblioteca/modelo escolhido.
+
+## E12B — Reconciliação e confiança entre métodos — #pendente
+
+**Objetivo:** incorporar contribuições úteis das abordagens alternativas ao pipeline,
+preservando divergências e impedindo confirmações automáticas sem sustentação.
+**Por que agora:** múltiplas leituras só ajudam se a combinação não duplicar objetos
+nem converter concordância frágil em certeza.
+**Dependências e paralelismo:** E12A; receber matriz de erros e candidatos executados.
+Implementação sequencial por alterar evidências consumidas por E13/E14.
+**Escopo:** portas de análise/interpretação, adaptadores selecionados em E12A,
+`application/document_analysis.py`, `interpretation_pipeline.py`,
+`automatic_promotion.py`, cache, revisão e DTOs afetados. Novo módulo de reconciliação
+é possibilidade de implementação, não arquivo existente confirmado.
+**Fora de escopo:** votação cega, substituição automática pelo catálogo ou integração
+de todos os candidatos sem benefício demonstrado.
+
+**Passos de implementação:**
+
+1. Associar hipóteses à mesma região/ocorrência e à mesma versão da camada técnica;
+   guardar método, versão, geometria, leitura literal e transformação aplicada.
+2. Integrar candidatos com ganho demonstrado como complemento, verificação ou
+   substituição por classe. Comparar saída isolada e combinada; não fundir dois
+   objetos físicos só porque seus códigos ou geometrias são parecidos.
+3. Definir confirmação por evidência e erro observado na referência de desenvolvimento,
+   sem comparar diretamente scores incompatíveis nem contar métodos correlacionados
+   como votos independentes. Conflito relevante exige nova leitura ou revisão explícita.
+4. Versionar composição, modelos e parâmetros no cache/assinaturas; permitir análises
+   longas com progresso e cancelamento. Falha de um motor preserva resultados e informa
+   verificação incompleta, sem parecer aprovação de todas as passagens.
+5. Criar regressões de discordância, acordo errado, revisão sobreposta e método
+   indisponível; documentar decisões e impacto em confirmações/revisão. Candidatos de
+   associação/topologia ficam preparados para integração específica em E13/E14.
+
+**Prompt para uma sessão limpa:**
+
+```text
+Execute E12B — Reconciliação e confiança entre métodos de docs/roadmap-mercado-paineis-leitura-rede.md. Leia AGENTS.md aplicáveis, roadmap/diretriz vigente, handoffs E10/E12A, portas de análise/interpretação, adaptadores selecionados, application/document_analysis.py, interpretation_pipeline.py, automatic_promotion.py, cache, revisão, DTOs e git status. Confirme E12A concluída com candidatos realmente executados e matriz de erros; confira divergências e preserve mudanças existentes. Marque E12B #em-andamento no índice e detalhe. Integre contribuições úteis com identidade por ocorrência/camada, proveniência e resolução explícita de discordâncias. Não use votação cega, scores de motores como probabilidades comparáveis ou catálogo para completar leitura incerta. Meça erro entre confirmações, cobertura e revisão, preserve os casos reservados e prepare contribuições de associação/topologia para E13/E14. Não escolha por tempo; mantenha memória, progresso, cancelamento e falhas parciais explícitas em análise longa. Versione métodos/modelos/composição no cache, atualize documentação e crie testes de acordo errado, conflito, revisão e motor indisponível. Execute validações E12B e registre contribuição de cada método. Se nenhum candidato melhorar a leitura, registre o resultado negativo e amplie E12A com outra família antes de declarar a integração concluída; não force um método pior. Só marque #concluida após aceite e testes aprovados; não declare sucesso com validação falhando ou não executada. Diante de impedimento real, use #bloqueada com causa, evidência, impacto e desbloqueio. Preencha Evidências e handoff com arquivos, decisões, comandos, métricas e mudanças de contrato. Não faça commit nem publique. Termine com resumo conciso de mudanças, validações e pendências.
+```
+
+**Critérios de aceite:**
+
+- [ ] Alternativa com ganho demonstrado incorporada como leitura, verificação ou
+      associação; contribuição medida desligando cada método separadamente.
+- [ ] Conflitos, acordos errados e falhas de motor não geram confirmação silenciosa.
+- [ ] Proveniência, decisões humanas, cache e identidade sobrevivem à reanálise.
+- [ ] Qualidade e cobertura melhoram sem esconder erro com abstenção generalizada;
+      integração não regride os controles previamente corretos.
+
+**Validação obrigatória:** `python -m pytest tests/unit/test_analysis_cache.py tests/unit/test_benchmark_network_pdf.py tests/integration/test_document_analysis.py tests/integration/test_interpretation_pipeline.py tests/integration/test_human_review.py tests/server/test_review_api.py` e testes sintéticos de reconciliação adicionados. Rodar benchmark com motores reais e comparar cada contribuição habilitada/desabilitada. Registrar comandos novos no handoff; executar análise acima de cinco minutos com duração simulada no teste de job/cancelamento, localizando antes o teste existente correspondente. Nenhum corte temporal pode apresentar leitura integral sem completar as verificações.
+**Migração/rollback:** versionar composição e eventual contrato aditivo, preservar
+snapshots anteriores; voltar à composição anterior não apaga evidências/decisões
+novas nem reaproveita cache incompatível. Documentar alterações de persistência se houver.
+**Bloqueios:** nenhum bloqueio confirmado. Candidatos sem ganho exigem novas
+experiências; resultado negativo não autoriza integração artificial ou aceite integral.
+**Riscos e mitigação:** combinar leituras aumentar falsos positivos; validar por item
+e medir confirmações erradas. Confiança mal calibrada; usar erro observado, não score bruto.
+**Evidências e handoff:** ainda não executada.
+
+## E13 — Ocorrências e associação aos pontos corretos — #pendente
+
+**Objetivo:** interpretar códigos/situações e associar cada ocorrência ao ponto físico
+correto, evitando o neutro duplicado e a transferência de ativos existentes para P5.
+**Por que agora:** E12B entrega evidências reconciliadas entre métodos.
+**Dependências e paralelismo:** E12B; conferir eventuais correções novas de E08/E09.
+Não editar intérprete/promoção simultaneamente com outra etapa.
+**Escopo:** `adapters/interpretation/category_analyzers.py`, `operational_labels.py`,
+`rule_based.py`, `relation_rules.py`, `application/automatic_promotion.py`,
+`analysis_regions.py` e catálogo/regras existentes.
+**Fora de escopo:** inventar modelos de poste, expandir qualificadores em quantidade,
+renumerar pontos existentes ou resolver a projeção de vãos nesta etapa.
+
+**Passos de implementação:**
+
+1. Reproduzir D02–D05 em fixtures: mesmo neutro lido duas vezes versus dois cabos
+   distintos, dois N3 físicos, ponto existente sem P, N4 instalado/removido e TR-3-45.
+2. Comparar a associação atual com o candidato alternativo de E12A, reutilizando
+   a reconciliação de E12B; escolher por erros demonstrados e não por velocidade.
+   Deduplicar apenas leituras da mesma ocorrência. Ancorar ativos no ponto e na
+   geometria sustentados pela fonte, sem anexar ao único P próximo por conveniência.
+3. Normalizar TR-3-45 sem escolher equipamento arbitrário; preservar código e
+   capacidade observados quando o catálogo não puder resolver o modelo.
+4. Preservar ambas as situações de N4 e relações válidas; manter casos incertos
+   revisáveis, com motivo específico. Versionar interpretação e conferir reanálise.
+
+**Prompt para uma sessão limpa:**
+
+```text
+Execute E13 — Ocorrências e associação aos pontos corretos de docs/roadmap-mercado-paineis-leitura-rede.md. Leia AGENTS.md aplicáveis, roadmap, diagnóstico D02–D05, handoffs E12A/E12B, ADR 0015, category_analyzers.py, operational_labels.py, rule_based.py, relation_rules.py, automatic_promotion.py, analysis_regions.py e git status. Confirme E12B concluída, confira mudanças posteriores de E08/E09 e divergências do código; preserve alterações preexistentes. Marque E13 #em-andamento no índice e detalhe. Corrija o neutro repetido em V2-3 sem fundir cabos distintos, preserve N3 repetidos físicos e N4 instalar/remover, represente TR-3-45 com evidência e vincule o ponto existente de 36 m ao seu próprio contexto sem atribuí-lo a P5. Compare a associação atual e a alternativa E12A por precisão, preservando conflitos conforme E12B. Não invente modelos, códigos ou pontos por proximidade. Implemente regressões sintéticas e revisão/identidades preservadas, atualize versão e documentação e execute validações E13. Só marque #concluida com todos os critérios e testes obrigatórios aprovados; não declare sucesso se falharem ou não rodarem. Em impedimento real, use #bloqueada com causa, evidência, impacto e ação de desbloqueio. Preencha Evidências e handoff com arquivos, decisões, comandos e reconciliação por ocorrência. Não faça commit nem publique. Termine com resumo conciso de mudanças, validações e pendências.
+```
+
+**Critérios de aceite:**
+
+- [ ] D02–D05 resolvidos por evidência, sem falsos vínculos nem omissões de ocorrências.
+- [ ] TR-3-45 fica representado com código literal; catálogo não resolvido é explícito.
+- [ ] Reanálise não duplica e não transfere decisões humanas para outro ativo.
+
+**Validação obrigatória:** `python -m pytest tests/unit/test_rule_based_interpreter.py tests/unit/test_e08_association.py tests/unit/test_analysis_regions.py tests/integration/test_interpretation_pipeline.py tests/integration/test_human_review.py tests/server/test_review_api.py`.
+Adicionar regressões positivas/negativas; repetir benchmark com auditoria E10 das
+propostas, promoções e geometrias, incluindo todos os equipamentos.
+**Bloqueios:** nenhum bloqueio conhecido; classificação sem evidência deve ser
+registrada como ambiguidade técnica, não preenchida para passar o teste.
+**Riscos e mitigação:** fundir ocorrências iguais em locais diferentes; validar identidade
+e posição. Catálogo insuficiente; preservar proposta literal e candidatos sem promoção falsa.
+**Evidências e handoff:** ainda não executada.
+
+## E14 — Topologia e projeção dos trechos — #pendente
+
+**Objetivo:** representar conectividade coerente, medidas e rede existente/novas ligações
+na projeção de vãos, distinguindo trecho físico e cabo.
+**Por que agora:** a topologia depende das ocorrências e dos pontos corrigidos em E13.
+**Dependências e paralelismo:** E13; coordenar alterações de `span_rules.py`/`spans.py`
+com retomadas de E08. Não depende de declarar a homologação do outro PDF concluída.
+**Escopo:** `adapters/interpretation/span_rules.py`, `application/spans.py`,
+`automatic_promotion.py`, `src/zeny_project_handler_server/review_api.py`,
+`deliverable_exports.py`, domínio e codecs correspondentes se necessários.
+**Fora de escopo:** ligar vizinhos sem traçado ou concluir padrão/ramal apenas pela casa desenhada.
+
+**Passos de implementação:**
+
+1. Rastrear por que cabos existentes de 36/83 m não geram linhas em Vãos; diferenciar
+   regra de apresentação documentada de omissão e tornar os trechos navegáveis.
+2. Avaliar hipóteses de conectividade com o método alternativo de E12A frente à
+   associação atual, usando restrições geométricas e evidência de continuidade.
+   Resolver identidade de endpoints compartilhados por fase/neutro a partir do
+   ponto físico; não criar continuidade só porque os comprimentos coincidem.
+3. Representar 14/100/80/57/36/83 m nos trechos correspondentes; distinguir cabo,
+   trecho, tipo topológico e modalidade. Para P4, seguir evidência e ADR 0015.
+4. Sincronizar projeções HTTP/XLSX/UI afetadas, revisão e versões; documentar
+   incertezas reais e a unidade de contagem na tabela Vãos.
+
+**Prompt para uma sessão limpa:**
+
+```text
+Execute E14 — Topologia e projeção dos trechos de docs/roadmap-mercado-paineis-leitura-rede.md. Leia AGENTS.md aplicáveis, roadmap, diagnóstico D06, handoffs E10/E13, ADR 0015, span_rules.py, application/spans.py, automatic_promotion.py, review_api.py, deliverable_exports.py e git status. Confirme E13 concluída, confira divergências e alterações de E08; preserve mudanças preexistentes e marque E14 #em-andamento no índice e detalhe. Compare o método atual e o candidato alternativo de E12A por conectividade exata, sem ranking por tempo. Corrija projeção dos trechos existentes de 36/83 m, conectividade dos pontos compartilhados e correspondência dos trechos de 14/100/80/57 m, distinguindo cabo e trecho físico. Preserve tipo/modalidade desconhecidos quando faltar evidência; não invente padrão ou rede por proximidade. Atualize contratos/projeções/codecs somente se necessário, com compatibilidade documentada, e preserve revisão humana. Crie regressões sintéticas, execute validações E14 e auditoria E10, atualize documentação. Só marque #concluida com todos os critérios e testes aprovados; não declare sucesso com testes falhando ou não executados. Em impedimento real, use #bloqueada com causa, evidência, impacto e desbloqueio. Preencha Evidências e handoff com arquivos, decisões, comandos e mapa de endpoints/trechos. Não faça commit ou publicação. Termine com resumo conciso de mudanças, validações e pendências.
+```
+
+**Critérios de aceite:**
+
+- [ ] Trechos inequívocos do inventário têm endpoints/medidas corretos e projeção navegável.
+- [ ] Fase/neutro mantêm identidade física coerente, sem vãos ou ativos duplicados.
+- [ ] Tipo/modalidade têm evidência ou motivo de indeterminação; HTTP/UI/XLSX concordam.
+
+**Validação obrigatória:** `python -m pytest tests/unit/test_spans.py tests/unit/test_topology_path_compliance.py tests/unit/test_e08_association.py tests/integration/test_interpretation_pipeline.py tests/server/test_review_api.py tests/server/test_deliverable_exports.py tests/e2e/test_span_compliance_ui.py`.
+Executar novos casos de conectividade e comparar cada trecho E10 até XLSX; navegar
+um caso de cada situação/tipo e conferir a geometria no PDF.
+**Migração/rollback:** mudança de identidade ou contrato exige compatibilidade explícita,
+sem reescrita de snapshots; preservar sessões antigas e reconciliar novas propostas.
+Se novos campos forem necessários, documentar valores ausentes e leitura da versão anterior.
+**Bloqueios:** nenhum bloqueio conhecido.
+**Riscos e mitigação:** gráficos desconectados por UUIDs por cabo; testar continuidade
+real e circuitos próximos sem conexão. Não relaxar ADR para aumentar contagens.
+**Evidências e handoff:** ainda não executada.
+
+## E15 — Aceite integral do segundo PDF — #pendente
+
+**Objetivo:** comprovar a referência integral através dos painéis, API, documentação
+e exportações, e registrar com precisão o que o sistema consegue ler.
+**Por que agora:** extração correta não garante interpretação, apresentação ou conteúdo vigente.
+**Dependências e paralelismo:** E11/E12/E12A/E12B/E13/E14; validar uma única revisão estabilizada.
+**Escopo:** pipeline servidor, inspeção documental em
+`application/document_compliance.py`, `project_compliance.py`, `document_zones.py`,
+revisão/API/cliente/exportação, `README.md`, diagnóstico e este roadmap.
+**Fora de escopo:** publicar release, consultar SQL operacional ou certificar fotos/assinaturas.
+
+**Passos de implementação:**
+
+1. Repetir inventário completo, benchmark isolado e hash. Conferir D01–D06 e todos
+   os itens E10, contabilizando perdas, falsos positivos e ambiguidades separadamente.
+2. Conferir campos documentais suportados: NS, impacto, servidão, notas, tabelas e
+   presença de fotos/assinaturas; campos não suportados devem ser explicitamente
+   documentados. Verificar conflitos entre camada base e revisão também nesses campos.
+3. Validar API/cliente, reabertura, revisão, reanálise/cache, cancelamento, zoom/rotação,
+   realces e exportações. Usar SQL fake onde necessário. Corrigir regressões de
+   integração com testes; se houver nova classe independente de perda, subdividir
+   o trabalho no roadmap antes de implementar, mantendo o aceite pendente.
+4. Comparar baseline, melhoria vertical, alternativas isoladas e combinação final
+   nos casos reservados E10; desligar cada contribuição separadamente para medir
+   seu efeito. Exigir evidência de ganho ou rejeição justificada de cada alternativa.
+5. Executar gate público completo e atualizar documentação com resultados medidos,
+   sem confundir execução bem-sucedida, ambiguidade técnica e leitura integral.
+
+**Prompt para uma sessão limpa:**
+
+```text
+Execute E15 — Aceite integral do segundo PDF de docs/roadmap-mercado-paineis-leitura-rede.md. Leia AGENTS.md aplicáveis, roadmap, diagnóstico e handoffs E10–E14, README, testes do pipeline/API/UI/exportações e git status. Confirme E11/E12/E12A/E12B/E13/E14 concluídas e código coerente, preserve mudanças preexistentes e marque E15 #em-andamento no índice e detalhe. Audite toda a referência E10 do PDF 1256407599, incluindo D01–D06 e campos documentais, camadas revisadas, medidas, situações, pontos e topologia. Valide HTTP/cliente/Resultados/XLSX, reabertura, reanálise, cancelamento e realces com OCR real e SQL fake, sem consulta operacional. Compare baseline, melhoria vertical, alternativas isoladas e combinação final nos casos reservados E10; reporte falsos positivos, omissões, confirmações erradas e revisão, sem usar tempo como gate. Execute benchmark isolado, metas de qualidade E10 e IniciarTestes.bat; corrija regressões de integração com testes e documentação. Para nova classe independente de perda, subdivida o roadmap antes de ampliar implementação; não reduza inventário ou esconda omissões. Só marque #concluida após toda a definição de pronto e validações; não declare sucesso com testes falhando ou não executados. Se impedimento real impedir o aceite, use #bloqueada com causa, evidência, impacto e ação de desbloqueio. Preencha Evidências e handoff com arquivos, comandos, resultados, inspeções, métricas e ambiguidades remanescentes. Preserve estados de E08/E09 e PDFs privados. Não faça commit, release ou publicação. Termine com resumo conciso de mudanças, validações e pendências.
+```
+
+**Critérios de aceite:**
+
+- [ ] Inventário inteiro reconciliado e D01–D06 resolvidos, com ambiguidades técnicas explícitas.
+- [ ] Campos documentais suportados e fonte vigente conferidos nos painéis e exportações.
+- [ ] HTTP/Qt/XLSX, reanálise, cancelamento e inspeção visual passam na mesma revisão.
+- [ ] Comparações e contribuição de cada método comprovadas em casos reservados,
+      sem confirmações erradas conhecidas ou aumento oculto de revisão manual.
+- [ ] Gate público aprovado, metas de qualidade E10 cumpridas, fonte preservada e
+      documentação atualizada; tempo não constitui critério de reprovação.
+
+**Validação obrigatória:** `.\IniciarTestes.bat` com saída zero e cobertura mínima
+85,01%; benchmark OCR e auditoria integral E10; `python scripts/smoke_examples.py`
+apenas como complemento. Usar testes existentes de `tests/server/` e `tests/e2e/`
+para o fluxo real: localizar o teste de cada painel antes da execução e registrar
+comandos efetivamente usados. Comparar snapshots/planilhas e inspecionar todos os
+itens do inventário no PDF, sem elevar sucesso de smoke a homologação.
+**Bloqueios:** nenhum bloqueio conhecido; etapas anteriores são dependências pendentes.
+**Riscos e mitigação:** aceitar apenas números agregados; exigir correspondência por item.
+PDF privado ausente impede aceite local, mas nunca se torna dependência do gate público.
+**Evidências e handoff:** ainda não executada. A auditoria inicial comprovou leitura
+parcial e preservação da fonte; não homologou API/Qt, documentação ou conformidade.
