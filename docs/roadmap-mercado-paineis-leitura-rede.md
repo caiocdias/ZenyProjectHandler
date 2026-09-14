@@ -155,7 +155,7 @@ Hipóteses de produto adotadas para tornar o plano executável, ajustáveis com 
 | E05 | Rolagem independente dos painéis | #concluida | Nenhuma | Cinco painéis; matriz 8/8 e gate aprovados |
 | E06 | Marca-texto por situação | #concluida | Nenhuma | Realce 25%; matriz 24/24 e gate aprovados |
 | E07 | Extração robusta de evidências | #concluida | E01 | 95 ocorrências, 18 identificadores e 19 comprimentos com evidência recuperada |
-| E08 | Associação de elementos e vãos | #pendente | E01, E07 | Ocorrências e topologia recuperadas |
+| E08 | Associação de elementos e vãos | #bloqueada | E01, E07 | 95 ocorrências; 18/19 comprimentos; classificação/topologia pendentes |
 | E09 | Homologação integrada | #pendente | E03, E04, E05, E06, E08 | Aceite completo e relatório final |
 
 ## E01 — Diagnóstico e referência da NS 1256148225 — #concluida
@@ -866,7 +866,7 @@ Os itens abaixo preservam o histórico de 10/09/2026 e não são as métricas at
   [e07-extracao-evidencias.md](e07-extracao-evidencias.md). Fixtures públicas sintéticas;
   PDF, recortes, inventário e snapshots privados permanecem ignorados. Sem commit/publicação.
 
-## E08 — Associação de elementos e vãos — #pendente
+## E08 — Associação de elementos e vãos — #bloqueada
 
 **Objetivo:** transformar evidências recuperadas em ocorrências, vínculos e vãos corretos.
 **Por que agora:** E07 garante entrada espacial/textual verificável para corrigir associação.
@@ -901,19 +901,44 @@ Execute E08 — Associação de elementos e vãos de docs/roadmap-mercado-painei
 
 - [ ] Todos os elementos/vãos legíveis e inequívocos do inventário aparecem com vínculos corretos.
 - [ ] Endpoints, comprimentos e situações correspondem à evidência; ambiguidades são explícitas.
-- [ ] Não há falsos ativos/vínculos nos controles negativos nem duplicação ao reanalisar.
-- [ ] Resultados e exportação concordam; revisões humanas e histórico são preservados.
+- [x] Não há falsos ativos/vínculos nos controles negativos nem duplicação ao reanalisar.
+- [x] Resultados e exportação concordam; revisões humanas e histórico são preservados.
 
 **Validação obrigatória:** `python -m pytest tests/unit/test_rule_based_interpreter.py tests/unit/test_spans.py tests/unit/test_analysis_regions.py tests/unit/test_topology_path_compliance.py tests/integration/test_interpretation_pipeline.py tests/integration/test_human_review.py tests/server/test_review_api.py tests/server/test_deliverable_exports.py tests/e2e/test_span_compliance_ui.py`.
 Executar novas regressões e benchmark E01 com OCR real, promoção e vãos. Exigir precisão/recall
 por categoria, correspondência dos endpoints/comprimentos, duplicatas e desempenho dentro das
 metas, além de navegação visual amostrada em cada classe de correção. Testes todos aprovados.
-**Bloqueios:** nenhum bloqueio conhecido.
+**Bloqueios:** falta evidência técnica de padrão no endpoint junto à casa e de formato/material
+para escolher os 17 modelos de poste; a ocorrência não basta para inventar essas classes
+(ADR 0015 e candidatos preservados nas propostas). Isso impede certificar ramal/rede resolvidos.
+Desbloqueio: classificação rastreável ou revisão técnica formal da expectativa do inventário.
+Há também trabalho de software remanescente: comprimento explícito de T02 sem associação segura
+(18/19, abaixo da meta) e projeção por cabo/segmento que não equivale aos 20 trechos físicos.
+Evidência, impacto e próximos passos detalhados no handoff abaixo; as metas não foram relaxadas.
 **Riscos e mitigação:** melhorar recall fabricando relações; testar casos ambíguos e negativos.
 Identidade mudar ao corrigir geometria; comprovar comportamento de reanálise e decisões antigas.
 Subdividir antes de iniciar se E01 revelar correções independentes além de uma sessão.
-**Evidências e handoff:** ainda não executada. Registrar comparativo por item/fase, versões,
-regressões, ambiguidades justificadas e instruções de reanálise para homologação.
+**Evidências e handoff:** iniciada e marcada em andamento em 14/09/2026 sobre `bb457ef`, Git limpo e sem
+`AGENTS.md` aplicável. E01/E07 concluídas; inventário, baseline e runtime privados presentes.
+O commit atual integra o aceite E07 sobre `f82b1c2`; não há divergência de interpretação
+ou topologia desde aquela base. Fechamento **bloqueado para aceite**, com código validado,
+em [e08-associacao-elementos-vaos.md](e08-associacao-elementos-vaos.md).
+
+- Interpretador 22.0: normalização de qualificadores, situação do rótulo, traçados/endpoints,
+  guardas de comprimento/promoção e preservação da revisão na reanálise. Nenhum ativo criado
+  para preencher ausência de classificação. Extrator e contrato HTTP preservados.
+- Auditoria final: precisão/recall 100% por categoria/situação nas 95 ocorrências, 95 vínculos
+  corretos, 18/18 pares visíveis e 18/19 comprimentos; zero propostas elegíveis sem par.
+  Há 20 traçados distintos, 35 cabos confirmados e 28 linhas de Vãos ainda de tipo desconhecido.
+- Benchmark isolado até Resultados/XLSX: 15,501/56,904 s nativo/OCR no escopo E01;
+  18,308/59,548 s incluindo exportação. Python 602,37 MiB, Tesseract 80,46 MiB,
+  agregado amostrado 452,55 MiB. Metas de desempenho cumpridas; fonte inalterada.
+- 125 testes direcionados, repetição final de 16 testes E08/benchmark, três verificações
+  privadas de E01 e seis amostras de navegação visual aprovados. Gate final: **1.250 testes,
+  87,71% de cobertura, saída zero**, incluindo dependências, Ruff, Mypy e complexidade.
+  O gate intermediário falhou por complexidade e não foi usado como aceite.
+- Dados reais e auditorias somente em `tmp/e08/`, ignorado; comandos, arquivos e casos
+  remanescentes no handoff. E09 permanece pendente. Sem commit ou publicação.
 
 ## E09 — Homologação integrada — #pendente
 

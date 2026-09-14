@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from uuid import UUID, uuid5
 
@@ -14,7 +14,7 @@ from zeny_project_handler.domain.analysis import (
     PropostaRelacao,
 )
 from zeny_project_handler.domain.catalog import CatalogoTecnico, ExtraAttributes
-from zeny_project_handler.domain.enums import EstadoExecucaoAnalise
+from zeny_project_handler.domain.enums import EstadoExecucaoAnalise, EstadoRevisao
 from zeny_project_handler.domain.interpretation import RegistroRegrasInterpretacao
 from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler.ports.interpretation import (
@@ -86,21 +86,7 @@ class ExecutarPipelineInterpretacao:
         )
         stored = self._load_completed(execution_id)
         if stored is not None:
-            promoted = self._persist_result(
-                stored.execucao,
-                ResultadoInterpretacao(
-                    elementos=stored.elementos,
-                    relacoes=stored.relacoes,
-                    diagnosticos=stored.execucao.diagnosticos,
-                ),
-                context,
-            )
-            return ResultadoExecucaoInterpretacao(
-                execucao=stored.execucao,
-                elementos=promoted.elementos,
-                relacoes=promoted.relacoes,
-                resultado_reutilizado=True,
-            )
+            return stored
         started_at = self._aware_now()
         parameters = _execution_parameters(execucao_extracao_id, self._registry, config)
         self._persist_execution(
@@ -217,6 +203,7 @@ class ExecutarPipelineInterpretacao:
             project = work.projetos.obter(execution.projeto_id)
             if project is None:
                 raise ProjetoNaoEncontradoError("Projeto removido durante a interpretação")
+            result = _preserve_previous_review(work, execution, result)
             promoted = promover_resultado_automatico(
                 project,
                 context.catalogo,
@@ -269,6 +256,41 @@ class ExecutarPipelineInterpretacao:
         if value.tzinfo is None:
             raise ValueError("Relógio da aplicação deve retornar data com fuso horário")
         return value
+
+
+def _preserve_previous_review(
+    work: UnitOfWorkPort,
+    execution: ExecucaoAnalise,
+    result: ResultadoInterpretacao,
+) -> ResultadoInterpretacao:
+    reviewed_pages = {
+        proposal.geometria.pagina_id
+        for previous in work.execucoes_analise.listar_do_projeto(execution.projeto_id)
+        if previous.id != execution.id
+        and previous.metodo == execution.metodo
+        and previous.estado is EstadoExecucaoAnalise.CONCLUIDA
+        for proposal in work.propostas.listar_da_execucao(previous.id)
+        if isinstance(proposal, PropostaElemento)
+        and work.decisoes_revisao.obter_da_proposta(proposal.id) is not None
+    }
+    elements = tuple(
+        replace(
+            item,
+            estado_revisao=EstadoRevisao.CONFLITANTE,
+            atributos_sugeridos=(
+                *item.atributos_sugeridos,
+                ("reconciliacao_reanalise_pendente", True),
+            ),
+            justificativa=(
+                f"{item.justificativa or ''} Esta folha possui decisões anteriores; "
+                "reconciliar a nova interpretação com o histórico antes de confirmar."
+            ),
+        )
+        if item.geometria.pagina_id in reviewed_pages
+        else item
+        for item in result.elementos
+    )
+    return replace(result, elementos=elements)
 
 
 def _execution_parameters(

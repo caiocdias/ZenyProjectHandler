@@ -184,6 +184,17 @@ O código unitário `N` só é reconhecido nessa forma qualificada; textos comun
 qualificador ou geometria próprios, enquanto texto nativo e OCR da mesma ocorrência são consolidados
 com todas as evidências. A identidade e a ordenação resultantes independem da ordem das evidências.
 
+O interpretador `22.0` preserva a separação entre tokens qualificados adjacentes. Altura e
+resistência de poste que correspondem a vários formatos de catálogo geram ocorrência conflitante
+com candidatos explícitos. Rótulo de cabo sem traçado inequívoco também permanece revisável;
+caixas e pontos do OCR não são convertidos em segmentos físicos. A cor do rótulo tem precedência
+sobre a do traçado compartilhado; OCR de contornos exige cores concordantes e contidas no rótulo,
+com proveniência. Medidas ambíguas não são preenchidas nem promovidas automaticamente.
+
+Uma relação de instalação precisa resolver um único poste. Relações dirigidas à entrega não são
+transferidas ao vizinho. Endpoints sem classe suficiente continuam desconhecidos; `P<n>` e
+proximidade de casa não provam padrão do consumidor, conforme ADR 0015.
+
 Nomenclaturas de chave no formato amperagem–capacidade de interrupção–número de elos são
 reconhecidas como uma ocorrência completa. Uma bolsa vinho total, parcial ou rotacionada muda a
 situação para `INSTALAR` somente quando sua geometria contém o rótulo ou tem o próprio centro sobre
@@ -192,6 +203,12 @@ situação nem criam chave.
 
 Uma execução concluída é idempotente para o mesmo projeto, extração, catálogo, registro e
 configuração. Cancelamento ou falha não publica um conjunto parcial como concluído.
+
+Carregar novamente a mesma execução concluída não repromove propostas ou regrava revisão humana.
+Se outra assinatura do interpretador produzir propostas em folha com decisões anteriores, essas
+propostas ficam conflitantes e exigem reconciliação explícita. O histórico e os ativos anteriores
+são conservados; decisões não são copiadas por proximidade para novas identidades. A reconciliação
+entre versões ainda não possui correspondência física automática.
 
 ### Jobs de análise
 

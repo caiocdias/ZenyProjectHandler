@@ -178,7 +178,7 @@ class AnalisadorCatalogoPorCodigo:
 
 class AnalisadorPoste(AnalisadorCatalogoPorCodigo):
     nome = "poste-codigo-e-nomenclatura"
-    versao = "2.0"
+    versao = "2.1"
     categoria = CategoriaElemento.POSTE
 
     def analisar(
@@ -666,15 +666,16 @@ def _pole_dimension_proposal(
         execucao_id=request.execucao_id,
         categoria=CategoriaElemento.POSTE,
         situacao_projeto=situation,
-        estado_revisao=EstadoRevisao.PROPOSTA,
+        estado_revisao=EstadoRevisao.PROPOSTA if unique else EstadoRevisao.CONFLITANTE,
         evidencia_ids=evidence_ids,
         geometria=evidence.geometria,
-        tipo_catalogo_sugerido_id=selected.id,
+        tipo_catalogo_sugerido_id=selected.id if unique else None,
         codigo_observado=observed,
         atributos_sugeridos=(
             ("altura_m", height),
             ("candidatos_catalogo", ",".join(item.codigo for item in matching)),
-            ("catalogo_inferido", not unique),
+            ("catalogo_inferido", False),
+            ("classificacao_pendente", not unique),
             ("regra_id", rule.id),
             ("resistencia_dan", int(resistance)),
         ),
@@ -685,8 +686,8 @@ def _pole_dimension_proposal(
                 "o formato também foi identificado."
                 if unique
                 else (
-                    f"o formato não estava explícito e {selected.codigo} foi escolhido "
-                    "como correspondência canônica."
+                    "o formato não estava explícito; os candidatos de catálogo foram "
+                    "preservados para classificação humana, sem escolher material ou formato."
                 )
             )
         ),

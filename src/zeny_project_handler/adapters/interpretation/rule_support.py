@@ -32,7 +32,9 @@ def normalized_text(value: str) -> str:
         "_": " ",
     }
     normalized = without_accents.upper().translate(str.maketrans(translation))
-    normalized = re.sub(r"\s*([-/,()])\s*", r"\1", normalized)
+    normalized = re.sub(r"\s*([-/,])\s*", r"\1", normalized)
+    normalized = re.sub(r"\s*\(\s*", "(", normalized)
+    normalized = re.sub(r"\s*\)", ")", normalized)
     return " ".join(normalized.split())
 
 
@@ -178,6 +180,34 @@ def project_situation_override(
     return (situation, None) if situation is not None else None
 
 
+def contour_label_situation(
+    source: EvidenciaDocumento,
+    evidence: tuple[EvidenciaDocumento, ...],
+    category: CategoriaElemento,
+    catalog: CatalogoTecnico,
+) -> tuple[SituacaoProjeto, tuple[EvidenciaDocumento, ...]] | None:
+    """Recupere a cor dos glifos contidos no rótulo OCR, sem usar a cor do traçado."""
+    if dict(source.atributos_extraidos).get("motor_ocr") != "tesseract-contornos-vetoriais":
+        return None
+    contained = tuple(
+        item
+        for item in evidence
+        if item.pagina_id == source.pagina_id
+        and item.tipo is TipoEvidencia.VETOR
+        and dict(item.atributos_extraidos).get("tipo_caminho") == "f"
+        and all(
+            _geometry_contains_point(source.geometria, (float(point.x), float(point.y)), 0.00025)
+            for point in item.geometria.pontos
+        )
+    )
+    situations = {situation_from_evidence(item, category, catalog) for item in contained}
+    if len(contained) < 2 or len(situations) != 1 or None in situations:
+        return None
+    situation = situation_from_evidence(contained[0], category, catalog)
+    assert situation is not None
+    return situation, contained
+
+
 def _is_installation_bag(evidence: EvidenciaDocumento) -> bool:
     if evidence.tipo is not TipoEvidencia.VETOR:
         return False
@@ -287,10 +317,10 @@ def _geometry_area(geometry: GeometriaDocumento) -> float:
 def _geometry_contains_point(
     geometry: GeometriaDocumento,
     point: tuple[float, float],
+    tolerance: float = 0.001,
 ) -> bool:
     left, top, right, bottom = _geometry_bounds(geometry)
     x, y = point
-    tolerance = 0.001
     if not (
         left - tolerance <= x <= right + tolerance and top - tolerance <= y <= bottom + tolerance
     ):

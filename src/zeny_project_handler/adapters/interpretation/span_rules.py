@@ -13,13 +13,20 @@ from zeny_project_handler.domain.analysis import EvidenciaDocumento, PropostaEle
 from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.domain.enums import (
     CategoriaElemento,
+    EstadoRevisao,
     SituacaoProjeto,
     TipoEvidencia,
     TipoGeometria,
 )
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 
-from .rule_support import center, normalized_text, point_distance, situation_from_evidence
+from .rule_support import (
+    center,
+    contour_label_situation,
+    normalized_text,
+    point_distance,
+    situation_from_evidence,
+)
 
 _MAXIMUM_ANNOTATION_DISTANCE = 0.055
 _MINIMUM_ENDPOINT_DISTANCE = 0.035
@@ -110,7 +117,16 @@ def associar_tracados_de_cabos(
     )
     paths = _trace_paths(evidencias, poles)
     evidence_by_id = {item.id: item for item in evidencias}
-    identifiers_by_path = _span_identifiers_by_path(paths, evidencias)
+    resolved_path_ids = {
+        association.path.evidence.id
+        for proposal in propostas
+        if proposal.categoria is CategoriaElemento.CABO
+        if (label := _cable_label_evidence(proposal, evidence_by_id)) is not None
+        if (association := _unique_path_association(label, paths, _MAXIMUM_CABLE_LABEL_DISTANCE))
+        is not None
+    }
+    cable_paths = tuple(path for path in paths if path.evidence.id in resolved_path_ids)
+    identifiers_by_path = _span_identifiers_by_path(cable_paths, evidencias)
     associated: list[PropostaElemento] = []
     for proposal in propostas:
         if proposal.categoria is not CategoriaElemento.CABO:
@@ -123,6 +139,7 @@ def associar_tracados_de_cabos(
             evidence_by_id,
             evidencias,
             catalogo,
+            cable_paths,
         )
         if cable is not None:
             associated.append(cable)
@@ -134,10 +151,38 @@ def _trace_paths(
     poles: tuple[PropostaElemento, ...],
 ) -> tuple[_TracePath, ...]:
     return tuple(
-        _canonical_trace_path(item, poles)
+        path
         for item in sorted(evidence, key=lambda current: str(current.id))
         if _is_trace_path(item)
+        if (path := _canonical_trace_path(item, poles))
+        if _geometry_length(item.geometria) >= _MINIMUM_CABLE_PATH_LENGTH
+        or _short_path_has_anchors(path, evidence)
     )
+
+
+def _short_path_has_anchors(
+    path: _TracePath,
+    evidence: tuple[EvidenciaDocumento, ...],
+) -> bool:
+    pole_labels = tuple(_pole_identifier(pole) for pole in path.endpoint_poles)
+    if all(pole_labels) and len(set(pole_labels)) == 2:
+        return True
+    labels = []
+    for endpoint in (path.geometry.pontos[0], path.geometry.pontos[-1]):
+        candidates = sorted(
+            (
+                point_distance((float(endpoint.x), float(endpoint.y)), center(item.geometria)),
+                normalized_text(item.conteudo_bruto or ""),
+            )
+            for item in evidence
+            if item.pagina_id == path.geometry.pagina_id
+            and item.tipo in {TipoEvidencia.OCR, TipoEvidencia.TEXTO}
+            and _POINT_IDENTIFIER_PATTERN.fullmatch(normalized_text(item.conteudo_bruto or ""))
+        )
+        if not candidates or candidates[0][0] > 0.035:
+            return False
+        labels.append(candidates[0][1])
+    return len(set(labels)) == 2
 
 
 def _is_trace_path(evidence: EvidenciaDocumento) -> bool:
@@ -151,7 +196,15 @@ def _is_trace_path(evidence: EvidenciaDocumento) -> bool:
         and not bool(attributes.get("fechado", False))
         and math.dist(points[0], points[-1]) > 0.002
         and _solid_path(attributes.get("tracejado"))
-        and _geometry_length(geometry) >= _MINIMUM_CABLE_PATH_LENGTH
+        and (
+            _geometry_length(geometry) >= _MINIMUM_CABLE_PATH_LENGTH
+            or (
+                math.dist(points[0], points[-1]) >= 0.015
+                and math.dist(points[0], points[-1]) >= _geometry_length(geometry) * 0.98
+                and attributes.get("cor_contorno") is not None
+            )
+        )
+        and attributes.get("tipo_caminho") != "f"
         and not _is_burgundy_vector(evidence)
     )
 
@@ -229,6 +282,7 @@ def _associate_cable(
     evidence_by_id: dict[UUID, EvidenciaDocumento],
     evidence: tuple[EvidenciaDocumento, ...],
     catalog: CatalogoTecnico,
+    cable_paths: tuple[_TracePath, ...],
 ) -> PropostaElemento | None:
     label = _cable_label_evidence(cable, evidence_by_id)
     association = (
@@ -237,7 +291,15 @@ def _associate_cable(
         else None
     )
     if association is None:
-        return cable if label is not None and _has_nearby_path(label, paths) else None
+        return replace(
+            cable,
+            estado_revisao=EstadoRevisao.CONFLITANTE,
+            atributos_sugeridos=(*cable.atributos_sugeridos, ("associacao_pendente", "tracado")),
+            justificativa=(
+                f"{cable.justificativa or ''} Traçado não resolvido sem ambiguidade; "
+                "o rótulo permanece disponível para revisão humana."
+            ),
+        )
     path = association.path
     identifier_label = identifiers_by_path.get(path.evidence.id)
     geometry, endpoint_poles = _oriented_path(path, identifier_label)
@@ -294,9 +356,29 @@ def _associate_cable(
                 f"O identificador {identifier_label.value} fixou as extremidades em "
                 f"P{int(match.group(1))} e P{int(match.group(2))}."
             )
-    resolution = _resolve_length(path, paths, evidence)
-    situation = situation_from_evidence(path.evidence, CategoriaElemento.CABO, catalog)
+    resolution = _resolve_length(path, cable_paths, evidence)
+    situation = (
+        situation_from_evidence(label, CategoriaElemento.CABO, catalog)
+        if label is not None
+        else None
+    )
+    contour_situation = (
+        contour_label_situation(label, evidence, CategoriaElemento.CABO, catalog)
+        if label is not None
+        else None
+    )
+    if contour_situation is not None:
+        situation = contour_situation[0]
+        evidence_ids.update(item.id for item in contour_situation[1])
+        attributes["situacao_origem"] = "contornos_do_rotulo"
+    situation = situation or situation_from_evidence(path.evidence, CategoriaElemento.CABO, catalog)
     situation = situation or cable.situacao_projeto
+    if resolution.current is None and _has_unresolved_measurement(path, evidence):
+        attributes["comprimento_pendente"] = True
+        justification_parts.append(
+            "Há medida próxima, mas seu vínculo vigente com este traçado não foi resolvido; "
+            "o comprimento exige revisão humana."
+        )
     if resolution.current is not None:
         current = resolution.current
         attributes.update(
@@ -330,6 +412,11 @@ def _associate_cable(
             )
     return replace(
         cable,
+        estado_revisao=(
+            EstadoRevisao.CONFLITANTE
+            if attributes.get("comprimento_pendente")
+            else cable.estado_revisao
+        ),
         situacao_projeto=situation,
         geometria=geometry,
         evidencia_ids=tuple(sorted(evidence_ids, key=str)),
@@ -338,15 +425,17 @@ def _associate_cable(
     )
 
 
-def _has_nearby_path(
-    source: EvidenciaDocumento,
-    paths: tuple[_TracePath, ...],
+def _has_unresolved_measurement(
+    path: _TracePath,
+    evidence: tuple[EvidenciaDocumento, ...],
 ) -> bool:
     return any(
-        path.geometry.pagina_id == source.pagina_id
-        and _distance_to_geometry(center(source.geometria), path.geometry)[0]
-        <= _MAXIMUM_CABLE_LABEL_DISTANCE
-        for path in paths
+        _measurement_value(item) is not None
+        and item.pagina_id == path.geometry.pagina_id
+        and (position := _distance_to_geometry(center(item.geometria), path.geometry))[0]
+        <= _MAXIMUM_ANNOTATION_DISTANCE
+        and not _measurement_is_at_endpoint(item, path.geometry, position[1])
+        for item in evidence
     )
 
 
@@ -476,8 +565,17 @@ def _unique_path_association(
     for path in paths:
         if path.geometry.pagina_id != source.pagina_id:
             continue
-        distance, _, segment_angle = _distance_to_geometry(center(source.geometria), path.geometry)
+        distance, projected, segment_angle = _distance_to_geometry(
+            center(source.geometria), path.geometry
+        )
         if distance > maximum_distance:
+            continue
+        if dict(source.atributos_extraidos).get(
+            "motor_ocr"
+        ) == "tesseract-contornos-vetoriais" and any(
+            math.dist(projected, (float(point.x), float(point.y))) < 0.000001
+            for point in (path.geometry.pontos[0], path.geometry.pontos[-1])
+        ):
             continue
         orientation_penalty = 0.0
         if source_angle is not None:
@@ -505,6 +603,12 @@ def _unique_path_association(
 def _reliable_label_angle(evidence: EvidenciaDocumento) -> float | None:
     attributes = dict(evidence.atributos_extraidos)
     engine = str(attributes.get("motor_ocr") or "")
+    if (
+        engine == "tesseract-contornos-vetoriais"
+        and evidence.geometria.tipo is TipoGeometria.POLIGONO
+    ):
+        start, end = evidence.geometria.pontos[:2]
+        return math.degrees(math.atan2(float(end.y - start.y), float(end.x - start.x))) % 180
     if engine not in _TARGETED_LINEAR_ENGINES:
         return None
     raw_rotation = attributes.get("rotacao_graus", 0)
@@ -607,7 +711,7 @@ def _measurement_is_at_endpoint(
     )
     return (
         min(math.dist(evidence_center, endpoint) for endpoint in endpoints)
-        < (_MINIMUM_ENDPOINT_DISTANCE)
+        < min(_MINIMUM_ENDPOINT_DISTANCE, _geometry_length(geometry) * 0.15)
         or min(math.dist(projected, endpoint) for endpoint in endpoints) < 0.005
     )
 
@@ -639,7 +743,12 @@ def _supersession_marker(
     measurement_center = center(measurement.geometria)
     candidates: list[tuple[float, str, EvidenciaDocumento]] = []
     for item in evidence:
-        if item.pagina_id != measurement.pagina_id or not _is_burgundy_vector(item):
+        if (
+            item.pagina_id != measurement.pagina_id
+            or not _is_burgundy_vector(item)
+            or item.geometria.tipo is not TipoGeometria.POLILINHA
+            or bool(dict(item.atributos_extraidos).get("fechado"))
+        ):
             continue
         length = _geometry_length(item.geometria)
         if not 0.005 <= length <= _MAXIMUM_SUPERSESSION_MARK_LENGTH:

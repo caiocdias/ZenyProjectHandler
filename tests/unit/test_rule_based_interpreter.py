@@ -99,6 +99,7 @@ def _request(catalog: CatalogoTecnico):  # type: ignore[no-untyped-def]
             text=codes[CategoriaElemento.CABO],
             x="0.45",
             y="0.45",
+            color="#008000",
         ),
         vector_evidence(
             execution_id=source_execution_id,
@@ -1416,15 +1417,14 @@ def test_pole_nomenclature_from_native_text_or_ocr_is_recognized_and_cataloged(
     pole = result.elementos[0]
     assert pole.categoria is CategoriaElemento.POSTE
     assert pole.codigo_observado == "11-300"
-    assert pole.tipo_catalogo_sugerido_id is not None
-    catalog_item = catalogo_inicial.item_por_id(pole.tipo_catalogo_sugerido_id)
-    assert catalog_item is not None
-    assert catalog_item.codigo == "P-11M-300DAN-CIRCULAR"
-    assert pole.estado_revisao is EstadoRevisao.PROPOSTA
+    assert pole.tipo_catalogo_sugerido_id is None
+    assert pole.estado_revisao is EstadoRevisao.CONFLITANTE
     attributes = dict(pole.atributos_sugeridos)
     assert attributes["altura_m"] == "11"
     assert attributes["resistencia_dan"] == 300
-    assert attributes["catalogo_inferido"] is True
+    assert attributes["catalogo_inferido"] is False
+    assert attributes["classificacao_pendente"] is True
+    assert "P-11M-300DAN-CIRCULAR" in str(attributes["candidatos_catalogo"])
 
 
 def test_pole_collects_nearby_coordinates_from_native_text_and_ocr(
@@ -1669,8 +1669,8 @@ def test_e05_delivery_cluster_cannot_receive_structures_or_equipment(
         and relation.tipo_relacao in {"INSTALADA_EM", "INSTALADO_EM"}
     )
     assert dependents
-    assert {relation.origem_referencia_id for relation in installation_relations} == dependents
-    assert {relation.destino_referencia_id for relation in installation_relations} == {real_pole.id}
+    # O identificador da entrega não autoriza instalar seus itens no poste vizinho.
+    assert not installation_relations
     assert all(relation.destino_referencia_id != delivery_symbol.id for relation in result.relacoes)
 
 
@@ -2343,9 +2343,14 @@ def test_operational_identifiers_can_share_text_with_the_catalog_nomenclature(
 
     result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
 
-    assert len(result.elementos) == 1
-    assert result.elementos[0].categoria is CategoriaElemento.POSTE
-    assert dict(result.elementos[0].atributos_sugeridos)["identificador_operacional"] == "P13"
+    assert len(result.elementos) == 2
+    identified_pole = next(
+        item for item in result.elementos if item.categoria is CategoriaElemento.POSTE
+    )
+    assert dict(identified_pole.atributos_sugeridos)["identificador_operacional"] == "P13"
+    unresolved = next(item for item in result.elementos if item.categoria is CategoriaElemento.CABO)
+    assert unresolved.estado_revisao is EstadoRevisao.CONFLITANTE
+    assert dict(unresolved.atributos_sugeridos)["associacao_pendente"] == "tracado"
 
 
 def test_point_reference_inside_instruction_does_not_identify_nearby_asset(

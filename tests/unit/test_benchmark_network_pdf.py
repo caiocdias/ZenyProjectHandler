@@ -40,6 +40,10 @@ def test_native_benchmark_persists_promotes_and_preserves_source(tmp_path: Path)
     stored = json.loads(output.read_text(encoding="utf-8"))
     assert stored["native"]["extraction"]["evidencias"][0]["geometria"]
     assert stored["native"]["decisions"]
+    assert stored["native"]["export"]["verified"]
+    assert len(stored["native"]["results"]["proposals"]) == counts["proposals"]
+    assert len(stored["native"]["export"]["sheets"][0]["rows"]) == counts["proposals"]
+    assert len(stored["native"]["export"]["sheets"][1]["rows"]) == counts["spans"]
     assert not list(tmp_path.glob("benchmark-native-*"))
     repeated = benchmark(source, tmp_path / "repeat.json", tmp_path, native_only=True)
     first_ids = [p.id for p in report["native"]["semantic"].elementos]

@@ -162,6 +162,15 @@ Ao abrir uma NS fora da primeira página, Exportar acompanha seu ID e sua versã
 Trocar para um projeto sem análise limpa os resultados e a documentação do projeto anterior.
 Restaurar o último projeto também usa seu ID; se ele foi removido, a sessão local volta ao início.
 
+A interpretação conserva ocorrências e qualificadores para revisão mesmo quando não consegue
+resolver o catálogo ou o traçado. Dimensão de poste sem formato/material suficiente não escolhe
+um modelo arbitrário; medida com vínculo ambíguo não preenche o comprimento. A situação do
+rótulo do cabo é preservada quando cabos diferentes compartilham um traçado. Reabrir uma sessão
+concluída preserva as decisões; reanalisar uma folha já revisada com outra assinatura deixa as
+novas propostas pendentes de reconciliação, conservando o histórico e os ativos anteriores.
+O aceite da associação integral está registrado em
+[E08 — Associação de elementos e vãos](docs/e08-associacao-elementos-vaos.md).
+
 O pipeline principal executa, em ordem, a extração documental, a interpretação semântica, a
 promoção dos resultados e a conformidade. A ação **Analisar conformidade** reaplica as regras aos
 resultados semânticos persistidos; ela não abre o PDF nem repete OCR. Cada uma dessas execuções

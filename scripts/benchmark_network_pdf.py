@@ -42,6 +42,7 @@ from zeny_project_handler.adapters.persistence import (
 )
 from zeny_project_handler.application.analysis_regions import agrupar_regioes_da_analise
 from zeny_project_handler.application.document_analysis import ExecutarAnaliseDocumento
+from zeny_project_handler.application.human_review import ServicoRevisaoHumana
 from zeny_project_handler.application.interpretation_pipeline import ExecutarPipelineInterpretacao
 from zeny_project_handler.application.spans import detectar_vaos
 from zeny_project_handler.domain.analysis import PropostaElemento
@@ -204,6 +205,40 @@ def run_variant(source: Path, directory: Path, *, ocr: MotorOcrPort | None) -> d
         )
         spans = detectar_vaos(promoted)
         projection_seconds = perf_counter() - projection_started
+        semantic_total = perf_counter() - started
+        export_started = perf_counter()
+        # Mesma sessão e projeções usadas pelo servidor, sem SQL operacional nem HTTP.
+        from xml.etree import ElementTree
+        from zipfile import ZipFile
+
+        from zeny_project_handler_server.deliverable_exports import _results_sheets
+        from zeny_project_handler_server.review_api import _session_dto
+        from zeny_project_handler_server.xlsx_export import write_xlsx
+
+        session = ServicoRevisaoHumana(work).carregar_sessao_semantica(project.id)
+        dto = _session_dto(session, project_version=1)
+        sheets = _results_sheets(dto)
+        exported = write_xlsx(directory / "results.xlsx", sheets)
+        with ZipFile(exported) as archive:
+            if archive.testzip() is not None:
+                raise RuntimeError("Exportação XLSX inválida")
+            for index, sheet in enumerate(sheets, start=1):
+                root = ElementTree.fromstring(archive.read(f"xl/worksheets/sheet{index}.xml"))
+                rows = root.findall("{*}sheetData/{*}row")
+                actual_rows = tuple(
+                    tuple(
+                        cell.findtext("{*}is/{*}t") or cell.findtext("{*}v") or ""
+                        for cell in row.findall("{*}c")
+                    )
+                    for row in rows
+                )
+                expected_rows = tuple(
+                    tuple(str(value) if value is not None else "" for value in row)
+                    for row in (sheet.headers, *sheet.rows)
+                )
+                if actual_rows != expected_rows:
+                    raise RuntimeError("Exportação diverge da sessão de Resultados")
+        results_export_seconds = perf_counter() - export_started
         raw = tuple(item for recorder in recorders for item in recorder.proposals)
         return {
             "configuration": configuration,
@@ -214,7 +249,9 @@ def run_variant(source: Path, directory: Path, *, ocr: MotorOcrPort | None) -> d
                 "extraction_persistence": extraction_seconds,
                 "interpretation_promotion_persistence": interpretation_seconds,
                 "regions_spans": projection_seconds,
-                "total": perf_counter() - started,
+                "total": semantic_total,
+                "results_export": results_export_seconds,
+                "including_results_export": perf_counter() - started,
             },
             "counts": {
                 "evidence": len(extraction.evidencias),
@@ -235,6 +272,13 @@ def run_variant(source: Path, directory: Path, *, ocr: MotorOcrPort | None) -> d
             "decisions": decisions,
             "regions": regions,
             "spans": spans,
+            "results": dto.model_dump(mode="json"),
+            "export": {
+                "sheets": sheets,
+                "bytes": exported.stat().st_size,
+                "sha256": sha256(exported.read_bytes()).hexdigest(),
+                "verified": True,
+            },
         }
     finally:
         engine.dispose()

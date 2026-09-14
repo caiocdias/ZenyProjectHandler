@@ -41,7 +41,7 @@ _MAXIMUM_DUPLICATE_OCCURRENCE_AXIS_DISTANCE = 0.015
 
 class InterpretadorRegrasExplicitas:
     nome = "regras-explicitas-cemig"
-    versao = "21.1"
+    versao = "22.0"
 
     def __init__(
         self,

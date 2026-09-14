@@ -79,6 +79,13 @@ def _relation_targets(
             if dict(item.atributos_sugeridos).get("tipo_ponto_rede") != "ENTREGA"
         )
     if rule.estrategia == "CENTROS_PROXIMOS":
+        identifier = dict(origin.atributos_sugeridos).get("identificador_operacional")
+        if identifier:
+            same_page = tuple(
+                item
+                for item in same_page
+                if dict(item.atributos_sugeridos).get("identificador_operacional") == identifier
+            )
         same_situation = tuple(
             item for item in same_page if item.situacao_projeto is origin.situacao_projeto
         )
@@ -88,6 +95,19 @@ def _relation_targets(
             key=lambda item: geometry_distance(origin.geometria, item.geometria),
             default=None,
         )
+        if (
+            nearest is not None
+            and sum(
+                abs(
+                    geometry_distance(origin.geometria, item.geometria)
+                    - geometry_distance(origin.geometria, nearest.geometria)
+                )
+                <= 0.004
+                for item in candidates
+            )
+            > 1
+        ):
+            return ()
         if nearest is not None and geometry_distance(origin.geometria, nearest.geometria) <= float(
             rule.distancia_maxima
         ):

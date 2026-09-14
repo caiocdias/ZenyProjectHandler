@@ -181,7 +181,16 @@ def test_pipeline_persists_cross_run_provenance_and_reuses_completed_result(
     assert second.resultado_reutilizado
     assert second.execucao.id == first.execucao.id
     assert second.elementos == first.elementos
-    assert all(item.estado_revisao is EstadoRevisao.CONFIRMADA for item in first.elementos)
+    confirmed_categories = {
+        CategoriaElemento.POSTE,
+        CategoriaElemento.ESTRUTURA_MT,
+        CategoriaElemento.CABO,
+    }
+    assert all(
+        (item.estado_revisao is EstadoRevisao.CONFIRMADA)
+        == (item.categoria in confirmed_categories)
+        for item in first.elementos
+    )
     assert all(source_execution.id != item.execucao_id for item in first.elementos)
     with SqlAlchemyUnitOfWork(engine) as work:
         stored = work.propostas.listar_da_execucao(first.execucao.id)
@@ -203,7 +212,11 @@ def test_pipeline_persists_cross_run_provenance_and_reuses_completed_result(
         decisions = tuple(
             work.decisoes_revisao.obter_da_proposta(item.id) for item in first.elementos
         )
-        assert all(item is not None and item.revisor == "Análise automática" for item in decisions)
+        assert all(
+            (decision is not None) == (item.categoria in confirmed_categories)
+            for item, decision in zip(first.elementos, decisions, strict=True)
+        )
+        assert all(item.revisor == "Análise automática" for item in decisions if item is not None)
 
 
 def test_interpreter_version_change_invalidates_completed_semantic_result(
@@ -219,12 +232,59 @@ def test_interpreter_version_change_invalidates_completed_semantic_result(
     )
 
     legacy = legacy_runner.executar(project.id, source_execution.id)
+    with SqlAlchemyUnitOfWork(engine) as work:
+        before = work.projetos.obter(project.id)
+        prior_decisions = tuple(
+            work.decisoes_revisao.obter_da_proposta(item.id) for item in legacy.elementos
+        )
     current = _runner(engine).executar(project.id, source_execution.id)
 
     assert legacy.execucao.versao_metodo == "20.0"
-    assert current.execucao.versao_metodo == "21.1"
+    assert current.execucao.versao_metodo == "22.0"
     assert current.execucao.id != legacy.execucao.id
     assert not current.resultado_reutilizado
+    assert all(item.estado_revisao is EstadoRevisao.CONFLITANTE for item in current.elementos)
+    assert all(
+        dict(item.atributos_sugeridos)["reconciliacao_reanalise_pendente"]
+        for item in current.elementos
+    )
+    with SqlAlchemyUnitOfWork(engine) as work:
+        assert work.projetos.obter(project.id) == before
+        assert (
+            tuple(work.decisoes_revisao.obter_da_proposta(item.id) for item in legacy.elementos)
+            == prior_decisions
+        )
+        assert all(
+            work.decisoes_revisao.obter_da_proposta(item.id) is None for item in current.elementos
+        )
+
+
+def test_reused_session_does_not_repromote_a_human_rejection(
+    interpretation_context: tuple[Engine, Projeto, ExecucaoAnalise],
+) -> None:
+    from zeny_project_handler.application.human_review import ServicoRevisaoHumana
+
+    engine, project, source_execution = interpretation_context
+    runner = _runner(engine)
+    first = runner.executar(project.id, source_execution.id)
+    pending = next(
+        item for item in first.elementos if item.estado_revisao is not EstadoRevisao.CONFIRMADA
+    )
+    service = ServicoRevisaoHumana(lambda: SqlAlchemyUnitOfWork(engine))
+    decision = service.rejeitar(
+        pending.id, revisor="Revisor sintético", motivo="Símbolo sem vínculo"
+    )
+    with SqlAlchemyUnitOfWork(engine) as work:
+        before = work.projetos.obter(project.id)
+    second = runner.executar(project.id, source_execution.id)
+    assert second.resultado_reutilizado
+    assert (
+        next(item for item in second.elementos if item.id == pending.id).estado_revisao
+        is EstadoRevisao.REJEITADA
+    )
+    with SqlAlchemyUnitOfWork(engine) as work:
+        assert work.decisoes_revisao.obter_da_proposta(pending.id) == decision
+        assert work.projetos.obter(project.id) == before
 
 
 def test_cancelled_pipeline_resumes_with_same_identity_without_duplicates(

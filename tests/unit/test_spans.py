@@ -459,11 +459,15 @@ def test_automatic_promotion_separates_delivery_from_nearby_real_pole_and_is_ide
     confirmed_cable = next(item for item in promoted.projeto.elementos if isinstance(item, Cabo))
     assert confirmed_cable.tipo_trecho is TipoTrechoRede.RAMAL_CONEXAO
     assert confirmed_cable.modalidade is ModalidadeTrecho.DESCONHECIDO
-    assert {
-        item.poste_id
-        for item in promoted.projeto.elementos
-        if isinstance(item, (EstruturaMt, Equipamento))
-    } == {poles[0].id}
+    # Relações que apontavam à entrega não autorizam transferência ao poste vizinho.
+    assert not any(
+        isinstance(item, (EstruturaMt, Equipamento)) for item in promoted.projeto.elementos
+    )
+    assert all(
+        item.estado_revisao is EstadoRevisao.PROPOSTA
+        for item in promoted.elementos
+        if item.id in {structure.id, equipment.id}
+    )
     assert all(
         relation.destino_id != delivery_point.id
         for relation in promoted.projeto.relacoes_confirmadas

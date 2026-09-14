@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 from decimal import Decimal
@@ -60,14 +61,7 @@ def promover_resultado_automatico(
     promovido_em: datetime,
 ) -> ResultadoPromocaoAutomatica:
     """Materialize tudo que possui tipo catalogado e vínculos de domínio resolvíveis."""
-    cataloged = {
-        proposal.id: proposal
-        for proposal in elementos
-        if proposal.tipo_catalogo_sugerido_id is not None
-        and (item := catalogo.item_por_id(proposal.tipo_catalogo_sugerido_id)) is not None
-        and item.ativo
-        and item.categoria is proposal.categoria
-    }
+    cataloged = _promotable_proposals(elementos, catalogo)
     poles = tuple(
         proposal
         for proposal in cataloged.values()
@@ -124,6 +118,9 @@ def promover_resultado_automatico(
     promoted_relations: list[PropostaRelacao] = []
     relation_decisions: list[DecisaoRevisao] = []
     for relation_proposal in relacoes:
+        if relation_proposal.estado_revisao is EstadoRevisao.REJEITADA:
+            promoted_relations.append(relation_proposal)
+            continue
         origin_id = element_ids.get(relation_proposal.origem_referencia_id)
         destination_id = element_ids.get(relation_proposal.destino_referencia_id)
         if origin_id is None or destination_id is None:
@@ -179,6 +176,27 @@ def promover_resultado_automatico(
     )
 
 
+def _promotable_proposals(
+    proposals: tuple[PropostaElemento, ...],
+    catalog: CatalogoTecnico,
+) -> dict[UUID, PropostaElemento]:
+    pending_keys = (
+        "reconciliacao_reanalise_pendente",
+        "associacao_pendente",
+        "comprimento_pendente",
+    )
+    return {
+        proposal.id: proposal
+        for proposal in proposals
+        if proposal.tipo_catalogo_sugerido_id is not None
+        and proposal.estado_revisao is not EstadoRevisao.REJEITADA
+        and not any(dict(proposal.atributos_sugeridos).get(key) for key in pending_keys)
+        and (item := catalog.item_por_id(proposal.tipo_catalogo_sugerido_id)) is not None
+        and item.ativo
+        and item.categoria is proposal.categoria
+    }
+
+
 def _dependent_element(
     proposal: PropostaElemento,
     element_id: UUID,
@@ -191,7 +209,7 @@ def _dependent_element(
     pole_proposals = _related_poles(proposal, poles, relation_index)
     pole_ids = tuple(element_ids[item.id] for item in pole_proposals if item.id in element_ids)
     if proposal.categoria is CategoriaElemento.ESTRUTURA_MT:
-        if not pole_ids:
+        if len(pole_ids) != 1:
             return None
         return (
             EstruturaMt(
@@ -206,7 +224,7 @@ def _dependent_element(
             (),
         )
     if proposal.categoria is CategoriaElemento.ESTRUTURA_BT:
-        if not pole_ids:
+        if len(pole_ids) != 1:
             return None
         return (
             EstruturaBt(
@@ -221,7 +239,7 @@ def _dependent_element(
             (),
         )
     if proposal.categoria is CategoriaElemento.EQUIPAMENTO:
-        if not pole_ids:
+        if len(pole_ids) != 1:
             return None
         return (
             Equipamento(
@@ -238,7 +256,9 @@ def _dependent_element(
     cable_type = catalog.item_por_id(catalog_id)
     if not isinstance(cable_type, TipoCabo):
         return None
-    geometry = _cable_geometry(proposal.geometria)
+    if proposal.geometria.tipo is not TipoGeometria.POLILINHA:
+        return None
+    geometry = proposal.geometria
     level = _network_level(catalog, cable_type.nivel_tensao_opcao_id)
     attributes = dict(proposal.atributos_sugeridos)
     explicit_endpoint_types: tuple[TipoPontoRede | None, TipoPontoRede | None] = (
@@ -258,6 +278,7 @@ def _dependent_element(
         pole_proposals,
         element_ids,
         explicit_endpoint_types,
+        attributes,
     )
     endpoint_types: tuple[TipoPontoRede, TipoPontoRede] = (
         explicit_endpoint_types[0]
@@ -329,17 +350,7 @@ def _related_poles(
         for relation in relation_index.get(proposal.id, ())
         if relation.destino_referencia_id in by_id
     )
-    if related:
-        return related
-    same_page = tuple(
-        pole for pole in poles if pole.geometria.pagina_id == proposal.geometria.pagina_id
-    )
-    same_situation = tuple(
-        pole for pole in same_page if pole.situacao_projeto is proposal.situacao_projeto
-    )
-    candidates = same_situation or same_page
-    nearest = min(candidates, key=lambda pole: _distance(proposal, pole), default=None)
-    return (nearest,) if nearest is not None else ()
+    return related
 
 
 def _endpoint_poles(
@@ -347,6 +358,7 @@ def _endpoint_poles(
     poles: tuple[PropostaElemento, ...],
     element_ids: dict[UUID, UUID],
     explicit_types: tuple[TipoPontoRede | None, TipoPontoRede | None],
+    attributes: Mapping[str, object],
 ) -> tuple[UUID | None, UUID | None]:
     remaining = list(poles)
     selected: list[UUID | None] = []
@@ -354,11 +366,23 @@ def _endpoint_poles(
         if explicit_types[index] is TipoPontoRede.ENTREGA:
             selected.append(None)
             continue
-        nearest = min(
-            remaining,
-            key=lambda pole: _point_distance(point, pole.geometria),
-            default=None,
+        label = attributes.get(f"ponto_operacional_{'origem' if index == 0 else 'destino'}")
+        candidates = sorted(
+            (
+                pole
+                for pole in remaining
+                if (not label or _operational_identifier(pole) == label)
+                and _point_distance(point, pole.geometria) <= 0.10
+            ),
+            key=lambda pole: (_point_distance(point, pole.geometria), str(pole.id)),
         )
+        nearest = candidates[0] if candidates else None
+        if len(candidates) > 1 and (
+            _point_distance(point, candidates[1].geometria)
+            - _point_distance(point, candidates[0].geometria)
+            <= 0.004
+        ):
+            nearest = None
         selected.append(element_ids.get(nearest.id) if nearest is not None else None)
         if nearest is not None:
             remaining.remove(nearest)
@@ -471,23 +495,6 @@ def _automatic_decision(
     )
 
 
-def _cable_geometry(geometry: GeometriaDocumento) -> GeometriaDocumento:
-    if geometry.tipo is TipoGeometria.POLILINHA:
-        return geometry
-    if geometry.tipo is TipoGeometria.CAIXA:
-        return GeometriaDocumento.polilinha(geometry.pagina_id, geometry.pontos)
-    point = geometry.pontos[0]
-    start_x = max(Decimal(0), point.x - Decimal("0.005"))
-    end_x = min(Decimal(1), point.x + Decimal("0.005"))
-    return GeometriaDocumento.polilinha(
-        geometry.pagina_id,
-        (
-            PontoNormalizado(start_x, point.y),
-            PontoNormalizado(max(end_x, start_x + Decimal("0.001")), point.y),
-        ),
-    )
-
-
 def _network_level(catalog: CatalogoTecnico, voltage_option_id: UUID) -> NivelRede:
     option = next(
         (
@@ -503,10 +510,6 @@ def _network_level(catalog: CatalogoTecnico, voltage_option_id: UUID) -> NivelRe
         raise ValueError("Nível de tensão do cabo não está disponível no catálogo")
     label = f"{option.codigo} {option.rotulo}".upper()
     return NivelRede.MT if "MT" in label else NivelRede.BT
-
-
-def _distance(first: PropostaElemento, second: PropostaElemento) -> float:
-    return math.dist(_center(first.geometria), _center(second.geometria))
 
 
 def _point_distance(point: PontoNormalizado, geometry: GeometriaDocumento) -> float:
