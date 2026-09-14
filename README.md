@@ -38,8 +38,8 @@ apresenta os DTOs e rasters recebidos pela API autenticada.
   efetiva é persistida e editável pela API. As ações operacionais continuam consultadas no SQL.
 - Painel **Exportar**: o servidor compila o PDF na ordem das folhas, incorpora as anotações de
   conformidade e gera planilhas Excel de **Resultados** (Elementos e Vãos), **Documentação** e
-  **Conformidade** (Conformidade e Regras). O cliente apenas escolhe o destino e confere tamanho e
-  SHA-256 antes de publicar o download local.
+  **Conformidade** (Conformidade, Regras e Contexto da execução). O cliente apenas escolhe o
+  destino e confere tamanho e SHA-256 antes de publicar o download local.
 - Lifecycle fail-closed do volume: manifesto de formato versionado, verificação SQLite pré/pós,
   Alembic somente quando necessário e rejeição de revisão futura, corrupção ou falta de escrita
   antes da prontidão.
@@ -49,7 +49,8 @@ O extrator 1.14.0 lê também rótulos convertidos em contornos vetoriais, isola
 de molduras e linhas sobrepostas e preservando sua posição na página. Recortes têm orçamento
 limitado; falhas mantêm as evidências já obtidas, geram diagnóstico e não ficam presas no cache.
 A referência local recuperou as 95 ocorrências, os 18 identificadores e os 19 comprimentos
-legíveis. A associação de elementos e a topologia dos vãos seguem para E08. Métodos, limites e
+legíveis. E08 recuperou as 95 ocorrências com seus vínculos, mas permanece bloqueada para aceite
+integral: 18/19 comprimentos associados e classificação/topologia pendentes. Métodos, limites e
 validações estão em [E07](docs/e07-extracao-evidencias.md). Reanalise documentos para usar a
 nova versão do extrator.
 
@@ -368,6 +369,9 @@ sanitizados com e sem linha antes da produção.
   de documentos restritos não são inferidos sem fonte e evidência suficientes.
 - Algumas regras de pacote documental ou topologia permanecem não avaliáveis quando os anexos ou as
   associações necessárias não aparecem no projeto analisado.
+- A homologação integrada ainda depende do aceite de E08 e da revisão de caixas amplas em
+  propostas simbólicas de equipamento, que podem produzir realces excessivos. Evidências e
+  desbloqueios estão no [handoff E09](docs/e09-homologacao-integrada.md).
 - O ZIP portátil ainda não possui assinatura de código nem instalador; a verificação automatizada
   comprova inicialização autocontida no Windows x64 sem usar o Python do host.
 

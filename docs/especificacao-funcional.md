@@ -19,7 +19,10 @@ Estado versionado relevante:
 | Catálogo técnico | `2` |
 | Registro de interpretação | `1.6.0` |
 | Registro de conformidade distribuído | `cemig-normas-distribuicao-2026.1` |
-| Método de conformidade | `12` |
+| Método de conformidade | `14` |
+| Extrator documental | `1.14.0` |
+| Interpretador semântico | `22.0` |
+| API / piso compatível | `1.4.0` |
 | Migração SQLite mais recente | `0009_remote_jobs` |
 
 ## Modelo de domínio
@@ -125,7 +128,7 @@ Os padrões são 600 DPI como teto de detalhe, 8.000.000 pixels e 64 MiB por sol
 cache visual. Esses limites são configuráveis pelas variáveis descritas no README e não alteram o
 pipeline de análise.
 
-Sublinhos de elementos, contornos temporários e callouts de conformidade são camadas vetoriais
+Marca-textos de elementos, contornos temporários e callouts de conformidade são camadas vetoriais
 independentes. Nenhuma delas é escrita no PDF original.
 
 ## Extração documental
@@ -303,7 +306,7 @@ implementado por E05–E08 e exposto de forma coordenada pela API, cliente e exp
   e `ALTERAR` exigirão reanálise semântica explícita e nova conformidade; snapshots históricos não
   serão reescritos.
 
-Na API `1.3.0`, `ElementSituation.CHANGE` representa `ALTERAR`, e `SpanType` fecha os valores
+Desde a API `1.3.0`, `ElementSituation.CHANGE` representa `ALTERAR`, e `SpanType` fecha os valores
 `DISTRIBUTION_NETWORK`, `CONNECTION_BRANCH` e `UNKNOWN`. `DetectedSpanDto` expõe o enum e seu rótulo
 pronto, os IDs dos dois pontos e mantém opcionais os IDs de elementos/postes. Um endpoint
 `TipoPontoRede.ENTREGA` é apresentado exatamente como **Padrão do cliente**, nunca como `-` ou como
@@ -320,7 +323,8 @@ O cliente não classifica o trecho nem deduz o endpoint pela presença de poste,
 proximidade. Dados antigos sem `tipo_trecho` continuam legíveis como `UNKNOWN` e exigem reanálise
 semântica explícita para obter classificação resolvida. Como `CHANGE` e os campos obrigatórios do
 vão não são compreendidos pela API `1.2.x`, a negociação de sessão eleva o piso compatível para
-`1.3.0`: cliente e servidor antigos são recusados antes da leitura da sessão, sem tradução para
+`1.3.0` naquela entrega. O piso vigente é `1.4.0`, que também inclui Ambos: cliente e servidor
+antigos são recusados antes da leitura da sessão, sem tradução para
 `EXISTING` ou `REMOVE` e sem reescrever snapshots históricos.
 
 ## Documentação e conformidade
@@ -469,7 +473,7 @@ inferência.
 O painel **Exportar** não transporta o agregado nem oferece backup/restauração ao usuário. O servidor
 compila quatro entregáveis a partir do projeto atual: PDF na ordem das folhas com anotações de
 conformidade, Resultados `.xlsx` com abas Elementos e Vãos, Documentação `.xlsx` e Conformidade
-`.xlsx` com abas Conformidade e Regras.
+`.xlsx` com abas Conformidade, Regras e Contexto da execução.
 
 O PDF mantém o conteúdo e as anotações originais e recebe callouts FreeText nas coordenadas
 normalizadas da execução mais recente. Posições ajustadas na interface são enviadas como overrides
@@ -529,6 +533,10 @@ investigação, mas não substituem fonte normativa.
   assinatura de código.
 - Reconhecimento visual pode permanecer ambíguo; a interface conserva o resultado para revisão em
   vez de forçar uma classificação.
+- A homologação local E09 permanece impedida pelas lacunas de associação/classificação de E08
+  e por um realce amplo originado de evidência simbólica de equipamento. O gate público aprovado
+  não concede aceite técnico à NS real; métricas, inspeções e ações de desbloqueio estão em
+  [e09-homologacao-integrada.md](e09-homologacao-integrada.md).
 - Cálculos elétricos e mecânicos completos e verificações dependentes de fontes restritas não são
   executados sem todos os fatos e referências necessários.
 - Carimbo, rótulo ou campo de assinatura não comprova autoria ou autenticidade.

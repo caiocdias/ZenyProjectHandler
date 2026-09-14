@@ -156,7 +156,7 @@ Hipóteses de produto adotadas para tornar o plano executável, ajustáveis com 
 | E06 | Marca-texto por situação | #concluida | Nenhuma | Realce 25%; matriz 24/24 e gate aprovados |
 | E07 | Extração robusta de evidências | #concluida | E01 | 95 ocorrências, 18 identificadores e 19 comprimentos com evidência recuperada |
 | E08 | Associação de elementos e vãos | #bloqueada | E01, E07 | 95 ocorrências; 18/19 comprimentos; classificação/topologia pendentes |
-| E09 | Homologação integrada | #pendente | E03, E04, E05, E06, E08 | Aceite completo e relatório final |
+| E09 | Homologação integrada | #bloqueada | E03, E04, E05, E06, E08 | Gate aprovado; E08 e realce simbólico impedem aceite |
 
 ## E01 — Diagnóstico e referência da NS 1256148225 — #concluida
 
@@ -938,9 +938,9 @@ em [e08-associacao-elementos-vaos.md](e08-associacao-elementos-vaos.md).
   87,71% de cobertura, saída zero**, incluindo dependências, Ruff, Mypy e complexidade.
   O gate intermediário falhou por complexidade e não foi usado como aceite.
 - Dados reais e auditorias somente em `tmp/e08/`, ignorado; comandos, arquivos e casos
-  remanescentes no handoff. E09 permanece pendente. Sem commit ou publicação.
+  remanescentes no handoff. E09 permaneceu pendente naquele encerramento. Sem commit ou publicação.
 
-## E09 — Homologação integrada — #pendente
+## E09 — Homologação integrada — #bloqueada
 
 **Objetivo:** comprovar os quatro pedidos juntos no cliente/servidor e consolidar documentação.
 **Por que agora:** as mudanças individuais precisam de aceite integrado com o PDF motivador.
@@ -972,9 +972,9 @@ Execute E09 — Homologação integrada de docs/roadmap-mercado-paineis-leitura-
 **Critérios de aceite:**
 
 - [ ] Todos os itens da definição global de pronto possuem evidência rastreável.
-- [ ] Gate público integral aprovado com cobertura mínima 85,01% e fixtures independentes do PDF.
+- [x] Gate público integral aprovado com cobertura mínima 85,01% e fixtures independentes do PDF.
 - [ ] NS 1256148225 atende inventário/metas E01 no pipeline completo e no visualizador.
-- [ ] Documentação, contrato, histórico e exportações descrevem o comportamento entregue.
+- [x] Documentação, contrato, histórico e exportações descrevem o comportamento entregue.
 
 **Validação obrigatória:** `.\IniciarTestes.bat`, que cobre integridade das dependências, Ruff,
 formatação, Mypy, fronteira do cliente magro, Pytest com cobertura e complexidade. Exigir saída
@@ -982,10 +982,34 @@ zero e relatório aprovado. Rodar o benchmark local de E01 e as matrizes visuais
 fluxo integrado; `python scripts/smoke_examples.py` complementa regressão nativa nos exemplos
 locais disponíveis, mas não substitui o benchmark com OCR. Verificar diff do Git sem PDFs,
 recortes, credenciais ou dados de execução. Não é necessário SQL operacional para esse gate.
-**Bloqueios:** nenhum bloqueio conhecido. Se uma dependência, PDF ou runtime necessário faltar
-na homologação, registrar o impedimento real e concluir apenas o trabalho independente.
+**Bloqueios:** E08 continua abaixo do aceite: T02/V2-3 permanece em **18/19 comprimentos**;
+faltam classificação técnica de postes/entregas e aceite da representação de trechos por cabo.
+A inspeção E09 demonstrou ainda realce amplo de proposta simbólica de Para-raios MT: a caixa
+da evidência inclui linha e rótulos vizinhos. **Impacto:** a NS não satisfaz a definição global
+de pronto, apesar do gate aprovado. **Desbloqueio:** concluir os casos E08, corrigir a evidência
+simbólica com regressão e negativos, verificar os demais equipamentos e repetir benchmark e
+inspeção integrada na revisão resultante. Não ocultar propostas nem reduzir metas. Causa,
+geometria, capturas e rastreio constam de [e09-homologacao-integrada.md](e09-homologacao-integrada.md).
+PDF/OCR estavam disponíveis; SQL operacional não é necessário para este gate.
 **Riscos e mitigação:** relato de sucesso apenas de testes sintéticos; exigir os dois conjuntos
 de evidência, público e local, sem tornar o segundo requisito de CI.
-**Evidências e handoff:** ainda não executada. Registrar revisão testada, resultados completos,
-relatório sanitizado, métricas antes/depois, matrizes visuais e pendências efetivas. Conclusão
-do roadmap exige todos os aceites; não marcar pronto apenas porque o gate público passou.
+**Evidências e handoff:** iniciada em 14/09/2026 sobre `cd598bc`, Git limpo e sem
+`AGENTS.md` aplicável. E01–E07 concluídas; E08 permanece bloqueada e seu código está integrado
+na base. Por solicitação explícita, iniciadas as validações independentes de E09; o aceite
+global continua impedido por E08 e pelo caso visual encontrado. Gate completo: **1.250 testes
+aprovados em 449,12 s / 87,71% de cobertura**, saída 0, com todas as verificações de qualidade
+aprovadas. Benchmark OCR real: **59,953 s** no escopo congelado E01 e **62,657 s** incluindo
+Resultados/exportação; nativo **15,476 / 18,473 s**. Python **598,59 MiB**, Tesseract observado
+**80,46 MiB**, agregado amostrado **527,93 MiB**. Sem margem estável demonstrada nos 60 s OCR.
+Auditoria: **95/95 ocorrências e vínculos, 18/18 identificadores e endpoints visíveis,
+18/19 comprimentos**, 106 propostas e 28 linhas de Vãos. Origem preservada.
+
+Escolhas Rural/Urbano/Ambos, snapshots, três conflitos HTTP e exportações reais conferidos;
+Ambos equivale à união dos achados sem duplicação. Smoke nativo **1/1** e referência E01 **3/3**
+aprovados. Matrizes sintéticas E05 **28 testes / oito cenários** e E06 **24 casos** executadas
+e inspecionadas. Complemento HTTP real: **oito testes aprovados** nas duas escalas, 40 navegações
+e **24 capturas de zoom/rotação**, oito mosaicos de painéis e dois de marca-textos inspecionados.
+Asserções de interação/rolagem passaram; **aceite visual real reprovado pela caixa ampla de
+equipamento**. Handoff final: [e09-homologacao-integrada.md](e09-homologacao-integrada.md).
+Nenhuma alteração de produção, commit, release, publicação ou migração operacional.
+PDFs e dados privados ignorados.
