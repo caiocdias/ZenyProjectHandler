@@ -15,8 +15,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SEMVER = re.compile(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\Z")
-API_VERSION = "1.3.0"
-MIN_COMPATIBLE_API_VERSION = "1.3.0"
+API_VERSION = "1.5.0"
+MIN_COMPATIBLE_API_VERSION = "1.5.0"
 MAX_COMPATIBLE_API_VERSION = "1.999.999"
 VOLUME_FORMAT_VERSION = 1
 ALEMBIC_REVISION = "0009_remote_jobs"
@@ -396,7 +396,7 @@ passa a avaliar caminhos topológicos e ramais com evidências rastreáveis no P
 distribuído `cemig-normas-distribuicao-2026.1` contém 42 regras habilitadas e usa o método de
 conformidade 12.
 
-A API pública está na versão `1.3.0` e eleva o piso compatível para `1.3.0`; por isso, cliente e
+A API pública está na versão `{API_VERSION}` e usa o piso `{MIN_COMPATIBLE_API_VERSION}`; cliente e
 servidor desta release devem ser atualizados em conjunto. A classificação rural/urbana e os checks
 do GMAX continuam consultando o SQL Server exclusivamente pelo servidor. Falha, ausência ou resposta
 inválida interrompe a análise sem fallback nem snapshot parcial.

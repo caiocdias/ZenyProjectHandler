@@ -268,7 +268,8 @@ def test_native_extraction_preserves_geometry_provenance_and_properties(tmp_path
     result = PyMuPdfDocumentAnalyzer(motor_ocr=ocr).analisar(request)
 
     assert {item.tipo for item in result.evidencias} == set(TipoEvidencia)
-    assert [page.pagina_numero for page in ocr.pages] == [2]
+    # Annotation text no longer inflates the native-character threshold on page 1.
+    assert [page.pagina_numero for page in ocr.pages] == [1, 2]
     assert not result.diagnosticos
     assert all(
         0 <= point.x <= 1 and 0 <= point.y <= 1
@@ -308,7 +309,11 @@ def test_native_extraction_preserves_geometry_provenance_and_properties(tmp_path
         for item in result.evidencias
     )
     assert any(item.origem_pdf.tipo is TipoOrigemPdf.FORM_XOBJECT for item in result.evidencias)
-    ocr_evidence = next(item for item in result.evidencias if item.tipo is TipoEvidencia.OCR)
+    ocr_evidence = next(
+        item
+        for item in result.evidencias
+        if item.tipo is TipoEvidencia.OCR and item.pagina_id == request.documento.paginas[1].id
+    )
     assert ocr_evidence.pagina_id == request.documento.paginas[1].id
     assert dict(ocr_evidence.atributos_extraidos)["confianca"] == Decimal("0.91")
 

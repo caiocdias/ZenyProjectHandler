@@ -34,6 +34,7 @@ from .errors import (
     InterpretacaoProjetoError,
     ProjetoNaoEncontradoError,
 )
+from .technical_revisions import preserve_revision_decision
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -263,6 +264,19 @@ def _preserve_previous_review(
     execution: ExecucaoAnalise,
     result: ResultadoInterpretacao,
 ) -> ResultadoInterpretacao:
+    previous_proposals = tuple(
+        proposal
+        for previous in work.execucoes_analise.listar_do_projeto(execution.projeto_id)
+        if previous.id != execution.id
+        for proposal in work.propostas.listar_da_execucao(previous.id)
+        if isinstance(proposal, PropostaElemento)
+    )
+    result = replace(
+        result,
+        elementos=tuple(
+            preserve_revision_decision(work, item, previous_proposals) for item in result.elementos
+        ),
+    )
     reviewed_pages = {
         proposal.geometria.pagina_id
         for previous in work.execucoes_analise.listar_do_projeto(execution.projeto_id)
@@ -287,6 +301,7 @@ def _preserve_previous_review(
             ),
         )
         if item.geometria.pagina_id in reviewed_pages
+        and not dict(item.atributos_sugeridos).get("revisao_tecnica_decidida")
         else item
         for item in result.elementos
     )

@@ -45,7 +45,7 @@ apresenta os DTOs e rasters recebidos pela API autenticada.
   antes da prontidão.
 - Temas claro e escuro, painéis acopláveis e restauração do estado da interface.
 
-O extrator 1.14.0 lê também rótulos convertidos em contornos vetoriais, isolando os caracteres
+O extrator 1.15.0 lê também rótulos convertidos em contornos vetoriais, isolando os caracteres
 de molduras e linhas sobrepostas e preservando sua posição na página. Recortes têm orçamento
 limitado; falhas mantêm as evidências já obtidas, geram diagnóstico e não ficam presas no cache.
 A referência local recuperou as 95 ocorrências, os 18 identificadores e os 19 comprimentos
@@ -53,6 +53,15 @@ legíveis. E08 recuperou as 95 ocorrências com seus vínculos, mas permanece bl
 integral: 18/19 comprimentos associados e classificação/topologia pendentes. Métodos, limites e
 validações estão em [E07](docs/e07-extracao-evidencias.md). Reanalise documentos para usar a
 nova versão do extrator.
+
+Revisões sobrepostas de cabos ABCN e estruturas N1–N4 são comparadas com a camada base.
+O painel Resultados apresenta os dois recortes e mantém a decisão técnica pendente até
+o responsável escolher uma camada e informar o motivo. Comentários, fotos, assinaturas e
+carimbos permanecem evidências; SHX continua disponível como conteúdo técnico. A escolha
+da camada preserva a versão anterior e não cria um ativo sem catálogo: `ABCN-16(16)`,
+ausente do catálogo atual, continua com catalogação pendente. A interpretação de múltiplas
+operações sobrepostas de N4 permanece pendente das etapas de extração/interpretação.
+Detalhes e validações em [E11](docs/e11-revisoes-tecnicas.md).
 
 Projeto, Resultados, Documentação e conformidade, GMAX e Exportar têm rolagem vertical
 independente. As tabelas e listas mantêm uma área de leitura limitada: a roda percorre suas
@@ -195,7 +204,7 @@ GMAX distingue o mercado salvo no projeto da classificação da última execuç�
 efetivo e origem. Após salvar ou atualizar o mercado, GMAX e o aviso de conformidade releem o
 estado persistido; o snapshot anterior mantém sua proveniência e indicação de desatualizado.
 A planilha
-de conformidade inclui a aba Contexto da execução. API e piso compatível: `1.4.0`.
+de conformidade inclui a aba Contexto da execução. API e piso compatível: `1.5.0`.
 Quando o PDF contém `Impacto Ambiental: Sim` no cabeçalho ou uma menção positiva a servidão, a
 execução também consulta no máximo uma vez a ação correspondente com a NS e a coleção de serviços
 vigentes. Assim, depois que a classificação efetiva, a NS, os serviços ou as ações externas mudarem, execute

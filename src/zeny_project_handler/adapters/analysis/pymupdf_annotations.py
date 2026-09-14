@@ -66,6 +66,15 @@ def _extract_annotations(
                     tipo_campo_formulario=field_type,
                     campo_formulario_preenchido=field_has_value,
                     anotacao_tecnica=technical_annotation,
+                    classificacao_anotacao=(
+                        "conteudo_tecnico"
+                        if technical_annotation
+                        else "comentario_apresentacao"
+                        if subtype in {"Text", "Popup"}
+                        else "conteudo_documental"
+                        if field_type is not None
+                        else "indeterminada"
+                    ),
                 ),
             )
         )

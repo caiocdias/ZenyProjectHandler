@@ -264,6 +264,15 @@ def _results_sheets(session: ReviewSessionResponse) -> tuple[WorksheetData, Work
             "Sim" if item.requires_review else "Não",
             _page_id(item.overlay.geometry.page_id.root, session.page_order),
             str(item.proposal_id.root),
+            str((item.technical_revision or {}).get("group_id", "")),
+            str((item.technical_revision or {}).get("base_text", "")),
+            str((item.technical_revision or {}).get("visible_text") or ""),
+            str(
+                (item.technical_revision or {}).get("decision")
+                or ("Pendente" if item.technical_revision else "")
+            ),
+            str((item.technical_revision or {}).get("effective_value") or ""),
+            str((item.technical_revision or {}).get("source_sha256", "")),
         )
         for item in session.proposals
     )
@@ -301,6 +310,12 @@ def _results_sheets(session: ReviewSessionResponse) -> tuple[WorksheetData, Work
                 "Exige revisão",
                 "Folha",
                 "ID da identificação",
+                "Grupo de revisão técnica",
+                "Camada base",
+                "Camada visível",
+                "Decisão técnica",
+                "Valor efetivo",
+                "SHA-256 da fonte",
             ),
             element_rows,
         ),

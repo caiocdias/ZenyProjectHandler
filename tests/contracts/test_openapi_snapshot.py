@@ -49,7 +49,7 @@ def test_openapi_covers_every_minimum_group_and_expected_operation() -> None:
     } <= tags
     assert schema["info"]["version"] == API_VERSION
     assert schema["openapi"].startswith("3.1.")
-    assert API_VERSION == "1.4.0"
+    assert API_VERSION == "1.5.0"
     assert len(operations) == 59
 
 

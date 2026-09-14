@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
@@ -46,6 +47,7 @@ from zeny_project_handler.ports.persistence import UnitOfWorkPort
 
 from .analysis_regions import RegiaoAnalise, agrupar_regioes_da_analise
 from .errors import ProjetoNaoEncontradoError, RevisaoHumanaError
+from .technical_revisions import effective_revision_project
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -212,7 +214,7 @@ class ServicoRevisaoHumana:
                 if (source := work.fontes_pdf.obter(document.id)) is not None
             )
             return SessaoRevisao(
-                projeto=project,
+                projeto=effective_revision_project(project, proposals, decisions),
                 catalogo=catalog,
                 execucoes=executions,
                 propostas=proposals,
@@ -257,11 +259,53 @@ class ServicoRevisaoHumana:
         *,
         revisor: str,
         motivo: str | None = None,
+        escolha_revisao: str | None = None,
     ) -> DecisaoRevisao:
         now = self._aware_now()
         with self._unit_of_work() as work:
             proposal, project, catalog = self._element_context(work, proposta_id)
             self._ensure_undecided(work, proposal)
+            from .technical_revisions import revision_data
+
+            revision = revision_data(proposal)
+            if revision is not None:
+                escolha_revisao = revision.get("decision") or escolha_revisao
+                if escolha_revisao not in {"base", "revised"} or not (motivo or "").strip():
+                    raise RevisaoHumanaError(
+                        "Escolha a camada técnica e informe o motivo da decisão."
+                    )
+                allowed_codes = (
+                    [revision["base_code"]]
+                    if escolha_revisao == "base"
+                    else revision["visible_codes"]
+                )
+                if len(allowed_codes) != 1 or (
+                    escolha_revisao == "revised" and revision.get("operation_review_pending")
+                ):
+                    raise RevisaoHumanaError(
+                        "A camada contém leitura incompleta ou múltiplas operações; "
+                        "mantenha pendente."
+                    )
+                selected_code = str(allowed_codes[0])
+                if dados.codigo_observado != selected_code:
+                    raise RevisaoHumanaError(
+                        "O código confirmado deve corresponder à camada escolhida."
+                    )
+                item = catalog.item_por_id(dados.tipo_catalogo_id)
+                if item is None or item.codigo != selected_code:
+                    raise RevisaoHumanaError(
+                        "Selecione o catálogo correspondente ao código escolhido."
+                    )
+                if not revision.get("decision"):
+                    revision.update(
+                        authority="decisao_humana",
+                        decision=escolha_revisao,
+                        effective_value=selected_code,
+                        author=revisor,
+                        reason=motivo,
+                        decided_at=now.isoformat(),
+                        revision=1,
+                    )
             if self._was_rejected_before(work, project.id, proposal):
                 raise RevisaoHumanaError(
                     "Uma proposta semanticamente equivalente já foi rejeitada neste projeto"
@@ -283,6 +327,19 @@ class ServicoRevisaoHumana:
                 geometria=dados.geometria,
                 codigo_observado=dados.codigo_observado or proposal.codigo_observado,
                 estado_revisao=EstadoRevisao.CONFIRMADA,
+                atributos_sugeridos=(
+                    tuple(
+                        sorted(
+                            {
+                                **dict(proposal.atributos_sugeridos),
+                                "revisao_tecnica": json.dumps(revision, ensure_ascii=False),
+                                "revisao_tecnica_pendente": False,
+                            }.items()
+                        )
+                    )
+                    if revision is not None
+                    else proposal.atributos_sugeridos
+                ),
             )
             updated_project = replace(
                 project,
@@ -303,6 +360,66 @@ class ServicoRevisaoHumana:
             work.decisoes_revisao.salvar(decision)
             work.commit()
             return decision
+
+    def decidir_camada_tecnica(
+        self,
+        proposta_id: UUID,
+        *,
+        escolha: str,
+        revisor: str,
+        motivo: str,
+    ) -> PropostaElemento:
+        """Record source authority independently of catalog resolution or asset creation."""
+        from .technical_revisions import revision_data
+
+        now = self._aware_now()
+        with self._unit_of_work() as work:
+            proposal, _project, catalog = self._element_context(work, proposta_id)
+            self._ensure_undecided(work, proposal)
+            revision = revision_data(proposal)
+            if revision is None or revision.get("decision"):
+                raise RevisaoHumanaError("Revisão técnica ausente ou já decidida.")
+            if escolha not in {"base", "revised"} or not motivo.strip() or not revisor.strip():
+                raise RevisaoHumanaError("Escolha a camada, o responsável e o motivo da decisão.")
+            codes = [revision["base_code"]] if escolha == "base" else revision["visible_codes"]
+            if len(codes) != 1 or (
+                escolha == "revised" and revision.get("operation_review_pending")
+            ):
+                raise RevisaoHumanaError("Operações ou leitura da revisão ainda indeterminadas.")
+            code = str(codes[0])
+            matches = [
+                item for item in catalog.itens_ativos(proposal.categoria) if item.codigo == code
+            ]
+            revision.update(
+                authority="decisao_humana",
+                decision=escolha,
+                effective_value=code,
+                author=revisor,
+                reason=motivo,
+                decided_at=now.isoformat(),
+                revision=1,
+                catalog_pending=len(matches) != 1,
+            )
+            updated = replace(
+                proposal,
+                codigo_observado=code,
+                tipo_catalogo_sugerido_id=matches[0].id if len(matches) == 1 else None,
+                estado_revisao=EstadoRevisao.PROPOSTA,
+                atributos_sugeridos=tuple(
+                    sorted(
+                        {
+                            **dict(proposal.atributos_sugeridos),
+                            "revisao_tecnica": json.dumps(revision, ensure_ascii=False),
+                            "revisao_tecnica_pendente": False,
+                            "revisao_tecnica_decidida": True,
+                        }.items()
+                    )
+                ),
+            )
+            work.propostas.salvar(updated)
+            work.projetos.salvar(_project, esperado=_project)
+            work.commit()
+            return updated
 
     def confirmar_relacao(
         self,

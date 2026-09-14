@@ -22,6 +22,7 @@ from zeny_project_handler.application.human_review import (
     SessaoRevisao,
 )
 from zeny_project_handler.application.spans import VaoDetectado, detectar_vaos
+from zeny_project_handler.application.technical_revisions import revision_data
 from zeny_project_handler.domain.analysis import (
     DecisaoRevisao,
     EvidenciaDocumento,
@@ -187,12 +188,35 @@ class ReviewApiService:
                         motivo=request.reason,
                     )
                 else:
+                    if (
+                        request.technical_revision_choice is not None
+                        and request.adjustments is None
+                    ):
+                        selected = self._service.decidir_camada_tecnica(
+                            proposal_id,
+                            escolha=request.technical_revision_choice,
+                            revisor=request.author,
+                            motivo=request.reason or "",
+                        )
+                        revision = revision_data(selected)
+                        assert revision is not None
+                        version, _ = self._project_metadata(project_id)
+                        return ReviewDecisionResponse(
+                            proposal_id=ProposalId(proposal_id),
+                            decision=ReviewDecision.ADJUST,
+                            review_state=ReviewState.PENDING,
+                            author=request.author,
+                            decided_at=datetime.fromisoformat(str(revision["decided_at"])),
+                            reason=request.reason,
+                            project_version=version,
+                        )
                     if request.adjustments is None:
                         raise validation_error("Informe os dados confirmados do elemento.")
                     self._validate_element_scope(project_id, request.adjustments)
                     decision = self._service.confirmar_elemento(
                         proposal_id,
                         _element_data(request.adjustments),
+                        escolha_revisao=request.technical_revision_choice,
                         revisor=request.author,
                         motivo=request.reason,
                     )
@@ -583,6 +607,7 @@ def _proposal_dto(
     )
     confidence = decimal_string(proposal.confianca) if proposal.confianca is not None else None
     return ReviewProposalDto(
+        technical_revision=revision_data(proposal),
         proposal_id=ProposalId(proposal.id),
         kind=ReviewProposalKind.ELEMENT,
         category=_category(proposal.categoria),
@@ -600,7 +625,11 @@ def _proposal_dto(
         detection_summary=f"{_category_label(proposal.categoria)} · {catalog_label}",
         observed_code=proposal.codigo_observado,
         confidence=confidence,
-        attributes={key: _json_value(value) for key, value in proposal.atributos_sugeridos},
+        attributes={
+            key: _json_value(value)
+            for key, value in proposal.atributos_sugeridos
+            if key != "revisao_tecnica"
+        },
         evidence=_evidence_navigation(
             proposal.evidencia_ids,
             evidence_by_id,
@@ -908,8 +937,32 @@ def _audit(
         )
         for item in session.projeto.historico_revisao_manual
     )
+    technical = tuple(
+        ReviewAuditDto(
+            audit_id=uuid5(session.projeto.id, f"revisao-tecnica:{revision['group_id']}"),
+            action=ReviewDecision.ADJUST,
+            author=revision["author"],
+            occurred_at=datetime.fromisoformat(revision["decided_at"]),
+            reason=revision["reason"],
+            proposal_id=ProposalId(proposal.id),
+            previous_values={
+                "base_text": revision.get("base_text"),
+                "source_sha256": revision.get("source_sha256"),
+            },
+            confirmed_values={
+                "technical_layer": revision["decision"],
+                "effective_value": revision["effective_value"],
+            },
+        )
+        for proposal in session.propostas
+        if isinstance(proposal, PropostaElemento)
+        if (revision := revision_data(proposal)) is not None and revision.get("decision")
+    )
     return tuple(
-        sorted((*decisions, *manual), key=lambda item: (item.occurred_at, str(item.audit_id)))
+        sorted(
+            (*decisions, *manual, *technical),
+            key=lambda item: (item.occurred_at, str(item.audit_id)),
+        )
     )
 
 
@@ -1033,6 +1086,18 @@ def _semantic_signature(
         "project_version": project_version,
         "executions": [str(item.id) for item in session.execucoes],
         "proposals": [[str(item.id), item.estado_revisao.value] for item in session.propostas],
+        "technical_revisions": [
+            [
+                str(item.id),
+                revision.get("group_id"),
+                revision.get("revision"),
+                revision.get("decision"),
+                revision.get("effective_value"),
+            ]
+            for item in session.propostas
+            if isinstance(item, PropostaElemento)
+            if (revision := revision_data(item)) is not None
+        ],
         "decisions": [
             [str(item.id), item.decisao.value, item.decidida_em.isoformat()]
             for item in session.decisoes
@@ -1355,6 +1420,7 @@ def _safe_uuid(value: object) -> UUID | None:
 def _proposal_audit_values(value: object) -> dict[str, Any] | None:
     if isinstance(value, PropostaElemento):
         return {
+            "technical_revision": revision_data(value),
             "category": value.categoria.value,
             "situation": value.situacao_projeto.value,
             "catalog_item_id": (

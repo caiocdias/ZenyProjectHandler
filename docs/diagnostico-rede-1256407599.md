@@ -114,3 +114,19 @@ Artefatos privados em `tmp/rede-1256407599/`: `benchmark.json`, `page-1.txt`,
 O plano de correção foi incorporado como E10–E15, incluindo E12A/E12B para
 experimentação de algoritmos alternativos e reconciliação entre métodos, em
 [roadmap-mercado-paineis-leitura-rede.md](roadmap-mercado-paineis-leitura-rede.md).
+
+## Atualização E11 — 14/09/2026
+
+A implementação registra D01 como conflito entre `ABCN-35(70)` da base e
+`ABCN-16(16)` visível, com recortes, máscara de alteração, xrefs e hash da fonte.
+Nenhuma alternativa é promovida sem decisão humana com responsável e motivo.
+O catálogo ainda não contém o código revisado; a escolha da camada pode ser salva,
+mas o ativo permanece pendente de catalogação. A inspeção dos dois recortes
+confirmou esses literais; hash, tamanho e mtime do PDF permaneceram iguais.
+
+O grupo N4 conserva a comparação e as representações 138/146, sem inferir as
+operações instalar/remover do OCR literal. Essa resolução permanece em E12/E13.
+O benchmark E11 tem 9 confirmações e 7 vãos: a redução de um cabo/uma linha em
+relação à E10 corresponde à retirada da promoção sem autoridade de D01. Isso não
+resolve D02–D06 nem homologa a leitura integral. Implementação, validações,
+compatibilidade e handoff em [e11-revisoes-tecnicas.md](e11-revisoes-tecnicas.md).

@@ -195,7 +195,7 @@ Hipóteses de produto adotadas para tornar o plano executável, ajustáveis com 
 | E08 | Associação de elementos e vãos | #bloqueada | E01, E07 | 95 ocorrências; 18/19 comprimentos; classificação/topologia pendentes |
 | E09 | Homologação integrada | #bloqueada | E03, E04, E05, E06, E08 | Gate aprovado; E08 e realce simbólico impedem aceite |
 | E10 | Referência integral do segundo PDF | #concluida | Nenhuma | 139 registros, revisão definida e três medições isoladas |
-| E11 | Revisões técnicas e conteúdo vigente | #pendente | E10 | Revisão explícita de sobreposições sem promover comentários |
+| E11 | Revisões técnicas e conteúdo vigente | #concluida | E10 | Conflitos rastreáveis, decisão persistida e gate aprovado |
 | E12 | Precisão dos extratores atuais | #pendente | E10, E11 | Melhorias verticais medidas por ocorrência |
 | E12A | Experimentação de algoritmos alternativos | #pendente | E12 | Comparação executada de métodos distintos |
 | E12B | Reconciliação e confiança entre métodos | #pendente | E12A | Métodos úteis integrados e conflitos rastreáveis |
@@ -1225,7 +1225,7 @@ Relatório completo: [e10-referencia-segundo-pdf.md](e10-referencia-segundo-pdf.
   campos documentais truncados/repetidos/ausentes e homologação integrada.
   Nenhuma correção do pipeline, commit ou ação externa realizada.
 
-## E11 — Revisões técnicas e conteúdo vigente — #pendente
+## E11 — Revisões técnicas e conteúdo vigente — #concluida
 
 **Objetivo:** representar conteúdo técnico sobreposto e conflitos com a camada base,
 sem promover anotações comuns nem usar silenciosamente valores encobertos.
@@ -1257,9 +1257,9 @@ Execute E11 — Revisões técnicas e conteúdo vigente de docs/roadmap-mercado-
 
 **Critérios de aceite:**
 
-- [ ] D01 apresenta os valores base e visível com origem; não confirma o antigo silenciosamente.
-- [ ] Decisão técnica persiste e sobrevive à reanálise; comentários/fotos/carimbo não criam ativos.
-- [ ] SHX continua recuperável e cache antigo não oculta a mudança.
+- [x] D01 apresenta os valores base e visível com origem; não confirma o antigo silenciosamente.
+- [x] Decisão técnica persiste e sobrevive à reanálise; comentários/fotos/carimbo não criam ativos.
+- [x] SHX continua recuperável e cache antigo não oculta a mudança.
 
 **Validação obrigatória:** `python -m pytest tests/unit/test_pymupdf_analyzer.py tests/unit/test_rule_based_interpreter.py tests/unit/test_analysis_cache.py tests/integration/test_human_review.py tests/server/test_review_api.py tests/server/test_deliverable_exports.py`.
 Acrescentar novas regressões sintéticas e teste da UI alterada; descobrir seu comando
@@ -1267,10 +1267,34 @@ nos testes existentes do painel antes de editar. Repetir D01 sobre a fonte real.
 **Migração/rollback:** se o contrato mudar, evolução aditiva com campos antigos
 legíveis e decisão ausente como não resolvida; sem backfill de autoridade. Incrementar
 compatibilidade se necessário; documentar retorno de versão sem perder decisões.
-**Bloqueios:** nenhum bloqueio conhecido; decisão de E10 é dependência.
+**Bloqueios:** nenhum impedimento remanescente de E11; política E10 conferida e aplicada.
 **Riscos e mitigação:** sobreposição mal classificada gerar ativo; revisão explícita,
 negativos e rastreabilidade. Não usar a anotação como instrução executável.
-**Evidências e handoff:** ainda não executada.
+**Evidências e handoff — 14/09/2026:**
+
+- Base `c85bebe`, Git inicialmente limpo e nenhum `AGENTS.md` aplicável. E10 concluída
+  e política conferida; divergências encontradas no texto nativo do PyMuPDF e nas
+  constantes de compatibilidade dos scripts de release foram tratadas. E08/E09 preservadas.
+- `pymupdf_revisions.py` registra base/aparência, máscara, página, xrefs, hashes e
+  grupo estável. `technical_revisions.py`, intérprete/promoção e `human_review.py`
+  exigem escolha rastreável e preservam identidade, histórico e decisões na reanálise.
+  `review_api.py`, contratos, painel e exportação apresentam conflito/decisão/efetivo.
+- Fixtures sintéticas em `tests/pdf_fixtures.py` e regressões de análise, revisão,
+  HTTP/Qt/XLSX cobrem comentários, fotos, carimbo, assinatura, Ink, SHX e rotações.
+  Extrator 1.15.0, interpretador 23.0 e API/piso 1.5.0; OpenAPI atualizado.
+  Persistência aditiva nos payloads JSON existentes, sem migração SQL ou backfill.
+- D01 real conferido: `ABCN-35(70)` base, `ABCN-16(16)` visível, zero promoção
+  conflitante. Dois grupos pendentes; N4 referencia as representações 138/146.
+  Benchmark: 2.047 evidências, 38 propostas, 9 confirmações e 7 vãos; fonte com
+  hash/tamanho/mtime preservados. Sem decisão técnica tomada sobre o PDF privado.
+- `.\IniciarTestes.bat`: saída zero, **1.265 testes aprovados**, **87,78% de cobertura**;
+  Ruff, Mypy, dependências, cliente magro e complexidade aprovados. Após ajuste
+  final exclusivamente no texto de motivo obrigatório, 16 testes do painel,
+  inspeção visual e Ruff aprovados. Todos os módulos obrigatórios E11 passaram.
+- Comandos, resultados, falhas intermediárias resolvidas, arquivos privados ignorados,
+  compatibilidade/rollback e limites em [e11-revisoes-tecnicas.md](e11-revisoes-tecnicas.md).
+  Catalogação de ABCN revisado e operações N4 seguem E12/E13; não houve aceite
+  integral E15, commit, publicação ou reescrita do PDF.
 
 ## E12 — Precisão dos extratores atuais — #pendente
 

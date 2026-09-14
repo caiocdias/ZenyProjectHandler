@@ -199,7 +199,8 @@ def test_server_generates_pdf_and_three_real_xlsx_deliverables(tmp_path: Path) -
         market_sqlserver_connection_string="fixture-market-connection",
         data_directory=tmp_path / "server",
     )
-    source = create_analysis_pdf(tmp_path / "projeto.pdf")
+    # Export an actual drawing occurrence; FreeText comments must not seed an asset.
+    source = create_analysis_pdf(tmp_path / "projeto.pdf", native_structure=True)
     runtime = compose_server_runtime(
         settings,
         market_classifier=FakeClassificadorMercado(),

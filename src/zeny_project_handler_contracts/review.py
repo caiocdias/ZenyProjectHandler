@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import Field, JsonValue
@@ -97,6 +97,7 @@ class ReviewOverlayDto(ContractModel):
 
 
 class ReviewProposalDto(ContractModel):
+    technical_revision: dict[str, JsonValue] | None = None
     proposal_id: ProposalId
     kind: ReviewProposalKind = ReviewProposalKind.ELEMENT
     category: ElementCategory
@@ -218,6 +219,7 @@ class ReviewElementInputDto(ContractModel):
 
 
 class AcceptReviewProposalRequest(ContractModel):
+    technical_revision_choice: Literal["base", "revised"] | None = None
     author: NonEmptyString
     reason: str | None = Field(default=None, max_length=1000)
     adjustments: ReviewElementInputDto | None = None

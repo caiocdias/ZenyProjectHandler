@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
@@ -15,6 +16,7 @@ from zeny_project_handler.adapters.persistence import SqlAlchemyUnitOfWork
 from zeny_project_handler.application.analysis_regions import RegiaoAnalise
 from zeny_project_handler.application.human_review import ServicoRevisaoHumana, SessaoRevisao
 from zeny_project_handler.application.spans import detectar_vaos
+from zeny_project_handler.domain.analysis import PropostaElemento
 from zeny_project_handler.domain.enums import (
     CategoriaElemento,
     EstadoRevisao,
@@ -33,6 +35,78 @@ pytestmark = pytest.mark.integration
 
 PASSWORD = "senha do servidor para testes da etapa seis"
 AUTH = {"Authorization": f"Bearer {PASSWORD}"}
+
+
+def test_technical_cable_revision_http_requires_choice_and_exports_both_layers(
+    tmp_path: Path,
+) -> None:
+    from zeny_project_handler_server.deliverable_exports import _results_sheets
+    from zeny_project_handler_server.review_api import ReviewApiService
+
+    settings = _settings(tmp_path / "revision-server")
+    runtime = compose_server_runtime(settings)
+    project_id, proposal_id, _ = _seed_review(runtime)
+    catalog = runtime.core.catalog
+    base = next(item for item in catalog.itens if item.codigo == "ABCN-35(70)")
+    revised_code = "ABCN-16(16)"
+    payload = {
+        "group_id": "1" * 64,
+        "source_sha256": "2" * 64,
+        "base_code": base.codigo,
+        "base_text": base.codigo,
+        "visible_text": revised_code,
+        "visible_codes": [revised_code],
+        "decision": None,
+        "effective_value": None,
+    }
+    with SqlAlchemyUnitOfWork(runtime.core.engine) as work:
+        proposal = work.propostas.obter(proposal_id)
+        assert isinstance(proposal, PropostaElemento)
+        work.propostas.salvar(
+            replace(
+                proposal,
+                categoria=CategoriaElemento.CABO,
+                codigo_observado=base.codigo,
+                tipo_catalogo_sugerido_id=base.id,
+                estado_revisao=EstadoRevisao.CONFLITANTE,
+                atributos_sugeridos=(
+                    ("revisao_tecnica", json.dumps(payload)),
+                    ("revisao_tecnica_pendente", True),
+                ),
+            )
+        )
+        work.commit()
+    application = create_app(settings, runtime_factory=lambda _settings: runtime)
+    with TestClient(application, raise_server_exceptions=False) as client:
+        response = client.get(f"/api/v1/projects/{project_id}/review-session", headers=AUTH)
+        assert response.status_code == 200, response.text
+        session = response.json()
+        dto = next(item for item in session["proposals"] if item["proposal_id"] == str(proposal_id))
+        assert dto["technical_revision"]["effective_value"] is None
+        request = {
+            "author": "Técnico",
+            "reason": "Comparação das camadas",
+            "adjustments": None,
+            "expected_review_session_id": session["review_session_id"],
+        }
+        route = f"/api/v1/review/proposals/{proposal_id}/accept"
+        missing = client.post(route, headers=AUTH, json=request)
+        assert missing.status_code == 422, missing.text
+        request["technical_revision_choice"] = "revised"
+        accepted = client.post(route, headers=AUTH, json=request)
+        assert accepted.status_code == 200, accepted.text
+        assert client.post(route, headers=AUTH, json=request).status_code == 409
+        service = ReviewApiService(runtime.core.engine)
+        current = service.get_session(project_id)
+        item = next(item for item in current.proposals if item.proposal_id.root == proposal_id)
+        assert item.technical_revision is not None
+        assert item.technical_revision["effective_value"] == revised_code
+        assert item.technical_revision["catalog_pending"] is True
+        assert item.catalog_item_id is None
+        assert item.technical_revision["base_text"] == base.codigo
+        sheets = _results_sheets(current)
+        row = next(row for row in sheets[0].rows if str(proposal_id) in row)
+        assert base.codigo in row and revised_code in row and "revised" in row
 
 
 def _settings(data_directory: Path) -> ServerSettings:

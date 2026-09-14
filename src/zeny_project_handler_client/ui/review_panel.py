@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import base64
 from collections.abc import Callable
 from functools import partial
 from typing import TypeVar
 from uuid import UUID
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -137,7 +139,8 @@ class ReviewPanelWidget(QWidget):
         elements_layout.setContentsMargins(0, 0, 0, 0)
         elements_layout.addWidget(filter_widget)
         guidance = QLabel(
-            "As identificações são incorporadas automaticamente ao projeto. "
+            "Identificações aptas são incorporadas automaticamente; revisões sobrepostas "
+            "exigem decisão técnica. "
             "Expanda cada região para ver a coordenada e tudo o que acontece naquele ponto; "
             "clique em qualquer elemento para localizá-lo no PDF."
         )
@@ -244,6 +247,24 @@ class ReviewPanelWidget(QWidget):
         self._reason.setObjectName("reviewReasonEdit")
         self._reason.setPlaceholderText("Opcional")
         self._editor_form.addRow("Observação", self._reason)
+        self._revision_comparison = QLabel()
+        self._revision_comparison.setObjectName("reviewRevisionComparison")
+        self._revision_comparison.setWordWrap(True)
+        self._revision_comparison.setTextFormat(Qt.TextFormat.PlainText)
+        self._editor_form.addRow("Camadas da fonte", self._revision_comparison)
+        self._revision_base = QLabel()
+        self._revision_base.setObjectName("reviewRevisionBaseImage")
+        self._editor_form.addRow("Sem anotações", self._revision_base)
+        self._revision_visible = QLabel()
+        self._revision_visible.setObjectName("reviewRevisionVisibleImage")
+        self._editor_form.addRow("Com anotações", self._revision_visible)
+        self._revision_choice = QComboBox()
+        self._revision_choice.setObjectName("reviewRevisionChoice")
+        self._revision_choice.addItem("Manter pendente", None)
+        self._revision_choice.addItem("Manter camada base", "base")
+        self._revision_choice.addItem("Aceitar camada revisada", "revised")
+        self._editor_form.addRow("Decisão técnica", self._revision_choice)
+        self._revision_choice.currentIndexChanged.connect(self._revision_choice_changed)
         self._classification_correction = QCheckBox("Corrigir classe ou item do catálogo")
         self._classification_correction.setObjectName("reviewCorrectClassificationCheck")
         self._editor_form.addRow(self._classification_correction)
@@ -872,6 +893,7 @@ class ReviewPanelWidget(QWidget):
             else:
                 self._detected.setText(proposal.label)
             self._update_editor_visibility(proposal)
+            self._show_revision(proposal)
         finally:
             self._syncing_selection = False
 
@@ -882,6 +904,78 @@ class ReviewPanelWidget(QWidget):
             return tuple(item.root for item in self._session.page_order).index(page_id) + 1
         except ValueError:
             return None
+
+    def _show_revision(self, proposal: ReviewItem) -> None:
+        revision = proposal.technical_revision if isinstance(proposal, ReviewProposalDto) else None
+        self._reason.setPlaceholderText(
+            "Motivo obrigatório da escolha técnica" if revision is not None else "Opcional"
+        )
+        self._revision_choice.setCurrentIndex(0)
+        self._editor_form.parentWidget().setVisible(revision is not None)
+        self._accept.setVisible(revision is not None)
+        self._reject.setVisible(False)
+        for widget in (
+            self._revision_comparison,
+            self._revision_base,
+            self._revision_visible,
+            self._revision_choice,
+        ):
+            self._editor_form.setRowVisible(widget, revision is not None)
+        if revision is None:
+            return
+        self._revision_comparison.setText(
+            f"Base: {revision.get('base_text')}\nVisível: {revision.get('visible_text')}\n"
+            f"Decisão: {revision.get('decision') or 'pendente'}; "
+            f"valor efetivo: {revision.get('effective_value') or 'não definido'}\n"
+            f"Origem: folha {revision.get('page_number')}, "
+            f"objetos {revision.get('annotation_xrefs')}"
+        )
+        for key, label in (
+            ("base_png", self._revision_base),
+            ("visible_png", self._revision_visible),
+        ):
+            pixmap = QPixmap()
+            pixmap.loadFromData(base64.b64decode(str(revision.get(key, ""))))
+            label.setPixmap(
+                pixmap.scaled(
+                    440,
+                    240,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
+        self._revision_choice.setEnabled(proposal.requires_review and not revision.get("decision"))
+        if revision.get("decision") and revision.get("catalog_pending"):
+            self._accept.setEnabled(False)
+            self._accept.setText("Camada escolhida · catalogação pendente")
+
+    def _revision_choice_changed(self) -> None:
+        proposal = self._selected_proposal()
+        if not isinstance(proposal, ReviewProposalDto) or proposal.technical_revision is None:
+            return
+        revision = proposal.technical_revision
+        code = revision.get("base_code")
+        if self._revision_choice.currentData() == "revised":
+            codes = revision.get("visible_codes")
+            code = codes[0] if isinstance(codes, list) and len(codes) == 1 else None
+        if self._session is not None and code:
+            matches = [
+                item
+                for item in self._session.catalog_items
+                if item.category == proposal.category and item.code == code
+            ]
+            if len(matches) == 1:
+                self._set_combo_value(self._catalog_item, str(matches[0].catalog_item_id.root))
+
+    def _revision_observed_code(self, proposal: ReviewProposalDto | None) -> str | None:
+        if proposal is None:
+            return None
+        revision = proposal.technical_revision
+        if revision is not None and self._revision_choice.currentData() == "revised":
+            codes = revision.get("visible_codes")
+            if isinstance(codes, list) and len(codes) == 1:
+                return str(codes[0])
+        return proposal.observed_code
 
     def _select_tree_item(self, proposal_id: str) -> None:
         pending = [self._tree.invisibleRootItem()]
@@ -913,7 +1007,12 @@ class ReviewPanelWidget(QWidget):
     def _update_editor_visibility(self, proposal: ReviewItem | None) -> None:
         is_element = isinstance(proposal, ReviewProposalDto)
         decidable = proposal is not None and proposal.requires_review
-        editable = is_element and decidable
+        deciding_layer = (
+            isinstance(proposal, ReviewProposalDto)
+            and proposal.technical_revision is not None
+            and not proposal.technical_revision.get("decision")
+        )
+        editable = is_element and decidable and not deciding_layer
         correcting = editable and self._classification_correction.isChecked()
         category = (
             ElementCategory(self._category.currentData())
@@ -944,7 +1043,9 @@ class ReviewPanelWidget(QWidget):
         )
         self._accept.setEnabled(decidable)
         self._reject.setEnabled(decidable)
-        if proposal is not None and not decidable:
+        if deciding_layer:
+            self._accept.setText("Salvar decisão técnica")
+        elif proposal is not None and not decidable:
             self._accept.setText("Decisão já registrada")
         elif isinstance(proposal, ReviewRelationDto):
             self._accept.setText("Confirmar relação")
@@ -1003,11 +1104,27 @@ class ReviewPanelWidget(QWidget):
         session = self._session
         if proposal is None or session is None:
             return
+        choice = self._revision_choice.currentData()
+        deciding_layer = (
+            isinstance(proposal, ReviewProposalDto)
+            and proposal.technical_revision is not None
+            and not proposal.technical_revision.get("decision")
+        )
+        if deciding_layer:
+            if choice is None:
+                self.status_changed.emit("Revisão técnica mantida pendente.")
+                return
+            if not self._reason.text().strip():
+                self.status_changed.emit("Informe o motivo da decisão técnica.")
+                return
         request = AcceptReviewProposalRequest(
+            technical_revision_choice=choice,
             author=self._reviewer.text(),
             reason=self._reason.text() or None,
             adjustments=(
-                self._element_data(proposal) if isinstance(proposal, ReviewProposalDto) else None
+                self._element_data(proposal)
+                if isinstance(proposal, ReviewProposalDto) and not deciding_layer
+                else None
             ),
             expected_review_session_id=session.review_session_id,
         )
@@ -1116,7 +1233,7 @@ class ReviewPanelWidget(QWidget):
             catalog_item_id=CatalogItemId(UUID(str(catalog_item))),
             situation=ElementSituation(self._situation.currentData()),
             geometry=geometry,
-            observed_code=proposal.observed_code if proposal is not None else None,
+            observed_code=self._revision_observed_code(proposal),
             pole_id=(
                 ElementId(UUID(str(self._pole.currentData())))
                 if self._pole.currentData() is not None

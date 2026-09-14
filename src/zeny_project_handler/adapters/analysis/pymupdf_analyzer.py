@@ -38,6 +38,7 @@ from .pymupdf_page_extractors import (
     _extract_text,
     _extract_vectors,
 )
+from .pymupdf_revisions import extract_revision_appearances
 from .pymupdf_symbols import _extract_symbolic_equipment
 
 _READ_CHUNK_SIZE = 1024 * 1024
@@ -48,7 +49,7 @@ class PyMuPdfDocumentAnalyzer:
     """Converte recursos PDF nativos em evidências independentes da biblioteca."""
 
     nome = "pymupdf-nativo"
-    versao = "1.14.0"
+    versao = "1.15.0"
 
     def __init__(
         self,
@@ -286,6 +287,24 @@ def _extract_page(
     )
     candidates.extend(ocr_candidates)
     diagnostics.extend(ocr_diagnostics)
+    if config.extrair_anotacoes:
+        # Failure to compare the source must fail the analysis, not approve hidden values.
+        revisions = extract_revision_appearances(
+            page, page_number, request.fonte.sha256, tuple(candidates), ocr_engine
+        )
+        candidates.extend(revisions)
+        if any(
+            json.loads(str(dict(item.atributos_extraidos)["revisao_tecnica"])).get("ocr_failed")
+            for item in revisions
+        ):
+            diagnostics.append(
+                DiagnosticoAnalise(
+                    codigo="analise.ocr_revisoes_falhou",
+                    extrator="ocr_revisoes",
+                    pagina_numero=page_number,
+                    mensagem="OCR da revisão falhou; comparação preservada e decisão pendente.",
+                )
+            )
     return tuple(candidates), tuple(diagnostics)
 
 

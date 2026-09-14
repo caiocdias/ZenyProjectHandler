@@ -20,7 +20,7 @@ def test_dynamic_smoke_discovers_nested_pdfs_without_a_manifest(tmp_path: Path) 
 def test_dynamic_smoke_runs_the_real_native_pipeline_without_changing_source(
     tmp_path: Path,
 ) -> None:
-    source = create_analysis_pdf(tmp_path / "projeto-sintetico.pdf")
+    source = create_analysis_pdf(tmp_path / "projeto-sintetico.pdf", native_structure=True)
     before = source.stat()
 
     result = executar_smoke_pdf(source)

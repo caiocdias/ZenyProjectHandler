@@ -369,7 +369,39 @@ def create_dense_vector_text_pdf(path: Path) -> Path:
     return path
 
 
-def create_analysis_pdf(path: Path) -> Path:
+def create_e11_revision_pdf(path: Path, *, revised: bool = True, rotation: int = 0) -> Path:
+    """Development fixture: occlusion, notes, photo, signature, stamp, Ink and SHX."""
+    document = pymupdf.open()
+    try:
+        page = document.new_page(width=600, height=400)
+        page.insert_text((40, 90), "ABCN-35(70)", fontsize=14, color=(0, 0.5, 0))
+        page.insert_text((40, 65), "V1-2 14m", fontsize=12)
+        if revised:
+            page.add_freetext_annot(
+                pymupdf.Rect(38, 73, 150, 96),
+                "ABCN-16(16)",
+                fontsize=14,
+                fill_color=(1, 1, 1),
+                text_color=(0, 0.5, 0),
+            )
+        page.insert_text((40, 160), "N4", fontsize=14)
+        page.add_ink_annot([[(40, 156), (63, 147)]]).update()
+        page.add_text_annot((300, 30), "Comentário: instalar ABCN-16(16)")
+        page.add_freetext_annot(pymupdf.Rect(280, 60, 540, 90), "Comentário N4")
+        page.add_stamp_annot(pymupdf.Rect(300, 110, 440, 150), stamp=0)
+        page.insert_image(pymupdf.Rect(300, 180, 370, 240), stream=_red_pixel_png())
+        page.add_ink_annot([[(300, 290), (320, 270), (310, 285), (340, 290)]]).update()
+        shx = page.add_rect_annot(pymupdf.Rect(40, 220, 90, 245))
+        shx.set_info(title="AutoCAD SHX Text", content="N3")
+        shx.update()
+        page.set_rotation(rotation)
+        document.save(path)
+    finally:
+        document.close()
+    return path
+
+
+def create_analysis_pdf(path: Path, *, native_structure: bool = False) -> Path:
     """PDF rico, incluindo imagem em appearance stream e Form XObject aninhado."""
     document = pymupdf.open()
     nested = pymupdf.open()
@@ -381,6 +413,8 @@ def create_analysis_pdf(path: Path) -> Path:
         page = document.new_page(width=240, height=160)
         page.insert_text((12, 25), "POSTE P1", fontsize=10)
         page.insert_text((105, 40), "P2", fontsize=10)
+        if native_structure:
+            page.insert_text((105, 55), "N1", fontsize=10)
         page.insert_text((25, 135), "MT", fontsize=9, rotate=90)
         page.draw_line((10, 40), (90, 40), color=(0, 1, 0), width=2)
         page.draw_bezier((10, 55), (30, 35), (60, 75), (90, 55), color=(0, 0, 1))

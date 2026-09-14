@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -10,6 +11,7 @@ from uuid import uuid4
 
 import pytest
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QFont, QFontDatabase
 from PySide6.QtWidgets import (
     QComboBox,
     QGroupBox,
@@ -26,10 +28,13 @@ from PySide6.QtWidgets import (
 from pytestqt.qtbot import QtBot
 from sqlalchemy import Engine
 from tests.market_fakes import FakeClassificadorMercado
-from tests.pdf_fixtures import TEST_RENDER_BUDGET, create_golden_pdf
+from tests.pdf_fixtures import TEST_RENDER_BUDGET, create_e11_revision_pdf, create_golden_pdf
 from tests.remote_gateways import SynchronousDocumentationGateway
+from tests.unit.test_pymupdf_analyzer import _request
+from tests.unit.test_technical_revisions import RevisionOcr
 from tests.viewer_gateway import LocalTestPdfViewerGateway
 
+from zeny_project_handler.adapters.analysis import PyMuPdfDocumentAnalyzer
 from zeny_project_handler.adapters.compliance import carregar_registro_conformidade_inicial
 from zeny_project_handler.adapters.pdf import PyMuPdfReader
 from zeny_project_handler.adapters.persistence import (
@@ -76,6 +81,74 @@ from zeny_project_handler_contracts.review import AnalysisRegionDto, DetectedSpa
 from zeny_project_handler_server.review_api import ReviewApiService, _proposal_label
 
 pytestmark = pytest.mark.integration
+
+
+def test_revision_comparison_and_explicit_choice_are_visible_and_pending_by_default(
+    review_panel_context: tuple[Engine, ReviewPanelWidget, PropostaElemento],
+    tmp_path: Path,
+) -> None:
+    engine, panel, proposal = review_panel_context
+    panel._project.setCurrentIndex(1)
+    payload = {
+        "group_id": "1" * 64,
+        "base_text": "ABCN-35(70)",
+        "visible_text": "ABCN-16(16)",
+        "base_code": "ABCN-35(70)",
+        "visible_codes": ["ABCN-16(16)"],
+        "decision": None,
+        "page_number": 1,
+        "annotation_xrefs": [10],
+        "base_png": "",
+        "visible_png": "",
+    }
+    extraction = PyMuPdfDocumentAnalyzer(motor_ocr=RevisionOcr()).analisar(
+        _request(create_e11_revision_pdf(tmp_path / "comparison.pdf"))
+    )
+    real_payload = next(
+        json.loads(str(dict(item.atributos_extraidos)["revisao_tecnica"]))
+        for item in extraction.evidencias
+        if "revisao_tecnica" in dict(item.atributos_extraidos)
+        and "ABCN" in str(dict(item.atributos_extraidos)["revisao_tecnica"])
+    )
+    payload.update(base_png=real_payload["base_png"], visible_png=real_payload["visible_png"])
+    with SqlAlchemyUnitOfWork(engine) as work:
+        work.propostas.salvar(
+            replace(proposal, atributos_sugeridos=(("revisao_tecnica", json.dumps(payload)),))
+        )
+        work.commit()
+    panel._reload_session()
+    panel._select_proposal_id(str(proposal.id))
+    comparison = panel.findChild(QLabel, "reviewRevisionComparison")
+    choice = panel.findChild(QComboBox, "reviewRevisionChoice")
+    assert comparison is not None and comparison.isVisible()
+    assert "ABCN-35(70)" in comparison.text() and "ABCN-16(16)" in comparison.text()
+    assert choice is not None and choice.isVisible() and choice.currentData() is None
+    assert not panel._revision_base.pixmap().isNull()
+    assert not panel._revision_visible.pixmap().isNull()
+    font = Path("C:/Windows/Fonts/segoeui.ttf")
+    font_id = -1
+    if font.exists():
+        font_id = QFontDatabase.addApplicationFont(str(font))
+        panel.setFont(QFont("Segoe UI", 10))
+    panel.resize(720, 1100)
+    assert panel.grab().save(str(tmp_path / "comparison.png"))
+    if font_id >= 0:
+        QFontDatabase.removeApplicationFont(font_id)
+    panel.aceitar_selecionada()
+    with SqlAlchemyUnitOfWork(engine) as work:
+        assert work.decisoes_revisao.obter_da_proposta(proposal.id) is None
+    panel._reviewer.setText("Técnico da fixture")
+    panel._reason.setText("Comparação explícita das camadas")
+    choice.setCurrentIndex(2)
+    panel.aceitar_selecionada()
+    with SqlAlchemyUnitOfWork(engine) as work:
+        stored = work.propostas.obter(proposal.id)
+        assert isinstance(stored, PropostaElemento)
+        decision = json.loads(str(dict(stored.atributos_sugeridos)["revisao_tecnica"]))
+        assert decision["decision"] == "revised"
+        assert decision["catalog_pending"] is True
+        assert decision["effective_value"] == "ABCN-16(16)"
+
 
 _LONG_CELL_TEXT = (
     "Texto longo de resultado que deve permanecer totalmente visível quando a coluna fica "

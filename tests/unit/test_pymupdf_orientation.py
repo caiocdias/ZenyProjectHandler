@@ -207,7 +207,7 @@ def test_damaged_native_text_does_not_prevent_dense_raster_ocr(
     def fail_text(*_args: object, **_kwargs: object) -> object:
         raise ValueError("synthetic malformed text layer")
 
-    monkeypatch.setattr(pymupdf.Page, "get_text", fail_text)
+    monkeypatch.setattr(pymupdf.DisplayList, "get_textpage", fail_text)
     engine = RedMarkerOcr()
     result = PyMuPdfDocumentAnalyzer(motor_ocr=engine).analisar(request)
     assert len(engine.pages) == 9

@@ -34,6 +34,21 @@
               }
             ],
             "title": "Reason"
+          },
+          "technical_revision_choice": {
+            "anyOf": [
+              {
+                "enum": [
+                  "base",
+                  "revised"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Technical Revision Choice"
           }
         },
         "required": [
@@ -4245,6 +4260,20 @@
             "minLength": 1,
             "title": "State Label",
             "type": "string"
+          },
+          "technical_revision": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Technical Revision"
           }
         },
         "required": [
@@ -5200,7 +5229,7 @@
     },
     "summary": "Contrato HTTP v1 do cliente magro e do servidor Zeny.",
     "title": "Zeny Project Handler API",
-    "version": "1.4.0"
+    "version": "1.5.0"
   },
   "openapi": "3.1.0",
   "paths": {

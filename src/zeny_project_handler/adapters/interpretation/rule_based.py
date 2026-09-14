@@ -10,6 +10,7 @@ from zeny_project_handler.application.document_zones import (
     evidencias_sem_anotacoes_de_revisao,
     evidencias_sem_cabecalho,
 )
+from zeny_project_handler.application.technical_revisions import attach_revision_conflicts
 from zeny_project_handler.domain.analysis import (
     DiagnosticoAnalise,
     EvidenciaDocumento,
@@ -41,7 +42,7 @@ _MAXIMUM_DUPLICATE_OCCURRENCE_AXIS_DISTANCE = 0.015
 
 class InterpretadorRegrasExplicitas:
     nome = "regras-explicitas-cemig"
-    versao = "22.0"
+    versao = "23.0"
 
     def __init__(
         self,
@@ -105,6 +106,7 @@ class InterpretadorRegrasExplicitas:
             elements,
             project_request.evidencias,
         )
+        elements = attach_revision_conflicts(elements, solicitacao.evidencias)
         relations = (
             generate_relations(
                 solicitacao.execucao_id,

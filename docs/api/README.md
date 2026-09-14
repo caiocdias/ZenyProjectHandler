@@ -14,14 +14,25 @@ falha diante de qualquer alteração não revisada.
 
 ## Compatibilidade
 
-- versão atual: `1.4.0`;
+- versão atual: `1.5.0`;
 - prefixo protegido: `/api/v1`;
-- faixa negociada: `1.4.0` a `1.999.999`;
+- faixa negociada: `1.5.0` a `1.999.999`;
 - adições compatíveis podem introduzir rotas e campos opcionais dentro de v1;
 - novos valores de enum fechado ou campos obrigatórios elevam o piso compatível antes de serem
   emitidos; remoção, renomeação ou mudança semântica de rota, campo, enum ou código de erro exige
   nova versão principal;
 - o cliente consulta `GET /api/v1/session` antes de carregar dados e recusa uma faixa incompatível.
+
+A versão `1.5.0` acrescenta `ReviewProposalDto.technical_revision` opcional e
+`AcceptReviewProposalRequest.technical_revision_choice` (`base`/`revised`, opcional).
+Com escolha e sem `adjustments`, registra somente a decisão da camada, com motivo
+obrigatório; o retorno permanece `PENDING`, sem elemento criado. Catalogação ausente
+fica explícita. O grupo contém hash da fonte, página, xrefs, representações repetidas,
+literais, recortes PNG em base64, máscara de pixels alterados, decisão, autoria e valor
+efetivo. O endpoint continua exigindo a sessão corrente e recusa concorrência obsoleta.
+Clientes estritos anteriores rejeitariam o campo novo; o piso sobe em conjunto.
+Dados antigos sem o campo continuam legíveis, sem inferir autoridade. Persistência
+usa os payloads existentes; não há migração de esquema nem reescrita de snapshots.
 
 A versão `1.4.0` eleva o piso nos dois lados para emitir `GmaxMarket.AMBOS`. GMAX e
 `ComplianceExecutionSummaryDto` acrescentam `classification` opcional com o mesmo schema

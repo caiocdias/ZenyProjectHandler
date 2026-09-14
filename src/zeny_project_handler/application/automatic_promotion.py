@@ -181,6 +181,8 @@ def _promotable_proposals(
     catalog: CatalogoTecnico,
 ) -> dict[UUID, PropostaElemento]:
     pending_keys = (
+        "revisao_tecnica_pendente",
+        "revisao_tecnica_decidida",
         "reconciliacao_reanalise_pendente",
         "associacao_pendente",
         "comprimento_pendente",

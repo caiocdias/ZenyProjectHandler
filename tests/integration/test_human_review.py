@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -21,6 +22,10 @@ from zeny_project_handler.application.human_review import (
     DadosElementoRevisao,
     ServicoRevisaoHumana,
 )
+from zeny_project_handler.application.technical_revisions import (
+    preserve_revision_decision,
+    revision_data,
+)
 from zeny_project_handler.domain.analysis import PropostaElemento, PropostaRelacao
 from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.domain.enums import (
@@ -33,6 +38,76 @@ from zeny_project_handler.domain.project import Cabo, Poste
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 
 pytestmark = pytest.mark.integration
+
+
+@pytest.mark.parametrize("choice", ["base", "revised"])
+def test_technical_revision_requires_choice_reason_and_survives_reanalysis(
+    review_context: tuple[
+        Engine, ServicoRevisaoHumana, PropostaElemento, PropostaElemento, PropostaRelacao
+    ],
+    choice: str,
+) -> None:
+    engine, service, proposal, _, _ = review_context
+    session = service.carregar_sessao(service.listar_projetos()[0].projeto_id)
+    data = _pole_data(proposal, session.catalogo)
+    payload = {
+        "group_id": "1" * 64,
+        "source_sha256": "2" * 64,
+        "base_code": data.codigo_observado,
+        "base_text": data.codigo_observado,
+        "visible_codes": [data.codigo_observado],
+        "decision": None,
+    }
+    proposal = replace(
+        proposal,
+        atributos_sugeridos=(
+            ("revisao_tecnica", json.dumps(payload)),
+            ("revisao_tecnica_pendente", True),
+        ),
+    )
+    with SqlAlchemyUnitOfWork(engine) as work:
+        work.propostas.salvar(proposal)
+        work.commit()
+    with pytest.raises(RevisaoHumanaError, match="camada técnica"):
+        service.confirmar_elemento(proposal.id, data, revisor="Técnico", motivo="Conferido")
+    with pytest.raises(RevisaoHumanaError, match="motivo"):
+        service.confirmar_elemento(proposal.id, data, revisor="Técnico", escolha_revisao=choice)
+    decision = service.confirmar_elemento(
+        proposal.id,
+        data,
+        revisor="Técnico",
+        motivo="Camadas comparadas na fonte",
+        escolha_revisao=choice,
+    )
+    with SqlAlchemyUnitOfWork(engine) as work:
+        previous = work.propostas.obter(proposal.id)
+        assert isinstance(previous, PropostaElemento)
+        previous_revision = revision_data(previous)
+        assert previous_revision is not None
+        assert previous_revision["decision"] == choice
+        assert previous_revision["base_text"] == data.codigo_observado
+        fresh = replace(proposal, id=uuid4())
+        restored = preserve_revision_decision(work, fresh, (previous,))
+        work.propostas.salvar(restored)
+        work.commit()
+    reopened = ServicoRevisaoHumana(lambda: SqlAlchemyUnitOfWork(engine)).carregar_sessao(
+        session.projeto.id
+    )
+    assert len(reopened.projeto.elementos) == len(session.projeto.elementos) + 1
+    restored_revision = revision_data(restored)
+    assert restored_revision is not None and restored_revision["decision"] == choice
+    with SqlAlchemyUnitOfWork(engine) as work:
+        restored_decision = work.decisoes_revisao.obter_da_proposta(restored.id)
+        assert restored_decision is not None
+        assert restored_decision.elemento_confirmado_id == decision.elemento_confirmado_id
+        assert restored_decision.revisor == decision.revisor
+        changed_payload = {**payload, "group_id": "3" * 64, "source_sha256": "4" * 64}
+        changed = replace(
+            proposal,
+            id=uuid4(),
+            atributos_sugeridos=(("revisao_tecnica", json.dumps(changed_payload)),),
+        )
+        assert preserve_revision_decision(work, changed, (previous,)) == changed
 
 
 @pytest.fixture

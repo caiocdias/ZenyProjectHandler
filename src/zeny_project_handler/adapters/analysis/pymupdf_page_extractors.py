@@ -34,7 +34,20 @@ from .pymupdf_support import (
 
 def _extract_text(page: Any, page_number: int) -> tuple[CandidatoEvidenciaDocumento, ...]:
     candidates: list[CandidatoEvidenciaDocumento] = []
-    raw = cast(dict[str, Any], page.get_text("rawdict", sort=False))
+    # Recent PyMuPDF versions include FreeText/Stamp text in page.get_text().
+    # A base-only display list prevents annotation text from masquerading as native content.
+    rotation = page.rotation
+    try:
+        # Match get_textpage's unrotated coordinates; restore before normalizing geometry.
+        page.set_rotation(0)
+        raw = cast(
+            dict[str, Any],
+            pymupdf.TextPage(
+                page.get_displaylist(annots=False).get_textpage(flags=pymupdf.TEXTFLAGS_RAWDICT)
+            ).extractRAWDICT(),
+        )
+    finally:
+        page.set_rotation(rotation)
     for block_index, block in enumerate(raw.get("blocks", ())):
         if int(block.get("type", -1)) != 0:
             continue
