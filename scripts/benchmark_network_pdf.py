@@ -53,6 +53,7 @@ from zeny_project_handler.ports.analysis import (
     ConfiguracaoAnaliseDocumento,
     MotorOcrPort,
     PaginaRasterOcr,
+    TrechoTextoOcr,
 )
 from zeny_project_handler.ports.interpretation import (
     AnalisadorCategoriaPort,
@@ -92,6 +93,69 @@ def verify_ocr(engine: MotorOcrPort) -> None:
         raise RuntimeError("OCR não passou o controle sintético; verifique configs/tsv e stderr")
 
 
+class TimedTesseract(TesseractCliOcr):
+    """Instrumentação opt-in no ponto comum aos cinco métodos, sem mudar capacidade."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.calls: list[dict[str, Any]] = []
+
+    def _recognize(
+        self,
+        pagina: PaginaRasterOcr,
+        *,
+        page_segmentation_mode: int,
+        character_whitelist: str | None = None,
+        technical_glyphs: bool = False,
+    ) -> tuple[TrechoTextoOcr, ...]:
+        started = perf_counter()
+        call: dict[str, Any] = {
+            "page": pagina.pagina_numero,
+            "width": pagina.largura_pixels,
+            "height": pagina.altura_pixels,
+            "dpi": pagina.dpi,
+            "psm": page_segmentation_mode,
+            "whitelist": character_whitelist,
+            "technical_glyphs": technical_glyphs,
+            "completed": False,
+        }
+        try:
+            result = super()._recognize(
+                pagina,
+                page_segmentation_mode=page_segmentation_mode,
+                character_whitelist=character_whitelist,
+                technical_glyphs=technical_glyphs,
+            )
+            call.update(completed=True, segments=len(result))
+            return result
+        finally:
+            call["seconds"] = perf_counter() - started
+            self.calls.append(call)
+
+
+def profile_annotations(source: Path) -> list[dict[str, Any]]:
+    """Meça renderização separada a 150 DPI, abrindo a fonte a cada modo; sem OCR."""
+    measurements = []
+    for enabled in (False, True):
+        with pymupdf.open(source) as document:  # type: ignore[no-untyped-call]
+            for page in document:
+                started = perf_counter()
+                pixmap = page.get_pixmap(dpi=150, annots=enabled)
+                seconds = perf_counter() - started
+                measurements.append(
+                    {
+                        "page": page.number + 1,
+                        "annotations": enabled,
+                        "dpi": 150,
+                        "seconds": seconds,
+                        "raster_bytes": len(pixmap.samples),
+                        "raster_sha256": sha256(pixmap.samples).hexdigest(),
+                        "annotation_count": len(tuple(page.annots() or ())),
+                    }
+                )
+    return measurements
+
+
 @dataclass
 class CategoryRecorder:
     """Observe a saída real dos analisadores antes do filtro de identificadores."""
@@ -117,7 +181,13 @@ class CategoryRecorder:
         return result
 
 
-def run_variant(source: Path, directory: Path, *, ocr: MotorOcrPort | None) -> dict[str, Any]:
+def run_variant(
+    source: Path,
+    directory: Path,
+    *,
+    ocr: MotorOcrPort | None,
+    telemetry: bool = False,
+) -> dict[str, Any]:
     """Use uma base nova por variante, sem cache nem consulta de conformidade/SQL."""
     started = perf_counter()
     inspection = PyMuPdfReader().inspecionar(source)
@@ -217,7 +287,38 @@ def run_variant(source: Path, directory: Path, *, ocr: MotorOcrPort | None) -> d
 
         session = ServicoRevisaoHumana(work).carregar_sessao_semantica(project.id)
         dto = _session_dto(session, project_version=1)
-        sheets = _results_sheets(dto)
+        sheets = tuple(_results_sheets(dto))
+        documentation: dict[str, Any] = {}
+        if telemetry:
+            # Apenas os insumos documentais puros, sem assumir mercado nem executar SQL.
+            from zeny_project_handler.application.project_compliance import (
+                _document_compliance_inputs,
+                _metadata_values,
+                _targets,
+                detectar_notas_servico_cabecalho,
+            )
+            from zeny_project_handler.domain.compliance import TipoEscopoConformidade
+            from zeny_project_handler_server.compliance_api import _documentation_response
+            from zeny_project_handler_server.deliverable_exports import _documentation_sheet
+
+            targets = {
+                item.referencia_id: item
+                for item in _targets(session)
+                if item.tipo is TipoEscopoConformidade.DOCUMENTO and item.referencia_id is not None
+            }
+            _, document_items, _ = _document_compliance_inputs(
+                session,
+                targets,
+                detectar_notas_servico_cabecalho(session),
+                _metadata_values(session),
+            )
+            document_dto = _documentation_response(session, dto.semantic_signature, document_items)
+            documentation = {
+                "items": document_items,
+                "dto": document_dto.model_dump(mode="json"),
+                "scope": "document inputs only; no compliance execution or SQL",
+            }
+            sheets = (*sheets, _documentation_sheet(document_dto))
         exported = write_xlsx(directory / "results.xlsx", sheets)
         with ZipFile(exported) as archive:
             if archive.testzip() is not None:
@@ -273,6 +374,7 @@ def run_variant(source: Path, directory: Path, *, ocr: MotorOcrPort | None) -> d
             "regions": regions,
             "spans": spans,
             "results": dto.model_dump(mode="json"),
+            **({"documentation": documentation} if telemetry else {}),
             "export": {
                 "sheets": sheets,
                 "bytes": exported.stat().st_size,
@@ -285,7 +387,12 @@ def run_variant(source: Path, directory: Path, *, ocr: MotorOcrPort | None) -> d
 
 
 def benchmark(
-    source: Path, output: Path, runtime_directory: Path, *, native_only: bool = False
+    source: Path,
+    output: Path,
+    runtime_directory: Path,
+    *,
+    native_only: bool = False,
+    telemetry: bool = False,
 ) -> dict[str, Any]:
     source = source.resolve(strict=True)
     if output.resolve() == source:
@@ -301,7 +408,8 @@ def benchmark(
     ocr = None
     if runtime is not None:
         assert runtime.executavel is not None and runtime.diretorio_tessdata is not None
-        ocr = TesseractCliOcr(
+        ocr_class = TimedTesseract if telemetry else TesseractCliOcr
+        ocr = ocr_class(
             runtime.executavel,
             language="+".join(runtime.idiomas_selecionados),
             tessdata_directory=runtime.diretorio_tessdata,
@@ -311,6 +419,7 @@ def benchmark(
         "schema": 1,
         "source_sha256": before[2],
         "source_bytes": before[0],
+        "source_mtime_ns": before[1],
         "python": platform.python_version(),
         "platform": platform.platform(),
         "pymupdf": pymupdf.VersionBind,
@@ -318,13 +427,20 @@ def benchmark(
         "ocr_capability": ocr.consultar_capacidade() if ocr is not None else None,
         "native_only": native_only,
     }
+    if telemetry:
+        report["annotation_rendering"] = profile_annotations(source)
+        if isinstance(ocr, TimedTesseract):
+            report["ocr_control_calls"] = list(ocr.calls)
+            ocr.calls.clear()
     output.parent.mkdir(parents=True, exist_ok=True)
     for name, motor in (("native", None), ("ocr", ocr)):
         if name == "ocr" and native_only:
             continue
         print(f"Iniciando {name}", flush=True)
         with TemporaryDirectory(prefix=f"benchmark-{name}-", dir=output.parent) as temporary:
-            report[name] = run_variant(source, Path(temporary), ocr=motor)
+            report[name] = run_variant(source, Path(temporary), ocr=motor, telemetry=telemetry)
+        if isinstance(motor, TimedTesseract):
+            report[name]["ocr_calls"] = list(motor.calls)
         output.write_text(
             json.dumps(report, default=json_value, ensure_ascii=False, indent=2), encoding="utf-8"
         )
@@ -352,9 +468,14 @@ def main(arguments: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--runtime-directory", type=Path, default=Path("tmp/benchmark-runtime"))
     parser.add_argument("--native-only", action="store_true")
+    parser.add_argument("--telemetry", action="store_true")
     options = parser.parse_args(arguments)
     benchmark(
-        options.source, options.output, options.runtime_directory, native_only=options.native_only
+        options.source,
+        options.output,
+        options.runtime_directory,
+        native_only=options.native_only,
+        telemetry=options.telemetry,
     )
     return 0
 

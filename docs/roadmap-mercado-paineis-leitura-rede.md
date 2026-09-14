@@ -194,7 +194,7 @@ Hipóteses de produto adotadas para tornar o plano executável, ajustáveis com 
 | E07 | Extração robusta de evidências | #concluida | E01 | 95 ocorrências, 18 identificadores e 19 comprimentos com evidência recuperada |
 | E08 | Associação de elementos e vãos | #bloqueada | E01, E07 | 95 ocorrências; 18/19 comprimentos; classificação/topologia pendentes |
 | E09 | Homologação integrada | #bloqueada | E03, E04, E05, E06, E08 | Gate aprovado; E08 e realce simbólico impedem aceite |
-| E10 | Referência integral do segundo PDF | #pendente | Nenhuma | Inventário por camada e medições isoladas |
+| E10 | Referência integral do segundo PDF | #concluida | Nenhuma | 139 registros, revisão definida e três medições isoladas |
 | E11 | Revisões técnicas e conteúdo vigente | #pendente | E10 | Revisão explícita de sobreposições sem promover comentários |
 | E12 | Precisão dos extratores atuais | #pendente | E10, E11 | Melhorias verticais medidas por ocorrência |
 | E12A | Experimentação de algoritmos alternativos | #pendente | E12 | Comparação executada de métodos distintos |
@@ -1127,7 +1127,7 @@ são novas etapas, posicionadas antes de seus consumidores. Nesta execução
 não há execução paralela de código prevista, pois as etapas compartilham os
 extratores e as projeções. As dependências pendentes não são bloqueios reais.
 
-## E10 — Referência integral do segundo PDF — #pendente
+## E10 — Referência integral do segundo PDF — #concluida
 
 **Objetivo:** transformar o diagnóstico amostral em referência auditável de toda a
 página e medir o custo real por fase antes de modificar heurísticas.
@@ -1169,20 +1169,61 @@ Execute E10 — Referência integral do segundo PDF de docs/roadmap-mercado-pain
 
 **Critérios de aceite:**
 
-- [ ] Inventário cobre toda a página, distingue camadas e fixa denominadores por classe.
-- [ ] D01–D06 têm cadeia de evidência e a política de revisão está documentada.
-- [ ] Três medições isoladas e memória ficam registradas, sem limite de tempo para aceite.
-- [ ] Casos reservados e métricas de qualidade/confirmados/revisão estão congelados.
-- [ ] Testes do benchmark passam sem exigir arquivo privado.
+- [x] Inventário cobre toda a página, distingue camadas e fixa denominadores por classe.
+- [x] D01–D06 têm cadeia de evidência e a política de revisão está documentada.
+- [x] Três medições isoladas e memória ficam registradas, sem limite de tempo para aceite.
+- [x] Casos reservados e métricas de qualidade/confirmados/revisão estão congelados.
+- [x] Testes do benchmark passam sem exigir arquivo privado.
 
 **Validação obrigatória:** executar o comando OCR do diagnóstico três vezes, com
 saídas distintas em `tmp/rede-1256407599/`; conferir hash/tamanho/mtime. Rodar
 `python -m pytest tests/unit/test_benchmark_network_pdf.py tests/unit/test_smoke_examples.py`.
 Inspecionar todos os recortes do inventário e conferir cada vínculo ao snapshot.
-**Bloqueios:** nenhum bloqueio conhecido; PDF e OCR estavam disponíveis nesta auditoria.
+**Bloqueios:** nenhum impedimento remanescente ao diagnóstico E10. PDF/OCR disponíveis;
+as falhas de qualidade abaixo pertencem às correções seguintes e não foram resolvidas.
 **Riscos e mitigação:** denominador baseado na saída ocultar perdas; inventariar primeiro
 pelo desenho. Confundir revisões com comentários; registrar ambos e a autoridade conhecida.
-**Evidências e handoff:** ainda não executada. Insumo: diagnóstico de 14/09/2026.
+**Evidências e handoff:** executada em 14/09/2026 sobre `80dc6fd`, Git inicialmente
+limpo, sem `AGENTS.md` aplicável. Passou por `#em-andamento` no índice e detalhe.
+Desde `9cb0ef7`, somente roadmap/diagnóstico diferiam; E08/E09 preservadas.
+Relatório completo: [e10-referencia-segundo-pdf.md](e10-referencia-segundo-pdf.md).
+
+- 139 registros privados cobrem as duas camadas: núcleo de 29 ocorrências, nove
+  pontos, dez trechos, seis comprimentos, dois conflitos, 64 itens documentais e
+  estratos de símbolos/ambiguidades/negativos. As 28 anotações têm registro próprio.
+  D01–D06 e todas as 38 propostas finais rastreadas até evidência/ativo/DTO/XLSX.
+- Núcleo na proposta: TP 24, FN 5, FP 4; recall 82,76%, precisão 85,71%, com escopo
+  de código/situação/ocorrência explícito. Duas confirmações erradas em dez; oito
+  acertam esses campos, mas cobertura automática integral comprovada continua 0/29.
+  Os dois conflitos não são representados e a leitura exata do documento é 0/1.
+  Isso é baseline para correções, não aceite da leitura automática.
+- Três benchmarks novos, sequenciais, sem análise Python concorrente: OCR até
+  regiões/vãos 94,130 / 89,407 / 94,104 s; com DTOs/XLSX documental 96,488 / 91,741 /
+  96,706 s. Cada um realizou 81 chamadas OCR, mais controle separado. Memória
+  simultânea máxima amostrada 490,69 MiB; Python high-water observado até 374,74 MiB,
+  Tesseract até 216,11 MiB. Hash, tamanho e mtime preservados em todas as execuções.
+  Duração somente telemetria, sem teto de aceite. Sonda CIM negada foi substituída;
+  isso não impediu medir memória dos processos. Limitações de amostragem documentadas.
+- `scripts/benchmark_network_pdf.py`: `--telemetry` observa os cinco modos OCR,
+  renderização das anotações e insumos documentais puros até DTO/XLSX. Instrumentação
+  opt-in, sem mudar produção, catálogo, parâmetros OCR, contratos ou pipeline.
+  `tests/unit/test_benchmark_network_pdf.py`: controles sintéticos de transparência,
+  falhas e camadas. Nenhum PDF privado é necessário nos testes públicos.
+- Validação final: **17 aprovados em 5,42 s** (11 públicos + seis privados), Ruff,
+  formatação, Mypy (334 arquivos), diff e isolamento dos artefatos aprovados. Comandos
+  exatos e falhas iniciais corrigidas no relatório. Gate global/HTTP/Qt e avaliação
+  reservada pertencem às etapas posteriores e não foram reivindicados em E10.
+- Artefatos ignorados em `tmp/rede-1256407599/e10/`: `inventory.json`, `audit.json`,
+  rasters, anotações, `run-1/2/3.json`, `memory-1/2/3.json`, `performance.json`, logs,
+  scripts privados e `evaluation-split.json`. Três famílias sintéticas/nove sementes
+  reservadas; PDFs conhecidos são ajuste/regressão. Dois outros PDFs são candidatos
+  à reserva documental, sujeitos à auditoria de exposição anterior.
+- E11 recebe conflito de cabo e N4, oclusões, cópia ampliada, decisão técnica explícita
+  e impactos em UI/DTO/cache. E12/E13 recebem neutros N-4 omitidos, transformador,
+  chave descartada, vínculo U1/P5 e qualificadores perdidos na exportação; E14 recebe
+  endpoints P3/P4 invertidos, IDs por cabo e supressão de existentes. E15 recebe
+  campos documentais truncados/repetidos/ausentes e homologação integrada.
+  Nenhuma correção do pipeline, commit ou ação externa realizada.
 
 ## E11 — Revisões técnicas e conteúdo vigente — #pendente
 

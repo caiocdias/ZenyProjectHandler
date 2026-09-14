@@ -1,5 +1,11 @@
 # Diagnóstico de leitura do projeto 1256407599
 
+Complemento E10: [referência integral, política de revisão e métricas](e10-referencia-segundo-pdf.md).
+O diagnóstico amostral abaixo permanece como registro de sua execução. A referência
+E10 distingue as camadas, inclui documentação e amplia D04: a anotação de P5 muda
+N4 existente para remover/instalar, e o quadro ampliado à direita repete o mesmo
+ponto. O estado e as validações vigentes de E10 constam do roadmap.
+
 Verificação de 14/09/2026 no checkout `9cb0ef7`, inicialmente limpo. Pacote `0.4.0`,
 extrator `1.14.0`, interpretador `22.0`. Nenhum `AGENTS.md` aplicável encontrado.
 Teste do código atual, não do executável distribuído na release 0.4.
