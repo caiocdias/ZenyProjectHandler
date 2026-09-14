@@ -155,6 +155,10 @@ class TesseractCliOcr:
     def reconhecer(self, pagina: PaginaRasterOcr) -> tuple[TrechoTextoOcr, ...]:
         return self._recognize(pagina, page_segmentation_mode=_GENERAL_PSM)
 
+    def reconhecer_glifos(self, pagina: PaginaRasterOcr) -> tuple[TrechoTextoOcr, ...]:
+        """Códigos vetorizados usam inglês quando já habilitado, sem alterar OCR geral."""
+        return self._recognize(pagina, page_segmentation_mode=_GENERAL_PSM, technical_glyphs=True)
+
     def reconhecer_identificador(
         self,
         pagina: PaginaRasterOcr,
@@ -191,6 +195,7 @@ class TesseractCliOcr:
         *,
         page_segmentation_mode: int,
         character_whitelist: str | None = None,
+        technical_glyphs: bool = False,
     ) -> tuple[TrechoTextoOcr, ...]:
         inspection = self._inspection
         capability = inspection.result.capacidade
@@ -201,7 +206,9 @@ class TesseractCliOcr:
             "stdin",
             "stdout",
             "-l",
-            "+".join(capability.idiomas),
+            "eng"
+            if technical_glyphs and "eng" in capability.idiomas
+            else "+".join(capability.idiomas),
             "--oem",
             str(self._oem),
             "--psm",
@@ -249,6 +256,7 @@ class TesseractCliOcr:
             ("agregacao_tsv", "linhas-logicas-v1"),
             ("formato_saida", "tsv"),
             ("geracao_tsv", "parametro-explicito-sem-config-v1"),
+            ("idioma_glifos", "eng-quando-habilitado-v1"),
             ("oem", self._oem),
             ("preprocessamento_raster", "ppm-p6-rgb-sem-alpha-v1"),
             ("psm_bloco_operacional", _OPERATIONAL_BLOCK_PSM),

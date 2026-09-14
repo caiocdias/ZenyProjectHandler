@@ -26,7 +26,9 @@ from zeny_project_handler.ports.analysis import (
     SolicitacaoAnaliseDocumento,
 )
 
+from .pymupdf_glyph_ocr import extract_vector_glyphs
 from .pymupdf_ocr_batch import MAXIMUM_BATCH_REGIONS, pack_ocr_rows
+from .pymupdf_ocr_page import OcrPage
 from .pymupdf_orientation import dominant_text_rotation, unrotate_box
 from .pymupdf_support import _extras, _normalized_point
 
@@ -180,6 +182,7 @@ def _conditional_ocr(
         return (), ()
     if ocr_engine is None:
         return (), (_ocr_unavailable_diagnostic(page_number),)
+    page = OcrPage(page)
     try:
         candidates = _primary_ocr_candidates(
             page,
@@ -197,15 +200,40 @@ def _conditional_ocr(
         MotorOcrIdentificadorPort,
     ):
         return candidates, ()
+    glyph_candidates, glyph_diagnostics = extract_vector_glyphs(
+        page,
+        page_number,
+        ocr_engine,
+        config.dpi_ocr_rotulos_inclinados,
+    )
+    covered_glyphs = tuple(
+        candidate
+        for candidate in glyph_candidates
+        if _ocr_confidence(candidate) >= Decimal("0.80")
+        or dict(candidate.atributos_extraidos).get("concordancia_contornos")
+    )
     targeted_candidates, targeted_diagnostics = _targeted_ocr_candidates(
         page,
         page_number,
         ocr_engine,
         config,
+        covered_glyphs=covered_glyphs,
     )
     return (
-        _deduplicate_tiled_candidates((*candidates, *targeted_candidates)),
-        targeted_diagnostics,
+        _deduplicate_tiled_candidates(
+            (
+                *(
+                    candidate
+                    for candidate in (*candidates, *targeted_candidates)
+                    if not (
+                        _is_single_ocr_token(candidate)
+                        and _has_glyph_reading(_candidate_bounds(candidate), covered_glyphs)
+                    )
+                ),
+                *glyph_candidates,
+            )
+        ),
+        (*targeted_diagnostics, *glyph_diagnostics),
     )
 
 
@@ -285,6 +313,8 @@ def _targeted_ocr_candidates(
     page_number: int,
     ocr_engine: MotorOcrPort,
     config: ConfiguracaoAnaliseDocumento,
+    *,
+    covered_glyphs: tuple[CandidatoEvidenciaDocumento, ...] = (),
 ) -> tuple[tuple[CandidatoEvidenciaDocumento, ...], tuple[DiagnosticoAnalise, ...]]:
     assert isinstance(ocr_engine, MotorOcrIdentificadorPort)
     targeted_candidates: list[CandidatoEvidenciaDocumento] = []
@@ -302,6 +332,7 @@ def _targeted_ocr_candidates(
         page_number,
         ocr_engine,
         config,
+        covered_glyphs=covered_glyphs,
     )
     targeted_candidates.extend(linear_candidates)
     targeted_diagnostics.extend(linear_diagnostics)
@@ -348,6 +379,8 @@ def _linear_label_candidates(
     page_number: int,
     ocr_engine: MotorOcrPort,
     config: ConfiguracaoAnaliseDocumento,
+    *,
+    covered_glyphs: tuple[CandidatoEvidenciaDocumento, ...] = (),
 ) -> tuple[tuple[CandidatoEvidenciaDocumento, ...], tuple[DiagnosticoAnalise, ...]]:
     if not isinstance(ocr_engine, MotorOcrRotuloOperacionalPort):
         return (), ()
@@ -359,6 +392,7 @@ def _linear_label_candidates(
                 page_number,
                 ocr_engine,
                 config.dpi_ocr_identificadores,
+                covered_glyphs=covered_glyphs,
             )
         )
         candidates.extend(
@@ -385,7 +419,9 @@ def _linear_label_candidates(
     remaining_frames = tuple(
         frame
         for drawing in page.get_drawings()
-        if (frame := _operational_frame(page, drawing)) is not None and frame not in selected_frames
+        if (frame := _operational_frame(page, drawing)) is not None
+        and frame not in selected_frames
+        and not _has_glyph_reading(frame.bounds, covered_glyphs)
     )
     try:
         batched, processed = _extract_remaining_frame_labels(
@@ -631,15 +667,50 @@ def _extract_point_identifiers(
     return tuple(candidates)
 
 
+def _has_glyph_reading(
+    bounds: tuple[Decimal, Decimal, Decimal, Decimal],
+    candidates: tuple[CandidatoEvidenciaDocumento, ...],
+    *,
+    allow_fragment: bool = False,
+) -> bool:
+    left, top, right, bottom = bounds
+    width, height = right - left, bottom - top
+    for candidate in candidates:
+        x0, y0, x1, y1 = _candidate_bounds(candidate)
+        tolerance = Decimal("0.0005")
+        if allow_fragment and (
+            x0 - tolerance <= left <= right <= x1 + tolerance
+            and y0 - tolerance <= top <= bottom <= y1 + tolerance
+        ):
+            return True
+        area = (x1 - x0) * (y1 - y0)
+        overlap = max(Decimal(0), min(right, x1) - max(left, x0)) * max(
+            Decimal(0), min(bottom, y1) - max(top, y0)
+        )
+        if (
+            area > 0
+            and area >= width * height * Decimal("0.35")
+            and overlap >= area * Decimal("0.8")
+            and abs(x0 + x1 - left - right) <= width * Decimal("0.4")
+            and abs(y0 + y1 - top - bottom) <= height * Decimal("0.4")
+        ):
+            return True
+    return False
+
+
 def _extract_blue_operational_identifiers(
     page: Any,
     page_number: int,
     engine: MotorOcrRotuloOperacionalPort,
     dpi: int,
+    *,
+    covered_glyphs: tuple[CandidatoEvidenciaDocumento, ...] = (),
 ) -> tuple[CandidatoEvidenciaDocumento, ...]:
     """Leia Pn e Vn-m diretamente dos grupos de glifos vetoriais azuis."""
     candidates: list[CandidatoEvidenciaDocumento] = []
     for index, bounds in enumerate(_blue_glyph_group_bounds(page)):
+        if _has_glyph_reading(bounds, covered_glyphs, allow_fragment=True):
+            continue
         raster = _blue_only_raster(
             _render_bounds(page, _expanded_bounds(bounds, Decimal("0.45")), dpi),
             page_number,

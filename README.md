@@ -45,11 +45,13 @@ apresenta os DTOs e rasters recebidos pela API autenticada.
   antes da prontidão.
 - Temas claro e escuro, painéis acopláveis e restauração do estado da interface.
 
-O extrator 1.12.0 orienta recortes densos a partir do texto parcial, preserva evidências de
-recortes concluídos quando o OCR falha e informa regiões sem leitura localizada garantida.
-Falhas transitórias não ficam presas no cache. A recuperação integral da rede de referência
-ainda está bloqueada por lacunas de extração; resultados parciais não significam leitura
-completa. Correções, validações e pendências estão em [E07](docs/e07-extracao-evidencias.md).
+O extrator 1.14.0 lê também rótulos convertidos em contornos vetoriais, isolando os caracteres
+de molduras e linhas sobrepostas e preservando sua posição na página. Recortes têm orçamento
+limitado; falhas mantêm as evidências já obtidas, geram diagnóstico e não ficam presas no cache.
+A referência local recuperou as 95 ocorrências, os 18 identificadores e os 19 comprimentos
+legíveis. A associação de elementos e a topologia dos vãos seguem para E08. Métodos, limites e
+validações estão em [E07](docs/e07-extracao-evidencias.md). Reanalise documentos para usar a
+nova versão do extrator.
 
 Projeto, Resultados, Documentação e conformidade, GMAX e Exportar têm rolagem vertical
 independente. As tabelas e listas mantêm uma área de leitura limitada: a roda percorre suas

@@ -67,6 +67,40 @@ def test_ppm_encoder_removes_stride_padding() -> None:
     assert encoded == b"P6\n2 2\n255\nabcdefghijkl"
 
 
+@pytest.mark.parametrize("languages,expected", [("por+eng", "eng"), ("por", "por")])
+def test_vector_glyph_language_uses_only_enabled_traineddata_and_preserves_general_ocr(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    languages: str,
+    expected: str,
+) -> None:
+    executable, tessdata = _fake_installation(tmp_path / "glyphs")
+    selected: list[str] = []
+
+    def fake_run(arguments: tuple[str, ...], **_kwargs: object) -> CompletedProcess[str]:
+        if metadata := _metadata_process(arguments, tessdata=tessdata):
+            return metadata
+        selected.append(arguments[arguments.index("-l") + 1])
+        return CompletedProcess(arguments, 0, "\t".join(ocr_module._TSV_COLUMNS) + "\n")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    engine = ocr_module.TesseractCliOcr(executable, language=languages, tessdata_directory=tessdata)
+    page = PaginaRasterOcr(
+        pagina_numero=1,
+        largura_pixels=1,
+        altura_pixels=1,
+        stride=3,
+        dados_rgb=b"\xff\xff\xff",
+        dpi=450,
+    )
+    assert engine.reconhecer_glifos(page) == ()
+    assert engine.reconhecer(page) == ()
+    assert selected == [expected, languages]
+    capability = engine.consultar_capacidade().capacidade
+    assert capability is not None
+    assert dict(capability.parametros)["idioma_glifos"] == "eng-quando-habilitado-v1"
+
+
 def test_tsv_parser_groups_words_into_normalized_lines() -> None:
     tsv = "\n".join(
         (

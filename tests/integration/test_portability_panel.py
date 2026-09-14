@@ -3,14 +3,17 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
-from typing import cast
+from threading import Event
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread
 from PySide6.QtWidgets import QComboBox, QFileDialog, QPushButton
 from pytestqt.qtbot import QtBot
+from shiboken6 import isValid
 
+from zeny_project_handler_client.ui import portability_panel as panel_module
 from zeny_project_handler_client.ui.portability_gateway import (
     CancelCallback,
     PortabilityGateway,
@@ -206,3 +209,61 @@ def test_pdf_export_forwards_current_callout_positions(
     qtbot.waitUntil(lambda: not panel.processando)
 
     assert gateway.requests[0].callout_positions == (override,)
+
+
+def test_export_stays_busy_until_thread_cleanup_has_finished(
+    qtbot: QtBot,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    transfer_release = Event()
+    cleanup_release = Event()
+    cleanup_done = Event()
+
+    class FinishingThread(QThread):
+        def wait(self, *args: Any, **kwargs: Any) -> bool:
+            cleanup_release.set()
+            return super().wait(*args, **kwargs)
+
+    class GatedGateway(ExportScenarioGateway):
+        def create_deliverable_export(
+            self,
+            project_id: UUID,
+            request: CreateDeliverableExportRequest,
+        ) -> DownloadMetadataDto:
+            assert transfer_release.wait(5)
+            return super().create_deliverable_export(project_id, request)
+
+    def finish_cleanup() -> None:
+        # Finished foi emitido, mas a thread nativa ainda tem finalizadores pendentes.
+        cleanup_release.wait(5)
+        cleanup_done.set()
+
+    monkeypatch.setattr(panel_module, "QThread", FinishingThread)
+    gateway = GatedGateway()
+    panel = _panel(qtbot, gateway)
+    cleanup_at_idle: list[bool] = []
+    panel.busy_changed.connect(
+        lambda busy: cleanup_at_idle.append(cleanup_done.is_set()) if not busy else None
+    )
+    panel._start_operation(
+        gateway.project_id,
+        CreateDeliverableExportRequest(
+            kind=DeliverableExportKind.RESULTS_XLSX,
+            expected_project_version=7,
+        ),
+        tmp_path / "export.xlsx",
+    )
+    thread, worker = panel._thread, panel._worker
+    assert thread is not None and worker is not None
+    thread.finished.connect(finish_cleanup, Qt.ConnectionType.DirectConnection)
+    try:
+        transfer_release.set()
+        qtbot.waitUntil(lambda: not panel.processando)
+        assert cleanup_at_idle == [True]
+        assert (tmp_path / "export.xlsx").read_bytes() == gateway.payload
+    finally:
+        # Mantenha wrappers vivos até o término, inclusive quando a regressão falhar.
+        cleanup_release.set()
+        if isValid(thread):
+            thread.wait(5000)

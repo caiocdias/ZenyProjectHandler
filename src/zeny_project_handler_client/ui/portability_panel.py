@@ -395,6 +395,10 @@ class PortabilityPanelWidget(QWidget):
 
     @Slot()
     def _thread_finished(self) -> None:
+        # finished antecede as deleções pendentes na thread nativa. Não liberar o
+        # wrapper Python do worker enquanto o Qt ainda pode estar destruindo-o.
+        if self._thread is not None:
+            self._thread.wait()
         self._thread = None
         self._worker = None
         self._cancellation = None

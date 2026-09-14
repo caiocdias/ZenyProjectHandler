@@ -1,9 +1,140 @@
 # E07 — Extração robusta de evidências
 
 Execução inicial em 10/09/2026 sobre `77258cf`; retomada em 11/09/2026 sobre `7fd1b7f`.
-Estado e aceite no
+**Concluída em 14/09/2026 sobre `f82b1c2`**, conforme o aceite no
 [roadmap](roadmap-mercado-paineis-leitura-rede.md). A recuperação integral exigida por E01
-ainda não foi demonstrada; os ganhos abaixo não certificam a leitura completa da rede.
+ainda estava pendente na retomada de 11/09; as correções e a validação final estão abaixo.
+E08 permanece pendente, com suas dependências atendidas. Sem commit ou publicação.
+
+## Retomada de 14/09/2026
+
+Base `f82b1c2`, Git inicialmente limpo. Neste ambiente foram recuperados o inventário
+original, o baseline e o runtime de E01. As três verificações privadas de integridade
+passaram. A reprodução da versão 1.13.0 confirmou 312 evidências OCR, 33 propostas,
+27 confirmações e seis vãos, em 16,426 s nativo e 47,177 s com OCR.
+
+### Correções de extração
+
+- Extrator **1.14.0**, com invalidação das assinaturas e caches anteriores. Os contornos
+  preenchidos de caracteres próximos e consecutivos são isolados em rasters temporários.
+  Molduras, traçados cruzados e fotografias não entram nessa camada. A fonte, os vetores
+  originais e o OCR geral permanecem disponíveis.
+- A orientação usa a sequência dos glifos e seus segmentos retos. O raster retorna por
+  transformação inversa à geometria da página, incluindo sua rotação declarada. Contadores
+  internos de caracteres mantêm a orientação dos subcaminhos; não são preenchidos por engano.
+- Linhas curtas têm no máximo 16 contornos, 384 regiões por página e oito milhões de pixels
+  de conteúdo. Cada lote mantém os limites de 48 linhas e oito milhões de pixels. Quando
+  um lote consome menos linhas pelo limite de pixels, o seguinte começa no primeiro recorte
+  ainda não processado. Limites excedidos e falhas geram diagnósticos; resultados anteriores
+  são preservados, e falhas transitórias continuam fora do cache.
+- Lotes aproximam larguras para reduzir pixels brancos, mantendo os índices e a ordem final
+  das ocorrências originais. As margens entre recortes são de 20 pixels, além da margem própria
+  do raster; os caracteres não são reamostrados. Uma nova tentativa com confiança de pelo
+  menos 0,90 encerra as repetições daquele recorte.
+- Para esses contornos, o Tesseract usa inglês somente quando esse idioma já está habilitado
+  na capacidade verificada. O OCR geral mantém os idiomas configurados. Leituras fracas
+  recebem tentativas limitadas; texto e confiança são preservados sem consulta ao catálogo.
+- Confusões entre dígitos e letras também podem ser resolvidas pela concordância dos
+  próprios contornos: duas outras regiões, leituras com confiança mínima de 0,85, mesma
+  estrutura de caminhos e nenhuma discordância. Reflexão e meia-volta são rejeitadas.
+  O texto anterior fica em `texto_ocr_original`; a confiança original não é inflada.
+- Leituras localizadas já cobertas por glifos não repetem os mesmos recortes. A lista de
+  desenho usada para rasterizar é reutilizada somente durante o OCR daquela página.
+  Testes comparam bytes, origem, dimensões e DPI com o rasterizador original, nas quatro
+  rotações, sem incluir anotações.
+- A deduplicação mantém ocorrências iguais em posições distintas. Leituras gerais compostas
+  continuam disponíveis quando contêm outros tokens; a presença de um rótulo localizado não
+  apaga a linha inteira nem altera seu texto bruto.
+
+### Reconciliação da referência e inspeção
+
+O inventário original permanece intacto. A cópia `tmp/e07-complete/inventory-reconciled.json`
+registra seu hash, as alterações e os mesmos denominadores: **95 ocorrências** (17 postes,
+22 estruturas MT, 19 BT, 37 cabos), **18 identificadores**, **20 trechos físicos**,
+**18 pares de endpoints visíveis**, **19 comprimentos** e as mesmas 20 exclusões.
+
+A revisão do PDF original corrigiu uma transcrição de cabo (`ABC-2 CAA` para `ABC-4 CAA`).
+Três ROIs de cabos apontavam para o centro do trecho, longe do rótulo; foram substituídas
+por caixas de revisão do texto. Geometrias físicas, endpoints, situações e denominadores
+não foram alterados. Identificadores e comprimentos ganharam caixas de rótulo separadas
+dos pontos e traçados físicos; não foi ampliada a tolerância original de 0,01.
+
+A comparação por token com correspondência um a um atingiu **95/95**, **18/18** e **19/19**.
+Os 132 recortes correspondentes do PDF original foram inspecionados em seis folhas locais
+(`qa-1.png` a `qa-6.png`), incluindo sobreposições, textos inclinados, situações existentes
+e instaladas e o identificador corrigido por concordância. Isso certifica presença textual
+e localização; associação, classificação de ambiguidades e topologia permanecem em E08.
+
+### Validação
+
+O conjunto obrigatório, ampliado com as regressões de glifos, concordância, rasterização,
+orientação, molduras, falhas e benchmark, passou em **197 testes** (18,73 s).
+Ruff e Mypy passaram, com 333 arquivos verificados pelo Mypy. A primeira execução do gate
+integral abortou no Qt durante `test_pdf_export_forwards_current_callout_positions`.
+O módulo isolado passou nos seis testes; o log inicial foi preservado como
+`tmp/e07-complete/gate-first.log`. Um gate intermediário passou em 1.234 testes
+(`gate-before-packing.log`), mas o aborto voltou após a otimização de lotes, em
+`PortabilityPanelWidget._thread_finished`, ao liberar `_worker`. Esse segundo aborto está
+em `gate-qt-recurrence.log`; a aprovação intermediária não foi usada como aceite final.
+
+O sinal `QThread.finished` pode chegar enquanto ainda há limpeza na thread nativa.
+O painel agora chama `wait()` antes de soltar os wrappers e emitir o estado disponível,
+conforme o contrato de [sincronização do Qt](https://doc.qt.io/qt-6/qthread.html#isFinished).
+Uma regressão com finalização controlada por eventos falhou antes da correção
+(`thread-before.log`) e passou depois, junto dos sete testes do painel (`thread-fixed.log`).
+Uma execução dirigida de portabilidade com temporários longos no workspace também falhou
+com `WinError 3`; o gate oficial usa a raiz curta `C:\tmp` para esses casos.
+O gate integral final passou com captura Qt padrão e sem exclusões de testes:
+**1.238 testes em 421,83 s, cobertura 87,72%, saída 0**. Dependências, Ruff, formatação,
+Mypy (333 arquivos), fronteira do cliente e complexidade E/F (2.768 funções e métodos)
+também passaram. Log: `tmp/e07-complete/gate-final.log`. A etapa não tem bloqueios pendentes.
+
+Uma primeira medição ficou em 57,930 s com OCR, mas a repetição atingiu **61,257 s**,
+acima do limite. Esse resultado está preservado em `benchmark-over-budget.json`. O agrupamento
+por largura e a parada de tentativas confiáveis resolveram o custo restante: na revisão final,
+o fluxo nativo levou **15,511 s** e o fluxo completo com OCR, promoção e vãos **55,313 s**.
+
+O monitor final cobriu 377 amostras, com no máximo dois processos Python (launcher e intérprete)
+e um Tesseract: high-water do Python **548,36 MiB**, high-water observado do Tesseract
+**85,30 MiB** e pico agregado amostrado **481,08 MiB**. O pico dos subprocessos depende da
+amostragem de 200 ms. Todos ficaram dentro dos limites congelados de 25/60 s, 768 MiB para
+Python, 256 MiB para Tesseract e 1 GiB agregado. Hash, tamanho e mtime da fonte foram preservados;
+o SHA-256 continua `1e824e972d5cfc0b19fbcae774321d371cff30f6a8d1dfcb3673db858e6c77df`.
+
+A auditoria final repetiu **95/95 ocorrências, 18/18 identificadores e 19/19 comprimentos**.
+Quatro folhas visuais ficaram idênticas por SHA-256; as duas com diferenças de recorte
+(`qa-3.png` e `qa-5.png`) foram inspecionadas novamente, sem perda de evidência.
+
+O resultado tem **3.719 evidências, incluindo 399 OCR**, sem diagnósticos. O pipeline
+produz 107 propostas brutas, 105 finais, 97 confirmações automáticas e 30 vãos. Essas contagens
+não homologam associação: a saída semântica tem 21 estruturas MT para 22 no inventário, além
+de 11 propostas de equipamento fora das 95 ocorrências. E08 deve usar as evidências recuperadas
+para conferir normalização, situação, promoção e endpoints, incluindo as ambiguidades.
+
+Reprodução nesta máquina, com Python 3.12.14, PyMuPDF 1.28.0 e Tesseract 5.4.0.20240606:
+
+```powershell
+# Gate público com captura Qt padrão, sem excluir testes.
+$env:PYTEST_ADDOPTS='-o cache_dir=tmp/e07-complete/gate-cache'
+.\IniciarTestes.bat *> tmp/e07-complete/gate-final.log
+Remove-Item Env:PYTEST_ADDOPTS
+
+# Rodar sozinho, sem outro processo de teste/benchmark Python ou Tesseract.
+# O monitor local invoca este comando e amostra memória a cada 200 ms:
+.\.venv\Scripts\python.exe -m scripts.benchmark_network_pdf `
+  "examples/PROJETO DE REDE 1256148225.pdf" `
+  --output tmp/e07-complete/benchmark-final.json `
+  --runtime-directory tmp/e01/runtime
+.\.venv\Scripts\python.exe tmp/e07-complete/reconcile_inventory.py `
+  tmp/e07-complete/benchmark-final.json
+```
+
+Os logs direcionados estão em `required-packed.log` e `export-recheck.log`; benchmark,
+amostragem e auditoria em `benchmark-final.json`, `memory-final.json` e `audit-reconciled.json`.
+O monitor local é `monitor_benchmark.ps1`; as seis folhas visuais usam o raster do PDF original.
+
+Artefatos privados, probes e snapshots ficam em `tmp/e07-complete/`, ignorados pelo Git.
+O caso real continua opt-in; os testes públicos usam somente figuras sintéticas.
 
 ## Retomada de 11/09/2026
 

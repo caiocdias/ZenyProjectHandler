@@ -42,12 +42,16 @@ class OcrRowBatch:
         return None
 
 
-def pack_ocr_rows(regions: tuple[PaginaRasterOcr, ...]) -> OcrRowBatch | None:
+def pack_ocr_rows(
+    regions: tuple[PaginaRasterOcr, ...],
+    *,
+    gap_pixels: int | None = None,
+) -> OcrRowBatch | None:
     """Empacote um prefixo limitado, sem reamostrar nem juntar ocorrências vizinhas."""
     if not regions:
         return None
     first = regions[0]
-    gap = max(20, first.dpi // 25)
+    gap = max(20, first.dpi // 25) if gap_pixels is None else max(20, gap_pixels)
     width, height = 0, gap
     selected: list[PaginaRasterOcr] = []
     for region in regions[:MAXIMUM_BATCH_REGIONS]:

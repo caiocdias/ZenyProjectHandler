@@ -282,6 +282,11 @@ class MotorOcrRotuloOperacionalPort(Protocol):
 
 
 @runtime_checkable
+class MotorOcrGlifosPort(Protocol):
+    def reconhecer_glifos(self, pagina: PaginaRasterOcr) -> tuple[TrechoTextoOcr, ...]: ...
+
+
+@runtime_checkable
 class MotorOcrBlocoOperacionalPort(Protocol):
     def reconhecer_bloco_operacional(
         self,

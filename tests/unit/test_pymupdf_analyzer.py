@@ -675,6 +675,7 @@ def test_conditional_ocr_preserves_partial_candidates_and_diagnostic_order(
         return (linear,)
 
     monkeypatch.setattr(ocr_module, "_extract_ocr_tiled", general_candidates)
+    monkeypatch.setattr(ocr_module, "extract_vector_glyphs", lambda *_args: ((), ()))
     monkeypatch.setattr(ocr_module, "_extract_point_identifiers", fail)
     monkeypatch.setattr(ocr_module, "_extract_blue_operational_identifiers", linear_candidates)
     monkeypatch.setattr(ocr_module, "_extract_linear_operational_labels", fail)

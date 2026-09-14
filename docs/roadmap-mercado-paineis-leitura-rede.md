@@ -154,7 +154,7 @@ Hipóteses de produto adotadas para tornar o plano executável, ajustáveis com 
 | E04 | Escolha do técnico na interface | #concluida | E02, E03 | Seletor e proveniência em Projeto/GMAX |
 | E05 | Rolagem independente dos painéis | #concluida | Nenhuma | Cinco painéis; matriz 8/8 e gate aprovados |
 | E06 | Marca-texto por situação | #concluida | Nenhuma | Realce 25%; matriz 24/24 e gate aprovados |
-| E07 | Extração robusta de evidências | #bloqueada | E01 | OCR em lote validado; recuperação integral pendente |
+| E07 | Extração robusta de evidências | #concluida | E01 | 95 ocorrências, 18 identificadores e 19 comprimentos com evidência recuperada |
 | E08 | Associação de elementos e vãos | #pendente | E01, E07 | Ocorrências e topologia recuperadas |
 | E09 | Homologação integrada | #pendente | E03, E04, E05, E06, E08 | Aceite completo e relatório final |
 
@@ -749,7 +749,7 @@ aprovados em 549,75 s, cobertura 87,37%; dependências, Ruff, formatação, Mypy
 magro e complexidade aprovados. Relatório local `tmp/e06/gate-final.txt`. Sem commit/publicação.
 A inspeção complementar da NS permanece em E08/E09 conforme planejado, sem pendência da E06.
 
-## E07 — Extração robusta de evidências — #bloqueada
+## E07 — Extração robusta de evidências — #concluida
 
 **Objetivo:** recuperar evidências legíveis hoje omitidas na extração, conforme E01.
 **Por que agora:** baseline e inventário distinguem falha de leitura de falha de associação.
@@ -782,29 +782,53 @@ Execute E07 — Extração robusta de evidências de docs/roadmap-mercado-painei
 
 **Critérios de aceite:**
 
-- [ ] Todas as omissões inequívocas atribuídas à extração em E01 têm evidência recuperada.
-- [ ] Evidências preservam posição/orientação e não duplicam a mesma ocorrência.
+- [x] Todas as omissões inequívocas atribuídas à extração em E01 têm evidência recuperada.
+- [x] Evidências preservam posição/orientação e não duplicam a mesma ocorrência.
 - [x] Ausência/falha de OCR é diagnosticada e cache antigo não mascara o novo comportamento.
-- [ ] Benchmark com OCR real atende metas/orçamentos de E01 e hash da origem não muda.
+- [x] Benchmark com OCR real atende metas/orçamentos de E01 e hash da origem não muda.
 
 **Validação obrigatória:** `python -m pytest tests/unit/test_pymupdf_analyzer.py tests/unit/test_tesseract_ocr.py tests/unit/test_tesseract_runtime.py tests/unit/test_analysis_cache.py tests/unit/test_pdf_coordinates.py tests/integration/test_document_analysis.py`.
 Executar também novas fixtures e o comando de benchmark completo registrado por E01, comparando
 itens, caixas, diagnósticos e desempenho. Todos os testes devem passar; mocks de OCR não
 substituem a comparação local com Tesseract real.
-**Bloqueios:** a recuperação integral ainda não foi atingida. Na retomada de 11/09/2026,
-as 42 molduras antes excluídas passaram pelo OCR em lote; em um subconjunto visual de 41
-rótulos, a presença textual por ocorrência melhorou de 1/41 para 33/41, mas oito leituras
-continuam incorretas/incompletas. O inventário original `tmp/e01/inventory.json` não está
-neste checkout; o novo subconjunto não substitui as 95 ocorrências nem reduz a meta.
-E07 não pode ser aceita e E08 permanece pendente. Para desbloquear: recuperar ou reconstruir
-o inventário integral, reconciliar seus denominadores publicados, corrigir as classes restantes
-de perda e repetir a comparação completa dentro dos limites congelados. A falha intermitente
-HTTP/Qt foi corrigida; a suíte pública da retomada passou nos 1.202 testes. Ver evidências,
-limites da auditoria e validações em [e07-extracao-evidencias.md](e07-extracao-evidencias.md).
+**Bloqueios:** nenhum pendente. Em 14/09/2026, inventário, baseline e runtime originais de
+E01 foram recuperados. A referência foi reconciliada por inspeção do PDF, mantendo os
+denominadores, as geometrias físicas e a tolerância. As omissões de extração foram recuperadas
+dentro dos limites congelados. O encerramento prematuro da thread de exportação, que abortava
+o gate Qt, foi corrigido e recebeu regressão com falha antes/aprovação depois. E08 está
+desbloqueada para tratar associação e topologia. Evidências e limites do aceite em
+[e07-extracao-evidencias.md](e07-extracao-evidencias.md).
 **Riscos e mitigação:** excesso de recortes/DPI e falso texto em fotos; limitar por região,
 medir orçamento e testar controles negativos. Se a investigação revelar frentes independentes
 que não cabem em uma sessão, subdividir antes de iniciar, preservando IDs já executados.
-**Evidências e handoff:** execução em 10/09/2026 sobre `77258cf`, Git inicialmente limpo e
+**Evidências e handoff:** concluída em 14/09/2026 sobre `f82b1c2`, Git inicialmente limpo.
+Extrator **1.14.0**: OCR de contornos originais, transformação inversa, concordância entre
+glifos repetidos, lotes por largura e reutilização da lista de desenho por página. Cache
+anterior invalidado; erros e limites preservam diagnósticos. Sem alteração na interpretação,
+nas normas ou na fonte. Correção adicional de sincronização no encerramento da exportação Qt.
+
+A auditoria por token e ocorrência recuperou **95/95** itens (17 postes, 22 MT, 19 BT e
+37 cabos), **18/18 identificadores** e **19/19 comprimentos**. Os 132 recortes do PDF original
+foram conferidos; as duas folhas alteradas pela otimização final foram reinspecionadas.
+O inventário original permanece intacto; a cópia registra uma correção de transcrição,
+três ROIs de cabo e caixas de rótulos separadas das geometrias físicas, sem mudar denominadores.
+Leituras compostas gerais preservam os outros tokens; a consolidação de recortes equivalentes
+mantém ocorrências distintas. Isso certifica a entrada textual/espacial, não a associação de E08.
+
+Validação final: **197 testes direcionados**, **7 testes do painel de exportação** e gate
+integral **1.238 aprovados / 87,72% de cobertura**, saída 0, com todas as verificações de
+qualidade aprovadas. Benchmark completo: **15,511 s nativo / 55,313 s OCR**; high-water Python
+**548,36 MiB**, Tesseract observado **85,30 MiB**, agregado amostrado **481,08 MiB**.
+Hash, tamanho e mtime da origem preservados. Saída: **399 OCR, 105 propostas finais,
+97 confirmações e 30 vãos**, sem homologação semântica dessas contagens. Há 21 MT na saída
+para 22 no inventário e 11 propostas de equipamento fora das 95 ocorrências; E08 deve conferir
+normalização, situações, promoção e endpoints. Reanalisar com a versão nova.
+
+Artefatos privados em `tmp/e07-complete/`, ignorados pelo Git; fixtures públicas sintéticas.
+Comandos, memória, auditoria, falhas anteriores e correções no handoff. Sem commit/publicação.
+Os registros seguintes são históricos e não representam o aceite vigente.
+
+**Registro de 10/09/2026:** execução sobre `77258cf`, Git inicialmente limpo e
 nenhum `AGENTS.md` aplicável. E01 conferida com inventário, baseline, comandos, metas e três
 verificações privadas aprovadas; extrator/ports sem divergência desde E01. Especialistas
 separaram runtime TSV, retificação/recortes e revisão; integração/validação no trabalho principal.
