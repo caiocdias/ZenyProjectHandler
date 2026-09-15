@@ -64,6 +64,7 @@ class ServerSettings:
     viewer_max_files: int = DEFAULT_VIEWER_MAX_FILES
     job_retention_seconds: int = DEFAULT_JOB_RETENTION_SECONDS
     job_max_retained: int = DEFAULT_JOB_MAX_RETAINED
+    complementary_ocr: bool = False
     transfer_ttl_seconds: int = DEFAULT_TRANSFER_TTL_SECONDS
     market_sqlserver_timeout_seconds: int = field(
         default=DEFAULT_MARKET_SQLSERVER_TIMEOUT_SECONDS,
@@ -136,6 +137,8 @@ class ServerSettings:
         """Leia apenas variáveis documentadas, recusando segredo ausente ou inseguro."""
         values = os.environ if environment is None else environment
         return cls(
+            complementary_ocr=values.get("ZENY_SERVER_COMPLEMENTARY_OCR", "false").lower()
+            == "true",
             password=values.get(PASSWORD_ENVIRONMENT_VARIABLE, ""),
             market_sqlserver_connection_string=values.get(
                 MARKET_SQLSERVER_CONNECTION_STRING_ENVIRONMENT_VARIABLE,

@@ -463,7 +463,14 @@ class ReviewApiService:
 
 
 def _session_dto(session: SessaoRevisao, *, project_version: int) -> ReviewSessionResponse:
+    from zeny_project_handler.application.method_reconciliation import reading_data
+
     project = session.projeto
+    method_readings = tuple(
+        {**data, "evidence_id": str(item.id), "page_id": str(item.pagina_id)}
+        for item in session.evidencias
+        if (data := reading_data(item.atributos_extraidos)) is not None and data.get("selected")
+    )
     proposal_elements = tuple(
         item for item in session.propostas if isinstance(item, PropostaElemento)
     )
@@ -527,6 +534,7 @@ def _session_dto(session: SessaoRevisao, *, project_version: int) -> ReviewSessi
     )
     signature = _semantic_signature(session, project_version=project_version, spans=spans)
     return ReviewSessionResponse(
+        method_readings=method_readings,
         review_session_id=ReviewSessionId(uuid5(_SESSION_NAMESPACE, signature)),
         project_id=ProjectId(project.id),
         service_note=project.nome,
@@ -1085,6 +1093,11 @@ def _semantic_signature(
         "project_id": str(session.projeto.id),
         "project_version": project_version,
         "executions": [str(item.id) for item in session.execucoes],
+        "method_readings": [
+            [str(item.id), str(dict(item.atributos_extraidos).get("leitura_metodo"))]
+            for item in session.evidencias
+            if "leitura_metodo" in dict(item.atributos_extraidos)
+        ],
         "proposals": [[str(item.id), item.estado_revisao.value] for item in session.propostas],
         "technical_revisions": [
             [

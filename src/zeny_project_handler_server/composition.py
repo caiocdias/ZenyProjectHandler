@@ -448,6 +448,8 @@ def _compose_analysis_workflow(
     ocr: RuntimeTesseract,
     compliance: ExecutarAnaliseConformidade,
 ) -> ServicoFluxoMvp:
+    from zeny_project_handler.adapters.analysis.rapid_evidence import RapidEvidenceExtractor
+
     def unit_of_work() -> SqlAlchemyUnitOfWork:
         return SqlAlchemyUnitOfWork(core.engine)
 
@@ -470,6 +472,7 @@ def _compose_analysis_workflow(
             PyMuPdfDocumentAnalyzer(
                 cache=JsonAnalysisCache(settings.core_settings().analysis_cache_directory),
                 motor_ocr=_ocr_engine(ocr),
+                complementar=RapidEvidenceExtractor() if settings.complementary_ocr else None,
             ),
             unit_of_work,
         ),

@@ -1,4 +1,4 @@
-# E12A opt-in runtime only; never include in client/server/release requirements.
+# E12A/E12B opt-in runtime only; never include in default client/server/release requirements.
 # Python 3.12 Windows x64 measured; model hashes are in docs/e12a-algoritmos-alternativos.md.
 rapidocr-onnxruntime==1.4.4
 onnxruntime==1.30.0

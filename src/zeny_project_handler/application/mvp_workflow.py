@@ -370,12 +370,23 @@ class ServicoFluxoMvp:
             )
             extraction = self._completed_execution(extraction_id)
             if extraction is None:
+
+                def extraction_progress(
+                    _done: int,
+                    _total: int,
+                    message: str,
+                    step: int = index * 2,
+                ) -> None:
+                    self._progress(progresso, step, total_steps, message)
+
                 extraction = self._extractor.executar(
                     projeto_id,
                     document.id,
                     configuracao=extraction_config,
                     senha=(senhas_documentos or {}).get(document.id),
                     execucao_id=extraction_id,
+                    cancelado=cancelado,
+                    progresso=extraction_progress,
                 ).execucao
             self._ensure_not_cancelled(cancelado)
             self._progress(

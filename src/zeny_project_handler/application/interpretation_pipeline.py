@@ -34,6 +34,7 @@ from .errors import (
     InterpretacaoProjetoError,
     ProjetoNaoEncontradoError,
 )
+from .method_reconciliation import COMPOSITION_VERSION, attach_method_conflicts
 from .technical_revisions import preserve_revision_decision
 
 
@@ -112,6 +113,9 @@ class ExecutarPipelineInterpretacao:
         )
         try:
             result = self._interpreter.interpretar(request, cancelado=cancelado)
+            result = replace(
+                result, elementos=attach_method_conflicts(result.elementos, context.evidencias)
+            )
         except PortInterpretacaoCanceladaError as error:
             cancelled = self._finished_execution(
                 execution_id,
@@ -274,7 +278,10 @@ def _preserve_previous_review(
     result = replace(
         result,
         elementos=tuple(
-            preserve_revision_decision(work, item, previous_proposals) for item in result.elementos
+            item
+            if dict(item.atributos_sugeridos).get("reconciliacao_metodos_pendente")
+            else preserve_revision_decision(work, item, previous_proposals)
+            for item in result.elementos
         ),
     )
     reviewed_pages = {
@@ -320,6 +327,7 @@ def _execution_parameters(
                 ("execucao_extracao_id", str(source_execution_id)),
                 ("registro_regras_assinatura", registry.assinatura()),
                 ("registro_regras_versao", registry.versao),
+                ("reconciliacao_metodos_versao", COMPOSITION_VERSION),
             )
         )
     )
@@ -342,6 +350,7 @@ def _execution_id(
             config.assinatura(),
             interpreter_name,
             interpreter_version,
+            COMPOSITION_VERSION,
         )
     )
     return uuid5(registry.id, identity)

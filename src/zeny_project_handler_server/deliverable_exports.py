@@ -241,7 +241,7 @@ class DeliverableExportService:
         write_xlsx(destination, _compliance_sheets(result, registry))
 
 
-def _results_sheets(session: ReviewSessionResponse) -> tuple[WorksheetData, WorksheetData]:
+def _results_sheets(session: ReviewSessionResponse) -> tuple[WorksheetData, ...]:
     regions = {
         proposal_id.root: region
         for region in session.regions
@@ -291,7 +291,7 @@ def _results_sheets(session: ReviewSessionResponse) -> tuple[WorksheetData, Work
         )
         for item in session.spans
     )
-    return (
+    sheets = (
         WorksheetData(
             "Elementos",
             (
@@ -334,6 +334,33 @@ def _results_sheets(session: ReviewSessionResponse) -> tuple[WorksheetData, Work
                 "ID do vão",
             ),
             span_rows,
+        ),
+    )
+    if not session.method_readings:
+        return sheets
+    return (
+        *sheets,
+        WorksheetData(
+            "Leituras auxiliares",
+            (
+                "Literal",
+                "Camada",
+                "Resolução",
+                "Revisão obrigatória",
+                "Identidade",
+                "Fonte SHA-256",
+            ),
+            tuple(
+                (
+                    str(r.get("literal", "")),
+                    str(r.get("layer", "")),
+                    str(r.get("resolution", "")),
+                    "Sim",
+                    str(r.get("identity", "")),
+                    str(r.get("source_sha256", "")),
+                )
+                for r in session.method_readings
+            ),
         ),
     )
 

@@ -65,6 +65,8 @@ class ExecutarAnaliseDocumento:
         configuracao: ConfiguracaoAnaliseDocumento | None = None,
         senha: str | None = None,
         execucao_id: UUID | None = None,
+        cancelado: Callable[[], bool] | None = None,
+        progresso: Callable[[int, int, str], None] | None = None,
     ) -> ResultadoExecucaoAnalise:
         execution_id = execucao_id or self._gerador_id()
         parameters = configuracao or ConfiguracaoAnaliseDocumento()
@@ -91,6 +93,8 @@ class ExecutarAnaliseDocumento:
                 parameters=parameters,
                 senha=senha,
                 observation=observation,
+                cancelado=cancelado,
+                progresso=progresso,
             )
 
     def _analyze_and_persist(
@@ -104,6 +108,8 @@ class ExecutarAnaliseDocumento:
         parameters: ConfiguracaoAnaliseDocumento,
         senha: str | None,
         observation: OperationLogger,
+        cancelado: Callable[[], bool] | None,
+        progresso: Callable[[int, int, str], None] | None,
     ) -> ResultadoExecucaoAnalise:
         try:
             result = self._analisador.analisar(
@@ -115,6 +121,8 @@ class ExecutarAnaliseDocumento:
                     criada_em=started_at,
                     configuracao=parameters,
                     senha=senha,
+                    cancelado=cancelado,
+                    progresso=progresso,
                 )
             )
         except Exception as error:
@@ -141,7 +149,10 @@ class ExecutarAnaliseDocumento:
             evidencias=result.evidencias,
             cache_utilizado=result.cache_utilizado,
         )
-        observation.succeeded(cache_hit=result.cache_utilizado)
+        if execution.estado is EstadoExecucaoAnalise.CONCLUIDA:
+            observation.succeeded(cache_hit=result.cache_utilizado)
+        else:
+            observation.failed(RuntimeError("Verificação complementar incompleta"), expected=True)
         return response
 
     def _load_source(
@@ -167,13 +178,26 @@ class ExecutarAnaliseDocumento:
         configuration: ConfiguracaoAnaliseDocumento,
         result: ResultadoAnaliseDocumento,
     ) -> ExecucaoAnalise:
+        incomplete = any(
+            d.codigo.startswith("analysis.complementary.") for d in result.diagnosticos
+        )
+        cancelled = any(d.codigo == "analysis.complementary.cancelled" for d in result.diagnosticos)
         return ExecucaoAnalise(
             id=execution_id,
             projeto_id=project_id,
             metodo=self._analisador.nome,
             versao_metodo=self._analisador.versao,
             parametros=self._execution_parameters(configuration),
-            estado=EstadoExecucaoAnalise.CONCLUIDA,
+            estado=(
+                EstadoExecucaoAnalise.CANCELADA
+                if cancelled
+                else EstadoExecucaoAnalise.FALHOU
+                if incomplete
+                else EstadoExecucaoAnalise.CONCLUIDA
+            ),
+            erro="Verificação complementar incompleta; resultados parciais preservados."
+            if incomplete and not cancelled
+            else None,
             iniciada_em=started_at,
             finalizada_em=self._finished_at(started_at),
             diagnosticos=result.diagnosticos,

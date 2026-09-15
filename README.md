@@ -1,5 +1,24 @@
 # Zeny Project Handler
 
+### Leitura complementar local (E12B)
+
+O servidor pode executar OCR neural auxiliar com `ZENY_SERVER_COMPLEMENTARY_OCR=true`.
+É opt-in: instale `requirements-experiments.lock` no ambiente Python do servidor antes
+de habilitar. O cliente não executa OCR e os modelos não são incluídos no build padrão.
+O ganho medido é documental; a alternativa não substitui o interpretador operacional.
+
+Em Resultados, **Leituras auxiliares** preserva literal, camada e alternativas para
+conferência; a planilha de Resultados inclui a mesma seção quando há leituras.
+Esses valores não são confirmados automaticamente. Acordo entre motores não é uma
+probabilidade de acerto. Divergências nas evidências usadas por uma proposta exigem
+revisão dessa proposta; aparências com anotações não aprovam a vigência de revisões.
+
+O motor usa tiles limitados em memória, informa progresso e aceita cancelamento
+entre chamadas. Motor indisponível, falha parcial ou limite de memória deixam a
+execução incompleta, preservando evidências e impedindo cache/reutilização como sucesso.
+Desabilitar a opção restaura a composição vertical sem apagar histórico. Ver
+[protocolo e limites E12B](docs/e12b-reconciliacao-metodos.md).
+
 Cliente Windows e servidor protegido para organizar, visualizar e analisar projetos de expansão da
 rede de distribuição elétrica. O servidor mantém cópias gerenciadas dos PDFs, extrai evidências,
 interpreta elementos técnicos e executa verificações de conformidade rastreáveis. O cliente magro

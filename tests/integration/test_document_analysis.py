@@ -34,6 +34,56 @@ from zeny_project_handler.ports.analysis import SolicitacaoAnaliseDocumento
 pytestmark = pytest.mark.integration
 
 
+@pytest.mark.parametrize("reason", ["unavailable", "failed", "cancelled"])
+def test_complementary_partial_preserves_evidence_but_never_caches_success(
+    tmp_path: Path,
+    analysis_project: tuple[Engine, Projeto],
+    reason: str,
+) -> None:
+    from zeny_project_handler.adapters.analysis.rapid_evidence import RapidEvidenceExtractor
+    from zeny_project_handler.domain.analysis import DiagnosticoAnalise
+    from zeny_project_handler.ports.analysis import ExtracaoDocumentoNormalizada
+
+    class Partial(RapidEvidenceExtractor):
+        assinatura_capacidade = "fake-models-composition-v1"
+
+        def extrair(self, solicitacao: SolicitacaoAnaliseDocumento) -> ExtracaoDocumentoNormalizada:
+            return ExtracaoDocumentoNormalizada(
+                candidatos=(),
+                diagnosticos=(
+                    DiagnosticoAnalise(
+                        codigo=f"analysis.complementary.{reason}",
+                        mensagem="incomplete",
+                        extrator="fake",
+                    ),
+                ),
+            )
+
+    engine, project = analysis_project
+    source = create_analysis_pdf(tmp_path / "partial.pdf")
+
+    def work() -> SqlAlchemyUnitOfWork:
+        return SqlAlchemyUnitOfWork(engine)
+
+    imported = ImportarPdfNoProjeto(PyMuPdfReader(), work).executar(project.id, source)
+    use_case = ExecutarAnaliseDocumento(
+        PyMuPdfDocumentAnalyzer(
+            cache=JsonAnalysisCache(tmp_path / "cache"), complementar=Partial()
+        ),
+        work,
+    )
+    first = use_case.executar(project.id, imported.inspecao.documento.id)
+    second = use_case.executar(project.id, imported.inspecao.documento.id)
+    expected = (
+        EstadoExecucaoAnalise.CANCELADA if reason == "cancelled" else EstadoExecucaoAnalise.FALHOU
+    )
+    assert first.execucao.estado is second.execucao.estado is expected
+    assert first.evidencias and second.evidencias
+    assert not first.cache_utilizado and not second.cache_utilizado
+    with work() as unit:
+        assert unit.evidencias.listar_da_execucao(first.execucao.id) == first.evidencias
+
+
 class FailingAnalyzer:
     nome = "falha-controlada"
     versao = "1"

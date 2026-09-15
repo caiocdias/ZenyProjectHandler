@@ -83,6 +83,42 @@ from zeny_project_handler_server.review_api import ReviewApiService, _proposal_l
 pytestmark = pytest.mark.integration
 
 
+def test_auxiliary_readings_display_literal_conflict_and_review_layer(
+    review_panel_context: tuple[Engine, ReviewPanelWidget, PropostaElemento],
+) -> None:
+    _engine, panel, _proposal = review_panel_context
+    panel._project.setCurrentIndex(1)
+    assert panel._session is not None
+    panel._session = panel._session.model_copy(
+        update={
+            "method_readings": (
+                {
+                    "literal": "654321 7654321",
+                    "layer": "appearance",
+                    "resolution": "conflict_requires_review",
+                    "alternatives": [{"literal": "654329 7654321"}],
+                    "page_id": str(panel._session.page_order[0].root),
+                },
+            )
+        }
+    )
+    panel._refresh_method_readings()
+    table = panel.findChild(QTableWidget, "methodReadingsTable")
+    assert table is not None and table.rowCount() == 1
+    values = []
+    for column in range(4):
+        item = table.item(0, column)
+        assert item is not None
+        values.append(item.text())
+    assert values[0] == "654321 7654321"
+    assert values[1] == "Aparência com anotações"
+    assert "Discordância" in values[2]
+    assert "654329" in values[3]
+    panel._select_method_reading(0, 0)
+    panel.limpar()
+    assert table.rowCount() == 0
+
+
 def test_revision_comparison_and_explicit_choice_are_visible_and_pending_by_default(
     review_panel_context: tuple[Engine, ReviewPanelWidget, PropostaElemento],
     tmp_path: Path,
@@ -556,7 +592,11 @@ def test_results_panel_has_span_tab_with_situation_cable_and_length_source(
 
     panel._refresh_spans()
 
-    assert [tabs.tabText(index) for index in range(tabs.count())] == ["Elementos", "Vãos"]
+    assert [tabs.tabText(index) for index in range(tabs.count())] == [
+        "Elementos",
+        "Vãos",
+        "Leituras auxiliares",
+    ]
     assert table.rowCount() == 1
     headers: list[str] = []
     for index in range(table.columnCount()):

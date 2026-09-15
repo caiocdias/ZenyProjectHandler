@@ -186,6 +186,8 @@ def _promotable_proposals(
         "reconciliacao_reanalise_pendente",
         "associacao_pendente",
         "comprimento_pendente",
+        "reconciliacao_metodos_pendente",
+        "verificacao_metodos_incompleta",
     )
     return {
         proposal.id: proposal

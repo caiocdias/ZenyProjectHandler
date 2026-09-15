@@ -198,7 +198,7 @@ Hipóteses de produto adotadas para tornar o plano executável, ajustáveis com 
 | E11 | Revisões técnicas e conteúdo vigente | #concluida | E10 | Conflitos rastreáveis, decisão persistida e gate aprovado |
 | E12 | Precisão dos extratores atuais | #concluida | E10, E11 | Leituras por cor, lotes contínuos e comparação vertical validada |
 | E12A | Experimentação de algoritmos alternativos | #concluida | E12 | OCR neural e grafo global comparados; ganhos e regressões auditados |
-| E12B | Reconciliação e confiança entre métodos | #pendente | E12A | Métodos úteis integrados e conflitos rastreáveis |
+| E12B | Reconciliação e confiança entre métodos | #concluida | E12A | OCR documental auxiliar integrado; ablações e 167 testes aprovados |
 | E13 | Ocorrências e associação aos pontos corretos | #pendente | E12B | Catálogo, situação, vínculos e deduplicação rastreáveis |
 | E14 | Topologia e projeção dos trechos | #pendente | E13 | Continuidade e vãos existentes/novos coerentes |
 | E15 | Aceite integral do segundo PDF | #pendente | E11, E12, E12A, E12B, E13, E14 | Precisão vertical/horizontal, revisão visual e integração |
@@ -1455,7 +1455,7 @@ distribuição. Sobreajuste ao PDF; separar casos reservados por documento/famí
 - Casos reservados não usados. Leitura integral continua **0/1**, revisões técnicas
   pendentes e E08/E09 preservadas. Sem commit, publicação ou promoção de produção.
 
-## E12B — Reconciliação e confiança entre métodos — #pendente
+## E12B — Reconciliação e confiança entre métodos — #concluida
 
 **Objetivo:** incorporar contribuições úteis das abordagens alternativas ao pipeline,
 preservando divergências e impedindo confirmações automáticas sem sustentação.
@@ -1495,11 +1495,11 @@ Execute E12B — Reconciliação e confiança entre métodos de docs/roadmap-mer
 
 **Critérios de aceite:**
 
-- [ ] Alternativa com ganho demonstrado incorporada como leitura, verificação ou
+- [x] Alternativa com ganho demonstrado incorporada como leitura, verificação ou
       associação; contribuição medida desligando cada método separadamente.
-- [ ] Conflitos, acordos errados e falhas de motor não geram confirmação silenciosa.
-- [ ] Proveniência, decisões humanas, cache e identidade sobrevivem à reanálise.
-- [ ] Qualidade e cobertura melhoram sem esconder erro com abstenção generalizada;
+- [x] Conflitos, acordos errados e falhas de motor não geram confirmação silenciosa.
+- [x] Proveniência, decisões humanas, cache e identidade sobrevivem à reanálise.
+- [x] Qualidade e cobertura melhoram sem esconder erro com abstenção generalizada;
       integração não regride os controles previamente corretos.
 
 **Validação obrigatória:** `python -m pytest tests/unit/test_analysis_cache.py tests/unit/test_benchmark_network_pdf.py tests/integration/test_document_analysis.py tests/integration/test_interpretation_pipeline.py tests/integration/test_human_review.py tests/server/test_review_api.py` e testes sintéticos de reconciliação adicionados. Rodar benchmark com motores reais e comparar cada contribuição habilitada/desabilitada. Registrar comandos novos no handoff; executar análise acima de cinco minutos com duração simulada no teste de job/cancelamento, localizando antes o teste existente correspondente. Nenhum corte temporal pode apresentar leitura integral sem completar as verificações.
@@ -1510,7 +1510,21 @@ novas nem reaproveita cache incompatível. Documentar alterações de persistên
 experiências; resultado negativo não autoriza integração artificial ou aceite integral.
 **Riscos e mitigação:** combinar leituras aumentar falsos positivos; validar por item
 e medir confirmações erradas. Confiança mal calibrada; usar erro observado, não score bruto.
-**Evidências e handoff:** ainda não executada.
+**Evidências e handoff — 15/09/2026:** [e12b-reconciliacao-metodos.md](e12b-reconciliacao-metodos.md).
+Base `67a5457`, Git inicialmente limpo e E12A revalidada. Extrator 1.17.0 e composição
+`documentary-coordinate-review-1`: proveniência por observação/camada, cache com modelos,
+confirmação vedada por acordo e conflitos ligados às evidências exatas da proposta.
+Motor opcional no servidor, aba/DTO/XLSX de leituras auxiliares; falhas e cancelamentos
+persistem evidência parcial sem sucesso/cache. Três composições reais executadas:
+vertical e combinação mantêm 24 TP/5 FN/4 FP, nove confirmações, erro conhecido 1/9
+e revisão do núcleo 19/29; neural recupera um literal documental adicional sem promover
+ativos. 328 observações preservadas, 29 selecionadas para conferência; não equivalem
+a 29 novos objetos. A ablação sem Tesseract conserva o ganho documental, mas perde
+a leitura operacional; substituição geral continua rejeitada. **167 testes aprovados**,
+Mypy em 347 arquivos, Ruff/formatação, contratos, complexidade e fonte do cliente aprovados.
+139 referências preservadas; casos reservados intocados. Grafo e pendências operacionais
+seguem para E13/E14; leitura integral permanece 0/1 e gate integral reservado a E15.
+Não houve commit, publicação ou instalação no servidor operacional.
 
 ## E13 — Ocorrências e associação aos pontos corretos — #pendente
 

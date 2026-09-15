@@ -190,6 +190,7 @@ class DetectedSpanDto(ContractModel):
 
 
 class ReviewSessionResponse(ContractModel):
+    method_readings: tuple[dict[str, JsonValue], ...] = ()
     review_session_id: ReviewSessionId
     project_id: ProjectId
     service_note: NonEmptyString

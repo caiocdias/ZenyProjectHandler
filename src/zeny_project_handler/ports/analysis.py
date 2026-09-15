@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -153,6 +154,8 @@ class SolicitacaoAnaliseDocumento:
     criada_em: datetime
     configuracao: ConfiguracaoAnaliseDocumento = ConfiguracaoAnaliseDocumento()
     senha: str | None = None
+    cancelado: Callable[[], bool] | None = None
+    progresso: Callable[[int, int, str], None] | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -308,6 +311,13 @@ class AnalisadorDocumentoPort(Protocol):
     def assinatura_capacidade(self) -> str: ...
 
     def analisar(self, solicitacao: SolicitacaoAnaliseDocumento) -> ResultadoAnaliseDocumento: ...
+
+
+class ExtratorComplementarPort(Protocol):
+    @property
+    def assinatura_capacidade(self) -> str: ...
+
+    def extrair(self, solicitacao: SolicitacaoAnaliseDocumento) -> ExtracaoDocumentoNormalizada: ...
 
 
 def chave_cache_analise(

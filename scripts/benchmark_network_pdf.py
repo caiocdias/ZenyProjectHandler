@@ -187,6 +187,7 @@ def run_variant(
     *,
     ocr: MotorOcrPort | None,
     telemetry: bool = False,
+    complementary: bool = False,
 ) -> dict[str, Any]:
     """Use uma base nova por variante, sem cache nem consulta de conformidade/SQL."""
     started = perf_counter()
@@ -232,7 +233,11 @@ def run_variant(
             )
             unit.commit()
         configuration = ConfiguracaoAnaliseDocumento(habilitar_ocr_condicional=ocr is not None)
-        analyzer = PyMuPdfDocumentAnalyzer(motor_ocr=ocr)
+        from zeny_project_handler.adapters.analysis.rapid_evidence import RapidEvidenceExtractor
+
+        analyzer = PyMuPdfDocumentAnalyzer(
+            motor_ocr=ocr, complementar=RapidEvidenceExtractor() if complementary else None
+        )
         extraction_started = perf_counter()
         extraction = ExecutarAnaliseDocumento(analyzer, work).executar(
             project.id,
@@ -393,6 +398,7 @@ def benchmark(
     *,
     native_only: bool = False,
     telemetry: bool = False,
+    complementary: bool = False,
 ) -> dict[str, Any]:
     source = source.resolve(strict=True)
     if output.resolve() == source:
@@ -426,6 +432,7 @@ def benchmark(
         "runtime": runtime,
         "ocr_capability": ocr.consultar_capacidade() if ocr is not None else None,
         "native_only": native_only,
+        "complementary": complementary,
     }
     if telemetry:
         report["annotation_rendering"] = profile_annotations(source)
@@ -438,7 +445,13 @@ def benchmark(
             continue
         print(f"Iniciando {name}", flush=True)
         with TemporaryDirectory(prefix=f"benchmark-{name}-", dir=output.parent) as temporary:
-            report[name] = run_variant(source, Path(temporary), ocr=motor, telemetry=telemetry)
+            report[name] = run_variant(
+                source,
+                Path(temporary),
+                ocr=motor,
+                telemetry=telemetry,
+                complementary=complementary and (name == "ocr" or native_only),
+            )
         if isinstance(motor, TimedTesseract):
             report[name]["ocr_calls"] = list(motor.calls)
         output.write_text(
@@ -469,6 +482,7 @@ def main(arguments: list[str] | None = None) -> int:
     parser.add_argument("--runtime-directory", type=Path, default=Path("tmp/benchmark-runtime"))
     parser.add_argument("--native-only", action="store_true")
     parser.add_argument("--telemetry", action="store_true")
+    parser.add_argument("--complementary-ocr", action="store_true")
     options = parser.parse_args(arguments)
     benchmark(
         options.source,
@@ -476,6 +490,7 @@ def main(arguments: list[str] | None = None) -> int:
         options.runtime_directory,
         native_only=options.native_only,
         telemetry=options.telemetry,
+        complementary=options.complementary_ocr,
     )
     return 0
 

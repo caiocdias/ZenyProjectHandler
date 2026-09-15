@@ -230,6 +230,27 @@ class ReviewPanelWidget(QWidget):
         spans_layout.addLayout(span_actions)
         spans_layout.addWidget(self._span_table, 1)
         self._results_tabs.addTab(spans_page, "Vãos")
+        readings_page = QWidget()
+        readings_layout = QVBoxLayout(readings_page)
+        readings_hint = QLabel(
+            "Leituras complementares aguardam conferência no PDF. Concordância entre "
+            "leituras não confirma o valor. As alternativas de revisão permanecem separadas."
+        )
+        readings_hint.setWordWrap(True)
+        readings_layout.addWidget(readings_hint)
+        self._method_table = QTableWidget(0, 4)
+        self._method_table.setObjectName("methodReadingsTable")
+        self._method_table.setHorizontalHeaderLabels(
+            ("Literal", "Camada", "Revisão", "Alternativas")
+        )
+        self._method_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._method_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Interactive
+        )
+        self._method_table.horizontalHeader().setStretchLastSection(True)
+        self._method_table.cellClicked.connect(self._select_method_reading)
+        readings_layout.addWidget(self._method_table)
+        self._results_tabs.addTab(readings_page, "Leituras auxiliares")
         layout.addWidget(self._results_tabs, 1)
 
         editor = QGroupBox("Revisar identificação")
@@ -413,6 +434,7 @@ class ReviewPanelWidget(QWidget):
         self._tree.clear()
         self._table.setRowCount(0)
         self._span_table.setRowCount(0)
+        self._method_table.setRowCount(0)
         self._elements_word_wrap.refresh()
         self._spans_word_wrap.refresh()
         self._detected.setText("Selecione uma identificação na lista ou no PDF")
@@ -466,7 +488,44 @@ class ReviewPanelWidget(QWidget):
         self._refresh_catalog_items()
         self._refresh_proposals()
         self._refresh_spans()
+        self._refresh_method_readings()
         self.session_changed.emit(session)
+
+    def _refresh_method_readings(self) -> None:
+        readings = self._session.method_readings if self._session else ()
+        self._method_table.setRowCount(len(readings))
+        labels = {
+            "complement_requires_review": "Complemento — conferir",
+            "conflict_requires_review": "Discordância — conferir alternativas",
+            "agreement_uncalibrated": "Acordo — valor não confirmado",
+            "technical_layer_review": "Revisão técnica — conferir vigência",
+        }
+        for row, reading in enumerate(readings):
+            alternatives = reading.get("alternatives", [])
+            values = (
+                str(reading.get("literal", "")),
+                "Base" if reading.get("layer") == "base" else "Aparência com anotações",
+                labels.get(str(reading.get("resolution")), "Conferência pendente"),
+                " | ".join(
+                    str(item.get("literal", "")) for item in alternatives if isinstance(item, dict)
+                )
+                if isinstance(alternatives, list)
+                else "",
+            )
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setToolTip(value)
+                self._method_table.setItem(row, column, item)
+        self._method_table.resizeRowsToContents()
+
+    def _select_method_reading(self, row: int, _column: int) -> None:
+        if self._session is None or not 0 <= row < len(self._session.method_readings):
+            return
+        page_id = str(self._session.method_readings[row].get("page_id", ""))
+        for index, page in enumerate(self._session.page_order, start=1):
+            if str(page.root) == page_id:
+                self._viewer.ir_para_folha(index)
+                break
 
     def _page_changed(self, page_id: str) -> None:
         self._page_id = UUID(page_id)

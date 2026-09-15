@@ -16,6 +16,11 @@ from uuid import uuid5
 import pymupdf
 
 from zeny_project_handler.adapters.pdf.errors import PdfProtegidoError
+from zeny_project_handler.application.method_reconciliation import (
+    READING_KEY,
+    reading_data,
+    reconcile_readings,
+)
 from zeny_project_handler.domain.analysis import DiagnosticoAnalise, EvidenciaDocumento
 from zeny_project_handler.domain.enums import TipoEvidencia
 from zeny_project_handler.domain.values import GeometriaDocumento
@@ -23,6 +28,7 @@ from zeny_project_handler.ports.analysis import (
     CacheAnaliseDocumentoPort,
     CandidatoEvidenciaDocumento,
     ExtracaoDocumentoNormalizada,
+    ExtratorComplementarPort,
     MotorOcrPort,
     ResultadoAnaliseDocumento,
     SolicitacaoAnaliseDocumento,
@@ -49,16 +55,18 @@ class PyMuPdfDocumentAnalyzer:
     """Converte recursos PDF nativos em evidências independentes da biblioteca."""
 
     nome = "pymupdf-nativo"
-    versao = "1.16.0"
+    versao = "1.17.0"
 
     def __init__(
         self,
         *,
         cache: CacheAnaliseDocumentoPort | None = None,
         motor_ocr: MotorOcrPort | None = None,
+        complementar: ExtratorComplementarPort | None = None,
     ) -> None:
         self._cache = cache
         self._motor_ocr = motor_ocr
+        self._complementar = complementar
 
     @property
     def assinatura_capacidade(self) -> str:
@@ -67,6 +75,9 @@ class PyMuPdfDocumentAnalyzer:
                 "analisador": self.nome,
                 "versao": self.versao,
                 "ocr": self._ocr_runtime.assinatura,
+                "complementar": self._complementar.assinatura_capacidade
+                if self._complementar
+                else None,
             },
             sort_keys=True,
             separators=(",", ":"),
@@ -137,6 +148,30 @@ class PyMuPdfDocumentAnalyzer:
         if cached is not None:
             return cached, True, cache_diagnostics
         extraction = _extract_document(source, request, self._ocr_runtime.motor)
+        if self._complementar is not None:
+            try:
+                auxiliary = self._complementar.extrair(request)
+                extraction = ExtracaoDocumentoNormalizada(
+                    candidatos=(
+                        *extraction.candidatos,
+                        *reconcile_readings(extraction.candidatos, auxiliary.candidatos),
+                    ),
+                    diagnosticos=(*extraction.diagnosticos, *auxiliary.diagnosticos),
+                )
+            except Exception as error:
+                extraction = ExtracaoDocumentoNormalizada(
+                    candidatos=extraction.candidatos,
+                    diagnosticos=(
+                        *extraction.diagnosticos,
+                        DiagnosticoAnalise(
+                            codigo="analysis.complementary.failed",
+                            extrator="complementar",
+                            mensagem=(
+                                f"Verificação incompleta; base preservada: {type(error).__name__}"
+                            ),
+                        ),
+                    ),
+                )
         _verify_source(source, request.fonte.sha256, request.fonte.tamanho_bytes)
         write_diagnostics = self._write_cache(cache_key, extraction)
         return extraction, False, (*cache_diagnostics, *write_diagnostics)
@@ -157,7 +192,8 @@ class PyMuPdfDocumentAnalyzer:
         if self._cache is None:
             return ()
         if any(
-            item.codigo.startswith("analise.ocr") and item.codigo.endswith("falhou")
+            (item.codigo.startswith("analise.ocr") and item.codigo.endswith("falhou"))
+            or item.codigo.startswith("analysis.complementary.")
             for item in extraction.diagnosticos
         ):
             # A transient runtime failure must be retried on the next analysis.
@@ -354,6 +390,22 @@ def _materialize_evidence(
             tipo=candidate.geometria.tipo,
             pontos=candidate.geometria.pontos,
         )
+        attributes = candidate.atributos_extraidos
+        data = reading_data(attributes)
+        if data is not None:
+            data["alternatives"] = [
+                {
+                    **alternative,
+                    "evidence_id": str(uuid5(request.execucao_id, alternative["evidence_key"])),
+                    "extraction_version": version,
+                    "extraction_capability": capability_signature,
+                }
+                for alternative in data.get("alternatives", [])
+            ]
+            attributes = (
+                *((key, value) for key, value in attributes if key != READING_KEY),
+                (READING_KEY, json.dumps(data, ensure_ascii=False, sort_keys=True)),
+            )
         evidence.append(
             EvidenciaDocumento(
                 id=uuid5(request.execucao_id, candidate.chave_estavel),
@@ -370,7 +422,7 @@ def _materialize_evidence(
                 conteudo_bruto=candidate.conteudo_bruto,
                 criada_em=request.criada_em,
                 origem_pdf=candidate.origem_pdf,
-                atributos_extraidos=candidate.atributos_extraidos,
+                atributos_extraidos=attributes,
             )
         )
     return tuple(evidence)

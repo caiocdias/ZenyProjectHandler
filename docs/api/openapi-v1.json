@@ -4469,6 +4469,17 @@
             "title": "Confirmed Relations",
             "type": "array"
           },
+          "method_readings": {
+            "default": [],
+            "items": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              "type": "object"
+            },
+            "title": "Method Readings",
+            "type": "array"
+          },
           "page_order": {
             "items": {
               "$ref": "#/components/schemas/PageId"
