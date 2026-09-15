@@ -196,7 +196,7 @@ Hipóteses de produto adotadas para tornar o plano executável, ajustáveis com 
 | E09 | Homologação integrada | #bloqueada | E03, E04, E05, E06, E08 | Gate aprovado; E08 e realce simbólico impedem aceite |
 | E10 | Referência integral do segundo PDF | #concluida | Nenhuma | 139 registros, revisão definida e três medições isoladas |
 | E11 | Revisões técnicas e conteúdo vigente | #concluida | E10 | Conflitos rastreáveis, decisão persistida e gate aprovado |
-| E12 | Precisão dos extratores atuais | #pendente | E10, E11 | Melhorias verticais medidas por ocorrência |
+| E12 | Precisão dos extratores atuais | #concluida | E10, E11 | Leituras por cor, lotes contínuos e comparação vertical validada |
 | E12A | Experimentação de algoritmos alternativos | #pendente | E12 | Comparação executada de métodos distintos |
 | E12B | Reconciliação e confiança entre métodos | #pendente | E12A | Métodos úteis integrados e conflitos rastreáveis |
 | E13 | Ocorrências e associação aos pontos corretos | #pendente | E12B | Catálogo, situação, vínculos e deduplicação rastreáveis |
@@ -1296,7 +1296,7 @@ negativos e rastreabilidade. Não usar a anotação como instrução executável
   Catalogação de ABCN revisado e operações N4 seguem E12/E13; não houve aceite
   integral E15, commit, publicação ou reescrita do PDF.
 
-## E12 — Precisão dos extratores atuais — #pendente
+## E12 — Precisão dos extratores atuais — #concluida
 
 **Objetivo:** recuperar os tokens técnicos do inventário com geometria, cor e risco
 preservados, aprimorando os algoritmos atuais sem limitar a duração da análise.
@@ -1329,18 +1329,50 @@ Execute E12 — Precisão dos extratores atuais de docs/roadmap-mercado-paineis-
 
 **Critérios de aceite:**
 
-- [ ] Casos atribuídos às correções verticais têm evidência correta e navegável;
+- [x] Casos atribuídos às correções verticais têm evidência correta e navegável;
       baseline/melhorias são comparados e perdas para métodos alternativos ficam listadas.
-- [ ] Leituras parciais/ambíguas são explícitas; controles não criam texto técnico falso.
-- [ ] Cancelamento, memória e cache mantêm os contratos em análise longa; tempo não reprova.
+- [x] Leituras parciais/ambíguas são explícitas; controles não criam texto técnico falso.
+- [x] Cancelamento, memória e cache mantêm os contratos em análise longa; tempo não reprova.
 
 **Validação obrigatória:** `python -m pytest tests/unit/test_pymupdf_analyzer.py tests/unit/test_pymupdf_ocr_failures.py tests/unit/test_pymupdf_ocr_batch.py tests/unit/test_tesseract_ocr.py tests/unit/test_analysis_cache.py tests/integration/test_document_analysis.py tests/unit/test_benchmark_network_pdf.py`.
 Executar novas regressões e benchmark isolado E10; comparar inventário e inspecionar
 as ROIs corrigidas. Registrar duração sem gate e conferir fonte intacta.
-**Bloqueios:** nenhum bloqueio conhecido.
+**Bloqueios:** nenhum impedimento remanescente ao aceite vertical E12. As perdas de leitura listadas no handoff seguem explicitamente para E12A/E12B; não foram declaradas resolvidas nem retiradas dos denominadores E10.
 **Riscos e mitigação:** melhorar só os casos conhecidos; comparar por ocorrência e
 reservar a avaliação final. Não truncar tentativas por velocidade.
-**Evidências e handoff:** ainda não executada.
+**Evidências e handoff — 15/09/2026:** concluída sobre `66b6146`, Git inicialmente
+limpo e sem `AGENTS.md` aplicável. E10/E11 e código conferidos. Relatório completo:
+[e12-precisao-extratores.md](e12-precisao-extratores.md).
+
+- Extrator **1.16.0**: leituras por cor/célula e risco no grupo N4, glifos longos,
+  tentativas adicionais até 2400 DPI e lotes sucessivos, com RGB concluído liberado.
+  Timeout Tesseract **900 s por chamada**, sem teto global; cache/cancelamento e
+  diagnósticos preservados. Catálogo, associação e topologia não foram implementados.
+- Baseline isolado **2.047/228 evidências/OCR**; final **2.065/246**. São **85/127**
+  chamadas, todas concluídas, zero diagnósticos. As **38 propostas finais** mantêm
+  códigos/situações/identificadores/qualificadores/comprimentos; permanecem **9
+  confirmações e 7 vãos**. Dois grupos E11 estáveis e nenhuma promoção conflitante.
+- Seis leituras coloridas exatas e respectivas ROIs inspecionadas, incluindo N4(1)
+  verde e vermelho riscado. Leituras originais divergentes mantidas para revisão;
+  decisão técnica ainda pendente. S3R inclinado tem geometria mais justa; dois
+  campos documentais recuperam o literal completo, sem homologar suas projeções.
+- OCR até regiões/vãos **129,464 → 119,290 s**; incluindo exportação **132,632 →
+  121,711 s**. Pico Python **380,16 → 379,94 MiB**, Tesseract **217,22 MiB** e RSS
+  agregado amostrado **482,82 → 484,08 MiB**. Telemetria, sem critério temporal.
+  Fonte/hash/tamanho/mtime preservados; dados reais somente em `tmp/`, ignorados.
+- **174 testes direcionados aprovados em 12,38 s** e auditoria real aprovada.
+  Gate final `.\IniciarTestes.bat`: **1.282 testes em 433,48 s, cobertura 87,83%,
+  saída zero**, com Ruff, Mypy, dependências, cliente magro e complexidade aprovados.
+  A primeira variante perdeu 43 grupos por orçamento acumulado e foi reprovada;
+  corrigida com memória por lote. A primeira execução do gate falhou no setup por
+  permissão de `C:\tmp`; a repetição canônica autorizada passou. Nenhuma falha
+  intermediária foi tratada como aceite.
+- E12A recebe coordenadas/textos truncados, quadros e limites de segmentação;
+  E12B recebe reconciliação original/tratada e geral/contornos, inclusive leituras
+  erradas preservadas. E13/E14/E15 recebem catálogo, associação, topologia e
+  projeções ainda incompletas. **139 registros, 29 ocorrências operacionais e 64
+  itens documentais** preservados; leitura integral continua **0/1**. Famílias
+  reservadas não usadas; E08/E09 mantidas. Sem commit ou ação externa.
 
 ## E12A — Experimentação de algoritmos alternativos — #pendente
 

@@ -19,6 +19,7 @@ from zeny_project_handler.ports.analysis import (
     TrechoTextoOcr,
 )
 
+from . import pymupdf_ocr_batch as batch_limits
 from .pymupdf_glyph_consensus import GlyphConsensus
 from .pymupdf_glyphs import (
     MAXIMUM_GLYPH_GROUPS,
@@ -28,16 +29,29 @@ from .pymupdf_glyphs import (
     glyph_region,
 )
 from .pymupdf_ocr_batch import MAXIMUM_BATCH_REGIONS, pack_ocr_rows
-from .pymupdf_support import _extras, _normalized_point
+from .pymupdf_support import _extras, _normalized_point, _pdf_color
 
-MAXIMUM_GLYPH_RETRIES = 24
+
+@dataclass(frozen=True)
+class _RasterGeometry:
+    largura_pixels: int
+    altura_pixels: int
+    dpi: int
 
 
 @dataclass(frozen=True)
 class _Reading:
-    raster: PaginaRasterOcr
+    raster: PaginaRasterOcr | _RasterGeometry
     items: tuple[TrechoTextoOcr, ...]
     raw_items: tuple[TrechoTextoOcr, ...] = ()
+
+    def __post_init__(self) -> None:
+        # Após OCR só precisamos da transformação inversa; não reter RGB da página toda.
+        object.__setattr__(
+            self,
+            "raster",
+            _RasterGeometry(self.raster.largura_pixels, self.raster.altura_pixels, self.raster.dpi),
+        )
 
     @property
     def confidence(self) -> float:
@@ -91,6 +105,7 @@ def _candidates(
                 pre_processamento="contornos_originais_sem_tracos_sobrepostos",
                 indice_recorte=index,
                 quantidade_glifos=len(region.paths),
+                cor=_pdf_color(region.paths[0].get("fill")),
                 texto_ocr_original=reading.raw_items[0].texto if reading.raw_items else None,
                 concordancia_contornos=bool(reading.raw_items),
             ),
@@ -102,18 +117,15 @@ def _candidates(
 
 def _regions(page: Any, dpi: int) -> tuple[list[GlyphRegion], int]:
     regions: list[GlyphRegion] = []
-    pixels = skipped = 0
+    skipped = 0
     for group in glyph_groups(page):
-        if len(group) > 16:
-            continue
         region = glyph_region(group)
         if region is None:
             continue
         width, height = region.dimensions(dpi)
-        if len(regions) >= MAXIMUM_GLYPH_GROUPS or pixels + width * height > MAXIMUM_GLYPH_PIXELS:
+        if len(regions) >= MAXIMUM_GLYPH_GROUPS or width * height > MAXIMUM_GLYPH_PIXELS:
             skipped += 1
             continue
-        pixels += width * height
         regions.append(region)
     return regions, skipped
 
@@ -127,10 +139,31 @@ def _read_batches(
 ) -> None:
     # Aproximar larguras reduz pixels brancos sem reamostrar os caracteres.
     # Os índices originais continuam sendo a identidade e a geometria dos recortes.
-    ordered = sorted(range(len(regions)), key=lambda i: regions[i].dimensions(dpi)[0])
+    ordered = sorted(
+        range(len(regions)),
+        key=lambda i: (len(regions[i].paths) > 16, regions[i].dimensions(dpi)[0]),
+    )
     start = 0
     while start < len(ordered):
         indices = ordered[start : start + MAXIMUM_BATCH_REGIONS]
+        # Linhas documentais adicionais não mudam o contexto dos lotes de códigos curtos.
+        indices = [
+            i
+            for i in indices
+            if (len(regions[i].paths) > 16) == (len(regions[indices[0]].paths) > 16)
+        ]
+        width, height = 0, 20
+        selected = []
+        for index in indices:
+            w, h = regions[index].dimensions(dpi)
+            width = max(width, w + 40)
+            height += h + 20
+            if width * height > batch_limits.MAXIMUM_BATCH_PIXELS:
+                break
+            selected.append(index)
+        indices = selected
+        if not indices:
+            raise ValueError("Recorte vetorial excedeu orçamento do lote")
         rasters = tuple(regions[index].render(number, dpi) for index in indices)
         # Glifos já têm 15 px de margem própria; não multiplicar faixas vazias pelo DPI.
         batch = pack_ocr_rows(rasters, gap_pixels=20)
@@ -156,15 +189,14 @@ def _retry_weak(
     readings: dict[int, _Reading],
 ) -> None:
     weak = sorted(
-        (
-            i
-            for i, r in readings.items()
-            if len(regions[i].paths) <= 16 and r.confidence < 0.75 and not r.raw_items
-        ),
+        (i for i, r in readings.items() if r.confidence < 0.75 and not r.raw_items),
         key=lambda i: (readings[i].confidence, i),
     )
-    for index in weak[:MAXIMUM_GLYPH_RETRIES]:
-        for resolution in dict.fromkeys((dpi, min(dpi, 1200))):
+    for index in weak:
+        for resolution in dict.fromkeys((dpi, min(dpi, 1200), max(dpi, 2400))):
+            width, height = regions[index].dimensions(resolution)
+            if width * height > MAXIMUM_GLYPH_PIXELS:
+                raise ValueError("Recorte vetorial excedeu orçamento de pixels")
             raster = regions[index].render(number, resolution)
             reading = _Reading(raster, _recognize(engine, raster))
             if reading.confidence > readings[index].confidence:
@@ -176,7 +208,11 @@ def _retry_weak(
 def _apply_consensus(regions: list[GlyphRegion], readings: dict[int, _Reading]) -> None:
     atlas = GlyphConsensus()
     for index, reading in readings.items():
-        if len(reading.items) == 1 and reading.confidence >= 0.85:
+        if (
+            len(regions[index].paths) <= 16
+            and len(reading.items) == 1
+            and reading.confidence >= 0.85
+        ):
             atlas.add(index, regions[index], reading.items[0].texto)
     for index, reading in tuple(readings.items()):
         if len(reading.items) != 1:

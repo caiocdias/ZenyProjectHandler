@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, tzinfo
 from decimal import Decimal
 from pathlib import Path
 from threading import Event
@@ -182,6 +182,7 @@ def _wait_status(client: TestClient, job_id: str, expected: JobStatus) -> dict[s
 
 def test_two_clients_observe_one_global_job_idempotency_progress_and_cancel(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runner = ControlledRunner(Event(), Event())
     runtime = _controlled_runtime(tmp_path / "data", runner)
@@ -214,6 +215,17 @@ def test_two_clients_observe_one_global_job_idempotency_progress_and_cancel(
         assert replay.json() == accepted.json()
         assert runner.calls == 1
 
+        # Uma extração saudável pode levar mais de cinco minutos. Avance só o
+        # relógio observado pelo job, sem esperar nem alterar polling/cancelamento.
+        from zeny_project_handler_server import job_manager, job_store
+
+        class Later(datetime):
+            @classmethod
+            def now(cls, tz: tzinfo | None = None) -> Later:
+                return super().now(tz) + timedelta(minutes=20)
+
+        monkeypatch.setattr(job_manager, "datetime", Later)
+        monkeypatch.setattr(job_store, "datetime", Later)
         observed = first_client.get("/api/v1/session", headers=AUTH)
         assert observed.status_code == 200
         operation = observed.json()["global_operation"]

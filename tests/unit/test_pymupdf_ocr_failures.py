@@ -150,7 +150,7 @@ class _LegacyTesseract(TesseractCliOcr):
 
 
 class _LegacyAnalyzer(PyMuPdfDocumentAnalyzer):
-    versao = "1.11.0"
+    versao = "1.15.0"
 
 
 @pytest.mark.parametrize("changed_component", ("tesseract", "analyzer"))

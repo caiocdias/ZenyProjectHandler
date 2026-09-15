@@ -209,8 +209,11 @@ def _conditional_ocr(
     covered_glyphs = tuple(
         candidate
         for candidate in glyph_candidates
-        if _ocr_confidence(candidate) >= Decimal("0.80")
-        or dict(candidate.atributos_extraidos).get("concordancia_contornos")
+        if int(str(dict(candidate.atributos_extraidos).get("quantidade_glifos", 0))) <= 16
+        and (
+            _ocr_confidence(candidate) >= Decimal("0.80")
+            or dict(candidate.atributos_extraidos).get("concordancia_contornos")
+        )
     )
     targeted_candidates, targeted_diagnostics = _targeted_ocr_candidates(
         page,
@@ -423,11 +426,21 @@ def _linear_label_candidates(
         and frame not in selected_frames
         and not _has_glyph_reading(frame.bounds, covered_glyphs)
     )
+    processed = 0
     try:
-        batched, processed = _extract_remaining_frame_labels(
-            page, page_number, ocr_engine, config.dpi_ocr_rotulos_inclinados, remaining_frames
-        )
-        candidates.extend(batched)
+        while processed < len(remaining_frames):
+            batched, consumed = _extract_remaining_frame_labels(
+                page,
+                page_number,
+                ocr_engine,
+                config.dpi_ocr_rotulos_inclinados,
+                remaining_frames[processed:],
+                offset=processed,
+            )
+            candidates.extend(batched)
+            if not consumed:
+                break
+            processed += consumed
     except Exception:
         return tuple(candidates), (
             DiagnosticoAnalise(
@@ -463,6 +476,8 @@ def _extract_remaining_frame_labels(
     engine: MotorOcrPort,
     dpi: int,
     frames: tuple[_OperationalFrame, ...],
+    *,
+    offset: int = 0,
 ) -> tuple[tuple[CandidatoEvidenciaDocumento, ...], int]:
     regions = tuple(
         _rectified_frame_region(page, page_number, frame, dpi, isolate="green", padding=False)
@@ -481,7 +496,7 @@ def _extract_remaining_frame_labels(
         candidates.append(
             CandidatoEvidenciaDocumento(
                 chave_estavel=(
-                    f"p{page_number}:ocr-moldura-lote:{index}:"
+                    f"p{page_number}:ocr-moldura-lote:{offset + index}:"
                     f"{local_item.caixa_normalizada}:{local_item.texto}"
                 ),
                 pagina_numero=page_number,
@@ -506,7 +521,7 @@ def _extract_remaining_frame_labels(
                         )
                     ),
                     pre_processamento="retificacao_afim_isolamento_verde_e_lote",
-                    indice_recorte=index,
+                    indice_recorte=offset + index,
                 ),
             )
         )

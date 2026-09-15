@@ -71,7 +71,7 @@ class TesseractCliOcr:
         oem: int = 3,
         tessdata_directory: Path | None = None,
         capability_timeout_seconds: int = 15,
-        recognition_timeout_seconds: int = 90,
+        recognition_timeout_seconds: int = 900,
     ) -> None:
         resolved = executable.expanduser().resolve(strict=True)
         if not resolved.is_file():

@@ -13,7 +13,7 @@ from tests.factories import complete_project
 from tests.pdf_fixtures import create_e11_revision_pdf
 from tests.unit.test_pymupdf_analyzer import FakeOcr, _request
 
-from zeny_project_handler.adapters.analysis import PyMuPdfDocumentAnalyzer
+from zeny_project_handler.adapters.analysis import JsonAnalysisCache, PyMuPdfDocumentAnalyzer
 from zeny_project_handler.adapters.analysis.pymupdf_page_extractors import _extract_text
 from zeny_project_handler.adapters.analysis.pymupdf_revisions import extract_revision_appearances
 from zeny_project_handler.application.document_zones import evidencias_sem_anotacoes_de_revisao
@@ -144,3 +144,54 @@ def test_legacy_confirmed_alternative_is_history_not_current_content(
     assert cable not in effective.elementos
     assert cable in project.elementos
     assert len(effective.elementos) == len(project.elementos) - 1
+
+
+@pytest.mark.parametrize("failure", [False, True])
+def test_colored_revision_readings_survive_cache_and_failed_passes_are_retried(
+    tmp_path: Path, failure: bool
+) -> None:
+    class ColorOcr(RevisionOcr):
+        def reconhecer_rotulo_operacional(
+            self, pagina: PaginaRasterOcr
+        ) -> tuple[TrechoTextoOcr, ...]:
+            if failure:
+                raise TimeoutError("private engine details")
+            return (TrechoTextoOcr(texto="N?(1)", caixa_normalizada=(0.1, 0.1, 0.9, 0.9)),)
+
+    path = tmp_path / "colors.pdf"
+    with pymupdf.open() as document:
+        page = document.new_page(width=200, height=200)
+        page.insert_text((30, 55), "N4", fontsize=12)
+        annotation = page.add_freetext_annot(
+            (25, 35, 110, 65),
+            "N4(1)",
+            fontsize=14,
+            text_color=(0, 0.5, 0),
+            fill_color=(1, 1, 1),
+        )
+        annotation.update()
+        document.save(path)
+    analyzer = PyMuPdfDocumentAnalyzer(
+        cache=JsonAnalysisCache(tmp_path / "cache"), motor_ocr=ColorOcr()
+    )
+    request = _request(path)
+    request = replace(
+        request, configuracao=replace(request.configuracao, minimo_caracteres_texto_nativo=0)
+    )
+    first = analyzer.analisar(request)
+    second = analyzer.analisar(request)
+    assert second.cache_utilizado is not failure
+    revisions = [e for e in first.evidencias if "revisao_tecnica" in dict(e.atributos_extraidos)]
+    assert len(revisions) == 1
+    payload = json.loads(str(dict(revisions[0].atributos_extraidos)["revisao_tecnica"]))
+    assert payload["operation_review_pending"] and payload["decision"] is None
+    assert payload["ocr_failed"] is failure
+    if not failure:
+        assert payload["color_readings"][0]["text"] == "N?(1)"
+        assert payload["color_readings"][0]["color"] == "verde"
+        assert first.evidencias == second.evidencias
+    else:
+        assert first.diagnosticos and second.diagnosticos
+    assert not any(
+        e.conteudo_bruto == "N?(1)" for e in evidencias_sem_anotacoes_de_revisao(first.evidencias)
+    )

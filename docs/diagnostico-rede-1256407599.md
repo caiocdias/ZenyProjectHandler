@@ -130,3 +130,23 @@ O benchmark E11 tem 9 confirmações e 7 vãos: a redução de um cabo/uma linha
 relação à E10 corresponde à retirada da promoção sem autoridade de D01. Isso não
 resolve D02–D06 nem homologa a leitura integral. Implementação, validações,
 compatibilidade e handoff em [e11-revisoes-tecnicas.md](e11-revisoes-tecnicas.md).
+
+## Atualização E12 — 15/09/2026
+
+O extrator 1.16.0 conserva no grupo R02 as leituras `N4(1)` verde e vermelho,
+com caixas distintas e risco horizontal no vermelho, além de `N3(2)`, `S3R`,
+`11-600` e `10-150`. A leitura original divergente permanece junto da passagem
+tratada. A autoridade e a decisão técnica continuam pendentes; isso não resolve
+automaticamente as operações de D04 nem cria novos ativos.
+
+Lotes sucessivos, liberação de RGB concluído e passagens adicionais recuperam
+grupos longos e melhoram uma geometria inclinada. O benchmark isolado passa de
+228 para 246 evidências OCR; mantém 38 propostas finais, 9 confirmações e 7 vãos,
+com zero diagnósticos. Essas contagens não medem a leitura integral. Os dois grupos
+E11 mantêm identidade e não são promovidos. Fonte/hash/tamanho/mtime preservados.
+
+Coordenadas fragmentadas, leituras divergentes, campos documentais truncados ou
+duplicados e as pendências de interpretação/topologia continuam explícitos.
+Denominadores E10 preservados. Comparação por ocorrência, experiência reprovada,
+telemetria, validações e handoff E12A/E12B em
+[e12-precisao-extratores.md](e12-precisao-extratores.md).

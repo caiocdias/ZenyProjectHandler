@@ -141,7 +141,7 @@ class _EmptyRowsOcr(CharacterizationOcr):
         return ()
 
 
-def test_frames_beyond_the_batch_budget_are_diagnosed() -> None:
+def test_frames_beyond_one_batch_are_processed_without_a_global_count_cutoff() -> None:
     with pymupdf.open() as document:
         page = document.new_page(width=200, height=200)
         for index in range(49):
@@ -152,9 +152,8 @@ def test_frames_beyond_the_batch_budget_are_diagnosed() -> None:
             page, 1, engine, ConfiguracaoAnaliseDocumento()
         )
         assert candidates == ()
-        assert len(engine.pages) == 1
-        assert [item.codigo for item in diagnostics] == ["analise.ocr_cobertura_parcial"]
-        assert "1 molduras" in diagnostics[0].mensagem
+        assert len(engine.pages) == 2
+        assert diagnostics == ()
 
 
 class _FailingRowsOcr(CharacterizationOcr):

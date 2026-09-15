@@ -45,7 +45,7 @@ apresenta os DTOs e rasters recebidos pela API autenticada.
   antes da prontidão.
 - Temas claro e escuro, painéis acopláveis e restauração do estado da interface.
 
-O extrator 1.15.0 lê também rótulos convertidos em contornos vetoriais, isolando os caracteres
+O extrator 1.16.0 lê também rótulos convertidos em contornos vetoriais, isolando os caracteres
 de molduras e linhas sobrepostas e preservando sua posição na página. Recortes têm orçamento
 limitado; falhas mantêm as evidências já obtidas, geram diagnóstico e não ficam presas no cache.
 A referência local recuperou as 95 ocorrências, os 18 identificadores e os 19 comprimentos
@@ -60,8 +60,18 @@ o responsável escolher uma camada e informar o motivo. Comentários, fotos, ass
 carimbos permanecem evidências; SHX continua disponível como conteúdo técnico. A escolha
 da camada preserva a versão anterior e não cria um ativo sem catálogo: `ABCN-16(16)`,
 ausente do catálogo atual, continua com catalogação pendente. A interpretação de múltiplas
-operações sobrepostas de N4 permanece pendente das etapas de extração/interpretação.
+operações sobrepostas de N4 permanece pendente de reconciliação e interpretação.
 Detalhes e validações em [E11](docs/e11-revisoes-tecnicas.md).
+
+E12 acrescenta leituras literais por cor e célula ao grupo de revisão N4, com caixas,
+risco horizontal e tentativas originais preservadas. A passagem que trata o risco não
+aprova a revisão nem cria ativos. Glifos longos e molduras continuam em lotes com memória
+limitada; os rasters concluídos são liberados e os glifos fracos podem ser relidos a
+2400 DPI. O timeout padrão do Tesseract passa a 900 s por chamada, sem teto global de
+análise. Cancelamento continua cooperativo nos pontos seguros do fluxo; uma chamada
+OCR em execução não é interrompida imediatamente pelo pedido de cancelamento.
+Há ganho de extração no segundo PDF, mas ainda existem leituras divergentes e truncadas.
+Limites, comparação isolada e próximos passos: [E12](docs/e12-precisao-extratores.md).
 
 Projeto, Resultados, Documentação e conformidade, GMAX e Exportar têm rolagem vertical
 independente. As tabelas e listas mantêm uma área de leitura limitada: a roda percorre suas

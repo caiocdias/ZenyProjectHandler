@@ -213,6 +213,15 @@ def test_capability_is_real_normalized_cached_and_stable_across_machine_paths(
     assert second_result.capacidade is not None
     assert first_result.capacidade.versao == "5.4.1.20250101"
     assert first_result.capacidade.idiomas == ("por", "eng")
+    assert dict(first_result.capacidade.parametros)["timeout_reconhecimento_segundos"] == 900
+    old_timeout = replace(
+        first_result.capacidade,
+        parametros=tuple(
+            (key, 90 if key == "timeout_reconhecimento_segundos" else value)
+            for key, value in first_result.capacidade.parametros
+        ),
+    )
+    assert old_timeout.assinatura() != first_result.capacidade.assinatura()
     assert first_result.capacidade.assinatura() == second_result.capacidade.assinatura()
     legacy = replace(
         first_result.capacidade,

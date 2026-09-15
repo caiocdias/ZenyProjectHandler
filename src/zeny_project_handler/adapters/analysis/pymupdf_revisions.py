@@ -22,6 +22,7 @@ from zeny_project_handler.ports.analysis import (
 )
 
 from .pymupdf_annotations import _annotation_info, _is_technical_annotation
+from .pymupdf_revision_ocr import revision_color_readings
 from .pymupdf_support import _box_geometry
 
 POLICY_VERSION = "1"
@@ -91,23 +92,9 @@ def extract_revision_appearances(
             dpi = min(1200, max(72, int(72 * (4_000_000 / (clip.width * clip.height)) ** 0.5)))
             base = page.get_pixmap(clip=clip, dpi=dpi, alpha=False, annots=False)
             visible = page.get_pixmap(clip=clip, dpi=dpi, alpha=False, annots=True)
-            text = None
-            ocr_failed = False
-            if engine is not None:
-                try:
-                    readings = engine.reconhecer(
-                        PaginaRasterOcr(
-                            pagina_numero=page_number,
-                            largura_pixels=visible.width,
-                            altura_pixels=visible.height,
-                            stride=visible.stride,
-                            dados_rgb=visible.samples,
-                            dpi=dpi,
-                        )
-                    )
-                    text = " ".join(item.texto for item in readings)
-                except Exception:
-                    ocr_failed = True
+            text, color_readings, ocr_failed = _read_revision(
+                visible, page, page_number, dpi, engine, codes, affected
+            )
             xrefs = sorted(
                 a.xref for a in annotations if clip.intersects(a.rect * page.rotation_matrix)
             )
@@ -118,6 +105,8 @@ def extract_revision_appearances(
                 "annotation_xrefs": xrefs,
                 "base_text": candidate.conteudo_bruto,
                 "visible_text": text,
+                "color_readings": color_readings,
+                "color_readings_version": "1",
                 "base_codes": codes,
                 "visible_codes": _CODE.findall(text or ""),
                 "classification": "candidata_revisao_tecnica",
@@ -169,6 +158,59 @@ def extract_revision_appearances(
                 )
             )
     return tuple({item.chave_estavel: item for item in results}.values())
+
+
+def _read_revision(
+    visible: Any,
+    page: Any,
+    number: int,
+    dpi: int,
+    engine: MotorOcrPort | None,
+    codes: list[str],
+    affected: list[Any],
+) -> tuple[str | None, list[dict[str, Any]], bool]:
+    if engine is None:
+        return None, [], False
+    text = None
+    failed = False
+    colors: list[dict[str, Any]] = []
+    try:
+        readings = engine.reconhecer(
+            PaginaRasterOcr(
+                pagina_numero=number,
+                largura_pixels=visible.width,
+                altura_pixels=visible.height,
+                stride=visible.stride,
+                dados_rgb=visible.samples,
+                dpi=dpi,
+            )
+        )
+        text = " ".join(item.texto for item in readings)
+    except Exception:
+        failed = True
+    if any(code.upper() == "N4" for code in codes):
+        colors, color_failed = _read_annotation_colors(page, affected, number, engine)
+        failed = failed or color_failed
+    return text, colors, failed
+
+
+def _read_annotation_colors(
+    page: Any, annotations: list[Any], number: int, engine: MotorOcrPort
+) -> tuple[list[dict[str, Any]], bool]:
+    readings: list[dict[str, Any]] = []
+    failed = False
+    for annotation in annotations:
+        if str(annotation.type[1]) not in {"Stamp", "FreeText"}:
+            continue
+        clip = (annotation.rect * page.rotation_matrix) & page.rect
+        if clip.is_empty:
+            continue
+        dpi = min(1200, max(72, int(72 * (4_000_000 / (clip.width * clip.height)) ** 0.5)))
+        pixmap = page.get_pixmap(clip=clip, dpi=dpi, alpha=False, annots=True)
+        items, error = revision_color_readings(pixmap, page, number, dpi, engine)
+        readings.extend({**item, "annotation_xref": annotation.xref} for item in items)
+        failed = failed or error
+    return readings, failed
 
 
 def _representation_xrefs(

@@ -123,6 +123,7 @@ def test_vector_crop_excludes_crossing_line_and_maps_back_to_each_occurrence(
         candidate = candidates[0]
         assert candidate.conteudo_bruto == "LI"
         assert dict(candidate.atributos_extraidos)["confianca"] == Decimal("0.97")
+        assert dict(candidate.atributos_extraidos)["cor"] == "#008000"
         points = candidate.geometria.pontos
         expected = (pymupdf.Point(0.9, 1) * pymupdf.Matrix(-angle)) + pymupdf.Point(20, 30)
         expected *= page.rotation_matrix
@@ -169,6 +170,7 @@ def test_pixel_limited_batches_resume_from_consumed_prefix(monkeypatch: pytest.M
         assert set(readings) == {0, 1, 2}
         assert engine.calls == 3
         assert all(r.items[0].texto == "LI" for r in readings.values())
+        assert all(isinstance(r.raster, ocr._RasterGeometry) for r in readings.values())
 
 
 def test_outline_size_guards_and_degenerate_baselines() -> None:
@@ -188,11 +190,11 @@ def test_budget_is_checked_before_render_and_unread_regions_are_diagnosed(
     with pymupdf.open() as document:
         page = document.new_page()
         for index in range(3):
-            _outlined_pair(page, 20, 20 + index * 10, gap=3)
+            _outlined_pair(page, 20, 20 + index * 10, gap=3 if index else 2.5)
         if budget == "groups":
             monkeypatch.setattr(ocr, "MAXIMUM_GLYPH_GROUPS", 1)
         else:
-            monkeypatch.setattr(ocr, "MAXIMUM_GLYPH_PIXELS", 6000)
+            monkeypatch.setattr(ocr, "MAXIMUM_GLYPH_PIXELS", 5150)
         candidates, diagnostics = ocr.extract_vector_glyphs(page, 1, _OutlineOcr(), 1200)
         assert len(candidates) == 1
         assert diagnostics[0].codigo == "analise.ocr_cobertura_parcial"
@@ -283,3 +285,56 @@ def test_weak_retry_stops_on_reliable_reading_but_keeps_second_attempt_when_need
         ocr._retry_weak([region], 1, engine, 1800, readings)
         assert engine.calls == expected_calls
         assert readings[0].confidence >= 0.90
+
+
+def test_weak_regions_after_twenty_four_get_a_higher_resolution_attempt() -> None:
+    class ResolutionOcr(_OutlineOcr):
+        def reconhecer(self, pagina: PaginaRasterOcr) -> tuple[TrechoTextoOcr, ...]:
+            self.calls += 1
+            if pagina.dpi < 2400:
+                return ()
+            return (
+                TrechoTextoOcr(texto="CAA", confianca=0.96, caixa_normalizada=(0.2, 0.2, 0.8, 0.8)),
+            )
+
+    with pymupdf.open() as document:
+        page = document.new_page()
+        _outlined_pair(page, 20, 20, gap=3)
+        region = glyph_region(glyph_groups(page)[0])
+        assert region is not None
+        readings = {i: ocr._Reading(region.render(1, 1800), ()) for i in range(25)}
+        engine = ResolutionOcr()
+        ocr._retry_weak([region] * 25, 1, engine, 1800, readings)
+        assert engine.calls == 75
+        assert all(r.raster.dpi == 2400 and r.items[0].texto == "CAA" for r in readings.values())
+
+
+def test_long_vector_label_is_not_silently_excluded_at_sixteen_glyphs() -> None:
+    with pymupdf.open() as document:
+        page = document.new_page()
+        for i in range(9):
+            # Consecutive fill paths form a single 18-character label.
+            shape = page.new_shape()
+            for x in (20 + i * 3, 21.5 + i * 3):
+                shape.draw_rect((x, 20, x + 0.5, 22))
+                shape.finish(color=None, fill=(0, 0.5, 0))
+            shape.commit()
+        regions, skipped = ocr._regions(page, 1200)
+        assert skipped == 0 and len(regions) == 1
+        assert len(regions[0].paths) == 18
+
+
+@pytest.mark.parametrize("text", ["ABC-2 CA", "ABC-2 CAA", "N-4", "TR-3-45", "N?(1)", "36m"])
+def test_vector_candidates_keep_literal_codes_without_catalog_completion(text: str) -> None:
+    with pymupdf.open() as document:
+        page = document.new_page()
+        _outlined_pair(page, 20, 20, gap=3)
+        region = glyph_region(glyph_groups(page)[0])
+        assert region is not None
+        reading = ocr._Reading(
+            region.render(1, 1800),
+            (TrechoTextoOcr(texto=text, caixa_normalizada=(0.2, 0.2, 0.8, 0.8)),),
+        )
+        candidate = ocr._candidates(page, 1, 0, region, reading)[0]
+        assert candidate.conteudo_bruto == text
+        assert "situacao_projeto_forcada" not in dict(candidate.atributos_extraidos)
