@@ -197,7 +197,7 @@ Hipóteses de produto adotadas para tornar o plano executável, ajustáveis com 
 | E10 | Referência integral do segundo PDF | #concluida | Nenhuma | 139 registros, revisão definida e três medições isoladas |
 | E11 | Revisões técnicas e conteúdo vigente | #concluida | E10 | Conflitos rastreáveis, decisão persistida e gate aprovado |
 | E12 | Precisão dos extratores atuais | #concluida | E10, E11 | Leituras por cor, lotes contínuos e comparação vertical validada |
-| E12A | Experimentação de algoritmos alternativos | #pendente | E12 | Comparação executada de métodos distintos |
+| E12A | Experimentação de algoritmos alternativos | #concluida | E12 | OCR neural e grafo global comparados; ganhos e regressões auditados |
 | E12B | Reconciliação e confiança entre métodos | #pendente | E12A | Métodos úteis integrados e conflitos rastreáveis |
 | E13 | Ocorrências e associação aos pontos corretos | #pendente | E12B | Catálogo, situação, vínculos e deduplicação rastreáveis |
 | E14 | Topologia e projeção dos trechos | #pendente | E13 | Continuidade e vãos existentes/novos coerentes |
@@ -1374,7 +1374,7 @@ limpo e sem `AGENTS.md` aplicável. E10/E11 e código conferidos. Relatório com
   itens documentais** preservados; leitura integral continua **0/1**. Famílias
   reservadas não usadas; E08/E09 mantidas. Sem commit ou ação externa.
 
-## E12A — Experimentação de algoritmos alternativos — #pendente
+## E12A — Experimentação de algoritmos alternativos — #concluida
 
 **Objetivo:** executar uma comparação reproduzível com pelo menos duas abordagens
 algoritmicamente distintas das atuais, identificando ganhos complementares e erros.
@@ -1384,8 +1384,8 @@ melhoria vertical; trocar parâmetros do mesmo método já não basta para este 
 alteram a promoção de produção; executar medições separadamente para atribuir resultados.
 **Escopo:** `src/zeny_project_handler/ports/analysis.py`, `ports/interpretation.py`,
 adaptadores de análise/interpretação, `scripts/benchmark_network_pdf.py` e fixtures.
-Novos adaptadores e testes são caminhos a definir conforme os candidatos; registrar
-a localização escolhida no handoff. Não há motor alternativo escolhido ou instalado.
+Protótipos em `scripts/experiments/`, entrada `scripts/benchmark_network_alternatives.py`
+e testes em `tests/unit/test_network_alternatives.py`; runtime opcional isolado em `tmp/`.
 **Fora de escopo:** listar alternativas sem executá-las, usar somente variações de
 Tesseract, enviar PDFs a serviços externos ou promover saídas experimentais.
 
@@ -1418,18 +1418,42 @@ Execute E12A — Experimentação de algoritmos alternativos de docs/roadmap-mer
 
 **Critérios de aceite:**
 
-- [ ] Dois candidatos das famílias exigidas implementados e efetivamente executados.
-- [ ] Baselines e candidatos comparados por ocorrência com controles positivos/negativos.
-- [ ] Versões, dependências, comandos, erros complementares/correlacionados e decisões registrados.
-- [ ] Casos reservados preservados; nenhum candidato aceito por rapidez ou confiança autodeclarada.
+- [x] Dois candidatos das famílias exigidas implementados e efetivamente executados.
+- [x] Baselines e candidatos comparados por ocorrência com controles positivos/negativos.
+- [x] Versões, dependências, comandos, erros complementares/correlacionados e decisões registrados.
+- [x] Casos reservados preservados; nenhum candidato aceito por rapidez ou confiança autodeclarada.
 
-**Validação obrigatória:** `python -m pytest tests/unit/test_benchmark_network_pdf.py tests/unit/test_pymupdf_analyzer.py tests/unit/test_rule_based_interpreter.py` e testes sintéticos dos adaptadores novos. Os comandos de execução de cada candidato ainda precisam ser definidos: criar uma entrada opt-in no benchmark ou script dedicado, documentar argumentos e registrá-los antes de comparar. Executar controles com os motores reais; mocks não validam capacidade. Repetir a comparação local da referência E10 sem tocar a origem.
-**Bloqueios:** nenhum bloqueio confirmado. Se faltar runtime/modelo compatível,
-registrar tentativa, erro e alternativa local; não considerar pesquisa bibliográfica
-ou indisponibilidade como experimentação concluída.
+**Validação obrigatória:** `python -m pytest tests/unit/test_benchmark_network_pdf.py tests/unit/test_pymupdf_analyzer.py tests/unit/test_rule_based_interpreter.py tests/unit/test_network_alternatives.py`.
+Entradas e argumentos reais de cada candidato no [handoff E12A](e12a-algoritmos-alternativos.md).
+Executar controles com os motores reais; mocks não validam capacidade. Repetir a comparação
+local da referência E10 sem tocar a origem.
+**Bloqueios:** nenhum impedimento remanescente da experimentação. A primeira instalação
+foi impedida pela restrição de rede; o download autorizado passou. Regressões dos candidatos
+impedem sua integração direta, mas foram medidas e não são declaradas resolvidas.
 **Riscos e mitigação:** erros correlacionados parecerem consenso; registrar sua
 distribuição. Sobreajuste ao PDF; separar casos reservados por documento/família.
-**Evidências e handoff:** ainda não executada; sem biblioteca/modelo escolhido.
+**Evidências e handoff — 15/09/2026:** [e12a-algoritmos-alternativos.md](e12a-algoritmos-alternativos.md).
+
+- Base `172afd5`, Git inicialmente limpo, nenhum `AGENTS.md` aplicável. E12 e insumos
+  confirmados; diferenças históricas tratadas em E11/E12. Nenhuma mudança em `src/`.
+- RapidOCR 1.4.4/ONNX Runtime 1.30.0, modelos PP-OCRv4 locais com hashes registrados,
+  segmentação DB em 24 tiles, duas camadas e polígonos preservados. Grafo de extremidades
+  com atribuição global húngara e abstenção; solver confere com SciPy em 100 matrizes.
+- Original 1.14/22.0 reexecutado de `c85bebe`; vertical 1.16/23.0 reexecutado. Núcleo:
+  original/vertical **24 TP, 5 FN, 4 FP**; neural com interpretador atual **7/22/8**;
+  grafo sobre vertical **18/11/3**. Os **139 registros** e denominadores E10 preservados.
+- Neural recupera uma coordenada documental integral inspecionada: candidato auxiliar
+  para E12B, rejeitado como substituto geral. Grafo corrige três associações U1, mas
+  regride em P3/traçados: rejeitado para integração direta, entregue como experimento E14.
+  Matriz de erros exclusivos/compartilhados, duplicatas, endpoints e medidas registrada.
+- Sete controles reais por motor: **6/7 literais corretos**; ambos erram o riscado,
+  erro preservado na avaliação. Negativos da cerca não geram propostas. Erros conhecidos
+  entre confirmações: original **2/10**, vertical **1/9**; candidatos não promovem.
+- **106 testes aprovados em 11,49 s**; Ruff/formatação e Mypy (**346 arquivos**) aprovados;
+  auditoria privada e `git diff --check` aprovados. Sem gate integral/UI/SQL nesta etapa.
+  Fonte/hash/tamanho/mtime preservados, modelos e dados reais somente em `tmp/` ignorado.
+- Casos reservados não usados. Leitura integral continua **0/1**, revisões técnicas
+  pendentes e E08/E09 preservadas. Sem commit, publicação ou promoção de produção.
 
 ## E12B — Reconciliação e confiança entre métodos — #pendente
 

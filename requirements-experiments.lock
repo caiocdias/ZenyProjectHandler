@@ -1,0 +1,18 @@
+# E12A opt-in runtime only; never include in client/server/release requirements.
+# Python 3.12 Windows x64 measured; model hashes are in docs/e12a-algoritmos-alternativos.md.
+rapidocr-onnxruntime==1.4.4
+onnxruntime==1.30.0
+numpy==2.3.5
+scipy==1.15.3
+opencv-python==5.0.0.93
+pyclipper==1.4.0
+shapely==2.1.2
+PyYAML==6.0.3
+flatbuffers==25.12.19
+protobuf==7.36.1
+tqdm==4.70.1
+colorama==0.4.6
+Pillow==12.2.0
+PyMuPDF==1.28.0
+six==1.17.0
+packaging==26.2
