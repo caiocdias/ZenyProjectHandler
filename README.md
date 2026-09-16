@@ -2,7 +2,14 @@
 
 ### Ocorrências e contexto dos pontos (E13)
 
-O interpretador `24.0` consolida leituras sobrepostas do mesmo cabo, preserva estruturas
+A aba **Trechos físicos** agrupa condutores pelo traçado e mostra continuidades na borda
+do desenho com destino/comprimento desconhecidos. A tabela **Vãos** mantém uma linha
+por cabo confirmado, incluindo existentes sem poste classificado. Propostas pendentes
+continuam exigindo revisão; agrupamento físico não une circuitos elétricos de tensões
+diferentes. Detalhes de compatibilidade e validação em
+[Topologia e projeção dos trechos — E14](docs/e14-topologia-projecao-trechos.md).
+
+O interpretador `25.0` consolida leituras sobrepostas do mesmo cabo, preserva estruturas
 repetidas e separa o contexto de postes sem identificador dos pontos numerados próximos.
 `TR-3-45` e neutros como `N-4` permanecem literais revisáveis quando falta correspondência
 exata de catálogo. Operações de estrutura observadas em revisão técnica aparecem separadas
@@ -245,7 +252,7 @@ GMAX distingue o mercado salvo no projeto da classificação da última execuç�
 efetivo e origem. Após salvar ou atualizar o mercado, GMAX e o aviso de conformidade releem o
 estado persistido; o snapshot anterior mantém sua proveniência e indicação de desatualizado.
 A planilha
-de conformidade inclui a aba Contexto da execução. API e piso compatível: `1.5.0`.
+de conformidade inclui a aba Contexto da execução. API e piso compatível: `1.6.0`.
 Quando o PDF contém `Impacto Ambiental: Sim` no cabeçalho ou uma menção positiva a servidão, a
 execução também consulta no máximo uma vez a ação correspondente com a NS e a coleção de serviços
 vigentes. Assim, depois que a classificação efetiva, a NS, os serviços ou as ações externas mudarem, execute

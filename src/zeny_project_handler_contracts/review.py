@@ -189,7 +189,33 @@ class DetectedSpanDto(ContractModel):
     evidence: tuple[EvidenceNavigationDto, ...]
 
 
+class PhysicalSpanDto(ContractModel):
+    span_id: UUID
+    start_point_id: UUID
+    end_point_id: UUID | None
+    continuation: bool = False
+    evidence_ids: tuple[UUID, ...] = ()
+    proposal_ids: tuple[ProposalId, ...]
+    cable_element_ids: tuple[ElementId, ...]
+    label: NonEmptyString
+    start_label: NonEmptyString
+    end_label: NonEmptyString
+    cable_labels: tuple[str, ...]
+    situations: tuple[ElementSituation, ...]
+    situation_label: NonEmptyString
+    span_type: SpanType
+    span_type_label: NonEmptyString
+    modality: Literal["AEREO", "SUBTERRANEO", "DESCONHECIDO"] = "DESCONHECIDO"
+    modality_label: NonEmptyString = "Desconhecida"
+    length: DecimalString | None = None
+    length_label: NonEmptyString
+    pending_reasons: tuple[str, ...] = ()
+    page_label: NonEmptyString
+    geometry: ReviewGeometryDto
+
+
 class ReviewSessionResponse(ContractModel):
+    physical_spans: tuple[PhysicalSpanDto, ...] = ()
     method_readings: tuple[dict[str, JsonValue], ...] = ()
     review_session_id: ReviewSessionId
     project_id: ProjectId

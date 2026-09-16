@@ -21,8 +21,8 @@ Estado versionado relevante:
 | Registro de conformidade distribuído | `cemig-normas-distribuicao-2026.1` |
 | Método de conformidade | `14` |
 | Extrator documental | `1.17.0` |
-| Interpretador semântico | `24.0` |
-| API / piso compatível | `1.5.0` |
+| Interpretador semântico | `25.0` |
+| API / piso compatível | `1.6.0` |
 | Migração SQLite mais recente | `0009_remote_jobs` |
 
 ## Modelo de domínio
@@ -187,7 +187,7 @@ O código unitário `N` só é reconhecido nessa forma qualificada; textos comun
 qualificador ou geometria próprios, enquanto texto nativo e OCR da mesma ocorrência são consolidados
 com todas as evidências. A identidade e a ordenação resultantes independem da ordem das evidências.
 
-O interpretador `24.0` preserva a separação entre tokens qualificados adjacentes. Altura e
+O interpretador `25.0` preserva a separação entre tokens qualificados adjacentes. Altura e
 resistência de poste que correspondem a vários formatos de catálogo geram ocorrência conflitante
 com candidatos explícitos. Rótulo de cabo sem traçado inequívoco também permanece revisável;
 caixas e pontos do OCR não são convertidos em segmentos físicos. A cor do rótulo tem precedência
@@ -560,3 +560,35 @@ investigação, mas não substituem fonte normativa.
 - Carimbo, rótulo ou campo de assinatura não comprova autoria ou autenticidade.
 - Não existe integração ativa com serviços externos de OCR, nuvem ou IA; o pipeline funciona no
   servidor com PyMuPDF e Tesseract.
+
+
+### Topologia física e elétrica — E14
+
+A resposta de revisão 1.6.0 mantém `spans` como linhas por cabo confirmado e
+acrescenta `physical_spans`. Traçados completos coincidentes (inclusive sentido
+inverso) compartilham identidade física; caminhos diferentes com os mesmos
+endpoints continuam distintos. Apenas extremidades exatamente coincidentes na
+mesma página compartilham ponto físico: proximidade e cruzamento interior não bastam.
+Pontos elétricos novos compartilham identidade somente com tensão, configuração,
+tipo e poste compatíveis. Um ponto físico pode conter vários pontos elétricos.
+
+`physical_spans` inclui cabos pendentes sem criar ativos. Revisões de comprimento,
+geometria e situação já confirmadas prevalecem sobre a proposta original. Tipo e
+modalidade permanecem desconhecidos sem evidência positiva. Uma continuidade exige
+borda explícita da janela de desenho e traçado colinear de mesmo estilo conectado
+exatamente a cabo associado, ou rótulo de cabo cortado na borda com orientação
+compatível e único candidato. Não cria endpoint externo, poste ou catálogo:
+`continuation=true`, `end_point_id=null`, comprimento ausente e revisão explícita.
+Quadros isolados, linhas vizinhas, traços interrompidos no interior e empates não
+produzem continuidade. A detecção atual exige janela retangular branca grande;
+esta limitação não autoriza declarar leitura integral de outros desenhos.
+
+A UI exibe uma linha por trecho físico e navega sua geometria no PDF, inclusive
+sem cabo confirmado. A aba XLSX Trechos físicos repete os campos, pendências,
+identidades e proveniência. A aba Vãos permanece compatível em colunas e unidade
+por cabo. Nenhuma migração/codec ou reescrita de snapshots foi necessária.
+Clientes anteriores usam DTOs estritos e não podem consumir os campos novos:
+servidor/cliente devem ser atualizados juntos para API/piso 1.6.0. JSON antigo sem
+`physical_spans` continua decodificável como coleção vazia pelo cliente novo.
+A interpretação 25.0 exige reanálise para corrigir endpoints de sessões anteriores;
+as guardas de reconciliação e as decisões humanas permanecem preservadas.

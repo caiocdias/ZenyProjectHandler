@@ -117,6 +117,51 @@ def _settings(data_directory: Path) -> ServerSettings:
     )
 
 
+def test_pending_physical_span_survives_http_xlsx_and_reopening(tmp_path: Path) -> None:
+    from tests.unit.test_e14_topology import cable_proposal
+    from zeny_project_handler_contracts.review import ReviewSessionResponse
+    from zeny_project_handler_server.deliverable_exports import _results_sheets
+
+    settings = _settings(tmp_path / "physical")
+    runtime = compose_server_runtime(settings)
+    project_id, proposal_id, _ = _seed_review(runtime)
+    with SqlAlchemyUnitOfWork(runtime.core.engine) as work:
+        original = work.propostas.obter(proposal_id)
+        assert isinstance(original, PropostaElemento)
+        cable = cable_proposal(runtime.core.catalog, original.geometria.pagina_id, length="14")
+        cable = replace(
+            cable,
+            id=original.id,
+            execucao_id=original.execucao_id,
+            evidencia_ids=original.evidencia_ids,
+            estado_revisao=EstadoRevisao.CONFLITANTE,
+            atributos_sugeridos=(*cable.atributos_sugeridos, ("revisao_tecnica_pendente", True)),
+        )
+        work.propostas.salvar(cable)
+        work.commit()
+    app = create_app(settings, runtime_factory=lambda _settings: runtime)
+    with TestClient(app) as client:
+        response = client.get(f"/api/v1/projects/{project_id}/review-session", headers=AUTH)
+        assert response.status_code == 200
+        session = ReviewSessionResponse.model_validate(response.json())
+        span = session.physical_spans[0]
+        assert span.proposal_ids[0].root == proposal_id
+        assert not span.cable_element_ids
+        assert span.length == "14"
+        assert span.span_type.value == "UNKNOWN" and span.modality == "DESCONHECIDO"
+        assert span.pending_reasons
+        sheet = next(s for s in _results_sheets(session) if s.name == "Trechos físicos")
+        assert sheet.rows[0][7] == span.length_label
+        assert sheet.rows[0][10] == str(span.span_id)
+        assert sheet.rows[0][11:13] == (str(span.start_point_id), str(span.end_point_id))
+        reopened = client.get(f"/api/v1/projects/{project_id}/review-session", headers=AUTH)
+        assert reopened.json()["physical_spans"] == response.json()["physical_spans"]
+        assert len(reopened.json()["confirmed_elements"]) == len(session.confirmed_elements)
+        legacy = response.json()
+        legacy.pop("physical_spans")
+        assert ReviewSessionResponse.model_validate(legacy).physical_spans == ()
+
+
 def _seed_review(
     runtime: ServerRuntime,
     *,

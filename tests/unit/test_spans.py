@@ -98,7 +98,7 @@ def test_identified_span_is_kept_when_one_endpoint_has_no_classified_pole(
     assert spans[0].tipo_trecho is TipoTrechoRede.DESCONHECIDO
 
 
-def test_unidentified_cable_without_both_classified_poles_is_not_a_span(
+def test_unidentified_cable_without_classified_poles_remains_visible(
     catalogo_inicial: CatalogoTecnico,
 ) -> None:
     project = complete_project(catalogo_inicial)
@@ -114,7 +114,10 @@ def test_unidentified_cable_without_both_classified_poles_is_not_a_span(
         ),
     )
 
-    assert detectar_vaos(project) == ()
+    spans = detectar_vaos(project)
+    assert len(spans) == 1
+    assert spans[0].tipo_trecho is TipoTrechoRede.DESCONHECIDO
+    assert spans[0].poste_destino_id is None
 
 
 def test_span_without_informed_length_keeps_unknown_measurement(

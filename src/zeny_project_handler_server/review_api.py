@@ -21,6 +21,7 @@ from zeny_project_handler.application.human_review import (
     ServicoRevisaoHumana,
     SessaoRevisao,
 )
+from zeny_project_handler.application.physical_spans import TrechoFisico, projetar_trechos_fisicos
 from zeny_project_handler.application.spans import VaoDetectado, detectar_vaos
 from zeny_project_handler.application.technical_revisions import revision_data
 from zeny_project_handler.domain.analysis import (
@@ -85,6 +86,7 @@ from zeny_project_handler_contracts.review import (
     CreateManualElementRequest,
     CreateManualRelationRequest,
     DetectedSpanDto,
+    PhysicalSpanDto,
     RejectReviewProposalRequest,
     ReviewAuditDto,
     ReviewCatalogItemDto,
@@ -578,6 +580,12 @@ def _session_dto(session: SessaoRevisao, *, project_version: int) -> ReviewSessi
         proposals=proposal_dtos,
         relations=relation_dtos,
         spans=spans,
+        physical_spans=tuple(
+            _physical_span_dto(item, page_number)
+            for item in projetar_trechos_fisicos(
+                project, proposal_elements, session.decisoes, session.evidencias
+            )
+        ),
         audit=_audit(session, element_by_id),
     )
 
@@ -827,6 +835,41 @@ def _region_relation_ids(
         and (
             relation.origem_referencia_id in retained or relation.destino_referencia_id in retained
         )
+    )
+
+
+def _physical_span_dto(span: TrechoFisico, pages: dict[UUID, int]) -> PhysicalSpanDto:
+    return PhysicalSpanDto(
+        span_id=span.id,
+        start_point_id=span.origem_id,
+        end_point_id=span.destino_id,
+        continuation=span.continuidade,
+        evidence_ids=span.evidencias,
+        proposal_ids=tuple(ProposalId(p) for p in span.propostas),
+        cable_element_ids=tuple(ElementId(c) for c in span.cabos),
+        label=span.rotulo,
+        start_label=span.origem,
+        end_label=span.destino,
+        cable_labels=span.codigos,
+        situations=tuple(_situation(s) for s in span.situacoes),
+        situation_label=" / ".join(_situation_label(s) for s in span.situacoes),
+        span_type=_span_type(span.tipo),
+        span_type_label=_span_type_label(span.tipo),
+        modality=span.modalidade.value,
+        modality_label={
+            "AEREO": "Aéreo",
+            "SUBTERRANEO": "Subterrâneo",
+            "DESCONHECIDO": "Desconhecida",
+        }[span.modalidade.value],
+        length=decimal_string(span.comprimento_m) if span.comprimento_m is not None else None,
+        length_label=(
+            f"{span.comprimento_m:.2f} m".replace(".", ",")
+            if span.comprimento_m is not None
+            else "Não identificado"
+        ),
+        pending_reasons=span.pendencias,
+        page_label=f"Folha {pages[span.geometria.pagina_id]}",
+        geometry=_geometry(span.geometria),
     )
 
 

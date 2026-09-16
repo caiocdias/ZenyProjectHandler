@@ -291,7 +291,7 @@ def _results_sheets(session: ReviewSessionResponse) -> tuple[WorksheetData, ...]
         )
         for item in session.spans
     )
-    sheets = (
+    sheets: tuple[WorksheetData, ...] = (
         WorksheetData(
             "Elementos",
             (
@@ -336,6 +336,8 @@ def _results_sheets(session: ReviewSessionResponse) -> tuple[WorksheetData, ...]
             span_rows,
         ),
     )
+    if session.physical_spans:
+        sheets = (*sheets, _physical_spans_sheet(session))
     if not session.method_readings:
         return sheets
     return (
@@ -361,6 +363,53 @@ def _results_sheets(session: ReviewSessionResponse) -> tuple[WorksheetData, ...]
                 )
                 for r in session.method_readings
             ),
+        ),
+    )
+
+
+def _physical_spans_sheet(session: ReviewSessionResponse) -> WorksheetData:
+    return WorksheetData(
+        "Trechos físicos",
+        (
+            "Trecho",
+            "Tipo",
+            "Modalidade",
+            "Situação",
+            "Origem",
+            "Destino",
+            "Cabos observados",
+            "Comprimento",
+            "Pendências",
+            "Folha",
+            "ID do trecho físico",
+            "ID físico de origem",
+            "ID físico de destino",
+            "IDs das propostas",
+            "IDs dos cabos confirmados",
+            "Continuidade",
+            "IDs das evidências",
+        ),
+        tuple(
+            (
+                item.label,
+                item.span_type_label,
+                item.modality_label,
+                item.situation_label,
+                item.start_label,
+                item.end_label,
+                "; ".join(item.cable_labels),
+                item.length_label,
+                "; ".join(item.pending_reasons),
+                item.page_label,
+                str(item.span_id),
+                str(item.start_point_id),
+                str(item.end_point_id) if item.end_point_id is not None else "",
+                "; ".join(str(p.root) for p in item.proposal_ids),
+                "; ".join(str(c.root) for c in item.cable_element_ids),
+                "Sim" if item.continuation else "Não",
+                "; ".join(str(e) for e in item.evidence_ids),
+            )
+            for item in session.physical_spans
         ),
     )
 

@@ -200,7 +200,7 @@ Hipóteses de produto adotadas para tornar o plano executável, ajustáveis com 
 | E12A | Experimentação de algoritmos alternativos | #concluida | E12 | OCR neural e grafo global comparados; ganhos e regressões auditados |
 | E12B | Reconciliação e confiança entre métodos | #concluida | E12A | OCR documental auxiliar integrado; ablações e 167 testes aprovados |
 | E13 | Ocorrências e associação aos pontos corretos | #concluida | E12B | 29/29 no núcleo; D02–D05 rastreáveis, revisão e identidades preservadas |
-| E14 | Topologia e projeção dos trechos | #pendente | E13 | Continuidade e vãos existentes/novos coerentes |
+| E14 | Topologia e projeção dos trechos | #concluida | E13 | 10 trechos, 9 pontos físicos, 6 medidas e 3 continuidades rastreáveis |
 | E15 | Aceite integral do segundo PDF | #pendente | E11, E12, E12A, E12B, E13, E14 | Precisão vertical/horizontal, revisão visual e integração |
 
 ## E01 — Diagnóstico e referência da NS 1256148225 — #concluida
@@ -1586,7 +1586,7 @@ isso não homologa topologia, classificação ou leitura integral. Q3 fica visí
 associação pendente; revisões técnicas e modelos incertos exigem decisão humana.
 E14/E15 recebem essas limitações conforme handoff. Sem commit ou publicação.
 
-## E14 — Topologia e projeção dos trechos — #pendente
+## E14 — Topologia e projeção dos trechos — #concluida
 
 **Objetivo:** representar conectividade coerente, medidas e rede existente/novas ligações
 na projeção de vãos, distinguindo trecho físico e cabo.
@@ -1619,9 +1619,9 @@ Execute E14 — Topologia e projeção dos trechos de docs/roadmap-mercado-paine
 
 **Critérios de aceite:**
 
-- [ ] Trechos inequívocos do inventário têm endpoints/medidas corretos e projeção navegável.
-- [ ] Fase/neutro mantêm identidade física coerente, sem vãos ou ativos duplicados.
-- [ ] Tipo/modalidade têm evidência ou motivo de indeterminação; HTTP/UI/XLSX concordam.
+- [x] Trechos inequívocos do inventário têm endpoints/medidas corretos e projeção navegável.
+- [x] Fase/neutro mantêm identidade física coerente, sem vãos ou ativos duplicados.
+- [x] Tipo/modalidade têm evidência ou motivo de indeterminação; HTTP/UI/XLSX concordam.
 
 **Validação obrigatória:** `python -m pytest tests/unit/test_spans.py tests/unit/test_topology_path_compliance.py tests/unit/test_e08_association.py tests/integration/test_interpretation_pipeline.py tests/server/test_review_api.py tests/server/test_deliverable_exports.py tests/e2e/test_span_compliance_ui.py`.
 Executar novos casos de conectividade e comparar cada trecho E10 até XLSX; navegar
@@ -1632,7 +1632,31 @@ Se novos campos forem necessários, documentar valores ausentes e leitura da ver
 **Bloqueios:** nenhum bloqueio conhecido.
 **Riscos e mitigação:** gráficos desconectados por UUIDs por cabo; testar continuidade
 real e circuitos próximos sem conexão. Não relaxar ADR para aumentar contagens.
-**Evidências e handoff:** ainda não executada.
+**Evidências e handoff:** concluída em 16/09/2026 sobre `af8ead2`, Git inicialmente
+limpo. E13 integrada, sem AGENTS.md aplicável; divergências E11–E13 conferidas,
+correções e bloqueios E08/E09 preservados. Ver
+[e14-topologia-projecao-trechos.md](e14-topologia-projecao-trechos.md).
+
+Interpretador 25.0/API e piso 1.6.0: existentes 36/83 m visíveis, V3-4 orientado
+corretamente, pontos elétricos compartilhados somente em configuração compatível;
+projeção física separa dez traçados de seus condutores. Nove pontos físicos, sete
+pares visíveis, três continuidades na borda explícita e seis medidas corretas;
+quatro medidas continuam ausentes. Tipo/modalidade e decisões técnicas incertas
+permanecem pendentes. HTTP/Qt/XLSX coerentes; nenhum ativo criado por proximidade.
+Compatibilidade coordenada por DTOs estritos; sem codec/migração/backfill ou
+reescrita de snapshots. Guarda de reconciliação de reanálise preservada.
+
+**162 testes ampliados aprovados**, incluindo os sete arquivos obrigatórios;
+**76 de contratos/handshake/fronteira/regressões** e **51 de navegação/topologia**
+aprovados (rodadas com sobreposição). Mypy em 352 arquivos, Ruff/formatação,
+complexidade em 2.856 funções/métodos e `git diff --check` aprovados.
+Benchmark OCR final: 43 propostas, oito confirmações, dez pontos elétricos, oito
+linhas de Vãos, dez trechos físicos e zero diagnósticos; fonte/hash/mtime e XLSX
+conferidos. Auditoria preserva 139 referências E10 e núcleo E13 29/29, com mapa
+individual até XLSX e navegação real 10/10. Comparação estrita: E14 7/7 pares
+completos contra 1/7 do grafo E12A; sem ranking por duração. Grafo não integrado.
+E15 recebe o gate integral/cobertura, classificação, autoridade, documentação,
+equipamentos e reservas; E08/E09 não foram re-homologadas. Sem commit/publicação.
 
 ## E15 — Aceite integral do segundo PDF — #pendente
 

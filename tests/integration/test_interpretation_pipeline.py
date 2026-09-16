@@ -240,7 +240,7 @@ def test_interpreter_version_change_invalidates_completed_semantic_result(
     current = _runner(engine).executar(project.id, source_execution.id)
 
     assert legacy.execucao.versao_metodo == "20.0"
-    assert current.execucao.versao_metodo == "24.0"
+    assert current.execucao.versao_metodo == "25.0"
     assert current.execucao.id != legacy.execucao.id
     assert not current.resultado_reutilizado
     assert all(item.estado_revisao is EstadoRevisao.CONFLITANTE for item in current.elementos)

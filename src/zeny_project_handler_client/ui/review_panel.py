@@ -187,8 +187,9 @@ class ReviewPanelWidget(QWidget):
         spans_layout = QVBoxLayout(spans_page)
         spans_layout.setContentsMargins(0, 0, 0, 0)
         spans_guidance = QLabel(
-            "Um trecho é exibido quando o desenho permite associar as duas extremidades "
-            "de um cabo a pontos da rede. O tipo, os endpoints e a situação vêm do servidor; "
+            "Esta tabela contém uma linha por cabo confirmado. Fase e neutro podem "
+            "compartilhar um trecho: veja o agrupamento na aba Trechos físicos. "
+            "O tipo, os endpoints e a situação vêm do servidor; "
             "o comprimento prioriza a anotação do desenho e, na ausência dela, a distância "
             "entre coordenadas."
         )
@@ -251,6 +252,7 @@ class ReviewPanelWidget(QWidget):
         self._method_table.cellClicked.connect(self._select_method_reading)
         readings_layout.addWidget(self._method_table)
         self._results_tabs.addTab(readings_page, "Leituras auxiliares")
+        self._build_physical_spans_tab()
         layout.addWidget(self._results_tabs, 1)
 
         editor = QGroupBox("Revisar identificação")
@@ -435,6 +437,7 @@ class ReviewPanelWidget(QWidget):
         self._table.setRowCount(0)
         self._span_table.setRowCount(0)
         self._method_table.setRowCount(0)
+        self._physical_span_table.setRowCount(0)
         self._elements_word_wrap.refresh()
         self._spans_word_wrap.refresh()
         self._detected.setText("Selecione uma identificação na lista ou no PDF")
@@ -590,6 +593,7 @@ class ReviewPanelWidget(QWidget):
 
     def _refresh_spans(self) -> None:
         session = self._session
+        self._refresh_physical_spans()
         self._spans = session.spans if session is not None else ()
         self._span_table.setRowCount(0)
         self._span_visibility_buttons.clear()
@@ -628,6 +632,76 @@ class ReviewPanelWidget(QWidget):
             self._span_visibility_buttons[span.span_id] = button
             self._span_table.setCellWidget(row, 9, button)
         self._spans_word_wrap.refresh()
+
+    def _build_physical_spans_tab(self) -> None:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        hint = QLabel(
+            "Uma linha por traçado físico. Cabos distintos aparecem juntos, sem unir "
+            "circuitos elétricos de tensões diferentes. Pendências continuam exigindo revisão. "
+            "Clique na linha para localizar o trecho no PDF e revisar um dos cabos."
+        )
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
+        self._physical_span_table = QTableWidget(0, 10)
+        self._physical_span_table.setObjectName("physicalSpanTable")
+        self._physical_span_table.setHorizontalHeaderLabels(
+            (
+                "Trecho",
+                "Tipo",
+                "Modalidade",
+                "Situação",
+                "Origem",
+                "Destino",
+                "Cabos observados",
+                "Comprimento",
+                "Pendências",
+                "Folha",
+            )
+        )
+        self._physical_span_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self._physical_span_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self._physical_span_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.ResizeToContents
+        )
+        self._physical_span_table.cellClicked.connect(self._select_physical_span)
+        layout.addWidget(self._physical_span_table)
+        self._results_tabs.addTab(page, "Trechos físicos")
+
+    def _refresh_physical_spans(self) -> None:
+        spans = self._session.physical_spans if self._session is not None else ()
+        self._physical_span_table.setRowCount(len(spans))
+        for row, span in enumerate(spans):
+            values = (
+                span.label,
+                span.span_type_label,
+                span.modality_label,
+                span.situation_label,
+                span.start_label,
+                span.end_label,
+                "; ".join(span.cable_labels),
+                span.length_label,
+                "; ".join(span.pending_reasons) or "Sem pendências",
+                span.page_label,
+            )
+            for column, value in enumerate(values):
+                self._physical_span_table.setItem(row, column, QTableWidgetItem(value))
+
+    def _select_physical_span(self, row: int, _column: int) -> None:
+        if self._session is None or row >= len(self._session.physical_spans):
+            return
+        span = self._session.physical_spans[row]
+        page = self._project_page_number(span.geometry.page_id.root)
+        if page is not None:
+            self._viewer.ir_para_folha(page)
+        if span.proposal_ids:
+            self._select_proposal_id(str(span.proposal_ids[0].root))
+        else:
+            self._selected_proposal_id = None
+            self._update_editor_visibility(None)
+            self._show_revision(None)
+            self._detected.setText("; ".join(span.pending_reasons))
+        self._viewer.definir_sobreposicoes_revisao((span.geometry,))
 
     def _refresh_visible_word_wrap(self, index: int) -> None:
         controllers = (self._elements_word_wrap, self._spans_word_wrap)
@@ -964,7 +1038,7 @@ class ReviewPanelWidget(QWidget):
         except ValueError:
             return None
 
-    def _show_revision(self, proposal: ReviewItem) -> None:
+    def _show_revision(self, proposal: ReviewItem | None) -> None:
         revision = proposal.technical_revision if isinstance(proposal, ReviewProposalDto) else None
         self._reason.setPlaceholderText(
             "Motivo obrigatório da escolha técnica" if revision is not None else "Opcional"
@@ -1003,7 +1077,9 @@ class ReviewPanelWidget(QWidget):
                     Qt.TransformationMode.SmoothTransformation,
                 )
             )
-        self._revision_choice.setEnabled(proposal.requires_review and not revision.get("decision"))
+        self._revision_choice.setEnabled(
+            proposal is not None and proposal.requires_review and not revision.get("decision")
+        )
         if revision.get("decision") and revision.get("catalog_pending"):
             self._accept.setEnabled(False)
             self._accept.setText("Camada escolhida · catalogação pendente")

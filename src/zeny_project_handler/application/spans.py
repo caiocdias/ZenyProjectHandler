@@ -10,7 +10,6 @@ from zeny_project_handler.domain.enums import (
     ModalidadeTrecho,
     OrigemComprimentoVao,
     SituacaoProjeto,
-    TipoPontoRede,
     TipoTrechoRede,
 )
 from zeny_project_handler.domain.project import Cabo, Poste, Projeto
@@ -65,17 +64,6 @@ def detectar_vaos(projeto: Projeto) -> tuple[VaoDetectado, ...]:
             poste_origem is not None
             and poste_destino is not None
             and poste_origem.id == poste_destino.id
-        ):
-            continue
-        identified_span = bool(
-            cabo.identificador_operacional
-            and cabo.identificador_operacional.upper().startswith("V")
-        )
-        has_delivery_endpoint = TipoPontoRede.ENTREGA in {origem.tipo, destino.tipo}
-        if (
-            (poste_origem is None or poste_destino is None)
-            and not identified_span
-            and not has_delivery_endpoint
         ):
             continue
         comprimento, fonte = _comprimento(cabo, poste_origem, poste_destino)

@@ -77,10 +77,117 @@ from zeny_project_handler_contracts.enums import (
     SpanLengthSource,
     SpanType,
 )
-from zeny_project_handler_contracts.review import AnalysisRegionDto, DetectedSpanDto
+from zeny_project_handler_contracts.review import (
+    AnalysisRegionDto,
+    DetectedSpanDto,
+    PhysicalSpanDto,
+)
 from zeny_project_handler_server.review_api import ReviewApiService, _proposal_label
 
 pytestmark = pytest.mark.integration
+
+
+@pytest.mark.parametrize("situation", list(ElementSituation))
+@pytest.mark.parametrize("span_type", list(SpanType))
+def test_physical_span_navigation_preserves_type_situation_and_pending_review(
+    review_panel_context: tuple[Engine, ReviewPanelWidget, PropostaElemento],
+    situation: ElementSituation,
+    span_type: SpanType,
+) -> None:
+    _engine, panel, _proposal = review_panel_context
+    panel._project.setCurrentIndex(1)
+    assert panel._session is not None
+    original = panel._session.proposals[0]
+    span = PhysicalSpanDto(
+        span_id=uuid4(),
+        start_point_id=uuid4(),
+        end_point_id=uuid4(),
+        proposal_ids=(original.proposal_id,),
+        cable_element_ids=(),
+        label="V3-4",
+        start_label="P3",
+        end_label="P4",
+        cable_labels=("ABCN", "N"),
+        situations=(situation,),
+        situation_label=situation.value,
+        span_type=span_type,
+        span_type_label=span_type.value,
+        length="14",
+        length_label="14,00 m",
+        pending_reasons=("Revisão técnica pendente",),
+        page_label="Folha 1",
+        geometry=original.overlay.geometry,
+    )
+    panel._session = panel._session.model_copy(update={"physical_spans": (span,)})
+    panel._refresh_spans()
+    table = panel.findChild(QTableWidget, "physicalSpanTable")
+    assert table is not None and table.rowCount() == 1
+    expected = {
+        1: span_type.value,
+        2: "Desconhecida",
+        3: situation.value,
+        7: "14,00 m",
+        8: "Revisão técnica pendente",
+    }
+    for column, value in expected.items():
+        cell = table.item(0, column)
+        assert cell is not None and cell.text() == value
+    panel._select_physical_span(0, 0)
+    assert panel._selected_proposal_id == original.proposal_id.root
+    assert panel._session.proposals[0].review_state == original.review_state
+    panel.limpar()
+    assert table.rowCount() == 0
+
+
+def test_continuation_navigation_clears_previous_revision_editor(
+    review_panel_context: tuple[Engine, ReviewPanelWidget, PropostaElemento],
+) -> None:
+    _engine, panel, _proposal = review_panel_context
+    panel._project.setCurrentIndex(1)
+    assert panel._session is not None
+    original = panel._session.proposals[0]
+    revised = original.model_copy(
+        update={
+            "technical_revision": {
+                "base_text": "Base",
+                "visible_text": "Revisão",
+                "decision": None,
+            }
+        }
+    )
+    continuation = PhysicalSpanDto(
+        span_id=uuid4(),
+        start_point_id=uuid4(),
+        end_point_id=None,
+        continuation=True,
+        proposal_ids=(),
+        cable_element_ids=(),
+        label="Continuidade do desenho",
+        start_label="Ponto sem identificador",
+        end_label="Fora do desenho",
+        cable_labels=(),
+        situations=(ElementSituation.EXISTING,),
+        situation_label="Existente",
+        span_type=SpanType.UNKNOWN,
+        span_type_label="Desconhecido",
+        length_label="Não identificado",
+        pending_reasons=("Revisão necessária",),
+        page_label="Folha 1",
+        geometry=original.overlay.geometry,
+    )
+    panel._session = panel._session.model_copy(
+        update={
+            "proposals": (revised,),
+            "physical_spans": (continuation,),
+        }
+    )
+    panel._select_proposal_id(str(original.proposal_id.root))
+    assert not panel._revision_comparison.isHidden()
+    panel._select_physical_span(0, 0)
+    assert panel._selected_proposal_id is None
+    assert panel._revision_comparison.isHidden()
+    assert not panel._accept.isEnabled()
+    assert panel._viewer._overlays
 
 
 def test_auxiliary_readings_display_literal_conflict_and_review_layer(
@@ -596,6 +703,7 @@ def test_results_panel_has_span_tab_with_situation_cable_and_length_source(
         "Elementos",
         "Vãos",
         "Leituras auxiliares",
+        "Trechos físicos",
     ]
     assert table.rowCount() == 1
     headers: list[str] = []

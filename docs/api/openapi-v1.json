@@ -3081,6 +3081,181 @@
         "title": "PhotoId",
         "type": "string"
       },
+      "PhysicalSpanDto": {
+        "additionalProperties": false,
+        "properties": {
+          "cable_element_ids": {
+            "items": {
+              "$ref": "#/components/schemas/ElementId"
+            },
+            "title": "Cable Element Ids",
+            "type": "array"
+          },
+          "cable_labels": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Cable Labels",
+            "type": "array"
+          },
+          "continuation": {
+            "default": false,
+            "title": "Continuation",
+            "type": "boolean"
+          },
+          "end_label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "End Label",
+            "type": "string"
+          },
+          "end_point_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Point Id"
+          },
+          "evidence_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Evidence Ids",
+            "type": "array"
+          },
+          "geometry": {
+            "$ref": "#/components/schemas/ReviewGeometryDto"
+          },
+          "label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "length": {
+            "anyOf": [
+              {
+                "description": "Número decimal codificado como texto para preservar precisão.",
+                "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Length"
+          },
+          "length_label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Length Label",
+            "type": "string"
+          },
+          "modality": {
+            "default": "DESCONHECIDO",
+            "enum": [
+              "AEREO",
+              "SUBTERRANEO",
+              "DESCONHECIDO"
+            ],
+            "title": "Modality",
+            "type": "string"
+          },
+          "modality_label": {
+            "default": "Desconhecida",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Modality Label",
+            "type": "string"
+          },
+          "page_label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Page Label",
+            "type": "string"
+          },
+          "pending_reasons": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Pending Reasons",
+            "type": "array"
+          },
+          "proposal_ids": {
+            "items": {
+              "$ref": "#/components/schemas/ProposalId"
+            },
+            "title": "Proposal Ids",
+            "type": "array"
+          },
+          "situation_label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Situation Label",
+            "type": "string"
+          },
+          "situations": {
+            "items": {
+              "$ref": "#/components/schemas/ElementSituation"
+            },
+            "title": "Situations",
+            "type": "array"
+          },
+          "span_id": {
+            "format": "uuid",
+            "title": "Span Id",
+            "type": "string"
+          },
+          "span_type": {
+            "$ref": "#/components/schemas/SpanType"
+          },
+          "span_type_label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Span Type Label",
+            "type": "string"
+          },
+          "start_label": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Start Label",
+            "type": "string"
+          },
+          "start_point_id": {
+            "format": "uuid",
+            "title": "Start Point Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "span_id",
+          "start_point_id",
+          "end_point_id",
+          "proposal_ids",
+          "cable_element_ids",
+          "label",
+          "start_label",
+          "end_label",
+          "cable_labels",
+          "situations",
+          "situation_label",
+          "span_type",
+          "span_type_label",
+          "length_label",
+          "page_label",
+          "geometry"
+        ],
+        "title": "PhysicalSpanDto",
+        "type": "object"
+      },
       "PreflightDisposition": {
         "enum": [
           "READY",
@@ -4487,6 +4662,14 @@
             "title": "Page Order",
             "type": "array"
           },
+          "physical_spans": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/PhysicalSpanDto"
+            },
+            "title": "Physical Spans",
+            "type": "array"
+          },
           "project_id": {
             "$ref": "#/components/schemas/ProjectId"
           },
@@ -5240,7 +5423,7 @@
     },
     "summary": "Contrato HTTP v1 do cliente magro e do servidor Zeny.",
     "title": "Zeny Project Handler API",
-    "version": "1.5.0"
+    "version": "1.6.0"
   },
   "openapi": "3.1.0",
   "paths": {

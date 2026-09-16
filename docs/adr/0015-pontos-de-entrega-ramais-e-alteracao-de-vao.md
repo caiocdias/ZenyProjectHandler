@@ -130,3 +130,19 @@ endpoints e vínculo geométrico coerentes; caso contrário permanece `DESCONHEC
 
 Rejeitada porque os JSON e snapshots antigos não contêm os fatos necessários para uma classificação
 segura. Reanálise explícita conserva a proveniência e a versão que produziu cada resultado.
+
+
+## Implementação E14 — 16/09/2026
+
+A projeção física é separada do grafo elétrico. Fase/neutro podem compartilhar um
+ID de trecho/ponto físico sem unir tensão ou configuração de fases. Cabos continuam
+ativos individuais; continuidades de desenho sem endpoint visível não criam ativo.
+`physical_spans` é calculado na leitura, com proposta/ativo/evidência rastreáveis,
+revisão explícita e ausência de destino/comprimento externo. Não há novos campos
+persistidos nem migração de codec. `spans` mantém a unidade por cabo e passa a
+mostrar existentes sem exigir poste classificado ou identificador V.
+
+API/piso 1.6.0 e interpretador 25.0; clientes estritos anteriores exigem atualização
+coordenada. Snapshots antigos não são reescritos e reanálise continua exigindo
+reconciliação quando houver decisões anteriores. Detalhes, limites e validações
+em [E14](../e14-topologia-projecao-trechos.md).

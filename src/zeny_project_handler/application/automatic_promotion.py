@@ -9,6 +9,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID, uuid5
 
+from zeny_project_handler.application.physical_topology import physical_point_id
 from zeny_project_handler.domain.analysis import (
     DecisaoRevisao,
     PropostaElemento,
@@ -108,11 +109,13 @@ def promover_resultado_automatico(
             continue
         built, points = element
         element_ids[proposal.id] = element_id
-        if element_id not in existing_elements:
-            added_elements.append(built)
+        if element_id in existing_elements:
+            continue
+        added_elements.append(built)
         for point in points:
             if point.id not in existing_points:
                 added_points.append(point)
+                existing_points[point.id] = point
 
     confirmed_relations: list[RelacaoConfirmada] = []
     promoted_relations: list[PropostaRelacao] = []
@@ -304,6 +307,7 @@ def _dependent_element(
             endpoint_poles[index],
             endpoint_types[index],
             endpoint_labels[index],
+            shared=bool(attributes.get("evidencia_geometria_id")),
         )
         for index in range(2)
     )
@@ -402,11 +406,21 @@ def _network_point(
     pole_id: UUID | None,
     point_type: TipoPontoRede,
     operational_label: str | None,
+    *,
+    shared: bool = False,
 ) -> PontoRede:
     suffix = "origem" if index == 0 else "destino"
     point = geometry.pontos[0] if index == 0 else geometry.pontos[-1]
     return PontoRede(
-        id=uuid5(cable_id, f"ponto-{suffix}"),
+        id=(
+            uuid5(
+                physical_point_id(geometry.pagina_id, point),
+                f"electrical:{cable_type.nivel_tensao_opcao_id}:"
+                f"{cable_type.configuracao_fases_opcao_id}:{point_type.value}:{pole_id}",
+            )
+            if shared
+            else uuid5(cable_id, f"ponto-{suffix}")
+        ),
         poste_id=pole_id,
         nome=(
             f"{operational_label} - Padrão do cliente"

@@ -302,7 +302,7 @@ def _associate_cable(
         )
     path = association.path
     identifier_label = identifiers_by_path.get(path.evidence.id)
-    geometry, endpoint_poles = _oriented_path(path, identifier_label)
+    geometry, endpoint_poles = _oriented_path(path, identifier_label, evidence)
     attributes = dict(cable.atributos_sugeridos)
     for key in (
         "comprimento_m",
@@ -331,8 +331,10 @@ def _associate_cable(
     ]
     if identifier_label is not None:
         identifier_endpoints = _identifier_endpoint_labels(identifier_label.value)
-        origin_label = _pole_identifier(endpoint_poles[0])
-        destination_label = _pole_identifier(endpoint_poles[1])
+        origin_label = _endpoint_label(geometry.pontos[0], geometry.pagina_id, evidence)
+        destination_label = _endpoint_label(geometry.pontos[-1], geometry.pagina_id, evidence)
+        origin_label = origin_label or _pole_identifier(endpoint_poles[0])
+        destination_label = destination_label or _pole_identifier(endpoint_poles[1])
         if identifier_endpoints is not None:
             origin_label = origin_label or identifier_endpoints[0]
             destination_label = destination_label or identifier_endpoints[1]
@@ -516,6 +518,7 @@ def _identifier_matches_endpoints(identifier: str, path: _TracePath) -> bool:
 def _oriented_path(
     path: _TracePath,
     label: _SpanLabel | None,
+    evidence: tuple[EvidenciaDocumento, ...] = (),
 ) -> tuple[
     GeometriaDocumento,
     tuple[PropostaElemento | None, PropostaElemento | None],
@@ -528,8 +531,11 @@ def _oriented_path(
     if identifier_endpoints is None:
         return geometry, endpoints
     origin_label, destination_label = identifier_endpoints
-    first_label = _pole_identifier(endpoints[0])
-    second_label = _pole_identifier(endpoints[1])
+    first_label = _endpoint_label(geometry.pontos[0], geometry.pagina_id, evidence)
+    second_label = _endpoint_label(geometry.pontos[-1], geometry.pagina_id, evidence)
+    if first_label is None and second_label is None:
+        first_label = _pole_identifier(endpoints[0])
+        second_label = _pole_identifier(endpoints[1])
     if first_label == destination_label or second_label == origin_label:
         return (
             GeometriaDocumento.polilinha(
@@ -539,6 +545,33 @@ def _oriented_path(
             (endpoints[1], endpoints[0]),
         )
     return geometry, endpoints
+
+
+def _endpoint_label(
+    endpoint: PontoNormalizado,
+    page_id: UUID,
+    evidence: tuple[EvidenciaDocumento, ...],
+) -> str | None:
+    """Resolve an isolated point label locally; ties do not choose an endpoint."""
+    distances: dict[str, float] = {}
+    for item in evidence:
+        label = normalized_text(item.conteudo_bruto or "")
+        if (
+            item.pagina_id != page_id
+            or item.tipo not in {TipoEvidencia.OCR, TipoEvidencia.TEXTO}
+            or not _POINT_IDENTIFIER_PATTERN.fullmatch(label)
+        ):
+            continue
+        distance = point_distance((float(endpoint.x), float(endpoint.y)), center(item.geometria))
+        if distance <= 0.035:
+            distances[label] = min(distance, distances.get(label, math.inf))
+    ranked = sorted(distances, key=lambda key: distances[key])
+    if not ranked or (
+        len(ranked) > 1
+        and distances[ranked[1]] - distances[ranked[0]] <= _ASSOCIATION_AMBIGUITY_MARGIN
+    ):
+        return None
+    return ranked[0]
 
 
 def _identifier_endpoint_labels(identifier: str) -> tuple[str, str] | None:

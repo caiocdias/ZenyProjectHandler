@@ -167,3 +167,25 @@ esse denominador. O grafo alternativo continua perdendo associações em P3/cabo
 O benchmark final tem 43 propostas, oito confirmações, seis vãos e zero diagnósticos;
 nenhuma confirmação duplicada conhecida. Isso não conclui D06 nem a leitura integral.
 Fonte e 139 referências preservadas. Ver [decisões, testes e reconciliação E13](e13-ocorrencias-associacao.md).
+
+
+## Atualização E14 — 16/09/2026
+
+D06 corrigido no escopo topológico: dez trechos físicos projetados, nove pontos
+físicos, sete pares visíveis corretos e três continuidades com destino externo
+não inventado. Os seis comprimentos estão nos trechos correspondentes; os quatro
+sem medida continuam desconhecidos. V3-4 agora orienta P3/P4 corretamente e fica
+visível com revisão técnica pendente, sem confirmar a base. Existentes 36/83 m
+chegam à tabela Vãos; fase/neutro aparecem juntos em Trechos físicos sem perder
+identidade de cabo nem unir circuitos de tensões/configurações distintas.
+
+API/UI/XLSX concordam. Tipo/modalidade continuam desconhecidos com motivo;
+P4 não foi classificado como padrão pela casa. A janela de desenho e os traçados
+sustentam continuidades revisáveis, sem poste/cabo confirmado além da folha.
+Benchmark final: 43 propostas, oito confirmações, dez pontos elétricos, oito linhas
+de Vãos, dez trechos físicos, zero diagnósticos e fonte inalterada. Núcleo E13
+preservado: 29 TP, zero FN/FP. Grafo E12A mantém somente 1/7 pares completos e não
+foi integrado. Não é aceite integral E15, nem resolução dos bloqueios E08/E09.
+
+Decisões, compatibilidade 25.0/API 1.6.0, limites, comandos e mapa completo em
+[e14-topologia-projecao-trechos.md](e14-topologia-projecao-trechos.md).
