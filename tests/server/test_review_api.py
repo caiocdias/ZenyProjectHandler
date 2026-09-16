@@ -37,6 +37,50 @@ PASSWORD = "senha do servidor para testes da etapa seis"
 AUTH = {"Authorization": f"Bearer {PASSWORD}"}
 
 
+@pytest.mark.parametrize("token,qualifier", [("N3(2)", "2"), ("N4(1)", "1"), (None, None)])
+def test_structure_literal_survives_http_and_xlsx(
+    tmp_path: Path, token: str | None, qualifier: str | None
+) -> None:
+    from tests.server.test_deliverable_exports import _sheet_rows
+    from zeny_project_handler_contracts.review import ReviewSessionResponse
+    from zeny_project_handler_server.deliverable_exports import _results_sheets
+    from zeny_project_handler_server.xlsx_export import write_xlsx
+
+    settings = _settings(tmp_path / "structure-export")
+    runtime = compose_server_runtime(settings)
+    project_id, proposal_id, _ = _seed_review(runtime)
+    with SqlAlchemyUnitOfWork(runtime.core.engine) as work:
+        proposal = work.propostas.obter(proposal_id)
+        assert isinstance(proposal, PropostaElemento)
+        attributes = dict(proposal.atributos_sugeridos)
+        if token is not None:
+            attributes["token_estrutura"] = token
+            attributes["qualificador_estrutura"] = qualifier
+        proposal = replace(
+            proposal,
+            categoria=CategoriaElemento.ESTRUTURA_MT,
+            codigo_observado=token.split("(")[0] if token is not None else None,
+            atributos_sugeridos=tuple(attributes.items()),
+        )
+        work.propostas.salvar(proposal)
+        work.commit()
+    with TestClient(create_app(settings, runtime_factory=lambda _settings: runtime)) as client:
+        response = client.get(f"/api/v1/projects/{project_id}/review-session", headers=AUTH)
+        assert response.status_code == 200, response.text
+        session = ReviewSessionResponse.model_validate(response.json())
+        item = next(item for item in session.proposals if item.proposal_id.root == proposal_id)
+        assert item.label == f"Estrutura MT {token or ''}".strip()
+        assert item.overlay.label == item.label
+        sheets = _results_sheets(session)
+        exported = write_xlsx(tmp_path / "results.xlsx", sheets)
+        rows = _sheet_rows(exported.read_bytes(), 1)
+        row = next(row for row in rows[1:] if row[14] == str(proposal_id))
+        assert rows[0][-2:] == ("Token de estrutura observado", "Qualificador de estrutura")
+        assert row[-2:] == (token or "", qualifier or "")
+        assert row[10] == (proposal.codigo_observado or "")
+        assert len(session.proposals) == len(rows) - 1
+
+
 def test_technical_cable_revision_http_requires_choice_and_exports_both_layers(
     tmp_path: Path,
 ) -> None:

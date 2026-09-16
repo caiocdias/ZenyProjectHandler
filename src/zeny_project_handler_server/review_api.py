@@ -1295,7 +1295,12 @@ def _proposal_label(proposal: PropostaElemento, catalog: CatalogoTecnico) -> str
         if dict(proposal.atributos_sugeridos).get("reconhecido_por_simbologia") is True:
             return category
         return f"{category} {proposal.codigo_observado or ''}".strip()
-    return f"{_category_label(proposal.categoria)} {proposal.codigo_observado or ''}".strip()
+    observed = proposal.codigo_observado or ""
+    if proposal.categoria in (CategoriaElemento.ESTRUTURA_MT, CategoriaElemento.ESTRUTURA_BT):
+        token = dict(proposal.atributos_sugeridos).get("token_estrutura")
+        if isinstance(token, str) and token.strip():
+            observed = token
+    return f"{_category_label(proposal.categoria)} {observed}".strip()
 
 
 def _equipment_type_label(proposal: PropostaElemento, catalog: CatalogoTecnico) -> str:

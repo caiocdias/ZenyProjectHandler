@@ -189,3 +189,27 @@ foi integrado. Não é aceite integral E15, nem resolução dos bloqueios E08/E0
 
 Decisões, compatibilidade 25.0/API 1.6.0, limites, comandos e mapa completo em
 [e14-topologia-projecao-trechos.md](e14-topologia-projecao-trechos.md).
+
+## Atualização E15 — 16/09/2026 — aceite bloqueado
+
+Auditoria integral das 139 referências preserva os ganhos de E11–E14: núcleo
+29 TP/0 FN/0 FP, dez trechos, sete pares visíveis e seis medidas corretas no PDF
+principal. Isso não resolve classificação completa, autoridade ou documentação.
+Dos 64 itens documentais, 16 estão exatos na projeção, 11 duplicados (oito também
+com valores errados), 36 sem representação individual e um somente como leitura
+auxiliar revisável. Revisão do núcleo 21/29; cobertura automática por campos no
+máximo 8/29. Metas E10 e leitura exata do documento estão reprovadas.
+
+As nove reservas sintéticas E10 foram executadas com baseline original, vertical,
+composição atual e ablações. H01 perde 18/27 ocorrências entre páginas; H03 produz
+seis falsos positivos na composição atual, três confirmados; H02 mantém revisões
+pendentes, mas erra os pares/medidas dos circuitos cruzados. Não extrapolar o êxito
+topológico deste PDF às reservas. O grafo independente também erra medidas.
+
+Correções de integração conservam tokens/qualificadores nos rótulos HTTP/Qt/realces
+e no XLSX; o teste do benchmark passa a conferir a aba adicionada por E14.
+Inferência não ampliada. E15A–E15E separam as perdas antes da implementação.
+HTTP real, OCR real, SQL fake, exportações, cancelamento, reanálise e reabertura
+foram exercitados; a rejeição anterior foi preservada nos três H02.
+Comandos, resultados finais do gate, métricas e limites no
+[handoff E15](e15-aceite-integral-segundo-pdf.md). E08/E09 e fontes intactas.

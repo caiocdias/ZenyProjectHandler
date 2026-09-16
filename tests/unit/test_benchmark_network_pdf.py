@@ -100,7 +100,9 @@ def test_telemetry_renders_both_layers_and_projects_documentation(tmp_path: Path
     assert layers[0]["raster_sha256"] != layers[1]["raster_sha256"]
     assert report["native"]["documentation"]["dto"]["sections"]
     assert report["native"]["export"]["verified"]
-    assert report["native"]["export"]["sheets"][2].name == "Documentação"
+    sheet_names = [sheet.name for sheet in report["native"]["export"]["sheets"]]
+    assert sheet_names[:3] == ["Elementos", "Vãos", "Trechos físicos"]
+    assert "Documentação" in sheet_names
     assert source.read_bytes() == original
     plain = benchmark(source, tmp_path / "plain.json", tmp_path, native_only=True)
     assert plain["native"]["counts"] == report["native"]["counts"]

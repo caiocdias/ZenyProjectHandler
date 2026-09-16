@@ -273,6 +273,8 @@ def _results_sheets(session: ReviewSessionResponse) -> tuple[WorksheetData, ...]
             ),
             str((item.technical_revision or {}).get("effective_value") or ""),
             str((item.technical_revision or {}).get("source_sha256", "")),
+            str(item.attributes.get("token_estrutura") or ""),
+            str(item.attributes.get("qualificador_estrutura") or ""),
         )
         for item in session.proposals
     )
@@ -316,6 +318,8 @@ def _results_sheets(session: ReviewSessionResponse) -> tuple[WorksheetData, ...]
                 "Decisão técnica",
                 "Valor efetivo",
                 "SHA-256 da fonte",
+                "Token de estrutura observado",
+                "Qualificador de estrutura",
             ),
             element_rows,
         ),

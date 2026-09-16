@@ -83,7 +83,7 @@ apresenta os DTOs e rasters recebidos pela API autenticada.
   antes da prontidão.
 - Temas claro e escuro, painéis acopláveis e restauração do estado da interface.
 
-O extrator 1.16.0 lê também rótulos convertidos em contornos vetoriais, isolando os caracteres
+O extrator 1.17.0 lê também rótulos convertidos em contornos vetoriais, isolando os caracteres
 de molduras e linhas sobrepostas e preservando sua posição na página. Recortes têm orçamento
 limitado; falhas mantêm as evidências já obtidas, geram diagnóstico e não ficam presas no cache.
 A referência local recuperou as 95 ocorrências, os 18 identificadores e os 19 comprimentos
@@ -97,8 +97,8 @@ O painel Resultados apresenta os dois recortes e mantém a decisão técnica pen
 o responsável escolher uma camada e informar o motivo. Comentários, fotos, assinaturas e
 carimbos permanecem evidências; SHX continua disponível como conteúdo técnico. A escolha
 da camada preserva a versão anterior e não cria um ativo sem catálogo: `ABCN-16(16)`,
-ausente do catálogo atual, continua com catalogação pendente. A interpretação de múltiplas
-operações sobrepostas de N4 permanece pendente de reconciliação e interpretação.
+ausente do catálogo atual, continua com catalogação pendente. E13 distingue a base e as
+operações instalar/remover de N4, mantendo a escolha da camada técnica pendente.
 Detalhes e validações em [E11](docs/e11-revisoes-tecnicas.md).
 
 E12 acrescenta leituras literais por cor e célula ao grupo de revisão N4, com caixas,
@@ -110,6 +110,14 @@ análise. Cancelamento continua cooperativo nos pontos seguros do fluxo; uma cha
 OCR em execução não é interrompida imediatamente pelo pedido de cancelamento.
 Há ganho de extração no segundo PDF, mas ainda existem leituras divergentes e truncadas.
 Limites, comparação isolada e próximos passos: [E12](docs/e12-precisao-extratores.md).
+
+O [aceite E15](docs/e15-aceite-integral-segundo-pdf.md) permanece bloqueado por qualidade.
+O segundo PDF tem 29 ocorrências corretas no núcleo e dez trechos físicos conferidos,
+mas os 64 itens documentais ainda incluem omissões e valores conflitantes. A cobertura
+automática não cumpre as metas E10. Reservas também revelaram fusão entre páginas,
+falsos ativos em tabelas e associações erradas em circuitos cruzados; E15A–E15E detalham
+o trabalho restante. Os qualificadores de estruturas aparecem nos rótulos de Resultados,
+realces e duas colunas adicionais do XLSX, preservando o código-base do catálogo.
 
 Projeto, Resultados, Documentação e conformidade, GMAX e Exportar têm rolagem vertical
 independente. As tabelas e listas mantêm uma área de leitura limitada: a roda percorre suas

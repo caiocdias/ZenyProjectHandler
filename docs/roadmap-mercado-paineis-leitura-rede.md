@@ -201,7 +201,12 @@ Hipóteses de produto adotadas para tornar o plano executável, ajustáveis com 
 | E12B | Reconciliação e confiança entre métodos | #concluida | E12A | OCR documental auxiliar integrado; ablações e 167 testes aprovados |
 | E13 | Ocorrências e associação aos pontos corretos | #concluida | E12B | 29/29 no núcleo; D02–D05 rastreáveis, revisão e identidades preservadas |
 | E14 | Topologia e projeção dos trechos | #concluida | E13 | 10 trechos, 9 pontos físicos, 6 medidas e 3 continuidades rastreáveis |
-| E15 | Aceite integral do segundo PDF | #pendente | E11, E12, E12A, E12B, E13, E14 | Precisão vertical/horizontal, revisão visual e integração |
+| E15A | Consolidação documental e vigência por campo | #pendente | E11, E12B, E14 | 64 itens rastreáveis sem valores errados silenciosos |
+| E15B | Classificação e cobertura automática comprovada | #pendente | E13, E14 | Promoção exata, revisão explícita e metas E10 |
+| E15C | Identidade de ocorrências entre páginas | #pendente | E13 | Não fundir ocorrências de folhas distintas |
+| E15D | Exclusão contextual de falsos ativos | #pendente | E13 | Tabelas, fotos e carimbos sem promoção indevida |
+| E15E | Topologia de circuitos cruzados | #pendente | E14 | Endpoints, medidas e cabos exatos em circuitos distintos |
+| E15 | Aceite integral do segundo PDF | #bloqueada | E11, E12, E12A, E12B, E13, E14; retomada após E15A–E15E | Metas E10 reprovadas; evidências no handoff E15 |
 
 ## E01 — Diagnóstico e referência da NS 1256148225 — #concluida
 
@@ -1658,12 +1663,203 @@ completos contra 1/7 do grafo E12A; sem ranking por duração. Grafo não integr
 E15 recebe o gate integral/cobertura, classificação, autoridade, documentação,
 equipamentos e reservas; E08/E09 não foram re-homologadas. Sem commit/publicação.
 
-## E15 — Aceite integral do segundo PDF — #pendente
+## E15A — Consolidação documental e vigência por campo — #pendente
+
+**Objetivo:** representar os 64 itens documentais E10, com valor, fonte/camada,
+presença/vazio, limitação e decisão explícitos nos DTOs, painéis e XLSX.
+**Por que agora:** o aceite E15 reproduziu 11 itens duplicados, oito com valor
+errado entre as alternativas, 36 sem campo individual e um apenas auxiliar.
+São perdas próprias do processamento documental, além da exportação de estruturas.
+**Dependências e paralelismo:** E11, E12B, E14 concluídas; não editar projeções
+simultaneamente com E15. A auditoria E15 é insumo, não dependência de seu aceite.
+**Escopo:** `application/project_compliance.py`, `document_compliance.py`,
+`document_zones.py`, `coordinate_pairs.py`, revisão documental, contratos,
+`compliance_api.py`, `documentation_panel.py`, `deliverable_exports.py`.
+**Fora de escopo:** autenticar assinaturas/fotos, consultar SQL operacional,
+aprovar revisões pela data/cor ou alterar o inventário para acomodar perdas.
+
+**Passos de implementação:**
+
+1. Reproduzir em fixtures próprias campos truncados, duplicados e contraditórios,
+   coordenadas fragmentadas, tabelas/valores vazios e presença em aparências.
+2. Consolidar por identidade de campo/camada, conservando leituras concorrentes.
+   Valor conflitante não pode continuar `IDENTIFICADO` sem pendência específica.
+3. Representar notas, CHI, regulador, fotos/assinaturas e demais itens com suporte
+   ou limitação individual navegável; incluir decisão de vigência por campo.
+4. Validar persistência/reabertura, concorrência, reanálise e HTTP/Qt/XLSX com OCR
+   real e SQL fake. Não usar reservas expostas para calibrar e depois medir ganho.
+
+**Prompt para uma sessão limpa:**
+
+```text
+Execute E15A — Consolidação documental e vigência por campo de docs/roadmap-mercado-paineis-leitura-rede.md. Leia AGENTS.md aplicáveis, README, E10, handoffs E11/E12B/E14/E15, diagnóstico, código e testes documentais e git status. Confirme dependências concluídas e coerentes; preserve alterações existentes e marque E15A #em-andamento no índice e detalhe. Corrija consolidação/representação dos 64 itens documentais E10 com fonte e camada, valores exatos, vazios e limitações individuais navegáveis; preserve alternativas e não confirme conflito ou revisão por confiança do OCR. Não autentique fotos/assinaturas nem consulte SQL operacional. Use fixtures novas de desenvolvimento, OCR real no PDF privado e SQL fake; valide HTTP/Qt/XLSX, revisão, reabertura e reanálise. Não reduza denominadores nem use famílias reservadas já expostas como avaliação cega. Subdivida classes independentes antes de ampliar implementação. Execute validações obrigatórias e registre métricas/evidências/handoff. Só marque #concluida com todos os critérios aprovados; em impedimento real use #bloqueada com causa, evidência, impacto e desbloqueio. Preserve E08/E09 e originais. Não faça commit, release ou publicação. Termine com resumo conciso.
+```
+
+**Critérios de aceite:**
+
+- [ ] 64/64 itens têm representação ou limitação explícita individual até XLSX.
+- [ ] Nenhum valor errado/duplicado é exibido como campo consolidado correto.
+- [ ] Camada/autoridade e decisões sobrevivem a reabertura/reanálise sem transferência.
+- [ ] Testes documentais/API/Qt/exportação e gate público aprovados.
+
+**Validação obrigatória:** `python -m pytest tests/unit/test_document_compliance.py
+tests/server/test_compliance_api.py tests/server/test_deliverable_exports.py
+tests/integration/test_review_panel.py tests/e2e/test_mvp_ui.py`; localizar os testes
+de `project_compliance` antes de ampliar a lista. Executar `IniciarTestes.bat` e
+auditoria dos 64 itens E10 com fonte/hash preservados, sem gate de duração.
+**Bloqueios:** nenhum impedimento de início conhecido; os defeitos acima motivam a etapa.
+**Riscos e mitigação:** consolidar variantes apagando conflito; manter proveniência
+e regressões negativas. Acrescentar dados em DTO estrito exige compatibilidade explícita.
+**Evidências e handoff:** criada durante E15 em 16/09/2026, antes de ampliar a
+implementação documental; ver `tmp/rede-1256407599/e15/audit.json` e handoff E15.
+
+## E15B — Classificação e cobertura automática comprovada — #pendente
+
+**Objetivo:** resolver a primeira perda de classificação/promoção por ocorrência
+e comprovar as metas automáticas E10 sem fabricar modelos ou autoridade.
+**Por que agora:** as propostas acertam 29/29, mas somente oito cabos estão
+confirmados; 21/29 itens do núcleo ainda exigem revisão (meta máxima 5%).
+**Dependências e paralelismo:** E13/E14 concluídas; independente da consolidação
+documental, mas evitar alterações simultâneas em revisão e projeções com E15A.
+**Escopo:** catálogo/regras existentes, `automatic_promotion.py`, intérprete,
+classificação de pontos/tipo/modalidade, revisão humana e testes associados.
+**Fora de escopo:** inventar material/formato de poste, CA/CAA, classe de símbolo,
+tipo de entrega, quantidade por qualificador ou aprovação de camada.
+
+**Passos de implementação:**
+
+1. Auditar as 21 pendências do núcleo e os estratos de equipamentos/símbolos;
+   separar defeito corrigível de insuficiência real de fonte sem remover referências.
+2. Implementar somente resolução sustentada por evidência e catálogo verificado;
+   manter abstenção/revisão motivadas quando não houver decisão técnica autorizada.
+3. Medir código/situação/localização, classificação completa, FP/FN, confirmações
+   erradas e revisão por categoria. Congelar métodos antes de nova avaliação reservada.
+4. Se a fonte não sustentar ≥95% global/≥90% por classe e revisão ≤5%, registrar
+   incompatibilidade demonstrada e ação necessária; não baixar metas unilateralmente.
+
+**Prompt para uma sessão limpa:**
+
+```text
+Execute E15B — Classificação e cobertura automática comprovada de docs/roadmap-mercado-paineis-leitura-rede.md. Leia AGENTS.md aplicáveis, README, E10/E13/E14/E15, ADR 0015, catálogo, promoção, revisão, testes e git status. Confirme dependências concluídas e código coerente; preserve alterações e marque E15B #em-andamento no índice e detalhe. Audite as 21 pendências do núcleo e equipamentos/símbolos sem retirar itens da referência. Corrija apenas resoluções sustentadas por fonte/catálogo, preservando abstenção, identidade e decisões humanas. Não invente modelos, modalidade, padrão ou autoridade, nem promova por consenso OCR. Meça cobertura automática completa ≥95% global e ≥90% por categoria, revisão ≤5% e zero confirmações erradas; se a fonte não permitir as metas, documente o impedimento sem relaxá-las. Use testes sintéticos novos e OCR real/SQL fake; preserve reservas expostas e congele novos métodos antes de medir generalização. Subdivida perdas independentes antes de ampliar implementação. Execute testes obrigatórios, benchmark/auditoria E10 e IniciarTestes.bat. Só conclua com toda validação aprovada; use #bloqueada em impedimento real com causa/evidência/impacto/desbloqueio. Preencha Evidências e handoff. Preserve E08/E09 e PDFs privados; não faça commit, release ou publicação. Termine com resumo conciso.
+```
+
+**Critérios de aceite:**
+
+- [ ] Todas as pendências têm primeira perda e fonte/decisão rastreáveis.
+- [ ] Metas E10 de confirmação/revisão por categoria cumpridas sem erros conhecidos.
+- [ ] Tipo/modalidade/modelos exigidos têm evidência, sem transferência de decisão.
+- [ ] Reanálise/reabertura/API/XLSX e gate público aprovados.
+
+**Validação obrigatória:** `python -m pytest tests/unit/test_e13_occurrences.py
+tests/unit/test_e14_topology.py tests/unit/test_rule_based_interpreter.py
+tests/integration/test_interpretation_pipeline.py tests/integration/test_human_review.py
+tests/server/test_review_api.py tests/server/test_deliverable_exports.py`; benchmark
+OCR E10 por ocorrência e `IniciarTestes.bat`, sem teto temporal.
+**Bloqueios:** nenhum impedimento de início; suficiência da fonte deve ser demonstrada
+antes de prometer automação, com decisão do responsável quando faltar dado técnico.
+**Riscos e mitigação:** esconder omissões como revisão ou promover catálogo ambíguo;
+manter denominadores E10, medir erro das confirmações e abstenção separadamente.
+**Evidências e handoff:** criada em E15 em 16/09/2026 antes de ampliar classificação;
+os oito confirmados são cabos, nenhum poste/MT/BT confirmado. Ver handoff E15.
+
+## E15C — Identidade de ocorrências entre páginas — #pendente
+
+**Objetivo:** preservar cada ocorrência física de páginas distintas, inclusive
+mesmo identificador/código/posição em páginas nativas, rasterizadas e rotacionadas.
+**Dependências:** E13 concluída. Executar sem alterações simultâneas em deduplicação.
+**Escopo:** identidade, agrupamento, associação e projeção por página; não completar
+OCR ausente por cópia de outra folha. Fora de escopo: catálogo e vigência documental.
+
+**Passos:** localizar a primeira fusão entre nove propostas brutas e três finais
+em H01; criar fixtures novas de desenvolvimento; corrigir a identidade com página;
+validar persistência, revisão, HTTP/Qt/XLSX e reanálise. Congelar a composição antes
+de novas reservas; sementes 910101–910103 já estão expostas.
+
+**Prompt para uma sessão limpa:**
+
+```text
+Execute E15C de docs/roadmap-mercado-paineis-leitura-rede.md. Leia AGENTS.md aplicáveis, README, E10/E13/E15, pipeline, identidade/deduplicação, testes e git status. Confira dependências e preserve mudanças; marque índice/detalhe #em-andamento. Investigue a fusão entre páginas observada em H01, sem retirar omissões do inventário. Corrija com fixtures novas e sem completar textos ausentes por cópia. Valide páginas nativas/raster/rotacionadas, revisão humana, reabertura, reanálise, HTTP/Qt/XLSX, OCR real e SQL fake. Congele antes de novas reservas. Subdivida outras perdas antes de ampliar implementação. Execute testes, benchmark e IniciarTestes.bat. Só conclua com critérios aprovados; bloqueio exige causa/evidência/impacto/desbloqueio e handoff. Preserve E08/E09/PDFs; não faça commit, release ou publicação.
+```
+
+**Critérios e validação obrigatória:**
+
+- [ ] Nove ocorrências de cada caso H01 conservadas por página/código/situação/ROI,
+      sem falsos positivos nem confirmação indevida; novas reservas separadas.
+- [ ] Nenhuma decisão humana migra para ocorrência de outra folha.
+- [ ] HTTP/Qt/XLSX, reanálise/reabertura e gate público aprovados; E10 sem regressão.
+
+**Bloqueios:** nenhum de execução; E15 depende da resolução desta perda.
+**Risco:** duplicar a mesma representação dentro de uma folha; manter esse controle.
+**Evidências/handoff:** E15 mediu 9 TP/18 FN em 27 ocorrências H01, nos três métodos
+com Tesseract. `reserved-metrics.json` preserva correspondências e páginas.
+
+## E15D — Exclusão contextual de falsos ativos — #pendente
+
+**Objetivo:** impedir que textos técnicos em tabela, carimbo, foto e cerca sejam
+promovidos a ativos da rede sem contexto positivo de desenho.
+**Dependências:** E13 concluída; separar alterações de promoção das de E15B.
+**Escopo:** discriminação contextual e promoção; preservar os textos como evidência.
+Fora de escopo: excluir documentação ou diminuir o denominador para melhorar números.
+
+**Passos:** rastrear cabo confirmado sobre linha de tabela e transformador proposto
+em H03; criar controles positivos e negativos novos; corrigir contexto sem apagar
+evidências; medir FP, omissões, confirmações erradas e revisão por categoria.
+
+**Prompt para uma sessão limpa:**
+
+```text
+Execute E15D de docs/roadmap-mercado-paineis-leitura-rede.md. Leia AGENTS.md aplicáveis, README, E10/E13/E15, contexto de extração/interpretação, promoção, testes e git status. Preserve alterações e marque índice/detalhe #em-andamento. Corrija falsos ativos de tabela/carimbo/foto/cerca com contexto positivo e controles sintéticos novos; preserve evidências documentais. Não transforme abstenção generalizada em qualidade nem ajuste às reservas H03 já expostas. Meça FP/FN/confirmações erradas/revisão, valide OCR real/SQL fake, HTTP/Qt/XLSX e persistência. Subdivida perdas independentes. Execute benchmark, testes e IniciarTestes.bat; conclua apenas com todos os critérios aprovados. Registre evidências, bloqueios e handoff. Preserve E08/E09/PDFs; não faça commit, release ou publicação.
+```
+
+**Critérios e validação obrigatória:**
+
+- [ ] H03 não produz ativos de rede nem confirmações indevidas; controles positivos
+      mantêm recall e campos corretos, incluindo novas reservas após congelamento.
+- [ ] Todos os negativos continuam navegáveis como evidência, sem sumir do inventário.
+- [ ] HTTP/Qt/XLSX, persistência, E10 e gate público aprovados.
+
+**Bloqueios:** nenhum de execução. **Risco:** excluir cabos legítimos junto a quadros;
+contrapor fixtures positivas e negativas. **Evidências/handoff:** E15 registrou seis
+FP em três reservas H03, três confirmados erradamente, na composição atual.
+
+## E15E — Topologia de circuitos cruzados — #pendente
+
+**Objetivo:** representar dois circuitos cruzados com endpoints, nomes, comprimentos
+e identidades distintos, sem inventar junção ou escolher camada por proximidade.
+**Dependências:** E14 concluída; evitar alterações simultâneas em trechos com E15B/C.
+**Escopo:** associação cabo/traçado/ponto/medida e sua projeção; comparação com grafo
+independente. Fora de escopo: inventar autoridade técnica ou modalidade.
+
+**Passos:** rastrear a fusão de dois cabos em um trecho P3–P2 no H02; comparar a
+geometria correta do grafo com seus comprimentos errados; criar novos cruzamentos
+de desenvolvimento; corrigir associação e validar revisão/cópia/decisão anterior.
+
+**Prompt para uma sessão limpa:**
+
+```text
+Execute E15E de docs/roadmap-mercado-paineis-leitura-rede.md. Leia AGENTS.md aplicáveis, README, E10/E12A/E14/E15, ADR 0015, trechos, grafo experimental, testes e git status. Preserve alterações e marque índice/detalhe #em-andamento. Corrija associação em circuitos cruzados com fixtures novas; compare método atual e grafo por geometria/endpoints/nomes/medidas, nunca por tempo. Preserve revisão, cópia, decisão humana e incógnitas. Não una cabos distintos nem invente junção no cruzamento. Valide OCR real/SQL fake, HTTP/Qt/XLSX/reanálise/reabertura, E10 e novas reservas após congelamento. Subdivida novas perdas. Execute testes, benchmark e IniciarTestes.bat. Só conclua com todos os critérios aprovados; registre causa/evidência/impacto/desbloqueio se bloqueada e preencha handoff. Preserve E08/E09/PDFs; não faça commit, release ou publicação.
+```
+
+**Critérios e validação obrigatória:**
+
+- [ ] Seis pares/medidas completos nos três H02, sem fusão de circuitos ou junção
+      fictícia; revisão/cópia e rejeição anterior preservadas.
+- [ ] Contribuição de cada método medida em novas reservas congeladas.
+- [ ] HTTP/Qt/XLSX, reanálise/reabertura, E10 e gate público aprovados.
+
+**Bloqueios:** nenhum de execução. **Risco:** ganhar geometria e errar nomes/medidas;
+exigir acerto conjunto. **Evidências/handoff:** `reserved-topology.json`: produção
+0/6 pares completos, três saídas incorretas; grafo 6/6 pares geométricos nomeados,
+0/6 com medida correta. A aprovação restrita de E14 no PDF principal é preservada.
+
+## E15 — Aceite integral do segundo PDF — #bloqueada
 
 **Objetivo:** comprovar a referência integral através dos painéis, API, documentação
 e exportações, e registrar com precisão o que o sistema consegue ler.
 **Por que agora:** extração correta não garante interpretação, apresentação ou conteúdo vigente.
 **Dependências e paralelismo:** E11/E12/E12A/E12B/E13/E14; validar uma única revisão estabilizada.
+Dependências originais conferidas como concluídas. Retomada após E15A–E15E,
+criadas pelas perdas reproduzidas neste aceite; elas não dependem de E15 concluída.
 **Escopo:** pipeline servidor, inspeção documental em
 `application/document_compliance.py`, `project_compliance.py`, `document_zones.py`,
 revisão/API/cliente/exportação, `README.md`, diagnóstico e este roadmap.
@@ -1696,7 +1892,7 @@ Execute E15 — Aceite integral do segundo PDF de docs/roadmap-mercado-paineis-l
 
 - [ ] Inventário inteiro reconciliado e D01–D06 resolvidos, com ambiguidades técnicas explícitas.
 - [ ] Campos documentais suportados e fonte vigente conferidos nos painéis e exportações.
-- [ ] HTTP/Qt/XLSX, reanálise, cancelamento e inspeção visual passam na mesma revisão.
+- [x] HTTP/Qt/XLSX, reanálise, cancelamento e inspeção visual passam na mesma revisão.
 - [ ] Comparações e contribuição de cada método comprovadas em casos reservados,
       sem confirmações erradas conhecidas ou aumento oculto de revisão manual.
 - [ ] Gate público aprovado, metas de qualidade E10 cumpridas, fonte preservada e
@@ -1708,8 +1904,25 @@ apenas como complemento. Usar testes existentes de `tests/server/` e `tests/e2e/
 para o fluxo real: localizar o teste de cada painel antes da execução e registrar
 comandos efetivamente usados. Comparar snapshots/planilhas e inspecionar todos os
 itens do inventário no PDF, sem elevar sucesso de smoke a homologação.
-**Bloqueios:** nenhum bloqueio conhecido; etapas anteriores são dependências pendentes.
-**Riscos e mitigação:** aceitar apenas números agregados; exigir correspondência por item.
-PDF privado ausente impede aceite local, mas nunca se torna dependência do gate público.
-**Evidências e handoff:** ainda não executada. A auditoria inicial comprovou leitura
-parcial e preservação da fonte; não homologou API/Qt, documentação ou conformidade.
+**Bloqueios:** causa: perdas documentais, classificação insuficiente e falhas nas
+reservas. Evidência: dos 64 campos, 36 sem representação, 11 duplicados (oito com
+valores errados); cobertura automática por campos no máximo 8/29 e revisão 21/29.
+H01 perde 18/27 ocorrências; H03 confirma três falsos ativos; H02 erra seis pares
+completos. Impacto: leitura exata e metas E10 reprovadas. Desbloqueio: executar
+E15A–E15E, congelar nova composição, reservar casos novos e repetir o aceite.
+**Riscos e mitigação:** aceitar números agregados; exigir correspondência por item.
+PDF privado nunca se torna dependência do gate público; reservas expostas não
+podem ser reapresentadas como cegas. E08/E09 permanecem com os mesmos estados.
+**Evidências e handoff:** auditoria de 16/09/2026, transição #em-andamento → #bloqueada;
+[relatório E15](e15-aceite-integral-segundo-pdf.md), 139 linhas em `audit.json`,
+benchmarks isolados vertical/combinado/neural, inspeção integral da fonte,
+reconciliação documental/topológica e 45 execuções nas nove reservas. Integração
+real HTTP/Qt/XLSX, cache, reanálise, cancelamento e reabertura registrada em
+`http-report.json`; rótulos/qualificadores em `final-projection.json`. Comandos,
+resultados completos do gate, métricas e limites constam no handoff; nenhum
+critério de qualidade foi relaxado. Correções limitadas em rótulo/exportação e
+teste da ordem de abas; inferência não ampliada nesta etapa.
+Gate final: **1365 testes aprovados, 87,92% de cobertura, saída 0**; validação
+focada de API/XLSX/Resultados: 60 aprovados. Três rejeições anteriores H02
+preservadas após cache, reanálise forçada e reabertura. Gate aprovado não supera
+as metas de qualidade E10 reprovadas; os demais critérios de aceite ficam abertos.
