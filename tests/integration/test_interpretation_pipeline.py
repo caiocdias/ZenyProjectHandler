@@ -240,7 +240,7 @@ def test_interpreter_version_change_invalidates_completed_semantic_result(
     current = _runner(engine).executar(project.id, source_execution.id)
 
     assert legacy.execucao.versao_metodo == "20.0"
-    assert current.execucao.versao_metodo == "23.0"
+    assert current.execucao.versao_metodo == "24.0"
     assert current.execucao.id != legacy.execucao.id
     assert not current.resultado_reutilizado
     assert all(item.estado_revisao is EstadoRevisao.CONFLITANTE for item in current.elementos)
@@ -285,6 +285,40 @@ def test_reused_session_does_not_repromote_a_human_rejection(
     with SqlAlchemyUnitOfWork(engine) as work:
         assert work.decisoes_revisao.obter_da_proposta(pending.id) == decision
         assert work.projetos.obter(project.id) == before
+
+
+def test_duplicate_cable_readings_promote_once_and_reanalysis_preserves_review(
+    interpretation_context: tuple[Engine, Projeto, ExecucaoAnalise],
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    engine, project, source = interpretation_context
+    code = catalogo_inicial.itens_ativos(CategoriaElemento.CABO)[0].codigo
+    with SqlAlchemyUnitOfWork(engine) as work:
+        label = next(
+            e for e in work.evidencias.listar_da_execucao(source.id) if e.conteudo_bruto == code
+        )
+        duplicate = replace(label, id=uuid4(), tipo=TipoEvidencia.OCR)
+        work.evidencias.salvar(duplicate)
+        work.commit()
+    first = _runner(engine).executar(project.id, source.id)
+    cables = [p for p in first.elementos if p.categoria is CategoriaElemento.CABO]
+    assert len(cables) == 1 and cables[0].estado_revisao is EstadoRevisao.CONFIRMADA
+    assert {label.id, duplicate.id} <= set(cables[0].evidencia_ids)
+    with SqlAlchemyUnitOfWork(engine) as work:
+        before = work.projetos.obter(project.id)
+        prior = work.decisoes_revisao.obter_da_proposta(cables[0].id)
+    again = _runner(engine).executar(project.id, source.id)
+    assert again.resultado_reutilizado and again.elementos == first.elementos
+    changed = _runner(engine).executar(
+        project.id, source.id, configuracao=ConfiguracaoInterpretacao(maximo_propostas=9999)
+    )
+    current = next(p for p in changed.elementos if p.categoria is CategoriaElemento.CABO)
+    assert current.id != cables[0].id
+    assert dict(current.atributos_sugeridos)["reconciliacao_reanalise_pendente"]
+    with SqlAlchemyUnitOfWork(engine) as work:
+        assert work.projetos.obter(project.id) == before
+        assert work.decisoes_revisao.obter_da_proposta(cables[0].id) == prior
+        assert work.decisoes_revisao.obter_da_proposta(current.id) is None
 
 
 def test_cancelled_pipeline_resumes_with_same_identity_without_duplicates(

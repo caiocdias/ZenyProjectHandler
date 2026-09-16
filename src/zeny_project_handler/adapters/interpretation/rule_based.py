@@ -10,7 +10,10 @@ from zeny_project_handler.application.document_zones import (
     evidencias_sem_anotacoes_de_revisao,
     evidencias_sem_cabecalho,
 )
-from zeny_project_handler.application.technical_revisions import attach_revision_conflicts
+from zeny_project_handler.application.technical_revisions import (
+    append_revision_operations,
+    attach_revision_conflicts,
+)
 from zeny_project_handler.domain.analysis import (
     DiagnosticoAnalise,
     EvidenciaDocumento,
@@ -32,17 +35,15 @@ from .category_analyzers import (
     AnalisadorEstruturaMt,
     AnalisadorPoste,
 )
+from .occurrence_rules import deduplicate_cable_readings, overlapping_labels
 from .operational_labels import filtrar_propostas_identificadas
 from .relation_rules import generate_relations, mark_conflicts
-from .rule_support import center
 from .span_rules import associar_tracados_de_cabos
-
-_MAXIMUM_DUPLICATE_OCCURRENCE_AXIS_DISTANCE = 0.015
 
 
 class InterpretadorRegrasExplicitas:
     nome = "regras-explicitas-cemig"
-    versao = "23.0"
+    versao = "24.0"
 
     def __init__(
         self,
@@ -97,7 +98,7 @@ class InterpretadorRegrasExplicitas:
         )
         elements = mark_conflicts(
             _deduplicate_point_proposals(
-                proposals_with_paths,
+                deduplicate_cable_readings(proposals_with_paths, project_request.evidencias),
                 project_request.evidencias,
             ),
             project_request.evidencias,
@@ -106,7 +107,9 @@ class InterpretadorRegrasExplicitas:
             elements,
             project_request.evidencias,
         )
-        elements = attach_revision_conflicts(elements, solicitacao.evidencias)
+        elements = append_revision_operations(
+            attach_revision_conflicts(elements, solicitacao.evidencias)
+        )
         relations = (
             generate_relations(
                 solicitacao.execucao_id,
@@ -148,7 +151,9 @@ def _deduplicate_point_proposals(
     result: list[PropostaElemento] = []
     for proposal in proposals:
         attributes = dict(proposal.atributos_sugeridos)
-        operational_label = attributes.get("identificador_operacional")
+        operational_label = attributes.get("contexto_ponto_id") or attributes.get(
+            "identificador_operacional"
+        )
         catalog_reference = proposal.tipo_catalogo_sugerido_id or proposal.codigo_observado
         if (
             proposal.categoria is CategoriaElemento.CABO
@@ -230,12 +235,7 @@ def _same_physical_occurrence(
         )
     if first.geometria.pagina_id != second.geometria.pagina_id:
         return False
-    first_x, first_y = center(first.geometria)
-    second_x, second_y = center(second.geometria)
-    return (
-        abs(first_x - second_x) <= _MAXIMUM_DUPLICATE_OCCURRENCE_AXIS_DISTANCE
-        and abs(first_y - second_y) <= _MAXIMUM_DUPLICATE_OCCURRENCE_AXIS_DISTANCE
-    )
+    return overlapping_labels(first.geometria, second.geometria, whole=False)
 
 
 def _analyzer_diagnostic(name: str, error: Exception) -> DiagnosticoAnalise:

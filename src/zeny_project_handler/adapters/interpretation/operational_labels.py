@@ -10,6 +10,7 @@ from itertools import pairwise
 from zeny_project_handler.domain.analysis import EvidenciaDocumento, PropostaElemento
 from zeny_project_handler.domain.enums import (
     CategoriaElemento,
+    EstadoRevisao,
     SituacaoProjeto,
     TipoEvidencia,
     TipoGeometria,
@@ -59,11 +60,28 @@ def filtrar_propostas_identificadas(
     if distancia_maxima <= 0:
         raise ValueError("Distância máxima do identificador deve ser positiva")
     pole_labels, span_labels = _operational_labels(evidencias)
+    local_contexts = _unnumbered_contexts(propostas, pole_labels)
     identified: list[PropostaElemento] = []
     deferred_equipment: list[PropostaElemento] = []
     for proposal in propostas:
         if proposal.categoria is CategoriaElemento.CABO:
             identified.append(proposal)
+            continue
+        context, context_pending = _local_context(proposal, local_contexts, pole_labels)
+        if context is not None:
+            identified.append(_with_local_context(proposal, context))
+            continue
+        if context_pending:
+            identified.append(
+                replace(
+                    proposal,
+                    estado_revisao=EstadoRevisao.CONFLITANTE,
+                    atributos_sugeridos=(
+                        *proposal.atributos_sugeridos,
+                        ("associacao_pendente", "contextos_locais_em_empate"),
+                    ),
+                )
+            )
             continue
         if proposal.categoria is CategoriaElemento.EQUIPAMENTO:
             deferred_equipment.append(proposal)
@@ -83,9 +101,89 @@ def filtrar_propostas_identificadas(
         nearest = nearest or _nearest_label(proposal, pole_labels, distancia_maxima)
         if nearest is not None:
             identified.append(_with_operational_label(proposal, nearest))
-    return _select_unique_identifier_occurrences(
+    selected = _select_unique_identifier_occurrences(
         tuple(identified),
         (*pole_labels, *span_labels),
+    )
+    selected_ids = {p.id for p in selected}
+    text_ids = {str(e.id) for e in evidencias if e.tipo in {TipoEvidencia.TEXTO, TipoEvidencia.OCR}}
+    pending = tuple(
+        replace(
+            p,
+            estado_revisao=EstadoRevisao.CONFLITANTE,
+            atributos_sugeridos=(
+                *p.atributos_sugeridos,
+                ("associacao_pendente", "equipamento_sem_contexto_inequivoco"),
+            ),
+        )
+        for p in deferred_equipment
+        if p.id not in selected_ids
+        and dict(p.atributos_sugeridos).get("evidencia_rotulo_id") in text_ids
+    )
+    return (*selected, *pending)
+
+
+def _unnumbered_contexts(
+    proposals: tuple[PropostaElemento, ...], labels: tuple[_OperationalLabel, ...]
+) -> tuple[PropostaElemento, ...]:
+    """A legenda conjunta de poste/estrutura sustenta contexto, nunca um novo P<n>."""
+    structure_sources = {
+        dict(p.atributos_sugeridos).get("evidencia_ocorrencia_id")
+        for p in proposals
+        if p.categoria is CategoriaElemento.ESTRUTURA_MT
+    }
+    return tuple(
+        p
+        for p in proposals
+        if p.categoria is CategoriaElemento.POSTE
+        and any(str(e) in structure_sources for e in p.evidencia_ids)
+        and _nearest_label(p, labels, _MAXIMUM_TARGETED_IDENTIFIER_DISTANCE) is None
+    )
+
+
+def _local_context(
+    proposal: PropostaElemento,
+    contexts: tuple[PropostaElemento, ...],
+    labels: tuple[_OperationalLabel, ...],
+) -> tuple[PropostaElemento | None, bool]:
+    candidates = sorted(
+        (
+            (_proposal_distance(proposal, p), p)
+            for p in contexts
+            if _proposal_distance(proposal, p) <= _MAXIMUM_TARGETED_IDENTIFIER_DISTANCE
+        ),
+        key=lambda pair: (pair[0], str(pair[1].id)),
+    )
+    if not candidates:
+        return None, False
+    named = _nearest_label(proposal, labels, _MAXIMUM_IDENTIFIER_DISTANCE)
+    if (
+        named is not None
+        and _distance_to_geometry(center(named.evidence.geometria), proposal.geometria)
+        <= candidates[0][0] + 0.004
+    ):
+        return None, False
+    if len(candidates) > 1 and candidates[1][0] - candidates[0][0] <= 0.004:
+        return None, True
+    return candidates[0][1], False
+
+
+def _with_local_context(proposal: PropostaElemento, context: PropostaElemento) -> PropostaElemento:
+    # The context names an observed label, not a synthesized physical support or catalogue model.
+    context_id = dict(context.atributos_sugeridos).get("evidencia_rotulo_id")
+    attributes = dict(proposal.atributos_sugeridos)
+    attributes.update(
+        {
+            "contexto_ponto_id": str(context_id or context.id),
+            "associacao_origem": "legenda_conjunta_poste_estrutura",
+        }
+    )
+    return replace(
+        proposal,
+        evidencia_ids=tuple(sorted({*proposal.evidencia_ids, *context.evidencia_ids}, key=str)),
+        atributos_sugeridos=tuple(attributes.items()),
+        justificativa=f"{proposal.justificativa or ''} Contexto próprio sem identificador P; "
+        "a legenda conjunta de poste/estrutura foi preservada sem renumerar o ponto.",
     )
 
 

@@ -133,6 +133,9 @@ def operational(
                     )
             elif item["kind"] != "cable" or item["site"].startswith("V"):
                 record["association"] = attrs.get("identificador_operacional") == item["site"]
+                if not item["site"].startswith("P") and attrs.get("contexto_ponto_id"):
+                    record["observed_context"] = attrs["contexto_ponto_id"]
+                    record["association"] = context_association(item, p, proposals, evidence, refs)
             else:
                 # Unnumbered traces are evaluated by their geometry, not invented labels.
                 span = next(i for i in inventory["items"] if i["id"] == item["site"])
@@ -180,6 +183,40 @@ def operational(
         "classes": summary,
         "scope": "29 core occurrences; other output strata retained separately",
     }
+
+
+def context_association(
+    reference: dict[str, Any],
+    proposal: dict[str, Any],
+    proposals: list[dict[str, Any]],
+    evidence: dict[str, Any],
+    references: list[dict[str, Any]],
+) -> bool:
+    """Score an unnamed context against its inventoried pole label, never fabricate a P ID."""
+    poles = [r for r in references if r["kind"] == "pole" and r["site"] == reference["site"]]
+    if len(poles) != 1:
+        return False
+    pole = poles[0]
+    context_id = dict(proposal["atributos_sugeridos"]).get("contexto_ponto_id")
+    if context_id not in proposal["evidencia_ids"]:
+        return False
+    candidates = [
+        p
+        for p in proposals
+        if p["categoria"] == "POSTE"
+        and normal(proposal_code(p)) == normal(pole["code"])
+        and p["situacao_projeto"] == pole["situation"]
+        and box_distance(pole["center"], points(p)) <= 0.012
+        and not dict(p["atributos_sugeridos"]).get("identificador_operacional")
+        and dict(p["atributos_sugeridos"]).get("contexto_ponto_id") == context_id
+    ]
+    return any(
+        (source := evidence.get(str(dict(p["atributos_sugeridos"]).get("contexto_ponto_id"))))
+        is not None
+        and source["id"] in p["evidencia_ids"]
+        and box_distance(pole["center"], points(source)) <= 0.012
+        for p in candidates
+    )
 
 
 def topology(

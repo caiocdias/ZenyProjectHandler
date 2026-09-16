@@ -1,5 +1,17 @@
 # Zeny Project Handler
 
+### Ocorrências e contexto dos pontos (E13)
+
+O interpretador `24.0` consolida leituras sobrepostas do mesmo cabo, preserva estruturas
+repetidas e separa o contexto de postes sem identificador dos pontos numerados próximos.
+`TR-3-45` e neutros como `N-4` permanecem literais revisáveis quando falta correspondência
+exata de catálogo. Operações de estrutura observadas em revisão técnica aparecem separadas
+como instalar/remover, sem aprovação automática da camada revisada.
+
+A referência de desenvolvimento atingiu 29/29 ocorrências do núcleo; isso não certifica
+equipamentos, topologia ou leitura integral. Associação pendente, classificação e decisões
+técnicas continuam explícitas. Ver [evidências e limites E13](docs/e13-ocorrencias-associacao.md).
+
 ### Leitura complementar local (E12B)
 
 O servidor pode executar OCR neural auxiliar com `ZENY_SERVER_COMPLEMENTARY_OCR=true`.

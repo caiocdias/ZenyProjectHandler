@@ -20,9 +20,9 @@ Estado versionado relevante:
 | Registro de interpretação | `1.6.0` |
 | Registro de conformidade distribuído | `cemig-normas-distribuicao-2026.1` |
 | Método de conformidade | `14` |
-| Extrator documental | `1.14.0` |
-| Interpretador semântico | `22.0` |
-| API / piso compatível | `1.4.0` |
+| Extrator documental | `1.17.0` |
+| Interpretador semântico | `24.0` |
+| API / piso compatível | `1.5.0` |
 | Migração SQLite mais recente | `0009_remote_jobs` |
 
 ## Modelo de domínio
@@ -187,12 +187,30 @@ O código unitário `N` só é reconhecido nessa forma qualificada; textos comun
 qualificador ou geometria próprios, enquanto texto nativo e OCR da mesma ocorrência são consolidados
 com todas as evidências. A identidade e a ordenação resultantes independem da ordem das evidências.
 
-O interpretador `22.0` preserva a separação entre tokens qualificados adjacentes. Altura e
+O interpretador `24.0` preserva a separação entre tokens qualificados adjacentes. Altura e
 resistência de poste que correspondem a vários formatos de catálogo geram ocorrência conflitante
 com candidatos explícitos. Rótulo de cabo sem traçado inequívoco também permanece revisável;
 caixas e pontos do OCR não são convertidos em segmentos físicos. A cor do rótulo tem precedência
 sobre a do traçado compartilhado; OCR de contornos exige cores concordantes e contidas no rótulo,
 com proveniência. Medidas ambíguas não são preenchidas nem promovidas automaticamente.
+
+Leituras de cabo são consolidadas somente quando coincidem código, situação, traçado,
+identificador/medida e a área do rótulo na mesma página/camada. Cabos paralelos e rótulos
+distintos não são fundidos porque compartilham traçado. A proposta conserva as evidências
+de todas as leituras; conflitos auxiliares continuam impedindo promoção.
+
+Uma legenda conjunta de poste/estrutura sem identificador próximo pode sustentar contexto
+próprio (`contexto_ponto_id`), sem criar nome P, modelo de poste ou endpoint. Relações de
+instalação e regiões respeitam esse contexto. Empates e equipamentos textuais sem contexto
+inequívoco permanecem revisáveis. A geometria de tokens repetidos na mesma leitura é
+subdividida ao longo da linha OCR, conservando fonte, offsets e qualificadores.
+
+`TR-3-45` conserva código, três fases e capacidade observada de 45 kVA; sem correspondência
+exata não escolhe equipamento do catálogo. `N-4` não completa material CA/CAA. Leituras
+coloridas de estruturas revisadas geram alternativas instalar/remover com geometrias e
+identidades próprias, preservando a base e a autoridade pendente. Decisões de uma operação
+não são transferidas para outra operação nem para a base. Detalhes e limites em
+[E13](e13-ocorrencias-associacao.md).
 
 Uma relação de instalação precisa resolver um único poste. Relações dirigidas à entrega não são
 transferidas ao vizinho. Endpoints sem classe suficiente continuam desconhecidos; `P<n>` e

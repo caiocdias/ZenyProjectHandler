@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import replace
+from decimal import Decimal
 from typing import Any
 from uuid import uuid5
 
@@ -13,8 +15,9 @@ from zeny_project_handler.domain.analysis import (
     PropostaElemento,
     ReferenciaProposta,
 )
-from zeny_project_handler.domain.enums import EstadoRevisao
+from zeny_project_handler.domain.enums import CategoriaElemento, EstadoRevisao, SituacaoProjeto
 from zeny_project_handler.domain.project import Projeto
+from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 from zeny_project_handler.ports.persistence import UnitOfWorkPort
 
 
@@ -36,6 +39,10 @@ def preserve_revision_decision(
         if old.categoria != proposal.categoria or prior.get("base_code") != current.get(
             "base_code"
         ):
+            continue
+        if dict(old.atributos_sugeridos).get("operacao_revisao_id") != dict(
+            proposal.atributos_sugeridos
+        ).get("operacao_revisao_id"):
             continue
         # Retain the existing physical element and immutable decision, not a new asset.
         if decision is not None:
@@ -152,6 +159,94 @@ def attach_revision_conflicts(
             )
         )
     return tuple(result)
+
+
+def append_revision_operations(
+    proposals: tuple[PropostaElemento, ...],
+) -> tuple[PropostaElemento, ...]:
+    """Expose observed structure operations, retaining the base and undecided authority."""
+    result = list(proposals)
+    for proposal in proposals:
+        data = revision_data(proposal)
+        if proposal.categoria not in {
+            CategoriaElemento.ESTRUTURA_MT,
+            CategoriaElemento.ESTRUTURA_BT,
+        }:
+            continue
+        if not data or not data.get("operation_review_pending"):
+            continue
+        if dict(proposal.atributos_sugeridos).get("operacao_revisao_id"):
+            continue
+        for color, situation in (
+            ("verde", SituacaoProjeto.INSTALAR),
+            ("vermelho", SituacaoProjeto.REMOVER),
+        ):
+            readings = [
+                reading
+                for reading in data.get("color_readings", [])
+                if reading.get("color") == color
+                and (color != "vermelho" or reading.get("horizontal_strike") is True)
+                and _operation_token(reading.get("text", ""), proposal.codigo_observado)
+                and len(reading.get("box", [])) == 4
+            ]
+            for reading in _distinct_operation_readings(readings):
+                box = [Decimal(str(v)) for v in reading["box"]]
+                identity = (
+                    f"{data['group_id']}:{color}:{reading['annotation_xref']}:"
+                    f"{reading['text']}:{box}"
+                )
+                attrs = dict(proposal.atributos_sugeridos)
+                attrs.update(
+                    {
+                        "operacao_revisao_id": identity,
+                        "token_estrutura": reading["text"],
+                        "situacao_origem": "leitura_colorida_da_revisao_tecnica",
+                    }
+                )
+                attrs.pop("qualificador_estrutura", None)
+                qualifier = re.search(r"\((\d+)\)", reading["text"])
+                if qualifier is not None:
+                    attrs["qualificador_estrutura"] = qualifier[1]
+                result.append(
+                    replace(
+                        proposal,
+                        id=uuid5(proposal.id, identity),
+                        situacao_projeto=situation,
+                        geometria=GeometriaDocumento.caixa(
+                            proposal.geometria.pagina_id,
+                            PontoNormalizado(box[0], box[1]),
+                            PontoNormalizado(box[2], box[3]),
+                        ),
+                        atributos_sugeridos=tuple(attrs.items()),
+                        justificativa=f"Operação observada em {color}: {reading['text']}. "
+                        "Alternativa da camada revisada; autoridade e vigência "
+                        "requerem decisão técnica.",
+                    )
+                )
+    return tuple({p.id: p for p in result}.values())
+
+
+def _distinct_operation_readings(readings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    selected: list[dict[str, Any]] = []
+    for reading in sorted(readings, key=lambda r: (-len(r["text"]), str(r["box"]))):
+        if not any(_same_operation_reading(reading, other) for other in selected):
+            selected.append(reading)
+    return selected
+
+
+def _same_operation_reading(reading: dict[str, Any], other: dict[str, Any]) -> bool:
+    a, b, c, d = reading["box"]
+    e, f, g, h = other["box"]
+    return bool(
+        reading["annotation_xref"] == other["annotation_xref"]
+        and min(c, g) > max(a, e)
+        and min(d, h) > max(b, f)
+        and (reading["text"] == other["text"] or other["text"].startswith(reading["text"] + "("))
+    )
+
+
+def _operation_token(text: str, code: str | None) -> bool:
+    return code is not None and re.fullmatch(re.escape(code) + r"(?:\(\d+\))?", text) is not None
 
 
 def _bounds(item: EvidenciaDocumento) -> tuple[float, float, float, float]:

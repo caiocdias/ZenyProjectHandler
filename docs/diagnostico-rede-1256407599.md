@@ -150,3 +150,20 @@ duplicados e as pendências de interpretação/topologia continuam explícitos.
 Denominadores E10 preservados. Comparação por ocorrência, experiência reprovada,
 telemetria, validações e handoff E12A/E12B em
 [e12-precisao-extratores.md](e12-precisao-extratores.md).
+
+## Atualização E13 — 16/09/2026
+
+Interpretador 24.0: D02 passa a uma ocorrência confirmada de neutro em V2-3,
+conservando as duas leituras; os dois N3 físicos de P1 continuam separados. D03
+usa contexto próprio da legenda do poste existente, sem identificador P5 e sem
+inventar endpoint/modelo. D04 conserva base N4 e alternativas instalar/remover,
+com caixas e identidades distintas e decisão técnica pendente. D05 apresenta
+`TR-3-45`, fases/capacidade observadas e catálogo não resolvido.
+
+Os dois `N-4` existentes também ficam representados sem completar CA/CAA; Q3
+permanece visível com associação pendente. O núcleo E10 passa de 24 TP/5 FN/4 FP
+para 29/0/0. Equipamentos, classificação, documentação e topologia não integram
+esse denominador. O grafo alternativo continua perdendo associações em P3/cabos.
+O benchmark final tem 43 propostas, oito confirmações, seis vãos e zero diagnósticos;
+nenhuma confirmação duplicada conhecida. Isso não conclui D06 nem a leitura integral.
+Fonte e 139 referências preservadas. Ver [decisões, testes e reconciliação E13](e13-ocorrencias-associacao.md).

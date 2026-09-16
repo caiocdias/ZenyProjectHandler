@@ -69,16 +69,11 @@ def _relation_targets(
     rule: RegraRelacaoInterpretacao,
     catalog: CatalogoTecnico,
 ) -> tuple[PropostaElemento, ...]:
-    same_page = tuple(
-        item for item in destinations if item.geometria.pagina_id == origin.geometria.pagina_id
-    )
-    if rule.tipo_relacao.upper() in _INSTALLATION_RELATIONS:
-        same_page = tuple(
-            item
-            for item in same_page
-            if dict(item.atributos_sugeridos).get("tipo_ponto_rede") != "ENTREGA"
-        )
+    if dict(origin.atributos_sugeridos).get("associacao_pendente"):
+        return ()
+    same_page = _eligible_relation_destinations(origin, destinations, rule)
     if rule.estrategia == "CENTROS_PROXIMOS":
+        same_page = _point_context_targets(origin, same_page)
         identifier = dict(origin.atributos_sugeridos).get("identificador_operacional")
         if identifier:
             same_page = tuple(
@@ -136,6 +131,37 @@ def _relation_targets(
             float(rule.distancia_maxima),
         )
     raise ValueError(f"Estratégia de relação não suportada: {rule.estrategia}")
+
+
+def _eligible_relation_destinations(
+    origin: PropostaElemento,
+    destinations: tuple[PropostaElemento, ...],
+    rule: RegraRelacaoInterpretacao,
+) -> tuple[PropostaElemento, ...]:
+    same_page = tuple(
+        item
+        for item in destinations
+        if item.geometria.pagina_id == origin.geometria.pagina_id
+        and not dict(item.atributos_sugeridos).get("associacao_pendente")
+    )
+    if rule.tipo_relacao.upper() in _INSTALLATION_RELATIONS:
+        same_page = tuple(
+            item
+            for item in same_page
+            if dict(item.atributos_sugeridos).get("tipo_ponto_rede") != "ENTREGA"
+        )
+    return same_page
+
+
+def _point_context_targets(
+    origin: PropostaElemento, destinations: tuple[PropostaElemento, ...]
+) -> tuple[PropostaElemento, ...]:
+    context = dict(origin.atributos_sugeridos).get("contexto_ponto_id")
+    return tuple(
+        item
+        for item in destinations
+        if dict(item.atributos_sugeridos).get("contexto_ponto_id") == context
+    )
 
 
 def _targets_for_operational_endpoints(

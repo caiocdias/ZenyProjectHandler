@@ -2128,8 +2128,11 @@ def test_unidentified_cable_with_valid_trace_remains_without_span_identifier(
 
     result = InterpretadorRegrasExplicitas(request.registro).interpretar(references_only)
 
-    assert len(result.elementos) == 1
-    cable = result.elementos[0]
+    assert len(result.elementos) == 2
+    equipment = next(p for p in result.elementos if p.categoria is CategoriaElemento.EQUIPAMENTO)
+    assert dict(equipment.atributos_sugeridos)["associacao_pendente"]
+    assert "identificador_operacional" not in dict(equipment.atributos_sugeridos)
+    cable = next(p for p in result.elementos if p.categoria is CategoriaElemento.CABO)
     assert cable.categoria is CategoriaElemento.CABO
     assert cable.geometria.tipo is TipoGeometria.POLILINHA
     assert "identificador_operacional" not in dict(cable.atributos_sugeridos)

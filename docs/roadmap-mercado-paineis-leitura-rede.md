@@ -199,7 +199,7 @@ Hipóteses de produto adotadas para tornar o plano executável, ajustáveis com 
 | E12 | Precisão dos extratores atuais | #concluida | E10, E11 | Leituras por cor, lotes contínuos e comparação vertical validada |
 | E12A | Experimentação de algoritmos alternativos | #concluida | E12 | OCR neural e grafo global comparados; ganhos e regressões auditados |
 | E12B | Reconciliação e confiança entre métodos | #concluida | E12A | OCR documental auxiliar integrado; ablações e 167 testes aprovados |
-| E13 | Ocorrências e associação aos pontos corretos | #pendente | E12B | Catálogo, situação, vínculos e deduplicação rastreáveis |
+| E13 | Ocorrências e associação aos pontos corretos | #concluida | E12B | 29/29 no núcleo; D02–D05 rastreáveis, revisão e identidades preservadas |
 | E14 | Topologia e projeção dos trechos | #pendente | E13 | Continuidade e vãos existentes/novos coerentes |
 | E15 | Aceite integral do segundo PDF | #pendente | E11, E12, E12A, E12B, E13, E14 | Precisão vertical/horizontal, revisão visual e integração |
 
@@ -1526,7 +1526,7 @@ Mypy em 347 arquivos, Ruff/formatação, contratos, complexidade e fonte do clie
 seguem para E13/E14; leitura integral permanece 0/1 e gate integral reservado a E15.
 Não houve commit, publicação ou instalação no servidor operacional.
 
-## E13 — Ocorrências e associação aos pontos corretos — #pendente
+## E13 — Ocorrências e associação aos pontos corretos — #concluida
 
 **Objetivo:** interpretar códigos/situações e associar cada ocorrência ao ponto físico
 correto, evitando o neutro duplicado e a transferência de ativos existentes para P5.
@@ -1560,9 +1560,9 @@ Execute E13 — Ocorrências e associação aos pontos corretos de docs/roadmap-
 
 **Critérios de aceite:**
 
-- [ ] D02–D05 resolvidos por evidência, sem falsos vínculos nem omissões de ocorrências.
-- [ ] TR-3-45 fica representado com código literal; catálogo não resolvido é explícito.
-- [ ] Reanálise não duplica e não transfere decisões humanas para outro ativo.
+- [x] D02–D05 resolvidos por evidência, sem falsos vínculos nem omissões de ocorrências.
+- [x] TR-3-45 fica representado com código literal; catálogo não resolvido é explícito.
+- [x] Reanálise não duplica e não transfere decisões humanas para outro ativo.
 
 **Validação obrigatória:** `python -m pytest tests/unit/test_rule_based_interpreter.py tests/unit/test_e08_association.py tests/unit/test_analysis_regions.py tests/integration/test_interpretation_pipeline.py tests/integration/test_human_review.py tests/server/test_review_api.py`.
 Adicionar regressões positivas/negativas; repetir benchmark com auditoria E10 das
@@ -1571,7 +1571,20 @@ propostas, promoções e geometrias, incluindo todos os equipamentos.
 registrada como ambiguidade técnica, não preenchida para passar o teste.
 **Riscos e mitigação:** fundir ocorrências iguais em locais diferentes; validar identidade
 e posição. Catálogo insuficiente; preservar proposta literal e candidatos sem promoção falsa.
-**Evidências e handoff:** ainda não executada.
+**Evidências e handoff — 16/09/2026:** [e13-ocorrencias-associacao.md](e13-ocorrencias-associacao.md).
+Base `f990c1b`, Git inicialmente limpo; E12B confirmada e E08/E09 preservadas.
+Interpretador 24.0: neutro V2-3 consolidado por rótulo/traçado/situação, dois N3 físicos
+preservados, contexto existente separado de P5, TR-3-45 e N-4 literais sem modelo
+inventado, N4 base/instalar/remover com autoridade pendente e identidades próprias.
+**147 testes aprovados**, Mypy em 348 arquivos, Ruff/formatação, complexidade e
+`git diff --check` aprovados. Benchmark real: 43 propostas, oito confirmações,
+47 relações, 13 regiões, seis vãos e zero diagnósticos; fonte e exportações verificadas.
+Auditoria preserva 139 referências e inspeciona nove equipamentos. Núcleo: 29 TP,
+zero FN/FP, contra 24/5/4 no baseline; grafo E12A sobre E13: 20/9/2, rejeitado para
+integração por perdas em P3/cabos. Nenhuma confirmação duplicada conhecida (0/8);
+isso não homologa topologia, classificação ou leitura integral. Q3 fica visível com
+associação pendente; revisões técnicas e modelos incertos exigem decisão humana.
+E14/E15 recebem essas limitações conforme handoff. Sem commit ou publicação.
 
 ## E14 — Topologia e projeção dos trechos — #pendente
 

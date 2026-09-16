@@ -25,6 +25,7 @@ from zeny_project_handler.domain.enums import (
 from zeny_project_handler.domain.interpretation import RegraReconhecimento
 from zeny_project_handler.ports.interpretation import SolicitacaoInterpretacao
 
+from .occurrence_rules import token_geometry
 from .rule_support import (
     contains_code,
     geometry_distance,
@@ -41,12 +42,14 @@ _POLE_DIMENSION_PATTERN = re.compile(
 )
 _COORDINATE_CONTEXT_DISTANCE = 0.12
 _CABLE_NOMENCLATURE_PATTERN = re.compile(
-    r"(?<![A-Z0-9])(?:ABCN|ABN|BN|AN)-\d{1,3}\(\d{1,3}\)(?![A-Z0-9])"
+    r"(?<![A-Z0-9])(?:(?:ABCN|ABN|BN|AN)-\d{1,3}\(\d{1,3}\)(?![A-Z0-9])"
+    r"|N-\d{1,3}(?![A-Z0-9(/.,-]))"
 )
 _EQUIPMENT_NOMENCLATURE_PATTERN = re.compile(
     r"(?<![A-Z0-9])(\d{2,4})\s*A\s*[-/:]\s*(\d{1,2})\s*KA"
     r"\s*[-/:]\s*(\d{1,2})\s*([HK])(?![A-Z0-9])"
 )
+_TRANSFORMER_PATTERN = re.compile(r"(?<![A-Z0-9-])TR-([13])-(\d{1,3})(?![A-Z0-9.,-])")
 _POLE_FORMAT_PHRASES = {
     "CIRCULAR": ("POSTE CIRCULAR", "CIRCULAR"),
     "DUPLO T": ("POSTE DUPLO T", "DUPLO T"),
@@ -154,7 +157,7 @@ class AnalisadorCatalogoPorCodigo:
             ("registro_regras", request.registro.versao),
             ("regra_id", rule.id),
         ]
-        if self.categoria is CategoriaElemento.CABO:
+        if self.categoria in {CategoriaElemento.CABO, CategoriaElemento.EQUIPAMENTO}:
             attributes.append(("evidencia_rotulo_id", str(evidence.id)))
         if override is not None and override[1] is not None:
             attributes.append(("situacao_inferida_bolha", True))
@@ -249,7 +252,7 @@ class AnalisadorPoste(AnalisadorCatalogoPorCodigo):
 
 
 class _AnalisadorEstruturaPorCodigo(AnalisadorCatalogoPorCodigo):
-    versao = "2.0"
+    versao = "2.1"
 
     def analisar(
         self,
@@ -296,6 +299,17 @@ class _AnalisadorEstruturaPorCodigo(AnalisadorCatalogoPorCodigo):
                         solicitacao.execucao_id,
                         f"elemento:{regra.id}:{item.id}:{occurrence_identity}",
                     )
+                    # OCR of a line can contain several physical tokens. Preserve their
+                    # order and separate extents instead of assigning the entire line to each.
+                    proposal = replace(
+                        proposal,
+                        geometria=token_geometry(
+                            evidence.geometria,
+                            token.start,
+                            token.end,
+                            len(normalized_text(evidence.conteudo_bruto)),
+                        ),
+                    )
                 proposal = replace(
                     proposal,
                     id=proposal_id,
@@ -328,7 +342,7 @@ class AnalisadorEstruturaBt(_AnalisadorEstruturaPorCodigo):
 
 class AnalisadorCabo(AnalisadorCatalogoPorCodigo):
     nome = "cabo-codigo-e-nomenclatura"
-    versao = "4.1"
+    versao = "4.2"
     categoria = CategoriaElemento.CABO
 
     def analisar(
@@ -391,7 +405,7 @@ class AnalisadorCabo(AnalisadorCatalogoPorCodigo):
 
 class AnalisadorEquipamento(AnalisadorCatalogoPorCodigo):
     nome = "equipamento-codigo-e-nomenclatura"
-    versao = "3.3"
+    versao = "3.4"
     categoria = CategoriaElemento.EQUIPAMENTO
 
     def _matches_catalog_item(self, text: str, item: ItemCatalogoType) -> bool:
@@ -438,6 +452,37 @@ class AnalisadorEquipamento(AnalisadorCatalogoPorCodigo):
         }
         proposals = list(exact)
         for evidence in _semantic_evidence(solicitacao, regra, include_symbolic=True):
+            for match in _TRANSFORMER_PATTERN.finditer(
+                normalized_text(evidence.conteudo_bruto or "")
+            ):
+                if any(
+                    p.codigo_observado == match.group(0) and evidence.id in p.evidencia_ids
+                    for p in exact
+                ):
+                    continue
+                proposal = _untyped_phrase_proposal(
+                    solicitacao,
+                    regra,
+                    evidence,
+                    category=self.categoria,
+                    observed=match.group(0),
+                    candidate_codes=(),
+                    attribute_name="classe_equipamento",
+                    attribute_value="TRANSFORMADOR",
+                    confidence=Decimal("0.66"),
+                )
+                proposals.append(
+                    replace(
+                        proposal,
+                        atributos_sugeridos=(
+                            *proposal.atributos_sugeridos,
+                            ("catalogo_nao_localizado", True),
+                            ("capacidade_observada_kva", int(match.group(2))),
+                            ("fases_observadas", int(match.group(1))),
+                            ("evidencia_rotulo_id", str(evidence.id)),
+                        ),
+                    )
+                )
             if evidence.id in exact_evidence:
                 continue
             text = normalized_text(evidence.conteudo_bruto or "")
@@ -672,6 +717,7 @@ def _pole_dimension_proposal(
         tipo_catalogo_sugerido_id=selected.id if unique else None,
         codigo_observado=observed,
         atributos_sugeridos=(
+            ("evidencia_rotulo_id", str(evidence.id)),
             ("altura_m", height),
             ("candidatos_catalogo", ",".join(item.codigo for item in matching)),
             ("catalogo_inferido", False),

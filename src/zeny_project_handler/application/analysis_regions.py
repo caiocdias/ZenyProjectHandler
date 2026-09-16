@@ -421,6 +421,7 @@ def _spatial_components(
         for element in elements
     ]
     component_evidence = [set(element.evidencia_ids) for element in elements]
+    component_contexts = [{_region_context(element)} - {None} for element in elements]
 
     def find(index: int) -> int:
         while parents[index] != index:
@@ -432,6 +433,10 @@ def _spatial_components(
         left_root = find(left)
         right_root = find(right)
         if left_root == right_root:
+            return
+        left_contexts = component_contexts[left_root]
+        right_contexts = component_contexts[right_root]
+        if (left_contexts or right_contexts) and left_contexts != right_contexts:
             return
         left_labels = component_labels[left_root]
         right_labels = component_labels[right_root]
@@ -446,6 +451,7 @@ def _spatial_components(
         parents[right_root] = left_root
         component_labels[left_root] = left_labels | right_labels
         component_evidence[left_root] |= component_evidence[right_root]
+        component_contexts[left_root] |= component_contexts[right_root]
 
     edges: list[tuple[float, str, str, int, int]] = []
     for left_index, left in enumerate(elements):
@@ -484,6 +490,15 @@ def _spatial_components(
         )
         for component in grouped.values()
     )
+
+
+def _region_context(element: PropostaElemento) -> str | None:
+    attributes = dict(element.atributos_sugeridos)
+    if attributes.get("contexto_ponto_id"):
+        return str(attributes["contexto_ponto_id"])
+    if element.categoria is not CategoriaElemento.CABO and attributes.get("associacao_pendente"):
+        return f"pending:{element.id}"
+    return None
 
 
 def _regional_distance(left: PropostaElemento, right: PropostaElemento) -> float:
@@ -557,6 +572,10 @@ def _assign_point_labels(
 ) -> dict[UUID, str]:
     assignments: dict[UUID, str] = {}
     for element in elements:
+        if dict(element.atributos_sugeridos).get("contexto_ponto_id") or dict(
+            element.atributos_sugeridos
+        ).get("associacao_pendente"):
+            continue
         operational_identifier = str(
             dict(element.atributos_sugeridos).get("identificador_operacional") or ""
         )
