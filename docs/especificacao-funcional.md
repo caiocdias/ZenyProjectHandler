@@ -20,7 +20,7 @@ Estado versionado relevante:
 | Registro de interpretação | `1.6.0` |
 | Registro de conformidade distribuído | `cemig-normas-distribuicao-2026.1` |
 | Método de conformidade | `14` |
-| Extrator documental | `1.17.0` |
+| Extrator documental | `1.18.0` |
 | Interpretador semântico | `25.0` |
 | API / piso compatível | `1.6.0` |
 | Migração SQLite mais recente | `0009_remote_jobs` |
@@ -552,9 +552,11 @@ investigação, mas não substituem fonte normativa.
 - Reconhecimento visual pode permanecer ambíguo; a interface conserva o resultado para revisão em
   vez de forçar uma classificação.
 - A homologação local E09 permanece impedida pelas lacunas de associação/classificação de E08
-  e por um realce amplo originado de evidência simbólica de equipamento. O gate público aprovado
-  não concede aceite técnico à NS real; métricas, inspeções e ações de desbloqueio estão em
-  [e09-homologacao-integrada.md](e09-homologacao-integrada.md).
+  e por uma leitura duplicada de estrutura ainda revisável. O falso realce amplo de equipamento
+  foi corrigido na extração 1.18.0, exigindo barras lineares e corpos retangulares na assinatura
+  simbólica. Os vetores originais continuam disponíveis. O gate público não concede aceite
+  técnico à NS real; evidências atuais estão em
+  [validacao-e08-e09-0.4.0.md](validacao-e08-e09-0.4.0.md).
 - Cálculos elétricos e mecânicos completos e verificações dependentes de fontes restritas não são
   executados sem todos os fatos e referências necessários.
 - Carimbo, rótulo ou campo de assinatura não comprova autoria ou autenticidade.

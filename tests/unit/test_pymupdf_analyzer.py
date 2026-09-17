@@ -531,6 +531,39 @@ def test_vector_symbols_identify_grounding_and_surge_arresters_with_situation(
     assert not result.diagnosticos
 
 
+@pytest.mark.parametrize("shape", ["ellipse", "curved_glyph", "angular_glyph"])
+def test_vector_letters_near_network_line_are_not_equipment(shape: str) -> None:
+    with pymupdf.open() as document:
+        page = document.new_page(width=500, height=400)
+        page.draw_line((50, 60), (90, 60), color=(0, 0.5, 0))
+        for x in (96, 99, 102, 105):
+            if shape == "ellipse":
+                page.draw_oval(pymupdf.Rect(x, 57, x + 1, 63), color=None, fill=(0, 0.5, 0))
+            elif shape == "curved_glyph":
+                page.draw_bezier(
+                    (x, 57), (x + 1, 59), (x + 1, 61), (x, 63), color=None, fill=(0, 0.5, 0)
+                )
+            else:
+                page.draw_polyline([(x, 57), (x + 1, 60), (x, 63)], color=None, fill=(0, 0.5, 0))
+        assert _extract_symbolic_equipment(page, 1) == ()
+
+
+def test_filled_rectangular_bars_still_identify_grounding() -> None:
+    with pymupdf.open() as document:
+        page = document.new_page(width=500, height=400)
+        page.draw_line((50, 60), (65, 60), color=(0, 0, 0))
+        for index, length in enumerate((10, 7, 4)):
+            x = 65 + index * 4
+            page.draw_rect(
+                pymupdf.Rect(x - 0.1, 60 - length / 2, x + 0.1, 60 + length / 2),
+                color=None,
+                fill=(0, 0, 0),
+            )
+        symbols = _extract_symbolic_equipment(page, 1)
+        assert len(symbols) == 1
+        assert symbols[0].conteudo_bruto == "ATERRAMENTO"
+
+
 def test_same_input_and_configuration_are_reproducible_from_cache(tmp_path: Path) -> None:
     request = _request(create_analysis_pdf(tmp_path / "reproducible.pdf"))
     analyzer = PyMuPdfDocumentAnalyzer(

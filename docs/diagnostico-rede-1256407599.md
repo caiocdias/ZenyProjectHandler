@@ -112,8 +112,9 @@ Artefatos privados em `tmp/rede-1256407599/`: `benchmark.json`, `page-1.txt`,
 `page-1.png`, `poppler.png`, `top.png`, `middle.png`, `bottom.png`, `header.png` e
 `top-without-annotations.png`. Permanecem ignorados; o PDF real não é fixture pública.
 O plano de correção foi incorporado como E10–E15, incluindo E12A/E12B para
-experimentação de algoritmos alternativos e reconciliação entre métodos, em
-[roadmap-mercado-paineis-leitura-rede.md](roadmap-mercado-paineis-leitura-rede.md).
+experimentação de algoritmos alternativos e reconciliação entre métodos. O roadmap
+foi removido em 17/09/2026; as evidências e pendências consolidadas permanecem no
+[relatório de aceite E15](e15-aceite-integral-segundo-pdf.md).
 
 ## Atualização E11 — 14/09/2026
 

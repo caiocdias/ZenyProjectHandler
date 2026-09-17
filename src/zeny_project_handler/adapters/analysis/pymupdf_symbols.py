@@ -31,6 +31,8 @@ class _VectorPrimitive:
     major_length: float
     minor_length: float
     color: str
+    linear: bool
+    rectangular: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,7 +93,8 @@ def _extract_symbolic_equipment(
 
 
 def _primitive_from_drawing(index: int, drawing: dict[str, Any]) -> _VectorPrimitive | None:
-    points = _drawing_points(tuple(drawing.get("items") or ()))
+    items = tuple(drawing.get("items") or ())
+    points = _drawing_points(items)
     if len(points) < 2:
         return None
     color = _canonical_symbol_color(drawing.get("color"), drawing.get("fill"))
@@ -111,7 +114,20 @@ def _primitive_from_drawing(index: int, drawing: dict[str, Any]) -> _VectorPrimi
         major_length=major,
         minor_length=minor,
         color=color,
+        linear=minor <= 0.01 or (_is_rectangle(items) and minor <= major * 0.1),
+        rectangular=_is_rectangle(items),
     )
+
+
+def _is_rectangle(items: tuple[Any, ...]) -> bool:
+    if len(items) != 1:
+        return False
+    if items[0][0] == "re":
+        return True
+    if items[0][0] != "qu":
+        return False
+    quad = pymupdf.Quad(items[0][1])
+    return bool(quad.is_rectangular)
 
 
 def _drawing_points(items: tuple[Any, ...]) -> tuple[tuple[float, float], ...]:
@@ -177,11 +193,7 @@ def _rgb255(value: object) -> tuple[int, int, int] | None:
 def _ground_and_mt_arrester_matches(
     primitives: tuple[_VectorPrimitive, ...],
 ) -> tuple[_SymbolMatch, ...]:
-    lines = tuple(
-        item
-        for item in primitives
-        if item.major_length >= 1 and item.minor_length <= max(1.2, item.major_length * 0.22)
-    )
+    lines = tuple(item for item in primitives if item.linear and item.major_length >= 1)
     matches: list[_SymbolMatch] = []
     for stem in lines:
         if stem.major_length < 6:
@@ -227,9 +239,7 @@ def _bt_arrester_matches(
 ) -> tuple[_SymbolMatch, ...]:
     matches: list[_SymbolMatch] = []
     for stem in primitives:
-        if not 6 <= stem.major_length <= _MAXIMUM_PRIMITIVE_LENGTH or stem.minor_length > max(
-            1.2, stem.major_length * 0.15
-        ):
+        if not stem.linear or not 6 <= stem.major_length <= _MAXIMUM_PRIMITIVE_LENGTH:
             continue
         axis = math.cos(stem.angle), math.sin(stem.angle)
         normal = -axis[1], axis[0]
@@ -243,15 +253,16 @@ def _bt_arrester_matches(
         bodies = tuple(
             item
             for item in nearby
-            if stem.major_length * 0.5 <= item.major_length <= stem.major_length * 1.1
+            if item.rectangular
+            and stem.major_length * 0.5 <= item.major_length <= stem.major_length * 1.1
             and 2 <= item.major_length / max(item.minor_length, 0.01) <= 4.5
             and _angle_difference(stem.angle, item.angle) <= 0.2
         )
         diagonals = tuple(
             item
             for item in nearby
-            if stem.major_length * 0.55 <= item.major_length <= stem.major_length * 1.15
-            and item.minor_length <= item.major_length * 0.2
+            if item.linear
+            and stem.major_length * 0.55 <= item.major_length <= stem.major_length * 1.15
             and 0.4 <= _angle_difference(stem.angle, item.angle) <= 1.2
         )
         for body in bodies:

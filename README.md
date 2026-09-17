@@ -434,9 +434,11 @@ sanitizados com e sem linha antes da produção.
   de documentos restritos não são inferidos sem fonte e evidência suficientes.
 - Algumas regras de pacote documental ou topologia permanecem não avaliáveis quando os anexos ou as
   associações necessárias não aparecem no projeto analisado.
-- A homologação integrada ainda depende do aceite de E08 e da revisão de caixas amplas em
-  propostas simbólicas de equipamento, que podem produzir realces excessivos. Evidências e
-  desbloqueios estão no [handoff E09](docs/e09-homologacao-integrada.md).
+- A homologação integrada ainda depende da classificação técnica de postes/entregas, da
+  associação da medida ambígua de 13 m e da consolidação de uma leitura duplicada de estrutura.
+  O falso realce simbólico foi corrigido na extração 1.18.0; trechos físicos preservam os
+  condutores e situações. Evidências e limites estão na
+  [validação da 0.4.0](docs/validacao-e08-e09-0.4.0.md).
 - O ZIP portátil ainda não possui assinatura de código nem instalador; a verificação automatizada
   comprova inicialização autocontida no Windows x64 sem usar o Python do host.
 

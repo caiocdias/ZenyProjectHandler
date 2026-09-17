@@ -12,6 +12,8 @@ from pathlib import Path, PurePosixPath
 from tarfile import TarFile
 from tarfile import open as open_tar
 
+from zeny_project_handler_contracts.versioning import API_VERSION
+
 ROOT = Path(__file__).resolve().parents[1]
 FORBIDDEN_CLIENT_COMPONENTS = {"alembic", "pymupdf", "sqlalchemy", "tesseract"}
 FORBIDDEN_SERVER_COMPONENTS = {"pyside6", "pyside6_addons", "pyside6_essentials", "shiboken6"}
@@ -389,7 +391,6 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-API_VERSION = "1.5.0"
 ALEMBIC_REVISION = "0009_remote_jobs"
 
 

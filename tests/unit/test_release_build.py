@@ -10,11 +10,24 @@ from scripts.build_release import (
     ReleaseBuildError,
     _render_server_environment,
     _validate_version,
+    _write_release_notes,
     _write_sha256s,
 )
 from scripts.release_artifact_gate import _validate_sha256s
 
+from zeny_project_handler_contracts.versioning import API_VERSION, MIN_COMPATIBLE_API_VERSION
+
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_release_notes_declare_current_api_and_acceptance_limits(tmp_path: Path) -> None:
+    destination = tmp_path / "RELEASE_NOTES.md"
+    _write_release_notes(destination, "0.4.0", "zeny-server:0.4.0", "sha256:fixture")
+    notes = destination.read_text(encoding="utf-8")
+    assert f"API: `{API_VERSION}`" in notes
+    assert f"faixa compatível `{MIN_COMPATIBLE_API_VERSION}`" in notes
+    assert "Trechos físicos" in notes
+    assert "ainda não está homologado" in notes
 
 
 def test_pyinstaller_build_environment_excludes_external_dll_and_qt_paths() -> None:

@@ -1,8 +1,8 @@
 # E07 — Extração robusta de evidências
 
 Execução inicial em 10/09/2026 sobre `77258cf`; retomada em 11/09/2026 sobre `7fd1b7f`.
-**Concluída em 14/09/2026 sobre `f82b1c2`**, conforme o aceite no
-[roadmap](roadmap-mercado-paineis-leitura-rede.md). A recuperação integral exigida por E01
+**Concluída em 14/09/2026 sobre `f82b1c2`**, conforme a validação registrada abaixo.
+O roadmap foi removido em 17/09; o histórico está no Git. A recuperação integral exigida por E01
 ainda estava pendente na retomada de 11/09; as correções e a validação final estão abaixo.
 E08 permanece pendente, com suas dependências atendidas. Sem commit ou publicação.
 

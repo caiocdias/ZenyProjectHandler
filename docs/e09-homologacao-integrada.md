@@ -1,5 +1,9 @@
 # E09 — Homologação integrada
 
+Retomada em 17/09/2026: veja a [validação da release 0.4.0](validacao-e08-e09-0.4.0.md)
+para as correções, métricas e pendências atuais. O conteúdo abaixo preserva a execução
+histórica de 14/09/2026; seus limites de tempo não são critérios de aceite vigentes.
+
 **Estado: #bloqueada para aceite.** Gate público aprovado; E08 e a falha de
 realce simbólico demonstrada na inspeção real impedem concluir a homologação.
 

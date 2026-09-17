@@ -13,11 +13,14 @@ import sys
 import tomllib
 from pathlib import Path
 
+from zeny_project_handler_contracts.versioning import (
+    API_VERSION,
+    MAX_COMPATIBLE_API_VERSION,
+    MIN_COMPATIBLE_API_VERSION,
+)
+
 ROOT = Path(__file__).resolve().parents[1]
 SEMVER = re.compile(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\Z")
-API_VERSION = "1.5.0"
-MIN_COMPATIBLE_API_VERSION = "1.5.0"
-MAX_COMPATIBLE_API_VERSION = "1.999.999"
 VOLUME_FORMAT_VERSION = 1
 ALEMBIC_REVISION = "0009_remote_jobs"
 BASE_IMAGE = (
@@ -385,21 +388,23 @@ def _write_release_notes(path: Path, version: str, image: str, digest: str) -> N
   `{MAX_COMPATIBLE_API_VERSION}`.
 - Volume: formato `{VOLUME_FORMAT_VERSION}`; revisão Alembic `{ALEMBIC_REVISION}`.
 
-Esta release adiciona busca e troca da NS do projeto com sincronização dos dados remotos e um painel
-**GMAX** somente leitura. O painel apresenta mercado, NS encontradas nos cabeçalhos e os checks de
-impacto ambiental e servidão, incluindo estados de consulta, ausência de linha, resultado
-desatualizado e divergência de NS.
+Esta release inclui a escolha persistida Rural/Urbano/Ambos, rolagem independente dos painéis,
+marca-textos por situação, leitura de revisões técnicas e reconciliação de evidências OCR.
+A aba **Trechos físicos** agrupa caminhos preservando seus condutores, situações e pendências;
+**Vãos** conserva a projeção por cabo confirmado. O detector de símbolos exige barras lineares
+e corpos retangulares para evitar equipamentos falsos formados por letras e linhas vizinhas.
 
-A interpretação preserva ocorrências qualificadas de estruturas e amplia a reconstrução
-determinística da topologia de pontos de entrega, ramais, postes, estruturas e vãos. A conformidade
-passa a avaliar caminhos topológicos e ramais com evidências rastreáveis no PDF. O registro
-distribuído `cemig-normas-distribuicao-2026.1` contém 42 regras habilitadas e usa o método de
-conformidade 12.
+O registro distribuído `cemig-normas-distribuicao-2026.1` contém 42 regras habilitadas e usa o
+método de conformidade 14. A extração usa a versão 1.18.0 e a interpretação 25.0.
+O reconhecimento integral dos PDFs ainda não está homologado: classificação de postes/entregas,
+medidas ambíguas e os bloqueios documentados do segundo PDF continuam exigindo revisão técnica.
+Uma proposta ou trecho visível não equivale a ativo confirmado nem aprovação de conformidade.
 
 A API pública está na versão `{API_VERSION}` e usa o piso `{MIN_COMPATIBLE_API_VERSION}`; cliente e
-servidor desta release devem ser atualizados em conjunto. A classificação rural/urbana e os checks
-do GMAX continuam consultando o SQL Server exclusivamente pelo servidor. Falha, ausência ou resposta
-inválida interrompe a análise sem fallback nem snapshot parcial.
+servidor desta release devem ser atualizados em conjunto. A classificação inicial e os checks
+do GMAX consultam o SQL Server exclusivamente pelo servidor; a escolha salva é preservada nas
+reanálises. Falha de consulta ou mercado inválido interrompe a análise sem fallback nem snapshot
+parcial. Ausência de linha nas ações é uma pendência válida, não falha de conexão.
 
 O cliente deve ser distribuído somente aos usuários finais; o kit servidor, somente aos
 administradores. Ambos podem receber também os três arquivos comuns de notas e integridade. Não

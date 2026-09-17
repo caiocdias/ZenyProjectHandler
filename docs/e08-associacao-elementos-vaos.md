@@ -1,5 +1,9 @@
 # E08 — Associação de elementos e vãos
 
+Retomada em 17/09/2026: veja a [validação da release 0.4.0](validacao-e08-e09-0.4.0.md)
+para as correções, métricas e pendências atuais. O conteúdo abaixo preserva a execução
+histórica de 14/09/2026; seus limites de tempo não são critérios de aceite vigentes.
+
 **Estado: #bloqueada para aceite.** Correções e gate de código validados; associação
 integral de comprimentos e classificação/topologia ainda não atendem o aceite.
 
