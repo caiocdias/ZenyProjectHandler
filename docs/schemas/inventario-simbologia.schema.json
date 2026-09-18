@@ -1,0 +1,578 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:zeny:inventory:symbols:1",
+  "title": "Inventário documental de simbologia; não é contrato de detecção",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "inventory_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reviewed_on": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/source"
+      },
+      "minItems": 1
+    },
+    "profiles": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/profile"
+      },
+      "minItems": 1
+    },
+    "families": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/family"
+      },
+      "minItems": 1
+    },
+    "variants": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/variant"
+      },
+      "minItems": 1
+    },
+    "f02_index": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/index_entry"
+      },
+      "minItems": 1
+    },
+    "policies": {
+      "type": "object",
+      "properties": {
+        "preserve_exclusive_candidates": {
+          "const": true
+        },
+        "silence_is_veto": {
+          "const": false
+        },
+        "agreement_is_probability": {
+          "const": false
+        },
+        "reviewer_reference_is_inference_input": {
+          "const": false
+        },
+        "inspected_examples_partition": {
+          "const": "development"
+        },
+        "synthetic_reserve_release_stage": {
+          "const": "E16"
+        }
+      },
+      "required": [
+        "preserve_exclusive_candidates",
+        "silence_is_veto",
+        "agreement_is_probability",
+        "reviewer_reference_is_inference_input",
+        "inspected_examples_partition",
+        "synthetic_reserve_release_stage"
+      ],
+      "additionalProperties": false
+    },
+    "totals": {
+      "type": "object",
+      "properties": {
+        "families": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "variants": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "by_profile": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/count"
+          },
+          "minItems": 1
+        },
+        "by_family": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/count"
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "families",
+        "variants",
+        "by_profile",
+        "by_family"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "schema_version",
+    "inventory_version",
+    "reviewed_on",
+    "sources",
+    "profiles",
+    "families",
+    "variants",
+    "f02_index",
+    "policies",
+    "totals"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "source": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "authority": {
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1
+        },
+        "access": {
+          "type": "string",
+          "enum": [
+            "public",
+            "subscription",
+            "local_code",
+            "document_scoped"
+          ]
+        },
+        "review_status": {
+          "type": "string",
+          "enum": [
+            "visual_checked",
+            "metadata_only",
+            "unverified"
+          ]
+        },
+        "sha256": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "pages": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "authority",
+        "url",
+        "revision",
+        "access",
+        "review_status",
+        "sha256",
+        "pages",
+        "limitations"
+      ],
+      "additionalProperties": false
+    },
+    "profile": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true,
+          "minItems": 1
+        },
+        "scope": {
+          "type": "string",
+          "minLength": 1
+        },
+        "automatic_semantic_equivalence": {
+          "const": false
+        },
+        "review_status": {
+          "type": "string",
+          "enum": [
+            "visual_checked",
+            "metadata_only",
+            "unverified"
+          ]
+        },
+        "conventions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "source_ids",
+        "scope",
+        "automatic_semantic_equivalence",
+        "review_status",
+        "conventions",
+        "limitations"
+      ],
+      "additionalProperties": false
+    },
+    "family": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1
+        },
+        "owner_stage": {
+          "type": "string",
+          "enum": [
+            "E04",
+            "E05",
+            "E06",
+            "E07",
+            "E10"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "owner",
+        "owner_stage"
+      ],
+      "additionalProperties": false
+    },
+    "source_ref": {
+      "type": "object",
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pdf_page": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "locator": {
+          "type": "string",
+          "minLength": 1
+        },
+        "review_status": {
+          "type": "string",
+          "enum": [
+            "visual_checked",
+            "metadata_only",
+            "unverified"
+          ]
+        }
+      },
+      "required": [
+        "source_id",
+        "pdf_page",
+        "locator",
+        "review_status"
+      ],
+      "additionalProperties": false
+    },
+    "variant": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "family_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "profile_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source_kind": {
+          "type": "string",
+          "enum": [
+            "EC",
+            "AEC",
+            "INS",
+            "AV",
+            "CNX",
+            "CTR",
+            "DES",
+            "annotation",
+            "document_context"
+          ]
+        },
+        "class_code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "subtype": {
+          "type": "string",
+          "minLength": 1
+        },
+        "function": {
+          "type": "string",
+          "enum": [
+            "asset_candidate",
+            "composite",
+            "non_asset",
+            "convention"
+          ]
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1
+        },
+        "owner_stage": {
+          "type": "string",
+          "enum": [
+            "E04",
+            "E05",
+            "E06",
+            "E07",
+            "E10"
+          ]
+        },
+        "destination": {
+          "type": "string",
+          "enum": [
+            "equipment_review",
+            "support_review",
+            "mechanical_relation",
+            "network_context",
+            "informative_only",
+            "composite_review",
+            "document_convention",
+            "unknown_review"
+          ]
+        },
+        "cardinality": {
+          "type": "string",
+          "minLength": 1
+        },
+        "situation": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "situation_note": {
+          "type": "string",
+          "minLength": 1
+        },
+        "world": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "G",
+            "I",
+            "G/I",
+            null
+          ]
+        },
+        "operating_state": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "Aberto",
+            "Fechado",
+            null
+          ]
+        },
+        "ambiguities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "confusable_negatives": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true,
+          "minItems": 1
+        },
+        "source_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/source_ref"
+          },
+          "minItems": 1
+        },
+        "visual_note": {
+          "type": "string",
+          "minLength": 1
+        },
+        "composite_policy": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "id",
+        "family_id",
+        "profile_id",
+        "name",
+        "source_kind",
+        "class_code",
+        "subtype",
+        "function",
+        "owner",
+        "owner_stage",
+        "destination",
+        "cardinality",
+        "situation",
+        "situation_note",
+        "world",
+        "operating_state",
+        "ambiguities",
+        "confusable_negatives",
+        "source_refs",
+        "visual_note",
+        "composite_policy"
+      ],
+      "additionalProperties": false
+    },
+    "index_entry": {
+      "type": "object",
+      "properties": {
+        "section": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 33
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pdf_page_start": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 45
+        },
+        "pdf_page_end": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 45
+        },
+        "family_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true,
+          "minItems": 1
+        }
+      },
+      "required": [
+        "section",
+        "title",
+        "pdf_page_start",
+        "pdf_page_end",
+        "family_ids"
+      ],
+      "additionalProperties": false
+    },
+    "count": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "count"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

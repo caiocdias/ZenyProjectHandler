@@ -1,7 +1,8 @@
 # Zeny Project Handler — Roadmap de análise de simbologia
 
 Criado em 18/09/2026; revisado para execução com subagentes e V-P em 18/09/2026. Base inspecionada: `bfb47f7`, com alterações locais preexistentes.
-Documento de planejamento; nenhuma etapa abaixo foi implementada nesta tarefa.
+Planejamento original preservado. A execução de E01 começou em 18/09/2026 sobre `5ee65d3`,
+com Git limpo; estados, validações e entregas efetivas constam no handoff da etapa.
 
 ## Objetivo e uso
 
@@ -364,7 +365,7 @@ E16 executa V-G; não repetir toda a suíte após mera edição do roadmap.
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E01 | Inventário de símbolos e perfis de referência | #pendente | Nenhuma | Criar inventário versionado e verificável de famílias, variantes e convenções, incluindo símbolos sem equivalente patrimonial. |
+| E01 | Inventário de símbolos e perfis de referência | #concluida | Nenhuma | Criar inventário versionado e verificável de famílias, variantes e convenções, incluindo símbolos sem equivalente patrimonial. |
 | E02 | Benchmark de cobertura e complementaridade | #pendente | E01 | Entregar avaliador independente e baseline reproduzível de símbolos, com reserva e métricas de união. |
 | E03 | Contrato de observações e registro de métodos | #pendente | E01, E02 | Introduzir contrato interno aditivo para observações de símbolos, cobertura e estados de cada método. |
 | E04 | Robustez vetorial de aterramento e para-raios | #pendente | E03 | Melhorar o detector existente para primitives fragmentadas/agrupadas, escala e estilos, sem ampliar sua lista de classes. |
@@ -383,13 +384,13 @@ E16 executa V-G; não repetir toda a suíte após mera edição do roadmap.
 
 A execução das etapas deve usar subagentes conforme a divisão abaixo, por solicitação do usuário em 18/09/2026. Paralelismo entre etapas continua sujeito às dependências; paralelismo dentro de uma etapa segue as responsabilidades e fronteiras de escrita definidas para ela.
 
-## E01 — Inventário de símbolos e perfis de referência — #pendente
+## E01 — Inventário de símbolos e perfis de referência — #concluida
 
 **Objetivo:** Criar inventário versionado e verificável de famílias, variantes e convenções, incluindo símbolos sem equivalente patrimonial.
 
 **Por que agora:** A cobertura e a semântica precisam de referência antes de criar detectores ou contar acertos.
 
-**Dependências e paralelismo:** Nenhuma. Sem paralelismo nesta etapa inicial.
+**Dependências e paralelismo:** Nenhuma; nenhuma outra etapa iniciada. Frentes A e C em paralelo; B confere o contrato e revisa o registro consolidado no checkpoint final.
 
 **Subagentes e integração:**
 
@@ -412,15 +413,19 @@ A execução das etapas deve usar subagentes conforme a divisão abaixo, por sol
 
 **Critérios de aceite:**
 
-- [ ] Inventário inclui transformador, para-raios MT/BT, aterramento, estai e todas as famílias restantes da F02, com dono e fonte por variante.
-- [ ] Perfis CEMIG/externos não compartilham significado por simples aparência; limitações de acesso e revisão constam no registro.
-- [ ] Símbolos não patrimoniais e compostos têm destino explícito; nenhum ID aparece duas vezes.
+- [x] Inventário inclui transformador, para-raios MT/BT, aterramento, estai e todas as famílias restantes da F02, com dono e fonte por variante.
+- [x] Perfis CEMIG/externos não compartilham significado por simples aparência; limitações de acesso e revisão constam no registro.
+- [x] Símbolos não patrimoniais e compostos têm destino explícito; nenhum ID aparece duas vezes.
 
 **Validação obrigatória:** V-P e conferência das entregas dos subagentes, com as particularidades acima. Inspeção dos localizadores e desenhos, comparação do inventário com o índice completo F02, verificação de IDs/fontes e links. Acrescentar testes de esquema se o registro já for legível por código; sem execução de benchmark nesta etapa. Os códigos V-* remetem aos comandos completos acima; registrar os comandos efetivamente executados.
 
-**Bloqueios:** Nenhum bloqueio conhecido para iniciar respeitando as dependências. Lacunas de dados/fontes são riscos até impedirem concretamente a execução ou o aceite; nessa ocorrência, registrar causa, evidência, impacto e ação de desbloqueio.
+**Bloqueios:** Nenhum impeditivo remanescente para E01. V-P, revisão independente,
+esquema/integridade e V-Q concluídos; limites de IEC, UKPN e origem legada estão
+explicitamente registrados, sem atribuir a eles desenhos ou autoridade não comprovados.
 
-**Riscos e mitigação:** Fonte textual não captura desenhos: conferir páginas renderizadas e guardar localizadores; lacuna numa variante limita essa variante, não paralisa as demais.
+**Riscos e mitigação:** Fonte textual não captura desenhos: páginas efetivamente vistas,
+localizadores e hashes preservados; variantes ambíguas continuam revisáveis. A E01 não
+constitui benchmark, reconhecimento implementado ou homologação dos projetos de exemplo.
 
 **Prompt para uma sessão limpa:**
 
@@ -439,7 +444,109 @@ Ao iniciar, sincronize #em-andamento no índice e detalhe. Implemente somente es
 Não declare sucesso com validação obrigatória falhando ou não executada. Atualize para #concluida somente após todos os critérios; impedimento real exige #bloqueada com causa, evidência, impacto e ação de desbloqueio. Dependência ainda pendente mantém #pendente. Preencha Evidências e handoff com arquivos, decisões, comandos, resultados e limitações. Não crie commit, publique ou implante sem autorização explícita. Termine com resumo conciso de mudanças, validações e pendências.
 ```
 
-**Evidências e handoff:** ainda não executada. Registrar também agentes/papéis, fronteiras de escrita, checkpoint integrado, revisão independente, manifesto V-P e total de PDFs/páginas conferidos/bloqueados. Ao trabalhar, registrar arquivos alterados, versão/configuração, decisões, fontes/fixtures, comandos e resultados, métricas comparadas, limitações e próximo passo.
+**Evidências e handoff — execução de 18/09/2026:**
+
+- Base efetiva `5ee65d38cefc8a5344206c714cd6ff2d2360ebcd`; `git status --short`,
+  `git diff` e `git diff --cached` inicialmente vazios. A lista de modificações no contexto
+  global é histórica do planejamento, não desta execução. Nenhum `AGENTS.md` aplicável
+  encontrado nos ancestrais/áreas de escopo; pesquisa ampla acusou acesso negado a cache
+  de testes e a um diretório histórico em `tmp/`, sem ocultar fonte/instrução de escopo.
+  Dependências: nenhuma. Roadmap completo, escopo e código conferidos; versões continuam
+  extrator 1.18.0/interpretador 25.0. Nenhum detector ou regra de conformidade alterado.
+- Entrega: [inventário documentado](inventario-simbologia.md),
+  [registro JSON](data/inventario-simbologia-v1.json),
+  [esquema](schemas/inventario-simbologia.schema.json),
+  [relatório A](e01-referencias-simbologia.md),
+  [revisão B](e01-revisao-inventario.md) e `tests/unit/test_symbol_inventory.py`.
+  Atualizados também `docs/inventario-fontes-normativas.md`, `examples/README.md` e
+  este roadmap. Área de dados definida como `docs/data/`, sem consumidor de runtime.
+- Denominador congelado: **427 variantes/células em 33 famílias/tópicos F02**, seis
+  fontes e cinco perfis; 249 candidatos sujeitos a catálogo/revisão, 81 compostos,
+  89 não patrimoniais e oito convenções. Total por pacote: E04=12, E05=29, E06=17,
+  E07=365, E10=4. Todos têm dono, fonte, localizador, situação, cardinalidade e destino.
+  IDs de definição e localizadores não se repetem; referências a IDs podem se repetir.
+  Esses números não são quantidade de ativos nem cobertura de reconhecimento.
+
+**Delegação e checkpoints:**
+
+| Frente / agente | Propriedade exclusiva | Entrega conferida |
+|---|---|---|
+| A `/root/a_referencias` | `docs/e01-referencias-simbologia.md`, `tmp/e01-simbologia/referencias/` | 45/45 páginas F02, 15/15 F04 e F01 p88 vistas; IEC só metadados; 33 seções/427 células, fontes/hashes/localizadores. |
+| C `/root/c_pdfs` | `tmp/e01-simbologia/visual/` | 11 PDFs/11 páginas, base/aparência, 108 imagens vistas, 22 achados, 597 checagens de integridade/cobertura. |
+| B `/root/b_inventario` | `docs/e01-revisao-inventario.md`, `tests/unit/test_symbol_inventory.py`, `tmp/e01-simbologia/revisao/` | Contrato, índice visual dirigido, comparação independente 1:1 das 427 células, testes negativos e totais congelados. |
+| Coordenador `/root` | Registro, esquema, inventário, guias compartilhados e roadmap; scripts em `tmp/e01-simbologia/` | Consolidação somente após A+C e checagem de consistência; inspeção dirigida das fontes e quatro imagens privadas; integração final. |
+
+A e C iniciaram em paralelo; B preparou o contrato e só validou dados após o checkpoint
+consolidado. Quatro posições usadas, sem arquivos com dois escritores. A voltou em uma
+segunda onda para revisar o mapeamento semântico do consolidador; B fez a revisão
+independente final e congelou o teste antes de V-N/V-Q do coordenador.
+
+Checkpoint de dados `2026.09.18.1` / esquema `1.0.0`:
+
+- Registro SHA-256 `e3d49d9b0072f9f30ea98e2171c0cd520a819a15b329590cfbf35f508f042fcd`.
+- Esquema SHA-256 `afe4f05257d0bb8c6743de9738cd68aa105f30d17ed0a2d2a05b1cfed43760b8`.
+- Teste congelado SHA-256 `dc5e7027c7a694cd46cebf5490514d6958aaa36eddb3b2ea498027fdd6eb12af`.
+- Origem A: `variantes-f02.json` SHA-256
+  `65a881fd18dad15666dc3094b9b9c3a59f0d72a5c966d1984afe76a0f2e09b39`; índice e
+  PDFs têm hashes no relatório A. Integração preservou nomes, mundo, estados, notas e
+  localizadores de todas as células; B também conferiu ambiguidades e famílias.
+- Código `pymupdf_symbols.py` intacto, SHA-256
+  `a10df79930951c81c3a17fdc51a9e1960f5adc6aa90a8d7edd50b92f1164fa6e`.
+
+**Decisões e divergências resolvidas por evidência:** aterramento está em §19/p22;
+para-raios MT/BT, §21/p27, com continuação da seção na p28. Os intervalos de seções
+foram conferidos pelas imagens, não calculados pelo próximo título do sumário.
+Reguladores dentro de §18 vão a E07; mobiliário/cargas externas de §27 vão a contexto,
+sem catálogo presumido. Todos os rascunhos de §33 são informativos e sem conectividade;
+81 compostos preservam componentes sem multiplicar ativos. Convenções não têm
+cardinalidade patrimonial, e situação vazia difere do `N/A` declarado na fonte.
+Cor/estado operado/situação são eixos distintos: vermelho também aparece em rascunho
+existente, e envoltório preto pode indicar instalação. O perfil legado permanece
+não comprovado; aparência não estabelece equivalência CEMIG/UKPN/IEC/local.
+
+**V-P efetivamente executado:** descoberta recursiva reconciliada com **11 PDFs e
+11 páginas**, todos com anotações (163 no total). Base sem anotações e aparência
+anotada vistas separadamente; **108 imagens** (22 visões gerais, 64 tiles de cobertura
+integral e 22 recortes de 11 regiões). Zero página omitida, falha de renderização ou
+mudança de fonte. Há 22 registros de página/região, com imagens, geometria, hashes,
+negativos e ambiguidades. Não são rótulos exaustivos por ocorrência ou contagem física.
+
+Manifesto `tmp/e01-simbologia/visual/manifesto.json`, SHA-256
+`9b69d430b6680612c2ef54893cbb98900b46b4e579e76e3b2d750920b1e03b2f`;
+achados `tmp/e01-simbologia/visual/achados.json`, SHA-256
+`2f24947378f6b96c8d5e7608c964a1ebb7d71e698fbefab4340d7b837e66a050`.
+Relatório, log das 108 imagens e `validacao.json` ficam nesse diretório privado ignorado.
+Todos os exemplos vistos são **desenvolvimento**. A reserva sintética não foi acessada.
+Sem predições na E01, FP/FN/duplicatas/exclusivos são **não avaliados**, não zero.
+
+**Comandos e resultados da integração pelo coordenador:**
+
+| Comando na raiz | Resultado |
+|---|---|
+| `.\.venv\Scripts\python.exe -m pytest tests/unit/test_symbol_inventory.py` | **38 passed**, exit 0. Um `PytestCacheWarning`: `.pytest_cache` preexistente sem escrita; todos os testes foram executados. |
+| `.\.venv\Scripts\python.exe -m ruff check .` | **All checks passed**, exit 0. |
+| `.\.venv\Scripts\python.exe -m ruff format --check .` | **377 files already formatted**, exit 0. |
+| `.\.venv\Scripts\python.exe -m mypy` | **Success**, 352 arquivos, exit 0. |
+| `.\.venv\Scripts\python.exe tmp/e01-simbologia/check_integration.py` | 427 células preservadas, 427 localizadores únicos, hashes de F01/F02/F04 e 15 links locais válidos, exit 0. |
+| `.\.venv\Scripts\python.exe tmp/e01-simbologia/visual/verify_inventory.py` | **PASS, 597 checagens**, 11 PDFs/11 páginas/108 imagens/22 achados, exit 0. Não substitui visão nem mede detecção. |
+| `git diff --check` | Sem erro de whitespace, exit 0. |
+| `git diff --exit-code -- src scripts pyproject.toml` | Sem alteração de runtime/detectores/dependências, exit 0. |
+
+Logs V-N/V-Q em `tmp/e01-simbologia/integracao-resultados.json`. Os comandos novos de
+download/renderização/transcrição constam no relatório A; renderização/recortes e
+materialização da inspeção, no relatório privado C. Preparação local executada com
+`python tmp/e01-simbologia/build_schema.py` e `python tmp/e01-simbologia/build_inventory.py`,
+usando o Python da `.venv`; são scripts de documentação, não runner E02. Scripts e
+evidências `tmp/` são locais; o teste versionado funciona sem exemplos privados ou rede.
+Não foram executados V-B nem os gates de etapas posteriores; não eram aplicáveis à E01.
+
+**Limitações e próxima sessão:** IEC somente metadados por assinatura; UKPN edição
+histórica sem vigência/licença de templates certificada; original `SIMBOLOGIA.pdf`
+não identificado, com perfil legado separado. Subtipos visuais locais, identidade física,
+repetição em detalhes e oclusões por anotação permanecem revisáveis, sem bloqueio do
+inventário E01. E02 continua **#pendente**: construir runner/baseline e referência por
+ocorrência sem alimentar inferência com o revisor; preservar exclusivos e lacrar a
+reserva sintética até E16. Nenhum commit, publicação ou implantação realizado.
 
 ## E02 — Benchmark de cobertura e complementaridade — #pendente
 

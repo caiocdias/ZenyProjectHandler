@@ -1,5 +1,17 @@
 # Inventário de fontes normativas da análise de conformidade
 
+## Referências de simbologia — E01, 18 de setembro de 2026
+
+A conferência F01–F04 do roadmap de simbologia está no
+[relatório de referências](e01-referencias-simbologia.md), com localizadores, revisão e limites de
+acesso. O [inventário de símbolos](inventario-simbologia.md) e seu
+[registro versionado](data/inventario-simbologia-v1.json) separam perfis CEMIG, externos e legado.
+Essa auditoria de representação gráfica não acrescenta nem altera obrigações, fatos de
+conformidade ou as regras descritas nas revisões históricas abaixo. O literal `SIMBOLOGIA.pdf`
+do detector não comprova identidade com a IT-EO-008.
+
+## Histórico da auditoria de conformidade
+
 Auditoria integral realizada em 12 de agosto de 2026, com revisão complementar dirigida em 14 de
 agosto de 2026. O ponto de partida foi o
 [portal vigente de normas técnicas de redes de distribuição da CEMIG](https://www.cemig.com.br/normas-tecnicas/normas-tecnicas-de-redes-de-distribuicao/).

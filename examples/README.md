@@ -3,8 +3,10 @@
 Use esta pasta como bancada para PDFs de verificação exploratória. Todo o conteúdo abaixo de
 `examples/` é local e ignorado pelo Git; somente este guia pertence ao repositório.
 
-Não existe manifesto, lista fixa, partição privada ou conjunto obrigatório. A pasta pode estar vazia
-e o gate padrão continuará usando apenas fixtures sintéticas versionadas.
+Não existe lista fixa nem conjunto privado obrigatório para o gate portátil. A pasta pode estar
+vazia e esse gate continuará usando apenas fixtures sintéticas versionadas. Execuções locais do
+[roadmap de simbologia](../docs/roadmap-analise-simbologia.md) têm um requisito adicional: descobrir
+recursivamente todos os PDFs disponíveis e registrar um manifesto de cobertura por arquivo/página.
 
 Para exercitar, sob demanda, todos os PDFs encontrados também em subpastas:
 
@@ -16,6 +18,17 @@ O smoke abre cada arquivo, renderiza a primeira página, extrai evidências nati
 interpretador e confirma que tamanho e data de modificação da origem não mudaram. Ele não habilita
 OCR nem grava relatórios. A ausência de PDFs é válida; uma falha não impede a inspeção dos arquivos
 seguintes, mas faz o comando terminar com código diferente de zero.
+
+O smoke não cumpre a auditoria visual V-P: ele renderiza somente a primeira página e não faz revisão
+por IA. Na E01 de simbologia, o manifesto, hashes, imagens da base/aparência anotada e achados de
+todas as páginas ficam em `tmp/e01-simbologia/visual/`, ignorados pelo Git. FP/FN, duplicatas e
+acertos exclusivos ficam como **não avaliados**, pois a E01 inventaria símbolos sem executar
+motores; o runner e o baseline pertencem à E02. Uma página sem achado continua no denominador.
+
+Os exemplos vistos são desenvolvimento/diagnóstico, inclusive os que já tenham sido chamados de
+reserva em relatórios históricos. A reserva sintética a criar na E02 fica separada até a E16.
+Anotações e regiões do revisor não podem alimentar a inferência. Ausência de arquivos, falha de
+leitura ou páginas não inspecionadas devem constar no relatório; não equivalem a aprovação.
 
 Resultados observados em documentos reais são diagnósticos locais. Uma garantia permanente deve ser
 reproduzida por uma fixture sintética pequena, pública e determinística. Comentários de revisão podem
