@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_release_notes_declare_current_api_and_acceptance_limits(tmp_path: Path) -> None:
     destination = tmp_path / "RELEASE_NOTES.md"
-    _write_release_notes(destination, "0.4.0", "zeny-server:0.4.0", "sha256:fixture")
+    _write_release_notes(destination, "0.5.0", "zeny-server:0.5.0", "sha256:fixture")
     notes = destination.read_text(encoding="utf-8")
     assert f"API: `{API_VERSION}`" in notes
     assert f"faixa compatível `{MIN_COMPATIBLE_API_VERSION}`" in notes
@@ -54,7 +54,7 @@ def test_pyinstaller_build_environment_excludes_external_dll_and_qt_paths() -> N
 
 
 def test_release_version_must_be_stable_semver_and_match_all_packages() -> None:
-    _validate_version("0.4.0")
+    _validate_version("0.5.0")
 
     for invalid in ("1", "1.0", "01.0.0", "1.0.0-rc.1", "v1.0.0", "0.4.1"):
         with pytest.raises(ReleaseBuildError):
