@@ -1,0 +1,181 @@
+{
+  "corpus_id": "symbol-controls-e02-v1",
+  "generator_hash_normalization": "UTF-8 text with LF line endings",
+  "generator_sha256": "fb8f6251e0d8f940fb9a3e2683fb0a0c3a695f297886162d40fe6d75276f0af1",
+  "inventory_sha256": "e3d49d9b0072f9f30ea98e2171c0cd520a819a15b329590cfbf35f508f042fcd",
+  "limitations": [
+    "Public PDFs are generated from author-owned source, not private examples.",
+    "Families with no confirmed occurrences retain zero denominators.",
+    "Drawing ancestry is grouped conservatively; rotations/raster/contexts never cross splits.",
+    "Synthetic names designate author-intended semantic controls, not normative equivalence.",
+    "Reserve was authored without renderer, detector or human/AI image review."
+  ],
+  "partitions": [
+    {
+      "documents": [
+        {
+          "ancestor_id": "dev-author-layout-v1",
+          "id": "dev-symbols",
+          "pages": [
+            {
+              "height_pt": 300,
+              "number": 1,
+              "width_pt": 400
+            },
+            {
+              "height_pt": 300,
+              "number": 2,
+              "width_pt": 400
+            }
+          ],
+          "path": "dev-symbols.pdf",
+          "sha256": "96cf93f1c44c81b59108f138093d983f8dee988fe3f4d990ab0adc1abb25f761",
+          "split": "development",
+          "template_family": "dev-author-layout-v1"
+        },
+        {
+          "ancestor_id": "dev-author-layout-v1",
+          "id": "dev-raster",
+          "pages": [
+            {
+              "height_pt": 300,
+              "number": 1,
+              "width_pt": 400
+            }
+          ],
+          "path": "dev-raster.pdf",
+          "sha256": "7642e87883a1daf50956b277a8a34a43fd6dfee2be45eb146b1669897967dc26",
+          "split": "development",
+          "template_family": "dev-author-layout-v1"
+        },
+        {
+          "ancestor_id": "dev-author-layout-v1",
+          "id": "dev-contexts",
+          "pages": [
+            {
+              "height_pt": 300,
+              "number": 1,
+              "width_pt": 400
+            },
+            {
+              "height_pt": 300,
+              "number": 2,
+              "width_pt": 400
+            }
+          ],
+          "path": "dev-contexts.pdf",
+          "sha256": "5795f4294346a4e803b4581fde5f6abf7a38bd848e237bc6d46a715a97ebfc5f",
+          "split": "development",
+          "template_family": "dev-author-layout-v1"
+        },
+        {
+          "ancestor_id": "dev-author-layout-v1",
+          "id": "dev-negatives",
+          "pages": [
+            {
+              "height_pt": 300,
+              "number": 1,
+              "width_pt": 400
+            }
+          ],
+          "path": "dev-negatives.pdf",
+          "sha256": "de63171f5ec21a0fed6bfb91bf1e260f02bcb93c1a9afd4946d93630aa38841c",
+          "split": "development",
+          "template_family": "dev-author-layout-v1"
+        }
+      ],
+      "reference_path": "reference-development.json",
+      "reference_sha256": "cfdba30492ba3b0c416e97795a240d0413a405aa9d8c4806bd399f489d8b43e3",
+      "split": "development"
+    },
+    {
+      "documents": [
+        {
+          "ancestor_id": "cal-author-circles-v1",
+          "id": "cal-vector",
+          "pages": [
+            {
+              "height_pt": 300,
+              "number": 1,
+              "width_pt": 400
+            }
+          ],
+          "path": "cal-vector.pdf",
+          "sha256": "24a565b0e76c766c31d172156f9fe5bbd544edb5f01e661ebcc80ff84494b251",
+          "split": "calibration",
+          "template_family": "cal-author-circles-v1"
+        },
+        {
+          "ancestor_id": "cal-author-circles-v1",
+          "id": "cal-raster",
+          "pages": [
+            {
+              "height_pt": 300,
+              "number": 1,
+              "width_pt": 400
+            }
+          ],
+          "path": "cal-raster.pdf",
+          "sha256": "22b5e8a71b035ad41c745dbbe4d3e9d64dfce52450878cf41af14e2b4c330d8b",
+          "split": "calibration",
+          "template_family": "cal-author-circles-v1"
+        }
+      ],
+      "reference_path": "reference-calibration.json",
+      "reference_sha256": "1c2ecd2feb979f3b9bd42cdc1e4dd32bce33474391fee45924876fef6b753af4",
+      "split": "calibration"
+    },
+    {
+      "documents": [
+        {
+          "ancestor_id": "reserve-author-graphs-v1",
+          "id": "reserve-author-01",
+          "pages": [
+            {
+              "height_pt": 300,
+              "number": 1,
+              "width_pt": 400
+            }
+          ],
+          "path": "reserve-author-01.pdf",
+          "sha256": "eeb0b0bfbdfdcc94a6de5919a630a041af658dfd435998a20605347ff75eeec4",
+          "split": "reserve",
+          "template_family": "reserve-author-graphs-v1"
+        },
+        {
+          "ancestor_id": "reserve-author-graphs-v1",
+          "id": "reserve-author-02",
+          "pages": [
+            {
+              "height_pt": 300,
+              "number": 1,
+              "width_pt": 400
+            }
+          ],
+          "path": "reserve-author-02.pdf",
+          "sha256": "246ca35f28c8b2137b40b5494a0c99bd3a2455df3894b14321b9af818e835118",
+          "split": "reserve",
+          "template_family": "reserve-author-graphs-v1"
+        }
+      ],
+      "split": "reserve"
+    }
+  ],
+  "protocol_sha256": "b00899651b0aadf3ae1cca4baa22affc8a97a39c7d52fc25cacfca37f2d96928",
+  "pymupdf_version": "1.28.0",
+  "randomness": "none; author coordinates and deterministic PDF/ZIP serialization",
+  "reserve": {
+    "bytes": 5938,
+    "documents": 2,
+    "evaluation_status": "sealed_until_E16",
+    "limitations": "Small independent synthetic drawing set; not full inventory coverage or field validation",
+    "pages": 2,
+    "path": "reserve.sealed.zip",
+    "seal_type": "operational policy and SHA-256 integrity, not encryption",
+    "sha256": "6874d0585269a0a68397319268076e8e788aff64fc2bc5d776e80efca739be7b",
+    "visual_review": "not_performed"
+  },
+  "reserve_authoring_sha256": "67e79f09bef18f6863820520f584ad20eb390b5669a05d3f6558c9638c27ca3c",
+  "schema_version": 1,
+  "seed": 20260918
+}

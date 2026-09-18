@@ -1,0 +1,767 @@
+{
+  "documents": [
+    {
+      "ancestor_id": "dev-author-layout-v1",
+      "id": "dev-symbols",
+      "pages": [
+        {
+          "height_pt": 300,
+          "number": 1,
+          "width_pt": 400
+        },
+        {
+          "height_pt": 300,
+          "number": 2,
+          "width_pt": 400
+        }
+      ],
+      "path": "dev-symbols.pdf",
+      "sha256": "96cf93f1c44c81b59108f138093d983f8dee988fe3f4d990ab0adc1abb25f761",
+      "split": "development",
+      "template_family": "dev-author-layout-v1"
+    },
+    {
+      "ancestor_id": "dev-author-layout-v1",
+      "id": "dev-raster",
+      "pages": [
+        {
+          "height_pt": 300,
+          "number": 1,
+          "width_pt": 400
+        }
+      ],
+      "path": "dev-raster.pdf",
+      "sha256": "7642e87883a1daf50956b277a8a34a43fd6dfee2be45eb146b1669897967dc26",
+      "split": "development",
+      "template_family": "dev-author-layout-v1"
+    },
+    {
+      "ancestor_id": "dev-author-layout-v1",
+      "id": "dev-contexts",
+      "pages": [
+        {
+          "height_pt": 300,
+          "number": 1,
+          "width_pt": 400
+        },
+        {
+          "height_pt": 300,
+          "number": 2,
+          "width_pt": 400
+        }
+      ],
+      "path": "dev-contexts.pdf",
+      "sha256": "5795f4294346a4e803b4581fde5f6abf7a38bd848e237bc6d46a715a97ebfc5f",
+      "split": "development",
+      "template_family": "dev-author-layout-v1"
+    },
+    {
+      "ancestor_id": "dev-author-layout-v1",
+      "id": "dev-negatives",
+      "pages": [
+        {
+          "height_pt": 300,
+          "number": 1,
+          "width_pt": 400
+        }
+      ],
+      "path": "dev-negatives.pdf",
+      "sha256": "de63171f5ec21a0fed6bfb91bf1e260f02bcb93c1a9afd4946d93630aa38841c",
+      "split": "development",
+      "template_family": "dev-author-layout-v1"
+    }
+  ],
+  "families": [
+    "family-f02-01",
+    "family-f02-02",
+    "family-f02-03",
+    "family-f02-04",
+    "family-f02-05",
+    "family-f02-06",
+    "family-f02-07",
+    "family-f02-08",
+    "family-f02-09",
+    "family-f02-10",
+    "family-f02-11",
+    "family-f02-12",
+    "family-f02-13",
+    "family-f02-14",
+    "family-f02-15",
+    "family-f02-16",
+    "family-f02-17",
+    "family-f02-18",
+    "family-f02-19",
+    "family-f02-20",
+    "family-f02-21",
+    "family-f02-22",
+    "family-f02-23",
+    "family-f02-24",
+    "family-f02-25",
+    "family-f02-26",
+    "family-f02-27",
+    "family-f02-28",
+    "family-f02-29",
+    "family-f02-30",
+    "family-f02-31",
+    "family-f02-32",
+    "family-f02-33"
+  ],
+  "occurrences": [
+    {
+      "association": null,
+      "bbox": [
+        0.175,
+        0.13333333333333333,
+        0.2325,
+        0.16666666666666666
+      ],
+      "class_id": "ATERRAMENTO",
+      "context": "operational",
+      "document_id": "dev-symbols",
+      "evaluability": "confirmed",
+      "family": "family-f02-19",
+      "id": "dev-symbols-p1-o00",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 1,
+      "quantity": 1,
+      "situation": "EXISTENTE",
+      "strata": [
+        "vector",
+        "canonical",
+        "color"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.175,
+        0.29333333333333333,
+        0.2425,
+        0.32666666666666666
+      ],
+      "class_id": "PARA_RAIOS_MT",
+      "context": "operational",
+      "document_id": "dev-symbols",
+      "evaluability": "confirmed",
+      "family": "family-f02-21",
+      "id": "dev-symbols-p1-o01",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 1,
+      "quantity": 1,
+      "situation": "INSTALAR",
+      "strata": [
+        "vector",
+        "canonical",
+        "color"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.175,
+        0.4583333333333333,
+        0.235,
+        0.4816666666666667
+      ],
+      "class_id": "PARA_RAIOS_BT",
+      "context": "operational",
+      "document_id": "dev-symbols",
+      "evaluability": "confirmed",
+      "family": "family-f02-21",
+      "id": "dev-symbols-p1-o02",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 1,
+      "quantity": 1,
+      "situation": "REMOVER",
+      "strata": [
+        "vector",
+        "canonical",
+        "color"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.175,
+        0.5966666666666667,
+        0.25,
+        0.6566666666666666
+      ],
+      "class_id": "TRANSFORMADOR",
+      "context": "operational",
+      "document_id": "dev-symbols",
+      "evaluability": "confirmed",
+      "family": "family-f02-18",
+      "id": "dev-symbols-p1-o03",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 1,
+      "quantity": null,
+      "situation": null,
+      "strata": [
+        "vector",
+        "canonical",
+        "color"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.175,
+        0.7833333333333333,
+        0.35,
+        0.7966666666666666
+      ],
+      "class_id": "ESTAI_MT",
+      "context": "operational",
+      "document_id": "dev-symbols",
+      "evaluability": "confirmed",
+      "family": "family-f02-14",
+      "id": "dev-symbols-p1-o04",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 1,
+      "quantity": null,
+      "situation": null,
+      "strata": [
+        "vector",
+        "canonical",
+        "color"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.1675,
+        0.15,
+        0.1825,
+        0.19599999999999998
+      ],
+      "class_id": "ATERRAMENTO",
+      "context": "operational",
+      "document_id": "dev-symbols",
+      "evaluability": "confirmed",
+      "family": "family-f02-19",
+      "id": "dev-symbols-p2-o00",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 2,
+      "quantity": 1,
+      "situation": "EXISTENTE",
+      "strata": [
+        "vector",
+        "scale_rotation",
+        "color"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.0535,
+        0.28,
+        0.175,
+        0.34
+      ],
+      "class_id": "PARA_RAIOS_MT",
+      "context": "operational",
+      "document_id": "dev-symbols",
+      "evaluability": "confirmed",
+      "family": "family-f02-21",
+      "id": "dev-symbols-p2-o01",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 2,
+      "quantity": 1,
+      "situation": "INSTALAR",
+      "strata": [
+        "vector",
+        "scale_rotation",
+        "color"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.175,
+        0.47,
+        0.23360147449083513,
+        0.5542635580913969
+      ],
+      "class_id": "PARA_RAIOS_BT",
+      "context": "operational",
+      "document_id": "dev-symbols",
+      "evaluability": "confirmed",
+      "family": "family-f02-21",
+      "id": "dev-symbols-p2-o02",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 2,
+      "quantity": 1,
+      "situation": "REMOVER",
+      "strata": [
+        "vector",
+        "scale_rotation",
+        "color"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.155,
+        0.55,
+        0.191,
+        0.63
+      ],
+      "class_id": "TRANSFORMADOR",
+      "context": "operational",
+      "document_id": "dev-symbols",
+      "evaluability": "confirmed",
+      "family": "family-f02-18",
+      "id": "dev-symbols-p2-o03",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 2,
+      "quantity": null,
+      "situation": null,
+      "strata": [
+        "vector",
+        "scale_rotation",
+        "color"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.175,
+        0.78,
+        0.4375,
+        0.8
+      ],
+      "class_id": "ESTAI_MT",
+      "context": "operational",
+      "document_id": "dev-symbols",
+      "evaluability": "confirmed",
+      "family": "family-f02-14",
+      "id": "dev-symbols-p2-o04",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 2,
+      "quantity": null,
+      "situation": null,
+      "strata": [
+        "vector",
+        "scale_rotation",
+        "color"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.175,
+        0.13333333333333333,
+        0.2325,
+        0.16666666666666666
+      ],
+      "class_id": "ATERRAMENTO",
+      "context": "operational",
+      "document_id": "dev-raster",
+      "evaluability": "confirmed",
+      "family": "family-f02-19",
+      "id": "dev-raster-p1-o00",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 1,
+      "quantity": 1,
+      "situation": "EXISTENTE",
+      "strata": [
+        "raster",
+        "degraded_108dpi"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.175,
+        0.29333333333333333,
+        0.2425,
+        0.32666666666666666
+      ],
+      "class_id": "PARA_RAIOS_MT",
+      "context": "operational",
+      "document_id": "dev-raster",
+      "evaluability": "confirmed",
+      "family": "family-f02-21",
+      "id": "dev-raster-p1-o01",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 1,
+      "quantity": 1,
+      "situation": "INSTALAR",
+      "strata": [
+        "raster",
+        "degraded_108dpi"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.175,
+        0.4583333333333333,
+        0.235,
+        0.4816666666666667
+      ],
+      "class_id": "PARA_RAIOS_BT",
+      "context": "operational",
+      "document_id": "dev-raster",
+      "evaluability": "confirmed",
+      "family": "family-f02-21",
+      "id": "dev-raster-p1-o02",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 1,
+      "quantity": 1,
+      "situation": "REMOVER",
+      "strata": [
+        "raster",
+        "degraded_108dpi"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.175,
+        0.5966666666666667,
+        0.25,
+        0.6566666666666666
+      ],
+      "class_id": "TRANSFORMADOR",
+      "context": "operational",
+      "document_id": "dev-raster",
+      "evaluability": "confirmed",
+      "family": "family-f02-18",
+      "id": "dev-raster-p1-o03",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 1,
+      "quantity": null,
+      "situation": null,
+      "strata": [
+        "raster",
+        "degraded_108dpi"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.175,
+        0.7833333333333333,
+        0.35,
+        0.7966666666666666
+      ],
+      "class_id": "ESTAI_MT",
+      "context": "operational",
+      "document_id": "dev-raster",
+      "evaluability": "confirmed",
+      "family": "family-f02-14",
+      "id": "dev-raster-p1-o04",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 1,
+      "quantity": null,
+      "situation": null,
+      "strata": [
+        "raster",
+        "degraded_108dpi"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.125,
+        0.15,
+        0.1825,
+        0.18333333333333332
+      ],
+      "class_id": "ATERRAMENTO",
+      "context": "operational",
+      "document_id": "dev-contexts",
+      "evaluability": "confirmed",
+      "family": "family-f02-19",
+      "id": "dev-contexts-p1-o00",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 1,
+      "quantity": 1,
+      "situation": null,
+      "strata": [
+        "fragmentation"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.375,
+        0.15,
+        0.4325,
+        0.18333333333333332
+      ],
+      "class_id": "ATERRAMENTO",
+      "context": "operational",
+      "document_id": "dev-contexts",
+      "evaluability": "confirmed",
+      "family": "family-f02-19",
+      "id": "dev-contexts-p1-o01",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 1,
+      "quantity": 1,
+      "situation": null,
+      "strata": [
+        "grouped"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.125,
+        0.35,
+        0.1825,
+        0.38333333333333336
+      ],
+      "class_id": "ATERRAMENTO",
+      "context": "operational",
+      "document_id": "dev-contexts",
+      "evaluability": "confirmed",
+      "family": "family-f02-19",
+      "id": "dev-contexts-p1-o02",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 1,
+      "quantity": 1,
+      "situation": null,
+      "strata": [
+        "neighbors"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.1775,
+        0.35,
+        0.235,
+        0.38333333333333336
+      ],
+      "class_id": "ATERRAMENTO",
+      "context": "operational",
+      "document_id": "dev-contexts",
+      "evaluability": "confirmed",
+      "family": "family-f02-19",
+      "id": "dev-contexts-p1-o03",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 1,
+      "quantity": 1,
+      "situation": null,
+      "strata": [
+        "neighbors"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.125,
+        0.5833333333333334,
+        0.1825,
+        0.6166666666666667
+      ],
+      "class_id": "ATERRAMENTO",
+      "context": "operational",
+      "document_id": "dev-contexts",
+      "evaluability": "confirmed",
+      "family": "family-f02-19",
+      "id": "dev-contexts-p1-o04",
+      "layer": "annotation",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 1,
+      "quantity": 1,
+      "situation": null,
+      "strata": [
+        "annotation"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.45,
+        0.5,
+        0.525,
+        0.56
+      ],
+      "class_id": "TRANSFORMADOR",
+      "context": "operational",
+      "document_id": "dev-contexts",
+      "evaluability": "confirmed",
+      "family": "family-f02-18",
+      "id": "dev-contexts-p1-o05",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 1,
+      "quantity": null,
+      "situation": null,
+      "strata": [
+        "overlap"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.125,
+        0.15,
+        0.1825,
+        0.18333333333333332
+      ],
+      "class_id": "ATERRAMENTO",
+      "context": "operational",
+      "document_id": "dev-contexts",
+      "evaluability": "confirmed",
+      "family": "family-f02-19",
+      "id": "dev-contexts-p2-o00",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 2,
+      "quantity": 1,
+      "situation": null,
+      "strata": [
+        "different_page"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.45,
+        0.5,
+        0.525,
+        0.56
+      ],
+      "class_id": "TRANSFORMADOR",
+      "context": "operational",
+      "document_id": "dev-contexts",
+      "evaluability": "ambiguous",
+      "family": "family-f02-18",
+      "id": "dev-contexts-p2-o01",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 2,
+      "quantity": null,
+      "situation": null,
+      "strata": [
+        "ambiguous"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.1,
+        0.13333333333333333,
+        0.1575,
+        0.16666666666666666
+      ],
+      "class_id": "ATERRAMENTO",
+      "context": "legend",
+      "document_id": "dev-negatives",
+      "evaluability": "confirmed",
+      "family": "family-f02-19",
+      "id": "dev-negatives-p1-o00",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 1,
+      "quantity": 1,
+      "situation": null,
+      "strata": [
+        "critical_legend"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.09,
+        0.24,
+        0.31,
+        0.33
+      ],
+      "class_id": "NON_SYMBOL",
+      "context": "negative",
+      "document_id": "dev-negatives",
+      "evaluability": "confirmed",
+      "family": "family-f02-33",
+      "id": "dev-negatives-p1-o01",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 1,
+      "quantity": null,
+      "situation": null,
+      "strata": [
+        "critical_glyph"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.1,
+        0.45,
+        0.325,
+        0.55
+      ],
+      "class_id": "NON_SYMBOL",
+      "context": "negative",
+      "document_id": "dev-negatives",
+      "evaluability": "confirmed",
+      "family": "family-f02-33",
+      "id": "dev-negatives-p1-o02",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 1,
+      "quantity": null,
+      "situation": null,
+      "strata": [
+        "critical_table"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.1,
+        0.725,
+        0.475,
+        0.775
+      ],
+      "class_id": "NON_SYMBOL",
+      "context": "negative",
+      "document_id": "dev-negatives",
+      "evaluability": "confirmed",
+      "family": "family-f02-33",
+      "id": "dev-negatives-p1-o03",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 1,
+      "quantity": null,
+      "situation": null,
+      "strata": [
+        "critical_fence"
+      ]
+    }
+  ],
+  "provenance": {
+    "generator": "tests/symbol_benchmark_fixtures.py",
+    "generator_hash_normalization": "UTF-8 text with LF line endings",
+    "generator_sha256": "fb8f6251e0d8f940fb9a3e2683fb0a0c3a695f297886162d40fe6d75276f0af1",
+    "limitations": "Synthetic diagnostic set; no field generalization estimate",
+    "ownership": "Author-owned controls, not normative symbol reproductions",
+    "randomness": "none; coordinates and serialization fixed",
+    "seed": 20260918
+  },
+  "schema_version": 1
+}

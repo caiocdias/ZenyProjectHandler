@@ -25,6 +25,18 @@ todas as páginas ficam em `tmp/e01-simbologia/visual/`, ignorados pelo Git. FP/
 acertos exclusivos ficam como **não avaliados**, pois a E01 inventaria símbolos sem executar
 motores; o runner e o baseline pertencem à E02. Uma página sem achado continua no denominador.
 
+Na E02, a inferência de simbologia em todos os arquivos/páginas usa:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.benchmark_symbols examples --root examples --output tmp/e02-simbologia/predictions
+```
+
+O [protocolo E02](../docs/e02-benchmark-simbologia.md) descreve os artefatos, a
+inspeção independente de imagens e o baseline sintético portátil. O comando acima
+executa somente o detector vetorial legado e não realiza revisão visual automática.
+Referência parcial de IA não autoriza calcular recall global ou considerar regiões
+não anotadas como FP. A ausência de PDFs é registrada com `completed=false`/exit 1.
+
 Os exemplos vistos são desenvolvimento/diagnóstico, inclusive os que já tenham sido chamados de
 reserva em relatórios históricos. A reserva sintética a criar na E02 fica separada até a E16.
 Anotações e regiões do revisor não podem alimentar a inferência. Ausência de arquivos, falha de

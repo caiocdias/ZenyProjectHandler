@@ -1,0 +1,177 @@
+{
+  "documents": [
+    {
+      "ancestor_id": "cal-author-circles-v1",
+      "id": "cal-vector",
+      "pages": [
+        {
+          "height_pt": 300,
+          "number": 1,
+          "width_pt": 400
+        }
+      ],
+      "path": "cal-vector.pdf",
+      "sha256": "24a565b0e76c766c31d172156f9fe5bbd544edb5f01e661ebcc80ff84494b251",
+      "split": "calibration",
+      "template_family": "cal-author-circles-v1"
+    },
+    {
+      "ancestor_id": "cal-author-circles-v1",
+      "id": "cal-raster",
+      "pages": [
+        {
+          "height_pt": 300,
+          "number": 1,
+          "width_pt": 400
+        }
+      ],
+      "path": "cal-raster.pdf",
+      "sha256": "22b5e8a71b035ad41c745dbbe4d3e9d64dfce52450878cf41af14e2b4c330d8b",
+      "split": "calibration",
+      "template_family": "cal-author-circles-v1"
+    }
+  ],
+  "families": [
+    "family-f02-01",
+    "family-f02-02",
+    "family-f02-03",
+    "family-f02-04",
+    "family-f02-05",
+    "family-f02-06",
+    "family-f02-07",
+    "family-f02-08",
+    "family-f02-09",
+    "family-f02-10",
+    "family-f02-11",
+    "family-f02-12",
+    "family-f02-13",
+    "family-f02-14",
+    "family-f02-15",
+    "family-f02-16",
+    "family-f02-17",
+    "family-f02-18",
+    "family-f02-19",
+    "family-f02-20",
+    "family-f02-21",
+    "family-f02-22",
+    "family-f02-23",
+    "family-f02-24",
+    "family-f02-25",
+    "family-f02-26",
+    "family-f02-27",
+    "family-f02-28",
+    "family-f02-29",
+    "family-f02-30",
+    "family-f02-31",
+    "family-f02-32",
+    "family-f02-33"
+  ],
+  "occurrences": [
+    {
+      "association": null,
+      "bbox": [
+        0.1825,
+        0.21,
+        0.2175,
+        0.25666666666666665
+      ],
+      "class_id": "POSTE",
+      "context": "operational",
+      "document_id": "cal-vector",
+      "evaluability": "confirmed",
+      "family": "family-f02-03",
+      "id": "cal-vector-p1-o00",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 1,
+      "quantity": 1,
+      "situation": null,
+      "strata": [
+        "vector",
+        "independent_drawing"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.375,
+        0.43333333333333335,
+        0.46,
+        0.5
+      ],
+      "class_id": "TRANSFORMADOR",
+      "context": "operational",
+      "document_id": "cal-vector",
+      "evaluability": "confirmed",
+      "family": "family-f02-18",
+      "id": "cal-vector-p1-o01",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 1,
+      "quantity": null,
+      "situation": null,
+      "strata": [
+        "vector",
+        "independent_drawing"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.1825,
+        0.21,
+        0.2175,
+        0.25666666666666665
+      ],
+      "class_id": "POSTE",
+      "context": "operational",
+      "document_id": "cal-raster",
+      "evaluability": "confirmed",
+      "family": "family-f02-03",
+      "id": "cal-raster-p1-o00",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 1,
+      "quantity": 1,
+      "situation": null,
+      "strata": [
+        "raster",
+        "independent_drawing"
+      ]
+    },
+    {
+      "association": null,
+      "bbox": [
+        0.375,
+        0.43333333333333335,
+        0.46,
+        0.5
+      ],
+      "class_id": "TRANSFORMADOR",
+      "context": "operational",
+      "document_id": "cal-raster",
+      "evaluability": "confirmed",
+      "family": "family-f02-18",
+      "id": "cal-raster-p1-o01",
+      "layer": "base",
+      "notes": "Author-owned synthetic control; not a normative variant or asset count",
+      "page": 1,
+      "quantity": null,
+      "situation": null,
+      "strata": [
+        "raster",
+        "independent_drawing"
+      ]
+    }
+  ],
+  "provenance": {
+    "generator": "tests/symbol_benchmark_fixtures.py",
+    "generator_hash_normalization": "UTF-8 text with LF line endings",
+    "generator_sha256": "fb8f6251e0d8f940fb9a3e2683fb0a0c3a695f297886162d40fe6d75276f0af1",
+    "limitations": "Synthetic diagnostic set; no field generalization estimate",
+    "ownership": "Author-owned controls, not normative symbol reproductions",
+    "randomness": "none; coordinates and serialization fixed",
+    "seed": 20260918
+  },
+  "schema_version": 1
+}

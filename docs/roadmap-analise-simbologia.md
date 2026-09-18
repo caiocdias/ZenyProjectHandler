@@ -353,8 +353,8 @@ ser registradas, sem instalar ferramentas/modelos implicitamente para fazer o re
 | V-Q | `.\.venv\Scripts\python.exe -m ruff check .`; `.\.venv\Scripts\python.exe -m ruff format --check .`; `.\.venv\Scripts\python.exe -m mypy` — comandos separados, sem erros. |
 | V-G | `.\.venv\Scripts\python.exe -m pytest --cov` — suíte completa e piso de cobertura configurado, atualmente 85,01%, passam. |
 | V-O | Se mudar contrato: `.\.venv\Scripts\python.exe scripts/generate_openapi_v1.py`, revisar diff e executar `tests/contracts/test_openapi_snapshot.py` pelo pytest. |
-| V-B | Benchmark novo a criar em E02, proposto `scripts/benchmark_symbols.py`; não existe na inspeção. E02 deve documentar CLI real, seed, partições, hashes e comando exato. E04–E16 executam esse comando registrado; não inventar flags. |
-| V-P | Auditoria visual por IA de todos os PDFs/páginas em `examples/`, conforme protocolo acima; runner/comando real a entregar em E02. E01 realiza inventário visual e E03 confere o contrato usando baseline congelado. |
+| V-B | `.\.venv\Scripts\python.exe -m scripts.benchmark_symbols synthetic --output tmp/e02-simbologia/baseline-final` — CLI entregue em E02; desenvolvimento autoral, sem `examples/`. Protocolo/seed/partições/hashes em `docs/e02-benchmark-simbologia.md` e `tests/fixtures/symbols/manifest.json`; reserva recusada até E16. |
+| V-P | `.\.venv\Scripts\python.exe -m scripts.benchmark_symbols examples --root examples --output tmp/e02-simbologia/predictions` — inferência de todos os PDFs/páginas. Exige também inspeção real independente de imagens e registro por predição/ROI conforme protocolo; o runner não declara aprovação visual. E03 pode reutilizar o baseline congelado com hashes/configuração idênticos. |
 | V-N | Testes novos da etapa: criar em `tests/unit/` ou `tests/integration/` conforme fronteira e registrar os caminhos/comandos exatos no handoff. Validar comportamento e falhas, não só espelhar a implementação. |
 
 V-Q é obrigatório para mudanças de código de cada etapa. Falha preexistente não pode ser
@@ -366,7 +366,7 @@ E16 executa V-G; não repetir toda a suíte após mera edição do roadmap.
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E01 | Inventário de símbolos e perfis de referência | #concluida | Nenhuma | Criar inventário versionado e verificável de famílias, variantes e convenções, incluindo símbolos sem equivalente patrimonial. |
-| E02 | Benchmark de cobertura e complementaridade | #pendente | E01 | Entregar avaliador independente e baseline reproduzível de símbolos, com reserva e métricas de união. |
+| E02 | Benchmark de cobertura e complementaridade | #concluida | E01 | Entregar avaliador independente e baseline reproduzível de símbolos, com reserva e métricas de união. |
 | E03 | Contrato de observações e registro de métodos | #pendente | E01, E02 | Introduzir contrato interno aditivo para observações de símbolos, cobertura e estados de cada método. |
 | E04 | Robustez vetorial de aterramento e para-raios | #pendente | E03 | Melhorar o detector existente para primitives fragmentadas/agrupadas, escala e estilos, sem ampliar sua lista de classes. |
 | E05 | Reconhecimento visual de transformadores | #pendente | E04 | Detectar variantes gráficas de transformador e conjuntos sem depender da existência de um literal reconhecido. |
@@ -548,7 +548,7 @@ inventário E01. E02 continua **#pendente**: construir runner/baseline e referê
 ocorrência sem alimentar inferência com o revisor; preservar exclusivos e lacrar a
 reserva sintética até E16. Nenhum commit, publicação ou implantação realizado.
 
-## E02 — Benchmark de cobertura e complementaridade — #pendente
+## E02 — Benchmark de cobertura e complementaridade — #concluida
 
 **Objetivo:** Entregar avaliador independente e baseline reproduzível de símbolos, com reserva e métricas de união.
 
@@ -577,13 +577,15 @@ reserva sintética até E16. Nenhum commit, publicação ou implantação realiz
 
 **Critérios de aceite:**
 
-- [ ] Uma execução sem examples/ gera métricas por família e denominadores, com FP/FN localizáveis.
-- [ ] Controle A-acerta/B-falha demonstra ganho da união; duplicatas não aumentam TP e interseção não filtra o candidato.
-- [ ] Baseline e reserva têm hashes/partições; CLI exata está documentada, sem métricas inventadas de generalização.
+- [x] Uma execução sem examples/ gera métricas por família e denominadores, com FP/FN localizáveis.
+- [x] Controle A-acerta/B-falha demonstra ganho da união; duplicatas não aumentam TP e interseção não filtra o candidato.
+- [x] Baseline e reserva têm hashes/partições; CLI exata está documentada, sem métricas inventadas de generalização.
 
 **Validação obrigatória:** V-P e conferência das entregas dos subagentes, com as particularidades acima. V-S, V-N, V-Q e execução inaugural V-B. Testar avaliador com saídas-oráculo conhecidas: duplicatas, páginas diferentes, classes ausentes e símbolos finos. Os códigos V-* remetem aos comandos completos acima; registrar os comandos efetivamente executados.
 
-**Bloqueios:** Nenhum bloqueio conhecido para iniciar respeitando as dependências. Lacunas de dados/fontes são riscos até impedirem concretamente a execução ou o aceite; nessa ocorrência, registrar causa, evidência, impacto e ação de desbloqueio.
+**Bloqueios:** Nenhum impedimento de E02 após o checkpoint integrado. As limitações
+do detector legado e da referência visual parcial estão medidas no handoff;
+não equivalem ao cumprimento das metas de reconhecimento de E16.
 
 **Riscos e mitigação:** Sintéticos derivados do próprio template superestimam resultado: usar desenhos independentes e manter partições por ancestral.
 
@@ -604,7 +606,184 @@ Ao iniciar, sincronize #em-andamento no índice e detalhe. Implemente somente es
 Não declare sucesso com validação obrigatória falhando ou não executada. Atualize para #concluida somente após todos os critérios; impedimento real exige #bloqueada com causa, evidência, impacto e ação de desbloqueio. Dependência ainda pendente mantém #pendente. Preencha Evidências e handoff com arquivos, decisões, comandos, resultados e limitações. Não crie commit, publique ou implante sem autorização explícita. Termine com resumo conciso de mudanças, validações e pendências.
 ```
 
-**Evidências e handoff:** ainda não executada. Registrar também agentes/papéis, fronteiras de escrita, checkpoint integrado, revisão independente, manifesto V-P e total de PDFs/páginas conferidos/bloqueados. Ao trabalhar, registrar arquivos alterados, versão/configuração, decisões, fontes/fixtures, comandos e resultados, métricas comparadas, limitações e próximo passo.
+**Evidências e handoff — concluída em 18/09/2026:**
+
+- Base `50204c0dbfedeaf7a8878f7fc27b774bd7fe94d5`, Git inicialmente limpo;
+  `git status --short`, `git diff` e `git diff --cached` conferidos. Nenhum
+  `AGENTS.md` encontrado nos ancestrais/áreas de escopo. Roadmap completo e
+  quatro arquivos de escopo lidos antes da implementação. Sem mudança de detector.
+- Dependência E01 confirmada pelos artefatos versionados, hashes de registro,
+  esquema e detector e **38 passed** em `tests/unit/test_symbol_inventory.py`.
+  Hash do teste difere apenas por LF/CRLF: normalizado permanece
+  `dc5e7027c7a694cd46cebf5490514d6958aaa36eddb3b2ea498027fdd6eb12af`.
+  Os artefatos privados E01 não existem neste checkout; V-P recebeu nova inspeção.
+- Contrato fechado antes da delegação em
+  [e02-contrato-benchmark-simbologia.md](e02-contrato-benchmark-simbologia.md),
+  checkpoint 1.1. A semântica primária usa confirmado/operacional; ambiguidades
+  e contexto informativo conservam denominadores separados.
+- A `/root/a_codigo`: exclusivo dos três scripts novos de avaliador/runner/CLI.
+  B `/root/b_testes_dados`: fixtures, partições, testes-oráculo e documento de dados.
+  C `/root/c_pdfs`: exclusivamente `tmp/e02-simbologia/visual/`, inspeção de imagens
+  antes das predições. Coordenador: contratos, documentação, integração e roadmap.
+  Quatro posições, sem dois escritores por arquivo; comparação liberada somente
+  após estabilizar as saídas e congelar a referência visual inicial.
+- Pré-voo: Python 3.13.14, PyMuPDF 1.28.0, Pillow 12.2.0, pytest 8.4.2,
+  ruff 0.15.22, mypy 1.20.2, Windows 11. O launcher Microsoft Store da `.venv`
+  requer execução fora do sandbox; a revisão automática autorizou os comandos,
+  sem instalar dependências ou alterar ambiente. Detalhes/hashes em
+  `tmp/e02-simbologia/integracao/environment.json`.
+- Entregas públicas: [protocolo e CLI](e02-benchmark-simbologia.md),
+  [contrato checkpoint 2](e02-contrato-benchmark-simbologia.md),
+  [dados e oráculos](e02-dados-benchmark-simbologia.md),
+  [baseline integral](data/benchmark-simbologia-e02-baseline.json), três scripts
+  novos `benchmark_symbols.py`, `symbol_benchmark_evaluator.py` e
+  `symbol_benchmark_runner.py`, gerador `tests/symbol_benchmark_fixtures.py`,
+  `tests/unit/test_benchmark_symbols.py` e `tests/fixtures/symbols/`.
+  `docs/data/.gitattributes` fixa LF somente no baseline novo; o atributo local
+  das fixtures preserva seus hashes. Os quatro arquivos legados de escopo foram
+  lidos/retestados e permaneceram intactos; também não mudaram `src/` ou dependências.
+- Protocolo: matching máximo um-a-um, IoU 0,5 e critério fino congelado; união
+  exata entre métodos conserva observações/duplicatas e interseção não filtra.
+  Classes ausentes têm recall null. Aliases filtered/final são explicitamente
+  controle de benchmark, não implementação de E12. GT parcial é recusada para
+  métricas globais; score 0,88 não é probabilidade. Nenhuma família E01 foi retirada.
+- Revisões resolveram por evidência: fixture de transformador arbitrária substituída
+  por controle triangular autoral não normativo; quantidade composta ficou null;
+  erros de abertura agora preservam continuidade; mapa SHA fonte/predição rejeita
+  referência trocada. No checkpoint 2, centro contido serve só para atribuir o
+  contexto de um FP, sem alterar candidato/TP/FP/FN. O smoke original foi preservado.
+- B entregou **47 testes** e revisou independentemente runner/avaliador. Na segunda
+  onda A reconstruiu os dados públicos de B: **6 PDFs/8 páginas/31 registros**,
+  referências e hashes idênticos, **15 grupos de checagens** aprovados. Evidência:
+  `tmp/e02-simbologia/a/data-review.md` (SHA
+  `3f757535c6efdd1dc3b09d90e73b20f31d8dfe2d003e742affcff2694c6f6761`).
+  A não abriu/leu/enumerou a reserva. Coordenador revisou código/fixtures e integrou
+  sobre os arquivos congelados, não sobre árvore em mutação.
+
+**V-B e reserva:** desenvolvimento com 4 PDFs/6 páginas, 27 registros, 22 positivos
+operacionais confirmados, uma ambiguidade, uma legenda e três negativos; 33 famílias
+no relatório, quatro com positivos. O legado emitiu 9 predições: **0 TP/9 FP/22 FN**
+pelo critério fixo de localização. `_union_bounds` usa união de retângulos de área
+zero, produzindo caixas restritas à haste/corpo; classe visual plausível não basta
+para TP localizado. Esse achado não foi corrigido em E02. Há um FP no controle
+de legenda; não se declara cumprimento das metas futuras E16. Transformador/estai
+e raster não têm método visual implementado no baseline.
+
+Controle-oráculo: A=1 TP/1 FN, B=1 TP/1 FN, união=2 TP/0 FN e interseção=0 TP/2 FN;
+duplicatas não aumentam TP. Isso demonstra o avaliador, não ganho entre detectores
+reais (somente um foi executado). Calibração tem 2 PDFs/2 páginas; reserva, 2/2,
+com ancestral/desenho distinto e lacre operacional sem criptografia. Nenhuma
+inferência/renderização/inspeção da reserva em E02. Sua cobertura pequena não
+homologa todas as famílias; expansão exige novo manifesto e desenhos independentes.
+
+Reprodução pelo coordenador em workspace mínimo sem `examples/` nem reserva:
+referência, predições e relatório idênticos, excluindo apenas tempos variáveis.
+Ambiente PyMuPDF 1.28.0; não foi testada identidade binária entre versões.
+
+| Artefato congelado | SHA-256 |
+|---|---|
+| Baseline público, LF | `fd30cb3fa3cbe34e86b36660b5d794b6c3a6ec371849166188c6d9bcc1d5eeae` |
+| Observações V-B | `ff493710564319ffa02a4a5589a81463bfc1cc16c256f489c697a84fe4580cfc` |
+| Manifesto de partições | `2175799853d0e3e9a2fdf2dcd9fe96457bcc82706a22fa95de6cc531b4d7e8ce` |
+| Reserva opaca | `6874d0585269a0a68397319268076e8e788aff64fc2bc5d776e80efca739be7b` |
+| Protocolo canonical JSON | `b00899651b0aadf3ae1cca4baa22affc8a97a39c7d52fc25cacfca37f2d96928` |
+| CLI / texto LF | `9c6c5818dc893b4c9e3910011c63efbb67fb3ebd59d85bd886cbae1f1fba98d4` |
+| Avaliador / texto LF | `1e5683f18f8312dc59c8437f724dcbe5f1c04ae57995773f124afba9a61511a9` |
+| Runner / texto LF | `af084e4dabb1b5b26f88259dbbeb0880c457215f9cc158d31598e525d6bb3e75` |
+
+**Comandos de integração executados pelo coordenador:**
+
+| Comando na raiz | Resultado |
+|---|---|
+| V-S, comando integral da tabela global | **75 passed**, exit 0, repetido no checkpoint final. |
+| `.\.venv\Scripts\python.exe -m pytest tests/unit/test_benchmark_symbols.py tests/unit/test_benchmark_network_pdf.py` | V-N: **55 passed**, exit 0. |
+| `.\.venv\Scripts\python.exe -m ruff check .` | All checks passed, exit 0. |
+| `.\.venv\Scripts\python.exe -m ruff format --check .` | 382 arquivos formatados, exit 0. |
+| `.\.venv\Scripts\python.exe -m mypy` | Success, 354 arquivos, exit 0. |
+| `.\.venv\Scripts\python.exe -m scripts.benchmark_symbols synthetic --output tmp/e02-simbologia/baseline` | Inaugural: 4 PDFs/6 páginas/9 predições, zero falha; 0 TP/9 FP/22 FN. Preservado após correção de atribuição contextual. |
+| `.\.venv\Scripts\python.exe -m scripts.benchmark_symbols synthetic --output tmp/e02-simbologia/baseline-final` | Checkpoint 2: mesmos totais; erros/estratos localizáveis; exit 0. |
+| `.\.venv\Scripts\python.exe tmp/e02-simbologia/integracao/reproduce_and_freeze.py` | Executa a mesma CLI em cópia mínima sem exemplos/reserva; referências/predições/relatórios reproduzidos; exit 0. |
+| `.\.venv\Scripts\python.exe -m scripts.benchmark_symbols evaluate --reference tmp/e02-simbologia/baseline-final/reference.json --predictions tmp/e02-simbologia/baseline-final/predictions.json --output tmp/e02-simbologia/integracao/re-evaluation.json` | Avaliação sem inferência reproduz hash integral do relatório `a01444a135774eba74e5b6c3b08f1af32fbef8cf5575d981c45a416dc2944912`, exit 0. |
+| `.\.venv\Scripts\python.exe -m scripts.benchmark_symbols examples --root examples --output tmp/e02-simbologia/predictions` | 11 PDFs/11 páginas/159 predições, zero falha e fontes intactas, exit 0. Inferência não equivale a aprovação visual. |
+| `git diff --check` | Sem erro de whitespace. |
+| `git diff --exit-code -- src scripts/benchmark_network_pdf.py scripts/benchmark_network_alternatives.py tests/unit/test_benchmark_network_pdf.py tests/unit/test_pymupdf_analyzer.py pyproject.toml` | Sem mudanças nos detectores, legados ou dependências. |
+
+Logs de integração em `tmp/e02-simbologia/integracao/validation-results.json` e
+arquivos V-S/V-N/V-Q, reprodutibilidade em `reproducibility.json`. Comando auxiliar
+do registro: `.\.venv\Scripts\python.exe tmp/e02-simbologia/integracao/run_validation.py`.
+V-G não era obrigatório nesta etapa e não foi alegado.
+
+**V-P concluída no escopo E02:** 11 PDFs recursivos, 11 páginas, zero documento/página
+bloqueado ou falha de inferência, 159 predições e fontes intactas. C inspecionou
+154 visões gerais/tiles de base/aparência e mais 27 recortes originais antes de
+receber predições; congelou 87 hipóteses (75 operacionais legíveis provisórias,
+10 ambíguas, dois controles). Depois inspecionou todos os 159 recortes a 1200 DPI
+em 20 folhas de contato, com quatro ampliações individuais adicionais. Os logs
+registram inspeção real de imagens, não só renderização, OCR ou leitura de JSON.
+
+Resultado por candidato: **118 classes visualmente plausíveis, 22 FP localizados,
+15 ambiguidades e quatro casos semanticamente não avaliáveis, também inspecionados**.
+As 118 classes plausíveis não são TP geométricos. Dos 22 FP, cinco são posições
+reportadas vazias, dois são falhas de localização com classe plausível e 15 são
+gráficos não operacionais. Sete caixas degeneradas no total. A comparação conserva
+as caixas emitidas; não deduz se a causa de uma posição vazia é pintura invisível,
+coordenada incorreta ou detecção espúria. Há **30 FN mínimos provisórios localizados**
+nas ROIs iniciais: sete aterramentos, sete MT, 16 BT; 16 hipóteses legíveis de
+transformador ficam fora das classes do método. Precisão estrita e recall global
+permanecem null: varrer todas as páginas não torna a anotação por ocorrência
+exaustiva nem homologada por especialista.
+
+Matriz com **22 células documento/página/método/camada**: 11 bases executadas e
+11 camadas de anotação inspecionadas mas `not_applicable` ao método, com motivo.
+Duas páginas têm zero saída apesar de hipóteses visuais. Há apenas um método real:
+exclusividade é trivial, ganho empírico da união é null. Nenhuma duplicata adicional
+identificada; detalhes distantes não foram fundidos em uma identidade física.
+O coordenador fez revisão dirigida de sete imagens (uma visão geral, três recortes
+originais, dois candidatos e um contato); isso não é segunda auditoria integral.
+Essa revisão apoiou a correção da hipótese inicial do candidato 040 e manteve
+ambiguidades do inset raster e da composição de aterramento junto à cerca.
+
+Artefatos privados em `tmp/e02-simbologia/visual/`: `relatorio-vp.md`, `handoff-c.md`,
+`manifesto.json`, `inspection-log.json`, `crop-inspection-log.json`,
+`original-findings.json`, `reference-initial.json`, `reference-partial.json`,
+`prediction-crops.json`, `prediction-review-decisions.json`, `prediction-review.json`,
+`matrix.json` e `review-artifact-hashes.json`. A cópia contextual declara
+`annotation_scope=partial`; o coordenador confirmou sua recusa pelo avaliador global.
+A referência original permanece intacta. Nenhuma ROI/rótulo foi entrada do detector.
+
+| Artefato local | SHA-256 |
+|---|---|
+| Predições V-P | `e11993a21cbce8ab81ec1ceeba7c4f749e20d522b2825d406305b72ef9a332e9` |
+| Manifesto do runner V-P | `b103f391d996f524aec43552b6c6f1a79bbb7d345e05888042602056f98f8fb6` |
+| Referência visual inicial | `219f11304fc137dd456a6fc0fcc0512412b55ec493ebd3f5ab92a2c781f86104` |
+| Referência explicitamente parcial | `9c40e98b6b32da1c86804511895f9dca6b12d59768abf1d5b668d6df79d5fff7` |
+| Revisão dos 159 candidatos | `30efb7bc322af5cb0148acdcc9d4912a4df9fc16226f52c3d9f9248643083b72` |
+
+Os comandos de renderização/congelamento/comparação estão integralmente em
+`tmp/e02-simbologia/visual/relatorio-vp.md`. Integração final pelo coordenador:
+
+```powershell
+.\.venv\Scripts\python.exe tmp/e02-simbologia/visual/verify_visual.py
+.\.venv\Scripts\python.exe tmp/e02-simbologia/integracao/verify_final_checkpoint.py
+git diff --check
+git diff --exit-code -- src scripts/benchmark_network_pdf.py scripts/benchmark_network_alternatives.py tests/unit/test_benchmark_network_pdf.py tests/unit/test_pymupdf_analyzer.py pyproject.toml
+```
+
+Todos terminaram com exit 0. `final-checkpoint.json` confirma hashes das fontes,
+artefatos públicos, código congelado e reserva opaca, cobertura dos 159 IDs/22 células,
+FN mínimos localizados, resultados dos gates e rejeição de GT parcial. Os verificadores
+provam integridade/cobertura, não verdade semântica. Inferência V-P foi preservada do
+checkpoint 1: runner, CLI e detector têm os mesmos hashes no checkpoint final; a
+única alteração posterior foi no diagnóstico contextual do avaliador, que não é
+invocado pelo comando `examples`. Não foi necessária nova inferência.
+
+**Limitações e próximo passo:** dados públicos pequenos e autorais não normativos,
+apenas quatro famílias com positivos; nenhuma estimativa de generalização/calibração.
+Reserva permanece lacrada até E16, e todos os exemplos inspecionados são desenvolvimento.
+E03 deve conferir round-trip usando as saídas congeladas, mantendo fonte/geometria,
+score bruto, exclusivos e estados; E04 deve investigar as caixas degeneradas antes
+de ajustar reconhecimento. E03 e demais etapas continuam pendentes. E02 não ajustou
+detectores, criou commit, publicou ou implantou.
 
 ## E03 — Contrato de observações e registro de métodos — #pendente
 
