@@ -367,7 +367,7 @@ E16 executa V-G; não repetir toda a suíte após mera edição do roadmap.
 |---|---|---|---|---|
 | E01 | Inventário de símbolos e perfis de referência | #concluida | Nenhuma | Criar inventário versionado e verificável de famílias, variantes e convenções, incluindo símbolos sem equivalente patrimonial. |
 | E02 | Benchmark de cobertura e complementaridade | #concluida | E01 | Entregar avaliador independente e baseline reproduzível de símbolos, com reserva e métricas de união. |
-| E03 | Contrato de observações e registro de métodos | #pendente | E01, E02 | Introduzir contrato interno aditivo para observações de símbolos, cobertura e estados de cada método. |
+| E03 | Contrato de observações e registro de métodos | #concluida | E01, E02 | Introduzir contrato interno aditivo para observações de símbolos, cobertura e estados de cada método. |
 | E04 | Robustez vetorial de aterramento e para-raios | #pendente | E03 | Melhorar o detector existente para primitives fragmentadas/agrupadas, escala e estilos, sem ampliar sua lista de classes. |
 | E05 | Reconhecimento visual de transformadores | #pendente | E04 | Detectar variantes gráficas de transformador e conjuntos sem depender da existência de um literal reconhecido. |
 | E06 | Reconhecimento de estais e ancoragens | #pendente | E04 | Reconhecer as variantes de estai e seus vínculos geométricos sem confundi-las com condutores. |
@@ -785,7 +785,7 @@ score bruto, exclusivos e estados; E04 deve investigar as caixas degeneradas ant
 de ajustar reconhecimento. E03 e demais etapas continuam pendentes. E02 não ajustou
 detectores, criou commit, publicou ou implantou.
 
-## E03 — Contrato de observações e registro de métodos — #pendente
+## E03 — Contrato de observações e registro de métodos — #concluida
 
 **Objetivo:** Introduzir contrato interno aditivo para observações de símbolos, cobertura e estados de cada método.
 
@@ -814,13 +814,16 @@ detectores, criou commit, publicou ou implantou.
 
 **Critérios de aceite:**
 
-- [ ] Round-trip preserva fonte, página, camada, geometria, score bruto e alternativas.
-- [ ] Motor fora de domínio ou indisponível não produz voto negativo.
-- [ ] Adapter legado passa nos controles e identidade é determinística para a mesma entrada/configuração.
+- [x] Round-trip preserva fonte, página, camada, geometria, score bruto e alternativas.
+- [x] Motor fora de domínio ou indisponível não produz voto negativo.
+- [x] Adapter legado passa nos controles e identidade é determinística para a mesma entrada/configuração.
 
 **Validação obrigatória:** V-P e conferência das entregas dos subagentes, com as particularidades acima. V-S, V-N, V-Q e V-B em modo legado; testar serialização, assinaturas distintas e origens correlacionadas. Os códigos V-* remetem aos comandos completos acima; registrar os comandos efetivamente executados.
 
-**Bloqueios:** Nenhum bloqueio conhecido para iniciar respeitando as dependências. Lacunas de dados/fontes são riscos até impedirem concretamente a execução ou o aceite; nessa ocorrência, registrar causa, evidência, impacto e ação de desbloqueio.
+**Bloqueios e aceite final E03:** nenhum bloqueio remanescente. V-S, V-N, V-Q, V-B legado e
+V-P passaram no checkpoint A1, com retorno verificável das três frentes e
+integração executada pelo coordenador. Limitações de reconhecimento herdadas
+do E02 permanecem documentadas e não são apresentadas como melhoria de detecção.
 
 **Riscos e mitigação:** Mudança interna vaza como alteração pública: manter adapter de compatibilidade e adiar projeção para E14.
 
@@ -841,7 +844,144 @@ Ao iniciar, sincronize #em-andamento no índice e detalhe. Implemente somente es
 Não declare sucesso com validação obrigatória falhando ou não executada. Atualize para #concluida somente após todos os critérios; impedimento real exige #bloqueada com causa, evidência, impacto e ação de desbloqueio. Dependência ainda pendente mantém #pendente. Preencha Evidências e handoff com arquivos, decisões, comandos, resultados e limitações. Não crie commit, publique ou implante sem autorização explícita. Termine com resumo conciso de mudanças, validações e pendências.
 ```
 
-**Evidências e handoff:** ainda não executada. Registrar também agentes/papéis, fronteiras de escrita, checkpoint integrado, revisão independente, manifesto V-P e total de PDFs/páginas conferidos/bloqueados. Ao trabalhar, registrar arquivos alterados, versão/configuração, decisões, fontes/fixtures, comandos e resultados, métricas comparadas, limitações e próximo passo.
+**Evidências e handoff:** execução de 18/09/2026 registrada abaixo.
+
+### Registro de execução E03 — integração A1
+
+- Início em 18/09/2026 sobre `3a2609c2171f835b3df0e61f8c762e21edc1f26e`,
+  Git limpo (`status`, diff de trabalho e staged). Nenhum `AGENTS.md` aplicável
+  encontrado nos ancestrais ou no repositório. Roadmap completo e módulos de
+  escopo conferidos. Extrator continua 1.18.0; detector legado será preservado.
+- Dependências E01/E02 verificadas por hashes do inventário, baseline público e
+  predições privadas congeladas; testes `test_symbol_inventory.py` e
+  `test_benchmark_symbols.py`: **85 passed**. Pré-voo em
+  `tmp/e03-simbologia/integracao/preflight.json`. Launcher Python Microsoft Store
+  não executa no sandbox; execução externa autorizada pela revisão automática.
+- A `/root/a_codigo`: `domain/symbols.py`, `domain/enums.py`, `ports/analysis.py`,
+  `adapters/analysis/legacy_symbols.py`, `adapters/persistence/domain_json.py`.
+  B `/root/b_testes`: dois testes unitários novos e teste de compatibilidade JSON
+  de integração. C `/root/c_pdfs`: somente `tmp/e03-simbologia/visual/`.
+  Coordenador: documentação, exportador e gates de integração. Quatro posições;
+  nenhum arquivo com dois escritores.
+- Contrato v1 congelado antes do adapter em `tmp/e03-simbologia/a/contrato.md`;
+  B revisou a interface antes de implementar testes. Documento público:
+  [contrato E03](e03-contrato-observacoes-simbologia.md). C recebe as saídas
+  serializadas somente após congelar sua leitura visual das imagens originais.
+- Decisões: classes/subtipos abertos, sem criar categorias patrimoniais;
+  desconhecido é alternativa explícita. Identidade de observação inclui fonte,
+  conteúdo e assinatura, sem equivaler à identidade física. Cobertura separa
+  estados e nunca comprova ausência; falha parcial mantém observações. Registro
+  conserva família/fontes correlacionadas sem votação. Score bruto usa Decimal
+  sem faixa probabilística. Perfil legado fixo não aceita configuração fictícia.
+- Geometria original, normalizada, transformação inversa, clipping e primitives
+  com OCG ficam preservados. Camada de análise base/anotação é eixo separado.
+  O wrapper em `legacy_symbols.py` mantém `pymupdf_symbols.py` byte intacto;
+  `domain/analysis.py`, cache, DTO, OpenAPI e pipeline público também intactos.
+  A persistência usa registro explícito aditivo em `domain_json.py`, sem migração.
+  `confianca_minima` foi auditado; observações novas não entram nesse consumidor.
+- Testes B: `tests/unit/test_symbol_observations.py` (27),
+  `tests/unit/test_legacy_symbol_adapter.py` (14),
+  `tests/integration/test_symbol_observation_json.py` (1): **42 passed**.
+  Cobrem assinaturas/modelo/template/perfil/parâmetros tipados, origem correlacionada,
+  score negativo e acima de um, alternativas abertas, JSON legado, estados,
+  cobertura incompatível, quatro rotações, OCG, barras preenchidas, glifos,
+  clipping e caixas degeneradas. A revisou testes e exportador em segunda onda.
+- Divergências resolvidas por evidência: fixture inicial declarava só ESTAI mas
+  emitia também alternativa informativa; cobertura da fixture corrigida, com
+  negativo específico para manter a rejeição. Exportador inicialmente comparava
+  tuple Python a list JSON; comparação passou ao JSON materializado. A identificou
+  que a projeção E02 hardcodeia camada e lê score dos atributos: acrescentadas
+  assertivas diretas de fonte/página/camada/bruto/alternativa/situação/primitives.
+  O relatório público E02 remove tempos; comparador exclui somente `seconds` das
+  execuções antes da igualdade. Nenhuma tolerância/métrica/detecção foi alterada.
+
+**Comandos finais executados pelo coordenador (Python da `.venv`):**
+
+| Validação / comando na raiz | Resultado |
+|---|---|
+| V-S, comando integral da tabela global | **75 passed**, exit 0. |
+| `.\.venv\Scripts\python.exe -m pytest tests/unit/test_symbol_observations.py tests/unit/test_legacy_symbol_adapter.py tests/integration/test_symbol_observation_json.py tests/unit/test_persistence_codec.py tests/unit/test_analysis_cache.py` | V-N + regressão codec/cache: **58 passed**, exit 0. |
+| `.\.venv\Scripts\python.exe -m ruff check .` | All checks passed, exit 0. |
+| `.\.venv\Scripts\python.exe -m ruff format --check .` | 387 arquivos formatados, exit 0. |
+| `.\.venv\Scripts\python.exe -m mypy` | Success, 359 arquivos, exit 0. |
+| `.\.venv\Scripts\python.exe -m scripts.benchmark_symbols synthetic --output tmp/e03-simbologia/baseline-final` | V-B legado: 4 PDFs/6 páginas/9 predições; zero falha, **0 TP/9 FP/22 FN**, idêntico ao baseline E02. |
+| `.\.venv\Scripts\python.exe tmp/e03-simbologia/integracao/export_checkpoint.py` | **11 PDFs/11 páginas/159 observações**, round-trip e IDs exatos; projeção integral idêntica ao E02, fontes intactas. |
+| `.\.venv\Scripts\python.exe tmp/e03-simbologia/integracao/verify_final.py` | Gates, hashes de código/fontes/reserva, métricas e observações E02 preservados, exit 0. |
+| `.\.venv\Scripts\python.exe tmp/e03-simbologia/visual/verify_visual.py` | V-P final: **11 PDFs/11 páginas/159 observações/22 células**, hashes e cobertura reconciliados, exit 0 pelo coordenador após inspeção real de C. |
+| `git diff --check` | Sem erro de whitespace. |
+| `git diff --exit-code -- src/zeny_project_handler/adapters/analysis/pymupdf_symbols.py src/zeny_project_handler/domain/analysis.py src/zeny_project_handler_contracts src/zeny_project_handler_api_spec docs/api/openapi-v1.json tests/fixtures/symbols` | Sem alteração do detector, contratos públicos ou fixtures/reserva, exit 0. |
+
+Gates registrados por
+`.\.venv\Scripts\python.exe tmp/e03-simbologia/integracao/run_validation.py`.
+Após os últimos reforços dos testes B, repetidos apenas os gates afetados com
+`run_validation.py V-N V-Q-lint V-Q-format V-Q-types`, todos exit 0.
+Logs/comandos completos em `integracao/validation-results.json`; provas de
+integridade em `integracao/final-checkpoint.json`. V-G não é exigido pela E03;
+V-O não se aplica sem mudança de DTO/OpenAPI. Não foram alegados como executados.
+
+**Checkpoints verificáveis:**
+
+| Artefato | SHA-256 |
+|---|---|
+| `tmp/e03-simbologia/checkpoint/manifest.json` | `b328ec2372a7e4ec355c1bddd25ee4aebf22861361f772432f336e98dae7232a` |
+| `domain/symbols.py` | `46669dfd51b5175aaaaf013f42b4fe30ae28ced5cd5f1874b9fe2303d3897743` |
+| `adapters/analysis/legacy_symbols.py` | `62b6de98425fd03cacebbc4acc9132942bf6221d570490b76eed4a5af225f8b4` |
+| `adapters/persistence/domain_json.py` | `12122b76e3f7c1cbb2020f6fcadf8fce924f69ea7ad9ff4097f962289143c600` |
+| Leitura visual original E03 | `464411ae226acdfc99b17c608c29d4921a53194ad47c1d880a7157938259aa5f` |
+| Validação visual final E03 | `16506db7658288b35c090635d1a00a5d6074fccfdc58f8b83d1e3db7a2e7c46d` |
+| Revisão das 159 observações E03 | `d82309d0222529f35ee3beaff01fca6d7c19095fb68ea0b456b245597aeb4c16` |
+| Matriz final E03 | `80df8c2022c08e9648f1c6886a28dbe50c118f86effd2c1b805272e74e106220` |
+
+Os caminhos de código abreviados são relativos a `src/zeny_project_handler/`.
+Manifesto pinado inclui também enum, porta, detector, suporte geométrico, runner
+e exportador. `checkpoint/observation-index.json` vincula cada ID E02 ao ID de
+observação e payload JSON com hash; inclui páginas sem detecção no manifesto.
+Handoffs e revisões A/B: `tmp/e03-simbologia/a/{handoff.md,checkpoint-a1.json,
+revisao-integracao.md,revisao-hashes.json}` e
+`tmp/e03-simbologia/b/{handoff.md,checkpoint-hashes.json}`.
+
+**V-P — escopo E03:** descoberta recursiva reconciliada com **11 PDFs/11 páginas**,
+163 anotações, zero arquivo/página omitido ou bloqueado. C inspecionou realmente
+**154 imagens originais** (base/aparência, visão geral e seis tiles por camada),
+incluindo regiões sem detecção; congelou sua leitura antes de abrir predições.
+Depois viu **20 folhas de contato, cobrindo todas as 159 observações**. Imagens
+E02 foram reutilizadas após verificação de hashes, com nova inspeção visual
+nesta sessão. Fontes preservadas; matriz de **22 células** distingue base
+executada/não detecção e anotações não aplicáveis ao método, sem voto negativo.
+Estados finais da matriz: **9 CONCLUIDO, 2 NAO_DETECCAO, 11 not_applicable**.
+
+O round-trip preservou fonte, página, camada, geometria original/normalizada,
+transformação, primitivas, score bruto, alternativas e identidade. As decisões
+semânticas parciais E02 são transportadas explicitamente: **118 classes plausíveis,
+22 FP localizados, 15 ambiguidades e quatro não avaliáveis**; não são 118 TP
+geométricos. Os **30 FN mínimos provisórios** (7 aterramento/7 MT/16 BT) são
+reuso da referência parcial E02; seus 27 recortes extras não receberam segunda
+inspeção isolada nesta sessão. Todas as páginas/regiões integrais foram vistas.
+Não se afirma nova contagem exaustiva, precisão estrita ou recall global.
+Com um método real, exclusividade é trivial e ganho da união permanece null.
+
+Coordenador inspecionou diretamente uma folha com oito recortes; as posições
+006/007 vazias corroboram manter os FP legados. Essa revisão dirigida está em
+`integracao/coordinator-visual-review.json` e não equivale a segunda auditoria
+integral. Na revisão do verificador C, a matriz inicialmente rotulava toda base
+como concluída; exigido usar o estado real da cobertura para páginas sem saída.
+A correção foi integrada e o coordenador reexecutou o verificador com exit 0.
+
+Artefatos locais: `tmp/e03-simbologia/visual/{manifesto.json,original-findings.json,
+prediction-review.json,matrix.json,validation.json,artifact-hashes.json}`.
+O script `verify_visual.py` confere cobertura/integridade/round-trip; visão real
+está documentada nos registros do revisor, não é produzida pelo script.
+O handoff completo C está em `visual/handoff-c.md`, com comandos de inventário,
+congelamento da leitura e verificação, hashes e limites do reuso E02.
+
+**Limitações e próximo passo:** nenhum ganho de detecção/calibração é reivindicado.
+As falhas geométricas E02 permanecem para E04; cobertura retangular não é máscara
+arbitrária, e a inversa não desfaz clipping. O SHA da fonte é responsabilidade do
+chamador e foi conferido na integração. Cancelamento/orquestração/cache da nova
+composição ficam para E15. Todos os exemplos vistos são desenvolvimento; reserva
+sintética preservada, somente hash opaco conferido, sem abrir seus conteúdos.
+E03 está concluída; E04 permanece pendente para uma próxima sessão.
+Não houve commit, publicação ou implantação.
 
 ## E04 — Robustez vetorial de aterramento e para-raios — #pendente
 

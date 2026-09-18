@@ -41,6 +41,7 @@ from zeny_project_handler.domain.enums import (
     CategoriaElemento,
     EstadoConexao,
     EstadoExecucaoAnalise,
+    EstadoMetodoSimbolos,
     EstadoRevisao,
     ModalidadeTrecho,
     NivelRede,
@@ -78,6 +79,19 @@ from zeny_project_handler.domain.project import (
     TerminalEquipamento,
 )
 from zeny_project_handler.domain.project_metadata import ContatoSolicitante, MetadadosProjeto
+from zeny_project_handler.domain.symbols import (
+    AlternativaClasseSimbolo,
+    CoberturaMetodoSimbolos,
+    FonteObservacaoSimbolo,
+    GeometriaObservacaoSimbolo,
+    HipoteseSimbolo,
+    ObservacaoSimbolo,
+    PerfilMetodoSimbolos,
+    PrimitivaObservadaSimbolo,
+    RegistroMetodosSimbolos,
+    ResultadoMetodoSimbolos,
+    TransformacaoSimbolo,
+)
 from zeny_project_handler.domain.values import (
     CaixaPagina,
     CoordenadaCampo,
@@ -92,6 +106,17 @@ T = TypeVar("T")
 _DOMAIN_CLASSES: dict[str, type[Any]] = {
     domain_type.__name__: domain_type
     for domain_type in (
+        AlternativaClasseSimbolo,
+        CoberturaMetodoSimbolos,
+        FonteObservacaoSimbolo,
+        GeometriaObservacaoSimbolo,
+        HipoteseSimbolo,
+        ObservacaoSimbolo,
+        PerfilMetodoSimbolos,
+        PrimitivaObservadaSimbolo,
+        RegistroMetodosSimbolos,
+        ResultadoMetodoSimbolos,
+        TransformacaoSimbolo,
         ArtefatoExtraido,
         AchadoConformidade,
         AlvoConformidade,
@@ -141,6 +166,7 @@ _ENUM_CLASSES: dict[str, type[Enum]] = {
         OrigemClassificacao,
         EstadoConexao,
         EstadoExecucaoAnalise,
+        EstadoMetodoSimbolos,
         EstadoRevisao,
         GrupoCondicaoConformidade,
         ModalidadeTrecho,

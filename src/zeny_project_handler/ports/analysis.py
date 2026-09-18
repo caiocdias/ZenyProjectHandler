@@ -20,6 +20,7 @@ from zeny_project_handler.domain.analysis import (
 from zeny_project_handler.domain.catalog import ExtraAttributes
 from zeny_project_handler.domain.documents import SHA256_PATTERN, DocumentoProjeto
 from zeny_project_handler.domain.enums import TipoEvidencia, TipoGeometria
+from zeny_project_handler.domain.symbols import PerfilMetodoSimbolos, ResultadoMetodoSimbolos
 from zeny_project_handler.domain.values import PontoNormalizado
 from zeny_project_handler.ports.pdf import ReferenciaFontePdf
 
@@ -318,6 +319,17 @@ class ExtratorComplementarPort(Protocol):
     def assinatura_capacidade(self) -> str: ...
 
     def extrair(self, solicitacao: SolicitacaoAnaliseDocumento) -> ExtracaoDocumentoNormalizada: ...
+
+
+class MetodoSimbolosPort(Protocol):
+    """Contrato interno opt-in; habilitação/orquestração não altera o pipeline legado."""
+
+    @property
+    def perfil(self) -> PerfilMetodoSimbolos: ...
+
+    def observar(
+        self, solicitacao: SolicitacaoAnaliseDocumento
+    ) -> tuple[ResultadoMetodoSimbolos, ...]: ...
 
 
 def chave_cache_analise(

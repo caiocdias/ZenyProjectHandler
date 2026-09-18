@@ -112,3 +112,19 @@ class EstadoConexao(StrEnum):
     CONECTADA = "CONECTADA"
     DESCONECTADA = "DESCONECTADA"
     DESCONHECIDA = "DESCONHECIDA"
+
+
+class EstadoMetodoSimbolos(StrEnum):
+    """Estado de cobertura; nenhum deles comprova ausência física de símbolos."""
+
+    DESCONHECIDO = "DESCONHECIDO"
+    CONCLUIDO = "CONCLUIDO"
+    ABSTENCAO = "ABSTENCAO"
+    FORA_DOMINIO = "FORA_DOMINIO"
+    INDISPONIVEL = "INDISPONIVEL"
+    FALHA = "FALHA"
+    NAO_DETECCAO = "NAO_DETECCAO"
+
+    @property
+    def comprova_ausencia(self) -> bool:
+        return False
