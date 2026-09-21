@@ -55,7 +55,7 @@ class PyMuPdfDocumentAnalyzer:
     """Converte recursos PDF nativos em evidências independentes da biblioteca."""
 
     nome = "pymupdf-nativo"
-    versao = "1.18.0"
+    versao = "1.19.3"
 
     def __init__(
         self,
@@ -193,6 +193,7 @@ class PyMuPdfDocumentAnalyzer:
             return ()
         if any(
             (item.codigo.startswith("analise.ocr") and item.codigo.endswith("falhou"))
+            or item.codigo == "analise.simbolos_vetoriais_falhou"
             or item.codigo.startswith("analysis.complementary.")
             for item in extraction.diagnosticos
         ):

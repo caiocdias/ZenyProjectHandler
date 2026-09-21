@@ -368,7 +368,7 @@ E16 executa V-G; não repetir toda a suíte após mera edição do roadmap.
 | E01 | Inventário de símbolos e perfis de referência | #concluida | Nenhuma | Criar inventário versionado e verificável de famílias, variantes e convenções, incluindo símbolos sem equivalente patrimonial. |
 | E02 | Benchmark de cobertura e complementaridade | #concluida | E01 | Entregar avaliador independente e baseline reproduzível de símbolos, com reserva e métricas de união. |
 | E03 | Contrato de observações e registro de métodos | #concluida | E01, E02 | Introduzir contrato interno aditivo para observações de símbolos, cobertura e estados de cada método. |
-| E04 | Robustez vetorial de aterramento e para-raios | #pendente | E03 | Melhorar o detector existente para primitives fragmentadas/agrupadas, escala e estilos, sem ampliar sua lista de classes. |
+| E04 | Robustez vetorial de aterramento e para-raios | #concluida | E03 | Melhorar o detector existente para primitives fragmentadas/agrupadas, escala e estilos, sem ampliar sua lista de classes. |
 | E05 | Reconhecimento visual de transformadores | #pendente | E04 | Detectar variantes gráficas de transformador e conjuntos sem depender da existência de um literal reconhecido. |
 | E06 | Reconhecimento de estais e ancoragens | #pendente | E04 | Reconhecer as variantes de estai e seus vínculos geométricos sem confundi-las com condutores. |
 | E07 | Pacotes extensíveis das demais famílias | #pendente | E04, E05, E06 | Entregar representação declarativa e pacotes de reconhecimento para as famílias restantes do inventário, com cobertura auditável. |
@@ -983,7 +983,7 @@ sintética preservada, somente hash opaco conferido, sem abrir seus conteúdos.
 E03 está concluída; E04 permanece pendente para uma próxima sessão.
 Não houve commit, publicação ou implantação.
 
-## E04 — Robustez vetorial de aterramento e para-raios — #pendente
+## E04 — Robustez vetorial de aterramento e para-raios — #concluida
 
 **Objetivo:** Melhorar o detector existente para primitives fragmentadas/agrupadas, escala e estilos, sem ampliar sua lista de classes.
 
@@ -1012,13 +1012,17 @@ Não houve commit, publicação ou implantação.
 
 **Critérios de aceite:**
 
-- [ ] Aterramento e para-raios MT/BT mantêm os TP e negativos legados, incluindo barras preenchidas e glifos.
-- [ ] Rotação/escala, desenho fragmentado/agrupado e instâncias repetidas mantêm identidade/localização no conjunto E02.
-- [ ] Monocromático com situação indeterminada não é confirmado automaticamente como existente.
+- [x] Aterramento e para-raios MT/BT mantêm os TP e negativos legados, incluindo barras preenchidas e glifos.
+- [x] Rotação/escala, desenho fragmentado/agrupado e instâncias repetidas mantêm identidade/localização no conjunto E02.
+- [x] Monocromático com situação indeterminada não é confirmado automaticamente como existente.
 
 **Validação obrigatória:** V-P e conferência das entregas dos subagentes, com as particularidades acima. V-S, V-N, V-Q, V-B com ablação das normalizações; comparar TP/FP e localização com baseline por estrato. Os códigos V-* remetem aos comandos completos acima; registrar os comandos efetivamente executados.
 
-**Bloqueios:** Nenhum bloqueio conhecido para iniciar respeitando as dependências. Lacunas de dados/fontes são riscos até impedirem concretamente a execução ou o aceite; nessa ocorrência, registrar causa, evidência, impacto e ação de desbloqueio.
+**Bloqueios:** Nenhum impeditivo remanescente para E04 no checkpoint A6. V-S,
+V-N, V-Q, V-B com ablações e V-P passaram. Os cinco FP herdados e pelo menos
+19 FN da referência visual parcial permanecem limitações de cobertura do detector,
+sem perda dos controles válidos legados nem FP novos; não constituem homologação
+de campo ou avaliação da reserva E16.
 
 **Riscos e mitigação:** Normalização une traços distintos: registrar vínculo a primitives e testar símbolos contíguos e caminhos compostos.
 
@@ -1039,7 +1043,148 @@ Ao iniciar, sincronize #em-andamento no índice e detalhe. Implemente somente es
 Não declare sucesso com validação obrigatória falhando ou não executada. Atualize para #concluida somente após todos os critérios; impedimento real exige #bloqueada com causa, evidência, impacto e ação de desbloqueio. Dependência ainda pendente mantém #pendente. Preencha Evidências e handoff com arquivos, decisões, comandos, resultados e limitações. Não crie commit, publique ou implante sem autorização explícita. Termine com resumo conciso de mudanças, validações e pendências.
 ```
 
-**Evidências e handoff:** ainda não executada. Registrar também agentes/papéis, fronteiras de escrita, checkpoint integrado, revisão independente, manifesto V-P e total de PDFs/páginas conferidos/bloqueados. Ao trabalhar, registrar arquivos alterados, versão/configuração, decisões, fontes/fixtures, comandos e resultados, métricas comparadas, limitações e próximo passo.
+**Evidências e handoff — execução iniciada em 21/09/2026:**
+
+- Base `4bf1d9f9670f46fc5d7131298bd8875c9985db08`; Git inicialmente limpo,
+  diff de trabalho e staged vazios. Nenhum `AGENTS.md` aplicável encontrado.
+  Roadmap e módulos de escopo conferidos; estado sincronizado no índice/detalhe.
+- E03 verificada por hashes dos módulos centrais e checkpoint de integração;
+  reprodução de `test_symbol_observations.py`, `test_legacy_symbol_adapter.py`
+  e `test_symbol_observation_json.py`: **42 passed**. Pré-voo em
+  `tmp/e04-simbologia/integracao/preflight.json`. Launcher Windows da `.venv`
+  falhou no sandbox; revisão automática autorizou execução externa, sem instalar
+  dependências. A mudança de HEAD desde E03 não alterou esses contratos.
+- A `/root/a_codigo`: exclusivo dos três módulos vetoriais do escopo.
+  B `/root/b_testes`: exclusivo de `tests/unit/test_pymupdf_analyzer.py`.
+  C `/root/c_pdfs`: somente `tmp/e04-simbologia/visual/`, leitura independente
+  das imagens antes de receber predições. Coordenador: integração, documentação,
+  ajuste mínimo de `legacy_symbols.py` e `test_legacy_symbol_adapter.py` para
+  preservar o contrato E03 com caixas agrupadas e situação indeterminada.
+  Quatro posições, sem dois escritores por arquivo.
+- Contrato acordado: normalizações `grouping`, `fragments`, `scale`, `styles`,
+  configuração explícita para ablação, suporte por drawing/item, caixa original
+  por ocorrência, score bruto preservado, preto/cinza sem convenção com situação
+  `None`. Referências do revisor não entram na inferência; reserva intocada.
+- C redescobriu 11 PDFs/11 páginas/163 anotações; hashes dos renders E02
+  conferidos para reuso com nova inspeção real de 154 imagens de base/aparência.
+  Referência parcial congelada antes das predições, SHA-256
+  `e83887bbae775faa4f64804088158bd74ec1c6e1bfb2dffa52a7fe2cc18fcec4`.
+  A3: V-S 221 passed, V-N 60 passed, lint/format/mypy aprovados; V-B 11 TP,
+  1 FP, 11 FN globais, incluindo classes/camadas fora de E04 no denominador.
+  V-P leu 11 PDFs/11 páginas, produziu 138 candidatos e foi realmente inspecionada
+  por C, mas **rejeitou o checkpoint** por barras largas perdidas e aterramentos
+  trocados por MT após decompor círculos. Coordenador confirmou uma troca em imagem.
+  A3 preservado em `tmp/e04-simbologia/checkpoint-a3/` e
+  `tmp/e04-simbologia/visual/review-a3.json`. Correções voltaram a A; B acrescentou
+  contraprovas autorais. O aceite daquele checkpoint ficou pendente de correção,
+  resolvida e revalidada no A6 final abaixo.
+- Documento técnico: [robustez vetorial E04](e04-robustez-vetorial.md).
+  A4 corrige os dois grupos de regressões e acrescenta junção em T e MT de cinco
+  barras. Versões `1.19.1:vetorial-3`/cache `1.19.1`; configuração completa das
+  quatro normalizações. V-P inspecionou realmente os 221 candidatos e apontou
+  um FP novo de associação entre dois símbolos colineares. C e coordenador
+  confirmaram em imagem; A4 foi arquivado e reaberto como A5. Uma interação
+  comprovada entre haste redundante e barra fragmentada interrompeu a inferência
+  A5 antes de terminar; não conta como V-P. A6 corrige a ordem de reconstrução
+  e limita a reunião às hastes originais, preservando vizinhos. B encerrou
+  a revisão com 302 passed e hashes estáveis; gates abaixo são os finais A6.
+
+**Comandos efetivamente executados no checkpoint final A6:**
+
+| Validação | Comando relativo à raiz | Resultado |
+|---|---|---|
+| V-S | `.\.venv\Scripts\python.exe -m pytest tests/unit/test_pymupdf_analyzer.py tests/unit/test_pdf_coordinates.py tests/unit/test_pdf_rendering_budget.py` | 286 passed, 7,92 s. |
+| V-N | `.\.venv\Scripts\python.exe -m pytest tests/unit/test_symbol_observations.py tests/unit/test_legacy_symbol_adapter.py tests/integration/test_symbol_observation_json.py tests/unit/test_persistence_codec.py tests/unit/test_analysis_cache.py` | 60 passed. |
+| V-Q | `.\.venv\Scripts\python.exe -m ruff check .`; `.\.venv\Scripts\python.exe -m ruff format --check .`; `.\.venv\Scripts\python.exe -m mypy` | Todos exit 0; 387 arquivos formatados e 359 verificados por mypy. O primeiro format apontou finais de linha do analyzer, corrigidos e revalidados. |
+| V-B | `.\.venv\Scripts\python.exe -m scripts.benchmark_symbols synthetic --output tmp/e04-simbologia/baseline-final` | 11 TP / 1 FP / 11 FN globais; 11/11 positivos vetoriais de base de E04 pareados. |
+| Ablação nova | `.\.venv\Scripts\python.exe tmp/e04-simbologia/integracao/ablate.py` | Completa 11/1/11; sem todas 8/1/14; sem fragmentos 10/1/12; sem agrupamento 9/1/13; sem escala e sem estilos 11/1/11, na ordem TP/FP/FN. |
+| Aceite E02 novo | `.\.venv\Scripts\python.exe tmp/e04-simbologia/integracao/verify_benchmark.py` | Exit 0: todos os 11 suportados, sem duplicatas e sem aumento de FP nos negativos críticos. |
+| V-P | `.\.venv\Scripts\python.exe -m scripts.benchmark_symbols examples --root examples --output tmp/e04-simbologia/predictions` | A6 completo: 11 PDFs/11 páginas/220 candidatos, zero falhas, fontes intactas e auditoria visual reconciliada. |
+
+O harness `tmp/e04-simbologia/integracao/run_validation.py` registra comandos,
+saídas e códigos em `validation-results.json`; os comandos novos de apoio são
+locais e não substituem o runner E02. `checkpoint.py` congela runtime, assinatura
+e hash opaco da reserva; `checkpoint.py verify` confere gates, fontes e descoberta
+após a inferência. Nenhum desses verificadores certifica a semântica das imagens.
+
+**Integridade final A6:** configuração assinada
+`5dfa257155ff88fea773c4da4f789759eab3358f505dc7a3c22b3ce4d83fd0e6`;
+versões detector `1.19.3:vetorial-5` e analisador/cache `1.19.3`.
+O arquivo principal passou de 46 para 257 casos, incluindo 211 casos E04.
+Os lotes de B se sobrepõem a V-S/V-N e não são somados como testes distintos.
+Handoffs A/B e logs permanecem em
+`tmp/e04-simbologia/a/handoff.md` e `tmp/e04-simbologia/b/handoff.md`.
+
+| Artefato | SHA-256 |
+|---|---|
+| `pymupdf_symbols.py` | `957f672b669e9ce6fb6bd8cff066138b3e81c749681720e1f9974b4edb112a92` |
+| `pymupdf_analyzer.py` | `036ef48f8a216bd1783ee9173302d9352851148fbb20cdacbc103b0eb2c5881c` |
+| `legacy_symbols.py` | `56825a6cf3342c2f6f90f45730eee8eb1d51ef4e0b181d95500386d64938e15d` |
+| `test_pymupdf_analyzer.py` | `41b078063984afb495674b836d6cae8428eaed4589a86b489cf4a18d20985984` |
+| Predições V-P A6 | `5d1f67d002dbd5277831b57413a06fa0c7ab0642069fc9891eadd81e4816a605` |
+| Manifesto V-P A6 | `bacca11678516a0686f9eb430bedc8cb9a308c16124aef56f014be02082e9092` |
+| Reserva E02, somente hash opaco | `6874d0585269a0a68397319268076e8e788aff64fc2bc5d776e80efca739be7b` |
+
+`pymupdf_support.py`, DTO/codec E03, avaliador, runner, fixtures, tolerâncias e
+baseline público E02 permaneceram inalterados. Fontes finais também foram
+copiadas para `tmp/e04-simbologia/integracao/source-a6/`. Nenhum commit,
+publicação ou implantação foi realizado.
+
+**Aceite final e V-P — 21/09/2026:** o coordenador reproduziu
+`checkpoint.py verify` e `.\.venv\Scripts\python.exe tmp/e04-simbologia/visual/verify_visual.py`,
+ambos exit 0. A frente B encerrou a revisão A5→A6 com **302 passed**, hashes
+antes/depois idênticos e nenhum achado impeditivo. Os gates finais de integração
+constam da tabela acima; nenhuma execução parcial foi usada como validação.
+
+C inspecionou realmente 154 imagens originais de base/aparência antes das
+predições, 159 recortes do baseline, 27 recortes de referência E02, oito recortes
+próprios e todas as 221 predições A4. A6 foi inferido integralmente: **220
+inspeções reaproveitadas com igualdade exata** de documento/página/camada,
+classe, caixa, suporte, situação e revisão, além de SHA-256 idêntico do PDF e
+do PNG rerenderizado. Delta visual novo: zero. Foi removido exclusivamente o
+FP A4 #92, confirmado em imagem por C e coordenador; não se alega nova leitura
+dos 220 recortes. Manifesto, matriz de 22 células, hashes e decisões individuais
+estão em `tmp/e04-simbologia/visual/review-final.json`,
+`checkpoint-a6/delta-proof.json`, `relatorio-final.md` e `verification.json`.
+
+- Baseline 159 → A6 220: 143 pareamentos por suporte original exato, 16 perdas
+  adjudicadas (15 FP herdados removidos e um ambíguo), 77 candidatos novos
+  visualmente plausíveis. Todos os **118 candidatos plausíveis legados** foram
+  preservados na mesma classe/localização; caixas degeneradas foram corrigidas.
+- A6: **197 classes plausíveis, cinco FP herdados, 14 ambiguidades e quatro não
+  avaliáveis**. Zero FP novo e nenhuma perda plausível. Classe plausível não
+  equivale a TP estrito com verdade-terreno especialista. A referência parcial
+  mantém **19 FN mínimos** (um aterramento, dois MT, 16 BT), antes 30; 11 ROIs
+  passaram a ter candidato da mesma classe, sem transformar interseção em TP.
+- 137 candidatos pretos permanecem com situação indeterminada e revisão; zero
+  confirmação automática como existente. Quantidade física, associação e vigência
+  de convenções coloridas não foram homologadas. Apenas um método vetorial base
+  foi executado: exclusivos são triviais, ganho de união e recall global são
+  indefinidos. Silêncio de outro algoritmo não foi veto e score não virou probabilidade.
+- V-B final: 11/11 positivos vetoriais de base suportados, zero duplicatas,
+  IoU mínimo 0,99999978; comparação por estrato e seis ablações no documento E04
+  e JSONs locais. Os 11 FN globais mantêm raster/anotação e classes fora desta
+  etapa no denominador. Um FP de legenda herdado continua explícito.
+
+Comandos novos da frente C, registrados com seus resultados no handoff:
+`.\.venv\Scripts\python.exe tmp/e04-simbologia/visual/prepare_comparison.py checkpoint-a6 tmp/e04-simbologia/predictions/predictions.json`,
+`.\.venv\Scripts\python.exe tmp/e04-simbologia/visual/prepare_a5_delta.py tmp/e04-simbologia/predictions/predictions.json 5d1f67d002dbd5277831b57413a06fa0c7ab0642069fc9891eadd81e4816a605 checkpoint-a6`
+e `.\.venv\Scripts\python.exe tmp/e04-simbologia/visual/finalize_a5.py checkpoint-a6`;
+os nomes históricos dos scripts não mudam o checkpoint A6 indicado nos argumentos
+e artefatos. Verificador final executado também pelo coordenador. A inferência
+somou 269,62 s nos 11 documentos; memória é `tracemalloc`, não RSS/MuPDF.
+Retorno final da frente C: `tmp/e04-simbologia/visual/handoff.json`, conferido
+pelo coordenador contra o relatório, manifesto e prova de delta. As três frentes
+encerraram suas entregas; `git diff --check` passou e não há validação obrigatória
+pendente ou falhando no checkpoint final.
+
+Limitações: todos os exemplos são desenvolvimento, reserva permanece lacrada;
+clipping arbitrário não é máscara exata e cópia do documento tem custo de memória
+proporcional. Não há alegação de precisão de campo ou de cobertura integral das
+famílias. Próxima etapa: seguir as dependências do índice, levando os FP/FN e
+ambiguidades registrados para reconhecimento/composição posteriores, sem alterar
+E02 ou abrir a reserva antecipadamente.
+
 
 ## E05 — Reconhecimento visual de transformadores — #pendente
 

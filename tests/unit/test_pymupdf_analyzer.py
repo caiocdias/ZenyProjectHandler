@@ -1,6 +1,8 @@
 # mypy: disable-error-code="no-untyped-call"
 from __future__ import annotations
 
+import json
+import math
 import re
 from collections.abc import Callable
 from dataclasses import replace
@@ -36,9 +38,21 @@ from zeny_project_handler.adapters.analysis.pymupdf_ocr import (
 from zeny_project_handler.adapters.analysis.pymupdf_symbols import (
     _extract_symbolic_equipment,
 )
+from zeny_project_handler.adapters.interpretation import (
+    InterpretadorRegrasExplicitas,
+    carregar_registro_regras_inicial,
+)
 from zeny_project_handler.adapters.pdf import PyMuPdfReader
+from zeny_project_handler.application.automatic_promotion import promover_resultado_automatico
 from zeny_project_handler.domain.analysis import OrigemObjetoPdf
-from zeny_project_handler.domain.enums import TipoEvidencia, TipoGeometria, TipoOrigemPdf
+from zeny_project_handler.domain.catalog import CatalogoTecnico
+from zeny_project_handler.domain.enums import (
+    EstadoRevisao,
+    TipoEvidencia,
+    TipoGeometria,
+    TipoOrigemPdf,
+)
+from zeny_project_handler.domain.project import Projeto
 from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormalizado
 from zeny_project_handler.ports.analysis import (
     AnalisadorDocumentoPort,
@@ -53,6 +67,7 @@ from zeny_project_handler.ports.analysis import (
     SolicitacaoAnaliseDocumento,
     TrechoTextoOcr,
 )
+from zeny_project_handler.ports.interpretation import SolicitacaoInterpretacao
 from zeny_project_handler.ports.pdf import ReferenciaFontePdf
 
 
@@ -503,7 +518,7 @@ def test_vector_symbols_identify_grounding_and_surge_arresters_with_situation(
         )
         for item in direct
     } == {
-        ("ATERRAMENTO", "EXISTENTE"),
+        ("ATERRAMENTO", None),
         ("PARA RAIOS MT", "INSTALAR"),
         ("PARA RAIOS BT", "REMOVER"),
     }
@@ -562,6 +577,689 @@ def test_filled_rectangular_bars_still_identify_grounding() -> None:
         symbols = _extract_symbolic_equipment(page, 1)
         assert len(symbols) == 1
         assert symbols[0].conteudo_bruto == "ATERRAMENTO"
+
+
+@pytest.mark.parametrize("kind", ("ATERRAMENTO", "PARA RAIOS MT", "PARA RAIOS BT"))
+@pytest.mark.parametrize("scale", (0.3, 1.0, 5.0))
+@pytest.mark.parametrize("angle", (0.0, 31.0, 90.0, 153.0))
+@pytest.mark.parametrize("packing", ("separate", "grouped", "fragmented"))
+def test_e04_vector_symbols_preserve_class_and_full_geometry(
+    kind: str, scale: float, angle: float, packing: str
+) -> None:
+    with pymupdf.open() as document:
+        page = document.new_page(width=400, height=300)
+        expected = _draw_e04_symbol(
+            page, kind=kind, origin=(200, 120), scale=scale, angle=angle, packing=packing
+        )
+
+        symbols = _extract_symbolic_equipment(page, 1)
+
+        assert len(symbols) == 1
+        assert symbols[0].conteudo_bruto == kind
+        _assert_e04_bounds(page, symbols[0], expected)
+        assert dict(symbols[0].atributos_extraidos)["confianca"] == Decimal("0.88")
+
+
+@pytest.mark.parametrize("kind", ("ATERRAMENTO", "PARA RAIOS MT"))
+@pytest.mark.parametrize("angle", (0.0, 37.0, 90.0))
+def test_e04_filled_rotated_bars_preserve_class_and_geometry(kind: str, angle: float) -> None:
+    with pymupdf.open() as document:
+        page = document.new_page(width=400, height=300)
+        expected = _draw_e04_symbol(page, kind=kind, origin=(120, 120), angle=angle, filled=True)
+
+        symbols = _extract_symbolic_equipment(page, 1)
+
+        assert len(symbols) == 1
+        assert symbols[0].conteudo_bruto == kind
+        _assert_e04_bounds(page, symbols[0], expected)
+
+
+def test_e04_bt_body_from_four_separate_strokes_is_recovered() -> None:
+    with pymupdf.open() as document:
+        page = document.new_page(width=400, height=300)
+        corners = ((95, 88.5), (104, 88.5), (104, 91.5), (95, 91.5))
+        page.draw_line((80, 90), (95, 90), color=(0, 0.5, 0))
+        for first, second in zip(corners, (*corners[1:], corners[0]), strict=True):
+            page.draw_line(first, second, color=(0, 0.5, 0))
+        page.draw_line((95, 86.5), (104, 93.5), color=(0, 0.5, 0))
+
+        symbols = _extract_symbolic_equipment(page, 1)
+
+        assert len(symbols) == 1
+        assert symbols[0].conteudo_bruto == "PARA RAIOS BT"
+        _assert_e04_bounds(page, symbols[0], ((80, 86.5), (104, 93.5)))
+
+
+@pytest.mark.parametrize("rotation", (0, 90, 180, 270))
+def test_e04_page_rotation_keeps_symbol_in_display_coordinates(rotation: int) -> None:
+    with pymupdf.open() as document:
+        page = document.new_page(width=400, height=300)
+        expected = _draw_e04_symbol(page, kind="ATERRAMENTO", origin=(80, 90))
+        page.set_rotation(rotation)
+
+        symbols = _extract_symbolic_equipment(page, 2)
+
+        assert len(symbols) == 1
+        assert symbols[0].pagina_numero == 2
+        _assert_e04_bounds(page, symbols[0], expected)
+
+
+@pytest.mark.parametrize("kind", ("ATERRAMENTO", "PARA RAIOS MT", "PARA RAIOS BT"))
+def test_e04_nearby_symbols_keep_distinct_identity_and_source_support(kind: str) -> None:
+    with pymupdf.open() as document:
+        page = document.new_page(width=400, height=300)
+        expected = [
+            _draw_e04_symbol(page, kind=kind, origin=(80, y), packing="grouped") for y in (90, 101)
+        ]
+
+        symbols = _extract_symbolic_equipment(page, 1)
+
+        assert len(symbols) == 2
+        assert len({item.chave_estavel for item in symbols}) == 2
+        assert all(item.conteudo_bruto == kind for item in symbols)
+        for symbol, bounds in zip(
+            sorted(symbols, key=lambda item: min(point.y for point in item.geometria.pontos)),
+            expected,
+            strict=True,
+        ):
+            _assert_e04_bounds(page, symbol, bounds)
+        supports = [
+            set(str(dict(item.atributos_extraidos)["vetores_origem"]).split(","))
+            for item in symbols
+        ]
+        assert supports[0].isdisjoint(supports[1])
+
+
+@pytest.mark.parametrize("kind", ("ATERRAMENTO", "PARA RAIOS MT"))
+def test_e04_interleaved_nearby_symbols_preserve_both_occurrences(kind: str) -> None:
+    with pymupdf.open() as document:
+        page = document.new_page(width=400, height=300)
+        expected = [
+            _draw_e04_symbol(page, kind=kind, origin=(x, 100), packing="grouped") for x in (80, 94)
+        ]
+
+        symbols = _extract_symbolic_equipment(page, 1)
+
+        assert len(symbols) == 2
+        assert all(item.conteudo_bruto == kind for item in symbols)
+        assert len({item.chave_estavel for item in symbols}) == 2
+        for symbol, bounds in zip(
+            sorted(symbols, key=lambda item: min(point.x for point in item.geometria.pontos)),
+            expected,
+            strict=True,
+        ):
+            _assert_e04_bounds(page, symbol, bounds)
+
+
+def test_e04_long_fragmented_fence_is_not_grounding_or_arrester() -> None:
+    with pymupdf.open() as document:
+        page = document.new_page(width=400, height=300)
+        shape = page.new_shape()
+        for x in range(50, 350, 15):
+            shape.draw_line((x, 100), (x + 15, 100))
+        for x in range(50, 351, 15):
+            shape.draw_line((x, 94), (x, 106))
+        shape.finish(color=(0, 0.5, 0), closePath=False)
+        shape.commit()
+
+        assert _extract_symbolic_equipment(page, 1) == ()
+
+
+@pytest.mark.parametrize("angle", (0.0, 37.0))
+@pytest.mark.parametrize("bar_offsets", ((15.0, 19.0, 23.0, 27.0), (15.0, 18.0, 21.0, 24.0, 27.0)))
+def test_e04_mt_equal_terminal_bars_preserve_legacy_true_positive(
+    angle: float, bar_offsets: tuple[float, ...]
+) -> None:
+    theta = math.radians(angle)
+
+    def point(x: float, y: float) -> tuple[float, float]:
+        return 80 + x * math.cos(theta) - y * math.sin(theta), 100 + x * math.sin(
+            theta
+        ) + y * math.cos(theta)
+
+    with pymupdf.open() as document:
+        page = document.new_page(width=400, height=300)
+        points = [point(0, 0), point(15, 0)]
+        page.draw_line(points[0], points[1], color=(0, 0.5, 0))
+        for x in bar_offsets:
+            points.extend((point(x, -4), point(x, 4)))
+            page.draw_line(points[-2], points[-1], color=(0, 0.5, 0))
+
+        symbols = _extract_symbolic_equipment(page, 1)
+
+        assert len(symbols) == 1
+        assert symbols[0].conteudo_bruto == "PARA RAIOS MT"
+        _assert_e04_bounds(page, symbols[0], tuple(points))
+
+
+@pytest.mark.parametrize(
+    ("kind", "bar_lengths", "terminal_offset"),
+    (
+        ("ATERRAMENTO", (15.0, 9.0, 3.0), 15.0),
+        ("PARA RAIOS MT", (15.0, 6.0, 15.0, 6.0), 15.0),
+        ("ATERRAMENTO", (10.0, 7.0, 4.0), 14.5),
+        ("PARA RAIOS MT", (10.0, 7.0, 4.0, 7.0), 14.5),
+    ),
+    ids=("ground-wide", "mt-wide", "ground-overlap", "mt-overlap"),
+)
+@pytest.mark.parametrize("angle", (0.0, 37.0, 131.0))
+@pytest.mark.parametrize("scale", (0.5, 1.0, 3.0))
+def test_e04_wide_and_overlapping_terminal_bars_preserve_legacy_classes(
+    kind: str,
+    bar_lengths: tuple[float, ...],
+    terminal_offset: float,
+    angle: float,
+    scale: float,
+) -> None:
+    with pymupdf.open() as document:
+        page = document.new_page(width=400, height=300)
+        points = _draw_e04_symbol(
+            page,
+            kind=kind,
+            origin=(200, 120),
+            scale=scale,
+            angle=angle,
+            bar_lengths=bar_lengths,
+            terminal_offset=terminal_offset,
+            bar_gap=3.0,
+        )
+
+        symbols = _extract_symbolic_equipment(page, 1)
+
+        assert len(symbols) == 1
+        assert symbols[0].conteudo_bruto == kind
+        _assert_e04_bounds(page, symbols[0], points)
+
+
+@pytest.mark.parametrize("outline", ("curve", "polygon", "fragmented_polygon"))
+def test_e04_circular_outline_does_not_add_a_fourth_grounding_bar(outline: str) -> None:
+    with pymupdf.open() as document:
+        page = document.new_page(width=400, height=300)
+        points = _draw_e04_symbol(page, kind="ATERRAMENTO", origin=(200, 120))
+        if outline == "curve":
+            page.draw_circle((212, 120), 15, color=(0, 0.5, 0), width=0.5)
+        else:
+            ring = [
+                (
+                    212 + 15 * math.cos(math.radians(angle)),
+                    120 + 15 * math.sin(math.radians(angle)),
+                )
+                for angle in range(0, 360, 10)
+            ]
+            if outline == "polygon":
+                page.draw_polyline([*ring, ring[0]], color=(0, 0.5, 0), width=0.5)
+            else:
+                for first, second in zip(ring, (*ring[1:], ring[0]), strict=True):
+                    page.draw_line(first, second, color=(0, 0.5, 0), width=0.5)
+
+        symbols = _extract_symbolic_equipment(page, 1)
+
+        assert len(symbols) == 1
+        assert symbols[0].conteudo_bruto == "ATERRAMENTO"
+        _assert_e04_bounds(page, symbols[0], points)
+        assert set(str(dict(symbols[0].atributos_extraidos)["vetores_origem"]).split(",")) == {
+            "0",
+            "1",
+            "2",
+            "3",
+        }
+
+
+@pytest.mark.parametrize("fragmented_bar", (0, 1, 2))
+@pytest.mark.parametrize("bar_tilt", (0.0, 10.0))
+def test_e04_fragments_and_reconstructed_bar_are_one_physical_bar(
+    fragmented_bar: int, bar_tilt: float
+) -> None:
+    with pymupdf.open() as document:
+        document.new_page(width=400, height=300)
+        document.new_page(width=400, height=300)
+        reference_page, page = document[0], document[1]
+        points: list[tuple[float, float]] = [(100, 120), (115, 120)]
+        theta = math.radians(bar_tilt)
+        for target, fragmented in ((reference_page, False), (page, True)):
+            target.draw_line((100, 120), (115, 120), color=(0, 0.5, 0))
+            for index, length in enumerate((10, 7, 4)):
+                center = (115.0 + 4 * index, 120.0)
+                start = (
+                    center[0] - length / 2 * math.sin(theta),
+                    center[1] - length / 2 * math.cos(theta),
+                )
+                end = (
+                    center[0] + length / 2 * math.sin(theta),
+                    center[1] + length / 2 * math.cos(theta),
+                )
+                points.extend((start, end))
+                segments = (
+                    ((start, center), (center, end))
+                    if fragmented and index == fragmented_bar
+                    else ((start, end),)
+                )
+                for first, second in segments:
+                    target.draw_line(first, second, color=(0, 0.5, 0))
+
+        reference = _extract_symbolic_equipment(reference_page, 1)
+        symbols = _extract_symbolic_equipment(page, 2)
+
+        assert len(reference) == len(symbols) == 1
+        assert symbols[0].conteudo_bruto == reference[0].conteudo_bruto == "ATERRAMENTO"
+        assert _extract_symbolic_equipment(page, 2) == symbols
+        _assert_e04_bounds(page, symbols[0], tuple(points))
+        assert json.loads(str(dict(symbols[0].atributos_extraidos)["primitives_origem"])) == [
+            [index, 0] for index in range(5)
+        ]
+
+
+def test_e04_grouped_stem_turning_into_half_bar_preserves_open_t_junction() -> None:
+    with pymupdf.open() as document:
+        page = document.new_page(width=400, height=300)
+        shape = page.new_shape()
+        shape.draw_polyline(((100, 120), (115, 120), (115, 115)))
+        shape.draw_line((115, 120), (115, 125))
+        shape.draw_line((119, 116.5), (119, 123.5))
+        shape.draw_line((123, 118), (123, 122))
+        shape.finish(color=(0, 0.5, 0), width=0.5, closePath=False)
+        shape.commit()
+
+        symbols = _extract_symbolic_equipment(page, 1)
+
+        assert len(symbols) == 1
+        assert symbols[0].conteudo_bruto == "ATERRAMENTO"
+        _assert_e04_bounds(page, symbols[0], ((100, 115), (123, 125)))
+        assert dict(symbols[0].atributos_extraidos)["vetores_origem"] == "0"
+
+
+@pytest.mark.parametrize("kind", ("ATERRAMENTO", "PARA RAIOS MT"))
+@pytest.mark.parametrize("shortening", (0.5, 1.0))
+@pytest.mark.parametrize("angle", (0.0, 37.0))
+def test_e04_contained_redundant_stem_keeps_one_symbol_and_all_sources(
+    kind: str, shortening: float, angle: float
+) -> None:
+    with pymupdf.open() as document:
+        page = document.new_page(width=400, height=300)
+        points = _draw_e04_symbol(page, kind=kind, origin=(100, 120), angle=angle)
+        theta = math.radians(angle)
+        page.draw_line(
+            (100 + shortening * math.cos(theta), 120 + shortening * math.sin(theta)),
+            (100 + 15 * math.cos(theta), 120 + 15 * math.sin(theta)),
+            color=(0, 0.5, 0),
+            width=0.5,
+        )
+
+        symbols = _extract_symbolic_equipment(page, 1)
+
+        assert len(symbols) == 1
+        assert symbols[0].conteudo_bruto == kind
+        assert _extract_symbolic_equipment(page, 1) == symbols
+        _assert_e04_bounds(page, symbols[0], points)
+        drawing_count = 5 if kind == "ATERRAMENTO" else 6
+        assert json.loads(str(dict(symbols[0].atributos_extraidos)["primitives_origem"])) == [
+            [index, 0] for index in range(drawing_count)
+        ]
+
+
+def test_e04_redundant_stems_with_fragmented_terminal_bar_are_coalesced() -> None:
+    with pymupdf.open() as document:
+        page = document.new_page(width=400, height=300)
+        segments = (
+            ((80, 100), (95, 100)),
+            ((81, 100), (95, 100)),
+            ((95, 95), (95, 100)),
+            ((95, 100), (95, 105)),
+            ((99, 96.5), (99, 103.5)),
+            ((103, 98), (103, 102)),
+        )
+        for first, second in segments:
+            page.draw_line(first, second, color=(0, 0.5, 0), width=0.5)
+
+        symbols = _extract_symbolic_equipment(page, 1)
+
+        assert len(symbols) == 1
+        assert symbols[0].conteudo_bruto == "ATERRAMENTO"
+        _assert_e04_bounds(page, symbols[0], ((80, 95), (103, 105)))
+        assert json.loads(str(dict(symbols[0].atributos_extraidos)["primitives_origem"])) == [
+            [index, 0] for index in range(6)
+        ]
+
+
+@pytest.mark.parametrize(
+    "kinds", (("ATERRAMENTO", "PARA RAIOS MT"), ("PARA RAIOS MT", "ATERRAMENTO"))
+)
+@pytest.mark.parametrize("angle", (0.0, 37.0))
+def test_e04_collinear_ground_and_mt_neighbors_keep_separate_boxes_and_support(
+    kinds: tuple[str, str], angle: float
+) -> None:
+    with pymupdf.open() as document:
+        page = document.new_page(width=400, height=300)
+        theta = math.radians(angle)
+        expected = {
+            kind: _draw_e04_symbol(
+                page,
+                kind=kind,
+                origin=(100 + offset * math.cos(theta), 120 + offset * math.sin(theta)),
+                angle=angle,
+                packing="grouped",
+            )
+            for kind, offset in zip(kinds, (0, 14), strict=True)
+        }
+
+        symbols = _extract_symbolic_equipment(page, 1)
+
+        assert len(symbols) == 2
+        assert {symbol.conteudo_bruto for symbol in symbols} == set(kinds)
+        assert len({symbol.chave_estavel for symbol in symbols}) == 2
+        for symbol in symbols:
+            assert symbol.conteudo_bruto is not None
+            _assert_e04_bounds(page, symbol, expected[symbol.conteudo_bruto])
+            assert dict(symbol.atributos_extraidos)["vetores_origem"] == str(
+                kinds.index(symbol.conteudo_bruto)
+            )
+
+
+@pytest.mark.parametrize("angle", (0.0, 37.0))
+def test_e04_shared_stem_start_with_distinct_terminals_keeps_two_grounds(angle: float) -> None:
+    with pymupdf.open() as document:
+        page = document.new_page(width=400, height=300)
+        expected = [
+            _draw_e04_symbol(
+                page,
+                kind="ATERRAMENTO",
+                origin=(100, 120),
+                scale=scale,
+                angle=angle,
+                packing="grouped",
+            )
+            for scale in (1.0, 7.0 / 3.0)
+        ]
+
+        symbols = _extract_symbolic_equipment(page, 1)
+
+        assert len(symbols) == 2
+        assert all(symbol.conteudo_bruto == "ATERRAMENTO" for symbol in symbols)
+        assert len({symbol.chave_estavel for symbol in symbols}) == 2
+        ordered = sorted(symbols, key=lambda item: max(point.x for point in item.geometria.pontos))
+        for index, (symbol, points) in enumerate(zip(ordered, expected, strict=True)):
+            _assert_e04_bounds(page, symbol, points)
+            assert dict(symbol.atributos_extraidos)["vetores_origem"] == str(index)
+
+
+@pytest.mark.parametrize("angle", (0.0, 37.0))
+def test_e04_ground_stem_does_not_borrow_opposite_mt_terminal_bars(angle: float) -> None:
+    with pymupdf.open() as document:
+        page = document.new_page(width=400, height=300)
+        theta = math.radians(angle)
+        expected = {}
+        for kind, start, lengths in (
+            ("ATERRAMENTO", 15.0, (15.0, 9.0, 3.0)),
+            ("PARA RAIOS MT", 40.0, (15.0, 6.0, 15.0, 6.0)),
+        ):
+            expected[kind] = _draw_e04_symbol(
+                page,
+                kind=kind,
+                origin=(100 + start * math.cos(theta), 120 + start * math.sin(theta)),
+                angle=180 + angle,
+                packing="grouped",
+                bar_lengths=lengths,
+                bar_gap=3,
+            )
+
+        symbols = _extract_symbolic_equipment(page, 1)
+
+        assert len(symbols) == 2
+        assert {symbol.conteudo_bruto for symbol in symbols} == set(expected)
+        for symbol in symbols:
+            assert symbol.conteudo_bruto is not None
+            _assert_e04_bounds(page, symbol, expected[symbol.conteudo_bruto])
+            assert dict(symbol.atributos_extraidos)["vetores_origem"] == (
+                "0" if symbol.conteudo_bruto == "ATERRAMENTO" else "1"
+            )
+
+
+def test_e04_repeated_form_instances_have_distinct_keys_and_localization() -> None:
+    with pymupdf.open() as source, pymupdf.open() as document:
+        source_page = source.new_page(width=100, height=80)
+        source_bounds = _draw_e04_symbol(
+            source_page, kind="PARA RAIOS MT", origin=(30, 40), packing="grouped"
+        )
+        page = document.new_page(width=400, height=300)
+        for x, y in ((20, 20), (180, 160)):
+            page.show_pdf_page(pymupdf.Rect(x, y, x + 100, y + 80), source, 0)
+
+        first = _extract_symbolic_equipment(page, 1)
+        second = _extract_symbolic_equipment(page, 1)
+
+        assert first == second
+        assert len(first) == 2
+        assert len({item.chave_estavel for item in first}) == 2
+        for symbol, (x, y) in zip(first, ((20, 20), (180, 160)), strict=True):
+            _assert_e04_bounds(
+                page,
+                symbol,
+                tuple((px + x, py + y) for px, py in source_bounds),
+            )
+
+
+@pytest.mark.parametrize("clip_width", (70, 100))
+def test_e04_inherited_form_clip_does_not_detect_invisible_symbol_bars(clip_width: int) -> None:
+    with pymupdf.open() as source, pymupdf.open() as document:
+        source_page = source.new_page(width=200, height=200)
+        source_points = _draw_e04_symbol(source_page, kind="ATERRAMENTO", origin=(60, 100))
+        page = document.new_page(width=400, height=300)
+        page.show_pdf_page(
+            pymupdf.Rect(20, 20, 20 + clip_width, 220),
+            source,
+            0,
+            clip=pymupdf.Rect(0, 0, clip_width, 200),
+        )
+
+        symbols = _extract_symbolic_equipment(page, 1)
+
+        if clip_width == 70:
+            # Only a short piece of the stem is painted; all bars lie outside the Form clip.
+            assert symbols == ()
+        else:
+            assert len(symbols) == 1
+            _assert_e04_bounds(page, symbols[0], tuple((x + 20, y + 20) for x, y in source_points))
+
+
+@pytest.mark.parametrize("with_ocg", (False, True))
+def test_e04_annotation_appearance_is_not_reported_as_base_symbol(with_ocg: bool) -> None:
+    with pymupdf.open() as document:
+        page = document.new_page(width=400, height=300)
+        ocg = document.add_ocg("Rede E04") if with_ocg else 0
+        expected = _draw_e04_symbol(page, kind="ATERRAMENTO", origin=(80, 90), oc=ocg)
+        segments: list[tuple[tuple[float, float], tuple[float, float]]] = [((80, 160), (95, 160))]
+        segments.extend(
+            ((95 + index * 4, 160 - length / 2), (95 + index * 4, 160 + length / 2))
+            for index, length in enumerate((10, 7, 4))
+        )
+        for first, second in segments:
+            annotation = page.add_line_annot(first, second)
+            annotation.set_colors(stroke=(0, 0.5, 0))
+            annotation.set_border(width=0.5)
+            annotation.update()
+
+        symbols = _extract_symbolic_equipment(page, 1)
+
+        assert len(symbols) == 1
+        _assert_e04_bounds(page, symbols[0], expected)
+        styles = json.loads(str(dict(symbols[0].atributos_extraidos)["estilos_originais"]))
+        assert {item["layer"] for item in styles.values()} == {"Rede E04" if with_ocg else ""}
+        assert len(tuple(page.annots())) == 4
+
+
+@pytest.mark.parametrize("shade", (0.0, 0.4, 0.7))
+def test_e04_monochrome_symbol_is_not_automatically_existing(shade: float) -> None:
+    with pymupdf.open() as document:
+        page = document.new_page(width=400, height=300)
+        _draw_e04_symbol(page, kind="ATERRAMENTO", origin=(80, 90), color=(shade, shade, shade))
+
+        symbols = _extract_symbolic_equipment(page, 1)
+
+        assert len(symbols) == 1
+        attributes = dict(symbols[0].atributos_extraidos)
+        assert attributes.get("situacao_projeto_forcada") is None
+        assert attributes["situacao_indeterminada"] is True
+
+
+def test_e04_monochrome_candidate_is_not_promoted_to_confirmed_equipment(
+    tmp_path: Path, catalogo_inicial: CatalogoTecnico
+) -> None:
+    path = tmp_path / "monochrome.pdf"
+    with pymupdf.open() as document:
+        page = document.new_page(width=400, height=300)
+        _draw_e04_symbol(page, kind="ATERRAMENTO", origin=(80, 90), color=(0, 0, 0))
+        page.insert_text((85, 82), "P1", fontsize=6)
+        document.save(path)
+    request = replace(
+        _request(path),
+        configuracao=ConfiguracaoAnaliseDocumento(habilitar_ocr_condicional=False),
+    )
+    extracted = PyMuPdfDocumentAnalyzer().analisar(request)
+    symbols = [
+        item
+        for item in extracted.evidencias
+        if dict(item.atributos_extraidos).get("reconhecido_por_simbologia") is True
+    ]
+    assert len(symbols) == 1
+    assert dict(symbols[0].atributos_extraidos).get("situacao_projeto_forcada") is None
+    registry = carregar_registro_regras_inicial()
+    interpreted = InterpretadorRegrasExplicitas(registry).interpretar(
+        SolicitacaoInterpretacao(
+            projeto_id=request.projeto_id,
+            execucao_id=uuid4(),
+            execucao_extracao_id=request.execucao_id,
+            catalogo=catalogo_inicial,
+            evidencias=extracted.evidencias,
+            registro=registry,
+        )
+    )
+
+    assert not interpreted.diagnosticos
+    assert len(interpreted.elementos) == 1
+    proposal = interpreted.elementos[0]
+    assert proposal.estado_revisao is EstadoRevisao.CONFLITANTE
+    assert proposal.tipo_catalogo_sugerido_id is None
+    promoted = promover_resultado_automatico(
+        Projeto(
+            id=request.projeto_id,
+            nome="E04 monochrome",
+            catalogo_versao_id=catalogo_inicial.id,
+            criado_em=request.criada_em,
+            documentos=(request.documento,),
+        ),
+        catalogo_inicial,
+        interpreted.elementos,
+        interpreted.relacoes,
+        promovido_em=request.criada_em,
+    )
+    assert promoted.projeto.elementos == ()
+    assert promoted.decisoes == ()
+    assert promoted.elementos[0].estado_revisao is not EstadoRevisao.CONFIRMADA
+
+
+@pytest.mark.parametrize("negative", ("fence", "table", "incomplete_ground", "body_only"))
+def test_e04_vector_negative_controls_do_not_create_equipment(negative: str) -> None:
+    with pymupdf.open() as document:
+        page = document.new_page(width=400, height=300)
+        shape = page.new_shape()
+        if negative == "fence":
+            shape.draw_line((60, 100), (90, 100))
+            for x in (60, 70, 80, 90):
+                shape.draw_line((x, 95), (x, 105))
+        elif negative == "table":
+            shape.draw_rect(pymupdf.Rect(60, 90, 100, 110))
+            for x in (70, 80, 90):
+                shape.draw_line((x, 90), (x, 110))
+            shape.draw_line((60, 100), (100, 100))
+        elif negative == "incomplete_ground":
+            shape.draw_line((60, 100), (75, 100))
+            shape.draw_line((75, 95), (75, 105))
+            shape.draw_line((79, 96.5), (79, 103.5))
+        else:
+            shape.draw_rect(pymupdf.Rect(75, 98.5, 84, 101.5))
+            shape.draw_line((75, 96.5), (84, 103.5))
+        shape.finish(color=(0, 0.5, 0), closePath=False)
+        shape.commit()
+
+        assert _extract_symbolic_equipment(page, 1) == ()
+
+
+def test_e04_grouped_symbol_retains_drawing_and_item_provenance() -> None:
+    with pymupdf.open() as document:
+        page = document.new_page(width=400, height=300)
+        expected = _draw_e04_symbol(page, kind="ATERRAMENTO", origin=(80, 90), packing="grouped")
+
+        symbols = _extract_symbolic_equipment(page, 1)
+
+        assert len(symbols) == 1
+        attributes = dict(symbols[0].atributos_extraidos)
+        assert attributes["vetores_origem"] == "0"
+        assert json.loads(str(attributes["primitives_origem"])) == [[0, i] for i in range(4)]
+        xs, ys = zip(*expected, strict=True)
+        assert json.loads(str(attributes["simbolo_limites_originais"])) == pytest.approx(
+            (min(xs), min(ys), max(xs), max(ys)), abs=0.001
+        )
+
+
+@pytest.mark.parametrize("removed", ("grouping", "fragments", "scale", "styles"))
+def test_e04_normalization_ablation_changes_only_the_requested_control(removed: str) -> None:
+    normalizations = frozenset({"grouping", "fragments", "scale", "styles"})
+    with pymupdf.open() as document:
+        page = document.new_page(width=400, height=300)
+        _draw_e04_symbol(
+            page,
+            kind="ATERRAMENTO",
+            origin=(120, 120),
+            packing={"grouping": "grouped", "fragments": "fragmented"}.get(removed, "separate"),
+            scale=0.3 if removed == "scale" else 1.0,
+            color=(0.4, 0.4, 0.4) if removed == "styles" else (0, 0.5, 0),
+        )
+
+        full = _extract_symbolic_equipment(page, 1)
+        explicit_full = _extract_symbolic_equipment(page, 1, normalizations=normalizations)
+        ablated = _extract_symbolic_equipment(page, 1, normalizations=normalizations - {removed})
+
+        assert full == explicit_full
+        assert len(full) == 1
+        assert ablated == ()
+
+
+def test_e04_failed_symbol_extraction_is_retried_before_caching_complete_result(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    path = tmp_path / "retry-symbol.pdf"
+    with pymupdf.open() as document:
+        page = document.new_page(width=400, height=300)
+        _draw_e04_symbol(page, kind="ATERRAMENTO", origin=(80, 90))
+        document.save(path)
+    request = replace(
+        _request(path),
+        configuracao=ConfiguracaoAnaliseDocumento(habilitar_ocr_condicional=False),
+    )
+    extract = _extract_symbolic_equipment
+    calls = 0
+
+    def fail_once(page: pymupdf.Page, page_number: int) -> tuple[CandidatoEvidenciaDocumento, ...]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise ValueError("Não foi possível preservar índices vetoriais da camada base")
+        return extract(page, page_number)
+
+    monkeypatch.setattr(analyzer_module, "_extract_symbolic_equipment", fail_once)
+    analyzer = PyMuPdfDocumentAnalyzer(cache=JsonAnalysisCache(tmp_path / "cache"))
+    failed = analyzer.analisar(request)
+    recovered = analyzer.analisar(request)
+    cached = analyzer.analisar(request)
+
+    assert any(item.codigo == "analise.simbolos_vetoriais_falhou" for item in failed.diagnosticos)
+    assert not failed.cache_utilizado
+    assert not recovered.cache_utilizado
+    assert calls == 2
+    assert not recovered.diagnosticos
+    assert any(item.conteudo_bruto == "ATERRAMENTO" for item in recovered.evidencias)
+    assert cached.cache_utilizado
+    assert cached.evidencias == recovered.evidencias
 
 
 def test_same_input_and_configuration_are_reproducible_from_cache(tmp_path: Path) -> None:
@@ -1010,6 +1708,101 @@ def _draw_ground_family(
             color=color,
             width=0.5,
         )
+
+
+def _draw_e04_symbol(
+    page: pymupdf.Page,
+    *,
+    kind: str,
+    origin: tuple[float, float],
+    scale: float = 1.0,
+    angle: float = 0.0,
+    packing: str = "separate",
+    filled: bool = False,
+    color: tuple[float, float, float] = (0, 0.5, 0),
+    oc: int = 0,
+    bar_lengths: tuple[float, ...] | None = None,
+    terminal_offset: float = 15.0,
+    bar_gap: float = 4.0,
+) -> tuple[tuple[float, float], ...]:
+    """Independent authorial development controls; no benchmark reference is consumed."""
+    theta = math.radians(angle)
+
+    def transform(x: float, y: float) -> tuple[float, float]:
+        return (
+            origin[0] + scale * (x * math.cos(theta) - y * math.sin(theta)),
+            origin[1] + scale * (x * math.sin(theta) + y * math.cos(theta)),
+        )
+
+    segments = [((0.0, 0.0), (15.0, 0.0))]
+    rectangles = []
+    if kind == "PARA RAIOS BT":
+        rectangles.append((15.0, -1.5, 24.0, 1.5))
+        segments.append(((15.0, -3.5), (24.0, 3.5)))
+    else:
+        lengths = bar_lengths or (
+            (10.0, 7.0, 4.0, 7.0) if kind == "PARA RAIOS MT" else (10.0, 7.0, 4.0)
+        )
+        for index, length in enumerate(lengths):
+            x = terminal_offset + index * bar_gap
+            if filled:
+                rectangles.append((x - 0.1, -length / 2, x + 0.1, length / 2))
+            else:
+                segments.append(((x, -length / 2), (x, length / 2)))
+    points: list[tuple[float, float]] = []
+    shape = page.new_shape()
+    for start, end in segments:
+        points.extend((transform(*start), transform(*end)))
+        pairs = [(start, end)]
+        if packing == "fragmented":
+            middle = ((start[0] + end[0]) / 2, (start[1] + end[1]) / 2)
+            pairs = [(start, middle), (middle, end)]
+        for first, second in pairs:
+            shape.draw_line(transform(*first), transform(*second))
+            if packing != "grouped":
+                shape.finish(color=color, width=0.5 * scale, closePath=False, oc=oc)
+                shape.commit()
+                shape = page.new_shape()
+    for x0, y0, x1, y1 in rectangles:
+        corners = (transform(x0, y0), transform(x1, y0), transform(x1, y1), transform(x0, y1))
+        points.extend(corners)
+        shape.draw_quad(pymupdf.Quad(corners[0], corners[1], corners[3], corners[2]))
+        if packing != "grouped":
+            shape.finish(
+                color=None if filled else color,
+                fill=color if filled else None,
+                width=0.5 * scale,
+                closePath=False,
+                oc=oc,
+            )
+            shape.commit()
+            shape = page.new_shape()
+    if packing == "grouped":
+        shape.finish(color=color, width=0.5 * scale, closePath=False, oc=oc)
+        shape.commit()
+    return tuple(points)
+
+
+def _assert_e04_bounds(
+    page: pymupdf.Page,
+    symbol: CandidatoEvidenciaDocumento,
+    source_points: tuple[tuple[float, float], ...],
+) -> None:
+    transformed = [pymupdf.Point(point) * page.rotation_matrix for point in source_points]
+    expected = (
+        min(point.x for point in transformed) / page.rect.width,
+        min(point.y for point in transformed) / page.rect.height,
+        max(point.x for point in transformed) / page.rect.width,
+        max(point.y for point in transformed) / page.rect.height,
+    )
+    assert symbol.geometria.tipo is TipoGeometria.CAIXA
+    actual = (
+        min(float(point.x) for point in symbol.geometria.pontos),
+        min(float(point.y) for point in symbol.geometria.pontos),
+        max(float(point.x) for point in symbol.geometria.pontos),
+        max(float(point.y) for point in symbol.geometria.pontos),
+    )
+    assert actual == pytest.approx(expected, abs=0.00001)
 
 
 def _draw_bt_arrester(

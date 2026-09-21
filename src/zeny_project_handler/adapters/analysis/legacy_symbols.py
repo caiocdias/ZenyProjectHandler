@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 from decimal import Decimal
 from typing import Any
@@ -29,17 +30,24 @@ from .pymupdf_symbols import (
     _ANGLE_TOLERANCE,
     _MAXIMUM_PRIMITIVE_LENGTH,
     _SYMBOL_CONFIDENCE,
+    _SYMBOL_NORMALIZATIONS,
     _SYMBOL_SOURCE,
+    _SYMBOL_VERSION,
     _drawing_points,
     _extract_symbolic_equipment,
 )
 
 
-def perfil_simbolos_legados() -> PerfilMetodoSimbolos:
+def perfil_simbolos_legados(
+    *, normalizations: frozenset[str] | None = None
+) -> PerfilMetodoSimbolos:
     """Assinatura fixa dos parâmetros realmente executados; score não calibrado."""
+    enabled = _SYMBOL_NORMALIZATIONS if normalizations is None else normalizations
+    if enabled - _SYMBOL_NORMALIZATIONS:
+        raise ValueError("Normalização de símbolo desconhecida")
     return PerfilMetodoSimbolos(
         metodo_id="pymupdf-symbols-legacy",
-        versao="1.18.0:observacoes-1",
+        versao=f"{_SYMBOL_VERSION}:observacoes-1",
         familia="heuristica-geometrica-vetorial-legada",
         dominio_aplicacao="Desenhos vetoriais da base; três assinaturas geométricas legadas",
         classes_suportadas=("ATERRAMENTO", "PARA_RAIOS_MT", "PARA_RAIOS_BT"),
@@ -48,11 +56,15 @@ def perfil_simbolos_legados() -> PerfilMetodoSimbolos:
         perfil_referencia="legado:SIMBOLOGIA.pdf:procedencia-nao-comprovada:v1",
         parametros=(
             ("pymupdf_version", str(pymupdf.VersionBind)),
-            ("maximum_primitive_length", Decimal(str(_MAXIMUM_PRIMITIVE_LENGTH))),
+            (
+                "maximum_primitive_length",
+                None if "scale" in enabled else Decimal(str(_MAXIMUM_PRIMITIVE_LENGTH)),
+            ),
             ("angle_tolerance_radians", Decimal(str(_ANGLE_TOLERANCE))),
             ("score_bruto", _SYMBOL_CONFIDENCE),
             ("origem_simbologia", _SYMBOL_SOURCE),
             ("normalizacao", "pymupdf_support._box_geometry:rotacao-e-clipping:v1"),
+            ("normalizacoes_vetoriais", ",".join(sorted(enabled))),
         ),
     )
 
@@ -72,7 +84,12 @@ def _original_bounds(drawings: tuple[dict[str, Any], ...]) -> Any:
 def _geometry(
     page: Any, candidate: CandidatoEvidenciaDocumento, drawings: tuple[dict[str, Any], ...]
 ) -> GeometriaObservacaoSimbolo:
-    bounds = _original_bounds(drawings)
+    raw_bounds = dict(candidate.atributos_extraidos).get("simbolo_limites_originais")
+    bounds = (
+        pymupdf.Rect(json.loads(str(raw_bounds)))
+        if raw_bounds is not None
+        else _original_bounds(drawings)
+    )
     corners = (bounds.tl, bounds.tr, bounds.br, bounds.bl)
     width, height = float(page.rect.width), float(page.rect.height)
     inverse = page.derotation_matrix
@@ -86,6 +103,7 @@ def _geometry(
     )
     transformed = tuple(point * page.rotation_matrix for point in corners)
     clipped = any(not (0 <= point.x <= width and 0 <= point.y <= height) for point in transformed)
+    clipped = clipped or bool(dict(candidate.atributos_extraidos).get("recorte_vetorial_limitado"))
     return GeometriaObservacaoSimbolo(
         tipo=candidate.geometria.tipo,
         pontos_originais=_decimal_points(tuple((point.x, point.y) for point in corners)),
@@ -108,11 +126,25 @@ def _observation(
     attributes = dict(candidate.atributos_extraidos)
     indices = tuple(int(index) for index in str(attributes["vetores_origem"]).split(","))
     originals = tuple(drawings[index] for index in indices)
+    item_indices = attributes.get("primitives_origem")
+    selected_items = (
+        tuple((int(index), int(item)) for index, item in json.loads(str(item_indices)))
+        if item_indices is not None
+        else ()
+    )
     primitives = tuple(
         PrimitivaObservadaSimbolo(
             indice=str(index),
             camada=str(drawing["layer"]) if drawing.get("layer") else None,
-            pontos_originais=_decimal_points(_drawing_points(tuple(drawing.get("items") or ()))),
+            pontos_originais=_decimal_points(
+                _drawing_points(
+                    tuple(
+                        item
+                        for item_index, item in enumerate(drawing.get("items") or ())
+                        if not selected_items or (index, item_index) in selected_items
+                    )
+                )
+            ),
         )
         for index, drawing in zip(indices, originals, strict=True)
     )
@@ -131,7 +163,9 @@ def _observation(
         ),
         score_bruto=score,
         primitivas=primitives,
-        situacao=SituacaoProjeto(str(attributes["situacao_projeto_forcada"])),
+        situacao=SituacaoProjeto(str(attributes["situacao_projeto_forcada"]))
+        if attributes.get("situacao_projeto_forcada") is not None
+        else None,
         atributos=candidate.atributos_extraidos,
         chave_legada=candidate.chave_estavel,
         conteudo_bruto=candidate.conteudo_bruto,
@@ -144,25 +178,26 @@ def observar_simbolos_legados(
     documento_id: str,
     documento_sha256: str,
     pagina_numero: int,
+    normalizations: frozenset[str] | None = None,
 ) -> ResultadoMetodoSimbolos:
     """Execute o legado na página base; nenhuma referência visual entra na inferência.
 
     Fonte SHA é a identidade informada pelo chamador, que deve verificar o arquivo.
-    Não aceita perfil customizado ou thresholds que o detector não executaria.
+    Aceita somente ablações das normalizações realmente executadas pelo detector.
     A cobertura declara a tentativa nas três classes; zero saída não prova ausência.
     """
     if not math.isfinite(float(page.rect.width)) or float(page.rect.width) <= 0:
         raise ValueError("Página deve possuir largura positiva finita")
     if not math.isfinite(float(page.rect.height)) or float(page.rect.height) <= 0:
         raise ValueError("Página deve possuir altura positiva finita")
-    profile = perfil_simbolos_legados()
+    profile = perfil_simbolos_legados(normalizations=normalizations)
     source = FonteObservacaoSimbolo(
         documento_id=documento_id,
         documento_sha256=documento_sha256,
         pagina_numero=pagina_numero,
         camada="base",
     )
-    candidates = _extract_symbolic_equipment(page, pagina_numero)
+    candidates = _extract_symbolic_equipment(page, pagina_numero, normalizations=normalizations)
     drawings = tuple(page.get_drawings(extended=True))
     observations = tuple(
         _observation(page, candidate, source, profile, drawings) for candidate in candidates

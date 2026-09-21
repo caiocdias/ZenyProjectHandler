@@ -60,10 +60,8 @@ def test_adapter_preserves_legacy_candidates_for_lines_bars_rotation_and_ocg(
     assert (
         observation.alternativas[0].classe == dict(legacy.atributos_extraidos)["classe_equipamento"]
     )
-    assert observation.situacao is not None
-    assert (
-        observation.situacao.value == dict(legacy.atributos_extraidos)["situacao_projeto_forcada"]
-    )
+    assert observation.situacao is None
+    assert dict(legacy.atributos_extraidos).get("situacao_projeto_forcada") is None
     assert observation.geometria.tipo is legacy.geometria.tipo
     assert observation.geometria.pontos_normalizados == legacy.geometria.pontos
     assert observation.score_bruto == Decimal("0.88")
@@ -95,9 +93,8 @@ def test_adapter_preserves_legacy_candidates_for_lines_bars_rotation_and_ocg(
         recovered = a * point.x + c * point.y + e, b * point.x + d * point.y + f
         assert min(abs(recovered[0] - coordinate) for coordinate in original_x) < Decimal("0.0001")
         assert min(abs(recovered[1] - coordinate) for coordinate in original_y) < Decimal("0.0001")
-    if not filled:
-        points = observation.geometria.pontos_normalizados
-        assert points[0].x == points[1].x or points[0].y == points[1].y
+    points = observation.geometria.pontos_normalizados
+    assert points[0].x < points[1].x and points[0].y < points[1].y
 
 
 def test_adapter_identity_changes_when_source_page_or_document_changes() -> None:
@@ -151,7 +148,7 @@ def test_legacy_negative_controls_remain_non_detection_without_negative_evidence
     assert restored.completo
 
 
-def test_adapter_retains_original_primitives_when_crop_clips_legacy_geometry() -> None:
+def test_adapter_abstains_when_crop_hides_required_symbol_primitives() -> None:
     with pymupdf.open() as document:
         page = document.new_page(width=500, height=400)
         _draw_ground(page, filled=True)
@@ -160,9 +157,62 @@ def test_adapter_retains_original_primitives_when_crop_clips_legacy_geometry() -
         result = observar_simbolos_legados(
             page, documento_id="crop", documento_sha256="a" * 64, pagina_numero=1
         )
-    assert len(direct) == len(result.observacoes) == 1
-    observation = result.observacoes[0]
-    assert observation.geometria.pontos_normalizados == direct[0].geometria.pontos
-    assert observation.geometria.normalizacao_limitada
-    assert any(x < 0 for primitive in observation.primitivas for x, _ in primitive.pontos_originais)
+    # E03 preserved the legacy off-page signature. E04 must not claim a visible
+    # complete symbol when the crop hides its stem and two of the three bars.
+    assert direct == ()
+    assert result.observacoes == ()
+    assert result.coberturas[0].estado is EstadoMetodoSimbolos.NAO_DETECCAO
+    assert not result.coberturas[0].estado.comprova_ausencia
     assert loads_domain(dumps_domain(result), ResultadoMetodoSimbolos) == result
+
+
+def test_e04_adapter_separates_occurrences_in_one_drawing_and_roundtrips() -> None:
+    with pymupdf.open() as document:
+        page = document.new_page(width=500, height=400)
+        shape = page.new_shape()
+        for x in (50, 150):
+            shape.draw_line((x, 60), (x + 15, 60))
+            for index, length in enumerate((10, 7, 4)):
+                bar_x = x + 15 + index * 4
+                shape.draw_line((bar_x, 60 - length / 2), (bar_x, 60 + length / 2))
+        shape.finish(color=(0, 0, 0), closePath=False)
+        shape.commit()
+        result = observar_simbolos_legados(
+            page, documento_id="grouped", documento_sha256="b" * 64, pagina_numero=1
+        )
+        ablated = observar_simbolos_legados(
+            page,
+            documento_id="grouped",
+            documento_sha256="b" * 64,
+            pagina_numero=1,
+            normalizations=frozenset(),
+        )
+    assert len(result.observacoes) == 2
+    assert ablated.observacoes == ()
+    assert ablated.coberturas[0].estado is EstadoMetodoSimbolos.NAO_DETECCAO
+    assert ablated.perfil.assinatura() != result.perfil.assinatura()
+    assert loads_domain(dumps_domain(result), ResultadoMetodoSimbolos) == result
+    assert len({observation.id for observation in result.observacoes}) == 2
+    observations = sorted(
+        result.observacoes, key=lambda item: item.geometria.pontos_originais[0][0]
+    )
+    for observation, expected_x in zip(observations, (50, 150), strict=True):
+        xs = [point[0] for point in observation.geometria.pontos_originais]
+        assert min(xs) == expected_x
+        assert max(xs) == expected_x + 23
+        assert observation.situacao is None
+        assert len(observation.primitivas) == 1
+        primitive_xs = [point[0] for point in observation.primitivas[0].pontos_originais]
+        assert min(primitive_xs) == expected_x
+        assert max(primitive_xs) == expected_x + 23
+
+
+def test_e04_profile_signatures_record_only_executed_normalizations() -> None:
+    full = perfil_simbolos_legados()
+    ablated = perfil_simbolos_legados(normalizations=frozenset({"styles"}))
+    assert full.assinatura() != ablated.assinatura()
+    assert dict(full.parametros)["maximum_primitive_length"] is None
+    assert dict(ablated.parametros)["maximum_primitive_length"] == Decimal(60)
+    assert dict(ablated.parametros)["normalizacoes_vetoriais"] == "styles"
+    with pytest.raises(ValueError, match="Normalização"):
+        perfil_simbolos_legados(normalizations=frozenset({"invented"}))
