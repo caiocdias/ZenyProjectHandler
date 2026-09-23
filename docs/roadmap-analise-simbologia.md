@@ -370,7 +370,7 @@ E16 executa V-G; não repetir toda a suíte após mera edição do roadmap.
 | E03 | Contrato de observações e registro de métodos | #concluida | E01, E02 | Introduzir contrato interno aditivo para observações de símbolos, cobertura e estados de cada método. |
 | E04 | Robustez vetorial de aterramento e para-raios | #concluida | E03 | Melhorar o detector existente para primitives fragmentadas/agrupadas, escala e estilos, sem ampliar sua lista de classes. |
 | E05 | Reconhecimento visual de transformadores | #concluida | E04 | Detectar variantes gráficas de transformador e conjuntos sem depender da existência de um literal reconhecido. |
-| E06 | Reconhecimento de estais e ancoragens | #pendente | E04 | Reconhecer as variantes de estai e seus vínculos geométricos sem confundi-las com condutores. |
+| E06 | Reconhecimento de estais e ancoragens | #concluida | E04 | Reconhecer as variantes de estai e seus vínculos geométricos sem confundi-las com condutores. |
 | E07 | Pacotes extensíveis das demais famílias | #pendente | E04, E05, E06 | Entregar representação declarativa e pacotes de reconhecimento para as famílias restantes do inventário, com cobertura auditável. |
 | E08 | Detector raster por templates e Hough | #pendente | E03, E04 | Acrescentar família raster capaz de detectar símbolos sem vetores aproveitáveis. |
 | E09 | Detector por contornos e grafo de traços | #pendente | E03, E04 | Implementar alternativa estrutural de reconhecimento de formas distinta de correlação de pixels e das heurísticas legadas. |
@@ -1432,7 +1432,7 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
   contexto, associação e cardinalidade. Nenhum commit, publicação ou
   implantação foi feito.
 
-## E06 — Reconhecimento de estais e ancoragens — #pendente
+## E06 — Reconhecimento de estais e ancoragens — #concluida
 
 **Objetivo:** Reconhecer as variantes de estai e seus vínculos geométricos sem confundi-las com condutores.
 
@@ -1461,9 +1461,9 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
 
 **Critérios de aceite:**
 
-- [ ] Estais do inventário geram observações com geometria própria, inclusive sem texto.
-- [ ] Controles de estai não criam cabo, vão ou junção elétrica.
-- [ ] Ambiguidade de suporte/subtipo é visível e não elimina candidato visual válido.
+- [x] Estais do inventário geram observações com geometria própria, inclusive sem texto.
+- [x] Controles de estai não criam cabo, vão ou junção elétrica.
+- [x] Ambiguidade de suporte/subtipo é visível e não elimina candidato visual válido.
 
 **Validação obrigatória:** V-P e conferência das entregas dos subagentes, com as particularidades acima. V-S, V-N, V-Q, V-B por variante; executar também `tests/unit/test_e14_topology.py` pelo pytest para garantir fronteira elétrica. Os códigos V-* remetem aos comandos completos acima; registrar os comandos efetivamente executados.
 
@@ -1488,7 +1488,95 @@ Ao iniciar, sincronize #em-andamento no índice e detalhe. Implemente somente es
 Não declare sucesso com validação obrigatória falhando ou não executada. Atualize para #concluida somente após todos os critérios; impedimento real exige #bloqueada com causa, evidência, impacto e ação de desbloqueio. Dependência ainda pendente mantém #pendente. Preencha Evidências e handoff com arquivos, decisões, comandos, resultados e limitações. Não crie commit, publique ou implante sem autorização explícita. Termine com resumo conciso de mudanças, validações e pendências.
 ```
 
-**Evidências e handoff:** ainda não executada. Registrar também agentes/papéis, fronteiras de escrita, checkpoint integrado, revisão independente, manifesto V-P e total de PDFs/páginas conferidos/bloqueados. Ao trabalhar, registrar arquivos alterados, versão/configuração, decisões, fontes/fixtures, comandos e resultados, métricas comparadas, limitações e próximo passo.
+**Evidências e handoff — execução de 22/09/2026:**
+
+- Base `f97e99376cc185c3df7a180a45625f64d9def2ca`, Git inicialmente
+  limpo; nenhum `AGENTS.md` aplicável no repositório ou ancestrais. E04 A6
+  estava concluída (`1.19.3:vetorial-5`, cache `1.19.3`). Foram lidos o
+  roadmap, o inventário E01 (17 células E06 em §14–15), o contrato E03, o
+  runner/baseline E02, o handoff E04 e a fronteira
+  `application/physical_topology.py`. Esta fronteira, o normalizador E04 e
+  o pacote E05 não foram editados; não houve commit.
+- Delegação e propriedade: A `/root/codigo_estais` entregou somente
+  `src/zeny_project_handler/adapters/analysis/pymupdf_guys.py` (SHA-256 final
+  `50ab9064b94aab791d60b65d38de29de341c2d246861e0adde345992a4d1f6ce`);
+  B `/root/testes_estais` entregou `tests/fixtures/guys/fixtures.py`
+  (`a52d786708559208ff4476935bb99dfd4251a797f900341fbde39f7fad609d9a`),
+  `tests/fixtures/guys/__init__.py` e `tests/unit/test_pymupdf_guys.py`
+  (`127e7bac8c5c36790d17d2e738997c9c2cb80c106d6bbf6a929e05499b71c933`);
+  C `/root/pdfs_estais` entregou somente relatórios e imagens em
+  `tmp/e06-simbologia/visual/`. O coordenador integrou
+  `scripts/symbol_benchmark_runner.py`, `scripts/benchmark_symbols.py`,
+  `scripts/benchmark_guys_e06.py`, `tests/unit/test_benchmark_symbols.py`,
+  `docs/e06-estais-ancoragens.md` e este roadmap. A passou o contrato estável
+  `perfil_estais()`/`observar_estais(...)` a B antes dos testes; C recebeu
+  somente checkpoints de predição completos.
+- O método E03 emite classe aberta `ESTAI`, eixo `POLILINHA`, primitivas e
+  componentes de origem, subtipo/referências e suportes **possíveis**,
+  `vinculo=mecanico_possivel`, `conectividade_eletrica=False` e cardinalidade
+  indeterminada. Os testes verificam round-trip, ambiguidade e ausência de
+  cabo, vão e junção elétrica. Runner E02 opt-in `--include-guys` preserva
+  candidatos exclusivos sem quórum nem probabilidade; `score` bruto não é
+  calibrado. Não há dimensionamento mecânico nem promoção patrimonial.
+- Checkpoints rejeitados e correção baseada em evidência: A1/B4 falhou Y
+  simples (23 TP/1 FP/1 FN); A2/B4 passou autoral (24/0/0), mas V-P A2
+  encontrou 20 FP claros e um ambíguo. A5/B8 passou 32/0/0, porém V-P A5
+  apontou 18 FP e dois ambíguos. B9 congelou negativos autorais e reproduziu
+  três FP de rosa/cor antes da correção A6; A6/B9 passou 32/0/0, mas V-P A6
+  ainda reteve um FP em corredor sólido/tracejado. B10 e B11 congelaram
+  negativos independentes vermelhos antes de A7 e preservaram sobreimpressão
+  exata/âncora tracejada válidas. A7 eliminou o último corredor; B confirmou
+  **73/73 testes E06 e 94/94 com E14**, além de Ruff/mypy. Nenhuma anotação
+  ou ROI de C entrou no detector ou nas fixtures. Os relatórios A2/A5/A6 e
+  deltas permanecem em `tmp/e06-simbologia/visual/`.
+- **V-B final por variante:**
+  `.\.venv\Scripts\python.exe -m scripts.benchmark_guys_e06 --output tmp/e06-simbologia/benchmark-a7-b11`
+  retornou 0: **17/17 IDs E01, 33 TP / 0 FP / 0 FN em 67 páginas**. O runner
+  persistiu predições antes de ler a referência autoral; PDF fonte SHA-256
+  `87dbcef34983423c143a6ae51884c447cea320d0825268a2fc5722515e7f34c0`,
+  referência `090fb2e7c57c908cb2ac6c22fbe789237ec4a3940c8d48d418f80e6d8b96d3a5`,
+  predições `0e243c3a378c02b4e762740fea2ed272b89e7c4a499586f7b61086508b26816e`.
+  A reserva sintética E16 não foi aberta. Baseline de desenvolvimento E02
+  com `--include-transformers --include-guys` em `baseline-a7` completou
+  4 PDFs/6 páginas, união bruta 14 TP/3 FP/8 FN. A taxonomia legada
+  `ESTAI_MT` difere da classe aberta E03 `ESTAI`; diagnóstico **após inferência**
+  `integracao/e02-taxonomy-crosswalk-a7.json` associa dois estais vetoriais,
+  sem alterar o relatório bruto, tolerâncias ou o detector. O terceiro
+  estai E02 é raster e permanece fora do domínio vetorial E06.
+- **V-S:** `.\.venv\Scripts\python.exe -m pytest tests/unit/test_pymupdf_analyzer.py tests/unit/test_pdf_coordinates.py tests/unit/test_pdf_rendering_budget.py`
+  → 286 passed, exit 0. **V-N/fronteira E14:**
+  `.\.venv\Scripts\python.exe -m pytest tests/unit/test_pymupdf_guys.py tests/unit/test_benchmark_symbols.py tests/unit/test_e14_topology.py`
+  → 143 passed, exit 0. **V-Q:** comandos separados
+  `.\.venv\Scripts\python.exe -m ruff check .`,
+  `.\.venv\Scripts\python.exe -m ruff format --check .` e
+  `.\.venv\Scripts\python.exe -m mypy` → exit 0, 397 arquivos
+  formatados, 367 arquivos sem erro de tipo. `git diff --check` sem erro.
+- **V-P final:** C congelou a inspeção *antes* das predições: manifesto
+  `visual/manifest.json` SHA-256
+  `d494462bb6b715ae513e85c0014a8479a0936e556da352ac7e4d27a569424e13`
+  e `visual/initial-observations.md`
+  `4ccff208fefa17c2a6f32e833b0bab5efa80cebba36d202ba27da9d65505d596`.
+  Examinou as 11 páginas renderizadas, 20 quadrantes, oito recortes e 11
+  diferenças base/anotação (277 anotações). Comando
+  `.\.venv\Scripts\python.exe -m scripts.benchmark_symbols examples --root examples --include-transformers --include-guys --output tmp/e06-simbologia/predictions-a7`
+  → 11 PDFs/11 páginas, 0 falhas, fontes intactas, 237 predições (E04 220,
+  E05 17, E06 **0**). Manifesto SHA-256
+  `c0be646dae120fa4ea3751ae64d060a5d4c08f1923aabf8dc8050a3036707e0b`,
+  predições `f4fb7cc5e4d35cf7b478ddcd9216cf4c9ef6a14d497ea380e92dc60b61ce297d`.
+  Delta A6→A7: E06 1→0, E04/E05 237 JSON idênticos, 11 fontes idênticas.
+  C reabriu o recorte cru e a página inteira do último FP removido; era
+  condutor entre suportes. Relatório `visual/reconciliation-a7.md` SHA-256
+  `1ade38d0fdb53e668674b29434f196228600160204cd2a6b86268813cb313336`
+  registra 66 células (33 base executadas, 33 anotações fora de escopo),
+  **0 FP e 0 FN verificáveis** de E06 e nenhuma exclusividade E06 final.
+- Limite explícito: nenhum estai operacional foi confirmado nesses 11 PDFs;
+  portanto o recall real não é estimável, e os exemplos já inspecionados são
+  desenvolvimento. Duas relações linha/ponto e uma foto anotada continuam
+  visualmente incertas, sem promoção a positivo; 14 grupos opcionais de PDF
+  foram vistos apenas no estado padrão. A conclusão valida geometria e
+  negativos do corpus autoral e a precisão observável de V-P no escopo
+  inspecionado, **não** sensibilidade em projetos reais com estai. Não há
+  bloqueio remanescente para os critérios desta etapa.
 
 ## E07 — Pacotes extensíveis das demais famílias — #pendente
 

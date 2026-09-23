@@ -606,6 +606,37 @@ def test_transformer_opt_in_keeps_legacy_candidates_and_separate_execution(tmp_p
     )
 
 
+def test_guy_opt_in_preserves_exclusive_mechanical_trace_and_legacy_output(
+    tmp_path: Path,
+) -> None:
+    from scripts.symbol_benchmark_runner import GUY_METHOD_ID, METHOD_ID, infer_pdf
+    from tests.fixtures.guys.fixtures import build_fixture
+
+    source = tmp_path / "author-guys.pdf"
+    cases = build_fixture(source)
+    _, legacy_predictions, legacy_executions = infer_pdf(source, "opaque-id")
+    _, combined_predictions, combined_executions = infer_pdf(source, "opaque-id", include_guys=True)
+    assert [item for item in combined_predictions if item["method_id"] == METHOD_ID] == (
+        legacy_predictions
+    )
+    guys = [item for item in combined_predictions if item["method_id"] == GUY_METHOD_ID]
+    assert guys
+    assert all(item["class_id"] == "ESTAI" and item["trace"] for item in guys)
+    assert all(item["association"] is None and item["quantity"] is None for item in guys)
+    assert all(item["provenance"]["electrical_connectivity"] is False for item in guys)
+    assert len([item for item in combined_executions if item["method_id"] == GUY_METHOD_ID]) == (
+        2 * max(item.page_number for item in cases)
+    )
+    assert [
+        {key: value for key, value in item.items() if key != "seconds"}
+        for item in combined_executions
+        if item["method_id"] == METHOD_ID
+    ] == [
+        {key: value for key, value in item.items() if key != "seconds"}
+        for item in legacy_executions
+    ]
+
+
 def test_empty_examples_are_explicit_and_do_not_claim_completion(tmp_path: Path) -> None:
     from scripts.symbol_benchmark_runner import run_examples
 

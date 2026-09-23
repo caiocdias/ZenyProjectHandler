@@ -16,12 +16,17 @@ from typing import Any
 import pymupdf
 
 from scripts.symbol_benchmark_evaluator import PROTOCOL, evaluate
-from zeny_project_handler.adapters.analysis import pymupdf_symbols, pymupdf_transformers
+from zeny_project_handler.adapters.analysis import (
+    pymupdf_guys,
+    pymupdf_symbols,
+    pymupdf_transformers,
+)
 from zeny_project_handler.adapters.analysis.pymupdf_analyzer import PyMuPdfDocumentAnalyzer
 
 ROOT = Path(__file__).resolve().parents[1]
 METHOD_ID = "legacy-vector-symbols"
 TRANSFORMER_METHOD_ID = "transformer-vector-shapes"
+GUY_METHOD_ID = "guy-vector-shapes"
 CLASS_FAMILY = {
     "ATERRAMENTO": "family-f02-19",
     "PARA_RAIOS_MT": "family-f02-21",
@@ -75,6 +80,22 @@ def transformer_method_metadata() -> Record:
         "supported_layers": list(profile.camadas_suportadas),
         "source_sha256_lf": _text_sha256(Path(pymupdf_transformers.__file__)),
         "configuration": "E05 visual vector shapes; raw score is not calibrated probability",
+        "family_mapping": "per-observation familia_inventario; alternatives retained",
+    }
+
+
+def guy_method_metadata() -> Record:
+    """Describe the opt-in E06 mechanical relation method."""
+    profile = pymupdf_guys.perfil_estais()
+    return {
+        "id": GUY_METHOD_ID,
+        "version": profile.versao,
+        "algorithm_family": profile.familia,
+        "shared_sources": list(profile.fontes_compartilhadas),
+        "supported_classes": list(profile.classes_suportadas),
+        "supported_layers": list(profile.camadas_suportadas),
+        "source_sha256_lf": _text_sha256(Path(pymupdf_guys.__file__)),
+        "configuration": "E06 vector mechanical relation; no calibrated probability",
         "family_mapping": "per-observation familia_inventario; alternatives retained",
     }
 
@@ -183,8 +204,76 @@ def _transformer_prediction(observation: Any, document_id: str) -> Record:
     }
 
 
+def _guy_prediction(observation: Any, document_id: str) -> Record:
+    """Keep a mechanical trace and alternatives in the E02 evaluation projection."""
+    attributes = dict(observation.atributos)
+    points = [
+        (float(point.x), float(point.y)) for point in observation.geometria.pontos_normalizados
+    ]
+    # The E03 polyline is the guy's shaft. The benchmark bbox covers its
+    # terminals too, while trace continues to describe the mechanical path.
+    a, b, c, d, e, f = map(float, observation.geometria.transformacao.normalizada_para_original)
+    determinant = a * d - b * c
+    for primitive in observation.primitivas:
+        for original_x, original_y in primitive.pontos_originais:
+            x, y = float(original_x) - e, float(original_y) - f
+            points.append(((d * x - c * y) / determinant, (-b * x + a * y) / determinant))
+    xs, ys = [point[0] for point in points], [point[1] for point in points]
+    raw_bbox = [min(xs), min(ys), max(xs), max(ys)]
+    bounded_bbox = [max(0.0, min(1.0, value)) for value in raw_bbox]
+    primary = next((item for item in observation.alternativas if item.classe == "ESTAI"), None)
+    if primary is None:
+        raise ValueError("Guy observation has no ESTAI alternative")
+    reported_context = attributes.get("contexto", "unknown")
+    if reported_context not in {"operational", "legend", "unknown"}:
+        raise ValueError(f"Unknown guy context: {reported_context}")
+    return {
+        "id": f"{document_id}:{observation.id}",
+        "method_id": GUY_METHOD_ID,
+        "document_id": document_id,
+        "page": observation.fonte.pagina_numero,
+        "layer": observation.fonte.camada,
+        "family": attributes["familia_inventario"],
+        "class_id": primary.classe,
+        "bbox": bounded_bbox,
+        "trace": [
+            [float(point.x), float(point.y)] for point in observation.geometria.pontos_normalizados
+        ],
+        "score": float(observation.score_bruto) if observation.score_bruto is not None else None,
+        "situation": observation.situacao.value if observation.situacao is not None else None,
+        "quantity": None,
+        "association": None,
+        "context": "operational" if reported_context == "unknown" else reported_context,
+        "review_required": True,
+        "provenance": {
+            "observation_id": observation.id,
+            "variant_graphic": attributes.get("variante_grafica"),
+            "possible_references": attributes.get("referencias_possiveis"),
+            "possible_supports": attributes.get("suportes_possiveis"),
+            "components": attributes.get("componentes"),
+            "mechanical_link": attributes.get("vinculo"),
+            "electrical_connectivity": attributes.get("conectividade_eletrica"),
+            "cardinality": attributes.get("cardinalidade"),
+            "nearby_text": attributes.get("texto_proximo"),
+            "reported_context": reported_context,
+            "alternatives": [
+                {"class_id": item.classe, "subtype": item.subtipo}
+                for item in observation.alternativas
+            ],
+            "primitive_ids": [item.indice for item in observation.primitivas],
+            "raw_component_bbox": raw_bbox,
+            "bbox_clipped": bounded_bbox != raw_bbox,
+            "score_kind": "raw; not calibrated probability",
+        },
+    }
+
+
 def infer_pdf(
-    source: Path, document_id: str, *, include_transformers: bool = False
+    source: Path,
+    document_id: str,
+    *,
+    include_transformers: bool = False,
+    include_guys: bool = False,
 ) -> tuple[Record, list[Record], list[Record]]:
     """Infer all base pages with only source path and opaque document identity.
 
@@ -307,6 +396,53 @@ def infer_pdf(
                             },
                         )
                     )
+                if include_guys:
+                    guy_started = perf_counter()
+                    guy_execution: Record = {
+                        "document_id": document_id,
+                        "page": number,
+                        "layer": "base",
+                        "method_id": GUY_METHOD_ID,
+                        "status": "executed",
+                        "reason": None,
+                    }
+                    try:
+                        if page is None:
+                            raise ValueError("PDF page unavailable to guy detector")
+                        observed_guys = pymupdf_guys.observar_estais(
+                            page,
+                            documento_id=document_id,
+                            documento_sha256=before["sha256"],
+                            pagina_numero=number,
+                        )
+                        guy_predictions = [
+                            _guy_prediction(item, document_id) for item in observed_guys.observacoes
+                        ]
+                        predictions.extend(guy_predictions)
+                        guy_execution["prediction_count"] = len(guy_predictions)
+                        guy_execution["signature"] = observed_guys.perfil.assinatura()
+                    except Exception as error:
+                        message = f"{type(error).__name__}: {error}"
+                        guy_execution.update(status="failed", reason=message)
+                        page_manifest.update(status="failed", reason=message)
+                        manifest["failures"].append(
+                            {"page": number, "method_id": GUY_METHOD_ID, "reason": message}
+                        )
+                        manifest["status"] = "failed"
+                    guy_execution["seconds"] = perf_counter() - guy_started
+                    executions.extend(
+                        (
+                            guy_execution,
+                            {
+                                "document_id": document_id,
+                                "page": number,
+                                "layer": "annotation",
+                                "method_id": GUY_METHOD_ID,
+                                "status": "not_applicable",
+                                "reason": "E06 vector detector supports the base layer only",
+                            },
+                        )
+                    )
                 manifest["pages"].append(page_manifest)
     except Exception as error:
         manifest["status"] = "failed"
@@ -337,7 +473,12 @@ def infer_pdf(
 
 
 def _run(
-    sources: list[tuple[Path, str]], output: Path, *, mode: str, include_transformers: bool = False
+    sources: list[tuple[Path, str]],
+    output: Path,
+    *,
+    mode: str,
+    include_transformers: bool = False,
+    include_guys: bool = False,
 ) -> Record:
     output = output.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -351,6 +492,7 @@ def _run(
         "methods": [
             method_metadata(),
             *([transformer_method_metadata()] if include_transformers else []),
+            *([guy_method_metadata()] if include_guys else []),
         ],
         "documents": [],
         "predictions": [],
@@ -366,15 +508,20 @@ def _run(
         "reference_access": "inference accepts only PDF path and opaque document id",
         "limitations": [
             "Methods sharing PyMuPDF vector drawings are correlated; agreement is not probability."
-            if include_transformers
+            if include_transformers or include_guys
             else "One real visual method only; no independent detector gain claimed."
         ],
     }
     for source, document_id in sources:
         try:
             document, items, executions = (
-                infer_pdf(source, document_id, include_transformers=True)
-                if include_transformers
+                infer_pdf(
+                    source,
+                    document_id,
+                    include_transformers=include_transformers,
+                    include_guys=include_guys,
+                )
+                if include_transformers or include_guys
                 else infer_pdf(source, document_id)
             )
         except OSError as error:
@@ -431,7 +578,9 @@ def _run(
     return manifest
 
 
-def run_examples(root: Path, output: Path, *, include_transformers: bool = False) -> Record:
+def run_examples(
+    root: Path, output: Path, *, include_transformers: bool = False, include_guys: bool = False
+) -> Record:
     """Discover every recursive PDF, including .PDF, without collapsing equal copies."""
     root = root.resolve()
     sources = (
@@ -447,7 +596,13 @@ def run_examples(root: Path, output: Path, *, include_transformers: bool = False
         else []
     )
     named = [(path, "example:" + path.relative_to(root).as_posix()) for path in sources]
-    manifest = _run(named, output, mode="examples", include_transformers=include_transformers)
+    manifest = _run(
+        named,
+        output,
+        mode="examples",
+        include_transformers=include_transformers,
+        include_guys=include_guys,
+    )
     manifest["discovery_root"] = str(root)
     manifest["discovery_root_exists"] = root.is_dir()
     manifest["development_only"] = True
@@ -455,7 +610,9 @@ def run_examples(root: Path, output: Path, *, include_transformers: bool = False
     return manifest
 
 
-def run_synthetic(output: Path, *, include_transformers: bool = False) -> Record:
+def run_synthetic(
+    output: Path, *, include_transformers: bool = False, include_guys: bool = False
+) -> Record:
     """Materialize fixtures in a separate process; load labels only after inference."""
     output = output.resolve()
     corpus = output / "corpus"
@@ -474,7 +631,11 @@ def run_synthetic(output: Path, *, include_transformers: bool = False) -> Record
     )
     sources = [(path, path.stem) for path in sorted(corpus.glob("*.pdf"))]
     manifest = _run(
-        sources, output, mode="synthetic-development", include_transformers=include_transformers
+        sources,
+        output,
+        mode="synthetic-development",
+        include_transformers=include_transformers,
+        include_guys=include_guys,
     )
     # Deliberate phase boundary. The original prediction artifact already exists.
     predictions = json.loads((output / "predictions.json").read_text(encoding="utf-8"))
