@@ -16,11 +16,12 @@ from typing import Any
 import pymupdf
 
 from scripts.symbol_benchmark_evaluator import PROTOCOL, evaluate
-from zeny_project_handler.adapters.analysis import pymupdf_symbols
+from zeny_project_handler.adapters.analysis import pymupdf_symbols, pymupdf_transformers
 from zeny_project_handler.adapters.analysis.pymupdf_analyzer import PyMuPdfDocumentAnalyzer
 
 ROOT = Path(__file__).resolve().parents[1]
 METHOD_ID = "legacy-vector-symbols"
+TRANSFORMER_METHOD_ID = "transformer-vector-shapes"
 CLASS_FAMILY = {
     "ATERRAMENTO": "family-f02-19",
     "PARA_RAIOS_MT": "family-f02-21",
@@ -59,6 +60,22 @@ def method_metadata() -> Record:
         "configuration": "unmodified legacy defaults; raw constant score 0.88",
         "family_mapping": CLASS_FAMILY,
         "mapping_limitation": "benchmark taxonomy mapping, not normative equivalence",
+    }
+
+
+def transformer_method_metadata() -> Record:
+    """Describe the opt-in E05 method separately from the E02 baseline."""
+    profile = pymupdf_transformers.perfil_transformadores()
+    return {
+        "id": TRANSFORMER_METHOD_ID,
+        "version": profile.versao,
+        "algorithm_family": profile.familia,
+        "shared_sources": list(profile.fontes_compartilhadas),
+        "supported_classes": list(profile.classes_suportadas),
+        "supported_layers": list(profile.camadas_suportadas),
+        "source_sha256_lf": _text_sha256(Path(pymupdf_transformers.__file__)),
+        "configuration": "E05 visual vector shapes; raw score is not calibrated probability",
+        "family_mapping": "per-observation familia_inventario; alternatives retained",
     }
 
 
@@ -115,7 +132,60 @@ def _prediction(candidate: Any, document_id: str) -> Record:
     }
 
 
-def infer_pdf(source: Path, document_id: str) -> tuple[Record, list[Record], list[Record]]:
+def _transformer_prediction(observation: Any, document_id: str) -> Record:
+    """Project one E03 observation into the frozen E02 evaluator schema."""
+    attributes = dict(observation.atributos)
+    points = [
+        (float(point.x), float(point.y)) for point in observation.geometria.pontos_normalizados
+    ]
+    xs, ys = [point[0] for point in points], [point[1] for point in points]
+    alternatives = [
+        {"class_id": item.classe, "subtype": item.subtipo} for item in observation.alternativas
+    ]
+    primary = next((item for item in observation.alternativas if item.classe), None)
+    if primary is None:
+        raise ValueError("Transformer observation has no class alternative")
+    reported_context = attributes.get("contexto", "operational")
+    if reported_context not in {"operational", "legend", "unknown"}:
+        raise ValueError(f"Unknown transformer context: {reported_context}")
+    # The E02 evaluator has no unknown-context bucket. Keep a reviewable
+    # candidate in its operational denominator rather than silently drop it.
+    context = "operational" if reported_context == "unknown" else reported_context
+    return {
+        "id": f"{document_id}:{observation.id}",
+        "method_id": TRANSFORMER_METHOD_ID,
+        "document_id": document_id,
+        "page": observation.fonte.pagina_numero,
+        "layer": observation.fonte.camada,
+        "family": attributes["familia_inventario"],
+        "class_id": primary.classe,
+        "bbox": [min(xs), min(ys), max(xs), max(ys)],
+        "score": float(observation.score_bruto) if observation.score_bruto is not None else None,
+        "situation": observation.situacao.value if observation.situacao is not None else None,
+        "quantity": None,
+        "association": None,
+        "context": context,
+        "review_required": True,
+        "provenance": {
+            "observation_id": observation.id,
+            "variant_graphic": attributes.get("variante_grafica"),
+            "possible_references": attributes.get("referencias_possiveis"),
+            "possible_families": attributes.get("familias_possiveis"),
+            "components": attributes.get("componentes"),
+            "cardinality": attributes.get("cardinalidade"),
+            "nearby_text": attributes.get("texto_proximo"),
+            "text_conflict": attributes.get("conflito_textual"),
+            "reported_context": reported_context,
+            "alternatives": alternatives,
+            "primitive_ids": [item.indice for item in observation.primitivas],
+            "score_kind": "raw; not calibrated probability",
+        },
+    }
+
+
+def infer_pdf(
+    source: Path, document_id: str, *, include_transformers: bool = False
+) -> tuple[Record, list[Record], list[Record]]:
     """Infer all base pages with only source path and opaque document identity.
 
     No reference, expected class, reviewer ROI or expected count enters this API.
@@ -147,6 +217,7 @@ def infer_pdf(source: Path, document_id: str) -> tuple[Record, list[Record], lis
             manifest["page_count"] = len(document)
             for number in range(1, len(document) + 1):
                 page_started = perf_counter()
+                page = None
                 page_manifest: Record = {"number": number, "status": "executed"}
                 base: Record = {
                     "document_id": document_id,
@@ -188,6 +259,54 @@ def infer_pdf(source: Path, document_id: str) -> tuple[Record, list[Record], lis
                         },
                     )
                 )
+                if include_transformers:
+                    transformer_started = perf_counter()
+                    transformer_execution: Record = {
+                        "document_id": document_id,
+                        "page": number,
+                        "layer": "base",
+                        "method_id": TRANSFORMER_METHOD_ID,
+                        "status": "executed",
+                        "reason": None,
+                    }
+                    try:
+                        if page is None:
+                            raise ValueError("PDF page unavailable to transformer detector")
+                        observed = pymupdf_transformers.observar_transformadores(
+                            page,
+                            documento_id=document_id,
+                            documento_sha256=before["sha256"],
+                            pagina_numero=number,
+                        )
+                        transformer_predictions = [
+                            _transformer_prediction(item, document_id)
+                            for item in observed.observacoes
+                        ]
+                        predictions.extend(transformer_predictions)
+                        transformer_execution["prediction_count"] = len(transformer_predictions)
+                        transformer_execution["signature"] = observed.perfil.assinatura()
+                    except Exception as error:
+                        message = f"{type(error).__name__}: {error}"
+                        transformer_execution.update(status="failed", reason=message)
+                        page_manifest.update(status="failed", reason=message)
+                        manifest["failures"].append(
+                            {"page": number, "method_id": TRANSFORMER_METHOD_ID, "reason": message}
+                        )
+                        manifest["status"] = "failed"
+                    transformer_execution["seconds"] = perf_counter() - transformer_started
+                    executions.extend(
+                        (
+                            transformer_execution,
+                            {
+                                "document_id": document_id,
+                                "page": number,
+                                "layer": "annotation",
+                                "method_id": TRANSFORMER_METHOD_ID,
+                                "status": "not_applicable",
+                                "reason": "E05 vector detector supports the base layer only",
+                            },
+                        )
+                    )
                 manifest["pages"].append(page_manifest)
     except Exception as error:
         manifest["status"] = "failed"
@@ -217,7 +336,9 @@ def infer_pdf(source: Path, document_id: str) -> tuple[Record, list[Record], lis
     return manifest, predictions, executions
 
 
-def _run(sources: list[tuple[Path, str]], output: Path, *, mode: str) -> Record:
+def _run(
+    sources: list[tuple[Path, str]], output: Path, *, mode: str, include_transformers: bool = False
+) -> Record:
     output = output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     protected = {source.resolve() for source, _ in sources}
@@ -227,7 +348,10 @@ def _run(sources: list[tuple[Path, str]], output: Path, *, mode: str) -> Record:
         raise ValueError("Output must not overwrite source PDF")
     predictions: Record = {
         "schema_version": 1,
-        "methods": [method_metadata()],
+        "methods": [
+            method_metadata(),
+            *([transformer_method_metadata()] if include_transformers else []),
+        ],
         "documents": [],
         "predictions": [],
         "executions": [],
@@ -240,11 +364,19 @@ def _run(sources: list[tuple[Path, str]], output: Path, *, mode: str) -> Record:
         "completed": False,
         "visual_review": "not performed by runner; independent image review required",
         "reference_access": "inference accepts only PDF path and opaque document id",
-        "limitations": ["One real visual method only; no independent detector gain claimed."],
+        "limitations": [
+            "Methods sharing PyMuPDF vector drawings are correlated; agreement is not probability."
+            if include_transformers
+            else "One real visual method only; no independent detector gain claimed."
+        ],
     }
     for source, document_id in sources:
         try:
-            document, items, executions = infer_pdf(source, document_id)
+            document, items, executions = (
+                infer_pdf(source, document_id, include_transformers=True)
+                if include_transformers
+                else infer_pdf(source, document_id)
+            )
         except OSError as error:
             # A removed/unreadable file can fail before opening or hashing. Preserve
             # the failed inventory entry and still attempt every subsequent source.
@@ -299,7 +431,7 @@ def _run(sources: list[tuple[Path, str]], output: Path, *, mode: str) -> Record:
     return manifest
 
 
-def run_examples(root: Path, output: Path) -> Record:
+def run_examples(root: Path, output: Path, *, include_transformers: bool = False) -> Record:
     """Discover every recursive PDF, including .PDF, without collapsing equal copies."""
     root = root.resolve()
     sources = (
@@ -315,7 +447,7 @@ def run_examples(root: Path, output: Path) -> Record:
         else []
     )
     named = [(path, "example:" + path.relative_to(root).as_posix()) for path in sources]
-    manifest = _run(named, output, mode="examples")
+    manifest = _run(named, output, mode="examples", include_transformers=include_transformers)
     manifest["discovery_root"] = str(root)
     manifest["discovery_root_exists"] = root.is_dir()
     manifest["development_only"] = True
@@ -323,7 +455,7 @@ def run_examples(root: Path, output: Path) -> Record:
     return manifest
 
 
-def run_synthetic(output: Path) -> Record:
+def run_synthetic(output: Path, *, include_transformers: bool = False) -> Record:
     """Materialize fixtures in a separate process; load labels only after inference."""
     output = output.resolve()
     corpus = output / "corpus"
@@ -341,7 +473,9 @@ def run_synthetic(output: Path) -> Record:
         [sys.executable, "-c", construction, str(corpus), str(reference_path)], check=True, cwd=ROOT
     )
     sources = [(path, path.stem) for path in sorted(corpus.glob("*.pdf"))]
-    manifest = _run(sources, output, mode="synthetic-development")
+    manifest = _run(
+        sources, output, mode="synthetic-development", include_transformers=include_transformers
+    )
     # Deliberate phase boundary. The original prediction artifact already exists.
     predictions = json.loads((output / "predictions.json").read_text(encoding="utf-8"))
     reference = json.loads(reference_path.read_text(encoding="utf-8"))

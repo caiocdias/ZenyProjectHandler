@@ -573,6 +573,39 @@ def test_runner_page_failure_preserves_manifest_and_attempts_following_pages(
     ]
 
 
+def test_transformer_opt_in_keeps_legacy_candidates_and_separate_execution(tmp_path: Path) -> None:
+    from scripts.symbol_benchmark_runner import (
+        METHOD_ID,
+        TRANSFORMER_METHOD_ID,
+        infer_pdf,
+    )
+
+    corpus = build_corpus(tmp_path / "corpus")
+    source = Path(corpus["documents"][0]["path"])
+    legacy_document, legacy_predictions, legacy_executions = infer_pdf(source, "opaque-id")
+    combined_document, combined_predictions, combined_executions = infer_pdf(
+        source, "opaque-id", include_transformers=True
+    )
+    assert legacy_document["source_before"] == combined_document["source_before"]
+    assert [item for item in combined_predictions if item["method_id"] == METHOD_ID] == (
+        legacy_predictions
+    )
+
+    def without_timing(items: list[Record]) -> list[Record]:
+        return [{key: value for key, value in item.items() if key != "seconds"} for item in items]
+
+    assert without_timing(
+        [item for item in combined_executions if item["method_id"] == METHOD_ID]
+    ) == without_timing(legacy_executions)
+    assert (
+        len([item for item in combined_executions if item["method_id"] == TRANSFORMER_METHOD_ID])
+        == 4
+    )
+    assert all(
+        item["method_id"] in {METHOD_ID, TRANSFORMER_METHOD_ID} for item in combined_predictions
+    )
+
+
 def test_empty_examples_are_explicit_and_do_not_claim_completion(tmp_path: Path) -> None:
     from scripts.symbol_benchmark_runner import run_examples
 

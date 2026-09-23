@@ -369,7 +369,7 @@ E16 executa V-G; não repetir toda a suíte após mera edição do roadmap.
 | E02 | Benchmark de cobertura e complementaridade | #concluida | E01 | Entregar avaliador independente e baseline reproduzível de símbolos, com reserva e métricas de união. |
 | E03 | Contrato de observações e registro de métodos | #concluida | E01, E02 | Introduzir contrato interno aditivo para observações de símbolos, cobertura e estados de cada método. |
 | E04 | Robustez vetorial de aterramento e para-raios | #concluida | E03 | Melhorar o detector existente para primitives fragmentadas/agrupadas, escala e estilos, sem ampliar sua lista de classes. |
-| E05 | Reconhecimento visual de transformadores | #pendente | E04 | Detectar variantes gráficas de transformador e conjuntos sem depender da existência de um literal reconhecido. |
+| E05 | Reconhecimento visual de transformadores | #concluida | E04 | Detectar variantes gráficas de transformador e conjuntos sem depender da existência de um literal reconhecido. |
 | E06 | Reconhecimento de estais e ancoragens | #pendente | E04 | Reconhecer as variantes de estai e seus vínculos geométricos sem confundi-las com condutores. |
 | E07 | Pacotes extensíveis das demais famílias | #pendente | E04, E05, E06 | Entregar representação declarativa e pacotes de reconhecimento para as famílias restantes do inventário, com cobertura auditável. |
 | E08 | Detector raster por templates e Hough | #pendente | E03, E04 | Acrescentar família raster capaz de detectar símbolos sem vetores aproveitáveis. |
@@ -1186,7 +1186,7 @@ ambiguidades registrados para reconhecimento/composição posteriores, sem alter
 E02 ou abrir a reserva antecipadamente.
 
 
-## E05 — Reconhecimento visual de transformadores — #pendente
+## E05 — Reconhecimento visual de transformadores — #concluida
 
 **Objetivo:** Detectar variantes gráficas de transformador e conjuntos sem depender da existência de um literal reconhecido.
 
@@ -1215,13 +1215,18 @@ E02 ou abrir a reserva antecipadamente.
 
 **Critérios de aceite:**
 
-- [ ] Transformadores sem texto geram observações em fixtures de suas variantes cadastradas.
-- [ ] Símbolo composto não vira múltiplos ativos por contagem de componentes.
-- [ ] Texto incompatível fica como alternativa/conflito e não altera o desenho observado.
+- [x] Transformadores sem texto geram observações em fixtures de suas variantes cadastradas.
+- [x] Símbolo composto não vira múltiplos ativos por contagem de componentes.
+- [x] Texto incompatível fica como alternativa/conflito e não altera o desenho observado.
 
 **Validação obrigatória:** V-P e conferência das entregas dos subagentes, com as particularidades acima. V-S, V-N, V-Q, V-B por variante de transformador; incluir casos sem literal, duplicados e em legenda. Os códigos V-* remetem aos comandos completos acima; registrar os comandos efetivamente executados.
 
-**Bloqueios:** Nenhum bloqueio conhecido para iniciar respeitando as dependências. Lacunas de dados/fontes são riscos até impedirem concretamente a execução ou o aceite; nessa ocorrência, registrar causa, evidência, impacto e ação de desbloqueio.
+**Bloqueios:** Nenhum impeditivo remanescente para o escopo vetorial E05: V-S,
+V-N, V-Q, V-B e auditoria V-P vetorial passaram no checkpoint A7. A auditoria
+integral dos PDFs ainda contém um FN comprovado em conteúdo raster, registrado
+para E08; isto limita a cobertura visual do produto e não foi contado como
+acerto E05. Contexto de detalhe, cardinalidade entre desenhos e três casos
+ambíguos permanecem para revisão nas etapas consumidoras.
 
 **Riscos e mitigação:** Confusão de círculos e interpretação de banco: exigir forma/arranjo documentados, mantendo quantidade separada.
 
@@ -1242,7 +1247,190 @@ Ao iniciar, sincronize #em-andamento no índice e detalhe. Implemente somente es
 Não declare sucesso com validação obrigatória falhando ou não executada. Atualize para #concluida somente após todos os critérios; impedimento real exige #bloqueada com causa, evidência, impacto e ação de desbloqueio. Dependência ainda pendente mantém #pendente. Preencha Evidências e handoff com arquivos, decisões, comandos, resultados e limitações. Não crie commit, publique ou implante sem autorização explícita. Termine com resumo conciso de mudanças, validações e pendências.
 ```
 
-**Evidências e handoff:** ainda não executada. Registrar também agentes/papéis, fronteiras de escrita, checkpoint integrado, revisão independente, manifesto V-P e total de PDFs/páginas conferidos/bloqueados. Ao trabalhar, registrar arquivos alterados, versão/configuração, decisões, fontes/fixtures, comandos e resultados, métricas comparadas, limitações e próximo passo.
+**Evidências e handoff — execução iniciada em 22/09/2026:**
+
+- Base `4f68ba5`; Git limpo antes da atualização do roadmap. Nenhum `AGENTS.md`
+  aplicável encontrado. E04 A6 foi conferida: `pymupdf_symbols.py`,
+  `pymupdf_analyzer.py`, `legacy_symbols.py` e seu teste central têm os hashes
+  publicados em E04. O baseline E04 reproduzido antes das mudanças deu
+  **11 TP / 1 FP / 11 FN** em 4 PDFs/6 páginas, sem abrir a reserva E16.
+- Propriedade: A `/root/codigo_transformador`, exclusivo de
+  `adapters/analysis/pymupdf_transformers.py`; B `/root/testes_transformador`,
+  exclusivo de `tests/fixtures/transformers/` e
+  `tests/unit/test_pymupdf_transformers.py`; C `/root/pdfs_transformador`,
+  somente `tmp/e05-simbologia/visual/`, leitura de imagens antes das predições.
+  Coordenador: runner/CLI, benchmark E05, documentação, índice e integração.
+  `pymupdf_symbols.py`/normalizador E04 e `category_analyzers.py` não foram
+  editados. Contrato A→B: `perfil_transformadores()` e
+  `observar_transformadores(...) -> ResultadoMetodoSimbolos` E03.
+- A1 foi rejeitado por V-N (16 falhas/20 aprovações), incluindo observações
+  duplicadas para triângulos ciano e falhas de enrolamentos/conjunto. A2 passou
+  37 testes, mas V-B encontrou **20/29 variantes**, 25 TP / 9 FP / 9 FN:
+  caixas de círculo/X/terminais não cobriam o símbolo composto. A3 congelado
+  em `0895dc5409b15ab6d1d36851aa8c40b35a21d0b0` corrigiu essas caixas;
+  B repetiu **37 passed** com hash estável e IoU ≥0,5 por variante.
+- V-B A3 autoral: `python -m scripts.benchmark_transformers_e05 --output
+  tmp/e05-simbologia/benchmark-a3`, **29/29 variantes**, 34 TP / 0 FP / 0 FN
+  do método E05 em 35 páginas, incluindo controles de legenda, duplicação e
+  círculos negativos. E02 com `--include-transformers`: união **14 TP / 1 FP /
+  8 FN**, ante 11/1/11 de E04; três acertos exclusivos de transformador, sem
+  apagar os 11 acertos legados. Um transformador raster permanece fora do
+  domínio vetorial. A referência autoral é lida somente após persistir
+  predições, sem entrada no detector; reserva opaca intacta.
+- V-S A3: **286 passed**; V-N integrado
+  `test_pymupdf_transformers.py test_benchmark_symbols.py`: **84 passed**;
+  V-Q: Ruff check exit 0, format check **392 arquivos**, mypy **363 arquivos**,
+  exit 0. O runner legado isolado manteve **47 passed**. O launcher `.venv`
+  exigiu execução escalada aprovada pelo auto-review do sandbox, sem instalar
+  dependências. Comandos exatos e gate final serão registrados ao fechar.
+- V-P A3 executou `python -m scripts.benchmark_symbols examples --root
+  examples --include-transformers --output tmp/e05-simbologia/predictions-a3`:
+  **11 PDFs recursivos/11 páginas**, zero falhas, 492 predições (220 legado,
+  272 E05). Manifesto SHA-256 `fcb215997266b15e5de0c9c87932f017d85fcd41e0a56ba856bb72d666202e50`;
+  predições `cb786e4a7fff55d99ee8ef296f25b1b4d769fd4b4b649047b45f48d6e8ff8a34`.
+  C abriu realmente 11 imagens gerais, 44 quadrantes e quatro recortes de
+  origem **antes** das predições; depois abriu 11 mapas e 20 folhas de contato
+  com os 272 recortes. Fontes SHA intactas; 220/220 predições E04 byte a byte
+  idênticas. `tmp/e05-simbologia/visual/review-a3.json` decide cada ID:
+  **20 correspondências gráficas provisórias, 9 duplicatas, 192 FP confirmados,
+  51 ambíguos e ao menos 1 FN visual seguro**. Exemplos são desenvolvimento,
+  não verdade normativa exaustiva. Relatório em
+  `tmp/e05-simbologia/visual/comparison-a3.md`.
+- **A3 rejeitado:** V-P confirmou confusão sistemática com rosa dos ventos,
+  postes/marcadores, círculos vermelhos 4F/4FF e detalhes, além de FN do setor
+  ciano. A/B receberam categorias, sem ROIs privadas, para criar negativos e
+  positivo autorais B2 e corrigir assinatura A4. O método ainda não entra no
+  consumidor patrimonial; `confianca_minima` não recebe scores novos.
+  Nenhuma alegação de sucesso ou homologação neste checkpoint.
+- B2 congelou 41 páginas/42 casos em um PDF autoral (SHA-256
+  `e61c9dbf029e5d04229e3153e1d2e875f7c25a80d6b6011c3e18972a5b635dc4`):
+  29 variantes, duplicação, legenda, conflito textual, círculo com setor ciano,
+  rosa dos ventos, postes e anotações vermelhas. A3 falhou nesse gate com
+  **34 TP / 14 FP / 1 FN**. A4 (`d6d250a7c04c5fb12bba790ee0fccc4f4d8b3b4a`)
+  passou B2 com **35 TP / 0 FP / 0 FN**. B3, congelado em PDF separado de
+  5 páginas/5 casos (SHA-256
+  `b1de1ef50b5caba441efc2f5608654a7690381585d51aaa7ba19ffcf5e57efc7`),
+  acrescentou três negativos de lóbulos/anotação e dois setores ciano vetoriais.
+  B confirmou **48 passed** no V-N A4, sem modificar o PDF B2. O benchmark
+  integrado de ambos os PDFs, `python -m scripts.benchmark_transformers_e05
+  --output tmp/e05-simbologia/benchmark-b3-a4`, passou **29/29 variantes,
+  37 TP / 0 FP / 0 FN**, em 46 páginas. São controles sintéticos de
+  desenvolvimento, não evidência de acurácia real.
+- **A4 também rejeitado em V-P:** inferência de 11 PDFs/11 páginas sem falha,
+  com 220 candidatos legados idênticos e 135 E05. Predições SHA-256
+  `388fb5b413b3d121b7f9e36a07988de5116d58a64efb3fee0ada5e97f62a7cdb`;
+  manifesto `e1d604fb172621e77937152df89b753712091d4ed83f6b1a08928b44a436483d`.
+  C abriu as 12 folhas de contato A4, revisou 24 candidatos novos e reconciliou
+  os 111 objetos idênticos com os recortes já vistos A3: **14 formas plausíveis,
+  117 FP confirmados, 4 ambíguos**, 0 duplicatas E05 comprovadas. A revisão
+  135/135 IDs está em `tmp/e05-simbologia/visual/review-a4.json` (SHA-256
+  `c94e2c3f70cbacd147a236fd9e99cef0680bea4f8cfb9e3401db28556c2f3faf`);
+  a matriz por página, FN e limites em `comparison-a4.md` (SHA-256
+  `e0d67814c90cba8ac8b3c679dc594c383039481e105804f040ba1f5175507dfa`).
+  O FN seguro de círculo com setor ciano pertence a faixas **raster** embutidas:
+  `get_drawings()` não oferece a forma na região. E08 deverá tratar o raster;
+  E05 ainda falha por 117 FP vetoriais reais, independentemente desse limite.
+  A recebeu apenas categorias morfológicas gerais, sem ROI/rótulo de revisão.
+- A5 (`42f3d1fcaa4fda79ac1273a56592bbfdaaf46309`, perfil E03 v2) trocou
+  atalhos por contagem por conectividade de arcos, terminais e leads. B repetiu
+  revisão independente: **48 testes próprios passaram**, hashes do detector e
+  fixtures estáveis. Integração: V-S **286 passed**, V-N combinado **96 passed**
+  após excluir apenas tempo variável de execução da comparação do runner,
+  Ruff check/format **392 arquivos** e mypy **363 arquivos** passaram. V-B
+  autoral B2+B3: **29/29 variantes, 37 TP / 0 FP / 0 FN** em 2 PDFs/46 páginas;
+  E02 sintético com método opt-in: união **14 TP / 1 FP / 8 FN**.
+- V-P A5: `python -m scripts.benchmark_symbols examples --root examples
+  --include-transformers --output tmp/e05-simbologia/predictions-a5`, **11/11
+  PDFs/páginas, zero falhas**, 220 saídas legadas exatas + 20 E05 = 240 na
+  união bruta. Manifesto SHA-256
+  `217a557b89b996b8e2209fa6a3ecd2e9faaf7d1af7fc9a7c580b97ed0cc9f9c2`;
+  predições `b1c95e1d16f719fda3377731660d39d1716ee7d5610fbcbf95f843cd6bb1d7df`.
+  C não reutilizou decisões dos novos IDs: abriu 8 mapas/8 contatos e decidiu
+  **20/20**: 14 formas plausíveis, 3 ambíguas, **3 FP certos**, sem FN vetorial
+  seguro demonstrado; 135 candidatos A4 removidos reconciliados. Revisão
+  `tmp/e05-simbologia/visual/review-a5.json` SHA-256
+  `e1b9c75d6bf8b1d3b2dd6a7e2ce7b59338310653cbb1e1d7f28ca7b32c1a81e6`;
+  relatório `comparison-a5.md` SHA-256
+  `9ed0fd29bc541d5db373f992867a63653247da6086250846754015c9ec5a8f3d`.
+  Os 3 FP são uma causa morfológica no ramo de enrolamentos circulares
+  (fragmento circular/haste e círculos de poste sem espiras). A6/B4 receberam
+  somente essa categoria geral para correção/controle autoral. O FN raster
+  seguro segue separado como limitação E08; V-P A5 **não foi aprovado**.
+- B4 acrescentou um terceiro PDF autoral de 4 páginas/4 casos, SHA-256
+  `e771fa0bf0eb8ed30dd3459df0f02e0cb95b897a733f6d1f7b6541a913e6f878`,
+  com três negativos círculo/haste e um par positivo. A5 já passava esses
+  controles, então eles protegem regressão, mas não reproduzem os FP reais.
+  A6 (`43e091db527bcb1fd2c457ba2c8601d42b66831d60717ea0aaca1e6bf85a14d1`,
+  perfil E03 v3) exigiu circularidade completa, cores coerentes e rejeição de
+  haste perpendicular. V-B B2+B3+B4 passou **29/29, 38 TP / 0 FP / 0 FN** em
+  3 PDFs/50 páginas; V-N integrado **100 passed**, V-S **286 passed**, Ruff
+  check/format e mypy passaram. B confirmou **52 passed** próprios com hash
+  estável. E02 sintético opt-in permaneceu **14 TP / 1 FP / 8 FN**.
+- **A6 rejeitado em V-P:** 11 PDFs/11 páginas, zero falhas, 240 candidatos
+  (220 legados exatos + 20 E05); predições SHA-256
+  `dddb7fd02c0dfebfe053dfcd9070ee5453a4ff7054e05440869519177ef60994`,
+  manifesto `975e8e788b22c5d73622392a78fde0e503def76afc0cf2b8254cad79489074b36`.
+  C reabriu 20/20 novos IDs em 8 contatos: mesmos 20 bboxes/classes/variantes e
+  componentes de A5 apesar dos IDs novos, portanto **14 formas plausíveis,
+  3 ambíguos, 3 FP certos**. Seis âncoras vetoriais pré-predição seguem
+  cobertas; nenhum FN vetorial seguro demonstrado. A7/B5 investigam a
+  distinção geral entre marcas preenchidas de poste/ponto e espiras vazadas,
+  sem normalizador E04 ou ROIs privadas no algoritmo. O FN raster E08 permanece.
+- A7 (`9938265175122057ce6adb9fe65ba77213f467fd5d5d9a1b6736d2f97e202553`,
+  perfil E03 v4) passou a carregar o preenchimento dos caminhos separado do
+  contorno e exigir laços vazados no ramo de enrolamentos circulares. O
+  diagnóstico read-only de A6 mostrou que os três FP eram pares de caminhos
+  `type=fs` preenchidos, embora o contorno fosse escuro; essa propriedade
+  havia sido perdida em `_Round`. B5 congelou um quarto PDF autoral de
+  3 páginas/3 casos, SHA-256
+  `818c5d7da77e916d8a2bf50cdb0fc25e5be8069bb7d8f4013b862c18bf24f486`,
+  com discos preenchidos negativos e laços vazados positivos. B repetiu **55
+  passed** próprios e confirmou hashes estáveis. Integração A7: V-B **29/29
+  variantes, 39 TP / 0 FP / 0 FN** em 4 PDFs/53 páginas; V-N **103 passed**,
+  V-S **286 passed**, Ruff check/format **392 arquivos**, mypy **363 arquivos**;
+  E02 sintético opt-in **14 TP / 1 FP / 8 FN**. V-P inferiu **11 PDFs/11
+  páginas, zero falhas, 237 candidatos**; predições SHA-256
+  `65304c683304aeaa40d733c2b6438abf0edcbfada117ba880f2d26399e86be75`,
+  manifesto `8b2e459bfc5a98fcbf1b97efdea8358d2a7cad92456030d88ed27ebb50fa53aa`.
+  Auditoria visual A7 por C fechada: 17/17 novos IDs reabertos em 8 mapas e
+  8 contatos, além das três posições FP retiradas e das regiões sem saída.
+  A reconciliação provou 220/220 predições legadas idênticas e 11 fontes
+  intactas. Os 17 suportes restantes conservam caixa, classe e componentes
+  de A6; saíram exatamente os três FP certos. Resultado restrito à ocorrência
+  gráfica vetorial: **14 formas plausíveis, 3 ambíguas, 0 FP vetorial certo,
+  0 FN vetorial seguro**; seis âncoras vetoriais da referência inicial seguem
+  cobertas. As 14 formas não são 14 ativos físicos confirmados. Uma forma em
+  quadro de detalhe ainda reporta `operational`; contexto/associação reais
+  exigem revisão. O FN seguro do setor ciano raster continua contabilizado
+  no V-P integral e pertence à infraestrutura E08, não a uma saída E05.
+  Artefatos locais privados: `tmp/e05-simbologia/visual/comparison-a7.md`
+  SHA-256 `1593f48f5e1bfef08f727a4e524d0f0d9b58dfc8818d101e23906833f73f5349`;
+  `review-a7.json` `02477897381b0ea9209edf078b6961b646abc88b4f1de06143db4244c7d76345`;
+  `delta-a7.json` `240c5035d3659ca75fbac8789c87fae45dff3ddfb6e1970bfd2523c46fde1e8c`;
+  `reconcile-a7.json` `f9ddbf4e67f9894d551a3feaa3a0a0a20dde1c7fe43132974ad0b23df7a10638`.
+- **Comandos finais efetivos (todos exit 0):**
+
+  ```powershell
+  .\.venv\Scripts\python.exe -m pytest tests/unit/test_pymupdf_analyzer.py tests/unit/test_pdf_coordinates.py tests/unit/test_pdf_rendering_budget.py
+  .\.venv\Scripts\python.exe -m pytest tests/unit/test_pymupdf_transformers.py tests/unit/test_benchmark_symbols.py
+  .\.venv\Scripts\python.exe -m ruff check .
+  .\.venv\Scripts\python.exe -m ruff format --check .
+  .\.venv\Scripts\python.exe -m mypy
+  .\.venv\Scripts\python.exe -m scripts.benchmark_transformers_e05 --output tmp/e05-simbologia/benchmark-a7
+  .\.venv\Scripts\python.exe -m scripts.benchmark_symbols synthetic --include-transformers --output tmp/e05-simbologia/baseline-a7
+  .\.venv\Scripts\python.exe -m scripts.benchmark_symbols examples --root examples --include-transformers --output tmp/e05-simbologia/predictions-a7
+  ```
+
+  V-S 286 passed; V-N 103 passed; V-Q Ruff check e format 392 arquivos sem
+  diferenças, mypy 363 arquivos sem erros; V-B 29/29 variantes, 39 TP/0 FP/0
+  FN em 4 PDFs autorais/53 páginas; V-P 11 PDFs/11 páginas e 17/17 candidatos
+  E05 inspecionados. O comando E02 sintético mede união 14 TP/1 FP/8 FN
+  contra 11/1/11 E04. Scripts/runner opt-in, detector, fixtures B2–B5 e
+  testes estão no workspace; `pymupdf_symbols.py`, normalizador E04,
+  `category_analyzers.py` e reserva E16 ficaram sem alteração. E05 termina no
+  escopo vetorial; E08 trata o FN raster, e as etapas consumidoras tratam
+  contexto, associação e cardinalidade. Nenhum commit, publicação ou
+  implantação foi feito.
 
 ## E06 — Reconhecimento de estais e ancoragens — #pendente
 

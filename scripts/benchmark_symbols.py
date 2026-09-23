@@ -25,11 +25,17 @@ def main(argv: list[str] | None = None) -> int:
         "synthetic", help="portable development corpus; no examples required"
     )
     synthetic.add_argument("--output", type=Path, required=True)
+    synthetic.add_argument(
+        "--include-transformers", action="store_true", help="include the opt-in E05 method"
+    )
     examples = modes.add_parser(
         "examples", help="all recursive PDFs/pages; independent visual review still required"
     )
     examples.add_argument("--root", type=Path, default=Path("examples"))
     examples.add_argument("--output", type=Path, required=True)
+    examples.add_argument(
+        "--include-transformers", action="store_true", help="include the opt-in E05 method"
+    )
     comparison = modes.add_parser(
         "evaluate", help="compare frozen JSON artifacts without inference"
     )
@@ -38,7 +44,7 @@ def main(argv: list[str] | None = None) -> int:
     comparison.add_argument("--output", type=Path, required=True)
     options = parser.parse_args(argv)
     if options.mode == "synthetic":
-        result = run_synthetic(options.output)
+        result = run_synthetic(options.output, include_transformers=options.include_transformers)
         print(
             json.dumps(
                 {
@@ -49,7 +55,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0 if result["manifest"]["completed"] else 1
     if options.mode == "examples":
-        manifest = run_examples(options.root, options.output)
+        manifest = run_examples(
+            options.root, options.output, include_transformers=options.include_transformers
+        )
         print(
             json.dumps(
                 {
