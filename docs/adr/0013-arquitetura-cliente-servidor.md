@@ -3,8 +3,8 @@
 - Estado: aceita
 - Data: 2026-08-17
 - Atualizada: 2026-08-20
-- Escopo de vigência: arquitetura-alvo da migração descrita em
-  `docs/roadmap-arquitetura-cliente-servidor.md`
+- Escopo de vigência: arquitetura-alvo da migração documentada neste ADR;
+  o roadmap histórico de arquitetura cliente-servidor foi removido do repositório.
 - Relações: preserva as garantias dos ADRs 0001–0012 e é detalhada pelo ADR 0014; substitui, na nova
   fronteira HTTP, a
   referência a PDFs externos por caminho local descrita no ADR 0003 e a noção de ambiente local do

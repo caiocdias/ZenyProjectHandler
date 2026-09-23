@@ -24,6 +24,47 @@ handoffs históricos. Dependência pendente não significa bloqueio. Caso uma fa
 exija mais de uma sessão, decompor a etapa antes de iniciá-la em IDs sufixados estáveis,
 com critérios próprios e ajuste das dependências; não ocultar trabalho restante.
 
+**Decisão de 23/09/2026 — trilhas independentes.** O usuário aceitou que um
+desenho visualmente indistinguível de vários IDs seja apresentado como **uma
+ocorrência com alternativas**, sem escolher um ID exato por adivinhação. Este
+contrato ainda requer implementação e teste nas etapas pertinentes; não
+transforma automaticamente as 344 variantes `pending` de E07 em reconhecidas.
+O [fluxo de curadoria incremental](fluxo-curadoria-incremental-simbologia.md)
+trata PDFs novos de `examples/` em rodadas one-shot independentes, com seu
+próprio prompt e etapas C01–C04. E08–E16 podem avançar usando o snapshot
+verificado disponível, mesmo com E07 `#bloqueada` pelo critério histórico
+de reconhecimento completo. Cada etapa continua obrigada aos próprios gates;
+E16 publicará a cobertura real e as lacunas, sem alegar reconhecimento universal.
+Adicionar PDF não treina automaticamente um modelo nem altera o produto até
+que um pacote/teste revisado seja versionado.
+
+### Handoff da remodelagem do plano — 23/09/2026
+
+Esta edição é documental; nenhuma etapa E08–E16 foi iniciada e nenhum PDF foi
+revalidado por ela. O ponto de partida é o checkpoint E07 documentado adiante:
+21 variantes habilitadas e 344 pendentes; o aceite histórico segue `#bloqueada`.
+A decisão do usuário sobre figuras indistinguíveis virou contrato planejado de
+uma ocorrência com alternativas, a implementar e testar em E12–E14. E07 saiu
+das dependências de E11/E12, sem lhes conceder aceite automático. E16 medirá o
+inventário na versão congelada e publicará as lacunas; não homologará variantes
+pendentes. A curadoria futura tem C01–C04 e prompt one-shot independentes.
+
+Arquivos da decisão: este roadmap,
+[`fluxo-curadoria-incremental-simbologia.md`](fluxo-curadoria-incremental-simbologia.md),
+`examples/README.md` e ADRs 0013/0015. Foram excluídos quatro handoffs órfãos
+de roadmaps removidos: `docs/e01-diagnostico-leitura-rede.md`,
+`docs/diagnostico-rede-1256407599.md`, `docs/e06-marca-texto-situacao.md` e
+`docs/e09-homologacao-integrada.md`; não havia referências ativas a seus
+caminhos. E08 pode iniciar por suas dependências e gates próprios; uma rodada
+C01–C04 pode ocorrer antes ou depois.
+
+Validação desta edição: `git diff --check` saiu com código 0; conferência
+estrutural encontrou 16 estados no índice e 16 detalhes correspondentes,
+quatro etapas C01–C04 e o prompt one-shot; `rg` não encontrou referências
+ativas aos quatro arquivos excluídos. Suítes de código e V-P não foram
+executados, pois esta edição altera somente documentação e não implementa
+os contratos propostos. Cada etapa futura permanece responsável por eles.
+
 ## Contexto confirmado
 
 | Área | Evidência no repositório | Consequência para o plano |
@@ -39,7 +80,7 @@ com critérios próprios e ajuste das dependências; não ocultar trabalho resta
 | Alternativas existentes | `rapid_evidence.py`, `rapid_ocr.py`, `scripts/experiments/`, `requirements-experiments.lock` e handoff E12A | OCR neural é leitor auxiliar, não detector de símbolos; grafo experimental não foi homologado como substituto operacional. |
 | Regressões conhecidas | `tests/unit/test_pymupdf_analyzer.py`, `test_rule_based_interpreter.py`, `test_topology_compliance.py`; `docs/validacao-e08-e09-0.4.0.md` | Preservar negativos de glifos/molduras e símbolos com barras preenchidas. |
 | Aceite histórico | `docs/e15-aceite-integral-segundo-pdf.md` | Êxito do núcleo textual não certifica equipamentos, quantidade de símbolos ou leitura integral. Este roadmap não encerra aquele aceite. |
-| Exemplos | `examples/README.md` | PDFs reais são opcionais, locais e ignorados; gate padrão deve funcionar sem eles. Nenhum conjunto privado obrigatório. |
+| Exemplos | `examples/README.md`, ADR 0005 e `docs/fluxo-curadoria-incremental-simbologia.md` | PDFs reais são opcionais, locais e ignorados; gate padrão deve funcionar sem eles. Curadoria contínua é independente deste roadmap e só persiste em dados/testes revisados. |
 
 Os caminhos abreviados acima são relativos a `src/zeny_project_handler/`, salvo os que
 já começam por `src/`, `docs/`, `scripts/` ou `tests/`. Não foi encontrado `AGENTS.md`
@@ -95,6 +136,9 @@ As interfaces abaixo são propostas, ainda não APIs existentes.
 6. Classificação visual, identidade física, situação, quantidade, associação e catálogo
    têm decisões separadas. Cor cinza/preta não impõe “existente” quando a convenção é
    desconhecida. Classe inequívoca pode coexistir com situação/quantidade pendentes.
+   Se a mesma forma sustentar vários IDs, preservar uma ocorrência com alternativas
+   e a evidência contextual de cada opção; sem discriminante, não escolher ID nem
+   contar o conjunto como múltiplos ativos ou como classe exata reconhecida.
 7. Contexto elétrico é verificador e priorizador, nunca gerador de um símbolo inexistente.
    A regra “deveria haver aterramento” não prova presença. Não detecção também não prova
    ausência física; informar cobertura/avaliabilidade aos provedores de conformidade.
@@ -172,7 +216,7 @@ antes de produzir templates/regras. Nenhum PDF do usuário foi enviado à intern
 
 | Questão | Decisão de planejamento / impacto / responsável |
 |---|---|
-| Cobertura infinita de símbolos | E01 congela famílias e variantes das fontes escolhidas, com versão e totalizadores; símbolos novos seguem como desconhecidos e expansão explícita. Nenhuma classe some do denominador por baixo desempenho. |
+| Cobertura infinita de símbolos | E01 congela famílias e variantes das fontes escolhidas, com versão e totalizadores; símbolos novos seguem como desconhecidos e expansão explícita no fluxo independente de curadoria. Nenhuma classe some do denominador por baixo desempenho. E08–E16 podem usar apenas pacotes habilitados, mantendo pendências visíveis. |
 | Fonte local `SIMBOLOGIA.pdf` | Literal encontrado no código; conteúdo/revisão não comprovados. E01 resolve a correspondência ou marca perfil legado com procedência desconhecida. |
 | Representação de estai e símbolos informativos | Preferir observação semântica separada de item patrimonial; E03 decide o contrato e E13 mapeia categorias sem converter estai em cabo. Mudança pública exige compatibilidade. |
 | Capacidade de dados para treino | Ainda não medida. E11 entrega experimento reprodutível e decisão justificada; rejeitar o neural pode concluir o experimento, mas não a cobertura das famílias que faltarem. |
@@ -217,9 +261,14 @@ E02 implementa os critérios abaixo e congela dados/limiares antes de E04–E11:
   ≥99%, sempre com tamanho da amostra e intervalo. Subconjunto vazio não cumpre essa meta;
   estratos insuficientes permanecem em revisão e não são chamados de homologados para
   automação. Nenhum quórum de detectores é necessário.
-- Cobertura de todas as famílias de E01 tem destino verificável em E07/E13/E14. Registro
-  de “não suportado” é transparente, mas não equivale a reconhecimento concluído. Se faltar
-  uma família do inventário, o aceite integral fica pendente/bloqueado com ação concreta.
+- Toda família de E01 tem destino verificável em E07/E13/E14: reconhecida,
+  alternativa ambígua, informativa ou ainda não suportada. Registro de “não
+  suportado” é transparente e **não** equivale a reconhecimento concluído.
+  Uma família sem destino ou ocultada do denominador impede E16; variantes
+  pendentes declaradas permanecem no backlog do fluxo independente e não
+  bloqueiam a execução ou o aceite deste roadmap por si sós. E16 deve
+  publicar cobertura reconhecida e lacunas com todos os IDs da versão
+  congelada do inventário no denominador (427 no checkpoint atual).
 - Gate padrão sem PDFs privados; fontes intactas, decisões preservadas, API/UI/exportação
   consistentes, execução cancelável e cache versionado. Aprovação deste roadmap não
   certifica projeto elétrico nem substitui revisão de vigência normativa.
@@ -371,16 +420,16 @@ E16 executa V-G; não repetir toda a suíte após mera edição do roadmap.
 | E04 | Robustez vetorial de aterramento e para-raios | #concluida | E03 | Melhorar o detector existente para primitives fragmentadas/agrupadas, escala e estilos, sem ampliar sua lista de classes. |
 | E05 | Reconhecimento visual de transformadores | #concluida | E04 | Detectar variantes gráficas de transformador e conjuntos sem depender da existência de um literal reconhecido. |
 | E06 | Reconhecimento de estais e ancoragens | #concluida | E04 | Reconhecer as variantes de estai e seus vínculos geométricos sem confundi-las com condutores. |
-| E07 | Pacotes extensíveis das demais famílias | #bloqueada | E04, E05, E06 | Entregar representação declarativa e pacotes de reconhecimento para as famílias restantes do inventário, com cobertura auditável. |
+| E07 | Pacotes extensíveis das demais famílias | #bloqueada | E04, E05, E06 | Pacotes auditáveis entregues; reconhecimento integral permanece histórico/pendente e sua expansão segue o fluxo independente, sem travar E08–E16. |
 | E08 | Detector raster por templates e Hough | #pendente | E03, E04 | Acrescentar família raster capaz de detectar símbolos sem vetores aproveitáveis. |
 | E09 | Detector por contornos e grafo de traços | #pendente | E03, E04 | Implementar alternativa estrutural de reconhecimento de formas distinta de correlação de pixels e das heurísticas legadas. |
 | E10 | Adaptação à legenda e símbolos desconhecidos | #pendente | E03, E08 | Usar a legenda do próprio documento como fonte local de templates/semântica e oferecer desconhecidos revisáveis. |
-| E11 | Experimento de detector visual treinável | #pendente | E02, E03, E07 | Medir um detector local aprendido como fonte adicional, com decisão reproduzível de adoção ou rejeição. |
-| E12 | União, validação cruzada e calibração | #pendente | E05, E06, E07, E08, E09, E10, E11 | Entregar reconciliador de símbolos que aproveite exclusivos e resolva duplicatas/conflitos sem quórum. |
+| E11 | Experimento de detector visual treinável | #pendente | E02, E03 | Medir um detector local aprendido como fonte adicional, com decisão reproduzível de adoção ou rejeição; E07 é insumo opcional versionado. |
+| E12 | União, validação cruzada e calibração | #pendente | E05, E06, E08, E09, E10, E11 | Entregar reconciliador de símbolos que aproveite exclusivos e resolva duplicatas/conflitos sem quórum, consumindo apenas pacotes E07 habilitados. |
 | E13 | Associação semântica e promoção por campo | #pendente | E12 | Converter hipóteses reconciliadas em propostas úteis, com associação e promoção coerentes com a evidência. |
 | E14 | Revisão visual, API e exportações | #pendente | E13 | Expor símbolos, métodos, exclusivos e conflitos de modo revisável no cliente e nos arquivos exportados. |
 | E15 | Execução, cache e ativação controlada no servidor | #pendente | E13, E14 | Integrar a composição habilitada ao job do servidor com memória limitada, cancelamento e assinaturas completas. |
-| E16 | Aceite integrado e matriz final de cobertura | #pendente | E15 | Demonstrar a melhoria de cobertura por união e o atendimento integral ao inventário e às regressões, com limites explícitos. |
+| E16 | Aceite integrado e matriz final de cobertura | #pendente | E15 | Demonstrar ganho da união, rastrear todos os IDs E01 e publicar reconhecimento, alternativas e pendências sem alegar cobertura não comprovada. |
 
 A execução das etapas deve usar subagentes conforme a divisão abaixo, por solicitação do usuário em 18/09/2026. Paralelismo entre etapas continua sujeito às dependências; paralelismo dentro de uma etapa segue as responsabilidades e fronteiras de escrita definidas para ela.
 
@@ -1613,9 +1662,16 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
 
 **Validação obrigatória:** V-P e conferência das entregas dos subagentes, com as particularidades acima. V-N, V-Q e V-B para cada pacote; validar esquema, fontes e cobertura contra inventário. E07 só conclui com os pacotes de todo seu escopo entregues, sem contar desconhecido como reconhecimento. Os códigos V-* remetem aos comandos completos acima; registrar os comandos efetivamente executados.
 
-**Bloqueios:** O aceite integral está impedido por 344/365 variantes sem gramática discriminativa e benchmark positivo/negativo, distribuídas por 17 famílias inteiramente pendentes e por variantes restantes de outras dez. A fonte F02 mostra colisões de forma entre famílias e variantes, inclusive figuras idênticas para IDs distintos; atribuição exata exige contexto/alternativas verificáveis. `scripts.audit_symbol_packages --require-complete` retorna 1 com essa contagem; V-P A5 não produziu nenhum candidato E07 real. O cadastro não é reconhecimento. E11/E12 não devem tratar E07 como dependência concluída. Desbloqueio: criar e validar gramáticas/fixtures autorais para as variantes pendentes por ondas, conferir colisões e negativos da fonte F02, repetir o validador independente Draft 2020-12, V-B por pacote, V-P integral e V-N/V-Q no checkpoint final; só então reavaliar o aceite.
+**Bloqueios:** O aceite integral original de E07 está impedido por 344/365 variantes sem gramática discriminativa e benchmark positivo/negativo, distribuídas por 17 famílias inteiramente pendentes e por variantes restantes de outras dez. A fonte F02 mostra colisões de forma entre famílias e variantes, inclusive figuras idênticas para IDs distintos; atribuição exata exige contexto/alternativas verificáveis. `scripts.audit_symbol_packages --require-complete` retorna 1 com essa contagem; V-P A5 não produziu nenhum candidato E07 real. O cadastro não é reconhecimento. **Este bloqueio histórico não é dependência de E08–E16:** E11/E12 podem consumir somente o snapshot habilitado/verificado, com pendências e alternativas explícitas, e a expansão posterior segue `docs/fluxo-curadoria-incremental-simbologia.md`. Para concluir E07 sob o critério original, criar e validar gramáticas/fixtures autorais para as variantes pendentes por ondas, conferir colisões e negativos da fonte F02, repetir o validador independente Draft 2020-12, V-B por pacote, V-P integral e V-N/V-Q no checkpoint final.
 
 **Riscos e mitigação:** Escopo grande: lotes por família com IDs estáveis e totalizadores impedem encerramento parcial disfarçado.
+
+O prompt E07 abaixo preserva o critério histórico de conclusão integral.
+Para acrescentar PDFs e conhecimento de forma incremental, usar o prompt
+one-shot do fluxo independente, sem reiniciar E01–E16 nem marcar E07 como
+concluída por simples cadastro. A alternativa visual aceita pelo usuário
+precisa de contrato/teste efetivo em E12/E13 antes de ser tratada como
+comportamento entregue.
 
 **Prompt para uma sessão limpa:**
 
@@ -1869,7 +1925,7 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
 **Passos de implementação:**
 
 1. Extrair contornos/esqueleto e primitives locais por fonte, formando grafo de junções, extremidades, ciclos e relações angulares.
-2. Comparar subestruturas/descritores com gramáticas E01/E07, tolerando lacunas limitadas e registrando penalidades.
+2. Comparar subestruturas/descritores com gramáticas E01 e pacotes E07 habilitados, quando houver; tolerar lacunas limitadas e registrar penalidades sem exigir cobertura E07 completa.
 3. Limitar busca combinatória com orçamento explícito; falha/abstenção preservam a observação dos demais.
 4. Medir erros correlacionados quando o grafo reutilizar primitives E04 e ganhos de sua entrada raster independente.
 
@@ -1968,7 +2024,7 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
 
 **Por que agora:** Testa uma família de generalização diferente sem torná-la dependência obrigatória da solução.
 
-**Dependências e paralelismo:** E02, E03, E07. Pode ocorrer em paralelo a E08–E10; treino isolado e sem editar dados/partições congelados.
+**Dependências e paralelismo:** E02, E03. Pode ocorrer em paralelo a E08–E10; pacotes E07 habilitados e verificados são insumo opcional, nunca gate de início. Treino isolado e sem editar dados/partições congelados.
 
 **Subagentes e integração:**
 
@@ -1986,7 +2042,7 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
 
 1. Conferir licença de código/pesos/dados e capacidade de treino/inferência local; registrar arquitetura, seeds, hashes e ambiente.
 2. Treinar com dados autorizados/sintéticos, mantendo ancestrais na mesma partição; não usar a reserva como fonte de augmentation.
-3. Avaliar objetos pequenos, desconhecidos e estilos inéditos, além de complementaridade com E04–E10.
+3. Avaliar objetos pequenos, desconhecidos e estilos inéditos, além de complementaridade com E04–E10; usar somente classes com referência avaliável e publicar estratos sem dado.
 4. Entregar adapter experimental e resultado de adoção por estrato, ou rejeição fundamentada; se faltar dado para executar, registrar bloqueio e ação, sem alegar ensaio concluído.
 
 **Critérios de aceite:**
@@ -2006,7 +2062,7 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
 ```text
 Execute E11 — Experimento de detector visual treinável de docs/roadmap-analise-simbologia.md no Zeny Project Handler, aberto na raiz.
 Leia primeiro as instruções aplicáveis do repositório, o roadmap completo, os arquivos de escopo desta etapa e git status/diff. Preserve alterações preexistentes. Verifique divergências do código e evidências de conclusão das dependências antes de iniciar.
-Dependências: E02, E03, E07. Objetivo: Medir um detector local aprendido como fonte adicional, com decisão reproduzível de adoção ou rejeição.
+Dependências: E02, E03. Pacotes E07 habilitados/verificados são insumo opcional; variantes pendentes não são rótulos de treino. Objetivo: Medir um detector local aprendido como fonte adicional, com decisão reproduzível de adoção ou rejeição.
 Escopo: `scripts/experiments/`, `requirements-experiments.lock`, protocolo E02 e contrato E03; candidato Faster R-CNN/FPN F07, com seleção final justificada.
 Limites: Não usar modelos de linguagem remotos, presumir classes técnicas nos pesos genéricos ou incluir modelo no cliente.
 Aceite específico: Treino/inferência e avaliação foram executados de forma reproduzível e sem vazamento. Há matriz de acertos/erros exclusivos e decisão de integração por ganho, não por popularidade do modelo. Modelo rejeitado permanece fora da composição; rejeição não elimina obrigações de cobertura restantes.
@@ -2026,7 +2082,7 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
 
 **Por que agora:** As saídas independentes e o benchmark permitem avaliar a composição, não apenas motores isolados.
 
-**Dependências e paralelismo:** E05, E06, E07, E08, E09, E10, E11. Integração serial após os handoffs de todos os detectores; E09/E11 podem entregar rejeição experimental válida, nunca falha de execução ocultada.
+**Dependências e paralelismo:** E05, E06, E08, E09, E10, E11. Integração serial após os handoffs desses detectores; consumir snapshot E07 somente dos pacotes habilitados/verificados. E09/E11 podem entregar rejeição experimental válida, nunca falha de execução ocultada.
 
 **Subagentes e integração:**
 
@@ -2043,7 +2099,7 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
 **Passos de implementação:**
 
 1. Implementar união imutável, associação de ocorrências e matriz de apoio/complemento/contradição/abstenção com cobertura por método.
-2. Preservar observações, alternativas incompatíveis e rejeições justificadas; ensaiar WBF somente para caixas compatíveis, comparando com seleção da geometria de origem.
+2. Preservar observações, alternativas incompatíveis e rejeições justificadas. Uma forma indistinguível entre IDs é uma ocorrência com conjunto explícito de alternativas; exigir contexto verificável para escolher ID exato, sem duplicar ativos. Ensaiar WBF somente para caixas compatíveis, comparando com seleção da geometria de origem.
 3. Calibrar decisões por classe/método/estrato em partição própria, modelando correlação e incluindo ramo de candidato exclusivo elegível.
 4. Rodar todos os casos da tabela de política e ablações; congelar composição e thresholds antes do gate reservado.
 
@@ -2053,6 +2109,7 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
 - [ ] Composição preserva os exclusivos válidos e não funde objetos distintos/páginas/camadas.
 - [ ] Score bruto, probabilidade calibrada, suporte e decisão são campos distintos; falta de amostra mantém revisão.
 - [ ] Matriz/ablação mostra contribuição de cada método aplicável; não detecção não vira contradição.
+- [ ] Colisões visuais conhecidas mantêm alternativas na mesma ocorrência até haver discriminante verificável; variante `pending` não vira reconhecida por cadastro ou consenso.
 
 **Validação obrigatória:** V-P e conferência das entregas dos subagentes, com as particularidades acima. V-N, V-Q, V-B completo em desenvolvimento/calibração e regressão `tests/unit/test_method_reconciliation.py`; reserva final permanece lacrada até E16. Os códigos V-* remetem aos comandos completos acima; registrar os comandos efetivamente executados.
 
@@ -2065,10 +2122,10 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
 ```text
 Execute E12 — União, validação cruzada e calibração de docs/roadmap-analise-simbologia.md no Zeny Project Handler, aberto na raiz.
 Leia primeiro as instruções aplicáveis do repositório, o roadmap completo, os arquivos de escopo desta etapa e git status/diff. Preserve alterações preexistentes. Verifique divergências do código e evidências de conclusão das dependências antes de iniciar.
-Dependências: E05, E06, E07, E08, E09, E10, E11. Objetivo: Entregar reconciliador de símbolos que aproveite exclusivos e resolva duplicatas/conflitos sem quórum.
+Dependências: E05, E06, E08, E09, E10, E11. Consuma só o snapshot E07 habilitado/verificado; o fluxo de curadoria incremental é independente. Objetivo: Entregar reconciliador de símbolos que aproveite exclusivos e resolva duplicatas/conflitos sem quórum.
 Escopo: Novo reconciliador de simbologia em `application/` (proposto), E03 e `application/method_reconciliation.py` como contrato documental a preservar.
 Limites: Não exigir unanimidade, fazer média de scores brutos ou reutilizar o filtro de coordenadas de E12B.
-Aceite específico: Todos os casos obrigatórios da política passam, inclusive correto exclusivo e maioria correlacionada errada. Composição preserva os exclusivos válidos e não funde objetos distintos/páginas/camadas. Score bruto, probabilidade calibrada, suporte e decisão são campos distintos; falta de amostra mantém revisão. Matriz/ablação mostra contribuição de cada método aplicável; não detecção não vira contradição.
+Aceite específico: Todos os casos obrigatórios da política passam, inclusive correto exclusivo e maioria correlacionada errada. Composição preserva os exclusivos válidos e não funde objetos distintos/páginas/camadas. IDs visualmente indistinguíveis ficam como alternativas de uma ocorrência até discriminante verificável; `pending` não conta como reconhecimento. Score bruto, probabilidade calibrada, suporte e decisão são campos distintos; falta de amostra mantém revisão. Matriz/ablação mostra contribuição de cada método aplicável; não detecção não vira contradição.
 Validação: V-N, V-Q, V-B completo em desenvolvimento/calibração e regressão `tests/unit/test_method_reconciliation.py`; reserva final permanece lacrada até E16. Consulte a seção de validações do roadmap para os comandos completos; descubra somente os comandos novos indicados e registre-os.
 Delegue a etapa a subagentes com estas frentes: A — Código: reconciliador, associação de hipóteses e política calibrada nos módulos atribuídos. B — Testes: exclusivos, maioria correlacionada errada, silêncio/falha, vizinhos e ablações, com oráculos independentes. C — PDFs: comparar cada método e união com imagens de todas as páginas, identificando candidatos válidos perdidos pela fusão. Coordene assim: Calibração/contratos são fixados pelo coordenador; validador não altera thresholds e preserva a reserva final. Atribua um responsável por arquivo, use ondas conforme a capacidade e entregue contratos/checkpoints estáveis aos consumidores. Você integra e atualiza o roadmap.
 Execute V-P no escopo desta etapa: todos os PDFs recursivos em examples/ e todas as páginas, com manifesto, inspeção real de imagens por IA antes de comparar predições e registro de FP/FN, exclusivos e ambiguidades. Não alegue revisão visual a partir de JSON/OCR apenas; não alimente o algoritmo com a referência do revisor. Em E01 faça o inventário; em E02 construa o runner/baseline; em E03 confira o round-trip. Preserve a reserva sintética até E16; exemplos já inspecionados são desenvolvimento. Registre cobertura/falhas, ausência de exemplos ou de ferramenta de subagentes, sem simular validação concluída.
@@ -2101,9 +2158,9 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
 
 **Passos de implementação:**
 
-1. Conectar resultado E12 à interpretação sem quebrar evidências/documentary readings; mapear todas as famílias E01 para proposta, contexto informativo ou desconhecido.
+1. Conectar resultado E12 à interpretação sem quebrar evidências/documentary readings; mapear todas as famílias E01 para proposta, alternativas pendentes de revisão, contexto informativo ou ainda não suportado, sem converter este último em reconhecimento.
 2. Associar símbolo a suporte/trecho/rotulo considerando documento, página, camada e ambiguidade; separar quantidade de componentes e de ativos.
-3. Aplicar política por campo e revisão técnica; preservar exclusivos elegíveis sem quórum, conflitos e classe conhecida com catálogo pendente.
+3. Aplicar política por campo e revisão técnica; preservar exclusivos elegíveis sem quórum, conflitos e classe conhecida com catálogo pendente. Conjunto de IDs alternativos permanece uma única ocorrência e não promove automaticamente ativo de ID incerto.
 4. Publicar fatos de presença/avaliabilidade somente com origem adequada; distinguir silêncio do detector de ausência física.
 
 **Critérios de aceite:**
@@ -2111,6 +2168,7 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
 - [ ] Símbolo correto exclusivo chega à proposta e pode seguir a política de promoção sem segundo detector.
 - [ ] Estai não vira cabo; texto isolado não prova símbolo; legenda não vira ocorrência de rede.
 - [ ] Quantidade/situação/associação incertas ficam pendentes e não são completadas pelo catálogo.
+- [ ] Alternativas visuais não geram múltiplos ativos nem promoção de ID não comprovado; famílias sem reconhecimento seguem visíveis como pendentes.
 - [ ] Revisão humana e reanálise preservam histórico, vigência e conflitos; conformidade não recebe presença inventada.
 
 **Validação obrigatória:** V-P e conferência das entregas dos subagentes, com as particularidades acima. V-I, V-N, V-Q e V-B semântico; testar persistência/reabertura, pontos próximos, páginas diferentes e revisão base/anotação. Os códigos V-* remetem aos comandos completos acima; registrar os comandos efetivamente executados.
@@ -2127,7 +2185,7 @@ Leia primeiro as instruções aplicáveis do repositório, o roadmap completo, o
 Dependências: E12. Objetivo: Converter hipóteses reconciliadas em propostas úteis, com associação e promoção coerentes com a evidência.
 Escopo: `application/interpretation_pipeline.py`, `automatic_promotion.py`, `analysis_regions.py`, `topology_compliance.py`, `adapters/interpretation/category_analyzers.py`, `relation_rules.py` e domínio.
 Limites: Não inferir equipamento para satisfazer uma norma nem inventar catálogo para classe reconhecida.
-Aceite específico: Símbolo correto exclusivo chega à proposta e pode seguir a política de promoção sem segundo detector. Estai não vira cabo; texto isolado não prova símbolo; legenda não vira ocorrência de rede. Quantidade/situação/associação incertas ficam pendentes e não são completadas pelo catálogo. Revisão humana e reanálise preservam histórico, vigência e conflitos; conformidade não recebe presença inventada.
+Aceite específico: Símbolo correto exclusivo chega à proposta e pode seguir a política de promoção sem segundo detector. Estai não vira cabo; texto isolado não prova símbolo; legenda não vira ocorrência de rede. Alternativas visuais são uma ocorrência pendente, sem múltiplos ativos ou promoção de ID incerto; família não reconhecida permanece visível como pendência. Quantidade/situação/associação incertas ficam pendentes e não são completadas pelo catálogo. Revisão humana e reanálise preservam histórico, vigência e conflitos; conformidade não recebe presença inventada.
 Validação: V-I, V-N, V-Q e V-B semântico; testar persistência/reabertura, pontos próximos, páginas diferentes e revisão base/anotação. Consulte a seção de validações do roadmap para os comandos completos; descubra somente os comandos novos indicados e registre-os.
 Delegue a etapa a subagentes com estas frentes: A — Código: integração semântica, associação e promoção por campo nos módulos acordados. B — Testes: revisão/reanálise, catálogo pendente, estai versus cabo e presença versus não detecção. C — PDFs: conferir em toda a coleção classe, situação, quantidade, suporte e proposta, inclusive exclusivos e pendências. Coordene assim: Coordenador integra promoção/topologia serialmente; testes usam checkpoint único e retornam regressões ao autor do módulo. Atribua um responsável por arquivo, use ondas conforme a capacidade e entregue contratos/checkpoints estáveis aos consumidores. Você integra e atualiza o roadmap.
 Execute V-P no escopo desta etapa: todos os PDFs recursivos em examples/ e todas as páginas, com manifesto, inspeção real de imagens por IA antes de comparar predições e registro de FP/FN, exclusivos e ambiguidades. Não alegue revisão visual a partir de JSON/OCR apenas; não alimente o algoritmo com a referência do revisor. Em E01 faça o inventário; em E02 construa o runner/baseline; em E03 confira o round-trip. Preserve a reserva sintética até E16; exemplos já inspecionados são desenvolvimento. Registre cobertura/falhas, ausência de exemplos ou de ferramenta de subagentes, sem simular validação concluída.
@@ -2161,13 +2219,14 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
 **Passos de implementação:**
 
 1. Projetar campos aditivos de hipóteses/observações, alternativas, cobertura e motivos; respeitar versionamento e compatibilidade cliente/servidor.
-2. Exibir recorte, classe/situação/quantidade, origem e resumo legível de acordo/divergência; permitir inspeção técnica dos motores sem sobrecarregar o fluxo principal.
+2. Exibir recorte, classe/situação/quantidade, alternativas de ID na mesma ocorrência, origem e resumo legível de acordo/divergência; permitir inspeção técnica dos motores sem sobrecarregar o fluxo principal.
 3. Permitir correção/rejeição de símbolo desconhecido ou exclusivo e associação, preservando auditoria e controle de conflito.
 4. Exportar mesmos estados/pendências no XLSX/PDF quando aplicável; não apresentar score bruto como porcentagem de acerto.
 
 **Critérios de aceite:**
 
 - [ ] Exclusivo, conflitante, desconhecido e informativo são distinguíveis e localizáveis na página correta.
+- [ ] A UI e a exportação distinguem alternativa sem ID resolvido de reconhecimento exato e de família ainda não suportada; nenhuma alternativa é contada como ativo adicional.
 - [ ] Correção/rejeição persiste e reabertura/exportação mantém o mesmo resultado.
 - [ ] Clientes compatíveis consomem payload aditivo e o snapshot OpenAPI corresponde ao código.
 
@@ -2187,7 +2246,7 @@ Leia primeiro as instruções aplicáveis do repositório, o roadmap completo, o
 Dependências: E13. Objetivo: Expor símbolos, métodos, exclusivos e conflitos de modo revisável no cliente e nos arquivos exportados.
 Escopo: `src/zeny_project_handler_contracts/review.py`, `src/zeny_project_handler_server/review_api.py`, `src/zeny_project_handler_client/ui/review_panel.py`, `review_gateway.py`, exportações e `docs/api/openapi-v1.json`.
 Limites: Não executar visão computacional no cliente nem transferir decisões em lote por semelhança.
-Aceite específico: Exclusivo, conflitante, desconhecido e informativo são distinguíveis e localizáveis na página correta. Correção/rejeição persiste e reabertura/exportação mantém o mesmo resultado. Clientes compatíveis consomem payload aditivo e o snapshot OpenAPI corresponde ao código.
+Aceite específico: Exclusivo, conflitante, desconhecido e informativo são distinguíveis e localizáveis na página correta. UI e exportação mostram alternativas na mesma ocorrência, sem ID exato inventado nem ativo extra, e separam famílias não suportadas. Correção/rejeição persiste e reabertura/exportação mantém o mesmo resultado. Clientes compatíveis consomem payload aditivo e o snapshot OpenAPI corresponde ao código.
 Validação: V-U, V-O, V-N, V-Q; inspeção manual com fixture de união/exclusivo/conflito em zoom/rotação e conferência das células/exportações. Consulte a seção de validações do roadmap para os comandos completos; descubra somente os comandos novos indicados e registre-os.
 Delegue a etapa a subagentes com estas frentes: A — Código: DTO/API/cliente/exportações por lotes com interfaces acordadas; coordenador integra snapshot OpenAPI. B — Testes: contratos, persistência de revisão, exportação e regressão da UI em arquivos separados. C — PDFs/UI: conferir realces/recortes e correspondência das propostas com todas as páginas e exportações, guardando evidência visual. Coordene assim: Estabilizar DTO antes de implementar consumidores; usar ondas se separar servidor/cliente exigir mais agentes; uma sessão de UI por vez. Atribua um responsável por arquivo, use ondas conforme a capacidade e entregue contratos/checkpoints estáveis aos consumidores. Você integra e atualiza o roadmap.
 Execute V-P no escopo desta etapa: todos os PDFs recursivos em examples/ e todas as páginas, com manifesto, inspeção real de imagens por IA antes de comparar predições e registro de FP/FN, exclusivos e ambiguidades. Não alegue revisão visual a partir de JSON/OCR apenas; não alimente o algoritmo com a referência do revisor. Em E01 faça o inventário; em E02 construa o runner/baseline; em E03 confira o round-trip. Preserve a reserva sintética até E16; exemplos já inspecionados são desenvolvimento. Registre cobertura/falhas, ausência de exemplos ou de ferramenta de subagentes, sem simular validação concluída.
@@ -2261,7 +2320,7 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
 
 ## E16 — Aceite integrado e matriz final de cobertura — #pendente
 
-**Objetivo:** Demonstrar a melhoria de cobertura por união e o atendimento integral ao inventário e às regressões, com limites explícitos.
+**Objetivo:** Demonstrar a melhoria de cobertura por união e auditar integralmente o inventário e as regressões, publicando alcance e lacunas reais.
 
 **Por que agora:** É o gate que distingue algoritmos implementados de melhoria demonstrada ponta a ponta.
 
@@ -2282,17 +2341,18 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
 **Passos de implementação:**
 
 1. Congelar versão/configuração e executar a reserva uma vez para aceite; após falha, registrar correção e criar reserva nova antes de recalibrar.
-2. Publicar matriz por família/estrato e cada método: isolado, união, interseção de controle, composição e ablação, incluindo exclusivos preservados e custo.
+2. Publicar matriz de todos os IDs da versão E01 congelada (427 no checkpoint atual) por família/estrato e cada método: reconhecido exato, alternativa sem ID resolvido, informativo, ainda não suportado e não avaliável; isolado, união, interseção de controle, composição e ablação, com exclusivos preservados, denominadores e custo. Variante pendente permanece pendente mesmo que sua família tenha outra variante reconhecida.
 3. Executar V-G, V-Q e fluxo completo de análise/revisão/exportação/cancelamento; conferir classificação, situação, quantidade e associação separadamente.
-4. Registrar V-P obrigatório de todos os exemplos reais disponíveis; apontar classes/estratos que seguem em revisão e confirmar todos os critérios globais.
+4. Registrar V-P obrigatório de todos os exemplos reais disponíveis; apontar classes/estratos que seguem em revisão e confirmar todos os critérios globais aplicáveis ao snapshot suportado. O backlog de curadoria independente não recebe aceite implícito.
 
 **Critérios de aceite:**
 
-- [ ] Todos os critérios globais e as metas congeladas aplicáveis passam; família não atendida impede aceite integral.
+- [ ] Todos os critérios globais e as metas congeladas aplicáveis ao snapshot suportado passam; todos os IDs do inventário congelado têm destino explícito, inclusive variantes não suportadas, sem declará-las reconhecidas ou homologadas.
 - [ ] União final demonstra recuperação de acertos exclusivos e ganho sobre baseline, com FP e denominadores publicados.
 - [ ] Todos os métodos têm avaliação e decisão de adoção/rejeição; ao menos duas famílias algorítmicas distintas contribuem com acertos exclusivos validados.
 - [ ] Não há unanimidade/quórum escondido; contratos, histórico, jobs e exportações passam nos testes obrigatórios.
 - [ ] Relatório distingue validação sintética, generalização real disponível e automação não homologada por falta de evidência.
+- [ ] Matriz publica contagens e denominadores de reconhecimento exato, alternativas, informativos, pendentes e não avaliáveis por família/variante; o aceite desta integração não encerra E07 histórico nem o fluxo de curadoria.
 
 **Validação obrigatória:** V-P e conferência das entregas dos subagentes, com as particularidades acima. V-B reservado, V-Q, V-G e inspeção manual dos casos obrigatórios da política na UI/exportação. Não concluir se teste obrigatório não foi executado ou meta falhou. Os códigos V-* remetem aos comandos completos acima; registrar os comandos efetivamente executados.
 
@@ -2305,10 +2365,10 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
 ```text
 Execute E16 — Aceite integrado e matriz final de cobertura de docs/roadmap-analise-simbologia.md no Zeny Project Handler, aberto na raiz.
 Leia primeiro as instruções aplicáveis do repositório, o roadmap completo, os arquivos de escopo desta etapa e git status/diff. Preserve alterações preexistentes. Verifique divergências do código e evidências de conclusão das dependências antes de iniciar.
-Dependências: E15. Objetivo: Demonstrar a melhoria de cobertura por união e o atendimento integral ao inventário e às regressões, com limites explícitos.
+Dependências: E15. Objetivo: Demonstrar a melhoria de cobertura por união e auditar todos os IDs da versão E01 congelada (427 no checkpoint atual) e as regressões, publicando alcance e lacunas reais.
 Escopo: Este roadmap, fixtures/avaliador E02, pipeline, API/UI/exportações e handoffs relacionados; novo relatório final em `docs/` (proposto).
 Limites: Não baixar metas, ajustar sobre a reserva ou declarar concluídos aceites históricos de outro escopo.
-Aceite específico: Todos os critérios globais e as metas congeladas aplicáveis passam; família não atendida impede aceite integral. União final demonstra recuperação de acertos exclusivos e ganho sobre baseline, com FP e denominadores publicados. Todos os métodos têm avaliação e decisão de adoção/rejeição; ao menos duas famílias algorítmicas distintas contribuem com acertos exclusivos validados. Não há unanimidade/quórum escondido; contratos, histórico, jobs e exportações passam nos testes obrigatórios. Relatório distingue validação sintética, generalização real disponível e automação não homologada por falta de evidência.
+Aceite específico: Todos os critérios globais e metas congeladas aplicáveis ao snapshot suportado passam. Cada ID da versão E01 congelada (427 no checkpoint atual; recalcular se o inventário crescer) aparece na matriz como reconhecido exato, alternativa sem ID resolvido, informativo, ainda não suportado ou não avaliável, com denominadores; pendência não vira reconhecimento. União final demonstra recuperação de acertos exclusivos e ganho sobre baseline, com FP e denominadores publicados. Todos os métodos têm avaliação e decisão de adoção/rejeição; ao menos duas famílias algorítmicas distintas contribuem com acertos exclusivos validados. Não há unanimidade/quórum escondido; contratos, histórico, jobs e exportações passam nos testes obrigatórios. Relatório distingue validação sintética, generalização real disponível e automação não homologada por falta de evidência; concluir E16 não conclui E07 histórico nem a curadoria independente.
 Validação: V-B reservado, V-Q, V-G e inspeção manual dos casos obrigatórios da política na UI/exportação. Não concluir se teste obrigatório não foi executado ou meta falhou. Consulte a seção de validações do roadmap para os comandos completos; descubra somente os comandos novos indicados e registre-os.
 Delegue a etapa a subagentes com estas frentes: A — Integração: preparar checkpoint/configuração e reproduzir o fluxo completo; nesta frente não ajustar algoritmos sobre a reserva. B — Testes: executar V-Q/V-G/V-B reservado, auditar métricas/ablações e confirmar independência da reserva. C — PDFs: validação final independente de toda a coleção, páginas/camadas e saídas da composição, com cobertura reconciliada ao manifesto. Coordene assim: Coordenador consolida aceite e relatório; correção necessária volta à etapa responsável, recebe novo checkpoint e revalidação antes de fechar o gate. Atribua um responsável por arquivo, use ondas conforme a capacidade e entregue contratos/checkpoints estáveis aos consumidores. Você integra e atualiza o roadmap.
 Execute V-P no escopo desta etapa: todos os PDFs recursivos em examples/ e todas as páginas, com manifesto, inspeção real de imagens por IA antes de comparar predições e registro de FP/FN, exclusivos e ambiguidades. Não alegue revisão visual a partir de JSON/OCR apenas; não alimente o algoritmo com a referência do revisor. Em E01 faça o inventário; em E02 construa o runner/baseline; em E03 confira o round-trip. Preserve a reserva sintética até E16; exemplos já inspecionados são desenvolvimento. Registre cobertura/falhas, ausência de exemplos ou de ferramenta de subagentes, sem simular validação concluída.

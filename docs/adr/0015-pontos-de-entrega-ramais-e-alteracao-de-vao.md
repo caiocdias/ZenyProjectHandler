@@ -2,8 +2,8 @@
 
 - Estado: aceita
 - Data: 2026-09-01
-- Escopo: contrato de domínio para as etapas E04, E05, E06, E07 e E08 de
-  `docs/roadmap-correcao-interpretacao-topologia-ramais.md`
+- Escopo: contrato de domínio das etapas históricas E04–E08 de correção de
+  interpretação, topologia e ramais; o roadmap correspondente foi removido.
 - Relações: preserva os ADRs 0005, 0009, 0011 e 0013
 
 ## Contexto

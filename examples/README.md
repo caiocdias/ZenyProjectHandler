@@ -8,6 +8,12 @@ vazia e esse gate continuará usando apenas fixtures sintéticas versionadas. Ex
 [roadmap de simbologia](../docs/roadmap-analise-simbologia.md) têm um requisito adicional: descobrir
 recursivamente todos os PDFs disponíveis e registrar um manifesto de cobertura por arquivo/página.
 
+Para ampliar a cobertura depois, coloque PDFs em qualquer subpasta de `examples/` e envie em uma
+nova tarefa o [prompt one-shot de curadoria incremental](../docs/fluxo-curadoria-incremental-simbologia.md#prompt-one-shot-para-usar-após-adicionar-pdfs).
+Esse fluxo tem etapas e evidências próprias; ele pode rodar sem aguardar a conclusão do roadmap.
+Adicionar arquivos por si só não treina nem atualiza o detector: o conhecimento duradouro são
+pacotes e testes versionados após revisão visual, fontes e validação.
+
 Para exercitar, sob demanda, todos os PDFs encontrados também em subpastas:
 
 ```powershell
