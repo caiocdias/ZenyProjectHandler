@@ -421,7 +421,7 @@ E16 executa V-G; não repetir toda a suíte após mera edição do roadmap.
 | E05 | Reconhecimento visual de transformadores | #concluida | E04 | Detectar variantes gráficas de transformador e conjuntos sem depender da existência de um literal reconhecido. |
 | E06 | Reconhecimento de estais e ancoragens | #concluida | E04 | Reconhecer as variantes de estai e seus vínculos geométricos sem confundi-las com condutores. |
 | E07 | Pacotes extensíveis das demais famílias | #bloqueada | E04, E05, E06 | Pacotes auditáveis entregues; reconhecimento integral permanece histórico/pendente e sua expansão segue o fluxo independente, sem travar E08–E16. |
-| E08 | Detector raster por templates e Hough | #pendente | E03, E04 | Acrescentar família raster capaz de detectar símbolos sem vetores aproveitáveis. |
+| E08 | Detector raster por templates e Hough | #concluida | E03, E04 | Acrescentar família raster capaz de detectar símbolos sem vetores aproveitáveis. |
 | E09 | Detector por contornos e grafo de traços | #pendente | E03, E04 | Implementar alternativa estrutural de reconhecimento de formas distinta de correlação de pixels e das heurísticas legadas. |
 | E10 | Adaptação à legenda e símbolos desconhecidos | #pendente | E03, E08 | Usar a legenda do próprio documento como fonte local de templates/semântica e oferecer desconhecidos revisáveis. |
 | E11 | Experimento de detector visual treinável | #pendente | E02, E03 | Medir um detector local aprendido como fonte adicional, com decisão reproduzível de adoção ou rejeição; E07 é insumo opcional versionado. |
@@ -1844,7 +1844,7 @@ quando necessário, sem promover §33; então repetir fonte/esquema, V-N/V-Q/V-B
 V-P integral no mesmo snapshot. E11/E12 não devem consumir E07 como concluída.
 Nenhum commit, publicação ou implantação foi feito.
 
-## E08 — Detector raster por templates e Hough — #pendente
+## E08 — Detector raster por templates e Hough — #concluida
 
 **Objetivo:** Acrescentar família raster capaz de detectar símbolos sem vetores aproveitáveis.
 
@@ -1873,9 +1873,9 @@ Nenhum commit, publicação ou implantação foi feito.
 
 **Critérios de aceite:**
 
-- [ ] PDF raster sem vetores produz candidatos corretos que o legado perde.
-- [ ] Símbolo na borda do tile mantém caixa na página e uma hipótese, com observações preservadas.
-- [ ] Variação de DPI/rotação não gera votação independente nem score declarado probabilidade.
+- [x] PDF raster sem vetores produz candidatos corretos que o legado perde.
+- [x] Símbolo na borda do tile mantém caixa na página e uma hipótese, com observações preservadas.
+- [x] Variação de DPI/rotação não gera votação independente nem score declarado probabilidade.
 
 **Validação obrigatória:** V-P e conferência das entregas dos subagentes, com as particularidades acima. V-S, V-N, V-Q, V-B comparando vetor, raster e união; avaliar página vazia, ruído, templates parecidos e saturação de candidatos. Os códigos V-* remetem aos comandos completos acima; registrar os comandos efetivamente executados.
 
@@ -1900,7 +1900,101 @@ Ao iniciar, sincronize #em-andamento no índice e detalhe. Implemente somente es
 Não declare sucesso com validação obrigatória falhando ou não executada. Atualize para #concluida somente após todos os critérios; impedimento real exige #bloqueada com causa, evidência, impacto e ação de desbloqueio. Dependência ainda pendente mantém #pendente. Preencha Evidências e handoff com arquivos, decisões, comandos, resultados e limitações. Não crie commit, publique ou implante sem autorização explícita. Termine com resumo conciso de mudanças, validações e pendências.
 ```
 
-**Evidências e handoff:** ainda não executada. Registrar também agentes/papéis, fronteiras de escrita, checkpoint integrado, revisão independente, manifesto V-P e total de PDFs/páginas conferidos/bloqueados. Ao trabalhar, registrar arquivos alterados, versão/configuração, decisões, fontes/fixtures, comandos e resultados, métricas comparadas, limitações e próximo passo.
+**Evidências e handoff — execução de 23/09/2026, checkpoint A5:**
+
+- Base Git `2ebe388`, `main`, árvore inicialmente limpa; nenhum `AGENTS.md`
+  aplicável. E03 e E04 foram conferidas como `#concluida`, inclusive contrato
+  E03, round-trip e regressão E04. E07 está `#bloqueada` em sua meta histórica,
+  mas não é dependência de E08; nenhum pacote novo foi inventado. Foram lidos
+  roadmap integral, registro E01, E02, escopo e diffs antes da implementação.
+  Reserva sintética `tests/fixtures/symbols/reserve.sealed.zip` não foi aberta
+  (SHA-256 somente: `6874d0585269a0a68397319268076e8e788aff64fc2bc5d776e80efca739be7b`).
+- Propriedade/delegação: A `/root/a_codigo` editou somente
+  `src/zeny_project_handler/adapters/analysis/raster_symbols.py` (A5 SHA-256
+  `568f86cae2785c2a4506fef6c6d467cbe5301ae5dd3e8ef7c2d79995ab8cecbd`);
+  B `/root/b_testes` editou somente `tests/unit/test_raster_symbols.py`
+  (`051b76fb5eee09b402c858021058c195085a187d244e07f261bee1edbb5bc797`);
+  C `/root/c_pdfs` editou somente `tmp/e08-simbologia/visual/` e inspecionou
+  fontes/imagens antes de ver predições. O coordenador editou o runner opt-in,
+  CLI, `tests/unit/test_benchmark_raster.py`, `docs/e08-detector-raster.md`
+  e este roadmap. B recebeu contrato A estável; C aguardou o mesmo checkpoint
+  completo para comparar vetor, raster e união. A revisão A/B independente está
+  em `tmp/e08-simbologia/b/revisao-a5.md`; não houve commit.
+- `raster_symbols.py` versão `e08-raster-3`: varredura completa da página base
+  em tiles sobrepostos, transformação inversa, agrupamento de bordas e
+  escala/rotação com observações preservadas; não depende de caixas vetoriais,
+  OCR ou regiões do revisor. A busca por template e o ensaio Generalized Hough
+  Ballard compartilham raster/templates e portanto não são votos independentes.
+  OpenCV/NumPy não estão na `.venv`; Hough retorna `INDISPONIVEL`, nunca falso
+  recall medido. Scores são similaridade/votos brutos, não probabilidade.
+  Os dois templates embarcados são controles autorais E02 de `ATERRAMENTO` e
+  `PARA_RAIOS_MT`, com hashes no perfil, sem equivalência normativa E01. Os
+  limites de tile, bytes, propostas e candidatos sinalizam `FALHA` se a busca
+  ficar parcial. O runner E02 só ativa raster com `--include-raster`; baseline
+  legado permanece igual, exclusivos entram na união sem quórum.
+- Checkpoints rejeitados: A3 usava uma única âncora e perdeu símbolo com pixel
+  apagado (B reproduziu); A4 corrigiu esse caso, mas V-P A4 terminou 11/11
+  documentos com **1 página falha** (`1251386294.pdf` p1, foto densa,
+  `Limite de candidatos/picos alcançado`, 136 s) e B reproduziu saturação
+  indevida em raster todo preto. A5 aplica o mesmo predicado coarse de 16
+  amostras escuras e 16 claras em máscaras Pillow nativas **antes** de contar
+  propostas. B comparou 5.760 janelas válidas/80 imagens aleatórias contra o
+  predicado Python anterior: zero divergências. A página problemática passou
+  em 65,991 s, `NAO_DETECCAO` completo/0 candidatos; o negativo todo preto
+  também passou, enquanto saturação real com limite baixo ainda gera `FALHA`.
+- **V-S final:** `.\.venv\Scripts\python.exe -m pytest tests/unit/test_pymupdf_analyzer.py tests/unit/test_pdf_coordinates.py tests/unit/test_pdf_rendering_budget.py -q`
+  → 286 passed, exit 0. **V-N final:**
+  `.\.venv\Scripts\python.exe -m pytest tests/unit/test_raster_symbols.py tests/unit/test_benchmark_symbols.py tests/unit/test_benchmark_raster.py -q`
+  → 66 passed, exit 0. **V-Q:** comandos separados
+  `.\.venv\Scripts\python.exe -m ruff check .`, `.\.venv\Scripts\python.exe -m ruff format --check .`,
+  `.\.venv\Scripts\python.exe -m mypy` → exit 0, 407 arquivos formatados,
+  375 fontes sem erro de tipo.
+- **V-B final:** `.\.venv\Scripts\python.exe -m scripts.benchmark_symbols synthetic --output tmp/e08-simbologia/baseline-a5`
+  e `.\.venv\Scripts\python.exe -m scripts.benchmark_symbols synthetic --output tmp/e08-simbologia/benchmark-a5 --include-raster`
+  → exit 0, 4 PDFs/6 páginas/zero falhas. Vetor 11 TP/1 FP/11 FN,
+  template 9 TP/1 FP/13 FN, união bruta 13 TP/9 FP/9 FN. Os dois TP
+  exclusivos do raster (`dev-raster-p1-o00/o01`) estão em PDF sem desenhos
+  vetoriais; o legado os perde. Os 7 FP adicionais de união são caixas
+  quase coincidentes que o avaliador E02 não funde, e há 1 FP de legenda do
+  template. IDs/proveniência de assinatura diferem de A4 pela versão, mas
+  22 predições semânticas ficaram iguais. Hough indisponível não entra como
+  comparação de desempenho observada. Reserva E16 continuou lacrada.
+- **V-P final:** `.\.venv\Scripts\python.exe -m scripts.benchmark_symbols examples --root examples --output tmp/e08-simbologia/vp-raster-a5 --include-raster`
+  → exit 0, `completed=true`, **11 PDFs/11 páginas, zero falhas**, 220
+  candidatos vetoriais, zero template, Hough `INDISPONIVEL` nas 11 bases;
+  união bruta = 220 vetoriais. C congelou `visual/initial-review.md`
+  (`ec8553b9db800b1be6adee3462a29ff0de70cdb1caf00ad4581384e8c7694217`)
+  antes de ler saídas; abriu realmente 66 imagens originais (11 aparência,
+  11 base, 44 quadrantes) e, depois, 23/23 folhas de contato dos 220
+  candidatos. `visual/manifest.json` SHA-256
+  `f0d01918bb5d446dbfcd52d59539e7c48d6489f723551fe1962131501c8526bf`;
+  `visual/reconciliation-a5.md` SHA-256
+  `43a80b9c86c83a633beec67ecfccb5564bdc65451fa63924ac8a74365f31541b`;
+  `visual/checkpoint-summary.json` SHA-256
+  `882628feec7065f4a7a804c38b8e5c18ed4c32c0c469ab9ca476d4ea758f0a88`.
+  Comandos novos C: `.\.venv\Scripts\python.exe tmp/e08-simbologia/visual/render_manifest.py`,
+  `.\.venv\Scripts\python.exe tmp/e08-simbologia/visual/verify_visual.py` e
+  `.\.venv\Scripts\python.exe tmp/e08-simbologia/visual/review_predictions.py tmp/e08-simbologia/vp-raster-a5 --vector-reference tmp/e08-simbologia/vp-vector`
+  → exit 0; `verify_visual.py` reportou
+  `sources=11 pages=11 full_coverage_tiles=44 hashes_ok=true` e
+  `review_predictions.py` `pages=11 predictions=220 contact_sheets=23`;
+  11/11 hashes de fonte coincidem com o runner antes/depois; predições A5
+  SHA-256 `e7acb83c7e9b884cc3db452fd30366c241111ff8a1f822cfd5c96a6f844994b7`.
+  O vetor do mesmo checkpoint reproduziu 220 predições/estados de `vp-vector`;
+  a matriz cobre cada página, método e camada. C localizou FP vetoriais claros
+  em `1232321190` #7, `1250771080` #4, `1251386294` #18 e `1256407599`
+  #4; terra visível sem hipótese raster em `1250771080`, `1250832231` e
+  `1256407599`. Classes/ocorrências sobrepostas e detalhes repetidos ficaram
+  ambíguos, sem TP/FP/FN exatos inventados. Nenhuma folha real é raster puro;
+  todas têm redes vetoriais, embora haja fotos/bitmaps. Assim V-P não comprova
+  sensibilidade em raster real local; o ganho sem vetores é do desenvolvimento
+  sintético V-B, e não há precisão/recall real declarado. OpenCV opcional não
+  foi executado. Os exemplos vistos são desenvolvimento, não reserva cega;
+  a reserva E16 permaneceu lacrada. A inferência A5 somou 552,19 s nos 11 PDFs
+  (máximo 142,92 s em `1250771080`), uma limitação de desempenho para corpus
+  maiores, sem omitir páginas ou atenuar os limites. O pico `tracemalloc` do runner exclui busca
+  raster e memória nativa; tempo inclui a busca completa. Ver também
+  `docs/e08-detector-raster.md`.
 
 ## E09 — Detector por contornos e grafo de traços — #pendente
 

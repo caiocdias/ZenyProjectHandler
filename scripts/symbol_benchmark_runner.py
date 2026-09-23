@@ -8,6 +8,7 @@ import platform
 import subprocess
 import sys
 import tracemalloc
+from decimal import Decimal
 from hashlib import sha256
 from pathlib import Path
 from time import perf_counter
@@ -19,8 +20,10 @@ import zeny_project_handler.adapters.analysis.declarative_symbols as declarative
 import zeny_project_handler.adapters.analysis.pymupdf_guys as pymupdf_guys
 import zeny_project_handler.adapters.analysis.pymupdf_symbols as pymupdf_symbols
 import zeny_project_handler.adapters.analysis.pymupdf_transformers as pymupdf_transformers
+import zeny_project_handler.adapters.analysis.raster_symbols as raster_symbols
 from scripts.symbol_benchmark_evaluator import PROTOCOL, evaluate
 from zeny_project_handler.adapters.analysis.pymupdf_analyzer import PyMuPdfDocumentAnalyzer
+from zeny_project_handler.domain.enums import EstadoMetodoSimbolos
 
 ROOT = Path(__file__).resolve().parents[1]
 METHOD_ID = "legacy-vector-symbols"
@@ -123,6 +126,43 @@ def package_method_metadata(
         "configuration": "E07 vector grammars; pending inventory cells are not detections",
         "family_mapping": "per-observation familia_inventario; no asset promotion",
     }
+
+
+def raster_method_metadata(
+    templates: tuple[raster_symbols.TemplateRasterVerificado, ...],
+    configuration: raster_symbols.ConfiguracaoDetectorRaster,
+) -> list[Record]:
+    """Describe the E08 opt-in methods and their common raster/template origin."""
+    profiles = raster_symbols.perfis_simbolos_raster(
+        templates=templates, configuracao=configuration
+    )
+    return [
+        {
+            "id": profile.metodo_id,
+            "version": profile.versao,
+            "algorithm_family": profile.familia,
+            "shared_sources": list(profile.fontes_compartilhadas),
+            "supported_classes": list(profile.classes_suportadas),
+            "supported_layers": list(profile.camadas_suportadas),
+            "source_sha256_lf": _text_sha256(Path(raster_symbols.__file__)),
+            "signature": profile.assinatura(),
+            "templates": [
+                {"id": item.id, "sha256": item.sha256, "source": item.fonte_referencia}
+                for item in templates
+            ],
+            "configuration": {
+                key: str(value) if isinstance(value, Decimal) else value
+                for key, value in profile.parametros
+            },
+            "score_kind": (
+                "raw generalized Hough votes; not calibrated probability"
+                if profile.metodo_id == "raster-hough-generalizado"
+                else "raw image similarity; not calibrated probability"
+            ),
+            "source_limitation": "Bundled template is an author-owned E02 control, not F02 artwork",
+        }
+        for profile in profiles
+    ]
 
 
 def _environment() -> Record:
@@ -335,6 +375,60 @@ def _package_prediction(observation: Any, document_id: str) -> Record:
     }
 
 
+def _raster_prediction(observation: Any, document_id: str, method_id: str) -> Record:
+    """Project E03 raster evidence into E02 without treating scores as probabilities."""
+    attributes = dict(observation.atributos)
+    points = [
+        (float(point.x), float(point.y)) for point in observation.geometria.pontos_normalizados
+    ]
+    xs, ys = [point[0] for point in points], [point[1] for point in points]
+    primary = next((item for item in observation.alternativas if item.classe), None)
+    if primary is None:
+        raise ValueError("Raster observation has no class alternative")
+    family = CLASS_FAMILY.get(primary.classe)
+    if family is None:
+        raise ValueError(f"No E01 family mapping for raster class {primary.classe}")
+    return {
+        "id": f"{document_id}:{observation.id}",
+        "method_id": method_id,
+        "document_id": document_id,
+        "page": observation.fonte.pagina_numero,
+        "layer": observation.fonte.camada,
+        "family": family,
+        "class_id": primary.classe,
+        "bbox": [min(xs), min(ys), max(xs), max(ys)],
+        "score": float(observation.score_bruto) if observation.score_bruto is not None else None,
+        "situation": observation.situacao.value if observation.situacao is not None else None,
+        "quantity": None,
+        "association": None,
+        "context": "operational",
+        "review_required": True,
+        "provenance": {
+            "observation_id": observation.id,
+            "template_id": observation.template,
+            "raster_sha256": observation.raster_sha256,
+            "source_reference": attributes.get("fonte_referencia"),
+            "template_sha256": attributes.get("template_sha256"),
+            "tile_locations": attributes.get("tiles_concordantes"),
+            "correlated_variants": attributes.get("variantes_correlacionadas"),
+            "reported_context": "unknown; requires independent review",
+            "alternatives": [
+                {
+                    "class_id": item.classe,
+                    "subtype": item.subtipo,
+                    "raw_score": float(item.score_bruto) if item.score_bruto is not None else None,
+                }
+                for item in observation.alternativas
+            ],
+            "score_kind": (
+                "raw generalized Hough votes; not calibrated probability"
+                if method_id == "raster-hough-generalizado"
+                else "raw image similarity; not calibrated probability"
+            ),
+        },
+    }
+
+
 def infer_pdf(
     source: Path,
     document_id: str,
@@ -342,7 +436,10 @@ def infer_pdf(
     include_transformers: bool = False,
     include_guys: bool = False,
     include_packages: bool = False,
+    include_raster: bool = False,
     package_snapshot: tuple[declarative_symbols.Package, ...] | None = None,
+    raster_snapshot: tuple[raster_symbols.TemplateRasterVerificado, ...] | None = None,
+    raster_configuration: raster_symbols.ConfiguracaoDetectorRaster | None = None,
 ) -> tuple[Record, list[Record], list[Record]]:
     """Infer all base pages with only source path and opaque document identity.
 
@@ -352,6 +449,10 @@ def infer_pdf(
     source = source.resolve(strict=True)
     if include_packages and package_snapshot is None:
         package_snapshot = declarative_symbols.carregar_pacotes()
+    if include_raster and raster_snapshot is None:
+        raster_snapshot = raster_symbols.carregar_templates_raster()
+    if include_raster and raster_configuration is None:
+        raster_configuration = raster_symbols.ConfiguracaoDetectorRaster()
     before = _identity(source)
     started = perf_counter()
     own_tracing = not tracemalloc.is_tracing()
@@ -359,6 +460,7 @@ def infer_pdf(
         tracemalloc.start()
     tracemalloc.reset_peak()
     memory_before = tracemalloc.get_traced_memory()[0]
+    python_peak_outside_raster = 0
     manifest: Record = {
         "id": document_id,
         "path": str(source),
@@ -563,12 +665,129 @@ def infer_pdf(
                             },
                         )
                     )
+                if include_raster:
+                    raster_started = perf_counter()
+                    try:
+                        if page is None or raster_snapshot is None or raster_configuration is None:
+                            raise ValueError("PDF page or E08 configuration unavailable")
+                        if own_tracing:
+                            python_peak_outside_raster = max(
+                                python_peak_outside_raster, tracemalloc.get_traced_memory()[1]
+                            )
+                            tracemalloc.stop()
+                        try:
+                            raster_results = raster_symbols.observar_simbolos_raster(
+                                page,
+                                documento_id=document_id,
+                                documento_sha256=before["sha256"],
+                                pagina_numero=number,
+                                templates=raster_snapshot,
+                                configuracao=raster_configuration,
+                            )
+                        finally:
+                            if own_tracing:
+                                tracemalloc.start()
+                                tracemalloc.reset_peak()
+                        raster_page_predictions: list[Record] = []
+                        raster_page_executions: list[Record] = []
+                        raster_page_failures: list[Record] = []
+                        for result in raster_results:
+                            state = result.coberturas[0].estado
+                            status = (
+                                "failed"
+                                if state is EstadoMetodoSimbolos.FALHA
+                                else "not_applicable"
+                                if state
+                                in {
+                                    EstadoMetodoSimbolos.INDISPONIVEL,
+                                    EstadoMetodoSimbolos.FORA_DOMINIO,
+                                    EstadoMetodoSimbolos.ABSTENCAO,
+                                }
+                                else "executed"
+                            )
+                            items = [
+                                _raster_prediction(item, document_id, result.perfil.metodo_id)
+                                for item in result.observacoes
+                            ]
+                            raster_page_predictions.extend(items)
+                            raster_page_executions.extend(
+                                (
+                                    {
+                                        "document_id": document_id,
+                                        "page": number,
+                                        "layer": "base",
+                                        "method_id": result.perfil.metodo_id,
+                                        "status": status,
+                                        "reason": result.coberturas[0].motivo,
+                                        "coverage_state": state.value,
+                                        "prediction_count": len(items),
+                                        "signature": result.perfil.assinatura(),
+                                        "seconds": perf_counter() - raster_started,
+                                    },
+                                    {
+                                        "document_id": document_id,
+                                        "page": number,
+                                        "layer": "annotation",
+                                        "method_id": result.perfil.metodo_id,
+                                        "status": "not_applicable",
+                                        "reason": "E08 raster supports base layer only",
+                                    },
+                                )
+                            )
+                            if status == "failed":
+                                raster_page_failures.append(
+                                    {
+                                        "page": number,
+                                        "method_id": result.perfil.metodo_id,
+                                        "reason": result.coberturas[0].motivo,
+                                    }
+                                )
+                        predictions.extend(raster_page_predictions)
+                        executions.extend(raster_page_executions)
+                        if raster_page_failures:
+                            page_manifest.update(
+                                status="failed", reason=raster_page_failures[0]["reason"]
+                            )
+                            manifest["failures"].extend(raster_page_failures)
+                            manifest["status"] = "failed"
+                    except Exception as error:
+                        message = f"{type(error).__name__}: {error}"
+                        page_manifest.update(status="failed", reason=message)
+                        manifest["failures"].append(
+                            {"page": number, "method_id": "raster", "reason": message}
+                        )
+                        manifest["status"] = "failed"
+                        for metadata in raster_method_metadata(
+                            raster_snapshot or (),
+                            raster_configuration or raster_symbols.ConfiguracaoDetectorRaster(),
+                        ):
+                            executions.extend(
+                                (
+                                    {
+                                        "document_id": document_id,
+                                        "page": number,
+                                        "layer": "base",
+                                        "method_id": metadata["id"],
+                                        "status": "failed",
+                                        "reason": message,
+                                    },
+                                    {
+                                        "document_id": document_id,
+                                        "page": number,
+                                        "layer": "annotation",
+                                        "method_id": metadata["id"],
+                                        "status": "not_applicable",
+                                        "reason": "base layer only",
+                                    },
+                                )
+                            )
                 manifest["pages"].append(page_manifest)
     except Exception as error:
         manifest["status"] = "failed"
         manifest["failures"].append({"page": None, "reason": f"{type(error).__name__}: {error}"})
     finally:
         current, peak = tracemalloc.get_traced_memory()
+        peak = max(peak, python_peak_outside_raster)
         if own_tracing:
             tracemalloc.stop()
         manifest.update(
@@ -577,7 +796,12 @@ def infer_pdf(
                 "python_current_bytes": current,
                 "python_peak_bytes": peak,
                 "python_current_before_bytes": memory_before,
-                "scope": "tracemalloc Python allocations; not process RSS/native MuPDF memory",
+                "scope": (
+                    "tracemalloc Python allocations outside raster scan; raster and native "
+                    "MuPDF/RSS excluded when runner owns tracing"
+                    if include_raster and own_tracing
+                    else "tracemalloc Python allocations; not process RSS/native MuPDF memory"
+                ),
             },
         )
         try:
@@ -600,6 +824,7 @@ def _run(
     include_transformers: bool = False,
     include_guys: bool = False,
     include_packages: bool = False,
+    include_raster: bool = False,
 ) -> Record:
     output = output.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -609,6 +834,8 @@ def _run(
     ):
         raise ValueError("Output must not overwrite source PDF")
     package_snapshot = declarative_symbols.carregar_pacotes() if include_packages else None
+    raster_snapshot = raster_symbols.carregar_templates_raster() if include_raster else None
+    raster_configuration = raster_symbols.ConfiguracaoDetectorRaster() if include_raster else None
     predictions: Record = {
         "schema_version": 1,
         "methods": [
@@ -616,6 +843,11 @@ def _run(
             *([transformer_method_metadata()] if include_transformers else []),
             *([guy_method_metadata()] if include_guys else []),
             *([package_method_metadata(package_snapshot)] if include_packages else []),
+            *(
+                raster_method_metadata(raster_snapshot, raster_configuration)
+                if raster_snapshot is not None and raster_configuration is not None
+                else []
+            ),
         ],
         "documents": [],
         "predictions": [],
@@ -630,8 +862,9 @@ def _run(
         "visual_review": "not performed by runner; independent image review required",
         "reference_access": "inference accepts only PDF path and opaque document id",
         "limitations": [
-            "Methods sharing PyMuPDF vector drawings are correlated; agreement is not probability."
-            if include_transformers or include_guys or include_packages
+            "Methods sharing PyMuPDF vector drawings or raster templates are correlated; "
+            "agreement is not probability."
+            if include_transformers or include_guys or include_packages or include_raster
             else "One real visual method only; no independent detector gain claimed."
         ],
     }
@@ -644,9 +877,12 @@ def _run(
                     include_transformers=include_transformers,
                     include_guys=include_guys,
                     include_packages=include_packages,
+                    include_raster=include_raster,
                     package_snapshot=package_snapshot,
+                    raster_snapshot=raster_snapshot,
+                    raster_configuration=raster_configuration,
                 )
-                if include_transformers or include_guys or include_packages
+                if include_transformers or include_guys or include_packages or include_raster
                 else infer_pdf(source, document_id)
             )
         except OSError as error:
@@ -687,6 +923,17 @@ def _run(
         if not package_configuration_unchanged:
             manifest["failures"] = ["E07 package configuration changed during inference"]
     manifest["package_configuration_unchanged"] = package_configuration_unchanged
+    raster_configuration_unchanged = True
+    if raster_snapshot is not None:
+        try:
+            raster_configuration_unchanged = [
+                (item.id, item.sha256) for item in raster_symbols.carregar_templates_raster()
+            ] == [(item.id, item.sha256) for item in raster_snapshot]
+        except (OSError, ValueError):
+            raster_configuration_unchanged = False
+        if not raster_configuration_unchanged:
+            manifest["failures"].append("E08 raster templates changed during inference")
+        manifest["raster_configuration_unchanged"] = raster_configuration_unchanged
     manifest["counts"] = {
         "pdfs": len(sources),
         "pages_discovered": sum(item.get("page_count") or 0 for item in manifest["documents"]),
@@ -704,6 +951,7 @@ def _run(
         bool(sources)
         and not manifest["counts"]["documents_failed"]
         and package_configuration_unchanged
+        and raster_configuration_unchanged
     )
     manifest["status"] = (
         "completed_inference" if manifest["completed"] else "failed" if sources else "no_examples"
@@ -725,6 +973,7 @@ def run_examples(
     include_transformers: bool = False,
     include_guys: bool = False,
     include_packages: bool = False,
+    include_raster: bool = False,
 ) -> Record:
     """Discover every recursive PDF, including .PDF, without collapsing equal copies."""
     root = root.resolve()
@@ -748,6 +997,7 @@ def run_examples(
         include_transformers=include_transformers,
         include_guys=include_guys,
         include_packages=include_packages,
+        include_raster=include_raster,
     )
     manifest["discovery_root"] = str(root)
     manifest["discovery_root_exists"] = root.is_dir()
@@ -762,6 +1012,7 @@ def run_synthetic(
     include_transformers: bool = False,
     include_guys: bool = False,
     include_packages: bool = False,
+    include_raster: bool = False,
 ) -> Record:
     """Materialize fixtures in a separate process; load labels only after inference."""
     output = output.resolve()
@@ -787,6 +1038,7 @@ def run_synthetic(
         include_transformers=include_transformers,
         include_guys=include_guys,
         include_packages=include_packages,
+        include_raster=include_raster,
     )
     # Deliberate phase boundary. The original prediction artifact already exists.
     predictions = json.loads((output / "predictions.json").read_text(encoding="utf-8"))
