@@ -1,0 +1,514 @@
+{
+  "schema_version": 1,
+  "family_id": "family-f02-16",
+  "profile_id": "profile-cemig-eo-r3",
+  "source_id": "F02",
+  "variants": [
+    {
+      "id": "cemig-eo-r3-s16-v001",
+      "class_code": "CABO_AEREO",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 16,
+        "locator": "§16; página PDF/impressa 16; desenho/linha 1 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Linha contínuo preto",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Linha contínuo preto. Cor/tracejado de linha aérea só tem sentido com continuidade, tensão e contexto de rede; trecho isolado é ambíguo.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Cerca com marcas repetidas, cotas e traços cartográficos",
+          "Texto mencionando estai não prova desenho de estai"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s16-v002",
+      "class_code": "CABO_AEREO",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 16,
+        "locator": "§16; página PDF/impressa 16; desenho/linha 2 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Linha contínuo verde",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Linha contínuo verde. Cor/tracejado de linha aérea só tem sentido com continuidade, tensão e contexto de rede; trecho isolado é ambíguo.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Cerca com marcas repetidas, cotas e traços cartográficos",
+          "Texto mencionando estai não prova desenho de estai"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s16-v003",
+      "class_code": "CABO_AEREO",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 16,
+        "locator": "§16; página PDF/impressa 16; desenho/linha 3 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Linha contínuo roxo",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Linha contínuo roxo. Cor/tracejado de linha aérea só tem sentido com continuidade, tensão e contexto de rede; trecho isolado é ambíguo.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Cerca com marcas repetidas, cotas e traços cartográficos",
+          "Texto mencionando estai não prova desenho de estai"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s16-v004",
+      "class_code": "CABO_AEREO",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 16,
+        "locator": "§16; página PDF/impressa 16; desenho/linha 4 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Linha contínuo vermelho",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Linha contínuo vermelho. Cor/tracejado de linha aérea só tem sentido com continuidade, tensão e contexto de rede; trecho isolado é ambíguo.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Cerca com marcas repetidas, cotas e traços cartográficos",
+          "Texto mencionando estai não prova desenho de estai"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s16-v005",
+      "class_code": "CABO_AEREO",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 16,
+        "locator": "§16; página PDF/impressa 16; desenho/linha 5 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Linha tracejado longo preto",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Linha tracejado longo preto. Cor/tracejado de linha aérea só tem sentido com continuidade, tensão e contexto de rede; trecho isolado é ambíguo.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Cerca com marcas repetidas, cotas e traços cartográficos",
+          "Texto mencionando estai não prova desenho de estai"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s16-v006",
+      "class_code": "CABO_AEREO",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 16,
+        "locator": "§16; página PDF/impressa 16; desenho/linha 6 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Linha tracejado longo verde",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Linha tracejado longo verde. Cor/tracejado de linha aérea só tem sentido com continuidade, tensão e contexto de rede; trecho isolado é ambíguo.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Cerca com marcas repetidas, cotas e traços cartográficos",
+          "Texto mencionando estai não prova desenho de estai"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s16-v007",
+      "class_code": "CABO_AEREO",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 16,
+        "locator": "§16; página PDF/impressa 16; desenho/linha 7 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Linha tracejado longo roxo",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Linha tracejado longo roxo. Cor/tracejado de linha aérea só tem sentido com continuidade, tensão e contexto de rede; trecho isolado é ambíguo.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Cerca com marcas repetidas, cotas e traços cartográficos",
+          "Texto mencionando estai não prova desenho de estai"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s16-v008",
+      "class_code": "CABO_AEREO",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 16,
+        "locator": "§16; página PDF/impressa 16; desenho/linha 8 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Linha tracejado longo vermelho",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Linha tracejado longo vermelho. Cor/tracejado de linha aérea só tem sentido com continuidade, tensão e contexto de rede; trecho isolado é ambíguo.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Cerca com marcas repetidas, cotas e traços cartográficos",
+          "Texto mencionando estai não prova desenho de estai"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s16-v009",
+      "class_code": "CABO_AEREO",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 16,
+        "locator": "§16; página PDF/impressa 16; desenho/linha 9 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Linha tracejado curto preto",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Linha tracejado curto preto. Cor/tracejado de linha aérea só tem sentido com continuidade, tensão e contexto de rede; trecho isolado é ambíguo.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Cerca com marcas repetidas, cotas e traços cartográficos",
+          "Texto mencionando estai não prova desenho de estai"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s16-v010",
+      "class_code": "CABO_AEREO",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 17,
+        "locator": "§16; página PDF/impressa 17; desenho/linha 1 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Linha tracejado curto verde",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Linha tracejado curto verde. Cor/tracejado de linha aérea só tem sentido com continuidade, tensão e contexto de rede; trecho isolado é ambíguo.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Cerca com marcas repetidas, cotas e traços cartográficos",
+          "Texto mencionando estai não prova desenho de estai"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s16-v011",
+      "class_code": "CABO_AEREO",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 17,
+        "locator": "§16; página PDF/impressa 17; desenho/linha 2 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Linha tracejado curto roxo",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Linha tracejado curto roxo. Cor/tracejado de linha aérea só tem sentido com continuidade, tensão e contexto de rede; trecho isolado é ambíguo.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Cerca com marcas repetidas, cotas e traços cartográficos",
+          "Texto mencionando estai não prova desenho de estai"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s16-v012",
+      "class_code": "CABO_AEREO",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 17,
+        "locator": "§16; página PDF/impressa 17; desenho/linha 3 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Linha tracejado curto vermelho",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Linha tracejado curto vermelho. Cor/tracejado de linha aérea só tem sentido com continuidade, tensão e contexto de rede; trecho isolado é ambíguo.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Cerca com marcas repetidas, cotas e traços cartográficos",
+          "Texto mencionando estai não prova desenho de estai"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s16-v013",
+      "class_code": "CABO_AEREO",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 17,
+        "locator": "§16; página PDF/impressa 17; desenho/linha 4 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Linha traço/ponto preto",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Linha traço/ponto preto. Cor/tracejado de linha aérea só tem sentido com continuidade, tensão e contexto de rede; trecho isolado é ambíguo.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Cerca com marcas repetidas, cotas e traços cartográficos",
+          "Texto mencionando estai não prova desenho de estai"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s16-v014",
+      "class_code": "CABO_AEREO",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 17,
+        "locator": "§16; página PDF/impressa 17; desenho/linha 5 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Linha traço/ponto verde",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Linha traço/ponto verde. Cor/tracejado de linha aérea só tem sentido com continuidade, tensão e contexto de rede; trecho isolado é ambíguo.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Cerca com marcas repetidas, cotas e traços cartográficos",
+          "Texto mencionando estai não prova desenho de estai"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s16-v015",
+      "class_code": "CABO_AEREO",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 17,
+        "locator": "§16; página PDF/impressa 17; desenho/linha 6 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Linha traço/ponto roxo",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Linha traço/ponto roxo. Cor/tracejado de linha aérea só tem sentido com continuidade, tensão e contexto de rede; trecho isolado é ambíguo.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Cerca com marcas repetidas, cotas e traços cartográficos",
+          "Texto mencionando estai não prova desenho de estai"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s16-v016",
+      "class_code": "CABO_AEREO",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 17,
+        "locator": "§16; página PDF/impressa 17; desenho/linha 7 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Linha traço/ponto vermelho",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Linha traço/ponto vermelho. Cor/tracejado de linha aérea só tem sentido com continuidade, tensão e contexto de rede; trecho isolado é ambíguo.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Cerca com marcas repetidas, cotas e traços cartográficos",
+          "Texto mencionando estai não prova desenho de estai"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s16-v017",
+      "class_code": "CABO_AEREO",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 17,
+        "locator": "§16; página PDF/impressa 17; desenho/linha 8 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Linha contínua azul",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Linha contínua azul. Cor/tracejado de linha aérea só tem sentido com continuidade, tensão e contexto de rede; trecho isolado é ambíguo.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Cerca com marcas repetidas, cotas e traços cartográficos",
+          "Texto mencionando estai não prova desenho de estai"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s16-v018",
+      "class_code": "CABO_AEREO",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 17,
+        "locator": "§16; página PDF/impressa 17; desenho/linha 9 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Linha contínua preto",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Linha contínua preto. Cor/tracejado de linha aérea só tem sentido com continuidade, tensão e contexto de rede; trecho isolado é ambíguo.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Cerca com marcas repetidas, cotas e traços cartográficos",
+          "Texto mencionando estai não prova desenho de estai"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s16-v019",
+      "class_code": "CABO_AEREO",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 17,
+        "locator": "§16; página PDF/impressa 17; desenho/linha 10 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Linha contínua vermelho",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Linha contínua vermelho. Cor/tracejado de linha aérea só tem sentido com continuidade, tensão e contexto de rede; trecho isolado é ambíguo.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Cerca com marcas repetidas, cotas e traços cartográficos",
+          "Texto mencionando estai não prova desenho de estai"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s16-v020",
+      "class_code": "CABO_AEREO",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 17,
+        "locator": "§16; página PDF/impressa 17; desenho/linha 11 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Linha contínua ciano",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Linha contínua ciano. Cor/tracejado de linha aérea só tem sentido com continuidade, tensão e contexto de rede; trecho isolado é ambíguo.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Cerca com marcas repetidas, cotas e traços cartográficos",
+          "Texto mencionando estai não prova desenho de estai"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s16-v021",
+      "class_code": "CABO_AEREO",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 17,
+        "locator": "§16; página PDF/impressa 17; desenho/linha 12 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Linha contínua cinza",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Linha contínua cinza. Cor/tracejado de linha aérea só tem sentido com continuidade, tensão e contexto de rede; trecho isolado é ambíguo.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Cerca com marcas repetidas, cotas e traços cartográficos",
+          "Texto mencionando estai não prova desenho de estai"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s16-v022",
+      "class_code": "CABO_AEREO",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 17,
+        "locator": "§16; página PDF/impressa 17; desenho/linha 13 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Linha contínua cinza",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Linha contínua cinza. Cor/tracejado de linha aérea só tem sentido com continuidade, tensão e contexto de rede; trecho isolado é ambíguo.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Cerca com marcas repetidas, cotas e traços cartográficos",
+          "Texto mencionando estai não prova desenho de estai"
+        ]
+      }
+    }
+  ]
+}

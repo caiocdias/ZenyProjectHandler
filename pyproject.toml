@@ -45,6 +45,7 @@ zeny-project-handler-server = "zeny_project_handler_server.__main__:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
+"zeny_project_handler.adapters.analysis.symbol_packages" = ["*.json"]
 "zeny_project_handler.adapters.catalog.data" = ["*.json"]
 "zeny_project_handler.adapters.compliance.data" = ["*.json"]
 "zeny_project_handler.adapters.interpretation.data" = ["*.json"]

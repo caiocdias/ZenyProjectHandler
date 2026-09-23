@@ -1,0 +1,376 @@
+{
+  "schema_version": 1,
+  "family_id": "family-f02-23",
+  "profile_id": "profile-cemig-eo-r3",
+  "source_id": "F02",
+  "variants": [
+    {
+      "id": "cemig-eo-r3-s23-v001",
+      "class_code": "CONJUNTO_EO",
+      "role": "operational",
+      "destination": "composite_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 29,
+        "locator": "§23; página PDF/impressa 29; desenho/linha 1 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Conjunto contornado/sombreado cinza com placas e arco",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Conjunto contornado/sombreado cinza com placas e arco. Conjunto sombreado agrega componentes; contorno/label isolados não resolve associação nem cardinalidade.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s23-v002",
+      "class_code": "CONJUNTO_EO",
+      "role": "operational",
+      "destination": "composite_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 29,
+        "locator": "§23; página PDF/impressa 29; desenho/linha 2 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Conjunto contornado/sombreado cinza com EH",
+      "recognition": {
+        "status": "enabled",
+        "grammar": {
+          "kind": "label_in_frame",
+          "label": "EH",
+          "nested_frame": true,
+          "max_span": 72,
+          "inner_fill": "gray",
+          "frame": "rectangle"
+        },
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Mesmo literal em caixa simples sem painel cinza interno não representa o conjunto associado"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s23-v003",
+      "class_code": "CONJUNTO_EO",
+      "role": "operational",
+      "destination": "composite_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 29,
+        "locator": "§23; página PDF/impressa 29; desenho/linha 3 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Conjunto contornado/sombreado cinza com círculo e seta",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Conjunto contornado/sombreado cinza com círculo e seta. Conjunto sombreado agrega componentes; contorno/label isolados não resolve associação nem cardinalidade.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s23-v004",
+      "class_code": "CONJUNTO_EO",
+      "role": "operational",
+      "destination": "composite_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 29,
+        "locator": "§23; página PDF/impressa 29; desenho/linha 4 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Conjunto contornado/sombreado cinza com R",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Conjunto contornado/sombreado cinza com R. Conjunto sombreado agrega componentes; contorno/label isolados não resolve associação nem cardinalidade.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s23-v005",
+      "class_code": "CONJUNTO_EO",
+      "role": "operational",
+      "destination": "composite_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 29,
+        "locator": "§23; página PDF/impressa 29; desenho/linha 5 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Conjunto contornado/sombreado cinza com SF6",
+      "recognition": {
+        "status": "enabled",
+        "grammar": {
+          "kind": "label_in_frame",
+          "label": "SF6",
+          "nested_frame": true,
+          "max_span": 72,
+          "inner_fill": "gray",
+          "frame": "rectangle"
+        },
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Mesmo literal em caixa simples sem painel cinza interno não representa o conjunto associado"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s23-v006",
+      "class_code": "CONJUNTO_EO",
+      "role": "operational",
+      "destination": "composite_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 29,
+        "locator": "§23; página PDF/impressa 29; desenho/linha 6 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Conjunto contornado/sombreado cinza com S",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Conjunto contornado/sombreado cinza com S. Conjunto sombreado agrega componentes; contorno/label isolados não resolve associação nem cardinalidade.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s23-v007",
+      "class_code": "CONJUNTO_EO",
+      "role": "operational",
+      "destination": "composite_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 29,
+        "locator": "§23; página PDF/impressa 29; desenho/linha 7 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Conjunto contornado/sombreado cinza com chevrons",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Conjunto contornado/sombreado cinza com chevrons. Conjunto sombreado agrega componentes; contorno/label isolados não resolve associação nem cardinalidade.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s23-v008",
+      "class_code": "CONJUNTO_EO",
+      "role": "operational",
+      "destination": "composite_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 29,
+        "locator": "§23; página PDF/impressa 29; desenho/linha 8 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Conjunto contornado/sombreado cinza com D",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Conjunto contornado/sombreado cinza com D. Conjunto sombreado agrega componentes; contorno/label isolados não resolve associação nem cardinalidade.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s23-v009",
+      "class_code": "CONJUNTO_EO",
+      "role": "operational",
+      "destination": "composite_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 29,
+        "locator": "§23; página PDF/impressa 29; desenho/linha 9 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Conjunto contornado/sombreado cinza com G",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Conjunto contornado/sombreado cinza com G. Conjunto sombreado agrega componentes; contorno/label isolados não resolve associação nem cardinalidade.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s23-v010",
+      "class_code": "CONJUNTO_EO",
+      "role": "operational",
+      "destination": "composite_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 29,
+        "locator": "§23; página PDF/impressa 29; desenho/linha 10 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Conjunto contornado/sombreado cinza com C",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Conjunto contornado/sombreado cinza com C. Conjunto sombreado agrega componentes; contorno/label isolados não resolve associação nem cardinalidade.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s23-v011",
+      "class_code": "CONJUNTO_EO",
+      "role": "operational",
+      "destination": "composite_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 29,
+        "locator": "§23; página PDF/impressa 29; desenho/linha 11 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Conjunto contornado/sombreado cinza com BTX",
+      "recognition": {
+        "status": "enabled",
+        "grammar": {
+          "kind": "label_in_frame",
+          "label": "BTX",
+          "nested_frame": true,
+          "max_span": 72,
+          "inner_fill": "gray",
+          "frame": "rectangle"
+        },
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Mesmo literal em caixa simples sem painel cinza interno não representa o conjunto associado"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s23-v012",
+      "class_code": "CONJUNTO_EO",
+      "role": "operational",
+      "destination": "composite_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 30,
+        "locator": "§23; página PDF/impressa 30; desenho/linha 1 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Conjunto contornado/sombreado cinza com BQX",
+      "recognition": {
+        "status": "enabled",
+        "grammar": {
+          "kind": "label_in_frame",
+          "label": "BQX",
+          "nested_frame": true,
+          "max_span": 72,
+          "inner_fill": "gray",
+          "frame": "rectangle"
+        },
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Mesmo literal em caixa simples sem painel cinza interno não representa o conjunto associado"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s23-v013",
+      "class_code": "CONJUNTO_EO",
+      "role": "operational",
+      "destination": "composite_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 30,
+        "locator": "§23; página PDF/impressa 30; desenho/linha 2 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Conjunto contornado/sombreado cinza com dois círculos e triângulo",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Conjunto contornado/sombreado cinza com dois círculos e triângulo. Conjunto sombreado agrega componentes; contorno/label isolados não resolve associação nem cardinalidade.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s23-v014",
+      "class_code": "CONJUNTO_EO",
+      "role": "operational",
+      "destination": "composite_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 30,
+        "locator": "§23; página PDF/impressa 30; desenho/linha 3 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Conjunto contornado/sombreado cinza com CM",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Conjunto contornado/sombreado cinza com CM. Conjunto sombreado agrega componentes; contorno/label isolados não resolve associação nem cardinalidade.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s23-v015",
+      "class_code": "CONJUNTO_EO",
+      "role": "operational",
+      "destination": "composite_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 30,
+        "locator": "§23; página PDF/impressa 30; desenho/linha 4 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Conjunto contornado/sombreado cinza com triângulo",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Conjunto contornado/sombreado cinza com triângulo. Conjunto sombreado agrega componentes; contorno/label isolados não resolve associação nem cardinalidade.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s23-v016",
+      "class_code": "CONJUNTO_EO",
+      "role": "operational",
+      "destination": "composite_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 30,
+        "locator": "§23; página PDF/impressa 30; desenho/linha 5 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Conjunto contornado/sombreado cinza com R e triângulo",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Conjunto contornado/sombreado cinza com R e triângulo. Conjunto sombreado agrega componentes; contorno/label isolados não resolve associação nem cardinalidade.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    }
+  ]
+}

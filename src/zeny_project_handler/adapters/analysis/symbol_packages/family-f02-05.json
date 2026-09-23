@@ -1,0 +1,287 @@
+{
+  "schema_version": 1,
+  "family_id": "family-f02-05",
+  "profile_id": "profile-cemig-eo-r3",
+  "source_id": "F02",
+  "variants": [
+    {
+      "id": "cemig-eo-r3-s05-v001",
+      "class_code": "CAIXA_SUBTERRANEA",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 9,
+        "locator": "§5; página PDF/impressa 9; desenho/linha 1 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Quadrado ciano; triângulo preenchido ou X; contorno/base",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Quadrado ciano; triângulo preenchido ou X; contorno/base. Caixas compartilham quadrado, octógono e contornos; componentes internos e estado desta variante ainda carecem de positivo/negativo independente.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s05-v002",
+      "class_code": "CAIXA_SUBTERRANEA",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 9,
+        "locator": "§5; página PDF/impressa 9; desenho/linha 2 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Quadrado ciano; triângulo preenchido ou X; preenchimento de instalação",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Quadrado ciano; triângulo preenchido ou X; preenchimento de instalação. Caixas compartilham quadrado, octógono e contornos; componentes internos e estado desta variante ainda carecem de positivo/negativo independente.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s05-v003",
+      "class_code": "CAIXA_SUBTERRANEA",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 9,
+        "locator": "§5; página PDF/impressa 9; desenho/linha 3 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Quadrado ciano; triângulo preenchido ou X; marca de retirada/substituição",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Quadrado ciano; triângulo preenchido ou X; marca de retirada/substituição. Caixas compartilham quadrado, octógono e contornos; componentes internos e estado desta variante ainda carecem de positivo/negativo independente.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s05-v004",
+      "class_code": "CAIXA_SUBTERRANEA",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 9,
+        "locator": "§5; página PDF/impressa 9; desenho/linha 4 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Retângulos concêntricos ciano com linha horizontal central",
+      "recognition": {
+        "status": "enabled",
+        "grammar": {
+          "max_span": 72,
+          "kind": "nested_rectangles_bar",
+          "frame": "rectangle",
+          "central_bar": true
+        },
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Componente incompleto: mesma moldura sem os traços internos exigidos"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s05-v005",
+      "class_code": "CAIXA_SUBTERRANEA",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 9,
+        "locator": "§5; página PDF/impressa 9; desenho/linha 5 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Octógono ciano; preenchimento inferior ou X; contorno/base",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Octógono ciano; preenchimento inferior ou X; contorno/base. Caixas compartilham quadrado, octógono e contornos; componentes internos e estado desta variante ainda carecem de positivo/negativo independente.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s05-v006",
+      "class_code": "CAIXA_SUBTERRANEA",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 9,
+        "locator": "§5; página PDF/impressa 9; desenho/linha 6 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Octógono ciano; preenchimento inferior ou X; preenchimento de instalação",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Octógono ciano; preenchimento inferior ou X; preenchimento de instalação. Caixas compartilham quadrado, octógono e contornos; componentes internos e estado desta variante ainda carecem de positivo/negativo independente.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s05-v007",
+      "class_code": "CAIXA_SUBTERRANEA",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 9,
+        "locator": "§5; página PDF/impressa 9; desenho/linha 7 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Octógono ciano; preenchimento inferior ou X; marca de retirada/substituição",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Octógono ciano; preenchimento inferior ou X; marca de retirada/substituição. Caixas compartilham quadrado, octógono e contornos; componentes internos e estado desta variante ainda carecem de positivo/negativo independente.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s05-v008",
+      "class_code": "CAIXA_SUBTERRANEA",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 9,
+        "locator": "§5; página PDF/impressa 9; desenho/linha 8 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Retângulo com três pares de terminais cruzados",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Retângulo com três pares de terminais cruzados. Caixas compartilham quadrado, octógono e contornos; componentes internos e estado desta variante ainda carecem de positivo/negativo independente.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s05-v009",
+      "class_code": "CAIXA_SUBTERRANEA",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 9,
+        "locator": "§5; página PDF/impressa 9; desenho/linha 9 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Retângulo com dois terminais e linha",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Retângulo com dois terminais e linha. Caixas compartilham quadrado, octógono e contornos; componentes internos e estado desta variante ainda carecem de positivo/negativo independente.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s05-v010",
+      "class_code": "CAIXA_SUBTERRANEA",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 10,
+        "locator": "§5; página PDF/impressa 10; desenho/linha 1 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Dois quadrados ciano",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Dois quadrados ciano. Caixas compartilham quadrado, octógono e contornos; componentes internos e estado desta variante ainda carecem de positivo/negativo independente.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s05-v011",
+      "class_code": "CAIXA_SUBTERRANEA",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 10,
+        "locator": "§5; página PDF/impressa 10; desenho/linha 2 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Contorno ortogonal em L",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Contorno ortogonal em L. Caixas compartilham quadrado, octógono e contornos; componentes internos e estado desta variante ainda carecem de positivo/negativo independente.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s05-v012",
+      "class_code": "CAIXA_SUBTERRANEA",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 10,
+        "locator": "§5; página PDF/impressa 10; desenho/linha 3 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Linha verde angular com colchetes",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Linha verde angular com colchetes. Caixas compartilham quadrado, octógono e contornos; componentes internos e estado desta variante ainda carecem de positivo/negativo independente.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s05-v013",
+      "class_code": "CAIXA_SUBTERRANEA",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 10,
+        "locator": "§5; página PDF/impressa 10; desenho/linha 4 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Dois quadrados ciano",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Dois quadrados ciano. Caixas compartilham quadrado, octógono e contornos; componentes internos e estado desta variante ainda carecem de positivo/negativo independente.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    }
+  ]
+}

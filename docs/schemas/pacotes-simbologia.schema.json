@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:zeny:symbol-packages:1",
+  "title": "Pacote declarativo de reconhecimento de uma família E01",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "family_id", "profile_id", "source_id", "variants"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "family_id": {"type": "string", "pattern": "^family-[a-z0-9-]+$"},
+    "profile_id": {"type": "string", "minLength": 1},
+    "source_id": {"type": "string", "minLength": 1},
+    "variants": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/variant"}
+    }
+  },
+  "$defs": {
+    "source_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "pdf_page", "locator", "review_status"],
+      "properties": {
+        "source_id": {"type": "string", "minLength": 1},
+        "pdf_page": {"type": "integer", "minimum": 1},
+        "locator": {"type": "string", "minLength": 1},
+        "review_status": {"enum": ["visual_checked", "synthetic_fixture"]}
+      }
+    },
+    "grammar": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "frame", "label", "max_span"],
+          "dependentRequired": {"nested_frame": ["inner_fill"], "inner_fill": ["nested_frame"]},
+          "properties": {
+            "kind": {"const": "label_in_frame"},
+            "frame": {"enum": ["rectangle", "ellipse"]},
+            "label": {"type": "string", "pattern": "^[A-Z0-9]{1,4}$"},
+            "max_span": {"type": "number", "exclusiveMinimum": 0, "maximum": 96},
+            "max_aspect": {"type": "number", "minimum": 1, "maximum": 4},
+            "empty_interior": {"const": true},
+            "nested_frame": {"const": true},
+            "inner_fill": {"const": "gray"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "frame", "fill", "max_span"],
+          "properties": {
+            "kind": {"const": "triangle_in_frame"},
+            "frame": {"const": "rectangle"},
+            "fill": {"enum": ["empty", "solid"]},
+            "max_span": {"type": "number", "exclusiveMinimum": 0, "maximum": 72}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "frame", "min_diagonals", "max_span"],
+          "properties": {
+            "kind": {"const": "framed_diagonals"},
+            "frame": {"const": "rectangle"},
+            "min_diagonals": {"const": 2},
+            "max_span": {"type": "number", "exclusiveMinimum": 0, "maximum": 72}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "frame", "central_bar", "max_span"],
+          "properties": {
+            "kind": {"const": "nested_rectangles_bar"},
+            "frame": {"const": "rectangle"},
+            "central_bar": {"const": true},
+            "max_span": {"type": "number", "exclusiveMinimum": 0, "maximum": 72}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "frame", "dot_count", "max_span"],
+          "properties": {
+            "kind": {"const": "diamond_three_dots"},
+            "frame": {"const": "diamond"},
+            "dot_count": {"const": 3},
+            "max_span": {"type": "number", "exclusiveMinimum": 0, "maximum": 72}
+          }
+        }
+      ]
+    },
+    "recognition": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "grammar", "negative_examples"],
+          "properties": {
+            "status": {"const": "enabled"},
+            "grammar": {"$ref": "#/$defs/grammar"},
+            "negative_examples": {"$ref": "#/$defs/negative_examples"}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "reason", "negative_examples"],
+          "properties": {
+            "status": {"const": "pending"},
+            "reason": {"type": "string", "minLength": 12},
+            "negative_examples": {"$ref": "#/$defs/negative_examples"}
+          }
+        }
+      ]
+    },
+    "negative_examples": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 3}
+    },
+    "variant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "class_code", "role", "destination", "source_ref", "visual_note", "recognition"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "class_code": {"type": "string", "minLength": 1},
+        "role": {"enum": ["operational", "informative"]},
+        "destination": {"type": "string", "minLength": 1},
+        "source_ref": {"$ref": "#/$defs/source_ref"},
+        "visual_note": {"type": "string", "minLength": 1},
+        "recognition": {"$ref": "#/$defs/recognition"}
+      }
+    }
+  }
+}

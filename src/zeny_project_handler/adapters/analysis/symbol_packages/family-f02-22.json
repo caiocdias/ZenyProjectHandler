@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "family_id": "family-f02-22",
+  "profile_id": "profile-cemig-eo-r3",
+  "source_id": "F02",
+  "variants": [
+    {
+      "id": "cemig-eo-r3-s22-v001",
+      "class_code": "EQUIPAMENTO_REGULACAO",
+      "role": "operational",
+      "destination": "equipment_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 28,
+        "locator": "§22; página PDF/impressa 28; desenho/linha 1 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Placa reta e arco ligados a haste; símbolo base",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Placa reta e arco ligados a haste; símbolo base. Placa/arco ou enrolamento precisam de relação geométrica e separação das marcas de proposta/retirada.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s22-v002",
+      "class_code": "EQUIPAMENTO_REGULACAO",
+      "role": "operational",
+      "destination": "equipment_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 28,
+        "locator": "§22; página PDF/impressa 28; desenho/linha 2 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Placa reta e arco ligados a haste; círculo/oval envolvente",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Placa reta e arco ligados a haste; círculo/oval envolvente. Placa/arco ou enrolamento precisam de relação geométrica e separação das marcas de proposta/retirada.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s22-v003",
+      "class_code": "EQUIPAMENTO_REGULACAO",
+      "role": "operational",
+      "destination": "equipment_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 28,
+        "locator": "§22; página PDF/impressa 28; desenho/linha 3 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Placa reta e arco ligados a haste; círculo/oval e X vermelho",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Placa reta e arco ligados a haste; círculo/oval e X vermelho. Placa/arco ou enrolamento precisam de relação geométrica e separação das marcas de proposta/retirada.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s22-v004",
+      "class_code": "EQUIPAMENTO_REGULACAO",
+      "role": "operational",
+      "destination": "equipment_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 28,
+        "locator": "§22; página PDF/impressa 28; desenho/linha 4 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Placa reta e arco ligados a haste; X vermelho sem envolvente",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Placa reta e arco ligados a haste; X vermelho sem envolvente. Placa/arco ou enrolamento precisam de relação geométrica e separação das marcas de proposta/retirada.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s22-v005",
+      "class_code": "EQUIPAMENTO_REGULACAO",
+      "role": "operational",
+      "destination": "equipment_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 28,
+        "locator": "§22; página PDF/impressa 28; desenho/linha 5 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Enrolamento horizontal circular",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Enrolamento horizontal circular. Placa/arco ou enrolamento precisam de relação geométrica e separação das marcas de proposta/retirada.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    }
+  ]
+}

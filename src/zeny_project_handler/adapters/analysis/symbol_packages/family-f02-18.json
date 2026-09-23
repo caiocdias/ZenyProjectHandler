@@ -1,0 +1,100 @@
+{
+  "schema_version": 1,
+  "family_id": "family-f02-18",
+  "profile_id": "profile-cemig-eo-r3",
+  "source_id": "F02",
+  "variants": [
+    {
+      "id": "cemig-eo-r3-s18-v024",
+      "class_code": "REGULADOR_TENSAO",
+      "role": "operational",
+      "destination": "equipment_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 21,
+        "locator": "§18; página PDF/impressa 21; desenho/linha 7 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Enrolamento atravessado por seta",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Enrolamento atravessado por seta. Enrolamento/círculo com seta exige discriminador de preenchimento/X e negativo contra transformador/proteção.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Círculos de situação e componentes não equivalem a ativos adicionais",
+          "Detalhe ampliado pode repetir a mesma ocorrência"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s18-v025",
+      "class_code": "REGULADOR_TENSAO",
+      "role": "operational",
+      "destination": "equipment_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 21,
+        "locator": "§18; página PDF/impressa 21; desenho/linha 8 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Círculo vazio atravessado por seta",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Círculo vazio atravessado por seta. Enrolamento/círculo com seta exige discriminador de preenchimento/X e negativo contra transformador/proteção.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Círculos de situação e componentes não equivalem a ativos adicionais",
+          "Detalhe ampliado pode repetir a mesma ocorrência"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s18-v026",
+      "class_code": "REGULADOR_TENSAO",
+      "role": "operational",
+      "destination": "equipment_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 21,
+        "locator": "§18; página PDF/impressa 21; desenho/linha 9 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Círculo metade preenchida atravessado por seta",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Círculo metade preenchida atravessado por seta. Enrolamento/círculo com seta exige discriminador de preenchimento/X e negativo contra transformador/proteção.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Círculos de situação e componentes não equivalem a ativos adicionais",
+          "Detalhe ampliado pode repetir a mesma ocorrência"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s18-v027",
+      "class_code": "REGULADOR_TENSAO",
+      "role": "operational",
+      "destination": "equipment_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 21,
+        "locator": "§18; página PDF/impressa 21; desenho/linha 10 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Círculo X vermelho atravessado por seta",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Círculo X vermelho atravessado por seta. Enrolamento/círculo com seta exige discriminador de preenchimento/X e negativo contra transformador/proteção.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Círculos de situação e componentes não equivalem a ativos adicionais",
+          "Detalhe ampliado pode repetir a mesma ocorrência"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,307 @@
+{
+  "schema_version": 1,
+  "family_id": "family-f02-19",
+  "profile_id": "profile-cemig-eo-r3",
+  "source_id": "F02",
+  "variants": [
+    {
+      "id": "cemig-eo-r3-s19-v005",
+      "class_code": "CONECTOR",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 22,
+        "locator": "§19; página PDF/impressa 22; desenho/linha 5 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Haste com extremidade quadrangular aberta; símbolo base",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Haste com extremidade quadrangular aberta; símbolo base. Haste/terminação requer separar conector, aterramento e marcas de situação; positivo/negativo ainda não validado.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Círculos de situação e componentes não equivalem a ativos adicionais",
+          "Detalhe ampliado pode repetir a mesma ocorrência"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s19-v006",
+      "class_code": "CONECTOR",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 22,
+        "locator": "§19; página PDF/impressa 22; desenho/linha 6 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Haste com extremidade quadrangular aberta; círculo/oval envolvente",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Haste com extremidade quadrangular aberta; círculo/oval envolvente. Haste/terminação requer separar conector, aterramento e marcas de situação; positivo/negativo ainda não validado.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Círculos de situação e componentes não equivalem a ativos adicionais",
+          "Detalhe ampliado pode repetir a mesma ocorrência"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s19-v007",
+      "class_code": "CONECTOR",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 22,
+        "locator": "§19; página PDF/impressa 22; desenho/linha 7 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Haste com extremidade quadrangular aberta; círculo/oval e X vermelho",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Haste com extremidade quadrangular aberta; círculo/oval e X vermelho. Haste/terminação requer separar conector, aterramento e marcas de situação; positivo/negativo ainda não validado.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Círculos de situação e componentes não equivalem a ativos adicionais",
+          "Detalhe ampliado pode repetir a mesma ocorrência"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s19-v008",
+      "class_code": "CONECTOR",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 22,
+        "locator": "§19; página PDF/impressa 22; desenho/linha 8 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Haste com extremidade quadrangular aberta; X vermelho sem envolvente",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Haste com extremidade quadrangular aberta; X vermelho sem envolvente. Haste/terminação requer separar conector, aterramento e marcas de situação; positivo/negativo ainda não validado.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Círculos de situação e componentes não equivalem a ativos adicionais",
+          "Detalhe ampliado pode repetir a mesma ocorrência"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s19-v009",
+      "class_code": "CONECTOR",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 22,
+        "locator": "§19; página PDF/impressa 22; desenho/linha 9 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Triângulo ciano claro; símbolo base",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Triângulo ciano claro; símbolo base. Haste/terminação requer separar conector, aterramento e marcas de situação; positivo/negativo ainda não validado.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Círculos de situação e componentes não equivalem a ativos adicionais",
+          "Detalhe ampliado pode repetir a mesma ocorrência"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s19-v010",
+      "class_code": "CONECTOR",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 22,
+        "locator": "§19; página PDF/impressa 22; desenho/linha 10 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Triângulo ciano claro; círculo/oval envolvente",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Triângulo ciano claro; círculo/oval envolvente. Haste/terminação requer separar conector, aterramento e marcas de situação; positivo/negativo ainda não validado.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Círculos de situação e componentes não equivalem a ativos adicionais",
+          "Detalhe ampliado pode repetir a mesma ocorrência"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s19-v011",
+      "class_code": "CONECTOR",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 22,
+        "locator": "§19; página PDF/impressa 22; desenho/linha 11 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Triângulo ciano claro; círculo/oval e X vermelho",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Triângulo ciano claro; círculo/oval e X vermelho. Haste/terminação requer separar conector, aterramento e marcas de situação; positivo/negativo ainda não validado.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Círculos de situação e componentes não equivalem a ativos adicionais",
+          "Detalhe ampliado pode repetir a mesma ocorrência"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s19-v012",
+      "class_code": "CONECTOR",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 22,
+        "locator": "§19; página PDF/impressa 22; desenho/linha 12 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Triângulo ciano claro; X vermelho sem envolvente",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Triângulo ciano claro; X vermelho sem envolvente. Haste/terminação requer separar conector, aterramento e marcas de situação; positivo/negativo ainda não validado.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Círculos de situação e componentes não equivalem a ativos adicionais",
+          "Detalhe ampliado pode repetir a mesma ocorrência"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s19-v013",
+      "class_code": "CONECTOR",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 22,
+        "locator": "§19; página PDF/impressa 22; desenho/linha 13 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Elipse cinza preenchida; símbolo base",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Elipse cinza preenchida; símbolo base. Haste/terminação requer separar conector, aterramento e marcas de situação; positivo/negativo ainda não validado.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Círculos de situação e componentes não equivalem a ativos adicionais",
+          "Detalhe ampliado pode repetir a mesma ocorrência"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s19-v014",
+      "class_code": "CONECTOR",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 22,
+        "locator": "§19; página PDF/impressa 22; desenho/linha 14 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Elipse cinza preenchida; círculo/oval envolvente",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Elipse cinza preenchida; círculo/oval envolvente. Haste/terminação requer separar conector, aterramento e marcas de situação; positivo/negativo ainda não validado.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Círculos de situação e componentes não equivalem a ativos adicionais",
+          "Detalhe ampliado pode repetir a mesma ocorrência"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s19-v015",
+      "class_code": "CONECTOR",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 23,
+        "locator": "§19; página PDF/impressa 23; desenho/linha 1 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Elipse cinza preenchida; círculo/oval e X vermelho",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Elipse cinza preenchida; círculo/oval e X vermelho. Haste/terminação requer separar conector, aterramento e marcas de situação; positivo/negativo ainda não validado.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Círculos de situação e componentes não equivalem a ativos adicionais",
+          "Detalhe ampliado pode repetir a mesma ocorrência"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s19-v016",
+      "class_code": "CONECTOR",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 23,
+        "locator": "§19; página PDF/impressa 23; desenho/linha 2 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Elipse cinza preenchida; X vermelho sem envolvente",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Elipse cinza preenchida; X vermelho sem envolvente. Haste/terminação requer separar conector, aterramento e marcas de situação; positivo/negativo ainda não validado.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Círculos de situação e componentes não equivalem a ativos adicionais",
+          "Detalhe ampliado pode repetir a mesma ocorrência"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s19-v017",
+      "class_code": "CONECTOR",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 23,
+        "locator": "§19; página PDF/impressa 23; desenho/linha 3 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Losango com núcleo radial",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Losango com núcleo radial. Haste/terminação requer separar conector, aterramento e marcas de situação; positivo/negativo ainda não validado.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Círculos de situação e componentes não equivalem a ativos adicionais",
+          "Detalhe ampliado pode repetir a mesma ocorrência"
+        ]
+      }
+    }
+  ]
+}

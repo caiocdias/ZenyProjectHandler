@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "family_id": "family-f02-26",
+  "profile_id": "profile-cemig-eo-r3",
+  "source_id": "F02",
+  "variants": [
+    {
+      "id": "cemig-eo-r3-s26-v001",
+      "class_code": "USINA",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 31,
+        "locator": "§26; página PDF/impressa 31; desenho/linha 1 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Círculo alaranjado com senoide",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Círculo alaranjado com senoide. Senoide em círculo vista na F02 p31 carece de curva vetorial positiva e negativo independente para escala/rotação.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    }
+  ]
+}

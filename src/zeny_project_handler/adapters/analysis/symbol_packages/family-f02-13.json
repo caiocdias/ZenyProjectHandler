@@ -1,0 +1,134 @@
+{
+  "schema_version": 1,
+  "family_id": "family-f02-13",
+  "profile_id": "profile-cemig-eo-r3",
+  "source_id": "F02",
+  "variants": [
+    {
+      "id": "cemig-eo-r3-s13-v001",
+      "class_code": "ESTRUTURA_MONTAGEM_MT_BT",
+      "role": "operational",
+      "destination": "support_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 14,
+        "locator": "§13; página PDF/impressa 14; desenho/linha 1 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Círculo verde claro",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Círculo verde claro. Ponto colorido indica montagem, não ativo isolado; cor, estado e anotação exigem contexto e negativo calibrado.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s13-v002",
+      "class_code": "ESTRUTURA_MONTAGEM_MT_BT",
+      "role": "operational",
+      "destination": "support_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 14,
+        "locator": "§13; página PDF/impressa 14; desenho/linha 2 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Círculo verde escuro",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Círculo verde escuro. Ponto colorido indica montagem, não ativo isolado; cor, estado e anotação exigem contexto e negativo calibrado.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s13-v003",
+      "class_code": "ESTRUTURA_MONTAGEM_MT_BT",
+      "role": "operational",
+      "destination": "support_review",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 14,
+        "locator": "§13; página PDF/impressa 14; desenho/linha 3 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Círculo vermelho",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Círculo vermelho. Ponto colorido indica montagem, não ativo isolado; cor, estado e anotação exigem contexto e negativo calibrado.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s13-v004",
+      "class_code": "CONVENCAO_EO",
+      "role": "informative",
+      "destination": "document_convention",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 14,
+        "locator": "§13; página PDF/impressa 14; desenho/linha 4 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Texto simples SI1Q(BT)",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Texto simples SI1Q(BT). Ponto colorido indica montagem, não ativo isolado; cor, estado e anotação exigem contexto e negativo calibrado.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s13-v005",
+      "class_code": "CONVENCAO_EO",
+      "role": "informative",
+      "destination": "document_convention",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 14,
+        "locator": "§13; página PDF/impressa 14; desenho/linha 5 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Texto CE3(1) enquadrado",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Texto CE3(1) enquadrado. Ponto colorido indica montagem, não ativo isolado; cor, estado e anotação exigem contexto e negativo calibrado.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s13-v006",
+      "class_code": "CONVENCAO_EO",
+      "role": "informative",
+      "destination": "document_convention",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 14,
+        "locator": "§13; página PDF/impressa 14; desenho/linha 6 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Texto M1(2) vermelho tachado",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Texto M1(2) vermelho tachado. Ponto colorido indica montagem, não ativo isolado; cor, estado e anotação exigem contexto e negativo calibrado.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação"
+        ]
+      }
+    }
+  ]
+}

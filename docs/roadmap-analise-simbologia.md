@@ -371,7 +371,7 @@ E16 executa V-G; não repetir toda a suíte após mera edição do roadmap.
 | E04 | Robustez vetorial de aterramento e para-raios | #concluida | E03 | Melhorar o detector existente para primitives fragmentadas/agrupadas, escala e estilos, sem ampliar sua lista de classes. |
 | E05 | Reconhecimento visual de transformadores | #concluida | E04 | Detectar variantes gráficas de transformador e conjuntos sem depender da existência de um literal reconhecido. |
 | E06 | Reconhecimento de estais e ancoragens | #concluida | E04 | Reconhecer as variantes de estai e seus vínculos geométricos sem confundi-las com condutores. |
-| E07 | Pacotes extensíveis das demais famílias | #pendente | E04, E05, E06 | Entregar representação declarativa e pacotes de reconhecimento para as famílias restantes do inventário, com cobertura auditável. |
+| E07 | Pacotes extensíveis das demais famílias | #bloqueada | E04, E05, E06 | Entregar representação declarativa e pacotes de reconhecimento para as famílias restantes do inventário, com cobertura auditável. |
 | E08 | Detector raster por templates e Hough | #pendente | E03, E04 | Acrescentar família raster capaz de detectar símbolos sem vetores aproveitáveis. |
 | E09 | Detector por contornos e grafo de traços | #pendente | E03, E04 | Implementar alternativa estrutural de reconhecimento de formas distinta de correlação de pixels e das heurísticas legadas. |
 | E10 | Adaptação à legenda e símbolos desconhecidos | #pendente | E03, E08 | Usar a legenda do próprio documento como fonte local de templates/semântica e oferecer desconhecidos revisáveis. |
@@ -1578,7 +1578,7 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
   inspecionado, **não** sensibilidade em projetos reais com estai. Não há
   bloqueio remanescente para os critérios desta etapa.
 
-## E07 — Pacotes extensíveis das demais famílias — #pendente
+## E07 — Pacotes extensíveis das demais famílias — #bloqueada
 
 **Objetivo:** Entregar representação declarativa e pacotes de reconhecimento para as famílias restantes do inventário, com cobertura auditável.
 
@@ -1607,13 +1607,13 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
 
 **Critérios de aceite:**
 
-- [ ] Toda família E01 tem pacote verificável e testes positivos/negativos ou pendência explícita que impede o aceite integral.
-- [ ] Adicionar uma família por dados não exige modificar o reconciliador.
-- [ ] Símbolos de legenda, norte e outros informativos não são promovidos a equipamento por estarem reconhecidos.
+- [ ] Toda família E07 do inventário E01 tem pacote verificável, mas 344 variantes em 17 famílias sem qualquer gramática e em outras famílias ainda não têm V-B positivo/negativo; pendência explícita impede o aceite integral.
+- [x] Adicionar uma família por dados não exige modificar o reconciliador.
+- [x] Símbolos de legenda, norte e outros informativos não são promovidos a equipamento por estarem reconhecidos.
 
 **Validação obrigatória:** V-P e conferência das entregas dos subagentes, com as particularidades acima. V-N, V-Q e V-B para cada pacote; validar esquema, fontes e cobertura contra inventário. E07 só conclui com os pacotes de todo seu escopo entregues, sem contar desconhecido como reconhecimento. Os códigos V-* remetem aos comandos completos acima; registrar os comandos efetivamente executados.
 
-**Bloqueios:** Nenhum bloqueio conhecido para iniciar respeitando as dependências. Lacunas de dados/fontes são riscos até impedirem concretamente a execução ou o aceite; nessa ocorrência, registrar causa, evidência, impacto e ação de desbloqueio.
+**Bloqueios:** O aceite integral está impedido por 344/365 variantes sem gramática discriminativa e benchmark positivo/negativo, distribuídas por 17 famílias inteiramente pendentes e por variantes restantes de outras dez. A fonte F02 mostra colisões de forma entre famílias e variantes, inclusive figuras idênticas para IDs distintos; atribuição exata exige contexto/alternativas verificáveis. `scripts.audit_symbol_packages --require-complete` retorna 1 com essa contagem; V-P A5 não produziu nenhum candidato E07 real. O cadastro não é reconhecimento. E11/E12 não devem tratar E07 como dependência concluída. Desbloqueio: criar e validar gramáticas/fixtures autorais para as variantes pendentes por ondas, conferir colisões e negativos da fonte F02, repetir o validador independente Draft 2020-12, V-B por pacote, V-P integral e V-N/V-Q no checkpoint final; só então reavaliar o aceite.
 
 **Riscos e mitigação:** Escopo grande: lotes por família com IDs estáveis e totalizadores impedem encerramento parcial disfarçado.
 
@@ -1634,7 +1634,159 @@ Ao iniciar, sincronize #em-andamento no índice e detalhe. Implemente somente es
 Não declare sucesso com validação obrigatória falhando ou não executada. Atualize para #concluida somente após todos os critérios; impedimento real exige #bloqueada com causa, evidência, impacto e ação de desbloqueio. Dependência ainda pendente mantém #pendente. Preencha Evidências e handoff com arquivos, decisões, comandos, resultados e limitações. Não crie commit, publique ou implante sem autorização explícita. Termine com resumo conciso de mudanças, validações e pendências.
 ```
 
-**Evidências e handoff:** ainda não executada. Registrar também agentes/papéis, fronteiras de escrita, checkpoint integrado, revisão independente, manifesto V-P e total de PDFs/páginas conferidos/bloqueados. Ao trabalhar, registrar arquivos alterados, versão/configuração, decisões, fontes/fixtures, comandos e resultados, métricas comparadas, limitações e próximo passo.
+### Evidências e handoff E07 — checkpoint A5, 23/09/2026
+
+Início: `main` em `2c87d54`, Git limpo, nenhum `AGENTS.md` aplicável encontrado.
+E04/E05/E06 estavam `#concluida` e seus módulos atuais conferiam com o handoff:
+extrator `1.19.3`, transformadores `e05-transformadores-v4`, estais
+`e06-estais-v1`. Pré-teste de dependências: 385 testes E04–E06 passaram. O Python
+da `.venv` só iniciou com `require_escalated` neste host, pois o executável base
+WindowsApps era inacessível no sandbox; nenhuma instalação ou modificação da
+`.venv` foi feita. O inventário E01, SHA-256
+`e3d49d9b0072f9f30ea98e2171c0cd520a819a15b329590cfbf35f508f042fcd`,
+define **365 variantes E07 em 27 famílias** por `variants.owner_stage`, incluindo
+quatro reguladores de §18 cujo `family.owner_stage` é E05. A contagem preliminar
+de 28 famílias foi corrigida contra os IDs reais. O inventário global mantém
+427 variantes/33 famílias: E04=12, E05=29, E06=17, E07=365 e E10=4. As quatro
+E10 continuam futuras e não são contadas como reconhecimento E07. Fonte primária F02 IT-EO-008
+revisão 3, 29/07/2024, e localizadores E01 foram preservados; nenhum desenho
+normativo foi copiado como asset comercial.
+
+| Frente / propriedade exclusiva | Entrega verificável |
+|---|---|
+| A `/root/packages` — `declarative_symbols.py`, `analysis/symbol_packages/*.json`, `docs/schemas/pacotes-simbologia.schema.json` | Esquema 1, loader estrito, observações E03, 27 arquivos/365 IDs; 12 gramáticas executáveis em oito famílias e 353 pendências. SHA-256 runner A5 `a0980a5e4ef6930d74f239c3a5f63ec2bac137de8a9e72d743961a0eb724adeb`, esquema `6da709b58cff4a7d7e8a788d096345b8b07816ac4d90ab43f8086ce1f13ec041`; hash agregado dos JSON `ad4c6de1962c91225f9098e0d88d2a41b6c03432b5a657a3abc4d57f7d187625`. |
+| B `/root/package_tests` — `tests/unit/test_declarative_symbol_packages.py`, `tests/fixtures/declarative_symbols/` | Matriz independente 365/27, mutações de esquema, positivo/negativo autoral por gramática, exclusivo/vizinhos, família adicionada por dados, informativo/norte/legenda sem promoção. Teste SHA-256 `658dd74878813eaf34f541a50be215224d990a1b4688aac5c2246ff3ef916e4f`; corpus `31c508863256c68e5a8176fc46f59850f6b760a02a71e7609383e7e420b75250`. |
+| C `/root/pdf_audit` — somente `tmp/e07-simbologia/visual/` | 11 PDFs/11 páginas inspecionadas visualmente antes de ver predições; manifesto `cb150f80e6d81e8f6b2440681193e7f453f2f35790b3b43784590e374f8ce459`, notas iniciais `74a75c6932ca62c5fc222e843c7da1c141ed4c9017ba064fec2df7261af1826d`, comparação A5 `ef960cf184cfc74a0d925423528d3fd7b1068b65c8ca43ca9fcef5f61cd2c76e`. |
+| Coordenador `/root` — registro/integração serial em `scripts/benchmark_symbols.py`, `scripts/symbol_benchmark_runner.py`, `scripts/audit_symbol_packages.py`, `scripts/benchmark_packages_e07.py`, `pyproject.toml`, `docs/e07-pacotes-simbologia.md`, este roadmap | Opt-in `--include-packages`, manifesto por método, empacotamento dos JSON, auditoria E01 e gates integrados; o reconciliador não foi editado. |
+
+Contrato A2 foi congelado antes dos testes e da projeção central. O checkpoint A4
+foi rejeitado: B achou booleanos aceitos como inteiros no loader e V-P falhou
+no primeiro PDF com `drawing.rect=None`; a execução parcial (2/11) foi
+interrompida e **não** conta como V-P. A5 corrigiu ambos, adicionou teste
+regressivo e foi congelado antes da inferência final. Pacotes são carregados por
+dados; `enabled` exige gramática, `pending` não emite reconhecimento. O fallback
+desconhecido exige região explícita, retorna `classe=None` e não aumenta cobertura
+E01. `papel=informative` fica separado de equipamento, quantidade e promoção.
+Scores não são probabilidades; silêncio de outros métodos não veta exclusivos.
+
+**Validações integradas A5** (comandos na raiz, `.venv` via escalonamento de
+execução do runtime existente):
+
+| Gate/comando | Resultado |
+|---|---|
+| V-N: `.\.venv\Scripts\python.exe -m pytest tests/unit/test_declarative_symbol_packages.py tests/unit/test_benchmark_symbols.py tests/unit/test_symbol_inventory.py -q -o cache_dir=tmp/e07-simbologia/pytest-cache --basetemp=tmp/e07-simbologia/final-pytest` | **132 passed**, saída 0; B isolado 45 passed. Pré-teste E04–E06: **385 passed**. |
+| V-Q: `.\.venv\Scripts\python.exe -m ruff check .`; `.\.venv\Scripts\python.exe -m ruff format --check .`; `.\.venv\Scripts\python.exe -m mypy` | Todos saída 0; 404 arquivos formatados, 372 fontes sem erro. |
+| Auditoria: `.\.venv\Scripts\python.exe -m scripts.audit_symbol_packages --output tmp/e07-simbologia/package-audit-a5.json` | 27/27 pacotes, 365/365 IDs, fonte/localizador/papel sem divergência, saída 0. Com `--require-complete`: **saída 1**, 12 enabled/353 pending; gate integral não passou. |
+| V-B por gramática: `.\.venv\Scripts\python.exe -m scripts.benchmark_packages_e07 --output tmp/e07-simbologia/benchmark-a5` | 58 páginas autorais, 12 positivos/46 negativos em oito famílias: **12 TP, 0 FP, 0 FN, 0 duplicatas**, saída 0. As 19 famílias inteiramente pendentes não têm V-B positivo. |
+| V-B regressão/composição: `.\.venv\Scripts\python.exe -m scripts.benchmark_symbols synthetic --include-transformers --include-guys --include-packages --output tmp/e07-simbologia/baseline-a5` | 4 PDFs/6 páginas, 17 predições; união bruta 14 TP/3 FP/8 FN, saída 0. Nenhum positivo E07 nesse corpus E02; não é V-B dos pacotes pendentes. |
+| V-P inferência: `.\.venv\Scripts\python.exe -m scripts.benchmark_symbols examples --root examples --include-transformers --include-guys --include-packages --output tmp/e07-simbologia/predictions-a5` | **11 PDFs/11 páginas**, zero falhas e 11 fontes intactas; 237 predições (E04 220, E05 17, E06 0, E07 **0**), saída 0. `predictions.json` SHA-256 `045cc707265d33486b1adbd427b0ff88ab13eec03fddc5179c599cda34c3105c`; manifesto `363600250e14662f02150f909d40972634cc6e53a95371d40209d727fb492679`. |
+
+O esquema JSON foi parseado, seus campos/estados e casos inválidos foram
+exercitados pelo loader e pelos testes de mutação. Na continuação da etapa,
+`jsonschema==4.25.1` foi instalado somente em `tmp/e07-simbologia/jsonschema-validator`;
+o gate independente Draft 2020-12 passou para esquema, 27 pacotes/365 variantes
+e rejeitou oito mutações inválidas. O relatório é
+`tmp/e07-simbologia/jsonschema-gate.json`. O gate será repetido no checkpoint
+final após as novas gramáticas.
+
+**V-P visual independente:** C renderizou e viu realmente 11 visões gerais,
+44 tiles ampliados com cobertura integral e 11 imagens base **antes** das
+predições; não inferiu revisão visual de JSON/OCR. Depois comparou A5 com as
+imagens e registrou as 88 células página × método × camada: 44 bases executadas,
+44 anotações fora de domínio, nenhuma falha. As 11 sobreposições E07 são iguais
+às bases, sem candidato E07. Houve **0 FP emitidos e 0 exclusivos E07**; FN e
+recall reais das 12 variantes habilitadas são **não estimáveis**, pois não há
+positivo F02 inequívoco delas na coleção. Postes, cabos e conexões amplos são
+visíveis, mas não autorizaram rótulos de variante. Norte, detalhes, tabelas
+`VÃO REGULADOR`, instruções negativas, fotos, QR, vegetação e futuro de geração
+foram mantidos como contexto, não ativos. As 237 predições E04–E06 e estados
+coincidem exatamente com E06 A7; sua comparação visual anterior foi reutilizada
+por identidade comprovada, sem alegar nova leitura a partir de JSON. Os hashes
+das 11 fontes da inspeção inicial coincidem com os de A5. Relatório por página,
+ambiguidades e limites de fontes/flate estão em
+`tmp/e07-simbologia/visual/reconciliation-a5.md` e `.json` (SHA-256
+`b6d87a24389dd99668bca493ec2a3d87cc906ede3327f49fde9f3aacef96b5b3`).
+Nenhuma referência/ROI de C entrou no algoritmo; todos os exemplos vistos são
+desenvolvimento e a reserva sintética permanece lacrada até E16.
+
+**Decisão:** E07 permanece `#bloqueada` para aceite integral. Os 27 pacotes são
+auditáveis, mas 353 variantes ainda não são reconhecidas, 19 famílias não têm
+qualquer positivo/negativo executável, e o V-P não demonstrou ganho real E07.
+O desbloqueio exige ondas de gramáticas visuais ligadas à fonte e corpus
+positivo/negativo independente para cada pacote/variante pendente, seguidas por
+V-B, V-N, V-Q e V-P de toda a coleção no mesmo checkpoint. Esquema e loader
+podem ser consumidos como base de desenvolvimento; não representam cobertura
+homologada. Sem modelo comercial, regra nova de conformidade, commit, publicação
+ou implantação.
+
+### Evidências e handoff E07 — continuação e checkpoint integrado, 23/09/2026
+
+A retomada começou com E07 `#em-andamento` sincronizado no índice e detalhe,
+preservando os arquivos A5 sem commit. E04/E05/E06 permaneceram concluídas; o
+denominador E01 continuou 365 variantes E07 em 27 famílias. A fonte primária
+F02 foi obtida do URL oficial para `tmp/e07-simbologia/reference/`, sem entrar
+no Git: SHA-256 `0e29f0ea81827c7235d0893c383fc993c78378c51e930b8b8228de82d564ce04`,
+igual ao E01; 45 páginas. `scripts.audit_symbol_packages --source-pdf` verificou
+esse hash e o intervalo das 365 páginas citadas. O validador independente
+`jsonschema==4.25.1` foi instalado somente em
+`tmp/e07-simbologia/jsonschema-validator`, sem mudar `.venv` ou dependências.
+
+| Frente e dono dos arquivos | Checkpoint verificável |
+| --- | --- |
+| A `/root/packages` — `declarative_symbols.py`, `symbol_packages/*.json`, esquema | Ondas §6/§7/§23: CT, CL, CM com quadro rotulado; triângulo vazio/cheio; EH, SF6, BTX, BQX em painel cinza aninhado. 27 JSON/365 IDs, **21 enabled/344 pending** em 10/17 famílias; runner SHA-256 `849cc38d7a8c9cbbeae3afb769dac3435faf8c490484b126bac674657b19a40a`, esquema `6c3896da33243f35aeddbc4e2d51368cd06e8d41822962a99ae9e1c6f46cde17`. Arquivos congelados antes da inferência V-P. |
+| B `/root/package_tests` — `tests/unit/test_declarative_symbol_packages.py`, `tests/fixtures/declarative_symbols/` | 69 testes dirigidos, negativos cruzados e regressão CT/X→torre, fill válido para variante irmã, snapshot do runner, 23 TP/0 FP/0 FN/0 duplicatas no corpus autoral. Teste SHA-256 `1a284a54164456b547d5902238aa5d43783f04b584ea3a4bbb0b5da4cb759153`; corpus `58600bc5cef40459acd76246c7bad38e1797ff4c2a6cc0ad7d473b3d462e716b`. |
+| C `/root/pdf_audit` — somente `tmp/e07-simbologia/source-review/` e `tmp/e07-simbologia/visual/` | Fonte F02 p6–45: **40/40 páginas realmente vistas** a 300 dpi; p6–14 incluem matriz visual de 80/80 IDs e 15 recortes; relatórios `review-03-13.md` SHA-256 `453fa7f85dc6418942e9b857ce73f3ee3eeb7e9cf1ef1828d896653c3cbde9d6` e `review-14-33.md` `61d0955e82987ff6a04860a5a1f4c4ac45cd003776d227a660fc3fac8c238209`. V-P final `reconciliation-final.md` SHA-256 `d34837b189813be8aa4049e328e4a8d12372f6ad84e51952313016d4602bb053`. Nenhuma ROI do revisor entrou no runner. |
+| Coordenador `/root` — scripts centrais, `docs/e07-pacotes-simbologia.md`, este roadmap | Auditoria opcional da fonte/hash/páginas, snapshot único de pacotes durante benchmark e falha explícita por drift; integração serial e gates abaixo. O reconciliador não foi alterado. |
+
+**Decisões de fonte:** F02 p6–45 foi renderizada e aberta como imagem antes de
+comparar gramáticas. Há símbolos **idênticos** para poste MT/AT (§3/§8), rota
+subterrânea/galeria (§4/§5), duas caixas (§5), pórticos 2/3 (§11), cabos
+aéreos/subterrâneos (§16/§17) e subtipos de equipamento (§20/§25/§32).
+Nesses casos o ID exato precisa de contexto ou deve permanecer alternativa
+explícita; uma forma genérica não conta como reconhecimento específico. Os
+glifos das páginas F02 p9–14 e p27–33 testadas com o runner estão incorporados
+como imagens e não produziram positivos vetoriais. A própria F02 p38 declara os 89 desenhos §33
+sem conectividade elétrica e excluídos da publicação; imitação de equipamento
+nessa seção permanece informativa. Os PNGs da fonte ficam somente em `tmp/`.
+
+**Validações no checkpoint congelado** (comandos executados na raiz; `.venv`
+existente via `require_escalated` neste host):
+
+| Gate/comando | Resultado |
+| --- | --- |
+| V-N: `.\.venv\Scripts\python.exe -m pytest tests/unit/test_declarative_symbol_packages.py tests/unit/test_benchmark_symbols.py tests/unit/test_symbol_inventory.py -q -o cache_dir=tmp/e07-simbologia/pytest-cache --basetemp=tmp/e07-simbologia/integration-pytest-bfinal` | **156 passed**, exit 0; B dirigido 69 passed. |
+| V-Q: `.\.venv\Scripts\python.exe -m ruff check .`; `.\.venv\Scripts\python.exe -m ruff format --check .`; `.\.venv\Scripts\python.exe -m mypy`; `git diff --check` | Todos exit 0; 404 arquivos formatados, 372 fontes sem erro de tipo. |
+| Esquema independente: `.\.venv\Scripts\python.exe tmp/e07-simbologia/validator_gate.py` | Draft 2020-12 `check_schema`, 27 pacotes/365 IDs, **13 mutações inválidas rejeitadas**, exit 0; relatório `tmp/e07-simbologia/jsonschema-gate.json`. |
+| Fonte/inventário: `.\.venv\Scripts\python.exe -m scripts.audit_symbol_packages --source-pdf tmp/e07-simbologia/reference/IT-EO-008_Simbologia_EO.pdf --output tmp/e07-simbologia/package-audit-final-wave.json` | 27/365, F02 SHA E01/45 páginas/localizadores válidos, zero erros, exit 0; **21 enabled/344 pending**. O mesmo script com `--require-complete` retornou **exit 1** por 344 pendências; aceite integral falhou. |
+| V-B por gramática: `.\.venv\Scripts\python.exe -m scripts.benchmark_packages_e07 --output tmp/e07-simbologia/benchmark-final-wave` | 10 famílias, 21 positivos diretos + dois fills de variante irmã, 95 negativos vazios: **23 TP/0 FP/0 FN/0 duplicatas**, exit 0. As 344 pendentes não têm V-B positivo/negativo aprovado. |
+| V-B composição E02: `.\.venv\Scripts\python.exe -m scripts.benchmark_symbols synthetic --include-transformers --include-guys --include-packages --output tmp/e07-simbologia/baseline-final-wave` | 4 PDFs/6 páginas, união bruta 14 TP/3 FP/8 FN, exit 0; a reserva E16 não foi aberta. |
+| V-P inferência: `.\.venv\Scripts\python.exe -m scripts.benchmark_symbols examples --root examples --include-transformers --include-guys --include-packages --output tmp/e07-simbologia/predictions-final-wave` | **11 PDFs/11 páginas**, 0 falhas, 11 fontes intactas, pacote sem drift, 237 predições (E04 220/E05 17/E06 0/E07 **0**), exit 0. Manifesto SHA-256 `081a8c246ff46fb4287ba91aa2ec1486cdb8e1f0dab964665c671e425c3a5949`; predições `32cc59b79cb847502ffd9fe2c02f09c15109894c97b5b896487e117dff4355ea`. |
+
+**V-P visual final:** C reutilizou a inspeção independente *pré-predição* de
+11 páginas completas, 44 tiles e 11 bases de A5; depois abriu três overlays
+finais e verificou igualdade de pixels nos 11 overlays E07 contra as bases.
+`tmp/e07-simbologia/visual/reconciliation-final.md` e `.json` (SHA-256
+`dd56c9a0e25a8024c966e29a606bbefbd10442e43a120ca90463a375b07c2fa9`)
+registram 88 células página × método × camada: 44 bases executadas e 44
+anotações fora do domínio. Os 237 candidatos anteriores são semanticamente
+idênticos a A5 e mantidos na união; silêncio E07 não os veta, concordância não
+é probabilidade. E07 emitiu **0 FP, 0 exclusivos e 0 concordantes**; FN/recall
+reais das variantes habilitadas são **não estimáveis**, pois não houve positivo
+E07 inequívoco nesses PDFs. Grupos amplos, negativos informativos e ambiguidades
+estão na matriz por página. JSON/OCR não foram tratados como revisão visual,
+nenhuma referência do revisor entrou no algoritmo, e a reserva E16 permanece
+lacrada. Os exemplos vistos continuam corpus de desenvolvimento.
+
+**Decisão final:** E07 volta a `#bloqueada`, com o cadastro auditável e nove
+gramáticas novas testadas, mas **344/365 variantes** ainda sem reconhecimento
+positivo/negativo em **17 famílias inteiramente pendentes**. A fonte demonstra
+colisões intrínsecas de forma e o V-P não forneceu positivo real E07; portanto
+habilitar tudo por forma genérica ou contar candidato desconhecido mascararia
+FP/FN. Desbloqueio: desenvolver por ondas gramáticas/alternativas com contexto
+discriminante e corpus autoral por variante/família, inclusive caminho raster
+quando necessário, sem promover §33; então repetir fonte/esquema, V-N/V-Q/V-B e
+V-P integral no mesmo snapshot. E11/E12 não devem consumir E07 como concluída.
+Nenhum commit, publicação ou implantação foi feito.
 
 ## E08 — Detector raster por templates e Hough — #pendente
 

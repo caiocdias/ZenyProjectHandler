@@ -15,18 +15,18 @@ from typing import Any
 
 import pymupdf
 
+import zeny_project_handler.adapters.analysis.declarative_symbols as declarative_symbols
+import zeny_project_handler.adapters.analysis.pymupdf_guys as pymupdf_guys
+import zeny_project_handler.adapters.analysis.pymupdf_symbols as pymupdf_symbols
+import zeny_project_handler.adapters.analysis.pymupdf_transformers as pymupdf_transformers
 from scripts.symbol_benchmark_evaluator import PROTOCOL, evaluate
-from zeny_project_handler.adapters.analysis import (
-    pymupdf_guys,
-    pymupdf_symbols,
-    pymupdf_transformers,
-)
 from zeny_project_handler.adapters.analysis.pymupdf_analyzer import PyMuPdfDocumentAnalyzer
 
 ROOT = Path(__file__).resolve().parents[1]
 METHOD_ID = "legacy-vector-symbols"
 TRANSFORMER_METHOD_ID = "transformer-vector-shapes"
 GUY_METHOD_ID = "guy-vector-shapes"
+PACKAGE_METHOD_ID = "declarative-vector-packages"
 CLASS_FAMILY = {
     "ATERRAMENTO": "family-f02-19",
     "PARA_RAIOS_MT": "family-f02-21",
@@ -97,6 +97,31 @@ def guy_method_metadata() -> Record:
         "source_sha256_lf": _text_sha256(Path(pymupdf_guys.__file__)),
         "configuration": "E06 vector mechanical relation; no calibrated probability",
         "family_mapping": "per-observation familia_inventario; alternatives retained",
+    }
+
+
+def package_method_metadata(
+    packages: tuple[declarative_symbols.Package, ...] | None = None,
+) -> Record:
+    """Expose only executable E07 classes; pending cells stay in the package audit."""
+    packages = declarative_symbols.carregar_pacotes() if packages is None else packages
+    profile = declarative_symbols.perfil_pacotes(packages)
+    variants = [variant for package in packages for variant in package["variants"]]
+    enabled = [item for item in variants if item["recognition"]["status"] == "enabled"]
+    return {
+        "id": PACKAGE_METHOD_ID,
+        "version": profile.versao,
+        "algorithm_family": profile.familia,
+        "shared_sources": list(profile.fontes_compartilhadas),
+        "supported_classes": list(profile.classes_suportadas),
+        "supported_layers": list(profile.camadas_suportadas),
+        "source_sha256_lf": _text_sha256(Path(declarative_symbols.__file__)),
+        "package_sha256": sha256(canonical_json(packages).encode()).hexdigest(),
+        "package_count": len(packages),
+        "enabled_variant_count": len(enabled),
+        "pending_variant_count": len(variants) - len(enabled),
+        "configuration": "E07 vector grammars; pending inventory cells are not detections",
+        "family_mapping": "per-observation familia_inventario; no asset promotion",
     }
 
 
@@ -268,12 +293,56 @@ def _guy_prediction(observation: Any, document_id: str) -> Record:
     }
 
 
+def _package_prediction(observation: Any, document_id: str) -> Record:
+    """Project one E07 shape without treating informative symbols as equipment."""
+    attributes = dict(observation.atributos)
+    points = [
+        (float(point.x), float(point.y)) for point in observation.geometria.pontos_normalizados
+    ]
+    xs, ys = [point[0] for point in points], [point[1] for point in points]
+    primary = next((item for item in observation.alternativas if item.classe), None)
+    if primary is None:
+        raise ValueError("Package observation has no class alternative")
+    role = attributes["papel"]
+    if role not in {"operational", "informative"}:
+        raise ValueError(f"Unknown package role: {role}")
+    return {
+        "id": f"{document_id}:{observation.id}",
+        "method_id": PACKAGE_METHOD_ID,
+        "document_id": document_id,
+        "page": observation.fonte.pagina_numero,
+        "layer": observation.fonte.camada,
+        "family": attributes["familia_inventario"],
+        "class_id": primary.classe,
+        "bbox": [min(xs), min(ys), max(xs), max(ys)],
+        "score": float(observation.score_bruto) if observation.score_bruto is not None else None,
+        "situation": observation.situacao.value if observation.situacao is not None else None,
+        "quantity": None,
+        "association": None,
+        "context": "informative" if role == "informative" else "operational",
+        "review_required": True,
+        "provenance": {
+            "observation_id": observation.id,
+            "variant_id": attributes["variante_inventario"],
+            "possible_references": attributes["referencias_possiveis"],
+            "role": role,
+            "destination": attributes["destino"],
+            "reported_context": attributes["contexto"],
+            "source_reference": attributes["fonte_referencia"],
+            "primitive_ids": [item.indice for item in observation.primitivas],
+            "score_kind": "raw; not calibrated probability",
+        },
+    }
+
+
 def infer_pdf(
     source: Path,
     document_id: str,
     *,
     include_transformers: bool = False,
     include_guys: bool = False,
+    include_packages: bool = False,
+    package_snapshot: tuple[declarative_symbols.Package, ...] | None = None,
 ) -> tuple[Record, list[Record], list[Record]]:
     """Infer all base pages with only source path and opaque document identity.
 
@@ -281,6 +350,8 @@ def infer_pdf(
     Page failures are preserved and do not prevent attempting subsequent pages.
     """
     source = source.resolve(strict=True)
+    if include_packages and package_snapshot is None:
+        package_snapshot = declarative_symbols.carregar_pacotes()
     before = _identity(source)
     started = perf_counter()
     own_tracing = not tracemalloc.is_tracing()
@@ -443,6 +514,55 @@ def infer_pdf(
                             },
                         )
                     )
+                if include_packages:
+                    package_started = perf_counter()
+                    package_execution: Record = {
+                        "document_id": document_id,
+                        "page": number,
+                        "layer": "base",
+                        "method_id": PACKAGE_METHOD_ID,
+                        "status": "executed",
+                        "reason": None,
+                    }
+                    try:
+                        if page is None:
+                            raise ValueError("PDF page unavailable to package detector")
+                        observed_packages = declarative_symbols.observar_pacotes(
+                            page,
+                            documento_id=document_id,
+                            documento_sha256=before["sha256"],
+                            pagina_numero=number,
+                            pacotes=package_snapshot,
+                        )
+                        package_predictions = [
+                            _package_prediction(item, document_id)
+                            for item in observed_packages.observacoes
+                        ]
+                        predictions.extend(package_predictions)
+                        package_execution["prediction_count"] = len(package_predictions)
+                        package_execution["signature"] = observed_packages.perfil.assinatura()
+                    except Exception as error:
+                        message = f"{type(error).__name__}: {error}"
+                        package_execution.update(status="failed", reason=message)
+                        page_manifest.update(status="failed", reason=message)
+                        manifest["failures"].append(
+                            {"page": number, "method_id": PACKAGE_METHOD_ID, "reason": message}
+                        )
+                        manifest["status"] = "failed"
+                    package_execution["seconds"] = perf_counter() - package_started
+                    executions.extend(
+                        (
+                            package_execution,
+                            {
+                                "document_id": document_id,
+                                "page": number,
+                                "layer": "annotation",
+                                "method_id": PACKAGE_METHOD_ID,
+                                "status": "not_applicable",
+                                "reason": "E07 vector packages support the base layer only",
+                            },
+                        )
+                    )
                 manifest["pages"].append(page_manifest)
     except Exception as error:
         manifest["status"] = "failed"
@@ -479,6 +599,7 @@ def _run(
     mode: str,
     include_transformers: bool = False,
     include_guys: bool = False,
+    include_packages: bool = False,
 ) -> Record:
     output = output.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -487,12 +608,14 @@ def _run(
         (output / name).resolve() in protected for name in ("manifest.json", "predictions.json")
     ):
         raise ValueError("Output must not overwrite source PDF")
+    package_snapshot = declarative_symbols.carregar_pacotes() if include_packages else None
     predictions: Record = {
         "schema_version": 1,
         "methods": [
             method_metadata(),
             *([transformer_method_metadata()] if include_transformers else []),
             *([guy_method_metadata()] if include_guys else []),
+            *([package_method_metadata(package_snapshot)] if include_packages else []),
         ],
         "documents": [],
         "predictions": [],
@@ -508,7 +631,7 @@ def _run(
         "reference_access": "inference accepts only PDF path and opaque document id",
         "limitations": [
             "Methods sharing PyMuPDF vector drawings are correlated; agreement is not probability."
-            if include_transformers or include_guys
+            if include_transformers or include_guys or include_packages
             else "One real visual method only; no independent detector gain claimed."
         ],
     }
@@ -520,8 +643,10 @@ def _run(
                     document_id,
                     include_transformers=include_transformers,
                     include_guys=include_guys,
+                    include_packages=include_packages,
+                    package_snapshot=package_snapshot,
                 )
-                if include_transformers or include_guys
+                if include_transformers or include_guys or include_packages
                 else infer_pdf(source, document_id)
             )
         except OSError as error:
@@ -551,6 +676,17 @@ def _run(
         predictions["executions"].extend(executions)
         write_json(output / "predictions.json", predictions)
         write_json(output / "manifest.json", manifest)
+    package_configuration_unchanged = True
+    if package_snapshot is not None:
+        try:
+            package_configuration_unchanged = canonical_json(
+                declarative_symbols.carregar_pacotes()
+            ) == canonical_json(package_snapshot)
+        except (OSError, ValueError):
+            package_configuration_unchanged = False
+        if not package_configuration_unchanged:
+            manifest["failures"] = ["E07 package configuration changed during inference"]
+    manifest["package_configuration_unchanged"] = package_configuration_unchanged
     manifest["counts"] = {
         "pdfs": len(sources),
         "pages_discovered": sum(item.get("page_count") or 0 for item in manifest["documents"]),
@@ -564,7 +700,11 @@ def _run(
         "documents_failed": sum(item["status"] == "failed" for item in manifest["documents"]),
         "predictions": len(predictions["predictions"]),
     }
-    manifest["completed"] = bool(sources) and not manifest["counts"]["documents_failed"]
+    manifest["completed"] = (
+        bool(sources)
+        and not manifest["counts"]["documents_failed"]
+        and package_configuration_unchanged
+    )
     manifest["status"] = (
         "completed_inference" if manifest["completed"] else "failed" if sources else "no_examples"
     )
@@ -579,7 +719,12 @@ def _run(
 
 
 def run_examples(
-    root: Path, output: Path, *, include_transformers: bool = False, include_guys: bool = False
+    root: Path,
+    output: Path,
+    *,
+    include_transformers: bool = False,
+    include_guys: bool = False,
+    include_packages: bool = False,
 ) -> Record:
     """Discover every recursive PDF, including .PDF, without collapsing equal copies."""
     root = root.resolve()
@@ -602,6 +747,7 @@ def run_examples(
         mode="examples",
         include_transformers=include_transformers,
         include_guys=include_guys,
+        include_packages=include_packages,
     )
     manifest["discovery_root"] = str(root)
     manifest["discovery_root_exists"] = root.is_dir()
@@ -611,7 +757,11 @@ def run_examples(
 
 
 def run_synthetic(
-    output: Path, *, include_transformers: bool = False, include_guys: bool = False
+    output: Path,
+    *,
+    include_transformers: bool = False,
+    include_guys: bool = False,
+    include_packages: bool = False,
 ) -> Record:
     """Materialize fixtures in a separate process; load labels only after inference."""
     output = output.resolve()
@@ -636,6 +786,7 @@ def run_synthetic(
         mode="synthetic-development",
         include_transformers=include_transformers,
         include_guys=include_guys,
+        include_packages=include_packages,
     )
     # Deliberate phase boundary. The original prediction artifact already exists.
     predictions = json.loads((output / "predictions.json").read_text(encoding="utf-8"))

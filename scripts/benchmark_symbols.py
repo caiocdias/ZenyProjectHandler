@@ -31,6 +31,9 @@ def main(argv: list[str] | None = None) -> int:
     synthetic.add_argument(
         "--include-guys", action="store_true", help="include the opt-in E06 method"
     )
+    synthetic.add_argument(
+        "--include-packages", action="store_true", help="include executable E07 packages"
+    )
     examples = modes.add_parser(
         "examples", help="all recursive PDFs/pages; independent visual review still required"
     )
@@ -41,6 +44,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     examples.add_argument(
         "--include-guys", action="store_true", help="include the opt-in E06 method"
+    )
+    examples.add_argument(
+        "--include-packages", action="store_true", help="include executable E07 packages"
     )
     comparison = modes.add_parser(
         "evaluate", help="compare frozen JSON artifacts without inference"
@@ -54,6 +60,7 @@ def main(argv: list[str] | None = None) -> int:
             options.output,
             include_transformers=options.include_transformers,
             include_guys=options.include_guys,
+            include_packages=options.include_packages,
         )
         print(
             json.dumps(
@@ -70,6 +77,7 @@ def main(argv: list[str] | None = None) -> int:
             options.output,
             include_transformers=options.include_transformers,
             include_guys=options.include_guys,
+            include_packages=options.include_packages,
         )
         print(
             json.dumps(
