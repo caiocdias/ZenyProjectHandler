@@ -1,17 +1,23 @@
+# mypy: disable-error-code="no-untyped-call"
 """Real tiling/persistence boundaries with a deterministic, optional-runtime-free engine."""
 
 from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, ClassVar, Never, cast
 from uuid import uuid4
 
+import pymupdf
 from tests.pdf_fixtures import create_analysis_pdf
 from tests.unit.test_pymupdf_analyzer import FakeOcr, _request
 
 from zeny_project_handler.adapters.analysis import JsonAnalysisCache, PyMuPdfDocumentAnalyzer
-from zeny_project_handler.adapters.analysis.rapid_evidence import RapidEvidenceExtractor
+from zeny_project_handler.adapters.analysis.rapid_evidence import (
+    RapidEvidenceExtractor,
+    extrair_leituras_ocr_legenda,
+)
 from zeny_project_handler.adapters.analysis.rapid_ocr import RapidLocalOcr
 from zeny_project_handler.application.method_reconciliation import reading_data
 from zeny_project_handler.ports.analysis import PaginaRasterOcr, ResultadoAnaliseDocumento
@@ -96,3 +102,46 @@ def test_unavailable_engine_is_explicit_and_retried(tmp_path: Path) -> None:
     result = adapter.extrair(request)
     assert not result.candidatos
     assert result.diagnosticos[0].codigo == "analysis.complementary.unavailable"
+
+
+def test_legend_ocr_failure_is_diagnostic_and_page_readings_keep_provenance() -> None:
+    document = pymupdf.open()
+    document.new_page(width=200, height=100)
+    document.new_page(width=200, height=100)
+    try:
+        fake = FakeRapid(fail=2)
+        readings, diagnostics = extrair_leituras_ocr_legenda(
+            document, factory=lambda: cast(RapidLocalOcr, fake)
+        )
+        assert len(readings) == 1
+        assert readings[0].pagina_numero == 1
+        assert readings[0].texto == "654321 7654321"
+        assert diagnostics == ("OCR de legenda p2: RuntimeError",)
+        missing, unavailable = extrair_leituras_ocr_legenda(
+            document, factory=lambda: cast(RapidLocalOcr, missing_runtime())
+        )
+        assert not missing
+        assert unavailable == ("OCR de legenda indisponível: ImportError",)
+    finally:
+        document.close()
+
+
+def missing_runtime() -> Never:
+    raise ImportError("optional OCR unavailable")
+
+
+def test_legend_ocr_budget_rejects_page_before_render() -> None:
+    class OversizedPage:
+        number = 0
+        rect = SimpleNamespace(width=1000, height=1000)
+
+        def get_pixmap(self, **_options: Any) -> Never:
+            raise AssertionError("render must not happen")
+
+    readings, diagnostics = extrair_leituras_ocr_legenda(
+        [OversizedPage()],
+        factory=lambda: cast(RapidLocalOcr, FakeRapid()),
+        limite_pixels=100,
+    )
+    assert readings == ()
+    assert diagnostics == ("OCR de legenda p1: ValueError",)

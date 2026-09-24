@@ -8,6 +8,7 @@ import platform
 import subprocess
 import sys
 import tracemalloc
+from dataclasses import asdict, is_dataclass
 from decimal import Decimal
 from hashlib import sha256
 from pathlib import Path
@@ -17,6 +18,7 @@ from typing import Any
 import pymupdf
 
 import zeny_project_handler.adapters.analysis.declarative_symbols as declarative_symbols
+import zeny_project_handler.adapters.analysis.legend_symbols as legend_symbols
 import zeny_project_handler.adapters.analysis.pymupdf_guys as pymupdf_guys
 import zeny_project_handler.adapters.analysis.pymupdf_symbols as pymupdf_symbols
 import zeny_project_handler.adapters.analysis.pymupdf_transformers as pymupdf_transformers
@@ -24,6 +26,10 @@ import zeny_project_handler.adapters.analysis.raster_symbols as raster_symbols
 import zeny_project_handler.adapters.analysis.structural_symbols as structural_symbols
 from scripts.symbol_benchmark_evaluator import PROTOCOL, evaluate
 from zeny_project_handler.adapters.analysis.pymupdf_analyzer import PyMuPdfDocumentAnalyzer
+from zeny_project_handler.adapters.analysis.rapid_evidence import (
+    LeituraOcrLegenda,
+    extrair_leituras_ocr_legenda,
+)
 from zeny_project_handler.domain.enums import EstadoMetodoSimbolos
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -31,6 +37,7 @@ METHOD_ID = "legacy-vector-symbols"
 TRANSFORMER_METHOD_ID = "transformer-vector-shapes"
 GUY_METHOD_ID = "guy-vector-shapes"
 PACKAGE_METHOD_ID = "declarative-vector-packages"
+LEGEND_METHOD_ID = "document-local-legend"
 CLASS_FAMILY = {
     "ATERRAMENTO": "family-f02-19",
     "PARA_RAIOS_MT": "family-f02-21",
@@ -46,6 +53,20 @@ def canonical_json(value: Any) -> str:
 def write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(canonical_json(value), encoding="utf-8", newline="\n")
+
+
+def _jsonable(value: Any) -> Any:
+    if is_dataclass(value) and not isinstance(value, type):
+        return _jsonable(asdict(value))
+    if isinstance(value, dict):
+        return {str(key): _jsonable(item) for key, item in value.items()}
+    if isinstance(value, tuple | list):
+        return [_jsonable(item) for item in value]
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, bytes):
+        return {"sha256": sha256(value).hexdigest(), "bytes": len(value)}
+    return value
 
 
 def file_sha256(path: Path) -> str:
@@ -192,6 +213,50 @@ def structural_method_metadata(
             for config in configurations
         )
     ]
+
+
+def legend_method_metadata(*, include_ocr: bool) -> Record:
+    """Document-local unknowns stay outside the closed E02 family evaluator."""
+    return {
+        "id": LEGEND_METHOD_ID,
+        "version": "e10-document-local-1",
+        "algorithm_family": "document-local-legend-and-repetition",
+        "shared_sources": ["pymupdf:native-text", "pymupdf:page-raster", "optional:rapidocr"],
+        "supported_classes": ["UNKNOWN_LOCAL"],
+        "supported_layers": ["base"],
+        "source_sha256_lf": _text_sha256(Path(legend_symbols.__file__)),
+        "configuration": {"ocr_enabled": include_ocr, "scope": "one PDF SHA-256 only"},
+        "score_kind": "raw visual similarity; not calibrated probability",
+        "evaluation_scope": "local_candidates; excluded from closed E02 family metrics",
+    }
+
+
+def _legend_prediction(observation: Any, document_id: str) -> Record:
+    points = [
+        (float(point.x), float(point.y)) for point in observation.geometria.pontos_normalizados
+    ]
+    xs, ys = [point[0] for point in points], [point[1] for point in points]
+    return {
+        "id": f"{document_id}:{observation.id}",
+        "method_id": LEGEND_METHOD_ID,
+        "document_id": document_id,
+        "page": observation.fonte.pagina_numero,
+        "layer": observation.fonte.camada,
+        "family": "local-unknown",
+        "class_id": "UNKNOWN_LOCAL",
+        "bbox": [min(xs), min(ys), max(xs), max(ys)],
+        "score": float(observation.score_bruto) if observation.score_bruto is not None else None,
+        "context": "operational",
+        "review_required": True,
+        "provenance": {
+            "observation_id": observation.id,
+            "document_sha256": observation.fonte.documento_sha256,
+            "template_id": observation.template,
+            "attributes": _jsonable(dict(observation.atributos)),
+            "alternatives": _jsonable(observation.alternativas),
+            "score_kind": "raw visual similarity; not calibrated probability",
+        },
+    }
 
 
 def _environment() -> Record:
@@ -513,6 +578,8 @@ def infer_pdf(
     include_packages: bool = False,
     include_raster: bool = False,
     include_structural: bool = False,
+    include_legend: bool = False,
+    include_legend_ocr: bool = False,
     package_snapshot: tuple[declarative_symbols.Package, ...] | None = None,
     raster_snapshot: tuple[raster_symbols.TemplateRasterVerificado, ...] | None = None,
     raster_configuration: raster_symbols.ConfiguracaoDetectorRaster | None = None,
@@ -560,6 +627,49 @@ def infer_pdf(
             if document.needs_pass:
                 raise ValueError("encrypted PDF needs password; no page silently skipped")
             manifest["page_count"] = len(document)
+            legend_result: Any = None
+            legend_error: str | None = None
+            if include_legend:
+                legend_started = perf_counter()
+                try:
+                    ocr_readings: tuple[LeituraOcrLegenda, ...] = ()
+                    ocr_diagnostics: tuple[str, ...] = ()
+                    if include_legend_ocr:
+                        ocr_readings, ocr_diagnostics = extrair_leituras_ocr_legenda(document)
+                    legend_result = legend_symbols.observar_legenda_documental(
+                        document,
+                        documento_id=document_id,
+                        documento_sha256=before["sha256"],
+                        leituras_ocr=tuple(
+                            legend_symbols.LeituraLegenda(
+                                pagina_numero=item.pagina_numero,
+                                texto=item.texto,
+                                caixa=item.caixa,
+                                origem="rapidocr-db-svtr",
+                            )
+                            for item in ocr_readings
+                        ),
+                    )
+                    manifest["legend_reference"] = {
+                        "pairs": _jsonable(legend_result.pares),
+                        "regions": _jsonable(legend_result.regioes_legenda),
+                        "diagnostics": [*ocr_diagnostics, *legend_result.diagnosticos],
+                        "signature": legend_result.resultado.perfil.assinatura(),
+                        "seconds": perf_counter() - legend_started,
+                    }
+                    manifest["local_candidates"] = [
+                        _legend_prediction(item, document_id)
+                        for item in legend_result.resultado.observacoes
+                    ]
+                except Exception as error:
+                    legend_error = f"{type(error).__name__}: {error}"
+                    manifest["legend_reference"] = {"error": legend_error}
+                    manifest["legend_reference"]["seconds"] = perf_counter() - legend_started
+                    manifest["local_candidates"] = []
+                    manifest["status"] = "failed"
+                    manifest["failures"].append(
+                        {"page": None, "method_id": LEGEND_METHOD_ID, "reason": legend_error}
+                    )
             for number in range(1, len(document) + 1):
                 page_started = perf_counter()
                 page = None
@@ -604,6 +714,55 @@ def infer_pdf(
                         },
                     )
                 )
+                if include_legend:
+                    legend_started = perf_counter()
+                    coverages = (
+                        tuple(
+                            item
+                            for item in legend_result.resultado.coberturas
+                            if item.fonte.pagina_numero == number
+                        )
+                        if legend_result is not None
+                        else ()
+                    )
+                    legend_failure = legend_error or (
+                        "missing page coverage" if not coverages else None
+                    )
+                    if any(item.estado is EstadoMetodoSimbolos.FALHA for item in coverages):
+                        legend_failure = "document-local legend coverage failed"
+                    legend_execution: Record = {
+                        "document_id": document_id,
+                        "page": number,
+                        "layer": "base",
+                        "method_id": LEGEND_METHOD_ID,
+                        "status": "failed" if legend_failure else "executed",
+                        "reason": legend_failure,
+                        "prediction_count": sum(
+                            item["page"] == number for item in manifest.get("local_candidates", [])
+                        ),
+                        "signature": (
+                            legend_result.resultado.perfil.assinatura()
+                            if legend_result is not None
+                            else None
+                        ),
+                        "seconds": perf_counter() - legend_started,
+                    }
+                    executions.extend(
+                        (
+                            legend_execution,
+                            {
+                                "document_id": document_id,
+                                "page": number,
+                                "layer": "annotation",
+                                "method_id": LEGEND_METHOD_ID,
+                                "status": "not_applicable",
+                                "reason": "document-local legend searches base layer only",
+                            },
+                        )
+                    )
+                    if legend_failure:
+                        page_manifest.update(status="failed", reason=legend_failure)
+                        manifest["status"] = "failed"
                 if include_transformers:
                     transformer_started = perf_counter()
                     transformer_execution: Record = {
@@ -997,7 +1156,11 @@ def _run(
     include_packages: bool = False,
     include_raster: bool = False,
     include_structural: bool = False,
+    include_legend: bool = False,
+    include_legend_ocr: bool = False,
 ) -> Record:
+    if include_legend_ocr and not include_legend:
+        raise ValueError("Legend OCR requires the document-local legend method")
     output = output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     protected = {source.resolve() for source, _ in sources}
@@ -1023,6 +1186,7 @@ def _run(
     structural_source_hash = (
         _text_sha256(Path(structural_symbols.__file__)) if include_structural else None
     )
+    legend_source_hash = _text_sha256(Path(legend_symbols.__file__)) if include_legend else None
     predictions: Record = {
         "schema_version": 1,
         "methods": [
@@ -1040,9 +1204,11 @@ def _run(
                 if structural_configurations is not None
                 else []
             ),
+            *([legend_method_metadata(include_ocr=include_legend_ocr)] if include_legend else []),
         ],
         "documents": [],
         "predictions": [],
+        "local_candidates": [],
         "executions": [],
     }
     manifest: Record = {
@@ -1061,6 +1227,7 @@ def _run(
             or include_packages
             or include_raster
             or include_structural
+            or include_legend
             else "One real visual method only; no independent detector gain claimed."
         ],
     }
@@ -1075,6 +1242,8 @@ def _run(
                     include_packages=include_packages,
                     include_raster=include_raster,
                     include_structural=include_structural,
+                    include_legend=include_legend,
+                    include_legend_ocr=include_legend_ocr,
                     package_snapshot=package_snapshot,
                     raster_snapshot=raster_snapshot,
                     raster_configuration=raster_configuration,
@@ -1085,6 +1254,7 @@ def _run(
                 or include_packages
                 or include_raster
                 or include_structural
+                or include_legend
                 else infer_pdf(source, document_id)
             )
         except OSError as error:
@@ -1111,6 +1281,7 @@ def _run(
             }
         )
         predictions["predictions"].extend(items)
+        predictions["local_candidates"].extend(document.get("local_candidates", []))
         predictions["executions"].extend(executions)
         write_json(output / "predictions.json", predictions)
         write_json(output / "manifest.json", manifest)
@@ -1145,6 +1316,15 @@ def _run(
         manifest["failures"].append("E09 structural adapter changed during inference")
     if include_structural:
         manifest["structural_configuration_unchanged"] = structural_configuration_unchanged
+    legend_configuration_unchanged = (
+        legend_source_hash == _text_sha256(Path(legend_symbols.__file__))
+        if legend_source_hash is not None
+        else True
+    )
+    if not legend_configuration_unchanged:
+        manifest["failures"].append("E10 legend adapter changed during inference")
+    if include_legend:
+        manifest["legend_configuration_unchanged"] = legend_configuration_unchanged
     manifest["counts"] = {
         "pdfs": len(sources),
         "pages_discovered": sum(item.get("page_count") or 0 for item in manifest["documents"]),
@@ -1157,6 +1337,7 @@ def _run(
         ),
         "documents_failed": sum(item["status"] == "failed" for item in manifest["documents"]),
         "predictions": len(predictions["predictions"]),
+        "local_candidates": len(predictions["local_candidates"]),
     }
     manifest["completed"] = (
         bool(sources)
@@ -1164,6 +1345,7 @@ def _run(
         and package_configuration_unchanged
         and raster_configuration_unchanged
         and structural_configuration_unchanged
+        and legend_configuration_unchanged
     )
     manifest["status"] = (
         "completed_inference" if manifest["completed"] else "failed" if sources else "no_examples"
@@ -1173,6 +1355,9 @@ def _run(
     # This hash excludes timing and machine paths, suitable for repeatability checks.
     manifest["observations_sha256"] = sha256(
         canonical_json(predictions["predictions"]).encode()
+    ).hexdigest()
+    manifest["local_candidates_sha256"] = sha256(
+        canonical_json(predictions["local_candidates"]).encode()
     ).hexdigest()
     write_json(output / "manifest.json", manifest)
     return manifest
@@ -1187,6 +1372,8 @@ def run_examples(
     include_packages: bool = False,
     include_raster: bool = False,
     include_structural: bool = False,
+    include_legend: bool = False,
+    include_legend_ocr: bool = False,
 ) -> Record:
     """Discover every recursive PDF, including .PDF, without collapsing equal copies."""
     root = root.resolve()
@@ -1212,6 +1399,8 @@ def run_examples(
         include_packages=include_packages,
         include_raster=include_raster,
         include_structural=include_structural,
+        include_legend=include_legend,
+        include_legend_ocr=include_legend_ocr,
     )
     manifest["discovery_root"] = str(root)
     manifest["discovery_root_exists"] = root.is_dir()
@@ -1228,6 +1417,8 @@ def run_synthetic(
     include_packages: bool = False,
     include_raster: bool = False,
     include_structural: bool = False,
+    include_legend: bool = False,
+    include_legend_ocr: bool = False,
 ) -> Record:
     """Materialize fixtures in a separate process; load labels only after inference."""
     output = output.resolve()
@@ -1255,6 +1446,8 @@ def run_synthetic(
         include_packages=include_packages,
         include_raster=include_raster,
         include_structural=include_structural,
+        include_legend=include_legend,
+        include_legend_ocr=include_legend_ocr,
     )
     # Deliberate phase boundary. The original prediction artifact already exists.
     predictions = json.loads((output / "predictions.json").read_text(encoding="utf-8"))

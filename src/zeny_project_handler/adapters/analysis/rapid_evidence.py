@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from dataclasses import dataclass
 from decimal import Decimal
 from hashlib import sha256
+from typing import Any
 
 from zeny_project_handler.application.method_reconciliation import (
     COMPOSITION_VERSION,
@@ -25,6 +27,78 @@ from zeny_project_handler.ports.analysis import (
 
 from .pymupdf_analyzer import _open_document
 from .rapid_ocr import RapidLocalOcr, map_quad
+
+
+@dataclass(frozen=True, slots=True)
+class LeituraOcrLegenda:
+    """OCR opcional em pontos da página; não é hipótese de símbolo."""
+
+    pagina_numero: int
+    texto: str
+    caixa: tuple[float, float, float, float]
+    confianca: float
+
+
+def extrair_leituras_ocr_legenda(
+    document: Any,
+    *,
+    factory: Callable[[], RapidLocalOcr] = RapidLocalOcr,
+    dpi: int = 144,
+    limite_pixels: int = 8_000_000,
+) -> tuple[tuple[LeituraOcrLegenda, ...], tuple[str, ...]]:
+    """Lê páginas independentemente de ROIs; falha de OCR preserva outros motores.
+
+    A implementação neural é opcional. O chamador registra diagnósticos e
+    continua com o texto nativo quando ela não está instalada ou uma página falha.
+    """
+    try:
+        engine = factory()
+    except Exception as error:
+        return (), (f"OCR de legenda indisponível: {type(error).__name__}",)
+    readings: list[LeituraOcrLegenda] = []
+    diagnostics: list[str] = []
+    for page in document:
+        number = page.number + 1
+        try:
+            scale = dpi / 72
+            if (page.rect.width * scale + 2) * (page.rect.height * scale + 2) > limite_pixels:
+                raise ValueError("página excede o limite de pixels do OCR")
+            pix = page.get_pixmap(dpi=dpi, annots=False, alpha=False)
+            if pix.width * pix.height > limite_pixels:
+                raise ValueError("página excede o limite de pixels do OCR")
+            raster = PaginaRasterOcr(
+                pagina_numero=number,
+                largura_pixels=pix.width,
+                altura_pixels=pix.height,
+                stride=pix.stride,
+                dados_rgb=pix.samples,
+                dpi=dpi,
+            )
+            for row in engine.recognize_quads(raster):
+                points = [
+                    ((float(x) + pix.x) / scale, (float(y) + pix.y) / scale) for x, y in row["quad"]
+                ]
+                readings.append(
+                    LeituraOcrLegenda(
+                        pagina_numero=number,
+                        texto=str(row["text"]),
+                        caixa=(
+                            min(x for x, _ in points),
+                            min(y for _, y in points),
+                            max(x for x, _ in points),
+                            max(y for _, y in points),
+                        ),
+                        confianca=float(row["confidence"]),
+                    )
+                )
+        except Exception as error:
+            diagnostics.append(f"OCR de legenda p{number}: {type(error).__name__}")
+        finally:
+            try:
+                engine.calls.clear()
+            except Exception as error:
+                diagnostics.append(f"OCR de legenda p{number}: limpeza {type(error).__name__}")
+    return tuple(readings), tuple(diagnostics)
 
 
 class RapidEvidenceExtractor:

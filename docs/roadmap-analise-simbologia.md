@@ -423,7 +423,7 @@ E16 executa V-G; não repetir toda a suíte após mera edição do roadmap.
 | E07 | Pacotes extensíveis das demais famílias | #bloqueada | E04, E05, E06 | Pacotes auditáveis entregues; reconhecimento integral permanece histórico/pendente e sua expansão segue o fluxo independente, sem travar E08–E16. |
 | E08 | Detector raster por templates e Hough | #concluida | E03, E04 | Acrescentar família raster capaz de detectar símbolos sem vetores aproveitáveis. |
 | E09 | Detector por contornos e grafo de traços | #concluida | E03, E04 | Implementar alternativa estrutural de reconhecimento de formas distinta de correlação de pixels e das heurísticas legadas. |
-| E10 | Adaptação à legenda e símbolos desconhecidos | #pendente | E03, E08 | Usar a legenda do próprio documento como fonte local de templates/semântica e oferecer desconhecidos revisáveis. |
+| E10 | Adaptação à legenda e símbolos desconhecidos | #concluida | E03, E08 | Usar a legenda do próprio documento como fonte local de templates/semântica e oferecer desconhecidos revisáveis. |
 | E11 | Experimento de detector visual treinável | #pendente | E02, E03 | Medir um detector local aprendido como fonte adicional, com decisão reproduzível de adoção ou rejeição; E07 é insumo opcional versionado. |
 | E12 | União, validação cruzada e calibração | #pendente | E05, E06, E08, E09, E10, E11 | Entregar reconciliador de símbolos que aproveite exclusivos e resolva duplicatas/conflitos sem quórum, consumindo apenas pacotes E07 habilitados. |
 | E13 | Associação semântica e promoção por campo | #pendente | E12 | Converter hipóteses reconciliadas em propostas úteis, com associação e promoção coerentes com a evidência. |
@@ -2160,7 +2160,7 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
   `6874d0585269a0a68397319268076e8e788aff64fc2bc5d776e80efca739be7b`).
   Nenhum commit, publicação ou implantação foi feito.
 
-## E10 — Adaptação à legenda e símbolos desconhecidos — #pendente
+## E10 — Adaptação à legenda e símbolos desconhecidos — #concluida
 
 **Objetivo:** Usar a legenda do próprio documento como fonte local de templates/semântica e oferecer desconhecidos revisáveis.
 
@@ -2189,13 +2189,18 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
 
 **Critérios de aceite:**
 
-- [ ] Convenção local não cadastrada pode gerar candidato através da legenda, com origem e descrição revisáveis.
-- [ ] Legenda ausente ou OCR errado não veta candidatos dos demais motores.
-- [ ] Símbolo da legenda não vira ativo; template não vaza para outros projetos nem para a reserva.
+- [x] Convenção local não cadastrada pode gerar candidato através da legenda, com origem e descrição revisáveis.
+- [x] Legenda ausente ou OCR errado não veta candidatos dos demais motores.
+- [x] Símbolo da legenda não vira ativo; template não vaza para outros projetos nem para a reserva.
 
 **Validação obrigatória:** V-P e conferência das entregas dos subagentes, com as particularidades acima. V-N, V-Q, V-B em casos com/sem legenda, descrição trocada, múltiplas legendas e revisões; inspecionar isolamento por documento. Os códigos V-* remetem aos comandos completos acima; registrar os comandos efetivamente executados.
 
-**Bloqueios:** Nenhum bloqueio conhecido para iniciar respeitando as dependências. Lacunas de dados/fontes são riscos até impedirem concretamente a execução ou o aceite; nessa ocorrência, registrar causa, evidência, impacto e ação de desbloqueio.
+**Bloqueios e aceite final E10:** nenhum bloqueio remanescente nos critérios
+específicos. V-N demonstra o caminho positivo de legenda em PDFs autorais;
+V-P cobre integralmente os 11 PDFs reais disponíveis, todos sem legenda formal.
+A sensibilidade real de pareamento permanece não medida, e OCR neural opcional
+ficou indisponível no ambiente, sem veto aos demais motores. Essas limitações
+não são apresentadas como validação positiva de campo.
 
 **Riscos e mitigação:** Propagação de rótulo errado: conservar pareamento incerto e impedir aprendizado global automático.
 
@@ -2216,7 +2221,92 @@ Ao iniciar, sincronize #em-andamento no índice e detalhe. Implemente somente es
 Não declare sucesso com validação obrigatória falhando ou não executada. Atualize para #concluida somente após todos os critérios; impedimento real exige #bloqueada com causa, evidência, impacto e ação de desbloqueio. Dependência ainda pendente mantém #pendente. Preencha Evidências e handoff com arquivos, decisões, comandos, resultados e limitações. Não crie commit, publique ou implante sem autorização explícita. Termine com resumo conciso de mudanças, validações e pendências.
 ```
 
-**Evidências e handoff:** ainda não executada. Registrar também agentes/papéis, fronteiras de escrita, checkpoint integrado, revisão independente, manifesto V-P e total de PDFs/páginas conferidos/bloqueados. Ao trabalhar, registrar arquivos alterados, versão/configuração, decisões, fontes/fixtures, comandos e resultados, métricas comparadas, limitações e próximo passo.
+**Evidências e handoff — execução de 24/09/2026, checkpoint E10-final:**
+
+- Base Git `a6ecd1d9bf80522393eeb7a298a2f532f694be21` em `main`, árvore
+  inicialmente limpa; nenhum `AGENTS.md` aplicável no projeto/ancestrais.
+  Roadmap, escopo, `git status/diff` e handoffs E03/E08 foram conferidos antes
+  da edição. E03 e E08 tinham aceite `#concluida`; E07 bloqueada não é
+  dependência de E10. Índice e detalhe foram sincronizados em `#em-andamento`
+  no início. Nenhuma alteração preexistente foi sobrescrita.
+- Delegação/propriedade: A `/root/codigo_legenda` editou só
+  `src/zeny_project_handler/adapters/analysis/legend_symbols.py` (SHA-256
+  `86adae46ab2edb5a124da939eeff4eae37c7750231d4ad2c4221c7bbca441c36`);
+  B `/root/testes_legenda` editou só `tests/unit/test_legend_symbols.py`
+  (`1432ada40ba337a20b54f0710488f77f6077f87612dc4dc7a94b99cf13386bf7`);
+  C `/root/auditoria_pdfs` editou só `tmp/e10-simbologia/visual/` e congelou
+  inspeção das imagens originais antes de conhecer predições. O coordenador
+  editou `rapid_evidence.py`, runner/CLI, `tests/unit/test_rapid_evidence.py`,
+  `tests/unit/test_benchmark_legend.py`,
+  [`e10-adaptacao-legenda.md`](e10-adaptacao-legenda.md) e este roadmap.
+  Contrato A (`observar_legenda_documental`, `LeituraLegenda`, resultado E03)
+  foi entregue a B/runner antes do checkpoint; OCR compartilhado e saída central
+  ficaram na integração. B revisou independentemente o runner e apontou que o
+  orçamento OCR era checado depois de renderizar. O coordenador corrigiu para
+  recusar antes de `get_pixmap`, adicionou teste, e B verificou a correção
+  read-only (5 testes OCR passaram). Nenhuma ROI do revisor alimentou o método.
+- Implementação: versão `e10-legend-documental-1`, método opt-in
+  `document-local-legend`. Texto nativo e leitura OCR local opcional formam
+  pares desenho/descrição com origem, revisão e pareamento incerto; busca por
+  tiles encontra repetições fora do conteúdo real da legenda. Sem cabeçalho,
+  pequenas imagens embutidas repetidas no próprio documento podem sugerir
+  motivo desconhecido. Observações têm classe `None`, score bruto e SHA do PDF;
+  exemplares não se tornam ativos, não são adicionados a E01/E08 e não têm
+  cache global. O runner guarda desconhecidos em `local_candidates` fora das
+  métricas fechadas E02, preservando os demais candidatos e os exclusivos.
+  OCR errado/indisponível apenas deixa diagnóstico/alternativas revisáveis.
+- **V-N final:** `.\.venv\Scripts\python.exe -m pytest tests/unit/test_legend_symbols.py tests/unit/test_benchmark_legend.py tests/unit/test_rapid_evidence.py -q`
+  (mesma invocação dos testes novos/afetados) → 15 passed, exit 0; controles
+  autorais cobrem legenda positiva e exemplar excluído, página sem legenda,
+  descrição OCR conflitante, múltiplas legendas/revisões, ocorrência abaixo da
+  legenda, repetição local, documento/projeto isolado, orçamento e falha OCR.
+  `.\.venv\Scripts\python.exe -m pytest tests/unit/test_raster_symbols.py tests/unit/test_benchmark_raster.py -q`
+  → 17 passed, exit 0. **V-Q final:** `.\.venv\Scripts\python.exe -m ruff check .`,
+  `.\.venv\Scripts\python.exe -m ruff format --check .` e
+  `.\.venv\Scripts\python.exe -m mypy` → três exits 0, 413 arquivos
+  formatados e 381 fontes sem erro. O Python da `.venv` exigiu
+  `require_escalated` porque no sandbox seu WindowsApps retornava acesso
+  negado; fora do sandbox executou Python 3.13.14 sem instalar dependências.
+- **V-B final:** `.\.venv\Scripts\python.exe -m scripts.benchmark_symbols synthetic --output tmp/e10-simbologia/vb-legacy`
+  e `.\.venv\Scripts\python.exe -m scripts.benchmark_symbols synthetic --output tmp/e10-simbologia/vb-e10-final --include-raster --include-legend --legend-ocr`
+  → exits 0; 4 PDFs/6 páginas/zero falhas. Vetor legado conservou
+  11 TP/1 FP/11 FN nas duas execuções; E08 template 9 TP/1 FP/13 FN;
+  união fechada E02 13 TP/9 FP/9 FN, preservando dois acertos exclusivos
+  raster. O corpus E02 não contém legenda formal positiva e emitiu zero
+  `local_candidates`; os casos positivos/negativos E10 ficam nos testes
+  autorais dirigidos e no teste de integração do runner, não são apresentados
+  como ganho mensurado pela métrica E02. Hough/OpenCV e RapidOCR não estão
+  instalados; estados/diagnósticos permaneceram explícitos. A reserva
+  `reserve.sealed.zip` não foi aberta e mantém SHA-256
+  `6874d0585269a0a68397319268076e8e788aff64fc2bc5d776e80efca739be7b`.
+- **V-P final:** `.\.venv\Scripts\python.exe -m scripts.benchmark_symbols examples --root examples --output tmp/e10-simbologia/vp-final --include-raster --include-legend --legend-ocr`
+  → exit 0, `completed=true`, 11 PDFs/11 páginas, zero falhas e 11/11
+  fontes intactas. `predictions.json` SHA-256
+  `b1d14f58fa9a46a9bf85ee5aff3f5da6b3904891732e8ba62b5dd75289a056cf`;
+  `manifest.json` SHA-256
+  `4951eb834fdd7af19a09c4511ff60e428c4019fe2b76c4bad682cdd9a5704225`.
+  C abriu 11 imagens integrais, 44 quadrantes e 9 recortes **antes** de ler
+  predições, depois 11 overlays. Encontrou zero legendas formais, zero pares
+  e zero candidatos E10; OCR opcional indisponível em 11/11 páginas não vetou
+  220 candidatos vetoriais exclusivos. Template executou 11/11 e emitiu zero;
+  Hough foi indisponível 11/11. Os 220 registros E02 são idênticos ao E08 A5
+  (`observations_sha256` igual a
+  `2726ee241edd66670b8be546894c5d9bccef56d2dbbcac307852e8462c1444c3`),
+  com fontes, versões e assinaturas iguais; C reutilizou o julgamento anterior
+  de 23/23 folhas de contato com vínculo verificável. A matriz 11 páginas ×
+  4 métodos × 2 camadas = 88 células e FP/FN/ambiguidades por página estão em
+  `tmp/e10-simbologia/visual/reconciliation-final.md` (SHA-256
+  `314ab2e33b712b4ddeddde2705a203040414874285ee4353ab71140dc5a14e55`),
+  com 11/11 PDFs e páginas conferidos, zero bloqueados. Há FP vetoriais claros
+  e omissões de template já existentes em E08; nenhum erro novo do método E10
+  foi observado. Não há positivo real de legenda para estimar sensibilidade,
+  OCR real não executou e recall real por classe não é adjudicável; V-P não
+  é apresentado como homologação de campo.
+- Limites/próximo passo: fallback desconhecido cobre apenas imagens embutidas
+  pequenas repetidas, não motivos vetoriais arbitrários; OCR opcional ausente
+  neste ambiente e rótulo de legenda continua hipótese revisável. E12 fará
+  reconciliação/calibração e E14 apresentação, sem promover automaticamente.
+  Nenhum commit, publicação ou implantação foi feito.
 
 ## E11 — Experimento de detector visual treinável — #pendente
 
