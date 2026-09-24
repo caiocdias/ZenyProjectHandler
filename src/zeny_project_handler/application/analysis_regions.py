@@ -364,7 +364,11 @@ def agrupar_regioes_da_analise(
     if distancia_maxima <= 0:
         raise ValueError("Distância máxima de uma região deve ser positiva")
     project_evidence = evidencias_sem_anotacoes_de_revisao(evidencias)
-    elements = tuple(item for item in propostas if isinstance(item, PropostaElemento))
+    elements = tuple(
+        item
+        for item in propostas
+        if isinstance(item, PropostaElemento) and _is_network_region_element(item)
+    )
     relations = tuple(item for item in propostas if isinstance(item, PropostaRelacao))
     point_anchors = _point_anchors(project_evidence)
     point_labels = _assign_point_labels(elements, point_anchors)
@@ -499,6 +503,16 @@ def _region_context(element: PropostaElemento) -> str | None:
     if element.categoria is not CategoriaElemento.CABO and attributes.get("associacao_pendente"):
         return f"pending:{element.id}"
     return None
+
+
+def _is_network_region_element(element: PropostaElemento) -> bool:
+    attributes = dict(element.atributos_sugeridos)
+    if "origem_simbolo_ocorrencia_id" not in attributes:
+        return True
+    return (
+        attributes.get("simbolo_legenda") is not True
+        and attributes.get("simbolo_papel") != "informativo"
+    )
 
 
 def _regional_distance(left: PropostaElemento, right: PropostaElemento) -> float:

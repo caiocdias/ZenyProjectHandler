@@ -151,17 +151,46 @@ class _TopologyFactCollector:
 
     def equipment_class(self, proposal: PropostaElemento) -> str:
         attributes = dict(proposal.atributos_sugeridos)
-        raw = (
-            attributes.get("classe_equipamento")
-            if attributes.get("reconhecido_por_simbologia") is True
-            else None
-        )
+        if "origem_simbolo_ocorrencia_id" in attributes:
+            # A reconciled occurrence is only a presence fact when its own
+            # visual class, situation and support association are resolved.
+            # A catalogue match or a nearby required device cannot supply them.
+            if (
+                attributes.get("simbolo_papel") != "equipamento"
+                or attributes.get("simbolo_legenda") is True
+                or attributes.get("simbolo_familia_nao_suportada") is True
+                or (
+                    attributes.get("simbolo_decisao_e12") != "eligible"
+                    and proposal.id not in self.state.by_proposal
+                )
+                or (
+                    attributes.get("simbolo_camada") != "base"
+                    and proposal.id not in self.state.by_proposal
+                )
+                or not all(
+                    attributes.get(key) is True
+                    for key in (
+                        "simbolo_identidade_resolvida",
+                        "simbolo_classe_resolvida",
+                        "simbolo_situacao_resolvida",
+                        "simbolo_associacao_resolvida",
+                    )
+                )
+            ):
+                return ""
+            raw = attributes.get("simbolo_classe")
+        elif attributes.get("reconhecido_por_simbologia") is True:
+            raw = attributes.get("classe_equipamento")
+        else:
+            raw = None
         catalog_item = (
             self.state.items.get(proposal.tipo_catalogo_sugerido_id)
             if proposal.tipo_catalogo_sugerido_id is not None
             else None
         )
-        if isinstance(catalog_item, TipoEquipamento):
+        if isinstance(catalog_item, TipoEquipamento) and (
+            "origem_simbolo_ocorrencia_id" not in attributes
+        ):
             raw = self.state.option_codes.get(catalog_item.classe_equipamento_opcao_id, raw)
         return _normalize_class(raw)
 
@@ -1350,13 +1379,41 @@ def _associate_proposals_to_poles(
             result[proposal.id] = element.poste_id
             continue
         attributes = dict(proposal.atributos_sugeridos)
+        if attributes.get("associacao_pendente") or (
+            "origem_simbolo_ocorrencia_id" in attributes
+            and attributes.get("simbolo_associacao_resolvida") is not True
+        ):
+            continue
+        raw_support = attributes.get("suporte_proposta_id")
+        if raw_support:
+            try:
+                support_proposal_id = UUID(str(raw_support))
+            except ValueError:
+                support_proposal_id = None
+            support = (
+                confirmed_by_proposal.get(support_proposal_id)
+                if support_proposal_id is not None
+                else None
+            )
+            if (
+                isinstance(support, Poste)
+                and support.geometria is not None
+                and support.geometria.pagina_id == proposal.geometria.pagina_id
+            ):
+                result[proposal.id] = support.id
+                continue
         raw_pole_id = attributes.get("poste_id")
         if raw_pole_id:
             try:
                 candidate_id = UUID(str(raw_pole_id))
             except ValueError:
                 candidate_id = None
-            if candidate_id is not None and any(pole.id == candidate_id for pole in poles):
+            if candidate_id is not None and any(
+                pole.id == candidate_id
+                and pole.geometria is not None
+                and pole.geometria.pagina_id == proposal.geometria.pagina_id
+                for pole in poles
+            ):
                 result[proposal.id] = candidate_id
                 continue
         identifier = attributes.get("identificador_operacional")
@@ -1388,7 +1445,14 @@ def _nearest_pole(
     if not candidates:
         return None
     normalized_distance = candidates[0][0] / math.hypot(float(width), float(height))
-    return candidates[0][2] if normalized_distance <= _SYMBOL_POLE_DISTANCE else None
+    if normalized_distance > _SYMBOL_POLE_DISTANCE:
+        return None
+    if (
+        len(candidates) > 1
+        and (candidates[1][0] - candidates[0][0]) / math.hypot(float(width), float(height)) <= 0.004
+    ):
+        return None
+    return candidates[0][2]
 
 
 def _normalize_identifier(value: object) -> str:

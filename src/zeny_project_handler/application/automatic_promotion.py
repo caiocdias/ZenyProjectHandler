@@ -191,17 +191,50 @@ def _promotable_proposals(
         "comprimento_pendente",
         "reconciliacao_metodos_pendente",
         "verificacao_metodos_incompleta",
+        "situacao_pendente",
+        "quantidade_pendente",
+        "catalogo_nao_localizado",
+        "simbolo_legenda",
+        "simbolo_familia_nao_suportada",
     )
     return {
         proposal.id: proposal
         for proposal in proposals
         if proposal.tipo_catalogo_sugerido_id is not None
         and proposal.estado_revisao is not EstadoRevisao.REJEITADA
+        and (
+            proposal.estado_revisao is not EstadoRevisao.CONFLITANTE
+            or "origem_simbolo_ocorrencia_id" not in dict(proposal.atributos_sugeridos)
+        )
         and not any(dict(proposal.atributos_sugeridos).get(key) for key in pending_keys)
+        and _symbol_fields_resolved(proposal)
         and (item := catalog.item_por_id(proposal.tipo_catalogo_sugerido_id)) is not None
         and item.ativo
         and item.categoria is proposal.categoria
     }
+
+
+def _symbol_fields_resolved(proposal: PropostaElemento) -> bool:
+    """Require evidence and a separate resolved decision for each symbolic field."""
+    attributes = dict(proposal.atributos_sugeridos)
+    if "origem_simbolo_ocorrencia_id" not in attributes:
+        return True
+    if (
+        attributes.get("simbolo_decisao_e12") != "eligible"
+        or attributes.get("simbolo_ativo_elegivel") is not True
+    ):
+        return False
+    return all(
+        attributes.get(key) is True
+        for key in (
+            "simbolo_identidade_resolvida",
+            "simbolo_classe_resolvida",
+            "simbolo_situacao_resolvida",
+            "simbolo_quantidade_resolvida",
+            "simbolo_associacao_resolvida",
+            "simbolo_catalogo_resolvido",
+        )
+    )
 
 
 def _dependent_element(

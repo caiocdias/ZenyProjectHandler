@@ -19,7 +19,7 @@ from zeny_project_handler.application.symbol_reconciliation import (
     CalibrationPolicy,
     reconcile_symbols,
 )
-from zeny_project_handler.domain.enums import EstadoMetodoSimbolos, TipoGeometria
+from zeny_project_handler.domain.enums import EstadoMetodoSimbolos, SituacaoProjeto, TipoGeometria
 from zeny_project_handler.domain.symbols import (
     AlternativaClasseSimbolo,
     CoberturaMetodoSimbolos,
@@ -87,6 +87,18 @@ def _observation(
         ("contexto", provenance.get("reported_context") or prediction.get("context", "unknown")),
         ("estrato", "default"),
     ]
+    raw_situation = prediction.get("situation")
+    observed_situation: SituacaoProjeto | None = None
+    if raw_situation is not None:
+        try:
+            observed_situation = SituacaoProjeto(str(raw_situation))
+        except ValueError:
+            attributes.append(("situacao_evidencia", f"valor_bruto:{raw_situation}"))
+        else:
+            attributes.append(("situacao_origem", "predicao_benchmark_sem_vigencia_validada"))
+    legacy_color = provenance.get("legacy_color")
+    if isinstance(legacy_color, str) and legacy_color:
+        attributes.append(("cor", legacy_color))
     for source_key, target_key in (
         ("variant_id", "variante_inventario"),
         ("possible_references", "referencias_possiveis"),
@@ -120,6 +132,7 @@ def _observation(
             PrimitivaObservadaSimbolo(indice=item, camada=None, pontos_originais=box)
             for item in primitive_ids
         ),
+        situacao=observed_situation,
         atributos=tuple(attributes),
         chave_legada=prediction["id"],
     )

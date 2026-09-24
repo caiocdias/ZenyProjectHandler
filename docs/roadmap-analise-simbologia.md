@@ -426,7 +426,7 @@ E16 executa V-G; não repetir toda a suíte após mera edição do roadmap.
 | E10 | Adaptação à legenda e símbolos desconhecidos | #concluida | E03, E08 | Usar a legenda do próprio documento como fonte local de templates/semântica e oferecer desconhecidos revisáveis. |
 | E11 | Experimento de detector visual treinável | #concluida | E02, E03 | Medir um detector local aprendido como fonte adicional, com decisão reproduzível de adoção ou rejeição; E07 é insumo opcional versionado. |
 | E12 | União, validação cruzada e calibração | #concluida | E05, E06, E08, E09, E10, E11 | Entregar reconciliador de símbolos que aproveite exclusivos e resolva duplicatas/conflitos sem quórum, consumindo apenas pacotes E07 habilitados. |
-| E13 | Associação semântica e promoção por campo | #pendente | E12 | Converter hipóteses reconciliadas em propostas úteis, com associação e promoção coerentes com a evidência. |
+| E13 | Associação semântica e promoção por campo | #concluida | E12 | Converter hipóteses reconciliadas em propostas úteis, com associação e promoção coerentes com a evidência. |
 | E14 | Revisão visual, API e exportações | #pendente | E13 | Expor símbolos, métodos, exclusivos e conflitos de modo revisável no cliente e nos arquivos exportados. |
 | E15 | Execução, cache e ativação controlada no servidor | #pendente | E13, E14 | Integrar a composição habilitada ao job do servidor com memória limitada, cancelamento e assinaturas completas. |
 | E16 | Aceite integrado e matriz final de cobertura | #pendente | E15 | Demonstrar ganho da união, rastrear todos os IDs E01 e publicar reconhecimento, alternativas e pendências sem alegar cobertura não comprovada. |
@@ -2691,7 +2691,7 @@ real dos métodos adotados; V-N/V-B demonstram associação/conflitos, V-P não
 mede precisão/recall nem deduplicação real. Próximo passo E13. Nenhum commit,
 publicação ou implantação.
 
-## E13 — Associação semântica e promoção por campo — #pendente
+## E13 — Associação semântica e promoção por campo — #concluida
 
 **Objetivo:** Converter hipóteses reconciliadas em propostas úteis, com associação e promoção coerentes com a evidência.
 
@@ -2720,11 +2720,11 @@ publicação ou implantação.
 
 **Critérios de aceite:**
 
-- [ ] Símbolo correto exclusivo chega à proposta e pode seguir a política de promoção sem segundo detector.
-- [ ] Estai não vira cabo; texto isolado não prova símbolo; legenda não vira ocorrência de rede.
-- [ ] Quantidade/situação/associação incertas ficam pendentes e não são completadas pelo catálogo.
-- [ ] Alternativas visuais não geram múltiplos ativos nem promoção de ID não comprovado; famílias sem reconhecimento seguem visíveis como pendentes.
-- [ ] Revisão humana e reanálise preservam histórico, vigência e conflitos; conformidade não recebe presença inventada.
+- [x] Símbolo correto exclusivo chega à proposta e pode seguir a política de promoção sem segundo detector.
+- [x] Estai não vira cabo; texto isolado não prova símbolo; legenda não vira ocorrência de rede.
+- [x] Quantidade/situação/associação incertas ficam pendentes e não são completadas pelo catálogo.
+- [x] Alternativas visuais não geram múltiplos ativos nem promoção de ID não comprovado; famílias sem reconhecimento seguem visíveis como pendentes.
+- [x] Revisão humana e reanálise preservam histórico, vigência e conflitos; conformidade não recebe presença inventada.
 
 **Validação obrigatória:** V-P e conferência das entregas dos subagentes, com as particularidades acima. V-I, V-N, V-Q e V-B semântico; testar persistência/reabertura, pontos próximos, páginas diferentes e revisão base/anotação. Os códigos V-* remetem aos comandos completos acima; registrar os comandos efetivamente executados.
 
@@ -2749,7 +2749,39 @@ Ao iniciar, sincronize #em-andamento no índice e detalhe. Implemente somente es
 Não declare sucesso com validação obrigatória falhando ou não executada. Atualize para #concluida somente após todos os critérios; impedimento real exige #bloqueada com causa, evidência, impacto e ação de desbloqueio. Dependência ainda pendente mantém #pendente. Preencha Evidências e handoff com arquivos, decisões, comandos, resultados e limitações. Não crie commit, publique ou implante sem autorização explícita. Termine com resumo conciso de mudanças, validações e pendências.
 ```
 
-**Evidências e handoff:** ainda não executada. Registrar também agentes/papéis, fronteiras de escrita, checkpoint integrado, revisão independente, manifesto V-P e total de PDFs/páginas conferidos/bloqueados. Ao trabalhar, registrar arquivos alterados, versão/configuração, decisões, fontes/fixtures, comandos e resultados, métricas comparadas, limitações e próximo passo.
+**Evidências e handoff — execução de 24/09/2026:**
+
+- Base `c0de8b5f9911cc9ffc08950757784ee7c506e0c3`, árvore inicialmente limpa;
+  E12 `#concluida`. Contrato, arquivos alterados, SHA-256 do checkpoint final,
+  comandos exatos e decisões por campo estão em
+  [`docs/e13-semantica-simbologia.md`](e13-semantica-simbologia.md).
+- A `/root/codigo` entregou `interpretation_pipeline.py`, `analysis_regions.py` e
+  `category_analyzers.py`; B `/root/testes` entregou dois testes E13; C
+  `/root/pdfs` foi responsável exclusivo por `tmp/e13-simbologia/visual/`.
+  O coordenador integrou `automatic_promotion.py`, `topology_compliance.py`,
+  adaptador/runner de benchmark e este handoff. `relation_rules.py` já bloqueava
+  associação pendente e permaneceu intacto. Os retornos verificáveis e
+  respectivos hashes constam no handoff; B usou checkpoint estável e a
+  divergência das 83 pistas de situação foi devolvida a A, corrigida e
+  revalidada por C no checkpoint a2.
+- V-I **144 passed**; V-N **36 passed**; V-Q Ruff check/format, mypy e
+  `git diff --check` com exit 0; V-B sintético 4 PDFs/6 páginas, 27 propostas
+  pendentes e ramo positivo elegível exercitado nos testes. V-P: 11 PDFs/11
+  páginas recursivos, 55 imagens originais inspecionadas antes das predições,
+  0 bloqueios, 198 células; auditorias a2 com exit 0, 240/240 predições E12
+  preservadas, 237/237 propostas vinculadas. Manifesto visual SHA-256
+  `cda3faef21dbe3949f20f975933f9bf19f248a43b34b97527cf565ae3e253a01`;
+  [relatório V-P](../tmp/e13-simbologia/visual/relatorio-vp-e13.md) SHA-256
+  `349721d986fbf55945ba4f20207cf70b43a2b403d240068a72eac127e667e9ba`.
+- Os 17 exclusivos E05 chegaram às propostas; três têm forma ambígua. Três
+  FPs experimentais E09 foram excluídos; dez FPs legados claros seguiram
+  pendentes, sem promoção. O transformador raster P2 em `1251985467` segue FN
+  da união e três glifos de terra foram omitidos pelo template. Isso não é
+  falha de promoção semântica: nenhum desses casos virou ativo ou presença
+  normativa inventada. Exemplos são desenvolvimento, sem alegação de
+  precisão/recall global. A reserva E16 permaneceu fechada. Nenhum commit,
+  publicação ou implantação foi feito; E14 deverá apresentar alternativas,
+  pendências e papéis observacionais ao usuário.
 
 ## E14 — Revisão visual, API e exportações — #pendente
 

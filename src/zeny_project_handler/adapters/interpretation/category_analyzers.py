@@ -537,7 +537,7 @@ class AnalisadorEquipamento(AnalisadorCatalogoPorCodigo):
             source_attributes = dict(evidence.atributos_extraidos)
             confidence = (
                 Decimal(str(source_attributes.get("confianca", "0.88")))
-                if source_attributes.get("reconhecido_por_simbologia") is True
+                if _is_visual_symbol_evidence(evidence)
                 else Decimal("0.62")
             )
             proposals.append(
@@ -583,12 +583,19 @@ def _semantic_evidence(
         for evidence in sorted(request.evidencias, key=lambda item: str(item.id))
         if (
             evidence.tipo in rule.tipos_evidencia
-            or (
-                include_symbolic
-                and dict(evidence.atributos_extraidos).get("reconhecido_por_simbologia") is True
-            )
+            or (include_symbolic and _is_visual_symbol_evidence(evidence))
         )
         and evidence.conteudo_bruto
+    )
+
+
+def _is_visual_symbol_evidence(evidence: EvidenciaDocumento) -> bool:
+    attributes = dict(evidence.atributos_extraidos)
+    return (
+        evidence.tipo in {TipoEvidencia.VETOR, TipoEvidencia.IMAGEM}
+        and attributes.get("reconhecido_por_simbologia") is True
+        and isinstance(attributes.get("origem_simbologia"), str)
+        and bool(str(attributes["origem_simbologia"]).strip())
     )
 
 
@@ -812,7 +819,7 @@ def _untyped_phrase_proposal(
 ) -> PropostaElemento:
     situation, evidence_ids = _situation_and_evidence(request, rule, evidence, category)
     evidence_attributes = dict(evidence.atributos_extraidos)
-    symbolic = evidence_attributes.get("reconhecido_por_simbologia") is True
+    symbolic = _is_visual_symbol_evidence(evidence)
     suggested_attributes: list[tuple[str, JsonPrimitive]] = [
         (attribute_name, attribute_value),
         ("candidatos_catalogo", ",".join(candidate_codes)),
