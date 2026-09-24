@@ -21,6 +21,7 @@ import zeny_project_handler.adapters.analysis.pymupdf_guys as pymupdf_guys
 import zeny_project_handler.adapters.analysis.pymupdf_symbols as pymupdf_symbols
 import zeny_project_handler.adapters.analysis.pymupdf_transformers as pymupdf_transformers
 import zeny_project_handler.adapters.analysis.raster_symbols as raster_symbols
+import zeny_project_handler.adapters.analysis.structural_symbols as structural_symbols
 from scripts.symbol_benchmark_evaluator import PROTOCOL, evaluate
 from zeny_project_handler.adapters.analysis.pymupdf_analyzer import PyMuPdfDocumentAnalyzer
 from zeny_project_handler.domain.enums import EstadoMetodoSimbolos
@@ -162,6 +163,34 @@ def raster_method_metadata(
             "source_limitation": "Bundled template is an author-owned E02 control, not F02 artwork",
         }
         for profile in profiles
+    ]
+
+
+def structural_method_metadata(
+    configurations: tuple[structural_symbols.ConfiguracaoDetectorEstrutural, ...],
+) -> list[Record]:
+    """Describe structural methods and distinguish raster from shared vector input."""
+    return [
+        {
+            "id": profile.metodo_id,
+            "version": profile.versao,
+            "algorithm_family": profile.familia,
+            "shared_sources": list(profile.fontes_compartilhadas),
+            "supported_classes": list(profile.classes_suportadas),
+            "supported_layers": list(profile.camadas_suportadas),
+            "source_sha256_lf": _text_sha256(Path(structural_symbols.__file__)),
+            "signature": profile.assinatura(),
+            "configuration": {
+                key: str(value) if isinstance(value, Decimal) else value
+                for key, value in profile.parametros
+            },
+            "score_kind": "raw graph descriptor fit; not calibrated probability",
+            "source_limitation": "Author-owned shape grammar; no F02 equivalence claimed",
+        }
+        for profile in (
+            structural_symbols.perfil_simbolos_estruturais(configuracao=config)
+            for config in configurations
+        )
     ]
 
 
@@ -429,6 +458,52 @@ def _raster_prediction(observation: Any, document_id: str, method_id: str) -> Re
     }
 
 
+def _structural_prediction(observation: Any, document_id: str, method_id: str) -> Record:
+    """Project graph evidence without equating raw descriptor fit to confidence."""
+    points = [
+        (float(point.x), float(point.y)) for point in observation.geometria.pontos_normalizados
+    ]
+    xs, ys = [point[0] for point in points], [point[1] for point in points]
+    primary = next((item for item in observation.alternativas if item.classe), None)
+    if primary is None:
+        raise ValueError("Structural observation has no class alternative")
+    family = CLASS_FAMILY.get(primary.classe)
+    if family is None:
+        raise ValueError(f"No E01 family mapping for structural class {primary.classe}")
+    return {
+        "id": f"{document_id}:{observation.id}",
+        "method_id": method_id,
+        "document_id": document_id,
+        "page": observation.fonte.pagina_numero,
+        "layer": observation.fonte.camada,
+        "family": family,
+        "class_id": primary.classe,
+        "bbox": [min(xs), min(ys), max(xs), max(ys)],
+        "score": float(observation.score_bruto) if observation.score_bruto is not None else None,
+        "situation": observation.situacao.value if observation.situacao is not None else None,
+        "quantity": None,
+        "association": None,
+        "context": "operational",
+        "review_required": True,
+        "provenance": {
+            "observation_id": observation.id,
+            "raster_sha256": observation.raster_sha256,
+            "primitive_ids": [item.indice for item in observation.primitivas],
+            "attributes": dict(observation.atributos),
+            "alternatives": [
+                {
+                    "class_id": item.classe,
+                    "subtype": item.subtipo,
+                    "raw_score": float(item.score_bruto) if item.score_bruto is not None else None,
+                }
+                for item in observation.alternativas
+            ],
+            "reported_context": "unknown; requires independent review",
+            "score_kind": "raw graph descriptor fit; not calibrated probability",
+        },
+    }
+
+
 def infer_pdf(
     source: Path,
     document_id: str,
@@ -437,9 +512,12 @@ def infer_pdf(
     include_guys: bool = False,
     include_packages: bool = False,
     include_raster: bool = False,
+    include_structural: bool = False,
     package_snapshot: tuple[declarative_symbols.Package, ...] | None = None,
     raster_snapshot: tuple[raster_symbols.TemplateRasterVerificado, ...] | None = None,
     raster_configuration: raster_symbols.ConfiguracaoDetectorRaster | None = None,
+    structural_configurations: tuple[structural_symbols.ConfiguracaoDetectorEstrutural, ...]
+    | None = None,
 ) -> tuple[Record, list[Record], list[Record]]:
     """Infer all base pages with only source path and opaque document identity.
 
@@ -453,6 +531,11 @@ def infer_pdf(
         raster_snapshot = raster_symbols.carregar_templates_raster()
     if include_raster and raster_configuration is None:
         raster_configuration = raster_symbols.ConfiguracaoDetectorRaster()
+    if include_structural and structural_configurations is None:
+        structural_configurations = (
+            structural_symbols.ConfiguracaoDetectorEstrutural(entrada="raster"),
+            structural_symbols.ConfiguracaoDetectorEstrutural(entrada="vetor"),
+        )
     before = _identity(source)
     started = perf_counter()
     own_tracing = not tracemalloc.is_tracing()
@@ -781,6 +864,94 @@ def infer_pdf(
                                     },
                                 )
                             )
+                if include_structural:
+                    for structural_config in structural_configurations or ():
+                        structural_started = perf_counter()
+                        structural_profile = structural_symbols.perfil_simbolos_estruturais(
+                            configuracao=structural_config
+                        )
+                        structural_execution: Record = {
+                            "document_id": document_id,
+                            "page": number,
+                            "layer": "base",
+                            "method_id": structural_profile.metodo_id,
+                            "status": "executed",
+                            "reason": None,
+                            "signature": structural_profile.assinatura(),
+                        }
+                        try:
+                            if page is None:
+                                raise ValueError("PDF page unavailable to structural detector")
+                            structural_result = structural_symbols.observar_simbolos_estruturais(
+                                page,
+                                documento_id=document_id,
+                                documento_sha256=before["sha256"],
+                                pagina_numero=number,
+                                configuracao=structural_config,
+                            )
+                            states = {coverage.estado for coverage in structural_result.coberturas}
+                            if EstadoMetodoSimbolos.FALHA in states:
+                                structural_execution["status"] = "failed"
+                            elif states <= {
+                                EstadoMetodoSimbolos.INDISPONIVEL,
+                                EstadoMetodoSimbolos.FORA_DOMINIO,
+                                EstadoMetodoSimbolos.ABSTENCAO,
+                            }:
+                                structural_execution["status"] = "not_applicable"
+                            structural_execution["coverage_state"] = ",".join(
+                                sorted(state.value for state in states)
+                            )
+                            structural_execution["reason"] = next(
+                                (
+                                    coverage.motivo
+                                    for coverage in structural_result.coberturas
+                                    if coverage.motivo
+                                ),
+                                None,
+                            )
+                            structural_predictions = [
+                                _structural_prediction(
+                                    item, document_id, structural_result.perfil.metodo_id
+                                )
+                                for item in structural_result.observacoes
+                            ]
+                            predictions.extend(structural_predictions)
+                            structural_execution["prediction_count"] = len(structural_predictions)
+                            if structural_execution["status"] == "failed":
+                                failure = {
+                                    "page": number,
+                                    "method_id": structural_profile.metodo_id,
+                                    "reason": structural_execution["reason"],
+                                }
+                                manifest["failures"].append(failure)
+                                page_manifest.update(status="failed", reason=failure["reason"])
+                                manifest["status"] = "failed"
+                        except Exception as error:
+                            message = f"{type(error).__name__}: {error}"
+                            structural_execution.update(status="failed", reason=message)
+                            page_manifest.update(status="failed", reason=message)
+                            manifest["failures"].append(
+                                {
+                                    "page": number,
+                                    "method_id": structural_profile.metodo_id,
+                                    "reason": message,
+                                }
+                            )
+                            manifest["status"] = "failed"
+                        structural_execution["seconds"] = perf_counter() - structural_started
+                        executions.extend(
+                            (
+                                structural_execution,
+                                {
+                                    "document_id": document_id,
+                                    "page": number,
+                                    "layer": "annotation",
+                                    "method_id": structural_profile.metodo_id,
+                                    "status": "not_applicable",
+                                    "reason": "E09 structural detector supports base layer only",
+                                },
+                            )
+                        )
                 manifest["pages"].append(page_manifest)
     except Exception as error:
         manifest["status"] = "failed"
@@ -825,6 +996,7 @@ def _run(
     include_guys: bool = False,
     include_packages: bool = False,
     include_raster: bool = False,
+    include_structural: bool = False,
 ) -> Record:
     output = output.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -836,6 +1008,21 @@ def _run(
     package_snapshot = declarative_symbols.carregar_pacotes() if include_packages else None
     raster_snapshot = raster_symbols.carregar_templates_raster() if include_raster else None
     raster_configuration = raster_symbols.ConfiguracaoDetectorRaster() if include_raster else None
+    structural_configurations = (
+        (
+            structural_symbols.ConfiguracaoDetectorEstrutural(
+                entrada="raster", dpi=72, limite_pixels=5_000_000
+            ),
+            structural_symbols.ConfiguracaoDetectorEstrutural(
+                entrada="vetor", dpi=72, limite_pixels=5_000_000
+            ),
+        )
+        if include_structural
+        else None
+    )
+    structural_source_hash = (
+        _text_sha256(Path(structural_symbols.__file__)) if include_structural else None
+    )
     predictions: Record = {
         "schema_version": 1,
         "methods": [
@@ -846,6 +1033,11 @@ def _run(
             *(
                 raster_method_metadata(raster_snapshot, raster_configuration)
                 if raster_snapshot is not None and raster_configuration is not None
+                else []
+            ),
+            *(
+                structural_method_metadata(structural_configurations)
+                if structural_configurations is not None
                 else []
             ),
         ],
@@ -864,7 +1056,11 @@ def _run(
         "limitations": [
             "Methods sharing PyMuPDF vector drawings or raster templates are correlated; "
             "agreement is not probability."
-            if include_transformers or include_guys or include_packages or include_raster
+            if include_transformers
+            or include_guys
+            or include_packages
+            or include_raster
+            or include_structural
             else "One real visual method only; no independent detector gain claimed."
         ],
     }
@@ -878,11 +1074,17 @@ def _run(
                     include_guys=include_guys,
                     include_packages=include_packages,
                     include_raster=include_raster,
+                    include_structural=include_structural,
                     package_snapshot=package_snapshot,
                     raster_snapshot=raster_snapshot,
                     raster_configuration=raster_configuration,
+                    structural_configurations=structural_configurations,
                 )
-                if include_transformers or include_guys or include_packages or include_raster
+                if include_transformers
+                or include_guys
+                or include_packages
+                or include_raster
+                or include_structural
                 else infer_pdf(source, document_id)
             )
         except OSError as error:
@@ -934,6 +1136,15 @@ def _run(
         if not raster_configuration_unchanged:
             manifest["failures"].append("E08 raster templates changed during inference")
         manifest["raster_configuration_unchanged"] = raster_configuration_unchanged
+    structural_configuration_unchanged = (
+        structural_source_hash == _text_sha256(Path(structural_symbols.__file__))
+        if structural_source_hash is not None
+        else True
+    )
+    if not structural_configuration_unchanged:
+        manifest["failures"].append("E09 structural adapter changed during inference")
+    if include_structural:
+        manifest["structural_configuration_unchanged"] = structural_configuration_unchanged
     manifest["counts"] = {
         "pdfs": len(sources),
         "pages_discovered": sum(item.get("page_count") or 0 for item in manifest["documents"]),
@@ -952,6 +1163,7 @@ def _run(
         and not manifest["counts"]["documents_failed"]
         and package_configuration_unchanged
         and raster_configuration_unchanged
+        and structural_configuration_unchanged
     )
     manifest["status"] = (
         "completed_inference" if manifest["completed"] else "failed" if sources else "no_examples"
@@ -974,6 +1186,7 @@ def run_examples(
     include_guys: bool = False,
     include_packages: bool = False,
     include_raster: bool = False,
+    include_structural: bool = False,
 ) -> Record:
     """Discover every recursive PDF, including .PDF, without collapsing equal copies."""
     root = root.resolve()
@@ -998,6 +1211,7 @@ def run_examples(
         include_guys=include_guys,
         include_packages=include_packages,
         include_raster=include_raster,
+        include_structural=include_structural,
     )
     manifest["discovery_root"] = str(root)
     manifest["discovery_root_exists"] = root.is_dir()
@@ -1013,6 +1227,7 @@ def run_synthetic(
     include_guys: bool = False,
     include_packages: bool = False,
     include_raster: bool = False,
+    include_structural: bool = False,
 ) -> Record:
     """Materialize fixtures in a separate process; load labels only after inference."""
     output = output.resolve()
@@ -1039,6 +1254,7 @@ def run_synthetic(
         include_guys=include_guys,
         include_packages=include_packages,
         include_raster=include_raster,
+        include_structural=include_structural,
     )
     # Deliberate phase boundary. The original prediction artifact already exists.
     predictions = json.loads((output / "predictions.json").read_text(encoding="utf-8"))

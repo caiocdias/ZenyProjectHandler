@@ -422,7 +422,7 @@ E16 executa V-G; não repetir toda a suíte após mera edição do roadmap.
 | E06 | Reconhecimento de estais e ancoragens | #concluida | E04 | Reconhecer as variantes de estai e seus vínculos geométricos sem confundi-las com condutores. |
 | E07 | Pacotes extensíveis das demais famílias | #bloqueada | E04, E05, E06 | Pacotes auditáveis entregues; reconhecimento integral permanece histórico/pendente e sua expansão segue o fluxo independente, sem travar E08–E16. |
 | E08 | Detector raster por templates e Hough | #concluida | E03, E04 | Acrescentar família raster capaz de detectar símbolos sem vetores aproveitáveis. |
-| E09 | Detector por contornos e grafo de traços | #pendente | E03, E04 | Implementar alternativa estrutural de reconhecimento de formas distinta de correlação de pixels e das heurísticas legadas. |
+| E09 | Detector por contornos e grafo de traços | #concluida | E03, E04 | Implementar alternativa estrutural de reconhecimento de formas distinta de correlação de pixels e das heurísticas legadas. |
 | E10 | Adaptação à legenda e símbolos desconhecidos | #pendente | E03, E08 | Usar a legenda do próprio documento como fonte local de templates/semântica e oferecer desconhecidos revisáveis. |
 | E11 | Experimento de detector visual treinável | #pendente | E02, E03 | Medir um detector local aprendido como fonte adicional, com decisão reproduzível de adoção ou rejeição; E07 é insumo opcional versionado. |
 | E12 | União, validação cruzada e calibração | #pendente | E05, E06, E08, E09, E10, E11 | Entregar reconciliador de símbolos que aproveite exclusivos e resolva duplicatas/conflitos sem quórum, consumindo apenas pacotes E07 habilitados. |
@@ -1996,7 +1996,7 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
   raster e memória nativa; tempo inclui a busca completa. Ver também
   `docs/e08-detector-raster.md`.
 
-## E09 — Detector por contornos e grafo de traços — #pendente
+## E09 — Detector por contornos e grafo de traços — #concluida
 
 **Objetivo:** Implementar alternativa estrutural de reconhecimento de formas distinta de correlação de pixels e das heurísticas legadas.
 
@@ -2025,13 +2025,18 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
 
 **Critérios de aceite:**
 
-- [ ] Casos de traços quebrados/deformados têm acertos exclusivos identificados ou rejeição experimental documentada com ação de melhoria.
-- [ ] Grafos visuais não criam junções elétricas automaticamente.
-- [ ] A medição distingue diversidade algorítmica de entrada compartilhada.
+- [x] Casos autorais de traços quebrados/deformados têm acerto exclusivo; a adoção experimental foi rejeitada diante dos FP reais, com ação de melhoria registrada.
+- [x] Grafos visuais não criam junções elétricas automaticamente.
+- [x] A medição distingue diversidade algorítmica de entrada compartilhada.
 
 **Validação obrigatória:** V-P e conferência das entregas dos subagentes, com as particularidades acima. V-N, V-Q, V-B e teste de limite/falha em grafo denso; executar controles de símbolos semelhantes e de componentes separados. Os códigos V-* remetem aos comandos completos acima; registrar os comandos efetivamente executados.
 
-**Bloqueios:** Nenhum bloqueio conhecido para iniciar respeitando as dependências. Lacunas de dados/fontes são riscos até impedirem concretamente a execução ou o aceite; nessa ocorrência, registrar causa, evidência, impacto e ação de desbloqueio.
+**Bloqueios e decisão:** a etapa experimental encerrou seus gates no checkpoint A2;
+o método continua opt-in e **não foi aprovado para adoção operacional**. Três FP
+reais compartilhados com o legado e zero acerto exclusivo real exigem novos
+negativos/descritores e outra V-B/V-P antes de qualquer ativação. A rejeição
+documentada é o caminho de aceite experimental previsto acima, sem converter
+FP em sucesso de detecção ou esconder limitações da coleção.
 
 **Riscos e mitigação:** Explosão combinatória ou confusão de topologias simples: limitar regiões/expansões e reportar incompletude, sem silêncio.
 
@@ -2052,7 +2057,108 @@ Ao iniciar, sincronize #em-andamento no índice e detalhe. Implemente somente es
 Não declare sucesso com validação obrigatória falhando ou não executada. Atualize para #concluida somente após todos os critérios; impedimento real exige #bloqueada com causa, evidência, impacto e ação de desbloqueio. Dependência ainda pendente mantém #pendente. Preencha Evidências e handoff com arquivos, decisões, comandos, resultados e limitações. Não crie commit, publique ou implante sem autorização explícita. Termine com resumo conciso de mudanças, validações e pendências.
 ```
 
-**Evidências e handoff:** ainda não executada. Registrar também agentes/papéis, fronteiras de escrita, checkpoint integrado, revisão independente, manifesto V-P e total de PDFs/páginas conferidos/bloqueados. Ao trabalhar, registrar arquivos alterados, versão/configuração, decisões, fontes/fixtures, comandos e resultados, métricas comparadas, limitações e próximo passo.
+**Evidências e handoff — 24/09/2026, checkpoint A2:**
+
+- Base `9f94cb469a679510e28ddf1ef89d213b3321b492`, `main`, `git status`
+  e diffs de trabalho/staged inicialmente vazios; nenhum `AGENTS.md` aplicável
+  encontrado nos ancestrais/escopo. E03/E04 estavam `#concluida`, conferidas
+  contra contrato E03, código e handoffs A1/A6; `global_graph.py` foi lido só
+  como antecedente e F05 [contornos OpenCV](https://docs.opencv.org/4.13.0/d5/d45/tutorial_py_contours_more_functions.html)
+  como referência técnica. E07 bloqueada historicamente não é dependência.
+  O índice e este detalhe foram marcados `#em-andamento` no início.
+- Propriedade e delegação efetivas: A `/root/e09_code` editou somente
+  `src/zeny_project_handler/adapters/analysis/structural_symbols.py`; B
+  `/root/e09_tests`, somente `tests/unit/test_structural_symbols.py`; C
+  `/root/e09_pdfs`, somente `tmp/e09-simbologia/visual/`. O coordenador editou
+  `scripts/benchmark_symbols.py`, `scripts/symbol_benchmark_runner.py`,
+  `tests/unit/test_benchmark_structural.py`,
+  [documento E09](e09-detector-estrutural.md), este roadmap e
+  `tmp/e09-simbologia/integracao/verify_checkpoint.py`. Nenhuma primitive
+  compartilhada, topologia elétrica, reserva, DTO público ou arquivo de PDF
+  fonte foi editado. A/B/C retornaram hashes, comandos, casos e limitações;
+  B revisou A sem editar seu módulo. O Python da `.venv` exigiu execução
+  escalada porque o launcher WindowsApps negava acesso no sandbox; não houve
+  instalação nem modificação da `.venv`.
+- Checkpoint A1 foi **rejeitado**: havia grafo de corridas axiais, mas não
+  esqueleto/contorno real. Sua V-P completa identificou três FP em marcadores
+  de divisa, compartilhados com o legado. A2 (`e09-stroke-graph-2`, adapter
+  SHA-256 `88d5abe6e35d01b7668f2b3bb39136c5c052825bdbe3eac5f6e66735fd852880`)
+  acrescenta thinning Zhang-Suen em recorte raster proposto pelo algoritmo,
+  limitado a 16.384 pixels e ao orçamento global de expansões. Junções e
+  extremidades do esqueleto condicionam aceite; ramificações afetam score
+  bruto. A busca vetorial permanece separada; perfis declaram família comum
+  e origens correlacionadas a E04/E08. O token raster compartilhado nomeia
+  a origem de renderização PyMuPDF, **não** identidade de pixels: E09 usa
+  página inteira cinza, E08 tiles RGB. A assinatura distingue entrada, DPI,
+  limites, versão e algoritmo local. Ambos são opt-in; nenhum score é
+  probabilidade ou voto por concordância.
+- **V-N final A2:** `.\.venv\Scripts\python.exe -m pytest tests/unit/test_structural_symbols.py tests/unit/test_benchmark_structural.py tests/unit/test_e14_topology.py tests/unit/test_topology_compliance.py -q`
+  → **65 passed**, exit 0 (15 detector, 2 runner, 48 topologia). B testou
+  traços quebrados, inclinação/espessura, três/quatro barras, componentes
+  separados e orçamento de grafo denso com `FALHA` explícita. No raster
+  autoral a 144 DPI, E09 achou um aterramento de haste quebrada com caixa
+  completa; legado e E08 ficaram silenciosos. Ablação da junção do esqueleto
+  retirou o positivo inclinado. `detectar_vaos` antes/depois ficou idêntico:
+  junções visuais não viraram junções elétricas. B SHA-256 final
+  `5602dd4fd494dacea61e9a1bbc620c58b3da324ed44e85f380746e5759337f28`.
+- **V-Q final A2:** `.\.venv\Scripts\python.exe -m ruff check .` → exit 0;
+  `.\.venv\Scripts\python.exe -m ruff format --check .` → exit 0,
+  410 arquivos formatados; `.\.venv\Scripts\python.exe -m mypy` → exit 0,
+  378 fontes sem erro. `git diff --check` → exit 0. Esses gates foram
+  reexecutados pelo coordenador no checkpoint congelado A2.
+- **V-B final A2:** `.\.venv\Scripts\python.exe -m scripts.benchmark_symbols synthetic --output tmp/e09-simbologia/baseline-a2`;
+  `.\.venv\Scripts\python.exe -m scripts.benchmark_symbols synthetic --output tmp/e09-simbologia/structural-a2 --include-structural`;
+  `.\.venv\Scripts\python.exe -m scripts.benchmark_symbols synthetic --output tmp/e09-simbologia/comparison-a2 --include-structural --include-raster`
+  → todos exit 0, 4 PDFs/6 páginas/zero falhas. Legado 11 TP/1 FP/11 FN;
+  grafo raster 3 TP/0 FP/19 FN; grafo vetor 7 TP/2 FP/15 FN;
+  template E08 9 TP/1 FP/13 FN. O Hough estava indisponível por ausência
+  de OpenCV, não recebeu recall medido. Ambos grafos tiveram **zero TP
+  exclusivo** nesse corpus; união com E08+E09 13 TP/13 FP/9 FN, ante
+  13/9/9 com E08 sem E09. FP adicionais de união incluem caixas quase
+  coincidentes contadas separadamente pelo avaliador E02. O exclusivo
+  quebrado/inclinado é controle autoral a 144 DPI; o runner usa 72 DPI,
+  diferença assinada e não tratada como votação independente.
+- **V-P final A2:** `.\.venv\Scripts\python.exe -m scripts.benchmark_symbols examples --root examples --output tmp/e09-simbologia/vp-a2 --include-structural`
+  → exit 0, `completed=true`, **11 PDFs/11 páginas, zero falhas**, 220
+  predições legadas, três grafo vetor, zero grafo raster; 33/33 células base
+  executadas e 33/33 annotation fora de escopo. Manifesto SHA-256
+  `7642d72713953df71b6e69cc05938571427cfe2e5d40a9ab2a9144f96c506a5c`,
+  predições `f7219e3a62b9aab12e0c06e7e806eb56ee2b2e9d880e8cfe4371d87d857dde5f`.
+  O verificador novo `.\.venv\Scripts\python.exe tmp/e09-simbologia/integracao/verify_checkpoint.py`
+  → exit 0: 66 células, 11 fontes intactas, 220 legados com classe/caixa
+  idênticas ao E08 A5 congelado. Código E04/E08 e 11 hashes PDF coincidiram
+  com A5, portanto a revisão de seus 220 recortes foi **reutilizada**, não
+  reivindicada como inspeção nova. Inferência dos 11 documentos somou 296,01 s;
+  telemetria é `tracemalloc`, sem medir RSS/MuPDF nativo.
+- C abriu realmente 11 imagens originais antes de qualquer predição, depois
+  recortes ampliados; leitura inicial congelada SHA-256
+  `58949d57c2f97499ee37cc8e199d04053fa4a29a4ab453276780c6f7a3c2425f`.
+  Na revisão A2 reabriu 3/3 contatos de candidatos e 2/2 omissões mínimas.
+  [Relatório A2 privado](../tmp/e09-simbologia/visual/reconciliation-a2.md)
+  SHA-256 `b573174b4b9325b56e593465b85fcf2741473bdc93833b6b5716959c5dc9ccdb`;
+  comparação `frozen-comparison-a2.json` SHA-256
+  `c04ded91c22afeee47ae3516f51fe7a1a9d057486be1e9581497ec025e21826a`.
+  A1→A2: **zero candidatos espaciais novos/removidos**, três correspondências;
+  IDs mudaram por versão. Os três candidatos vetoriais A2 são FP de
+  `ATERRAMENTO` em `5 FL DIVISA` (1251386294) e `CERCA DIVISA`/`4FF`
+  (1256407599), sobrepostos a FP legados com IoU 0,9990/0,9939/0,9446:
+  **erro compartilhado da entrada vetorial, zero TP exclusivo real**.
+  Há pelo menos duas omissões visuais de terra (1250771080 e 1256407599),
+  sem denominador exaustivo para recall real. Ambiguidades, detalhes repetidos
+  e negativos de árvores/cerca/glifos permanecem registrados, não convertidos
+  em acertos. Silêncio alheio não vetou candidatos; a rejeição decorre da
+  imagem e do contexto positivo de divisa.
+- **Decisão e próximo passo:** os critérios da *etapa experimental* estão
+  cobertos por exclusivo autoral, isolamento topológico, medição por entrada
+  e **rejeição documentada** após V-P. E09 fica `#concluida` como experimento,
+  não como método homologado: não ativar na composição operacional. Uma
+  revisão futura deve criar negativos autorais de cerca/divisa, melhorar a
+  discriminação estrutural e avaliar raster em resolução adaptativa, depois
+  repetir V-N/V-B/V-P antes de ativar. Curvas, rotações arbitrárias, BT e
+  E07 seguem fora da gramática; imagens reais são desenvolvimento, não teste
+  cego. Reserva E16 permaneceu lacrada (SHA-256 opaco
+  `6874d0585269a0a68397319268076e8e788aff64fc2bc5d776e80efca739be7b`).
+  Nenhum commit, publicação ou implantação foi feito.
 
 ## E10 — Adaptação à legenda e símbolos desconhecidos — #pendente
 

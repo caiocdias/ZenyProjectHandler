@@ -37,6 +37,9 @@ def main(argv: list[str] | None = None) -> int:
     synthetic.add_argument(
         "--include-raster", action="store_true", help="include opt-in E08 raster methods"
     )
+    synthetic.add_argument(
+        "--include-structural", action="store_true", help="include opt-in E09 structural methods"
+    )
     examples = modes.add_parser(
         "examples", help="all recursive PDFs/pages; independent visual review still required"
     )
@@ -54,6 +57,9 @@ def main(argv: list[str] | None = None) -> int:
     examples.add_argument(
         "--include-raster", action="store_true", help="include opt-in E08 raster methods"
     )
+    examples.add_argument(
+        "--include-structural", action="store_true", help="include opt-in E09 structural methods"
+    )
     comparison = modes.add_parser(
         "evaluate", help="compare frozen JSON artifacts without inference"
     )
@@ -68,6 +74,7 @@ def main(argv: list[str] | None = None) -> int:
             include_guys=options.include_guys,
             include_packages=options.include_packages,
             include_raster=options.include_raster,
+            include_structural=options.include_structural,
         )
         print(
             json.dumps(
@@ -86,6 +93,7 @@ def main(argv: list[str] | None = None) -> int:
             include_guys=options.include_guys,
             include_packages=options.include_packages,
             include_raster=options.include_raster,
+            include_structural=options.include_structural,
         )
         print(
             json.dumps(
