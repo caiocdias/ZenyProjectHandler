@@ -427,7 +427,7 @@ E16 executa V-G; não repetir toda a suíte após mera edição do roadmap.
 | E11 | Experimento de detector visual treinável | #concluida | E02, E03 | Medir um detector local aprendido como fonte adicional, com decisão reproduzível de adoção ou rejeição; E07 é insumo opcional versionado. |
 | E12 | União, validação cruzada e calibração | #concluida | E05, E06, E08, E09, E10, E11 | Entregar reconciliador de símbolos que aproveite exclusivos e resolva duplicatas/conflitos sem quórum, consumindo apenas pacotes E07 habilitados. |
 | E13 | Associação semântica e promoção por campo | #concluida | E12 | Converter hipóteses reconciliadas em propostas úteis, com associação e promoção coerentes com a evidência. |
-| E14 | Revisão visual, API e exportações | #pendente | E13 | Expor símbolos, métodos, exclusivos e conflitos de modo revisável no cliente e nos arquivos exportados. |
+| E14 | Revisão visual, API e exportações | #concluida | E13 | Expor símbolos, métodos, exclusivos e conflitos de modo revisável no cliente e nos arquivos exportados. |
 | E15 | Execução, cache e ativação controlada no servidor | #pendente | E13, E14 | Integrar a composição habilitada ao job do servidor com memória limitada, cancelamento e assinaturas completas. |
 | E16 | Aceite integrado e matriz final de cobertura | #pendente | E15 | Demonstrar ganho da união, rastrear todos os IDs E01 e publicar reconhecimento, alternativas e pendências sem alegar cobertura não comprovada. |
 
@@ -2783,7 +2783,7 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
   publicação ou implantação foi feito; E14 deverá apresentar alternativas,
   pendências e papéis observacionais ao usuário.
 
-## E14 — Revisão visual, API e exportações — #pendente
+## E14 — Revisão visual, API e exportações — #concluida
 
 **Objetivo:** Expor símbolos, métodos, exclusivos e conflitos de modo revisável no cliente e nos arquivos exportados.
 
@@ -2812,14 +2812,14 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
 
 **Critérios de aceite:**
 
-- [ ] Exclusivo, conflitante, desconhecido e informativo são distinguíveis e localizáveis na página correta.
-- [ ] A UI e a exportação distinguem alternativa sem ID resolvido de reconhecimento exato e de família ainda não suportada; nenhuma alternativa é contada como ativo adicional.
-- [ ] Correção/rejeição persiste e reabertura/exportação mantém o mesmo resultado.
-- [ ] Clientes compatíveis consomem payload aditivo e o snapshot OpenAPI corresponde ao código.
+- [x] Exclusivo, conflitante, desconhecido e informativo são distinguíveis e localizáveis na página correta.
+- [x] A UI e a exportação distinguem alternativa sem ID resolvido de reconhecimento exato e de família ainda não suportada; nenhuma alternativa é contada como ativo adicional.
+- [x] Correção/rejeição persiste e reabertura/exportação mantém o mesmo resultado.
+- [x] Clientes compatíveis consomem payload aditivo e o snapshot OpenAPI corresponde ao código.
 
 **Validação obrigatória:** V-P e conferência das entregas dos subagentes, com as particularidades acima. V-U, V-O, V-N, V-Q; inspeção manual com fixture de união/exclusivo/conflito em zoom/rotação e conferência das células/exportações. Os códigos V-* remetem aos comandos completos acima; registrar os comandos efetivamente executados.
 
-**Bloqueios:** Nenhum bloqueio conhecido para iniciar respeitando as dependências. Lacunas de dados/fontes são riscos até impedirem concretamente a execução ou o aceite; nessa ocorrência, registrar causa, evidência, impacto e ação de desbloqueio.
+**Bloqueios:** Nenhum bloqueio remanescente de E14 após integração e inspeção visual. Limites herdados de detecção/capacidade constam no handoff e não foram apresentados como reconhecimento concluído.
 
 **Riscos e mitigação:** UI mascara hipótese como confirmação: rotular campos pendentes e separar score técnico de decisão.
 
@@ -2842,7 +2842,51 @@ Ao iniciar, sincronize #em-andamento no índice e detalhe. Implemente somente es
 Não declare sucesso com validação obrigatória falhando ou não executada. Atualize para #concluida somente após todos os critérios; impedimento real exige #bloqueada com causa, evidência, impacto e ação de desbloqueio. Dependência ainda pendente mantém #pendente. Preencha Evidências e handoff com arquivos, decisões, comandos, resultados e limitações. Não crie commit, publique ou implante sem autorização explícita. Termine com resumo conciso de mudanças, validações e pendências.
 ```
 
-**Evidências e handoff:** ainda não executada. Registrar também agentes/papéis, fronteiras de escrita, checkpoint integrado, revisão independente, manifesto V-P e total de PDFs/páginas conferidos/bloqueados. Ao trabalhar, registrar arquivos alterados, versão/configuração, decisões, fontes/fixtures, comandos e resultados, métricas comparadas, limitações e próximo passo.
+**Evidências e handoff:** execução concluída no registro abaixo e em [`e14-revisao-simbologia.md`](e14-revisao-simbologia.md), com arquivos, responsabilidades, comandos completos, hashes, resultados e limites.
+
+### Registro de execução E14 — 24/09/2026
+
+Base `e95ce140574f90fdd2f1c32d5d0ec3e767db8c6e`, Git inicialmente limpo.
+E13 conferida por hashes de cinco módulos centrais e 36 testes aprovados.
+Índice/detalhe sincronizados ao iniciar e ao concluir. A `/root/codigo` entregou
+DTO/API/cliente/exportações após estabilizar o contrato; B `/root/testes`, testes
+separados e revisão independente; C `/root/pdfs_ui`, V-P e sessão visual exclusiva.
+O coordenador integrou metadados de persistência, guarda patrimonial de revisão,
+capacidade dos pacotes, compatibilidade HTTP, OpenAPI, runner e gates. Fronteiras
+de escrita e hashes finais estão no handoff; nenhum trabalho preexistente perdido.
+
+Detalhes, arquivos, comandos e limitações em
+[`e14-revisao-simbologia.md`](e14-revisao-simbologia.md). V-U + V-N final:
+**175 passed**; regressão semântica/revisão/gateway + V-O: **58 passed**
+(conjuntos sobrepostos, não somar). V-Q: lint, formato **430 arquivos** e mypy
+**392 fontes**, todos exit 0. Snapshot OpenAPI gerado/revisado: 313 linhas
+aditivas, sem mudar rotas/piso v1; header opt-in preserva clientes estritos antigos.
+Os 22 testes novos incluem correção/rejeição, reabertura, XLSX/PDF reais e Qt.
+
+V-P: **11 PDFs/11 páginas**, 66 imagens originais antes das predições, **137
+imagens aceitas** ao todo. Inferência E13 reutilizada por identidade comprovada;
+projeção E14 nova em `tmp/e14-simbologia/checkpoint-final/`: **237 ocorrências,
+11 XLSX e 11 PDFs derivados**. C conferiu todas as linhas/anotações e todos os
+PDFs; final versus a1 mantém pixels, células e conteúdo das anotações. Fixture
+autoral de duas páginas, zoom/rotação e decisões individuais conferidos na UI,
+na reabertura e em seis linhas/seis anotações exportadas. Primeira captura Qt
+sem fonte foi rejeitada e repetida legível; sem alegar aplicativo nativo.
+
+Manifesto final SHA-256
+`e2e604725078a10157fbbc76765a2a671a45d303b2e291e54f72bf4e51850eb4`.
+Relatório C `tmp/e14-simbologia/visual/relatorio-vp-e14.md`, SHA-256
+`59e7613fb23564d72287491071a01e23a406f97e85d785c827e6f35e134fbd49`.
+Handoffs A/B, `integration-results.json` e `integration-file-hashes.json` em
+`tmp/e14-simbologia/` registram entregas, tentativas, correções e checkpoint.
+Essa evidência local ignorada pelo Git deve acompanhar o workspace transferido.
+
+**Aceite final e limites:** sem bloqueio remanescente de E14. Falhas intermediárias
+de agrupamento/expectativa de abas foram corrigidas e a integração repetida.
+Dez FP legados, ambiguidades, FN raster, Hough indisponível e 344 IDs pendentes
+E07 permanecem documentados; não se alegou melhora de acurácia. Silêncio não
+vetou exclusivos, alternativas não geraram ativos extras e não houve visão no
+cliente nem decisões por similaridade. Reserva E16 lacrada. E15 continua
+pendente. Sem commit, publicação ou implantação.
 
 ## E15 — Execução, cache e ativação controlada no servidor — #pendente
 

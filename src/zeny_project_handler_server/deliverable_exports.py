@@ -37,7 +37,7 @@ from zeny_project_handler_contracts.exports import (
     CreateDeliverableExportRequest,
     DeliverableExportKind,
 )
-from zeny_project_handler_contracts.review import ReviewSessionResponse
+from zeny_project_handler_contracts.review import ReviewProposalDto, ReviewSessionResponse
 from zeny_project_handler_contracts.rules import ActiveRuleRegistryResponse
 from zeny_project_handler_server.api_errors import ApiError, resource_not_found, validation_error
 from zeny_project_handler_server.compliance_api import DocumentationComplianceApiService
@@ -205,6 +205,17 @@ class DeliverableExportService:
                         callout,
                         positions.get(callout.callout_id.root, callout.box),
                     )
+            try:
+                review = self._review.get_semantic_session(project.id)
+            except ApiError as error:
+                if error.status_code not in {400, 404, 422}:
+                    raise
+            else:
+                for proposal in review.proposals:
+                    if proposal.symbol is not None:
+                        index = page_indexes.get(proposal.overlay.geometry.page_id.root)
+                        if index is not None:
+                            _add_symbol_annotation(output[index], proposal)
             output.save(str(destination), garbage=3, deflate=True)
         finally:
             passwords.clear()
@@ -255,7 +266,7 @@ def _results_sheets(session: ReviewSessionResponse) -> tuple[WorksheetData, ...]
             region.coordinate_label if region is not None else "",
             item.label,
             item.situation_label,
-            _category_label(item.category),
+            item.symbol.role if item.symbol else _category_label(item.category),
             item.catalog_label,
             item.state_label,
             item.confidence or "",
@@ -342,6 +353,38 @@ def _results_sheets(session: ReviewSessionResponse) -> tuple[WorksheetData, ...]
     )
     if session.physical_spans:
         sheets = (*sheets, _physical_spans_sheet(session))
+    if session.symbol_support:
+        sheets = (
+            *sheets,
+            WorksheetData(
+                "Capacidade de símbolos",
+                (
+                    "Família",
+                    "IDs habilitados (não garante reconhecimento)",
+                    "IDs pendentes (não são ocorrências)",
+                    "Motivos",
+                    "Assinatura do pacote instalado atual",
+                ),
+                tuple(
+                    (
+                        item.family_id,
+                        "; ".join(item.enabled_reference_ids),
+                        "; ".join(item.pending_reference_ids),
+                        "; ".join(item.pending_reasons),
+                        item.package_signature,
+                    )
+                    for item in session.symbol_support
+                ),
+            ),
+        )
+    for title, unsupported in (("Símbolos", False), ("Famílias não suportadas", True)):
+        symbols = tuple(
+            p
+            for p in session.proposals
+            if p.symbol is not None and p.symbol.unsupported_family == unsupported
+        )
+        if symbols:
+            sheets = (*sheets, _symbol_sheet(title, symbols, session))
     if not session.method_readings:
         return sheets
     return (
@@ -369,6 +412,131 @@ def _results_sheets(session: ReviewSessionResponse) -> tuple[WorksheetData, ...]
             ),
         ),
     )
+
+
+def _symbol_status(value: str) -> str:
+    return {
+        "exclusive": "Exclusivo",
+        "conflicting": "Conflitante",
+        "unknown": "Desconhecido",
+        "informative": "Informativo",
+        "supported": "Suportado",
+    }.get(value, value)
+
+
+def _symbol_summary(item: ReviewProposalDto) -> str:
+    symbol = item.symbol
+    assert symbol is not None
+    alternatives = " / ".join(
+        " · ".join(filter(None, (a.symbol_class, a.subtype))) or "Desconhecido"
+        for a in symbol.alternatives
+    )
+    methods = "; ".join(
+        m.signature + " score bruto " + (m.raw_score or "indisponível") for m in symbol.methods
+    )
+    return (
+        f"{_symbol_status(symbol.status)} · {item.state_label} · {symbol.role}\n"
+        f"Uma ocorrência: {item.label}\nAlternativas: {alternatives or 'Sem classe resolvida'}\n"
+        f"Situação: {item.situation_label}; quantidade: {symbol.quantity or 'pendente'}\n"
+        f"Catálogo efetivo/sugerido: {item.catalog_label}\n"
+        f"Referências possíveis: {', '.join(symbol.reference_ids) or 'Sem ID exato'}\n"
+        f"Métodos: {methods}\n"
+        f"Probabilidade calibrada: {symbol.calibrated_probability or 'indisponível'}\n"
+        f"Família não suportada: {'Sim' if symbol.unsupported_family else 'Não'}\n"
+        f"Camada: {symbol.layer}; ocorrência: {symbol.occurrence_id}"
+    )
+
+
+def _symbol_sheet(
+    title: str, proposals: tuple[ReviewProposalDto, ...], session: ReviewSessionResponse
+) -> WorksheetData:
+    return WorksheetData(
+        title,
+        (
+            "Ocorrência",
+            "Estado visual",
+            "Papel",
+            "Exclusivo",
+            "Alternativas (uma ocorrência)",
+            "Referências possíveis (não é ID exato)",
+            "Métodos / score bruto",
+            "Probabilidade calibrada",
+            "Situação efetiva",
+            "Quantidade",
+            "Revisão",
+            "Catálogo",
+            "Folha",
+            "Página ID",
+            "Camada",
+            "Pendências da detecção",
+            "Cobertura dos métodos",
+            "Proposta ID",
+            "Geometria normalizada",
+        ),
+        tuple(
+            (
+                symbol.occurrence_id,
+                _symbol_status(symbol.status),
+                symbol.role,
+                "Sim" if symbol.exclusive else "Não",
+                " / ".join(
+                    " · ".join(filter(None, (a.symbol_class, a.subtype))) or "Desconhecido"
+                    for a in symbol.alternatives
+                ),
+                "; ".join(symbol.reference_ids),
+                "; ".join(
+                    m.signature + ": " + (m.raw_score or "indisponível") for m in symbol.methods
+                ),
+                symbol.calibrated_probability or "",
+                item.situation_label,
+                symbol.quantity or "Pendente",
+                item.state_label,
+                item.catalog_label,
+                _page_id(item.overlay.geometry.page_id.root, session.page_order),
+                str(item.overlay.geometry.page_id.root),
+                symbol.layer,
+                "; ".join(symbol.pending_reasons),
+                "; ".join(
+                    str(row.get("method_signature", "")) + ": " + str(row.get("state", ""))
+                    for row in symbol.coverage
+                ),
+                str(item.proposal_id.root),
+                item.overlay.geometry.model_dump_json(),
+            )
+            for item in proposals
+            if (symbol := item.symbol) is not None
+        ),
+    )
+
+
+def _add_symbol_annotation(page: pymupdf.Page, item: ReviewProposalDto) -> None:
+    geometry = item.overlay.geometry
+    xs, ys = [float(p.x) for p in geometry.points], [float(p.y) for p in geometry.points]
+    box = pymupdf.Rect(
+        min(xs) * page.rect.width,
+        min(ys) * page.rect.height,
+        max(xs) * page.rect.width,
+        max(ys) * page.rect.height,
+    )
+    if box.width < 2 or box.height < 2:
+        box = pymupdf.Rect(box.x0 - 2, box.y0 - 2, box.x1 + 2, box.y1 + 2)
+    annotation = page.add_rect_annot(_derotated_rect(page, box))
+    symbol = item.symbol
+    assert symbol is not None
+    color = {
+        "conflicting": (0.8, 0.2, 0.1),
+        "exclusive": (0.45, 0.2, 0.8),
+        "unknown": (0.75, 0.5, 0.1),
+        "informative": (0.1, 0.5, 0.75),
+    }.get(symbol.status, (0.2, 0.6, 0.3))
+    annotation.set_colors(stroke=color)
+    annotation.set_border(width=1.5)
+    annotation.set_info(
+        title="Zeny Project Handler",
+        subject="Símbolo · " + _symbol_status(symbol.status),
+        content=_symbol_summary(item),
+    )
+    annotation.update()
 
 
 def _physical_spans_sheet(session: ReviewSessionResponse) -> WorksheetData:

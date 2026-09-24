@@ -107,6 +107,8 @@ from zeny_project_handler_server.api_errors import (
     validation_error,
 )
 from zeny_project_handler_server.dto_values import bounded_label, decimal_string
+from zeny_project_handler_server.symbol_review import project_symbol
+from zeny_project_handler_server.symbol_support import installed_symbol_support
 
 _SESSION_NAMESPACE = UUID("8314f77e-f4d8-4518-a63d-90a44785ef5f")
 
@@ -214,6 +216,11 @@ class ReviewApiService:
                         )
                     if request.adjustments is None:
                         raise validation_error("Informe os dados confirmados do elemento.")
+                    attributes = dict(proposal.atributos_sugeridos)
+                    if attributes.get("simbolo_papel") == "desconhecido" and not request.reason:
+                        raise validation_error(
+                            "Informe o motivo da classificação do símbolo desconhecido."
+                        )
                     self._validate_element_scope(project_id, request.adjustments)
                     decision = self._service.confirmar_elemento(
                         proposal_id,
@@ -536,6 +543,7 @@ def _session_dto(session: SessaoRevisao, *, project_version: int) -> ReviewSessi
     )
     signature = _semantic_signature(session, project_version=project_version, spans=spans)
     return ReviewSessionResponse(
+        symbol_support=installed_symbol_support(),
         method_readings=method_readings,
         review_session_id=ReviewSessionId(uuid5(_SESSION_NAMESPACE, signature)),
         project_id=ProjectId(project.id),
@@ -600,7 +608,48 @@ def _proposal_dto(
     relation_by_id: dict[UUID, PropostaRelacao],
     decision: DecisaoRevisao | None,
 ) -> ReviewProposalDto:
+    original = proposal
+    confirmed = next(
+        (
+            item
+            for item in session.projeto.elementos
+            if decision is not None and item.id == decision.elemento_confirmado_id
+        ),
+        None,
+    )
+    if confirmed is not None:
+        proposal = replace(
+            proposal,
+            categoria=confirmed.categoria,
+            situacao_projeto=confirmed.situacao,
+            tipo_catalogo_sugerido_id=confirmed.tipo_catalogo_id,
+            codigo_observado=confirmed.codigo_observado,
+            geometria=confirmed.geometria or proposal.geometria,
+        )
+    navigation = _evidence_navigation(proposal.evidencia_ids, evidence_by_id, document_by_page)
+    symbol = project_symbol(
+        original,
+        evidence_by_id,
+        navigation,
+        _situation(proposal.situacao_projeto),
+        confirmed=confirmed is not None,
+    )
     label = _proposal_label(proposal, session.catalogo)
+    if symbol is not None and confirmed is None:
+        label = symbol.symbol_class or "Símbolo desconhecido"
+        if len(symbol.alternatives) > 1:
+            label = " / ".join(
+                dict.fromkeys(
+                    " · ".join(filter(None, (item.symbol_class, item.subtype))) or "Desconhecido"
+                    for item in symbol.alternatives
+                )
+            )
+        label = bounded_label(label) or "Símbolo desconhecido"
+    situation_label = (
+        "Pendente"
+        if symbol is not None and symbol.effective_situation is None
+        else _situation_label(proposal.situacao_projeto)
+    )
     catalog_label = (
         _catalog_label(proposal.tipo_catalogo_sugerido_id, session.catalogo)
         if proposal.tipo_catalogo_sugerido_id is not None
@@ -623,6 +672,7 @@ def _proposal_dto(
     )
     confidence = decimal_string(proposal.confianca) if proposal.confianca is not None else None
     return ReviewProposalDto(
+        symbol=symbol,
         technical_revision=revision_data(proposal),
         proposal_id=ProposalId(proposal.id),
         kind=ReviewProposalKind.ELEMENT,
@@ -630,7 +680,7 @@ def _proposal_dto(
         situation=_situation(proposal.situacao_projeto),
         review_state=state,
         state_label=_review_state_label(proposal.estado_revisao, decision),
-        situation_label=_situation_label(proposal.situacao_projeto),
+        situation_label=situation_label,
         label=label,
         catalog_item_id=(
             CatalogItemId(proposal.tipo_catalogo_sugerido_id)
@@ -638,7 +688,11 @@ def _proposal_dto(
             else None
         ),
         catalog_label=catalog_label,
-        detection_summary=f"{_category_label(proposal.categoria)} · {catalog_label}",
+        detection_summary=(
+            f"{label} · {symbol.role} · {symbol.status} · {situation_label}"
+            if symbol is not None
+            else f"{_category_label(proposal.categoria)} · {catalog_label}"
+        ),
         observed_code=proposal.codigo_observado,
         confidence=confidence,
         attributes={
@@ -661,7 +715,7 @@ def _proposal_dto(
             label=label,
             category=_category(proposal.categoria),
             situation=_situation(proposal.situacao_projeto),
-            situation_label=_situation_label(proposal.situacao_projeto),
+            situation_label=situation_label,
             review_state=state,
             confidence=confidence,
         ),
@@ -1412,9 +1466,18 @@ def _region_action_counts(proposals: tuple[ReviewProposalDto, ...]) -> str:
         (ElementSituation.CHANGE, "alterar", "alterar"),
         (ElementSituation.EXISTING, "existente", "existentes"),
     ):
-        count = sum(item.situation is situation for item in proposals)
+        count = sum(
+            item.situation is situation
+            and not (item.symbol is not None and item.symbol.effective_situation is None)
+            for item in proposals
+        )
         if count:
             parts.append(f"{count} {singular if count == 1 else plural}")
+    pending = sum(
+        item.symbol is not None and item.symbol.effective_situation is None for item in proposals
+    )
+    if pending:
+        parts.append(f"{pending} com situação pendente")
     return " · ".join(parts)
 
 
@@ -1426,9 +1489,21 @@ def _region_summary(proposals: tuple[ReviewProposalDto, ...]) -> str:
         (ElementSituation.CHANGE, "Alterar"),
         (ElementSituation.EXISTING, "Existente"),
     ):
-        labels = tuple(item.label for item in proposals if item.situation is situation)
+        labels = tuple(
+            item.label
+            for item in proposals
+            if item.situation is situation
+            and not (item.symbol is not None and item.symbol.effective_situation is None)
+        )
         if labels:
             parts.append(f"{verb}: {', '.join(labels)}")
+    pending_labels = tuple(
+        item.label
+        for item in proposals
+        if item.symbol is not None and item.symbol.effective_situation is None
+    )
+    if pending_labels:
+        parts.append("Situação pendente: " + ", ".join(pending_labels))
     return " · ".join(parts)
 
 

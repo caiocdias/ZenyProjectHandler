@@ -4436,6 +4436,16 @@
             "title": "State Label",
             "type": "string"
           },
+          "symbol": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewSymbolDto"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "technical_revision": {
             "anyOf": [
               {
@@ -4727,6 +4737,14 @@
             },
             "title": "Spans",
             "type": "array"
+          },
+          "symbol_support": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ReviewSymbolSupportDto"
+            },
+            "title": "Symbol Support",
+            "type": "array"
           }
         },
         "required": [
@@ -4759,6 +4777,282 @@
         ],
         "title": "ReviewState",
         "type": "string"
+      },
+      "ReviewSymbolAlternativeDto": {
+        "additionalProperties": false,
+        "properties": {
+          "subtype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subtype"
+          },
+          "symbol_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol Class"
+          }
+        },
+        "title": "ReviewSymbolAlternativeDto",
+        "type": "object"
+      },
+      "ReviewSymbolDto": {
+        "additionalProperties": false,
+        "description": "One visual occurrence; alternatives never represent additional assets.",
+        "properties": {
+          "alternatives": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ReviewSymbolAlternativeDto"
+            },
+            "title": "Alternatives",
+            "type": "array"
+          },
+          "calibrated_probability": {
+            "anyOf": [
+              {
+                "description": "Número decimal codificado como texto para preservar precisão.",
+                "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Calibrated Probability"
+          },
+          "coverage": {
+            "default": [],
+            "items": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/JsonValue"
+              },
+              "type": "object"
+            },
+            "title": "Coverage",
+            "type": "array"
+          },
+          "effective_situation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ElementSituation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exclusive": {
+            "default": false,
+            "title": "Exclusive",
+            "type": "boolean"
+          },
+          "layer": {
+            "default": "base",
+            "title": "Layer",
+            "type": "string"
+          },
+          "methods": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ReviewSymbolMethodDto"
+            },
+            "title": "Methods",
+            "type": "array"
+          },
+          "observation_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Observation Ids",
+            "type": "array"
+          },
+          "occurrence_id": {
+            "title": "Occurrence Id",
+            "type": "string"
+          },
+          "pending_reasons": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Pending Reasons",
+            "type": "array"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "description": "Número decimal codificado como texto para preservar precisão.",
+                "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          },
+          "reference_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Reference Ids",
+            "type": "array"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "exclusive",
+              "conflicting",
+              "unknown",
+              "informative",
+              "supported"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "symbol_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol Class"
+          },
+          "unsupported_family": {
+            "default": false,
+            "title": "Unsupported Family",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "occurrence_id",
+          "role",
+          "status"
+        ],
+        "title": "ReviewSymbolDto",
+        "type": "object"
+      },
+      "ReviewSymbolMethodDto": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence": {
+            "$ref": "#/components/schemas/EvidenceNavigationDto"
+          },
+          "family": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Family"
+          },
+          "observation_id": {
+            "title": "Observation Id",
+            "type": "string"
+          },
+          "raw_score": {
+            "anyOf": [
+              {
+                "description": "Número decimal codificado como texto para preservar precisão.",
+                "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Score"
+          },
+          "signature": {
+            "title": "Signature",
+            "type": "string"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          }
+        },
+        "required": [
+          "signature",
+          "observation_id",
+          "evidence"
+        ],
+        "title": "ReviewSymbolMethodDto",
+        "type": "object"
+      },
+      "ReviewSymbolSupportDto": {
+        "additionalProperties": false,
+        "description": "Installed package capabilities, separate from detections in this project.",
+        "properties": {
+          "enabled_reference_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Enabled Reference Ids",
+            "type": "array"
+          },
+          "family_id": {
+            "title": "Family Id",
+            "type": "string"
+          },
+          "package_signature": {
+            "title": "Package Signature",
+            "type": "string"
+          },
+          "pending_reasons": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Pending Reasons",
+            "type": "array"
+          },
+          "pending_reference_ids": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Pending Reference Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "family_id",
+          "package_signature"
+        ],
+        "title": "ReviewSymbolSupportDto",
+        "type": "object"
       },
       "RuleDetailDto": {
         "additionalProperties": false,
@@ -10049,6 +10343,25 @@
               "format": "uuid",
               "title": "Project Id",
               "type": "string"
+            }
+          },
+          {
+            "description": "Opt-in para symbol e symbol_support; sem o header mantém a forma legada.",
+            "in": "header",
+            "name": "X-Zeny-Review-Symbols",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "1",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Opt-in para symbol e symbol_support; sem o header mantém a forma legada.",
+              "title": "X-Zeny-Review-Symbols"
             }
           }
         ],

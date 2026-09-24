@@ -225,6 +225,8 @@ class HttpReviewGateway:
             "Authorization": f"Bearer {self.password}",
             **headers,
         }
+        if method == "GET" and path.endswith("/review-session"):
+            request_headers["X-Zeny-Review-Symbols"] = "1"
         target = f"{self._base_path}{path}"
         try:
             connection.request(method, target, body=body, headers=request_headers)
@@ -246,7 +248,8 @@ class HttpReviewGateway:
         model: type[ModelT],
     ) -> ModelT:
         if 200 <= status < 300:
-            return model.model_validate_json(payload)
+            # Response fields may grow within v1; requests stay strict.
+            return model.model_validate_json(payload, extra="ignore")
         try:
             envelope = ErrorEnvelope.model_validate_json(payload)
         except ValueError as error:

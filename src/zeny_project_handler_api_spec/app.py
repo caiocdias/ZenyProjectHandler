@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, FastAPI, File, Header, Path, Query, Security, UploadFile, status
@@ -563,7 +563,16 @@ async def list_documentation_projects(
     response_model=ReviewSessionResponse,
     responses=ERROR_RESPONSES,
 )
-async def get_review_session(project_id: UUID) -> ReviewSessionResponse:
+async def get_review_session(
+    project_id: UUID,
+    symbol_details: Annotated[
+        Literal["1"] | None,
+        Header(
+            alias="X-Zeny-Review-Symbols",
+            description="Opt-in para symbol e symbol_support; sem o header mantém a forma legada.",
+        ),
+    ] = None,
+) -> ReviewSessionResponse:
     raise NotImplementedError("Aplicação exclusiva para geração da OpenAPI.")
 
 

@@ -703,6 +703,7 @@ def test_results_panel_has_span_tab_with_situation_cable_and_length_source(
         "Elementos",
         "Vãos",
         "Leituras auxiliares",
+        "Cobertura de símbolos",
         "Trechos físicos",
     ]
     assert table.rowCount() == 1

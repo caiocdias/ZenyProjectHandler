@@ -6,7 +6,7 @@ from base64 import b64encode
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
 from hashlib import sha256
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
 from fastapi import Depends, FastAPI, Header, Path, Query, Request, UploadFile, status
@@ -669,8 +669,21 @@ def create_app(
     async def get_review_session(
         request: Request,
         project_id: UUID,
-    ) -> ReviewSessionResponse:
-        return _review_api(request).get_session(project_id)
+        symbol_details: Annotated[
+            Literal["1"] | None, Header(alias="X-Zeny-Review-Symbols")
+        ] = None,
+    ) -> ReviewSessionResponse | JSONResponse:
+        session = _review_api(request).get_session(project_id)
+        if symbol_details is not None:
+            return session
+        # Previously released v1 clients use strict response models. Keep their
+        # wire shape while newer clients explicitly request the additive details.
+        return JSONResponse(
+            session.model_dump(
+                mode="json",
+                exclude={"symbol_support": True, "proposals": {"__all__": {"symbol"}}},
+            )
+        )
 
     @application.post(
         f"{API_V1_PREFIX}/review/proposals/{{proposal_id}}/accept",

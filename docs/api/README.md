@@ -166,6 +166,22 @@ significa SELECT executado sem linha, não ausência de execução. `market` ace
 `URBANO` quando comprovado por um snapshot projetável. Cardinalidade impossível dos fatos do alvo
 projeto falha com `409 INTEGRITY_ERROR` em vez de escolher ou inferir um valor.
 
+## Detalhes de simbologia na revisão (E14)
+
+O cliente atualizado envia `X-Zeny-Review-Symbols: 1` em
+`GET /api/v1/projects/{project_id}/review-session`. A resposta inclui o campo
+opcional `proposals[].symbol` e a coleção `symbol_support`. Sem o header,
+esses campos são omitidos para manter a estrutura dos clientes v1 anteriores.
+O gateway novo tolera campos adicionais nas respostas; requests continuam
+estritos e as decisões continuam protegidas por `expected_review_session_id`.
+
+`symbol` preserva uma ocorrência com alternativas, referências possíveis,
+observações, score bruto, matriz de métodos, papel, estado visual e pendências.
+Situação efetiva nula deve ser apresentada como pendente; o enum legado não
+constitui evidência de situação. `symbol_support` descreve os pacotes instalados,
+incluindo IDs pendentes, e não detecções do projeto. Veja o
+[contrato e as evidências E14](../e14-revisao-simbologia.md).
+
 ## Decisões transversais
 
 - somente `GET /health/live` é público; todas as operações sob `/api/v1` declaram Bearer;

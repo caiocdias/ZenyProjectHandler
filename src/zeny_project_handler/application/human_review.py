@@ -265,6 +265,15 @@ class ServicoRevisaoHumana:
         with self._unit_of_work() as work:
             proposal, project, catalog = self._element_context(work, proposta_id)
             self._ensure_undecided(work, proposal)
+            symbol = dict(proposal.atributos_sugeridos)
+            if symbol.get("origem_simbolo_ocorrencia_id") and (
+                symbol.get("simbolo_papel") == "informativo"
+                or "ESTAI" in str(symbol.get("simbolo_classe") or "")
+            ):
+                raise RevisaoHumanaError(
+                    "Símbolo informativo ou estai sem tipo patrimonial não pode criar ativo. "
+                    "Mantenha a observação para revisão ou rejeite-a com motivo."
+                )
             from .technical_revisions import revision_data
 
             revision = revision_data(proposal)

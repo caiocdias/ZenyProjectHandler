@@ -128,9 +128,22 @@ class ReviewPanelWidget(QWidget):
         self._situation_filter = QComboBox()
         self._situation_filter.setObjectName("reviewSituationFilter")
         self._situation_filter.addItem("Todas as situações", None)
+        self._situation_filter.addItem("Situação pendente", "pending")
         for situation in ElementSituation:
             self._situation_filter.addItem(_situation_label(situation), situation.value)
         filter_row.addWidget(self._situation_filter)
+        self._symbol_filter = QComboBox()
+        self._symbol_filter.setObjectName("reviewSymbolFilter")
+        for label, value in (
+            ("Todos os símbolos", None),
+            ("Exclusivos", "exclusive"),
+            ("Conflitantes", "conflicting"),
+            ("Desconhecidos", "unknown"),
+            ("Informativos", "informative"),
+            ("Famílias não suportadas", "unsupported"),
+        ):
+            self._symbol_filter.addItem(label, value)
+        filter_row.addWidget(self._symbol_filter)
 
         self._results_tabs = QTabWidget()
         self._results_tabs.setObjectName("analysisResultTabs")
@@ -252,6 +265,23 @@ class ReviewPanelWidget(QWidget):
         self._method_table.cellClicked.connect(self._select_method_reading)
         readings_layout.addWidget(self._method_table)
         self._results_tabs.addTab(readings_page, "Leituras auxiliares")
+        support_page = QWidget()
+        support_layout = QVBoxLayout(support_page)
+        support_layout.addWidget(
+            QLabel(
+                "Capacidade instalada atual. Habilitação não garante reconhecimento; "
+                "variantes pendentes não são ocorrências nem ativos."
+            )
+        )
+        self._support_table = QTableWidget(0, 4)
+        self._support_table.setObjectName("reviewSymbolSupportTable")
+        self._support_table.setHorizontalHeaderLabels(
+            ("Família", "IDs habilitados", "IDs pendentes", "Motivos")
+        )
+        self._support_table.horizontalHeader().setStretchLastSection(True)
+        self._support_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        support_layout.addWidget(self._support_table)
+        self._results_tabs.addTab(support_page, "Cobertura de símbolos")
         self._build_physical_spans_tab()
         layout.addWidget(self._results_tabs, 1)
 
@@ -262,6 +292,12 @@ class ReviewPanelWidget(QWidget):
         self._detected.setObjectName("reviewDetectedSummary")
         self._detected.setWordWrap(True)
         self._editor_form.addRow("Identificado", self._detected)
+        self._symbol_details = QLabel()
+        self._symbol_details.setObjectName("reviewSymbolDetails")
+        self._symbol_details.setWordWrap(True)
+        self._symbol_details.setTextFormat(Qt.TextFormat.PlainText)
+        self._editor_form.addRow("Símbolo / procedência", self._symbol_details)
+        self._symbol_details.hide()
         self._reviewer = QLineEdit()
         self._reviewer.setObjectName("reviewAuthorEdit")
         self._reviewer.setPlaceholderText("Nome de quem está revisando")
@@ -381,6 +417,7 @@ class ReviewPanelWidget(QWidget):
         self._category_filter.currentIndexChanged.connect(self._refresh_proposals)
         self._state_filter.currentIndexChanged.connect(self._refresh_proposals)
         self._situation_filter.currentIndexChanged.connect(self._refresh_proposals)
+        self._symbol_filter.currentIndexChanged.connect(self._refresh_proposals)
         self._results_tabs.currentChanged.connect(self._refresh_visible_word_wrap)
         self._tree.itemSelectionChanged.connect(self._select_tree_proposal)
         self._table.itemSelectionChanged.connect(self._select_table_proposal)
@@ -492,6 +529,19 @@ class ReviewPanelWidget(QWidget):
         self._refresh_proposals()
         self._refresh_spans()
         self._refresh_method_readings()
+        self._support_table.setRowCount(len(session.symbol_support))
+        for row, support in enumerate(session.symbol_support):
+            for column, value in enumerate(
+                (
+                    support.family_id,
+                    ", ".join(support.enabled_reference_ids),
+                    ", ".join(support.pending_reference_ids),
+                    "; ".join(support.pending_reasons),
+                )
+            ):
+                cell = QTableWidgetItem(value)
+                cell.setToolTip(value + "\nPacote: " + support.package_signature)
+                self._support_table.setItem(row, column, cell)
         self.session_changed.emit(session)
 
     def _refresh_method_readings(self) -> None:
@@ -552,9 +602,32 @@ class ReviewPanelWidget(QWidget):
             and (state is None or item.review_state.value == state)
             and (
                 situation is None
-                or (isinstance(item, ReviewProposalDto) and item.situation.value == situation)
+                or (
+                    isinstance(item, ReviewProposalDto)
+                    and (
+                        (
+                            "pending"
+                            if item.symbol and item.symbol.effective_situation is None
+                            else item.situation.value
+                        )
+                        == situation
+                    )
+                )
             )
+            and self._matches_symbol_filter(item)
         )
+
+    def _matches_symbol_filter(self, item: ReviewItem) -> bool:
+        selected = self._symbol_filter.currentData()
+        if selected is None:
+            return True
+        if not isinstance(item, ReviewProposalDto) or item.symbol is None:
+            return False
+        if selected == "exclusive":
+            return item.symbol.exclusive
+        if selected == "unsupported":
+            return item.symbol.unsupported_family
+        return bool(item.symbol.status == selected)
 
     def _refresh_proposals(self) -> None:
         session = self._session
@@ -740,14 +813,18 @@ class ReviewPanelWidget(QWidget):
         if session is None:
             self._viewer.definir_propostas_revisao(())
             return
-        proposals = filtered or tuple(
-            item
-            for item in self._filtered_items(
-                category=self._category_filter.currentData(),
-                state=self._state_filter.currentData(),
-                situation=self._situation_filter.currentData(),
+        proposals = (
+            filtered
+            if filtered is not None
+            else tuple(
+                item
+                for item in self._filtered_items(
+                    category=self._category_filter.currentData(),
+                    state=self._state_filter.currentData(),
+                    situation=self._situation_filter.currentData(),
+                )
+                if isinstance(item, ReviewProposalDto)
             )
-            if isinstance(item, ReviewProposalDto)
         )
         hidden_by_region = {
             proposal_id.root
@@ -887,9 +964,13 @@ class ReviewPanelWidget(QWidget):
         self._tree.clear()
         self._visibility_buttons.clear()
         visible = {item.proposal_id.root: item for item in proposals}
+        grouped_ids = {p.root for region in session.regions for p in region.proposal_ids}
         for region in session.regions:
             elements = tuple(
-                visible[item.root] for item in region.proposal_ids if item.root in visible
+                visible[item.root]
+                for item in region.proposal_ids
+                if item.root in visible
+                and not ((symbol := visible[item.root].symbol) and symbol.unsupported_family)
             )
             if not elements and region.proposal_ids:
                 continue
@@ -927,12 +1008,19 @@ class ReviewPanelWidget(QWidget):
                         proposal.situation_label,
                         "",
                         proposal.catalog_label,
-                        "; ".join(proposal.relationship_labels) or "Agrupado por proximidade",
+                        (
+                            _symbol_status_label(proposal.symbol.status)
+                            if proposal.symbol
+                            else "; ".join(proposal.relationship_labels)
+                            or "Agrupado por proximidade"
+                        ),
                         "",
                     )
                 )
                 proposal_id = proposal.proposal_id.root
                 child.setData(0, Qt.ItemDataRole.UserRole, str(proposal_id))
+                if proposal.symbol:
+                    child.setToolTip(0, _symbol_detail(proposal))
                 root.addChild(child)
                 element_visible = region_visible and proposal_id not in self._hidden_proposal_ids
                 button = self._visibility_button(
@@ -949,6 +1037,42 @@ class ReviewPanelWidget(QWidget):
                 button.setProperty("proposalId", str(proposal_id))
                 self._visibility_buttons[("element", proposal_id)] = button
                 self._tree.setItemWidget(child, 5, button)
+        for title, items in (
+            (
+                "Símbolos e identificações sem região",
+                tuple(
+                    p
+                    for p in proposals
+                    if p.proposal_id.root not in grouped_ids
+                    and p.symbol is not None
+                    and not p.symbol.unsupported_family
+                ),
+            ),
+            (
+                "Famílias não suportadas",
+                tuple(p for p in proposals if p.symbol and p.symbol.unsupported_family),
+            ),
+        ):
+            if not items:
+                continue
+            root = QTreeWidgetItem((title, "", "", f"{len(items)} ocorrência(s)", "", ""))
+            self._tree.addTopLevelItem(root)
+            for proposal in items:
+                symbol = proposal.symbol
+                page_number = self._project_page_number(proposal.overlay.geometry.page_id.root)
+                child = QTreeWidgetItem(
+                    (
+                        proposal.label,
+                        proposal.situation_label,
+                        f"Folha {page_number}",
+                        proposal.catalog_label,
+                        _symbol_status_label(symbol.status) if symbol else proposal.state_label,
+                        "",
+                    )
+                )
+                child.setData(0, Qt.ItemDataRole.UserRole, str(proposal.proposal_id.root))
+                child.setToolTip(0, _symbol_detail(proposal))
+                root.addChild(child)
         if not visible:
             self._tree.addTopLevelItem(
                 QTreeWidgetItem(("Nenhuma identificação neste filtro", "", "", "", "", ""))
@@ -1020,7 +1144,12 @@ class ReviewPanelWidget(QWidget):
                     self._set_combo_value(self._catalog_item, str(proposal.catalog_item_id.root))
                 else:
                     self._classification_correction.setChecked(True)
-                self._set_combo_value(self._situation, proposal.situation.value)
+                    if proposal.symbol is not None:
+                        self._catalog_item.setCurrentIndex(-1)
+                if proposal.symbol and proposal.symbol.effective_situation is None:
+                    self._situation.setCurrentIndex(-1)
+                else:
+                    self._set_combo_value(self._situation, proposal.situation.value)
                 self._set_geometry_fields(proposal.overlay.geometry)
                 self._detected.setText(proposal.detection_summary)
             else:
@@ -1044,9 +1173,10 @@ class ReviewPanelWidget(QWidget):
             "Motivo obrigatório da escolha técnica" if revision is not None else "Opcional"
         )
         self._revision_choice.setCurrentIndex(0)
-        self._editor_form.parentWidget().setVisible(revision is not None)
-        self._accept.setVisible(revision is not None)
-        self._reject.setVisible(False)
+        has_symbol = isinstance(proposal, ReviewProposalDto) and proposal.symbol is not None
+        self._editor_form.parentWidget().setVisible(revision is not None or has_symbol)
+        self._accept.setVisible(revision is not None or has_symbol)
+        self._reject.setVisible(has_symbol)
         for widget in (
             self._revision_comparison,
             self._revision_base,
@@ -1140,6 +1270,11 @@ class ReviewPanelWidget(QWidget):
         self._update_editor_visibility(self._selected_proposal())
 
     def _update_editor_visibility(self, proposal: ReviewItem | None) -> None:
+        symbol = proposal.symbol if isinstance(proposal, ReviewProposalDto) else None
+        self._symbol_details.setText(
+            _symbol_detail(proposal) if isinstance(proposal, ReviewProposalDto) else ""
+        )
+        self._editor_form.setRowVisible(self._symbol_details, symbol is not None)
         is_element = isinstance(proposal, ReviewProposalDto)
         decidable = proposal is not None and proposal.requires_review
         deciding_layer = (
@@ -1176,7 +1311,10 @@ class ReviewPanelWidget(QWidget):
             self._geometry_widget,
             editable and self._adjust_geometry.isChecked(),
         )
-        self._accept.setEnabled(decidable)
+        self._accept.setEnabled(
+            decidable
+            and not (symbol and (symbol.symbol_class == "ESTAI" or symbol.role == "informativo"))
+        )
         self._reject.setEnabled(decidable)
         if deciding_layer:
             self._accept.setText("Salvar decisão técnica")
@@ -1240,6 +1378,23 @@ class ReviewPanelWidget(QWidget):
         if proposal is None or session is None:
             return
         choice = self._revision_choice.currentData()
+        if isinstance(proposal, ReviewProposalDto) and proposal.symbol is not None:
+            if proposal.symbol.symbol_class == "ESTAI" or proposal.symbol.role == "informativo":
+                self.status_changed.emit(
+                    "Ocorrência observacional: confirmação patrimonial indisponível."
+                )
+                return
+            if self._situation.currentData() is None:
+                self.status_changed.emit("Selecione explicitamente a situação confirmada.")
+                return
+            if self._catalog_item.currentData() is None:
+                self.status_changed.emit("Selecione explicitamente um item do catálogo.")
+                return
+            if proposal.symbol.role == "desconhecido" and not self._reason.text().strip():
+                self.status_changed.emit(
+                    "Informe o motivo da classificação do símbolo desconhecido."
+                )
+                return
         deciding_layer = (
             isinstance(proposal, ReviewProposalDto)
             and proposal.technical_revision is not None
@@ -1444,6 +1599,52 @@ def _proposal_category(value: ReviewItem) -> str:
 def _proposal_label(value: ReviewProposalDto) -> str:
     """Rótulo já calculado pelo servidor; mantido como helper puramente visual."""
     return value.label
+
+
+def _symbol_status_label(status: str) -> str:
+    return {
+        "exclusive": "Exclusivo",
+        "conflicting": "Conflitante",
+        "unknown": "Desconhecido",
+        "informative": "Informativo",
+        "supported": "Suportado",
+    }.get(status, status)
+
+
+def _symbol_detail(proposal: ReviewProposalDto) -> str:
+    symbol = proposal.symbol
+    if symbol is None:
+        return ""
+    alternatives = (
+        " / ".join(
+            " · ".join(filter(None, (a.symbol_class, a.subtype))) or "Desconhecido"
+            for a in symbol.alternatives
+        )
+        or "Sem classe resolvida"
+    )
+    methods = (
+        "; ".join(
+            f"{m.signature[:16]}: score bruto {m.raw_score or 'indisponível'}"
+            for m in symbol.methods
+        )
+        or "Método indisponível"
+    )
+    return "\n".join(
+        (
+            f"{_symbol_status_label(symbol.status)} · {symbol.role} · camada {symbol.layer}"
+            + (" · Família não suportada" if symbol.unsupported_family else ""),
+            f"Uma ocorrência; alternativas: {alternatives}",
+            f"Referências possíveis: {', '.join(symbol.reference_ids) or 'Sem ID exato'}",
+            f"{methods}. Concordância não é probabilidade.",
+            f"Probabilidade calibrada: {symbol.calibrated_probability or 'indisponível'}; "
+            f"quantidade: {symbol.quantity or 'pendente'}; situação: {proposal.situation_label}",
+            "Pendências da detecção: " + (", ".join(symbol.pending_reasons) or "nenhuma"),
+            "Cobertura: "
+            + "; ".join(
+                f"{r.get('method_signature', '')}: {r.get('state', '')}" for r in symbol.coverage
+            ),
+        )
+    )
 
 
 def _bounds(geometry: ReviewGeometryDto) -> tuple[float, float, float, float]:

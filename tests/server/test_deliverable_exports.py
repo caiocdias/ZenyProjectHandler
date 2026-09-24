@@ -307,7 +307,7 @@ def test_server_generates_pdf_and_three_real_xlsx_deliverables(tmp_path: Path) -
             analyzed_version,
             "RESULTS_XLSX",
         )
-        assert _sheet_names(results_content) == ("Elementos", "Vãos")
+        assert _sheet_names(results_content) == ("Elementos", "Vãos", "Capacidade de símbolos")
         span_rows = _sheet_rows(results_content, 2)
         assert span_rows[0] == (
             "Vão",

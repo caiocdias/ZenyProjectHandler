@@ -67,7 +67,7 @@ class ContextoInterpretacao:
     evidencias: tuple[EvidenciaDocumento, ...]
 
 
-SYMBOL_SEMANTICS_VERSION = "e13-symbol-semantics-1"
+SYMBOL_SEMANTICS_VERSION = "e14-symbol-review-1"
 
 
 class ExecutarPipelineInterpretacao:
@@ -611,6 +611,41 @@ def _symbol_proposals(
             codigo_observado=symbol_class,
             atributos_sugeridos=(
                 ("origem_simbolo_ocorrencia_id", occurrence.id),
+                ("simbolo_suporte_metodos", json.dumps(occurrence.support)),
+                (
+                    "simbolo_observacoes",
+                    json.dumps(
+                        [
+                            {
+                                "observation_id": obs.id,
+                                "method_signature": obs.metodo_assinatura,
+                                "raw_score": str(obs.score_bruto)
+                                if obs.score_bruto is not None
+                                else None,
+                                "evidence_id": str(evidence_id),
+                            }
+                            for obs, evidence_id in zip(
+                                occurrence.observations, observation_ids, strict=True
+                            )
+                        ],
+                        sort_keys=True,
+                    ),
+                ),
+                (
+                    "simbolo_matriz_metodos",
+                    json.dumps(
+                        [
+                            {
+                                "method_signature": row.method_signature,
+                                "state": row.state,
+                                "classes": row.classes,
+                            }
+                            for row in symbols.method_matrix
+                            if row.occurrence_id == occurrence.id
+                        ],
+                        sort_keys=True,
+                    ),
+                ),
                 ("simbolo_decisao_e12", occurrence.decision),
                 ("simbolo_classe", symbol_class),
                 (
@@ -834,6 +869,7 @@ def _symbol_evidence(
         origem_pdf=observation.fonte.origem_pdf,
         atributos_extraidos=(
             ("simbolo_observacao_id", observation.id),
+            ("simbolo_score_bruto", observation.score_bruto),
             ("simbolo_camada", observation.fonte.camada),
             (
                 "simbolo_situacao_observada",

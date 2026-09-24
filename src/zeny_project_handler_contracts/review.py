@@ -96,7 +96,43 @@ class ReviewOverlayDto(ContractModel):
     confidence: DecimalString | None = None
 
 
+class ReviewSymbolAlternativeDto(ContractModel):
+    symbol_class: str | None = None
+    subtype: str | None = None
+
+
+class ReviewSymbolMethodDto(ContractModel):
+    signature: str
+    observation_id: str
+    raw_score: DecimalString | None = None
+    family: str | None = None
+    version: str | None = None
+    evidence: EvidenceNavigationDto
+
+
+class ReviewSymbolDto(ContractModel):
+    """One visual occurrence; alternatives never represent additional assets."""
+
+    occurrence_id: str
+    symbol_class: str | None = None
+    role: str
+    status: Literal["exclusive", "conflicting", "unknown", "informative", "supported"]
+    exclusive: bool = False
+    unsupported_family: bool = False
+    alternatives: tuple[ReviewSymbolAlternativeDto, ...] = ()
+    reference_ids: tuple[str, ...] = ()
+    observation_ids: tuple[str, ...] = ()
+    methods: tuple[ReviewSymbolMethodDto, ...] = ()
+    coverage: tuple[dict[str, JsonValue], ...] = ()
+    pending_reasons: tuple[str, ...] = ()
+    layer: str = "base"
+    effective_situation: ElementSituation | None = None
+    quantity: DecimalString | None = None
+    calibrated_probability: DecimalString | None = None
+
+
 class ReviewProposalDto(ContractModel):
+    symbol: ReviewSymbolDto | None = None
     technical_revision: dict[str, JsonValue] | None = None
     proposal_id: ProposalId
     kind: ReviewProposalKind = ReviewProposalKind.ELEMENT
@@ -214,7 +250,18 @@ class PhysicalSpanDto(ContractModel):
     geometry: ReviewGeometryDto
 
 
+class ReviewSymbolSupportDto(ContractModel):
+    """Installed package capabilities, separate from detections in this project."""
+
+    family_id: str
+    package_signature: str
+    enabled_reference_ids: tuple[str, ...] = ()
+    pending_reference_ids: tuple[str, ...] = ()
+    pending_reasons: tuple[str, ...] = ()
+
+
 class ReviewSessionResponse(ContractModel):
+    symbol_support: tuple[ReviewSymbolSupportDto, ...] = ()
     physical_spans: tuple[PhysicalSpanDto, ...] = ()
     method_readings: tuple[dict[str, JsonValue], ...] = ()
     review_session_id: ReviewSessionId
