@@ -1,5 +1,9 @@
 # E12A/E12B opt-in runtime only; never include in default client/server/release requirements.
 # Python 3.12 Windows x64 measured; model hashes are in docs/e12a-algoritmos-alternativos.md.
+# E11 uses the pinned Pillow and PyMuPDF entries below plus Python stdlib only.
+# Torch/torchvision F07 are not pinned or bundled: absent in the measured local
+# Python 3.13 environment, and no generic detection weights are treated as
+# technical symbol classes. E11 model artifacts remain in tmp/, outside client.
 rapidocr-onnxruntime==1.4.4
 onnxruntime==1.30.0
 numpy==2.3.5

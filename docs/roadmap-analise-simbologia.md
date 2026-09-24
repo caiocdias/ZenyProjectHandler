@@ -424,7 +424,7 @@ E16 executa V-G; não repetir toda a suíte após mera edição do roadmap.
 | E08 | Detector raster por templates e Hough | #concluida | E03, E04 | Acrescentar família raster capaz de detectar símbolos sem vetores aproveitáveis. |
 | E09 | Detector por contornos e grafo de traços | #concluida | E03, E04 | Implementar alternativa estrutural de reconhecimento de formas distinta de correlação de pixels e das heurísticas legadas. |
 | E10 | Adaptação à legenda e símbolos desconhecidos | #concluida | E03, E08 | Usar a legenda do próprio documento como fonte local de templates/semântica e oferecer desconhecidos revisáveis. |
-| E11 | Experimento de detector visual treinável | #pendente | E02, E03 | Medir um detector local aprendido como fonte adicional, com decisão reproduzível de adoção ou rejeição; E07 é insumo opcional versionado. |
+| E11 | Experimento de detector visual treinável | #concluida | E02, E03 | Medir um detector local aprendido como fonte adicional, com decisão reproduzível de adoção ou rejeição; E07 é insumo opcional versionado. |
 | E12 | União, validação cruzada e calibração | #pendente | E05, E06, E08, E09, E10, E11 | Entregar reconciliador de símbolos que aproveite exclusivos e resolva duplicatas/conflitos sem quórum, consumindo apenas pacotes E07 habilitados. |
 | E13 | Associação semântica e promoção por campo | #pendente | E12 | Converter hipóteses reconciliadas em propostas úteis, com associação e promoção coerentes com a evidência. |
 | E14 | Revisão visual, API e exportações | #pendente | E13 | Expor símbolos, métodos, exclusivos e conflitos de modo revisável no cliente e nos arquivos exportados. |
@@ -2308,7 +2308,7 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
   reconciliação/calibração e E14 apresentação, sem promover automaticamente.
   Nenhum commit, publicação ou implantação foi feito.
 
-## E11 — Experimento de detector visual treinável — #pendente
+## E11 — Experimento de detector visual treinável — #concluida
 
 **Objetivo:** Medir um detector local aprendido como fonte adicional, com decisão reproduzível de adoção ou rejeição.
 
@@ -2337,9 +2337,9 @@ Não declare sucesso com validação obrigatória falhando ou não executada. At
 
 **Critérios de aceite:**
 
-- [ ] Treino/inferência e avaliação foram executados de forma reproduzível e sem vazamento.
-- [ ] Há matriz de acertos/erros exclusivos e decisão de integração por ganho, não por popularidade do modelo.
-- [ ] Modelo rejeitado permanece fora da composição; rejeição não elimina obrigações de cobertura restantes.
+- [x] Treino/inferência e avaliação foram executados de forma reproduzível e sem vazamento.
+- [x] Há matriz de acertos/erros exclusivos e decisão de integração por ganho, não por popularidade do modelo.
+- [x] Modelo rejeitado permanece fora da composição; rejeição não elimina obrigações de cobertura restantes.
 
 **Validação obrigatória:** V-P e conferência das entregas dos subagentes, com as particularidades acima. V-N, V-Q e V-B do experimento, com medição de RAM/tempo e repetição determinística quando suportada; registrar comando real de treino, inferência e diferenças numéricas. Os códigos V-* remetem aos comandos completos acima; registrar os comandos efetivamente executados.
 
@@ -2364,7 +2364,168 @@ Ao iniciar, sincronize #em-andamento no índice e detalhe. Implemente somente es
 Não declare sucesso com validação obrigatória falhando ou não executada. Atualize para #concluida somente após todos os critérios; impedimento real exige #bloqueada com causa, evidência, impacto e ação de desbloqueio. Dependência ainda pendente mantém #pendente. Preencha Evidências e handoff com arquivos, decisões, comandos, resultados e limitações. Não crie commit, publique ou implante sem autorização explícita. Termine com resumo conciso de mudanças, validações e pendências.
 ```
 
-**Evidências e handoff:** ainda não executada. Registrar também agentes/papéis, fronteiras de escrita, checkpoint integrado, revisão independente, manifesto V-P e total de PDFs/páginas conferidos/bloqueados. Ao trabalhar, registrar arquivos alterados, versão/configuração, decisões, fontes/fixtures, comandos e resultados, métricas comparadas, limitações e próximo passo.
+### Registro de execução E11 — checkpoint experimental de 24/09/2026
+
+**Pré-voo e dependências.** Git inicial limpo em `5dbefee76fbe022349285b4b09cf1cf22c39a3ae`;
+nenhum `AGENTS.md` aplicável encontrado. E02/E03 tinham `#concluida` e contratos
+implementados; o snapshot público E02, inventário E01 e lacre da reserva conferiram,
+respectivamente, SHA-256 `fd30cb3f…`, `e3d49d9b…` e `6874d058…`. As regressões
+E03 prévias passaram (44 testes). Nenhuma alteração preexistente precisou ser
+incorporada. O lacre foi apenas hasheado como bytes opacos; reserva não foi listada,
+aberta, renderizada, inferida ou usada no treino. E07 habilitado foi incluído no
+comparador opcional; variantes `pending` não foram rótulos.
+
+**Delegações e propriedade.** `/root/a_experimento` foi responsável exclusivo por
+`scripts/experiments/e11_detector.py`, `e11_adapter.py`,
+`requirements-experiments.lock` e
+[`e11-experimento-detector.md`](e11-experimento-detector.md). `/root/b_testes_dados`
+foi responsável por `tests/unit/test_e11_experiment.py` e
+`tmp/e11-simbologia/audit/`; auditou partições, hashes, licença e repetibilidade
+sem editar o detector. `/root/c_pdfs` foi responsável por
+`tmp/e11-simbologia/visual/`; congelou a leitura das imagens originais antes de
+receber os pesos e predições. O coordenador editou somente este roadmap,
+`scripts/experiments/e11_calibration_ids.py` (vínculo documental de IDs do
+baseline de calibração, sem ler ocorrências) e
+`tmp/e11-simbologia/integration/`. Treino aguardou o baseline V-P encerrar para
+medir recursos sem carga concorrente; C recebeu apenas os hashes do checkpoint
+final para a segunda fase. O autor não foi o único revisor do adapter: B encontrou
+e A corrigiu motivo obrigatório de `FORA_DOMINIO` e frame da página renderizada.
+
+**Seleção e configuração congeladas.** F07 Faster R-CNN/FPN não foi executado:
+Torch/TorchVision não estão na `.venv`, não havia GPU declarada e o corpus de treino
+tem 22 positivos de um único ancestral. Pesos COCO genéricos não identificam
+classes técnicas; nenhuma instalação ou download ocorreu. Foi medido um classificador
+linear de janelas raster com PyMuPDF/Pillow, inicializado do zero, seed `20260924`,
+5 classes E02, 12×12 pixels por janela, imagem completa limitada a 900 px no maior
+lado, limiar bruto 0,8, NMS 0,3 e teto global de 40 candidatos por página.
+Essa seleção mede uma família aprendida executável localmente, sem alegar
+equivalência arquitetural a F07. O modelo e seu score não entraram no cliente,
+em `src/`, na composição ou em calibração probabilística. Código/licença/pesos e
+titularidade dos dados estão detalhados no documento E11 e na auditoria local B.
+
+**Comandos reais do experimento e V-B** (raiz, Python da `.venv`; paths relativos):
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.experiments.e11_detector prepare --output tmp/e11-simbologia/data
+.\.venv\Scripts\python.exe -m scripts.experiments.e11_detector train --reference tmp/e11-simbologia/data/development/reference.json --root tmp/e11-simbologia/data/development --output tmp/e11-simbologia/train --seed 20260924
+.\.venv\Scripts\python.exe -m scripts.experiments.e11_detector infer --model tmp/e11-simbologia/train/model.json --root tmp/e11-simbologia/data/development --output tmp/e11-simbologia/eval-development
+.\.venv\Scripts\python.exe -m scripts.experiments.e11_detector infer --model tmp/e11-simbologia/train/model.json --root tmp/e11-simbologia/data/calibration --output tmp/e11-simbologia/eval-calibration
+.\.venv\Scripts\python.exe -m scripts.experiments.e11_detector infer --model tmp/e11-simbologia/train/model.json --root examples --output tmp/e11-simbologia/vp
+.\.venv\Scripts\python.exe -m scripts.benchmark_symbols synthetic --output tmp/e11-simbologia/integration/baseline-all-synthetic --include-transformers --include-guys --include-packages --include-raster --include-structural --include-legend
+.\.venv\Scripts\python.exe -m scripts.benchmark_symbols examples --root examples --output tmp/e11-simbologia/integration/baseline-all-examples --include-transformers --include-guys --include-packages --include-raster --include-structural --include-legend
+.\.venv\Scripts\python.exe -m scripts.benchmark_symbols examples --root tmp/e11-simbologia/data/calibration --output tmp/e11-simbologia/integration/baseline-calibration-raw --include-transformers --include-guys --include-packages --include-raster --include-structural --include-legend
+.\.venv\Scripts\python.exe -m scripts.experiments.e11_calibration_ids --raw tmp/e11-simbologia/integration/baseline-calibration-raw/predictions.json --output tmp/e11-simbologia/integration/baseline-calibration-predictions.json
+.\.venv\Scripts\python.exe -m scripts.experiments.e11_detector compare --reference tmp/e11-simbologia/data/development/reference.json --baseline tmp/e11-simbologia/integration/baseline-all-synthetic/predictions.json --learned tmp/e11-simbologia/eval-development/predictions.json --output tmp/e11-simbologia/integration/development-union
+.\.venv\Scripts\python.exe -m scripts.experiments.e11_detector compare --reference tmp/e11-simbologia/data/calibration/reference.json --baseline tmp/e11-simbologia/integration/baseline-calibration-predictions.json --learned tmp/e11-simbologia/eval-calibration/predictions.json --output tmp/e11-simbologia/integration/calibration-union
+.\.venv\Scripts\python.exe -m scripts.experiments.e11_detector compare --baseline tmp/e11-simbologia/integration/baseline-all-examples/predictions.json --learned tmp/e11-simbologia/vp/predictions.json --output tmp/e11-simbologia/integration/examples-union
+```
+
+`train-repeat`, `eval-development-repeat`, `eval-calibration-repeat` e `vp-repeat`
+repetiram os quatro comandos de treino/inferência com os mesmos argumentos e
+diretórios de saída substituídos. Modelo e predições foram byte a byte idênticos:
+SHA-256 do modelo `ca1058ae22c900de1e173673b26e79643ec8cd5a000f4a60326b7f354739df1a`,
+dev `6704f1654fd12552f2ef07698440fbfffbf7798247841ba7dc7a4dcae1d6aa62`,
+cal `01c703baf217b628c6562c788776c063c0afe987eb4423631cad660dbddc2a4b`
+e V-P `56d962e583cd091ee527888d71e409c1d372246a9655aaae299c46fe0d73e738`.
+Diferença numérica de candidatos/caixas/scores: zero. Tempos 1ª/2ª execução (s):
+treino 2,076/2,047; inferência dev 1,029/1,032, cal 0,286/0,272 e V-P
+10,985/10,639. Picos de working set 1ª/2ª (MB): 79,57/79,90; 94,02/94,29;
+88,90/85,29; 197,78/194,43. O primeiro modelo `dbe5940b…` foi invalidado
+antes de inferência porque a chamada WinAPI mediu RAM como `null`; A corrigiu a
+instrumentação e retreinou. Referência development/calibration regenerada com
+hashes E02 idênticos; origem dos PDFs preservada antes/depois.
+
+| Avaliação E02 | Baseline 9 métodos TP/FP/FN | E11 isolado TP/FP/FN | União crua TP/FP/FN | Exclusivos E11 | Interpretação |
+|---|---:|---:|---:|---:|---|
+| Desenvolvimento, no treino | 16/15/6 | 8/65/14 | 19/85/3 | 3 TP, 65 FP exclusivos | Ganho in-sample não demonstra generalização; excesso de FP. |
+| Calibração, outro ancestral | 1/0/3 | 0/21/4 | 1/21/3 | 0 TP, 21 FP exclusivos | Nenhum ganho independente. Dos 4 FN E11, 2 são `TRANSFORMADOR` suportado; 2 `POSTE` fora do domínio. |
+
+O avaliador E02 preserva todas as observações na união; silêncio dos outros
+métodos não veta E11, e concordância não é probabilidade. A calibração não alterou
+pesos, arquitetura, limiar ou tetos. A única classe treinada com referência
+independente é `TRANSFORMADOR` (2 objetos); `POSTE` não integra as 5 classes
+suportadas. Famílias sem amostra continuam com recall `null` por método/estrato,
+sem destino implícito de cobertura. O baseline V-P processou 11 PDFs/11 páginas,
+240 candidatos e zero falhas em 848,457 s acumulados por documento; E11 processou
+os mesmos 11/11, 329 candidatos e zero falhas. A união V-P tem 569 observações,
+10 métodos e SHA `590f3fc1595be91d64658f015c2d9789611eec4cd2f56117c720c14dddd92e4e`;
+nenhum recall/precisão global foi calculado com referência visual parcial.
+E11 suprimiu 347 candidatos pelo teto global em 6 páginas V-P e truncou outras
+1.629 propostas pelos tetos locais; cobriu os rasters completos, mas isso não
+demonstra recall completo.
+
+**V-N/V-Q do checkpoint:**
+`.\.venv\Scripts\python.exe -m pytest tests/unit/test_e11_experiment.py` deu
+**7 passed**; integração do coordenador com regressões E03
+`.\.venv\Scripts\python.exe -m pytest tests/unit/test_e11_experiment.py tests/unit/test_symbol_observations.py tests/unit/test_legacy_symbol_adapter.py tests/integration/test_symbol_observation_json.py -q`
+deu **51 passed**. Separadamente, `.\.venv\Scripts\python.exe -m ruff check .`,
+`.\.venv\Scripts\python.exe -m ruff format --check .` e
+`.\.venv\Scripts\python.exe -m mypy` saíram 0 (417 arquivos formatados,
+382 fontes mypy). `git diff --check` saiu 0. Testes novos cobrem split/hash,
+rejeição de calibração no treino, repetição, falhas, round-trip E03 e união
+sem veto; B adicionou teste da transformação documental de IDs da calibração.
+Uma checagem extra `mypy scripts/experiments/e11_calibration_ids.py` sem `src`
+falhou por 13 imports do pacote local vistos como não tipados; repetida com
+`.\.venv\Scripts\python.exe -m mypy src scripts/experiments/e11_calibration_ids.py`
+passou em 225 arquivos. O V-Q prescrito acima permaneceu sem falhas.
+
+**V-P visual concluída no escopo E11.** C descobriu recursivamente **11 PDFs/11
+páginas**, zero bloqueados. Congelou leitura da fonte antes das predições: 74 PNGs
+efetivamente abertos (base, aparência e tiles cobrindo toda a folha), com
+`source_manifest.json` SHA
+`a207137b8faba84931ddaa7afd5fd84810c7af95701a5d7561fb91320cebbc7a`
+e `source_observations.md` SHA
+`32d184c3cdc197360e844d9bdf14360724e5c90ab67e0bd0815891de8bf42e63`.
+Após congelar pesos/outputs, C abriu **33/33 folhas de contato** com **329/329
+ROIs E11**; registro por ID, bbox, imagem, motivo e vizinhos em
+`tmp/e11-simbologia/visual/e11_review.json` SHA
+`cde3be649f1959b99beeae5dc371944b44c077735448def188a3795efe0bbb55`.
+A matriz integral tem **11 × 10 × 2 = 220 células**: 99 execuções base, 11
+base fora de domínio e 110 anotações fora de domínio, sem converter silêncio em
+evidência negativa. O relatório
+`tmp/e11-simbologia/visual/e11_visual_results.md` SHA
+`d795a65fcef9bb93aa4e70c7f8eb438df5ffc37ded5050fbf6828ee2fa48548e`
+registra por página **270 FP visuais localizados, 59 classe/identidade não
+resolvida e zero TP E11 exclusivo confirmado**. Esses são juízos provisórios de
+IA nos exemplos já expostos, não precisão/recall populacional. Apenas 2 caixas
+E11 têm sobreposição IoU ≥0,1 com baseline; ambas têm classe conflitante e
+continuam não resolvidas. Outras 327 caixas são espacialmente exclusivas, o que
+não as torna acertos. Entre os candidatos E11 há 55 pares de caixas com IoU ≥0,5
+e classes diferentes, envolvendo 89 IDs. Dois FN mínimos de `ATERRAMENTO` foram
+confirmados em recortes ampliados de `1250771080` e `1256407599`; nenhum bbox E11
+cobre seus centros. O coordenador reabriu diretamente duas folhas de contato e
+esses dois recortes para conferir os achados.
+
+**Reuso e limites do comparador.** O comando
+`.\.venv\Scripts\python.exe tmp/e11-simbologia/integration/verify_baseline_reuse.py`
+saiu 0: as 11 fontes SHA coincidem com E05/E09/E10, 220 observações legadas
+coincidem integralmente por ID e conteúdo com E10 e 17 transformadores vetoriais
+com E05. Os 3 candidatos de grafo E09 conservam fonte/classe/caixa/score, mas
+IDs/proveniência mudaram; o coordenador renderizou e abriu novamente os 3 recortes
+atuais em `integration/structural-current-crops/`, sem alegar reuso de artefato
+idêntico. A frente C não refez a leitura semântica dos 240 candidatos baseline;
+para 237 observações imutáveis, os achados visuais anteriores são reutilizáveis
+somente nesse escopo, e os 3 divergentes têm inspeção atual. A matriz E11 não
+declara aprovação de todos os métodos anteriores ou homologação de campo.
+Comando final C:
+`.\.venv\Scripts\python.exe tmp/e11-simbologia/visual/compile_visual_review.py`
+→ exit 0, 329 registros/220 células, hashes de 11 fontes, referência congelada e
+outputs conferidos. Nenhuma ROI do revisor entrou no detector.
+
+**Decisão: rejeitar a integração de E11 ao produto.** Na calibração independente
+E11 não acrescentou TP e trouxe 21 FP exclusivos; a união caiu de 1 TP/0 FP
+para 1 TP/21 FP, preservando o TP prévio. Em desenvolvimento houve 3 TP
+exclusivos apenas no ancestral usado no treino, com FP da união de 15 para 85;
+essa melhora in-sample não demonstra generalização. A revisão real não confirmou
+TP exclusivo e mostrou 270 FP visuais localizados, 59 incertezas e dois FN
+mínimos, sem denominador global. O custo medido (pico até 197,78 MB; 10,985 s
+para 11 páginas) não compra ganho comprovado. O modelo experimental permanece
+somente em `tmp/`, o adapter em `scripts/experiments/`, sem importação em `src/`,
+composição, cliente ou release. Essa rejeição conclui **o experimento E11**, não
+reconhece as 344 variantes E07 `pending`, não remove famílias do inventário e
+não reduz os gates de cobertura/união de E12–E16. Futuro ensaio exigiria mais
+ancestrais autorizados e novas avaliações cegas antes de reconsiderar adoção;
+reserva E02 permanece lacrada até E16. Nenhum commit, publicação ou implantação.
 
 ## E12 — União, validação cruzada e calibração — #pendente
 
