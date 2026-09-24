@@ -425,7 +425,7 @@ E16 executa V-G; não repetir toda a suíte após mera edição do roadmap.
 | E09 | Detector por contornos e grafo de traços | #concluida | E03, E04 | Implementar alternativa estrutural de reconhecimento de formas distinta de correlação de pixels e das heurísticas legadas. |
 | E10 | Adaptação à legenda e símbolos desconhecidos | #concluida | E03, E08 | Usar a legenda do próprio documento como fonte local de templates/semântica e oferecer desconhecidos revisáveis. |
 | E11 | Experimento de detector visual treinável | #concluida | E02, E03 | Medir um detector local aprendido como fonte adicional, com decisão reproduzível de adoção ou rejeição; E07 é insumo opcional versionado. |
-| E12 | União, validação cruzada e calibração | #pendente | E05, E06, E08, E09, E10, E11 | Entregar reconciliador de símbolos que aproveite exclusivos e resolva duplicatas/conflitos sem quórum, consumindo apenas pacotes E07 habilitados. |
+| E12 | União, validação cruzada e calibração | #concluida | E05, E06, E08, E09, E10, E11 | Entregar reconciliador de símbolos que aproveite exclusivos e resolva duplicatas/conflitos sem quórum, consumindo apenas pacotes E07 habilitados. |
 | E13 | Associação semântica e promoção por campo | #pendente | E12 | Converter hipóteses reconciliadas em propostas úteis, com associação e promoção coerentes com a evidência. |
 | E14 | Revisão visual, API e exportações | #pendente | E13 | Expor símbolos, métodos, exclusivos e conflitos de modo revisável no cliente e nos arquivos exportados. |
 | E15 | Execução, cache e ativação controlada no servidor | #pendente | E13, E14 | Integrar a composição habilitada ao job do servidor com memória limitada, cancelamento e assinaturas completas. |
@@ -2527,7 +2527,7 @@ não reduz os gates de cobertura/união de E12–E16. Futuro ensaio exigiria mai
 ancestrais autorizados e novas avaliações cegas antes de reconsiderar adoção;
 reserva E02 permanece lacrada até E16. Nenhum commit, publicação ou implantação.
 
-## E12 — União, validação cruzada e calibração — #pendente
+## E12 — União, validação cruzada e calibração — #concluida
 
 **Objetivo:** Entregar reconciliador de símbolos que aproveite exclusivos e resolva duplicatas/conflitos sem quórum.
 
@@ -2556,11 +2556,11 @@ reserva E02 permanece lacrada até E16. Nenhum commit, publicação ou implanta�
 
 **Critérios de aceite:**
 
-- [ ] Todos os casos obrigatórios da política passam, inclusive correto exclusivo e maioria correlacionada errada.
-- [ ] Composição preserva os exclusivos válidos e não funde objetos distintos/páginas/camadas.
-- [ ] Score bruto, probabilidade calibrada, suporte e decisão são campos distintos; falta de amostra mantém revisão.
-- [ ] Matriz/ablação mostra contribuição de cada método aplicável; não detecção não vira contradição.
-- [ ] Colisões visuais conhecidas mantêm alternativas na mesma ocorrência até haver discriminante verificável; variante `pending` não vira reconhecida por cadastro ou consenso.
+- [x] Todos os casos obrigatórios da política passam, inclusive correto exclusivo e maioria correlacionada errada.
+- [x] Composição preserva os exclusivos válidos e não funde objetos distintos/páginas/camadas.
+- [x] Score bruto, probabilidade calibrada, suporte e decisão são campos distintos; falta de amostra mantém revisão.
+- [x] Matriz/ablação mostra contribuição de cada método aplicável; não detecção não vira contradição.
+- [x] Colisões visuais conhecidas mantêm alternativas na mesma ocorrência até haver discriminante verificável; variante `pending` não vira reconhecida por cadastro ou consenso.
 
 **Validação obrigatória:** V-P e conferência das entregas dos subagentes, com as particularidades acima. V-N, V-Q, V-B completo em desenvolvimento/calibração e regressão `tests/unit/test_method_reconciliation.py`; reserva final permanece lacrada até E16. Os códigos V-* remetem aos comandos completos acima; registrar os comandos efetivamente executados.
 
@@ -2585,7 +2585,111 @@ Ao iniciar, sincronize #em-andamento no índice e detalhe. Implemente somente es
 Não declare sucesso com validação obrigatória falhando ou não executada. Atualize para #concluida somente após todos os critérios; impedimento real exige #bloqueada com causa, evidência, impacto e ação de desbloqueio. Dependência ainda pendente mantém #pendente. Preencha Evidências e handoff com arquivos, decisões, comandos, resultados e limitações. Não crie commit, publique ou implante sem autorização explícita. Termine com resumo conciso de mudanças, validações e pendências.
 ```
 
-**Evidências e handoff:** ainda não executada. Registrar também agentes/papéis, fronteiras de escrita, checkpoint integrado, revisão independente, manifesto V-P e total de PDFs/páginas conferidos/bloqueados. Ao trabalhar, registrar arquivos alterados, versão/configuração, decisões, fontes/fixtures, comandos e resultados, métricas comparadas, limitações e próximo passo.
+**Evidências e handoff (24/09/2026):** inspeção inicial de instruções, roadmap,
+contratos E03, `git status/diff` e handoffs das dependências: árvore limpa antes
+da etapa; E05/E06/E08/E09/E10/E11 concluídas, com E09/E11 rejeitados para adoção
+operacional. E07 histórico permanece bloqueado, mas o snapshot verificado de
+21 variantes habilitadas em 27 pacotes/365 variantes foi consumido; 344
+`pending` não foram promovidas. Nenhum arquivo de E03 ou
+`application/method_reconciliation.py` foi alterado. O handoff técnico completo
+está em `docs/e12-reconciliacao-simbologia.md`.
+
+**Delegação e propriedade:** A `/root/codigo` escreveu somente
+`src/zeny_project_handler/application/symbol_reconciliation.py` (SHA-256
+`f88a7b0a66b9f527161e4e2f81d15992c96ca37acbd63608646cf1edd1aee203`);
+B `/root/testes` escreveu somente `tests/unit/test_symbol_reconciliation.py`
+(SHA-256 `f92c18f706a8e12e34605e9d0530e26ec5187aca70cd92e4890f59331dfdcda5`,
+25 testes dirigidos); C `/root/pdfs` escreveu a auditoria privada em
+`tmp/e12-simbologia/visual/`. O coordenador fixou os contratos e a política,
+integrou `scripts/reconcile_symbol_benchmark.py` e
+`docs/e12-reconciliacao-simbologia.md`, validou e atualizou este roadmap.
+O adaptador de benchmark tem SHA-256
+`a3fbfa1191ac2ead98b7ca1fe299aec0bc7f7ff822ba7d4b3c9e2d66c3cbd9e7`.
+Nenhum agente alterou thresholds na validação. C entregou
+`relatorio-vp-e12.md` SHA-256
+`5c2618a28306f155f7d9585027eb1b5f8c714cd59ba31bef3d1b75ef41f9cdeb`,
+`composition-audit.json` SHA-256
+`bde35e000979beca5b7a4fd651d1bb0d1da72bd0753cb7d7a59ab1c607942c3a`
+e `visual-findings.json` SHA-256
+`ad4221fe5b0fd2a2f2870abae03e0c6e3a09949a19d6bb9c2227af18ec89bc2c`.
+
+**Decisões de integração:** a união agrupa apenas documento/SHA, página,
+camada, contexto, geometria e primitivas compatíveis; caixas adjacentes ou
+um objeto de outra página/camada não se fundem. Conserva observações, geometria
+original escolhida, alternativas de classe e `reference_ids` alternativos,
+scores brutos, suporte, probabilidade calibrada e motivo da decisão. Não foi
+adotado WBF por falta de ganho demonstrado sobre a geometria de origem.
+Ausência, falha e fora de domínio são estados da matriz, não votos negativos;
+maioria correlacionada e score bruto não viram probabilidade. A política interna
+pré-fixada exige 30 amostras por assinatura/classe/estrato e probabilidade
+calibrada ≥0,99, sem conflito; a partição de calibração disponível tem apenas
+4 positivos em 2 PDFs/2 páginas, 1 candidato E05 TP e 3 FN. Não há célula
+ajustável: `entries=[]`, todas as decisões reais são `review`, e E13 ainda
+definirá propostas/semântica sem promover estes candidatos automaticamente.
+
+**V-B desenvolvimento/calibração** (comandos na raiz, `.venv`):
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.benchmark_symbols synthetic --output tmp/e12-simbologia/benchmark-development --include-transformers --include-guys --include-packages --include-raster --include-structural --include-legend
+.\.venv\Scripts\python.exe -m scripts.reconcile_symbol_benchmark --predictions tmp/e12-simbologia/benchmark-development/predictions.json --output tmp/e12-simbologia/composition-development --reference tmp/e12-simbologia/benchmark-development/reference.json --exclude-method structural-raster-graph --exclude-method structural-vector-graph
+.\.venv\Scripts\python.exe -m scripts.benchmark_symbols examples --root tmp/e11-simbologia/data/calibration --output tmp/e12-simbologia/benchmark-calibration --include-transformers --include-guys --include-packages --include-raster --include-structural --include-legend
+.\.venv\Scripts\python.exe -m scripts.experiments.e11_calibration_ids --raw tmp/e12-simbologia/benchmark-calibration/predictions.json --output tmp/e12-simbologia/benchmark-calibration/predictions-bound.json
+.\.venv\Scripts\python.exe -m scripts.benchmark_symbols evaluate --reference tmp/e11-simbologia/data/calibration/reference.json --predictions tmp/e12-simbologia/benchmark-calibration/predictions-bound.json --output tmp/e12-simbologia/benchmark-calibration/report.json
+.\.venv\Scripts\python.exe -m scripts.reconcile_symbol_benchmark --predictions tmp/e12-simbologia/benchmark-calibration/predictions-bound.json --output tmp/e12-simbologia/composition-calibration --reference tmp/e11-simbologia/data/calibration/reference.json --exclude-method structural-raster-graph --exclude-method structural-vector-graph
+```
+
+Todos exit 0. Desenvolvimento: 4 PDFs/6 páginas/22 positivos; união bruta
+16 TP/15 FP/6 FN, sem E09 16/11/6, composição de classe exata 14/4/8;
+9 candidatos de classe incerta permaneceram presentes e revisáveis, não foram
+descartados. Calibração: 1 TP/0 FP/3 FN, sem probabilidade ajustada. Ablações
+por método estão em `composition-development/evaluation.json` e
+`composition-calibration/evaluation.json`, sob `tmp/e12-simbologia/`.
+
+**V-P exemplos:** os comandos novos
+`.\.venv\Scripts\python.exe -m scripts.benchmark_symbols examples --root examples --output tmp/e12-simbologia/benchmark-examples --include-transformers --include-guys --include-packages --include-raster --include-structural --include-legend`
+e
+`.\.venv\Scripts\python.exe -m scripts.reconcile_symbol_benchmark --predictions tmp/e12-simbologia/benchmark-examples/predictions.json --output tmp/e12-simbologia/composition-examples --exclude-method structural-raster-graph --exclude-method structural-vector-graph`
+saíram 0. Manifesto do runner SHA-256
+`9db8d4e5a8585d62db6ea9afacb56f16fbbcc8f47f72bb58d8b1e967c9cea623`;
+predições SHA-256 `23e94315684ae90041784730db065e76866c112dc64c4699d54d18aaa913a80a`;
+composição SHA-256 `4d9523921b70648a2a3053a34dae5e429724201299b2eb72e0702573866faad5`.
+C inspecionou realmente 11 panoramas e 44 tiles das 11/11 páginas de 11 PDFs
+recursivos antes de ler predições; abriu depois 23 folhas das 220 caixas legadas,
+8 contatos dos 17 E05, 3 recortes E09 e recortes de omissões. Fontes idênticas
+por SHA antes/depois, zero PDF/página bloqueado. A matriz tem 198 células por
+PDF/página/método/camada. Dos 240 achados, 3 E09 experimentais eram FP e
+foram excluídos; as 237/237 observações adotadas viraram 237 ocorrências sem
+perda/fusão e 1.659 linhas método × ocorrência, sete ablações, todas `review`.
+Os 17 exclusivos E05 foram preservados: 14 formas plausíveis, 3 ambíguas,
+com IDs normativos alternativos explícitos. Dez FP legados certos foram
+localizados entre 28 achados individuais revisitados; terra visível foi omitida
+pelo template em três regiões, e o transformador raster no poste P2 de
+`1251985467` foi omitido pela união. O relatório visual registra IDs, caixas,
+recortes, incertezas e a inexistência de gabarito exaustivo real. Os juízos
+anteriores foram reutilizados só após igualdade de SHA da fonte, método,
+ID, classe, caixa e objeto JSON completo; 220/220 E10, 17/17 E05 A7 e 3/3
+E09 A2 coincidiram. Nenhuma anotação do revisor entrou na inferência.
+
+**V-N/V-Q final:**
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/unit/test_symbol_reconciliation.py tests/unit/test_method_reconciliation.py tests/unit/test_benchmark_symbols.py tests/unit/test_symbol_observations.py tests/unit/test_declarative_symbol_packages.py -q
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m ruff format --check .
+.\.venv\Scripts\python.exe -m mypy
+git diff --check
+```
+
+**180 passed**, Ruff check exit 0, format 420 arquivos, mypy 384 fontes sem
+erro e `git diff --check` exit 0. O comando extra `mypy .` encontrou um
+`scripts` duplicado no workspace portátil sob `tmp/e02-simbologia`; o V-Q
+prescrito, sem `.` e com a configuração do projeto, passou. A reserva
+`tests/fixtures/symbols/reserve.sealed.zip` continuou lacrada, SHA-256
+`6874d0585269a0a68397319268076e8e788aff64fc2bc5d776e80efca739be7b`.
+Limite: exemplos são desenvolvimento, sem gabarito exaustivo e sem sobreposição
+real dos métodos adotados; V-N/V-B demonstram associação/conflitos, V-P não
+mede precisão/recall nem deduplicação real. Próximo passo E13. Nenhum commit,
+publicação ou implantação.
 
 ## E13 — Associação semântica e promoção por campo — #pendente
 
