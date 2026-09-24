@@ -11,6 +11,7 @@ from __future__ import annotations
 import io
 import math
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from decimal import Decimal
 from hashlib import sha256
@@ -30,7 +31,13 @@ from zeny_project_handler.domain.symbols import (
 )
 from zeny_project_handler.domain.values import PontoNormalizado
 
-from .raster_symbols import _geometry, _iou, _positions, _search_template
+from .raster_symbols import (
+    SymbolScanCancelledError,
+    _geometry,
+    _iou,
+    _positions,
+    _search_template,
+)
 
 Caixa = tuple[float, float, float, float]
 _HEADING = re.compile(r"^(?:LEGENDA|SIMBOLOGIA|S[IÍ]MBOLOS?)\s*:?$", re.IGNORECASE)
@@ -348,12 +355,16 @@ def observar_legenda_documental(
     documento_sha256: str,
     leituras_ocr: tuple[LeituraLegenda, ...] = (),
     configuracao: ConfiguracaoLegenda = _DEFAULT_CONFIG,
+    cancelado: Callable[[], bool] | None = None,
+    progresso: Callable[[int, int], None] | None = None,
 ) -> ResultadoLegendaDocumental:
     """Find document-local legend pairs and their out-of-legend repetitions.
 
     The returned E03 result is additive. OCR absence or wrong descriptions cannot
     suppress candidates from other methods. Raw image score is not a probability.
     """
+    if cancelado is not None and cancelado():
+        raise SymbolScanCancelledError("Legenda cancelada antes da leitura")
     all_readings = tuple(item for page in document for item in _native_readings(page)) + tuple(
         leituras_ocr
     )
@@ -392,11 +403,16 @@ def observar_legenda_documental(
             ("limite_pares", configuracao.limite_pares),
             ("limite_ocorrencias", configuracao.limite_ocorrencias),
             ("limite_tiles", configuracao.limite_tiles),
+            ("limite_pixels_pagina", configuracao.limite_pixels_pagina),
+            ("largura_maxima_exemplar_pt", Decimal(str(configuracao.largura_maxima_exemplar_pt))),
+            ("alcance_vertical_pt", Decimal(str(configuracao.alcance_vertical_pt))),
         ),
     )
     observations: list[ObservacaoSimbolo] = []
     coverages: list[CoberturaMetodoSimbolos] = []
     for page in document:
+        if cancelado is not None and cancelado():
+            raise SymbolScanCancelledError("Legenda cancelada antes da página")
         page_number = page.number + 1
         source = FonteObservacaoSimbolo(
             documento_id=documento_id,
@@ -434,7 +450,11 @@ def observar_legenda_documental(
                 else:
                     accepted: dict[str, list[Caixa]] = {}
                     try:
-                        for tx, ty in tiles:
+                        for tile_number, (tx, ty) in enumerate(tiles, start=1):
+                            if cancelado is not None and cancelado():
+                                raise SymbolScanCancelledError(
+                                    "Legenda cancelada antes do próximo tile"
+                                )
                             right = min(width, tx + configuracao.tile_pixels)
                             bottom = min(height, ty + configuracao.tile_pixels)
                             if (right - tx) * (bottom - ty) > configuracao.limite_pixels_pagina:
@@ -527,6 +547,11 @@ def observar_legenda_documental(
                                     break
                             if reason == "Limite de ocorrências atingido":
                                 break
+                            del pix, binary, page_data
+                            if progresso is not None:
+                                progresso(tile_number, len(tiles))
+                    except SymbolScanCancelledError:
+                        raise
                     except Exception as error:
                         state, reason = EstadoMetodoSimbolos.FALHA, type(error).__name__
         else:

@@ -428,7 +428,7 @@ E16 executa V-G; não repetir toda a suíte após mera edição do roadmap.
 | E12 | União, validação cruzada e calibração | #concluida | E05, E06, E08, E09, E10, E11 | Entregar reconciliador de símbolos que aproveite exclusivos e resolva duplicatas/conflitos sem quórum, consumindo apenas pacotes E07 habilitados. |
 | E13 | Associação semântica e promoção por campo | #concluida | E12 | Converter hipóteses reconciliadas em propostas úteis, com associação e promoção coerentes com a evidência. |
 | E14 | Revisão visual, API e exportações | #concluida | E13 | Expor símbolos, métodos, exclusivos e conflitos de modo revisável no cliente e nos arquivos exportados. |
-| E15 | Execução, cache e ativação controlada no servidor | #pendente | E13, E14 | Integrar a composição habilitada ao job do servidor com memória limitada, cancelamento e assinaturas completas. |
+| E15 | Execução, cache e ativação controlada no servidor | #concluida | E13, E14 | Integrar a composição habilitada ao job do servidor com memória limitada, cancelamento e assinaturas completas. |
 | E16 | Aceite integrado e matriz final de cobertura | #pendente | E15 | Demonstrar ganho da união, rastrear todos os IDs E01 e publicar reconhecimento, alternativas e pendências sem alegar cobertura não comprovada. |
 
 A execução das etapas deve usar subagentes conforme a divisão abaixo, por solicitação do usuário em 18/09/2026. Paralelismo entre etapas continua sujeito às dependências; paralelismo dentro de uma etapa segue as responsabilidades e fronteiras de escrita definidas para ela.
@@ -2888,7 +2888,7 @@ vetou exclusivos, alternativas não geraram ativos extras e não houve visão no
 cliente nem decisões por similaridade. Reserva E16 lacrada. E15 continua
 pendente. Sem commit, publicação ou implantação.
 
-## E15 — Execução, cache e ativação controlada no servidor — #pendente
+## E15 — Execução, cache e ativação controlada no servidor — #concluida
 
 **Objetivo:** Integrar a composição habilitada ao job do servidor com memória limitada, cancelamento e assinaturas completas.
 
@@ -2917,10 +2917,10 @@ pendente. Sem commit, publicação ou implantação.
 
 **Critérios de aceite:**
 
-- [ ] Mudança de modelo/template/perfil/calibração altera assinatura; repetição idêntica permanece idempotente.
-- [ ] OOM simulado, tile falho, ausência de modelo e cancelamento não produzem sucesso/cache integral.
-- [ ] Configuração anterior continua utilizável e histórico permanece íntegro após habilitar/desabilitar.
-- [ ] RAM/tiles/progresso estão medidos em ambiente declarado, sem impor GPU nem teto global arbitrário de duração.
+- [x] Mudança de modelo/template/perfil/calibração altera assinatura; repetição idêntica permanece idempotente.
+- [x] OOM simulado, tile falho, ausência de modelo e cancelamento não produzem sucesso/cache integral.
+- [x] Configuração anterior continua utilizável e histórico permanece íntegro após habilitar/desabilitar.
+- [x] RAM/tiles/progresso estão medidos em ambiente declarado, sem impor GPU nem teto global arbitrário de duração.
 
 **Validação obrigatória:** V-P e conferência das entregas dos subagentes, com as particularidades acima. V-R, V-N, V-Q; teste integrado com falhas injetadas e reabertura; V-B operacional com telemetria e invariância do PDF de origem. Os códigos V-* remetem aos comandos completos acima; registrar os comandos efetivamente executados.
 
@@ -2947,7 +2947,25 @@ Ao iniciar, sincronize #em-andamento no índice e detalhe. Implemente somente es
 Não declare sucesso com validação obrigatória falhando ou não executada. Atualize para #concluida somente após todos os critérios; impedimento real exige #bloqueada com causa, evidência, impacto e ação de desbloqueio. Dependência ainda pendente mantém #pendente. Preencha Evidências e handoff com arquivos, decisões, comandos, resultados e limitações. Não crie commit, publique ou implante sem autorização explícita. Termine com resumo conciso de mudanças, validações e pendências.
 ```
 
-**Evidências e handoff:** ainda não executada. Registrar também agentes/papéis, fronteiras de escrita, checkpoint integrado, revisão independente, manifesto V-P e total de PDFs/páginas conferidos/bloqueados. Ao trabalhar, registrar arquivos alterados, versão/configuração, decisões, fontes/fixtures, comandos e resultados, métricas comparadas, limitações e próximo passo.
+**Evidências e handoff — execução de 24/09/2026:** base
+`f9832ca1e75ec446ceeb4f9c0c613c529ca68329`, árvore inicialmente limpa;
+E13 e E14 concluídas e preflight E13 com 36 testes aprovados. A execução e
+as fronteiras das frentes `/root/codigo`, `/root/testes` e `/root/pdfs`, os
+arquivos, decisões, hashes, comandos completos, resultados e limitações estão
+em [`e15-execucao-simbologia.md`](e15-execucao-simbologia.md). O checkpoint
+operacional percorreu 11 PDFs/11 páginas de `examples/`, 237 ocorrências,
+1.422 linhas de matriz, 11 caches `stored` seguidos de 11 `hit`, com SHA da
+fonte invariável. V-R 20/20, V-N 8/8, regressão E13/workflow/E14 37/37 e
+V-Q passaram; V-B mediu RAM, tiles e progresso no ambiente declarado.
+Inspeção visual real das 11 páginas precedeu as predições; C abriu 24 contatos
+para 237/237 candidatos e reconciliou 132 células método×camada. O relatório
+V-P SHA-256 `862a03e45a1d4441841a0d43341a79bf9f8cdb1a9643694bbc0bb36b42ee1198`
+e a auditoria de journals SHA-256
+`bc6c47cb8d5316ceeee0cbb0b48fdefe86b5fb493e854efa59d93aeac0a84963`
+registram 10 FP claros selecionados, um FN visual da união e ambiguidades,
+sem regressão E15 nova identificada ou estimativa exaustiva de acurácia.
+Falhas/cancelamento não viraram cache integral. A reserva E16 permaneceu
+lacrada. Sem commit, publicação ou implantação.
 
 ## E16 — Aceite integrado e matriz final de cobertura — #pendente
 

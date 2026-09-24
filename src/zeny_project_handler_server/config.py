@@ -30,6 +30,13 @@ JOB_MAX_RETAINED_ENVIRONMENT_VARIABLE = "ZENY_SERVER_JOB_MAX_RETAINED"
 TRANSFER_TTL_ENVIRONMENT_VARIABLE = "ZENY_SERVER_TRANSFER_TTL_SECONDS"
 MARKET_SQLSERVER_CONNECTION_STRING_ENVIRONMENT_VARIABLE = "ZENY_MARKET_SQLSERVER_CONNECTION_STRING"
 MARKET_SQLSERVER_TIMEOUT_ENVIRONMENT_VARIABLE = "ZENY_MARKET_SQLSERVER_TIMEOUT_SECONDS"
+SYMBOL_COMPOSITION_ENVIRONMENT_VARIABLE = "ZENY_SERVER_SYMBOL_COMPOSITION"
+SYMBOL_PROFILE_ENVIRONMENT_VARIABLE = "ZENY_SERVER_SYMBOL_PROFILE"
+SYMBOL_RASTER_DPI_ENVIRONMENT_VARIABLE = "ZENY_SERVER_SYMBOL_RASTER_DPI"
+SYMBOL_TILE_PIXELS_ENVIRONMENT_VARIABLE = "ZENY_SERVER_SYMBOL_TILE_PIXELS"
+SYMBOL_TILE_MAX_BYTES_ENVIRONMENT_VARIABLE = "ZENY_SERVER_SYMBOL_TILE_MAX_BYTES"
+SYMBOL_CALIBRATION_VERSION_ENVIRONMENT_VARIABLE = "ZENY_SERVER_SYMBOL_CALIBRATION_VERSION"
+SYMBOL_MODEL_PATH_ENVIRONMENT_VARIABLE = "ZENY_SERVER_SYMBOL_MODEL_PATH"
 
 PASSWORD_PLACEHOLDER = "troque-por-uma-senha-longa-e-aleatoria"
 MARKET_SQLSERVER_CONNECTION_PLACEHOLDER = "troque-por-uma-string-de-conexao-sql-server"
@@ -65,6 +72,13 @@ class ServerSettings:
     job_retention_seconds: int = DEFAULT_JOB_RETENTION_SECONDS
     job_max_retained: int = DEFAULT_JOB_MAX_RETAINED
     complementary_ocr: bool = False
+    symbol_composition: bool = False
+    symbol_profile: str = "balanced"
+    symbol_raster_dpi: int = 144
+    symbol_tile_pixels: int = 768
+    symbol_tile_max_bytes: int = 64_000_000
+    symbol_calibration_version: str = "e12-uncalibrated-1"
+    symbol_model_path: Path | None = None
     transfer_ttl_seconds: int = DEFAULT_TRANSFER_TTL_SECONDS
     market_sqlserver_timeout_seconds: int = field(
         default=DEFAULT_MARKET_SQLSERVER_TIMEOUT_SECONDS,
@@ -111,6 +125,19 @@ class ServerSettings:
             self.market_sqlserver_timeout_seconds,
             MARKET_SQLSERVER_TIMEOUT_ENVIRONMENT_VARIABLE,
         )
+        if self.symbol_profile not in {"balanced", "vector-only"}:
+            raise ValueError("ZENY_SERVER_SYMBOL_PROFILE deve ser balanced ou vector-only")
+        if not 72 <= self.symbol_raster_dpi <= 300:
+            raise ValueError("ZENY_SERVER_SYMBOL_RASTER_DPI deve estar entre 72 e 300")
+        if not 128 <= self.symbol_tile_pixels <= 2048:
+            raise ValueError("ZENY_SERVER_SYMBOL_TILE_PIXELS deve estar entre 128 e 2048")
+        _require_positive(self.symbol_tile_max_bytes, SYMBOL_TILE_MAX_BYTES_ENVIRONMENT_VARIABLE)
+        if not self.symbol_calibration_version.strip():
+            raise ValueError("ZENY_SERVER_SYMBOL_CALIBRATION_VERSION deve ser informada")
+        if self.symbol_model_path is not None:
+            object.__setattr__(
+                self, "symbol_model_path", self.symbol_model_path.expanduser().resolve()
+            )
         object.__setattr__(self, "host", normalized_host)
         object.__setattr__(self, "log_level", normalized_level)
         object.__setattr__(
@@ -139,6 +166,23 @@ class ServerSettings:
         return cls(
             complementary_ocr=values.get("ZENY_SERVER_COMPLEMENTARY_OCR", "false").lower()
             == "true",
+            symbol_composition=_boolean_setting(values, SYMBOL_COMPOSITION_ENVIRONMENT_VARIABLE),
+            symbol_profile=values.get(SYMBOL_PROFILE_ENVIRONMENT_VARIABLE, "balanced"),
+            symbol_raster_dpi=_integer_setting(values, SYMBOL_RASTER_DPI_ENVIRONMENT_VARIABLE, 144),
+            symbol_tile_pixels=_integer_setting(
+                values, SYMBOL_TILE_PIXELS_ENVIRONMENT_VARIABLE, 768
+            ),
+            symbol_tile_max_bytes=_integer_setting(
+                values, SYMBOL_TILE_MAX_BYTES_ENVIRONMENT_VARIABLE, 64_000_000
+            ),
+            symbol_calibration_version=values.get(
+                SYMBOL_CALIBRATION_VERSION_ENVIRONMENT_VARIABLE, "e12-uncalibrated-1"
+            ),
+            symbol_model_path=(
+                Path(values[SYMBOL_MODEL_PATH_ENVIRONMENT_VARIABLE])
+                if values.get(SYMBOL_MODEL_PATH_ENVIRONMENT_VARIABLE)
+                else None
+            ),
             password=values.get(PASSWORD_ENVIRONMENT_VARIABLE, ""),
             market_sqlserver_connection_string=values.get(
                 MARKET_SQLSERVER_CONNECTION_STRING_ENVIRONMENT_VARIABLE,
@@ -209,6 +253,13 @@ def _integer_setting(values: Mapping[str, str], name: str, default: int) -> int:
         return int(raw_value)
     except ValueError as error:
         raise ValueError(f"{name} deve ser um número inteiro") from error
+
+
+def _boolean_setting(values: Mapping[str, str], name: str) -> bool:
+    value = values.get(name, "false").strip().lower()
+    if value not in {"true", "false"}:
+        raise ValueError(f"{name} deve ser true ou false")
+    return value == "true"
 
 
 def _require_positive(value: int, name: str) -> None:

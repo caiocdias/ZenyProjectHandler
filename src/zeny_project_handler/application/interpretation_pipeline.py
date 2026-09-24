@@ -92,10 +92,11 @@ class ExecutarPipelineInterpretacao:
         configuracao: ConfiguracaoInterpretacao | None = None,
         cancelado: Callable[[], bool] | None = None,
         simbolos: SymbolReconciliation | None = None,
+        symbol_configuration_signature: str | None = None,
     ) -> ResultadoExecucaoInterpretacao:
         config = configuracao or ConfiguracaoInterpretacao()
         context = self._load_context(projeto_id, execucao_extracao_id)
-        symbol_signature = _symbol_signature(simbolos)
+        symbol_signature = _symbol_signature(simbolos, symbol_configuration_signature)
         execution_id = _execution_id(
             projeto_id,
             execucao_extracao_id,
@@ -110,7 +111,11 @@ class ExecutarPipelineInterpretacao:
             return stored
         started_at = self._aware_now()
         parameters = _execution_parameters(
-            execucao_extracao_id, self._registry, config, symbol_signature=symbol_signature
+            execucao_extracao_id,
+            self._registry,
+            config,
+            symbol_signature=symbol_signature,
+            symbol_configuration_signature=symbol_configuration_signature,
         )
         self._persist_execution(
             ExecucaoAnalise(
@@ -372,6 +377,7 @@ def _execution_parameters(
     config: ConfiguracaoInterpretacao,
     *,
     symbol_signature: str | None = None,
+    symbol_configuration_signature: str | None = None,
 ) -> ExtraAttributes:
     return tuple(
         sorted(
@@ -385,6 +391,11 @@ def _execution_parameters(
                     (
                         ("simbolos_reconciliados_assinatura", symbol_signature),
                         ("semantica_simbolos_versao", SYMBOL_SEMANTICS_VERSION),
+                        *(
+                            (("configuracao_simbolos_assinatura", symbol_configuration_signature),)
+                            if symbol_configuration_signature is not None
+                            else ()
+                        ),
                     )
                     if symbol_signature is not None
                     else ()
@@ -419,12 +430,16 @@ def _execution_id(
     return uuid5(registry.id, identity)
 
 
-def _symbol_signature(symbols: SymbolReconciliation | None) -> str | None:
-    if symbols is None:
+def _symbol_signature(
+    symbols: SymbolReconciliation | None, configuration_signature: str | None = None
+) -> str | None:
+    if symbols is None and configuration_signature is None:
         return None
     # E12 IDs identify observations, but its decision and calibration may change
     # without changing those IDs. Include the entire immutable result in the cache key.
-    return sha256(repr(symbols).encode("utf-8")).hexdigest()
+    if configuration_signature is None:
+        return sha256(repr(symbols).encode("utf-8")).hexdigest()
+    return sha256(f"{configuration_signature}:{symbols!r}".encode()).hexdigest()
 
 
 def _symbol_proposals(

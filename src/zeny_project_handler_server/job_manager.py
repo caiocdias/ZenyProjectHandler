@@ -100,10 +100,12 @@ class JobManager:
         portability: PortabilityApiService | None = None,
         retention_seconds: int,
         maximum_retained: int,
+        analysis_signature: str | None = None,
     ) -> None:
         self._coordinator = coordinator
         self._project_versions = project_versions
         self._analysis_runner = analysis_runner
+        self._analysis_signature = analysis_signature
         self._compliance_runner = compliance_runner
         self._semantic_signature_reader = semantic_signature_reader
         self._portability = portability
@@ -132,13 +134,16 @@ class JobManager:
         idempotency_key: str,
         correlation_id: str,
     ) -> JobAcceptedResponse:
+        payload: dict[str, object] = {
+            "project_id": str(project_id),
+            "expected_project_version": expected_project_version,
+            "force_reanalysis": force_reanalysis,
+        }
+        if self._analysis_signature is not None:
+            payload["analysis_signature"] = self._analysis_signature
         fingerprint = _fingerprint(
             "analysis-job",
-            {
-                "project_id": str(project_id),
-                "expected_project_version": expected_project_version,
-                "force_reanalysis": force_reanalysis,
-            },
+            payload,
         )
         job_id = uuid5(_RESOURCE_NAMESPACE, f"{idempotency_key}:{fingerprint}")
         with self._idempotency.idempotency_guard(

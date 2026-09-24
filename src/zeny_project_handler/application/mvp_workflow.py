@@ -5,9 +5,12 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
+from typing import Protocol
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
+from zeny_project_handler.application.symbol_reconciliation import SymbolReconciliation
 from zeny_project_handler.domain.analysis import ExecucaoAnalise
 from zeny_project_handler.domain.documents import DocumentoProjeto
 from zeny_project_handler.domain.enums import EstadoExecucaoAnalise, EstadoRevisao
@@ -22,6 +25,7 @@ from .compliance_analysis import ExecutarAnaliseConformidade
 from .document_analysis import ExecutarAnaliseDocumento
 from .errors import (
     AnaliseConformidadeCanceladaError,
+    AnaliseDocumentoError,
     FluxoMvpCanceladoError,
     InterpretacaoCanceladaError,
     ProjetoNaoEncontradoError,
@@ -35,6 +39,20 @@ from .project_document_removal import project_without_documents
 _project_without_documents = project_without_documents
 
 ProgressCallback = Callable[[int, int, str], None]
+
+
+class SymbolRunner(Protocol):
+    signature: str
+
+    def run(
+        self,
+        document: DocumentoProjeto,
+        source: ReferenciaFontePdf,
+        *,
+        senha: str | None = None,
+        cancelado: Callable[[], bool] | None = None,
+        progresso: ProgressCallback | None = None,
+    ) -> SymbolReconciliation: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,6 +119,7 @@ class ServicoFluxoMvp:
         coordenador: CoordenadorOperacoes | None = None,
         relogio: Callable[[], datetime] | None = None,
         gerar_id: Callable[[], UUID] = uuid4,
+        symbol_runner: SymbolRunner | None = None,
     ) -> None:
         self._unit_of_work = unidade_de_trabalho
         self._initial_catalog_id = catalogo_inicial_id
@@ -112,6 +131,14 @@ class ServicoFluxoMvp:
         self._coordinator = coordenador or CoordenadorOperacoes()
         self._clock = relogio or (lambda: datetime.now(UTC))
         self._generate_id = gerar_id
+        self._symbol_runner = symbol_runner
+
+    @property
+    def analysis_signature(self) -> str:
+        identity = self._extractor.assinatura_analisador
+        if self._symbol_runner is None:
+            return identity
+        return sha256(f"{identity}:{self._symbol_runner.signature}".encode()).hexdigest()
 
     @property
     def coordenador(self) -> CoordenadorOperacoes:
@@ -351,6 +378,8 @@ class ServicoFluxoMvp:
         extraction_config = configuracao_extracao or ConfiguracaoAnaliseDocumento()
         interpretation_config = configuracao_interpretacao or ConfiguracaoInterpretacao()
         total_steps = len(documents) * 2 + 1
+        progress_unit = 1000 if self._symbol_runner is not None else 1
+        progress_total = total_steps * progress_unit
         interpretation_ids: list[UUID] = []
         proposal_count = 0
         for index, document in enumerate(documents):
@@ -364,20 +393,23 @@ class ServicoFluxoMvp:
             )
             self._progress(
                 progresso,
-                index * 2,
-                total_steps,
+                index * 2 * progress_unit,
+                progress_total,
                 f"Extraindo evidências de {document.nome_arquivo}",
             )
             extraction = self._completed_execution(extraction_id)
             if extraction is None:
 
                 def extraction_progress(
-                    _done: int,
-                    _total: int,
+                    done: int,
+                    total: int,
                     message: str,
                     step: int = index * 2,
                 ) -> None:
-                    self._progress(progresso, step, total_steps, message)
+                    current = step * progress_unit
+                    if total > 0 and progress_unit > 1:
+                        current += min(progress_unit - 1, done * progress_unit // total)
+                    self._progress(progresso, current, progress_total, message)
 
                 extraction = self._extractor.executar(
                     projeto_id,
@@ -388,31 +420,87 @@ class ServicoFluxoMvp:
                     cancelado=cancelado,
                     progresso=extraction_progress,
                 ).execucao
+            if extraction.estado is EstadoExecucaoAnalise.CANCELADA:
+                raise FluxoMvpCanceladoError(
+                    f"Extração cancelada; execução parcial registrada: {extraction.id}"
+                )
+            if extraction.estado is not EstadoExecucaoAnalise.CONCLUIDA:
+                raise AnaliseDocumentoError(
+                    f"Extração incompleta; execução parcial registrada: {extraction.id}"
+                )
             self._ensure_not_cancelled(cancelado)
             self._progress(
                 progresso,
-                index * 2 + 1,
-                total_steps,
+                (index * 2 + 1) * progress_unit,
+                progress_total,
                 f"Interpretando evidências de {document.nome_arquivo}",
             )
-            try:
-                interpreted = self._interpreter.executar(
-                    projeto_id,
-                    extraction.id,
-                    configuracao=interpretation_config,
-                    cancelado=cancelado,
+            symbols = None
+            if self._symbol_runner is not None:
+                source = next(
+                    (item for item in session.fontes_pdf if item.documento_id == document.id),
+                    None,
                 )
+                if source is None:
+                    raise ValueError("Origem PDF não encontrada para composição de símbolos")
+
+                def symbol_progress(
+                    done: int,
+                    total: int,
+                    message: str,
+                    step: int = (index * 2 + 1) * progress_unit,
+                ) -> None:
+                    completed = min(800, max(0, done * 800 // total)) if total > 0 else 0
+                    self._progress(
+                        progresso,
+                        step + completed,
+                        progress_total,
+                        message,
+                    )
+
+                symbols = self._symbol_runner.run(
+                    document,
+                    source,
+                    senha=(senhas_documentos or {}).get(document.id),
+                    cancelado=cancelado,
+                    progresso=symbol_progress,
+                )
+                self._ensure_not_cancelled(cancelado)
+            try:
+                if self._symbol_runner is None:
+                    interpreted = self._interpreter.executar(
+                        projeto_id,
+                        extraction.id,
+                        configuracao=interpretation_config,
+                        cancelado=cancelado,
+                    )
+                else:
+                    interpreted = self._interpreter.executar(
+                        projeto_id,
+                        extraction.id,
+                        configuracao=interpretation_config,
+                        cancelado=cancelado,
+                        simbolos=symbols,
+                        symbol_configuration_signature=self._symbol_runner.signature,
+                    )
             except InterpretacaoCanceladaError as error:
                 raise FluxoMvpCanceladoError(
                     "Análise cancelada em um ponto seguro; use Retomar análise para continuar"
                 ) from error
             interpretation_ids.append(interpreted.execucao.id)
             proposal_count += len(interpreted.elementos) + len(interpreted.relacoes)
+            if self._symbol_runner is not None:
+                self._progress(
+                    progresso,
+                    (index * 2 + 2) * progress_unit,
+                    progress_total,
+                    f"Interpretação concluída de {document.nome_arquivo}",
+                )
         self._ensure_not_cancelled(cancelado)
         self._progress(
             progresso,
-            total_steps - 1,
-            total_steps,
+            (total_steps - 1) * progress_unit,
+            progress_total,
             "Avaliando conformidade com a revisão ativa capturada",
         )
         try:
@@ -424,7 +512,7 @@ class ServicoFluxoMvp:
             raise FluxoMvpCanceladoError(
                 "Análise cancelada antes de publicar a conformidade; use Retomar análise"
             ) from error
-        self._progress(progresso, total_steps, total_steps, "Análise concluída")
+        self._progress(progresso, progress_total, progress_total, "Análise concluída")
         return ResultadoFluxoMvp(
             projeto_id=projeto_id,
             execucoes_interpretacao=tuple(interpretation_ids),

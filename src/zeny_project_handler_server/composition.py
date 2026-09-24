@@ -75,6 +75,7 @@ from zeny_project_handler_server.job_manager import JobManager
 from zeny_project_handler_server.portability_api import PortabilityApiService
 from zeny_project_handler_server.project_api import ProjectApiService
 from zeny_project_handler_server.review_api import ReviewApiService
+from zeny_project_handler_server.symbol_execution import SymbolCompositionRunner
 from zeny_project_handler_server.transfer_storage import ManagedTransferStorage
 from zeny_project_handler_server.viewer_api import ViewerApiService
 from zeny_project_handler_server.volume_lifecycle import prepare_server_volume
@@ -247,6 +248,7 @@ class ServerRuntime:
     review_api: ReviewApiService | None = None
     compliance_api: DocumentationComplianceApiService | None = None
     portability_api: PortabilityApiService | None = None
+    symbol_composition: bool = False
     _closed: bool = False
 
     def session_capabilities(self) -> SessionCapabilitiesResponse:
@@ -259,7 +261,11 @@ class ServerRuntime:
             min_compatible_api_version=MIN_COMPATIBLE_API_VERSION,
             max_compatible_api_version=MAX_COMPATIBLE_API_VERSION,
             ready=True,
-            capabilities=SERVER_CAPABILITIES,
+            capabilities=(
+                (*SERVER_CAPABILITIES, "symbol-composition-e15")
+                if self.symbol_composition
+                else SERVER_CAPABILITIES
+            ),
             ocr=_ocr_diagnostic(self.ocr),
             global_operation=self.jobs.global_operation(),
             server_time=datetime.now(UTC),
@@ -419,6 +425,7 @@ def compose_server_runtime(
             coordinator=core.operation_coordinator,
             project_versions=project_api,
             analysis_runner=run_analysis,
+            analysis_signature=workflow.analysis_signature if settings.symbol_composition else None,
             compliance_runner=compliance_api.execute_compliance,
             semantic_signature_reader=compliance_api.semantic_signature,
             portability=portability_api,
@@ -439,6 +446,7 @@ def compose_server_runtime(
         review_api=review_api,
         compliance_api=compliance_api,
         portability_api=portability_api,
+        symbol_composition=settings.symbol_composition,
     )
 
 
@@ -460,6 +468,7 @@ def _compose_analysis_workflow(
     reader = PyMuPdfReader()
     managed_files = GerenciadorArquivosGerenciados(settings.data_directory, list_projects)
     registry = carregar_registro_regras_inicial()
+    symbol_runner = SymbolCompositionRunner(settings) if settings.symbol_composition else None
     return ServicoFluxoMvp(
         unit_of_work,
         catalogo_inicial_id=core.catalog.id,
@@ -484,6 +493,7 @@ def _compose_analysis_workflow(
         analisador_conformidade=compliance,
         gerenciador_arquivos=managed_files,
         coordenador=core.operation_coordinator,
+        symbol_runner=symbol_runner,
     )
 
 

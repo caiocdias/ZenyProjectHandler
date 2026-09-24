@@ -16,6 +16,7 @@ from uuid import uuid5
 import pymupdf
 
 from zeny_project_handler.adapters.pdf.errors import PdfProtegidoError
+from zeny_project_handler.application.errors import FluxoMvpCanceladoError
 from zeny_project_handler.application.method_reconciliation import (
     READING_KEY,
     reading_data,
@@ -55,7 +56,7 @@ class PyMuPdfDocumentAnalyzer:
     """Converte recursos PDF nativos em evidências independentes da biblioteca."""
 
     nome = "pymupdf-nativo"
-    versao = "1.19.3"
+    versao = "1.19.4"
 
     def __init__(
         self,
@@ -144,6 +145,7 @@ class PyMuPdfDocumentAnalyzer:
         cache_key: str,
         request: SolicitacaoAnaliseDocumento,
     ) -> tuple[ExtracaoDocumentoNormalizada, bool, tuple[DiagnosticoAnalise, ...]]:
+        _check_cancelled(request)
         cached, cache_diagnostics = self._read_cache(cache_key)
         if cached is not None:
             return cached, True, cache_diagnostics
@@ -173,6 +175,7 @@ class PyMuPdfDocumentAnalyzer:
                     ),
                 )
         _verify_source(source, request.fonte.sha256, request.fonte.tamanho_bytes)
+        _check_cancelled(request)
         write_diagnostics = self._write_cache(cache_key, extraction)
         return extraction, False, (*cache_diagnostics, *write_diagnostics)
 
@@ -192,8 +195,7 @@ class PyMuPdfDocumentAnalyzer:
         if self._cache is None:
             return ()
         if any(
-            (item.codigo.startswith("analise.ocr") and item.codigo.endswith("falhou"))
-            or item.codigo == "analise.simbolos_vetoriais_falhou"
+            (item.codigo.startswith("analise.") and item.codigo.endswith("falhou"))
             or item.codigo.startswith("analysis.complementary.")
             for item in extraction.diagnosticos
         ):
@@ -234,6 +236,7 @@ def _extract_document(
         if document.page_count != len(request.documento.paginas):
             raise ValueError("Quantidade de páginas diverge do documento importado")
         for page_index in range(document.page_count):
+            _check_cancelled(request)
             page_candidates, page_diagnostics = _extract_page(
                 document,
                 document.load_page(page_index),
@@ -243,12 +246,26 @@ def _extract_document(
             )
             candidates.extend(page_candidates)
             diagnostics.extend(page_diagnostics)
+            if request.progresso is not None:
+                request.progresso(
+                    page_index + 1,
+                    document.page_count,
+                    f"Extração nativa: página {page_index + 1}/{document.page_count}",
+                )
+        _check_cancelled(request)
     finally:
         document.close()
     _ensure_unique_candidate_keys(candidates)
     return ExtracaoDocumentoNormalizada(
         candidatos=tuple(candidates), diagnosticos=tuple(diagnostics)
     )
+
+
+def _check_cancelled(request: SolicitacaoAnaliseDocumento) -> None:
+    if request.cancelado is not None and request.cancelado():
+        raise FluxoMvpCanceladoError(
+            "Extração documental cancelada entre páginas; use Retomar análise para continuar"
+        )
 
 
 def _extract_page(

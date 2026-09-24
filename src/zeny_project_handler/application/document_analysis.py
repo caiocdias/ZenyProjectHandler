@@ -26,6 +26,7 @@ from .errors import (
     AnaliseDocumentoError,
     ApplicationError,
     DocumentoNaoEncontradoError,
+    FluxoMvpCanceladoError,
     OrigemPdfNaoEncontradaError,
     ProjetoNaoEncontradoError,
 )
@@ -125,6 +126,18 @@ class ExecutarAnaliseDocumento:
                     progresso=progresso,
                 )
             )
+        except FluxoMvpCanceladoError as error:
+            observation.cancelled(error_code=type(error).__name__)
+            cancelled = self._failed_execution(
+                execution_id,
+                projeto_id,
+                started_at,
+                parameters,
+                error,
+                state=EstadoExecucaoAnalise.CANCELADA,
+            )
+            self._persist(cancelled, ())
+            raise
         except Exception as error:
             observation.failed(error, expected=_is_expected_analysis_failure(error))
             failed = self._failed_execution(execution_id, projeto_id, started_at, parameters, error)
@@ -152,7 +165,7 @@ class ExecutarAnaliseDocumento:
         if execution.estado is EstadoExecucaoAnalise.CONCLUIDA:
             observation.succeeded(cache_hit=result.cache_utilizado)
         else:
-            observation.failed(RuntimeError("Verificação complementar incompleta"), expected=True)
+            observation.failed(RuntimeError("Extração incompleta"), expected=True)
         return response
 
     def _load_source(
@@ -179,7 +192,13 @@ class ExecutarAnaliseDocumento:
         result: ResultadoAnaliseDocumento,
     ) -> ExecucaoAnalise:
         incomplete = any(
-            d.codigo.startswith("analysis.complementary.") for d in result.diagnosticos
+            d.codigo.startswith("analysis.complementary.")
+            or (
+                d.codigo.startswith("analise.")
+                and d.codigo.endswith("_falhou")
+                and d.extrator != "cache"
+            )
+            for d in result.diagnosticos
         )
         cancelled = any(d.codigo == "analysis.complementary.cancelled" for d in result.diagnosticos)
         return ExecucaoAnalise(
@@ -195,7 +214,7 @@ class ExecutarAnaliseDocumento:
                 if incomplete
                 else EstadoExecucaoAnalise.CONCLUIDA
             ),
-            erro="Verificação complementar incompleta; resultados parciais preservados."
+            erro="Extração incompleta; resultados parciais preservados."
             if incomplete and not cancelled
             else None,
             iniciada_em=started_at,
@@ -210,6 +229,7 @@ class ExecutarAnaliseDocumento:
         started_at: datetime,
         configuration: ConfiguracaoAnaliseDocumento,
         error: Exception,
+        state: EstadoExecucaoAnalise = EstadoExecucaoAnalise.FALHOU,
     ) -> ExecucaoAnalise:
         detail = str(error).strip() or error.__class__.__name__
         return ExecucaoAnalise(
@@ -218,7 +238,7 @@ class ExecutarAnaliseDocumento:
             metodo=self._analisador.nome,
             versao_metodo=self._analisador.versao,
             parametros=self._execution_parameters(configuration),
-            estado=EstadoExecucaoAnalise.FALHOU,
+            estado=state,
             iniciada_em=started_at,
             finalizada_em=self._finished_at(started_at),
             erro=detail[:1000],

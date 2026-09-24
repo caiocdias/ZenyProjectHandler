@@ -11,6 +11,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal
 from hashlib import sha256
@@ -35,6 +36,10 @@ from zeny_project_handler.domain.values import PontoNormalizado
 _VERSION = "e08-raster-3"
 _MATCH_THRESHOLD = 0.88
 _COARSE_THRESHOLD = 0.72
+
+
+class SymbolScanCancelledError(RuntimeError):
+    """Cooperative stop between raster tiles."""
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -495,6 +500,9 @@ def observar_simbolos_raster(
     pagina_numero: int,
     templates: tuple[TemplateRasterVerificado, ...],
     configuracao: ConfiguracaoDetectorRaster = _DEFAULT_CONFIG,
+    cancelado: Callable[[], bool] | None = None,
+    progresso: Callable[[int, int], None] | None = None,
+    hough_enabled: bool = True,
 ) -> tuple[ResultadoMetodoSimbolos, ...]:
     """Scan every page tile once and emit correlated template/Hough method results."""
     templates = tuple(templates)
@@ -510,7 +518,9 @@ def observar_simbolos_raster(
     template_profile, hough_profile = perfis_simbolos_raster(
         templates=templates, configuracao=configuracao
     )
-    cv_available = dict(hough_profile.parametros)["opencv_version"] != "indisponivel"
+    cv_available = (
+        hough_enabled and dict(hough_profile.parametros)["opencv_version"] != "indisponivel"
+    )
     source = FonteObservacaoSimbolo(
         documento_id=documento_id,
         documento_sha256=documento_sha256,
@@ -528,10 +538,16 @@ def observar_simbolos_raster(
     hough_matches: list[_Match] = []
     saturated = False
     hough_failure: str | None = None
-    for tile_y in (
+    x_positions = _positions(page_width, configuracao.tile_pixels, overlap)
+    y_positions = (
         () if memory_failure else _positions(page_height, configuracao.tile_pixels, overlap)
-    ):
-        for tile_x in _positions(page_width, configuracao.tile_pixels, overlap):
+    )
+    total_tiles = len(x_positions) * len(y_positions)
+    completed_tiles = 0
+    for tile_y in y_positions:
+        for tile_x in x_positions:
+            if cancelado is not None and cancelado():
+                raise SymbolScanCancelledError("Busca raster cancelada antes do próximo tile")
             right = min(page_width, tile_x + configuracao.tile_pixels)
             bottom = min(page_height, tile_y + configuracao.tile_pixels)
             pix = page.get_pixmap(
@@ -597,6 +613,10 @@ def observar_simbolos_raster(
             if len(hough_matches) > configuracao.limite_candidatos * 16:
                 saturated = True
                 break
+            del pix, gray, binary
+            completed_tiles += 1
+            if progresso is not None:
+                progresso(completed_tiles, total_tiles)
         if memory_failure or (
             saturated
             and max(len(template_matches), len(hough_matches)) > configuracao.limite_candidatos * 16
@@ -657,7 +677,9 @@ def observar_simbolos_raster(
                     classes_avaliadas=hough_profile.classes_suportadas,
                     estado=hough_state,
                     motivo=(
-                        "OpenCV não instalado"
+                        "Método Hough desabilitado neste perfil"
+                        if not hough_enabled
+                        else "OpenCV não instalado"
                         if not cv_available
                         else hough_failure
                         or (

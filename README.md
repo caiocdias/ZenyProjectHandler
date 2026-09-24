@@ -335,6 +335,13 @@ As opções são lidas na inicialização:
 | `ZENY_SERVER_VIEWER_MAX_FILES` | `20` | máximo de PDFs por sessão avulsa |
 | `ZENY_SERVER_JOB_RETENTION_SECONDS` | `86400` | retenção renovada do histórico terminal de jobs |
 | `ZENY_SERVER_JOB_MAX_RETAINED` | `100` | máximo de jobs terminais mantidos no servidor |
+| `ZENY_SERVER_SYMBOL_COMPOSITION` | `false` | habilita a composição E15 somente no servidor; desabilitar mantém o fluxo anterior disponível |
+| `ZENY_SERVER_SYMBOL_PROFILE` | `balanced` | perfil operacional `balanced` ou `vector-only`; integra a assinatura da análise |
+| `ZENY_SERVER_SYMBOL_RASTER_DPI` | `144` | DPI do detector raster de símbolos quando o perfil o inclui |
+| `ZENY_SERVER_SYMBOL_TILE_PIXELS` | `768` | dimensão máxima de cada tile raster de símbolos |
+| `ZENY_SERVER_SYMBOL_TILE_MAX_BYTES` | `64000000` | orçamento de bytes estimados por tile de símbolos |
+| `ZENY_SERVER_SYMBOL_CALIBRATION_VERSION` | `e12-uncalibrated-1` | identifica a política de calibração E12, ainda sem células calibradas para promoção automática |
+| `ZENY_SERVER_SYMBOL_MODEL_PATH` | vazio | reserva para modelo local aprovado; configurar um modelo sem motor operacional aprovado causa falha explícita |
 | `ZENY_SERVER_TMPFS_SIZE` | `268435456` | limite em bytes do `/tmp` efêmero do container |
 | `ZENY_SERVER_PIDS_LIMIT` | `256` | limite de processos/threads imposto pelo Compose |
 | `ZENY_SERVER_MEMORY_LIMIT` | `2g` | limite de memória do container |
@@ -348,6 +355,16 @@ O servidor aplica seus próprios tetos equivalentes (`ZENY_SERVER_RENDER_DPI`,
 gateways são repetidas automaticamente depois de uma falha transitória; criação/alteração, uploads,
 senha, cancelamento e encerramento não são. Repetir deliberadamente a criação de um job com a mesma
 `Idempotency-Key` devolve o mesmo job sem executar o pipeline novamente.
+
+A composição de símbolos E15 é opt-in e usa configuração, versões e conteúdo dos
+pacotes/templates na identidade da execução. Mudanças incompatíveis iniciam outra
+análise; o fluxo anterior continua disponível ao desabilitá-la, preservando o
+histórico. O perfil operacional mantém métodos experimentais rejeitados fora da
+execução e não adiciona modelos ao cliente. Falha de método habilitado e
+cancelamento não são registrados como análise completa. As observações já
+obtidas ficam em um journal parcial local do servidor, separado do cache e das
+propostas; uma nova tentativa reprocessa o documento desde o início. Consulte
+[o handoff E15](docs/e15-execucao-simbologia.md) para medições e limites.
 
 Para a dependência operacional, use uma string ODBC com Microsoft ODBC Driver 18, `Encrypt=yes` e
 `TrustServerCertificate=no`, confiando a CA correta no container. O login deve ter apenas conexão
