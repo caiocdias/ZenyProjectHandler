@@ -42,7 +42,7 @@ from .raster_symbols import (
 Caixa = tuple[float, float, float, float]
 _HEADING = re.compile(r"^(?:LEGENDA|SIMBOLOGIA|S[IÍ]MBOLOS?)\s*:?$", re.IGNORECASE)
 _REVISION = re.compile(r"\bREV(?:ISAO|ISÃO|\.)?\b\s*[:.]?\s*([A-Z0-9_-]+)\b", re.IGNORECASE)
-_VERSION = "e10-legend-documental-1"
+_VERSION = "e16-legend-context-1"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -113,6 +113,102 @@ class ResultadoLegendaDocumental:
     pares: tuple[ParLegenda, ...]
     regioes_legenda: tuple[RegiaoLegenda, ...]
     diagnosticos: tuple[str, ...]
+
+
+def _in_legend_exemplar(
+    box: Caixa,
+    page_number: int,
+    regions: tuple[RegiaoLegenda, ...],
+    pairs: tuple[ParLegenda, ...],
+) -> bool:
+    """Use exemplar evidence, never the full E10 search window as a veto."""
+    center_x = (box[0] + box[2]) / 2
+    center_y = (box[1] + box[3]) / 2
+    for region in regions:
+        if region.pagina_numero != page_number:
+            continue
+        own_pairs = tuple(
+            pair
+            for pair in pairs
+            if pair.pagina_numero == page_number
+            and region.caixa[0] <= pair.caixa_exemplar[0]
+            and pair.caixa_exemplar[2] <= region.caixa[2]
+            and region.caixa[1] <= pair.caixa_exemplar[1]
+            and pair.caixa_exemplar[3] <= region.caixa[3]
+        )
+        if any(
+            pair.caixa_exemplar[0] - 4 <= center_x <= pair.caixa_exemplar[2] + 4
+            and pair.caixa_exemplar[1] - 4 <= center_y <= pair.caixa_exemplar[3] + 4
+            for pair in own_pairs
+        ):
+            return True
+        if own_pairs:
+            continue
+        # A title without a readable description still marks its first visual
+        # row. The broad 180 pt search area may contain operational objects.
+        short_bottom = min(region.caixa[3], region.caixa[1] + 60)
+        if (
+            region.caixa[0] <= box[0] <= box[2] <= region.caixa[2]
+            and region.caixa[1] <= box[1] <= box[3] <= short_bottom
+        ):
+            return True
+    return False
+
+
+def contexto_de_legenda(
+    caixa_pontos: Caixa,
+    pagina_numero: int,
+    regioes: tuple[RegiaoLegenda, ...],
+    pares: tuple[ParLegenda, ...],
+) -> bool:
+    """Classify a source-derived drawing box as a legend exemplar when supported."""
+    return _in_legend_exemplar(caixa_pontos, pagina_numero, regioes, pares)
+
+
+def contextualizar_resultados(
+    resultados: tuple[ResultadoMetodoSimbolos, ...],
+    regioes: tuple[RegiaoLegenda, ...],
+    pares: tuple[ParLegenda, ...],
+    tamanhos_paginas: dict[int, tuple[float, float]],
+) -> tuple[ResultadoMetodoSimbolos, ...]:
+    """Keep every E03 observation while marking source-derived legend exemplars."""
+    if not regioes:
+        return resultados
+    contextualizados = []
+    for resultado in resultados:
+        if resultado.perfil.metodo_id == "document-local-legend":
+            contextualizados.append(resultado)
+            continue
+        observations = []
+        for observation in resultado.observacoes:
+            page_number = observation.fonte.pagina_numero
+            if page_number not in tamanhos_paginas:
+                raise ValueError(f"Missing page dimensions for legend context: {page_number}")
+            width, height = tamanhos_paginas[page_number]
+            if width <= 0 or height <= 0:
+                raise ValueError(f"Invalid page dimensions for legend context: {page_number}")
+            points = observation.geometria.pontos_normalizados
+            box = (
+                float(min(point.x for point in points)) * width,
+                float(min(point.y for point in points)) * height,
+                float(max(point.x for point in points)) * width,
+                float(max(point.y for point in points)) * height,
+            )
+            if not contexto_de_legenda(box, page_number, regioes, pares):
+                observations.append(observation)
+                continue
+            attributes = dict(observation.atributos)
+            if str(attributes.get("contexto", "")).casefold() in {"legenda", "legend"}:
+                observations.append(observation)
+                continue
+            if "contexto" in attributes:
+                attributes["contexto_anterior"] = str(attributes["contexto"])
+            attributes["contexto"] = "legenda"
+            attributes["papel"] = "informative"
+            attributes["contexto_fonte"] = "e10:exemplar-documental"
+            observations.append(replace(observation, atributos=tuple(attributes.items())))
+        contextualizados.append(replace(resultado, observacoes=tuple(observations)))
+    return tuple(contextualizados)
 
 
 def _overlap(first: Caixa, second: Caixa) -> bool:

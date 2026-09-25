@@ -6,8 +6,7 @@ A aba **Trechos físicos** agrupa condutores pelo traçado e mostra continuidade
 do desenho com destino/comprimento desconhecidos. A tabela **Vãos** mantém uma linha
 por cabo confirmado, incluindo existentes sem poste classificado. Propostas pendentes
 continuam exigindo revisão; agrupamento físico não une circuitos elétricos de tensões
-diferentes. Detalhes de compatibilidade e validação em
-[Topologia e projeção dos trechos — E14](docs/e14-topologia-projecao-trechos.md).
+diferentes.
 
 O interpretador `25.0` consolida leituras sobrepostas do mesmo cabo, preserva estruturas
 repetidas e separa o contexto de postes sem identificador dos pontos numerados próximos.
@@ -17,7 +16,7 @@ como instalar/remover, sem aprovação automática da camada revisada.
 
 A referência de desenvolvimento atingiu 29/29 ocorrências do núcleo; isso não certifica
 equipamentos, topologia ou leitura integral. Associação pendente, classificação e decisões
-técnicas continuam explícitas. Ver [evidências e limites E13](docs/e13-ocorrencias-associacao.md).
+técnicas continuam explícitas.
 
 ### Leitura complementar local (E12B)
 
@@ -35,8 +34,7 @@ revisão dessa proposta; aparências com anotações não aprovam a vigência de
 O motor usa tiles limitados em memória, informa progresso e aceita cancelamento
 entre chamadas. Motor indisponível, falha parcial ou limite de memória deixam a
 execução incompleta, preservando evidências e impedindo cache/reutilização como sucesso.
-Desabilitar a opção restaura a composição vertical sem apagar histórico. Ver
-[protocolo e limites E12B](docs/e12b-reconciliacao-metodos.md).
+Desabilitar a opção restaura a composição vertical sem apagar histórico.
 
 Cliente Windows e servidor protegido para organizar, visualizar e analisar projetos de expansão da
 rede de distribuição elétrica. O servidor mantém cópias gerenciadas dos PDFs, extrai evidências,
@@ -87,9 +85,9 @@ O extrator 1.17.0 lê também rótulos convertidos em contornos vetoriais, isola
 de molduras e linhas sobrepostas e preservando sua posição na página. Recortes têm orçamento
 limitado; falhas mantêm as evidências já obtidas, geram diagnóstico e não ficam presas no cache.
 A referência local recuperou as 95 ocorrências, os 18 identificadores e os 19 comprimentos
-legíveis. E08 recuperou as 95 ocorrências com seus vínculos, mas permanece bloqueada para aceite
-integral: 18/19 comprimentos associados e classificação/topologia pendentes. Métodos, limites e
-validações estão em [E07](docs/e07-extracao-evidencias.md). Reanalise documentos para usar a
+legíveis. O fluxo de associação recuperou as 95 ocorrências com seus vínculos,
+mas o aceite integral continua pendente: 18/19 comprimentos associados e
+classificação/topologia pendentes. Reanalise documentos para usar a
 nova versão do extrator.
 
 Revisões sobrepostas de cabos ABCN e estruturas N1–N4 são comparadas com a camada base.
@@ -99,7 +97,7 @@ carimbos permanecem evidências; SHX continua disponível como conteúdo técnic
 da camada preserva a versão anterior e não cria um ativo sem catálogo: `ABCN-16(16)`,
 ausente do catálogo atual, continua com catalogação pendente. E13 distingue a base e as
 operações instalar/remover de N4, mantendo a escolha da camada técnica pendente.
-Detalhes e validações em [E11](docs/e11-revisoes-tecnicas.md).
+As decisões de revisão continuam auditáveis no histórico do projeto.
 
 E12 acrescenta leituras literais por cor e célula ao grupo de revisão N4, com caixas,
 risco horizontal e tentativas originais preservadas. A passagem que trata o risco não
@@ -109,9 +107,9 @@ limitada; os rasters concluídos são liberados e os glifos fracos podem ser rel
 análise. Cancelamento continua cooperativo nos pontos seguros do fluxo; uma chamada
 OCR em execução não é interrompida imediatamente pelo pedido de cancelamento.
 Há ganho de extração no segundo PDF, mas ainda existem leituras divergentes e truncadas.
-Limites, comparação isolada e próximos passos: [E12](docs/e12-precisao-extratores.md).
+Os limites de OCR e a divergência das leituras continuam visíveis na revisão.
 
-O [aceite E15](docs/e15-aceite-integral-segundo-pdf.md) permanece bloqueado por qualidade.
+O aceite integral do segundo PDF permanece bloqueado por qualidade.
 O segundo PDF tem 29 ocorrências corretas no núcleo e dez trechos físicos conferidos,
 mas os 64 itens documentais ainda incluem omissões e valores conflitantes. A cobertura
 automática não cumpre as metas E10. Reservas também revelaram fusão entre páginas,
@@ -126,8 +124,7 @@ não mudam pela roda; use teclado ou abra a lista para escolher. Tab sai das tab
 continuam navegando pelas células) e revela o controle seguinte. As ações se empilham quando
 falta largura, sem mudar a ordem dos cartões. O estado dos docks continua compatível com as
 preferências salvas. Em janelas estreitas, a barra do PDF ocupa duas linhas para manter uma
-área útil do documento. A matriz de resolução/DPI e as evidências de E05 estão registradas em
-[e05-rolagem-paineis.md](docs/e05-rolagem-paineis.md).
+área útil do documento.
 
 As 42 regras são executáveis, mas um achado só é criado para alvos que satisfazem todas as condições
 de aplicabilidade declaradas. Por isso o registro usa fatos de guarda para não aplicar uma obrigação
@@ -234,8 +231,7 @@ um modelo arbitrário; medida com vínculo ambíguo não preenche o comprimento.
 rótulo do cabo é preservada quando cabos diferentes compartilham um traçado. Reabrir uma sessão
 concluída preserva as decisões; reanalisar uma folha já revisada com outra assinatura deixa as
 novas propostas pendentes de reconciliação, conservando o histórico e os ativos anteriores.
-O aceite da associação integral está registrado em
-[E08 — Associação de elementos e vãos](docs/e08-associacao-elementos-vaos.md).
+A associação integral permanece auditável nos testes de interpretação.
 
 O pipeline principal executa, em ordem, a extração documental, a interpretação semântica, a
 promoção dos resultados e a conformidade. A ação **Analisar conformidade** reaplica as regras aos
@@ -363,8 +359,9 @@ histórico. O perfil operacional mantém métodos experimentais rejeitados fora 
 execução e não adiciona modelos ao cliente. Falha de método habilitado e
 cancelamento não são registrados como análise completa. As observações já
 obtidas ficam em um journal parcial local do servidor, separado do cache e das
-propostas; uma nova tentativa reprocessa o documento desde o início. Consulte
-[o handoff E15](docs/e15-execucao-simbologia.md) para medições e limites.
+propostas; uma nova tentativa reprocessa o documento desde o início. O
+[fluxo de curadoria contínua](docs/fluxo-curadoria-incremental-simbologia.md)
+mede cobertura, regressões e limites dos símbolos a cada nova amostragem.
 
 Para a dependência operacional, use uma string ODBC com Microsoft ODBC Driver 18, `Encrypt=yes` e
 `TrustServerCertificate=no`, confiando a CA correta no container. O login deve ter apenas conexão
@@ -455,7 +452,7 @@ sanitizados com e sem linha antes da produção.
   associação da medida ambígua de 13 m e da consolidação de uma leitura duplicada de estrutura.
   O falso realce simbólico foi corrigido na extração 1.18.0; trechos físicos preservam os
   condutores e situações. Evidências e limites estão na
-  [validação da 0.4.0](docs/validacao-e08-e09-0.4.0.md).
+  validação da release 0.4.0 registrada no histórico do Git.
 - O ZIP portátil ainda não possui assinatura de código nem instalador; a verificação automatizada
   comprova inicialização autocontida no Windows x64 sem usar o Python do host.
 
@@ -468,6 +465,8 @@ sanitizados com e sem linha antes da produção.
 - [Catálogo de regras](docs/catalogo-regras-conformidade.md): as 42 regras do seed e suas fontes.
 - [Inventário normativo](docs/inventario-fontes-normativas.md): documentos, revisões, hashes e escopo
   da auditoria normativa.
+- [Curadoria contínua de simbologia](docs/fluxo-curadoria-incremental-simbologia.md):
+  nova amostragem em `examples/`, cobertura por ID e testes de qualidade.
 - [Operação do servidor](docs/operacao-servidor.md): instalação, LAN, volume, cutover, atualização,
   rollback, senha, observabilidade e recuperação.
 - [ADRs](docs/adr): decisões arquiteturais; textos substituídos são mantidos somente quando o status

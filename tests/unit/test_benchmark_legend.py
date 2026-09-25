@@ -21,10 +21,40 @@ def test_legend_opt_in_keeps_closed_baseline_and_source_scope(
     )
     combined = run_synthetic(tmp_path / "legend", include_legend=True, include_legend_ocr=True)
 
-    assert (
-        combined["report"]["methods"]["legacy-vector-symbols"]["micro"]
-        == baseline["report"]["methods"]["legacy-vector-symbols"]["micro"]
+    # E16 marks the legend exemplar informative after inference. The legacy
+    # observation stays present, while its former operational FP is removed.
+    from json import loads
+
+    baseline_payload = loads(
+        (tmp_path / "baseline" / "predictions.json").read_text(encoding="utf-8")
     )
+    combined_payload = loads((tmp_path / "legend" / "predictions.json").read_text(encoding="utf-8"))
+    baseline_legacy = {
+        item["id"]: item
+        for item in baseline_payload["predictions"]
+        if item["method_id"] == "legacy-vector-symbols"
+    }
+    combined_legacy = {
+        item["id"]: item
+        for item in combined_payload["predictions"]
+        if item["method_id"] == "legacy-vector-symbols"
+    }
+    assert baseline_legacy.keys() == combined_legacy.keys()
+    contextualized = [item for item in combined_legacy.values() if item["context"] == "legend"]
+    assert len(contextualized) == 1
+    assert contextualized[0]["review_required"] is True
+    reference = loads((tmp_path / "legend" / "reference.json").read_text(encoding="utf-8"))
+    critical_documents = {
+        item["document_id"]
+        for item in reference["occurrences"]
+        if "critical_legend" in item["strata"]
+    }
+    assert contextualized[0]["document_id"] in critical_documents
+    baseline_micro = baseline["report"]["methods"]["legacy-vector-symbols"]["micro"]
+    combined_micro = combined["report"]["methods"]["legacy-vector-symbols"]["micro"]
+    assert combined_micro["tp"] == baseline_micro["tp"]
+    assert combined_micro["fn"] == baseline_micro["fn"]
+    assert combined_micro["fp"] == baseline_micro["fp"] - 1
     assert combined["manifest"]["legend_configuration_unchanged"]
     assert combined["manifest"]["counts"]["pages_failed"] == 0
     assert all(
@@ -32,9 +62,7 @@ def test_legend_opt_in_keeps_closed_baseline_and_source_scope(
         for document in combined["manifest"]["documents"]
     )
 
-    from json import loads
-
-    payload = loads((tmp_path / "legend" / "predictions.json").read_text(encoding="utf-8"))
+    payload = combined_payload
     assert "document-local-legend" in {method["id"] for method in payload["methods"]}
     documents = {item["id"]: item["sha256"] for item in payload["documents"]}
     for item in payload["local_candidates"]:

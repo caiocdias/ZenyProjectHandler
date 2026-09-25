@@ -42,6 +42,7 @@ CLASS_FAMILY = {
     "ATERRAMENTO": "family-f02-19",
     "PARA_RAIOS_MT": "family-f02-21",
     "PARA_RAIOS_BT": "family-f02-21",
+    "TRANSFORMADOR": "family-f02-18",
 }
 Record = dict[str, Any]
 
@@ -1112,6 +1113,34 @@ def infer_pdf(
                             )
                         )
                 manifest["pages"].append(page_manifest)
+            if legend_result is not None and legend_result.regioes_legenda:
+                sizes = {
+                    item["number"]: (item["width_pt"], item["height_pt"])
+                    for item in manifest["pages"]
+                    if "width_pt" in item and "height_pt" in item
+                }
+                contextualized = 0
+                for prediction in predictions:
+                    if prediction["layer"] != "base" or prediction["context"] != "operational":
+                        continue
+                    width, height = sizes[prediction["page"]]
+                    x0, y0, x1, y1 = prediction["bbox"]
+                    if not legend_symbols.contexto_de_legenda(
+                        (x0 * width, y0 * height, x1 * width, y1 * height),
+                        prediction["page"],
+                        legend_result.regioes_legenda,
+                        legend_result.pares,
+                    ):
+                        continue
+                    prediction["context"] = "legend"
+                    provenance = prediction.setdefault("provenance", {})
+                    provenance["reported_context_before_legend"] = provenance.get(
+                        "reported_context", "operational"
+                    )
+                    provenance["reported_context"] = "legend"
+                    provenance["legend_context_source"] = "e10:exemplar-documental"
+                    contextualized += 1
+                manifest["legend_reference"]["contextualized_predictions"] = contextualized
     except Exception as error:
         manifest["status"] = "failed"
         manifest["failures"].append({"page": None, "reason": f"{type(error).__name__}: {error}"})

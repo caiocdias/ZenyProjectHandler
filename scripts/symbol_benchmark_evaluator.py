@@ -74,7 +74,7 @@ def _geometry(item: Record) -> None:
         raise ValueError(f"{item['id']}: invalid trace")
 
 
-def _validate(reference: Record, outputs: Record) -> None:
+def _validate(reference: Record, outputs: Record, *, allow_reserve: bool = False) -> None:
     if reference.get("schema_version") != 1 or outputs.get("schema_version") != 1:
         raise ValueError("schema_version must be 1")
     if reference.get("annotation_scope", "complete") != "complete":
@@ -102,12 +102,14 @@ def _validate(reference: Record, outputs: Record) -> None:
     predictions = _unique(outputs["predictions"], "predictions")
     partitions: dict[tuple[str, str], str] = {}
     pages: dict[str, set[int]] = {}
+    splits: set[str] = set()
     for document in documents.values():
         split = document.get("split")
-        if split == "reserve":
+        if split == "reserve" and not allow_reserve:
             raise ValueError("reserve is sealed until E16; evaluation refused")
-        if split not in {"development", "calibration"}:
+        if split not in {"development", "calibration", "reserve"}:
             raise ValueError(f"{document['id']}: invalid split")
+        splits.add(split)
         for field in ("ancestor_id", "template_family", "sha256"):
             identity = document.get(field)
             if not isinstance(identity, str) or not identity:
@@ -129,6 +131,8 @@ def _validate(reference: Record, outputs: Record) -> None:
         if len(set(page_numbers)) != len(page_numbers):
             raise ValueError(f"{document['id']}: duplicate page")
         pages[document["id"]] = set(page_numbers)
+    if allow_reserve and splits != {"reserve"}:
+        raise ValueError("E16 reserve evaluation requires only reserve documents")
     for method in methods.values():
         for field in ("version", "algorithm_family"):
             if not isinstance(method.get(field), str) or not method[field]:
@@ -738,9 +742,9 @@ def _complementarity(methods: Record) -> Record:
     }
 
 
-def evaluate(reference: Record, outputs: Record) -> Record:
-    """Evaluate immutable JSON inputs; reserve and cross-partition leakage are refused."""
-    _validate(reference, outputs)
+def evaluate(reference: Record, outputs: Record, *, allow_reserve: bool = False) -> Record:
+    """Evaluate immutable inputs; E16 must explicitly opt in to reserve-only data."""
+    _validate(reference, outputs, allow_reserve=allow_reserve)
     classes = (
         {item["class_id"] for item in reference["occurrences"]}
         | {item["class_id"] for item in outputs["predictions"]}

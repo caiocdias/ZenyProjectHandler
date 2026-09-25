@@ -1,11 +1,11 @@
 # Inventário de fontes normativas da análise de conformidade
 
-## Referências de simbologia — E01, 18 de setembro de 2026
+## Referências de simbologia — 18 de setembro de 2026
 
-A conferência F01–F04 do roadmap de simbologia está no
-[relatório de referências](e01-referencias-simbologia.md), com localizadores, revisão e limites de
-acesso. O [inventário de símbolos](inventario-simbologia.md) e seu
-[registro versionado](data/inventario-simbologia-v1.json) separam perfis CEMIG, externos e legado.
+A conferência F01–F04, seus localizadores, revisão e limites de acesso estão no
+[registro versionado de símbolos](data/inventario-simbologia-v1.json), que separa
+perfis CEMIG, externos e legado. A curadoria atual usa o
+[fluxo independente](fluxo-curadoria-incremental-simbologia.md).
 Essa auditoria de representação gráfica não acrescenta nem altera obrigações, fatos de
 conformidade ou as regras descritas nas revisões históricas abaixo. O literal `SIMBOLOGIA.pdf`
 do detector não comprova identidade com a IT-EO-008.

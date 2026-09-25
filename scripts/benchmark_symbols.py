@@ -1,12 +1,14 @@
-"""E02 symbol benchmark: portable synthetic baseline and local recursive PDF audit.
+"""Symbol benchmark: portable synthetic baseline and local recursive PDF audit.
 
 Examples (repository root, installed development/server dependencies):
-  python -m scripts.benchmark_symbols synthetic --output tmp/e02-simbologia/baseline
-  python -m scripts.benchmark_symbols examples --root examples --output tmp/e02/predictions
+  python -m scripts.benchmark_symbols synthetic --output tmp/curadoria-simbologia/baseline
+  python -m scripts.benchmark_symbols examples --root examples
+      --output tmp/curadoria-simbologia/predictions
   python -m scripts.benchmark_symbols evaluate --reference reference.json
       --predictions predictions.json --output report.json
 
-The reserve remains sealed until E16. No command here opens or evaluates it.
+Earlier reserves were consumed. This CLI uses development and local examples;
+it does not open or evaluate a future independent reserve.
 """
 
 from __future__ import annotations

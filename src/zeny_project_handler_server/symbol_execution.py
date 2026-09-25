@@ -278,6 +278,33 @@ class SymbolCompositionRunner:
                     self._write_journal(attempt_id, journal)
                     self._require_complete(legend.resultado)
                     results.append(legend.resultado)
+                    contextualized = legend_symbols.contextualizar_resultados(
+                        tuple(results),
+                        legend.regioes_legenda,
+                        legend.pares,
+                        {
+                            index + 1: (
+                                float(opened[index].rect.width),
+                                float(opened[index].rect.height),
+                            )
+                            for index in range(opened.page_count)
+                        },
+                    )
+                    id_mapping = {
+                        original.id: updated.id
+                        for before, after in zip(results, contextualized, strict=True)
+                        for original, updated in zip(
+                            before.observacoes, after.observacoes, strict=True
+                        )
+                    }
+                    for recorded in journal["results"]:
+                        for observation in recorded["observations"]:
+                            observation["id"] = id_mapping.get(observation["id"], observation["id"])
+                    journal["legend_contextualized"] = sum(
+                        original != updated for original, updated in id_mapping.items()
+                    )
+                    results = list(contextualized)
+                    self._write_journal(attempt_id, journal)
                     completed += 1
                     if progresso is not None:
                         progresso(completed * 1000, total * 1000, "Símbolos: legenda documental")

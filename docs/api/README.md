@@ -179,8 +179,9 @@ estritos e as decisões continuam protegidas por `expected_review_session_id`.
 observações, score bruto, matriz de métodos, papel, estado visual e pendências.
 Situação efetiva nula deve ser apresentada como pendente; o enum legado não
 constitui evidência de situação. `symbol_support` descreve os pacotes instalados,
-incluindo IDs pendentes, e não detecções do projeto. Veja o
-[contrato e as evidências E14](../e14-revisao-simbologia.md).
+incluindo IDs pendentes, e não detecções do projeto. A
+[curadoria contínua](../fluxo-curadoria-incremental-simbologia.md) valida
+mudanças nesses pacotes e na apresentação/exportação.
 
 ## Decisões transversais
 

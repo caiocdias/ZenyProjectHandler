@@ -33,7 +33,7 @@ from zeny_project_handler.domain.symbols import (
 )
 from zeny_project_handler.domain.values import PontoNormalizado
 
-_VERSION = "e08-raster-3"
+_VERSION = "e16-raster-4"
 _MATCH_THRESHOLD = 0.88
 _COARSE_THRESHOLD = 0.72
 
@@ -106,30 +106,48 @@ _DEFAULT_CONFIG = ConfiguracaoDetectorRaster()
 
 
 def carregar_templates_raster() -> tuple[TemplateRasterVerificado, ...]:
-    """Return versioned E02 author-owned grounding/surge controls, not F02 artwork.
+    """Return versioned E02 author-owned controls, not F02 artwork.
 
-    Geometry duplicates the public fixture generator's `_segments` for these two
-    classes, independently of benchmark labels/ROIs and fixture output PDFs.
-    The common canvas includes the fourth-bar area in both controls, so absence
-    of that bar is visible to the matching score rather than silently cropped.
+    Geometry duplicates the public fixture generator's `_segments`, independently
+    of benchmark labels/ROIs and fixture output PDFs. Grounding and MT surge
+    controls share a canvas with the fourth-bar area, so absence of that bar is
+    visible to the matching score rather than silently cropped.
     """
     templates = []
-    for class_code, count, identity in (
-        ("ATERRAMENTO", 3, "e02-control-grounding-v2"),
-        ("PARA_RAIOS_MT", 4, "e02-control-surge-mt-v1"),
+    for class_code, identity in (
+        ("ATERRAMENTO", "e02-control-grounding-v2"),
+        ("PARA_RAIOS_MT", "e02-control-surge-mt-v1"),
+        ("PARA_RAIOS_BT", "e02-control-surge-bt-v1"),
+        ("TRANSFORMADOR", "e02-control-transformer-v1"),
     ):
         document = pymupdf.open()
         try:
-            page = document.new_page(width=31, height=13)
-            page.draw_line((2, 6.5), (17, 6.5), color=(0, 0, 0), width=0.5)
-            for index, length in enumerate((10.0, 7.0, 4.0, 7.0)[:count]):
-                x = 17 + index * 4
-                page.draw_line(
-                    (x, 6.5 - length / 2),
-                    (x, 6.5 + length / 2),
-                    color=(0, 0, 0),
-                    width=0.5,
-                )
+            if class_code in {"ATERRAMENTO", "PARA_RAIOS_MT"}:
+                page = document.new_page(width=31, height=13)
+                page.draw_line((2, 6.5), (17, 6.5), color=(0, 0, 0), width=0.5)
+                count = 3 if class_code == "ATERRAMENTO" else 4
+                for index, length in enumerate((10.0, 7.0, 4.0, 7.0)[:count]):
+                    x = 17 + index * 4
+                    page.draw_line(
+                        (x, 6.5 - length / 2),
+                        (x, 6.5 + length / 2),
+                        color=(0, 0, 0),
+                        width=0.5,
+                    )
+            elif class_code == "PARA_RAIOS_BT":
+                page = document.new_page(width=28, height=11)
+                page.draw_line((2, 5.5), (17, 5.5), color=(0, 0, 0), width=0.5)
+                page.draw_rect(pymupdf.Rect(17, 4, 26, 7), color=(0, 0, 0), width=0.5)
+                page.draw_line((17, 2), (26, 9), color=(0, 0, 0), width=0.5)
+            else:
+                page = document.new_page(width=34, height=22)
+                for start, end in (
+                    ((2, 20), (17, 2)),
+                    ((17, 2), (32, 20)),
+                    ((32, 20), (2, 20)),
+                    ((17, 2), (17, 20)),
+                ):
+                    page.draw_line(start, end, color=(0, 0, 0), width=0.5)
             pixmap = page.get_pixmap(
                 matrix=pymupdf.Matrix(2, 2), colorspace=pymupdf.csRGB, alpha=False
             )

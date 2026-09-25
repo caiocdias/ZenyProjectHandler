@@ -8,6 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from hashlib import sha256
+from urllib.parse import quote
 from uuid import UUID, uuid5
 
 from zeny_project_handler.domain.analysis import (
@@ -67,7 +68,7 @@ class ContextoInterpretacao:
     evidencias: tuple[EvidenciaDocumento, ...]
 
 
-SYMBOL_SEMANTICS_VERSION = "e14-symbol-review-1"
+SYMBOL_SEMANTICS_VERSION = "e16-symbol-conflict-values-1"
 
 
 class ExecutarPipelineInterpretacao:
@@ -595,6 +596,27 @@ def _symbol_proposals(
             or catalog_id is None
         )
         reasons = [*occurrence.reasons]
+        if "situation_conflict" in occurrence.reasons:
+            reasons.append(
+                _symbol_conflict_readings(
+                    "situation_conflict_values",
+                    tuple(
+                        (obs, obs.situacao.value if obs.situacao is not None else None)
+                        for obs in occurrence.observations
+                    ),
+                )
+            )
+        for reason in occurrence.reasons:
+            if reason.startswith("attribute_conflict:"):
+                key = reason.partition(":")[2]
+                reasons.append(
+                    _symbol_conflict_readings(
+                        f"{key}_conflict_values",
+                        tuple(
+                            (obs, dict(obs.atributos).get(key)) for obs in occurrence.observations
+                        ),
+                    )
+                )
         if informative:
             reasons.append("contexto_informativo")
         if support_symbol:
@@ -708,6 +730,25 @@ def _symbol_proposals(
                                     dict(obs.atributos).get("quantidade_ativos")
                                 ),
                                 "metodo_assinatura": obs.metodo_assinatura,
+                            }
+                            for obs in sorted(occurrence.observations, key=lambda item: item.id)
+                        ],
+                        ensure_ascii=False,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                ),
+                (
+                    "simbolo_potencias_observadas",
+                    json.dumps(
+                        [
+                            {
+                                "observacao_id": obs.id,
+                                "metodo_assinatura": obs.metodo_assinatura,
+                                "potencia": _json_scalar(dict(obs.atributos).get("potencia")),
+                                "potencia_kva": _json_scalar(
+                                    dict(obs.atributos).get("potencia_kva")
+                                ),
                             }
                             for obs in sorted(occurrence.observations, key=lambda item: item.id)
                         ],
@@ -896,6 +937,14 @@ def _symbol_evidence(
                 dict(observation.atributos).get("quantidade_ativos"),
             ),
             (
+                "simbolo_potencia_observada",
+                dict(observation.atributos).get("potencia"),
+            ),
+            (
+                "simbolo_potencia_kva_observada",
+                dict(observation.atributos).get("potencia_kva"),
+            ),
+            (
                 "simbolo_classe_visual",
                 ",".join(sorted({alt.classe for alt in observation.alternativas if alt.classe})),
             ),
@@ -948,6 +997,21 @@ def _json_scalar(value: object) -> str | int | float | bool | None:
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
     return str(value)
+
+
+def _symbol_conflict_readings(
+    label: str, readings: tuple[tuple[ObservacaoSimbolo, object], ...]
+) -> str:
+    """Keep values linked to the observation and method without comma splitting."""
+    return (
+        label
+        + ":"
+        + "|".join(
+            f"{quote(str(value) if value is not None else 'null', safe='')}@"
+            f"{observation.id[:12]}~{observation.metodo_assinatura[:12]}"
+            for observation, value in sorted(readings, key=lambda item: item[0].id)
+        )
+    )
 
 
 def _geometry_center(geometry: GeometriaDocumento) -> tuple[float, float]:

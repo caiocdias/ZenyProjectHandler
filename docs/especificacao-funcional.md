@@ -209,8 +209,7 @@ subdividida ao longo da linha OCR, conservando fonte, offsets e qualificadores.
 exata não escolhe equipamento do catálogo. `N-4` não completa material CA/CAA. Leituras
 coloridas de estruturas revisadas geram alternativas instalar/remover com geometrias e
 identidades próprias, preservando a base e a autoridade pendente. Decisões de uma operação
-não são transferidas para outra operação nem para a base. Detalhes e limites em
-[E13](e13-ocorrencias-associacao.md).
+não são transferidas para outra operação nem para a base.
 
 Uma relação de instalação precisa resolver um único poste. Relações dirigidas à entrega não são
 transferidas ao vizinho. Endpoints sem classe suficiente continuam desconhecidos; `P<n>` e
@@ -555,8 +554,7 @@ investigação, mas não substituem fonte normativa.
   e por uma leitura duplicada de estrutura ainda revisável. O falso realce amplo de equipamento
   foi corrigido na extração 1.18.0, exigindo barras lineares e corpos retangulares na assinatura
   simbólica. Os vetores originais continuam disponíveis. O gate público não concede aceite
-  técnico à NS real; evidências atuais estão em
-  [validacao-e08-e09-0.4.0.md](validacao-e08-e09-0.4.0.md).
+  técnico à NS real.
 - Cálculos elétricos e mecânicos completos e verificações dependentes de fontes restritas não são
   executados sem todos os fatos e referências necessários.
 - Carimbo, rótulo ou campo de assinatura não comprova autoria ou autenticidade.

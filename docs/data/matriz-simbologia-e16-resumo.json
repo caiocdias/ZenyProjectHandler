@@ -1,0 +1,509 @@
+{
+  "by_destination": {
+    "composite_review": {
+      "ainda_nao_suportado": 76,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 81,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 5
+    },
+    "document_convention": {
+      "ainda_nao_suportado": 0,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 8,
+      "informativo": 8,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    },
+    "equipment_review": {
+      "ainda_nao_suportado": 44,
+      "alternativa_sem_id_resolvido": 17,
+      "denominator": 82,
+      "informativo": 0,
+      "nao_avaliavel": 8,
+      "reconhecido_exato": 13
+    },
+    "informative_only": {
+      "ainda_nao_suportado": 0,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 89,
+      "informativo": 89,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    },
+    "mechanical_relation": {
+      "ainda_nao_suportado": 0,
+      "alternativa_sem_id_resolvido": 17,
+      "denominator": 17,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    },
+    "network_context": {
+      "ainda_nao_suportado": 87,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 105,
+      "informativo": 0,
+      "nao_avaliavel": 4,
+      "reconhecido_exato": 14
+    },
+    "support_review": {
+      "ainda_nao_suportado": 44,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 45,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 1
+    }
+  },
+  "by_family": {
+    "family-f02-01": {
+      "ainda_nao_suportado": 0,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 1,
+      "informativo": 1,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    },
+    "family-f02-02": {
+      "ainda_nao_suportado": 0,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 3,
+      "informativo": 3,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    },
+    "family-f02-03": {
+      "ainda_nao_suportado": 25,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 25,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    },
+    "family-f02-04": {
+      "ainda_nao_suportado": 0,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 1,
+      "informativo": 1,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    },
+    "family-f02-05": {
+      "ainda_nao_suportado": 12,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 13,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 1
+    },
+    "family-f02-06": {
+      "ainda_nao_suportado": 6,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 9,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 3
+    },
+    "family-f02-07": {
+      "ainda_nao_suportado": 0,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 5,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 5
+    },
+    "family-f02-08": {
+      "ainda_nao_suportado": 6,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 6,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    },
+    "family-f02-09": {
+      "ainda_nao_suportado": 4,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 4,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    },
+    "family-f02-10": {
+      "ainda_nao_suportado": 5,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 5,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    },
+    "family-f02-11": {
+      "ainda_nao_suportado": 2,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 3,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 1
+    },
+    "family-f02-12": {
+      "ainda_nao_suportado": 3,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 3,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    },
+    "family-f02-13": {
+      "ainda_nao_suportado": 3,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 6,
+      "informativo": 3,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    },
+    "family-f02-14": {
+      "ainda_nao_suportado": 0,
+      "alternativa_sem_id_resolvido": 15,
+      "denominator": 15,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    },
+    "family-f02-15": {
+      "ainda_nao_suportado": 0,
+      "alternativa_sem_id_resolvido": 2,
+      "denominator": 2,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    },
+    "family-f02-16": {
+      "ainda_nao_suportado": 22,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 22,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    },
+    "family-f02-17": {
+      "ainda_nao_suportado": 17,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 17,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    },
+    "family-f02-18": {
+      "ainda_nao_suportado": 4,
+      "alternativa_sem_id_resolvido": 16,
+      "denominator": 27,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 7
+    },
+    "family-f02-19": {
+      "ainda_nao_suportado": 13,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 17,
+      "informativo": 0,
+      "nao_avaliavel": 4,
+      "reconhecido_exato": 0
+    },
+    "family-f02-20": {
+      "ainda_nao_suportado": 40,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 40,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    },
+    "family-f02-21": {
+      "ainda_nao_suportado": 7,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 15,
+      "informativo": 0,
+      "nao_avaliavel": 8,
+      "reconhecido_exato": 0
+    },
+    "family-f02-22": {
+      "ainda_nao_suportado": 5,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 5,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    },
+    "family-f02-23": {
+      "ainda_nao_suportado": 12,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 16,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 4
+    },
+    "family-f02-24": {
+      "ainda_nao_suportado": 0,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 2,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 2
+    },
+    "family-f02-25": {
+      "ainda_nao_suportado": 0,
+      "alternativa_sem_id_resolvido": 1,
+      "denominator": 4,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 3
+    },
+    "family-f02-26": {
+      "ainda_nao_suportado": 1,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 1,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    },
+    "family-f02-27": {
+      "ainda_nao_suportado": 12,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 13,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 1
+    },
+    "family-f02-28": {
+      "ainda_nao_suportado": 1,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 4,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 3
+    },
+    "family-f02-29": {
+      "ainda_nao_suportado": 0,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 1,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 1
+    },
+    "family-f02-30": {
+      "ainda_nao_suportado": 0,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 1,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 1
+    },
+    "family-f02-31": {
+      "ainda_nao_suportado": 0,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 1,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 1
+    },
+    "family-f02-32": {
+      "ainda_nao_suportado": 51,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 51,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    },
+    "family-f02-33": {
+      "ainda_nao_suportado": 0,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 89,
+      "informativo": 89,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    }
+  },
+  "by_owner": {
+    "E04": {
+      "ainda_nao_suportado": 0,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 12,
+      "informativo": 0,
+      "nao_avaliavel": 12,
+      "reconhecido_exato": 0
+    },
+    "E05": {
+      "ainda_nao_suportado": 0,
+      "alternativa_sem_id_resolvido": 17,
+      "denominator": 29,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 12
+    },
+    "E06": {
+      "ainda_nao_suportado": 0,
+      "alternativa_sem_id_resolvido": 17,
+      "denominator": 17,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    },
+    "E07": {
+      "ainda_nao_suportado": 251,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 365,
+      "informativo": 93,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 21
+    },
+    "E10": {
+      "ainda_nao_suportado": 0,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 4,
+      "informativo": 4,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    }
+  },
+  "by_package_status": {
+    "enabled": {
+      "ainda_nao_suportado": 0,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 21,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 21
+    },
+    "nao_aplicavel": {
+      "ainda_nao_suportado": 0,
+      "alternativa_sem_id_resolvido": 34,
+      "denominator": 62,
+      "informativo": 4,
+      "nao_avaliavel": 12,
+      "reconhecido_exato": 12
+    },
+    "pending": {
+      "ainda_nao_suportado": 251,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 344,
+      "informativo": 93,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    }
+  },
+  "by_source_kind": {
+    "AEC": {
+      "ainda_nao_suportado": 3,
+      "alternativa_sem_id_resolvido": 17,
+      "denominator": 23,
+      "informativo": 3,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    },
+    "AV": {
+      "ainda_nao_suportado": 12,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 16,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 4
+    },
+    "CNX": {
+      "ainda_nao_suportado": 14,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 19,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 5
+    },
+    "CTR": {
+      "ainda_nao_suportado": 0,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 2,
+      "informativo": 0,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 2
+    },
+    "DES": {
+      "ainda_nao_suportado": 0,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 89,
+      "informativo": 89,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    },
+    "EC": {
+      "ainda_nao_suportado": 63,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 74,
+      "informativo": 1,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 10
+    },
+    "INS": {
+      "ainda_nao_suportado": 159,
+      "alternativa_sem_id_resolvido": 17,
+      "denominator": 200,
+      "informativo": 0,
+      "nao_avaliavel": 12,
+      "reconhecido_exato": 12
+    },
+    "annotation": {
+      "ainda_nao_suportado": 0,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 3,
+      "informativo": 3,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    },
+    "document_context": {
+      "ainda_nao_suportado": 0,
+      "alternativa_sem_id_resolvido": 0,
+      "denominator": 1,
+      "informativo": 1,
+      "nao_avaliavel": 0,
+      "reconhecido_exato": 0
+    }
+  },
+  "denominator_families": 33,
+  "denominator_ids": 427,
+  "inputs_sha256": {
+    "e05_report": "b2d39a56e25dc3d6ace8c4fff1be9fc360d0d26871810a50f0fd8a9a70ad30f7",
+    "e06_report": "36801fffc5715593b2b6ed06da6c5ea7f85cdb5d8e04a3059978f177e18d7de6",
+    "e07_report": "d53d8504f2d4dbe1f4fff6ad8666bdeef89b05f2e9356221ccf1fa822020bb03",
+    "inventory": "e3d49d9b0072f9f30ea98e2171c0cd520a819a15b329590cfbf35f508f042fcd"
+  },
+  "inventory_version": "2026.09.18.1",
+  "limits": [
+    "Exact status has author-owned synthetic support only; no field homology claim.",
+    "Informative is a semantic destination; pending packages do not recognize IDs.",
+    "Method columns separate ID grammar, class-only support, pending, unavailable, and rejected methods.",
+    "A class-level hit does not resolve a variant ID or an asset quantity."
+  ],
+  "method_columns": [
+    "legacy-vector-symbols",
+    "transformer-vector-shapes",
+    "guy-vector-shapes",
+    "declarative-vector-packages",
+    "raster-template",
+    "raster-hough-generalizado",
+    "structural-raster-graph",
+    "structural-vector-graph",
+    "document-local-legend",
+    "learned-e11"
+  ],
+  "status_counts": {
+    "ainda_nao_suportado": 251,
+    "alternativa_sem_id_resolvido": 34,
+    "informativo": 97,
+    "nao_avaliavel": 12,
+    "reconhecido_exato": 33
+  },
+  "status_order": [
+    "reconhecido_exato",
+    "alternativa_sem_id_resolvido",
+    "informativo",
+    "ainda_nao_suportado",
+    "nao_avaliavel"
+  ]
+}

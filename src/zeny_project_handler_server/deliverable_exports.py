@@ -443,6 +443,7 @@ def _symbol_summary(item: ReviewProposalDto) -> str:
         f"Métodos: {methods}\n"
         f"Probabilidade calibrada: {symbol.calibrated_probability or 'indisponível'}\n"
         f"Família não suportada: {'Sim' if symbol.unsupported_family else 'Não'}\n"
+        f"Pendências da detecção: {'; '.join(symbol.pending_reasons) or 'Nenhuma'}\n"
         f"Camada: {symbol.layer}; ocorrência: {symbol.occurrence_id}"
     )
 

@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "corpus_id": "e16r2-authorial-sealed-v1",
+  "split": "reserve",
+  "seal_type": "operational_policy_sha256_not_encryption",
+  "access_policy": "default refusal; corpus only after frozen inference checkpoint; reference only after predictions receipt",
+  "archive": {
+    "path": "reserve.sealed.zip",
+    "sha256": "86979533f7cb5fd51b0771074da3536349c404050f228fe59c480ffbc8435576",
+    "bytes": 90992,
+    "reference_sha256": "256f9bdd093f99d11638916ef6e7e82ccfa000bc02a052dde032e05b4ab4a514"
+  },
+  "documents": [
+    {
+      "id": "e16r2-a",
+      "path": "e16r2-a.pdf",
+      "sha256": "b6a3fc0b7e91991ea83b0d391acfaf98136fd2bd24723ddb0f4b226ae20820cd",
+      "pages": [
+        {
+          "number": 1,
+          "width_pt": 760.0,
+          "height_pt": 520.0,
+          "rotation": 0,
+          "annotation_count": 0
+        },
+        {
+          "number": 2,
+          "width_pt": 760.0,
+          "height_pt": 520.0,
+          "rotation": 0,
+          "annotation_count": 0
+        }
+      ],
+      "ancestor_id": "new-feeder-fork-a",
+      "template_family": "new-feeder-fork-a"
+    },
+    {
+      "id": "e16r2-b",
+      "path": "e16r2-b.pdf",
+      "sha256": "36f7e3edaa5816efc4fb081eb8e8b8c091a23ef8d521ac622d1929ffe4d07664",
+      "pages": [
+        {
+          "number": 1,
+          "width_pt": 680.0,
+          "height_pt": 480.0,
+          "rotation": 0,
+          "annotation_count": 0
+        },
+        {
+          "number": 2,
+          "width_pt": 680.0,
+          "height_pt": 480.0,
+          "rotation": 0,
+          "annotation_count": 0
+        }
+      ],
+      "ancestor_id": "new-raster-survey-b",
+      "template_family": "new-raster-survey-b"
+    },
+    {
+      "id": "e16r2-c",
+      "path": "e16r2-c.pdf",
+      "sha256": "7ee42c168ee3e3474ee416e19b0355c3c34c71980c3b77c824d3a4dbd0122941",
+      "pages": [
+        {
+          "number": 1,
+          "width_pt": 620.0,
+          "height_pt": 760.0,
+          "rotation": 0,
+          "annotation_count": 1
+        }
+      ],
+      "ancestor_id": "new-layered-crossing-c",
+      "template_family": "new-layered-crossing-c"
+    },
+    {
+      "id": "e16r2-d",
+      "path": "e16r2-d.pdf",
+      "sha256": "0647892a666b3242cbcc1826b3e4f420c5a48c0e2f0aaaf8a07162959b572714",
+      "pages": [
+        {
+          "number": 1,
+          "width_pt": 500.0,
+          "height_pt": 700.0,
+          "rotation": 90,
+          "annotation_count": 0
+        },
+        {
+          "number": 2,
+          "width_pt": 500.0,
+          "height_pt": 700.0,
+          "rotation": 270,
+          "annotation_count": 0
+        }
+      ],
+      "ancestor_id": "new-orientation-cross-d",
+      "template_family": "new-orientation-cross-d"
+    },
+    {
+      "id": "e16r2-e",
+      "path": "e16r2-e.pdf",
+      "sha256": "1098c613b684057eae0bb511a02daf58c5013cdf602bfa169211e447a55f2dc2",
+      "pages": [
+        {
+          "number": 1,
+          "width_pt": 800.0,
+          "height_pt": 540.0,
+          "rotation": 0,
+          "annotation_count": 0
+        }
+      ],
+      "ancestor_id": "new-control-constellation-e",
+      "template_family": "new-control-constellation-e"
+    }
+  ],
+  "counts": {
+    "documents": 5,
+    "pages": 8,
+    "reference_occurrences": 46,
+    "confirmed": 44,
+    "ambiguous": 2,
+    "operational": 32,
+    "legend": 3,
+    "negative": 11,
+    "annotation_layer": 1
+  },
+  "strata_counts": {
+    "annotation": 1,
+    "canonical": 8,
+    "critical_fence": 3,
+    "critical_glyph": 4,
+    "critical_legend": 3,
+    "critical_table": 4,
+    "ink_annotation": 1,
+    "operational_control": 29,
+    "overlap_ambiguous": 2,
+    "raster": 15,
+    "rotated_glyph": 23,
+    "vector": 30
+  },
+  "limitations": [
+    "Synthetic authorial controls, not field generalization.",
+    "C knows historical E16 failure and reviewed public E02 schema; no detector output used to author E16R2.",
+    "No evaluator or inference has run on this reserve.",
+    "The seal enforces operational access by tooling; ZIP itself is not encrypted."
+  ]
+}

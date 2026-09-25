@@ -144,5 +144,5 @@ mostrar existentes sem exigir poste classificado ou identificador V.
 
 API/piso 1.6.0 e interpretador 25.0; clientes estritos anteriores exigem atualização
 coordenada. Snapshots antigos não são reescritos e reanálise continua exigindo
-reconciliação quando houver decisões anteriores. Detalhes, limites e validações
-em [E14](../e14-topologia-projecao-trechos.md).
+reconciliação quando houver decisões anteriores. O contrato atual é verificável
+pelos testes de interpretação e pelo esquema da API.
