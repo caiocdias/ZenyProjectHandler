@@ -17,11 +17,22 @@
       },
       "visual_note": "Disco roxo",
       "recognition": {
-        "status": "pending",
-        "reason": "Forma E01: Disco roxo. Disco colorido isolado não distingue ponto de conexão de anotação ou estado sem contexto.",
+        "status": "enabled",
+        "grammar": {
+          "kind": "terminal_disc",
+          "fill": "purple",
+          "min_span": 1.0,
+          "max_span": 4.0,
+          "terminal_line": true
+        },
         "negative_examples": [
           "Exemplar de legenda/tabela não é ocorrência operacional",
-          "Glifos, molduras e líderes de anotação"
+          "Glifos, molduras e líderes de anotação",
+          "Disco verde, vermelho, preto ou lilás claro, mesmo com linha terminal",
+          "Disco roxo isolado, sem linha de rede terminando no centro",
+          "Disco roxo no meio de uma linha que passa por ele",
+          "Disco roxo grande, com texto dentro ou coberto por preenchimento posterior",
+          "Triângulo ou outra forma roxa com linha terminando nela"
         ]
       }
     },

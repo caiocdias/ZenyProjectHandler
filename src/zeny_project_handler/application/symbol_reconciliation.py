@@ -14,13 +14,19 @@ from decimal import Decimal
 from hashlib import sha256
 from typing import Literal
 
-from zeny_project_handler.domain.enums import EstadoMetodoSimbolos
+from zeny_project_handler.domain.enums import EstadoMetodoSimbolos, TipoGeometria
 from zeny_project_handler.domain.symbols import (
     AlternativaClasseSimbolo,
+    FonteObservacaoSimbolo,
     GeometriaObservacaoSimbolo,
     ObservacaoSimbolo,
     ResultadoMetodoSimbolos,
 )
+from zeny_project_handler.domain.values import PontoNormalizado
+
+# Box of the whole physical support (e.g. the stem down to the pole) reported by
+# the legacy vector detector apart from the pictogram box, in original coordinates.
+_SUPPORT_BOUNDS_KEY = "simbolo_limites_suporte"
 
 Decision = Literal["review", "eligible"]
 MatrixState = Literal[
@@ -83,6 +89,9 @@ class SymbolOccurrence:
     support: tuple[str, ...]
     decision: Decision
     reasons: tuple[str, ...]
+    # Physical extent linking the symbol to its support (e.g. the stem down to the
+    # pole) when a detector reports it apart from the symbol box; association only.
+    support_geometry: GeometriaObservacaoSimbolo | None = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -300,7 +309,7 @@ def _occurrence(
     raw_scores = tuple((obs.metodo_assinatura, obs.score_bruto) for obs in ordered)
     # Preserve one actual geometry.  Primitive count and unclipped coordinates
     # select provenance quality; detector scores never weight geometry.
-    selected = min(
+    by_quality = sorted(
         ordered,
         key=lambda obs: (
             obs.geometria.normalizacao_limitada,
@@ -308,6 +317,112 @@ def _occurrence(
             obs.id,
         ),
     )
+    selected = by_quality[0]
+    support_geometry = next(
+        (geometry for obs in by_quality if (geometry := _support_geometry(obs)) is not None),
+        None,
+    )
+    reasons = _observation_reasons(ordered, identities, reference_ids, invalid_references)
+    probability: Decimal | None = None
+    probability_source: str | None = None
+    if len(identities) == 1:
+        class_code = next(iter(identities))[0]
+        if class_code is not None:
+            calibrated = _calibrated_probability(ordered, class_code, calibration)
+            if calibrated is not None:
+                probability_source, probability = calibrated
+            else:
+                reasons.append("insufficient_calibration")
+    if probability is not None and probability < calibration.promotion_probability:
+        reasons.append("below_promotion_probability")
+    decision: Decision = "eligible" if probability is not None and not reasons else "review"
+    return SymbolOccurrence(
+        id=occurrence_id,
+        observations=ordered,
+        alternatives=alternatives,
+        reference_ids=reference_ids,
+        geometry=selected.geometria,
+        raw_scores=raw_scores,
+        calibrated_probability=probability,
+        probability_source=probability_source,
+        support=support,
+        decision=decision,
+        reasons=tuple(reasons),
+        support_geometry=support_geometry,
+    )
+
+
+def _support_bounds(observation: ObservacaoSimbolo) -> tuple[Decimal, ...] | None:
+    """Read the detector's ``[x0, y0, x1, y1]`` support box, in original coordinates."""
+    raw = _attributes(observation).get(_SUPPORT_BOUNDS_KEY)
+    if not isinstance(raw, str):
+        return None
+    try:
+        values = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if (
+        not isinstance(values, list)
+        or len(values) != 4
+        or not all(isinstance(item, (int, float)) and not isinstance(item, bool) for item in values)
+    ):
+        return None
+    bounds = tuple(Decimal(str(item)) for item in values)
+    if (
+        not all(item.is_finite() for item in bounds)
+        or bounds[0] > bounds[2]
+        or bounds[1] > bounds[3]
+    ):
+        return None
+    return bounds
+
+
+def _support_geometry(observation: ObservacaoSimbolo) -> GeometriaObservacaoSimbolo | None:
+    """Normalize the support box with the observation's own declared transformation."""
+    bounds = _support_bounds(observation)
+    if bounds is None:
+        return None
+    x0, y0, x1, y1 = bounds
+    corners = ((x0, y0), (x1, y0), (x1, y1), (x0, y1))
+    transformation = observation.geometria.transformacao
+    a, b, c, d, e, f = transformation.normalizada_para_original
+    determinant = a * d - c * b
+    # original = (nx * a + ny * c + e, nx * b + ny * d + f); invert the affine map.
+    raw = tuple(
+        (
+            (d * (x - e) - c * (y - f)) / determinant,
+            (a * (y - f) - b * (x - e)) / determinant,
+        )
+        for x, y in corners
+    )
+    clipped = any(not (0 <= value <= 1) for point in raw for value in point)
+    xs = [min(Decimal(1), max(Decimal(0), x)) for x, _ in raw]
+    ys = [min(Decimal(1), max(Decimal(0), y)) for _, y in raw]
+    lower = PontoNormalizado(min(xs), min(ys))
+    upper = PontoNormalizado(max(xs), max(ys))
+    kind = (
+        TipoGeometria.PONTO
+        if lower == upper
+        else TipoGeometria.POLILINHA
+        if lower.x == upper.x or lower.y == upper.y
+        else TipoGeometria.CAIXA
+    )
+    return GeometriaObservacaoSimbolo(
+        tipo=kind,
+        pontos_originais=corners,
+        pontos_normalizados=(lower,) if lower == upper else (lower, upper),
+        transformacao=transformation,
+        normalizacao_limitada=observation.geometria.normalizacao_limitada or clipped,
+    )
+
+
+def _observation_reasons(
+    ordered: tuple[ObservacaoSimbolo, ...],
+    identities: set[tuple[str | None, str | None]],
+    reference_ids: tuple[str, ...],
+    invalid_references: bool,
+) -> list[str]:
+    """Return review reasons that depend only on the grouped observations."""
     reasons: list[str] = []
     if len(identities) != 1 or next(iter(identities))[0] is None:
         reasons.append("ambiguous_class_or_id")
@@ -331,106 +446,116 @@ def _occurrence(
         values = {str(_attributes(obs)[key]) for obs in ordered if key in _attributes(obs)}
         if len(values) > 1:
             reasons.append("attribute_conflict:" + key)
-    probability: Decimal | None = None
-    probability_source: str | None = None
-    if len(identities) == 1:
-        class_code = next(iter(identities))[0]
-        if class_code is not None:
-            valid: list[tuple[int, str, Decimal]] = []
-            for obs in ordered:
-                stratum = str(_attributes(obs).get("estrato", "default"))
-                entry = next(
-                    (
-                        entry
-                        for entry in calibration.entries
-                        if entry.method_signature == obs.metodo_assinatura
-                        and entry.class_code == class_code
-                        and entry.stratum == stratum
-                        and entry.sample_size >= calibration.minimum_samples
-                    ),
-                    None,
-                )
-                if entry is not None:
-                    valid.append((entry.sample_size, obs.metodo_assinatura, entry.probability))
-            if valid:
-                # Select the most sampled calibration cell, with a stable
-                # signature tie-break.  This priority is fixed before seeing
-                # a candidate's scores or the methods that agree with it;
-                # choosing the largest probability here would bias promotion.
-                _, probability_source, probability = sorted(
-                    valid, key=lambda item: (-item[0], item[1])
-                )[0]
-            else:
-                reasons.append("insufficient_calibration")
-    if probability is not None and probability < calibration.promotion_probability:
-        reasons.append("below_promotion_probability")
-    decision: Decision = "eligible" if probability is not None and not reasons else "review"
-    return SymbolOccurrence(
-        id=occurrence_id,
-        observations=ordered,
-        alternatives=alternatives,
-        reference_ids=reference_ids,
-        geometry=selected.geometria,
-        raw_scores=raw_scores,
-        calibrated_probability=probability,
-        probability_source=probability_source,
-        support=support,
-        decision=decision,
-        reasons=tuple(reasons),
+    return reasons
+
+
+def _calibration_entry(
+    observation: ObservacaoSimbolo, class_code: str, calibration: CalibrationPolicy
+) -> CalibrationEntry | None:
+    stratum = str(_attributes(observation).get("estrato", "default"))
+    return next(
+        (
+            entry
+            for entry in calibration.entries
+            if entry.method_signature == observation.metodo_assinatura
+            and entry.class_code == class_code
+            and entry.stratum == stratum
+            and entry.sample_size >= calibration.minimum_samples
+        ),
+        None,
     )
+
+
+def _calibrated_probability(
+    ordered: tuple[ObservacaoSimbolo, ...], class_code: str, calibration: CalibrationPolicy
+) -> tuple[str, Decimal] | None:
+    """Return the selected calibration source and probability, if any cell is valid."""
+    valid: list[tuple[int, str, Decimal]] = []
+    for obs in ordered:
+        entry = _calibration_entry(obs, class_code, calibration)
+        if entry is not None:
+            valid.append((entry.sample_size, obs.metodo_assinatura, entry.probability))
+    if not valid:
+        return None
+    # Select the most sampled calibration cell, with a stable
+    # signature tie-break.  This priority is fixed before seeing
+    # a candidate's scores or the methods that agree with it;
+    # choosing the largest probability here would bias promotion.
+    _, probability_source, probability = sorted(valid, key=lambda item: (-item[0], item[1]))[0]
+    return probability_source, probability
 
 
 def _matrix_row(occurrence: SymbolOccurrence, result: ResultadoMetodoSimbolos) -> MethodMatrixRow:
     signature = result.perfil.assinatura()
     own = tuple(obs for obs in occurrence.observations if obs.metodo_assinatura == signature)
     classes = tuple(sorted({alt.classe for obs in own for alt in obs.alternativas if alt.classe}))
+    state: MatrixState
     if own:
         all_classes = {alt.classe for alt in occurrence.alternatives if alt.classe}
-        state: MatrixState = (
-            "conflict" if len(all_classes) > 1 and set(classes) != all_classes else "support"
-        )
+        state = "conflict" if len(all_classes) > 1 and set(classes) != all_classes else "support"
     else:
-        candidate_classes = {alt.classe for alt in occurrence.alternatives if alt.classe}
-        if (
-            candidate_classes and not candidate_classes & set(result.perfil.classes_suportadas)
-        ) or occurrence.observations[0].fonte.camada not in result.perfil.camadas_suportadas:
-            state = "not_applicable"
-        else:
-            bounds = _bounds(occurrence.observations[0])
-            center = ((bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2)
-            applicable = []
-            for coverage in result.coberturas:
-                source = occurrence.observations[0].fonte
-                if (
-                    coverage.fonte.documento_id != source.documento_id
-                    or coverage.fonte.documento_sha256 != source.documento_sha256
-                    or coverage.fonte.pagina_numero != source.pagina_numero
-                    or coverage.fonte.camada != source.camada
-                ):
-                    continue
-                if candidate_classes and not candidate_classes & set(coverage.classes_avaliadas):
-                    continue
-                xs = [point.x for point in coverage.regiao_normalizada]
-                ys = [point.y for point in coverage.regiao_normalizada]
-                if min(xs) <= center[0] <= max(xs) and min(ys) <= center[1] <= max(ys):
-                    applicable.append(coverage.estado)
-            if not applicable:
-                state = "uncovered"
-            elif any(item is EstadoMetodoSimbolos.FALHA for item in applicable):
-                state = "failure"
-            elif any(item is EstadoMetodoSimbolos.NAO_DETECCAO for item in applicable):
-                state = "non_detection"
-            elif any(item is EstadoMetodoSimbolos.INDISPONIVEL for item in applicable):
-                state = "failure"
-            elif any(item is EstadoMetodoSimbolos.CONCLUIDO for item in applicable):
-                state = "abstention"
-            elif all(item is EstadoMetodoSimbolos.FORA_DOMINIO for item in applicable):
-                state = "not_applicable"
-            else:
-                state = "abstention"
+        state = _absent_method_state(occurrence, result)
     return MethodMatrixRow(
         occurrence_id=occurrence.id,
         method_signature=signature,
         state=state,
         classes=classes,
     )
+
+
+def _absent_method_state(
+    occurrence: SymbolOccurrence, result: ResultadoMetodoSimbolos
+) -> MatrixState:
+    """Classify a method that has no observation in the occurrence by its coverage."""
+    candidate_classes = {alt.classe for alt in occurrence.alternatives if alt.classe}
+    if (
+        candidate_classes and not candidate_classes & set(result.perfil.classes_suportadas)
+    ) or occurrence.observations[0].fonte.camada not in result.perfil.camadas_suportadas:
+        return "not_applicable"
+    return _coverage_state(_applicable_coverage_states(occurrence, result, candidate_classes))
+
+
+def _same_coverage_source(coverage: FonteObservacaoSimbolo, source: FonteObservacaoSimbolo) -> bool:
+    return (
+        coverage.documento_id == source.documento_id
+        and coverage.documento_sha256 == source.documento_sha256
+        and coverage.pagina_numero == source.pagina_numero
+        and coverage.camada == source.camada
+    )
+
+
+def _applicable_coverage_states(
+    occurrence: SymbolOccurrence,
+    result: ResultadoMetodoSimbolos,
+    candidate_classes: set[str],
+) -> list[EstadoMetodoSimbolos]:
+    bounds = _bounds(occurrence.observations[0])
+    center = ((bounds[0] + bounds[2]) / 2, (bounds[1] + bounds[3]) / 2)
+    source = occurrence.observations[0].fonte
+    applicable: list[EstadoMetodoSimbolos] = []
+    for coverage in result.coberturas:
+        if not _same_coverage_source(coverage.fonte, source):
+            continue
+        if candidate_classes and not candidate_classes & set(coverage.classes_avaliadas):
+            continue
+        xs = [point.x for point in coverage.regiao_normalizada]
+        ys = [point.y for point in coverage.regiao_normalizada]
+        if min(xs) <= center[0] <= max(xs) and min(ys) <= center[1] <= max(ys):
+            applicable.append(coverage.estado)
+    return applicable
+
+
+def _coverage_state(applicable: list[EstadoMetodoSimbolos]) -> MatrixState:
+    if not applicable:
+        return "uncovered"
+    if any(item is EstadoMetodoSimbolos.FALHA for item in applicable):
+        return "failure"
+    if any(item is EstadoMetodoSimbolos.NAO_DETECCAO for item in applicable):
+        return "non_detection"
+    if any(item is EstadoMetodoSimbolos.INDISPONIVEL for item in applicable):
+        return "failure"
+    if any(item is EstadoMetodoSimbolos.CONCLUIDO for item in applicable):
+        return "abstention"
+    if all(item is EstadoMetodoSimbolos.FORA_DOMINIO for item in applicable):
+        return "not_applicable"
+    return "abstention"

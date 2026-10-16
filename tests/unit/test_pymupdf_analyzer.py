@@ -583,12 +583,12 @@ def test_filled_rectangular_bars_still_identify_grounding() -> None:
 @pytest.mark.parametrize("scale", (0.3, 1.0, 5.0))
 @pytest.mark.parametrize("angle", (0.0, 31.0, 90.0, 153.0))
 @pytest.mark.parametrize("packing", ("separate", "grouped", "fragmented"))
-def test_e04_vector_symbols_preserve_class_and_full_geometry(
+def test_e04_vector_symbols_preserve_class_pictogram_and_support_geometry(
     kind: str, scale: float, angle: float, packing: str
 ) -> None:
     with pymupdf.open() as document:
         page = document.new_page(width=400, height=300)
-        expected = _draw_e04_symbol(
+        expected, support = _draw_e04_symbol_geometry(
             page, kind=kind, origin=(200, 120), scale=scale, angle=angle, packing=packing
         )
 
@@ -596,7 +596,7 @@ def test_e04_vector_symbols_preserve_class_and_full_geometry(
 
         assert len(symbols) == 1
         assert symbols[0].conteudo_bruto == kind
-        _assert_e04_bounds(page, symbols[0], expected)
+        _assert_e04_bounds(page, symbols[0], expected, support=support)
         assert dict(symbols[0].atributos_extraidos)["confianca"] == Decimal("0.88")
 
 
@@ -729,7 +729,8 @@ def test_e04_mt_equal_terminal_bars_preserve_legacy_true_positive(
 
         assert len(symbols) == 1
         assert symbols[0].conteudo_bruto == "PARA RAIOS MT"
-        _assert_e04_bounds(page, symbols[0], tuple(points))
+        # Barras de 8: o pictograma leva só os 8 finais da haste de 15.
+        _assert_e04_bounds(page, symbols[0], (point(7, 0), *points[1:]), support=tuple(points))
 
 
 @pytest.mark.parametrize(
@@ -775,7 +776,7 @@ def test_e04_wide_and_overlapping_terminal_bars_preserve_legacy_classes(
 def test_e04_circular_outline_does_not_add_a_fourth_grounding_bar(outline: str) -> None:
     with pymupdf.open() as document:
         page = document.new_page(width=400, height=300)
-        points = _draw_e04_symbol(page, kind="ATERRAMENTO", origin=(200, 120))
+        _, support = _draw_e04_symbol_geometry(page, kind="ATERRAMENTO", origin=(200, 120))
         if outline == "curve":
             page.draw_circle((212, 120), 15, color=(0, 0.5, 0), width=0.5)
         else:
@@ -796,13 +797,141 @@ def test_e04_circular_outline_does_not_add_a_fourth_grounding_bar(outline: str) 
 
         assert len(symbols) == 1
         assert symbols[0].conteudo_bruto == "ATERRAMENTO"
-        _assert_e04_bounds(page, symbols[0], points)
-        assert set(str(dict(symbols[0].atributos_extraidos)["vetores_origem"]).split(",")) == {
-            "0",
-            "1",
-            "2",
-            "3",
+        # Diâmetro 30 = 3x a maior barra: o contorno é o envolvente do pictograma e
+        # define a caixa, mas não vira barra nem entra nos vetores do símbolo.
+        _assert_e04_bounds(page, symbols[0], ((197, 105), (227, 135)), support=support)
+        attributes = dict(symbols[0].atributos_extraidos)
+        assert set(str(attributes["vetores_origem"]).split(",")) == {"0", "1", "2", "3"}
+        envelope = set(str(attributes["envelope_origem"]).split(","))
+        assert envelope == (
+            {"4"} if outline != "fragmented_polygon" else set(map(str, range(4, 40)))
+        )
+
+
+def _draw_poled_ground(
+    page: pymupdf.Page,
+    *,
+    stem_end: float,
+    bars: tuple[tuple[float, float], ...],
+    color: tuple[float, float, float],
+) -> tuple[tuple[float, float], ...]:
+    """Poste preenchido em (100, 100), haste de ligação até ``stem_end`` e barras verticais."""
+    page.draw_circle((100, 100), 2.5, color=None, fill=(0, 0, 0))
+    page.draw_line((100, 100), (stem_end, 100), color=color, width=0.5)
+    points: list[tuple[float, float]] = [(100, 100), (stem_end, 100)]
+    for x, length in bars:
+        points.extend(((x, 100 - length / 2), (x, 100 + length / 2)))
+        page.draw_line(points[-2], points[-1], color=color, width=0.5)
+    return tuple(points)
+
+
+_GREEN: tuple[float, float, float] = (0.0, 0.5, 0.0)
+_GROUND_BARS = ((130.0, 10.0), (134.0, 7.0), (138.0, 4.0))
+_MT_BARS = ((130.0, 10.0), (134.0, 7.0), (138.0, 4.0), (142.0, 7.0))
+
+
+@pytest.mark.parametrize(
+    ("case", "kind", "expected", "envelope"),
+    (
+        # Pictograma proposto: círculo envolvente + barras; a haste de ligação fica de fora.
+        ("green_envelope", "ATERRAMENTO", (125, 92, 141, 108), True),
+        ("mt_envelope", "PARA RAIOS MT", (126, 90, 146, 110), True),
+        ("dark_red_envelope_grey_bars", "ATERRAMENTO", (125, 92, 141, 108), True),
+        ("blue_envelope", "ATERRAMENTO", (125, 92, 141, 108), True),
+        # Sem envolvente: barras + trecho de haste de até 1x a maior barra.
+        ("black_long_leader", "ATERRAMENTO", (127.5, 93.75, 148.5, 106.25), False),
+        # Negativos de envolvente: grande demais ou sem conter todas as barras.
+        ("large_circle", "ATERRAMENTO", (120, 95, 138, 105), False),
+        ("neighbor_circle", "ATERRAMENTO", (120, 95, 138, 105), False),
+        # Célula retangular de tabela em volta do símbolo não é envolvente.
+        ("table_cell", "ATERRAMENTO", (120, 95, 138, 105), False),
+    ),
+)
+def test_ground_footprint_uses_envelope_and_excludes_leader(
+    case: str,
+    kind: str,
+    expected: tuple[float, float, float, float],
+    envelope: bool,
+) -> None:
+    with pymupdf.open() as document:
+        page = document.new_page(width=400, height=300)
+        bars = _MT_BARS if kind == "PARA RAIOS MT" else _GROUND_BARS
+        stem_end, color = 130.0, _GREEN
+        if case == "black_long_leader":
+            stem_end, color = 140.0, (0, 0, 0)
+            bars = ((140.0, 12.5), (144.25, 8.0), (148.5, 4.0))
+        elif case == "dark_red_envelope_grey_bars":
+            color = (0.5, 0.5, 0.5)
+        support = _draw_poled_ground(page, stem_end=stem_end, bars=bars, color=color)
+        circles = {
+            "green_envelope": ((133, 100), 8, _GREEN),
+            "mt_envelope": ((136, 100), 10, _GREEN),
+            "dark_red_envelope_grey_bars": ((133, 100), 8, (0.55, 0, 0)),
+            "blue_envelope": ((133, 100), 8, (0, 0, 0.8)),
+            "large_circle": ((133, 100), 25, _GREEN),
+            "neighbor_circle": ((142, 100), 6, _GREEN),
         }
+        if case in circles:
+            center, radius, outline = circles[case]
+            page.draw_circle(center, radius, color=outline, width=0.5)
+        elif case == "table_cell":
+            page.draw_rect(pymupdf.Rect(124, 92, 142, 108), color=_GREEN, width=0.5)
+        envelope_index = len(page.get_drawings()) - 1
+
+        symbols = _extract_symbolic_equipment(page, 1)
+
+        assert len(symbols) == 1
+        assert symbols[0].conteudo_bruto == kind
+        attributes = dict(symbols[0].atributos_extraidos)
+        corners = ((expected[0], expected[1]), (expected[2], expected[3]))
+        _assert_e04_bounds(page, symbols[0], corners, support=support)
+        assert min(float(point.x) for point in symbols[0].geometria.pontos) * 400 >= 119.9
+        assert json.loads(str(attributes["simbolo_limites_originais"])) == pytest.approx(
+            expected, abs=0.001
+        )
+        if case in circles:
+            # O círculo nunca vira barra nem entra nos vetores do símbolo.
+            assert str(envelope_index) not in str(attributes["vetores_origem"]).split(",")
+        if envelope:
+            assert attributes["envelope_origem"] == str(envelope_index)
+        else:
+            assert attributes["envelope_origem"] is None
+        if case == "black_long_leader":
+            width = (expected[2] - expected[0]) / 400
+            assert width * 400 <= 22
+
+
+@pytest.mark.parametrize(
+    ("cover", "detected"),
+    (
+        ("opaque_after", False),
+        ("opaque_before", True),
+        ("translucent_after", True),
+        ("outline_after", True),
+        ("partial_opaque_after", True),
+    ),
+)
+def test_symbol_painted_over_by_opaque_fill_is_not_reported(cover: str, detected: bool) -> None:
+    with pymupdf.open() as document:
+        page = document.new_page(width=400, height=300)
+        rectangle = pymupdf.Rect(90, 80, 160, 120)
+        if cover == "opaque_before":
+            page.draw_rect(rectangle, color=None, fill=(1, 1, 1))
+        _draw_poled_ground(page, stem_end=130, bars=_GROUND_BARS, color=_GREEN)
+        if cover == "opaque_after":
+            page.draw_rect(rectangle, color=None, fill=(1, 1, 1))
+        elif cover == "translucent_after":
+            page.draw_rect(rectangle, color=None, fill=(1, 1, 1), fill_opacity=0.3)
+        elif cover == "outline_after":
+            page.draw_rect(rectangle, color=(0, 0, 0), fill=None, width=0.5)
+        elif cover == "partial_opaque_after":
+            page.draw_rect(pymupdf.Rect(90, 80, 132, 120), color=None, fill=(1, 1, 1))
+
+        symbols = _extract_symbolic_equipment(page, 1)
+
+        assert len(symbols) == (1 if detected else 0)
+        if detected:
+            assert symbols[0].conteudo_bruto == "ATERRAMENTO"
 
 
 @pytest.mark.parametrize("fragmented_bar", (0, 1, 2))
@@ -843,7 +972,8 @@ def test_e04_fragments_and_reconstructed_bar_are_one_physical_bar(
         assert len(reference) == len(symbols) == 1
         assert symbols[0].conteudo_bruto == reference[0].conteudo_bruto == "ATERRAMENTO"
         assert _extract_symbolic_equipment(page, 2) == symbols
-        _assert_e04_bounds(page, symbols[0], tuple(points))
+        # Pictograma: barras + trecho final da haste com o comprimento da maior barra (10).
+        _assert_e04_bounds(page, symbols[0], ((105, 120), *points[1:]), support=tuple(points))
         assert json.loads(str(dict(symbols[0].atributos_extraidos)["primitives_origem"])) == [
             [index, 0] for index in range(5)
         ]
@@ -864,7 +994,10 @@ def test_e04_grouped_stem_turning_into_half_bar_preserves_open_t_junction() -> N
 
         assert len(symbols) == 1
         assert symbols[0].conteudo_bruto == "ATERRAMENTO"
-        _assert_e04_bounds(page, symbols[0], ((100, 115), (123, 125)))
+        # Meia barra + trecho vertical formam a barra de 10; haste de ligação fica no suporte.
+        _assert_e04_bounds(
+            page, symbols[0], ((105, 115), (123, 125)), support=((100, 115), (123, 125))
+        )
         assert dict(symbols[0].atributos_extraidos)["vetores_origem"] == "0"
 
 
@@ -915,7 +1048,7 @@ def test_e04_redundant_stems_with_fragmented_terminal_bar_are_coalesced() -> Non
 
         assert len(symbols) == 1
         assert symbols[0].conteudo_bruto == "ATERRAMENTO"
-        _assert_e04_bounds(page, symbols[0], ((80, 95), (103, 105)))
+        _assert_e04_bounds(page, symbols[0], ((85, 95), (103, 105)), support=((80, 95), (103, 105)))
         assert json.loads(str(dict(symbols[0].atributos_extraidos)["primitives_origem"])) == [
             [index, 0] for index in range(6)
         ]
@@ -1187,18 +1320,22 @@ def test_e04_vector_negative_controls_do_not_create_equipment(negative: str) -> 
 def test_e04_grouped_symbol_retains_drawing_and_item_provenance() -> None:
     with pymupdf.open() as document:
         page = document.new_page(width=400, height=300)
-        expected = _draw_e04_symbol(page, kind="ATERRAMENTO", origin=(80, 90), packing="grouped")
+        expected, support = _draw_e04_symbol_geometry(
+            page, kind="ATERRAMENTO", origin=(80, 90), packing="grouped"
+        )
 
         symbols = _extract_symbolic_equipment(page, 1)
 
         assert len(symbols) == 1
         attributes = dict(symbols[0].atributos_extraidos)
         assert attributes["vetores_origem"] == "0"
+        assert attributes["envelope_origem"] is None
         assert json.loads(str(attributes["primitives_origem"])) == [[0, i] for i in range(4)]
         xs, ys = zip(*expected, strict=True)
         assert json.loads(str(attributes["simbolo_limites_originais"])) == pytest.approx(
             (min(xs), min(ys), max(xs), max(ys)), abs=0.001
         )
+        _assert_e04_bounds(page, symbols[0], expected, support=support)
 
 
 @pytest.mark.parametrize("removed", ("grouping", "fragments", "scale", "styles"))
@@ -1725,7 +1862,45 @@ def _draw_e04_symbol(
     terminal_offset: float = 15.0,
     bar_gap: float = 4.0,
 ) -> tuple[tuple[float, float], ...]:
-    """Independent authorial development controls; no benchmark reference is consumed."""
+    """Desenha o controle E04 e devolve os pontos do pictograma esperado."""
+    return _draw_e04_symbol_geometry(
+        page,
+        kind=kind,
+        origin=origin,
+        scale=scale,
+        angle=angle,
+        packing=packing,
+        filled=filled,
+        color=color,
+        oc=oc,
+        bar_lengths=bar_lengths,
+        terminal_offset=terminal_offset,
+        bar_gap=bar_gap,
+    )[0]
+
+
+def _draw_e04_symbol_geometry(
+    page: pymupdf.Page,
+    *,
+    kind: str,
+    origin: tuple[float, float],
+    scale: float = 1.0,
+    angle: float = 0.0,
+    packing: str = "separate",
+    filled: bool = False,
+    color: tuple[float, float, float] = (0, 0.5, 0),
+    oc: int = 0,
+    bar_lengths: tuple[float, ...] | None = None,
+    terminal_offset: float = 15.0,
+    bar_gap: float = 4.0,
+) -> tuple[tuple[tuple[float, float], ...], tuple[tuple[float, float], ...]]:
+    """Independent authorial development controls; no benchmark reference is consumed.
+
+    Devolve ``(pictograma, suporte)``. O suporte é a haste inteira (0..15) com as barras.
+    Para aterramento e para-raios MT sem envolvente, o pictograma é formado pelas barras
+    e pelo trecho final da haste com o comprimento da maior barra; a haste de ligação
+    restante fica só no suporte. O para-raios BT continua com a geometria completa.
+    """
     theta = math.radians(angle)
 
     def transform(x: float, y: float) -> tuple[float, float]:
@@ -1736,6 +1911,7 @@ def _draw_e04_symbol(
 
     segments = [((0.0, 0.0), (15.0, 0.0))]
     rectangles = []
+    lengths: tuple[float, ...] = ()
     if kind == "PARA RAIOS BT":
         rectangles.append((15.0, -1.5, 24.0, 1.5))
         segments.append(((15.0, -3.5), (24.0, 3.5)))
@@ -1780,14 +1956,21 @@ def _draw_e04_symbol(
     if packing == "grouped":
         shape.finish(color=color, width=0.5 * scale, closePath=False, oc=oc)
         shape.commit()
-    return tuple(points)
+    if kind == "PARA RAIOS BT":
+        return tuple(points), tuple(points)
+    leader = 15.0 - min(15.0, max(lengths))
+    pictogram = (transform(leader, 0.0), *points[1:])
+    return pictogram, tuple(points)
 
 
 def _assert_e04_bounds(
     page: pymupdf.Page,
     symbol: CandidatoEvidenciaDocumento,
     source_points: tuple[tuple[float, float], ...],
+    *,
+    support: tuple[tuple[float, float], ...] | None = None,
 ) -> None:
+    """``source_points`` delimitam o pictograma; ``support`` inclui a haste de ligação."""
     transformed = [pymupdf.Point(point) * page.rotation_matrix for point in source_points]
     expected = (
         min(point.x for point in transformed) / page.rect.width,
@@ -1803,6 +1986,11 @@ def _assert_e04_bounds(
         max(float(point.y) for point in symbol.geometria.pontos),
     )
     assert actual == pytest.approx(expected, abs=0.00001)
+    if support is not None:
+        xs, ys = zip(*support, strict=True)
+        assert json.loads(
+            str(dict(symbol.atributos_extraidos)["simbolo_limites_suporte"])
+        ) == pytest.approx((min(xs), min(ys), max(xs), max(ys)), abs=0.001)
 
 
 def _draw_bt_arrester(

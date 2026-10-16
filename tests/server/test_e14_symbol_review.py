@@ -284,8 +284,8 @@ def test_http_legacy_negotiation_and_client_accepts_additive_nested_fields(
         assert all("symbol" not in proposal for proposal in legacy.json()["proposals"])
         current = _session(client, fixture)
         assert current.symbol_support
-        assert sum(len(item.pending_reference_ids) for item in current.symbol_support) == 344
-        assert sum(len(item.enabled_reference_ids) for item in current.symbol_support) == 21
+        assert sum(len(item.pending_reference_ids) for item in current.symbol_support) == 343
+        assert sum(len(item.enabled_reference_ids) for item in current.symbol_support) == 22
         payload = current.model_dump(mode="json")
         payload["future_session_field"] = {"enabled": True}
         payload["proposals"][0]["symbol"]["future_symbol_field"] = "additive"

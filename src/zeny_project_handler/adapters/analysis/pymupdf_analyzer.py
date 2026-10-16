@@ -56,7 +56,7 @@ class PyMuPdfDocumentAnalyzer:
     """Converte recursos PDF nativos em evidências independentes da biblioteca."""
 
     nome = "pymupdf-nativo"
-    versao = "1.19.4"
+    versao = "1.20.0"
 
     def __init__(
         self,

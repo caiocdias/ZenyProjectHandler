@@ -707,3 +707,185 @@ def build_fill_morphology_fixture(path: Path) -> tuple[FixtureOccurrence, ...]:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(document.tobytes(garbage=4, deflate=True, no_new_id=True))
     return tuple(cases)
+
+
+GREEN = (0.1, 0.55, 0.2)
+DARK_RED = (0.6, 0.04, 0.06)
+WHITE = (1.0, 1.0, 1.0)
+
+
+def _equilateral(center: Point, side: float, angle: float) -> list[Point]:
+    """Vértices de um triângulo equilátero com o ápice em ``angle`` graus."""
+    radius = side / math.sqrt(3)
+    return [
+        (
+            center[0] + radius * math.cos(math.radians(angle + offset)),
+            center[1] + radius * math.sin(math.radians(angle + offset)),
+        )
+        for offset in (0.0, 120.0, 240.0)
+    ]
+
+
+def _outward(vertex: Point, center: Point, length: float) -> Point:
+    distance = math.dist(vertex, center)
+    return (
+        vertex[0] + (vertex[0] - center[0]) / distance * length,
+        vertex[1] + (vertex[1] - center[1]) / distance * length,
+    )
+
+
+def _thin_outline(
+    page: pymupdf.Page,
+    vertices: list[Point],
+    *,
+    color: tuple[float, float, float] = INK,
+    fill: tuple[float, float, float] | None = WHITE,
+) -> None:
+    page.draw_polyline(vertices, color=color, fill=fill, closePath=True, width=0.4)
+
+
+def _stem_case(
+    page: pymupdf.Page, center: Point, side: float, angle: float, *, fill: bool
+) -> list[Point]:
+    vertices = _equilateral(center, side, angle)
+    _thin_outline(page, vertices, fill=WHITE if fill else None)
+    page.draw_line(vertices[0], _outward(vertices[0], center, side * 1.1), color=INK, width=0.4)
+    return vertices
+
+
+def _polygon_ring_case(page: pymupdf.Page, center: Point, side: float, angle: float) -> list[Point]:
+    radius = side / math.sqrt(3)
+    ring = [
+        (
+            center[0] + radius * math.cos(2 * math.pi * index / 96),
+            center[1] + radius * math.sin(2 * math.pi * index / 96),
+        )
+        for index in range(96)
+    ]
+    page.draw_polyline(ring, color=GREEN, closePath=True, width=0.5)
+    vertices = _stem_case(page, center, side, angle, fill=False)
+    return [
+        *vertices,
+        (center[0] - radius, center[1] - radius),
+        (center[0] + radius, center[1] + radius),
+    ]
+
+
+def _removal_case(page: pymupdf.Page, center: Point, side: float, angle: float) -> list[Point]:
+    """Meio preenchimento vermelho-escuro com eixo, haste e X espesso por cima."""
+    vertices = _equilateral(center, side, angle)
+    base_mid = ((vertices[1][0] + vertices[2][0]) / 2, (vertices[1][1] + vertices[2][1]) / 2)
+    page.draw_polyline(
+        [vertices[0], vertices[1], base_mid],
+        color=DARK_RED,
+        fill=DARK_RED,
+        closePath=True,
+        width=0.3,
+    )
+    _thin_outline(page, vertices, fill=None)
+    page.draw_line(vertices[0], base_mid, color=INK, width=0.4)
+    page.draw_line(vertices[0], _outward(vertices[0], center, side), color=INK, width=0.4)
+    tips: list[Point] = []
+    for offset in (45.0, 135.0):
+        direction = math.radians(angle + offset)
+        half = side * 0.85
+        first = (center[0] - half * math.cos(direction), center[1] - half * math.sin(direction))
+        second = (center[0] + half * math.cos(direction), center[1] + half * math.sin(direction))
+        page.draw_line(first, second, color=RED, width=1.6)
+        tips.extend((first, second))
+    return [*vertices, *tips]
+
+
+def _green_marker_base_stem(page: pymupdf.Page) -> list[Point]:
+    center = (180.0, 130.0)
+    vertices = _equilateral(center, 11.0, -90.0)
+    _thin_outline(page, vertices, color=GREEN, fill=GREEN)
+    base_mid = ((vertices[1][0] + vertices[2][0]) / 2, (vertices[1][1] + vertices[2][1]) / 2)
+    page.draw_line(base_mid, _outward(base_mid, center, 11.0), color=GREEN, width=0.4)
+    return vertices
+
+
+def _elongated_arrowhead(page: pymupdf.Page) -> list[Point]:
+    # Base 8 pt e lados 12 pt: razão 1,5, como uma ponta de seta de cota.
+    apex = (180.0, 130.0 - math.sqrt(12.0**2 - 4.0**2))
+    vertices = [apex, (184.0, 130.0), (176.0, 130.0)]
+    _thin_outline(page, vertices)
+    page.draw_line(apex, (apex[0], apex[1] - 9.0), color=INK, width=0.4)
+    return vertices
+
+
+def _black_filled_stem(page: pymupdf.Page) -> list[Point]:
+    center = (180.0, 130.0)
+    vertices = _equilateral(center, 10.0, -30.0)
+    _thin_outline(page, vertices, fill=INK)
+    page.draw_line(vertices[0], _outward(vertices[0], center, 11.0), color=INK, width=0.4)
+    return vertices
+
+
+def _white_without_stem(page: pymupdf.Page) -> list[Point]:
+    vertices = _equilateral((180.0, 130.0), 12.0, 10.0)
+    _thin_outline(page, vertices)
+    return vertices
+
+
+def _white_perpendicular_tick(page: pymupdf.Page) -> list[Point]:
+    center = (180.0, 130.0)
+    vertices = _equilateral(center, 12.0, -90.0)
+    _thin_outline(page, vertices)
+    apex = vertices[0]
+    page.draw_line(apex, (apex[0] + 13.0, apex[1]), color=INK, width=0.4)
+    return vertices
+
+
+def build_stem_triangle_fixture(path: Path) -> tuple[FixtureOccurrence, ...]:
+    """Quinto documento autoral B6: contorno fino com haste externa, anel poligonal e X.
+
+    Formas desenhadas para a curadoria de transformadores de contorno sem eixo interno;
+    nenhuma coordenada vem de documento real.
+    """
+    cases: list[FixtureOccurrence] = []
+    positives = (
+        (
+            "stem_white_outline",
+            "cemig-eo-r3-s18-v007",
+            lambda page: _stem_case(page, (150.0, 120.0), 9.0, 23.0, fill=True),
+        ),
+        (
+            "stem_hollow_outline",
+            "cemig-eo-r3-s18-v007",
+            lambda page: _stem_case(page, (210.0, 140.0), 13.2, -140.0, fill=False),
+        ),
+        (
+            "stem_polygon_ring",
+            "cemig-eo-r3-s18-v009",
+            lambda page: _polygon_ring_case(page, (175.0, 125.0), 12.0, 75.0),
+        ),
+        (
+            "stem_thick_red_cross",
+            "cemig-eo-r3-s18-v008",
+            lambda page: _removal_case(page, (185.0, 135.0), 14.0, 200.0),
+        ),
+    )
+    negatives = (
+        ("green_marker_base_stem", _green_marker_base_stem),
+        ("elongated_arrowhead_apex_stem", _elongated_arrowhead),
+        ("black_filled_triangle_stem", _black_filled_stem),
+        ("white_triangle_without_stem", _white_without_stem),
+        ("white_triangle_perpendicular_tick", _white_perpendicular_tick),
+    )
+    with pymupdf.open() as document:
+        for stratum, variant_id, draw in positives:
+            page = document.new_page(width=WIDTH, height=HEIGHT)
+            box = _bounds(draw(page))
+            cases.append(
+                FixtureOccurrence(
+                    page.number + 1, variant_id, "TRANSFORMADOR", box, stratum=stratum
+                )
+            )
+        for stratum, draw_negative in negatives:
+            page = document.new_page(width=WIDTH, height=HEIGHT)
+            box = _bounds(draw_negative(page))
+            cases.append(FixtureOccurrence(page.number + 1, None, None, box, "negative", stratum))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(document.tobytes(garbage=4, deflate=True, no_new_id=True))
+    return tuple(cases)

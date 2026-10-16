@@ -58,8 +58,11 @@ def test_windows_identity_failure_has_clear_diagnostic(
 
 def test_window_identity_sets_taskbar_relaunch_icon_and_clears_properties(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     calls: list[tuple[int, dict[str, str | None]]] = []
+    icon_path = tmp_path / "icone.ico"
+    icon_path.write_bytes(b"")
 
     def record_properties(handle: int, properties: Mapping[str, str | None]) -> None:
         calls.append((handle, dict(properties)))
@@ -73,7 +76,7 @@ def test_window_identity_sets_taskbar_relaunch_icon_and_clears_properties(
 
     cleanup = windows_app_identity.configurar_identidade_janela_windows(
         1234,
-        icon_path=Path("C:/Zeny/icone.ico"),
+        icon_path=icon_path,
         relaunch_command='"C:\\Zeny\\pythonw.exe" -m zeny_project_handler_client',
         application_name="Zeny Project Handler",
     )
@@ -86,7 +89,7 @@ def test_window_identity_sets_taskbar_relaunch_icon_and_clears_properties(
             "app_user_model_id": windows_app_identity.WINDOWS_APP_USER_MODEL_ID,
             "relaunch_command": '"C:\\Zeny\\pythonw.exe" -m zeny_project_handler_client',
             "relaunch_display_name": "Zeny Project Handler",
-            "relaunch_icon": "C:\\Zeny\\icone.ico,0",
+            "relaunch_icon": f"{icon_path.resolve()},0",
         },
     )
     assert calls[1] == (1234, dict.fromkeys(calls[0][1]))

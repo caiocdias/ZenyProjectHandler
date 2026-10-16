@@ -89,6 +89,19 @@
             "dot_count": {"const": 3},
             "max_span": {"type": "number", "exclusiveMinimum": 0, "maximum": 72}
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "fill", "min_span", "max_span", "terminal_line"],
+          "$comment": "Disco pequeno preenchido com linha de rede terminando no centro; min_span < max_span é verificado pelo carregador.",
+          "properties": {
+            "kind": {"const": "terminal_disc"},
+            "fill": {"enum": ["purple"]},
+            "min_span": {"type": "number", "minimum": 0.5, "maximum": 8},
+            "max_span": {"type": "number", "exclusiveMinimum": 0.5, "maximum": 8},
+            "terminal_line": {"const": true}
+          }
         }
       ]
     },

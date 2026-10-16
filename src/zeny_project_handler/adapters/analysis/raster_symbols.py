@@ -510,6 +510,192 @@ def _observation(
     )
 
 
+_Variante = tuple[TemplateRasterVerificado, float, int, Image.Image, bytes]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class _ContextoVarredura:
+    # Invariants of one page scan, shared by every tile.
+    page: Any
+    configuracao: ConfiguracaoDetectorRaster
+    templates: tuple[TemplateRasterVerificado, ...]
+    variants: tuple[_Variante, ...]
+    factor: float
+    page_width: int
+    page_height: int
+    cv_available: bool
+    cancelado: Callable[[], bool] | None
+    progresso: Callable[[int, int], None] | None
+    total_tiles: int
+
+    @property
+    def raw_cap(self) -> int:
+        return self.configuracao.limite_candidatos * 16
+
+
+@dataclass(slots=True)
+class _EstadoVarredura:
+    # Mutable accumulators of the tile loop; mirrors the former local variables.
+    memory_failure: bool
+    template_matches: list[_Match]
+    hough_matches: list[_Match]
+    saturated: bool = False
+    hough_failure: str | None = None
+    completed_tiles: int = 0
+
+
+def _buscar_templates_tile(
+    binary: bytes,
+    pix: Any,
+    tile: tuple[int, int],
+    raster_hash: str,
+    contexto: _ContextoVarredura,
+    estado: _EstadoVarredura,
+) -> None:
+    factor = contexto.factor
+    for template, scale, angle, image, template_binary in contexto.variants:
+        found, overflow = _search_template(
+            binary,
+            pix.width,
+            pix.height,
+            template_binary,
+            image.width,
+            image.height,
+            limit=contexto.configuracao.limite_candidatos,
+        )
+        estado.saturated |= overflow
+        for x, y, score in found:
+            box = (
+                (pix.x + x) / factor,
+                (pix.y + y) / factor,
+                (pix.x + x + image.width) / factor,
+                (pix.y + y + image.height) / factor,
+            )
+            estado.template_matches.append(
+                _Match(template, "template", box, score, scale, angle, tile, raster_hash)
+            )
+        if len(estado.template_matches) > contexto.raw_cap:
+            estado.saturated = True
+            break
+
+
+def _processar_tile(
+    tile_x: int, tile_y: int, contexto: _ContextoVarredura, estado: _EstadoVarredura
+) -> bool:
+    """Scan one tile; return False when the row loop must stop (former `break`)."""
+    if contexto.cancelado is not None and contexto.cancelado():
+        raise SymbolScanCancelledError("Busca raster cancelada antes do próximo tile")
+    configuracao, factor = contexto.configuracao, contexto.factor
+    right = min(contexto.page_width, tile_x + configuracao.tile_pixels)
+    bottom = min(contexto.page_height, tile_y + configuracao.tile_pixels)
+    pix = contexto.page.get_pixmap(
+        matrix=pymupdf.Matrix(factor, factor),
+        colorspace=pymupdf.csRGB,
+        alpha=False,
+        annots=False,
+        clip=pymupdf.Rect(tile_x / factor, tile_y / factor, right / factor, bottom / factor),
+    )
+    if pix.width * pix.height * 20 > configuracao.limite_bytes:
+        estado.memory_failure = True
+        return False
+    raster_hash = sha256(pix.samples).hexdigest()
+    with Image.frombytes("RGB", (pix.width, pix.height), pix.samples) as rgb:
+        gray = rgb.convert("L")
+    binary = gray.point(lambda value: 0 if value < 220 else 1).tobytes()
+    _buscar_templates_tile(binary, pix, (tile_x, tile_y), raster_hash, contexto, estado)
+    if estado.saturated and len(estado.template_matches) > contexto.raw_cap:
+        return False
+    if contexto.cv_available and contexto.templates:
+        try:
+            estado.hough_matches.extend(
+                _hough_tile(
+                    gray, contexto.variants, pix.x, pix.y, factor, (tile_x, tile_y), raster_hash
+                )
+            )
+        except Exception as error:
+            estado.hough_failure = f"{type(error).__name__}: {error}"
+    if len(estado.hough_matches) > contexto.raw_cap:
+        estado.saturated = True
+        return False
+    del pix, gray, binary
+    estado.completed_tiles += 1
+    if contexto.progresso is not None:
+        contexto.progresso(estado.completed_tiles, contexto.total_tiles)
+    return True
+
+
+def _varrer_tiles(
+    x_positions: tuple[int, ...],
+    y_positions: tuple[int, ...],
+    contexto: _ContextoVarredura,
+    estado: _EstadoVarredura,
+) -> None:
+    for tile_y in y_positions:
+        for tile_x in x_positions:
+            if not _processar_tile(tile_x, tile_y, contexto, estado):
+                break
+        if estado.memory_failure or (
+            estado.saturated
+            and max(len(estado.template_matches), len(estado.hough_matches)) > contexto.raw_cap
+        ):
+            break
+
+
+def _estado_template(
+    saturated: bool, memory_failure: bool, observations: tuple[ObservacaoSimbolo, ...]
+) -> EstadoMetodoSimbolos:
+    if saturated or memory_failure:
+        return EstadoMetodoSimbolos.FALHA
+    if observations:
+        return EstadoMetodoSimbolos.CONCLUIDO
+    return EstadoMetodoSimbolos.NAO_DETECCAO
+
+
+def _estado_hough(
+    cv_available: bool,
+    hough_failure: str | None,
+    saturated: bool,
+    memory_failure: bool,
+    observations: tuple[ObservacaoSimbolo, ...],
+) -> EstadoMetodoSimbolos:
+    if not cv_available:
+        return EstadoMetodoSimbolos.INDISPONIVEL
+    if hough_failure or saturated or memory_failure:
+        return EstadoMetodoSimbolos.FALHA
+    if observations:
+        return EstadoMetodoSimbolos.CONCLUIDO
+    return EstadoMetodoSimbolos.NAO_DETECCAO
+
+
+def _motivo_template(saturated: bool, memory_failure: bool) -> str | None:
+    if memory_failure:
+        return "Orçamento de memória insuficiente"
+    if saturated:
+        return "Limite de candidatos/picos alcançado"
+    return None
+
+
+def _motivo_hough(
+    hough_enabled: bool,
+    cv_available: bool,
+    hough_failure: str | None,
+    saturated: bool,
+    memory_failure: bool,
+) -> str | None:
+    if not hough_enabled:
+        return "Método Hough desabilitado neste perfil"
+    if not cv_available:
+        return "OpenCV não instalado"
+    # A truthy failure text wins; an empty one falls through, as with `or`.
+    if hough_failure:
+        return hough_failure
+    if memory_failure:
+        return "Orçamento de memória insuficiente"
+    if saturated:
+        return "Limite de candidatos alcançado"
+    return None
+
+
 def observar_simbolos_raster(
     page: Any,
     *,
@@ -548,123 +734,46 @@ def observar_simbolos_raster(
     factor = configuracao.dpi / 72
     page_width = math.ceil(float(page.rect.width) * factor)
     page_height = math.ceil(float(page.rect.height) * factor)
-    memory_failure = (
-        min(page_width, configuracao.tile_pixels) * min(page_height, configuracao.tile_pixels) * 20
-        > configuracao.limite_bytes
+    estado = _EstadoVarredura(
+        memory_failure=(
+            min(page_width, configuracao.tile_pixels)
+            * min(page_height, configuracao.tile_pixels)
+            * 20
+            > configuracao.limite_bytes
+        ),
+        template_matches=[],
+        hough_matches=[],
     )
-    template_matches: list[_Match] = []
-    hough_matches: list[_Match] = []
-    saturated = False
-    hough_failure: str | None = None
     x_positions = _positions(page_width, configuracao.tile_pixels, overlap)
     y_positions = (
-        () if memory_failure else _positions(page_height, configuracao.tile_pixels, overlap)
+        () if estado.memory_failure else _positions(page_height, configuracao.tile_pixels, overlap)
     )
-    total_tiles = len(x_positions) * len(y_positions)
-    completed_tiles = 0
-    for tile_y in y_positions:
-        for tile_x in x_positions:
-            if cancelado is not None and cancelado():
-                raise SymbolScanCancelledError("Busca raster cancelada antes do próximo tile")
-            right = min(page_width, tile_x + configuracao.tile_pixels)
-            bottom = min(page_height, tile_y + configuracao.tile_pixels)
-            pix = page.get_pixmap(
-                matrix=pymupdf.Matrix(factor, factor),
-                colorspace=pymupdf.csRGB,
-                alpha=False,
-                annots=False,
-                clip=pymupdf.Rect(
-                    tile_x / factor, tile_y / factor, right / factor, bottom / factor
-                ),
-            )
-            if pix.width * pix.height * 20 > configuracao.limite_bytes:
-                memory_failure = True
-                break
-            raster_hash = sha256(pix.samples).hexdigest()
-            with Image.frombytes("RGB", (pix.width, pix.height), pix.samples) as rgb:
-                gray = rgb.convert("L")
-            binary = gray.point(lambda value: 0 if value < 220 else 1).tobytes()
-            for template, scale, angle, image, template_binary in variants:
-                found, overflow = _search_template(
-                    binary,
-                    pix.width,
-                    pix.height,
-                    template_binary,
-                    image.width,
-                    image.height,
-                    limit=configuracao.limite_candidatos,
-                )
-                saturated |= overflow
-                for x, y, score in found:
-                    box = (
-                        (pix.x + x) / factor,
-                        (pix.y + y) / factor,
-                        (pix.x + x + image.width) / factor,
-                        (pix.y + y + image.height) / factor,
-                    )
-                    template_matches.append(
-                        _Match(
-                            template,
-                            "template",
-                            box,
-                            score,
-                            scale,
-                            angle,
-                            (tile_x, tile_y),
-                            raster_hash,
-                        )
-                    )
-                if len(template_matches) > configuracao.limite_candidatos * 16:
-                    saturated = True
-                    break
-            if saturated and len(template_matches) > configuracao.limite_candidatos * 16:
-                break
-            if cv_available and templates:
-                try:
-                    hough_matches.extend(
-                        _hough_tile(
-                            gray, variants, pix.x, pix.y, factor, (tile_x, tile_y), raster_hash
-                        )
-                    )
-                except Exception as error:
-                    hough_failure = f"{type(error).__name__}: {error}"
-            if len(hough_matches) > configuracao.limite_candidatos * 16:
-                saturated = True
-                break
-            del pix, gray, binary
-            completed_tiles += 1
-            if progresso is not None:
-                progresso(completed_tiles, total_tiles)
-        if memory_failure or (
-            saturated
-            and max(len(template_matches), len(hough_matches)) > configuracao.limite_candidatos * 16
-        ):
-            break
-    template_groups, cap_reached = _deduplicate(template_matches, configuracao.limite_candidatos)
-    hough_groups, hough_cap = _deduplicate(hough_matches, configuracao.limite_candidatos)
-    saturated |= cap_reached or hough_cap
+    contexto = _ContextoVarredura(
+        page=page,
+        configuracao=configuracao,
+        templates=templates,
+        variants=variants,
+        factor=factor,
+        page_width=page_width,
+        page_height=page_height,
+        cv_available=cv_available,
+        cancelado=cancelado,
+        progresso=progresso,
+        total_tiles=len(x_positions) * len(y_positions),
+    )
+    _varrer_tiles(x_positions, y_positions, contexto, estado)
+    memory_failure, hough_failure = estado.memory_failure, estado.hough_failure
+    template_groups, cap_reached = _deduplicate(
+        estado.template_matches, configuracao.limite_candidatos
+    )
+    hough_groups, hough_cap = _deduplicate(estado.hough_matches, configuracao.limite_candidatos)
+    saturated = estado.saturated or cap_reached or hough_cap
     region = (PontoNormalizado(Decimal(0), Decimal(0)), PontoNormalizado(Decimal(1), Decimal(1)))
     template_observations = tuple(
         _observation(page, source, template_profile, best, group) for best, group in template_groups
     )
     hough_observations = tuple(
         _observation(page, source, hough_profile, best, group) for best, group in hough_groups
-    )
-    template_state = (
-        EstadoMetodoSimbolos.FALHA
-        if saturated or memory_failure
-        else EstadoMetodoSimbolos.CONCLUIDO
-        if template_observations
-        else EstadoMetodoSimbolos.NAO_DETECCAO
-    )
-    hough_state = (
-        EstadoMetodoSimbolos.INDISPONIVEL
-        if not cv_available
-        else EstadoMetodoSimbolos.FALHA
-        if hough_failure or saturated or memory_failure
-        else EstadoMetodoSimbolos.CONCLUIDO
-        if hough_observations
-        else EstadoMetodoSimbolos.NAO_DETECCAO
     )
     return (
         ResultadoMetodoSimbolos(
@@ -674,14 +783,8 @@ def observar_simbolos_raster(
                     fonte=source,
                     regiao_normalizada=region,
                     classes_avaliadas=template_profile.classes_suportadas,
-                    estado=template_state,
-                    motivo=(
-                        "Orçamento de memória insuficiente"
-                        if memory_failure
-                        else "Limite de candidatos/picos alcançado"
-                        if saturated
-                        else None
-                    ),
+                    estado=_estado_template(saturated, memory_failure, template_observations),
+                    motivo=_motivo_template(saturated, memory_failure),
                 ),
             ),
             observacoes=template_observations,
@@ -693,20 +796,11 @@ def observar_simbolos_raster(
                     fonte=source,
                     regiao_normalizada=region,
                     classes_avaliadas=hough_profile.classes_suportadas,
-                    estado=hough_state,
-                    motivo=(
-                        "Método Hough desabilitado neste perfil"
-                        if not hough_enabled
-                        else "OpenCV não instalado"
-                        if not cv_available
-                        else hough_failure
-                        or (
-                            "Orçamento de memória insuficiente"
-                            if memory_failure
-                            else "Limite de candidatos alcançado"
-                            if saturated
-                            else None
-                        )
+                    estado=_estado_hough(
+                        cv_available, hough_failure, saturated, memory_failure, hough_observations
+                    ),
+                    motivo=_motivo_hough(
+                        hough_enabled, cv_available, hough_failure, saturated, memory_failure
                     ),
                 ),
             ),

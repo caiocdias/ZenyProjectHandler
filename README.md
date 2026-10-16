@@ -466,7 +466,8 @@ sanitizados com e sem linha antes da produção.
 - [Inventário normativo](docs/inventario-fontes-normativas.md): documentos, revisões, hashes e escopo
   da auditoria normativa.
 - [Curadoria contínua de simbologia](docs/fluxo-curadoria-incremental-simbologia.md):
-  nova amostragem em `examples/`, cobertura por ID e testes de qualidade.
+  rodadas em ondas sobre os PDFs de `examples/`, iniciadas pela skill do Claude Code
+  `/curadoria-simbologia`, com cobertura por ID e testes de qualidade.
 - [Operação do servidor](docs/operacao-servidor.md): instalação, LAN, volume, cutover, atualização,
   rollback, senha, observabilidade e recuperação.
 - [ADRs](docs/adr): decisões arquiteturais; textos substituídos são mantidos somente quando o status

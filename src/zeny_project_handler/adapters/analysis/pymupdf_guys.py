@@ -33,10 +33,17 @@ from zeny_project_handler.domain.values import PontoNormalizado
 from .pymupdf_support import _normalized_points
 from .pymupdf_symbols import _base_drawings, _inherit_clipping
 
-_VERSION = "e06-estais-v1"
+_VERSION = "e06-estais-v3"
 _SOURCE = "cemig-eo-r3:it-eo-008:f02:inventario-v1"
 _Point = tuple[float, float]
 _Source = tuple[int, int]
+# Axes shorter than _AXIS_MIN are only compact anchor blocks: a shaft leaving
+# the pole centre and ending in a two-tine fork, without T-T, hook or cut.
+_AXIS_MIN = 26.0
+_COMPACT_MIN = 6.0
+_ENDPOINT_TOLERANCE = 2.0
+# Polygons need enough sides to read as a drawn circle, not as a frame.
+_RING_SIDES_MIN = 12
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +76,18 @@ class _Hook:
     @property
     def size(self) -> float:
         return math.dist(*self.endpoints)
+
+
+@dataclass(frozen=True, slots=True)
+class _Ring:
+    """Closed near-circular contour, kept apart from strokes and hooks."""
+
+    center: _Point
+    radius: float
+    sources: tuple[_Source, ...]
+    layer: str
+    color: tuple[float, ...] | None
+    width: float | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,23 +203,96 @@ def _color(value: object) -> tuple[float, ...] | None:
         return None
 
 
-def _extract(drawings: tuple[dict[str, Any], ...]) -> tuple[tuple[_Stroke, ...], tuple[_Hook, ...]]:
+def _circle_fit(samples: tuple[_Point, ...]) -> tuple[_Point, float] | None:
+    """Centre and radius when every sample is equidistant from the mean point."""
+    center = (
+        sum(point[0] for point in samples) / len(samples),
+        sum(point[1] for point in samples) / len(samples),
+    )
+    distances = tuple(math.dist(point, center) for point in samples)
+    radius = sum(distances) / len(distances)
+    if radius <= 0.2 or max(abs(value - radius) for value in distances) > max(0.1, radius * 0.06):
+        return None
+    return center, radius
+
+
+def _bezier_middle(item: Any) -> _Point:
+    p0, p1, p2, p3 = (_point(value) for value in item[1:5])
+    return (
+        (p0[0] + 3 * p1[0] + 3 * p2[0] + p3[0]) / 8,
+        (p0[1] + 3 * p1[1] + 3 * p2[1] + p3[1]) / 8,
+    )
+
+
+def _ring(drawing_index: int, drawing: dict[str, Any]) -> _Ring | None:
+    """A Bézier circle, or a closed polygon of many sides equidistant from its centre."""
+    items = tuple(drawing.get("items") or ())
+    curves = tuple((index, item) for index, item in enumerate(items) if item[0] == "c")
+    lines = tuple((index, item) for index, item in enumerate(items) if item[0] == "l")
+    closed = bool(drawing.get("closePath"))
+    if len(curves) >= 3 and not lines:
+        closed = closed or math.dist(_point(curves[0][1][1]), _point(curves[-1][1][4])) <= 1.5
+        members = curves
+        samples = tuple(
+            point for _, item in curves for point in (_point(item[1]), _bezier_middle(item))
+        )
+    elif len(lines) >= _RING_SIDES_MIN and not curves:
+        closed = closed or math.dist(_point(lines[0][1][1]), _point(lines[-1][1][2])) <= 0.5
+        members = lines
+        samples = tuple(_point(item[1]) for _, item in lines)
+    else:
+        return None
+    fit = _circle_fit(samples) if closed else None
+    if fit is None:
+        return None
+    center, radius = fit
+    # Long chords make a coarse star or frame, not a drawn circle.
+    if any(math.dist(_point(item[1]), _point(item[2])) > radius * 0.7 for _, item in lines):
+        return None
+    clip = drawing.get("scissor")
+    bounds = pymupdf.Rect(
+        center[0] - radius, center[1] - radius, center[0] + radius, center[1] + radius
+    )
+    if clip is not None and not pymupdf.Rect(clip).contains(bounds):
+        return None
+    return _Ring(
+        center,
+        radius,
+        tuple((drawing_index, index) for index, _ in members),
+        str(drawing.get("layer") or ""),
+        _color(drawing.get("color")),
+        float(drawing["width"]) if drawing.get("width") is not None else None,
+    )
+
+
+def _visible_stroke(drawing: dict[str, Any]) -> bool:
+    # The line items of a filled path are contour instructions, not visible
+    # strokes. Alpha zero and white on the normal white PDF page add no ink.
+    if str(drawing.get("type") or "") not in {"s", "fs"}:
+        return False
+    opacity = drawing.get("stroke_opacity")
+    if opacity is not None and float(opacity) <= 0.01:
+        return False
+    color = _color(drawing.get("color"))
+    return not (color is not None and color and min(color) >= 0.985)
+
+
+def _extract(
+    drawings: tuple[dict[str, Any], ...],
+) -> tuple[tuple[_Stroke, ...], tuple[_Hook, ...], tuple[_Ring, ...]]:
     strokes: list[_Stroke] = []
     hooks: list[_Hook] = []
+    rings: list[_Ring] = []
     for drawing_index, drawing in enumerate(drawings):
-        # The line items of a filled path are contour instructions, not visible
-        # strokes. Alpha zero and white on the normal white PDF page add no ink.
-        if str(drawing.get("type") or "") not in {"s", "fs"}:
-            continue
-        opacity = drawing.get("stroke_opacity")
-        if opacity is not None and float(opacity) <= 0.01:
+        if not _visible_stroke(drawing):
             continue
         color = _color(drawing.get("color"))
-        if color is not None and color and min(color) >= 0.985:
-            continue
         layer = str(drawing.get("layer") or "")
         clip = drawing.get("scissor")
         items = tuple(drawing.get("items") or ())
+        ring = _ring(drawing_index, drawing)
+        if ring is not None:
+            rings.append(ring)
         # A circle/closed contour is not a free terminal hook. PyMuPDF emits
         # its quadrants as separate cubic items, each resembling a hook.
         curves = tuple(item for item in items if item[0] == "c")
@@ -243,7 +335,7 @@ def _extract(drawings: tuple[dict[str, Any], ...]) -> tuple[tuple[_Stroke, ...],
                         layer,
                     )
                 )
-    return tuple(strokes), tuple(hooks)
+    return tuple(strokes), tuple(hooks), tuple(rings)
 
 
 def _bounds(points: tuple[_Point, ...]) -> pymupdf.Rect:
@@ -270,7 +362,7 @@ def _cross(a: _Point, b: _Point) -> float:
 
 def _axes(strokes: tuple[_Stroke, ...]) -> tuple[_Axis, ...]:
     """Keep original axes and joins across a short seccionamento gap."""
-    long = tuple(stroke for stroke in strokes if 26 <= stroke.length <= 700)
+    long = tuple(stroke for stroke in strokes if _AXIS_MIN <= stroke.length <= 700)
     result: list[_Axis] = []
     endpoints: dict[tuple[int, int], set[int]] = {}
     for index, stroke in enumerate(long):
@@ -397,7 +489,7 @@ def _terminal_hook(axis: _Axis, at_start: bool, hooks: tuple[_Hook, ...]) -> _Te
     return _Terminal("poste", (chosen.source,), (*chosen.endpoints, *chosen.controls))
 
 
-def _same_ink(first: _Stroke, second: _Stroke) -> bool:
+def _same_ink(first: _Stroke, second: _Stroke | _Ring) -> bool:
     """The shaft and both tines must be one visible mechanical stroke."""
     if first.color is not None and second.color is not None:
         a = first.color * 3 if len(first.color) == 1 else first.color
@@ -411,120 +503,248 @@ def _same_ink(first: _Stroke, second: _Stroke) -> bool:
     )
 
 
-def _terminal_anchor(axis: _Axis, strokes: tuple[_Stroke, ...]) -> _Terminal | None:
-    endpoint = axis.end
-    direction = _unit(axis.start, axis.end)
-    branches: list[tuple[_Stroke, _Point, _Point]] = []
+_Branch = tuple[_Stroke, _Point, _Point]
+
+
+def _compact(axis: _Axis) -> bool:
+    return axis.length < _AXIS_MIN
+
+
+def _branch_limits(axis: _Axis) -> tuple[float, float]:
+    """Tine length range; a compact block keeps tines relative to its shaft."""
+    if _compact(axis):
+        return max(3.0, axis.length * 0.3), axis.length * 0.9
+    return 9, min(75, axis.length * 0.42)
+
+
+def _fork_direction(projection: float, lateral: float, compact: bool) -> bool:
+    # A compact block only opens forward; a tiny backward V is an arrowhead.
+    if compact:
+        return 0.25 <= projection <= 0.95 and lateral >= 0.25
+    forward_fork = 0.25 <= projection <= 0.9 and lateral >= 0.25
+    backward_fork = -0.995 <= projection <= -0.25 and lateral >= 0.14
+    return forward_fork or backward_fork
+
+
+def _anchor_branches(
+    axis: _Axis, endpoint: _Point, direction: _Point, strokes: tuple[_Stroke, ...]
+) -> list[_Branch]:
+    branches: list[_Branch] = []
+    shortest, longest = _branch_limits(axis)
     for stroke in strokes:
         if (
             stroke.source in {member.source for member in axis.strokes}
             or stroke.layer != axis.layer
         ):
             continue
-        if not 9 <= stroke.length <= min(75, axis.length * 0.42):
+        if not shortest <= stroke.length <= longest:
             continue
         near, tip = (
             (stroke.start, stroke.end)
             if math.dist(stroke.start, endpoint) <= math.dist(stroke.end, endpoint)
             else (stroke.end, stroke.start)
         )
-        if math.dist(near, endpoint) > max(2.0, min(5.0, axis.length * 0.035)):
+        if math.dist(near, endpoint) > max(_ENDPOINT_TOLERANCE, min(5.0, axis.length * 0.035)):
             continue
         vector = _unit(near, tip)
-        projection = _dot(direction, vector)
-        lateral = abs(_cross(direction, vector))
-        forward_fork = 0.25 <= projection <= 0.9 and lateral >= 0.25
-        backward_fork = -0.995 <= projection <= -0.25 and lateral >= 0.14
-        if not (forward_fork or backward_fork):
+        if not _fork_direction(
+            _dot(direction, vector), abs(_cross(direction, vector)), _compact(axis)
+        ):
             continue
         branches.append((stroke, near, tip))
+    return branches
+
+
+def _vertex_directions(
+    axis: _Axis, vertex: _Point, strokes: tuple[_Stroke, ...], minimum: float
+) -> int:
+    """Distinct outgoing directions at a vertex; overprinted copies count once."""
+    angles: list[float] = []
+    for stroke in strokes:
+        if stroke.layer != axis.layer or stroke.length < minimum:
+            continue
+        if math.dist(stroke.start, vertex) <= _ENDPOINT_TOLERANCE:
+            other = stroke.end
+        elif math.dist(stroke.end, vertex) <= _ENDPOINT_TOLERANCE:
+            other = stroke.start
+        else:
+            continue
+        angle = math.atan2(other[1] - vertex[1], other[0] - vertex[0])
+        if all(
+            abs((angle - prior + math.pi) % (2 * math.pi) - math.pi) > math.pi / 18
+            for prior in angles
+        ):
+            angles.append(angle)
+    return len(angles)
+
+
+def _fork_projections(
+    axis: _Axis, direction: _Point, first: _Branch, second: _Branch
+) -> tuple[float, float] | None:
+    """Projections of two symmetric tines of the shaft's ink, or None otherwise."""
+    if not all(
+        _same_ink(member, tine) for member in axis.strokes for tine in (first[0], second[0])
+    ):
+        return None
+    v1, v2 = _unit(first[1], first[2]), _unit(second[1], second[2])
+    if _cross(direction, v1) * _cross(direction, v2) >= 0:
+        return None
+    if not 0.72 <= first[0].length / second[0].length <= 1.4:
+        return None
+    projection1, projection2 = _dot(direction, v1), _dot(direction, v2)
+    if projection1 * projection2 <= 0 or not 0.6 <= projection1 / projection2 <= 1.7:
+        return None
+    return projection1, projection2
+
+
+def _anchor_crossbars(
+    axis: _Axis,
+    direction: _Point,
+    strokes: tuple[_Stroke, ...],
+    first: _Branch,
+    second: _Branch,
+    tip_span: float,
+) -> tuple[_Stroke, ...]:
+    tip_middle = ((first[2][0] + second[2][0]) / 2, (first[2][1] + second[2][1]) / 2)
+    return tuple(
+        stroke
+        for stroke in strokes
+        if stroke.layer == axis.layer
+        and stroke.source not in {member.source for member in axis.strokes}
+        and stroke.source not in {first[0].source, second[0].source}
+        and stroke.length >= tip_span * 0.65
+        and abs(_dot(direction, _unit(stroke.start, stroke.end))) < 0.3
+        and math.dist(
+            (
+                (stroke.start[0] + stroke.end[0]) / 2,
+                (stroke.start[1] + stroke.end[1]) / 2,
+            ),
+            tip_middle,
+        )
+        <= max(6, first[0].length * 0.45)
+    )
+
+
+def _dimension_extensions(
+    axis: _Axis, direction: _Point, strokes: tuple[_Stroke, ...], tip_span: float
+) -> tuple[_Point, ...]:
+    return tuple(
+        endpoint_marker
+        for endpoint_marker in (axis.start, axis.end)
+        if any(
+            stroke.layer == axis.layer
+            and stroke.source not in {member.source for member in axis.strokes}
+            and stroke.length >= tip_span * 1.5
+            and abs(_dot(direction, _unit(stroke.start, stroke.end))) < 0.3
+            and math.dist(
+                (
+                    (stroke.start[0] + stroke.end[0]) / 2,
+                    (stroke.start[1] + stroke.end[1]) / 2,
+                ),
+                endpoint_marker,
+            )
+            <= 4
+            for stroke in strokes
+        )
+    )
+
+
+def _closed_arrowhead(cap: _Stroke, first: _Branch, second: _Branch, tip_span: float) -> bool:
+    closures = (
+        max(math.dist(cap.start, first[2]), math.dist(cap.end, second[2])),
+        max(math.dist(cap.start, second[2]), math.dist(cap.end, first[2])),
+    )
+    return min(closures) <= max(1.0, tip_span * 0.08)
+
+
+def _branch_continued(
+    axis: _Axis,
+    strokes: tuple[_Stroke, ...],
+    first: _Branch,
+    second: _Branch,
+    cap: _Stroke | None,
+    outward: _Point,
+) -> bool:
+    return any(
+        stroke.layer == axis.layer
+        and stroke.source not in {member.source for member in axis.strokes}
+        and stroke.source not in {first[0].source, second[0].source}
+        and (cap is None or stroke.source != cap.source)
+        and stroke.length > min(first[0].length, second[0].length) * 0.8
+        and _extends_beyond(stroke, tip, outward, min(first[0].length, second[0].length))
+        for tip in (first[2], second[2])
+        for stroke in strokes
+    )
+
+
+def _compact_fork(
+    axis: _Axis,
+    endpoint: _Point,
+    strokes: tuple[_Stroke, ...],
+    first: _Branch,
+    second: _Branch,
+    projections: tuple[float, float],
+) -> bool:
+    """A compact anchor is a symmetric CAD block with a three-way vertex.
+
+    Unequal or unevenly opened tines are chance junctions of short linework;
+    more outgoing directions make a compass rose or a star of short rays.
+    """
+    shortest = min(first[0].length, second[0].length)
+    if not 0.85 <= first[0].length / second[0].length <= 1 / 0.85:
+        return False
+    if abs(projections[0] - projections[1]) > 0.06:
+        return False
+    return _vertex_directions(axis, endpoint, strokes, shortest * 0.5) <= 3
+
+
+def _anchor_from_pair(
+    axis: _Axis,
+    endpoint: _Point,
+    direction: _Point,
+    strokes: tuple[_Stroke, ...],
+    first: _Branch,
+    second: _Branch,
+) -> _Terminal | None:
+    projections = _fork_projections(axis, direction, first, second)
+    if projections is None:
+        return None
+    projection1, _ = projections
+    if _compact(axis) and not _compact_fork(axis, endpoint, strokes, first, second, projections):
+        return None
+    tip_span = math.dist(first[2], second[2])
+    crossbars = _anchor_crossbars(axis, direction, strokes, first, second, tip_span)
+    # Dimension extension lines protrude much farther than the fork.
+    if any(stroke.length > tip_span * 1.6 for stroke in crossbars):
+        return None
+    # A second extension line at the other end makes a dimension mark,
+    # even when the fork points back along the axis.
+    if len(_dimension_extensions(axis, direction, strokes, tip_span)) == 2:
+        return None
+    cap = min(crossbars, key=lambda stroke: stroke.source) if crossbars else None
+    # A closed triangular arrowhead is a directed mark, not a guy.
+    if cap is not None and _closed_arrowhead(cap, first, second, tip_span):
+        return None
+    # Two outgoing continuations indicate a branched conductor.
+    outward = direction if projection1 > 0 else (-direction[0], -direction[1])
+    if _branch_continued(axis, strokes, first, second, cap, outward):
+        return None
+    return _Terminal(
+        "ancora",
+        tuple(sorted((first[0].source, second[0].source, *((cap.source,) if cap else ())))),
+        (endpoint, first[2], second[2], *((cap.start, cap.end) if cap else ())),
+    )
+
+
+def _terminal_anchor(axis: _Axis, strokes: tuple[_Stroke, ...]) -> _Terminal | None:
+    endpoint = axis.end
+    direction = _unit(axis.start, axis.end)
+    branches = _anchor_branches(axis, endpoint, direction, strokes)
     for index, first in enumerate(branches):
         for second in branches[index + 1 :]:
-            if not all(
-                _same_ink(member, tine) for member in axis.strokes for tine in (first[0], second[0])
-            ):
-                continue
-            v1, v2 = _unit(first[1], first[2]), _unit(second[1], second[2])
-            if _cross(direction, v1) * _cross(direction, v2) >= 0:
-                continue
-            if not 0.72 <= first[0].length / second[0].length <= 1.4:
-                continue
-            projection1, projection2 = _dot(direction, v1), _dot(direction, v2)
-            if projection1 * projection2 <= 0 or not 0.6 <= projection1 / projection2 <= 1.7:
-                continue
-            tip_middle = ((first[2][0] + second[2][0]) / 2, (first[2][1] + second[2][1]) / 2)
-            tip_span = math.dist(first[2], second[2])
-            crossbars = tuple(
-                stroke
-                for stroke in strokes
-                if stroke.layer == axis.layer
-                and stroke.source not in {member.source for member in axis.strokes}
-                and stroke.source not in {first[0].source, second[0].source}
-                and stroke.length >= tip_span * 0.65
-                and abs(_dot(direction, _unit(stroke.start, stroke.end))) < 0.3
-                and math.dist(
-                    (
-                        (stroke.start[0] + stroke.end[0]) / 2,
-                        (stroke.start[1] + stroke.end[1]) / 2,
-                    ),
-                    tip_middle,
-                )
-                <= max(6, first[0].length * 0.45)
-            )
-            # Dimension extension lines protrude much farther than the fork.
-            if any(stroke.length > tip_span * 1.6 for stroke in crossbars):
-                continue
-            # A second extension line at the other end makes a dimension mark,
-            # even when the fork points back along the axis.
-            extensions = tuple(
-                endpoint_marker
-                for endpoint_marker in (axis.start, axis.end)
-                if any(
-                    stroke.layer == axis.layer
-                    and stroke.source not in {member.source for member in axis.strokes}
-                    and stroke.length >= tip_span * 1.5
-                    and abs(_dot(direction, _unit(stroke.start, stroke.end))) < 0.3
-                    and math.dist(
-                        (
-                            (stroke.start[0] + stroke.end[0]) / 2,
-                            (stroke.start[1] + stroke.end[1]) / 2,
-                        ),
-                        endpoint_marker,
-                    )
-                    <= 4
-                    for stroke in strokes
-                )
-            )
-            if len(extensions) == 2:
-                continue
-            cap = min(crossbars, key=lambda stroke: stroke.source) if crossbars else None
-            if cap is not None:
-                closures = (
-                    max(math.dist(cap.start, first[2]), math.dist(cap.end, second[2])),
-                    max(math.dist(cap.start, second[2]), math.dist(cap.end, first[2])),
-                )
-                # A closed triangular arrowhead is a directed mark, not a guy.
-                if min(closures) <= max(1.0, tip_span * 0.08):
-                    continue
-            # Two outgoing continuations indicate a branched conductor.
-            outward = direction if projection1 > 0 else (-direction[0], -direction[1])
-            continued = any(
-                stroke.layer == axis.layer
-                and stroke.source not in {member.source for member in axis.strokes}
-                and stroke.source not in {first[0].source, second[0].source}
-                and (cap is None or stroke.source != cap.source)
-                and stroke.length > min(first[0].length, second[0].length) * 0.8
-                and _extends_beyond(stroke, tip, outward, min(first[0].length, second[0].length))
-                for tip in (first[2], second[2])
-                for stroke in strokes
-            )
-            if continued:
-                continue
-            return _Terminal(
-                "ancora",
-                tuple(sorted((first[0].source, second[0].source, *((cap.source,) if cap else ())))),
-                (endpoint, first[2], second[2], *((cap.start, cap.end) if cap else ())),
-            )
+            anchor = _anchor_from_pair(axis, endpoint, direction, strokes, first, second)
+            if anchor is not None:
+                return anchor
     return None
 
 
@@ -602,17 +822,15 @@ def _parallel_bundle(axis: _Axis, strokes: tuple[_Stroke, ...]) -> bool:
     return len(neighbors) >= 2 or any(stroke.dashed for stroke in neighbors)
 
 
-def _parallel_corridor(axis: _Axis, strokes: tuple[_Stroke, ...]) -> bool:
-    """Recognize other conductors beside an anchor-like shaft.
+_Neighbor = tuple[float, float, float, bool]
 
-    Coverage is assembled from collinear fragments, since dashed network
-    linework can be emitted as many short vector strokes. Coincident
-    overprinting of an isolated guy is deliberately excluded by offset.
-    """
-    direction = _unit(axis.start, axis.end)
+
+def _corridor_neighbors(
+    axis: _Axis, direction: _Point, strokes: tuple[_Stroke, ...]
+) -> list[_Neighbor]:
     members = {stroke.source for stroke in axis.strokes}
     shaft_width = max((stroke.width or 0 for stroke in axis.strokes), default=0)
-    neighbors: list[tuple[float, float, float, bool]] = []
+    neighbors: list[_Neighbor] = []
     for stroke in strokes:
         if stroke.layer != axis.layer or stroke.source in members:
             continue
@@ -635,23 +853,44 @@ def _parallel_corridor(axis: _Axis, strokes: tuple[_Stroke, ...]) -> bool:
         first, last = max(0, first), min(axis.length, last)
         if last - first >= 3:
             neighbors.append((offset, first, last, stroke.dashed))
-    if not neighbors:
-        return False
-    groups: list[list[tuple[float, float, float, bool]]] = []
+    return neighbors
+
+
+def _corridor_groups(neighbors: list[_Neighbor]) -> list[list[_Neighbor]]:
+    groups: list[list[_Neighbor]] = []
     for neighbor in sorted(neighbors):
         if groups and abs(neighbor[0] - groups[-1][-1][0]) <= 3.5:
             groups[-1].append(neighbor)
         else:
             groups.append([neighbor])
+    return groups
+
+
+def _merged_intervals(intervals: list[tuple[float, float]]) -> list[list[float]]:
+    merged: list[list[float]] = []
+    for first, last in intervals:
+        if merged and first <= merged[-1][1] + 1:
+            merged[-1][1] = max(last, merged[-1][1])
+        else:
+            merged.append([first, last])
+    return merged
+
+
+def _parallel_corridor(axis: _Axis, strokes: tuple[_Stroke, ...]) -> bool:
+    """Recognize other conductors beside an anchor-like shaft.
+
+    Coverage is assembled from collinear fragments, since dashed network
+    linework can be emitted as many short vector strokes. Coincident
+    overprinting of an isolated guy is deliberately excluded by offset.
+    """
+    direction = _unit(axis.start, axis.end)
+    neighbors = _corridor_neighbors(axis, direction, strokes)
+    if not neighbors:
+        return False
     substantial = 0
-    for group in groups:
+    for group in _corridor_groups(neighbors):
         intervals = sorted((first, last) for _, first, last, _ in group)
-        merged: list[list[float]] = []
-        for first, last in intervals:
-            if merged and first <= merged[-1][1] + 1:
-                merged[-1][1] = max(last, merged[-1][1])
-            else:
-                merged.append([first, last])
+        merged = _merged_intervals(intervals)
         coverage = sum(last - first for first, last in merged)
         span = max(last for _, last in intervals) - min(first for first, _ in intervals)
         if coverage >= axis.length * 0.6:
@@ -720,13 +959,9 @@ def _radial_hub(axis: _Axis, strokes: tuple[_Stroke, ...]) -> bool:
     return False
 
 
-def _find_guys(strokes: tuple[_Stroke, ...], hooks: tuple[_Hook, ...]) -> tuple[_Guy, ...]:
-    found: dict[tuple[_Source, ...], _Guy] = {}
-    all_index = _StrokeIndex(strokes)
-    short_index = _StrokeIndex(strokes, max_length=85)
-    long_index = _StrokeIndex(strokes, min_length=26)
-    axes = _axes(strokes)
-    oriented = (
+def _oriented_axes(axes: tuple[_Axis, ...]) -> tuple[_Axis, ...]:
+    """Each candidate axis in its own direction, then reversed."""
+    return tuple(
         axis
         for candidate in axes
         for axis in (
@@ -734,67 +969,114 @@ def _find_guys(strokes: tuple[_Stroke, ...], hooks: tuple[_Hook, ...]) -> tuple[
             _Axis(tuple(reversed(candidate.points)), candidate.strokes, candidate.gap),
         )
     )
-    for axis in oriented:
-        local = short_index.rectangle(_bounds(axis.points))
-        if axis.gap > 1.5 and not _cut_markers(axis, local):
+
+
+def _crossbars_on_axis(axis: _Axis, local: tuple[_Stroke, ...]) -> int:
+    direction = _unit(axis.start, axis.end)
+    on_axis = 0
+    for stroke in local:
+        if stroke.layer != axis.layer or not 7 <= stroke.length <= 65:
             continue
-        # A long fence has many repeated crossbars: it is not a single T-T guy.
-        direction = _unit(axis.start, axis.end)
-        on_axis = 0
-        for stroke in local:
-            if stroke.layer != axis.layer or not 7 <= stroke.length <= 65:
-                continue
-            if abs(_dot(direction, _unit(stroke.start, stroke.end))) > 0.3:
-                continue
-            center = ((stroke.start[0] + stroke.end[0]) / 2, (stroke.start[1] + stroke.end[1]) / 2)
-            projection = _dot(direction, (center[0] - axis.start[0], center[1] - axis.start[1]))
-            offset = abs(_cross(direction, (center[0] - axis.start[0], center[1] - axis.start[1])))
-            if 0 <= projection <= axis.length and offset <= 4:
-                on_axis += 1
-        if on_axis > 3:
+        if abs(_dot(direction, _unit(stroke.start, stroke.end))) > 0.3:
             continue
-        start_bar = _terminal_bar(axis, True, local)
-        end_bar = _terminal_bar(axis, False, local)
-        start_hook = _terminal_hook(axis, True, hooks)
-        end_hook = _terminal_hook(axis, False, hooks)
-        anchor = _terminal_anchor(axis, local)
-        cut = _cut_markers(axis, local)
-        if anchor and not start_bar and not start_hook and not end_hook:
-            guy = _Guy("ancora", axis, (anchor,))
-        elif (
-            start_bar
-            and end_bar
-            and not start_hook
-            and not end_hook
-            and min(math.dist(*start_bar.points), math.dist(*end_bar.points)) >= axis.length * 0.1
-            and not _interior_bar(axis, local)
-            and not _parallel_bundle(axis, long_index.rectangle(_bounds(axis.points)))
-            and not _parallel_corridor(axis, all_index.rectangle(_bounds(axis.points)))
-        ):
-            guy = _Guy("cruzeta_cruzeta", axis, (start_bar, end_bar))
-        elif start_hook and end_hook and not start_bar and not end_bar:
-            guy = _Guy("poste_poste", axis, (start_hook, end_hook))
-        elif (start_bar and end_hook and not end_bar and not start_hook) or (
-            start_hook and end_bar and not start_bar and not end_hook
-        ):
-            terminals = tuple(
-                terminal
-                for terminal in ((start_bar, end_hook) if start_bar else (start_hook, end_bar))
-                if terminal is not None
-            )
-            guy = _Guy("cruzeta_poste_seccionado" if cut else "cruzeta_poste", axis, terminals, cut)
-        else:
-            continue
-        # Complete axes win over their fragments; overprinting only contributes
-        # redundant sources and must not multiply the observation.
-        found[guy.sources] = guy
+        center = ((stroke.start[0] + stroke.end[0]) / 2, (stroke.start[1] + stroke.end[1]) / 2)
+        projection = _dot(direction, (center[0] - axis.start[0], center[1] - axis.start[1]))
+        offset = abs(_cross(direction, (center[0] - axis.start[0], center[1] - axis.start[1])))
+        if 0 <= projection <= axis.length and offset <= 4:
+            on_axis += 1
+    return on_axis
+
+
+@dataclass(frozen=True, slots=True)
+class _AxisTerminals:
+    start_bar: _Terminal | None
+    end_bar: _Terminal | None
+    start_hook: _Terminal | None
+    end_hook: _Terminal | None
+    anchor: _Terminal | None
+    cut: tuple[_Source, ...]
+
+
+def _admits_cruzeta_cruzeta(
+    axis: _Axis,
+    start_bar: _Terminal,
+    end_bar: _Terminal,
+    local: tuple[_Stroke, ...],
+    long_index: _StrokeIndex,
+    all_index: _StrokeIndex,
+) -> bool:
+    return (
+        min(math.dist(*start_bar.points), math.dist(*end_bar.points)) >= axis.length * 0.1
+        and not _interior_bar(axis, local)
+        and not _parallel_bundle(axis, long_index.rectangle(_bounds(axis.points)))
+        and not _parallel_corridor(axis, all_index.rectangle(_bounds(axis.points)))
+    )
+
+
+def _mixed_guy(axis: _Axis, terminals: _AxisTerminals) -> _Guy | None:
+    start_bar, end_bar = terminals.start_bar, terminals.end_bar
+    start_hook, end_hook = terminals.start_hook, terminals.end_hook
+    if not (
+        (start_bar and end_hook and not end_bar and not start_hook)
+        or (start_hook and end_bar and not start_bar and not end_hook)
+    ):
+        return None
+    chosen = tuple(
+        terminal
+        for terminal in ((start_bar, end_hook) if start_bar else (start_hook, end_bar))
+        if terminal is not None
+    )
+    cut = terminals.cut
+    return _Guy("cruzeta_poste_seccionado" if cut else "cruzeta_poste", axis, chosen, cut)
+
+
+def _classify_axis(
+    axis: _Axis,
+    local: tuple[_Stroke, ...],
+    hooks: tuple[_Hook, ...],
+    long_index: _StrokeIndex,
+    all_index: _StrokeIndex,
+) -> _Guy | None:
+    terminals = _AxisTerminals(
+        start_bar=_terminal_bar(axis, True, local),
+        end_bar=_terminal_bar(axis, False, local),
+        start_hook=_terminal_hook(axis, True, hooks),
+        end_hook=_terminal_hook(axis, False, hooks),
+        anchor=_terminal_anchor(axis, local),
+        cut=_cut_markers(axis, local),
+    )
+    start_bar, end_bar = terminals.start_bar, terminals.end_bar
+    start_hook, end_hook = terminals.start_hook, terminals.end_hook
+    if terminals.anchor and not start_bar and not start_hook and not end_hook:
+        return _Guy("ancora", axis, (terminals.anchor,))
+    if (
+        start_bar
+        and end_bar
+        and not start_hook
+        and not end_hook
+        and _admits_cruzeta_cruzeta(axis, start_bar, end_bar, local, long_index, all_index)
+    ):
+        return _Guy("cruzeta_cruzeta", axis, (start_bar, end_bar))
+    if start_hook and end_hook and not start_bar and not end_bar:
+        return _Guy("poste_poste", axis, (start_hook, end_hook))
+    return _mixed_guy(axis, terminals)
+
+
+def _select_guys(
+    found: dict[tuple[_Source, ...], _Guy],
+    strokes: tuple[_Stroke, ...],
+    all_index: _StrokeIndex,
+) -> list[_Guy]:
     ordered = sorted(
         found.values(), key=lambda guy: (-guy.axis.length, guy.axis.start, guy.sources)
     )
     selected: list[_Guy] = []
     for guy in ordered:
+        # A compact block opens forward from a pole centre, where other guys,
+        # earthing and service drops legitimately meet; its vertex is checked
+        # against radial spokes in _anchor_from_pair instead.
         if guy.variant == "ancora" and (
-            _radial_hub(guy.axis, strokes)
+            (not _compact(guy.axis) and _radial_hub(guy.axis, strokes))
             or _parallel_corridor(guy.axis, all_index.rectangle(_bounds(guy.axis.points)))
         ):
             continue
@@ -802,6 +1084,147 @@ def _find_guys(strokes: tuple[_Stroke, ...], hooks: tuple[_Hook, ...]) -> tuple[
         if any(_same_mark(guy, other, core) for other in selected):
             continue
         selected.append(guy)
+    return selected
+
+
+class _EndpointIndex:
+    """Stroke endpoints by small cell, to pre-filter compact fork vertices."""
+
+    _CELL = 4.0
+
+    def __init__(self, strokes: tuple[_Stroke, ...], max_length: float) -> None:
+        self.cells: dict[tuple[int, int], list[_Stroke]] = {}
+        for stroke in strokes:
+            if stroke.length > max_length:
+                continue
+            for point in (stroke.start, stroke.end):
+                key = math.floor(point[0] / self._CELL), math.floor(point[1] / self._CELL)
+                self.cells.setdefault(key, []).append(stroke)
+
+    def near(self, point: _Point) -> tuple[_Stroke, ...]:
+        x, y = math.floor(point[0] / self._CELL), math.floor(point[1] / self._CELL)
+        found: dict[_Source, _Stroke] = {}
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                for stroke in self.cells.get((x + dx, y + dy), ()):
+                    if (
+                        min(math.dist(stroke.start, point), math.dist(stroke.end, point))
+                        <= _ENDPOINT_TOLERANCE
+                    ):
+                        found[stroke.source] = stroke
+        return tuple(found.values())
+
+
+def _compact_guys(strokes: tuple[_Stroke, ...], short_index: _StrokeIndex) -> list[_Guy]:
+    """Compact anchor blocks: a short shaft whose free end opens in a fork."""
+    endpoints = _EndpointIndex(strokes, max_length=_AXIS_MIN * 0.9)
+    guys: list[_Guy] = []
+    for stroke in strokes:
+        if not _COMPACT_MIN <= stroke.length < _AXIS_MIN:
+            continue
+        for axis in _oriented_axes((_Axis((stroke.start, stroke.end), (stroke,)),)):
+            shortest, longest = _branch_limits(axis)
+            tines = sum(
+                1
+                for other in endpoints.near(axis.end)
+                if other.source != stroke.source and shortest <= other.length <= longest
+            )
+            if tines < 2:
+                continue
+            anchor = _terminal_anchor(axis, short_index.rectangle(_bounds(axis.points)))
+            if anchor is not None:
+                guys.append(_Guy("ancora", axis, (anchor,)))
+    return guys
+
+
+class _RingIndex:
+    """Rings by centre cell, searched around an anchor vertex."""
+
+    _CELL = 32.0
+
+    def __init__(self, rings: tuple[_Ring, ...]) -> None:
+        self.cells: dict[tuple[int, int], list[_Ring]] = {}
+        for ring in rings:
+            key = math.floor(ring.center[0] / self._CELL), math.floor(ring.center[1] / self._CELL)
+            self.cells.setdefault(key, []).append(ring)
+
+    def near(self, point: _Point, reach: float) -> tuple[_Ring, ...]:
+        x0, x1 = (math.floor((point[0] + delta) / self._CELL) for delta in (-reach, reach))
+        y0, y1 = (math.floor((point[1] + delta) / self._CELL) for delta in (-reach, reach))
+        return tuple(
+            ring
+            for x in range(x0, x1 + 1)
+            for y in range(y0, y1 + 1)
+            for ring in self.cells.get((x, y), ())
+            if math.dist(ring.center, point) <= reach
+        )
+
+
+def _enclosing_ring(axis: _Axis, terminal: _Terminal, rings: _RingIndex) -> _Ring | None:
+    """The circle drawn through the fork vertex and both tine tips, ahead of the shaft."""
+    vertex, tips = axis.end, terminal.points[1:3]
+    direction = _unit(axis.start, axis.end)
+    branch = sum(math.dist(vertex, tip) for tip in tips) / len(tips)
+    candidates: list[tuple[float, _Ring]] = []
+    for ring in rings.near(vertex, branch * 1.2 + max(0.75, branch * 0.15)):
+        if ring.layer != axis.layer or not all(_same_ink(member, ring) for member in axis.strokes):
+            continue
+        if not 0.45 <= ring.radius / branch <= 1.2:
+            continue
+        tolerance = max(0.75, ring.radius * 0.12)
+        deviation = max(abs(math.dist(tip, ring.center) - ring.radius) for tip in tips)
+        if deviation > tolerance or math.dist(vertex, ring.center) > ring.radius + tolerance:
+            continue
+        if _dot(direction, (ring.center[0] - vertex[0], ring.center[1] - vertex[1])) <= 0:
+            continue
+        candidates.append((deviation, ring))
+    if not candidates:
+        return None
+    return min(candidates, key=lambda item: (item[0], item[1].sources))[1]
+
+
+def _with_ring(guy: _Guy, rings: _RingIndex) -> _Guy:
+    """An anchor's enclosing ring joins its terminal, sources and primitives."""
+    if guy.variant != "ancora":
+        return guy
+    terminal = guy.terminals[0]
+    ring = _enclosing_ring(guy.axis, terminal, rings)
+    if ring is None:
+        return guy
+    sources = tuple(sorted({*terminal.sources, *ring.sources}))
+    return _Guy(
+        guy.variant,
+        guy.axis,
+        (_Terminal(terminal.kind, sources, terminal.points), *guy.terminals[1:]),
+        guy.cut_sources,
+    )
+
+
+def _find_guys(
+    strokes: tuple[_Stroke, ...], hooks: tuple[_Hook, ...], rings: tuple[_Ring, ...]
+) -> tuple[_Guy, ...]:
+    found: dict[tuple[_Source, ...], _Guy] = {}
+    all_index = _StrokeIndex(strokes)
+    short_index = _StrokeIndex(strokes, max_length=85)
+    long_index = _StrokeIndex(strokes, min_length=26)
+    axes = _axes(strokes)
+    for axis in _oriented_axes(axes):
+        local = short_index.rectangle(_bounds(axis.points))
+        if axis.gap > 1.5 and not _cut_markers(axis, local):
+            continue
+        # A long fence has many repeated crossbars: it is not a single T-T guy.
+        if _crossbars_on_axis(axis, local) > 3:
+            continue
+        guy = _classify_axis(axis, local, hooks, long_index, all_index)
+        if guy is None:
+            continue
+        # Complete axes win over their fragments; overprinting only contributes
+        # redundant sources and must not multiply the observation.
+        found[guy.sources] = guy
+    for guy in _compact_guys(strokes, short_index):
+        found.setdefault(guy.sources, guy)
+    ring_index = _RingIndex(rings)
+    selected = [_with_ring(guy, ring_index) for guy in _select_guys(found, strokes, all_index)]
     return tuple(
         sorted(
             selected,
@@ -981,8 +1404,8 @@ def observar_estais(
         camada="base",
     )
     drawings = _inherit_clipping(_base_drawings(page))
-    strokes, hooks = _extract(drawings)
-    guys = _find_guys(strokes, hooks)
+    strokes, hooks, rings = _extract(drawings)
+    guys = _find_guys(strokes, hooks, rings)
     observations = tuple(_observation(page, guy, drawings, source, profile) for guy in guys)
     coverage = CoberturaMetodoSimbolos(
         fonte=source,

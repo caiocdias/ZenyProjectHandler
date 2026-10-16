@@ -1,0 +1,451 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:zeny:curadoria:referencia-visual:1",
+  "title": "Referência visual regional da curadoria de simbologia",
+  "description": "Leitura visual de um PDF feita por IA sobre os tiles do índice de renderização. É referência de desenvolvimento, não gabarito, confirmação humana nem norma. Coordenadas na convenção symbols-e02-v1 (página exibida, [0,1], origem no canto superior esquerdo). Regras que dependem do índice de tiles e do inventário (tiles revisados, contenção de bbox, família/classe/ID, ids únicos, relações, cobertura do escopo completo) são aplicadas por scripts/curation_reference.py. O bloco congelamento é escrito só por congelar/revisar.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "pdf",
+    "revisor",
+    "escopo",
+    "tiles_revisados",
+    "regioes_ilegiveis",
+    "observacoes"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "curadoria-referencia-visual-v1"
+    },
+    "pdf": {
+      "$ref": "#/$defs/pdf"
+    },
+    "revisor": {
+      "$ref": "#/$defs/revisor"
+    },
+    "escopo": {
+      "description": "regional: só os tiles revisados e as regiões ilegíveis são o escopo; completo: todo tile a_revisar do índice está revisado ou coberto por região ilegível.",
+      "enum": [
+        "regional",
+        "completo"
+      ]
+    },
+    "tiles_revisados": {
+      "description": "Ids de tiles do índice de renderização (render/indice-tiles.json) realmente vistos pelo leitor.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/id_tile"
+      }
+    },
+    "regioes_ilegiveis": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/regiao_ilegivel"
+      }
+    },
+    "observacoes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/observacao"
+      }
+    },
+    "notas": {
+      "type": "string"
+    },
+    "congelamento": {
+      "$ref": "#/$defs/congelamento"
+    }
+  },
+  "$defs": {
+    "id_local": {
+      "description": "Id local estável, único entre observações e regiões ilegíveis da referência.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+    },
+    "id_tile": {
+      "type": "string",
+      "pattern": "^p\\d{3,}-(base|anotada)-t\\d{4}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "texto_opcional": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "pagina": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "camada": {
+      "enum": [
+        "base",
+        "annotation"
+      ]
+    },
+    "coordenada": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "bbox": {
+      "description": "[x0, y0, x1, y1] normalizados na página exibida; x0 <= x1, y0 <= y1, não pode ser um ponto.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/coordenada"
+      },
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "ponto": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/coordenada"
+      },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "pdf": {
+      "type": "object",
+      "required": [
+        "pdf_id",
+        "sha256",
+        "caminho_relativo"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "pdf_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "caminho_relativo": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "revisor": {
+      "type": "object",
+      "required": [
+        "origem",
+        "modelo"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "origem": {
+          "const": "revisao_ia"
+        },
+        "modelo": {
+          "description": "Modelo informado pela sessão, ou indisponivel.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "regiao_ilegivel": {
+      "type": "object",
+      "required": [
+        "id",
+        "pagina",
+        "camada",
+        "bbox",
+        "motivo"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id_local"
+        },
+        "pagina": {
+          "$ref": "#/$defs/pagina"
+        },
+        "camada": {
+          "$ref": "#/$defs/camada"
+        },
+        "bbox": {
+          "$ref": "#/$defs/bbox"
+        },
+        "motivo": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "alternativas": {
+      "description": "Forma que admite vários IDs do inventário: uma observação com alternativas explícitas, nunca vários ativos nem um ID exato. O tipo (objeto ou null) é declarado no uso.",
+      "required": [
+        "ids_inventario",
+        "motivo"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "ids_inventario": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 2
+        },
+        "motivo": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "quantidade": {
+      "type": "object",
+      "required": [
+        "valor",
+        "unidade"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "valor": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "unidade": {
+          "$ref": "#/$defs/texto_opcional"
+        },
+        "texto_original": {
+          "$ref": "#/$defs/texto_opcional"
+        }
+      }
+    },
+    "relacao": {
+      "type": "object",
+      "required": [
+        "tipo",
+        "alvo"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "tipo": {
+          "type": "string",
+          "minLength": 1
+        },
+        "alvo": {
+          "$ref": "#/$defs/id_local"
+        }
+      }
+    },
+    "fonte_significado": {
+      "type": "object",
+      "required": [
+        "tipo",
+        "localizador"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "tipo": {
+          "enum": [
+            "legenda_local",
+            "nota_documento",
+            "inventario",
+            "norma",
+            "contexto_visual",
+            "indisponivel"
+          ]
+        },
+        "localizador": {
+          "$ref": "#/$defs/texto_opcional"
+        }
+      }
+    },
+    "observacao": {
+      "type": "object",
+      "required": [
+        "id",
+        "pagina",
+        "camada",
+        "bbox",
+        "familia",
+        "class_id",
+        "papel",
+        "texto_original",
+        "interpretacao",
+        "estado",
+        "tile_evidencia",
+        "fonte_significado"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id_local"
+        },
+        "pagina": {
+          "$ref": "#/$defs/pagina"
+        },
+        "camada": {
+          "$ref": "#/$defs/camada"
+        },
+        "bbox": {
+          "$ref": "#/$defs/bbox"
+        },
+        "trace": {
+          "description": "Eixo de elemento fino (estai, cabo), como no avaliador.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ponto"
+          },
+          "minItems": 2
+        },
+        "familia": {
+          "description": "Id de família do inventário (family-f02-NN), igual a family das predições; local-unknown para elemento sem família no inventário.",
+          "type": "string",
+          "minLength": 1
+        },
+        "class_id": {
+          "description": "class_code de uma variante da família no inventário, igual a class_id das predições; UNKNOWN_LOCAL com local-unknown.",
+          "type": "string",
+          "minLength": 1
+        },
+        "id_inventario": {
+          "description": "Id exato de variante do inventário, só quando a evidência o distingue.",
+          "$ref": "#/$defs/texto_opcional"
+        },
+        "alternativas": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "$ref": "#/$defs/alternativas"
+        },
+        "papel": {
+          "enum": [
+            "operacional",
+            "informativo",
+            "desconhecido",
+            "negativo"
+          ]
+        },
+        "ponto": {
+          "description": "Identificação textual do ponto, ou desconhecido.",
+          "type": "string",
+          "minLength": 1
+        },
+        "descricao_visual": {
+          "type": "string"
+        },
+        "texto_original": {
+          "description": "Texto realmente legível, sem interpretação.",
+          "$ref": "#/$defs/texto_opcional"
+        },
+        "interpretacao": {
+          "$ref": "#/$defs/texto_opcional"
+        },
+        "quantidades": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/quantidade"
+          }
+        },
+        "relacoes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/relacao"
+          }
+        },
+        "estado": {
+          "enum": [
+            "sustentado_por_evidencia",
+            "provisorio",
+            "ilegivel"
+          ]
+        },
+        "motivo_estado": {
+          "description": "Obrigatório quando o estado não é sustentado_por_evidencia.",
+          "type": "string",
+          "minLength": 1
+        },
+        "tile_evidencia": {
+          "$ref": "#/$defs/id_tile"
+        },
+        "fonte_significado": {
+          "$ref": "#/$defs/fonte_significado"
+        }
+      }
+    },
+    "versao_anterior": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "required": [
+        "arquivo",
+        "sha256"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "arquivo": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "congelamento": {
+      "description": "Escrito por curation_reference congelar/revisar; a entrada do leitor não o contém.",
+      "type": "object",
+      "required": [
+        "versao",
+        "origem",
+        "exposicao_predicoes",
+        "motivo",
+        "versao_anterior",
+        "inferencias_presentes",
+        "indice_tiles_sha256",
+        "sha256_entrada"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "versao": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "origem": {
+          "enum": [
+            "leitura",
+            "revisao"
+          ]
+        },
+        "exposicao_predicoes": {
+          "description": "true quando quem produziu esta versão viu predições, comparações ou auditorias do PDF.",
+          "type": "boolean"
+        },
+        "motivo": {
+          "$ref": "#/$defs/texto_opcional"
+        },
+        "versao_anterior": {
+          "$ref": "#/$defs/versao_anterior"
+        },
+        "inferencias_presentes": {
+          "description": "Diretórios inferencia-vNNN já existentes no diretório do PDF no congelamento (transparência; não é erro).",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^inferencia-v\\d{3,}$"
+          }
+        },
+        "indice_tiles_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "sha256_entrada": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    }
+  }
+}

@@ -23,3 +23,7 @@ backups/
 tmp/
 examples/**
 !examples/README.md
+
+# Estado local do Claude Code (permissões pessoais e worktrees de subagentes).
+.claude/settings.local.json
+.claude/worktrees/

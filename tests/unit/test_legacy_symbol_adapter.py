@@ -1,6 +1,7 @@
 # mypy: disable-error-code="no-untyped-call"
 """Envelope legado preserva decisões, geometria e procedência sem calibrar score."""
 
+import json
 from decimal import Decimal
 
 import pymupdf
@@ -197,9 +198,13 @@ def test_e04_adapter_separates_occurrences_in_one_drawing_and_roundtrips() -> No
         result.observacoes, key=lambda item: item.geometria.pontos_originais[0][0]
     )
     for observation, expected_x in zip(observations, (50, 150), strict=True):
+        # Geometria = pictograma (barras + 10 pt finais da haste); primitivas = haste inteira.
         xs = [point[0] for point in observation.geometria.pontos_originais]
-        assert min(xs) == expected_x
+        assert min(xs) == expected_x + 5
         assert max(xs) == expected_x + 23
+        assert json.loads(str(dict(observation.atributos)["simbolo_limites_suporte"]))[0] == (
+            expected_x
+        )
         assert observation.situacao is None
         assert len(observation.primitivas) == 1
         primitive_xs = [point[0] for point in observation.primitivas[0].pontos_originais]

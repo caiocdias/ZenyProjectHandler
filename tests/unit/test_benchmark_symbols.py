@@ -685,3 +685,216 @@ def test_synthetic_runner_reads_reference_only_after_predictions_are_persisted(
     assert result["report"]["denominators"]["families"] == 33
     assert result["report"]["denominators"]["pages"] == 6
     assert len(inference_inputs) == 4
+
+
+# Format of the examples mode before the --pdf option; it must not change without --pdf.
+EXAMPLES_MANIFEST_KEYS = {
+    "completed",
+    "counts",
+    "development_only",
+    "discovery_root",
+    "discovery_root_exists",
+    "documents",
+    "environment",
+    "limitations",
+    "local_candidates_sha256",
+    "mode",
+    "observations_sha256",
+    "package_configuration_unchanged",
+    "predictions_sha256",
+    "reference_access",
+    "schema_version",
+    "status",
+    "visual_review",
+}
+PREDICTIONS_KEYS = {
+    "documents",
+    "executions",
+    "local_candidates",
+    "methods",
+    "predictions",
+    "schema_version",
+}
+VARIABLE_KEYS = {"seconds", "memory", "predictions_sha256"}
+
+
+def _without_variable_fields(value: Any) -> Any:
+    """Remove timing/memory fields that already vary between identical runs."""
+    if isinstance(value, dict):
+        return {
+            key: _without_variable_fields(item)
+            for key, item in value.items()
+            if key not in VARIABLE_KEYS
+        }
+    if isinstance(value, list | tuple):
+        return [_without_variable_fields(item) for item in value]
+    return value
+
+
+def _examples_root(tmp_path: Path) -> Path:
+    """Nested synthetic examples with mixed case and a byte-identical copy."""
+    corpus = build_corpus(tmp_path / "corpus")
+    sources = [Path(item["path"]) for item in corpus["documents"]]
+    root = tmp_path / "examples"
+    (root / "sub").mkdir(parents=True)
+    (root / "b.pdf").write_bytes(sources[1].read_bytes())
+    (root / "sub" / "a.pdf").write_bytes(sources[0].read_bytes())
+    (root / "Z.PDF").write_bytes(sources[2].read_bytes())
+    (root / "sub" / "copy.pdf").write_bytes(sources[0].read_bytes())
+    (root / "notes.txt").write_text("not a PDF", encoding="utf-8")
+    return root
+
+
+def _read(output: Path) -> tuple[Record, Record]:
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    predictions = json.loads((output / "predictions.json").read_text(encoding="utf-8"))
+    return manifest, predictions
+
+
+def _document_view(manifest: Record, predictions: Record, document_id: str) -> Any:
+    return _without_variable_fields(
+        {
+            "manifest_document": next(
+                item for item in manifest["documents"] if item["id"] == document_id
+            ),
+            "document": next(
+                item for item in predictions["documents"] if item["id"] == document_id
+            ),
+            "predictions": [
+                item for item in predictions["predictions"] if item["document_id"] == document_id
+            ],
+            "executions": [
+                item for item in predictions["executions"] if item["document_id"] == document_id
+            ],
+            "methods": predictions["methods"],
+        }
+    )
+
+
+def test_examples_cli_without_pdf_keeps_discovery_sources_and_output_format(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scripts import benchmark_symbols
+    from scripts import symbol_benchmark_runner as runner
+
+    root = _examples_root(tmp_path)
+    captured: list[list[tuple[Path, str]]] = []
+    original_run = runner._run
+
+    def recording_run(sources: list[tuple[Path, str]], output: Path, **options: Any) -> Record:
+        captured.append(list(sources))
+        return original_run(sources, output, **options)
+
+    monkeypatch.setattr(runner, "_run", recording_run)
+    output = tmp_path / "run"
+    assert benchmark_symbols.main(["examples", "--root", str(root), "--output", str(output)]) == 0
+    resolved = root.resolve()
+    expected = ["b.pdf", "sub/a.pdf", "sub/copy.pdf", "Z.PDF"]
+    assert captured == [[(resolved / name, "example:" + name) for name in expected]]
+    manifest, predictions = _read(output)
+    assert set(manifest) == EXAMPLES_MANIFEST_KEYS
+    assert set(predictions) == PREDICTIONS_KEYS
+    assert manifest["mode"] == "examples"
+    assert manifest["discovery_root"] == str(resolved)
+    assert manifest["discovery_root_exists"] is True
+    assert manifest["development_only"] is True
+    assert [item["id"] for item in manifest["documents"]] == [
+        "example:" + name for name in expected
+    ]
+    assert [item["path"] for item in manifest["documents"]] == [
+        str(resolved / name) for name in expected
+    ]
+    assert (
+        manifest["predictions_sha256"]
+        == hashlib.sha256((output / "predictions.json").read_bytes()).hexdigest()
+    )
+    # The CLI without --pdf is the same call as the library default.
+    direct = tmp_path / "direct"
+    runner.run_examples(root, direct)
+    assert _without_variable_fields(_read(direct)) == _without_variable_fields(
+        (manifest, predictions)
+    )
+
+
+def test_examples_pdf_option_runs_only_selected_file_with_folder_document_id(
+    tmp_path: Path,
+) -> None:
+    from scripts import benchmark_symbols
+
+    root = _examples_root(tmp_path)
+    folder = tmp_path / "folder"
+    single = tmp_path / "single"
+    assert benchmark_symbols.main(["examples", "--root", str(root), "--output", str(folder)]) == 0
+    arguments = ["examples", "--root", str(root), "--pdf", str(root / "sub" / "a.pdf")]
+    assert benchmark_symbols.main([*arguments, "--output", str(single)]) == 0
+    manifest, predictions = _read(single)
+    assert [item["id"] for item in manifest["documents"]] == ["example:sub/a.pdf"]
+    assert [item["id"] for item in predictions["documents"]] == ["example:sub/a.pdf"]
+    assert manifest["counts"]["pdfs"] == 1
+    assert manifest["completed"] is True
+    assert manifest["discovery_root"] == str(root.resolve())
+    assert manifest["explicit_pdfs"] == ["sub/a.pdf"]
+    assert set(manifest) == EXAMPLES_MANIFEST_KEYS | {"explicit_pdfs"}
+    assert predictions["predictions"]
+    assert {item["document_id"] for item in predictions["predictions"]} == {"example:sub/a.pdf"}
+    folder_manifest, folder_predictions = _read(folder)
+    assert _document_view(manifest, predictions, "example:sub/a.pdf") == _document_view(
+        folder_manifest, folder_predictions, "example:sub/a.pdf"
+    )
+
+
+def test_examples_pdf_option_accepts_cwd_relative_paths_and_orders_like_discovery(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from scripts import benchmark_symbols
+
+    root = _examples_root(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    output = tmp_path / "run"
+    arguments = ["examples", "--root", "examples", "--output", str(output)]
+    selected = ["--pdf", "examples/Z.PDF", "--pdf", "examples/sub/../b.pdf"]
+    assert benchmark_symbols.main([*arguments, *selected]) == 0
+    manifest, _ = _read(output)
+    assert [item["id"] for item in manifest["documents"]] == ["example:b.pdf", "example:Z.PDF"]
+    assert manifest["explicit_pdfs"] == ["b.pdf", "Z.PDF"]
+    assert manifest["discovery_root"] == str(root.resolve())
+
+
+@pytest.mark.parametrize("case", ["outside", "missing", "not-pdf", "duplicate", "directory"])
+def test_examples_pdf_option_rejects_invalid_selection_without_running(
+    tmp_path: Path, case: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from scripts import benchmark_symbols
+
+    root = _examples_root(tmp_path)
+    outside = tmp_path / "outside.pdf"
+    outside.write_bytes((root / "b.pdf").read_bytes())
+    selections = {
+        "outside": [outside],
+        "missing": [root / "absent.pdf"],
+        "not-pdf": [root / "notes.txt"],
+        "duplicate": [root / "b.pdf", root / "sub" / ".." / "b.pdf"],
+        "directory": [root / "sub"],
+    }
+    arguments = ["examples", "--root", str(root), "--output", str(tmp_path / "run")]
+    for path in selections[case]:
+        arguments += ["--pdf", str(path)]
+    with pytest.raises(SystemExit) as raised:
+        benchmark_symbols.main(arguments)
+    assert raised.value.code == 2
+    error = capsys.readouterr().err
+    assert "--pdf" in error
+    assert "unrecognized" not in error
+    assert not (tmp_path / "run").exists()
+
+
+def test_run_examples_rejects_pdf_selection_for_missing_root_or_empty_list(
+    tmp_path: Path,
+) -> None:
+    from scripts.symbol_benchmark_runner import run_examples
+
+    with pytest.raises(ValueError, match="--root"):
+        run_examples(tmp_path / "absent", tmp_path / "run", pdfs=[tmp_path / "absent" / "a.pdf"])
+    with pytest.raises(ValueError, match="--pdf"):
+        run_examples(tmp_path, tmp_path / "run", pdfs=[])
+    assert not (tmp_path / "run").exists()

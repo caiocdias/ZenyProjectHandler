@@ -49,77 +49,18 @@ def project_symbol(
     occurrence = values.get("origem_simbolo_ocorrencia_id")
     if not occurrence:
         return None
-    alternatives = tuple(
-        ReviewSymbolAlternativeDto(symbol_class=item.get("classe"), subtype=item.get("subtipo"))
-        for item in _array(values.get("simbolo_alternativas"))
-        if isinstance(item, dict)
-    )
-    methods: list[ReviewSymbolMethodDto] = []
-    navigation_by_id = {
-        str(item.evidence_id.root): item for item in navigation if item.evidence_id is not None
-    }
-    for row in _array(values.get("simbolo_observacoes")):
-        if not isinstance(row, dict):
-            continue
-        target = navigation_by_id.get(str(row.get("evidence_id")))
-        if target is not None:
-            methods.append(
-                ReviewSymbolMethodDto(
-                    signature=str(row["method_signature"]),
-                    observation_id=str(row["observation_id"]),
-                    raw_score=_decimal(row.get("raw_score")),
-                    evidence=target,
-                )
-            )
-    for target in navigation:
-        if target.evidence_id is None:
-            continue
-        evidence = evidence_by_id.get(target.evidence_id.root)
-        if evidence is None:
-            continue
-        attributes = dict(evidence.atributos_extraidos)
-        observation = attributes.get("simbolo_observacao_id")
-        if observation is None or str(observation) in {m.observation_id for m in methods}:
-            continue
-        methods.append(
-            ReviewSymbolMethodDto(
-                signature=evidence.metodo.removeprefix("simbolo:"),
-                observation_id=str(observation),
-                raw_score=_decimal(attributes.get("simbolo_score_bruto")),
-                evidence=target,
-            )
-        )
+    alternatives = _alternatives(values)
+    methods = _methods(values, evidence_by_id, navigation)
     exclusive = len({method.signature for method in methods}) == 1
     role = str(values.get("simbolo_papel") or "desconhecido")
     coverage = tuple(i for i in _array(values.get("simbolo_matriz_metodos")) if isinstance(i, dict))
     references = tuple(str(i) for i in _array(values.get("simbolo_reference_ids")))
-    situation_hints = {
-        row.get("situacao")
-        for row in _array(values.get("simbolo_situacoes_observadas"))
-        if isinstance(row, dict) and row.get("situacao") is not None
-    }
-    ambiguous = (
-        len({(a.symbol_class, a.subtype) for a in alternatives}) > 1
-        or len(references) > 1
-        or len(situation_hints) > 1
-        or any(row.get("state") == "conflict" for row in coverage)
-    )
-    status: Any = (
-        "informative"
-        if role == "informativo"
-        else "conflicting"
-        if ambiguous
-        else "unknown"
-        if role == "desconhecido" or not methods
-        else "exclusive"
-        if exclusive
-        else "supported"
-    )
+    ambiguous = _is_ambiguous(alternatives, references, _situation_hints(values), coverage)
     return ReviewSymbolDto(
         occurrence_id=str(occurrence),
         symbol_class=str(values["simbolo_classe"]) if values.get("simbolo_classe") else None,
         role=role,
-        status=status,
+        status=_status(role, ambiguous=ambiguous, has_methods=bool(methods), exclusive=exclusive),
         exclusive=exclusive,
         unsupported_family=values.get("simbolo_familia_nao_suportada") is True,
         alternatives=alternatives,
@@ -139,3 +80,103 @@ def project_symbol(
         else None,
         calibrated_probability=_decimal(values.get("simbolo_probabilidade_calibrada")),
     )
+
+
+def _alternatives(values: dict[str, Any]) -> tuple[ReviewSymbolAlternativeDto, ...]:
+    return tuple(
+        ReviewSymbolAlternativeDto(symbol_class=item.get("classe"), subtype=item.get("subtipo"))
+        for item in _array(values.get("simbolo_alternativas"))
+        if isinstance(item, dict)
+    )
+
+
+def _methods(
+    values: dict[str, Any],
+    evidence_by_id: dict[UUID, EvidenciaDocumento],
+    navigation: tuple[EvidenceNavigationDto, ...],
+) -> list[ReviewSymbolMethodDto]:
+    """Métodos declarados nas observações seguidos dos inferidos pelas evidências navegáveis."""
+    methods = _declared_methods(values, navigation)
+    _append_evidence_methods(methods, evidence_by_id, navigation)
+    return methods
+
+
+def _declared_methods(
+    values: dict[str, Any],
+    navigation: tuple[EvidenceNavigationDto, ...],
+) -> list[ReviewSymbolMethodDto]:
+    methods: list[ReviewSymbolMethodDto] = []
+    navigation_by_id = {
+        str(item.evidence_id.root): item for item in navigation if item.evidence_id is not None
+    }
+    for row in _array(values.get("simbolo_observacoes")):
+        if not isinstance(row, dict):
+            continue
+        target = navigation_by_id.get(str(row.get("evidence_id")))
+        if target is not None:
+            methods.append(
+                ReviewSymbolMethodDto(
+                    signature=str(row["method_signature"]),
+                    observation_id=str(row["observation_id"]),
+                    raw_score=_decimal(row.get("raw_score")),
+                    evidence=target,
+                )
+            )
+    return methods
+
+
+def _append_evidence_methods(
+    methods: list[ReviewSymbolMethodDto],
+    evidence_by_id: dict[UUID, EvidenciaDocumento],
+    navigation: tuple[EvidenceNavigationDto, ...],
+) -> None:
+    for target in navigation:
+        if target.evidence_id is None:
+            continue
+        evidence = evidence_by_id.get(target.evidence_id.root)
+        if evidence is None:
+            continue
+        attributes = dict(evidence.atributos_extraidos)
+        observation = attributes.get("simbolo_observacao_id")
+        if observation is None or str(observation) in {m.observation_id for m in methods}:
+            continue
+        methods.append(
+            ReviewSymbolMethodDto(
+                signature=evidence.metodo.removeprefix("simbolo:"),
+                observation_id=str(observation),
+                raw_score=_decimal(attributes.get("simbolo_score_bruto")),
+                evidence=target,
+            )
+        )
+
+
+def _situation_hints(values: dict[str, Any]) -> set[Any]:
+    return {
+        row.get("situacao")
+        for row in _array(values.get("simbolo_situacoes_observadas"))
+        if isinstance(row, dict) and row.get("situacao") is not None
+    }
+
+
+def _is_ambiguous(
+    alternatives: tuple[ReviewSymbolAlternativeDto, ...],
+    references: tuple[str, ...],
+    situation_hints: set[Any],
+    coverage: tuple[dict[Any, Any], ...],
+) -> bool:
+    return (
+        len({(a.symbol_class, a.subtype) for a in alternatives}) > 1
+        or len(references) > 1
+        or len(situation_hints) > 1
+        or any(row.get("state") == "conflict" for row in coverage)
+    )
+
+
+def _status(role: str, *, ambiguous: bool, has_methods: bool, exclusive: bool) -> Any:
+    if role == "informativo":
+        return "informative"
+    if ambiguous:
+        return "conflicting"
+    if role == "desconhecido" or not has_methods:
+        return "unknown"
+    return "exclusive" if exclusive else "supported"

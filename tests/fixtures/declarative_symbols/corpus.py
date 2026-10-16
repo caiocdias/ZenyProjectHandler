@@ -8,6 +8,7 @@ compare predictions with the returned manifest after inference has completed.
 from __future__ import annotations
 
 import hashlib
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -77,11 +78,57 @@ WAVE3_CASES = (
         "cemig-eo-r3-s23-v012", "family-f02-23", "label_in_frame", "rectangle", "BQX", "associated"
     ),
 )
-ENABLED_CASES = _INITIAL_ENABLED_CASES + WAVE2_CASES + WAVE3_CASES
+# Disco roxo de ponto de conexão (§28, linha 1): desenhos autorais em que uma
+# linha de rede termina no centro de um disco pequeno preenchido, sem texto.
+TERMINAL_DISC_CASES = (
+    EnabledCase("cemig-eo-r3-s28-v001", "family-f02-28", "terminal_disc", "disc", fill="purple"),
+)
+ENABLED_CASES = _INITIAL_ENABLED_CASES + WAVE2_CASES + WAVE3_CASES + TERMINAL_DISC_CASES
+
+_DARK_PURPLE = (0.31, 0.10, 0.30)
+_DISC_CENTER = (150.0, 150.0)
+_DISC_RADIUS = 1.4
+# Desenhos do disco terminal e as variantes esperadas com todos os pacotes na página.
+TERMINAL_DISC_POSITIVES = ("solid", "split", "stripes")
+TERMINAL_DISC_NEGATIVES: dict[str, tuple[str, ...]] = {
+    "unframed": (),
+    "north": (),
+    "green": (),
+    "red": (),
+    "black": (),
+    "lilac_disc": (),
+    "no_line": (),
+    "through_line": (),
+    "large": (),
+    "labeled": (),
+    "lilac_ring": ("cemig-eo-r3-s28-v003",),
+    "covered": (),
+    "triangle": (),
+}
+
+
+def extra_positive_kinds(case: EnabledCase) -> tuple[str, ...]:
+    """Other authored drawings of the same variant, beyond the default positive."""
+    if case.kind == "terminal_disc":
+        return TERMINAL_DISC_POSITIVES[1:]
+    return ()
+
+
+def expected_variant_ids(case: EnabledCase, drawing: str) -> list[str]:
+    """Variants that all packages together must emit on one authored page."""
+    if not drawing or drawing in extra_positive_kinds(case):
+        return [case.variant_id]
+    if case.kind == "triangle_in_frame" and drawing == "wrong_fill":
+        return ["cemig-eo-r3-s07-v002" if case.fill == "empty" else "cemig-eo-r3-s07-v001"]
+    if case.kind == "terminal_disc":
+        return list(TERMINAL_DISC_NEGATIVES[drawing])
+    return []
 
 
 def negative_kinds(case: EnabledCase) -> tuple[str, ...]:
     common = ("unframed", "north")
+    if case.kind == "terminal_disc":
+        return tuple(TERMINAL_DISC_NEGATIVES)
     if case.kind == "label_in_frame":
         if case.style == "associated":
             return (*common, "simple_frame", "no_gray", "wrong_label", "table_text")
@@ -99,7 +146,85 @@ def negative_kinds(case: EnabledCase) -> tuple[str, ...]:
     raise AssertionError(f"No negative drawing for {case.kind}")
 
 
+def _disc_stripes(page: pymupdf.Page, center: tuple[float, float], radius: float) -> None:
+    """Export-like disc: twelve stacked filled chords without gaps.
+
+    Even bands are rectangles; odd bands are two filled triangles, as some
+    exporters tessellate a disc into line-only paths.
+    """
+    count = 12
+    height = 2 * radius / count
+    for index in range(count):
+        top = center[1] - radius + index * height
+        offset = top + height / 2 - center[1]
+        half = math.sqrt(radius * radius - offset * offset)
+        band = pymupdf.Rect(center[0] - half, top, center[0] + half, top + height)
+        if index % 2 == 0:
+            page.draw_rect(band, color=None, fill=_DARK_PURPLE)
+            continue
+        shape = page.new_shape()
+        shape.draw_polyline([band.tl, band.tr, band.br, band.tl])
+        shape.draw_polyline([band.tl, band.br, band.bl, band.tl])
+        shape.finish(color=_DARK_PURPLE, fill=_DARK_PURPLE, width=0.05)
+        shape.commit()
+
+
+def _purple_triangle(page: pymupdf.Page) -> None:
+    x, y = _DISC_CENTER
+    shape = page.new_shape()
+    shape.draw_polyline([(x, y - 1.6), (x + 1.5, y + 1.0), (x - 1.5, y + 1.0), (x, y - 1.6)])
+    shape.finish(color=None, fill=_DARK_PURPLE)
+    shape.commit()
+
+
+_NEAR_MISS_FILLS = {
+    "green": (0.0, 0.6, 0.0),
+    "red": (0.8, 0.0, 0.0),
+    "black": (0.0, 0.0, 0.0),
+    "lilac_disc": (0.75, 0.55, 0.9),
+}
+
+
+def _draw_disc(page: pymupdf.Page, drawing: str) -> None:
+    if drawing == "stripes":
+        _disc_stripes(page, _DISC_CENTER, _DISC_RADIUS)
+    elif drawing == "split":
+        page.draw_circle(_DISC_CENTER, _DISC_RADIUS, color=None, fill=_DARK_PURPLE)
+        page.draw_circle(_DISC_CENTER, _DISC_RADIUS, color=_DARK_PURPLE, width=0.3)
+    elif drawing == "triangle":
+        _purple_triangle(page)
+    else:
+        fill = _NEAR_MISS_FILLS.get(drawing, _DARK_PURPLE)
+        radius = 6.0 if drawing == "large" else _DISC_RADIUS
+        page.draw_circle(_DISC_CENTER, radius, color=fill, fill=fill, width=0.2)
+
+
+def draw_terminal_disc(page: pymupdf.Page, drawing: str = "solid") -> None:
+    """A network line ending at the centre of a small filled disc, or a near miss."""
+    if drawing == "north":
+        draw_north_negative(page)
+        return
+    if drawing == "lilac_ring":
+        page.draw_oval(pymupdf.Rect(110, 110, 158, 158), color=(0.75, 0.55, 0.9), width=1)
+        page.insert_text((116, 139), "EC", fontsize=11)
+        return
+    line_color = (0.0, 0.55, 0.2) if drawing == "split" else (0.5, 0.5, 0.5)
+    if drawing == "through_line":
+        page.draw_line((60, 150), (240, 150), color=line_color, width=0.7)
+    elif drawing != "no_line":
+        page.draw_line((60, 150), _DISC_CENTER, color=line_color, width=0.7)
+    if drawing != "unframed":
+        _draw_disc(page, drawing)
+    if drawing == "labeled":
+        page.insert_text((149.4, 150.7), "1", fontsize=2)
+    if drawing == "covered":
+        page.draw_rect(pymupdf.Rect(140, 140, 160, 160), color=None, fill=(1, 1, 1))
+
+
 def draw_symbol(page: pymupdf.Page, case: EnabledCase, *, negative: str = "") -> None:
+    if case.kind == "terminal_disc":
+        draw_terminal_disc(page, negative or TERMINAL_DISC_POSITIVES[0])
+        return
     if case.style == "associated":
         if negative == "table_text":
             page.draw_rect(pymupdf.Rect(80, 95, 220, 180), color=(0, 0, 0), width=1)
@@ -191,24 +316,21 @@ def build_enabled_corpus(path: Path) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     with pymupdf.open() as document:
         for case in ENABLED_CASES:
-            for negative in ("", *negative_kinds(case)):
+            extras = extra_positive_kinds(case)
+            for drawing in ("", *extras, *negative_kinds(case)):
                 page = document.new_page(width=300, height=300)
-                if negative == "north":
+                if drawing == "north":
                     draw_north_negative(page)
                 else:
-                    draw_symbol(page, case, negative=negative)
-                expected = [case.variant_id] if not negative else []
-                if case.kind == "triangle_in_frame" and negative == "wrong_fill":
-                    expected = [
-                        "cemig-eo-r3-s07-v002" if case.fill == "empty" else "cemig-eo-r3-s07-v001"
-                    ]
+                    draw_symbol(page, case, negative=drawing)
+                stratum = f"positive_{drawing}" if drawing in extras else drawing
                 rows.append(
                     {
                         "page": len(document),
                         "family_id": case.family_id,
                         "variant_id": case.variant_id,
-                        "stratum": negative if negative else "positive",
-                        "expected_variant_ids": expected,
+                        "stratum": stratum or "positive",
+                        "expected_variant_ids": expected_variant_ids(case, drawing),
                     }
                 )
         document.save(path)

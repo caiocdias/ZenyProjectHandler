@@ -45,6 +45,7 @@ from zeny_project_handler_contracts.enums import (
 from zeny_project_handler_contracts.errors import ErrorCode
 from zeny_project_handler_contracts.review import (
     AcceptReviewProposalRequest,
+    AnalysisRegionDto,
     CreateManualElementRequest,
     CreateManualRelationRequest,
     DetectedSpanDto,
@@ -966,77 +967,10 @@ class ReviewPanelWidget(QWidget):
         visible = {item.proposal_id.root: item for item in proposals}
         grouped_ids = {p.root for region in session.regions for p in region.proposal_ids}
         for region in session.regions:
-            elements = tuple(
-                visible[item.root]
-                for item in region.proposal_ids
-                if item.root in visible
-                and not ((symbol := visible[item.root].symbol) and symbol.unsupported_family)
-            )
+            elements = _region_tree_elements(region, visible)
             if not elements and region.proposal_ids:
                 continue
-            root = QTreeWidgetItem(
-                (
-                    region.label,
-                    region.action_summary,
-                    region.coordinate_label,
-                    f"{len(elements)} elemento(s)",
-                    f"{len(region.relation_proposal_ids)} vínculo(s)",
-                    "",
-                )
-            )
-            root.setData(0, Qt.ItemDataRole.UserRole + 1, str(region.region_id.root))
-            root.setToolTip(0, region.location_label)
-            root.setToolTip(1, region.detail_summary)
-            self._tree.addTopLevelItem(root)
-            region_id = region.region_id.root
-            region_visible = region_id not in self._hidden_region_ids
-            region_button = self._visibility_button(
-                visible=region_visible,
-                object_name="analysisRegionVisibilityButton",
-                tooltip="Ocultar o ponto inteiro no PDF"
-                if region_visible
-                else "Exibir o ponto inteiro no PDF",
-                toggled=partial(self._set_region_visible, region_id),
-            )
-            region_button.setProperty("regionId", str(region_id))
-            self._visibility_buttons[("region", region_id)] = region_button
-            self._tree.setItemWidget(root, 5, region_button)
-            for proposal in elements:
-                child = QTreeWidgetItem(
-                    (
-                        proposal.label,
-                        proposal.situation_label,
-                        "",
-                        proposal.catalog_label,
-                        (
-                            _symbol_status_label(proposal.symbol.status)
-                            if proposal.symbol
-                            else "; ".join(proposal.relationship_labels)
-                            or "Agrupado por proximidade"
-                        ),
-                        "",
-                    )
-                )
-                proposal_id = proposal.proposal_id.root
-                child.setData(0, Qt.ItemDataRole.UserRole, str(proposal_id))
-                if proposal.symbol:
-                    child.setToolTip(0, _symbol_detail(proposal))
-                root.addChild(child)
-                element_visible = region_visible and proposal_id not in self._hidden_proposal_ids
-                button = self._visibility_button(
-                    visible=element_visible,
-                    object_name="analysisElementVisibilityButton",
-                    tooltip=(
-                        "Ocultar somente este elemento no PDF"
-                        if element_visible
-                        else "Exibir somente este elemento no PDF"
-                    ),
-                    toggled=partial(self._set_element_visible, proposal_id),
-                )
-                button.setEnabled(region_visible)
-                button.setProperty("proposalId", str(proposal_id))
-                self._visibility_buttons[("element", proposal_id)] = button
-                self._tree.setItemWidget(child, 5, button)
+            self._add_region_tree_item(region, elements)
         for title, items in (
             (
                 "Símbolos e identificações sem região",
@@ -1055,29 +989,103 @@ class ReviewPanelWidget(QWidget):
         ):
             if not items:
                 continue
-            root = QTreeWidgetItem((title, "", "", f"{len(items)} ocorrência(s)", "", ""))
-            self._tree.addTopLevelItem(root)
-            for proposal in items:
-                symbol = proposal.symbol
-                page_number = self._project_page_number(proposal.overlay.geometry.page_id.root)
-                child = QTreeWidgetItem(
-                    (
-                        proposal.label,
-                        proposal.situation_label,
-                        f"Folha {page_number}",
-                        proposal.catalog_label,
-                        _symbol_status_label(symbol.status) if symbol else proposal.state_label,
-                        "",
-                    )
-                )
-                child.setData(0, Qt.ItemDataRole.UserRole, str(proposal.proposal_id.root))
-                child.setToolTip(0, _symbol_detail(proposal))
-                root.addChild(child)
+            self._add_symbol_group_tree_item(title, items)
         if not visible:
             self._tree.addTopLevelItem(
                 QTreeWidgetItem(("Nenhuma identificação neste filtro", "", "", "", "", ""))
             )
         self._tree.expandAll()
+
+    def _add_region_tree_item(
+        self, region: AnalysisRegionDto, elements: tuple[ReviewProposalDto, ...]
+    ) -> None:
+        root = QTreeWidgetItem(
+            (
+                region.label,
+                region.action_summary,
+                region.coordinate_label,
+                f"{len(elements)} elemento(s)",
+                f"{len(region.relation_proposal_ids)} vínculo(s)",
+                "",
+            )
+        )
+        root.setData(0, Qt.ItemDataRole.UserRole + 1, str(region.region_id.root))
+        root.setToolTip(0, region.location_label)
+        root.setToolTip(1, region.detail_summary)
+        self._tree.addTopLevelItem(root)
+        region_id = region.region_id.root
+        region_visible = region_id not in self._hidden_region_ids
+        region_button = self._visibility_button(
+            visible=region_visible,
+            object_name="analysisRegionVisibilityButton",
+            tooltip="Ocultar o ponto inteiro no PDF"
+            if region_visible
+            else "Exibir o ponto inteiro no PDF",
+            toggled=partial(self._set_region_visible, region_id),
+        )
+        region_button.setProperty("regionId", str(region_id))
+        self._visibility_buttons[("region", region_id)] = region_button
+        self._tree.setItemWidget(root, 5, region_button)
+        for proposal in elements:
+            self._add_region_element_tree_item(root, proposal, region_visible=region_visible)
+
+    def _add_region_element_tree_item(
+        self, root: QTreeWidgetItem, proposal: ReviewProposalDto, *, region_visible: bool
+    ) -> None:
+        child = QTreeWidgetItem(
+            (
+                proposal.label,
+                proposal.situation_label,
+                "",
+                proposal.catalog_label,
+                (
+                    _symbol_status_label(proposal.symbol.status)
+                    if proposal.symbol
+                    else "; ".join(proposal.relationship_labels) or "Agrupado por proximidade"
+                ),
+                "",
+            )
+        )
+        proposal_id = proposal.proposal_id.root
+        child.setData(0, Qt.ItemDataRole.UserRole, str(proposal_id))
+        if proposal.symbol:
+            child.setToolTip(0, _symbol_detail(proposal))
+        root.addChild(child)
+        element_visible = region_visible and proposal_id not in self._hidden_proposal_ids
+        button = self._visibility_button(
+            visible=element_visible,
+            object_name="analysisElementVisibilityButton",
+            tooltip=(
+                "Ocultar somente este elemento no PDF"
+                if element_visible
+                else "Exibir somente este elemento no PDF"
+            ),
+            toggled=partial(self._set_element_visible, proposal_id),
+        )
+        button.setEnabled(region_visible)
+        button.setProperty("proposalId", str(proposal_id))
+        self._visibility_buttons[("element", proposal_id)] = button
+        self._tree.setItemWidget(child, 5, button)
+
+    def _add_symbol_group_tree_item(self, title: str, items: tuple[ReviewProposalDto, ...]) -> None:
+        root = QTreeWidgetItem((title, "", "", f"{len(items)} ocorrência(s)", "", ""))
+        self._tree.addTopLevelItem(root)
+        for proposal in items:
+            symbol = proposal.symbol
+            page_number = self._project_page_number(proposal.overlay.geometry.page_id.root)
+            child = QTreeWidgetItem(
+                (
+                    proposal.label,
+                    proposal.situation_label,
+                    f"Folha {page_number}",
+                    proposal.catalog_label,
+                    _symbol_status_label(symbol.status) if symbol else proposal.state_label,
+                    "",
+                )
+            )
+            child.setData(0, Qt.ItemDataRole.UserRole, str(proposal.proposal_id.root))
+            child.setToolTip(0, _symbol_detail(proposal))
+            root.addChild(child)
 
     def _select_tree_proposal(self) -> None:
         selected = self._tree.selectedItems()
@@ -1599,6 +1607,18 @@ def _proposal_category(value: ReviewItem) -> str:
 def _proposal_label(value: ReviewProposalDto) -> str:
     """Rótulo já calculado pelo servidor; mantido como helper puramente visual."""
     return value.label
+
+
+def _region_tree_elements(
+    region: AnalysisRegionDto, visible: dict[UUID, ReviewProposalDto]
+) -> tuple[ReviewProposalDto, ...]:
+    """Elementos visíveis do ponto, sem as famílias não suportadas (listadas à parte)."""
+    return tuple(
+        visible[item.root]
+        for item in region.proposal_ids
+        if item.root in visible
+        and not ((symbol := visible[item.root].symbol) and symbol.unsupported_family)
+    )
 
 
 def _symbol_status_label(status: str) -> str:

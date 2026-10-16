@@ -17,6 +17,7 @@ from tests.fixtures.transformers.fixtures import (
     build_fill_morphology_fixture,
     build_fixture,
     build_generalization_fixture,
+    build_stem_triangle_fixture,
 )
 
 from zeny_project_handler.adapters.analysis.pymupdf_transformers import (
@@ -63,6 +64,14 @@ def fill_morphology_corpus(
 ) -> tuple[Path, tuple[FixtureOccurrence, ...]]:
     path = tmp_path_factory.mktemp("e05-transformers-b5") / "author-fill-morphology.pdf"
     return path, build_fill_morphology_fixture(path)
+
+
+@pytest.fixture(scope="module")
+def stem_triangle_corpus(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> tuple[Path, tuple[FixtureOccurrence, ...]]:
+    path = tmp_path_factory.mktemp("e05-transformers-b6") / "author-stem-triangles.pdf"
+    return path, build_stem_triangle_fixture(path)
 
 
 def _run(path: Path, page_number: int) -> ResultadoMetodoSimbolos:
@@ -397,3 +406,94 @@ def test_b5_hollow_connected_loops_remain_one_transformer(
     assert attributes["cardinalidade"] == "indeterminada"
     assert attributes["quantidade_ativos"] is None
     assert observation.situacao is None
+
+
+def _components(observation: ObservacaoSimbolo) -> dict[str, set[int]]:
+    raw = _attributes(observation)["componentes"]
+    assert isinstance(raw, str)
+    parsed: dict[str, set[int]] = {}
+    for component in json.loads(raw):
+        parsed.setdefault(component["tipo"], set()).update(
+            int(source[0]) for source in component["fontes"]
+        )
+    return parsed
+
+
+def _single_transformer(path: Path, case: FixtureOccurrence) -> ObservacaoSimbolo:
+    result = _run(path, case.page_number)
+    assert result.completo
+    assert len(result.observacoes) == 1, (case.stratum, len(result.observacoes))
+    observation = result.observacoes[0]
+    assert any(item.classe == "TRANSFORMADOR" for item in observation.alternativas)
+    assert case.variant_id in _possible_references(observation)
+    attributes = _attributes(observation)
+    assert attributes["variante_grafica"] == "triangulo"
+    assert attributes["cardinalidade"] == "indeterminada"
+    assert attributes["quantidade_ativos"] is None
+    assert observation.situacao is None
+    return observation
+
+
+@pytest.mark.parametrize("stratum", ("stem_white_outline", "stem_hollow_outline"))
+def test_b6_thin_outline_with_external_stem_is_one_transformer(
+    stem_triangle_corpus: tuple[Path, tuple[FixtureOccurrence, ...]], stratum: str
+) -> None:
+    path, cases = stem_triangle_corpus
+    case = next(case for case in cases if case.stratum == stratum)
+    observation = _single_transformer(path, case)
+    components = _components(observation)
+    assert "haste_externa" in components
+    assert "eixo_interno" not in components
+    assert _iou(observation, case) >= 0.5, _iou(observation, case)
+    references = _possible_references(observation)
+    assert references <= {f"cemig-eo-r3-s18-v{index:03}" for index in range(7, 16)}
+
+
+def test_b6_polygonal_ring_is_the_install_envelope(
+    stem_triangle_corpus: tuple[Path, tuple[FixtureOccurrence, ...]],
+) -> None:
+    path, cases = stem_triangle_corpus
+    case = next(case for case in cases if case.stratum == "stem_polygon_ring")
+    observation = _single_transformer(path, case)
+    components = _components(observation)
+    assert {"haste_externa", "envoltoria"} <= set(components)
+    assert _iou(observation, case) >= 0.8, _iou(observation, case)
+
+
+def test_b6_red_cross_uses_the_crossing_thick_strokes(
+    stem_triangle_corpus: tuple[Path, tuple[FixtureOccurrence, ...]],
+) -> None:
+    path, cases = stem_triangle_corpus
+    case = next(case for case in cases if case.stratum == "stem_thick_red_cross")
+    with pymupdf.open(path) as document:
+        drawings = document[case.page_number - 1].get_drawings(extended=True)
+    thick_red = {
+        index
+        for index, drawing in enumerate(drawings)
+        if drawing.get("type") == "s" and float(drawing.get("width") or 0) > 1.0
+    }
+    assert len(thick_red) == 2
+    observation = _single_transformer(path, case)
+    components = _components(observation)
+    assert components.get("x_vermelho") == thick_red
+    assert _iou(observation, case) >= 0.8, _iou(observation, case)
+
+
+@pytest.mark.parametrize(
+    "stratum",
+    (
+        "green_marker_base_stem",
+        "elongated_arrowhead_apex_stem",
+        "black_filled_triangle_stem",
+        "white_triangle_without_stem",
+        "white_triangle_perpendicular_tick",
+    ),
+)
+def test_b6_similar_triangles_without_transformer_stem_are_not_transformers(
+    stem_triangle_corpus: tuple[Path, tuple[FixtureOccurrence, ...]], stratum: str
+) -> None:
+    path, cases = stem_triangle_corpus
+    case = next(case for case in cases if case.stratum == stratum)
+    result = _run(path, case.page_number)
+    assert result.completo
+    assert result.observacoes == (), stratum

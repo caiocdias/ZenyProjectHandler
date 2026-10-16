@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/Scripts/python.exe -m scripts.curation_round *)",
+      "Bash(.venv/Scripts/python.exe -m scripts.curation_render *)",
+      "Bash(.venv/Scripts/python.exe -m scripts.curation_infer *)",
+      "Bash(.venv/Scripts/python.exe -m scripts.curation_reference *)",
+      "Bash(.venv/Scripts/python.exe -m scripts.curation_compare *)",
+      "Bash(.venv/Scripts/python.exe -m scripts.curation_audit *)",
+      "Bash(.venv/Scripts/python.exe -m scripts.curation_backlog *)",
+      "Bash(.venv/Scripts/python.exe -m scripts.curation_coverage_e16 *)",
+      "Bash(.venv/Scripts/python.exe -m scripts.coverage_matrix_e16 *)",
+      "Bash(.venv/Scripts/python.exe -m scripts.benchmark_symbols *)",
+      "Bash(.venv/Scripts/python.exe -m scripts.benchmark_packages_e07 *)",
+      "Bash(.venv/Scripts/python.exe -m scripts.benchmark_transformers_e05 *)",
+      "Bash(.venv/Scripts/python.exe -m scripts.benchmark_guys_e06 *)",
+      "Bash(.venv/Scripts/python.exe -m scripts.benchmark_review_e14 *)",
+      "Bash(.venv/Scripts/python.exe -m scripts.reconcile_symbol_benchmark *)",
+      "Bash(.venv/Scripts/python.exe -m pytest *)",
+      "Bash(.venv/Scripts/python.exe -m ruff *)",
+      "Bash(.venv/Scripts/python.exe -m mypy *)"
+    ]
+  }
+}

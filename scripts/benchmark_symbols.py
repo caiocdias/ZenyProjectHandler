@@ -4,6 +4,8 @@ Examples (repository root, installed development/server dependencies):
   python -m scripts.benchmark_symbols synthetic --output tmp/curadoria-simbologia/baseline
   python -m scripts.benchmark_symbols examples --root examples
       --output tmp/curadoria-simbologia/predictions
+  python -m scripts.benchmark_symbols examples --root examples --pdf examples/sub/a.pdf
+      --output tmp/curadoria-simbologia/predictions-a
   python -m scripts.benchmark_symbols evaluate --reference reference.json
       --predictions predictions.json --output report.json
 
@@ -17,7 +19,12 @@ import argparse
 import json
 from pathlib import Path
 
-from scripts.symbol_benchmark_runner import evaluate_files, run_examples, run_synthetic
+from scripts.symbol_benchmark_runner import (
+    evaluate_files,
+    run_examples,
+    run_synthetic,
+    select_example_pdfs,
+)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -52,6 +59,13 @@ def main(argv: list[str] | None = None) -> int:
         "examples", help="all recursive PDFs/pages; independent visual review still required"
     )
     examples.add_argument("--root", type=Path, default=Path("examples"))
+    examples.add_argument(
+        "--pdf",
+        type=Path,
+        action="append",
+        help="run only this PDF under --root instead of discovering the folder (repeatable); "
+        "document_id stays relative to --root",
+    )
     examples.add_argument("--output", type=Path, required=True)
     examples.add_argument(
         "--include-transformers", action="store_true", help="include the opt-in E05 method"
@@ -102,9 +116,15 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0 if result["manifest"]["completed"] else 1
     if options.mode == "examples":
+        if options.pdf is not None:
+            try:
+                select_example_pdfs(options.root, options.pdf)
+            except ValueError as error:
+                examples.error(str(error))
         manifest = run_examples(
             options.root,
             options.output,
+            pdfs=options.pdf,
             include_transformers=options.include_transformers,
             include_guys=options.include_guys,
             include_packages=options.include_packages,

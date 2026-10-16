@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import re
 from collections import defaultdict
@@ -1421,18 +1422,39 @@ def _associate_proposals_to_poles(
         if len(matched) == 1:
             result[proposal.id] = next(iter(matched))
             continue
-        nearest = _nearest_pole(proposal.geometria, poles, page_sizes)
+        nearest = _nearest_pole(
+            proposal.geometria, poles, page_sizes, anchor=_symbol_support_anchor(attributes)
+        )
         if nearest is not None:
             result[proposal.id] = nearest.id
     return result
+
+
+def _symbol_support_anchor(attributes: Mapping[str, object]) -> PontoNormalizado | None:
+    """Centro da ligação símbolo→suporte (ex.: haste até o poste), quando informada."""
+    raw = attributes.get("simbolo_geometria_suporte")
+    if not isinstance(raw, str):
+        return None
+    try:
+        points = tuple(PontoNormalizado(Decimal(x), Decimal(y)) for x, y in json.loads(raw))
+    except (ArithmeticError, TypeError, ValueError):
+        return None
+    if not points:
+        return None
+    return PontoNormalizado(
+        (min(point.x for point in points) + max(point.x for point in points)) / 2,
+        (min(point.y for point in points) + max(point.y for point in points)) / 2,
+    )
 
 
 def _nearest_pole(
     geometry: GeometriaDocumento,
     poles: tuple[Poste, ...],
     page_sizes: Mapping[UUID, tuple[Decimal, Decimal]],
+    *,
+    anchor: PontoNormalizado | None = None,
 ) -> Poste | None:
-    center = _center(geometry)
+    center = anchor if anchor is not None else _center(geometry)
     width, height = page_sizes.get(geometry.pagina_id, (Decimal(1), Decimal(1)))
     candidates = sorted(
         (

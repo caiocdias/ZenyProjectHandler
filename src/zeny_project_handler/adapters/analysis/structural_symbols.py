@@ -393,125 +393,147 @@ def _local_skeleton(strokes: tuple[_Stroke, ...], ink: _RasterInk, budget: _Budg
     return _Skeleton(len(pixels), endpoints, junctions)
 
 
-def _find_candidates(
-    strokes: tuple[_Stroke, ...],
+@dataclass(frozen=True, slots=True)
+class _BarIndex:
+    # Bars of one axis sorted by their axis position, plus that position list.
+    bars: list[_Stroke]
+    positions: list[float]
+
+    def near(self, center: float, radius: float) -> list[_Stroke]:
+        return self.bars[
+            bisect_left(self.positions, center - radius) : bisect_right(
+                self.positions, center + radius
+            )
+        ]
+
+
+def _first_bars(
+    stem: _Stroke,
+    side: int,
+    index: _BarIndex,
     config: ConfiguracaoDetectorEstrutural,
     budget: _Budget,
-    ink: _RasterInk | None = None,
-) -> tuple[_Candidate, ...]:
-    found: list[_Candidate] = []
-    by_axis = {
-        axis: sorted((item for item in strokes if item.axis == axis), key=lambda item: item.line)
-        for axis in ("h", "v")
-    }
-    positions = {axis: [item.line for item in values] for axis, values in by_axis.items()}
-    # A stem meets the first crossbar. Raster runs may continue beyond that
-    # junction when antialiasing merges neighboring row runs; split the visual
-    # support there, then verify the real ink skeleton below.
-    for stem in strokes:
-        if stem.length < 6:
+    ink: _RasterInk | None,
+) -> list[_Stroke]:
+    endpoint = stem.start if side < 0 else stem.end
+    firsts = []
+    first_tolerance = max(1.5, config.tolerancia_lacuna)
+    search_radius = max(first_tolerance, min(stem.length * 0.6, 32.0))
+    for bar in index.near(endpoint, search_radius):
+        budget.step()
+        if not 2 <= bar.length <= stem.length * 1.8:
             continue
-        bar_axis = "v" if stem.axis == "h" else "h"
-        bars = by_axis[bar_axis]
-        bar_positions = positions[bar_axis]
-        for side in (-1, 1):
-            endpoint = stem.start if side < 0 else stem.end
-            firsts = []
-            first_tolerance = max(1.5, config.tolerancia_lacuna)
-            search_radius = max(first_tolerance, min(stem.length * 0.6, 32.0))
-            near = bars[
-                bisect_left(bar_positions, endpoint - search_radius) : bisect_right(
-                    bar_positions, endpoint + search_radius
-                )
-            ]
-            for bar in near:
-                budget.step()
-                if not 2 <= bar.length <= stem.length * 1.8:
-                    continue
-                longitudinal = bar.line
-                lateral = (bar.start + bar.end) / 2
-                lead = (longitudinal - stem.start) if side > 0 else (stem.end - longitudinal)
-                tail = (stem.end - longitudinal) if side > 0 else (longitudinal - stem.start)
-                lateral_tolerance = 3.0 if ink is not None else max(1.5, bar.length * 0.2)
-                if (
-                    lead >= max(6.0, bar.length * 0.3)
-                    and -first_tolerance <= tail <= max(first_tolerance, bar.length * 1.2)
-                    and abs(lateral - stem.line) <= lateral_tolerance
-                ):
-                    firsts.append(bar)
-            for first in firsts:
-                trimmed_stem = _Stroke(
-                    stem.axis,
-                    stem.line,
-                    stem.start if side > 0 else first.line,
-                    first.line if side > 0 else stem.end,
-                )
-                if trimmed_stem.length < 6:
-                    continue
-                ordered = []
-                reach = first.length * 2.5 + 1
-                local = bars[
-                    bisect_left(bar_positions, first.line - reach) : bisect_right(
-                        bar_positions, first.line + reach
-                    )
-                ]
-                for bar in local:
-                    budget.step()
-                    if not 2 <= bar.length <= stem.length * 1.8:
-                        continue
-                    distance = (bar.line - first.line) * side
-                    lateral = (bar.start + bar.end) / 2
-                    lateral_tolerance = 3.0 if ink is not None else max(1.5, bar.length * 0.2)
-                    if (
-                        -1 <= distance <= first.length * 2.5
-                        and abs(lateral - stem.line) <= lateral_tolerance
-                    ):
-                        ordered.append((distance, bar))
-                ordered.sort(key=lambda pair: pair[0])
-                # Distinct bars must have distinct axis positions. Tiny duplicate
-                # strokes are handled in merge, not counted as multiple bars.
-                selected: list[tuple[float, _Stroke]] = []
-                for distance, bar in ordered:
-                    if not selected or distance - selected[-1][0] > max(
-                        1, config.tolerancia_lacuna / 2
-                    ):
-                        selected.append((distance, bar))
-                if not selected or selected[0][1] != first or len(selected) not in (3, 4):
-                    continue
-                gaps = [selected[i + 1][0] - selected[i][0] for i in range(len(selected) - 1)]
-                if min(gaps) < max(1.5, first.length * 0.16) or max(gaps) > first.length * 0.8:
-                    continue
-                if max(gaps) / min(gaps) > 1.8:
-                    continue
-                lengths = [bar.length for _, bar in selected]
-                if not (lengths[0] > lengths[1] * 1.08 and lengths[1] > lengths[2] * 1.08):
-                    continue
-                if len(lengths) == 4 and not (lengths[2] * 1.15 < lengths[3] <= lengths[1] * 1.3):
-                    continue
-                if not first.length * 0.3 <= trimmed_stem.length <= first.length * 2.8:
-                    continue
-                gap_penalty = sum(abs(gap - sum(gaps) / len(gaps)) for gap in gaps) / max(
-                    1, sum(gaps)
-                )
-                support = (trimmed_stem, *(bar for _, bar in selected))
-                graph_tolerance = 3.0 if ink is not None else float(config.tolerancia_lacuna)
-                graph = _graph(support, graph_tolerance, budget)
-                if graph.junctions < 1 or graph.cycles:
-                    continue
-                skeleton = _local_skeleton(support, ink, budget) if ink is not None else None
-                if skeleton is not None and (skeleton.junctions < 1 or skeleton.endpoints < 4):
-                    continue
-                found.append(
-                    _Candidate(
-                        "PARA_RAIOS_MT" if len(selected) == 4 else "ATERRAMENTO",
-                        support,
-                        gap_penalty,
-                        graph,
-                        skeleton,
-                    )
-                )
-                if len(found) > config.limite_tracos:
-                    raise _BudgetExceededError("Limite de candidatos estruturais alcançado")
+        longitudinal = bar.line
+        lateral = (bar.start + bar.end) / 2
+        lead = (longitudinal - stem.start) if side > 0 else (stem.end - longitudinal)
+        tail = (stem.end - longitudinal) if side > 0 else (longitudinal - stem.start)
+        lateral_tolerance = 3.0 if ink is not None else max(1.5, bar.length * 0.2)
+        if (
+            lead >= max(6.0, bar.length * 0.3)
+            and -first_tolerance <= tail <= max(first_tolerance, bar.length * 1.2)
+            and abs(lateral - stem.line) <= lateral_tolerance
+        ):
+            firsts.append(bar)
+    return firsts
+
+
+def _ordered_bars(
+    stem: _Stroke,
+    side: int,
+    first: _Stroke,
+    index: _BarIndex,
+    budget: _Budget,
+    ink: _RasterInk | None,
+) -> list[tuple[float, _Stroke]]:
+    ordered = []
+    reach = first.length * 2.5 + 1
+    for bar in index.near(first.line, reach):
+        budget.step()
+        if not 2 <= bar.length <= stem.length * 1.8:
+            continue
+        distance = (bar.line - first.line) * side
+        lateral = (bar.start + bar.end) / 2
+        lateral_tolerance = 3.0 if ink is not None else max(1.5, bar.length * 0.2)
+        if -1 <= distance <= first.length * 2.5 and abs(lateral - stem.line) <= lateral_tolerance:
+            ordered.append((distance, bar))
+    ordered.sort(key=lambda pair: pair[0])
+    return ordered
+
+
+def _distinct_bars(
+    ordered: list[tuple[float, _Stroke]], config: ConfiguracaoDetectorEstrutural
+) -> list[tuple[float, _Stroke]]:
+    # Distinct bars must have distinct axis positions. Tiny duplicate
+    # strokes are handled in merge, not counted as multiple bars.
+    selected: list[tuple[float, _Stroke]] = []
+    for distance, bar in ordered:
+        if not selected or distance - selected[-1][0] > max(1, config.tolerancia_lacuna / 2):
+            selected.append((distance, bar))
+    return selected
+
+
+def _bar_grammar_gaps(
+    selected: list[tuple[float, _Stroke]], first: _Stroke, trimmed_stem: _Stroke
+) -> list[float] | None:
+    """Return the bar gaps when the bar rhythm and taper fit; otherwise None."""
+    if not selected or selected[0][1] != first or len(selected) not in (3, 4):
+        return None
+    gaps = [selected[i + 1][0] - selected[i][0] for i in range(len(selected) - 1)]
+    if min(gaps) < max(1.5, first.length * 0.16) or max(gaps) > first.length * 0.8:
+        return None
+    if max(gaps) / min(gaps) > 1.8:
+        return None
+    lengths = [bar.length for _, bar in selected]
+    if not (lengths[0] > lengths[1] * 1.08 and lengths[1] > lengths[2] * 1.08):
+        return None
+    if len(lengths) == 4 and not (lengths[2] * 1.15 < lengths[3] <= lengths[1] * 1.3):
+        return None
+    if not first.length * 0.3 <= trimmed_stem.length <= first.length * 2.8:
+        return None
+    return gaps
+
+
+def _candidate_at(
+    stem: _Stroke,
+    side: int,
+    first: _Stroke,
+    index: _BarIndex,
+    config: ConfiguracaoDetectorEstrutural,
+    budget: _Budget,
+    ink: _RasterInk | None,
+) -> _Candidate | None:
+    trimmed_stem = _Stroke(
+        stem.axis,
+        stem.line,
+        stem.start if side > 0 else first.line,
+        first.line if side > 0 else stem.end,
+    )
+    if trimmed_stem.length < 6:
+        return None
+    ordered = _ordered_bars(stem, side, first, index, budget, ink)
+    selected = _distinct_bars(ordered, config)
+    gaps = _bar_grammar_gaps(selected, first, trimmed_stem)
+    if gaps is None:
+        return None
+    gap_penalty = sum(abs(gap - sum(gaps) / len(gaps)) for gap in gaps) / max(1, sum(gaps))
+    support = (trimmed_stem, *(bar for _, bar in selected))
+    graph_tolerance = 3.0 if ink is not None else float(config.tolerancia_lacuna)
+    graph = _graph(support, graph_tolerance, budget)
+    if graph.junctions < 1 or graph.cycles:
+        return None
+    skeleton = _local_skeleton(support, ink, budget) if ink is not None else None
+    if skeleton is not None and (skeleton.junctions < 1 or skeleton.endpoints < 4):
+        return None
+    return _Candidate(
+        "PARA_RAIOS_MT" if len(selected) == 4 else "ATERRAMENTO",
+        support,
+        gap_penalty,
+        graph,
+        skeleton,
+    )
+
+
+def _best_by_bounds(found: list[_Candidate]) -> tuple[_Candidate, ...]:
     # Prefer longer 4-bar MT support to its 3-bar subset; different geometric
     # supports remain independent candidates for the future union stage.
     best: dict[tuple[int, int, int, int], _Candidate] = {}
@@ -526,6 +548,38 @@ def _find_candidates(
         ):
             best[key] = candidate
     return tuple(best.values())
+
+
+def _find_candidates(
+    strokes: tuple[_Stroke, ...],
+    config: ConfiguracaoDetectorEstrutural,
+    budget: _Budget,
+    ink: _RasterInk | None = None,
+) -> tuple[_Candidate, ...]:
+    found: list[_Candidate] = []
+    by_axis = {
+        axis: sorted((item for item in strokes if item.axis == axis), key=lambda item: item.line)
+        for axis in ("h", "v")
+    }
+    indexes = {
+        axis: _BarIndex(values, [item.line for item in values]) for axis, values in by_axis.items()
+    }
+    # A stem meets the first crossbar. Raster runs may continue beyond that
+    # junction when antialiasing merges neighboring row runs; split the visual
+    # support there, then verify the real ink skeleton below.
+    for stem in strokes:
+        if stem.length < 6:
+            continue
+        index = indexes["v" if stem.axis == "h" else "h"]
+        for side in (-1, 1):
+            for first in _first_bars(stem, side, index, config, budget, ink):
+                candidate = _candidate_at(stem, side, first, index, config, budget, ink)
+                if candidate is None:
+                    continue
+                found.append(candidate)
+                if len(found) > config.limite_tracos:
+                    raise _BudgetExceededError("Limite de candidatos estruturais alcançado")
+    return _best_by_bounds(found)
 
 
 def _geometry(page: Any, candidate: _Candidate) -> GeometriaObservacaoSimbolo:

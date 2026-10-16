@@ -8,6 +8,7 @@ import platform
 import subprocess
 import sys
 import tracemalloc
+from collections.abc import Sequence
 from dataclasses import asdict, is_dataclass
 from decimal import Decimal
 from hashlib import sha256
@@ -1392,10 +1393,37 @@ def _run(
     return manifest
 
 
+def select_example_pdfs(root: Path, pdfs: Sequence[Path]) -> list[Path]:
+    """Validate explicit PDFs under ``root``, ordered exactly like folder discovery.
+
+    ``root`` stays the identity base, so each ``document_id`` equals the one produced by
+    discovering the whole folder. Relative paths resolve against the working directory.
+    """
+    root = root.resolve()
+    if not root.is_dir():
+        raise ValueError(f"--root must be an existing directory when --pdf is used: {root}")
+    if not pdfs:
+        raise ValueError("--pdf requires at least one PDF")
+    selected: list[Path] = []
+    for item in pdfs:
+        path = Path(item).resolve()
+        if not path.is_file():
+            raise ValueError(f"--pdf is not an existing file: {item}")
+        if path.suffix.casefold() != ".pdf":
+            raise ValueError(f"--pdf is not a .pdf file: {item}")
+        if not path.is_relative_to(root):
+            raise ValueError(f"--pdf is outside --root: {item}")
+        if path in selected:
+            raise ValueError(f"--pdf repeated: {item}")
+        selected.append(path)
+    return sorted(selected, key=lambda path: path.relative_to(root).as_posix().casefold())
+
+
 def run_examples(
     root: Path,
     output: Path,
     *,
+    pdfs: Sequence[Path] | None = None,
     include_transformers: bool = False,
     include_guys: bool = False,
     include_packages: bool = False,
@@ -1404,20 +1432,26 @@ def run_examples(
     include_legend: bool = False,
     include_legend_ocr: bool = False,
 ) -> Record:
-    """Discover every recursive PDF, including .PDF, without collapsing equal copies."""
+    """Discover every recursive PDF, including .PDF, without collapsing equal copies.
+
+    With ``pdfs``, only those files run; identities stay relative to ``root``.
+    """
     root = root.resolve()
-    sources = (
-        sorted(
-            (
-                path
-                for path in root.rglob("*")
-                if path.is_file() and path.suffix.casefold() == ".pdf"
-            ),
-            key=lambda path: path.relative_to(root).as_posix().casefold(),
+    if pdfs is not None:
+        sources = select_example_pdfs(root, pdfs)
+    else:
+        sources = (
+            sorted(
+                (
+                    path
+                    for path in root.rglob("*")
+                    if path.is_file() and path.suffix.casefold() == ".pdf"
+                ),
+                key=lambda path: path.relative_to(root).as_posix().casefold(),
+            )
+            if root.is_dir()
+            else []
         )
-        if root.is_dir()
-        else []
-    )
     named = [(path, "example:" + path.relative_to(root).as_posix()) for path in sources]
     manifest = _run(
         named,
@@ -1433,6 +1467,8 @@ def run_examples(
     )
     manifest["discovery_root"] = str(root)
     manifest["discovery_root_exists"] = root.is_dir()
+    if pdfs is not None:
+        manifest["explicit_pdfs"] = [path.relative_to(root).as_posix() for path in sources]
     manifest["development_only"] = True
     write_json(output / "manifest.json", manifest)
     return manifest

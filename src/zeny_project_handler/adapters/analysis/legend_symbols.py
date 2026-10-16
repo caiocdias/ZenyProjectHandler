@@ -301,6 +301,97 @@ def _exemplar(
     return box, content, sha256(content).hexdigest()
 
 
+def _native_revision(
+    heading: LeituraLegenda, page_readings: tuple[LeituraLegenda, ...]
+) -> str | None:
+    """Revision text on the heading row, nearest to the right edge of the title."""
+    nearby_revisions = tuple(
+        (item, match)
+        for item in page_readings
+        if item is not heading
+        and abs((item.caixa[1] + item.caixa[3]) / 2 - (heading.caixa[1] + heading.caixa[3]) / 2)
+        <= 18
+        and (match := _REVISION.search(item.texto)) is not None
+    )
+    if not nearby_revisions:
+        return None
+    nearest = min(nearby_revisions, key=lambda pair: abs(pair[0].caixa[0] - heading.caixa[2]))
+    return nearest[1].group(1)
+
+
+def _initial_region(
+    page: Any, heading: LeituraLegenda, config: ConfiguracaoLegenda
+) -> RegiaoLegenda:
+    return RegiaoLegenda(
+        pagina_numero=page.number + 1,
+        caixa=(
+            max(0.0, heading.caixa[0] - 4),
+            max(0.0, heading.caixa[1] - 2),
+            min(float(page.rect.width), heading.caixa[0] + 260),
+            min(float(page.rect.height), heading.caixa[3] + config.alcance_vertical_pt),
+        ),
+        titulo=heading.texto,
+        origem=heading.origem,
+    )
+
+
+def _region_lines(
+    heading: LeituraLegenda, region: RegiaoLegenda, page_readings: tuple[LeituraLegenda, ...]
+) -> list[LeituraLegenda]:
+    return sorted(
+        (
+            item
+            for item in page_readings
+            if item is not heading
+            and item.caixa[1] >= heading.caixa[3]
+            and item.caixa[1] < region.caixa[3]
+            and region.caixa[0] + 20 < item.caixa[0] < region.caixa[2]
+            and not _HEADING.fullmatch(item.texto.strip())
+            and not _REVISION.match(item.texto.strip())
+        ),
+        key=lambda item: (item.caixa[1], item.caixa[0]),
+    )
+
+
+def _legend_pair(
+    page: Any,
+    line: LeituraLegenda,
+    heading: LeituraLegenda,
+    native_revision: str | None,
+    sample: tuple[Caixa, bytes, str],
+) -> ParLegenda:
+    box, image, digest = sample
+    identity = sha256(
+        f"{page.number + 1}:{box}:{line.texto}:{line.origem}:{digest}".encode()
+    ).hexdigest()
+    return ParLegenda(
+        id=identity,
+        pagina_numero=page.number + 1,
+        caixa_exemplar=box,
+        caixa_descricao=line.caixa,
+        descricao=line.texto.strip(),
+        origem=line.origem,
+        revisao=line.revisao or heading.revisao or native_revision,
+        pareamento_incerto=(line.origem != "texto-nativo" or heading.origem != "texto-nativo"),
+        template_sha256=digest,
+        dados_png=image,
+    )
+
+
+def _fitted_region(
+    region: RegiaoLegenda, heading: LeituraLegenda, region_pairs: list[ParLegenda]
+) -> RegiaoLegenda:
+    return replace(
+        region,
+        caixa=(
+            min(heading.caixa[0], *(pair.caixa_exemplar[0] for pair in region_pairs)) - 4,
+            heading.caixa[1] - 2,
+            max(heading.caixa[2], *(pair.caixa_descricao[2] for pair in region_pairs)) + 4,
+            max(pair.caixa_descricao[3] for pair in region_pairs) + 4,
+        ),
+    )
+
+
 def _extract_pairs(
     document: Any, readings: tuple[LeituraLegenda, ...], config: ConfiguracaoLegenda
 ) -> tuple[tuple[ParLegenda, ...], tuple[RegiaoLegenda, ...], tuple[str, ...]]:
@@ -311,48 +402,10 @@ def _extract_pairs(
         page_readings = tuple(item for item in readings if item.pagina_numero == page.number + 1)
         headings = tuple(item for item in page_readings if _HEADING.fullmatch(item.texto.strip()))
         for heading in headings:
-            nearby_revisions = tuple(
-                (item, match)
-                for item in page_readings
-                if item is not heading
-                and abs(
-                    (item.caixa[1] + item.caixa[3]) / 2 - (heading.caixa[1] + heading.caixa[3]) / 2
-                )
-                <= 18
-                and (match := _REVISION.search(item.texto)) is not None
-            )
-            native_revision = (
-                min(nearby_revisions, key=lambda pair: abs(pair[0].caixa[0] - heading.caixa[2]))[
-                    1
-                ].group(1)
-                if nearby_revisions
-                else None
-            )
-            region = RegiaoLegenda(
-                pagina_numero=page.number + 1,
-                caixa=(
-                    max(0.0, heading.caixa[0] - 4),
-                    max(0.0, heading.caixa[1] - 2),
-                    min(float(page.rect.width), heading.caixa[0] + 260),
-                    min(float(page.rect.height), heading.caixa[3] + config.alcance_vertical_pt),
-                ),
-                titulo=heading.texto,
-                origem=heading.origem,
-            )
+            native_revision = _native_revision(heading, page_readings)
+            region = _initial_region(page, heading, config)
             regions.append(region)
-            lines = sorted(
-                (
-                    item
-                    for item in page_readings
-                    if item is not heading
-                    and item.caixa[1] >= heading.caixa[3]
-                    and item.caixa[1] < region.caixa[3]
-                    and region.caixa[0] + 20 < item.caixa[0] < region.caixa[2]
-                    and not _HEADING.fullmatch(item.texto.strip())
-                    and not _REVISION.match(item.texto.strip())
-                ),
-                key=lambda item: (item.caixa[1], item.caixa[0]),
-            )
+            lines = _region_lines(heading, region, page_readings)
             prior_bottom = heading.caixa[3]
             region_pairs: list[ParLegenda] = []
             for line in lines:
@@ -365,38 +418,11 @@ def _extract_pairs(
                 sample = _exemplar(page, line.caixa, region, config)
                 if sample is None:
                     continue
-                box, image, digest = sample
-                identity = sha256(
-                    f"{page.number + 1}:{box}:{line.texto}:{line.origem}:{digest}".encode()
-                ).hexdigest()
-                pair = ParLegenda(
-                    id=identity,
-                    pagina_numero=page.number + 1,
-                    caixa_exemplar=box,
-                    caixa_descricao=line.caixa,
-                    descricao=line.texto.strip(),
-                    origem=line.origem,
-                    revisao=line.revisao or heading.revisao or native_revision,
-                    pareamento_incerto=(
-                        line.origem != "texto-nativo" or heading.origem != "texto-nativo"
-                    ),
-                    template_sha256=digest,
-                    dados_png=image,
-                )
+                pair = _legend_pair(page, line, heading, native_revision, sample)
                 pairs.append(pair)
                 region_pairs.append(pair)
             if region_pairs:
-                regions[-1] = replace(
-                    region,
-                    caixa=(
-                        min(heading.caixa[0], *(pair.caixa_exemplar[0] for pair in region_pairs))
-                        - 4,
-                        heading.caixa[1] - 2,
-                        max(heading.caixa[2], *(pair.caixa_descricao[2] for pair in region_pairs))
-                        + 4,
-                        max(pair.caixa_descricao[3] for pair in region_pairs) + 4,
-                    ),
-                )
+                regions[-1] = _fitted_region(region, heading, region_pairs)
     if len({pair.descricao for pair in pairs}) > 1:
         pairs = [replace(pair, pareamento_incerto=True) for pair in pairs]
     return tuple(pairs), tuple(regions), tuple(diagnostics)
@@ -444,29 +470,39 @@ def _embedded_repetitions(
     return {page: tuple(items) for page, items in by_page.items()}
 
 
-def observar_legenda_documental(
-    document: Any,
-    *,
+_OCCURRENCE_LIMIT = "Limite de ocorrências atingido"
+_TemplateVariant = tuple[ParLegenda, Image.Image, bytes]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class _PageScan:
+    """One page of the search; ``observations`` is shared across the document."""
+
+    page: Any
+    page_number: int
+    source: FonteObservacaoSimbolo
+    profile: PerfilMetodoSimbolos
+    regions: tuple[RegiaoLegenda, ...]
+    config: ConfiguracaoLegenda
+    observations: list[ObservacaoSimbolo]
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class _RenderedTile:
+    pix: Any
+    binary: Image.Image
+    data: bytes
+    sha256: str
+
+
+def _legend_profile(
     documento_id: str,
     documento_sha256: str,
-    leituras_ocr: tuple[LeituraLegenda, ...] = (),
-    configuracao: ConfiguracaoLegenda = _DEFAULT_CONFIG,
-    cancelado: Callable[[], bool] | None = None,
-    progresso: Callable[[int, int], None] | None = None,
-) -> ResultadoLegendaDocumental:
-    """Find document-local legend pairs and their out-of-legend repetitions.
-
-    The returned E03 result is additive. OCR absence or wrong descriptions cannot
-    suppress candidates from other methods. Raw image score is not a probability.
-    """
-    if cancelado is not None and cancelado():
-        raise SymbolScanCancelledError("Legenda cancelada antes da leitura")
-    all_readings = tuple(item for page in document for item in _native_readings(page)) + tuple(
-        leituras_ocr
-    )
-    pairs, regions, raw_diagnostics = _extract_pairs(document, all_readings, configuracao)
-    diagnostics = list(raw_diagnostics)
-    repetitions = _embedded_repetitions(document, regions) if not pairs and not regions else {}
+    leituras_ocr: tuple[LeituraLegenda, ...],
+    configuracao: ConfiguracaoLegenda,
+    pairs: tuple[ParLegenda, ...],
+    repetitions: dict[int, tuple[tuple[str, Caixa], ...]],
+) -> PerfilMetodoSimbolos:
     ocr_signature = sha256(
         repr(
             tuple(
@@ -475,7 +511,7 @@ def observar_legenda_documental(
             )
         ).encode("utf-8")
     ).hexdigest()
-    profile = PerfilMetodoSimbolos(
+    return PerfilMetodoSimbolos(
         metodo_id="document-local-legend",
         versao=_VERSION,
         familia="template-documental-local",
@@ -504,6 +540,246 @@ def observar_legenda_documental(
             ("alcance_vertical_pt", Decimal(str(configuracao.alcance_vertical_pt))),
         ),
     )
+
+
+def _template_variants(pairs: tuple[ParLegenda, ...]) -> list[_TemplateVariant]:
+    variants = []
+    for pair in pairs:
+        with Image.open(io.BytesIO(pair.dados_png)) as image:
+            template = image.convert("L")
+        variants.append(
+            (pair, template, bytes(0 if pixel == 0 else 1 for pixel in template.tobytes()))
+        )
+    return variants
+
+
+def _render_tile(page: Any, factor: float, clip: tuple[int, int, int, int]) -> _RenderedTile:
+    tx, ty, right, bottom = clip
+    pix = page.get_pixmap(
+        matrix=pymupdf.Matrix(factor, factor),
+        clip=pymupdf.Rect(tx / factor, ty / factor, right / factor, bottom / factor),
+        colorspace=pymupdf.csRGB,
+        alpha=False,
+        annots=False,
+    )
+    with Image.frombytes("RGB", (pix.width, pix.height), pix.samples) as rgb:
+        binary = rgb.convert("L").point(lambda value: 255 if value >= 220 else 0)
+    page_data = bytes(0 if pixel == 0 else 1 for pixel in binary.tobytes())
+    tile_hash = sha256(pix.samples).hexdigest()
+    return _RenderedTile(pix=pix, binary=binary, data=page_data, sha256=tile_hash)
+
+
+def _pair_observation(
+    scan: _PageScan, pair: ParLegenda, box: Caixa, score: float, tile_hash: str
+) -> ObservacaoSimbolo:
+    return ObservacaoSimbolo(
+        fonte=scan.source,
+        metodo_assinatura=scan.profile.assinatura(),
+        geometria=_geometry(scan.page, box),
+        alternativas=(AlternativaClasseSimbolo(classe=None),),
+        score_bruto=Decimal(str(score)),
+        raster_sha256=tile_hash,
+        template=pair.id,
+        atributos=(
+            ("contexto", "operacional"),
+            ("descricao_legenda", pair.descricao),
+            ("origem_legenda", pair.origem),
+            ("template_sha256", pair.template_sha256),
+            ("par_legenda_id", pair.id),
+            ("pareamento_incerto", pair.pareamento_incerto),
+            ("revisao_legenda", pair.revisao or ""),
+            ("score_tipo", "similaridade_binaria_bruta_nao_probabilidade"),
+        ),
+    )
+
+
+def _accept_matches(
+    scan: _PageScan,
+    variant: _TemplateVariant,
+    matches: list[tuple[int, int, float]],
+    factor: float,
+    tile: _RenderedTile,
+    accepted: dict[str, list[Caixa]],
+) -> bool:
+    """Record out-of-legend matches; return whether the occurrence limit was hit."""
+    pair, template, _ = variant
+    for x, y, score in matches:
+        box = (
+            (tile.pix.x + x) / factor,
+            (tile.pix.y + y) / factor,
+            (tile.pix.x + x + template.width) / factor,
+            (tile.pix.y + y + template.height) / factor,
+        )
+        if any(
+            region.pagina_numero == scan.page_number and _overlap(box, region.caixa)
+            for region in scan.regions
+        ):
+            continue
+        if any(_iou(box, old) >= 0.62 for old in accepted.get(pair.id, ())):
+            continue
+        if len(scan.observations) >= scan.config.limite_ocorrencias:
+            return True
+        accepted.setdefault(pair.id, []).append(box)
+        scan.observations.append(_pair_observation(scan, pair, box, score, tile.sha256))
+    return False
+
+
+def _match_tile(
+    scan: _PageScan,
+    variants: list[_TemplateVariant],
+    factor: float,
+    tile: _RenderedTile,
+    accepted: dict[str, list[Caixa]],
+    reason: str | None,
+) -> str | None:
+    for variant in variants:
+        _, template, template_data = variant
+        matches, overflow = _search_template(
+            tile.data,
+            tile.binary.width,
+            tile.binary.height,
+            template_data,
+            template.width,
+            template.height,
+            limit=scan.config.limite_ocorrencias,
+        )
+        if overflow:
+            reason = "Busca de template saturada"
+        if _accept_matches(scan, variant, matches, factor, tile, accepted):
+            return _OCCURRENCE_LIMIT
+    return reason
+
+
+def _scan_tiles(
+    scan: _PageScan,
+    variants: list[_TemplateVariant],
+    factor: float,
+    size: tuple[int, int],
+    tiles: tuple[tuple[int, int], ...],
+    cancelado: Callable[[], bool] | None,
+    progresso: Callable[[int, int], None] | None,
+) -> str | None:
+    width, height = size
+    config = scan.config
+    reason: str | None = None
+    accepted: dict[str, list[Caixa]] = {}
+    try:
+        for tile_number, (tx, ty) in enumerate(tiles, start=1):
+            if cancelado is not None and cancelado():
+                raise SymbolScanCancelledError("Legenda cancelada antes do próximo tile")
+            right = min(width, tx + config.tile_pixels)
+            bottom = min(height, ty + config.tile_pixels)
+            if (right - tx) * (bottom - ty) > config.limite_pixels_pagina:
+                reason = "Limite de pixels do tile atingido"
+                break
+            tile = _render_tile(scan.page, factor, (tx, ty, right, bottom))
+            reason = _match_tile(scan, variants, factor, tile, accepted, reason)
+            if reason == _OCCURRENCE_LIMIT:
+                break
+            del tile
+            if progresso is not None:
+                progresso(tile_number, len(tiles))
+    except SymbolScanCancelledError:
+        raise
+    except Exception as error:
+        reason = type(error).__name__
+    return reason
+
+
+def _scan_pairs(
+    scan: _PageScan,
+    pairs: tuple[ParLegenda, ...],
+    cancelado: Callable[[], bool] | None,
+    progresso: Callable[[int, int], None] | None,
+) -> str | None:
+    """Template search over one page; return the failure reason, if any."""
+    config = scan.config
+    factor = config.dpi / 72
+    variants = _template_variants(pairs)
+    overlap = max(
+        config.sobreposicao_pixels,
+        max((max(image.size) for _, image, _ in variants), default=0),
+    )
+    if overlap >= config.tile_pixels:
+        return "Template maior que o tile"
+    width = math.ceil(float(scan.page.rect.width) * factor)
+    height = math.ceil(float(scan.page.rect.height) * factor)
+    tiles = tuple(
+        (x, y)
+        for y in _positions(height, config.tile_pixels, overlap)
+        for x in _positions(width, config.tile_pixels, overlap)
+    )
+    if len(tiles) > config.limite_tiles:
+        return "Limite de tiles atingido"
+    return _scan_tiles(scan, variants, factor, (width, height), tiles, cancelado, progresso)
+
+
+def _record_repetitions(scan: _PageScan, repetitions: tuple[tuple[str, Caixa], ...]) -> str | None:
+    for digest, box in repetitions:
+        if len(scan.observations) >= scan.config.limite_ocorrencias:
+            return _OCCURRENCE_LIMIT
+        scan.observations.append(
+            ObservacaoSimbolo(
+                fonte=scan.source,
+                metodo_assinatura=scan.profile.assinatura(),
+                geometria=_geometry(scan.page, box),
+                alternativas=(AlternativaClasseSimbolo(classe=None),),
+                raster_sha256=digest,
+                template=digest,
+                atributos=(
+                    ("contexto", "operacional"),
+                    ("descricao_legenda", ""),
+                    ("origem_legenda", "repeticao-imagem-local"),
+                    ("template_sha256", digest),
+                    ("pareamento_incerto", True),
+                    ("score_tipo", "repeticao-exata-nao-probabilidade"),
+                ),
+            )
+        )
+    return None
+
+
+def _page_coverage(
+    source: FonteObservacaoSimbolo, state: EstadoMetodoSimbolos, reason: str | None
+) -> CoberturaMetodoSimbolos:
+    return CoberturaMetodoSimbolos(
+        fonte=source,
+        regiao_normalizada=(
+            PontoNormalizado(Decimal(0), Decimal(0)),
+            PontoNormalizado(Decimal(1), Decimal(1)),
+        ),
+        classes_avaliadas=(),
+        estado=state,
+        motivo=reason,
+    )
+
+
+def observar_legenda_documental(
+    document: Any,
+    *,
+    documento_id: str,
+    documento_sha256: str,
+    leituras_ocr: tuple[LeituraLegenda, ...] = (),
+    configuracao: ConfiguracaoLegenda = _DEFAULT_CONFIG,
+    cancelado: Callable[[], bool] | None = None,
+    progresso: Callable[[int, int], None] | None = None,
+) -> ResultadoLegendaDocumental:
+    """Find document-local legend pairs and their out-of-legend repetitions.
+
+    The returned E03 result is additive. OCR absence or wrong descriptions cannot
+    suppress candidates from other methods. Raw image score is not a probability.
+    """
+    if cancelado is not None and cancelado():
+        raise SymbolScanCancelledError("Legenda cancelada antes da leitura")
+    all_readings = tuple(item for page in document for item in _native_readings(page)) + tuple(
+        leituras_ocr
+    )
+    pairs, regions, raw_diagnostics = _extract_pairs(document, all_readings, configuracao)
+    diagnostics = list(raw_diagnostics)
+    repetitions = _embedded_repetitions(document, regions) if not pairs and not regions else {}
+    profile = _legend_profile(
+        documento_id, documento_sha256, leituras_ocr, configuracao, pairs, repetitions
+    )
     observations: list[ObservacaoSimbolo] = []
     coverages: list[CoberturaMetodoSimbolos] = []
     for page in document:
@@ -516,181 +792,30 @@ def observar_legenda_documental(
             pagina_numero=page_number,
             camada="base",
         )
-        state = EstadoMetodoSimbolos.NAO_DETECCAO
-        reason: str | None = None
+        scan = _PageScan(
+            page=page,
+            page_number=page_number,
+            source=source,
+            profile=profile,
+            regions=regions,
+            config=configuracao,
+            observations=observations,
+        )
+        # Every scan failure sets a reason; a page without one has no failure.
         if pairs:
-            factor = configuracao.dpi / 72
-            variants = []
-            for pair in pairs:
-                with Image.open(io.BytesIO(pair.dados_png)) as image:
-                    template = image.convert("L")
-                variants.append(
-                    (pair, template, bytes(0 if pixel == 0 else 1 for pixel in template.tobytes()))
-                )
-            overlap = max(
-                configuracao.sobreposicao_pixels,
-                max((max(image.size) for _, image, _ in variants), default=0),
-            )
-            if overlap >= configuracao.tile_pixels:
-                state, reason = EstadoMetodoSimbolos.FALHA, "Template maior que o tile"
-            else:
-                width = math.ceil(float(page.rect.width) * factor)
-                height = math.ceil(float(page.rect.height) * factor)
-                tiles = tuple(
-                    (x, y)
-                    for y in _positions(height, configuracao.tile_pixels, overlap)
-                    for x in _positions(width, configuracao.tile_pixels, overlap)
-                )
-                if len(tiles) > configuracao.limite_tiles:
-                    state, reason = EstadoMetodoSimbolos.FALHA, "Limite de tiles atingido"
-                else:
-                    accepted: dict[str, list[Caixa]] = {}
-                    try:
-                        for tile_number, (tx, ty) in enumerate(tiles, start=1):
-                            if cancelado is not None and cancelado():
-                                raise SymbolScanCancelledError(
-                                    "Legenda cancelada antes do próximo tile"
-                                )
-                            right = min(width, tx + configuracao.tile_pixels)
-                            bottom = min(height, ty + configuracao.tile_pixels)
-                            if (right - tx) * (bottom - ty) > configuracao.limite_pixels_pagina:
-                                state, reason = (
-                                    EstadoMetodoSimbolos.FALHA,
-                                    "Limite de pixels do tile atingido",
-                                )
-                                break
-                            pix = page.get_pixmap(
-                                matrix=pymupdf.Matrix(factor, factor),
-                                clip=pymupdf.Rect(
-                                    tx / factor, ty / factor, right / factor, bottom / factor
-                                ),
-                                colorspace=pymupdf.csRGB,
-                                alpha=False,
-                                annots=False,
-                            )
-                            with Image.frombytes(
-                                "RGB", (pix.width, pix.height), pix.samples
-                            ) as rgb:
-                                binary = rgb.convert("L").point(
-                                    lambda value: 255 if value >= 220 else 0
-                                )
-                            page_data = bytes(0 if pixel == 0 else 1 for pixel in binary.tobytes())
-                            tile_hash = sha256(pix.samples).hexdigest()
-                            for pair, template, template_data in variants:
-                                matches, overflow = _search_template(
-                                    page_data,
-                                    binary.width,
-                                    binary.height,
-                                    template_data,
-                                    template.width,
-                                    template.height,
-                                    limit=configuracao.limite_ocorrencias,
-                                )
-                                if overflow:
-                                    state, reason = (
-                                        EstadoMetodoSimbolos.FALHA,
-                                        "Busca de template saturada",
-                                    )
-                                for x, y, score in matches:
-                                    box = (
-                                        (pix.x + x) / factor,
-                                        (pix.y + y) / factor,
-                                        (pix.x + x + template.width) / factor,
-                                        (pix.y + y + template.height) / factor,
-                                    )
-                                    if any(
-                                        region.pagina_numero == page_number
-                                        and _overlap(box, region.caixa)
-                                        for region in regions
-                                    ):
-                                        continue
-                                    if any(
-                                        _iou(box, old) >= 0.62 for old in accepted.get(pair.id, ())
-                                    ):
-                                        continue
-                                    if len(observations) >= configuracao.limite_ocorrencias:
-                                        state, reason = (
-                                            EstadoMetodoSimbolos.FALHA,
-                                            "Limite de ocorrências atingido",
-                                        )
-                                        break
-                                    accepted.setdefault(pair.id, []).append(box)
-                                    observations.append(
-                                        ObservacaoSimbolo(
-                                            fonte=source,
-                                            metodo_assinatura=profile.assinatura(),
-                                            geometria=_geometry(page, box),
-                                            alternativas=(AlternativaClasseSimbolo(classe=None),),
-                                            score_bruto=Decimal(str(score)),
-                                            raster_sha256=tile_hash,
-                                            template=pair.id,
-                                            atributos=(
-                                                ("contexto", "operacional"),
-                                                ("descricao_legenda", pair.descricao),
-                                                ("origem_legenda", pair.origem),
-                                                ("template_sha256", pair.template_sha256),
-                                                ("par_legenda_id", pair.id),
-                                                ("pareamento_incerto", pair.pareamento_incerto),
-                                                ("revisao_legenda", pair.revisao or ""),
-                                                (
-                                                    "score_tipo",
-                                                    "similaridade_binaria_bruta_nao_probabilidade",
-                                                ),
-                                            ),
-                                        )
-                                    )
-                                if reason == "Limite de ocorrências atingido":
-                                    break
-                            if reason == "Limite de ocorrências atingido":
-                                break
-                            del pix, binary, page_data
-                            if progresso is not None:
-                                progresso(tile_number, len(tiles))
-                    except SymbolScanCancelledError:
-                        raise
-                    except Exception as error:
-                        state, reason = EstadoMetodoSimbolos.FALHA, type(error).__name__
+            reason = _scan_pairs(scan, pairs, cancelado, progresso)
         else:
-            for digest, box in repetitions.get(page_number, ()):
-                if len(observations) >= configuracao.limite_ocorrencias:
-                    state, reason = EstadoMetodoSimbolos.FALHA, "Limite de ocorrências atingido"
-                    break
-                observations.append(
-                    ObservacaoSimbolo(
-                        fonte=source,
-                        metodo_assinatura=profile.assinatura(),
-                        geometria=_geometry(page, box),
-                        alternativas=(AlternativaClasseSimbolo(classe=None),),
-                        raster_sha256=digest,
-                        template=digest,
-                        atributos=(
-                            ("contexto", "operacional"),
-                            ("descricao_legenda", ""),
-                            ("origem_legenda", "repeticao-imagem-local"),
-                            ("template_sha256", digest),
-                            ("pareamento_incerto", True),
-                            ("score_tipo", "repeticao-exata-nao-probabilidade"),
-                        ),
-                    )
-                )
+            reason = _record_repetitions(scan, repetitions.get(page_number, ()))
+        state = (
+            EstadoMetodoSimbolos.FALHA if reason is not None else EstadoMetodoSimbolos.NAO_DETECCAO
+        )
         if reason:
             diagnostics.append(f"p{page_number}: {reason}")
         if state is EstadoMetodoSimbolos.NAO_DETECCAO and any(
             item.fonte.pagina_numero == page_number for item in observations
         ):
             state = EstadoMetodoSimbolos.CONCLUIDO
-        coverages.append(
-            CoberturaMetodoSimbolos(
-                fonte=source,
-                regiao_normalizada=(
-                    PontoNormalizado(Decimal(0), Decimal(0)),
-                    PontoNormalizado(Decimal(1), Decimal(1)),
-                ),
-                classes_avaliadas=(),
-                estado=state,
-                motivo=reason,
-            )
-        )
+        coverages.append(_page_coverage(source, state, reason))
     result = ResultadoMetodoSimbolos(
         perfil=profile, coberturas=tuple(coverages), observacoes=tuple(observations)
     )

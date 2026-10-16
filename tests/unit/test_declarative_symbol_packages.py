@@ -21,10 +21,13 @@ import pytest
 from scripts.symbol_benchmark_runner import _package_prediction
 from tests.fixtures.declarative_symbols.corpus import (
     ENABLED_CASES,
+    TERMINAL_DISC_NEGATIVES,
+    TERMINAL_DISC_POSITIVES,
     EnabledCase,
     build_enabled_corpus,
     draw_north_negative,
     draw_symbol,
+    draw_terminal_disc,
     negative_kinds,
 )
 
@@ -265,6 +268,32 @@ def test_each_enabled_grammar_rejects_authored_near_misses(tmp_path: Path, varia
             dict(observation.atributos).get("variante_inventario") == variant_id
             for observation in result.observacoes
         ), (variant_id, negative)
+
+
+_TERMINAL_DISC_ID = "cemig-eo-r3-s28-v001"
+
+
+def _observe_terminal_disc(tmp_path: Path, drawing: str) -> list[str]:
+    from zeny_project_handler.adapters.analysis.declarative_symbols import carregar_pacotes
+
+    path = tmp_path / f"terminal-disc-{drawing}.pdf"
+    with pymupdf.open() as document:
+        draw_terminal_disc(document.new_page(width=300, height=300), drawing)
+        document.save(path)
+    result = _observe(path, carregar_pacotes())
+    return [str(dict(item.atributos)["variante_inventario"]) for item in result.observacoes]
+
+
+@pytest.mark.parametrize("drawing", TERMINAL_DISC_POSITIVES)
+def test_terminal_disc_finds_each_authored_export_once(tmp_path: Path, drawing: str) -> None:
+    assert _observe_terminal_disc(tmp_path, drawing) == [_TERMINAL_DISC_ID]
+
+
+@pytest.mark.parametrize(("drawing", "expected"), sorted(TERMINAL_DISC_NEGATIVES.items()))
+def test_terminal_disc_rejects_authored_near_misses(
+    tmp_path: Path, drawing: str, expected: tuple[str, ...]
+) -> None:
+    assert _observe_terminal_disc(tmp_path, drawing) == list(expected)
 
 
 def test_enabled_corpus_has_explicit_per_package_positive_and_negative_gates(
@@ -623,6 +652,13 @@ def test_package_loader_rejects_boolean_for_integer_schema_fields(
         ("cemig-eo-r3-s07-v001", "fill", "unknown"),
         ("cemig-eo-r3-s23-v002", "nested_frame", False),
         ("cemig-eo-r3-s23-v002", "inner_fill", "blue"),
+        ("cemig-eo-r3-s28-v001", "fill", "violet"),
+        ("cemig-eo-r3-s28-v001", "terminal_line", False),
+        ("cemig-eo-r3-s28-v001", "min_span", 0.2),
+        ("cemig-eo-r3-s28-v001", "min_span", 6),
+        ("cemig-eo-r3-s28-v001", "max_span", 9),
+        ("cemig-eo-r3-s28-v001", "max_span", True),
+        ("cemig-eo-r3-s28-v001", "frame", "ellipse"),
     ],
 )
 def test_new_grammar_loader_rejects_values_outside_draft202012_schema(

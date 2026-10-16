@@ -17,7 +17,12 @@ from zeny_project_handler.domain.analysis import (
     PropostaElemento,
     PropostaRelacao,
 )
-from zeny_project_handler.domain.catalog import CatalogoTecnico, ExtraAttributes, TipoEquipamento
+from zeny_project_handler.domain.catalog import (
+    CatalogoTecnico,
+    ExtraAttributes,
+    JsonPrimitive,
+    TipoEquipamento,
+)
 from zeny_project_handler.domain.enums import (
     CategoriaElemento,
     EstadoExecucaoAnalise,
@@ -48,7 +53,7 @@ from .errors import (
     ProjetoNaoEncontradoError,
 )
 from .method_reconciliation import COMPOSITION_VERSION, attach_method_conflicts
-from .symbol_reconciliation import SymbolReconciliation
+from .symbol_reconciliation import SymbolOccurrence, SymbolReconciliation
 from .technical_revisions import preserve_revision_decision
 
 
@@ -68,7 +73,7 @@ class ContextoInterpretacao:
     evidencias: tuple[EvidenciaDocumento, ...]
 
 
-SYMBOL_SEMANTICS_VERSION = "e16-symbol-conflict-values-1"
+SYMBOL_SEMANTICS_VERSION = "e16-symbol-support-anchor-2"
 
 
 class ExecutarPipelineInterpretacao:
@@ -443,6 +448,47 @@ def _symbol_signature(
     return sha256(f"{configuration_signature}:{symbols!r}".encode()).hexdigest()
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class _AvaliacaoOcorrenciaSimbolo:
+    """Decisões intermediárias de uma ocorrência simbólica reconciliada."""
+
+    layer: str
+    geometry: GeometriaDocumento
+    support_geometry: GeometriaDocumento | None
+    symbol_class: str | None
+    legend: bool
+    informative: bool
+    pending_variant: bool
+    support_symbol: bool
+    category: CategoriaElemento
+    role: str
+    asset_candidate: bool
+    situation_resolved: bool
+    situation: SituacaoProjeto
+    quantity_resolved: bool
+    quantity: int | None
+    catalog_id: UUID | None
+    identity_resolved: bool
+    class_resolved: bool
+    support: PropostaElemento | None
+    support_candidates: tuple[tuple[float, PropostaElemento], ...]
+    association_resolved: bool
+    decision: str
+
+    @property
+    def pending(self) -> bool:
+        return (
+            not self.asset_candidate
+            or self.decision != "eligible"
+            or not self.class_resolved
+            or not self.identity_resolved
+            or not self.situation_resolved
+            or not self.quantity_resolved
+            or not self.association_resolved
+            or self.catalog_id is None
+        )
+
+
 def _symbol_proposals(
     symbols: SymbolReconciliation,
     context: ContextoInterpretacao,
@@ -451,10 +497,7 @@ def _symbol_proposals(
 ) -> tuple[
     tuple[EvidenciaDocumento, ...], tuple[PropostaElemento, ...], tuple[PropostaRelacao, ...]
 ]:
-    pages: dict[tuple[str, int], list[tuple[str, UUID]]] = {}
-    for document in context.projeto.documentos:
-        for page in document.paginas:
-            pages.setdefault((document.sha256, page.numero), []).append((str(document.id), page.id))
+    pages = _project_pages(context.projeto)
     known_evidence = {evidence.id for evidence in context.evidencias}
     evidence: dict[UUID, EvidenciaDocumento] = {}
     proposals: list[PropostaElemento] = []
@@ -462,366 +505,535 @@ def _symbol_proposals(
     # Reconciler output already groups one physical occurrence. Never iterate its
     # alternatives into separate proposals or count its primitives as assets.
     for occurrence in symbols.occurrences:
-        sources = {
-            (
-                observation.fonte.documento_id,
-                observation.fonte.documento_sha256,
-                observation.fonte.pagina_numero,
-                observation.fonte.camada,
-            )
-            for observation in occurrence.observations
-        }
-        if len(sources) != 1:
-            raise ValueError("Ocorrência simbólica mistura documentos, páginas ou camadas")
-        document_id, document_sha, page_number, layer = next(iter(sources))
-        matching_pages = pages.get((document_sha, page_number), [])
-        page_id: UUID | None
-        if len(matching_pages) == 1:
-            page_id = matching_pages[0][1]
-        else:
-            matching_ids = [
-                page_id for source_id, page_id in matching_pages if source_id == document_id
-            ]
-            page_id = matching_ids[0] if len(matching_ids) == 1 else None
-        if page_id is None:
-            raise ValueError("Ocorrência simbólica não pertence ao projeto ou à página")
-        observation_ids: list[UUID] = []
-        for observation in occurrence.observations:
-            evidence_id = (
-                uuid5(context.execucao_extracao.id, observation.chave_legada)
-                if observation.chave_legada
-                else uuid5(context.execucao_extracao.id, f"simbolo:{observation.id}")
-            )
-            observation_ids.append(evidence_id)
-            if evidence_id not in known_evidence and evidence_id not in evidence:
-                evidence[evidence_id] = _symbol_evidence(
-                    observation, evidence_id, page_id, context.execucao_extracao
-                )
-        geometry = _symbol_geometry(occurrence.geometry, page_id)
-        classes = {alternative.classe for alternative in occurrence.alternatives}
-        symbol_class = next(iter(classes)) if len(classes) == 1 else None
-        attributes = [dict(observation.atributos) for observation in occurrence.observations]
-        legend = any(
-            str(item.get("contexto", "")).casefold() in {"legenda", "legend"} for item in attributes
+        document_id, document_sha, page_number, layer = _symbol_occurrence_source(occurrence)
+        page_id = _symbol_page_id(pages, document_id, document_sha, page_number)
+        observation_ids = _register_symbol_evidence(
+            occurrence, page_id, context.execucao_extracao, known_evidence, evidence
         )
-        informative = legend or any(
-            item.get("papel") == "informative" or item.get("destino") == "informative_only"
-            for item in attributes
+        assessment = _assess_symbol_occurrence(
+            occurrence, layer, page_id, context.catalogo, documentary_proposals
         )
-        pending_variant = "pending_variant" in occurrence.reasons or any(
-            str(item.get("status", "")).casefold() == "pending" for item in attributes
-        )
-        support_symbol = bool(symbol_class and "ESTAI" in symbol_class)
-        category = _symbol_category(symbol_class)
-        recognized_role = _recognized_symbol_role(symbol_class)
-        role = "informativo" if informative else "suporte" if support_symbol else recognized_role
-        # The closed legacy category has no observation-only member. Equipment is
-        # an envelope for an unsupported support/informative symbol, never an asset.
-        asset_candidate = (
-            not informative
-            and not pending_variant
-            and not support_symbol
-            and recognized_role != "desconhecido"
-            and category in {CategoriaElemento.POSTE, CategoriaElemento.EQUIPAMENTO}
-            and symbol_class is not None
-            and layer == "base"
-        )
-        situations = {observation.situacao for observation in occurrence.observations}
-        situation_resolved = (
-            len(situations) == 1
-            and None not in situations
-            and all(
-                item.get("situacao_validada") is True
-                or item.get("convencao_local_verificada") is True
-                for item in attributes
-            )
-        )
-        situation = (
-            next((value for value in situations if value is not None), SituacaoProjeto.EXISTENTE)
-            if situation_resolved
-            else SituacaoProjeto.EXISTENTE
-        )
-        quantities = {
-            quantity
-            for item in attributes
-            if isinstance((quantity := item.get("quantidade_ativos")), int)
-            and not isinstance(quantity, bool)
-            and quantity > 0
-        }
-        quantity_resolved = len(quantities) == 1 and all(
-            isinstance(item.get("quantidade_ativos"), int)
-            and not isinstance(item.get("quantidade_ativos"), bool)
-            and item["quantidade_ativos"] in quantities
-            for item in attributes
-        )
-        catalog_ids = {
-            str(item[key])
-            for item in attributes
-            for key in ("tipo_catalogo_id", "catalogo_item_id")
-            if item.get(key)
-        }
-        catalog_id = None
-        if asset_candidate and len(catalog_ids) == 1:
-            try:
-                candidate_id = UUID(next(iter(catalog_ids)))
-            except ValueError:
-                candidate_id = None
-            if candidate_id is not None:
-                catalog_item = context.catalogo.item_por_id(candidate_id)
-                if (
-                    catalog_item is not None
-                    and catalog_item.ativo
-                    and catalog_item.categoria is category
-                    and _catalog_matches_symbol_class(context.catalogo, catalog_item, symbol_class)
-                ):
-                    catalog_id = candidate_id
-        identity_resolved = (
-            len(occurrence.reference_ids) <= 1
-            and len({(alt.classe, alt.subtipo) for alt in occurrence.alternatives}) == 1
-            and "invalid_reference_id" not in occurrence.reasons
-        )
-        class_resolved = symbol_class is not None
-        support, support_candidates = _symbol_support(geometry, layer, documentary_proposals)
-        association_resolved = category is CategoriaElemento.POSTE or support is not None
-        if not asset_candidate:
-            association_resolved = False
-        pending = (
-            not asset_candidate
-            or occurrence.decision != "eligible"
-            or not class_resolved
-            or not identity_resolved
-            or not situation_resolved
-            or not quantity_resolved
-            or not association_resolved
-            or catalog_id is None
-        )
-        reasons = [*occurrence.reasons]
-        if "situation_conflict" in occurrence.reasons:
-            reasons.append(
-                _symbol_conflict_readings(
-                    "situation_conflict_values",
-                    tuple(
-                        (obs, obs.situacao.value if obs.situacao is not None else None)
-                        for obs in occurrence.observations
-                    ),
-                )
-            )
-        for reason in occurrence.reasons:
-            if reason.startswith("attribute_conflict:"):
-                key = reason.partition(":")[2]
-                reasons.append(
-                    _symbol_conflict_readings(
-                        f"{key}_conflict_values",
-                        tuple(
-                            (obs, dict(obs.atributos).get(key)) for obs in occurrence.observations
-                        ),
-                    )
-                )
-        if informative:
-            reasons.append("contexto_informativo")
-        if support_symbol:
-            reasons.append("suporte_sem_tipo_patrimonial")
-        if role == "desconhecido" and symbol_class is not None:
-            reasons.append("familia_sem_modelo_de_ativo")
-        if not class_resolved:
-            reasons.append("classe_pendente")
-        if not identity_resolved:
-            reasons.append("identidade_alternativa")
-        if not situation_resolved:
-            reasons.append("situacao_pendente")
-        if not quantity_resolved:
-            reasons.append("quantidade_pendente")
-        if not association_resolved:
-            reasons.append("associacao_pendente")
-        if catalog_id is None:
-            reasons.append("catalogo_nao_localizado")
-        proposal_id = uuid5(execution_id, f"ocorrencia-simbolo:{occurrence.id}")
-        proposal = PropostaElemento(
-            id=proposal_id,
-            execucao_id=execution_id,
-            categoria=category,
-            situacao_projeto=situation,
-            estado_revisao=EstadoRevisao.CONFLITANTE if pending else EstadoRevisao.PROPOSTA,
-            evidencia_ids=tuple(sorted(set(observation_ids), key=str)),
-            geometria=geometry,
-            tipo_catalogo_sugerido_id=catalog_id if identity_resolved else None,
-            codigo_observado=symbol_class,
-            atributos_sugeridos=(
-                ("origem_simbolo_ocorrencia_id", occurrence.id),
-                ("simbolo_suporte_metodos", json.dumps(occurrence.support)),
-                (
-                    "simbolo_observacoes",
-                    json.dumps(
-                        [
-                            {
-                                "observation_id": obs.id,
-                                "method_signature": obs.metodo_assinatura,
-                                "raw_score": str(obs.score_bruto)
-                                if obs.score_bruto is not None
-                                else None,
-                                "evidence_id": str(evidence_id),
-                            }
-                            for obs, evidence_id in zip(
-                                occurrence.observations, observation_ids, strict=True
-                            )
-                        ],
-                        sort_keys=True,
-                    ),
-                ),
-                (
-                    "simbolo_matriz_metodos",
-                    json.dumps(
-                        [
-                            {
-                                "method_signature": row.method_signature,
-                                "state": row.state,
-                                "classes": row.classes,
-                            }
-                            for row in symbols.method_matrix
-                            if row.occurrence_id == occurrence.id
-                        ],
-                        sort_keys=True,
-                    ),
-                ),
-                ("simbolo_decisao_e12", occurrence.decision),
-                ("simbolo_classe", symbol_class),
-                (
-                    "simbolo_alternativas",
-                    json.dumps(
-                        [
-                            {"classe": alt.classe, "subtipo": alt.subtipo}
-                            for alt in occurrence.alternatives
-                        ],
-                        ensure_ascii=False,
-                        sort_keys=True,
-                    ),
-                ),
-                ("simbolo_reference_ids", json.dumps(occurrence.reference_ids)),
-                (
-                    "simbolo_observacao_ids",
-                    json.dumps(tuple(obs.id for obs in occurrence.observations)),
-                ),
-                (
-                    "simbolo_situacoes_observadas",
-                    json.dumps(
-                        [
-                            {
-                                "observacao_id": obs.id,
-                                "situacao": obs.situacao.value if obs.situacao else None,
-                                "metodo_assinatura": obs.metodo_assinatura,
-                                "camada": obs.fonte.camada,
-                                "origem_pdf": obs.fonte.origem_pdf.tipo.value,
-                                "indicio": _observed_situation_source(obs),
-                            }
-                            for obs in sorted(occurrence.observations, key=lambda item: item.id)
-                        ],
-                        ensure_ascii=False,
-                        sort_keys=True,
-                        separators=(",", ":"),
-                    ),
-                ),
-                (
-                    "simbolo_quantidades_observadas",
-                    json.dumps(
-                        [
-                            {
-                                "observacao_id": obs.id,
-                                "quantidade_ativos": _json_scalar(
-                                    dict(obs.atributos).get("quantidade_ativos")
-                                ),
-                                "metodo_assinatura": obs.metodo_assinatura,
-                            }
-                            for obs in sorted(occurrence.observations, key=lambda item: item.id)
-                        ],
-                        ensure_ascii=False,
-                        sort_keys=True,
-                        separators=(",", ":"),
-                    ),
-                ),
-                (
-                    "simbolo_potencias_observadas",
-                    json.dumps(
-                        [
-                            {
-                                "observacao_id": obs.id,
-                                "metodo_assinatura": obs.metodo_assinatura,
-                                "potencia": _json_scalar(dict(obs.atributos).get("potencia")),
-                                "potencia_kva": _json_scalar(
-                                    dict(obs.atributos).get("potencia_kva")
-                                ),
-                            }
-                            for obs in sorted(occurrence.observations, key=lambda item: item.id)
-                        ],
-                        ensure_ascii=False,
-                        sort_keys=True,
-                        separators=(",", ":"),
-                    ),
-                ),
-                (
-                    "simbolo_suportes_candidatos",
-                    json.dumps(
-                        [
-                            {
-                                "proposta_id": str(candidate.id),
-                                "pagina_id": str(candidate.geometria.pagina_id),
-                                "distancia_normalizada": round(distance, 6),
-                            }
-                            for distance, candidate in support_candidates
-                        ],
-                        ensure_ascii=False,
-                        sort_keys=True,
-                        separators=(",", ":"),
-                    ),
-                ),
-                ("simbolo_probabilidade_calibrada", occurrence.calibrated_probability),
-                ("simbolo_motivo_pendencia", ",".join(dict.fromkeys(reasons))),
-                ("simbolo_papel", role),
-                ("simbolo_camada", layer),
-                ("simbolo_legenda", legend),
-                ("simbolo_ativo_elegivel", asset_candidate),
-                ("simbolo_classe_resolvida", class_resolved),
-                ("simbolo_identidade_resolvida", identity_resolved),
-                ("simbolo_situacao_resolvida", situation_resolved),
-                ("simbolo_quantidade_resolvida", quantity_resolved),
-                ("simbolo_associacao_resolvida", association_resolved),
-                ("simbolo_catalogo_resolvido", catalog_id is not None),
-                (
-                    "simbolo_familia_nao_suportada",
-                    pending_variant or (not asset_candidate and not informative),
-                ),
-                ("situacao_pendente", not situation_resolved),
-                ("quantidade_pendente", not quantity_resolved),
-                ("associacao_pendente", not association_resolved),
-                ("catalogo_nao_localizado", catalog_id is None),
-                ("revisao_tecnica_pendente", layer != "base"),
-                ("suporte_proposta_id", str(support.id) if support else None),
-                ("quantidade_ativos", next(iter(quantities)) if quantity_resolved else None),
-            ),
-            confianca=occurrence.calibrated_probability,
-            justificativa=(
-                "Ocorrência visual reconciliada; campos sem evidência direta permanecem pendentes."
-            ),
+        proposal = _symbol_occurrence_proposal(
+            symbols, occurrence, execution_id, observation_ids, assessment
         )
         proposals.append(proposal)
-        if support is not None and asset_candidate:
+        if assessment.support is not None and assessment.asset_candidate:
             relations.append(
-                PropostaRelacao(
-                    id=uuid5(execution_id, f"suporte-simbolo:{proposal_id}:{support.id}"),
-                    execucao_id=execution_id,
-                    origem_referencia_id=proposal_id,
-                    destino_referencia_id=support.id,
-                    tipo_relacao="INSTALADO_EM",
-                    evidencia_ids=tuple(
-                        sorted({*proposal.evidencia_ids, *support.evidencia_ids}, key=str)
-                    ),
-                    estado_revisao=EstadoRevisao.PROPOSTA
-                    if not pending
-                    else EstadoRevisao.CONFLITANTE,
-                    confianca=occurrence.calibrated_probability,
-                    justificativa="Suporte único na mesma página e próximo ao símbolo visual.",
+                _symbol_support_relation(
+                    execution_id, proposal, assessment.support, occurrence, assessment.pending
                 )
             )
     return tuple(evidence.values()), tuple(proposals), tuple(relations)
+
+
+def _project_pages(project: Projeto) -> dict[tuple[str, int], list[tuple[str, UUID]]]:
+    pages: dict[tuple[str, int], list[tuple[str, UUID]]] = {}
+    for document in project.documentos:
+        for page in document.paginas:
+            pages.setdefault((document.sha256, page.numero), []).append((str(document.id), page.id))
+    return pages
+
+
+def _symbol_occurrence_source(occurrence: SymbolOccurrence) -> tuple[str, str, int, str]:
+    sources = {
+        (
+            observation.fonte.documento_id,
+            observation.fonte.documento_sha256,
+            observation.fonte.pagina_numero,
+            observation.fonte.camada,
+        )
+        for observation in occurrence.observations
+    }
+    if len(sources) != 1:
+        raise ValueError("Ocorrência simbólica mistura documentos, páginas ou camadas")
+    return next(iter(sources))
+
+
+def _symbol_page_id(
+    pages: dict[tuple[str, int], list[tuple[str, UUID]]],
+    document_id: str,
+    document_sha: str,
+    page_number: int,
+) -> UUID:
+    matching_pages = pages.get((document_sha, page_number), [])
+    page_id: UUID | None
+    if len(matching_pages) == 1:
+        page_id = matching_pages[0][1]
+    else:
+        matching_ids = [
+            page_id for source_id, page_id in matching_pages if source_id == document_id
+        ]
+        page_id = matching_ids[0] if len(matching_ids) == 1 else None
+    if page_id is None:
+        raise ValueError("Ocorrência simbólica não pertence ao projeto ou à página")
+    return page_id
+
+
+def _register_symbol_evidence(
+    occurrence: SymbolOccurrence,
+    page_id: UUID,
+    extraction: ExecucaoAnalise,
+    known_evidence: set[UUID],
+    evidence: dict[UUID, EvidenciaDocumento],
+) -> list[UUID]:
+    """Return the occurrence evidence IDs, registering only evidence not yet known."""
+    observation_ids: list[UUID] = []
+    for observation in occurrence.observations:
+        evidence_id = (
+            uuid5(extraction.id, observation.chave_legada)
+            if observation.chave_legada
+            else uuid5(extraction.id, f"simbolo:{observation.id}")
+        )
+        observation_ids.append(evidence_id)
+        if evidence_id not in known_evidence and evidence_id not in evidence:
+            evidence[evidence_id] = _symbol_evidence(observation, evidence_id, page_id, extraction)
+    return observation_ids
+
+
+def _assess_symbol_occurrence(
+    occurrence: SymbolOccurrence,
+    layer: str,
+    page_id: UUID,
+    catalog: CatalogoTecnico,
+    documentary_proposals: tuple[PropostaElemento, ...],
+) -> _AvaliacaoOcorrenciaSimbolo:
+    geometry = _symbol_geometry(occurrence.geometry, page_id)
+    classes = {alternative.classe for alternative in occurrence.alternatives}
+    symbol_class = next(iter(classes)) if len(classes) == 1 else None
+    attributes = [dict(observation.atributos) for observation in occurrence.observations]
+    legend, informative, pending_variant = _symbol_context_flags(occurrence, attributes)
+    support_symbol = bool(symbol_class and "ESTAI" in symbol_class)
+    category = _symbol_category(symbol_class)
+    recognized_role = _recognized_symbol_role(symbol_class)
+    role = "informativo" if informative else "suporte" if support_symbol else recognized_role
+    asset_candidate = _is_symbol_asset_candidate(
+        informative=informative,
+        pending_variant=pending_variant,
+        support_symbol=support_symbol,
+        recognized_role=recognized_role,
+        category=category,
+        symbol_class=symbol_class,
+        layer=layer,
+    )
+    situation_resolved, situation = _symbol_situation(occurrence, attributes)
+    quantity_resolved, quantity = _symbol_quantity(attributes)
+    catalog_id = _symbol_catalog_id(catalog, attributes, asset_candidate, category, symbol_class)
+    # A haste até o poste, quando o detector a informa, mede a ligação ao suporte;
+    # a caixa reportada continua sendo a do pictograma.
+    support_geometry = (
+        _symbol_geometry(occurrence.support_geometry, page_id)
+        if occurrence.support_geometry is not None
+        else None
+    )
+    support, support_candidates = _symbol_support(
+        support_geometry or geometry, layer, documentary_proposals
+    )
+    association_resolved = category is CategoriaElemento.POSTE or support is not None
+    if not asset_candidate:
+        association_resolved = False
+    return _AvaliacaoOcorrenciaSimbolo(
+        layer=layer,
+        geometry=geometry,
+        support_geometry=support_geometry,
+        symbol_class=symbol_class,
+        legend=legend,
+        informative=informative,
+        pending_variant=pending_variant,
+        support_symbol=support_symbol,
+        category=category,
+        role=role,
+        asset_candidate=asset_candidate,
+        situation_resolved=situation_resolved,
+        situation=situation,
+        quantity_resolved=quantity_resolved,
+        quantity=quantity,
+        catalog_id=catalog_id,
+        identity_resolved=_symbol_identity_resolved(occurrence),
+        class_resolved=symbol_class is not None,
+        support=support,
+        support_candidates=support_candidates,
+        association_resolved=association_resolved,
+        decision=occurrence.decision,
+    )
+
+
+def _symbol_context_flags(
+    occurrence: SymbolOccurrence, attributes: list[dict[str, JsonPrimitive]]
+) -> tuple[bool, bool, bool]:
+    """Return the legend, informative and pending-variant flags of an occurrence."""
+    legend = any(
+        str(item.get("contexto", "")).casefold() in {"legenda", "legend"} for item in attributes
+    )
+    informative = legend or any(
+        item.get("papel") == "informative" or item.get("destino") == "informative_only"
+        for item in attributes
+    )
+    pending_variant = "pending_variant" in occurrence.reasons or any(
+        str(item.get("status", "")).casefold() == "pending" for item in attributes
+    )
+    return legend, informative, pending_variant
+
+
+def _is_symbol_asset_candidate(
+    *,
+    informative: bool,
+    pending_variant: bool,
+    support_symbol: bool,
+    recognized_role: str,
+    category: CategoriaElemento,
+    symbol_class: str | None,
+    layer: str,
+) -> bool:
+    # The closed legacy category has no observation-only member. Equipment is
+    # an envelope for an unsupported support/informative symbol, never an asset.
+    return (
+        not informative
+        and not pending_variant
+        and not support_symbol
+        and recognized_role != "desconhecido"
+        and category in {CategoriaElemento.POSTE, CategoriaElemento.EQUIPAMENTO}
+        and symbol_class is not None
+        and layer == "base"
+    )
+
+
+def _symbol_situation(
+    occurrence: SymbolOccurrence, attributes: list[dict[str, JsonPrimitive]]
+) -> tuple[bool, SituacaoProjeto]:
+    situations = {observation.situacao for observation in occurrence.observations}
+    situation_resolved = (
+        len(situations) == 1
+        and None not in situations
+        and all(
+            item.get("situacao_validada") is True or item.get("convencao_local_verificada") is True
+            for item in attributes
+        )
+    )
+    situation = (
+        next((value for value in situations if value is not None), SituacaoProjeto.EXISTENTE)
+        if situation_resolved
+        else SituacaoProjeto.EXISTENTE
+    )
+    return situation_resolved, situation
+
+
+def _symbol_quantity(attributes: list[dict[str, JsonPrimitive]]) -> tuple[bool, int | None]:
+    quantities = {
+        quantity
+        for item in attributes
+        if isinstance((quantity := item.get("quantidade_ativos")), int)
+        and not isinstance(quantity, bool)
+        and quantity > 0
+    }
+    quantity_resolved = len(quantities) == 1 and all(
+        isinstance(item.get("quantidade_ativos"), int)
+        and not isinstance(item.get("quantidade_ativos"), bool)
+        and item["quantidade_ativos"] in quantities
+        for item in attributes
+    )
+    return quantity_resolved, next(iter(quantities)) if quantity_resolved else None
+
+
+def _symbol_catalog_id(
+    catalog: CatalogoTecnico,
+    attributes: list[dict[str, JsonPrimitive]],
+    asset_candidate: bool,
+    category: CategoriaElemento,
+    symbol_class: str | None,
+) -> UUID | None:
+    catalog_ids = {
+        str(item[key])
+        for item in attributes
+        for key in ("tipo_catalogo_id", "catalogo_item_id")
+        if item.get(key)
+    }
+    if not asset_candidate or len(catalog_ids) != 1:
+        return None
+    try:
+        candidate_id = UUID(next(iter(catalog_ids)))
+    except ValueError:
+        return None
+    catalog_item = catalog.item_por_id(candidate_id)
+    if (
+        catalog_item is not None
+        and catalog_item.ativo
+        and catalog_item.categoria is category
+        and _catalog_matches_symbol_class(catalog, catalog_item, symbol_class)
+    ):
+        return candidate_id
+    return None
+
+
+def _symbol_identity_resolved(occurrence: SymbolOccurrence) -> bool:
+    return (
+        len(occurrence.reference_ids) <= 1
+        and len({(alt.classe, alt.subtipo) for alt in occurrence.alternatives}) == 1
+        and "invalid_reference_id" not in occurrence.reasons
+    )
+
+
+def _symbol_conflict_value_reasons(occurrence: SymbolOccurrence) -> list[str]:
+    reasons: list[str] = []
+    if "situation_conflict" in occurrence.reasons:
+        reasons.append(
+            _symbol_conflict_readings(
+                "situation_conflict_values",
+                tuple(
+                    (obs, obs.situacao.value if obs.situacao is not None else None)
+                    for obs in occurrence.observations
+                ),
+            )
+        )
+    for reason in occurrence.reasons:
+        if reason.startswith("attribute_conflict:"):
+            key = reason.partition(":")[2]
+            reasons.append(
+                _symbol_conflict_readings(
+                    f"{key}_conflict_values",
+                    tuple((obs, dict(obs.atributos).get(key)) for obs in occurrence.observations),
+                )
+            )
+    return reasons
+
+
+def _symbol_reasons(
+    occurrence: SymbolOccurrence, assessment: _AvaliacaoOcorrenciaSimbolo
+) -> list[str]:
+    reasons = [*occurrence.reasons, *_symbol_conflict_value_reasons(occurrence)]
+    if assessment.informative:
+        reasons.append("contexto_informativo")
+    if assessment.support_symbol:
+        reasons.append("suporte_sem_tipo_patrimonial")
+    if assessment.role == "desconhecido" and assessment.symbol_class is not None:
+        reasons.append("familia_sem_modelo_de_ativo")
+    if not assessment.class_resolved:
+        reasons.append("classe_pendente")
+    if not assessment.identity_resolved:
+        reasons.append("identidade_alternativa")
+    if not assessment.situation_resolved:
+        reasons.append("situacao_pendente")
+    if not assessment.quantity_resolved:
+        reasons.append("quantidade_pendente")
+    if not assessment.association_resolved:
+        reasons.append("associacao_pendente")
+    if assessment.catalog_id is None:
+        reasons.append("catalogo_nao_localizado")
+    return reasons
+
+
+def _symbol_occurrence_proposal(
+    symbols: SymbolReconciliation,
+    occurrence: SymbolOccurrence,
+    execution_id: UUID,
+    observation_ids: list[UUID],
+    assessment: _AvaliacaoOcorrenciaSimbolo,
+) -> PropostaElemento:
+    pending = assessment.pending
+    reasons = _symbol_reasons(occurrence, assessment)
+    return PropostaElemento(
+        id=uuid5(execution_id, f"ocorrencia-simbolo:{occurrence.id}"),
+        execucao_id=execution_id,
+        categoria=assessment.category,
+        situacao_projeto=assessment.situation,
+        estado_revisao=EstadoRevisao.CONFLITANTE if pending else EstadoRevisao.PROPOSTA,
+        evidencia_ids=tuple(sorted(set(observation_ids), key=str)),
+        geometria=assessment.geometry,
+        tipo_catalogo_sugerido_id=(assessment.catalog_id if assessment.identity_resolved else None),
+        codigo_observado=assessment.symbol_class,
+        atributos_sugeridos=_symbol_suggested_attributes(
+            symbols, occurrence, observation_ids, assessment, reasons
+        ),
+        confianca=occurrence.calibrated_probability,
+        justificativa=(
+            "Ocorrência visual reconciliada; campos sem evidência direta permanecem pendentes."
+        ),
+    )
+
+
+def _symbol_suggested_attributes(
+    symbols: SymbolReconciliation,
+    occurrence: SymbolOccurrence,
+    observation_ids: list[UUID],
+    assessment: _AvaliacaoOcorrenciaSimbolo,
+    reasons: list[str],
+) -> ExtraAttributes:
+    a = assessment
+    return (
+        ("origem_simbolo_ocorrencia_id", occurrence.id),
+        ("simbolo_suporte_metodos", json.dumps(occurrence.support)),
+        ("simbolo_observacoes", _symbol_observations_json(occurrence, observation_ids)),
+        ("simbolo_matriz_metodos", _symbol_method_matrix_json(symbols, occurrence)),
+        ("simbolo_decisao_e12", occurrence.decision),
+        ("simbolo_classe", a.symbol_class),
+        (
+            "simbolo_alternativas",
+            json.dumps(
+                [{"classe": alt.classe, "subtipo": alt.subtipo} for alt in occurrence.alternatives],
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+        ),
+        ("simbolo_reference_ids", json.dumps(occurrence.reference_ids)),
+        (
+            "simbolo_observacao_ids",
+            json.dumps(tuple(obs.id for obs in occurrence.observations)),
+        ),
+        ("simbolo_situacoes_observadas", _symbol_observed_situations_json(occurrence)),
+        ("simbolo_quantidades_observadas", _symbol_observed_quantities_json(occurrence)),
+        ("simbolo_potencias_observadas", _symbol_observed_powers_json(occurrence)),
+        ("simbolo_suportes_candidatos", _symbol_support_candidates_json(a.support_candidates)),
+        ("simbolo_geometria_suporte", _symbol_support_geometry_json(a.support_geometry)),
+        ("simbolo_probabilidade_calibrada", occurrence.calibrated_probability),
+        ("simbolo_motivo_pendencia", ",".join(dict.fromkeys(reasons))),
+        ("simbolo_papel", a.role),
+        ("simbolo_camada", a.layer),
+        ("simbolo_legenda", a.legend),
+        ("simbolo_ativo_elegivel", a.asset_candidate),
+        ("simbolo_classe_resolvida", a.class_resolved),
+        ("simbolo_identidade_resolvida", a.identity_resolved),
+        ("simbolo_situacao_resolvida", a.situation_resolved),
+        ("simbolo_quantidade_resolvida", a.quantity_resolved),
+        ("simbolo_associacao_resolvida", a.association_resolved),
+        ("simbolo_catalogo_resolvido", a.catalog_id is not None),
+        (
+            "simbolo_familia_nao_suportada",
+            a.pending_variant or (not a.asset_candidate and not a.informative),
+        ),
+        ("situacao_pendente", not a.situation_resolved),
+        ("quantidade_pendente", not a.quantity_resolved),
+        ("associacao_pendente", not a.association_resolved),
+        ("catalogo_nao_localizado", a.catalog_id is None),
+        ("revisao_tecnica_pendente", a.layer != "base"),
+        ("suporte_proposta_id", str(a.support.id) if a.support else None),
+        ("quantidade_ativos", a.quantity),
+    )
+
+
+def _symbol_observations_json(occurrence: SymbolOccurrence, observation_ids: list[UUID]) -> str:
+    return json.dumps(
+        [
+            {
+                "observation_id": obs.id,
+                "method_signature": obs.metodo_assinatura,
+                "raw_score": str(obs.score_bruto) if obs.score_bruto is not None else None,
+                "evidence_id": str(evidence_id),
+            }
+            for obs, evidence_id in zip(occurrence.observations, observation_ids, strict=True)
+        ],
+        sort_keys=True,
+    )
+
+
+def _symbol_method_matrix_json(symbols: SymbolReconciliation, occurrence: SymbolOccurrence) -> str:
+    return json.dumps(
+        [
+            {
+                "method_signature": row.method_signature,
+                "state": row.state,
+                "classes": row.classes,
+            }
+            for row in symbols.method_matrix
+            if row.occurrence_id == occurrence.id
+        ],
+        sort_keys=True,
+    )
+
+
+def _symbol_observed_situations_json(occurrence: SymbolOccurrence) -> str:
+    return json.dumps(
+        [
+            {
+                "observacao_id": obs.id,
+                "situacao": obs.situacao.value if obs.situacao else None,
+                "metodo_assinatura": obs.metodo_assinatura,
+                "camada": obs.fonte.camada,
+                "origem_pdf": obs.fonte.origem_pdf.tipo.value,
+                "indicio": _observed_situation_source(obs),
+            }
+            for obs in sorted(occurrence.observations, key=lambda item: item.id)
+        ],
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def _symbol_observed_quantities_json(occurrence: SymbolOccurrence) -> str:
+    return json.dumps(
+        [
+            {
+                "observacao_id": obs.id,
+                "quantidade_ativos": _json_scalar(dict(obs.atributos).get("quantidade_ativos")),
+                "metodo_assinatura": obs.metodo_assinatura,
+            }
+            for obs in sorted(occurrence.observations, key=lambda item: item.id)
+        ],
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def _symbol_observed_powers_json(occurrence: SymbolOccurrence) -> str:
+    return json.dumps(
+        [
+            {
+                "observacao_id": obs.id,
+                "metodo_assinatura": obs.metodo_assinatura,
+                "potencia": _json_scalar(dict(obs.atributos).get("potencia")),
+                "potencia_kva": _json_scalar(dict(obs.atributos).get("potencia_kva")),
+            }
+            for obs in sorted(occurrence.observations, key=lambda item: item.id)
+        ],
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def _symbol_support_candidates_json(
+    support_candidates: tuple[tuple[float, PropostaElemento], ...],
+) -> str:
+    return json.dumps(
+        [
+            {
+                "proposta_id": str(candidate.id),
+                "pagina_id": str(candidate.geometria.pagina_id),
+                "distancia_normalizada": round(distance, 6),
+            }
+            for distance, candidate in support_candidates
+        ],
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+
+
+def _symbol_support_geometry_json(geometry: GeometriaDocumento | None) -> str | None:
+    """Pontos normalizados da ligação ao suporte, para a associação na conformidade."""
+    if geometry is None:
+        return None
+    return json.dumps([[str(point.x), str(point.y)] for point in geometry.pontos])
+
+
+def _symbol_support_relation(
+    execution_id: UUID,
+    proposal: PropostaElemento,
+    support: PropostaElemento,
+    occurrence: SymbolOccurrence,
+    pending: bool,
+) -> PropostaRelacao:
+    return PropostaRelacao(
+        id=uuid5(execution_id, f"suporte-simbolo:{proposal.id}:{support.id}"),
+        execucao_id=execution_id,
+        origem_referencia_id=proposal.id,
+        destino_referencia_id=support.id,
+        tipo_relacao="INSTALADO_EM",
+        evidencia_ids=tuple(sorted({*proposal.evidencia_ids, *support.evidencia_ids}, key=str)),
+        estado_revisao=EstadoRevisao.PROPOSTA if not pending else EstadoRevisao.CONFLITANTE,
+        confianca=occurrence.calibrated_probability,
+        justificativa="Suporte único na mesma página e próximo ao símbolo visual.",
+    )
 
 
 def _symbol_category(symbol_class: str | None) -> CategoriaElemento:

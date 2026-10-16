@@ -9,7 +9,7 @@ geométrica nova. Nenhum desenho ou ROI normativo é redistribuído aqui.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pymupdf
@@ -83,8 +83,9 @@ def _line(
     *,
     color: tuple[float, float, float],
     dashed: bool = False,
+    width: float = 1.3,
 ) -> None:
-    page.draw_line(a, b, color=color, width=1.3, dashes="[5 3] 0" if dashed else None)
+    page.draw_line(a, b, color=color, width=width, dashes="[5 3] 0" if dashed else None)
     points.extend((a, b))
 
 
@@ -480,6 +481,287 @@ def _draw_negative(page: pymupdf.Page, stratum: str) -> Bounds:
     return _bounds(points)
 
 
+THIN = 0.15
+COMPACT_NEGATIVES = (
+    "ring_with_bar",
+    "compact_closed_triangle",
+    "compact_star_hub",
+    "compact_star_mixed",
+    "compact_branch_conductor",
+    "compact_equal_y",
+    "tiny_glyph_y",
+    "compact_uneven_y",
+    "compact_dimension",
+)
+
+
+def _polar(origin: Point, angle: float, length: float) -> Point:
+    radians = math.radians(angle)
+    return origin[0] + length * math.cos(radians), origin[1] + length * math.sin(radians)
+
+
+@dataclass(frozen=True)
+class CompactFork:
+    """Bloco autoral de âncora: haste saindo do poste e forquilha de dois ramos."""
+
+    center: Point = (180.0, 130.0)
+    angle: float = 0.0
+    scale: float = 1.0
+    shaft: float = 18.0
+    branch: float = 13.0
+    opening: float = 27.0
+    color: tuple[float, float, float] = INK
+    pole: bool = True
+    circle: bool = False
+    tines: bool = True
+
+
+def fork_points(fork: CompactFork) -> list[Point]:
+    """Centro do poste, vértice e pontas: a caixa sem nenhum círculo."""
+    vertex = _polar(fork.center, fork.angle, fork.shaft * fork.scale)
+    tips = [
+        _polar(vertex, fork.angle + side * fork.opening, fork.branch * fork.scale)
+        for side in ((-1, 1) if fork.tines else ())
+    ]
+    return [fork.center, vertex, *tips]
+
+
+def _through_tips(fork: CompactFork) -> float:
+    """Raio do círculo que passa pelo vértice e pelas duas pontas."""
+    return fork.branch * fork.scale / (2 * math.cos(math.radians(fork.opening)))
+
+
+@dataclass(frozen=True)
+class RingSpec:
+    """Círculo autoral no referencial do vértice: ``forward`` ao longo da haste.
+
+    Sem ``forward``, o centro é o do círculo pelo vértice e pelas pontas; sem
+    ``radius``, o contorno passa pelas pontas. ``sides`` desenha um polígono
+    regular e ``gapped`` abre duas lacunas laterais (cordas longas).
+    """
+
+    forward: float | None = None
+    lateral: float = 0.0
+    radius: float | None = None
+    color: tuple[float, float, float] | None = None
+    layer: str | None = None
+    sides: int | None = None
+    gapped: bool = False
+
+
+@dataclass(frozen=True)
+class RingCase:
+    """Forquilha com um círculo; ``criterion`` nomeia o que impede a anexação."""
+
+    fork: CompactFork
+    ring: RingSpec
+    attached: bool
+    criterion: str
+
+
+def ring_circle(fork: CompactFork, ring: RingSpec) -> tuple[Point, float]:
+    """Centro e raio do círculo autoral."""
+    vertex = _polar(fork.center, fork.angle, fork.shaft * fork.scale)
+    forward = _through_tips(fork) if ring.forward is None else ring.forward
+    center = _polar(_polar(vertex, fork.angle, forward), fork.angle + 90, ring.lateral)
+    radius = math.dist(center, fork_points(fork)[-1]) if ring.radius is None else ring.radius
+    return center, radius
+
+
+def _ring_polygon(fork: CompactFork, ring: RingSpec, center: Point, radius: float) -> list[Point]:
+    assert ring.sides is not None
+    if not ring.gapped:
+        step = 360 / ring.sides
+        return [
+            _polar(center, fork.angle + 180 + index * step, radius) for index in range(ring.sides)
+        ]
+    # Dois arcos opostos de 135°, separados por lacunas laterais de 45°: as
+    # duas cordas medem 0,765 r, contra lados curtos de 0,335 r nos arcos.
+    per_arc = ring.sides // 2
+    step = 135 / (per_arc - 1)
+    return [
+        _polar(center, fork.angle + middle - 67.5 + index * step, radius)
+        for middle in (0.0, 180.0)
+        for index in range(per_arc)
+    ]
+
+
+def _draw_ring(page: pymupdf.Page, fork: CompactFork, ring: RingSpec) -> tuple[Point, float]:
+    center, radius = ring_circle(fork, ring)
+    color = fork.color if ring.color is None else ring.color
+    layer = page.parent.add_ocg(ring.layer, on=True) if ring.layer else 0
+    if ring.sides is None:
+        page.draw_circle(center, radius, color=color, width=THIN, oc=layer)
+    else:
+        polygon = _ring_polygon(fork, ring, center, radius)
+        page.draw_polyline(polygon, color=color, width=THIN, closePath=True, oc=layer)
+    return center, radius
+
+
+def _draw_compact_fork(page: pymupdf.Page, fork: CompactFork, points: list[Point]) -> Point:
+    if fork.pole:
+        page.draw_circle(fork.center, 2, color=fork.color, width=THIN)
+        points.extend(((fork.center[0] - 2, fork.center[1] - 2), fork.center))
+    vertex = _polar(fork.center, fork.angle, fork.shaft * fork.scale)
+    _line(page, fork.center, vertex, points, color=fork.color, width=THIN)
+    for tip in fork_points(fork)[2:]:
+        _line(page, vertex, tip, points, color=fork.color, width=THIN)
+    if fork.circle:
+        # Polígono de 32 lados pelo vértice e (quase exatamente) pelas pontas;
+        # o anel envolvente pertence à âncora e entra na caixa autoral.
+        radius = _through_tips(fork)
+        middle = _polar(vertex, fork.angle, radius)
+        polygon = [_polar(middle, fork.angle + 180 + index * 11.25, radius) for index in range(32)]
+        page.draw_polyline(polygon, color=fork.color, width=THIN, closePath=True)
+        points.extend(polygon)
+    return vertex
+
+
+HALF_FORK = CompactFork(angle=128.0, scale=0.55, color=GREEN, circle=True)
+# Forquilha base dos anéis: a 0°, a caixa de haste e ramos não cobre o anel.
+RING_FORK = CompactFork(angle=0.0, shaft=7.0, branch=6.0, color=GREEN)
+_R0 = _through_tips(RING_FORK)
+_TIP_RUN = RING_FORK.branch * math.cos(math.radians(RING_FORK.opening))
+_TIP_RISE = RING_FORK.branch * math.sin(math.radians(RING_FORK.opening))
+# Cada negativo viola um único critério de anexação; os demais valem.
+RING_CASES = {
+    "compact_fork_ring": RingCase(RING_FORK, RingSpec(), True, "anexa"),
+    "compact_fork_polygon_ring": RingCase(RING_FORK, RingSpec(sides=32), True, "anexa"),
+    "compact_fork_side_ring": RingCase(
+        RING_FORK, RingSpec(forward=-3.5, lateral=_R0, radius=_R0), False, "varios"
+    ),
+    "compact_fork_pole_ring": RingCase(
+        RING_FORK, RingSpec(forward=-7.0, radius=7.0), False, "varios"
+    ),
+    "compact_fork_ink_ring": RingCase(RING_FORK, RingSpec(color=INK), False, "tinta"),
+    "compact_fork_layer_ring": RingCase(
+        RING_FORK, RingSpec(layer="ANEL AUXILIAR"), False, "camada"
+    ),
+    "compact_fork_decagon_ring": RingCase(RING_FORK, RingSpec(sides=10), False, "poucos lados"),
+    "compact_fork_gapped_ring": RingCase(
+        RING_FORK, RingSpec(sides=16, gapped=True), False, "lados longos"
+    ),
+    "compact_fork_offset_ring": RingCase(
+        RING_FORK, RingSpec(forward=1.5, radius=3.3), False, "pontas fora do contorno"
+    ),
+    "compact_fork_beyond_ring": RingCase(
+        RING_FORK,
+        RingSpec(forward=_TIP_RUN + math.sqrt(_R0**2 - _TIP_RISE**2)),
+        False,
+        "vertice fora",
+    ),
+    "compact_fork_rear_ring": RingCase(RING_FORK, RingSpec(forward=-0.7), False, "centro atras"),
+    "compact_fork_small_ring": RingCase(
+        CompactFork(angle=0.0, shaft=7.0, branch=6.0, opening=20.0, color=GREEN),
+        RingSpec(forward=3.2, radius=2.65),
+        False,
+        "raio pequeno",
+    ),
+    "compact_fork_large_ring": RingCase(
+        CompactFork(angle=0.0, shaft=7.0, branch=6.0, opening=70.0, color=GREEN),
+        RingSpec(forward=7.5),
+        False,
+        "raio grande",
+    ),
+}
+COMPACT_POSITIVES = ("compact_fork", "compact_fork_half", "compact_fork_remove", *RING_CASES)
+
+
+def _draw_compact(page: pymupdf.Page, stratum: str) -> list[Bounds]:
+    """Positivos compactos; cada forquilha vira uma ocorrência própria."""
+    points: list[Point] = []
+    if stratum == "compact_fork":
+        _draw_compact_fork(page, CompactFork(angle=37.0), points)
+    elif stratum == "compact_fork_half":
+        _draw_compact_fork(page, HALF_FORK, points)
+    elif stratum in RING_CASES:
+        case = RING_CASES[stratum]
+        _draw_compact_fork(page, case.fork, points)
+        (x, y), radius = _draw_ring(page, case.fork, case.ring)
+        if case.attached:
+            points.extend(((x - radius, y - radius), (x + radius, y + radius)))
+    elif stratum == "compact_fork_remove":
+        _draw_compact_fork(page, CompactFork(angle=200.0, opening=25.0, color=GREEN), points)
+        red = CompactFork(center=(180.3, 130.0), angle=200.0, opening=25.0, color=RED)
+        _draw_compact_fork(page, red, points)
+        middle = _polar((180.3, 130.0), 200.0, 9.0)
+        for arm in (45.0, 135.0):
+            a, b = _polar(middle, 200.0 + arm, 4.0), _polar(middle, 200.0 + arm + 180, 4.0)
+            _line(page, a, b, points, color=RED, width=1.2)
+    elif stratum == "compact_fork_hub":
+        bounds = []
+        for angle in (0.0, 90.0, 180.0, 270.0):
+            fork_points: list[Point] = []
+            _draw_compact_fork(page, CompactFork(angle=angle, pole=angle == 0.0), fork_points)
+            bounds.append(_bounds(fork_points))
+        _line(page, (180.0, 130.0), _polar((180.0, 130.0), 135.0, 11.0), [], color=INK, width=THIN)
+        return bounds
+    else:
+        raise ValueError(stratum)
+    return [_bounds(points)]
+
+
+def _draw_compact_negative(page: pymupdf.Page, stratum: str) -> Bounds:
+    points: list[Point] = []
+    center = (180.0, 130.0)
+    if stratum == "ring_with_bar":
+        # Haste até um círculo à frente, sem forquilha: não há âncora.
+        _draw_compact_fork(page, replace(RING_FORK, tines=False), points)
+        _draw_ring(page, RING_FORK, RingSpec())
+    elif stratum == "compact_closed_triangle":
+        _draw_compact_fork(page, CompactFork(angle=-20.0), points)
+        vertex = _polar(center, -20.0, 18.0)
+        tips = [_polar(vertex, -20.0 + side * 27.0, 13.0) for side in (-1, 1)]
+        _line(page, tips[0], tips[1], points, color=INK, width=THIN)
+    elif stratum in {"compact_star_hub", "compact_star_mixed"}:
+        page.draw_circle(center, 2, color=INK, width=THIN)
+        for index in range(8):
+            length = 13.0 if stratum == "compact_star_mixed" and index % 2 else 18.0
+            _line(page, center, _polar(center, index * 45.0, length), points, width=THIN, color=INK)
+    elif stratum == "compact_branch_conductor":
+        _draw_compact_fork(page, CompactFork(angle=0.0), points)
+        vertex = _polar(center, 0.0, 18.0)
+        for side in (-1, 1):
+            tip = _polar(vertex, side * 27.0, 13.0)
+            _line(page, tip, (tip[0] + 60.0, tip[1]), points, color=INK, width=THIN)
+    elif stratum == "compact_equal_y":
+        _draw_compact_fork(page, CompactFork(angle=60.0, shaft=17.0, branch=17.0), points)
+    elif stratum == "compact_uneven_y":
+        # Junção casual de traços curtos: ramos desiguais e abertura desigual.
+        vertex = _polar(center, 150.0, 18.0)
+        _line(page, center, vertex, points, color=INK, width=THIN)
+        for turn, length in ((20.0, 13.0), (-34.0, 10.5)):
+            _line(page, vertex, _polar(vertex, 150.0 + turn, length), points, color=INK, width=THIN)
+    elif stratum == "tiny_glyph_y":
+        _draw_compact_fork(page, CompactFork(angle=90.0, shaft=3.0, branch=2.2, pole=False), points)
+    elif stratum == "compact_dimension":
+        _draw_compact_fork(page, CompactFork(angle=0.0, pole=False), points)
+        for x in (180.0, 198.0):
+            _line(page, (x, 115.0), (x, 145.0), points, color=INK, width=THIN)
+    else:
+        raise ValueError(stratum)
+    return _bounds(points)
+
+
+def _build_compact(document: pymupdf.Document, cases: list[FixtureOccurrence]) -> None:
+    variant_by_color = {
+        "compact_fork_half": VARIANTS[1].id,
+        "compact_fork_remove": VARIANTS[2].id,
+        **dict.fromkeys(RING_CASES, VARIANTS[1].id),
+    }
+    for stratum in (*COMPACT_POSITIVES, "compact_fork_hub"):
+        page = document.new_page(width=WIDTH, height=HEIGHT)
+        variant_id = variant_by_color.get(stratum, VARIANTS[0].id)
+        cases.extend(
+            FixtureOccurrence(page.number + 1, variant_id, "anchor", bbox, stratum)
+            for bbox in _draw_compact(page, stratum)
+        )
+    for stratum in COMPACT_NEGATIVES:
+        page = document.new_page(width=WIDTH, height=HEIGHT)
+        bbox = _draw_compact_negative(page, stratum)
+        cases.append(FixtureOccurrence(page.number + 1, None, None, bbox, stratum))
+
+
 def build_fixture(path: Path) -> tuple[FixtureOccurrence, ...]:
     """Cria corpus determinístico; a lista de casos não entra no detector."""
     cases: list[FixtureOccurrence] = []
@@ -594,6 +876,7 @@ def build_fixture(path: Path) -> tuple[FixtureOccurrence, ...]:
             bbox = _draw_negative(page, stratum)
             cases.append(FixtureOccurrence(page.number + 1, None, None, bbox, stratum))
 
+        _build_compact(document, cases)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(document.tobytes(garbage=4, deflate=True, no_new_id=True))
     return tuple(cases)

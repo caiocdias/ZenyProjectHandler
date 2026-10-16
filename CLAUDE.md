@@ -79,9 +79,17 @@ Decisões arquiteturais estão em `docs/adr/` (0001–0015); comportamento vigen
 
 ## Curadoria de simbologia
 
-Melhorias de leitura/símbolos seguem `docs/fluxo-curadoria-incremental-simbologia.md`: um PDF de
-`examples/` por vez, referência visual congelada antes de rodar algoritmos, relatórios em
-`tmp/curadoria-simbologia/` (fora do Git), e conhecimento persistido apenas como mudanças
-versionadas em pacotes, algoritmos e fixtures/testes. Não declare aceite/homologação sem as
-métricas exigidas no documento. Benchmarks e experimentos ficam em `scripts/` e
-`scripts/experiments/` (dependências em `requirements-experiments.lock`, opt-in).
+Melhorias de leitura/símbolos seguem o contrato `docs/fluxo-curadoria-incremental-simbologia.md`.
+Uma rodada é iniciada pela skill de projeto `/curadoria-simbologia`
+(`.claude/skills/curadoria-simbologia/SKILL.md`), que processa os PDFs de `examples/` em ondas de
+3 a 5 com os subagentes de `.claude/agents/curadoria-*.md` e os CLIs `scripts/curation_round.py`,
+`curation_render.py`, `curation_infer.py`, `curation_reference.py`, `curation_compare.py`,
+`curation_audit.py` e `curation_backlog.py` (`python -m scripts.curation_*`). Invariantes: o
+leitor visual nunca vê predições e a referência é congelada antes de qualquer comparação;
+correções rodam em série na árvore principal, com fixture sintética positiva/negativa; tudo da
+rodada (PDFs, PNG, referências, relatório) fica em `tmp/curadoria-simbologia/` (fora do Git); a
+matriz `docs/data/matriz-simbologia-curadoria-atual*` só é publicada com os gates aprovados; e o
+conhecimento persiste apenas como mudanças versionadas em pacotes, algoritmos e fixtures/testes.
+Não declare aceite/homologação sem as métricas exigidas no documento. Benchmarks e experimentos
+ficam em `scripts/` e `scripts/experiments/` (dependências em `requirements-experiments.lock`,
+opt-in).

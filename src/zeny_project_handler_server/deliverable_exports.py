@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
@@ -37,7 +37,12 @@ from zeny_project_handler_contracts.exports import (
     CreateDeliverableExportRequest,
     DeliverableExportKind,
 )
-from zeny_project_handler_contracts.review import ReviewProposalDto, ReviewSessionResponse
+from zeny_project_handler_contracts.review import (
+    AnalysisRegionDto,
+    DetectedSpanDto,
+    ReviewProposalDto,
+    ReviewSessionResponse,
+)
 from zeny_project_handler_contracts.rules import ActiveRuleRegistryResponse
 from zeny_project_handler_server.api_errors import ApiError, resource_not_found, validation_error
 from zeny_project_handler_server.compliance_api import DocumentationComplianceApiService
@@ -252,6 +257,62 @@ class DeliverableExportService:
         write_xlsx(destination, _compliance_sheets(result, registry))
 
 
+_SheetRow = tuple[object | None, ...]
+
+_ELEMENT_HEADERS = (
+    "Ponto / região",
+    "Localização",
+    "Ação",
+    "Coordenada",
+    "Elemento",
+    "Situação",
+    "Categoria",
+    "Catálogo",
+    "Estado da revisão",
+    "Confiança",
+    "Código observado",
+    "Vínculos",
+    "Exige revisão",
+    "Folha",
+    "ID da identificação",
+    "Grupo de revisão técnica",
+    "Camada base",
+    "Camada visível",
+    "Decisão técnica",
+    "Valor efetivo",
+    "SHA-256 da fonte",
+    "Token de estrutura observado",
+    "Qualificador de estrutura",
+)
+_SPAN_HEADERS = (
+    "Vão",
+    "Tipo",
+    "Situação",
+    "Ponto de origem",
+    "Ponto de destino",
+    "Cabo",
+    "Comprimento",
+    "Fonte",
+    "Folha",
+    "ID do vão",
+)
+_SYMBOL_SUPPORT_HEADERS = (
+    "Família",
+    "IDs habilitados (não garante reconhecimento)",
+    "IDs pendentes (não são ocorrências)",
+    "Motivos",
+    "Assinatura do pacote instalado atual",
+)
+_METHOD_READING_HEADERS = (
+    "Literal",
+    "Camada",
+    "Resolução",
+    "Revisão obrigatória",
+    "Identidade",
+    "Fonte SHA-256",
+)
+
+
 def _results_sheets(session: ReviewSessionResponse) -> tuple[WorksheetData, ...]:
     regions = {
         proposal_id.root: region
@@ -259,124 +320,18 @@ def _results_sheets(session: ReviewSessionResponse) -> tuple[WorksheetData, ...]
         for proposal_id in region.proposal_ids
     }
     element_rows = tuple(
-        (
-            (region.label if (region := regions.get(item.proposal_id.root)) is not None else ""),
-            region.location_label if region is not None else "",
-            region.action_summary if region is not None else "",
-            region.coordinate_label if region is not None else "",
-            item.label,
-            item.situation_label,
-            item.symbol.role if item.symbol else _category_label(item.category),
-            item.catalog_label,
-            item.state_label,
-            item.confidence or "",
-            item.observed_code or "",
-            "; ".join(item.relationship_labels),
-            "Sim" if item.requires_review else "Não",
-            _page_id(item.overlay.geometry.page_id.root, session.page_order),
-            str(item.proposal_id.root),
-            str((item.technical_revision or {}).get("group_id", "")),
-            str((item.technical_revision or {}).get("base_text", "")),
-            str((item.technical_revision or {}).get("visible_text") or ""),
-            str(
-                (item.technical_revision or {}).get("decision")
-                or ("Pendente" if item.technical_revision else "")
-            ),
-            str((item.technical_revision or {}).get("effective_value") or ""),
-            str((item.technical_revision or {}).get("source_sha256", "")),
-            str(item.attributes.get("token_estrutura") or ""),
-            str(item.attributes.get("qualificador_estrutura") or ""),
-        )
+        _element_row(item, regions.get(item.proposal_id.root), session.page_order)
         for item in session.proposals
     )
-    span_rows = tuple(
-        (
-            item.label,
-            item.span_type_label,
-            item.situation_label,
-            item.start_label,
-            item.end_label,
-            item.cable_label,
-            item.length_label,
-            item.length_source_label,
-            item.page_label,
-            str(item.span_id),
-        )
-        for item in session.spans
-    )
+    span_rows = tuple(_span_row(item) for item in session.spans)
     sheets: tuple[WorksheetData, ...] = (
-        WorksheetData(
-            "Elementos",
-            (
-                "Ponto / região",
-                "Localização",
-                "Ação",
-                "Coordenada",
-                "Elemento",
-                "Situação",
-                "Categoria",
-                "Catálogo",
-                "Estado da revisão",
-                "Confiança",
-                "Código observado",
-                "Vínculos",
-                "Exige revisão",
-                "Folha",
-                "ID da identificação",
-                "Grupo de revisão técnica",
-                "Camada base",
-                "Camada visível",
-                "Decisão técnica",
-                "Valor efetivo",
-                "SHA-256 da fonte",
-                "Token de estrutura observado",
-                "Qualificador de estrutura",
-            ),
-            element_rows,
-        ),
-        WorksheetData(
-            "Vãos",
-            (
-                "Vão",
-                "Tipo",
-                "Situação",
-                "Ponto de origem",
-                "Ponto de destino",
-                "Cabo",
-                "Comprimento",
-                "Fonte",
-                "Folha",
-                "ID do vão",
-            ),
-            span_rows,
-        ),
+        WorksheetData("Elementos", _ELEMENT_HEADERS, element_rows),
+        WorksheetData("Vãos", _SPAN_HEADERS, span_rows),
     )
     if session.physical_spans:
         sheets = (*sheets, _physical_spans_sheet(session))
     if session.symbol_support:
-        sheets = (
-            *sheets,
-            WorksheetData(
-                "Capacidade de símbolos",
-                (
-                    "Família",
-                    "IDs habilitados (não garante reconhecimento)",
-                    "IDs pendentes (não são ocorrências)",
-                    "Motivos",
-                    "Assinatura do pacote instalado atual",
-                ),
-                tuple(
-                    (
-                        item.family_id,
-                        "; ".join(item.enabled_reference_ids),
-                        "; ".join(item.pending_reference_ids),
-                        "; ".join(item.pending_reasons),
-                        item.package_signature,
-                    )
-                    for item in session.symbol_support
-                ),
-            ),
-        )
+        sheets = (*sheets, _symbol_support_sheet(session))
     for title, unsupported in (("Símbolos", False), ("Famílias não suportadas", True)):
         symbols = tuple(
             p
@@ -387,29 +342,102 @@ def _results_sheets(session: ReviewSessionResponse) -> tuple[WorksheetData, ...]
             sheets = (*sheets, _symbol_sheet(title, symbols, session))
     if not session.method_readings:
         return sheets
+    return (*sheets, _method_readings_sheet(session))
+
+
+def _element_row(
+    item: ReviewProposalDto,
+    region: AnalysisRegionDto | None,
+    page_order: tuple[object, ...],
+) -> _SheetRow:
     return (
-        *sheets,
-        WorksheetData(
-            "Leituras auxiliares",
+        *_region_columns(region),
+        item.label,
+        item.situation_label,
+        item.symbol.role if item.symbol else _category_label(item.category),
+        item.catalog_label,
+        item.state_label,
+        item.confidence or "",
+        item.observed_code or "",
+        "; ".join(item.relationship_labels),
+        "Sim" if item.requires_review else "Não",
+        _page_id(item.overlay.geometry.page_id.root, page_order),
+        str(item.proposal_id.root),
+        *_technical_revision_columns(item.technical_revision),
+        str(item.attributes.get("token_estrutura") or ""),
+        str(item.attributes.get("qualificador_estrutura") or ""),
+    )
+
+
+def _region_columns(region: AnalysisRegionDto | None) -> _SheetRow:
+    if region is None:
+        return ("", "", "", "")
+    return (
+        region.label,
+        region.location_label,
+        region.action_summary,
+        region.coordinate_label,
+    )
+
+
+def _technical_revision_columns(revision: Mapping[str, object] | None) -> _SheetRow:
+    values: Mapping[str, object] = revision or {}
+    return (
+        str(values.get("group_id", "")),
+        str(values.get("base_text", "")),
+        str(values.get("visible_text") or ""),
+        str(values.get("decision") or ("Pendente" if revision else "")),
+        str(values.get("effective_value") or ""),
+        str(values.get("source_sha256", "")),
+    )
+
+
+def _span_row(item: DetectedSpanDto) -> _SheetRow:
+    return (
+        item.label,
+        item.span_type_label,
+        item.situation_label,
+        item.start_label,
+        item.end_label,
+        item.cable_label,
+        item.length_label,
+        item.length_source_label,
+        item.page_label,
+        str(item.span_id),
+    )
+
+
+def _symbol_support_sheet(session: ReviewSessionResponse) -> WorksheetData:
+    return WorksheetData(
+        "Capacidade de símbolos",
+        _SYMBOL_SUPPORT_HEADERS,
+        tuple(
             (
-                "Literal",
-                "Camada",
-                "Resolução",
-                "Revisão obrigatória",
-                "Identidade",
-                "Fonte SHA-256",
-            ),
-            tuple(
-                (
-                    str(r.get("literal", "")),
-                    str(r.get("layer", "")),
-                    str(r.get("resolution", "")),
-                    "Sim",
-                    str(r.get("identity", "")),
-                    str(r.get("source_sha256", "")),
-                )
-                for r in session.method_readings
-            ),
+                item.family_id,
+                "; ".join(item.enabled_reference_ids),
+                "; ".join(item.pending_reference_ids),
+                "; ".join(item.pending_reasons),
+                item.package_signature,
+            )
+            for item in session.symbol_support
+        ),
+    )
+
+
+def _method_readings_sheet(session: ReviewSessionResponse) -> WorksheetData:
+    return WorksheetData(
+        "Leituras auxiliares",
+        _METHOD_READING_HEADERS,
+        tuple(
+            (
+                str(r.get("literal", "")),
+                str(r.get("layer", "")),
+                str(r.get("resolution", "")),
+                "Sim",
+                str(r.get("identity", "")),
+                str(r.get("source_sha256", "")),
+            )
+            for r in session.method_readings
         ),
     )
 

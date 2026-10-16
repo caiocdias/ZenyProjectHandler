@@ -9,9 +9,13 @@ vazia e esse gate continuará usando apenas fixtures sintéticas versionadas. A
 descobre recursivamente todos os PDFs disponíveis e registra cobertura por
 arquivo e página.
 
-Para ampliar a cobertura depois, coloque PDFs em qualquer subpasta de `examples/` e envie em uma
-nova tarefa o [prompt one-shot de curadoria incremental](../docs/fluxo-curadoria-incremental-simbologia.md#prompt-one-shot-para-usar-após-adicionar-pdfs).
-Esse fluxo tem etapas e evidências próprias e pode ser repetido a cada nova amostragem.
+Para ampliar a cobertura depois, coloque PDFs em qualquer subpasta de `examples/` e, numa sessão
+do Claude Code aberta na raiz do repositório, invoque a skill `/curadoria-simbologia`. Ela processa
+os PDFs em ondas de 3 a 5, com leitura visual cega, comparação e auditoria por scripts
+(`scripts/curation_*.py`) e correções em série com fixtures sintéticas; a rodada seguinte parte da
+matriz de cobertura publicada pela anterior e reaproveita as referências de PDFs inalterados. Se a
+skill não aparecer na sessão, use o
+[prompt de reserva](../docs/fluxo-curadoria-incremental-simbologia.md#como-executar).
 Adicionar arquivos por si só não treina nem atualiza o detector: o conhecimento duradouro são
 pacotes e testes versionados após revisão visual, fontes e validação.
 
@@ -32,14 +36,16 @@ anotada e achados de todas as páginas em `tmp/curadoria-simbologia/`, ignorado
 pelo Git. FP/FN, duplicatas e exclusivos só são avaliados após revisão visual e
 inferência congelada. Uma página sem achado continua no denominador.
 
-Para inferir simbologia em todos os arquivos/páginas:
+Para inferir simbologia em todos os arquivos/páginas, fora de uma rodada de curadoria:
 
 ```powershell
 .\.venv\Scripts\python.exe -m scripts.benchmark_symbols examples --root examples --include-transformers --include-guys --include-packages --include-raster --include-structural --include-legend --output tmp/curadoria-simbologia/predictions
 ```
 
-O [fluxo de curadoria](../docs/fluxo-curadoria-incremental-simbologia.md)
-descreve os artefatos, a inspeção independente de imagens e o baseline sintético
+Dentro de uma rodada, a skill infere cada PDF isoladamente, em paralelo, com
+`scripts.curation_infer` (que usa `benchmark_symbols examples --pdf`). O
+[fluxo de curadoria](../docs/fluxo-curadoria-incremental-simbologia.md)
+descreve os artefatos, a leitura visual cega, a auditoria amostral e o baseline sintético
 portátil. O comando acima apenas infere; não realiza revisão visual automática.
 Referência parcial de IA não autoriza calcular recall global ou considerar regiões
 não anotadas como FP. A ausência de PDFs é registrada com `completed=false`/exit 1.

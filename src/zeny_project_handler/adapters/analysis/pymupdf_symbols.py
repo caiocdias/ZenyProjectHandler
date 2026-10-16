@@ -23,8 +23,13 @@ _SYMBOL_SOURCE = "SIMBOLOGIA.pdf"
 _SYMBOL_CONFIDENCE = Decimal("0.88")
 _MAXIMUM_PRIMITIVE_LENGTH = 60.0
 _ANGLE_TOLERANCE = math.radians(11)
-_SYMBOL_VERSION = "1.19.3:vetorial-5"
+_SYMBOL_VERSION = "1.20.0:vetorial-6"
 _SYMBOL_NORMALIZATIONS = frozenset({"grouping", "fragments", "scale", "styles"})
+# Envolvente do pictograma: diâmetro relativo à maior barra terminal.
+_ENVELOPE_RATIO = (0.95, 3.06)
+_OPAQUE_FILL_OPACITY = 0.99
+_BEZIER_SAMPLES = 8
+_PICTOGRAM_CLASSES = frozenset({"ATERRAMENTO", "PARA_RAIOS_MT"})
 
 
 class _PrimitiveIndex:
@@ -108,6 +113,32 @@ class _SymbolMatch:
         return (bounds.x0 + bounds.x1) / 2, (bounds.y0 + bounds.y1) / 2
 
 
+@dataclass(frozen=True, slots=True)
+class _ClosedOutline:
+    """Contorno fechado pintado (qualquer cor); candidato a envolvente de pictograma."""
+
+    bounds: Any
+    hull: tuple[tuple[float, float], ...]
+    diameter: float
+    sources: tuple[tuple[int, int], ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _OutlineIndex:
+    outlines: tuple[_ClosedOutline, ...]
+    spatial: _PrimitiveIndex
+
+
+@dataclass(frozen=True, slots=True)
+class _Occluder:
+    """Preenchimento opaco convexo; ``index`` é a ordem de pintura na página."""
+
+    index: int
+    hull: tuple[tuple[float, float], ...]
+    bounds: tuple[float, float, float, float]
+    clip: Any
+
+
 def _extract_symbolic_equipment(
     page: Any,
     page_number: int,
@@ -127,6 +158,20 @@ def _extract_symbolic_equipment(
             *_bt_arrester_matches(primitives, scale="scale" in enabled),
         )
     )
+    anchors = tuple(
+        (tip, longest)
+        for item in matches
+        if item.class_code in _PICTOGRAM_CLASSES
+        for tip, _, longest in (_pictogram_axis(item),)
+    )
+    outlines = _closed_outlines(drawings, primitives, anchors)
+    occluders = _opaque_fill_occluders(drawings) if matches else ()
+    footprints = tuple(
+        (match, footprint, envelope)
+        for match in matches
+        for footprint, envelope in (_symbol_footprint(match, outlines),)
+        if not _is_painted_over(match, footprint, occluders)
+    )
     return tuple(
         CandidatoEvidenciaDocumento(
             chave_estavel=(
@@ -135,7 +180,7 @@ def _extract_symbolic_equipment(
             ),
             pagina_numero=page_number,
             tipo=TipoEvidencia.VETOR,
-            geometria=_box_geometry(page, _union_bounds(match.primitives)),
+            geometria=_box_geometry(page, footprint),
             origem_pdf=OrigemObjetoPdf(),
             conteudo_bruto=match.code,
             atributos_extraidos=_extras(
@@ -151,7 +196,15 @@ def _extract_symbolic_equipment(
                     str(index) for index in sorted({source[0] for source in _match_sources(match)})
                 ),
                 primitives_origem=json.dumps(_match_sources(match)),
-                simbolo_limites_originais=json.dumps(list(_union_bounds(match.primitives))),
+                # Pictograma reportado (envolvente + barras, sem a haste de ligação) e
+                # suporte completo (haste inteira + barras) ficam em atributos separados.
+                simbolo_limites_originais=json.dumps(list(footprint)),
+                simbolo_limites_suporte=json.dumps(list(_union_bounds(match.primitives))),
+                envelope_origem=(
+                    ",".join(str(index) for index in sorted({source[0] for source in envelope}))
+                    if envelope
+                    else None
+                ),
                 normalizacoes_simbolo=",".join(sorted(enabled)),
                 versao_simbolo=_SYMBOL_VERSION,
                 recorte_vetorial_limitado=any(
@@ -171,7 +224,7 @@ def _extract_symbolic_equipment(
                 ),
             ),
         )
-        for match in matches
+        for match, footprint, envelope in footprints
     )
 
 
@@ -924,6 +977,324 @@ def _match_quality(match: _SymbolMatch) -> tuple[int, float, tuple[int, ...]]:
         _match_scale(match),
         tuple(item.index for item in match.primitives),
     )
+
+
+def _symbol_footprint(
+    match: _SymbolMatch, outlines: _OutlineIndex
+) -> tuple[Any, tuple[tuple[int, int], ...]]:
+    """Caixa do pictograma: envolvente + barras, ou barras + trecho curto da haste.
+
+    A haste de ligação até o poste não pertence ao pictograma; ela permanece nos
+    limites de suporte (união de todas as primitivas) informados à parte.
+    """
+    if match.class_code not in _PICTOGRAM_CLASSES:
+        return _union_bounds(match.primitives), ()
+    tip, base, longest = _pictogram_axis(match)
+    bars_bounds = _union_bounds(match.primitives[1:])
+    envelope = _enclosing_outline(match, tip, longest, outlines)
+    if envelope is not None:
+        extents = (envelope.bounds, bars_bounds)
+        return (
+            pymupdf.Rect(
+                min(item.x0 for item in extents),
+                min(item.y0 for item in extents),
+                max(item.x1 for item in extents),
+                max(item.y1 for item in extents),
+            ),
+            envelope.sources,
+        )
+    # Trecho da haste do lado das barras, com até o comprimento da maior barra.
+    span = max(math.dist(tip, base), 1e-9)
+    # O eixo principal mede barras verticais com ruído de ~1e-14; não propague isso.
+    leader = round(min(longest, span), 9)
+    start = (
+        tip[0] + (base[0] - tip[0]) / span * leader,
+        tip[1] + (base[1] - tip[1]) / span * leader,
+    )
+    return (
+        pymupdf.Rect(
+            min(bars_bounds.x0, tip[0], start[0]),
+            min(bars_bounds.y0, tip[1], start[1]),
+            max(bars_bounds.x1, tip[0], start[0]),
+            max(bars_bounds.y1, tip[1], start[1]),
+        ),
+        (),
+    )
+
+
+def _pictogram_axis(
+    match: _SymbolMatch,
+) -> tuple[tuple[float, float], tuple[float, float], float]:
+    """Ponta da haste junto às barras, extremidade oposta e maior barra."""
+    stem, bars = match.primitives[0], match.primitives[1:]
+    tip, base = sorted(_endpoints(stem), key=lambda point: math.dist(point, bars[0].center))
+    return tip, base, max(bar.major_length for bar in bars)
+
+
+def _enclosing_outline(
+    match: _SymbolMatch,
+    tip: tuple[float, float],
+    longest: float,
+    outlines: _OutlineIndex,
+) -> _ClosedOutline | None:
+    """Menor contorno fechado que contém todas as barras e a ponta da haste."""
+    minimum, maximum = _ENVELOPE_RATIO
+    own = set(_match_sources(match))
+    required = (tip, *(point for bar in match.primitives[1:] for point in _endpoints(bar)))
+    tolerance = max(0.01, longest * 0.02)
+    options = [
+        outline
+        for proxy in outlines.spatial.near(tip, longest * maximum, extent=True)
+        for outline in (outlines.outlines[proxy.index],)
+        if minimum * longest <= outline.diameter <= maximum * longest
+        and not own & set(outline.sources)
+        and all(_inside_convex(point, outline.hull, tolerance) for point in required)
+    ]
+    return min(options, key=lambda item: (item.diameter, item.sources), default=None)
+
+
+def _closed_outlines(
+    drawings: tuple[dict[str, Any], ...],
+    primitives: tuple[_VectorPrimitive, ...],
+    anchors: tuple[tuple[tuple[float, float], float], ...],
+) -> _OutlineIndex:
+    """Contornos fechados pintados, de qualquer cor, inteiros ou recompostos.
+
+    Só são examinados contornos cujo retângulo contém a ponta de haste de algum
+    pictograma e cujo tamanho é compatível com a respectiva maior barra.
+    """
+    found: list[_ClosedOutline] = []
+    ordered = sorted(anchors)
+    xs = [tip[0] for tip, _ in ordered]
+    for drawing_index, drawing in enumerate(drawings):
+        items = tuple(drawing.get("items") or ())
+        if (
+            not items
+            or (drawing.get("color") is None and drawing.get("fill") is None)
+            or not _may_enclose(drawing.get("rect"), ordered, xs)
+        ):
+            continue
+        groups = _connected_item_groups(items, close_path=bool(drawing.get("closePath")))
+        for position, (source_items, group) in enumerate(groups):
+            closing = bool(drawing.get("closePath")) and position == len(groups) - 1
+            if not _is_closed_group(group, closing=closing):
+                continue
+            outline = _outline(
+                _flattened_points(group),
+                tuple((drawing_index, item) for item in source_items),
+                drawing.get("scissor"),
+            )
+            if outline is not None:
+                found.append(outline)
+    for primitive in primitives:
+        # Contornos fragmentados recompostos por _recover_rectangles.
+        if (
+            primitive.linear
+            or len({source[0] for source in primitive.sources}) < 2
+            or not _may_enclose(primitive.bounds, ordered, xs)
+        ):
+            continue
+        group = tuple(drawings[index]["items"][item] for index, item in primitive.sources)
+        outline = _outline(_flattened_points(group), primitive.sources, None)
+        if outline is not None:
+            found.append(outline)
+    proxies = tuple(
+        _VectorPrimitive(
+            index=index,
+            bounds=item.bounds,
+            center=((item.bounds.x0 + item.bounds.x1) / 2, (item.bounds.y0 + item.bounds.y1) / 2),
+            angle=0.0,
+            major_length=item.diameter,
+            minor_length=item.diameter,
+            color="",
+            linear=False,
+            rectangular=False,
+            sources=item.sources,
+        )
+        for index, item in enumerate(found)
+    )
+    return _OutlineIndex(tuple(found), _PrimitiveIndex(proxies))
+
+
+def _may_enclose(
+    rect: Any,
+    anchors: list[tuple[tuple[float, float], float]],
+    xs: list[float],
+) -> bool:
+    """Filtro barato pelo retângulo do desenho, que majora o contorno real."""
+    if rect is None or not anchors:
+        return False
+    minimum, maximum = _ENVELOPE_RATIO
+    size = max(float(rect.width), float(rect.height))
+    for tip, longest in anchors[bisect_left(xs, rect.x0 - 0.01) : bisect_right(xs, rect.x1 + 0.01)]:
+        if (
+            rect.y0 - 0.01 <= tip[1] <= rect.y1 + 0.01
+            # Pontos de controle de curvas podem alargar o retângulo além do traçado.
+            and minimum * longest * 0.9 <= size <= maximum * longest * 1.5
+        ):
+            return True
+    return False
+
+
+def _is_closed_group(group: tuple[Any, ...], *, closing: bool) -> bool:
+    if len(group) < 2:
+        return False
+    points = _drawing_points(group)
+    return closing or math.dist(points[0], points[-1]) <= 0.001
+
+
+def _outline(
+    points: tuple[tuple[float, float], ...],
+    sources: tuple[tuple[int, int], ...],
+    clip: Any,
+) -> _ClosedOutline | None:
+    hull = _convex_hull(points)
+    # Retângulos (células de tabela, molduras, barras preenchidas) não são envolventes.
+    if len(hull) < 3 or _is_rectangular_hull(hull):
+        return None
+    bounds = pymupdf.Rect(
+        min(x for x, _ in hull),
+        min(y for _, y in hull),
+        max(x for x, _ in hull),
+        max(y for _, y in hull),
+    )
+    if clip is not None and (
+        bounds.x0 < clip.x0 - 0.001
+        or bounds.x1 > clip.x1 + 0.001
+        or bounds.y0 < clip.y0 - 0.001
+        or bounds.y1 > clip.y1 + 0.001
+    ):
+        return None
+    diameter = max(float(bounds.width), float(bounds.height))
+    return _ClosedOutline(bounds=bounds, hull=hull, diameter=diameter, sources=sources)
+
+
+def _is_rectangular_hull(hull: tuple[tuple[float, float], ...]) -> bool:
+    if len(hull) != 4:
+        return False
+    edges = tuple(
+        (second[0] - first[0], second[1] - first[1])
+        for first, second in zip(hull, (*hull[1:], hull[0]), strict=True)
+    )
+    return all(
+        abs(first[0] * second[0] + first[1] * second[1])
+        <= math.hypot(*first) * math.hypot(*second) * 0.01
+        for first, second in zip(edges, (*edges[1:], edges[0]), strict=True)
+    )
+
+
+def _flattened_points(items: tuple[Any, ...]) -> tuple[tuple[float, float], ...]:
+    """Pontos sobre o traçado; curvas são amostradas (pontos de controle ficam fora)."""
+    points: list[tuple[float, float]] = []
+    for item in items:
+        if item[0] != "c":
+            points.extend(_drawing_points((item,)))
+            continue
+        p0, p1, p2, p3 = ((float(point.x), float(point.y)) for point in item[1:5])
+        for step in range(_BEZIER_SAMPLES + 1):
+            t = step / _BEZIER_SAMPLES
+            weights = ((1 - t) ** 3, 3 * (1 - t) ** 2 * t, 3 * (1 - t) * t**2, t**3)
+            points.append(
+                (
+                    sum(w * p[0] for w, p in zip(weights, (p0, p1, p2, p3), strict=True)),
+                    sum(w * p[1] for w, p in zip(weights, (p0, p1, p2, p3), strict=True)),
+                )
+            )
+    return tuple(points)
+
+
+def _convex_hull(points: tuple[tuple[float, float], ...]) -> tuple[tuple[float, float], ...]:
+    ordered = sorted(set(points))
+    if len(ordered) < 3:
+        return tuple(ordered)
+
+    def cross(o: tuple[float, float], a: tuple[float, float], b: tuple[float, float]) -> float:
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+    lower: list[tuple[float, float]] = []
+    upper: list[tuple[float, float]] = []
+    for chain, sequence in ((lower, ordered), (upper, list(reversed(ordered)))):
+        for point in sequence:
+            while len(chain) >= 2 and cross(chain[-2], chain[-1], point) <= 1e-12:
+                chain.pop()
+            chain.append(point)
+    return tuple(lower[:-1] + upper[:-1])
+
+
+def _inside_convex(
+    point: tuple[float, float], hull: tuple[tuple[float, float], ...], tolerance: float
+) -> bool:
+    """Ponto dentro do polígono convexo anti-horário, com folga ``tolerance``."""
+    for first, second in zip(hull, (*hull[1:], hull[0]), strict=True):
+        edge = second[0] - first[0], second[1] - first[1]
+        length = math.hypot(*edge)
+        if length <= 0:
+            continue
+        cross = edge[0] * (point[1] - first[1]) - edge[1] * (point[0] - first[0])
+        if cross / length < -tolerance:
+            return False
+    return True
+
+
+def _opaque_fill_occluders(drawings: tuple[dict[str, Any], ...]) -> tuple[_Occluder, ...]:
+    """Preenchimentos opacos retangulares, na ordem de pintura da página."""
+    occluders: list[_Occluder] = []
+    for index, drawing in enumerate(drawings):
+        items = tuple(drawing.get("items") or ())
+        opacity = drawing.get("fill_opacity")
+        if (
+            not items
+            or drawing.get("type") not in {"f", "fs"}
+            or drawing.get("fill") is None
+            or (1.0 if opacity is None else float(opacity)) < _OPAQUE_FILL_OPACITY
+        ):
+            continue
+        if _is_rectangle(items):
+            shapes: tuple[tuple[Any, ...], ...] = (items,)
+        elif not drawing.get("even_odd") and all(item[0] == "re" for item in items):
+            # Retângulos "re" com regra não nula não abrem furos entre si.
+            shapes = tuple((item,) for item in items)
+        else:
+            continue
+        for shape in shapes:
+            hull = _convex_hull(_drawing_points(shape))
+            if len(hull) < 3:
+                continue
+            xs, ys = [x for x, _ in hull], [y for _, y in hull]
+            occluders.append(
+                _Occluder(
+                    index=index,
+                    hull=hull,
+                    bounds=(min(xs), min(ys), max(xs), max(ys)),
+                    clip=drawing.get("scissor"),
+                )
+            )
+    return tuple(occluders)
+
+
+def _is_painted_over(match: _SymbolMatch, footprint: Any, occluders: tuple[_Occluder, ...]) -> bool:
+    """Um preenchimento opaco pintado depois que cobre toda a caixa oculta o símbolo."""
+    last = max(source[0] for source in _match_sources(match))
+    box = float(footprint.x0), float(footprint.y0), float(footprint.x1), float(footprint.y1)
+    corners = ((box[0], box[1]), (box[2], box[1]), (box[2], box[3]), (box[0], box[3]))
+    start = bisect_right([item.index for item in occluders], last)
+    for occluder in occluders[start:]:
+        bounds = occluder.bounds
+        if not (
+            bounds[0] <= box[0]
+            and bounds[1] <= box[1]
+            and bounds[2] >= box[2]
+            and bounds[3] >= box[3]
+        ):
+            continue
+        clip = occluder.clip
+        if clip is not None and not (
+            clip.x0 <= box[0] and clip.y0 <= box[1] and clip.x1 >= box[2] and clip.y1 >= box[3]
+        ):
+            continue
+        if all(_inside_convex(corner, occluder.hull, 1e-6) for corner in corners):
+            return True
+    return False
 
 
 def _union_bounds(primitives: tuple[_VectorPrimitive, ...]) -> Any:
