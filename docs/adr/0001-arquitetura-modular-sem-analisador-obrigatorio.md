@@ -1,6 +1,7 @@
 # ADR 0001 - Arquitetura modular sem analisador proprietário obrigatório
 
-- Estado: aceito; requisito de revisão obrigatória substituído pelo ADR 0009
+- Estado: aceito; requisito de revisão obrigatória substituído pelo ADR 0009; proibição de
+  aprendizado de máquina substituída pelo ADR 0017
 - Data: 2026-07-20
 
 ## Contexto

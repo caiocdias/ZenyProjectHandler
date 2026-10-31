@@ -74,7 +74,7 @@ extrator/interpretador/método de conformidade entram na identidade/cache da exe
 comportamento de saída, incremente a versão correspondente. "Analisar conformidade" reaplica
 regras sobre resultados persistidos sem reabrir o PDF.
 
-Decisões arquiteturais estão em `docs/adr/` (0001–0015); comportamento vigente em
+Decisões arquiteturais estão em `docs/adr/` (0001–0017); comportamento vigente em
 `docs/especificacao-funcional.md` e `docs/arquitetura-conformidade.md`.
 
 ## Curadoria de simbologia
