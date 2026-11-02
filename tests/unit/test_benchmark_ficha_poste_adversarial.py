@@ -280,7 +280,7 @@ def test_poste_sem_estrutura_tem_lista_vazia_e_pendentes_vazio(
     assert poste["poste"] is None
 
 
-def test_poste_sem_geometria_fica_fora_e_seu_equipamento_e_ignorado_sem_contagem(
+def test_poste_sem_geometria_fica_fora_e_e_contado_junto_com_seu_simbolo_fora_da_ficha(
     catalogo_inicial: CatalogoTecnico,
 ) -> None:
     cenario = _Cenario(catalogo_inicial)
@@ -294,10 +294,13 @@ def test_poste_sem_geometria_fica_fora_e_seu_equipamento_e_ignorado_sem_contagem
     ficha = _ficha(cenario, {equipamento_id: {"simbolo_classe": "ESTAI"}})
 
     assert [poste["identificador"] for poste in ficha["postes"]] == ["COM"]
+    assert ficha["postes"][0]["simbolos"] == []
     assert ficha["atributos_extras"] == {
         "equipamentos_sem_simbolo": 0,
         "simbolos_fora_do_inventario": 0,
         "simbolos_sem_area": 0,
+        "postes_sem_geometria": 1,
+        "simbolos_de_poste_fora_da_ficha": 1,
     }
 
 

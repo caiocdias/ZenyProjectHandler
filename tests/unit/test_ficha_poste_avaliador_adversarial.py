@@ -1242,3 +1242,57 @@ def test_tolerancia_de_comprimento_nos_dois_lados_do_limite(
     ref: float, pred: float, esperado: int
 ) -> None:
     assert _acertos_comprimento(ref, pred) == esperado
+
+
+# ---------------------------------------------------------------------------------------------
+# Onda final E02: o relatório não compartilha estado com o protocolo nem com a predição
+# ---------------------------------------------------------------------------------------------
+
+
+def _par_com_gerador_aninhado() -> tuple[dict[str, Any], dict[str, Any]]:
+    from tests.unit.test_ficha_poste_avaliador import _acerto_total
+
+    referencia, predicao = _acerto_total()
+    predicao["gerador"] = {"versao_extracao": "v1", "aninhado": {"lista": [1, 2], "x": {"y": 1}}}
+    return referencia, predicao
+
+
+def test_mutar_dicionarios_aninhados_do_relatorio_nao_altera_protocolo_nem_entradas() -> None:
+    from scripts.ficha_poste_avaliador import PROTOCOLO_FICHA
+
+    referencia, predicao = _par_com_gerador_aninhado()
+    protocolo_antes = copy.deepcopy(dict(PROTOCOLO_FICHA))
+    referencia_antes = copy.deepcopy(referencia)
+    predicao_antes = copy.deepcopy(predicao)
+
+    relatorio = avaliar(referencia, predicao)
+    relatorio["protocolo"]["inventario"] = "mutado"
+    relatorio["protocolo"].clear()
+    relatorio["gerador_predicao"]["aninhado"]["lista"].append(3)
+    relatorio["gerador_predicao"]["aninhado"]["x"]["y"] = 99
+
+    assert dict(PROTOCOLO_FICHA) == protocolo_antes
+    assert referencia == referencia_antes
+    assert predicao == predicao_antes
+
+
+def test_duas_avaliacoes_seguidas_dao_o_mesmo_relatorio_mesmo_apos_mutar_a_primeira() -> None:
+    referencia, predicao = _par_com_gerador_aninhado()
+    primeiro = avaliar(referencia, predicao)
+    esperado = copy.deepcopy(primeiro)
+    primeiro["protocolo"]["distancia_max"] = 99.0
+    primeiro["gerador_predicao"]["aninhado"]["x"]["y"] = 99
+    segundo = avaliar(referencia, predicao)
+    assert segundo == esperado
+    assert segundo["protocolo"] is not primeiro["protocolo"]
+    assert segundo["gerador_predicao"] is not primeiro["gerador_predicao"]
+
+
+def test_mutar_o_protocolo_importado_nao_e_necessario_para_limiar_do_proximo_lote() -> None:
+    from tests.unit.test_ficha_poste_avaliador import _acerto_total
+
+    referencia, predicao = _acerto_total()
+    for _ in range(3):
+        relatorio = avaliar(referencia, predicao)
+        assert relatorio["protocolo"]["distancia_max"] == 0.02
+        relatorio["protocolo"]["distancia_max"] = 0.0
