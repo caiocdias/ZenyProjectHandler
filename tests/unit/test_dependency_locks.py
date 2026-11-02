@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -399,14 +400,34 @@ def test_pytest_instalado_no_ambiente_e_o_corrigido() -> None:
     assert Version(pytest.__version__) >= Version(VERSOES_CORRIGIDAS["pytest"])
 
 
-def _rodar_pytest_com_a_config_do_projeto(tmp_path: Path, teste: str) -> tuple[int, str]:
-    """Copie ``[tool.pytest.ini_options]`` real para um diretório isolado e rode um teste."""
+def _rodar_pytest_com_a_config_do_projeto(
+    tmp_path: Path,
+    teste: str,
+    *,
+    sem_chaves: tuple[str, ...] = (),
+    sem_flags_strict: bool = False,
+    sem_filtros_de_marcador: bool = False,
+    extras: dict[str, object] | None = None,
+) -> tuple[int, str]:
+    """Copie ``[tool.pytest.ini_options]`` real (menos ``testpaths``) e rode um teste isolado.
+
+    Os parâmetros ``sem_*`` removem partes da configuração para provar que o mecanismo
+    testado é de fato o que protege; ``extras`` acrescenta chaves ao ini.
+    """
     dados = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    opcoes = dados["tool"]["pytest"]["ini_options"]
+    opcoes = dict(dados["tool"]["pytest"]["ini_options"])
+    opcoes.pop("testpaths", None)
+    for chave in sem_chaves:
+        opcoes.pop(chave, None)
+    if sem_flags_strict:
+        opcoes["addopts"] = " ".join(
+            a for a in opcoes["addopts"].split() if a not in {"--strict-markers", "--strict-config"}
+        )
+    if sem_filtros_de_marcador:
+        opcoes["filterwarnings"] = [f for f in opcoes["filterwarnings"] if "UnknownMark" not in f]
+    opcoes.update(extras or {})
     linhas = ["[tool.pytest.ini_options]"]
-    linhas.append(f"addopts = {opcoes['addopts']!r}")
-    linhas.append("filterwarnings = [" + ", ".join(repr(f) for f in opcoes["filterwarnings"]) + "]")
-    linhas.append("markers = [" + ", ".join(repr(m) for m in opcoes["markers"]) + "]")
+    linhas.extend(f"{chave} = {json.dumps(valor)}" for chave, valor in opcoes.items())
     (tmp_path / "pyproject.toml").write_text("\n".join(linhas) + "\n", encoding="utf-8")
     (tmp_path / "test_alvo.py").write_text(teste, encoding="utf-8")
     ambiente = {k: v for k, v in os.environ.items() if k != "PYTEST_ADDOPTS"}
@@ -475,3 +496,75 @@ def test_config_do_projeto_nao_emite_aviso_de_config_nem_de_depreciacao_do_pytes
     assert "1 passed" in saida
     for aviso in ("PytestConfigWarning", "PytestRemovedIn", "PytestDeprecationWarning", "warnings"):
         assert aviso not in saida, saida
+
+
+_TESTE_TRIVIAL = "def test_a():\n    pass\n"
+_MARCADOR_DESCONHECIDO = "import pytest\n\n@pytest.mark.zzz\ndef test_a():\n    pass\n"
+
+
+def test_strict_markers_do_ini_sozinho_rejeita_marcador_sem_flag_nem_filtro(
+    tmp_path: Path,
+) -> None:
+    codigo, saida = _rodar_pytest_com_a_config_do_projeto(
+        tmp_path, _MARCADOR_DESCONHECIDO, sem_flags_strict=True, sem_filtros_de_marcador=True
+    )
+
+    assert codigo != 0, saida
+    assert "'zzz' not found" in saida
+
+
+def test_filtro_de_marcador_sozinho_rejeita_marcador_sem_strict_markers(tmp_path: Path) -> None:
+    codigo, saida = _rodar_pytest_com_a_config_do_projeto(
+        tmp_path, _MARCADOR_DESCONHECIDO, sem_chaves=("strict_markers",), sem_flags_strict=True
+    )
+
+    assert codigo != 0, saida
+
+
+def test_sem_strict_markers_flag_nem_filtro_marcador_desconhecido_so_avisa(
+    tmp_path: Path,
+) -> None:
+    """Controle negativo: prova que os testes acima podem falhar."""
+    codigo, saida = _rodar_pytest_com_a_config_do_projeto(
+        tmp_path,
+        _MARCADOR_DESCONHECIDO,
+        sem_chaves=("strict_markers",),
+        sem_flags_strict=True,
+        sem_filtros_de_marcador=True,
+    )
+
+    assert codigo == 0, saida
+    assert "PytestUnknownMarkWarning" in saida
+
+
+def test_config_do_projeto_rejeita_chave_desconhecida_no_ini(tmp_path: Path) -> None:
+    codigo, saida = _rodar_pytest_com_a_config_do_projeto(
+        tmp_path, _TESTE_TRIVIAL, extras={"chave_inexistente_zzz": 1}
+    )
+
+    assert codigo != 0, saida
+    assert "chave_inexistente_zzz" in saida
+
+
+def test_strict_config_do_ini_sozinho_rejeita_chave_desconhecida(tmp_path: Path) -> None:
+    codigo, saida = _rodar_pytest_com_a_config_do_projeto(
+        tmp_path,
+        _TESTE_TRIVIAL,
+        sem_flags_strict=True,
+        extras={"chave_inexistente_zzz": 1},
+    )
+
+    assert codigo != 0, saida
+
+
+def test_sem_strict_config_chave_desconhecida_so_avisa(tmp_path: Path) -> None:
+    """Controle negativo da guarda de ``strict_config``."""
+    codigo, saida = _rodar_pytest_com_a_config_do_projeto(
+        tmp_path,
+        _TESTE_TRIVIAL,
+        sem_chaves=("strict_config",),
+        sem_flags_strict=True,
+        extras={"chave_inexistente_zzz": 1},
+    )
+
+    assert codigo == 0, saida
