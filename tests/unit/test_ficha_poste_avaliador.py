@@ -150,6 +150,20 @@ def test_acerto_total_tem_todas_as_metricas_em_um() -> None:
     assert relatorio["protocolo"] == PROTOCOLO_FICHA
 
 
+def test_relatorio_nao_compartilha_estado_com_protocolo_nem_com_a_predicao() -> None:
+    referencia, predicao = _acerto_total()
+    gerador_original = copy.deepcopy(predicao["gerador"])
+    protocolo_original = copy.deepcopy(PROTOCOLO_FICHA)
+
+    relatorio = avaliar(referencia, predicao)
+    relatorio["protocolo"]["distancia_max"] = 99.0
+    relatorio["gerador_predicao"]["versao_extracao"] = "mutado"
+
+    assert protocolo_original == PROTOCOLO_FICHA
+    assert predicao["gerador"] == gerador_original
+    assert avaliar(referencia, predicao)["protocolo"] == protocolo_original
+
+
 def test_chaves_do_relatorio_sao_as_do_protocolo() -> None:
     relatorio = avaliar(*_acerto_total())
     assert set(relatorio) == {

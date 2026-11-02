@@ -9,6 +9,7 @@ autor não determinou fica em ``pendentes`` e sai do denominador (referência) o
 
 from __future__ import annotations
 
+import copy
 import math
 from collections.abc import Mapping, Sequence
 from decimal import Decimal
@@ -392,10 +393,10 @@ def avaliar(referencia: Mapping[str, Any], predicao: Mapping[str, Any]) -> dict[
     simbolos, simbolos_nao_casados = _avaliar_simbolos(pares, ref_sem_par, pred_sem_par)
     return {
         "schema_version": 1,
-        "protocolo": PROTOCOLO_FICHA,
+        "protocolo": copy.deepcopy(dict(PROTOCOLO_FICHA)),
         "pdf_sha256": referencia["pdf_sha256"],
         "escopo": referencia["escopo_anotacao"]["tipo"],
-        "gerador_predicao": predicao.get("gerador"),
+        "gerador_predicao": copy.deepcopy(predicao.get("gerador")),
         "postes": _contagem(len(casados), len(pred_sem_par), len(ref_sem_par)),
         "campos": campos,
         "vaos": _avaliar_vaos(referencia["vaos"], vaos_pred, mapa),

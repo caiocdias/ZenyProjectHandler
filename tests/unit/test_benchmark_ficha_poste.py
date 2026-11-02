@@ -199,6 +199,41 @@ def test_equipamento_sem_simbolo_ou_fora_do_inventario_fica_fora_e_e_contado(
     }
 
 
+def test_poste_sem_geometria_e_simbolo_de_poste_fora_da_ficha_sao_contados(
+    catalogo_inicial: CatalogoTecnico,
+) -> None:
+    projeto, poste_id, _ = _projeto_com(catalogo_inicial, lambda g: g, lambda g: g)
+    poste, com_simbolo, sem_simbolo = projeto.elementos
+    assert isinstance(poste, Poste)
+    assert isinstance(com_simbolo, Equipamento) and isinstance(sem_simbolo, Equipamento)
+    sem_geometria = replace(poste, id=uuid4(), identificador_operacional="P2", geometria=None)
+    orfao = replace(com_simbolo, id=uuid4(), poste_id=sem_geometria.id)
+    sem_classe_orfao = replace(sem_simbolo, id=uuid4(), poste_id=sem_geometria.id)
+    projeto = replace(
+        projeto,
+        elementos=(poste, com_simbolo, sem_simbolo, sem_geometria, orfao, sem_classe_orfao),
+    )
+    variante = _variante(
+        projeto,
+        {
+            poste_id: {},
+            sem_geometria.id: {},
+            com_simbolo.id: {"simbolo_classe": "ESTAI"},
+            sem_simbolo.id: {"simbolo_classe": "ESTAI"},
+            orfao.id: {"simbolo_classe": "ESTAI"},
+            sem_classe_orfao.id: {},
+        },
+    )
+
+    ficha = ficha_predita(variante, SHA_QUALQUER, native_only=True)
+
+    assert validar_ficha(ficha) == []
+    assert len(ficha["postes"]) == 1
+    assert ficha["atributos_extras"]["postes_sem_geometria"] == 1
+    assert ficha["atributos_extras"]["simbolos_de_poste_fora_da_ficha"] == 1
+    assert ficha["atributos_extras"]["equipamentos_sem_simbolo"] == 1
+
+
 def test_cli_grava_ficha_e_avaliacao_sem_caminho_absoluto(tmp_path: Path) -> None:
     pdf = create_network_benchmark_pdf(tmp_path / "rede-secreta.pdf")
     referencia = _grava(

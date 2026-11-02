@@ -114,10 +114,14 @@ def _anexar_simbolos(
     for equipamento in equipamentos:
         poste = postes.get(equipamento.poste_id)
         classe = origens.get(equipamento.id, {}).get("simbolo_classe")
-        if poste is None:
-            continue
         if classe is None:
             contagens["equipamentos_sem_simbolo"] += 1
+            continue
+        if poste is None:
+            # Chave só aparece quando ocorre, para a raiz da ficha sem ocorrência seguir enxuta.
+            contagens["simbolos_de_poste_fora_da_ficha"] = (
+                contagens.get("simbolos_de_poste_fora_da_ficha", 0) + 1
+            )
             continue
         classe = str(classe)
         if _erro_classe("simbolo", classe) is not None:
@@ -176,6 +180,11 @@ def ficha_predita(
         for vao in detectar_vaos(projeto)
         if vao.poste_origem_id in postes and vao.poste_destino_id in postes
     ]
+    sem_geometria = sum(
+        1 for item in projeto.elementos if isinstance(item, Poste) and item.geometria is None
+    )
+    if sem_geometria:
+        contagens["postes_sem_geometria"] = sem_geometria
     return {
         "schema_version": 1,
         "tipo": "predicao",
