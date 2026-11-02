@@ -75,6 +75,8 @@ A análise entrega, para cada poste da folha, a ficha correta: identificador, es
 | H4 | O usuário reserva folhas novas, ainda não vistas, para o conjunto de avaliação antes de E09 | sem elas, E09 não tem prova cega e fica bloqueada | E09 |
 | H5 | PyTorch com ROCm treina na RX 9070 XT desta máquina (Windows nativo ou WSL2) | o treino cai para CPU ou para GPU alugada (D1) | E11 |
 | D1 | Treinar em GPU alugada por hora, se ROCm e CPU forem inviáveis | sem decisão, E12 só treina em CPU | E12 (só se E11 concluir que o treino local é inviável) |
+| D2 | Decidido em 2026-11-02: a ficha predita vem do projeto promovido (R2 da E02), e o formato v1 e o casamento guloso 0,02/0,05 são mantidos, com calibração na E03 | se a E03 pedir outra fonte, entra nova `versao_extracao` no `gerador` | E03 |
+| D3 | Decidido em 2026-11-02: uma etapa própria de atualização de dependências entra antes da E03, com prioridade para o Pillow do lock do servidor. A etapa ainda precisa ser criada no roadmap (skill `development-roadmap`) | sem ela, a E03 roda sobre locks com vulnerabilidades conhecidas | E03 |
 
 ## Definição global de pronto
 
@@ -329,6 +331,7 @@ Bloco C — aprendizado
   - **Formato v1:** `null` (ou lista vazia) é "ausente na folha" e conta na métrica; campo não determinado vai em `pendentes` e sai do denominador na referência (na predição, erro em campo pendente conta à parte). Classe de símbolo validada contra o inventário; `ESTRUTURA_POSTE_MT/AT` (símbolo do próprio poste) excluídas.
   - **R4, casamento de postes:** guloso determinístico (identificador igual primeiro, depois distância), limiares 0,02 e 0,05 no espaço normalizado da página, versionados em `PROTOCOLO_FICHA`; calibráveis na E03.
   - Rodar `.\IniciarTestes.bat` no worktree antes de integrar.
+  - Respostas do usuário (2026-11-02): manter a branch sem integrar; R2 aceita (projeto promovido); formato v1 e R4 mantidos, com calibração na E03; etapa de atualização de dependências antes da E03 (D3).
 - Notas para a próxima etapa:
   - Na E03, leia as chaves de diagnóstico da raiz da ficha predita com `.get(chave, 0)`: `postes_sem_geometria` e `simbolos_de_poste_fora_da_ficha` só aparecem quando maiores que 0; `equipamentos_sem_simbolo` conta também equipamento de poste sem geometria.
   - Um cabo com postes intermediários vira um vão só em `detectar_vaos` (comportamento do analisador): nas folhas reais, isso aparece como FN de vãos intermediários, não como erro do avaliador.
