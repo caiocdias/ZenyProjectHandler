@@ -118,6 +118,28 @@ def test_distancia_um_pouco_acima_do_limite_nao_casa() -> None:
     assert casar_postes([_p("R", 0.0)], [_p("Q", 0.0200001)]) == []
 
 
+def test_par_0_50_e_0_52_casa_apesar_do_ruido_de_ponto_flutuante() -> None:
+    pares = casar_postes([_p("R", 0.5)], [_p("Q", 0.52)])
+    assert _ids(pares) == [("R", "Q")]
+    assert pares[0][2] == 0.52 - 0.5  # a distância reportada não é arredondada
+
+
+@pytest.mark.parametrize(
+    ("limite", "nome", "casa"),
+    [
+        (0.02, None, True),
+        (0.02 + 4e-10, None, True),
+        (0.02 + 2e-9, None, False),
+        (0.05, "P1", True),
+        (0.05 + 4e-10, "P1", True),
+        (0.05 + 2e-9, "P1", False),
+    ],
+)
+def test_limite_arredondado_a_nove_casas(limite: float, nome: str | None, casa: bool) -> None:
+    pares = casar_postes([_p("R", 0.0, nome)], [_p("Q", limite, nome)])
+    assert (_ids(pares) == [("R", "Q")]) is casa
+
+
 def test_distancia_e_euclidiana_nos_dois_eixos() -> None:
     # dx = dy = 0.015: Chebyshev daria 0.015 (casa); a euclidiana dá ~0.0212 (não casa).
     ref = {"id": "R", "pagina": 1, "bbox": [0.1, 0.1, 0.1, 0.1], "identificador": None}
