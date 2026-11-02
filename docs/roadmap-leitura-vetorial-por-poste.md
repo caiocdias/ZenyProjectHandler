@@ -163,7 +163,7 @@ Bloco A — base e medição
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E01 | Limpeza do projeto | #concluida | — | scripts, testes e docs de etapas encerradas removidos, gate verde |
-| E02 | Ficha de referência e benchmark por poste | #pendente | E01 | formato da ficha, avaliador por poste e baseline sintético |
+| E02 | Ficha de referência e benchmark por poste | #em-andamento | E01 | formato da ficha, avaliador por poste e baseline sintético |
 | E03 | Rotulagem v0 e baseline real | #pendente | E02 | fichas de referência das 16 folhas e baseline do analisador atual em `tmp/` |
 
 Bloco B — leitura vetorial
@@ -259,7 +259,7 @@ Bloco C — aprendizado
 
 ---
 
-## E02 — Ficha de referência e benchmark por poste — #pendente
+## E02 — Ficha de referência e benchmark por poste — #em-andamento
 
 **Objetivo:** definir o formato da ficha do poste de referência e um avaliador que compara fichas preditas e de referência com as métricas da decisão 7 do design.
 
