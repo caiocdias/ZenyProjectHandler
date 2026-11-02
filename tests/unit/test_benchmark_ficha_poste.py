@@ -248,8 +248,10 @@ def test_baseline_sintetico_do_analisador_atual(tmp_path: Path) -> None:
     """Baseline: muda só com mudança deliberada do analisador ou do protocolo.
 
     Erros esperados: o 35m do vão não vira comprimento do cabo no analisador (um erro de
-    comprimento) e o estai da referência nunca é promovido (R2: recall de símbolos 0 por
-    construção). Cabo com postes intermediários viraria um vão só em detectar_vaos (M5); a rede
+    comprimento) e o ESTAI da referência não tem contraparte: o PDF sintético não desenha estai,
+    é uma anotação posta só para fixar o caminho do FN de símbolo (fn=1 sairia igual mesmo que o
+    analisador promovesse estais). A R2 (estai nunca promovido) só seria exercitada com um estai
+    real na fixture. Cabo com postes intermediários viraria um vão só em detectar_vaos (M5); a rede
     sintética não tem intermediários.
     """
     pdf = create_network_benchmark_pdf(tmp_path / "rede.pdf")
