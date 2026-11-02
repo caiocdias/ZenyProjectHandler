@@ -1032,3 +1032,213 @@ def test_so_predicao_vazia_da_recall_zero_e_precisao_none() -> None:
     r = avaliar(_ficha([_poste("P1", 0.1)]), _pred([]))
     assert r["postes"]["precisao"] is None
     assert r["postes"]["recall"] == 0.0
+
+
+# --- rodada 2: vãos empatados com pendências distintas e tolerância sem ruído de float -----------
+
+
+def _relatorios_em_todas_as_ordens(
+    vaos_ref: list[dict[str, Any]], vaos_pred: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    ref, pred = _dois_postes()
+    relatorios = []
+    for ordem_ref in itertools.permutations(vaos_ref):
+        for ordem_pred in itertools.permutations(vaos_pred):
+            relatorios.append(
+                avaliar(
+                    _ficha(ref, copy.deepcopy(list(ordem_ref))),
+                    _pred(pred, copy.deepcopy(list(ordem_pred))),
+                )
+            )
+    return relatorios
+
+
+def test_tres_vaos_empatados_com_pendencias_distintas_em_toda_ordem_dao_o_mesmo_relatorio() -> None:
+    # Os três vãos de cada lado só diferem em `pendentes`; ordem canônica (pendentes ordenadas):
+    # (), (cabo, comp), (comp). Pareamento por posto: R0-Q0 (comprimento errado, sem pendência),
+    # R1-Q1 e R2-Q2 (comprimento pendente na referência).
+    refs = [
+        _vao("P1", "P2", 40.0, "MT", pendentes=[]),
+        _vao("P1", "P2", 40.0, "MT", pendentes=["comprimento_m"]),
+        _vao("P1", "P2", 40.0, "MT", pendentes=["comprimento_m", "cabo"]),
+    ]
+    preds = [
+        _vao("Q1", "Q2", 50.0, "MT", pendentes=[]),
+        _vao("Q1", "Q2", 50.0, "MT", pendentes=["comprimento_m"]),
+        _vao("Q1", "Q2", 50.0, "MT", pendentes=["cabo", "comprimento_m"]),
+    ]
+    relatorios = _relatorios_em_todas_as_ordens(refs, preds)
+    assert len(relatorios) == 36
+    assert all(relatorio == relatorios[0] for relatorio in relatorios)
+    vaos = relatorios[0]["vaos"]
+    assert (vaos["tp"], vaos["fp"], vaos["fn"]) == (3, 0, 0)
+    comp = vaos["comprimento"]
+    assert (comp["acertos"], comp["total"]) == (0, 1)
+    assert (comp["erros_com_pendencia"], comp["erros_sem_pendencia"]) == (0, 1)
+    cabo = vaos["cabo"]
+    assert (cabo["acertos"], cabo["total"]) == (2, 2)
+
+
+def test_vaos_empatados_pendencia_so_na_predicao_em_toda_ordem_dao_o_mesmo_relatorio() -> None:
+    # Ordem canônica: refs [], [cabo]; preds [], [comp]. Pares: ref [] com pred [] (erro de
+    # comprimento sem pendência) e ref [cabo] com pred [comp] (erro de comprimento com pendência).
+    refs = [_vao("P1", "P2", 40.0, "MT"), _vao("P1", "P2", 40.0, "MT", pendentes=["cabo"])]
+    preds = [
+        _vao("Q1", "Q2", 99.0, "MT", pendentes=["comprimento_m"]),
+        _vao("Q1", "Q2", 99.0, "MT", pendentes=[]),
+    ]
+    relatorios = _relatorios_em_todas_as_ordens(refs, preds)
+    assert all(relatorio == relatorios[0] for relatorio in relatorios)
+    comp = relatorios[0]["vaos"]["comprimento"]
+    assert (comp["acertos"], comp["total"]) == (0, 2)
+    assert (comp["erros_com_pendencia"], comp["erros_sem_pendencia"]) == (1, 1)
+    cabo = relatorios[0]["vaos"]["cabo"]
+    assert (cabo["acertos"], cabo["total"]) == (1, 1)
+
+
+def test_vaos_empatados_pendencia_so_na_referencia_em_toda_ordem_dao_o_mesmo_relatorio() -> None:
+    # Canônico: ref [] com pred [] e ref [comp] com pred [cabo]. Comprimento: só o primeiro conta
+    # (40 = 40, acerto); cabo: os dois contam e acertam (o ref [comp] não anula o cabo).
+    refs = [
+        _vao("P1", "P2", 40.0, "MT", pendentes=["comprimento_m"]),
+        _vao("P1", "P2", 40.0, "MT", pendentes=[]),
+    ]
+    preds = [_vao("Q1", "Q2", 40.0, "MT"), _vao("Q1", "Q2", 40.0, "MT", pendentes=["cabo"])]
+    relatorios = _relatorios_em_todas_as_ordens(refs, preds)
+    assert all(relatorio == relatorios[0] for relatorio in relatorios)
+    vaos = relatorios[0]["vaos"]
+    assert (vaos["comprimento"]["acertos"], vaos["comprimento"]["total"]) == (1, 1)
+    assert (vaos["cabo"]["acertos"], vaos["cabo"]["total"]) == (2, 2)
+
+
+def test_vaos_empatados_com_cabo_nulo_e_pendencias_distintas_independem_da_ordem() -> None:
+    # Cabo nulo cai no pareamento por posto (sobras): a chave com `pendentes` fixa o posto.
+    refs = [
+        _vao("P1", "P2", 40.0, None, pendentes=["comprimento_m"]),
+        _vao("P1", "P2", 40.0, None, pendentes=[]),
+    ]
+    preds = [
+        _vao("Q1", "Q2", 41.0, None, pendentes=[]),
+        _vao("Q1", "Q2", 41.0, None, pendentes=["comprimento_m"]),
+    ]
+    relatorios = _relatorios_em_todas_as_ordens(refs, preds)
+    assert all(relatorio == relatorios[0] for relatorio in relatorios)
+    comp = relatorios[0]["vaos"]["comprimento"]
+    # canônico: ref [] com pred [] (41 contra 40, fora de 0,1: um erro sem pendência);
+    # ref [comp] com pred [comp] fica fora da métrica.
+    assert (comp["acertos"], comp["total"]) == (0, 1)
+    assert (comp["erros_com_pendencia"], comp["erros_sem_pendencia"]) == (0, 1)
+
+
+def test_pendentes_do_vao_entram_na_chave_como_conjunto_ordenado() -> None:
+    # A mesma pendência escrita em ordens diferentes entre os lados não pode mudar o posto:
+    # canônico (sorted): refs (cabo, comp), (comp); preds (cabo, comp), (comp).
+    # Pares: R(cabo,comp)-Q(cabo,comp) fora da métrica; R(comp)-Q(comp): cabo errado, a predição
+    # não marcou `cabo` como pendente, logo um erro sem pendência. Sem ordenar, o R(comp) casaria
+    # com Q(cabo,comp) e o erro viraria "com pendência".
+    refs = [
+        _vao("P1", "P2", 40.0, "MT", pendentes=["comprimento_m", "cabo"]),
+        _vao("P1", "P2", 40.0, "MT", pendentes=["comprimento_m"]),
+    ]
+    preds = [
+        _vao("Q1", "Q2", 40.0, "BT", pendentes=["cabo", "comprimento_m"]),
+        _vao("Q1", "Q2", 40.0, "BT", pendentes=["comprimento_m"]),
+    ]
+    relatorios = _relatorios_em_todas_as_ordens(refs, preds)
+    assert all(relatorio == relatorios[0] for relatorio in relatorios)
+    cabo = relatorios[0]["vaos"]["cabo"]
+    assert (cabo["acertos"], cabo["total"]) == (0, 1)
+    assert (cabo["erros_com_pendencia"], cabo["erros_sem_pendencia"]) == (0, 1)
+
+
+def _acertos_coordenada(
+    leste_ref: float, norte_ref: float, leste_pred: float, norte_pred: float
+) -> int:
+    referencia = _ficha(
+        [_poste("P1", 0.1, coordenada={"leste": leste_ref, "norte": norte_ref, "zona": "23K"})]
+    )
+    predicao = _pred(
+        [_poste("Q1", 0.1, coordenada={"leste": leste_pred, "norte": norte_pred, "zona": "23K"})]
+    )
+    return int(avaliar(referencia, predicao)["campos"]["coordenada"]["acertos"])
+
+
+@pytest.mark.parametrize(
+    ("ref", "pred", "esperado"),
+    [
+        (7800000.48, 7800000.47, 1),  # no limite: o float dá 0,01000000070...
+        (7800000.47, 7800000.48, 1),
+        (7800000.03, 7800000.02, 1),
+        (7800000.07, 7800000.06, 1),
+        (7800000.11, 7800000.10, 1),
+        (7800000.48, 7800000.46, 0),  # 0,02 acima do limite
+        (7800000.46, 7800000.48, 0),
+        (7800000.49, 7800000.47, 0),
+    ],
+)
+def test_tolerancia_de_coordenada_norte_utm_nos_dois_lados_do_limite(
+    ref: float, pred: float, esperado: int
+) -> None:
+    assert _acertos_coordenada(700000.0, ref, 700000.0, pred) == esperado
+
+
+@pytest.mark.parametrize(
+    ("ref", "pred", "esperado"),
+    [
+        (700000.01, 700000.0, 1),
+        (700000.0, 700000.01, 1),
+        (700000.02, 700000.01, 1),
+        (700000.02, 700000.0, 0),
+        (700000.0, 700000.02, 0),
+        # 1e-10 acima do limite: round(.., 9) engoliria; o valor escrito não.
+        (700000.0100000001, 700000.0, 0),
+        (700000.0, 700000.0100000001, 0),
+    ],
+)
+def test_tolerancia_de_coordenada_leste_utm_nos_dois_lados_do_limite(
+    ref: float, pred: float, esperado: int
+) -> None:
+    assert _acertos_coordenada(ref, 7800000.0, pred, 7800000.0) == esperado
+
+
+def test_tolerancia_de_coordenada_exige_leste_e_norte_dentro_do_limite() -> None:
+    assert _acertos_coordenada(700000.01, 7800000.48, 700000.0, 7800000.47) == 1
+    assert _acertos_coordenada(700000.02, 7800000.48, 700000.0, 7800000.47) == 0
+    assert _acertos_coordenada(700000.01, 7800000.48, 700000.0, 7800000.46) == 0
+
+
+def test_tolerancia_de_coordenada_compara_o_valor_escrito_nao_o_ruido_de_float() -> None:
+    # 0.1 + 0.2 escreve 0.30000000000000004: acima de 0.29 por 0,01000000000000004 (> 0,01).
+    assert _acertos_coordenada(0.1 + 0.2, 7800000.0, 0.29, 7800000.0) == 0
+    assert _acertos_coordenada(0.3, 7800000.0, 0.29, 7800000.0) == 1
+    assert _acertos_coordenada(0.1 + 0.2, 7800000.0, 0.3, 7800000.0) == 1
+
+
+def _acertos_comprimento(ref: float, pred: float) -> int:
+    ref_postes, pred_postes = _dois_postes()
+    relatorio = avaliar(
+        _ficha(ref_postes, [_vao("P1", "P2", ref)]), _pred(pred_postes, [_vao("Q1", "Q2", pred)])
+    )
+    return int(relatorio["vaos"]["comprimento"]["acertos"])
+
+
+@pytest.mark.parametrize(
+    ("ref", "pred", "esperado"),
+    [
+        (7800000.2, 7800000.1, 1),  # discrimina Decimal de round(abs(a-b), 9): float dá 0,099999999
+        (7800000.4, 7800000.3, 1),
+        (7800000.7, 7800000.6, 1),
+        (7800000.2, 7800000.09, 0),
+        (7800000.09, 7800000.2, 0),
+        (40.1, 40.0, 1),
+        (40.0, 40.1, 1),
+        (40.2, 40.0, 0),
+        (40.0, 40.1000000001, 0),  # 1e-10 acima do limite
+        (0.1 + 0.2, 0.2, 0),  # 0.30000000000000004 - 0.2 > 0,1 no valor escrito
+        (0.3, 0.2, 1),
+    ],
+)
+def test_tolerancia_de_comprimento_nos_dois_lados_do_limite(
+    ref: float, pred: float, esperado: int
+) -> None:
+    assert _acertos_comprimento(ref, pred) == esperado
