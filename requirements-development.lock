@@ -20,6 +20,6 @@ pytest-cov==7.1.0
 pytest-qt==4.5.0
 radon==6.0.1
 ruff==0.15.22
-setuptools==80.10.2
+setuptools==84.1.0
 six==1.17.0
 truststore==0.10.4

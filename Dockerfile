@@ -10,7 +10,7 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 WORKDIR /build
 COPY requirements-server.lock ./
 RUN --mount=type=cache,target=/root/.cache/pip \
-    python -m pip install setuptools==80.10.2 \
+    python -m pip install setuptools==84.1.0 \
     && python -m pip wheel --wheel-dir=/wheels -r requirements-server.lock
 
 COPY server/pyproject.toml ./server/pyproject.toml

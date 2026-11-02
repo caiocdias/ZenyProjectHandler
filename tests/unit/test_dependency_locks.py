@@ -30,8 +30,19 @@ VERSOES_CORRIGIDAS = {
     "httpx2": "2.12.0",
     "httpcore2": "2.12.0",
     "pytest": "9.0.3",
+    "setuptools": "84.1.0",
+    "wheel": "0.46.2",
+    "altgraph": "0.17.5",
 }
-VERSOES_VULNERAVEIS = {"pillow": "12.2.0", "mako": "1.3.12", "httpx2": "2.10.0", "pytest": "8.4.2"}
+VERSOES_VULNERAVEIS = {
+    "pillow": "12.2.0",
+    "mako": "1.3.12",
+    "httpx2": "2.10.0",
+    "pytest": "8.4.2",
+    "setuptools": "80.10.2",
+    "wheel": "0.45.1",
+    "altgraph": "0.17.4",
+}
 
 
 def _pinos(lock: Path) -> dict[str, str]:
@@ -568,3 +579,17 @@ def test_sem_strict_config_chave_desconhecida_so_avisa(tmp_path: Path) -> None:
     )
 
     assert codigo == 0, saida
+
+
+# --- Task 3 (E13): ferramentas de build ---
+
+
+def test_dockerfile_instala_o_setuptools_corrigido() -> None:
+    pinos = re.findall(r"setuptools==([\w.]+)", (ROOT / "Dockerfile").read_text(encoding="utf-8"))
+    assert pinos == [VERSOES_CORRIGIDAS["setuptools"]]
+
+
+def test_lock_de_build_do_cliente_fixa_altgraph_sem_pkg_resources() -> None:
+    """altgraph 0.17.4 importa ``pkg_resources``, ausente a partir do setuptools 82."""
+    pinos = _pinos(ROOT / "requirements-client-build.lock")
+    assert pinos.get("altgraph") == VERSOES_CORRIGIDAS["altgraph"]
