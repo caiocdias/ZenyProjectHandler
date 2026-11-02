@@ -1,41 +1,5 @@
 # Zeny Project Handler
 
-### Ocorrências e contexto dos pontos (E13)
-
-A aba **Trechos físicos** agrupa condutores pelo traçado e mostra continuidades na borda
-do desenho com destino/comprimento desconhecidos. A tabela **Vãos** mantém uma linha
-por cabo confirmado, incluindo existentes sem poste classificado. Propostas pendentes
-continuam exigindo revisão; agrupamento físico não une circuitos elétricos de tensões
-diferentes.
-
-O interpretador `25.0` consolida leituras sobrepostas do mesmo cabo, preserva estruturas
-repetidas e separa o contexto de postes sem identificador dos pontos numerados próximos.
-`TR-3-45` e neutros como `N-4` permanecem literais revisáveis quando falta correspondência
-exata de catálogo. Operações de estrutura observadas em revisão técnica aparecem separadas
-como instalar/remover, sem aprovação automática da camada revisada.
-
-A referência de desenvolvimento atingiu 29/29 ocorrências do núcleo; isso não certifica
-equipamentos, topologia ou leitura integral. Associação pendente, classificação e decisões
-técnicas continuam explícitas.
-
-### Leitura complementar local (E12B)
-
-O servidor pode executar OCR neural auxiliar com `ZENY_SERVER_COMPLEMENTARY_OCR=true`.
-É opt-in: instale `requirements-experiments.lock` no ambiente Python do servidor antes
-de habilitar. O cliente não executa OCR e os modelos não são incluídos no build padrão.
-O ganho medido é documental; a alternativa não substitui o interpretador operacional.
-
-Em Resultados, **Leituras auxiliares** preserva literal, camada e alternativas para
-conferência; a planilha de Resultados inclui a mesma seção quando há leituras.
-Esses valores não são confirmados automaticamente. Acordo entre motores não é uma
-probabilidade de acerto. Divergências nas evidências usadas por uma proposta exigem
-revisão dessa proposta; aparências com anotações não aprovam a vigência de revisões.
-
-O motor usa tiles limitados em memória, informa progresso e aceita cancelamento
-entre chamadas. Motor indisponível, falha parcial ou limite de memória deixam a
-execução incompleta, preservando evidências e impedindo cache/reutilização como sucesso.
-Desabilitar a opção restaura a composição vertical sem apagar histórico.
-
 Cliente Windows e servidor protegido para organizar, visualizar e analisar projetos de expansão da
 rede de distribuição elétrica. O servidor mantém cópias gerenciadas dos PDFs, extrai evidências,
 interpreta elementos técnicos e executa verificações de conformidade rastreáveis. O cliente magro
@@ -81,40 +45,43 @@ apresenta os DTOs e rasters recebidos pela API autenticada.
   antes da prontidão.
 - Temas claro e escuro, painéis acopláveis e restauração do estado da interface.
 
-O extrator 1.17.0 lê também rótulos convertidos em contornos vetoriais, isolando os caracteres
+O extrator lê também rótulos convertidos em contornos vetoriais, isolando os caracteres
 de molduras e linhas sobrepostas e preservando sua posição na página. Recortes têm orçamento
 limitado; falhas mantêm as evidências já obtidas, geram diagnóstico e não ficam presas no cache.
-A referência local recuperou as 95 ocorrências, os 18 identificadores e os 19 comprimentos
-legíveis. O fluxo de associação recuperou as 95 ocorrências com seus vínculos,
-mas o aceite integral continua pendente: 18/19 comprimentos associados e
-classificação/topologia pendentes. Reanalise documentos para usar a
-nova versão do extrator.
+Reanalise documentos para usar a versão vigente do extrator.
+
+A aba **Trechos físicos** agrupa condutores pelo traçado e mostra continuidades na borda
+do desenho com destino/comprimento desconhecidos. A tabela **Vãos** mantém uma linha
+por cabo confirmado, incluindo existentes sem poste classificado. Propostas pendentes
+continuam exigindo revisão; agrupamento físico não une circuitos elétricos de tensões
+diferentes.
+
+O interpretador consolida leituras sobrepostas do mesmo cabo, preserva estruturas
+repetidas e separa o contexto de postes sem identificador dos pontos numerados próximos.
+`TR-3-45` e neutros como `N-4` permanecem literais revisáveis quando falta correspondência
+exata de catálogo. Operações de estrutura observadas em revisão técnica aparecem separadas
+como instalar/remover, sem aprovação automática da camada revisada. Associação pendente,
+classificação e decisões técnicas continuam explícitas.
 
 Revisões sobrepostas de cabos ABCN e estruturas N1–N4 são comparadas com a camada base.
 O painel Resultados apresenta os dois recortes e mantém a decisão técnica pendente até
 o responsável escolher uma camada e informar o motivo. Comentários, fotos, assinaturas e
 carimbos permanecem evidências; SHX continua disponível como conteúdo técnico. A escolha
 da camada preserva a versão anterior e não cria um ativo sem catálogo: `ABCN-16(16)`,
-ausente do catálogo atual, continua com catalogação pendente. E13 distingue a base e as
-operações instalar/remover de N4, mantendo a escolha da camada técnica pendente.
+ausente do catálogo atual, continua com catalogação pendente. A base e as operações
+instalar/remover de N4 aparecem distintas, mantendo a escolha da camada técnica pendente.
 As decisões de revisão continuam auditáveis no histórico do projeto.
 
-E12 acrescenta leituras literais por cor e célula ao grupo de revisão N4, com caixas,
+O grupo de revisão N4 recebe leituras literais por cor e célula, com caixas,
 risco horizontal e tentativas originais preservadas. A passagem que trata o risco não
-aprova a revisão nem cria ativos. Glifos longos e molduras continuam em lotes com memória
+aprova a revisão nem cria ativos. Glifos longos e molduras são lidos em lotes com memória
 limitada; os rasters concluídos são liberados e os glifos fracos podem ser relidos a
-2400 DPI. O timeout padrão do Tesseract passa a 900 s por chamada, sem teto global de
-análise. Cancelamento continua cooperativo nos pontos seguros do fluxo; uma chamada
+2400 DPI. O timeout padrão do Tesseract é de 900 s por chamada, sem teto global de
+análise. Cancelamento é cooperativo nos pontos seguros do fluxo; uma chamada
 OCR em execução não é interrompida imediatamente pelo pedido de cancelamento.
-Há ganho de extração no segundo PDF, mas ainda existem leituras divergentes e truncadas.
-Os limites de OCR e a divergência das leituras continuam visíveis na revisão.
+Leituras divergentes ou truncadas e os limites de OCR continuam visíveis na revisão.
 
-O aceite integral do segundo PDF permanece bloqueado por qualidade.
-O segundo PDF tem 29 ocorrências corretas no núcleo e dez trechos físicos conferidos,
-mas os 64 itens documentais ainda incluem omissões e valores conflitantes. A cobertura
-automática não cumpre as metas E10. Reservas também revelaram fusão entre páginas,
-falsos ativos em tabelas e associações erradas em circuitos cruzados; E15A–E15E detalham
-o trabalho restante. Os qualificadores de estruturas aparecem nos rótulos de Resultados,
+Os qualificadores de estruturas aparecem nos rótulos de Resultados,
 realces e duas colunas adicionais do XLSX, preservando o código-base do catálogo.
 
 Projeto, Resultados, Documentação e conformidade, GMAX e Exportar têm rolagem vertical
@@ -306,6 +273,23 @@ O modelo português provisionado vem de `tesseract-ocr/tessdata_fast`, revisão 
 `c4932b937207a9514b7514d518b931a99938c02a28a5a5a553f8599ed58b7deb`. A licença é Apache-2.0 e os
 avisos de terceiros estão em [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
+O servidor também pode executar OCR neural auxiliar com `ZENY_SERVER_COMPLEMENTARY_OCR=true`.
+É opt-in: instale `requirements-experiments.lock`, o lock opt-in de dependências fora do
+runtime padrão, no ambiente Python do servidor antes de habilitar. O cliente não executa OCR
+e os modelos não são incluídos no build padrão. A alternativa não substitui o interpretador
+operacional.
+
+Em Resultados, **Leituras auxiliares** preserva literal, camada e alternativas para
+conferência; a planilha de Resultados inclui a mesma seção quando há leituras.
+Esses valores não são confirmados automaticamente. Acordo entre motores não é uma
+probabilidade de acerto. Divergências nas evidências usadas por uma proposta exigem
+revisão dessa proposta; aparências com anotações não aprovam a vigência de revisões.
+
+O motor usa tiles limitados em memória, informa progresso e aceita cancelamento
+entre chamadas. Motor indisponível, falha parcial ou limite de memória deixam a
+execução incompleta, preservando evidências e impedindo cache/reutilização como sucesso.
+Desabilitar a opção restaura a composição vertical sem apagar histórico.
+
 Essas opções são administradas no host do servidor e não fazem parte do setup ou do artefato do
 cliente.
 
@@ -331,12 +315,12 @@ As opções são lidas na inicialização:
 | `ZENY_SERVER_VIEWER_MAX_FILES` | `20` | máximo de PDFs por sessão avulsa |
 | `ZENY_SERVER_JOB_RETENTION_SECONDS` | `86400` | retenção renovada do histórico terminal de jobs |
 | `ZENY_SERVER_JOB_MAX_RETAINED` | `100` | máximo de jobs terminais mantidos no servidor |
-| `ZENY_SERVER_SYMBOL_COMPOSITION` | `false` | habilita a composição E15 somente no servidor; desabilitar mantém o fluxo anterior disponível |
+| `ZENY_SERVER_SYMBOL_COMPOSITION` | `false` | habilita a composição de símbolos somente no servidor; desabilitar mantém o fluxo anterior disponível |
 | `ZENY_SERVER_SYMBOL_PROFILE` | `balanced` | perfil operacional `balanced` ou `vector-only`; integra a assinatura da análise |
 | `ZENY_SERVER_SYMBOL_RASTER_DPI` | `144` | DPI do detector raster de símbolos quando o perfil o inclui |
 | `ZENY_SERVER_SYMBOL_TILE_PIXELS` | `768` | dimensão máxima de cada tile raster de símbolos |
 | `ZENY_SERVER_SYMBOL_TILE_MAX_BYTES` | `64000000` | orçamento de bytes estimados por tile de símbolos |
-| `ZENY_SERVER_SYMBOL_CALIBRATION_VERSION` | `e12-uncalibrated-1` | identifica a política de calibração E12, ainda sem células calibradas para promoção automática |
+| `ZENY_SERVER_SYMBOL_CALIBRATION_VERSION` | `e12-uncalibrated-1` | identifica a política de calibração, ainda sem células calibradas para promoção automática |
 | `ZENY_SERVER_SYMBOL_MODEL_PATH` | vazio | reserva para modelo local aprovado; configurar um modelo sem motor operacional aprovado causa falha explícita |
 | `ZENY_SERVER_TMPFS_SIZE` | `268435456` | limite em bytes do `/tmp` efêmero do container |
 | `ZENY_SERVER_PIDS_LIMIT` | `256` | limite de processos/threads imposto pelo Compose |
@@ -352,7 +336,7 @@ gateways são repetidas automaticamente depois de uma falha transitória; criaç
 senha, cancelamento e encerramento não são. Repetir deliberadamente a criação de um job com a mesma
 `Idempotency-Key` devolve o mesmo job sem executar o pipeline novamente.
 
-A composição de símbolos E15 é opt-in e usa configuração, versões e conteúdo dos
+A composição de símbolos é opt-in e usa configuração, versões e conteúdo dos
 pacotes/templates na identidade da execução. Mudanças incompatíveis iniciam outra
 análise; o fluxo anterior continua disponível ao desabilitá-la, preservando o
 histórico. O perfil operacional mantém métodos experimentais rejeitados fora da
@@ -429,8 +413,7 @@ Para montar cliente e kit servidor oficiais com versão igual aos manifestos do 
 ```
 
 O comando recompõe `dist/release/0.5.0/`, gera os dois SBOMs, notas, manifesto e hashes e executa a
-inspeção estática dos artefatos. A validação de distribuição carrega o archive num host Docker
-temporário sem fonte e abre o executável num diretório cliente sem checkout/Python no `PATH`.
+inspeção estática dos artefatos.
 
 O smoke real do SQL Server é opt-in e pertence à homologação, não ao gate normal. O smoke disponível
 para mercado exige
@@ -450,11 +433,7 @@ sanitizados com e sem linha antes da produção.
   associações necessárias não aparecem no projeto analisado.
 - A homologação integrada ainda depende da classificação técnica de postes/entregas, da
   associação da medida ambígua de 13 m e da consolidação de uma leitura duplicada de estrutura.
-  O falso realce simbólico foi corrigido na extração 1.18.0; trechos físicos preservam os
-  condutores e situações. Evidências e limites estão na
-  validação da release 0.4.0 registrada no histórico do Git.
-- O ZIP portátil ainda não possui assinatura de código nem instalador; a verificação automatizada
-  comprova inicialização autocontida no Windows x64 sem usar o Python do host.
+- O ZIP portátil ainda não possui assinatura de código nem instalador.
 
 ## Documentação
 
