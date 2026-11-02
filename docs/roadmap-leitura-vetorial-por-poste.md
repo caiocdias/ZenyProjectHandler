@@ -162,7 +162,7 @@ Bloco A — base e medição
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E01 | Limpeza do projeto | #em-andamento | — | scripts, testes e docs de etapas encerradas removidos, gate verde |
+| E01 | Limpeza do projeto | #concluida | — | scripts, testes e docs de etapas encerradas removidos, gate verde |
 | E02 | Ficha de referência e benchmark por poste | #pendente | E01 | formato da ficha, avaliador por poste e baseline sintético |
 | E03 | Rotulagem v0 e baseline real | #pendente | E02 | fichas de referência das 16 folhas e baseline do analisador atual em `tmp/` |
 
@@ -187,7 +187,7 @@ Bloco C — aprendizado
 
 ---
 
-## E01 — Limpeza do projeto — #em-andamento
+## E01 — Limpeza do projeto — #concluida
 
 **Objetivo:** remover do repositório o que pertence a etapas encerradas, sem mudar o comportamento do produto.
 
@@ -208,9 +208,9 @@ Bloco C — aprendizado
 
 **Critérios de aceite:**
 
-- [ ] `git grep -n` por cada nome removido não encontra referência fora do histórico de revisões deste roadmap.
-- [ ] `build_release.py` e os gates `release_artifact_gate`, `server_artifact_gate` e `client_artifact_gate` continuam funcionando, ou o plano provou que não dependiam dos removidos.
-- [ ] `.\IniciarTestes.bat` termina com `RESULTADO FINAL: APROVADO`, com a cobertura mínima mantida.
+- [x] `git grep -n` por cada nome removido não encontra referência fora do histórico de revisões deste roadmap.
+- [x] `build_release.py` e os gates `release_artifact_gate`, `server_artifact_gate` e `client_artifact_gate` continuam funcionando, ou o plano provou que não dependiam dos removidos.
+- [x] `.\IniciarTestes.bat` termina com `RESULTADO FINAL: APROVADO`, com a cobertura mínima mantida. Prova: o gate equivalente passou; o `.bat` em si ainda precisa ser rodado pelo usuário.
 
 **Validação obrigatória:**
 
@@ -232,12 +232,30 @@ Bloco C — aprendizado
 **Evidências e handoff:**
 
 - Plano: `docs/superpowers/plans/2026-11-02-leitura-vetorial-por-poste-e01.md`, revisão de arquitetura aprovada com notas na rodada 1 (seção "Revisão de arquitetura" do plano).
-- Commits: 8c381a6, e942afc, 003d42f (só plano e roadmap; nenhuma tarefa executada).
-- Revisão final: —
-- Critérios verificados: —
-- Estado (2026-11-02): execução parada antes da Task 1. A trava de Edit/Write do `orquestrador` (`soul_guard.py orquestrador`, no frontmatter da soul) vale também para os subagentes, e o `desenvolvedor` foi bloqueado ao criar um `.py`. O usuário decidiu corrigir o hook antes de retomar. Retomar pela Task 1 com o ledger do workspace SDD do plano (`.superpowers/sdd/2026-11-02-leitura-vetorial-por-poste-e01/progress.md`, no worktree).
-- Decisões para o usuário: a Task 2 remove `stage11_parity_gate`/`stage12_release_gate` e, com eles, a validação automatizada do ZIP e do kit em host limpo. Ela pode ser recuperada do histórico do Git.
-- Notas para a próxima etapa: os critérios que pedem `IniciarTestes.bat` são provados por uma sequência equivalente de comandos, porque o harness recusa `cmd.exe` no worktree. Rodar o `.bat` antes de integrar. `allow_reserve` em `scripts/symbol_benchmark_evaluator.py` e `pywinauto` ficam sem uso: revisar em E03/E09.
+- Commits:
+  - plano: 8c381a6, e942afc, 003d42f, e398c02;
+  - Task 1: 3488ad8, ac4f6e6 (experimentos e benchmarks dependentes);
+  - Task 2: 1ea736f (harnesses de reserva, gates `stage1N` e QA visual);
+  - Task 3: cad3834 (README, CLAUDE.md, roadmap encerrado);
+  - correção final: 732471e (pin órfão de `scipy`).
+- Revisão final: `revisor-seguranca` (opus), aprovado com ressalvas, sem Crítico nem Importante de código em aberto depois da onda única de correção.
+  - O Importante de supply chain era o pin órfão de `scipy`; foi removido.
+  - Ficam opcionais estes Menores:
+    - narrativa de etapa em `docs/especificacao-funcional.md` (seção de homologação);
+    - o termo "composição vertical" no README;
+    - o ZIP "autocontido", que deixou de ter verificação dinâmica.
+- Critérios verificados:
+  - (1) `git grep` dos nomes removidos, fora deste roadmap, de `docs/superpowers/specs/` e de `docs/superpowers/plans/` → sem ocorrência.
+  - (2) `build_release.py`, `build_client.py` e os gates `release_artifact_gate`, `server_artifact_gate` e `client_artifact_gate` não citam nenhum removido. `client_artifact_gate --source-only` aprovado e `tests/unit/test_release_build.py` verde na suíte. O ensaio de `build_release.py` não foi executado: exige Docker e PyInstaller.
+  - (3) Gate equivalente ao `IniciarTestes.bat` (pip check, ruff, format, mypy, gate do cliente, pytest com cobertura e complexidade), tudo com exit 0: 2588 passed, cobertura 88,24%. O `.bat` em si não rodou, porque o harness recusa `cmd.exe` no worktree.
+  - Verificação mecânica `--base 4ed342d`: 165 apontamentos, todos remoções de teste de código removido e justificados nas revisões.
+- Decisões para o usuário:
+  - Rodar `.\IniciarTestes.bat` no worktree antes de integrar.
+  - A Task 2 removeu `stage11_parity_gate`/`stage12_release_gate` e, com eles, a validação automatizada do ZIP e do kit em host limpo. Ela pode ser recuperada do histórico do Git.
+  - O scanner (`osv-scanner -L requirements.txt:<lock>` nos 6 locks) aponta vulnerabilidades pré-existentes, não introduzidas pela branch. A mais grave é Pillow 12.2.0 no lock do servidor (CVSS até 9.8, corrigido em 12.3.0/13.0.0). Também aparecem Mako 1.3.12, setuptools 80.10.2, wheel 0.45.1, httpx2 2.10.0 (limitado por `pyproject.toml` a `<2.11`) e pytest 8.4.2. Sugere-se uma etapa própria de atualização de dependências.
+- Notas para a próxima etapa:
+  - `allow_reserve` e as mensagens "sealed until E16" em `scripts/symbol_benchmark_evaluator.py`, além de `pywinauto` no `pyproject.toml`/lock de dev, ficam sem uso: revisar em E03/E09.
+  - O `osv-scanner -r .` não reconhece os `requirements-*.lock`: use `-L requirements.txt:<arquivo>`.
 
 ---
 
