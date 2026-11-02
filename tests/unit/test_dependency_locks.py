@@ -20,8 +20,14 @@ MANIFESTOS = [
     ROOT / "client" / "pyproject.toml",
 ]
 
-VERSOES_CORRIGIDAS = {"pillow": "13.0.0", "mako": "1.4.2"}
-VERSOES_VULNERAVEIS = {"pillow": "12.2.0", "mako": "1.3.12"}
+VERSOES_CORRIGIDAS = {
+    "pillow": "13.0.0",
+    "mako": "1.4.2",
+    "httpx2": "2.12.0",
+    "httpcore2": "2.12.0",
+    "pytest": "9.0.3",
+}
+VERSOES_VULNERAVEIS = {"pillow": "12.2.0", "mako": "1.3.12", "httpx2": "2.10.0", "pytest": "8.4.2"}
 
 
 def _pinos(lock: Path) -> dict[str, str]:
@@ -113,6 +119,16 @@ def test_todo_pacote_corrigido_esta_em_algum_lock_ou_manifesto() -> None:
 
 def test_limites_dos_manifestos_admitem_a_corrigida_e_excluem_a_vulneravel() -> None:
     assert _limites_invalidos(MANIFESTOS) == []
+
+
+def test_pywinauto_sem_uso_fora_do_ambiente() -> None:
+    """pywinauto não é importado pelo projeto (E13); comtypes e pywin32 só entravam por ele."""
+    for lock in LOCKS:
+        assert "pywinauto" not in _pinos(lock)
+    for manifesto in MANIFESTOS:
+        assert all(
+            canonicalize_name(r.name) != "pywinauto" for r in _requisitos_de_manifesto(manifesto)
+        )
 
 
 # --- Guardas contra teste vazio e contra tabelas incoerentes ---

@@ -27,12 +27,11 @@ server = [
     "uvicorn>=0.41,<0.42",
 ]
 dev = [
-    "httpx2>=2.10,<2.11",
+    "httpx2>=2.12,<2.13",
     "mypy>=1.16,<2",
-    "pytest>=8.4,<9",
+    "pytest>=9.0.3,<10",
     "pytest-cov>=6.2,<8",
     "pytest-qt>=4.5,<5",
-    "pywinauto>=0.6.9,<0.7",
     "radon>=6,<7",
     "ruff>=0.12,<1",
 ]
