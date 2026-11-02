@@ -324,3 +324,56 @@ def test_carregar_ficha_recusa_raiz_que_nao_e_objeto(tmp_path: Path) -> None:
     arquivo.write_text("[]", encoding="utf-8")
     with pytest.raises(ValueError):
         carregar_ficha(arquivo)
+
+
+def test_pdf_sha256_com_quebra_de_linha_final_e_recusado() -> None:
+    ficha = _ficha_completa()
+    ficha["pdf_sha256"] = SHA + "\n"
+    assert any("pdf_sha256" in erro for erro in _com_erros(ficha))
+
+
+def _poste_id(f: dict[str, Any], valor: str) -> None:
+    f["postes"][0]["id"] = valor
+
+
+def _simbolo_id(f: dict[str, Any], valor: str) -> None:
+    f["postes"][0]["simbolos"][0]["id"] = valor
+
+
+def _identificador(f: dict[str, Any], valor: str) -> None:
+    f["postes"][0]["identificador"] = valor
+
+
+def _poste_texto(f: dict[str, Any], valor: str) -> None:
+    f["postes"][0]["poste"] = valor
+
+
+def _estrutura(f: dict[str, Any], valor: str) -> None:
+    f["postes"][0]["estruturas"] = ["N1", valor]
+
+
+def _classe(f: dict[str, Any], valor: str) -> None:
+    f["postes"][0]["simbolos"][0]["classe"] = valor
+
+
+def _cabo(f: dict[str, Any], valor: str) -> None:
+    f["vaos"][0]["cabo"] = valor
+
+
+def _de(f: dict[str, Any], valor: str) -> None:
+    f["vaos"][0]["de"] = valor
+
+
+def _para(f: dict[str, Any], valor: str) -> None:
+    f["vaos"][0]["para"] = valor
+
+
+@pytest.mark.parametrize(
+    "alterar",
+    [_poste_id, _simbolo_id, _identificador, _poste_texto, _estrutura, _classe, _cabo, _de, _para],
+)
+@pytest.mark.parametrize("valor", [" ", " \t\n"])
+def test_texto_em_branco_e_recusado(alterar: Any, valor: str) -> None:
+    ficha = _ficha_completa()
+    alterar(ficha, valor)
+    assert any("em branco" in erro for erro in _com_erros(ficha))

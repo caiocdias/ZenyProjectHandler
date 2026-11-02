@@ -30,6 +30,8 @@ CAMINHO_ESQUEMA = ROOT / "docs" / "schemas" / "ficha-poste.schema.json"
 CLASSES_DO_POSTE = frozenset({"POSTE", "POSTE_AT", "ESTRUTURA_POSTE_MT", "ESTRUTURA_POSTE_AT"})
 CLASSE_RASCUNHO_DE_POSTE = re.compile(r"^RASCUNHO_[A-Z]+_POSTE_[A-Z_]+$")
 
+PADRAO_SHA256 = re.compile(r"[0-9a-f]{64}")
+
 Ficha = Mapping[str, Any]
 Caixa = tuple[float, float, float, float]
 
@@ -147,6 +149,51 @@ def _erros_postes_nas_regioes(ficha: Ficha) -> list[str]:
     ]
 
 
+def _erros_sha256(ficha: Ficha) -> list[str]:
+    # O esquema usa re.search, em que "$" casa antes de um "\n" final: fullmatch fecha a brecha.
+    if PADRAO_SHA256.fullmatch(ficha["pdf_sha256"]):
+        return []
+    return ["pdf_sha256: deve ter exatamente 64 hexadecimais minúsculos"]
+
+
+def _em_branco(rotulo: str, valor: Any) -> list[str]:
+    # Texto só de espaços viraria None na normalização do avaliador e se confundiria com null.
+    if isinstance(valor, str) and not valor.strip():
+        return [f"{rotulo}: texto em branco"]
+    return []
+
+
+def _erros_em_branco_poste(posicao: int, poste: Ficha) -> list[str]:
+    rotulo = f"postes[{posicao}]"
+    erros = _em_branco(f"{rotulo}.id", poste["id"])
+    erros.extend(_em_branco(f"{rotulo}.identificador", poste["identificador"]))
+    erros.extend(_em_branco(f"{rotulo}.poste", poste["poste"]))
+    for item, estrutura in enumerate(poste["estruturas"]):
+        erros.extend(_em_branco(f"{rotulo}.estruturas[{item}]", estrutura))
+    for item, simbolo in enumerate(poste["simbolos"]):
+        erros.extend(_em_branco(f"{rotulo}.simbolos[{item}].id", simbolo["id"]))
+        erros.extend(_em_branco(f"{rotulo}.simbolos[{item}].classe", simbolo["classe"]))
+    return erros
+
+
+def _erros_em_branco_vao(posicao: int, vao: Ficha) -> list[str]:
+    rotulo = f"vaos[{posicao}]"
+    return [
+        erro
+        for campo in ("de", "para", "cabo")
+        for erro in _em_branco(f"{rotulo}.{campo}", vao[campo])
+    ]
+
+
+def _erros_em_branco(ficha: Ficha) -> list[str]:
+    erros: list[str] = []
+    for posicao, poste in enumerate(ficha["postes"]):
+        erros.extend(_erros_em_branco_poste(posicao, poste))
+    for posicao, vao in enumerate(ficha["vaos"]):
+        erros.extend(_erros_em_branco_vao(posicao, vao))
+    return erros
+
+
 def validar_ficha(dados: Mapping[str, Any]) -> list[str]:
     """Erros da ficha (lista vazia = válida), em português e com o caminho do campo.
 
@@ -156,7 +203,9 @@ def validar_ficha(dados: Mapping[str, Any]) -> list[str]:
     if erros:
         return erros
     ids = frozenset(poste["id"] for poste in dados["postes"])
-    erros = _erros_ids(dados)
+    erros = _erros_sha256(dados)
+    erros.extend(_erros_em_branco(dados))
+    erros.extend(_erros_ids(dados))
     for posicao, poste in enumerate(dados["postes"]):
         erros.extend(_erros_poste(posicao, poste))
     for posicao, vao in enumerate(dados["vaos"]):
