@@ -1,5 +1,7 @@
 """Ataques à validação da ficha do poste: entradas que o brief proíbe e que não podem passar."""
 
+# Os espaços não separáveis literais abaixo são deliberados: são a entrada atacada.
+# ruff: noqa: RUF001
 from __future__ import annotations
 
 import copy
