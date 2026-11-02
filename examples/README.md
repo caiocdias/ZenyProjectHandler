@@ -50,6 +50,17 @@ portátil. O comando acima apenas infere; não realiza revisão visual automáti
 Referência parcial de IA não autoriza calcular recall global ou considerar regiões
 não anotadas como FP. A ausência de PDFs é registrada com `completed=false`/exit 1.
 
+Para medir o analisador vigente por poste contra uma ficha de referência do mesmo PDF
+(`scripts/ficha_poste.py`), com a saída sempre em `tmp/`:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.benchmark_ficha_poste examples\<arquivo>.pdf --referencia tmp\ficha-referencia.json --saida tmp\benchmark-ficha-poste [--native-only]
+```
+
+Grava `ficha-predita.json` (do projeto promovido) e `avaliacao.json`; recusa referência de outro
+PDF antes de rodar o analisador. Símbolos de suporte, como estai, não são promovidos: o recall
+deles é 0 por construção.
+
 Os exemplos vistos são desenvolvimento/diagnóstico, inclusive os que já tenham
 sido chamados de reserva em relatórios históricos. As reservas sintéticas
 anteriores já foram consumidas e não podem servir como teste cego repetido.
