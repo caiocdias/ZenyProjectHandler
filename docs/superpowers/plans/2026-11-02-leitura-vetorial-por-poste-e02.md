@@ -110,7 +110,7 @@ Regras semânticas em `validar_ficha` (além do schema):
 - ids de poste únicos; ids de símbolo únicos na ficha; `pendentes` sem repetição;
 - `de` e `para` existem em `postes` e são diferentes (vários vãos entre o mesmo par são permitidos);
 - `x0 <= x1` e `y0 <= y1` em toda bbox; em símbolo, `x0 < x1` e `y0 < y1` (o `geometry_match` não casa bbox de ponto);
-- `classe` de símbolo pertence ao conjunto de `class_code` do inventário (`scripts.curation_reference.carregar_inventario()`, união de `classes_por_familia`) e não é classe do próprio poste: `POSTE`, `POSTE_AT` e as que casam `^RASCUNHO_[A-Z]+_POSTE_[A-Z_]+$` — o poste é o próprio poste, não um símbolo associado a ele;
+- `classe` de símbolo pertence ao conjunto de `class_code` do inventário (`scripts.curation_reference.carregar_inventario()`, união de `classes_por_familia`) e não é classe do próprio poste: `POSTE`, `POSTE_AT`, `ESTRUTURA_POSTE_MT`, `ESTRUTURA_POSTE_AT` e as que casam `^RASCUNHO_[A-Z]+_POSTE_[A-Z_]+$` — o poste é o próprio poste, não um símbolo associado a ele (as `ESTRUTURA_POSTE_*` são promovidas a `Poste` pelo analisador; a regra geral `"_POSTE_" in classe` não serve porque pegaria estais como `*_CRUZETA_POSTE*`);
 - `escopo_anotacao.tipo == "regional"` exige `regioes` com pelo menos 1 item e `"completo"` proíbe `regioes`; `tipo == "predicao"` exige escopo `"completo"` e `gerador`;
 - numa referência regional, o centro de cada poste está dentro de alguma região da mesma página.
 
@@ -125,7 +125,7 @@ Regras semânticas em `validar_ficha` (além do schema):
   - `test_vao_com_poste_inexistente_ou_laco_e_recusado`.
   - `test_id_de_poste_ou_de_simbolo_repetido_e_recusado`.
   - `test_bbox_invertida_ou_fora_de_0_1_e_recusada`; `test_bbox_de_simbolo_sem_area_e_recusada`; `test_bbox_de_poste_em_ponto_e_valida`.
-  - `test_classe_fora_do_inventario_e_recusada` (`"PARA-RAIOS"` → erro) e `test_classe_do_proprio_poste_e_recusada_como_simbolo` (parametrizado em `POSTE`, `POSTE_AT`, `RASCUNHO_EXISTENTE_POSTE_DT`).
+  - `test_classe_fora_do_inventario_e_recusada` (`"PARA-RAIOS"` → erro) e `test_classe_do_proprio_poste_e_recusada_como_simbolo` (parametrizado em `POSTE`, `POSTE_AT`, `ESTRUTURA_POSTE_MT`, `ESTRUTURA_POSTE_AT`, `RASCUNHO_EXISTENTE_POSTE_DT`), mais `test_estai_com_poste_no_nome_e_simbolo_valido` (`RASCUNHO_EXISTENTE_ESTAI_POSTE_A_POSTE` passa).
   - `test_escopo_regional_exige_regioes_e_completo_as_proibe`.
   - `test_predicao_exige_escopo_completo_e_gerador`.
   - `test_poste_de_referencia_regional_fora_das_regioes_e_recusado`.
@@ -146,7 +146,7 @@ Regras semânticas em `validar_ficha` (além do schema):
 **Interfaces:**
 - Consumes: `scripts.ficha_poste.validar_ficha` (Task 1); `scripts.symbol_benchmark_evaluator.geometry_match(first, second) -> dict` (existente; recebe dicts com `"bbox"` e devolve `"eligible"` e `"iou"`).
 - Produces:
-  - `PROTOCOLO_FICHA: Final[Mapping[str, Any]] = {"id": "ficha-poste-v1", "espaco_distancia": "normalizado-pagina-exibida", "distancia_max": 0.02, "distancia_max_mesmo_identificador": 0.05, "tolerancia_coordenada_m": 0.01, "tolerancia_comprimento_m": 0.1, "casamento_postes": "guloso-identificador-distancia", "casamento_simbolos": "cardinalidade-maxima"}` (o espaço normalizado é anisotrópico; a calibração em mm por eixo fica para a E03)
+  - `PROTOCOLO_FICHA: Final[Mapping[str, Any]] = {"id": "ficha-poste-v1", "espaco_distancia": "normalizado-pagina-exibida", "distancia_max": 0.02, "distancia_max_mesmo_identificador": 0.05, "tolerancia_coordenada_m": 0.01, "tolerancia_comprimento_m": 0.1, "casamento_postes": "guloso-identificador-distancia", "casamento_simbolos": "cardinalidade-maxima", "inventario": "inventario-simbologia-v1"}` (o espaço normalizado é anisotrópico; a calibração em mm por eixo fica para a E03)
   - `normalizar_texto(valor: str | None) -> str | None` — `strip`, espaços internos colapsados em um, maiúsculas; vazio → `None`.
   - `casar_postes(referencia: Sequence[Mapping[str, Any]], predicao: Sequence[Mapping[str, Any]]) -> list[tuple[str, str, float]]` — pares `(id_ref, id_pred, distancia)`.
   - `avaliar(referencia: Mapping[str, Any], predicao: Mapping[str, Any]) -> dict[str, Any]`.
@@ -251,3 +251,20 @@ Regras semânticas em `validar_ficha` (além do schema):
 - Critério 3 (CLI grava relatório em diretório informado, sem caminho absoluto): `test_benchmark_ficha_poste.py` verde.
 - Critério 4: gate completo equivalente ao `IniciarTestes.bat`, todos exit 0.
 - Handoff: preencher "Decisões para o usuário" com o formato v1 (R5: `null` × `pendentes`; classe do inventário; símbolo do próprio poste excluído), a R2 (fonte = projeto promovido, com recall de estai 0 por construção) e a R4 (casamento guloso de postes com limiares 0,02/0,05 no espaço normalizado).
+
+## Revisão de arquitetura
+
+- **Veredito:** aprovado com notas.
+- **Rodadas:** 1. A rodada 0 foi bloqueada por 6 Importantes, todos corrigidos no plano:
+  - `null` × pendente na referência;
+  - pontos de extensão para E07/E08;
+  - identidade do gerador;
+  - classe contra o inventário;
+  - casamento de símbolos dependente de ordem;
+  - poste vindo de símbolo.
+- **Modelo:** opus (revisor-arquitetura).
+- **Notas Menores:**
+  - N1: `ESTRUTURA_POSTE_MT/AT` excluídas como símbolo associado. Aplicado.
+  - N2: versão do inventário em `PROTOCOLO_FICHA`. Aplicado.
+  - M5: um cabo com postes intermediários vira um vão só em `detectar_vaos`. Fica registrado no relatório da Task 3.
+  - M7: não há ARCHITECTURE.md. O julgamento usou a seção "Arquitetura" do `CLAUDE.md` e os ADRs 0005, 0006, 0016 e 0017.
