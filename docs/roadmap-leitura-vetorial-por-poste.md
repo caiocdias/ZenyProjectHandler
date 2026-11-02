@@ -167,7 +167,7 @@ Bloco A — base e medição
 |---|---|---|---|---|
 | E01 | Limpeza do projeto | #concluida | — | scripts, testes e docs de etapas encerradas removidos, gate verde |
 | E02 | Ficha de referência e benchmark por poste | #concluida | E01 | formato da ficha, avaliador por poste e baseline sintético |
-| E13 | Atualização de dependências vulneráveis | #pendente | E01 | locks sem vulnerabilidade corrigível nos pacotes apontados pelo scanner, gate verde |
+| E13 | Atualização de dependências vulneráveis | #em-andamento | E01 | locks sem vulnerabilidade corrigível nos pacotes apontados pelo scanner, gate verde |
 | E03 | Rotulagem v0 e baseline real | #pendente | E02, E13 | fichas de referência das 16 folhas e baseline do analisador atual em `tmp/` |
 
 Bloco B — leitura vetorial
@@ -342,7 +342,7 @@ Bloco C — aprendizado
 
 ---
 
-## E13 — Atualização de dependências vulneráveis — #pendente
+## E13 — Atualização de dependências vulneráveis — #em-andamento
 
 **Objetivo:** atualizar nos locks os pacotes com vulnerabilidade conhecida e versão corrigida disponível, sem mudar o comportamento do produto.
 
