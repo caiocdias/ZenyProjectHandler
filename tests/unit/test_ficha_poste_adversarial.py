@@ -584,3 +584,59 @@ def test_simbolos_do_mesmo_id_em_postes_diferentes_sao_recusados() -> None:
 
     erros = _recusada(alterar)
     assert any("símbolo" in erro and "repetido" in erro for erro in erros)
+
+
+EM_BRANCO = [" ", "   ", "\t", "\n", "\r\n", " ", " ", "　", " \t\n  "]
+
+
+@pytest.mark.parametrize("texto", EM_BRANCO, ids=lambda t: ascii(t))
+@pytest.mark.parametrize(
+    "caminho",
+    [
+        ("postes", 0, "id"),
+        ("postes", 0, "identificador"),
+        ("postes", 0, "poste"),
+        ("postes", 0, "estruturas", 0),
+        ("postes", 0, "simbolos", 0, "id"),
+        ("postes", 0, "simbolos", 0, "classe"),
+        ("vaos", 0, "de"),
+        ("vaos", 0, "para"),
+        ("vaos", 0, "cabo"),
+    ],
+    ids=lambda c: ".".join(str(p) for p in c),
+)
+def test_texto_so_de_espacos_tab_quebra_ou_nbsp_e_recusado(
+    caminho: tuple[Any, ...], texto: str
+) -> None:
+    _recusada(_def(caminho, texto))
+
+
+@pytest.mark.parametrize("texto", [" P1", "P1 ", "\tP1\n", " P1"], ids=lambda t: ascii(t))
+def test_texto_com_conteudo_e_espacos_nas_pontas_nao_e_tratado_como_em_branco(texto: str) -> None:
+    def alterar(ficha: dict[str, Any]) -> None:
+        ficha["postes"][0]["identificador"] = texto
+        ficha["postes"][0]["poste"] = texto
+        ficha["postes"][0]["estruturas"] = [texto]
+        ficha["vaos"][0]["cabo"] = texto
+
+    _aceita(alterar)
+
+
+def test_ids_em_branco_diferentes_entre_si_continuam_recusados() -> None:
+    def alterar(ficha: dict[str, Any]) -> None:
+        ficha["postes"][0]["id"] = " "
+        ficha["postes"][1]["id"] = "\t"
+        ficha["vaos"][0]["de"] = " "
+        ficha["vaos"][0]["para"] = "\t"
+
+    erros = _recusada(alterar)
+    assert any("em branco" in erro for erro in erros)
+
+
+def test_texto_em_branco_e_recusado_ao_carregar_de_arquivo(tmp_path: Path) -> None:
+    ficha = _base()
+    ficha["postes"][0]["identificador"] = " "
+    arquivo = tmp_path / "ficha.json"
+    arquivo.write_text(json.dumps(ficha), encoding="utf-8")
+    with pytest.raises(ValueError, match="em branco"):
+        carregar_ficha(arquivo)
