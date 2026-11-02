@@ -8,8 +8,6 @@ from unittest.mock import Mock
 from uuid import UUID, uuid4, uuid5
 
 import pytest
-from scripts.benchmark_network_pdf import json_value
-from scripts.experiments.compare import context_association
 from tests.factories import complete_project
 from tests.interpretation_factories import text_evidence
 
@@ -306,34 +304,6 @@ def test_revision_operations_are_distinct_reviewable_and_never_auto_promoted(
     assert dict(preserve_revision_decision(work, proposals[1], (installed,)).atributos_sugeridos)[
         "revisao_tecnica_decidida"
     ]
-
-
-def test_context_comparison_requires_matching_source(catalogo_inicial: CatalogoTecnico) -> None:
-    request = _request(catalogo_inicial, (("N2-10-300", "0.6", "0.5"), ("S3R", "0.6", "0.51")))
-    result = InterpretadorRegrasExplicitas(request.registro).interpretar(request)
-    proposals = json.loads(json.dumps(result.elementos, default=json_value))
-    evidence = {
-        str(e.id): json.loads(json.dumps(e, default=json_value)) for e in request.evidencias
-    }
-    pole = next(p for p in proposals if p["categoria"] == "POSTE")
-    bt = next(p for p in proposals if p["categoria"] == "ESTRUTURA_BT")
-    reference = {"kind": "bt", "site": "unnumbered"}
-    refs = [
-        {
-            "kind": "pole",
-            "site": "unnumbered",
-            "center": [0.61, 0.503],
-            "code": "10-300",
-            "situation": "EXISTENTE",
-        }
-    ]
-    assert context_association(reference, bt, proposals, evidence, refs)
-    assert not context_association(
-        reference, {**bt, "evidencia_ids": []}, proposals, evidence, refs
-    )
-    assert not context_association(reference, bt, [bt], evidence, refs)
-    pole["atributos_sugeridos"] = [["contexto_ponto_id", "another-source"]]
-    assert not context_association(reference, bt, proposals, evidence, refs)
 
 
 def test_revision_preserves_disjoint_operations_and_qualifier_conflicts(

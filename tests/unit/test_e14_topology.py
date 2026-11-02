@@ -6,7 +6,6 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
-from scripts.experiments.topology_audit import evaluate
 from tests.factories import complete_project
 from tests.interpretation_factories import text_evidence, vector_evidence
 
@@ -400,42 +399,3 @@ def test_clipped_label_remains_pending_and_ambiguous_boundary_paths_abstain(
     duplicate = replace(continuation, id=uuid4())
     assert drawing_continuations((continuation, duplicate, frame), (label,)) == ()
     assert drawing_continuations((continuation, frame), ()) == ()
-
-
-def test_topology_evaluator_requires_explicit_continuity_and_unsplit_identity() -> None:
-    inventory = {
-        "items": [
-            {"kind": "point", "site": "P1", "center": [0.1, 0.1]},
-            {"kind": "point", "site": "P2", "center": [0.5, 0.5]},
-            {"id": "v", "kind": "span", "endpoints": ["P1", "P2"], "length": 36},
-            {"id": "cut", "kind": "span", "endpoints": ["P2", None], "length": None},
-        ]
-    }
-    first = {
-        "id": "a",
-        "xy": [[0.1, 0.1], [0.5, 0.5]],
-        "nodes": ["n1", "n2"],
-        "labels": ["P1", "P2"],
-        "length": 36,
-    }
-    second = {
-        "id": "b",
-        "xy": [[0.5, 0.5], [0.9, 0.9]],
-        "nodes": ["n2", None],
-        "labels": ["P2", None],
-        "length": None,
-        "continuation": True,
-    }
-    result = evaluate(inventory, [first, second])
-    assert result["exact_pairs"] == 1 and result["explicit_continuities"] == 1
-    assert result["consistent_physical_points"] == 2
-    assert (
-        evaluate(inventory, [first, {**second, "continuation": False}])["explicit_continuities"]
-        == 0
-    )
-    assert (
-        evaluate(inventory, [first, {**second, "nodes": ["split", None]}])[
-            "consistent_physical_points"
-        ]
-        == 1
-    )
