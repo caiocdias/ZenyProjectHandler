@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
 import re
+import subprocess
+import sys
 import tomllib
 from collections.abc import Iterable
 from pathlib import Path
@@ -326,3 +329,149 @@ def test_requisitos_de_manifesto_lista_build_dependencias_e_todos_os_extras(
     nomes = [requisito.name for requisito in _requisitos_de_manifesto(manifesto)]
 
     assert sorted(nomes) == ["a", "b", "c", "d", "setuptools"]
+
+
+# --- Task 2 (E13): ferramentas de desenvolvimento, pywinauto e pytest 9 ---
+
+
+def test_httpx2_e_httpcore2_tem_a_mesma_versao_em_todos_os_locks() -> None:
+    """httpx2 exige ``httpcore2==<mesma versão>``: divergir quebra a instalação."""
+    for lock in LOCKS:
+        pinos = _pinos(lock)
+        if "httpx2" in pinos or "httpcore2" in pinos:
+            assert pinos.get("httpx2") == pinos.get("httpcore2"), (
+                f"{lock.name}: httpx2={pinos.get('httpx2')} httpcore2={pinos.get('httpcore2')}"
+            )
+
+
+def test_httpcore2_corrigida_acompanha_a_httpx2_corrigida() -> None:
+    assert VERSOES_CORRIGIDAS["httpcore2"] == VERSOES_CORRIGIDAS["httpx2"]
+
+
+def test_lock_de_desenvolvimento_fixa_as_ferramentas_corrigidas() -> None:
+    pinos = _pinos(ROOT / "requirements-development.lock")
+    for nome in ("httpx2", "httpcore2", "pytest"):
+        assert pinos.get(nome) == VERSOES_CORRIGIDAS[nome], nome
+
+
+def test_extra_dev_do_manifesto_raiz_limita_httpx2_e_pytest_na_corrigida() -> None:
+    dados = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    requisitos = {
+        str(canonicalize_name(r.name)): r
+        for r in map(Requirement, dados["project"]["optional-dependencies"]["dev"])
+    }
+    for nome in ("httpx2", "pytest"):
+        assert nome in requisitos, f"{nome} sumiu do extra dev"
+        assert requisitos[nome].specifier.contains(VERSOES_CORRIGIDAS[nome])
+        assert not requisitos[nome].specifier.contains(VERSOES_VULNERAVEIS[nome])
+
+
+@pytest.mark.parametrize("nome", ["pywinauto", "comtypes", "pywin32"])
+def test_pacotes_do_pywinauto_nao_aparecem_em_nenhum_lock_nem_nao_fixados(nome: str) -> None:
+    """Varre o texto bruto: pega também linhas sem ``==`` que ``_pinos`` ignora."""
+    for lock in LOCKS:
+        for linha in lock.read_text(encoding="utf-8-sig").splitlines():
+            texto = linha.split("#", 1)[0].strip()
+            if not texto or texto.startswith("-"):
+                continue
+            assert canonicalize_name(re.split(r"[\s\[<>=!~;]", texto, maxsplit=1)[0]) != nome, (
+                f"{lock.name}: {linha}"
+            )
+
+
+def test_pywinauto_nao_aparece_em_nenhuma_secao_de_nenhum_manifesto() -> None:
+    """Olha o TOML inteiro (dependências, extras, build): qualquer string citando o pacote."""
+    for manifesto in MANIFESTOS:
+        if not manifesto.exists():
+            continue
+        dados = tomllib.loads(manifesto.read_text(encoding="utf-8"))
+        textos = re.findall(r"pywinauto", repr(dados), flags=re.IGNORECASE)
+        assert textos == [], f"{manifesto}: cita pywinauto"
+
+
+def test_nome_de_pacote_pywin32_ctypes_nao_e_confundido_com_pywin32(tmp_path: Path) -> None:
+    lock = _lock_sintetico(tmp_path, "pywin32-ctypes==0.2.3\n")
+
+    assert "pywin32" not in _pinos(lock)
+
+
+def test_pytest_instalado_no_ambiente_e_o_corrigido() -> None:
+    assert Version(pytest.__version__) >= Version(VERSOES_CORRIGIDAS["pytest"])
+
+
+def _rodar_pytest_com_a_config_do_projeto(tmp_path: Path, teste: str) -> tuple[int, str]:
+    """Copie ``[tool.pytest.ini_options]`` real para um diretório isolado e rode um teste."""
+    dados = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    opcoes = dados["tool"]["pytest"]["ini_options"]
+    linhas = ["[tool.pytest.ini_options]"]
+    linhas.append(f"addopts = {opcoes['addopts']!r}")
+    linhas.append("filterwarnings = [" + ", ".join(repr(f) for f in opcoes["filterwarnings"]) + "]")
+    linhas.append("markers = [" + ", ".join(repr(m) for m in opcoes["markers"]) + "]")
+    (tmp_path / "pyproject.toml").write_text("\n".join(linhas) + "\n", encoding="utf-8")
+    (tmp_path / "test_alvo.py").write_text(teste, encoding="utf-8")
+    ambiente = {k: v for k, v in os.environ.items() if k != "PYTEST_ADDOPTS"}
+    resultado = subprocess.run(
+        [sys.executable, "-m", "pytest", "-p", "no:cacheprovider", "test_alvo.py"],
+        cwd=tmp_path,
+        env=ambiente,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    return resultado.returncode, resultado.stdout + resultado.stderr
+
+
+def test_config_do_projeto_rejeita_marcador_nao_registrado_sob_o_pytest_atual(
+    tmp_path: Path,
+) -> None:
+    codigo, saida = _rodar_pytest_com_a_config_do_projeto(
+        tmp_path,
+        "import pytest\n\n@pytest.mark.marcador_inexistente\ndef test_a():\n    pass\n",
+    )
+
+    assert codigo != 0, saida
+    assert "marcador_inexistente" in saida
+
+
+def test_config_do_projeto_transforma_resourcewarning_em_falha(tmp_path: Path) -> None:
+    codigo, saida = _rodar_pytest_com_a_config_do_projeto(
+        tmp_path,
+        "import gc\n\n"
+        "def test_a(tmp_path):\n"
+        "    arquivo = open(tmp_path / 'x', 'w')\n"
+        "    del arquivo\n"
+        "    gc.collect()\n",
+    )
+
+    assert codigo != 0, saida
+    assert "ResourceWarning" in saida
+
+
+def test_config_do_projeto_transforma_excecao_nao_tratada_em_falha(tmp_path: Path) -> None:
+    codigo, saida = _rodar_pytest_com_a_config_do_projeto(
+        tmp_path,
+        "import gc\n\n"
+        "class Mau:\n"
+        "    def __del__(self):\n"
+        "        raise RuntimeError('boom no __del__')\n\n"
+        "def test_a():\n"
+        "    Mau()\n"
+        "    gc.collect()\n",
+    )
+
+    assert codigo != 0, saida
+    assert "PytestUnraisableExceptionWarning" in saida
+
+
+def test_config_do_projeto_nao_emite_aviso_de_config_nem_de_depreciacao_do_pytest(
+    tmp_path: Path,
+) -> None:
+    codigo, saida = _rodar_pytest_com_a_config_do_projeto(
+        tmp_path, "def test_a():\n    assert True\n"
+    )
+
+    assert codigo == 0, saida
+    assert "1 passed" in saida
+    for aviso in ("PytestConfigWarning", "PytestRemovedIn", "PytestDeprecationWarning", "warnings"):
+        assert aviso not in saida, saida
