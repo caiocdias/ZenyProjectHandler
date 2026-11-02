@@ -231,12 +231,13 @@ Bloco C — aprendizado
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
+- Plano: `docs/superpowers/plans/2026-11-02-leitura-vetorial-por-poste-e01.md`, revisão de arquitetura aprovada com notas na rodada 1 (seção "Revisão de arquitetura" do plano).
+- Commits: 8c381a6, e942afc, 003d42f (só plano e roadmap; nenhuma tarefa executada).
 - Revisão final: —
 - Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- Estado (2026-11-02): execução parada antes da Task 1. A trava de Edit/Write do `orquestrador` (`soul_guard.py orquestrador`, no frontmatter da soul) vale também para os subagentes, e o `desenvolvedor` foi bloqueado ao criar um `.py`. O usuário decidiu corrigir o hook antes de retomar. Retomar pela Task 1 com o ledger do workspace SDD do plano (`.superpowers/sdd/2026-11-02-leitura-vetorial-por-poste-e01/progress.md`, no worktree).
+- Decisões para o usuário: a Task 2 remove `stage11_parity_gate`/`stage12_release_gate` e, com eles, a validação automatizada do ZIP e do kit em host limpo. Ela pode ser recuperada do histórico do Git.
+- Notas para a próxima etapa: os critérios que pedem `IniciarTestes.bat` são provados por uma sequência equivalente de comandos, porque o harness recusa `cmd.exe` no worktree. Rodar o `.bat` antes de integrar. `allow_reserve` em `scripts/symbol_benchmark_evaluator.py` e `pywinauto` ficam sem uso: revisar em E03/E09.
 
 ---
 
