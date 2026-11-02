@@ -162,7 +162,7 @@ Bloco A — base e medição
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E01 | Limpeza do projeto | #pendente | — | scripts, testes e docs de etapas encerradas removidos, gate verde |
+| E01 | Limpeza do projeto | #em-andamento | — | scripts, testes e docs de etapas encerradas removidos, gate verde |
 | E02 | Ficha de referência e benchmark por poste | #pendente | E01 | formato da ficha, avaliador por poste e baseline sintético |
 | E03 | Rotulagem v0 e baseline real | #pendente | E02 | fichas de referência das 16 folhas e baseline do analisador atual em `tmp/` |
 
@@ -187,7 +187,7 @@ Bloco C — aprendizado
 
 ---
 
-## E01 — Limpeza do projeto — #pendente
+## E01 — Limpeza do projeto — #em-andamento
 
 **Objetivo:** remover do repositório o que pertence a etapas encerradas, sem mudar o comportamento do produto.
 
