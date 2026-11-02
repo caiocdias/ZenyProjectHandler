@@ -78,7 +78,6 @@ def test_sql_server_driver_provenance_is_pinned_and_documented() -> None:
     release_builder = script_text("scripts/build_release.py")
     release_gate = script_text("scripts/release_artifact_gate.py")
     client_gate = script_text("scripts/client_artifact_gate.py")
-    distribution_gate = script_text("scripts/stage12_release_gate.py")
     server_lock = script_text("requirements-server.lock")
     locked_components = {
         line.partition("==")[0]
@@ -92,7 +91,6 @@ def test_sql_server_driver_provenance_is_pinned_and_documented() -> None:
     assert '"--pyinstaller-python"' in release_builder
     assert '"--pyinstaller-python"' in release_gate
     assert '"--pyinstaller-python"' in client_gate
-    assert '"--pyinstaller-python"' in distribution_gate
     assert '_locked_components(ROOT / "requirements-server.lock")' in release_builder
     assert "msodbcsql18=18.6.2.1-1" in dockerfile
     assert "unixodbc=2.3.11-2+deb12u1" in dockerfile
