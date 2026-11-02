@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import re
@@ -32,8 +33,10 @@ VERSOES_CORRIGIDAS = {
     "pytest": "9.0.3",
     "setuptools": "84.1.0",
     "wheel": "0.46.2",
-    "altgraph": "0.17.5",
 }
+# Não é correção de vulnerabilidade: versão mínima de uma transitiva que o setuptools novo exige
+# (altgraph 0.17.4 importa ``pkg_resources``, removido no setuptools 82).
+VERSAO_MINIMA_SEM_PKG_RESOURCES = {"altgraph": "0.17.5"}
 VERSOES_VULNERAVEIS = {
     "pillow": "12.2.0",
     "mako": "1.3.12",
@@ -41,7 +44,6 @@ VERSOES_VULNERAVEIS = {
     "pytest": "8.4.2",
     "setuptools": "80.10.2",
     "wheel": "0.45.1",
-    "altgraph": "0.17.4",
 }
 
 
@@ -592,4 +594,277 @@ def test_dockerfile_instala_o_setuptools_corrigido() -> None:
 def test_lock_de_build_do_cliente_fixa_altgraph_sem_pkg_resources() -> None:
     """altgraph 0.17.4 importa ``pkg_resources``, ausente a partir do setuptools 82."""
     pinos = _pinos(ROOT / "requirements-client-build.lock")
-    assert pinos.get("altgraph") == VERSOES_CORRIGIDAS["altgraph"]
+    assert "altgraph" in pinos, "altgraph sumiu do lock de build do cliente"
+    minima = Version(VERSAO_MINIMA_SEM_PKG_RESOURCES["altgraph"])
+    assert Version(pinos["altgraph"]) >= minima, f"altgraph=={pinos['altgraph']} < {minima}"
+
+
+def test_altgraph_nao_esta_nas_tabelas_de_vulnerabilidade() -> None:
+    """altgraph 0.17.4 não tem vulnerabilidade apontada: as tabelas são só de segurança."""
+    for nome in VERSAO_MINIMA_SEM_PKG_RESOURCES:
+        assert nome not in VERSOES_CORRIGIDAS
+        assert nome not in VERSOES_VULNERAVEIS
+
+
+def _altgraph_minimo_exigido(lock_texto: str) -> str | None:
+    """Diga a versão mínima de altgraph que o setuptools do lock exige (``None`` se nenhuma)."""
+    setuptools = re.search(r"(?mi)^setuptools==([\w.]+)", lock_texto)
+    if setuptools is None or Version(setuptools.group(1)) < Version("82"):
+        return None
+    return VERSAO_MINIMA_SEM_PKG_RESOURCES["altgraph"]
+
+
+def test_altgraph_do_lock_de_build_acompanha_o_setuptools_sem_pkg_resources() -> None:
+    lock = ROOT / "requirements-client-build.lock"
+    exigido = _altgraph_minimo_exigido(lock.read_text(encoding="utf-8"))
+    assert exigido is not None, "o lock deveria fixar setuptools >= 82 (sem pkg_resources)"
+    assert Version(_pinos(lock)["altgraph"]) >= Version(exigido)
+
+
+def test_relacao_setuptools_altgraph_discrimina_setuptools_novo_e_velho() -> None:
+    """Controle: a relação exige altgraph novo só quando o setuptools já não traz pkg_resources."""
+    assert _altgraph_minimo_exigido("setuptools==84.1.0\n") == "0.17.5"
+    assert _altgraph_minimo_exigido("setuptools==82.0.0\n") == "0.17.5"
+    assert _altgraph_minimo_exigido("setuptools==81.0.0\n") is None
+    assert _altgraph_minimo_exigido("pefile==2023.2.7\n") is None
+
+
+def test_ambiente_de_teste_nao_tem_pkg_resources() -> None:
+    """O ambiente do gate usa o setuptools do lock (sem ``pkg_resources``): nada passa por acaso."""
+    assert importlib.util.find_spec("pkg_resources") is None
+
+
+_IMPORTA_PKG_RESOURCES = re.compile(r"(?m)^\s*(?:import|from)\s+pkg_resources\b")
+
+
+def test_codigo_do_projeto_nao_importa_pkg_resources() -> None:
+    arquivos = [
+        arquivo
+        for pasta in ("src", "scripts", "tests", "client", "server")
+        for arquivo in (ROOT / pasta).rglob("*.py")
+    ]
+    assert len(arquivos) > 100, "a varredura não encontrou o código: guarda vazia"
+    usos = [
+        str(arquivo.relative_to(ROOT))
+        for arquivo in arquivos
+        if _IMPORTA_PKG_RESOURCES.search(arquivo.read_text(encoding="utf-8"))
+    ]
+    assert usos == []
+
+
+@pytest.mark.parametrize(
+    "texto",
+    ["import pkg_resources\n", "  from pkg_resources import x\n", "x=1\nimport pkg_resources"],
+)
+def test_varredura_de_pkg_resources_pega_importacoes(texto: str) -> None:
+    assert _IMPORTA_PKG_RESOURCES.search(texto)
+
+
+@pytest.mark.parametrize(
+    "texto", ["# import pkg_resources\n", "x = 'pkg_resources'\n", "import pkg_resources_x\n"]
+)
+def test_varredura_de_pkg_resources_ignora_comentario_texto_e_nome_parecido(texto: str) -> None:
+    assert not _IMPORTA_PKG_RESOURCES.search(texto)
+
+
+# --- Task 3 (E13): ataques às guardas de setuptools e wheel ---
+
+_ESPECIFICACAO = r"(?:~=|===|==|!=|<=|>=|<|>)\s*[\w.*+!]+"
+_SETUPTOOLS_NO_TEXTO = re.compile(
+    rf"(?<![\w.-])setuptools(?![\w.-])\s*((?:{_ESPECIFICACAO})(?:\s*,\s*{_ESPECIFICACAO})*)?",
+    re.IGNORECASE,
+)
+
+
+def _especificacoes_de_setuptools(texto: str) -> list[str]:
+    """Liste, sem espaços, toda menção a setuptools; ``""`` quando não há versão."""
+    return [re.sub(r"\s+", "", m.group(1) or "") for m in _SETUPTOOLS_NO_TEXTO.finditer(texto)]
+
+
+@pytest.mark.parametrize(
+    ("texto", "esperado"),
+    [
+        ("pip install setuptools==84.1.0", ["==84.1.0"]),
+        (
+            "pip install setuptools==84.1.0 && pip install setuptools==80.10.2",
+            ["==84.1.0", "==80.10.2"],
+        ),
+        ("pip install Setuptools == 80.10.2", ["==80.10.2"]),
+        ("pip install SETUPTOOLS===80.10.2", ["===80.10.2"]),
+        ('pip install "setuptools>=75,<81"', [">=75,<81"]),
+        ("pip install setuptools~=80.10", ["~=80.10"]),
+        ("pip install setuptools", [""]),
+        ("pip install --upgrade setuptools wheel", [""]),
+        ("pip install setuptools-scm==8", []),
+        ("pip install my_setuptools==1", []),
+    ],
+)
+def test_helper_de_dockerfile_enxerga_segundo_pino_e_outras_grafias(
+    texto: str, esperado: list[str]
+) -> None:
+    assert _especificacoes_de_setuptools(texto) == esperado
+
+
+@pytest.mark.parametrize(
+    ("texto", "pinos_da_regex_original"),
+    [
+        ("pip install setuptools==84.1.0 && pip install Setuptools==80.10.2", ["84.1.0"]),
+        ("pip install setuptools==84.1.0 && pip install setuptools>=75,<81", ["84.1.0"]),
+        ("pip install setuptools==84.1.0 && pip install --upgrade setuptools", ["84.1.0"]),
+        ("pip install setuptools==84.1.0 && pip install setuptools == 80.10.2", ["84.1.0"]),
+    ],
+)
+def test_assercao_original_do_dockerfile_nao_pega_estas_grafias(
+    texto: str, pinos_da_regex_original: list[str]
+) -> None:
+    """Documenta a lacuna da regex original; o helper aponta o segundo pino ou o não fixado."""
+    assert re.findall(r"setuptools==([\w.]+)", texto) == pinos_da_regex_original
+    assert _especificacoes_de_setuptools(texto) != ["==84.1.0"]
+    assert len(_especificacoes_de_setuptools(texto)) == 2
+
+
+def test_dockerfile_menciona_setuptools_uma_unica_vez_e_com_o_pino_corrigido() -> None:
+    texto = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    assert _especificacoes_de_setuptools(texto) == [f"=={VERSOES_CORRIGIDAS['setuptools']}"]
+
+
+def test_dockerfile_nao_cita_wheel_nem_setuptools_vulneraveis() -> None:
+    texto = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    versoes = re.findall(r"(?i)(?<![\w.-])wheel(?![\w.-])==([\w.]+)", texto)
+    assert all(v == VERSOES_CORRIGIDAS["wheel"] for v in versoes)
+    assert VERSOES_VULNERAVEIS["wheel"] not in texto
+    assert VERSOES_VULNERAVEIS["setuptools"] not in texto
+
+
+def test_dockerfile_e_lock_de_desenvolvimento_fixam_o_mesmo_setuptools() -> None:
+    pino_lock = _pinos(ROOT / "requirements-development.lock")["setuptools"]
+    texto = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    assert _especificacoes_de_setuptools(texto) == [f"=={pino_lock}"]
+
+
+def _build_system(manifesto: Path) -> dict[str, Requirement]:
+    dados = tomllib.loads(manifesto.read_text(encoding="utf-8"))
+    return {
+        str(canonicalize_name(r.name)): r
+        for r in map(Requirement, dados["build-system"]["requires"])
+    }
+
+
+def test_build_system_dos_tres_manifestos_pede_setuptools_corrigido() -> None:
+    for manifesto in MANIFESTOS:
+        requisitos = _build_system(manifesto)
+        assert "setuptools" in requisitos, f"{manifesto}: sem setuptools no build-system"
+        faixa = requisitos["setuptools"].specifier
+        assert faixa.contains(VERSOES_CORRIGIDAS["setuptools"]), manifesto
+        assert not faixa.contains(VERSOES_VULNERAVEIS["setuptools"]), manifesto
+        assert not faixa.contains("85.0"), f"{manifesto}: faixa aberta demais"
+
+
+def test_build_system_de_server_e_client_fixa_setuptools_e_wheel_com_igualdade() -> None:
+    for manifesto in (ROOT / "server" / "pyproject.toml", ROOT / "client" / "pyproject.toml"):
+        requisitos = _build_system(manifesto)
+        for nome in ("setuptools", "wheel"):
+            assert nome in requisitos, f"{manifesto}: sem {nome}"
+            assert str(requisitos[nome].specifier) == f"=={VERSOES_CORRIGIDAS[nome]}", manifesto
+
+
+def test_manifesto_raiz_aceita_faixa_do_setuptools_mas_nao_pede_wheel() -> None:
+    requisitos = _build_system(ROOT / "pyproject.toml")
+    assert str(requisitos["setuptools"].specifier) == "<85,>=84.1"
+    assert "wheel" not in requisitos
+
+
+_MUTACOES_DO_BUILD_SYSTEM = {
+    "pyproject.toml": [
+        (">=84.1,<85", ">=75,<81"),
+        (">=84.1,<85", ">=75,<85"),
+        (">=84.1,<85", ">=85"),
+        ("setuptools>=84.1,<85", "setuptools==80.10.2"),
+    ],
+    "server/pyproject.toml": [
+        ("setuptools==84.1.0", "setuptools==80.10.2"),
+        ("wheel==0.46.2", "wheel==0.45.1"),
+        ("setuptools==84.1.0", "setuptools>=75"),
+        ("wheel==0.46.2", "wheel>=0.45"),
+        ("setuptools==84.1.0", "setuptools==85.0.0"),
+    ],
+    "client/pyproject.toml": [
+        ("setuptools==84.1.0", "setuptools==80.10.2"),
+        ("wheel==0.46.2", "wheel==0.45.1"),
+        ("setuptools==84.1.0", "setuptools>=75"),
+        ("wheel==0.46.2", "wheel>=0.45"),
+        ("setuptools==84.1.0", "setuptools==85.0.0"),
+    ],
+}
+
+
+@pytest.mark.parametrize(
+    ("manifesto", "de", "para"),
+    [(m, de, para) for m, trocas in _MUTACOES_DO_BUILD_SYSTEM.items() for de, para in trocas],
+)
+def test_guarda_pega_mutacao_do_build_system_real(
+    tmp_path: Path, manifesto: str, de: str, para: str
+) -> None:
+    original = (ROOT / manifesto).read_text(encoding="utf-8")
+    assert de in original, f"{manifesto} não contém {de!r}: a mutação não se aplicaria"
+    copia = tmp_path / "pyproject.toml"
+    copia.write_text(original.replace(de, para, 1), encoding="utf-8")
+
+    assert _limites_invalidos([copia]) != []
+    assert _limites_invalidos([ROOT / manifesto]) == []
+
+
+def _copiar_locks(tmp_path: Path) -> dict[str, Path]:
+    copias: dict[str, Path] = {}
+    for lock in LOCKS:
+        copia = tmp_path / lock.name
+        copia.write_bytes(lock.read_bytes())
+        copias[lock.name] = copia
+    return copias
+
+
+def _trocar_no_lock(lock: Path, de: str, para: str) -> None:
+    texto = lock.read_text(encoding="utf-8")
+    assert de in texto, f"{lock.name} não contém {de!r}"
+    lock.write_text(texto.replace(de, para), encoding="utf-8")
+
+
+def test_locks_de_dev_e_build_do_cliente_fixam_setuptools_corrigido_e_wheel_no_build() -> None:
+    dev = _pinos(ROOT / "requirements-development.lock")
+    build = _pinos(ROOT / "requirements-client-build.lock")
+    assert dev.get("setuptools") == VERSOES_CORRIGIDAS["setuptools"]
+    assert build.get("setuptools") == VERSOES_CORRIGIDAS["setuptools"]
+    assert build.get("wheel") == VERSOES_CORRIGIDAS["wheel"]
+
+
+@pytest.mark.parametrize(
+    "lock", ["requirements-development.lock", "requirements-client-build.lock"]
+)
+def test_igualdade_entre_locks_pega_setuptools_divergente(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, lock: str
+) -> None:
+    copias = _copiar_locks(tmp_path)
+    _trocar_no_lock(copias[lock], "setuptools==84.1.0", "setuptools==83.0.0")
+    monkeypatch.setattr(sys.modules[__name__], "LOCKS", sorted(copias.values()))
+
+    with pytest.raises(AssertionError, match="setuptools"):
+        test_pacote_corrigido_tem_a_mesma_versao_em_todos_os_locks()
+
+
+@pytest.mark.parametrize(
+    "lock", ["requirements-development.lock", "requirements-client-build.lock"]
+)
+def test_guarda_de_piso_pega_setuptools_vulneravel_em_cada_lock(tmp_path: Path, lock: str) -> None:
+    copias = _copiar_locks(tmp_path)
+    _trocar_no_lock(copias[lock], "setuptools==84.1.0", "setuptools==80.10.2")
+
+    assert _pinos_abaixo_da_corrigida(copias.values()) == [f"{lock}: setuptools==80.10.2"]
+
+
+def test_guarda_de_piso_pega_wheel_vulneravel_no_lock_de_build(tmp_path: Path) -> None:
+    copias = _copiar_locks(tmp_path)
+    _trocar_no_lock(copias["requirements-client-build.lock"], "wheel==0.46.2", "wheel==0.45.1")
+
+    assert _pinos_abaixo_da_corrigida(copias.values()) == [
+        "requirements-client-build.lock: wheel==0.45.1"
+    ]
