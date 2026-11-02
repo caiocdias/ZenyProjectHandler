@@ -163,7 +163,7 @@ Bloco A — base e medição
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E01 | Limpeza do projeto | #concluida | — | scripts, testes e docs de etapas encerradas removidos, gate verde |
-| E02 | Ficha de referência e benchmark por poste | #em-andamento | E01 | formato da ficha, avaliador por poste e baseline sintético |
+| E02 | Ficha de referência e benchmark por poste | #concluida | E01 | formato da ficha, avaliador por poste e baseline sintético |
 | E03 | Rotulagem v0 e baseline real | #pendente | E02 | fichas de referência das 16 folhas e baseline do analisador atual em `tmp/` |
 
 Bloco B — leitura vetorial
@@ -259,7 +259,7 @@ Bloco C — aprendizado
 
 ---
 
-## E02 — Ficha de referência e benchmark por poste — #em-andamento
+## E02 — Ficha de referência e benchmark por poste — #concluida
 
 **Objetivo:** definir o formato da ficha do poste de referência e um avaliador que compara fichas preditas e de referência com as métricas da decisão 7 do design.
 
@@ -281,10 +281,10 @@ Bloco C — aprendizado
 
 **Critérios de aceite:**
 
-- [ ] O schema valida uma ficha sintética completa e rejeita campo extra.
-- [ ] O avaliador, sobre fixtures sintéticas, produz as métricas esperadas em cada caso (acerto total, símbolo associado ao poste vizinho, poste ausente, vão errado).
-- [ ] Um CLI roda predição + avaliação de um PDF e grava o relatório em um diretório informado. O relatório não traz caminho absoluto nem conteúdo da folha além do necessário.
-- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+- [x] O schema valida uma ficha sintética completa e rejeita campo extra.
+- [x] O avaliador, sobre fixtures sintéticas, produz as métricas esperadas em cada caso (acerto total, símbolo associado ao poste vizinho, poste ausente, vão errado).
+- [x] Um CLI roda predição + avaliação de um PDF e grava o relatório em um diretório informado. O relatório não traz caminho absoluto nem conteúdo da folha além do necessário.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`. Prova: o gate equivalente passou; o `.bat` em si ainda precisa ser rodado pelo usuário.
 
 **Validação obrigatória:**
 
@@ -305,12 +305,35 @@ Bloco C — aprendizado
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- Plano: `docs/superpowers/plans/2026-11-02-leitura-vetorial-por-poste-e02.md`, revisão de arquitetura aprovada com notas na rodada 1 (seção "Revisão de arquitetura" do plano).
+- Commits:
+  - plano: 0989bab, 10af2df, c96d629;
+  - Task 1 (formato e validação): eb346e7, ca06d80, 7b6f9de, b03eef9, ede7e76;
+  - Task 2 (avaliador): 010bf5b, 26e7e66, c16b2ef, 1130cba, 50eb4d4, b19898a;
+  - Task 3 (CLI, ficha predita e baseline): 751c5bf, 71411bb, 9aff345;
+  - correção final: 1ba82a5, 5d6f3ad.
+- Entregas: `docs/schemas/ficha-poste.schema.json`, `scripts/ficha_poste.py`, `scripts/ficha_poste_avaliador.py`, `scripts/benchmark_ficha_poste.py` (`python -m scripts.benchmark_ficha_poste PDF --referencia REF --saida DIR [--native-only]`), parágrafo em `examples/README.md`.
+- Revisão final: `revisor-seguranca` (opus), aprovado com ressalvas, sem Crítico nem Importante de código.
+  - A onda única de correção resolveu os três Menores que protegem a E03: contagem `postes_sem_geometria`, contagem `simbolos_de_poste_fora_da_ficha` e cópia de `PROTOCOLO_FICHA`/`gerador` no relatório. Re-revisão: tudo resolvido.
+  - Os demais Menores foram triados como "pode ficar" (alias sem uso, `_erro_classe` privada importada, traceback do CLI no stderr, U+200B/U+FEFF não removidos por `strip()`, `zona` em branco aceita, helpers de teste importados entre módulos).
+  - Scanner (`osv-scanner -L requirements.txt:<lock>` nos 6 locks): sem dependência nova nem lock alterado na E02; vulnerabilidades pré-existentes, as mesmas da E01.
+- Critérios verificados:
+  - (1) `tests/unit/test_ficha_poste.py` verde: `test_ficha_completa_e_valida` e `test_campo_extra_e_recusado` (raiz, poste, vão, símbolo, coordenada e escopo).
+  - (2) `tests/unit/test_ficha_poste_avaliador.py` verde: acerto total, símbolo no poste vizinho, poste ausente e vão errado.
+  - (3) `tests/unit/test_benchmark_ficha_poste.py` e o adversarial verdes: o CLI grava `ficha-predita.json` e `avaliacao.json` no diretório informado, sem caminho absoluto nem nome do PDF; referência de outro PDF é recusada antes do analisador.
+  - (4) Gate equivalente ao `IniciarTestes.bat` em 5d6f3ad, tudo com exit 0: 3178 passed, cobertura 88,25%. O `.bat` em si não rodou, porque o harness recusa `cmd.exe` no worktree.
+  - Verificação mecânica `--base 0d8d148`: 1 apontamento (o desenvolvedor acrescentou um teste em arquivo que o testador tinha tocado), julgado justificado na re-revisão.
+- Baseline sintético (rede de 2 postes e 1 vão, `native_only`): postes tp 2, fp 0, fn 0; campos 2/2; vão casado, cabo 1/1, comprimento 0/1 (o analisador vigente não liga o "35m" ao cabo); símbolos fn 1 (ESTAI só na referência do teste, para fixar o caminho do FN).
+- Decisões para o usuário:
+  - **R2, fonte da ficha predita:** vem do projeto promovido, não das "propostas atuais" que a spec cita. Pendências não promovidas ficam fora e o recall de símbolos de suporte (estai) é 0 por construção. Mudar a fonte é uma nova `versao_extracao` no `gerador`.
+  - **Formato v1:** `null` (ou lista vazia) é "ausente na folha" e conta na métrica; campo não determinado vai em `pendentes` e sai do denominador na referência (na predição, erro em campo pendente conta à parte). Classe de símbolo validada contra o inventário; `ESTRUTURA_POSTE_MT/AT` (símbolo do próprio poste) excluídas.
+  - **R4, casamento de postes:** guloso determinístico (identificador igual primeiro, depois distância), limiares 0,02 e 0,05 no espaço normalizado da página, versionados em `PROTOCOLO_FICHA`; calibráveis na E03.
+  - Rodar `.\IniciarTestes.bat` no worktree antes de integrar.
+- Notas para a próxima etapa:
+  - Na E03, leia as chaves de diagnóstico da raiz da ficha predita com `.get(chave, 0)`: `postes_sem_geometria` e `simbolos_de_poste_fora_da_ficha` só aparecem quando maiores que 0; `equipamentos_sem_simbolo` conta também equipamento de poste sem geometria.
+  - Um cabo com postes intermediários vira um vão só em `detectar_vaos` (comportamento do analisador): nas folhas reais, isso aparece como FN de vãos intermediários, não como erro do avaliador.
+  - Fichas rotuladas a partir de texto copiado de PDF podem trazer U+200B/U+FEFF, que `strip()` não remove: normalize na rotulagem.
+  - O caminho com OCR do CLI (sem `--native-only`) não tem teste no gate, porque exige Tesseract.
 
 ---
 
