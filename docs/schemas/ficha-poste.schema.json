@@ -1,0 +1,282 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:zeny:benchmark:ficha-poste:1",
+  "title": "Ficha do poste (referência e predição)",
+  "description": "Contrato versionado da leitura por poste de uma folha: identificador, estruturas, poste, coordenada, símbolos associados e vãos. Coordenadas na convenção symbols-e02-v1 (página exibida, [0,1], origem no canto superior esquerdo). Regra R5: null (ou lista vazia) significa ausente na folha e conta na métrica; o campo que não foi possível determinar vai em pendentes do poste ou do vão. Regras que dependem de vários campos (ids únicos, vãos entre postes existentes, geometria da bbox, classes do inventário, escopo regional, predição) são aplicadas por scripts/ficha_poste.py.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "tipo",
+    "pdf_sha256",
+    "escopo_anotacao",
+    "postes",
+    "vaos"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "tipo": {
+      "enum": [
+        "referencia",
+        "predicao"
+      ]
+    },
+    "pdf_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "escopo_anotacao": {
+      "$ref": "#/$defs/escopo_anotacao"
+    },
+    "gerador": {
+      "description": "Identidade de quem gerou a ficha (objeto livre); obrigatório quando tipo é predicao.",
+      "type": "object"
+    },
+    "postes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/poste"
+      }
+    },
+    "vaos": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/vao"
+      }
+    },
+    "atributos_extras": {
+      "description": "Objeto livre, ignorado pela métrica.",
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "texto": {
+      "type": "string",
+      "minLength": 1
+    },
+    "texto_ou_nulo": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "pagina": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "unitario": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "bbox": {
+      "description": "[x0, y0, x1, y1] normalizados na página exibida; x0 <= x1 e y0 <= y1. No poste pode ser um ponto; no símbolo exige área positiva.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/unitario"
+      },
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "escopo_anotacao": {
+      "type": "object",
+      "required": [
+        "tipo"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "tipo": {
+          "enum": [
+            "completo",
+            "regional"
+          ]
+        },
+        "regioes": {
+          "description": "Obrigatório e não vazio no escopo regional; proibido no completo.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/regiao"
+          }
+        }
+      }
+    },
+    "regiao": {
+      "type": "object",
+      "required": [
+        "pagina",
+        "bbox"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "pagina": {
+          "$ref": "#/$defs/pagina"
+        },
+        "bbox": {
+          "$ref": "#/$defs/bbox"
+        }
+      }
+    },
+    "coordenada": {
+      "description": "Coordenada de projeto do poste; sem type aqui porque o uso declara objeto ou null.",
+      "required": [
+        "leste",
+        "norte"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "leste": {
+          "type": "number"
+        },
+        "norte": {
+          "type": "number"
+        },
+        "zona": {
+          "$ref": "#/$defs/texto_ou_nulo"
+        }
+      }
+    },
+    "simbolo": {
+      "type": "object",
+      "required": [
+        "id",
+        "classe",
+        "bbox"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "Único na ficha.",
+          "$ref": "#/$defs/texto"
+        },
+        "classe": {
+          "description": "class_code do inventário de simbologia.",
+          "$ref": "#/$defs/texto"
+        },
+        "bbox": {
+          "$ref": "#/$defs/bbox"
+        },
+        "atributos_extras": {
+          "type": "object"
+        }
+      }
+    },
+    "poste": {
+      "type": "object",
+      "required": [
+        "id",
+        "pagina",
+        "bbox",
+        "identificador",
+        "estruturas",
+        "poste",
+        "coordenada",
+        "simbolos",
+        "pendentes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "Único na ficha.",
+          "$ref": "#/$defs/texto"
+        },
+        "pagina": {
+          "$ref": "#/$defs/pagina"
+        },
+        "bbox": {
+          "$ref": "#/$defs/bbox"
+        },
+        "identificador": {
+          "$ref": "#/$defs/texto_ou_nulo"
+        },
+        "estruturas": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/texto"
+          }
+        },
+        "poste": {
+          "$ref": "#/$defs/texto_ou_nulo"
+        },
+        "coordenada": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "$ref": "#/$defs/coordenada"
+        },
+        "simbolos": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/simbolo"
+          }
+        },
+        "pendentes": {
+          "description": "Campos não determinados (saem do denominador na referência).",
+          "type": "array",
+          "items": {
+            "enum": [
+              "identificador",
+              "estruturas",
+              "poste",
+              "coordenada",
+              "simbolos"
+            ]
+          }
+        },
+        "atributos_extras": {
+          "type": "object"
+        }
+      }
+    },
+    "vao": {
+      "type": "object",
+      "required": [
+        "de",
+        "para",
+        "comprimento_m",
+        "cabo",
+        "pendentes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "de": {
+          "description": "Id de poste.",
+          "$ref": "#/$defs/texto"
+        },
+        "para": {
+          "description": "Id de poste.",
+          "$ref": "#/$defs/texto"
+        },
+        "comprimento_m": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "cabo": {
+          "$ref": "#/$defs/texto_ou_nulo"
+        },
+        "pendentes": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "comprimento_m",
+              "cabo"
+            ]
+          }
+        },
+        "atributos_extras": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}
