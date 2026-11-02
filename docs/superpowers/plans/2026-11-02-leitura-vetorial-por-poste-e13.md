@@ -53,7 +53,7 @@
 Script descartável em `C:\Users\Caio\Desktop\repos\ZenyProjectHandler\tmp\e13\digest_analise.py` (fora do Git), rodado com o `.venv` do worktree sobre cada PDF de `examples/` do checkout principal. Duas medidas por PDF:
 
 - **Caminho nativo:** monte a análise como `scripts/smoke_examples.py` (leitor, `PyMuPdfDocumentAnalyzer()` sem cache, catálogo, interpretador e orçamento de render), mas com `projeto_id`, `execucao_id` (da análise e da interpretação) e `criada_em` fixos (constantes no script, iguais nas duas rodadas). Serialize em JSON canônico (chaves ordenadas) todas as evidências, propostas e relações, excluindo também qualquer campo de id ou timestamp que ainda derive de `uuid4`/relógio, e tire o SHA-256.
-- **Entrada do OCR:** o Tesseract não está instalado nesta máquina (só existe na imagem Docker). Rode o analisador com `habilitar_ocr_condicional=True` e um motor OCR gravador, definido no script, que implementa `MotorOcrPort` (`consultar_capacidade` disponível; `reconhecer` e os métodos dos ports `MotorOcrIdentificadorPort`, `MotorOcrRotuloOperacionalPort`, `MotorOcrGlifosPort` e `MotorOcrBlocoOperacionalPort` de `src/zeny_project_handler/ports/analysis.py` devolvem tupla vazia) e acumula, em ordem de chamada, o SHA-256 dos pixels e das dimensões de cada `PaginaRasterOcr` recebida. O digest é o SHA-256 da lista. Isso prova que o pré-processamento com Pillow entrega ao Tesseract os mesmos pixels; a codificação interna do `TesseractCliOcr` fica fora e é registrada no relatório.
+- **Entrada do OCR:** o Tesseract não está instalado nesta máquina (só existe na imagem Docker). Rode o analisador com `habilitar_ocr_condicional=True` e um motor OCR gravador, definido no script, que implementa `MotorOcrPort` (`consultar_capacidade` disponível; `reconhecer` e os métodos dos ports `MotorOcrIdentificadorPort`, `MotorOcrRotuloOperacionalPort`, `MotorOcrGlifosPort` e `MotorOcrBlocoOperacionalPort` de `src/zeny_project_handler/ports/analysis.py` devolvem tupla vazia) e acumula, em ordem de chamada, o SHA-256 dos pixels e das dimensões de cada `PaginaRasterOcr` recebida. O digest é o SHA-256 da lista. Isso prova que o pré-processamento com Pillow entrega ao Tesseract os mesmos pixels; a codificação interna do `TesseractCliOcr` fica fora e é registrada no relatório, assim como o fato de que só os rasters pedidos com OCR vazio são comparados (passos que dependem de texto já reconhecido podem não ser chamados).
 
 Rode o "antes" duas vezes e exija digests idênticos entre as rodadas antes de seguir (se não forem, o script ainda não é determinístico: corrija o script, não o produto). Saída: `tmp\e13\digest-antes.json` no checkout principal, com id do PDF (hash do nome, nunca o nome) → `{nativo, entrada_ocr, chamadas_ocr}`.
 
@@ -83,7 +83,9 @@ def test_limites_dos_manifestos_admitem_a_corrigida_e_excluem_a_vulneravel() -> 
             nome = canonicalize_name(requisito.name)
             if nome in VERSOES_CORRIGIDAS:
                 assert requisito.specifier.contains(VERSOES_CORRIGIDAS[nome])
-                assert not requisito.specifier.contains(VERSOES_VULNERAVEIS[nome])
+                vulneravel = VERSOES_VULNERAVEIS.get(nome)
+                if vulneravel is not None:
+                    assert not requisito.specifier.contains(vulneravel)
 ```
 
 - [ ] **Step 3: Rode e confirme a falha**
@@ -226,3 +228,10 @@ git commit -m "build(deps): setuptools 84.1.0 e wheel 0.46.2 nos locks, manifest
 - `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO` (roda no worktree com o `.\`; baseline em 4a7f60b aprovado); `scripts/client_artifact_gate.py --source-only` → aprovado.
 - `docker build` do `Dockerfile`: o daemon Docker não está rodando nesta máquina (2026-11-02), e ligá-lo é ação fora do worktree. Se continuar assim, a etapa não vira `#concluida`: fica `#bloqueada`, com "Bloqueios" = só o `docker build` pendente, evidência das provas equivalentes (espelho do builder, wheels manylinux) e ação de desbloqueio = o usuário rodar `docker build` e registrar o resultado. A E03 depende da E13 e fica para trás; o lote segue para a próxima elegível.
 - Handoff: os limites alargados (`Pillow<13`, `httpx2<2.11`, `pytest<9`, `setuptools<81`) vêm dos commits iniciais de setup (`fecc5be`, `e9e5559`, `2641ed3`), sem motivo registrado (`git log -S`, nota da spec).
+
+## Revisão de arquitetura
+
+- Veredito: aprovado com notas.
+- Rodadas: 1 (rodada 0 bloqueada por I1 digest não determinístico e sem OCR, I2 commit sem a versão do extrator, I3 prova de build fora dos caminhos `--no-build-isolation`; todos resolvidos na rodada 1).
+- Modelo: opus (`revisor-arquitetura`).
+- Notas Menores: N1 (snippet do teste de manifestos alinhado ao `.get`, aplicado); N2 (o motor gravador só compara rasters pedidos com OCR vazio, registrado no Step 1); M10 (o repositório não tem documento ARCHITECTURE; julgado contra spec, ADRs 0005, 0006, 0012, 0013 e código).
