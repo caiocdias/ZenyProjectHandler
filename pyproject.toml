@@ -52,10 +52,13 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers"
+strict_config = true
+strict_markers = true
 testpaths = ["tests"]
 filterwarnings = [
     "error::ResourceWarning",
     "error::pytest.PytestUnraisableExceptionWarning",
+    "error::pytest.PytestUnknownMarkWarning",
 ]
 markers = [
     "integration: testes que exercitam adaptadores ou frameworks",
