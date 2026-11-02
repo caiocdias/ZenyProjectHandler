@@ -745,3 +745,70 @@ def test_distancia_no_limite_casa_apesar_do_ruido_de_float() -> None:
     assert [(r, p) for r, p, _ in mesmo] == [("P1", "Q1")]
     acima = casar_postes(referencia, [_poste("Q1", 0.5201, nome=None)])
     assert acima == []
+
+
+def _ficha_vaos_empatados(vaos: list[dict[str, Any]], prefixo: str, tipo: str) -> dict[str, Any]:
+    return _ficha([_poste(prefixo + "1", 0.1), _poste(prefixo + "2", 0.3)], vaos, tipo=tipo)
+
+
+def test_vaos_empatados_com_pendentes_diferentes_independem_da_ordem() -> None:
+    def ref(cabo: str | None, pendentes: list[str]) -> dict[str, Any]:
+        return _vao("P1", "P2", 40.0, cabo, pendentes)
+
+    def pred(cabo: str | None, pendentes: list[str]) -> dict[str, Any]:
+        return _vao("Q1", "Q2", 40.0, cabo, pendentes)
+
+    # Pendência na referência: o vão pendente não pode "roubar" o par do vão sem pendência.
+    refs = [ref(None, ["cabo"]), ref(None, [])]
+    preds = [pred("MT", []), pred(None, [])]
+    # Pendência na predição: o erro do vão pendente é contado à parte, em qualquer ordem.
+    refs2 = [ref(None, []), ref("X", [])]
+    preds2 = [pred(None, ["cabo"]), pred(None, [])]
+    for r, p, esperado in ((refs, preds, (1, 1, 0, 0)), (refs2, preds2, (1, 2, 1, 0))):
+        relatorios = []
+        for ordem_ref in (r, r[::-1]):
+            for ordem_pred in (p, p[::-1]):
+                relatorios.append(
+                    avaliar(
+                        _ficha_vaos_empatados(copy.deepcopy(ordem_ref), "P", "referencia"),
+                        _ficha_vaos_empatados(copy.deepcopy(ordem_pred), "Q", "predicao"),
+                    )
+                )
+        assert all(relatorio == relatorios[0] for relatorio in relatorios)
+        cabo = relatorios[0]["vaos"]["cabo"]
+        assert (cabo["acertos"], cabo["total"], cabo["erros_com_pendencia"]) == esperado[:3]
+        assert cabo["erros_sem_pendencia"] == esperado[3]
+
+
+def test_tolerancia_de_coordenada_exata_em_northing_utm() -> None:
+    def acertos(norte_ref: float, norte_pred: float) -> int:
+        referencia = _ficha(
+            [_poste("P1", 0.1, coordenada={"leste": 700000.0, "norte": norte_ref})], []
+        )
+        predicao = _ficha(
+            [_poste("Q1", 0.1, coordenada={"leste": 700000.0, "norte": norte_pred})],
+            [],
+            tipo="predicao",
+        )
+        return int(avaliar(referencia, predicao)["campos"]["coordenada"]["acertos"])
+
+    assert acertos(7800000.48, 7800000.47) == 1
+    assert acertos(7800000.47, 7800000.48) == 1
+    assert acertos(7800000.48, 7800000.46) == 0
+
+
+def test_tolerancia_de_comprimento_exata_em_valores_grandes() -> None:
+    def acertos(comprimento_ref: float, comprimento_pred: float) -> int:
+        referencia = _ficha(
+            [_poste("P1", 0.1), _poste("P2", 0.3)], [_vao("P1", "P2", comprimento_ref)]
+        )
+        predicao = _ficha(
+            [_poste("Q1", 0.1), _poste("Q2", 0.3)],
+            [_vao("Q1", "Q2", comprimento_pred)],
+            tipo="predicao",
+        )
+        return int(avaliar(referencia, predicao)["vaos"]["comprimento"]["acertos"])
+
+    assert acertos(1234.5, 1234.4) == 1
+    assert acertos(1234.4, 1234.5) == 1
+    assert acertos(1234.5, 1234.3) == 0

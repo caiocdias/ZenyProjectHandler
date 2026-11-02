@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
+from decimal import Decimal
 from typing import Any, Final
 
 from scripts.ficha_poste import validar_ficha
@@ -131,7 +132,8 @@ def _restringir_ao_escopo(
 
 
 def _numeros_iguais(a: float, b: float, tolerancia: float) -> bool:
-    return round(abs(a - b), _CASAS_DECIMAIS) <= tolerancia
+    # Decimais exatos dos reprs: northing UTM (~7,8e6) perde precisão em float na subtração.
+    return abs(Decimal(repr(a)) - Decimal(repr(b))) <= Decimal(repr(tolerancia))
 
 
 def _coordenada_acerta(ref: Registro | None, pred: Registro | None) -> bool:
@@ -205,7 +207,7 @@ def _avaliar_campos(
 # --- vãos ----------------------------------------------------------------------------------------
 
 
-def _chave_vao(vao: Registro) -> tuple[bool, float, str, str, str]:
+def _chave_vao(vao: Registro) -> tuple[bool, float, str, str, str, tuple[str, ...]]:
     comprimento = vao["comprimento_m"]
     return (
         comprimento is None,
@@ -213,6 +215,7 @@ def _chave_vao(vao: Registro) -> tuple[bool, float, str, str, str]:
         normalizar_texto(vao["cabo"]) or "",
         vao["de"],
         vao["para"],
+        tuple(sorted(vao["pendentes"])),
     )
 
 
