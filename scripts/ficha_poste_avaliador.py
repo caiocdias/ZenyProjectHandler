@@ -78,7 +78,7 @@ def _pares_elegiveis(
             ident_pred = normalizar_texto(pred["identificador"])
             igual = ident_ref is not None and ident_ref == ident_pred
             limite = limites["distancia_max_mesmo_identificador" if igual else "distancia_max"]
-            if distancia <= limite:
+            if round(distancia, _CASAS_DECIMAIS) <= limite:
                 chave = (0 if igual else 1, distancia, ref["id"], pred["id"])
                 elegiveis.append((chave, ref["id"], pred["id"], distancia))
     return sorted(elegiveis, key=lambda item: item[0])

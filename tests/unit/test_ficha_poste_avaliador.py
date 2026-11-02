@@ -734,3 +734,14 @@ def test_avaliar_nao_altera_as_fichas() -> None:
     copia_ref, copia_pred = copy.deepcopy(referencia), copy.deepcopy(predicao)
     avaliar(referencia, predicao)
     assert (referencia, predicao) == (copia_ref, copia_pred)
+
+
+def test_distancia_no_limite_casa_apesar_do_ruido_de_float() -> None:
+    referencia = [_poste("P1", 0.50, nome=None)]
+    pares = casar_postes(referencia, [_poste("Q1", 0.52, nome=None)])
+    assert [(r, p) for r, p, _ in pares] == [("P1", "Q1")]
+    assert pares[0][2] == 0.52 - 0.50  # a distância informada não é arredondada
+    mesmo = casar_postes([_poste("P1", 0.50, nome="7")], [_poste("Q1", 0.55, nome="7")])
+    assert [(r, p) for r, p, _ in mesmo] == [("P1", "Q1")]
+    acima = casar_postes(referencia, [_poste("Q1", 0.5201, nome=None)])
+    assert acima == []
