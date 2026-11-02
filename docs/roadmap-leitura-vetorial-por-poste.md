@@ -1,6 +1,6 @@
 # Roadmap — Leitura vetorial por poste
 
-> Arquivo: `docs/roadmap-leitura-vetorial-por-poste.md` · branch de execução: `roadmap/leitura-vetorial-por-poste` · criado em 2026-10-30 · última revisão 2026-10-30
+> Arquivo: `docs/roadmap-leitura-vetorial-por-poste.md` · branch de execução: `roadmap/leitura-vetorial-por-poste` · criado em 2026-10-30 · última revisão 2026-11-02
 
 ## Como usar
 
@@ -42,7 +42,8 @@ A análise entrega, para cada poste da folha, a ficha correta: identificador, es
 - conferência UTM;
 - troca do analisador e remoção do legado;
 - fábrica de rótulos;
-- detector visual local.
+- detector visual local;
+- atualização das dependências vulneráveis (E13, decisão D3).
 
 **Fora de escopo:**
 - gerar DWG;
@@ -76,7 +77,7 @@ A análise entrega, para cada poste da folha, a ficha correta: identificador, es
 | H5 | PyTorch com ROCm treina na RX 9070 XT desta máquina (Windows nativo ou WSL2) | o treino cai para CPU ou para GPU alugada (D1) | E11 |
 | D1 | Treinar em GPU alugada por hora, se ROCm e CPU forem inviáveis | sem decisão, E12 só treina em CPU | E12 (só se E11 concluir que o treino local é inviável) |
 | D2 | Decidido em 2026-11-02: a ficha predita vem do projeto promovido (R2 da E02), e o formato v1 e o casamento guloso 0,02/0,05 são mantidos, com calibração na E03 | se a E03 pedir outra fonte, entra nova `versao_extracao` no `gerador` | E03 |
-| D3 | Decidido em 2026-11-02: uma etapa própria de atualização de dependências entra antes da E03, com prioridade para o Pillow do lock do servidor. A etapa ainda precisa ser criada no roadmap (skill `development-roadmap`) | sem ela, a E03 roda sobre locks com vulnerabilidades conhecidas | E03 |
+| D3 | Decidido em 2026-11-02: uma etapa própria de atualização de dependências entra antes da E03, com prioridade para o Pillow do lock do servidor. Criada como E13 | sem ela, a E03 roda sobre locks com vulnerabilidades conhecidas | E13, E03 |
 
 ## Definição global de pronto
 
@@ -166,7 +167,8 @@ Bloco A — base e medição
 |---|---|---|---|---|
 | E01 | Limpeza do projeto | #concluida | — | scripts, testes e docs de etapas encerradas removidos, gate verde |
 | E02 | Ficha de referência e benchmark por poste | #concluida | E01 | formato da ficha, avaliador por poste e baseline sintético |
-| E03 | Rotulagem v0 e baseline real | #pendente | E02 | fichas de referência das 16 folhas e baseline do analisador atual em `tmp/` |
+| E13 | Atualização de dependências vulneráveis | #pendente | E01 | locks sem vulnerabilidade corrigível nos pacotes apontados pelo scanner, gate verde |
+| E03 | Rotulagem v0 e baseline real | #pendente | E02, E13 | fichas de referência das 16 folhas e baseline do analisador atual em `tmp/` |
 
 Bloco B — leitura vetorial
 
@@ -212,7 +214,7 @@ Bloco C — aprendizado
 
 - [x] `git grep -n` por cada nome removido não encontra referência fora do histórico de revisões deste roadmap.
 - [x] `build_release.py` e os gates `release_artifact_gate`, `server_artifact_gate` e `client_artifact_gate` continuam funcionando, ou o plano provou que não dependiam dos removidos.
-- [x] `.\IniciarTestes.bat` termina com `RESULTADO FINAL: APROVADO`, com a cobertura mínima mantida. Prova: o gate equivalente passou; o `.bat` em si ainda precisa ser rodado pelo usuário.
+- [x] `.\IniciarTestes.bat` termina com `RESULTADO FINAL: APROVADO`, com a cobertura mínima mantida. Prova: o gate equivalente passou, e o usuário rodou o `.bat` na branch em 2026-11-02, já com a E02, com `RESULTADO FINAL: APROVADO`.
 
 **Validação obrigatória:**
 
@@ -286,7 +288,7 @@ Bloco C — aprendizado
 - [x] O schema valida uma ficha sintética completa e rejeita campo extra.
 - [x] O avaliador, sobre fixtures sintéticas, produz as métricas esperadas em cada caso (acerto total, símbolo associado ao poste vizinho, poste ausente, vão errado).
 - [x] Um CLI roda predição + avaliação de um PDF e grava o relatório em um diretório informado. O relatório não traz caminho absoluto nem conteúdo da folha além do necessário.
-- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`. Prova: o gate equivalente passou; o `.bat` em si ainda precisa ser rodado pelo usuário.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`. Prova: o gate equivalente passou, e o usuário rodou o `.bat` no worktree em 2026-11-02 com `RESULTADO FINAL: APROVADO`.
 
 **Validação obrigatória:**
 
@@ -323,20 +325,86 @@ Bloco C — aprendizado
   - (1) `tests/unit/test_ficha_poste.py` verde: `test_ficha_completa_e_valida` e `test_campo_extra_e_recusado` (raiz, poste, vão, símbolo, coordenada e escopo).
   - (2) `tests/unit/test_ficha_poste_avaliador.py` verde: acerto total, símbolo no poste vizinho, poste ausente e vão errado.
   - (3) `tests/unit/test_benchmark_ficha_poste.py` e o adversarial verdes: o CLI grava `ficha-predita.json` e `avaliacao.json` no diretório informado, sem caminho absoluto nem nome do PDF; referência de outro PDF é recusada antes do analisador.
-  - (4) Gate equivalente ao `IniciarTestes.bat` em 5d6f3ad, tudo com exit 0: 3178 passed, cobertura 88,25%. O `.bat` em si não rodou, porque o harness recusa `cmd.exe` no worktree.
+  - (4) Gate equivalente ao `IniciarTestes.bat` em 5d6f3ad, tudo com exit 0: 3178 passed, cobertura 88,25%. O usuário rodou o `.bat` no worktree em 2026-11-02: `RESULTADO FINAL: APROVADO`.
   - Verificação mecânica `--base 0d8d148`: 1 apontamento (o desenvolvedor acrescentou um teste em arquivo que o testador tinha tocado), julgado justificado na re-revisão.
 - Baseline sintético (rede de 2 postes e 1 vão, `native_only`): postes tp 2, fp 0, fn 0; campos 2/2; vão casado, cabo 1/1, comprimento 0/1 (o analisador vigente não liga o "35m" ao cabo); símbolos fn 1 (ESTAI só na referência do teste, para fixar o caminho do FN).
 - Decisões para o usuário:
   - **R2, fonte da ficha predita:** vem do projeto promovido, não das "propostas atuais" que a spec cita. Pendências não promovidas ficam fora e o recall de símbolos de suporte (estai) é 0 por construção. Mudar a fonte é uma nova `versao_extracao` no `gerador`.
   - **Formato v1:** `null` (ou lista vazia) é "ausente na folha" e conta na métrica; campo não determinado vai em `pendentes` e sai do denominador na referência (na predição, erro em campo pendente conta à parte). Classe de símbolo validada contra o inventário; `ESTRUTURA_POSTE_MT/AT` (símbolo do próprio poste) excluídas.
   - **R4, casamento de postes:** guloso determinístico (identificador igual primeiro, depois distância), limiares 0,02 e 0,05 no espaço normalizado da página, versionados em `PROTOCOLO_FICHA`; calibráveis na E03.
-  - Rodar `.\IniciarTestes.bat` no worktree antes de integrar.
-  - Respostas do usuário (2026-11-02): manter a branch sem integrar; R2 aceita (projeto promovido); formato v1 e R4 mantidos, com calibração na E03; etapa de atualização de dependências antes da E03 (D3).
+  - Rodar `.\IniciarTestes.bat` no worktree antes de integrar (feito pelo usuário em 2026-11-02, aprovado).
+  - Respostas do usuário (2026-11-02): R2 aceita (projeto promovido); formato v1 e R4 mantidos, com calibração na E03; etapa de atualização de dependências antes da E03 (D3, criada como E13). Integração: primeiro a branch foi mantida; depois do `.bat` aprovado, o usuário pediu a integração em `main` com push.
 - Notas para a próxima etapa:
   - Na E03, leia as chaves de diagnóstico da raiz da ficha predita com `.get(chave, 0)`: `postes_sem_geometria` e `simbolos_de_poste_fora_da_ficha` só aparecem quando maiores que 0; `equipamentos_sem_simbolo` conta também equipamento de poste sem geometria.
   - Um cabo com postes intermediários vira um vão só em `detectar_vaos` (comportamento do analisador): nas folhas reais, isso aparece como FN de vãos intermediários, não como erro do avaliador.
   - Fichas rotuladas a partir de texto copiado de PDF podem trazer U+200B/U+FEFF, que `strip()` não remove: normalize na rotulagem.
   - O caminho com OCR do CLI (sem `--native-only`) não tem teste no gate, porque exige Tesseract.
+
+---
+
+## E13 — Atualização de dependências vulneráveis — #pendente
+
+**Objetivo:** atualizar nos locks os pacotes com vulnerabilidade conhecida e versão corrigida disponível, sem mudar o comportamento do produto.
+
+**Por que agora:** decisão do usuário (D3). O servidor processa PDFs e imagens não confiáveis, e o lock do servidor fixa Pillow 12.2.0, com CVSS até 9.8. A E03 em diante roda o analisador sobre folhas reais.
+
+**Dependências:** E01.
+
+**Escopo:**
+- **Pacotes apontados pelo scanner em 2026-11-02**, por lock:
+  - `pillow` 12.2.0: `requirements-server.lock`, `requirements-development.lock` e `requirements-experiments.lock`;
+  - `mako` 1.3.12: server e development;
+  - `httpx2` 2.10.0: `requirements.lock` e development;
+  - `pytest` 8.4.2: `requirements.lock` e development;
+  - `setuptools` 80.10.2: `requirements.lock`, development e `requirements-client-build.lock`;
+  - `wheel` 0.45.1: client-build.
+- **Coerência:** limites em `pyproject.toml` (inclusive `[build-system]`) ajustados quando a versão corrigida estiver fora deles, e a mesma versão de cada pacote em todos os locks que o fixam.
+- Dependências transitivas só quando a versão nova exigir.
+- Pacote sem versão corrigida compatível fica registrado no handoff, com o advisory e o motivo.
+
+**Fora de escopo:**
+- atualizar pacotes sem vulnerabilidade apontada;
+- trocar bibliotecas;
+- dependências novas;
+- mudar comportamento do produto (se uma atualização mudar a saída da análise, ela entra com a versão do extrator incrementada, conforme o ADR 0006, ou fica de fora com registro).
+
+**Critérios de aceite:**
+
+- [ ] `osv-scanner scan source -L requirements.txt:<lock>` sobre os 6 `requirements*.lock` não lista vulnerabilidade com versão corrigida disponível em `pillow`, `mako`, `httpx2`, `pytest`, `setuptools` e `wheel`. Toda vulnerabilidade restante está no handoff, com o motivo.
+- [ ] `.venv/Scripts/python.exe -m pip check` → sem requisitos quebrados, com o ambiente reinstalado a partir de `requirements-development.lock`.
+- [ ] A imagem do servidor é construída a partir do `Dockerfile` com o `requirements-server.lock` atualizado.
+- [ ] `.venv/Scripts/python.exe scripts/client_artifact_gate.py --source-only` → aprovado.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:**
+
+- `cmd.exe //c IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+- `osv-scanner` nos 6 locks, com a saída anexada à revisão final.
+- `docker build` do `Dockerfile` (exige Docker; se o harness não puder rodar, o usuário roda e registra no handoff).
+
+**Revisão humana:** não
+
+**Notas para o plano:**
+- Os locks são listas de pinos mantidas à mão, sem gerador versionado. Há testes que leem os nomes dos locks (`tests/unit/test_project_scripts.py`).
+- `pyproject.toml` limita `Pillow<13`, `httpx2<2.11`, `pytest<9` e `setuptools<81` (este no `[build-system]`). Antes de alargar um limite, confira com `git log -S` por que ele foi posto.
+- O `osv-scanner -r .` não reconhece os `requirements-*.lock`: use `-L requirements.txt:<arquivo>` (nota da E01).
+- `pywinauto`, sem uso segundo a nota da E01, pode sair aqui se o plano provar que nada o usa. Senão, fica para a E09.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:**
+
+- Um salto de versão maior do Pillow muda raster, overlay ou exportação → os testes de raster e exportação do gate pegam a mudança. Mudança de saída da análise exige versão do extrator incrementada, ou o pacote fica na versão corrigida mais próxima.
+- A versão nova não tem wheel para a plataforma do servidor (Linux/Docker) ou do cliente (Windows) → o `docker build` e o `setup.bat` acusam. Escolha a menor versão corrigida com wheel.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
 
 ---
 
@@ -346,7 +414,7 @@ Bloco C — aprendizado
 
 **Por que agora:** sem a linha de base real não há como provar que a leitura vetorial melhora.
 
-**Dependências:** E02.
+**Dependências:** E02, E13.
 
 **Escopo:**
 - **Adaptação da curadoria:** a skill `curadoria-simbologia`, os agentes `curadoria-leitor-visual` e `curadoria-auditor-visual` e o contrato `docs/fluxo-curadoria-incremental-simbologia.md` passam a produzir a ficha do poste.
@@ -855,3 +923,4 @@ Bloco C — aprendizado
 ## Histórico de revisões
 
 - 2026-10-30 — roadmap criado a partir do design `2026-10-30-leitura-vetorial-por-poste-design.md`, com 12 etapas em três blocos.
+- 2026-11-02 — E13 (atualização de dependências vulneráveis) incluída antes da E03, por decisão do usuário (D3). A E03 passa a depender de E13.
