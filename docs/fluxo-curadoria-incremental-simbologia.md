@@ -733,3 +733,23 @@ Uma rodada pode terminar com pendências explícitas; elas não contam como reco
 impedem a rodada seguinte. A próxima rodada começa colocando mais PDFs em `examples/` e
 invocando `/curadoria-simbologia` de novo: ela parte da matriz publicada e reutiliza as
 referências dos PDFs inalterados.
+
+## Rodada de fichas do poste
+
+Numa rodada de fichas, cada PDF é lido por leitores visuais cegos que gravam a ficha do poste
+(formato de `docs/schemas/ficha-poste.schema.json`) em `RODADA/pdfs/ID/ficha/rascunho-LEITOR/ficha.json`,
+com `atributos_extras.leitura` (leitor, modelo, origem, tiles revisados e regiões ilegíveis).
+
+`validar` confere a leitura contra o esquema, o PDF da rodada e o índice de tiles, sem gravar nada:
+
+```bash
+.venv/Scripts/python.exe -m scripts.curation_ficha validar --rodada RODADA --pdf ID --leitor LEITOR --arquivo RODADA/pdfs/ID/ficha/rascunho-LEITOR/ficha.json
+```
+
+`congelar` valida de novo, grava a cópia imutável `leitura-LEITOR.json` com o SHA-256 em
+`congelamento.json` e recusa uma segunda leitura do mesmo leitor ou qualquer leitura depois da
+consolidação:
+
+```bash
+.venv/Scripts/python.exe -m scripts.curation_ficha congelar --rodada RODADA --pdf ID --leitor LEITOR --arquivo RODADA/pdfs/ID/ficha/rascunho-LEITOR/ficha.json
+```

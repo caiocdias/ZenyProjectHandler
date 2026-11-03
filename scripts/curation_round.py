@@ -193,7 +193,7 @@ def _relativo(alvo: Path, base: Path) -> str:
 
 
 @contextmanager
-def _trava(arquivo: Path, espera_s: float = ESPERA_TRAVA_S) -> Iterator[None]:
+def trava(arquivo: Path, espera_s: float = ESPERA_TRAVA_S) -> Iterator[None]:
     """Trava exclusiva por checkpoint (arquivo ``.lock`` criado com ``O_EXCL``)."""
     trava = arquivo.with_name(arquivo.name + ".lock")
     limite = time.monotonic() + espera_s
@@ -212,6 +212,10 @@ def _trava(arquivo: Path, espera_s: float = ESPERA_TRAVA_S) -> Iterator[None]:
         yield
     finally:
         trava.unlink(missing_ok=True)
+
+
+# Nome antigo, mantido porque os demais CLIs da curadoria o importam.
+_trava = trava
 
 
 # --- checkpoint de código ---------------------------------------------------------------
@@ -794,7 +798,7 @@ def transicionar(
     """
     raiz = Path(rodada_dir).resolve()
     arquivo = diretorio_pdf(raiz, pdf_id) / ARQUIVO_CHECKPOINT
-    with _trava(arquivo):
+    with trava(arquivo):
         checkpoint = _validar_checkpoint(ler_json(arquivo), pdf_id)
         validar_transicao(checkpoint, fase, nota=nota)
         registros = [registrar_artefato(raiz, Path(item)) for item in artefatos]

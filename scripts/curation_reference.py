@@ -549,12 +549,45 @@ def _tile_coberto(tile: Registro, contexto: _Contexto) -> bool:
     return contida_na_uniao(_caixa(tile["bbox"]), ilegiveis)
 
 
+def _ids_nao_cobertos(contexto: _Contexto) -> list[str]:
+    return [
+        tile_id
+        for tile_id, tile in contexto.tiles.items()
+        if tile["estado"] == "a_revisar" and not _tile_coberto(tile, contexto)
+    ]
+
+
+def tiles_nao_cobertos(
+    indice: Mapping[str, Any],
+    revisados: Iterable[str],
+    regioes_ilegiveis: Iterable[tuple[int, str, Sequence[float]]],
+) -> list[str]:
+    """Ids dos tiles ``a_revisar`` que não foram revisados nem estão cobertos por regiões ilegíveis.
+
+    ``regioes_ilegiveis`` são tuplas ``(pagina, camada, bbox)``. Um tile da camada anotada vale
+    como revisado quando o gêmeo da camada base foi revisado e a página tem as camadas iguais.
+    """
+    tiles = {str(tile["id"]): tile for tile in indice["tiles"]}
+    ilegiveis: dict[Chave, list[Caixa]] = defaultdict(list)
+    for pagina, camada, bbox in regioes_ilegiveis:
+        ilegiveis[(pagina, camada)].append(_caixa(bbox))
+    contexto = _Contexto(
+        tiles=tiles,
+        gemeos={(t["pagina"], t["camada"], t["linha"], t["coluna"]): i for i, t in tiles.items()},
+        paginas={int(pagina["pagina"]): pagina for pagina in indice["paginas"]},
+        revisados=set(revisados),
+        caixas_revisadas={},
+        caixas_ilegiveis=ilegiveis,
+        observacoes=set(),
+    )
+    return _ids_nao_cobertos(contexto)
+
+
 def _erros_cobertura(contexto: _Contexto) -> list[str]:
     return [
         f"escopo completo: tile a_revisar {tile_id} não foi revisado nem está coberto por "
         "regioes_ilegiveis"
-        for tile_id, tile in contexto.tiles.items()
-        if tile["estado"] == "a_revisar" and not _tile_coberto(tile, contexto)
+        for tile_id in _ids_nao_cobertos(contexto)
     ]
 
 
