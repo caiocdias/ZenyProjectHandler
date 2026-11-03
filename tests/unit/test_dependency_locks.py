@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tomllib
@@ -409,6 +411,12 @@ def test_nome_de_pacote_pywin32_ctypes_nao_e_confundido_com_pywin32(tmp_path: Pa
     assert "pywin32" not in _pinos(lock)
 
 
+def test_minversion_do_ini_do_pytest_e_a_versao_corrigida() -> None:
+    dados = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    opcoes = dados["tool"]["pytest"]["ini_options"]
+    assert opcoes.get("minversion") == VERSOES_CORRIGIDAS["pytest"]
+
+
 def test_pytest_instalado_no_ambiente_e_o_corrigido() -> None:
     assert Version(pytest.__version__) >= Version(VERSOES_CORRIGIDAS["pytest"])
 
@@ -637,19 +645,71 @@ def test_ambiente_de_teste_nao_tem_pkg_resources() -> None:
 _IMPORTA_PKG_RESOURCES = re.compile(r"(?m)^\s*(?:import|from)\s+pkg_resources\b")
 
 
-def test_codigo_do_projeto_nao_importa_pkg_resources() -> None:
-    arquivos = [
-        arquivo
-        for pasta in ("src", "scripts", "tests", "client", "server")
-        for arquivo in (ROOT / pasta).rglob("*.py")
-    ]
-    assert len(arquivos) > 100, "a varredura não encontrou o código: guarda vazia"
-    usos = [
-        str(arquivo.relative_to(ROOT))
+_PASTAS_DE_CODIGO = ("src", "scripts", "tests", "client", "server")
+
+
+def _py_versionados(raiz: Path) -> list[Path]:
+    """Liste os ``.py`` versionados (``git ls-files``) das pastas de código, ignorando build/."""
+    saida = subprocess.run(
+        ["git", "ls-files", "-z", "--", *_PASTAS_DE_CODIGO],
+        cwd=raiz,
+        capture_output=True,
+        check=True,
+    ).stdout
+    nomes = [n for n in saida.decode("utf-8").split("\0") if n.endswith(".py")]
+    return [raiz / nome for nome in nomes]
+
+
+def _usos_de_pkg_resources(arquivos: Iterable[Path], raiz: Path) -> list[str]:
+    return [
+        arquivo.relative_to(raiz).as_posix()
         for arquivo in arquivos
         if _IMPORTA_PKG_RESOURCES.search(arquivo.read_text(encoding="utf-8"))
     ]
-    assert usos == []
+
+
+def test_codigo_do_projeto_nao_importa_pkg_resources() -> None:
+    arquivos = _py_versionados(ROOT)
+    assert len(arquivos) > 100, "a varredura não encontrou o código: guarda vazia"
+    assert _usos_de_pkg_resources(arquivos, ROOT) == []
+
+
+def test_varredura_de_pkg_resources_ignora_py_nao_versionado_ou_fora_de_utf8(
+    tmp_path: Path,
+) -> None:
+    def git(*args: str) -> None:
+        subprocess.run(["git", *args], cwd=tmp_path, check=True, capture_output=True)
+
+    git("init", "-q")
+    (tmp_path / "src").mkdir()
+    (tmp_path / "build" / "lib").mkdir(parents=True)
+    (tmp_path / "src" / "ruim.py").write_text("import pkg_resources\n", encoding="utf-8")
+    (tmp_path / "src" / "bom.py").write_text("import os\n", encoding="utf-8")
+    git("add", "src")
+    (tmp_path / "src" / "nao_versionado.py").write_text("import pkg_resources\n", encoding="utf-8")
+    (tmp_path / "src" / "latin1.py").write_bytes("# açaí\nimport pkg_resources\n".encode("latin-1"))
+    (tmp_path / "build" / "lib" / "x.py").write_text("import pkg_resources\n", encoding="utf-8")
+
+    versionados = _py_versionados(tmp_path)
+
+    assert sorted(p.name for p in versionados) == ["bom.py", "ruim.py"]
+    assert _usos_de_pkg_resources(versionados, tmp_path) == ["src/ruim.py"]
+
+
+def test_py_nao_versionado_em_build_nao_afeta_o_teste_real() -> None:
+    intruso = ROOT / "build" / "lib" / "zz_intruso_pkg_resources.py"
+    existia = (ROOT / "build").exists()
+    intruso.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        intruso.write_bytes(b"import pkg_resources\n\xff\xfe")
+        test_codigo_do_projeto_nao_importa_pkg_resources()
+    finally:
+        intruso.unlink(missing_ok=True)
+        if not existia:
+            shutil.rmtree(ROOT / "build", ignore_errors=True)
+        else:
+            with contextlib.suppress(OSError):
+                intruso.parent.rmdir()
 
 
 @pytest.mark.parametrize(
