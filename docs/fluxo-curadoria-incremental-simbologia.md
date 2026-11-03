@@ -771,3 +771,15 @@ regiões de conferência e sem a leitura C congelada, só consolida com `--sem-t
 .venv/Scripts/python.exe -m scripts.curation_ficha consolidar --rodada RODADA --pdf ID
 .venv/Scripts/python.exe -m scripts.curation_ficha consolidar --rodada RODADA --pdf ID --sem-terceiro --motivo "MOTIVO"
 ```
+
+`baseline` mede o analisador vigente contra as `referencia.json` consolidadas e grava a próxima
+versão livre, sem sobrescrever: `pdfs/ID/ficha/baseline-vNNN/` (ficha predita e avaliação) e
+`fichas/baseline-vNNN-resumo.json` e `.md`, com o agregado por PDF e no total e os denominadores.
+Recusa PDF sem referência (salvo `--parcial`) e referência cujo SHA-256 difere do congelado. Sem
+`--native-only`, confere o OCR português antes do primeiro PDF. Falha do analisador num PDF fica
+registrada como falha, não como zero, e o comando termina com erro:
+
+```bash
+.venv/Scripts/python.exe -m scripts.curation_ficha baseline --rodada RODADA
+.venv/Scripts/python.exe -m scripts.curation_ficha baseline --rodada RODADA --native-only
+```

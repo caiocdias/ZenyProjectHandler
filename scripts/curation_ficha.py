@@ -5,6 +5,8 @@ Uso:
     python -m scripts.curation_ficha congelar --rodada DIR --pdf ID --leitor {a,b,c} --arquivo JSON
     python -m scripts.curation_ficha comparar --rodada DIR --pdf ID
     python -m scripts.curation_ficha consolidar --rodada DIR --pdf ID [--sem-terceiro --motivo T]
+    python -m scripts.curation_ficha baseline --rodada DIR [--pdf ID ...] [--native-only]
+        [--runtime-directory DIR] [--parcial]
 
 Cada leitor (IA) lê os tiles de ``render/`` de um PDF e grava uma ficha no formato de
 ``docs/schemas/ficha-poste.schema.json`` (``tipo = referencia``), com os metadados da leitura em
@@ -30,29 +32,43 @@ páginas da entrada do PDF em ``rodada.json``, e registra o SHA-256 em ``congela
 ``leitor = consolidada``. Havendo regiões de conferência sem a leitura ``c``, só consolida com
 ``--sem-terceiro`` e ``--motivo`` (gravado em ``consolidacao.motivo_sem_terceiro``). Nunca refaz
 uma referência consolidada.
+
+``baseline`` mede o analisador vigente (``scripts.benchmark_ficha_poste``) contra a
+``referencia.json`` de cada PDF selecionado (por padrão, todos da rodada) e grava a próxima versão
+livre: ``pdfs/ID/ficha/baseline-vNNN/`` (``ficha-predita.json`` e ``avaliacao.json``) e
+``fichas/baseline-vNNN-resumo.json``/``.md`` com o agregado por PDF e no total, sempre com os
+denominadores (taxas recalculadas das somas). Recusa PDF sem referência, salvo ``--parcial``, e
+referência cujo SHA-256 difere do registrado em ``congelamento.json``. Sem ``--native-only``,
+confere o OCR português antes do primeiro PDF. Falha do analisador num PDF fica registrada como
+``falha`` (não é zero) e o comando termina com código 1 depois de gravar o resumo.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
+from scripts.benchmark_ficha_poste import executar as executar_benchmark
 from scripts.curation_reference import contida_na_uniao, tiles_nao_cobertos
 from scripts.curation_render import carregar_indice
 from scripts.curation_round import (
     RodadaError,
+    caminho_pdf_fonte,
     carregar_rodada,
     diretorio_pdf,
     escrever_bytes_atomico,
     escrever_json_atomico,
     hash_arquivo,
     ler_json,
+    selecionar_pdfs,
     trava,
 )
 from scripts.ficha_leitura_dupla import (
@@ -62,6 +78,7 @@ from scripts.ficha_leitura_dupla import (
     regioes_de_conferencia,
 )
 from scripts.ficha_poste import validar_ficha
+from zeny_project_handler.adapters.analysis.tesseract_runtime import inspect_tesseract_runtime
 
 LEITORES = ("a", "b", "c")
 ESQUEMA_CONGELAMENTO = "curadoria-ficha-congelamento-v1"
@@ -73,6 +90,10 @@ ARQUIVO_REFERENCIA = "referencia.json"
 ARQUIVO_COMPARACAO = "comparacao.json"
 LEITOR_CONSOLIDADA = "consolidada"
 CAMADAS = ("base", "annotation")
+ESQUEMA_BASELINE = "curadoria-ficha-baseline-v1"
+DIRETORIO_FICHAS = "fichas"
+RUNTIME_PADRAO = Path("tmp/benchmark-runtime")
+NOME_BASELINE = re.compile(r"baseline-v(\d{3,})")
 
 Registro = dict[str, Any]
 
@@ -415,6 +436,262 @@ def comparar(rodada_dir: Path, pdf_id: str) -> Registro:
     return comparacao
 
 
+# --- baseline do analisador atual ----------------------------------------------------------
+
+
+def _taxa(numerador: int, denominador: int) -> float | None:
+    return numerador / denominador if denominador else None
+
+
+def _contagem_somada(blocos: Sequence[Mapping[str, Any]]) -> Registro:
+    tp, fp, fn = (sum(int(b[chave]) for b in blocos) for chave in ("tp", "fp", "fn"))
+    return {
+        "tp": tp,
+        "fp": fp,
+        "fn": fn,
+        "precisao": _taxa(tp, tp + fp),
+        "recall": _taxa(tp, tp + fn),
+    }
+
+
+def _taxa_somada(blocos: Sequence[Mapping[str, Any]]) -> Registro:
+    acertos = sum(int(b["acertos"]) for b in blocos)
+    total = sum(int(b["total"]) for b in blocos)
+    return {"acertos": acertos, "total": total, "taxa": _taxa(acertos, total)}
+
+
+def _bloco_agregado(relatorios: Sequence[Mapping[str, Any]]) -> Registro:
+    """Soma as contagens dos relatórios e recalcula as taxas (nunca média de taxas)."""
+    campos = sorted({campo for r in relatorios for campo in r["campos"]})
+    vaos = [r["vaos"] for r in relatorios]
+    return {
+        "postes": _contagem_somada([r["postes"] for r in relatorios]),
+        "campos": {
+            campo: _taxa_somada([r["campos"][campo] for r in relatorios if campo in r["campos"]])
+            for campo in campos
+        },
+        "vaos": {
+            **_contagem_somada(vaos),
+            "comprimento": _taxa_somada([v["comprimento"] for v in vaos]),
+            "cabo": _taxa_somada([v["cabo"] for v in vaos]),
+        },
+        "simbolos": _contagem_somada([r["simbolos"] for r in relatorios]),
+        "distancias_casamento": sorted(
+            float(p["distancia"]) for r in relatorios for p in r["pares"]
+        ),
+    }
+
+
+def agregar_avaliacoes(avaliacoes: Mapping[str, Mapping[str, Any] | None]) -> Registro:
+    """Agrega relatórios de ``avaliar`` por PDF e no total (``None`` = sem referência).
+
+    Um PDF sem referência ou com falha do analisador aparece no ``por_pdf`` com sua situação e
+    fica fora do total: ausência de medida não é zero.
+    """
+    por_pdf: Registro = {}
+    medidos: list[Mapping[str, Any]] = []
+    for pdf_id, avaliacao in avaliacoes.items():
+        if avaliacao is None:
+            por_pdf[pdf_id] = {"situacao": "sem_referencia"}
+        elif "situacao" in avaliacao:
+            por_pdf[pdf_id] = dict(avaliacao)
+        else:
+            por_pdf[pdf_id] = _bloco_agregado([avaliacao])
+            medidos.append(avaliacao)
+    return {"por_pdf": por_pdf, "total": _bloco_agregado(medidos)}
+
+
+def _pdfs_do_baseline(rodada_dir: Path, pdf_ids: Sequence[str]) -> list[str]:
+    if pdf_ids:
+        return selecionar_pdfs(rodada_dir, pdf_ids=pdf_ids)
+    return [str(entrada["pdf_id"]) for entrada in carregar_rodada(rodada_dir)["pdfs"]]
+
+
+def _conferir_referencia(rodada_dir: Path, pdf_id: str) -> Path:
+    """``referencia.json`` do PDF, conferida contra o sha256 registrado no congelamento."""
+    pasta = diretorio_ficha(rodada_dir, pdf_id)
+    item = next(
+        (i for i in _manifesto(pasta)["itens"] if i.get("leitor") == LEITOR_CONSOLIDADA), None
+    )
+    referencia = pasta / ARQUIVO_REFERENCIA
+    if item is None:
+        raise ValueError(f"referência de {pdf_id} sem registro de congelamento")
+    if hash_arquivo(referencia) != item.get("sha256"):
+        raise ValueError(f"referência de {pdf_id} adulterada: sha256 difere do registrado")
+    return referencia
+
+
+def _referencias_do_baseline(
+    rodada_dir: Path, pdf_ids: Sequence[str], *, parcial: bool
+) -> dict[str, Path | None]:
+    sem_referencia = [
+        pdf_id
+        for pdf_id in pdf_ids
+        if not (diretorio_ficha(rodada_dir, pdf_id) / ARQUIVO_REFERENCIA).is_file()
+    ]
+    if sem_referencia and not parcial:
+        raise ValueError(
+            f"{ARQUIVO_REFERENCIA} ausente para: {', '.join(sem_referencia)}; "
+            "consolide antes ou use --parcial"
+        )
+    return {
+        pdf_id: None if pdf_id in sem_referencia else _conferir_referencia(rodada_dir, pdf_id)
+        for pdf_id in pdf_ids
+    }
+
+
+def _exigir_ocr(runtime_directory: Path) -> None:
+    runtime = inspect_tesseract_runtime(runtime_directory)
+    if not runtime.portugues_pronto:
+        raise ValueError(f"OCR português obrigatório: {runtime.diagnostico}")
+
+
+def _proxima_versao_baseline(rodada_dir: Path, pdf_ids: Sequence[str]) -> int:
+    nomes = [p.name for p in (rodada_dir / DIRETORIO_FICHAS).glob("baseline-v*-resumo.json")]
+    nomes += [
+        p.name
+        for pdf_id in pdf_ids
+        for p in diretorio_ficha(rodada_dir, pdf_id).glob("baseline-v*")
+    ]
+    numeros = [int(m.group(1)) for nome in nomes if (m := NOME_BASELINE.match(nome))]
+    return max(numeros, default=0) + 1
+
+
+def _sanear(texto: str, *raizes: Path) -> str:
+    linha = (texto.strip().splitlines() or ["sem detalhe"])[0]
+    for raiz in raizes:
+        for marca in {str(raiz), raiz.as_posix()}:
+            linha = linha.replace(marca, "<caminho>")
+    return linha
+
+
+def _medir_pdf(
+    rodada_dir: Path,
+    pdf_id: str,
+    referencia: Path,
+    saida: Path,
+    *,
+    native_only: bool,
+    runtime_directory: Path,
+) -> Registro:
+    pdf = caminho_pdf_fonte(rodada_dir, pdf_id)
+    try:
+        return executar_benchmark(
+            pdf,
+            referencia,
+            saida,
+            native_only=native_only,
+            runtime_directory=runtime_directory,
+        )
+    except Exception as erro:
+        return {"situacao": "falha", "erro": _sanear(str(erro), pdf.parent, rodada_dir.resolve())}
+
+
+def _versao_instalada(pacote: str) -> str | None:
+    try:
+        return version(pacote)
+    except PackageNotFoundError:
+        return None
+
+
+def _gerador_do_baseline(pastas: Sequence[Path]) -> Registro | None:
+    for pasta in pastas:
+        arquivo = pasta / "ficha-predita.json"
+        if arquivo.is_file():
+            gerador = ler_json(arquivo).get("gerador")
+            return gerador if isinstance(gerador, dict) else None
+    return None
+
+
+def _percentual(parte: int, todo: int) -> str:
+    return f"{parte}/{todo}" + (f" ({parte / todo:.1%})" if todo else " (n/d)")
+
+
+def _linha_baseline(rotulo: str, bloco: Mapping[str, Any]) -> str:
+    if "situacao" in bloco:
+        return f"| {rotulo} | {bloco['situacao']} | | | | | |"
+    postes, vaos, simbolos = bloco["postes"], bloco["vaos"], bloco["simbolos"]
+    colunas = (
+        _percentual(postes["tp"], postes["tp"] + postes["fn"]),
+        _percentual(postes["tp"], postes["tp"] + postes["fp"]),
+        _percentual(vaos["tp"], vaos["tp"] + vaos["fn"]),
+        _percentual(vaos["comprimento"]["acertos"], vaos["comprimento"]["total"]),
+        _percentual(vaos["cabo"]["acertos"], vaos["cabo"]["total"]),
+        _percentual(simbolos["tp"], simbolos["tp"] + simbolos["fn"]),
+    )
+    return f"| {rotulo} | medido | " + " | ".join(colunas) + " |"
+
+
+def _markdown_baseline(resumo: Mapping[str, Any]) -> str:
+    linhas = [
+        f"# {resumo['versao']}",
+        "",
+        f"Parcial: {'sim' if resumo['parcial'] else 'não'}. Todas as taxas são acertos/total.",
+        "",
+        "| PDF | Situação | Recall de postes | Precisão de postes | Recall de vãos "
+        "| Comprimento | Cabo | Recall de símbolos |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    linhas += [_linha_baseline(pdf_id, bloco) for pdf_id, bloco in resumo["por_pdf"].items()]
+    linhas.append(_linha_baseline("TOTAL", resumo["total"]))
+    linhas += ["", "## Campos do poste (total)", "", "| Campo | Acertos |", "|---|---|"]
+    linhas += [
+        f"| {campo} | {_percentual(bloco['acertos'], bloco['total'])} |"
+        for campo, bloco in resumo["total"]["campos"].items()
+    ]
+    return "\n".join(linhas) + "\n"
+
+
+def baseline(
+    rodada_dir: Path,
+    pdf_ids: Sequence[str] = (),
+    *,
+    native_only: bool = False,
+    runtime_directory: Path = RUNTIME_PADRAO,
+    parcial: bool = False,
+) -> Registro:
+    """Mede o analisador atual contra as referências e grava a próxima ``baseline-vNNN``."""
+    selecionados = _pdfs_do_baseline(rodada_dir, pdf_ids)
+    referencias = _referencias_do_baseline(rodada_dir, selecionados, parcial=parcial)
+    if not native_only:
+        _exigir_ocr(runtime_directory)
+    pasta_fichas = rodada_dir / DIRETORIO_FICHAS
+    pasta_fichas.mkdir(parents=True, exist_ok=True)
+    with trava(pasta_fichas / "baseline"):
+        nome = f"baseline-v{_proxima_versao_baseline(rodada_dir, selecionados):03d}"
+        saidas = {p: diretorio_ficha(rodada_dir, p) / nome for p in selecionados}
+        avaliacoes = {
+            pdf_id: None
+            if referencia is None
+            else _medir_pdf(
+                rodada_dir,
+                pdf_id,
+                referencia,
+                saidas[pdf_id],
+                native_only=native_only,
+                runtime_directory=runtime_directory,
+            )
+            for pdf_id, referencia in referencias.items()
+        }
+        resumo: Registro = {
+            "schema_version": ESQUEMA_BASELINE,
+            "versao": nome,
+            "opcoes": {"native_only": native_only, "pdfs": selecionados},
+            "parcial": parcial,
+            "versoes": {
+                "pillow": _versao_instalada("pillow"),
+                "pymupdf": _versao_instalada("pymupdf"),
+            },
+            "gerador": _gerador_do_baseline(list(saidas.values())),
+            **agregar_avaliacoes(avaliacoes),
+        }
+        escrever_json_atomico(pasta_fichas / f"{nome}-resumo.json", resumo)
+        escrever_bytes_atomico(
+            pasta_fichas / f"{nome}-resumo.md", _markdown_baseline(resumo).encode("utf-8")
+        )
+    return resumo
+
+
 # --- CLI ----------------------------------------------------------------------------------
 
 
@@ -442,6 +719,14 @@ def _parser() -> argparse.ArgumentParser:
     comando.add_argument("--pdf", required=True)
     comando.add_argument("--sem-terceiro", action="store_true")
     comando.add_argument("--motivo")
+    comando = sub.add_parser(
+        "baseline", help="mede o analisador atual contra as referências consolidadas"
+    )
+    comando.add_argument("--rodada", type=Path, required=True)
+    comando.add_argument("--pdf", action="append", default=[])
+    comando.add_argument("--native-only", action="store_true")
+    comando.add_argument("--runtime-directory", type=Path, default=RUNTIME_PADRAO)
+    comando.add_argument("--parcial", action="store_true")
     return parser
 
 
@@ -469,7 +754,27 @@ def _imprimir_consolidacao(referencia: Mapping[str, Any]) -> None:
     print(f"escopo: {referencia['escopo_anotacao']['tipo']}")
 
 
+def _imprimir_baseline(resumo: Mapping[str, Any]) -> int:
+    falhas = [p for p, b in resumo["por_pdf"].items() if b.get("situacao") == "falha"]
+    postes = resumo["total"]["postes"]
+    print(f"{'erro' if falhas else 'ok'}: {resumo['versao']} gravado")
+    print(f"postes: tp={postes['tp']} fp={postes['fp']} fn={postes['fn']}")
+    for pdf_id in falhas:
+        print(f"erro: falha do analisador em {pdf_id}", file=sys.stderr)
+    return 1 if falhas else 0
+
+
 def _executar(args: argparse.Namespace) -> int:
+    if args.comando == "baseline":
+        return _imprimir_baseline(
+            baseline(
+                args.rodada,
+                args.pdf,
+                native_only=args.native_only,
+                runtime_directory=args.runtime_directory,
+                parcial=args.parcial,
+            )
+        )
     if args.comando == "consolidar":
         referencia = consolidar_referencia(
             args.rodada, args.pdf, sem_terceiro=args.sem_terceiro, motivo=args.motivo
