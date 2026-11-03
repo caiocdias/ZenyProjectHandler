@@ -1,13 +1,19 @@
-"""Leitura dupla cega de fichas do poste: comparação das leituras A e B e regiões de conferência.
+"""Leitura dupla cega de fichas do poste: comparação, regiões de conferência e consolidação.
 
 Dois leitores (A e B) leem a mesma folha sem ver um ao outro. ``comparar_leituras`` casa as duas
 fichas com as regras do avaliador (``scripts.ficha_poste_avaliador``) e lista cada divergência com
 a página e a caixa a reler; ``regioes_de_conferencia`` funde essas caixas por página no que o
 terceiro leitor (C) recebe: só ``id``, ``pagina`` e ``bbox``, nunca valores. Os ids de divergência
-seguem a ficha A; poste que só B traz aparece como ``"b-" + id`` (a mesma regra da consolidação).
-Se algum ``"b-" + id`` coincidir com um id de A, o prefixo ``"b-"`` é repetido (``"b-b-"``, …)
-até nenhum id só de B prefixado coincidir com id de A; o prefixo escolhido vale para todos os
-postes só de B daquela comparação, e assim os ids continuam inequívocos.
+seguem a ficha A; poste que só B traz aparece como ``prefixo_so_b(...) + id``: ``"b-"``, repetido
+(``"b-b-"``, …) até nenhum id só de B prefixado coincidir com id de A; o prefixo escolhido vale
+para todos os postes só de B daquela comparação, e assim os ids continuam inequívocos.
+
+``consolidar`` monta a ficha de referência a partir de A, B e (opcional) C sem palpite: o que A e
+B concordam entra; o que divergem só entra quando C confirma um dos dois; o resto fica pendente
+(campo) ou sai do escopo (zona excluída). A consolidação não lê ids da comparação: recalcula os
+postes casados, o prefixo dos postes só de B e a ordem dos vãos de cada par com as mesmas funções
+(``prefixo_so_b`` e ``vaos_do_par_em_ordem``), e recusa uma comparação que não seja a das
+leituras recebidas; assim os ids e índices da comparação e da referência coincidem.
 Puro, sem E/S, e independente da ordem das listas de entrada.
 """
 
@@ -18,16 +24,16 @@ from collections import Counter
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any, Final
 
+from scripts.ficha_poste import validar_ficha
 from scripts.ficha_poste_avaliador import (
     CAMPOS_DO_POSTE,
-    PROTOCOLO_FICHA,
+    atributo_do_vao_acerta,
     avaliar,
     campo_acerta,
     casar_postes,
     casar_simbolos,
     casar_vaos_do_par,
     normalizar_texto,
-    numeros_iguais,
 )
 from scripts.symbol_benchmark_evaluator import geometry_match
 
@@ -80,7 +86,7 @@ def _sobrepoe(c1: Sequence[float], c2: Sequence[float]) -> bool:
 # --- leituras casadas ----------------------------------------------------------------------------
 
 
-def _prefixo_so_b(ids_a: Iterable[str], ids_so_b: Iterable[str]) -> str:
+def prefixo_so_b(ids_a: Iterable[str], ids_so_b: Iterable[str]) -> str:
     """Menor repetição de ``"b-"`` que, aplicada a todo id só de B, não coincide com id de A."""
     ocupados = set(ids_a)
     candidatos = list(ids_so_b)
@@ -94,7 +100,7 @@ class _Leituras:
     """Postes de A e B casados, indexados pelo id no espaço de A.
 
     Poste casado usa o id de A; poste só de B usa ``prefixo + id``, com o prefixo de
-    ``_prefixo_so_b`` (``"b-"``, repetido o mínimo para não coincidir com nenhum id de A). O
+    ``prefixo_so_b`` (``"b-"``, repetido o mínimo para não coincidir com nenhum id de A). O
     mesmo prefixo vale para todos os postes só de B, de modo que as chaves continuam únicas.
     """
 
@@ -103,7 +109,7 @@ class _Leituras:
         self.por_a = {poste["id"]: poste for poste in a["postes"]}
         self.por_b = {poste["id"]: poste for poste in b["postes"]}
         self.b_para_a = {id_b: id_a for id_a, id_b, _ in self.casados}
-        self.prefixo_so_b = _prefixo_so_b(self.por_a, self.so_b())
+        self.prefixo_so_b = prefixo_so_b(self.por_a, self.so_b())
         a_para_b = {id_a: id_b for id_a, id_b, _ in self.casados}
         self.postes: dict[str, list[Registro]] = {}
         for id_a, poste in self.por_a.items():
@@ -217,15 +223,6 @@ def _divergencia_de_simbolos(pa: Registro, pb: Registro) -> dict[str, Any]:
 # --- vãos ----------------------------------------------------------------------------------------
 
 
-def _atributo_igual(atributo: str, va: Registro, vb: Registro) -> bool:
-    if atributo == "cabo":
-        return normalizar_texto(va["cabo"]) == normalizar_texto(vb["cabo"])
-    x, y = va["comprimento_m"], vb["comprimento_m"]
-    if x is None or y is None:
-        return x is None and y is None
-    return numeros_iguais(x, y, PROTOCOLO_FICHA["tolerancia_comprimento_m"])
-
-
 def _ordem_vao(vao: Registro) -> tuple[str, str, str, str, tuple[str, ...]]:
     return (
         vao["de"],
@@ -234,6 +231,25 @@ def _ordem_vao(vao: Registro) -> tuple[str, str, str, str, tuple[str, ...]]:
         vao["cabo"] or "",
         tuple(sorted(vao["pendentes"])),
     )
+
+
+VaosEmOrdem = tuple[list[tuple[Registro, Registro]], list[Registro], list[Registro]]
+
+
+def vaos_do_par_em_ordem(refs: Sequence[Registro], preds: Sequence[Registro]) -> VaosEmOrdem:
+    """Vãos de um par de postes na ordem dos índices: ``(casados, sobra_refs, sobra_preds)``.
+
+    ``casados`` segue a ordem de ``casar_vaos_do_par`` e o índice de um vão casado é a posição
+    nessa lista. As sobras de cada lado vêm numa ordem determinística única e o índice de uma
+    sobra é ``len(casados) + posição`` na sua lista. ``comparar_leituras`` e ``consolidar`` usam
+    esta função, de modo que um índice aponta o mesmo vão nos dois.
+    """
+    casados = casar_vaos_do_par(refs, preds)
+    usados_refs = {id(ref) for ref, _ in casados}
+    usados_preds = {id(pred) for _, pred in casados}
+    sobra_refs = sorted((v for v in refs if id(v) not in usados_refs), key=_ordem_vao)
+    sobra_preds = sorted((v for v in preds if id(v) not in usados_preds), key=_ordem_vao)
+    return casados, sobra_refs, sobra_preds
 
 
 def _agrupar_vaos(
@@ -278,16 +294,12 @@ class _VaosDoPar:
             )
             for indice, (va, vb) in enumerate(casados)
             for atributo in ATRIBUTOS_DO_VAO
-            if _diverge(atributo, va, vb, _atributo_igual(atributo, va, vb))
+            if _diverge(atributo, va, vb, atributo_do_vao_acerta(atributo, va, vb))
         ]
 
     def comparar(self, refs: Sequence[Registro], preds: Sequence[Registro]) -> list[dict[str, Any]]:
-        casados = casar_vaos_do_par(refs, preds)
+        casados, sobra_a, sobra_b = vaos_do_par_em_ordem(refs, preds)
         divergencias = self.atributos(casados)
-        usados_a = {id(va) for va, _ in casados}
-        usados_b = {id(vb) for _, vb in casados}
-        sobra_a = sorted((v for v in refs if id(v) not in usados_a), key=_ordem_vao)
-        sobra_b = sorted((v for v in preds if id(v) not in usados_b), key=_ordem_vao)
         traduzir = self.leituras.chave_de_b
         divergencias.extend(
             self.divergencia("vao_so_a", len(casados) + j, (v["de"], v["para"]), (v["cabo"], None))
@@ -392,3 +404,364 @@ def regioes_de_conferencia(comparacao: Mapping[str, Any]) -> list[dict[str, Any]
         {"id": f"r{numero:03d}", "pagina": pagina, "bbox": list(caixa)}
         for numero, (pagina, caixa) in enumerate(regioes, start=1)
     ]
+
+
+# --- consolidação --------------------------------------------------------------------------------
+
+ZONA_POSTE_DISPUTADO: Final = "poste_disputado"
+ZONA_VAO_DISPUTADO: Final = "vao_disputado"
+ZONA_ILEGIVEL: Final = "ilegivel"
+_PAGINA_INTEIRA: Final[Caixa] = (0.0, 0.0, 1.0, 1.0)
+
+Acerta = Callable[[str, Registro, Registro], bool]
+Zona = tuple[int, Caixa, str]
+
+
+def _simbolos_acertam(_campo: str, x: Registro, y: Registro) -> bool:
+    """Os símbolos dos dois postes casam por inteiro (``casar_simbolos``)."""
+    donos = casar_simbolos(x["simbolos"], y["simbolos"])
+    return len(donos) == len(x["simbolos"]) == len(y["simbolos"])
+
+
+_REGRA_DO_CAMPO: Final[Mapping[str, Acerta]] = {
+    **dict.fromkeys(CAMPOS_DO_POSTE, campo_acerta),
+    "simbolos": _simbolos_acertam,
+    **dict.fromkeys(ATRIBUTOS_DO_VAO, atributo_do_vao_acerta),
+}
+_CAMPOS_CONSOLIDADOS_DO_POSTE: Final = (*CAMPOS_DO_POSTE, "simbolos")
+
+
+def _valor_nulo(campo: str) -> Any:
+    return [] if campo in ("estruturas", "simbolos") else None
+
+
+def _centro(poste: Registro) -> tuple[float, float]:
+    x0, y0, x1, y1 = poste["bbox"]
+    return (x0 + x1) / 2, (y0 + y1) / 2
+
+
+def _no_retangulo(ponto: tuple[float, float], caixa: Sequence[float]) -> bool:
+    return caixa[0] <= ponto[0] <= caixa[2] and caixa[1] <= ponto[1] <= caixa[3]
+
+
+def _em_alguma(poste: Registro, regioes: Iterable[Registro]) -> bool:
+    centro = _centro(poste)
+    return any(
+        int(regiao["pagina"]) == int(poste["pagina"]) and _no_retangulo(centro, regiao["bbox"])
+        for regiao in regioes
+    )
+
+
+def _regioes_ilegiveis(leitura: Registro) -> list[Registro]:
+    extras = leitura.get("atributos_extras") or {}
+    metadados = extras.get("leitura") or {}
+    return list(metadados.get("regioes_ilegiveis") or [])
+
+
+class _Terceiro:
+    """Leitura C casada às leituras A e B: poste e vãos de C por chave, e cobertura de C.
+
+    C casa primeiro com A (``casar_postes``); os postes de C que sobram casam com os de B ainda
+    sem C. ``cobre`` vale para postes cujos centros estão numa região de C e fora das
+    ``regioes_ilegiveis`` de C; sem C, nada é coberto.
+    """
+
+    def __init__(self, c: Registro | None, leituras: _Leituras) -> None:
+        self.existe = c is not None
+        self.poste: dict[str, Registro] = {}
+        self.vaos: dict[tuple[str, ...], list[Registro]] = {}
+        self.regioes: list[Registro] = []
+        self.ilegiveis: list[Registro] = []
+        self.completo = False
+        if c is not None:
+            self._casar(c, leituras)
+            escopo = c["escopo_anotacao"]
+            self.completo = escopo["tipo"] == "completo"
+            self.regioes = list(escopo.get("regioes") or [])
+            self.ilegiveis = _regioes_ilegiveis(c)
+
+    def _casar(self, c: Registro, leituras: _Leituras) -> None:
+        por_c = {poste["id"]: poste for poste in c["postes"]}
+        for id_a, id_c, _ in casar_postes(list(leituras.por_a.values()), c["postes"]):
+            self.poste[id_a] = por_c[id_c]
+        usados = {poste["id"] for poste in self.poste.values()}
+        restantes_b = [
+            poste
+            for poste in leituras.por_b.values()
+            if leituras.chave_de_b(poste["id"]) not in self.poste
+        ]
+        restantes_c = [poste for poste in c["postes"] if poste["id"] not in usados]
+        for id_b, id_c, _ in casar_postes(restantes_b, restantes_c):
+            self.poste[leituras.chave_de_b(id_b)] = por_c[id_c]
+        chave_de_c = {poste["id"]: chave for chave, poste in self.poste.items()}
+        vaos = [v for v in c["vaos"] if v["de"] in chave_de_c and v["para"] in chave_de_c]
+        self.vaos = _agrupar_vaos(vaos, chave_de_c.__getitem__)
+
+    def cobre(self, *postes: Registro) -> bool:
+        return self.existe and all(
+            (self.completo or _em_alguma(poste, self.regioes))
+            and not _em_alguma(poste, self.ilegiveis)
+            for poste in postes
+        )
+
+
+class _Consolidacao:
+    """Aplica as regras de consolidação e acumula as contagens e as zonas excluídas."""
+
+    def __init__(self, a: Registro, b: Registro, c: Registro | None) -> None:
+        self.leituras = _Leituras(a, b)
+        self.terceiro = _Terceiro(c, self.leituras)
+        self.contagem = dict.fromkeys(
+            ("resolvidas_por_c", "pendentes", "descartadas_por_maioria", "nao_cobertas_por_c"), 0
+        )
+        self.zonas: set[Zona] = set()
+        self.postes: dict[str, dict[str, Any]] = {}
+        self.de_b = {id(poste) for poste in b["postes"]}
+        self.prefixo_simbolos_b = prefixo_so_b(
+            (s["id"] for poste in a["postes"] for s in poste["simbolos"]),
+            [s["id"] for poste in b["postes"] for s in poste["simbolos"]],
+        )
+
+    # regras 1 e 2: de quem vem o valor do campo (None = pendente)
+    def _origem(
+        self, campo: str, x: Registro, y: Registro, terceiro: Registro | None, cobre: bool
+    ) -> Registro | None:
+        acerta = _REGRA_DO_CAMPO[campo]
+        if campo in x["pendentes"] and campo in y["pendentes"]:
+            return None
+        if not _diverge(campo, x, y, acerta(campo, x, y)):
+            return x
+        if cobre and terceiro is not None and campo not in terceiro["pendentes"]:
+            for leitura in (x, y):
+                if campo not in leitura["pendentes"] and acerta(campo, leitura, terceiro):
+                    self.contagem["resolvidas_por_c"] += 1
+                    return leitura
+        self.contagem["pendentes"] += 1
+        if not cobre:
+            self.contagem["nao_cobertas_por_c"] += 1
+        return None
+
+    def _valor(self, campo: str, origem: Registro) -> Any:
+        if campo != "simbolos":
+            return copy.deepcopy(origem[campo])
+        prefixo = self.prefixo_simbolos_b if id(origem) in self.de_b else ""
+        simbolos = [{**copy.deepcopy(s), "id": prefixo + s["id"]} for s in origem["simbolos"]]
+        return sorted(simbolos, key=lambda simbolo: str(simbolo["id"]))
+
+    def _resolvido(
+        self,
+        campos: Sequence[str],
+        x: Registro,
+        y: Registro,
+        terceiro: Registro | None,
+        cobre: bool,
+    ) -> dict[str, Any]:
+        registro = copy.deepcopy(dict(x))
+        pendentes: list[str] = []
+        for campo in campos:
+            origem = self._origem(campo, x, y, terceiro, cobre)
+            if origem is None:
+                registro[campo] = _valor_nulo(campo)
+                pendentes.append(campo)
+            else:
+                registro[campo] = self._valor(campo, origem)
+        registro["pendentes"] = pendentes
+        return registro
+
+    def _excluir(self, poste: Registro, motivo: str) -> None:
+        caixa = _com_margem(_envolvente([poste["bbox"]]), MARGEM_CONFERENCIA)
+        self.zonas.add((int(poste["pagina"]), _envolvente([caixa]), motivo))
+
+    # regra 3: postes
+    def _poste(
+        self, chave: str, x: Registro, y: Registro, terceiro: Registro | None, cobre: bool
+    ) -> None:
+        poste = self._resolvido(_CAMPOS_CONSOLIDADOS_DO_POSTE, x, y, terceiro, cobre)
+        poste["id"] = chave
+        self.postes[chave] = poste
+
+    def _poste_de_um_leitor(self, chave: str, x: Registro) -> None:
+        poste_c = self.terceiro.poste.get(chave)
+        if poste_c is not None:
+            self._poste(chave, x, poste_c, None, True)
+        elif self.terceiro.cobre(x):
+            self.contagem["descartadas_por_maioria"] += 1
+        else:
+            self._excluir(x, ZONA_POSTE_DISPUTADO)
+
+    def consolidar_postes(self) -> None:
+        leituras = self.leituras
+        for id_a, id_b, _ in leituras.casados:
+            pa = leituras.por_a[id_a]
+            terceiro = self.terceiro.poste.get(id_a)
+            self._poste(id_a, pa, leituras.por_b[id_b], terceiro, self.terceiro.cobre(pa))
+        for id_a in leituras.so_a():
+            self._poste_de_um_leitor(id_a, leituras.por_a[id_a])
+        for id_b in leituras.so_b():
+            self._poste_de_um_leitor(leituras.chave_de_b(id_b), leituras.por_b[id_b])
+
+    # regra 4: vãos
+    def _parceiros_em_c(
+        self, chave: tuple[str, ...], vaos_a: Sequence[Registro], sobra_b: Sequence[Registro]
+    ) -> dict[int, Registro]:
+        """Vão de C casado a cada vão de A e, entre os vãos de C que sobram, a cada sobra de B."""
+        vaos_c = self.terceiro.vaos.get(chave, [])
+        parceiros = {id(va): vc for va, vc in casar_vaos_do_par(vaos_a, vaos_c)}
+        usados = {id(vc) for vc in parceiros.values()}
+        restantes = [vc for vc in vaos_c if id(vc) not in usados]
+        parceiros.update({id(vb): vc for vb, vc in casar_vaos_do_par(sobra_b, restantes)})
+        return parceiros
+
+    def _vao(
+        self,
+        extremos: tuple[str, str],
+        x: Registro,
+        y: Registro,
+        terceiro: Registro | None,
+        cobre: bool,
+    ) -> dict[str, Any]:
+        vao = self._resolvido(ATRIBUTOS_DO_VAO, x, y, terceiro, cobre)
+        vao["de"], vao["para"] = extremos
+        return vao
+
+    def _vaos_do_par(
+        self, chave: tuple[str, ...], vaos_a: Sequence[Registro], vaos_b: Sequence[Registro]
+    ) -> list[dict[str, Any]]:
+        casados, sobra_a, sobra_b = vaos_do_par_em_ordem(vaos_a, vaos_b)
+        parceiros = self._parceiros_em_c(chave, vaos_a, sobra_b)
+        postes = [self.postes[extremo] for extremo in chave]
+        cobre = self.terceiro.cobre(*postes)
+        traduzir = self.leituras.chave_de_b
+        vaos = [
+            self._vao((va["de"], va["para"]), va, vb, parceiros.get(id(va)), cobre)
+            for va, vb in casados
+        ]
+        sobras = [((v["de"], v["para"]), v) for v in sobra_a]
+        sobras.extend(((traduzir(v["de"]), traduzir(v["para"])), v) for v in sobra_b)
+        for extremos, vao in sobras:
+            vao_c = parceiros.get(id(vao))
+            if vao_c is not None:
+                vaos.append(self._vao(extremos, vao, vao_c, None, True))
+            elif cobre:
+                self.contagem["descartadas_por_maioria"] += 1
+            else:
+                for poste in postes:
+                    self._excluir(poste, ZONA_VAO_DISPUTADO)
+        return vaos
+
+    def consolidar_vaos(self, a: Registro, b: Registro) -> list[dict[str, Any]]:
+        grupos_a = _agrupar_vaos(a["vaos"], lambda id_a: id_a)
+        grupos_b = _agrupar_vaos(b["vaos"], self.leituras.chave_de_b)
+        vaos: list[dict[str, Any]] = []
+        for chave in sorted(set(grupos_a) | set(grupos_b)):
+            if all(extremo in self.postes for extremo in chave):
+                vaos_a, vaos_b = grupos_a.get(chave, []), grupos_b.get(chave, [])
+                vaos.extend(self._vaos_do_par(chave, vaos_a, vaos_b))
+        return vaos
+
+    # regra 5: regiões ilegíveis de A e B
+    def excluir_ilegiveis(self, *leituras: Registro) -> None:
+        for leitura in leituras:
+            for regiao in _regioes_ilegiveis(leitura):
+                caixa = _envolvente([[float(v) for v in regiao["bbox"]]])
+                self.zonas.add((int(regiao["pagina"]), caixa, ZONA_ILEGIVEL))
+
+
+def _subtrair(caixa: Caixa, zona: Caixa) -> list[Caixa]:
+    """``caixa`` menos ``zona``: até 4 retângulos disjuntos (esquerda, direita, acima, abaixo)."""
+    if not _sobrepoe(caixa, zona):
+        return [caixa]
+    x0, y0, x1, y1 = caixa
+    z0, w0, z1, w1 = zona
+    meio0, meio1 = max(x0, z0), min(x1, z1)
+    pedacos = [(x0, y0, z0, y1), (z1, y0, x1, y1), (meio0, y0, meio1, w0), (meio0, w1, meio1, y1)]
+    return [p for p in pedacos if p[0] < p[2] and p[1] < p[3]]
+
+
+def _escopo(zonas: Sequence[Zona], paginas: int) -> dict[str, Any]:
+    """Regra 6: sem zonas, ``completo``; com zonas, cada página menos as zonas dela."""
+    if not zonas:
+        return {"tipo": "completo"}
+    regioes: list[dict[str, Any]] = []
+    for pagina in range(1, paginas + 1):
+        pedacos = [_PAGINA_INTEIRA]
+        for pagina_da_zona, caixa, _ in zonas:
+            if pagina_da_zona == pagina:
+                pedacos = [p for pedaco in pedacos for p in _subtrair(pedaco, caixa)]
+        regioes.extend({"pagina": pagina, "bbox": list(p)} for p in sorted(pedacos))
+    return {"tipo": "regional", "regioes": regioes}
+
+
+def _validar_entradas(
+    a: Registro, b: Registro, c: Registro | None, comparacao: Registro, paginas: int
+) -> None:
+    if isinstance(paginas, bool) or not isinstance(paginas, int) or paginas < 1:
+        raise ValueError("paginas: deve ser um inteiro positivo")
+    if comparar_leituras(a, b) != comparacao:  # também valida A e B e o mesmo pdf_sha256
+        raise ValueError("a comparação não corresponde às leituras a e b recebidas")
+    if c is None:
+        return
+    erros = validar_ficha(c)
+    if erros:
+        raise ValueError("leitura c: " + "; ".join(erros))
+    if c["pdf_sha256"] != a["pdf_sha256"]:
+        raise ValueError("leitura c: pdf_sha256 difere do das leituras a e b")
+
+
+def _fora_das_zonas(postes: Mapping[str, Registro], zonas: Sequence[Zona]) -> set[str]:
+    """Regra 6: postes cujo centro cai numa zona excluída."""
+    return {
+        chave
+        for chave, poste in postes.items()
+        if any(
+            pagina == int(poste["pagina"]) and _no_retangulo(_centro(poste), caixa)
+            for pagina, caixa, _ in zonas
+        )
+    }
+
+
+def consolidar(
+    a: Mapping[str, Any],
+    b: Mapping[str, Any],
+    c: Mapping[str, Any] | None,
+    comparacao: Mapping[str, Any],
+    *,
+    paginas: int,
+) -> dict[str, Any]:
+    """Ficha de referência consolidada de A, B e (opcional) C, sem palpite.
+
+    Campo igual em A e B entra com o valor de A; divergente só entra quando C, cobrindo o poste
+    (ou os dois extremos do vão), confirma o valor de A ou de B; senão vai a ``pendentes`` com
+    valor nulo. Poste ou vão de um só leitor entra se C o tem, sai se C cobre e não o tem e, sem
+    decisão de C, vira zona excluída do escopo, como as ``regioes_ilegiveis`` de A e B. As
+    contagens e as zonas ficam em ``atributos_extras.consolidacao``.
+    """
+    _validar_entradas(a, b, c, comparacao, paginas)
+    consolidacao = _Consolidacao(a, b, c)
+    consolidacao.consolidar_postes()
+    vaos = consolidacao.consolidar_vaos(a, b)
+    consolidacao.excluir_ilegiveis(a, b)
+    zonas = sorted(consolidacao.zonas)
+    fora = _fora_das_zonas(consolidacao.postes, zonas)
+    extras = {k: v for k, v in (a.get("atributos_extras") or {}).items() if k != "leitura"}
+    referencia = copy.deepcopy(dict(a))
+    referencia["tipo"] = "referencia"
+    referencia["escopo_anotacao"] = _escopo(zonas, paginas)
+    referencia["postes"] = [
+        poste for chave, poste in sorted(consolidacao.postes.items()) if chave not in fora
+    ]
+    referencia["vaos"] = [v for v in vaos if v["de"] not in fora and v["para"] not in fora]
+    referencia["atributos_extras"] = {
+        **copy.deepcopy(extras),
+        "consolidacao": {
+            **consolidacao.contagem,
+            "excluidas": [
+                {"pagina": pagina, "bbox": list(caixa), "motivo": motivo}
+                for pagina, caixa, motivo in zonas
+            ],
+        },
+    }
+    erros = validar_ficha(referencia)
+    if erros:
+        raise ValueError("referência consolidada inválida: " + "; ".join(erros))
+    return referencia

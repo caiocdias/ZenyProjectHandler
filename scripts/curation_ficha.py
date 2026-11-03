@@ -4,6 +4,7 @@ Uso:
     python -m scripts.curation_ficha validar --rodada DIR --pdf ID --leitor {a,b,c} --arquivo JSON
     python -m scripts.curation_ficha congelar --rodada DIR --pdf ID --leitor {a,b,c} --arquivo JSON
     python -m scripts.curation_ficha comparar --rodada DIR --pdf ID
+    python -m scripts.curation_ficha consolidar --rodada DIR --pdf ID [--sem-terceiro --motivo T]
 
 Cada leitor (IA) lê os tiles de ``render/`` de um PDF e grava uma ficha no formato de
 ``docs/schemas/ficha-poste.schema.json`` (``tipo = referencia``), com os metadados da leitura em
@@ -22,6 +23,13 @@ humana.
 ``comparar`` carrega as leituras ``a`` e ``b`` congeladas e grava ``ficha/comparacao.json``
 (divergências, só para o orquestrador e a consolidação) e ``ficha/regioes-conferencia.json`` (só
 página e bbox, o que o leitor ``c`` recebe); nunca sobrescreve uma comparação existente.
+
+``consolidar`` exige ``comparacao.json`` e consolida as leituras ``a``, ``b`` e (se congelada)
+``c`` em ``ficha/referencia.json`` (``scripts.ficha_leitura_dupla.consolidar``), com o número de
+páginas da entrada do PDF em ``rodada.json``, e registra o SHA-256 em ``congelamento.json`` com
+``leitor = consolidada``. Havendo regiões de conferência sem a leitura ``c``, só consolida com
+``--sem-terceiro`` e ``--motivo`` (gravado em ``consolidacao.motivo_sem_terceiro``). Nunca refaz
+uma referência consolidada.
 """
 
 from __future__ import annotations
@@ -39,6 +47,7 @@ from scripts.curation_reference import contida_na_uniao, tiles_nao_cobertos
 from scripts.curation_render import carregar_indice
 from scripts.curation_round import (
     RodadaError,
+    carregar_rodada,
     diretorio_pdf,
     escrever_bytes_atomico,
     escrever_json_atomico,
@@ -49,6 +58,7 @@ from scripts.curation_round import (
 from scripts.ficha_leitura_dupla import (
     TIPOS_DE_DIVERGENCIA,
     comparar_leituras,
+    consolidar,
     regioes_de_conferencia,
 )
 from scripts.ficha_poste import validar_ficha
@@ -61,6 +71,7 @@ ARQUIVO_CONGELAMENTO = "congelamento.json"
 ARQUIVO_REGIOES = "regioes-conferencia.json"
 ARQUIVO_REFERENCIA = "referencia.json"
 ARQUIVO_COMPARACAO = "comparacao.json"
+LEITOR_CONSOLIDADA = "consolidada"
 CAMADAS = ("base", "annotation")
 
 Registro = dict[str, Any]
@@ -310,6 +321,78 @@ def carregar_congelada(rodada_dir: Path, pdf_id: str, leitor: str) -> Registro:
     return dados
 
 
+def _paginas_do_pdf(rodada_dir: Path, pdf_id: str) -> int:
+    entrada: Registro = next(
+        (e for e in carregar_rodada(rodada_dir)["pdfs"] if e.get("pdf_id") == pdf_id), {}
+    )
+    paginas = entrada.get("paginas")
+    if not isinstance(paginas, int) or isinstance(paginas, bool) or paginas < 1:
+        raise RodadaError(f"{pdf_id} sem número de páginas válido em rodada.json")
+    return paginas
+
+
+def _validar_opcoes_sem_terceiro(sem_terceiro: bool, motivo: str | None) -> None:
+    if motivo is not None and not sem_terceiro:
+        raise ValueError("--motivo só vale com --sem-terceiro")
+    if sem_terceiro and (motivo is None or not motivo.strip()):
+        raise ValueError("--sem-terceiro exige --motivo com o motivo da falta do leitor c")
+
+
+def _leitura_c(
+    rodada_dir: Path, pdf_id: str, comparacao: Registro, sem_terceiro: bool
+) -> Registro | None:
+    """Leitura C congelada, ou ``None`` quando ela falta e a consolidação pode seguir sem ela."""
+    itens = _manifesto(diretorio_ficha(rodada_dir, pdf_id))["itens"]
+    if any(item.get("leitor") == "c" for item in itens):
+        if sem_terceiro:
+            raise ValueError("leitura c congelada; consolide sem --sem-terceiro")
+        return carregar_congelada(rodada_dir, pdf_id, "c")
+    if regioes_de_conferencia(comparacao) and not sem_terceiro:
+        raise ValueError(
+            "há regiões de conferência e a leitura c não foi congelada; congele a leitura c "
+            "ou use --sem-terceiro --motivo TEXTO"
+        )
+    return None
+
+
+def consolidar_referencia(
+    rodada_dir: Path, pdf_id: str, *, sem_terceiro: bool = False, motivo: str | None = None
+) -> Registro:
+    """Consolida A, B e C congeladas em ``referencia.json`` e registra o sha256 no manifesto."""
+    _validar_opcoes_sem_terceiro(sem_terceiro, motivo)
+    pasta = diretorio_ficha(rodada_dir, pdf_id)
+    if not (pasta / ARQUIVO_COMPARACAO).is_file():
+        raise ValueError(f"{ARQUIVO_COMPARACAO} ausente para {pdf_id}; rode comparar antes")
+    comparacao = ler_json(pasta / ARQUIVO_COMPARACAO)
+    if not isinstance(comparacao, dict) or not isinstance(comparacao.get("divergencias"), list):
+        raise RodadaError(f"{ARQUIVO_COMPARACAO} com esquema desconhecido")
+    a = carregar_congelada(rodada_dir, pdf_id, "a")
+    b = carregar_congelada(rodada_dir, pdf_id, "b")
+    c = _leitura_c(rodada_dir, pdf_id, comparacao, sem_terceiro)
+    paginas = _paginas_do_pdf(rodada_dir, pdf_id)
+    with trava(pasta / ARQUIVO_CONGELAMENTO):
+        manifesto = _manifesto(pasta)
+        if (pasta / ARQUIVO_REFERENCIA).exists() or any(
+            item.get("leitor") == LEITOR_CONSOLIDADA for item in manifesto["itens"]
+        ):
+            raise ValueError(f"referência já consolidada para {pdf_id}; não é refeita")
+        referencia = consolidar(a, b, c, comparacao, paginas=paginas)
+        if sem_terceiro and motivo is not None:
+            referencia["atributos_extras"]["consolidacao"]["motivo_sem_terceiro"] = motivo.strip()
+        escrever_json_atomico(pasta / ARQUIVO_REFERENCIA, referencia)
+        manifesto["itens"].append(
+            {
+                "leitor": LEITOR_CONSOLIDADA,
+                "arquivo": ARQUIVO_REFERENCIA,
+                "sha256": hash_arquivo(pasta / ARQUIVO_REFERENCIA),
+                "horario": datetime.now(UTC).isoformat(timespec="seconds"),
+                "exposicao": False,
+            }
+        )
+        escrever_json_atomico(pasta / ARQUIVO_CONGELAMENTO, manifesto)
+    return referencia
+
+
 def comparar(rodada_dir: Path, pdf_id: str) -> Registro:
     """Compara as leituras A e B congeladas e grava a comparação e as regiões de conferência."""
     pasta = diretorio_ficha(rodada_dir, pdf_id)
@@ -352,6 +435,13 @@ def _parser() -> argparse.ArgumentParser:
     )
     comando.add_argument("--rodada", type=Path, required=True)
     comando.add_argument("--pdf", required=True)
+    comando = sub.add_parser(
+        "consolidar", help="consolida as leituras congeladas na referência (referencia.json)"
+    )
+    comando.add_argument("--rodada", type=Path, required=True)
+    comando.add_argument("--pdf", required=True)
+    comando.add_argument("--sem-terceiro", action="store_true")
+    comando.add_argument("--motivo")
     return parser
 
 
@@ -362,7 +452,30 @@ def _imprimir_comparacao(comparacao: Mapping[str, Any], regioes: int) -> None:
     print(f"regiões de conferência: {regioes}")
 
 
+def _imprimir_consolidacao(referencia: Mapping[str, Any]) -> None:
+    consolidacao = referencia["atributos_extras"]["consolidacao"]
+    contagens = [
+        f"{chave}={consolidacao[chave]}"
+        for chave in (
+            "resolvidas_por_c",
+            "pendentes",
+            "descartadas_por_maioria",
+            "nao_cobertas_por_c",
+        )
+    ]
+    contagens.append(f"excluidas={len(consolidacao['excluidas'])}")
+    print("ok: referência consolidada gravada")
+    print("consolidação: " + " ".join(contagens))
+    print(f"escopo: {referencia['escopo_anotacao']['tipo']}")
+
+
 def _executar(args: argparse.Namespace) -> int:
+    if args.comando == "consolidar":
+        referencia = consolidar_referencia(
+            args.rodada, args.pdf, sem_terceiro=args.sem_terceiro, motivo=args.motivo
+        )
+        _imprimir_consolidacao(referencia)
+        return 0
     if args.comando == "comparar":
         comparacao = comparar(args.rodada, args.pdf)
         _imprimir_comparacao(comparacao, len(regioes_de_conferencia(comparacao)))

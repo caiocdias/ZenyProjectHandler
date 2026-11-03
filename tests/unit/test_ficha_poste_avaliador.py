@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 from scripts.ficha_poste_avaliador import (
     PROTOCOLO_FICHA,
+    atributo_do_vao_acerta,
     avaliar,
     casar_postes,
     normalizar_texto,
@@ -836,3 +837,26 @@ def test_funcoes_publicas_reusadas_pela_leitura_dupla_mantem_os_nomes_antigos() 
     assert avaliador._casar_vaos_do_par is avaliador.casar_vaos_do_par
     assert avaliador._casar_simbolos is avaliador.casar_simbolos
     assert avaliador.numeros_iguais(35.0, 35.05, PROTOCOLO_FICHA["tolerancia_comprimento_m"])
+
+
+@pytest.mark.parametrize(
+    ("atributo", "ref", "pred", "esperado"),
+    [
+        ("comprimento_m", 40.0, 40.1, True),
+        ("comprimento_m", 40.0, 40.11, False),
+        ("comprimento_m", None, None, True),
+        ("comprimento_m", None, 40.0, False),
+        ("comprimento_m", 40.0, None, False),
+        ("cabo", " bt  70 ", "BT 70", True),
+        ("cabo", "BT 70", "BT 35", False),
+        ("cabo", None, None, True),
+        ("cabo", None, "BT 70", False),
+    ],
+)
+def test_atributo_do_vao_acerta_usa_a_tolerancia_e_a_normalizacao_do_protocolo(
+    atributo: str, ref: Any, pred: Any, esperado: bool
+) -> None:
+    vao_ref: dict[str, Any] = _vao("P1", "P2", 1.0, "X")
+    vao_pred = copy.deepcopy(vao_ref)
+    vao_ref[atributo], vao_pred[atributo] = ref, pred
+    assert atributo_do_vao_acerta(atributo, vao_ref, vao_pred) is esperado

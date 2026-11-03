@@ -292,20 +292,23 @@ def _avaliar_vaos(
     }
 
 
+def atributo_do_vao_acerta(atributo: str, ref: Registro, pred: Registro) -> bool:
+    """``comprimento_m`` (ou ``cabo``) igual nos dois vãos, pelas regras do ``PROTOCOLO_FICHA``."""
+    if atributo == "cabo":
+        return normalizar_texto(ref["cabo"]) == normalizar_texto(pred["cabo"])
+    a, b = ref["comprimento_m"], pred["comprimento_m"]
+    if a is None or b is None:
+        return a is None and b is None
+    return numeros_iguais(a, b, PROTOCOLO_FICHA["tolerancia_comprimento_m"])
+
+
 def _avaliar_atributos_do_vao(
     ref: Registro, pred: Registro, comprimento: dict[str, Any], cabo: dict[str, Any]
 ) -> None:
-    if "comprimento_m" not in ref["pendentes"]:
-        a, b = ref["comprimento_m"], pred["comprimento_m"]
-        acertou = (
-            a is None and b is None
-            if a is None or b is None
-            else numeros_iguais(a, b, PROTOCOLO_FICHA["tolerancia_comprimento_m"])
-        )
-        _registrar(comprimento, acertou, "comprimento_m" in pred["pendentes"])
-    if "cabo" not in ref["pendentes"]:
-        acertou = normalizar_texto(ref["cabo"]) == normalizar_texto(pred["cabo"])
-        _registrar(cabo, acertou, "cabo" in pred["pendentes"])
+    for atributo, bloco in (("comprimento_m", comprimento), ("cabo", cabo)):
+        if atributo not in ref["pendentes"]:
+            acertou = atributo_do_vao_acerta(atributo, ref, pred)
+            _registrar(bloco, acertou, atributo in pred["pendentes"])
 
 
 # --- símbolos ------------------------------------------------------------------------------------

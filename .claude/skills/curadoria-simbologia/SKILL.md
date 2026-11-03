@@ -515,3 +515,13 @@ recebe) e recusa refazer uma comparação existente:
 ```bash
 .venv/Scripts/python.exe -m scripts.curation_ficha comparar --rodada RODADA --pdf ID
 ```
+
+`consolidar` exige `comparacao.json` e grava `referencia.json` sem palpite: o que A e B concordam
+entra; o que divergem só entra quando C confirma um dos dois; o resto fica pendente ou sai do
+escopo como zona excluída. O SHA-256 vai a `congelamento.json` e a referência não é refeita. Com
+regiões de conferência e sem a leitura C congelada, só consolida com `--sem-terceiro` e um motivo:
+
+```bash
+.venv/Scripts/python.exe -m scripts.curation_ficha consolidar --rodada RODADA --pdf ID
+.venv/Scripts/python.exe -m scripts.curation_ficha consolidar --rodada RODADA --pdf ID --sem-terceiro --motivo "MOTIVO"
+```
