@@ -32,7 +32,8 @@ Ambiente Windows, Python 3.11–3.13, venv em `.venv` (criado por `.\setup.bat`,
 
 - Testes de UI usam `QT_QPA_PLATFORM=offscreen` (definido em `tests/conftest.py`).
 - Pytest roda com `--strict-markers` e transforma `ResourceWarning`/unraisable em erro: feche
-  arquivos, documentos PyMuPDF e conexões explicitamente.
+  arquivos, documentos PyMuPDF e conexões explicitamente. No pytest 9.0 as flags `--strict-*` de
+  `addopts` são ignoradas; quem vale são `strict_markers`/`strict_config` no ini (não remova).
 - Marcadores: `integration`, `slow`, `e2e`.
 - O gate normal usa apenas fixtures sintéticas versionadas; nunca dependa de PDFs em `examples/`
   (ignorado pelo Git, bancada local — ADR 0005).
