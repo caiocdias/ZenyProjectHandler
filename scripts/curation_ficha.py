@@ -7,6 +7,9 @@ Uso:
     python -m scripts.curation_ficha consolidar --rodada DIR --pdf ID [--sem-terceiro --motivo T]
     python -m scripts.curation_ficha baseline --rodada DIR [--pdf ID ...] [--native-only]
         [--runtime-directory DIR] [--parcial]
+    python -m scripts.curation_ficha amostra --rodada DIR --tamanho N --semente S [--ampliar]
+    python -m scripts.curation_ficha responder --rodada DIR --versao N --arquivo ARQ
+    python -m scripts.curation_ficha taxa --rodada DIR
 
 Cada leitor (IA) lê os tiles de ``render/`` de um PDF e grava uma ficha no formato de
 ``docs/schemas/ficha-poste.schema.json`` (``tipo = referencia``), com os metadados da leitura em
@@ -41,20 +44,32 @@ denominadores (taxas recalculadas das somas). Recusa PDF sem referência, salvo 
 referência cujo SHA-256 difere do registrado em ``congelamento.json``. Sem ``--native-only``,
 confere o OCR português antes do primeiro PDF. Falha do analisador num PDF fica registrada como
 ``falha`` (não é zero) e o comando termina com código 1 depois de gravar o resumo.
+
+``amostra`` sorteia postes das referências (rodízio entre PDFs, semente fixa) e grava
+``fichas/amostra-humana/amostra-vNNN/`` (``amostra.json``, ``amostra.md`` e um recorte ``NN.png``
+por item), sem caminho nem nome do PDF; ``--ampliar`` cria a próxima versão sem repetir itens.
+``responder`` valida e grava ``respostas.json`` da amostra (uma única vez). ``taxa`` exige
+respostas de todas as amostras e grava ``taxa-vNNN.json`` (taxa de postes com erro com intervalo
+de Wilson, omissões e erros por campo).
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import math
+import random
 import re
+import shutil
 import sys
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
+
+import pymupdf
 
 from scripts.benchmark_ficha_poste import executar as executar_benchmark
 from scripts.curation_reference import contida_na_uniao, tiles_nao_cobertos
@@ -94,6 +109,14 @@ ESQUEMA_BASELINE = "curadoria-ficha-baseline-v1"
 DIRETORIO_FICHAS = "fichas"
 RUNTIME_PADRAO = Path("tmp/benchmark-runtime")
 NOME_BASELINE = re.compile(r"baseline-v(\d{3,})")
+ESQUEMA_TAXA = "curadoria-ficha-taxa-v1"
+DIRETORIO_AMOSTRA = "amostra-humana"
+NOME_AMOSTRA = re.compile(r"amostra-v(\d{3,})")
+CAMPOS_DO_POSTE = ("identificador", "estruturas", "poste", "coordenada", "simbolos")
+CAMPOS_AVALIADOS = (*CAMPOS_DO_POSTE, "vaos")
+CHAVES_RESPOSTA = ("correto", "campos_errados", "nao_e_poste", "omissao", "nota")
+DPI_RECORTE = 300
+MARGEM_RECORTE = 0.04
 
 Registro = dict[str, Any]
 
@@ -703,6 +726,332 @@ def baseline(
     return resumo
 
 
+# --- amostra humana e taxa de erro de rótulo ------------------------------------------------
+
+
+def sortear_amostra(
+    postes_por_pdf: Mapping[str, Sequence[str]],
+    tamanho: int,
+    semente: int,
+    *,
+    excluir: Collection[tuple[str, str]] = (),
+) -> list[tuple[str, str]]:
+    """Sorteio determinístico, em rodízio entre os PDFs ordenados (estratificado por folha)."""
+    aleatorio = random.Random(semente)
+    filas: list[list[tuple[str, str]]] = []
+    for pdf_id in sorted(postes_por_pdf):
+        restantes = sorted(p for p in postes_por_pdf[pdf_id] if (pdf_id, p) not in excluir)
+        aleatorio.shuffle(restantes)
+        filas.append([(pdf_id, p) for p in restantes])
+    sorteados: list[tuple[str, str]] = []
+    while len(sorteados) < tamanho and any(filas):
+        for fila in filas:
+            if fila and len(sorteados) < tamanho:
+                sorteados.append(fila.pop())
+    return sorteados
+
+
+def intervalo_wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float] | None:
+    """Intervalo de Wilson para a proporção ``k/n`` (``None`` sem observações)."""
+    if n == 0:
+        return None
+    p = k / n
+    fator = 1 + z * z / n
+    centro = (p + z * z / (2 * n)) / fator
+    meia = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / fator
+    return max(0.0, centro - meia), min(1.0, centro + meia)
+
+
+def _diretorio_humana(rodada_dir: Path) -> Path:
+    return Path(rodada_dir).resolve() / DIRETORIO_FICHAS / DIRETORIO_AMOSTRA
+
+
+def _versoes_amostra(humana: Path) -> list[int]:
+    return sorted(
+        int(m.group(1)) for p in humana.glob("amostra-v*") if (m := NOME_AMOSTRA.fullmatch(p.name))
+    )
+
+
+def _nome_amostra(versao: int) -> str:
+    return f"amostra-v{versao:03d}"
+
+
+def _populacao(rodada_dir: Path) -> dict[str, Registro]:
+    """``referencia.json`` de cada PDF que a tem (conferida contra o congelamento)."""
+    referencias: dict[str, Registro] = {}
+    for entrada in carregar_rodada(rodada_dir)["pdfs"]:
+        pdf_id = str(entrada["pdf_id"])
+        if (diretorio_ficha(rodada_dir, pdf_id) / ARQUIVO_REFERENCIA).is_file():
+            referencias[pdf_id] = ler_json(_conferir_referencia(rodada_dir, pdf_id))
+    if not referencias:
+        raise ValueError(f"nenhum PDF com {ARQUIVO_REFERENCIA}; consolide antes de amostrar")
+    return referencias
+
+
+def _campos_da_amostra(poste: Mapping[str, Any], vaos: Sequence[Mapping[str, Any]]) -> Registro:
+    ligados = [
+        {chave: vao[chave] for chave in ("de", "para", "comprimento_m", "cabo")}
+        for vao in vaos
+        if poste["id"] in (vao["de"], vao["para"])
+    ]
+    campos = {chave: poste[chave] for chave in CAMPOS_DO_POSTE}
+    return {**campos, "vaos_ligados": ligados, "pendentes": list(poste["pendentes"])}
+
+
+def _recorte_do_poste(pagina: Any, bbox: Sequence[float]) -> bytes:
+    x0, y0, x1, y1 = _caixa(bbox)
+    largura, altura = pagina.rect.width, pagina.rect.height
+    esquerda, topo, direita, base = (
+        min(1.0, max(0.0, v))
+        for v in (
+            x0 - MARGEM_RECORTE,
+            y0 - MARGEM_RECORTE,
+            x1 + MARGEM_RECORTE,
+            y1 + MARGEM_RECORTE,
+        )
+    )
+    area = pymupdf.Rect(esquerda * largura, topo * altura, direita * largura, base * altura)  # type: ignore[no-untyped-call]
+    if area.is_empty:
+        raise ValueError("bbox do poste sem área na página")
+    return bytes(pagina.get_pixmap(dpi=DPI_RECORTE, clip=area).tobytes("png"))
+
+
+def _gravar_recortes(rodada_dir: Path, pasta: Path, itens: Sequence[Registro]) -> None:
+    for pdf_id in sorted({str(i["pdf_id"]) for i in itens}):
+        with pymupdf.open(caminho_pdf_fonte(rodada_dir, pdf_id)) as documento:  # type: ignore[no-untyped-call]
+            for item in (i for i in itens if i["pdf_id"] == pdf_id):
+                if not 1 <= item["pagina"] <= documento.page_count:
+                    raise ValueError(f"página {item['pagina']} inexistente em {pdf_id}")
+                png = _recorte_do_poste(documento[item["pagina"] - 1], item["bbox"])
+                escrever_bytes_atomico(pasta / item["recorte"], png)
+
+
+PERGUNTAS_AMOSTRA = (
+    "A ficha está correta?",
+    "Quais campos erram (identificador, estruturas, poste, coordenada, simbolos, vaos)?",
+    "O item não é poste?",
+    "Há poste ou vão da rede visível no recorte que não está na ficha?",
+)
+
+
+def _markdown_amostra(versao: int, itens: Sequence[Mapping[str, Any]]) -> str:
+    linhas = [f"# Amostra humana {_nome_amostra(versao)}", ""]
+    for item in itens:
+        linhas += [f"## Item {item['item']} ({item['pdf_id']}, página {item['pagina']})", ""]
+        linhas += [f"![item {item['item']}]({item['recorte']})", ""]
+        linhas += [
+            f"- {chave}: `{json.dumps(valor, ensure_ascii=False)}`"
+            for chave, valor in item["campos"].items()
+        ]
+        linhas += ["", *(f"- [ ] {pergunta}" for pergunta in PERGUNTAS_AMOSTRA), ""]
+    return "\n".join(linhas)
+
+
+def _itens_da_amostra(
+    sorteados: Sequence[tuple[str, str]], referencias: Mapping[str, Mapping[str, Any]]
+) -> list[Registro]:
+    itens: list[Registro] = []
+    for posicao, (pdf_id, poste_id) in enumerate(sorteados, start=1):
+        referencia = referencias[pdf_id]
+        poste = next(p for p in referencia["postes"] if p["id"] == poste_id)
+        itens.append(
+            {
+                "item": f"{posicao:02d}",
+                "pdf_id": pdf_id,
+                "poste_id": poste_id,
+                "pagina": poste["pagina"],
+                "bbox": list(poste["bbox"]),
+                "campos": _campos_da_amostra(poste, referencia["vaos"]),
+                "recorte": f"{posicao:02d}.png",
+            }
+        )
+    return itens
+
+
+def _ja_sorteados(humana: Path, versoes: Sequence[int]) -> set[tuple[str, str]]:
+    return {
+        (str(i["pdf_id"]), str(i["poste_id"]))
+        for versao in versoes
+        for i in ler_json(humana / _nome_amostra(versao) / "amostra.json")
+    }
+
+
+def _gravar_amostra(rodada_dir: Path, pasta: Path, versao: int, itens: Sequence[Registro]) -> None:
+    pasta.mkdir()
+    try:
+        _gravar_recortes(rodada_dir, pasta, itens)
+        texto = _markdown_amostra(versao, itens)
+        escrever_bytes_atomico(pasta / "amostra.md", texto.encode("utf-8"))
+        escrever_json_atomico(pasta / "amostra.json", list(itens))
+    except BaseException:
+        shutil.rmtree(pasta, ignore_errors=True)
+        raise
+
+
+def amostrar(
+    rodada_dir: Path, tamanho: int, semente: int, *, ampliar: bool = False
+) -> tuple[int, int]:
+    """Cria a próxima ``amostra-vNNN``; devolve ``(versão, itens)``."""
+    if tamanho < 1:
+        raise ValueError("--tamanho deve ser positivo")
+    humana = _diretorio_humana(rodada_dir)
+    humana.mkdir(parents=True, exist_ok=True)
+    with trava(humana / "amostra"):
+        versoes = _versoes_amostra(humana)
+        if versoes and not ampliar:
+            raise ValueError(f"já existe {_nome_amostra(versoes[-1])}; use --ampliar para ampliar")
+        if ampliar and not versoes:
+            raise ValueError("nada para ampliar: ainda não existe amostra")
+        referencias = _populacao(rodada_dir)
+        sorteados = sortear_amostra(
+            {pdf_id: [p["id"] for p in ref["postes"]] for pdf_id, ref in referencias.items()},
+            tamanho,
+            semente,
+            excluir=_ja_sorteados(humana, versoes),
+        )
+        if not sorteados:
+            raise ValueError("população esgotada: todos os postes já foram sorteados")
+        versao = (versoes[-1] if versoes else 0) + 1
+        itens = _itens_da_amostra(sorteados, referencias)
+        _gravar_amostra(rodada_dir, humana / _nome_amostra(versao), versao, itens)
+    return versao, len(itens)
+
+
+def _erros_consistencia(item: str, resposta: Mapping[str, Any]) -> list[str]:
+    errada = not resposta["correto"]
+    campos = resposta.get("campos_errados", [])
+    if resposta.get("nao_e_poste") and not errada:
+        return [f"item {item}: item que não é poste não pode estar correto"]
+    if errada and not resposta.get("nao_e_poste") and not campos:
+        return [f"item {item}: ficha incorreta exige campos_errados"]
+    if not errada and campos:
+        return [f"item {item}: ficha correta não tem campos_errados"]
+    return []
+
+
+def _erros_resposta(item: str, resposta: Any) -> list[str]:
+    if not isinstance(resposta, dict):
+        return [f"item {item}: a resposta deve ser um objeto"]
+    desconhecidas = sorted(set(resposta) - set(CHAVES_RESPOSTA))
+    if desconhecidas:
+        return [f"item {item}: chaves desconhecidas {desconhecidas}"]
+    erros = [
+        f"item {item}: {chave} deve ser booleano"
+        for chave in ("correto", "nao_e_poste", "omissao")
+        if chave in resposta and not isinstance(resposta[chave], bool)
+    ]
+    campos = resposta.get("campos_errados", [])
+    if not isinstance(campos, list) or any(c not in CAMPOS_AVALIADOS for c in campos):
+        erros.append(f"item {item}: campos_errados deve listar campos de {CAMPOS_AVALIADOS}")
+    if not isinstance(resposta.get("nota", ""), str):
+        erros.append(f"item {item}: nota deve ser texto")
+    if "correto" not in resposta:
+        erros.append(f"item {item}: falta o campo correto")
+    return erros or _erros_consistencia(item, resposta)
+
+
+def _erros_respostas(respostas: Any, itens: Sequence[Mapping[str, Any]]) -> list[str]:
+    if not isinstance(respostas, dict):
+        return ["as respostas devem ser um objeto {item: resposta}"]
+    esperados = [str(i["item"]) for i in itens]
+    erros = [f"falta resposta do item {i}" for i in esperados if i not in respostas]
+    erros += [f"item inexistente na amostra: {i}" for i in respostas if i not in esperados]
+    for item in esperados:
+        if item in respostas:
+            erros += _erros_resposta(item, respostas[item])
+    return erros
+
+
+def _pasta_amostra(rodada_dir: Path, versao: int) -> Path:
+    pasta = _diretorio_humana(rodada_dir) / _nome_amostra(versao)
+    if not (pasta / "amostra.json").is_file():
+        raise ValueError(f"{_nome_amostra(versao)} inexistente")
+    return pasta
+
+
+def responder(rodada_dir: Path, versao: int, arquivo: Path) -> int:
+    """Valida e grava ``respostas.json`` da amostra; devolve o número de respostas."""
+    pasta = _pasta_amostra(rodada_dir, versao)
+    respostas = ler_json(arquivo)
+    erros = _erros_respostas(respostas, ler_json(pasta / "amostra.json"))
+    if erros:
+        raise ValueError("; ".join(erros))
+    with trava(pasta / "respostas.json"):
+        if (pasta / "respostas.json").exists():
+            raise ValueError(f"{_nome_amostra(versao)} já tem respostas.json; não é regravado")
+        escrever_json_atomico(pasta / "respostas.json", respostas)
+    return len(respostas)
+
+
+Avaliacao = tuple[Mapping[str, Any], Mapping[str, Any]]
+
+
+def _erros_por_campo(avaliacoes: Sequence[Avaliacao]) -> Registro:
+    por_campo: Registro = {}
+    for campo in CAMPOS_AVALIADOS:
+        validas = [
+            r
+            for i, r in avaliacoes
+            if not r.get("nao_e_poste") and campo not in i["campos"]["pendentes"]
+        ]
+        erros = sum(1 for r in validas if campo in r.get("campos_errados", []))
+        por_campo[campo] = {"erros": erros, "avaliados": len(validas)}
+    return por_campo
+
+
+def _bloco_taxa(avaliacoes: Sequence[Avaliacao]) -> Registro:
+    n = len(avaliacoes)
+    com_erro = sum(1 for _, r in avaliacoes if not r["correto"])
+    omissoes = sum(1 for _, r in avaliacoes if r.get("omissao"))
+    intervalo = intervalo_wilson(com_erro, n)
+    return {
+        "itens": n,
+        "postes_com_erro": {
+            "k": com_erro,
+            "n": n,
+            "taxa": _taxa(com_erro, n),
+            "wilson95": list(intervalo) if intervalo else None,
+        },
+        "nao_e_poste": sum(1 for _, r in avaliacoes if r.get("nao_e_poste")),
+        "omissoes": {"k": omissoes, "n": n, "taxa": _taxa(omissoes, n)},
+        "por_campo": _erros_por_campo(avaliacoes),
+    }
+
+
+def _avaliacoes_da_versao(rodada_dir: Path, versao: int) -> list[Avaliacao]:
+    pasta = _pasta_amostra(rodada_dir, versao)
+    if not (pasta / "respostas.json").is_file():
+        raise ValueError(f"{_nome_amostra(versao)} sem respostas.json; responda antes de medir")
+    itens = ler_json(pasta / "amostra.json")
+    respostas = ler_json(pasta / "respostas.json")
+    erros = _erros_respostas(respostas, itens)
+    if erros:
+        raise ValueError(f"respostas de {_nome_amostra(versao)} inválidas: {'; '.join(erros)}")
+    return [(item, respostas[item["item"]]) for item in itens]
+
+
+def calcular_taxa(rodada_dir: Path) -> Registro:
+    """Grava a próxima ``taxa-vNNN`` (versão da maior amostra incluída)."""
+    humana = _diretorio_humana(rodada_dir)
+    humana.mkdir(parents=True, exist_ok=True)
+    with trava(humana / "taxa"):
+        versoes = _versoes_amostra(humana)
+        if not versoes:
+            raise ValueError("nenhuma amostra para medir")
+        por_versao = {_nome_amostra(v): _avaliacoes_da_versao(rodada_dir, v) for v in versoes}
+        destino = humana / f"taxa-v{versoes[-1]:03d}.json"
+        if destino.exists():
+            raise ValueError(f"{destino.name} já existe; amplie a amostra para nova taxa")
+        taxa: Registro = {
+            "schema_version": ESQUEMA_TAXA,
+            "versao": destino.stem,
+            "por_versao": {nome: _bloco_taxa(av) for nome, av in por_versao.items()},
+            "total": _bloco_taxa([par for av in por_versao.values() for par in av]),
+        }
+        escrever_json_atomico(destino, taxa)
+    return taxa
+
+
 # --- CLI ----------------------------------------------------------------------------------
 
 
@@ -738,6 +1087,19 @@ def _parser() -> argparse.ArgumentParser:
     comando.add_argument("--native-only", action="store_true")
     comando.add_argument("--runtime-directory", type=Path, default=RUNTIME_PADRAO)
     comando.add_argument("--parcial", action="store_true")
+    comando = sub.add_parser(
+        "amostra", help="sorteia postes das referências para conferência humana"
+    )
+    comando.add_argument("--rodada", type=Path, required=True)
+    comando.add_argument("--tamanho", type=int, required=True)
+    comando.add_argument("--semente", type=int, required=True)
+    comando.add_argument("--ampliar", action="store_true")
+    comando = sub.add_parser("responder", help="registra as respostas da conferência humana")
+    comando.add_argument("--rodada", type=Path, required=True)
+    comando.add_argument("--versao", type=int, required=True)
+    comando.add_argument("--arquivo", type=Path, required=True)
+    comando = sub.add_parser("taxa", help="calcula a taxa de erro de rótulo das amostras")
+    comando.add_argument("--rodada", type=Path, required=True)
     return parser
 
 
@@ -775,7 +1137,24 @@ def _imprimir_baseline(resumo: Mapping[str, Any]) -> int:
     return 1 if falhas else 0
 
 
+def _executar_humana(args: argparse.Namespace) -> int:
+    if args.comando == "amostra":
+        versao, itens = amostrar(args.rodada, args.tamanho, args.semente, ampliar=args.ampliar)
+        print(f"ok: {_nome_amostra(versao)} gravada com {itens} itens")
+    elif args.comando == "responder":
+        itens = responder(args.rodada, args.versao, args.arquivo)
+        print(f"ok: {itens} respostas de {_nome_amostra(args.versao)} gravadas")
+    else:
+        taxa = calcular_taxa(args.rodada)
+        erro = taxa["total"]["postes_com_erro"]
+        print(f"ok: {taxa['versao']} gravada")
+        print(f"postes com erro: {erro['k']}/{erro['n']} wilson95={erro['wilson95']}")
+    return 0
+
+
 def _executar(args: argparse.Namespace) -> int:
+    if args.comando in ("amostra", "responder", "taxa"):
+        return _executar_humana(args)
     if args.comando == "baseline":
         return _imprimir_baseline(
             baseline(

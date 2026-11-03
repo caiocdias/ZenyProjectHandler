@@ -537,3 +537,19 @@ registrada como falha, não como zero, e o comando termina com erro:
 .venv/Scripts/python.exe -m scripts.curation_ficha baseline --rodada RODADA
 .venv/Scripts/python.exe -m scripts.curation_ficha baseline --rodada RODADA --native-only
 ```
+
+`amostra` sorteia postes das `referencia.json` (rodízio entre PDFs, semente fixa) para o usuário
+conferir sobre recortes do PDF a 300 dpi e grava `fichas/amostra-humana/amostra-vNNN/`
+(`amostra.json`, `amostra.md` e um `NN.png` por item, só com `pdf_id`). Sem `--ampliar` recusa se já
+existe amostra; com `--ampliar` cria a próxima versão sem repetir itens. `responder` valida as
+respostas do usuário (todas as perguntas respondidas; erro exige os campos errados) e grava
+`respostas.json` uma única vez. `taxa` exige respostas de todas as amostras e grava
+`taxa-vNNN.json` (postes com erro com intervalo de Wilson de 95%, itens que não são poste,
+omissões e erros por campo, por versão e no total):
+
+```bash
+.venv/Scripts/python.exe -m scripts.curation_ficha amostra --rodada RODADA --tamanho N --semente S
+.venv/Scripts/python.exe -m scripts.curation_ficha amostra --rodada RODADA --tamanho N --semente S --ampliar
+.venv/Scripts/python.exe -m scripts.curation_ficha responder --rodada RODADA --versao N --arquivo ARQ
+.venv/Scripts/python.exe -m scripts.curation_ficha taxa --rodada RODADA
+```
