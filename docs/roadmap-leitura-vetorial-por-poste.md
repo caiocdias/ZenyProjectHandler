@@ -167,7 +167,7 @@ Bloco A — base e medição
 |---|---|---|---|---|
 | E01 | Limpeza do projeto | #concluida | — | scripts, testes e docs de etapas encerradas removidos, gate verde |
 | E02 | Ficha de referência e benchmark por poste | #concluida | E01 | formato da ficha, avaliador por poste e baseline sintético |
-| E13 | Atualização de dependências vulneráveis | #em-andamento | E01 | locks sem vulnerabilidade corrigível nos pacotes apontados pelo scanner, gate verde |
+| E13 | Atualização de dependências vulneráveis | #concluida | E01 | locks sem vulnerabilidade corrigível nos pacotes apontados pelo scanner, gate verde |
 | E03 | Rotulagem v0 e baseline real | #pendente | E02, E13 | fichas de referência das 16 folhas e baseline do analisador atual em `tmp/` |
 
 Bloco B — leitura vetorial
@@ -342,7 +342,7 @@ Bloco C — aprendizado
 
 ---
 
-## E13 — Atualização de dependências vulneráveis — #em-andamento
+## E13 — Atualização de dependências vulneráveis — #concluida
 
 **Objetivo:** atualizar nos locks os pacotes com vulnerabilidade conhecida e versão corrigida disponível, sem mudar o comportamento do produto.
 
@@ -370,11 +370,11 @@ Bloco C — aprendizado
 
 **Critérios de aceite:**
 
-- [ ] `osv-scanner scan source -L requirements.txt:<lock>` sobre os 6 `requirements*.lock` não lista vulnerabilidade com versão corrigida disponível em `pillow`, `mako`, `httpx2`, `pytest`, `setuptools` e `wheel`. Toda vulnerabilidade restante está no handoff, com o motivo.
-- [ ] `.venv/Scripts/python.exe -m pip check` → sem requisitos quebrados, com o ambiente reinstalado a partir de `requirements-development.lock`.
-- [ ] A imagem do servidor é construída a partir do `Dockerfile` com o `requirements-server.lock` atualizado.
-- [ ] `.venv/Scripts/python.exe scripts/client_artifact_gate.py --source-only` → aprovado.
-- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+- [x] `osv-scanner scan source -L requirements.txt:<lock>` sobre os 6 `requirements*.lock` não lista vulnerabilidade com versão corrigida disponível em `pillow`, `mako`, `httpx2`, `pytest`, `setuptools` e `wheel`. Toda vulnerabilidade restante está no handoff, com o motivo.
+- [x] `.venv/Scripts/python.exe -m pip check` → sem requisitos quebrados, com o ambiente reinstalado a partir de `requirements-development.lock`.
+- [x] A imagem do servidor é construída a partir do `Dockerfile` com o `requirements-server.lock` atualizado.
+- [x] `.venv/Scripts/python.exe scripts/client_artifact_gate.py --source-only` → aprovado.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
 **Validação obrigatória:**
 
@@ -399,12 +399,35 @@ Bloco C — aprendizado
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- Plano: `docs/superpowers/plans/2026-11-02-leitura-vetorial-por-poste-e13.md`. A revisão de arquitetura bloqueou na rodada 0 e aprovou com notas na rodada 1 (seção "Revisão de arquitetura" do plano).
+- Commits:
+  - roadmap e plano: 4a7f60b, c742001, 56759d4, 60bc24b;
+  - Task 1 (Pillow 13.0.0, Mako 1.4.2 e guarda `tests/unit/test_dependency_locks.py`): 37bb43b, eaf09d8;
+  - Task 2 (httpx2/httpcore2 2.12.0, pytest 9.0.3, saída de pywinauto/comtypes/pywin32, chaves `strict_*` no ini): f3cc587, bb3e73f, 24b1f26, 7e69852;
+  - Task 3 (setuptools 84.1.0, wheel 0.46.2, altgraph 0.17.5): 8d4e138, 85fd9fa;
+  - correção final: 64942c6 (`minversion = "9.0.3"`), 0c3c254 (nota no CLAUDE.md), 50373d4.
+- Revisão final: `revisor-seguranca` (opus), aprovado com ressalvas, sem Crítico.
+  - O Important era que um venv antigo (pytest 8) abortava com `Unknown config option: strict_config`. A onda única acrescentou `minversion`, e agora o erro diz `requires pytest-9.0.3`. A re-revisão deu os 3 achados como resolvidos.
+  - Os Menores ficam como follow-up: literais de versão repetidos no teste de locks; testes de subprocesso do pytest que poderiam ir para módulo próprio; `git ls-files` sem explicação fora de um checkout git; locks e `Dockerfile` sem hash.
+- Critérios verificados:
+  - (1) `osv-scanner scan source -L requirements.txt:<lock>` nos 6 locks → `No issues found` (8/9/52/15/22/52 pacotes). Antes eram 343 vulnerabilidades nos 6 pacotes. Nenhuma vulnerabilidade restante.
+  - (2) Venv limpo (Python 3.11.9) com `requirements-development.lock` e `-e .` → `pip check`: `No broken requirements found.`
+  - (3) `docker build` do `Dockerfile` → exit 0. Dentro da imagem: Pillow 13.0.0, Mako 1.4.2 e Python 3.13.7, e `import zeny_project_handler_server` funciona.
+  - (4) e (5) `cmd.exe //c ".\IniciarTestes.bat"` em 50373d4 → `RESULTADO FINAL: APROVADO`, 3299 passed, cobertura 88,24%, `GATE DO CLIENTE: APROVADO`. O `.bat` roda no worktree com o `.\`; sem ele, o `cmd` não acha o arquivo.
+  - Comportamento: digest determinístico da análise nos 16 PDFs de `examples/`, rodado antes ×2 e depois. Mede o caminho nativo e os rasters entregues ao OCR (3476 chamadas, motor gravador, porque o Tesseract não está instalado no Windows). Saiu idêntico, e a versão do extrator continua 1.20.0.
+  - Builds: `scripts/build_client.py` (wheel, ZIP, manifesto e SBOM) e o espelho do builder do `Dockerfile` → exit 0. `pip download` das wheels `win_amd64` (3.11, 3.12 e 3.13) e `manylinux` cp313 → exit 0.
+  - Verificação mecânica `--base 53f74e2`: 2 apontamentos (o desenvolvedor estendeu o teste de locks depois do testador, como o plano manda nas Tasks 2 e 3), julgados justificados na revisão final.
+- Decisões para o usuário:
+  - Depois de integrar, rode `.\setup.bat` no checkout principal. O `.venv` dele ainda tem pytest 8.4.2, e o gate falha com `requires pytest-9.0.3`. O `pip install -r` não desinstala `pywinauto`, `comtypes` e `pywin32`, que ficam órfãos e inofensivos no venv antigo.
+  - **altgraph 0.17.4 → 0.17.5** no lock de build do cliente. É uma transitiva exigida pela versão nova do setuptools: o altgraph 0.17.4 importa `pkg_resources`, que saiu no setuptools 82, e o PyInstaller quebrava. Fica fora da lista do scanner.
+  - **pytest 9.0 ignora `--strict-markers`/`--strict-config` vindos de `addopts`** (regressão corrigida no 9.1, pytest#14442). Por isso o ini ganhou `strict_markers`, `strict_config`, `error::pytest.PytestUnknownMarkWarning` e `minversion`.
+  - Não verificado em folhas reais: o pipeline de símbolos raster (`raster_symbols`, `legend_symbols`, `structural_symbols`) com Pillow 13. O cache dele já inclui `pillow_version`. A E03 mede o baseline já sobre o Pillow 13.
+  - A imagem local `zeny-server:e13-check` ficou no Docker desta máquina. Pode ser removida com `docker image rm zeny-server:e13-check`.
+- Notas para a próxima etapa:
+  - Os limites alargados (`Pillow<13`, `httpx2<2.11`, `pytest<9`, `setuptools<81`) vinham dos commits iniciais de setup (`fecc5be`, `e9e5559`, `2641ed3`), sem motivo registrado (`git log -S`).
+  - A nota da E01 sobre `pywinauto` está resolvida: o pacote saiu. `allow_reserve` em `symbol_benchmark_evaluator.py` continua para a E03/E09.
+  - `tests/unit/test_dependency_locks.py` guarda versão mínima, igualdade entre locks e limites dos manifestos. Na próxima correção de segurança, atualize `VERSOES_CORRIGIDAS` e os literais de setuptools/wheel do mesmo arquivo.
+  - O Tesseract não está instalado no Windows desta máquina; o OCR real só existe na imagem Docker.
 
 ---
 
