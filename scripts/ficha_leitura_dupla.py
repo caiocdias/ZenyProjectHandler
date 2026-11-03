@@ -9,8 +9,9 @@ seguem a ficha A; poste que só B traz aparece como ``prefixo_so_b(...) + id``: 
 para todos os postes só de B daquela comparação, e assim os ids continuam inequívocos.
 
 ``consolidar`` monta a ficha de referência a partir de A, B e (opcional) C sem palpite: o que A e
-B concordam entra; o que divergem só entra quando C confirma um dos dois; o resto fica pendente
-(campo) ou sai do escopo (zona excluída). A consolidação não lê ids da comparação: recalcula os
+B concordam entra; o que divergem só entra quando C confirma um só dos dois (C que confirma A e B
+ao mesmo tempo, dentro da tolerância, deixa o valor pendente); o resto fica pendente (campo) ou
+sai do escopo (zona excluída). A consolidação não lê ids da comparação: recalcula os
 postes casados, o prefixo dos postes só de B e a ordem dos vãos de cada par com as mesmas funções
 (``prefixo_so_b`` e ``vaos_do_par_em_ordem``), e recusa uma comparação que não seja a das
 leituras recebidas; assim os ids e índices da comparação e da referência coincidem.
@@ -533,10 +534,14 @@ class _Consolidacao:
         if not _diverge(campo, x, y, acerta(campo, x, y)):
             return x
         if cobre and terceiro is not None and campo not in terceiro["pendentes"]:
-            for leitura in (x, y):
-                if campo not in leitura["pendentes"] and acerta(campo, leitura, terceiro):
-                    self.contagem["resolvidas_por_c"] += 1
-                    return leitura
+            confirmadas = [
+                leitura
+                for leitura in (x, y)
+                if campo not in leitura["pendentes"] and acerta(campo, leitura, terceiro)
+            ]
+            if len(confirmadas) == 1:  # C que confirma os dois (tolerância, IoU) não desempata
+                self.contagem["resolvidas_por_c"] += 1
+                return confirmadas[0]
         self.contagem["pendentes"] += 1
         if not cobre:
             self.contagem["nao_cobertas_por_c"] += 1
@@ -743,11 +748,12 @@ def consolidar(
     """Ficha de referência consolidada de A, B e (opcional) C, sem palpite.
 
     Campo igual em A e B entra com o valor de A; divergente só entra quando C, cobrindo o poste
-    (ou os dois extremos do vão), confirma o valor de A ou de B; senão vai a ``pendentes`` com
-    valor nulo. Poste ou vão de um só leitor entra se C o tem, sai se C cobre e não o tem e, sem
-    decisão de C, vira zona excluída do escopo, como as ``regioes_ilegiveis`` de A e B. As
-    contagens e as zonas ficam em ``atributos_extras.consolidacao``. Se as zonas cobrem todas as
-    páginas, a folha não tem referência: ``ValueError`` com a contagem de zonas por motivo.
+    (ou os dois extremos do vão), confirma o valor de A ou o de B, e não os dois; senão vai a
+    ``pendentes`` com valor nulo. Poste ou vão de um só leitor entra se C o tem, sai se C cobre
+    e não o tem e, sem decisão de C, vira zona excluída do escopo, como as ``regioes_ilegiveis``
+    de A e B. As contagens e as zonas ficam em ``atributos_extras.consolidacao``. Se as zonas
+    cobrem todas as páginas, a folha não tem referência: ``ValueError`` com a contagem de zonas
+    por motivo.
     """
     _validar_entradas(a, b, c, comparacao, paginas)
     consolidacao = _Consolidacao(a, b, c)

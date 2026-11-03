@@ -538,8 +538,9 @@ recebe) e recusa refazer uma comparação existente:
 ```
 
 `consolidar` exige `comparacao.json` e grava `referencia.json` sem palpite: o que A e B concordam
-entra; o que divergem só entra quando C confirma um dos dois; o resto fica pendente ou sai do
-escopo como zona excluída. O SHA-256 vai a `congelamento.json` e a referência não é refeita. Com
+entra; o que divergem só entra quando C confirma um só dos dois (se C, dentro da tolerância,
+confirma A e B ao mesmo tempo, o valor fica pendente e não conta como resolvido por C); o resto
+fica pendente ou sai do escopo como zona excluída. O SHA-256 vai a `congelamento.json` e a referência não é refeita. Com
 regiões de conferência e sem a leitura C congelada, só consolida com `--sem-terceiro` e um motivo:
 
 ```bash

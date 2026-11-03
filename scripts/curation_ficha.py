@@ -586,8 +586,26 @@ def _padrao_de_caminho(caminho: Path) -> str:
     return separador.join(partes)
 
 
+# Início de caminho absoluto: unidade Windows (``C:\`` ou ``C:/``), UNC (``\\servidor``, também
+# com as barras dobradas do repr) ou POSIX (``/home``). UNC e barra POSIX só contam fora de palavra,
+# URL, caminho relativo (``a/b``, ``./x``, ``..\\x``) ou resto de ``<caminho>`` já trocado.
+_FORA_DE_CAMINHO = r"(?<![\w.:/\\<>~-])"
+_INICIO_ABSOLUTO = (
+    rf"(?:(?<!\w)[A-Za-z]:[\\/]|{_FORA_DE_CAMINHO}\\{{2,}}(?=\w)"
+    rf"|{_FORA_DE_CAMINHO}/(?=[\w.~$/\\-]))"
+)
+_ABSOLUTO_ENTRE_ASPAS = re.compile(rf"""(['"]){_INICIO_ABSOLUTO}[^'"\r\n]*\1""")
+_ABSOLUTO_SOLTO = re.compile(rf"""{_INICIO_ABSOLUTO}(?:[^\s'"]*[^\s'".,;:)\]}}])?""")
+
+
+def _sem_caminho_absoluto(linha: str) -> str:
+    """Troca por ``<caminho>`` o caminho absoluto que sobrou, entre aspas (inteiro) ou solto."""
+    linha = _ABSOLUTO_ENTRE_ASPAS.sub(r"\1<caminho>\1", linha)
+    return _ABSOLUTO_SOLTO.sub("<caminho>", linha)
+
+
 def _sanear(texto: str, pdf: Path, pdf_id: str, *diretorios: Path) -> str:
-    """Primeira linha do erro sem o caminho do PDF, os diretórios nem o nome do arquivo."""
+    """Primeira linha do erro sem o caminho do PDF, os diretórios, o nome nem caminho absoluto."""
     linha = (texto.strip().splitlines() or ["sem detalhe"])[0]
     flags = re.IGNORECASE
     linha = re.sub(_padrao_de_caminho(pdf), pdf_id, linha, flags=flags)
@@ -596,7 +614,7 @@ def _sanear(texto: str, pdf: Path, pdf_id: str, *diretorios: Path) -> str:
     nomes = [pdf.name] + ([pdf.stem] if len(pdf.stem) >= 4 else [])
     for nome in nomes:
         linha = re.sub(re.escape(nome), pdf_id, linha, flags=flags)
-    return linha
+    return _sem_caminho_absoluto(linha)
 
 
 def _medir_pdf(
@@ -618,7 +636,8 @@ def _medir_pdf(
             runtime_directory=runtime_directory,
         )
     except Exception as erro:
-        return {"situacao": "falha", "erro": _sanear(str(erro), pdf, pdf_id, rodada_dir.resolve())}
+        diretorios = (rodada_dir.resolve(), runtime_directory.resolve())
+        return {"situacao": "falha", "erro": _sanear(str(erro), pdf, pdf_id, *diretorios)}
 
 
 def _versao_instalada(pacote: str) -> str | None:
