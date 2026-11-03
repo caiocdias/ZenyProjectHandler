@@ -270,3 +270,25 @@ def test_cli_baseline_registra_falha_sem_zerar(
     assert resumo["por_pdf"][pdf_id] == {"situacao": "falha", "erro": "falha do analisador"}
     assert resumo["total"]["postes"]["tp"] == 0
     assert resumo["total"]["postes"]["recall"] is None
+
+
+@pytest.mark.parametrize("forma", ["str", "posix", "barras", "so_nome", "so_stem"])
+def test_sanear_remove_caminho_e_nome_do_pdf(tmp_path: Path, forma: str) -> None:
+    pdf = tmp_path / "corpus" / "alfa-secreto.pdf"
+    citado = {
+        "str": str(pdf),
+        "posix": pdf.as_posix(),
+        "barras": str(pdf).replace("/", "\\"),
+        "so_nome": pdf.name,
+        "so_stem": pdf.stem,
+    }[forma]
+    erro = curation_ficha._sanear(f"nao abriu {citado}", pdf, "01-x", tmp_path / "rodada")
+    assert erro.startswith("nao abriu ")
+    assert "alfa-secreto" not in erro
+    assert str(tmp_path) not in erro and tmp_path.as_posix() not in erro
+
+
+def test_sanear_preserva_mensagem_sem_caminho(tmp_path: Path) -> None:
+    pdf = tmp_path / "corpus" / "alfa-secreto.pdf"
+    assert curation_ficha._sanear("falha do analisador", pdf, "01-x") == "falha do analisador"
+    assert curation_ficha._sanear("", pdf, "01-x") == "sem detalhe"

@@ -557,11 +557,22 @@ def _proxima_versao_baseline(rodada_dir: Path, pdf_ids: Sequence[str]) -> int:
     return max(numeros, default=0) + 1
 
 
-def _sanear(texto: str, *raizes: Path) -> str:
+def _padrao_de_caminho(caminho: Path) -> str:
+    separador = r"[\\/]+"
+    partes = [re.escape(parte) for parte in re.split(separador, str(caminho)) if parte]
+    return separador.join(partes)
+
+
+def _sanear(texto: str, pdf: Path, pdf_id: str, *diretorios: Path) -> str:
+    """Primeira linha do erro sem o caminho do PDF, os diretórios nem o nome do arquivo."""
     linha = (texto.strip().splitlines() or ["sem detalhe"])[0]
-    for raiz in raizes:
-        for marca in {str(raiz), raiz.as_posix()}:
-            linha = linha.replace(marca, "<caminho>")
+    flags = re.IGNORECASE
+    linha = re.sub(_padrao_de_caminho(pdf), pdf_id, linha, flags=flags)
+    for diretorio in (pdf.parent, *diretorios):
+        linha = re.sub(_padrao_de_caminho(diretorio), "<caminho>", linha, flags=flags)
+    nomes = [pdf.name] + ([pdf.stem] if len(pdf.stem) >= 4 else [])
+    for nome in nomes:
+        linha = re.sub(re.escape(nome), pdf_id, linha, flags=flags)
     return linha
 
 
@@ -584,7 +595,7 @@ def _medir_pdf(
             runtime_directory=runtime_directory,
         )
     except Exception as erro:
-        return {"situacao": "falha", "erro": _sanear(str(erro), pdf.parent, rodada_dir.resolve())}
+        return {"situacao": "falha", "erro": _sanear(str(erro), pdf, pdf_id, rodada_dir.resolve())}
 
 
 def _versao_instalada(pacote: str) -> str | None:
