@@ -52,6 +52,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers"
+minversion = "9.0.3"
 strict_config = true
 strict_markers = true
 testpaths = ["tests"]
