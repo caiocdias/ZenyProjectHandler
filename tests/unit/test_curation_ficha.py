@@ -494,3 +494,70 @@ def test_cli_recusa_pdf_desconhecido(
     arquivo.write_text("{}", encoding="utf-8")
     assert main(_argv("validar", rodada_dir, "pdf-que-nao-existe", "a", arquivo)) == 1
     assert capsys.readouterr().err.startswith("erro:")
+
+
+def _argv_comparar(rodada_dir: Path, pdf_id: str) -> list[str]:
+    return ["comparar", "--rodada", str(rodada_dir), "--pdf", pdf_id]
+
+
+def test_cli_comparar_exige_a_e_b_congeladas_e_nao_sobrescreve(
+    rodada: tuple[Path, str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    rodada_dir, pdf_id = rodada
+    pasta = diretorio_ficha(rodada_dir, pdf_id)
+    assert main(_argv_comparar(rodada_dir, pdf_id)) == 1
+    assert "não congelada" in capsys.readouterr().err
+
+    leitura_a = _ficha(rodada_dir, pdf_id, "a")
+    congelar_leitura(rodada_dir, pdf_id, "a", _rascunho(rodada_dir, pdf_id, "a", leitura_a))
+    assert main(_argv_comparar(rodada_dir, pdf_id)) == 1
+    assert "leitura b não congelada" in capsys.readouterr().err
+    assert not (pasta / "comparacao.json").exists()
+
+    leitura_b = _ficha(rodada_dir, pdf_id, "b")
+    leitura_b["postes"][0]["estruturas"] = ["N3"]
+    congelar_leitura(rodada_dir, pdf_id, "b", _rascunho(rodada_dir, pdf_id, "b", leitura_b))
+    assert main(_argv_comparar(rodada_dir, pdf_id)) == 0
+    saida = capsys.readouterr()
+    assert saida.err == ""
+    assert "campo=1" in saida.out
+    assert "poste_so_a=0" in saida.out
+
+    comparacao = json.loads((pasta / "comparacao.json").read_text(encoding="utf-8"))
+    assert comparacao["schema_version"] == "curadoria-ficha-comparacao-v1"
+    assert [d["tipo"] for d in comparacao["divergencias"]] == ["campo"]
+    regioes = json.loads((pasta / "regioes-conferencia.json").read_text(encoding="utf-8"))
+    assert regioes["schema_version"] == "curadoria-ficha-regioes-v1"
+    assert regioes["pdf_id"] == pdf_id
+    assert [set(r) for r in regioes["regioes"]] == [{"id", "pagina", "bbox"}]
+    for nome in ("comparacao.json", "regioes-conferencia.json"):
+        texto = (pasta / nome).read_text(encoding="utf-8")
+        assert str(rodada_dir) not in texto
+        assert str(rodada_dir).replace("\\", "/") not in texto
+        assert "a.pdf" not in texto
+
+    # o leitor C já pode ser validado contra as regiões geradas
+    assert erros_leitura(rodada_dir, pdf_id, "c", _ficha_regional(rodada_dir, pdf_id, "c")) == []
+
+    antes = {nome: (pasta / nome).read_bytes() for nome in ("comparacao.json",)}
+    assert main(_argv_comparar(rodada_dir, pdf_id)) == 1
+    erro = capsys.readouterr().err
+    assert "já existe" in erro
+    assert str(rodada_dir) not in erro
+    assert {nome: (pasta / nome).read_bytes() for nome in antes} == antes
+
+
+def test_cli_comparar_recusa_regioes_de_conferencia_ja_gravadas(
+    rodada: tuple[Path, str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    rodada_dir, pdf_id = rodada
+    for leitor in ("a", "b"):
+        rascunho = _rascunho(rodada_dir, pdf_id, leitor, _ficha(rodada_dir, pdf_id, leitor))
+        congelar_leitura(rodada_dir, pdf_id, leitor, rascunho)
+    _gravar_conferencia(rodada_dir, pdf_id)
+    pasta = diretorio_ficha(rodada_dir, pdf_id)
+    antes = (pasta / "regioes-conferencia.json").read_bytes()
+    assert main(_argv_comparar(rodada_dir, pdf_id)) == 1
+    assert "já existe" in capsys.readouterr().err
+    assert (pasta / "regioes-conferencia.json").read_bytes() == antes
+    assert not (pasta / "comparacao.json").exists()

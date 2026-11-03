@@ -507,3 +507,11 @@ consolidação:
 ```bash
 .venv/Scripts/python.exe -m scripts.curation_ficha congelar --rodada RODADA --pdf ID --leitor LEITOR --arquivo RODADA/pdfs/ID/ficha/rascunho-LEITOR/ficha.json
 ```
+
+`comparar` exige as leituras A e B congeladas, grava `comparacao.json` (divergências, só para o
+orquestrador e a consolidação) e `regioes-conferencia.json` (só página e bbox, o que o leitor C
+recebe) e recusa refazer uma comparação existente:
+
+```bash
+.venv/Scripts/python.exe -m scripts.curation_ficha comparar --rodada RODADA --pdf ID
+```

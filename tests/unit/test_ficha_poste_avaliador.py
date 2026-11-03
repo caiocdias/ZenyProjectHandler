@@ -826,3 +826,13 @@ def test_tolerancia_de_comprimento_exata_em_valores_grandes() -> None:
     assert acertos(1234.5, 1234.4) == 1
     assert acertos(1234.4, 1234.5) == 1
     assert acertos(1234.5, 1234.3) == 0
+
+
+def test_funcoes_publicas_reusadas_pela_leitura_dupla_mantem_os_nomes_antigos() -> None:
+    from scripts import ficha_poste_avaliador as avaliador
+
+    assert avaliador._campo_acerta is avaliador.campo_acerta
+    assert avaliador._numeros_iguais is avaliador.numeros_iguais
+    assert avaliador._casar_vaos_do_par is avaliador.casar_vaos_do_par
+    assert avaliador._casar_simbolos is avaliador.casar_simbolos
+    assert avaliador.numeros_iguais(35.0, 35.05, PROTOCOLO_FICHA["tolerancia_comprimento_m"])

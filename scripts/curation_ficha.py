@@ -3,6 +3,7 @@
 Uso:
     python -m scripts.curation_ficha validar --rodada DIR --pdf ID --leitor {a,b,c} --arquivo JSON
     python -m scripts.curation_ficha congelar --rodada DIR --pdf ID --leitor {a,b,c} --arquivo JSON
+    python -m scripts.curation_ficha comparar --rodada DIR --pdf ID
 
 Cada leitor (IA) lê os tiles de ``render/`` de um PDF e grava uma ficha no formato de
 ``docs/schemas/ficha-poste.schema.json`` (``tipo = referencia``), com os metadados da leitura em
@@ -17,6 +18,10 @@ que ele declarou ter aberto.
 sobrescreve uma leitura congelada e recusa leituras novas depois de ``ficha/referencia.json``
 (consolidação). A leitura é de desenvolvimento, gerada por IA: não é gabarito nem confirmação
 humana.
+
+``comparar`` carrega as leituras ``a`` e ``b`` congeladas e grava ``ficha/comparacao.json``
+(divergências, só para o orquestrador e a consolidação) e ``ficha/regioes-conferencia.json`` (só
+página e bbox, o que o leitor ``c`` recebe); nunca sobrescreve uma comparação existente.
 """
 
 from __future__ import annotations
@@ -24,6 +29,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -40,6 +46,11 @@ from scripts.curation_round import (
     ler_json,
     trava,
 )
+from scripts.ficha_leitura_dupla import (
+    TIPOS_DE_DIVERGENCIA,
+    comparar_leituras,
+    regioes_de_conferencia,
+)
 from scripts.ficha_poste import validar_ficha
 
 LEITORES = ("a", "b", "c")
@@ -49,6 +60,7 @@ DIRETORIO_FICHA = "ficha"
 ARQUIVO_CONGELAMENTO = "congelamento.json"
 ARQUIVO_REGIOES = "regioes-conferencia.json"
 ARQUIVO_REFERENCIA = "referencia.json"
+ARQUIVO_COMPARACAO = "comparacao.json"
 CAMADAS = ("base", "annotation")
 
 Registro = dict[str, Any]
@@ -298,6 +310,28 @@ def carregar_congelada(rodada_dir: Path, pdf_id: str, leitor: str) -> Registro:
     return dados
 
 
+def comparar(rodada_dir: Path, pdf_id: str) -> Registro:
+    """Compara as leituras A e B congeladas e grava a comparação e as regiões de conferência."""
+    pasta = diretorio_ficha(rodada_dir, pdf_id)
+    a = carregar_congelada(rodada_dir, pdf_id, "a")
+    b = carregar_congelada(rodada_dir, pdf_id, "b")
+    with trava(pasta / ARQUIVO_COMPARACAO):
+        for nome in (ARQUIVO_COMPARACAO, ARQUIVO_REGIOES):
+            if (pasta / nome).exists():
+                raise ValueError(f"{nome} já existe para {pdf_id}; a comparação não é refeita")
+        comparacao = comparar_leituras(a, b)
+        escrever_json_atomico(pasta / ARQUIVO_COMPARACAO, comparacao)
+        escrever_json_atomico(
+            pasta / ARQUIVO_REGIOES,
+            {
+                "schema_version": ESQUEMA_REGIOES,
+                "pdf_id": pdf_id,
+                "regioes": regioes_de_conferencia(comparacao),
+            },
+        )
+    return comparacao
+
+
 # --- CLI ----------------------------------------------------------------------------------
 
 
@@ -313,10 +347,26 @@ def _parser() -> argparse.ArgumentParser:
         comando.add_argument("--pdf", required=True)
         comando.add_argument("--leitor", required=True, choices=LEITORES)
         comando.add_argument("--arquivo", type=Path, required=True)
+    comando = sub.add_parser(
+        "comparar", help="compara as leituras a e b congeladas e gera as regiões de conferência"
+    )
+    comando.add_argument("--rodada", type=Path, required=True)
+    comando.add_argument("--pdf", required=True)
     return parser
 
 
+def _imprimir_comparacao(comparacao: Mapping[str, Any], regioes: int) -> None:
+    contagem = Counter(d["tipo"] for d in comparacao["divergencias"])
+    print("ok: comparação das leituras a e b gravada")
+    print("divergências: " + " ".join(f"{t}={contagem[t]}" for t in TIPOS_DE_DIVERGENCIA))
+    print(f"regiões de conferência: {regioes}")
+
+
 def _executar(args: argparse.Namespace) -> int:
+    if args.comando == "comparar":
+        comparacao = comparar(args.rodada, args.pdf)
+        _imprimir_comparacao(comparacao, len(regioes_de_conferencia(comparacao)))
+        return 0
     if args.comando == "validar":
         dados, _ = _ler_ficha(args.arquivo)
         erros = (

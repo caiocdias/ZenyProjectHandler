@@ -132,16 +132,20 @@ def _restringir_ao_escopo(
 # --- campos --------------------------------------------------------------------------------------
 
 
-def _numeros_iguais(a: float, b: float, tolerancia: float) -> bool:
+def numeros_iguais(a: float, b: float, tolerancia: float) -> bool:
+    """``|a - b| <= tolerancia`` em decimal exato."""
     # Decimais exatos dos reprs: northing UTM (~7,8e6) perde precisão em float na subtração.
     return abs(Decimal(repr(a)) - Decimal(repr(b))) <= Decimal(repr(tolerancia))
+
+
+_numeros_iguais = numeros_iguais
 
 
 def _coordenada_acerta(ref: Registro | None, pred: Registro | None) -> bool:
     if ref is None or pred is None:
         return ref is None and pred is None
     tolerancia = PROTOCOLO_FICHA["tolerancia_coordenada_m"]
-    return _numeros_iguais(ref["leste"], pred["leste"], tolerancia) and _numeros_iguais(
+    return numeros_iguais(ref["leste"], pred["leste"], tolerancia) and numeros_iguais(
         ref["norte"], pred["norte"], tolerancia
     )
 
@@ -150,12 +154,16 @@ def _estruturas(poste: Registro) -> list[str]:
     return sorted(str(normalizar_texto(item)) for item in poste["estruturas"])
 
 
-def _campo_acerta(campo: str, ref: Registro, pred: Registro) -> bool:
+def campo_acerta(campo: str, ref: Registro, pred: Registro) -> bool:
+    """O campo do poste tem o mesmo valor nos dois lados (pelas regras do ``PROTOCOLO_FICHA``)."""
     if campo == "estruturas":
         return _estruturas(ref) == _estruturas(pred)
     if campo == "coordenada":
         return _coordenada_acerta(ref["coordenada"], pred["coordenada"])
     return normalizar_texto(ref[campo]) == normalizar_texto(pred[campo])
+
+
+_campo_acerta = campo_acerta
 
 
 def _bloco_vazio() -> dict[str, Any]:
@@ -191,7 +199,7 @@ def _avaliar_campos(
             if campo in ref["pendentes"]:
                 resultado[campo] = None
                 continue
-            acertou = _campo_acerta(campo, ref, pred)
+            acertou = campo_acerta(campo, ref, pred)
             _registrar(blocos[campo], acertou, campo in pred["pendentes"])
             resultado[campo] = acertou
         relatorio_pares.append(
@@ -220,7 +228,7 @@ def _chave_vao(vao: Registro) -> tuple[bool, float, str, str, str, tuple[str, ..
     )
 
 
-def _casar_vaos_do_par(
+def casar_vaos_do_par(
     refs: Sequence[Registro], preds: Sequence[Registro]
 ) -> list[tuple[Registro, Registro]]:
     """Dentro do mesmo par de postes: primeiro cabo igual e não nulo, depois o restante em ordem."""
@@ -248,6 +256,9 @@ def _casar_vaos_do_par(
     return casados
 
 
+_casar_vaos_do_par = casar_vaos_do_par
+
+
 def _agrupar_por_par(
     vaos: Sequence[Registro], mapa: Mapping[str, str] | None
 ) -> dict[frozenset[str], list[Registro]]:
@@ -271,7 +282,7 @@ def _avaliar_vaos(
     comprimento, cabo = _bloco_vazio(), _bloco_vazio()
     tp = 0
     for chave, refs in grupos_ref.items():
-        for ref, pred in _casar_vaos_do_par(refs, grupos_pred.get(chave, [])):
+        for ref, pred in casar_vaos_do_par(refs, grupos_pred.get(chave, [])):
             tp += 1
             _avaliar_atributos_do_vao(ref, pred, comprimento, cabo)
     return {
@@ -289,7 +300,7 @@ def _avaliar_atributos_do_vao(
         acertou = (
             a is None and b is None
             if a is None or b is None
-            else _numeros_iguais(a, b, PROTOCOLO_FICHA["tolerancia_comprimento_m"])
+            else numeros_iguais(a, b, PROTOCOLO_FICHA["tolerancia_comprimento_m"])
         )
         _registrar(comprimento, acertou, "comprimento_m" in pred["pendentes"])
     if "cabo" not in ref["pendentes"]:
@@ -312,7 +323,7 @@ def _candidatos(ref: Registro, preds: Sequence[Registro]) -> list[str]:
     return [identificador for _, identificador in sorted(achados)]
 
 
-def _casar_simbolos(refs: Sequence[Registro], preds: Sequence[Registro]) -> dict[str, str]:
+def casar_simbolos(refs: Sequence[Registro], preds: Sequence[Registro]) -> dict[str, str]:
     """Cardinalidade máxima por caminhos aumentantes; devolve ``{id_pred: id_ref}``."""
     refs_ord = sorted(refs, key=lambda item: item["id"])
     arestas = {ref["id"]: _candidatos(ref, preds) for ref in refs_ord}
@@ -333,6 +344,9 @@ def _casar_simbolos(refs: Sequence[Registro], preds: Sequence[Registro]) -> dict
     return donos
 
 
+_casar_simbolos = casar_simbolos
+
+
 def _avaliar_simbolos(
     pares: Sequence[tuple[Registro, Registro, float]],
     refs_sem_par: Sequence[Registro],
@@ -344,7 +358,7 @@ def _avaliar_simbolos(
     for ref, pred, _ in pares:
         if "simbolos" in ref["pendentes"]:
             continue
-        donos = _casar_simbolos(ref["simbolos"], pred["simbolos"])
+        donos = casar_simbolos(ref["simbolos"], pred["simbolos"])
         tp += len(donos)
         fp_ids.extend(s["id"] for s in pred["simbolos"] if s["id"] not in donos)
         casados_ref = set(donos.values())
