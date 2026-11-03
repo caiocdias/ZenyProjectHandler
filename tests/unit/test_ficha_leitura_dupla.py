@@ -359,6 +359,35 @@ def test_trocar_a_e_b_espelha_as_divergencias() -> None:
     assert Counter(_direta(d) for d in ab) == Counter(_espelho(d) for d in ba)
 
 
+def test_id_so_de_b_que_colide_com_id_de_a_ganha_mais_um_prefixo() -> None:
+    def para_do_vao_so_b(ids_extras_a: list[str]) -> str:
+        a = ficha()
+        for numero, identidade in enumerate(ids_extras_a):
+            a["postes"].append(_poste(identidade, 0.10 + 0.2 * numero, y=0.80))
+        b = ficha()
+        b["postes"].append(_poste("P9", 0.80, y=0.10))
+        b["vaos"].append(_vao("P3", "P9", 30.0, "BT 70"))
+        [vao] = [d for d in comparar_leituras(a, b)["divergencias"] if d["tipo"] == "vao_so_b"]
+        return str(vao["para"])
+
+    assert para_do_vao_so_b([]) == "b-P9"
+    assert para_do_vao_so_b(["b-P9"]) == "b-b-P9"
+    assert para_do_vao_so_b(["b-P9", "b-b-P9"]) == "b-b-b-P9"
+
+
+def test_prefixo_unico_vale_para_todos_os_postes_so_de_b() -> None:
+    # B tem "P9" e "b-P9" sem par; A tem "b-P9": os dois de B ganham o mesmo prefixo, sem colisão.
+    a = ficha()
+    a["postes"].append(_poste("b-P9", 0.10, y=0.80))
+    b = ficha()
+    b["postes"].append(_poste("P9", 0.80, y=0.10))
+    b["postes"].append(_poste("b-P9", 0.80, y=0.50))
+    b["vaos"].append(_vao("P9", "b-P9", 30.0, "BT 70"))
+    [vao] = [d for d in comparar_leituras(a, b)["divergencias"] if d["tipo"] == "vao_so_b"]
+    assert {vao["de"], vao["para"]} == {"b-b-P9", "b-b-b-P9"}
+    assert vao["bbox"][1] < 0.10 and vao["bbox"][3] > 0.52
+
+
 def test_comparar_recusa_fichas_de_pdfs_diferentes() -> None:
     b = ficha()
     b["pdf_sha256"] = "b" * 64

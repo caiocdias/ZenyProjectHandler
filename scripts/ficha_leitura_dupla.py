@@ -5,6 +5,9 @@ fichas com as regras do avaliador (``scripts.ficha_poste_avaliador``) e lista ca
 a página e a caixa a reler; ``regioes_de_conferencia`` funde essas caixas por página no que o
 terceiro leitor (C) recebe: só ``id``, ``pagina`` e ``bbox``, nunca valores. Os ids de divergência
 seguem a ficha A; poste que só B traz aparece como ``"b-" + id`` (a mesma regra da consolidação).
+Se algum ``"b-" + id`` coincidir com um id de A, o prefixo ``"b-"`` é repetido (``"b-b-"``, …)
+até nenhum id só de B prefixado coincidir com id de A; o prefixo escolhido vale para todos os
+postes só de B daquela comparação, e assim os ids continuam inequívocos.
 Puro, sem E/S, e independente da ordem das listas de entrada.
 """
 
@@ -77,25 +80,40 @@ def _sobrepoe(c1: Sequence[float], c2: Sequence[float]) -> bool:
 # --- leituras casadas ----------------------------------------------------------------------------
 
 
+def _prefixo_so_b(ids_a: Iterable[str], ids_so_b: Iterable[str]) -> str:
+    """Menor repetição de ``"b-"`` que, aplicada a todo id só de B, não coincide com id de A."""
+    ocupados = set(ids_a)
+    candidatos = list(ids_so_b)
+    prefixo = PREFIXO_SO_B
+    while any(prefixo + id_b in ocupados for id_b in candidatos):
+        prefixo += PREFIXO_SO_B
+    return prefixo
+
+
 class _Leituras:
-    """Postes de A e B casados, indexados pelo id no espaço de A (``"b-" + id`` só em B)."""
+    """Postes de A e B casados, indexados pelo id no espaço de A.
+
+    Poste casado usa o id de A; poste só de B usa ``prefixo + id``, com o prefixo de
+    ``_prefixo_so_b`` (``"b-"``, repetido o mínimo para não coincidir com nenhum id de A). O
+    mesmo prefixo vale para todos os postes só de B, de modo que as chaves continuam únicas.
+    """
 
     def __init__(self, a: Registro, b: Registro) -> None:
         self.casados = casar_postes(a["postes"], b["postes"])
         self.por_a = {poste["id"]: poste for poste in a["postes"]}
         self.por_b = {poste["id"]: poste for poste in b["postes"]}
         self.b_para_a = {id_b: id_a for id_a, id_b, _ in self.casados}
+        self.prefixo_so_b = _prefixo_so_b(self.por_a, self.so_b())
         a_para_b = {id_a: id_b for id_a, id_b, _ in self.casados}
         self.postes: dict[str, list[Registro]] = {}
         for id_a, poste in self.por_a.items():
             par = [self.por_b[a_para_b[id_a]]] if id_a in a_para_b else []
             self.postes[id_a] = [poste, *par]
-        for id_b, poste in self.por_b.items():
-            if id_b not in self.b_para_a:
-                self.postes[PREFIXO_SO_B + id_b] = [poste]
+        for id_b in self.so_b():
+            self.postes[self.chave_de_b(id_b)] = [self.por_b[id_b]]
 
     def chave_de_b(self, id_b: str) -> str:
-        return self.b_para_a.get(id_b, PREFIXO_SO_B + id_b)
+        return self.b_para_a.get(id_b, self.prefixo_so_b + id_b)
 
     def so_a(self) -> list[str]:
         casados = {id_a for id_a, _, _ in self.casados}
@@ -145,7 +163,7 @@ def _divergencias_de_postes(leituras: _Leituras) -> list[dict[str, Any]]:
         for id_a in leituras.so_a()
     ]
     for id_b in leituras.so_b():
-        chave = PREFIXO_SO_B + id_b
+        chave = leituras.chave_de_b(id_b)
         caixa = _com_margem(_envolvente(leituras.caixas([chave])), MARGEM_CONFERENCIA)
         divergencias.append(_divergencia("poste_so_b", leituras.pagina(chave), caixa, b=id_b))
     return divergencias
