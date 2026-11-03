@@ -266,3 +266,89 @@ def test_regiao_nao_vaza_valores_nem_ids_de_poste() -> None:
     texto = repr(regioes_de_conferencia(comparar_leituras(a, b)))
     for proibido in ("N3", "estruturas", "P1", "campo", "tipo"):
         assert proibido not in texto
+
+
+def _com_colisoes_em_cadeia() -> tuple[Registro, Registro]:
+    a = ficha()
+    a["postes"] += [_poste("b-P9", 0.10, y=0.80), _poste("b-b-P9", 0.40, y=0.80)]
+    b = ficha()
+    b["postes"] += [_poste("P9", 0.80, y=0.10), _poste("P8", 0.80, y=0.50)]
+    b["vaos"] += [_vao("P3", "P9", 30.0, "BT 70"), _vao("P9", "P8", 25.0, "BT 70")]
+    return a, b
+
+
+def test_colisao_em_cadeia_repete_o_prefixo_o_minimo_e_igual_para_todos_so_b() -> None:
+    a, b = _com_colisoes_em_cadeia()
+    comp = comparar_leituras(a, b)
+    assert _tipos(comp) == [
+        "poste_so_a",
+        "poste_so_a",
+        "poste_so_b",
+        "poste_so_b",
+        "vao_so_b",
+        "vao_so_b",
+    ]
+    vaos = sorted((d["de"], d["para"]) for d in comp["divergencias"] if d["tipo"] == "vao_so_b")
+    assert vaos == [("P3", "b-b-b-P9"), ("b-b-b-P9", "b-b-b-P8")]
+    por_a = {d["a"]: d["bbox"] for d in comp["divergencias"] if d["tipo"] == "poste_so_a"}
+    assert por_a["b-P9"][0] == pytest.approx(0.10 - MARGEM_CONFERENCIA)
+    assert por_a["b-b-P9"][0] == pytest.approx(0.40 - MARGEM_CONFERENCIA)
+    vao_p3 = next(
+        d for d in comp["divergencias"] if (d.get("de"), d.get("para")) == ("P3", "b-b-b-P9")
+    )
+    assert _contem(vao_p3["bbox"], [0.70, 0.30, 0.82, 0.32])
+
+
+def test_colisao_so_de_um_dos_postes_so_b_muda_o_prefixo_de_todos() -> None:
+    a = ficha()
+    a["postes"].append(_poste("b-P9", 0.10, y=0.80))
+    b = ficha()
+    b["postes"] += [_poste("P9", 0.80, y=0.10), _poste("P8", 0.80, y=0.50)]
+    b["vaos"].append(_vao("P9", "P8", 25.0, "BT 70"))
+    comp = comparar_leituras(a, b)
+    [vao] = [d for d in comp["divergencias"] if d["tipo"] == "vao_so_b"]
+    assert (vao["de"], vao["para"]) == ("b-b-P9", "b-b-P8")
+
+
+def test_sem_colisao_o_prefixo_continua_b_hifen() -> None:
+    a = ficha()
+    a["postes"].append(_poste("b-P1", 0.10, y=0.80))  # não colide: B não tem P1 só dele
+    b = ficha()
+    b["postes"].append(_poste("P9", 0.80, y=0.10))
+    b["vaos"].append(_vao("P3", "P9", 30.0, "BT 70"))
+    [vao] = [d for d in comparar_leituras(a, b)["divergencias"] if d["tipo"] == "vao_so_b"]
+    assert (vao["de"], vao["para"]) == ("P3", "b-P9")
+
+
+def test_colisoes_em_cadeia_sao_deterministicas_sob_permutacao() -> None:
+    a, b = _com_colisoes_em_cadeia()
+    esperado = comparar_leituras(a, b)
+    for semente in range(15):
+        sorteio = random.Random(semente)
+        pa, pb = copy.deepcopy(a), copy.deepcopy(b)
+        for leitura in (pa, pb):
+            sorteio.shuffle(leitura["postes"])
+            sorteio.shuffle(leitura["vaos"])
+        assert comparar_leituras(pa, pb) == esperado
+
+
+def test_espelhar_com_ids_b_hifen_troca_so_a_e_so_b_e_mantem_bboxes() -> None:
+    a, b = _com_colisoes_em_cadeia()
+    ab = comparar_leituras(a, b)["divergencias"]
+    ba = comparar_leituras(b, a)["divergencias"]
+    troca = {
+        "poste_so_a": "poste_so_b",
+        "poste_so_b": "poste_so_a",
+        "vao_so_a": "vao_so_b",
+        "vao_so_b": "vao_so_a",
+    }
+
+    def chave(d: Registro, espelhar: bool) -> tuple[Any, ...]:
+        tipo = troca.get(d["tipo"], d["tipo"]) if espelhar else d["tipo"]
+        return (tipo, d["pagina"], tuple(d["bbox"]), d["campo"])
+
+    assert sorted(chave(d, False) for d in ab) == sorted(chave(d, True) for d in ba)
+    so_a_ba = {d["a"] for d in ba if d["tipo"] == "poste_so_a"}
+    so_b_ba = {d["b"] for d in ba if d["tipo"] == "poste_so_b"}
+    assert so_a_ba == {"P9", "P8"}
+    assert so_b_ba == {"b-P9", "b-b-P9"}
