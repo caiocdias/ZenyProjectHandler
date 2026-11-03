@@ -52,7 +52,7 @@ RODADA/pdfs/ID/ficha/referencia.json         # ficha consolidada (tipo referenci
 RODADA/pdfs/ID/ficha/baseline-vNNN/{ficha-predita,avaliacao}.json
 RODADA/fichas/baseline-vNNN-resumo.{json,md}
 RODADA/fichas/amostra-humana/amostra-vNNN/{amostra.json,amostra.md,NN.png,respostas.json}
-RODADA/fichas/amostra-humana/taxa.json
+RODADA/fichas/amostra-humana/taxa-vNNN.json
 ```
 
 Leitor: `"a"`, `"b"` ou `"c"` (constante `LEITORES = ("a", "b", "c")`).
@@ -75,7 +75,7 @@ Metadados de cada leitura em `atributos_extras.leitura` da raiz da ficha: `{"lei
   - em `scripts/curation_ficha.py`: `LEITORES`; `diretorio_ficha(rodada_dir: Path, pdf_id: str) -> Path`; `erros_leitura(rodada_dir: Path, pdf_id: str, leitor: str, dados: Mapping[str, Any]) -> list[str]`; `congelar_leitura(rodada_dir: Path, pdf_id: str, leitor: str, arquivo: Path) -> dict[str, Any]`; `carregar_congelada(rodada_dir: Path, pdf_id: str, leitor: str) -> dict[str, Any]` (confere o sha256 registrado; `ValueError` se divergir ou faltar); `main(argv: Sequence[str] | None = None) -> int` com `validar` e `congelar` (`--rodada`, `--pdf`, `--leitor`, `--arquivo`); erro → `erro: ...` em stderr e código 1.
   - formato de `regioes-conferencia.json` (produzido na Task 2, lido aqui): `{"schema_version": "curadoria-ficha-regioes-v1", "pdf_id": str, "regioes": [{"id": "r001", "pagina": int, "bbox": [x0,y0,x1,y1]}]}`.
 
-Regras de `erros_leitura` (além de `validar_ficha`): `tipo == "referencia"`; `pdf_sha256` igual ao `sha256` do PDF na rodada; `atributos_extras.leitura` presente, com `leitor` igual ao informado, `origem == "revisao_ia"`, `tiles_revisados` não vazio e só com ids do índice, `regioes_ilegiveis` bem formadas (página existente, camada válida, bbox em [0,1] não invertida); leitores `a` e `b` exigem `escopo_anotacao.tipo == "completo"` e `tiles_nao_cobertos(...) == []`; o leitor `c` exige `regional`, com cada região contida em alguma região de `regioes-conferencia.json` do PDF (que precisa existir).
+Regras de `erros_leitura` (além de `validar_ficha`): `tipo == "referencia"`; `pdf_sha256` igual ao `sha256` do PDF na rodada; `atributos_extras.leitura` presente, com `leitor` igual ao informado, `origem == "revisao_ia"`, `tiles_revisados` não vazio e só com ids do índice, `regioes_ilegiveis` bem formadas (página existente, camada válida, bbox em [0,1] não invertida); leitores `a` e `b` exigem `escopo_anotacao.tipo == "completo"` e `tiles_nao_cobertos(...) == []`; o leitor `c` exige `regional`, com cada região contida em alguma região de `regioes-conferencia.json` do PDF (que precisa existir) e contida na união das bbox (normalizadas) dos tiles de `tiles_revisados` da mesma página com as `regioes_ilegiveis` de C da mesma página (a mesma noção `contida_na_uniao` de `curation_reference`): tile não aberto não é declarado.
 
 - [ ] **Step 1: Write the failing tests** (rodada sintética com `tests/pdf_fixtures.py` + `curation_round.iniciar_rodada` + `curation_render.renderizar`, como em `tests/unit/test_curation_reference.py`; fichas montadas no próprio teste)
 
@@ -96,6 +96,9 @@ def test_validar_recusa_sha_de_outro_pdf_tile_inexistente_e_leitor_trocado(rodad
 
 def test_validar_c_exige_regioes_de_conferencia_e_regioes_contidas(rodada) -> None: ...
     # sem regioes-conferencia.json → erro; região de C fora das regiões de conferência → erro; contida → []
+
+def test_validar_c_exige_tiles_revisados_que_cubram_as_regioes(rodada) -> None: ...
+    # região de C sem tile revisado que a cubra → erro citando a região; com os tiles → []
 
 def test_congelar_grava_copia_e_sha_e_recusa_segunda_vez(rodada) -> None:
     item = congelar_leitura(rodada_dir, pdf_id, "a", rascunho)
@@ -132,7 +135,7 @@ def test_cli_validar_e_congelar_codigos_de_saida(rodada, capsys) -> None: ...
 - Produces:
   - `MARGEM_CONFERENCIA: Final = 0.02` e `MARGEM_CONFERENCIA_CAMPO: Final = 0.04` (espaço normalizado da página)
   - `comparar_leituras(a: Mapping[str, Any], b: Mapping[str, Any]) -> dict[str, Any]` com `schema_version` (`"curadoria-ficha-comparacao-v1"`), `pdf_sha256`, `pares` (`[{"a", "b", "distancia"}]`), `concordancia` (relatório de `avaliar(a, b_como_predicao)`, B convertido a `tipo: "predicao"` com `gerador: {"leitor": "b"}`; é assimétrico porque pendentes de A saem do denominador), `divergencias`, `distancias_casamento` (ordenada), `iou_simbolos` (IoU dos símbolos casados, ordenada) e `simbolos_so_geometria` (contagem de símbolos de mesma classe no mesmo par que não casaram por IoU).
-  - Cada divergência: `{"id": "d001"…, "tipo", "pagina", "bbox", "a": id|None, "b": id|None, "campo": str|None}`; `tipo` em `"poste_so_a"`, `"poste_so_b"`, `"campo"` (um por campo divergente de um par, inclusive pendente em só um leitor), `"simbolos"` (símbolos do par não casam por inteiro), `"vao_so_a"`, `"vao_so_b"`, `"vao_atributo"` (`campo` = `comprimento_m` ou `cabo`). Divergência de vão leva também `de`, `para` (ids de A; para vão só em B, os ids de A casados aos extremos), `indice` (posição estável dentro do par, saída de `casar_vaos_do_par`), `cabo_a`, `cabo_b`.
+  - Cada divergência: `{"id": "d001"…, "tipo", "pagina", "bbox", "a": id|None, "b": id|None, "campo": str|None}`; `tipo` em `"poste_so_a"`, `"poste_so_b"`, `"campo"` (um por campo divergente de um par, inclusive pendente em só um leitor), `"simbolos"` (símbolos do par não casam por inteiro), `"vao_so_a"`, `"vao_so_b"`, `"vao_atributo"` (`campo` = `comprimento_m` ou `cabo`). Divergência de vão leva também `de`, `para` (ids de A; para vão só em B, os ids de A casados aos extremos, e `"b-" + id` para extremo que só B tem, a mesma regra de ids da consolidação), `indice` (posição estável dentro do par, saída de `casar_vaos_do_par`), `cabo_a`, `cabo_b`.
   - bbox: poste/vão = bbox do poste (envolvente dos dois postes no vão) + `MARGEM_CONFERENCIA`; `campo` = bbox do poste + `MARGEM_CONFERENCIA_CAMPO`; `simbolos` = envolvente do poste e dos símbolos dos dois leitores + `MARGEM_CONFERENCIA`; tudo recortado a [0, 1].
   - `regioes_de_conferencia(comparacao: Mapping[str, Any]) -> list[dict[str, Any]]`: bbox das divergências, fundidas por página até não haver sobreposição; ids `r001`…; cada item só `{"id", "pagina", "bbox"}`.
   - CLI `comparar --rodada --pdf`: exige A e B congeladas (`carregar_congelada`) e recusa se `comparacao.json` já existe; grava `ficha/comparacao.json` e `ficha/regioes-conferencia.json`; imprime contagens de divergência por tipo.
@@ -151,6 +154,7 @@ def test_campo_diferente_gera_divergencia_de_campo() -> None:
 
 def test_poste_so_em_a_e_vao_so_em_b() -> None: ...
     # remove P3 de B (e o vão P2|P3) → poste_so_a + vao_so_a; acrescenta vão P1|P3 em B → vao_so_b
+    # espelho: poste P9 só em B com vão P2|P9 só em B → poste_so_b e vao_so_b com para == "b-P9"
 
 def test_dois_vaos_no_mesmo_par_so_um_divergente() -> None:
     # par P1|P2 com vão MT (cabo "3x1/0") e BT (cabo "BT 70"); B muda só o comprimento do BT
@@ -172,7 +176,9 @@ def test_permutar_listas_nao_muda_o_resultado() -> None: ...
     # postes, vãos e símbolos de A e B em outra ordem → comparação idêntica
 
 def test_trocar_a_e_b_espelha_as_divergencias() -> None: ...
-    # comparar(b, a): mesmo conjunto de divergências com so_a↔so_b e a↔b trocados
+    # comparar(b, a) × comparar(a, b): compara o multiconjunto de (tipo com so_a↔so_b trocado, pagina,
+    # bbox, campo, par de ids de poste {a, b} trocado, cabo_a↔cabo_b trocados); sem os ids dNNN, sem
+    # indice e sem de/para (que seguem a leitura da esquerda). A concordancia não é simétrica.
 
 def test_cli_comparar_exige_a_e_b_congeladas_e_nao_sobrescreve(rodada) -> None: ...
 ```
@@ -277,7 +283,7 @@ def test_cli_baseline_registra_falha_sem_zerar(rodada, monkeypatch) -> None: ...
 ### Task 5: Amostra humana e taxa de erro de rótulo
 
 **Files:**
-- Modify: `scripts/curation_ficha.py` (subcomandos `amostra` e `taxa`), skill e contrato (linhas)
+- Modify: `scripts/curation_ficha.py` (subcomandos `amostra`, `responder` e `taxa`), skill e contrato (linhas)
 - Test: `tests/unit/test_curation_ficha.py`; rodar também `tests/unit/test_claude_curation_assets.py`
 
 **Interfaces:**
@@ -286,7 +292,8 @@ def test_cli_baseline_registra_falha_sem_zerar(rodada, monkeypatch) -> None: ...
   - `sortear_amostra(postes_por_pdf: Mapping[str, Sequence[str]], tamanho: int, semente: int, *, excluir: Collection[tuple[str, str]] = ()) -> list[tuple[str, str]]`: determinística; rodízio entre PDFs ordenados (estratificada por folha), sorteio dentro de cada PDF com `random.Random(semente)`; ignora os pares de `excluir`; `tamanho` maior que a população → toda a população restante.
   - `intervalo_wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float] | None` (`None` se `n == 0`).
   - CLI `amostra --rodada --tamanho N --semente S [--ampliar]`: só PDFs com `referencia.json`; sem `--ampliar` recusa se já existe amostra; com `--ampliar` cria a próxima `amostra-vNNN` excluindo os itens já sorteados. Grava `amostra.json` (`[{"item": "NN", "pdf_id", "poste_id", "pagina", "bbox", "campos": {identificador, estruturas, poste, coordenada, simbolos, vaos_ligados, pendentes}, "recorte": "NN.png"}]`), `NN.png` (página a 300 dpi recortada na bbox do poste + 0,04, recortada à página) e `amostra.md` (uma seção por item com a imagem, os campos e as perguntas: a ficha está correta? quais campos erram? o item não é poste? há poste ou vão da rede visível no recorte que não está na ficha?).
-  - CLI `taxa --rodada`: lê `respostas.json` de cada `amostra-vNNN` (`{"NN": {"correto": bool, "campos_errados": [...], "nao_e_poste": bool, "omissao": bool, "nota": str}}`), exige resposta para todos os itens e `campos_errados` não vazio quando `correto` é falso e `nao_e_poste` é falso (campos em `identificador`, `estruturas`, `poste`, `coordenada`, `simbolos`, `vaos`); grava `amostra-humana/taxa.json` com, por versão e no total: `itens`, `postes_com_erro` (k, n, taxa, `wilson95`), `nao_e_poste`, `omissoes` (denominador = recortes) e `por_campo` (`erros`, `avaliados`, sem os itens em que o campo está em `pendentes`).
+  - CLI `responder --rodada --versao N --arquivo ARQ`: valida as respostas (regras abaixo) e grava `amostra-vNNN/respostas.json`; recusa se já existe (as respostas não são regravadas).
+  - CLI `taxa --rodada`: lê `respostas.json` de cada `amostra-vNNN` (`{"NN": {"correto": bool, "campos_errados": [...], "nao_e_poste": bool, "omissao": bool, "nota": str}}`), exige resposta para todos os itens e `campos_errados` não vazio quando `correto` é falso e `nao_e_poste` é falso (campos em `identificador`, `estruturas`, `poste`, `coordenada`, `simbolos`, `vaos`); grava `amostra-humana/taxa-vNNN.json` (versão = maior amostra incluída; recusa se já existe) com, por versão e no total: `itens`, `postes_com_erro` (k, n, taxa, `wilson95`), `nao_e_poste`, `omissoes` (denominador = recortes) e `por_campo` (`erros`, `avaliados`, sem os itens em que o campo está em `pendentes`).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -302,10 +309,11 @@ def test_intervalo_wilson_conhecido() -> None:
 def test_cli_amostra_grava_recortes_e_md_sem_nome_do_pdf(rodada) -> None: ...
 def test_cli_amostra_ampliar_cria_v002_sem_repetir_itens(rodada) -> None: ...
 def test_cli_taxa_calcula_por_poste_campo_omissao_e_nao_poste(rodada) -> None: ...
-def test_cli_taxa_recusa_resposta_faltando_ou_erro_sem_campo(rodada) -> None: ...
+def test_cli_responder_recusa_resposta_faltando_erro_sem_campo_e_regravacao(rodada) -> None: ...
+def test_cli_taxa_versiona_e_nao_sobrescreve(rodada) -> None: ...
 ```
 
-- [ ] **Step 2–4:** FAIL → implementar (documento PyMuPDF fechado com `with`; linhas `amostra --rodada RODADA --tamanho N --semente S`, `amostra --rodada RODADA --tamanho N --semente S --ampliar` e `taxa --rodada RODADA` na skill e no contrato) → PASS; ruff, format, mypy.
+- [ ] **Step 2–4:** FAIL → implementar (documento PyMuPDF fechado com `with`; linhas `amostra --rodada RODADA --tamanho N --semente S`, `amostra --rodada RODADA --tamanho N --semente S --ampliar`, `responder --rodada RODADA --versao N --arquivo ARQ` e `taxa --rodada RODADA` na skill e no contrato) → PASS; ruff, format, mypy.
 - [ ] **Step 5:** commit `feat(curadoria): amostra humana de fichas e taxa de erro de rótulo`.
 
 ---
@@ -321,7 +329,7 @@ def test_cli_taxa_recusa_resposta_faltando_ou_erro_sem_campo(rodada) -> None: ..
 
 Conteúdo:
 - **Agente leitor:** seção "Modo ficha", ativada quando a tarefa traz `modo: ficha` e `leitor: a|b|c`. Entrada: `RODADA`, `ID`, `sha256`, `caminho_relativo`, `modelo`, `leitor`, saída `RODADA/pdfs/ID/ficha/rascunho-LEITOR/ficha.json` e, só para `c`, o caminho de `regioes-conferencia.json`. Permitido a mais: ler `docs/schemas/ficha-poste.schema.json`; gravar só a saída; rodar só `.venv/Scripts/python.exe -m scripts.curation_ficha validar --rodada RODADA --pdf ID --leitor LEITOR --arquivo RODADA/pdfs/ID/ficha/rascunho-LEITOR/ficha.json`. Proibido a mais: `ficha/rascunho-*` de outro leitor, `ficha/leitura-*.json`, `ficha/congelamento.json`, `ficha/comparacao.json`, `ficha/referencia.json`, `ficha/baseline-*`, `fichas/`. Regras: uma entrada por poste da rede (identificador, estruturas, poste, coordenada escrita na folha, símbolos associados com `class_code` do inventário e bbox), vãos com comprimento e cabo escritos; `null` só para o que a folha não tem; o que não dá para ler vai em `pendentes`; área ilegível em `atributos_extras.leitura.regioes_ilegiveis`; normalizar U+200B/U+FEFF; A e B com escopo `completo` e todos os tiles `a_revisar` revisados ou cobertos por região ilegível; C com escopo `regional` dentro das regiões recebidas, lendo só os tiles que as tocam; `tiles_revisados` só com tiles abertos. As regras do modo normal continuam iguais. A `description` do frontmatter cita o modo ficha.
-- **Skill e contrato:** a seção "Rodada de fichas do poste" ganha o procedimento completo, com as mesmas linhas de comando nos dois arquivos: `curation_round init` e `curation_render` como hoje (sem inferência nem comparação de símbolos); leitores `a` e `b` por PDF (instâncias novas, `modo: ficha`) em paralelo; `validar`/`congelar` de cada um; `comparar`; leitor `c` (instância nova) só com as regiões de conferência, quando houver; `consolidar`; `amostra` → conferência pelo usuário → `taxa` (ampliar a amostra se a taxa de erro de poste passar de 20%); `baseline` só depois de todas as folhas consolidadas (com `--native-only` e pendência de OCR registrada se o OCR português não estiver disponível). Diz que no modo ficha a auditoria amostral de tiles não roda e a conferência é o leitor C.
+- **Skill e contrato:** a seção "Rodada de fichas do poste" ganha o procedimento completo, com as mesmas linhas de comando nos dois arquivos: `curation_round init` e `curation_render` como hoje (sem inferência nem comparação de símbolos); leitores `a` e `b` por PDF (instâncias novas, `modo: ficha`) em paralelo; `validar`/`congelar` de cada um; `comparar`; leitor `c` (instância nova) só com as regiões de conferência, quando houver; `consolidar`; `amostra` → conferência pelo usuário → `responder` → `taxa` (ampliar a amostra se a taxa de erro de poste passar de 20%); `baseline` só depois de todas as folhas consolidadas (com `--native-only` e pendência de OCR registrada se o OCR português não estiver disponível). Diz que no modo ficha a auditoria amostral de tiles não roda e a conferência é o leitor C.
 - **Contrato, invariante:** substitui o parágrafo "Uma rodada **não treina o assistente de forma permanente**…" pelo invariante revisado do ADR 0017: os rótulos (fichas consolidadas) podem alimentar o treino; a leitura de avaliação continua cega; o conjunto de avaliação é separado por folha, congelado e nunca usado no treino; pré-marcação só no conjunto de treino; conhecimento duradouro do analisador continua sendo mudança versionada em algoritmos, pacotes e fixtures.
 - **CLAUDE.md:** na seção "Curadoria de simbologia", acrescente `curation_ficha.py` à lista de CLIs e uma frase sobre a rodada de fichas.
 
@@ -341,7 +349,7 @@ Roda a partir do worktree, com o corpus `examples/` e a rodada em `tmp/` do chec
 2. `curation_round init --rodada RODADA --raiz <examples do checkout principal> --concorrencia 4`; `curation_render --rodada RODADA --onda K --jobs 4` para cada onda.
 3. Leitores `a` e `b` por PDF (instâncias novas, em segundo plano, até 4 por vez, sem `model`), cada um só com as entradas do modo ficha. `validar` e `congelar` cada leitura; leitura incompleta volta ao mesmo leitor antes de congelar.
 4. `comparar` por PDF; leitor `c` (instância nova) para cada PDF com regiões de conferência; `validar`/`congelar` `c`; `consolidar`.
-5. `amostra --tamanho 20 --semente 20261103`; o usuário confere os recortes de `amostra.md` (entrevista); o orquestrador grava `respostas.json` e roda `taxa`. Taxa de erro de poste acima de 20% → `amostra --ampliar --tamanho 20 --semente 20261104`, nova conferência e `taxa` de novo.
+5. `amostra --tamanho 20 --semente 20261103`; o usuário confere os recortes de `amostra.md` (entrevista); o orquestrador grava as respostas com `responder` e roda `taxa`. Taxa de erro de poste acima de 20% → `amostra --ampliar --tamanho 20 --semente 20261104`, nova conferência e `taxa` de novo.
 6. Baseline: conferir antes se `<checkout principal>/tmp/benchmark-runtime` tem o OCR português e passar esse caminho em `--runtime-directory`. Sem OCR, `--native-only`, com o OCR como pendência e decisão para o usuário (alternativa: rodar o baseline na imagem Docker, que tem o Tesseract). Baseline nativo subestima as famílias sem texto nativo e não serve sozinho para a decisão 7 do design.
 7. `RODADA/fichas/relatorio.md`: leitores e modelo; concordância A × B por PDF (postes, campos, vãos, símbolos, com denominadores); divergências por tipo, resolvidas por C, não cobertas, pendentes e zonas excluídas; distribuições de distância de casamento (calibração R4) e de IoU de símbolos; taxa de erro da amostra humana com intervalo de Wilson, omissões e não-postes; baseline por PDF e total, com opções e versões de Pillow/PyMuPDF.
 8. Critérios: `git grep -n "PROJETO DE REDE NS"` vazio; gate completo verde.
