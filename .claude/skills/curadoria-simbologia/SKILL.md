@@ -494,6 +494,27 @@ Numa rodada de fichas, cada PDF é lido por leitores visuais cegos que gravam a 
 (formato de `docs/schemas/ficha-poste.schema.json`) em `RODADA/pdfs/ID/ficha/rascunho-LEITOR/ficha.json`,
 com `atributos_extras.leitura` (leitor, modelo, origem, tiles revisados e regiões ilegíveis).
 
+Procedimento, na ordem:
+
+1. `curation_round init` e `curation_render`, como numa rodada normal (mesmas opções, sem
+   `--anterior`); não há inferência nem comparação de símbolos: o leitor C substitui a
+   auditoria. No modo ficha a auditoria amostral de tiles não roda.
+2. Leitores `a` e `b` por PDF: instâncias novas do agente `curadoria-leitor-visual`, em
+   paralelo, cada uma com a tarefa `modo: ficha`, `leitor: a` ou `b` e só as entradas dele.
+   Cada leitura passa por `validar` e `congelar`; leitura incompleta volta ao mesmo leitor
+   antes de congelar.
+3. `comparar` por PDF. Havendo regiões de conferência, o leitor C (instância nova, `modo: ficha`,
+   `leitor: c`) recebe só `regioes-conferencia.json`, nunca `comparacao.json` nem as leituras
+   de A e B; `validar` e `congelar` do leitor C.
+4. `consolidar` por PDF. Folha cujas zonas excluídas cobrem todas as páginas é recusada
+   ("folha sem área anotável"). Só sem região de conferência ou com `--sem-terceiro` e motivo
+   registrado no relatório da rodada se dispensa o leitor C.
+5. `amostra`, conferência dos recortes pelo usuário, `responder` e `taxa`. A taxa de erro de
+   poste conta o item marcado "não é poste" como erro e o mantém no denominador. Se passar de
+   20%, amplie a amostra (`--ampliar`), confira de novo e rode `taxa` outra vez.
+6. `baseline` só depois de todas as folhas consolidadas. Sem o OCR português disponível, use
+   `--native-only` e registre a pendência de OCR no relatório da rodada.
+
 `validar` confere a leitura contra o esquema, o PDF da rodada e o índice de tiles, sem gravar nada:
 
 ```bash
@@ -553,3 +574,8 @@ omissões e erros por campo, por versão e no total):
 .venv/Scripts/python.exe -m scripts.curation_ficha responder --rodada RODADA --versao N --arquivo ARQ
 .venv/Scripts/python.exe -m scripts.curation_ficha taxa --rodada RODADA
 ```
+
+Recuperação após queda: se um congelamento, comparação, consolidação ou amostra ficar pela
+metade (arquivo sem item no manifesto, `comparacao.json` sem `regioes-conferencia.json`,
+`amostra-vNNN` sem `amostra.json`), o CLI recusa seguir. A recuperação é manual e explícita:
+remova o arquivo órfão, repita o comando e registre o fato no relatório da rodada.

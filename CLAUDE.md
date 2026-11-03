@@ -85,7 +85,9 @@ Uma rodada é iniciada pela skill de projeto `/curadoria-simbologia`
 (`.claude/skills/curadoria-simbologia/SKILL.md`), que processa os PDFs de `examples/` em ondas de
 3 a 5 com os subagentes de `.claude/agents/curadoria-*.md` e os CLIs `scripts/curation_round.py`,
 `curation_render.py`, `curation_infer.py`, `curation_reference.py`, `curation_compare.py`,
-`curation_audit.py` e `curation_backlog.py` (`python -m scripts.curation_*`). Invariantes: o
+`curation_audit.py`, `curation_backlog.py` e `curation_ficha.py` (`python -m scripts.curation_*`).
+A rodada de fichas do poste (leitores `a`/`b`/`c` em modo ficha, consolidação, amostra humana e
+baseline) segue a seção "Rodada de fichas do poste" do mesmo contrato. Invariantes: o
 leitor visual nunca vê predições e a referência é congelada antes de qualquer comparação;
 correções rodam em série na árvore principal, com fixture sintética positiva/negativa; tudo da
 rodada (PDFs, PNG, referências, relatório) fica em `tmp/curadoria-simbologia/` (fora do Git); a

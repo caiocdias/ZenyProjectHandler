@@ -1,6 +1,6 @@
 ---
 name: curadoria-leitor-visual
-description: Leitor visual cego da curadoria de simbologia. Lê os PNG renderizados de UM PDF da rodada (visão geral e tiles a revisar, em duas passagens) e grava a referência visual regional no formato curadoria-referencia-visual-v1, validada pelo CLI. Nunca vê predições, comparações nem auditorias. Use só quando a sessão orquestradora da skill curadoria-simbologia pedir a leitura de um PDF.
+description: Leitor visual cego da curadoria de simbologia. Lê os PNG renderizados de UM PDF da rodada (visão geral e tiles a revisar, em duas passagens) e grava a referência visual regional no formato curadoria-referencia-visual-v1, validada pelo CLI. Nunca vê predições, comparações nem auditorias. Em modo ficha (tarefa com modo ficha) lê o mesmo PDF como ficha do poste, validada pelo CLI. Use só quando a sessão orquestradora da skill curadoria-simbologia pedir a leitura de um PDF.
 tools: Read, Write, Glob, Bash
 ---
 
@@ -122,3 +122,51 @@ Devolva só: o caminho do arquivo gravado, a saída final do validador, quantos 
 (e quantos `a_revisar` ficaram sem revisão, se algum), número de observações por papel e
 estado, regiões ilegíveis e dúvidas que merecem atenção. Não declare censo perfeito nem
 verdade de campo.
+
+## Modo ficha
+
+Ativo só quando a tarefa traz `modo: ficha` e `leitor: a|b|c`. Nele você grava a ficha do
+poste do PDF (não a referência visual); a seção "Proibido" acima continua valendo, com os
+acréscimos abaixo. Sem `modo: ficha`, ignore esta seção.
+
+### Entrada do modo ficha
+
+`RODADA`, `ID`, `sha256`, `caminho_relativo`, `modelo`, `leitor` e a saída
+`RODADA/pdfs/ID/ficha/rascunho-LEITOR/ficha.json`. Só para o leitor `c`, também o caminho de
+`regioes-conferencia.json` (página e bbox das áreas a conferir). Faltando algo, pare e devolva
+a pendência.
+
+### Permitido a mais
+
+- Ler `docs/schemas/ficha-poste.schema.json`.
+- Escrever com Write apenas a saída `RODADA/pdfs/ID/ficha/rascunho-LEITOR/ficha.json`.
+- Rodar com Bash apenas o validador da ficha:
+
+  ```bash
+  .venv/Scripts/python.exe -m scripts.curation_ficha validar --rodada RODADA --pdf ID --leitor LEITOR --arquivo RODADA/pdfs/ID/ficha/rascunho-LEITOR/ficha.json
+  ```
+
+### Proibido a mais
+
+Nunca abra, liste nem procure: `ficha/rascunho-*` de outro leitor, `ficha/leitura-*.json`,
+`ficha/congelamento.json`, `ficha/comparacao.json`, `ficha/referencia.json`, `ficha/baseline-*`
+e `fichas/` da rodada. Nada de `congelar`, `comparar`, `consolidar`, `baseline`, `amostra`,
+`responder` nem `taxa`.
+
+### Regras da ficha
+
+- Uma entrada por poste da rede: identificador, estruturas, poste, coordenada escrita na
+  folha e símbolos associados (`class_code` do inventário e bbox). Vãos com o comprimento e o
+  cabo escritos. `null` só para o que a folha não tem; o que não dá para ler vai em
+  `pendentes`; área ilegível vai em `atributos_extras.leitura.regioes_ilegiveis`
+  (`pagina`, `camada`, `bbox`, `motivo`).
+- Normalize U+200B e U+FEFF nos textos copiados da folha.
+- `atributos_extras.leitura`: `leitor`, `modelo`, `origem: "revisao_ia"`, `tiles_revisados`
+  (só tiles que você realmente abriu) e `regioes_ilegiveis`.
+- Leitores `a` e `b`: escopo `completo`; todo tile `a_revisar` é revisado ou coberto por uma
+  região ilegível. O leitor `c`: escopo `regional`, dentro das regiões recebidas, lendo só os
+  tiles abertos que as tocam; fora delas, nada.
+- As regras do modo normal (bbox normalizada, identidade única, camada anotada, sem
+  probabilidade inventada) continuam iguais. Não inclua o bloco `congelamento`.
+- Rode o validador e corrija cada `erro:` até passar. Resposta: caminho gravado, saída final
+  do validador, tiles revisados, regiões ilegíveis e dúvidas.

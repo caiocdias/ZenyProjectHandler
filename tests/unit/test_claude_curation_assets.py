@@ -486,3 +486,33 @@ def test_permissoes_cobrem_os_clis_da_curadoria_e_os_gates() -> None:
 def test_verificacao_de_permissoes_recusa_regra_ampla() -> None:
     for regra in ("Bash(*)", "Bash(.venv/Scripts/python.exe *)", "Bash(git *)"):
         assert REGRA_PERMITIDA.fullmatch(regra) is None, regra
+
+
+# --- modo ficha ---------------------------------------------------------------------------
+
+
+def test_leitor_tem_modo_ficha_cego() -> None:
+    campos, corpo = agente(LEITOR)
+    assert "modo ficha" in campos["description"].lower()
+    ficha = secao(corpo, "Modo ficha")
+    assert "scripts.curation_ficha validar" in ficha
+    for proibido in (
+        "comparacao.json",
+        "referencia.json",
+        "leitura-*.json",
+        "baseline-",
+        "fichas/",
+    ):
+        assert proibido in ficha, proibido
+
+
+def test_skill_descreve_a_rodada_de_fichas_com_leitor_c() -> None:
+    skill = SKILL.read_text(encoding="utf-8")
+    assert "modo: ficha" in skill
+    assert "leitor C" in skill
+
+
+def test_contrato_adota_o_invariante_do_adr_0017() -> None:
+    contrato = CONTRATO.read_text(encoding="utf-8")
+    assert "não treina o assistente" not in contrato
+    assert "ADR 0017" in contrato
