@@ -78,6 +78,7 @@ A análise entrega, para cada poste da folha, a ficha correta: identificador, es
 | D1 | Treinar em GPU alugada por hora, se ROCm e CPU forem inviáveis | sem decisão, E12 só treina em CPU | E12 (só se E11 concluir que o treino local é inviável) |
 | D2 | Decidido em 2026-11-02: a ficha predita vem do projeto promovido (R2 da E02), e o formato v1 e o casamento guloso 0,02/0,05 são mantidos, com calibração na E03 | se a E03 pedir outra fonte, entra nova `versao_extracao` no `gerador` | E03 |
 | D3 | Decidido em 2026-11-02: uma etapa própria de atualização de dependências entra antes da E03, com prioridade para o Pillow do lock do servidor. Criada como E13 | sem ela, a E03 roda sobre locks com vulnerabilidades conhecidas | E13, E03 |
+| D4 | Decidido em 2026-11-02: o usuário libera os agentes `curadoria-*` do projeto na soul `orquestrador` (lista de subagentes e pré-condição), para a leitura dupla cega da E03 rodar na sessão do orquestrador | sem isso, a E03 não roda pelo protocolo | E03 |
 
 ## Definição global de pronto
 
@@ -423,11 +424,13 @@ Bloco C — aprendizado
   - **pytest 9.0 ignora `--strict-markers`/`--strict-config` vindos de `addopts`** (regressão corrigida no 9.1, pytest#14442). Por isso o ini ganhou `strict_markers`, `strict_config`, `error::pytest.PytestUnknownMarkWarning` e `minversion`.
   - Não verificado em folhas reais: o pipeline de símbolos raster (`raster_symbols`, `legend_symbols`, `structural_symbols`) com Pillow 13. O cache dele já inclui `pillow_version`. A E03 mede o baseline já sobre o Pillow 13.
   - A imagem local `zeny-server:e13-check` ficou no Docker desta máquina. Pode ser removida com `docker image rm zeny-server:e13-check`.
+  - Respostas do usuário (2026-11-02): altgraph 0.17.5 e chaves `strict_*`/`minversion` aceitos; pipeline raster aceito, com medição na E03 sobre o Pillow 13; integração por merge local em `main`; para a E03, o usuário libera os agentes `curadoria-*` na soul `orquestrador` (D4).
 - Notas para a próxima etapa:
   - Os limites alargados (`Pillow<13`, `httpx2<2.11`, `pytest<9`, `setuptools<81`) vinham dos commits iniciais de setup (`fecc5be`, `e9e5559`, `2641ed3`), sem motivo registrado (`git log -S`).
   - A nota da E01 sobre `pywinauto` está resolvida: o pacote saiu. `allow_reserve` em `symbol_benchmark_evaluator.py` continua para a E03/E09.
   - `tests/unit/test_dependency_locks.py` guarda versão mínima, igualdade entre locks e limites dos manifestos. Na próxima correção de segurança, atualize `VERSOES_CORRIGIDAS` e os literais de setuptools/wheel do mesmo arquivo.
   - O Tesseract não está instalado no Windows desta máquina; o OCR real só existe na imagem Docker.
+  - A E03 não começou. Na conferência, a sessão `claude --agent orquestrador` só expõe as souls, sem `curadoria-leitor-visual`/`curadoria-auditor-visual` e sem o `general-purpose` do modo de reserva da skill. Ela roda depois que a soul `orquestrador` oferecer esses agentes (D4).
 
 ---
 
