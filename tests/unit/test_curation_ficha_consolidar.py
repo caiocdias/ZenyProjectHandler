@@ -149,6 +149,29 @@ def test_cli_consolidar_sem_divergencias_dispensa_o_terceiro(
     assert "leitura" not in referencia["atributos_extras"]
 
 
+def test_cli_consolidar_recusa_folha_sem_area_anotavel_sem_gravar_nada(
+    rodada: tuple[Path, str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    rodada_dir, pdf_id = rodada
+    ilegivel = {"pagina": 1, "camada": "base", "bbox": [0.0, 0.0, 1.0, 1.0], "motivo": "mancha"}
+    for leitor in ("a", "b"):
+        _congelar(
+            rodada_dir, pdf_id, leitor, _ficha(rodada_dir, pdf_id, leitor, ilegiveis=[ilegivel])
+        )
+    assert main(["comparar", "--rodada", str(rodada_dir), "--pdf", pdf_id]) == 0
+    pasta = diretorio_ficha(rodada_dir, pdf_id)
+    manifesto = (pasta / "congelamento.json").read_bytes()
+    capsys.readouterr()
+
+    assert main(_argv_consolidar(rodada_dir, pdf_id)) == 1
+    saida = capsys.readouterr()
+    assert saida.err.startswith("erro: folha sem área anotável")
+    assert "ilegivel=1" in saida.err
+    assert _sem_caminho(saida.err, rodada_dir)
+    assert not (pasta / "referencia.json").exists()
+    assert (pasta / "congelamento.json").read_bytes() == manifesto
+
+
 def test_cli_consolidar_recusa_comparacao_adulterada(
     rodada: tuple[Path, str], capsys: pytest.CaptureFixture[str]
 ) -> None:

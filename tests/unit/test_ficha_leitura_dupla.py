@@ -794,6 +794,37 @@ def test_zonas_sobrepostas_e_em_paginas_diferentes() -> None:
     assert [r["bbox"] for r in regioes if r["pagina"] == 2] == [[0.0, 0.5, 1.0, 1.0]]
 
 
+def test_zonas_que_cobrem_todas_as_paginas_recusam_a_folha_sem_area_anotavel() -> None:
+    a, b = ficha(), ficha()
+    a["atributos_extras"]["leitura"]["regioes_ilegiveis"] = [
+        _ilegivel([0.0, 0.0, 1.0, 1.0]),
+        _ilegivel([0.0, 0.0, 0.6, 1.0], pagina=2),
+    ]
+    b["atributos_extras"]["leitura"]["regioes_ilegiveis"] = [
+        _ilegivel([0.5, 0.0, 1.0, 1.0], pagina=2)
+    ]
+    b["vaos"] = b["vaos"][:1]  # vão P2-P3 só em A, sem C: dois vao_disputado
+    mensagem = (
+        r"folha sem área anotável: as zonas excluídas cobrem todas as páginas "
+        r"\(ilegivel=3, poste_disputado=0, vao_disputado=2\)"
+    )
+    with pytest.raises(ValueError, match=mensagem):
+        consolidar(a, b, None, comparar_leituras(a, b), paginas=2)
+
+
+def test_zonas_que_cobrem_quase_tudo_ainda_geram_referencia_valida() -> None:
+    a, b = ficha(), ficha()
+    a["atributos_extras"]["leitura"]["regioes_ilegiveis"] = [
+        _ilegivel([0.0, 0.0, 1.0, 1.0]),
+        _ilegivel([0.0, 0.0, 1.0, 0.99], pagina=2),
+    ]
+    referencia = _consolidar(a, b, paginas=2)
+    assert referencia["escopo_anotacao"]["regioes"] == [
+        {"pagina": 2, "bbox": [0.0, 0.99, 1.0, 1.0]}
+    ]
+    assert referencia["postes"] == [] and referencia["vaos"] == []
+
+
 def test_consolidar_recusa_comparacao_de_outras_leituras_e_c_de_outro_pdf() -> None:
     a, b = ficha(), _sem_p3()
     with pytest.raises(ValueError, match="comparação"):

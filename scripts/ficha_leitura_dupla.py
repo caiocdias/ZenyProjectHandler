@@ -411,6 +411,7 @@ def regioes_de_conferencia(comparacao: Mapping[str, Any]) -> list[dict[str, Any]
 ZONA_POSTE_DISPUTADO: Final = "poste_disputado"
 ZONA_VAO_DISPUTADO: Final = "vao_disputado"
 ZONA_ILEGIVEL: Final = "ilegivel"
+MOTIVOS_DE_ZONA: Final = (ZONA_ILEGIVEL, ZONA_POSTE_DISPUTADO, ZONA_VAO_DISPUTADO)
 _PAGINA_INTEIRA: Final[Caixa] = (0.0, 0.0, 1.0, 1.0)
 
 Acerta = Callable[[str, Registro, Registro], bool]
@@ -692,6 +693,17 @@ def _escopo(zonas: Sequence[Zona], paginas: int) -> dict[str, Any]:
     return {"tipo": "regional", "regioes": regioes}
 
 
+def _recusar_folha_sem_area_anotavel(escopo: Registro, zonas: Sequence[Zona]) -> None:
+    """Zonas que cobrem todas as páginas: a folha não tem referência (nenhuma região mínima)."""
+    if escopo["tipo"] != "regional" or escopo["regioes"]:
+        return
+    motivos = Counter(motivo for _, _, motivo in zonas)
+    contagem = ", ".join(f"{motivo}={motivos[motivo]}" for motivo in MOTIVOS_DE_ZONA)
+    raise ValueError(
+        f"folha sem área anotável: as zonas excluídas cobrem todas as páginas ({contagem})"
+    )
+
+
 def _validar_entradas(
     a: Registro, b: Registro, c: Registro | None, comparacao: Registro, paginas: int
 ) -> None:
@@ -734,7 +746,8 @@ def consolidar(
     (ou os dois extremos do vão), confirma o valor de A ou de B; senão vai a ``pendentes`` com
     valor nulo. Poste ou vão de um só leitor entra se C o tem, sai se C cobre e não o tem e, sem
     decisão de C, vira zona excluída do escopo, como as ``regioes_ilegiveis`` de A e B. As
-    contagens e as zonas ficam em ``atributos_extras.consolidacao``.
+    contagens e as zonas ficam em ``atributos_extras.consolidacao``. Se as zonas cobrem todas as
+    páginas, a folha não tem referência: ``ValueError`` com a contagem de zonas por motivo.
     """
     _validar_entradas(a, b, c, comparacao, paginas)
     consolidacao = _Consolidacao(a, b, c)
@@ -742,11 +755,13 @@ def consolidar(
     vaos = consolidacao.consolidar_vaos(a, b)
     consolidacao.excluir_ilegiveis(a, b)
     zonas = sorted(consolidacao.zonas)
+    escopo = _escopo(zonas, paginas)
+    _recusar_folha_sem_area_anotavel(escopo, zonas)
     fora = _fora_das_zonas(consolidacao.postes, zonas)
     extras = {k: v for k, v in (a.get("atributos_extras") or {}).items() if k != "leitura"}
     referencia = copy.deepcopy(dict(a))
     referencia["tipo"] = "referencia"
-    referencia["escopo_anotacao"] = _escopo(zonas, paginas)
+    referencia["escopo_anotacao"] = escopo
     referencia["postes"] = [
         poste for chave, poste in sorted(consolidacao.postes.items()) if chave not in fora
     ]
