@@ -176,12 +176,128 @@ def test_c_completo_cobre_tudo_e_descarta() -> None:
 # --- escopo e zonas ------------------------------------------------------------------------------
 
 
-def test_zona_ilegivel_que_cobre_a_pagina_toda_ainda_gera_referencia_valida() -> None:
-    a, b = ficha(), ficha()
-    a["atributos_extras"]["leitura"]["regioes_ilegiveis"] = [_ilegivel([0.0, 0.0, 1.0, 1.0])]
+RECUSA = "folha sem área anotável"
+
+
+def _ilegiveis(a: Registro, *caixas: list[float], pagina: int = 1) -> None:
+    a["atributos_extras"]["leitura"]["regioes_ilegiveis"].extend(
+        _ilegivel(caixa, pagina=pagina) for caixa in caixas
+    )
+
+
+def _ficha_com_ilegiveis() -> Registro:
+    a = ficha()
+    a["atributos_extras"]["leitura"]["regioes_ilegiveis"] = []
+    return a
+
+
+def test_zona_ilegivel_que_cobre_a_pagina_toda_recusa_a_folha() -> None:
+    a, b = _ficha_com_ilegiveis(), ficha()
+    _ilegiveis(a, [0.0, 0.0, 1.0, 1.0])
+    with pytest.raises(ValueError, match=RECUSA) as erro:
+        consolidar(a, b, None, comparar_leituras(a, b), paginas=1)
+    assert "ilegivel=1" in str(erro.value)
+
+
+def test_varias_zonas_que_juntas_cobrem_a_pagina_recusam() -> None:
+    a, b = _ficha_com_ilegiveis(), ficha()
+    _ilegiveis(a, [0.0, 0.0, 0.5, 1.0], [0.5, 0.0, 1.0, 0.5], [0.5, 0.5, 1.0, 1.0])
+    with pytest.raises(ValueError, match=RECUSA):
+        consolidar(a, b, None, comparar_leituras(a, b), paginas=1)
+
+
+def test_zonas_de_a_e_de_b_somadas_cobrem_a_pagina_e_recusam() -> None:
+    a, b = _ficha_com_ilegiveis(), _ficha_com_ilegiveis()
+    _ilegiveis(a, [0.0, 0.0, 0.6, 1.0])
+    _ilegiveis(b, [0.4, 0.0, 1.0, 1.0])
+    with pytest.raises(ValueError, match=RECUSA):
+        consolidar(a, b, None, comparar_leituras(a, b), paginas=1)
+
+
+def test_motivos_misturados_cobrem_a_pagina_e_a_mensagem_conta_cada_motivo() -> None:
+    a, b = _ficha_com_ilegiveis(), _sem_p3()
+    # P3 só em A, sem C: zona poste_disputado em torno de x=0.70..0.72
+    p3 = a["postes"][2]["bbox"]
+    _ilegiveis(
+        a,
+        [0.0, 0.0, p3[0] - 0.02, 1.0],
+        [p3[2] + 0.02, 0.0, 1.0, 1.0],
+        [p3[0] - 0.02, 0.0, p3[2] + 0.02, p3[1] - 0.02],
+        [p3[0] - 0.02, p3[3] + 0.02, p3[2] + 0.02, 1.0],
+    )
+    with pytest.raises(ValueError, match=RECUSA) as erro:
+        consolidar(a, b, None, comparar_leituras(a, b), paginas=1)
+    assert "poste_disputado=1" in str(erro.value)
+    assert "ilegivel=4" in str(erro.value)
+
+
+def test_uma_pagina_toda_coberta_e_a_outra_livre_gera_referencia_regional() -> None:
+    a, b = _ficha_com_ilegiveis(), ficha()
+    _ilegiveis(a, [0.0, 0.0, 1.0, 1.0], pagina=2)
+    referencia = consolidar(a, b, None, comparar_leituras(a, b), paginas=2)
+    assert validar_ficha(referencia) == []
+    assert referencia["escopo_anotacao"] == {
+        "tipo": "regional",
+        "regioes": [{"pagina": 1, "bbox": [0.0, 0.0, 1.0, 1.0]}],
+    }
+    assert set(_postes(referencia)) == {"P1", "P2", "P3"}
+
+
+def test_duas_paginas_cobertas_por_zonas_em_cada_uma_recusam() -> None:
+    a, b = _ficha_com_ilegiveis(), ficha()
+    _ilegiveis(a, [0.0, 0.0, 1.0, 1.0], pagina=1)
+    _ilegiveis(a, [0.0, 0.0, 1.0, 1.0], pagina=2)
+    with pytest.raises(ValueError, match=RECUSA):
+        consolidar(a, b, None, comparar_leituras(a, b), paginas=2)
+
+
+def test_zonas_cobrindo_so_a_pagina_1_de_um_pdf_de_2_paginas_nao_recusam() -> None:
+    a, b = _ficha_com_ilegiveis(), ficha()
+    _ilegiveis(a, [0.0, 0.0, 1.0, 1.0], pagina=1)
+    referencia = consolidar(a, b, None, comparar_leituras(a, b), paginas=2)
+    assert {r["pagina"] for r in referencia["escopo_anotacao"]["regioes"]} == {2}
+    assert referencia["postes"] == []
+
+
+@pytest.mark.parametrize("faixa", [0.01, 0.001, 1e-6])
+def test_faixa_minima_sobrando_mantem_a_referencia_valida(faixa: float) -> None:
+    a, b = _ficha_com_ilegiveis(), ficha()
+    _ilegiveis(a, [0.0, 0.0, 1.0 - faixa, 1.0])
     referencia = consolidar(a, b, None, comparar_leituras(a, b), paginas=1)
     assert validar_ficha(referencia) == []
-    assert referencia["postes"] == []
+    [regiao] = referencia["escopo_anotacao"]["regioes"]
+    assert regiao["bbox"][0] == pytest.approx(1.0 - faixa)
+    assert regiao["bbox"][2] == 1.0
+
+
+def test_zonas_que_se_tocam_sem_sobrepor_cobrem_a_pagina_e_recusam() -> None:
+    a, b = _ficha_com_ilegiveis(), ficha()
+    _ilegiveis(a, [0.0, 0.0, 0.3, 1.0], [0.3, 0.0, 0.7, 1.0], [0.7, 0.0, 1.0, 1.0])
+    with pytest.raises(ValueError, match=RECUSA):
+        consolidar(a, b, None, comparar_leituras(a, b), paginas=1)
+
+
+def test_cli_folha_sem_area_anotavel_nao_grava_nada(
+    rodada: tuple[Path, str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    rodada_dir, pdf_id = rodada
+    a = _ficha(rodada_dir, pdf_id, "a")
+    a["atributos_extras"]["leitura"]["regioes_ilegiveis"] = [
+        {"pagina": 1, "camada": "base", "bbox": [0.0, 0.0, 1.0, 1.0], "motivo": "mancha"},
+        {"pagina": 1, "camada": "annotation", "bbox": [0.0, 0.0, 1.0, 1.0], "motivo": "mancha"},
+    ]
+    _congelar(rodada_dir, pdf_id, "a", a)
+    _congelar(rodada_dir, pdf_id, "b", _ficha(rodada_dir, pdf_id, "b"))
+    assert main(["comparar", "--rodada", str(rodada_dir), "--pdf", pdf_id]) == 0
+    pasta = diretorio_ficha(rodada_dir, pdf_id)
+    manifesto = (pasta / "congelamento.json").read_bytes()
+    capsys.readouterr()
+    assert main(_argv(rodada_dir, pdf_id)) == 1
+    erro = capsys.readouterr().err
+    assert RECUSA in erro
+    assert str(rodada_dir) not in erro
+    assert not (pasta / "referencia.json").exists()
+    assert (pasta / "congelamento.json").read_bytes() == manifesto
 
 
 def test_zona_exclui_vizinho_confirmado_e_seus_vaos() -> None:
