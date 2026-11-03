@@ -352,3 +352,66 @@ def test_espelhar_com_ids_b_hifen_troca_so_a_e_so_b_e_mantem_bboxes() -> None:
     so_b_ba = {d["b"] for d in ba if d["tipo"] == "poste_so_b"}
     assert so_a_ba == {"P9", "P8"}
     assert so_b_ba == {"b-P9", "b-b-P9"}
+
+
+# --- indice dos vãos: discrimina vãos do mesmo par e cabo ----------------------------------------
+
+
+def _do_par(leitura: Registro) -> list[Registro]:
+    return [v for v in leitura["vaos"] if {v["de"], v["para"]} == {"P1", "P2"}]
+
+
+def _ficha_com_vaos(vaos: list[Registro]) -> Registro:
+    leitura = ficha()
+    leitura["vaos"] = vaos
+    return leitura
+
+
+def test_indice_aponta_o_vao_certo_de_a_quando_dois_vaos_do_mesmo_cabo_divergem() -> None:
+    a = _ficha_com_vaos([_vao("P1", "P2", 38.0, "BT 70"), _vao("P1", "P2", 50.0, "BT 70")])
+    b = _ficha_com_vaos([_vao("P1", "P2", 30.0, "BT 70"), _vao("P1", "P2", 60.0, "BT 70")])
+    divergencias = comparar_leituras(a, b)["divergencias"]
+    assert len(divergencias) == 2
+    assert all(d["campo"] == "comprimento_m" for d in divergencias)
+    assert sorted(d["indice"] for d in divergencias) == [0, 1]
+    casados = avaliador.casar_vaos_do_par(_do_par(a), _do_par(b))
+    for d in divergencias:
+        va, vb = casados[d["indice"]]
+        assert not avaliador.numeros_iguais(va["comprimento_m"], vb["comprimento_m"], 0.1)
+        assert (va["de"], va["para"], va["cabo"]) == (d["de"], d["para"], d["cabo_a"])
+
+
+def test_indice_distingue_o_vao_divergente_do_que_casa_igual_no_mesmo_par_e_cabo() -> None:
+    a = _ficha_com_vaos([_vao("P1", "P2", 38.0, "BT 70"), _vao("P1", "P2", 50.0, "BT 70")])
+    b = _ficha_com_vaos([_vao("P1", "P2", 38.0, "BT 70"), _vao("P1", "P2", 60.0, "BT 70")])
+    [d] = comparar_leituras(a, b)["divergencias"]  # o vão casado igual não aparece
+    assert (d["tipo"], d["campo"]) == ("vao_atributo", "comprimento_m")
+    va, vb = avaliador.casar_vaos_do_par(_do_par(a), _do_par(b))[d["indice"]]
+    assert (va["comprimento_m"], vb["comprimento_m"]) == (50.0, 60.0)
+
+
+def test_vao_so_a_tem_indice_igual_ao_numero_de_casados_do_par() -> None:
+    a = _ficha_com_vaos([_vao("P1", "P2", 40.0, "3x1/0"), _vao("P1", "P2", 30.0, "BT 70")])
+    b = _ficha_com_vaos([_vao("P1", "P2", 40.0, "3x1/0")])
+    [d] = comparar_leituras(a, b)["divergencias"]  # o vão casado e igual não diverge
+    casados = avaliador.casar_vaos_do_par(_do_par(a), _do_par(b))
+    assert len(casados) == 1
+    assert (d["tipo"], d["cabo_a"], d["cabo_b"]) == ("vao_so_a", "BT 70", None)
+    assert d["indice"] == len(casados)
+
+
+def test_vao_so_b_tem_indice_igual_ao_numero_de_casados_do_par() -> None:
+    a = _ficha_com_vaos([_vao("P1", "P2", 40.0, "3x1/0")])
+    b = _ficha_com_vaos([_vao("P1", "P2", 40.0, "3x1/0"), _vao("P1", "P2", 30.0, "BT 70")])
+    [d] = comparar_leituras(a, b)["divergencias"]
+    assert (d["tipo"], d["cabo_a"], d["cabo_b"]) == ("vao_so_b", None, "BT 70")
+    assert d["indice"] == 1
+
+
+def test_indice_e_estavel_sob_permutacao_dos_vaos() -> None:
+    a = _ficha_com_vaos([_vao("P1", "P2", 38.0, "BT 70"), _vao("P1", "P2", 50.0, "BT 70")])
+    b = _ficha_com_vaos([_vao("P1", "P2", 38.0, "BT 70"), _vao("P1", "P2", 60.0, "BT 70")])
+    esperado = comparar_leituras(a, b)["divergencias"]
+    a["vaos"].reverse()
+    b["vaos"].reverse()
+    assert comparar_leituras(a, b)["divergencias"] == esperado
