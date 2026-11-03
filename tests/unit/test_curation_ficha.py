@@ -561,3 +561,37 @@ def test_cli_comparar_recusa_regioes_de_conferencia_ja_gravadas(
     assert "já existe" in capsys.readouterr().err
     assert (pasta / "regioes-conferencia.json").read_bytes() == antes
     assert not (pasta / "comparacao.json").exists()
+
+
+def test_cli_comparar_recusa_comparacao_ja_gravada_sem_criar_as_regioes(
+    rodada: tuple[Path, str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    rodada_dir, pdf_id = rodada
+    for leitor in ("a", "b"):
+        rascunho = _rascunho(rodada_dir, pdf_id, leitor, _ficha(rodada_dir, pdf_id, leitor))
+        congelar_leitura(rodada_dir, pdf_id, leitor, rascunho)
+    pasta = diretorio_ficha(rodada_dir, pdf_id)
+    (pasta / "comparacao.json").write_text('{"antiga": true}', encoding="utf-8")
+    assert main(_argv_comparar(rodada_dir, pdf_id)) == 1
+    erro = capsys.readouterr().err
+    assert "já existe" in erro
+    assert str(rodada_dir) not in erro
+    assert (pasta / "comparacao.json").read_text(encoding="utf-8") == '{"antiga": true}'
+    assert not (pasta / "regioes-conferencia.json").exists()
+
+
+def test_cli_comparar_leituras_iguais_grava_zero_divergencias_sem_caminho_absoluto(
+    rodada: tuple[Path, str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    rodada_dir, pdf_id = rodada
+    for leitor in ("a", "b"):
+        rascunho = _rascunho(rodada_dir, pdf_id, leitor, _ficha(rodada_dir, pdf_id, leitor))
+        congelar_leitura(rodada_dir, pdf_id, leitor, rascunho)
+    assert main(_argv_comparar(rodada_dir, pdf_id)) == 0
+    saida = capsys.readouterr()
+    assert str(rodada_dir) not in saida.out + saida.err
+    assert "regiões de conferência: 0" in saida.out
+    assert all(parte.endswith("=0") for parte in saida.out.splitlines()[1].split()[1:])
+    pasta = diretorio_ficha(rodada_dir, pdf_id)
+    regioes = json.loads((pasta / "regioes-conferencia.json").read_text(encoding="utf-8"))
+    assert regioes["regioes"] == []
