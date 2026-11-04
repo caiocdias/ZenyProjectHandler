@@ -87,95 +87,152 @@ def _codificar(valor: object) -> object:
     return valor
 
 
-def _ponto(valor: Any) -> tuple[float, float]:
-    x, y = valor
-    return (float(x), float(y))
+class _CacheInvalidoError(ValueError):
+    """O conteúdo lido não tem a forma exata gravada por este módulo."""
 
 
-def _caixa(valor: Any) -> tuple[float, float, float, float]:
-    a, b, c, d = valor
-    return (float(a), float(b), float(c), float(d))
+def _objeto(valor: object) -> dict[str, Any]:
+    if not isinstance(valor, dict):
+        raise _CacheInvalidoError("objeto esperado")
+    return cast(dict[str, Any], valor)
 
 
-def _cor(valor: Any) -> tuple[float, float, float] | None:
+def _lista(valor: object) -> list[Any]:
+    if not isinstance(valor, list):
+        raise _CacheInvalidoError("lista esperada")
+    return valor
+
+
+def _texto(valor: object) -> str:
+    if not isinstance(valor, str):
+        raise _CacheInvalidoError("texto esperado")
+    return valor
+
+
+def _inteiro(valor: object) -> int:
+    if isinstance(valor, bool) or not isinstance(valor, int):
+        raise _CacheInvalidoError("inteiro esperado")
+    return valor
+
+
+def _booleano(valor: object) -> bool:
+    if not isinstance(valor, bool):
+        raise _CacheInvalidoError("booleano esperado")
+    return valor
+
+
+def _numero(valor: object) -> float:
+    if isinstance(valor, bool) or not isinstance(valor, (int, float)):
+        raise _CacheInvalidoError("número esperado")
+    return float(valor)
+
+
+def _numeros(valor: object, quantidade: int) -> tuple[float, ...]:
+    itens = _lista(valor)
+    if len(itens) != quantidade:
+        raise _CacheInvalidoError("quantidade de números inesperada")
+    return tuple(_numero(item) for item in itens)
+
+
+def _ponto(valor: object) -> tuple[float, float]:
+    x, y = _numeros(valor, 2)
+    return (x, y)
+
+
+def _caixa(valor: object) -> tuple[float, float, float, float]:
+    a, b, c, d = _numeros(valor, 4)
+    return (a, b, c, d)
+
+
+def _cor(valor: object) -> tuple[float, float, float] | None:
     if valor is None:
         return None
-    r, g, b = valor
-    return (float(r), float(g), float(b))
+    r, g, b = _numeros(valor, 3)
+    return (r, g, b)
 
 
-def _inteiros(valor: Any) -> tuple[int, ...]:
-    return tuple(int(item) for item in valor)
+def _inteiros(valor: object) -> tuple[int, ...]:
+    return tuple(_inteiro(item) for item in _lista(valor))
 
 
-def _textos(valor: Any) -> tuple[str, ...]:
-    return tuple(str(item) for item in valor)
+def _textos(valor: object) -> tuple[str, ...]:
+    return tuple(_texto(item) for item in _lista(valor))
 
 
-def _estilo(bruto: dict[str, Any]) -> Estilo:
+def _estilo(valor: object) -> Estilo:
+    bruto = _objeto(valor)
     return Estilo(
-        camada=str(bruto["camada"]),
+        camada=_texto(bruto["camada"]),
         cor=_cor(bruto["cor"]),
         preenchimento=_cor(bruto["preenchimento"]),
-        espessura=float(bruto["espessura"]),
-        tracejado=str(bruto["tracejado"]),
+        espessura=_numero(bruto["espessura"]),
+        tracejado=_texto(bruto["tracejado"]),
     )
 
 
-def _item(bruto: dict[str, Any]) -> ItemCaminho:
+def _item(valor: object) -> ItemCaminho:
+    bruto = _objeto(valor)
     tipo = bruto["tipo"]
     if tipo not in ("l", "c"):
-        raise ValueError("Tipo de item inválido no cache")
-    return ItemCaminho(tipo=tipo, pontos=tuple(_ponto(p) for p in bruto["pontos"]))
+        raise _CacheInvalidoError("tipo de item inválido")
+    pontos = tuple(_ponto(p) for p in _lista(bruto["pontos"]))
+    return ItemCaminho(tipo=tipo, pontos=pontos)
 
 
-def _caminho(bruto: dict[str, Any]) -> Caminho:
+def _caminho(valor: object) -> Caminho:
+    bruto = _objeto(valor)
     tipo = bruto["tipo"]
     if tipo not in ("traco", "preenchimento", "traco_e_preenchimento"):
-        raise ValueError("Tipo de caminho inválido no cache")
+        raise _CacheInvalidoError("tipo de caminho inválido")
     return Caminho(
-        subcaminhos=tuple(tuple(_item(i) for i in sub) for sub in bruto["subcaminhos"]),
+        subcaminhos=tuple(
+            tuple(_item(i) for i in _lista(sub)) for sub in _lista(bruto["subcaminhos"])
+        ),
         estilo=_estilo(bruto["estilo"]),
         tipo=tipo,
-        ordem=int(bruto["ordem"]),
+        ordem=_inteiro(bruto["ordem"]),
     )
 
 
-def _texto(bruto: dict[str, Any]) -> TextoModelo:
+def _texto_modelo(valor: object) -> TextoModelo:
+    bruto = _objeto(valor)
     origem = bruto["origem"]
     if origem not in ("nativo", "shx"):
-        raise ValueError("Origem de texto inválida no cache")
+        raise _CacheInvalidoError("origem de texto inválida")
     return TextoModelo(
-        texto=str(bruto["texto"]),
+        texto=_texto(bruto["texto"]),
         bbox=_caixa(bruto["bbox"]),
         origem=origem,
-        rotacao=float(bruto["rotacao"]),
-        altura=float(bruto["altura"]),
-        fonte=str(bruto["fonte"]),
-        camada=str(bruto["camada"]),
+        rotacao=_numero(bruto["rotacao"]),
+        altura=_numero(bruto["altura"]),
+        fonte=_texto(bruto["fonte"]),
+        camada=_texto(bruto["camada"]),
     )
 
 
-def _primitiva(bruto: dict[str, Any]) -> Polilinha | Circulo | Arco:
+def _primitiva(valor: object) -> Polilinha | Circulo | Arco:
+    bruto = _objeto(valor)
     estilo = _estilo(bruto["estilo"])
     origens = _inteiros(bruto["origens"])
     if "pontos" in bruto:
-        return Polilinha(
-            tuple(_ponto(p) for p in bruto["pontos"]), bool(bruto["fechada"]), estilo, origens
-        )
+        pontos = tuple(_ponto(p) for p in _lista(bruto["pontos"]))
+        return Polilinha(pontos, _booleano(bruto["fechada"]), estilo, origens)
+    centro = _ponto(bruto["centro"])
+    raio = _numero(bruto["raio"])
     if "angulo_inicial" in bruto:
         return Arco(
-            _ponto(bruto["centro"]),
-            float(bruto["raio"]),
-            float(bruto["angulo_inicial"]),
-            float(bruto["angulo_final"]),
+            centro,
+            raio,
+            _numero(bruto["angulo_inicial"]),
+            _numero(bruto["angulo_final"]),
             estilo,
             origens,
         )
-    return Circulo(_ponto(bruto["centro"]), float(bruto["raio"]), estilo, origens)
+    return Circulo(centro, raio, estilo, origens)
 
 
-def _grupo(bruto: dict[str, Any]) -> GrupoCandidato:
+def _grupo(valor: object) -> GrupoCandidato:
+    bruto = _objeto(valor)
     return GrupoCandidato(
         _caixa(bruto["bbox"]),
         _inteiros(bruto["indices_primitivas"]),
@@ -183,50 +240,67 @@ def _grupo(bruto: dict[str, Any]) -> GrupoCandidato:
     )
 
 
-def _imagem(bruto: dict[str, Any]) -> ImagemModelo:
+def _imagem(valor: object) -> ImagemModelo:
+    bruto = _objeto(valor)
     return ImagemModelo(
         _caixa(bruto["bbox"]),
-        int(bruto["largura_px"]),
-        int(bruto["altura_px"]),
-        str(bruto["sha256"]),
-        bool(bruto["de_anotacao"]),
+        _inteiro(bruto["largura_px"]),
+        _inteiro(bruto["altura_px"]),
+        _texto(bruto["sha256"]),
+        _booleano(bruto["de_anotacao"]),
     )
 
 
-def _pagina(bruto: dict[str, Any]) -> PaginaModelo:
+def _pagina(valor: object) -> PaginaModelo:
+    bruto = _objeto(valor)
     return PaginaModelo(
-        indice=int(bruto["indice"]),
-        largura=float(bruto["largura"]),
-        altura=float(bruto["altura"]),
-        caminhos=tuple(_caminho(i) for i in bruto["caminhos"]),
-        textos=tuple(_texto(i) for i in bruto["textos"]),
-        primitivas=tuple(_primitiva(i) for i in bruto["primitivas"]),
-        grupos=tuple(_grupo(i) for i in bruto["grupos"]),
-        imagens=tuple(_imagem(i) for i in bruto["imagens"]),
+        indice=_inteiro(bruto["indice"]),
+        largura=_numero(bruto["largura"]),
+        altura=_numero(bruto["altura"]),
+        caminhos=tuple(_caminho(i) for i in _lista(bruto["caminhos"])),
+        textos=tuple(_texto_modelo(i) for i in _lista(bruto["textos"])),
+        primitivas=tuple(_primitiva(i) for i in _lista(bruto["primitivas"])),
+        grupos=tuple(_grupo(i) for i in _lista(bruto["grupos"])),
+        imagens=tuple(_imagem(i) for i in _lista(bruto["imagens"])),
         diagnosticos=_textos(bruto["diagnosticos"]),
     )
 
 
 def _sinal(valor: object) -> JsonPrimitive:
-    if isinstance(valor, dict) and set(valor) == {"decimal"}:
-        return Decimal(str(valor["decimal"]))
+    if isinstance(valor, dict):
+        marcado = _objeto(valor)
+        if set(marcado) != {"decimal"}:
+            raise _CacheInvalidoError("marcador de tipo desconhecido")
+        try:
+            return Decimal(_texto(marcado["decimal"]))
+        except ArithmeticError as erro:
+            raise _CacheInvalidoError("decimal inválido") from erro
     if valor is None or isinstance(valor, (str, int, bool)):
         return valor
-    raise ValueError("Sinal inválido no cache")
+    raise _CacheInvalidoError("sinal inválido")
 
 
-def _familia(bruto: dict[str, Any]) -> PerfilFamilia:
+def _par_de_sinal(valor: object) -> tuple[str, JsonPrimitive]:
+    par = _lista(valor)
+    if len(par) != 2:
+        raise _CacheInvalidoError("sinal deve ser um par")
+    return (_texto(par[0]), _sinal(par[1]))
+
+
+def _familia(valor: object) -> PerfilFamilia:
+    bruto = _objeto(valor)
     return PerfilFamilia(
-        familia=str(bruto["familia"]),
-        sinais=tuple((str(chave), _sinal(valor)) for chave, valor in bruto["sinais"]),
+        familia=_texto(bruto["familia"]),
+        sinais=tuple(_par_de_sinal(i) for i in _lista(bruto["sinais"])),
         diagnosticos=_textos(bruto["diagnosticos"]),
     )
 
 
-def _decodificar_modelo(bruto: dict[str, Any]) -> ModeloDesenho:
+def _decodificar_modelo(valor: object) -> ModeloDesenho:
+    bruto = _objeto(valor)
     return ModeloDesenho(
-        versao=str(bruto["versao"]),
-        documento_sha256=str(bruto["documento_sha256"]),
+        versao=_texto(bruto["versao"]),
+        documento_sha256=_texto(bruto["documento_sha256"]),
         familia=_familia(bruto["familia"]),
-        paginas=tuple(_pagina(i) for i in bruto["paginas"]),
+        paginas=tuple(_pagina(i) for i in _lista(bruto["paginas"])),
     )
