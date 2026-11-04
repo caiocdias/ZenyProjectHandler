@@ -36,6 +36,16 @@ def poligono(*pontos: Ponto, tipo: TipoCaminho = "preenchimento") -> Caminho:
     return Caminho((itens,), E, tipo, 0)
 
 
+def quarto(cx: float, cy: float, r: float, k: int) -> ItemCaminho:
+    kappa = 0.5522847498307936
+    a0, a1 = math.radians(90 * k), math.radians(90 * (k + 1))
+    p0 = (cx + r * math.cos(a0), cy + r * math.sin(a0))
+    p1 = (cx + r * math.cos(a1), cy + r * math.sin(a1))
+    c1 = (p0[0] - kappa * r * math.sin(a0), p0[1] + kappa * r * math.cos(a0))
+    c2 = (p1[0] + kappa * r * math.sin(a1), p1[1] - kappa * r * math.cos(a1))
+    return ItemCaminho("c", (p0, c1, c2, p1))
+
+
 def bezier(p0: Ponto, p1: Ponto) -> ItemCaminho:
     return ItemCaminho("c", (p0, (p0[0], p0[1] + 3), (p1[0], p1[1] + 3), p1))
 
@@ -54,8 +64,7 @@ def test_triangulo_preenchido_entra_no_grupo_pelos_caminhos() -> None:
 
 
 def test_caminho_que_virou_circulo_nao_entra_duas_vezes() -> None:
-    itens = tuple(bezier((0, 0), (4, 0)) for _ in range(4))
-    caminho = Caminho((itens,), E, "preenchimento", 0)
+    caminho = Caminho((tuple(quarto(2, 2, 2.0, k) for k in range(4)),), E, "preenchimento", 0)
     grupos = agrupar_candidatos([circulo(2, 2)], [caminho])
     assert len(grupos) == 1
     assert grupos[0].indices_primitivas == (0,) and grupos[0].indices_caminhos == ()
@@ -91,6 +100,25 @@ def test_descarta_grupo_maior_que_lado_maximo() -> None:
 
 def test_descarta_polilinha_aberta_isolada_de_dois_pontos() -> None:
     assert agrupar_candidatos([linha((0, 0), (10, 0))], []) == ()
+
+
+def test_linha_longa_encostada_nao_apaga_o_simbolo() -> None:
+    primitivas: list[Polilinha | Circulo | Arco] = [
+        linha((0, 0), (200, 0)),
+        circulo(10, 4, 2.0),
+        linha((8, 2), (8, 0), (12, 0)),
+    ]
+    (grupo,) = agrupar_candidatos(primitivas, [])
+    assert grupo.indices_primitivas == (1, 2)
+
+
+def test_traco_com_um_arco_reconhecido_e_outra_curva_livre_entra_pelos_caminhos() -> None:
+    arco = Arco((0, 0), 4.0, 0.0, 90.0, E, (0,))
+    so_arco = Caminho(((quarto(0, 0, 4.0, 0),),), E, "traco", 0)
+    assert agrupar_candidatos([arco], [so_arco]) == agrupar_candidatos([arco], [])
+    com_curva = Caminho(((quarto(0, 0, 4.0, 0), bezier((30, 0), (36, 0))),), E, "traco", 0)
+    grupos = agrupar_candidatos([arco], [com_curva])
+    assert [g.indices_caminhos for g in grupos] == [(0,)]
 
 
 def _melhor_tempo(n: int) -> float:

@@ -6,16 +6,19 @@ import math
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 
+from zeny_project_handler.adapters.analysis.drawing_model.geometry import _ponto_bezier
 from zeny_project_handler.adapters.analysis.drawing_model.model import (
     Arco,
     Caixa,
     Caminho,
     Circulo,
     GrupoCandidato,
+    ItemCaminho,
     Polilinha,
 )
 
 _CELULA = 10.0
+_TOLERANCIA_RELATIVA = 0.02
 
 
 def _caixa_pontos(pontos: Iterable[tuple[float, float]]) -> Caixa:
@@ -36,28 +39,37 @@ def _caixa_caminho(caminho: Caminho) -> Caixa:
     )
 
 
+def _no_circulo(figura: Circulo | Arco, ponto: tuple[float, float]) -> bool:
+    distancia = math.dist(figura.centro, ponto)
+    return abs(distancia - figura.raio) <= _TOLERANCIA_RELATIVA * figura.raio
+
+
+def _item_coberto(item: ItemCaminho, figuras: Sequence[Circulo | Arco]) -> bool:
+    pontos = (item.pontos[0], _ponto_bezier(item.pontos, 0.5), item.pontos[-1])
+    return any(all(_no_circulo(figura, ponto) for ponto in pontos) for figura in figuras)
+
+
 def _caminhos_elegiveis(
     primitivas: Sequence[Polilinha | Circulo | Arco], caminhos: Sequence[Caminho]
 ) -> list[int]:
-    origens_circulo: set[int] = set()
-    origens_curva: set[int] = set()
+    figuras_por_origem: dict[int, list[Circulo | Arco]] = defaultdict(list)
     for primitiva in primitivas:
-        if isinstance(primitiva, Circulo):
-            origens_circulo.update(primitiva.origens)
-            origens_curva.update(primitiva.origens)
-        elif isinstance(primitiva, Arco):
-            origens_curva.update(primitiva.origens)
+        if isinstance(primitiva, Circulo | Arco):
+            for origem in primitiva.origens:
+                figuras_por_origem[origem].append(primitiva)
     elegiveis: list[int] = []
     for indice, caminho in enumerate(caminhos):
         itens = [item for sub in caminho.subcaminhos for item in sub]
         if not itens:
             continue
-        if indice in origens_circulo and all(item.tipo == "c" for item in itens):
-            continue  # inteiramente convertido em círculo
-        if caminho.tipo == "traco":
-            if indice not in origens_curva and any(item.tipo == "c" for item in itens):
-                elegiveis.append(indice)
-        else:
+        figuras = figuras_por_origem.get(indice, [])
+        if figuras and all(item.tipo == "c" for item in itens):
+            circulos = [f for f in figuras if isinstance(f, Circulo)]
+            if any(all(_item_coberto(item, [c]) for item in itens) for c in circulos):
+                continue  # inteiramente convertido num mesmo círculo
+        if caminho.tipo != "traco" or any(
+            item.tipo == "c" and not _item_coberto(item, figuras) for item in itens
+        ):
             elegiveis.append(indice)
     return elegiveis
 
@@ -82,7 +94,11 @@ def agrupar_candidatos(
         return i
 
     celulas: dict[tuple[int, int], list[int]] = defaultdict(list)
+    # Elemento maior que `lado_maximo` sozinho é traçado da rede, não parte de símbolo.
+    grandes = {i for i, c in enumerate(caixas) if max(c[2] - c[0], c[3] - c[1]) > lado_maximo}
     for i, (x0, y0, x1, y1) in enumerate(caixas):
+        if i in grandes:
+            continue
         faixa_x = range(math.floor((x0 - folga) / _CELULA), math.floor((x1 + folga) / _CELULA) + 1)
         faixa_y = range(math.floor((y0 - folga) / _CELULA), math.floor((y1 + folga) / _CELULA) + 1)
         vizinhos: set[int] = set()
@@ -104,6 +120,8 @@ def agrupar_candidatos(
 
     membros: dict[int, list[int]] = defaultdict(list)
     for i in range(total):
+        if i in grandes:
+            continue
         membros[raiz(i)].append(i)
 
     n_prim = len(primitivas)
