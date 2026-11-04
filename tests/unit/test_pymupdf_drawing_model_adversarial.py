@@ -605,3 +605,59 @@ def test_texto_parcialmente_fora_da_pagina_recebe_a_camada_certa(
 
     assert textos, "o texto parcialmente dentro da página deve ser lido"
     assert {t.camada for t in textos} == {"NOTAS"}
+
+
+def _desenho_preenchido(x: float, y: float, preenchimento: Any) -> dict[str, Any]:
+    cantos = [pymupdf.Point(x, y), pymupdf.Point(x + 2, y), pymupdf.Point(x + 2, y + 2)]
+    return {
+        "type": "f",
+        "items": [("l", cantos[0], cantos[1]), ("l", cantos[1], cantos[2])],
+        "fill": preenchimento,
+        "color": None,
+        "width": 0.0,
+        "rect": pymupdf.Rect(x, y, x + 2, y + 2),
+        "layer": "",
+    }
+
+
+def _caminhos_com_desenhos(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, desenhos: list[dict[str, Any]]
+) -> tuple[Any, ...]:
+    pdf = tmp_path / "vazio.pdf"
+    with pymupdf.open() as documento:
+        documento.new_page(width=_LARGURA, height=_ALTURA)
+        documento.save(pdf)
+    monkeypatch.setattr(pymupdf.Page, "get_drawings", lambda _pagina, extended=False: desenhos)
+    with pymupdf.open(pdf) as documento:
+        return pymupdf_drawing_model.caminhos_da_pagina(documento[0])
+
+
+def test_desenho_com_cor_de_aridade_errada_nao_esvazia_a_pagina(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    malformado = _desenho_preenchido(10, 10, (0.1, 0.2, 0.3, 0.4))
+    malformado["color"] = (0.5,)
+    valido = _desenho_preenchido(20, 20, (0.0, 1.0, 0.0))
+
+    caminhos = _caminhos_com_desenhos(tmp_path, monkeypatch, [malformado, valido])
+
+    primeiro, segundo = caminhos
+    assert primeiro.estilo.preenchimento is None and primeiro.estilo.cor is None
+    assert primeiro.subcaminhos[0][0].pontos == ((10.0, 10.0), (12.0, 10.0))
+    assert segundo.estilo.preenchimento == (0.0, 1.0, 0.0)
+    assert (primeiro.ordem, segundo.ordem) == (0, 1)
+
+
+@pytest.mark.parametrize("valor", [float("nan"), float("inf"), float("-inf")])
+def test_desenho_com_coordenada_nao_finita_e_descartado(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, valor: float
+) -> None:
+    hostil = _desenho_preenchido(10, 10, (0.0, 0.0, 0.0))
+    hostil["items"] = [("l", pymupdf.Point(10, 10), pymupdf.Point(valor, 12))]
+    valido = _desenho_preenchido(20, 20, (0.0, 0.0, 1.0))
+
+    (caminho,) = _caminhos_com_desenhos(tmp_path, monkeypatch, [hostil, valido])
+
+    assert caminho.estilo.preenchimento == (0.0, 0.0, 1.0)
+    assert caminho.subcaminhos[0][0].pontos == ((20.0, 20.0), (22.0, 20.0))
+    assert caminho.ordem == 1

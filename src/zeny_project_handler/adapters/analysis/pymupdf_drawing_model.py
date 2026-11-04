@@ -262,17 +262,37 @@ def _desenhos(pagina: Any) -> list[dict[str, Any]]:
     ]
 
 
-def _caminhos_e_glifos(pagina: Any) -> tuple[tuple[Caminho, ...], int]:
-    desenhos = _desenhos(pagina)
-    transformar = _transformacao(pagina)
+def caminhos_da_pagina(pagina: Any) -> tuple[Caminho, ...]:
+    """Caminhos da página visual; um desenho malformado sai sozinho, sem esvaziar a página."""
+    return _caminhos(_desenhos(pagina), _transformacao(pagina))
+
+
+def _caminhos(desenhos: Sequence[dict[str, Any]], transformar: _Transformar) -> tuple[Caminho, ...]:
     caminhos = []
     for ordem, desenho in enumerate(desenhos):
-        subcaminhos = _subcaminhos(desenho.get("items") or (), transformar)
-        if subcaminhos:
-            caminhos.append(
-                Caminho(subcaminhos, _estilo(desenho), _TIPOS_CAMINHO[desenho["type"]], ordem)
-            )
-    return tuple(caminhos), sum(1 for desenho in desenhos if _is_glyph(desenho))
+        try:
+            subcaminhos = _subcaminhos(desenho.get("items") or (), transformar)
+            estilo = _estilo(desenho)
+        except Exception:
+            continue
+        if subcaminhos and _finitos(subcaminhos):
+            caminhos.append(Caminho(subcaminhos, estilo, _TIPOS_CAMINHO[desenho["type"]], ordem))
+    return tuple(caminhos)
+
+
+def _finitos(subcaminhos: tuple[tuple[ItemCaminho, ...], ...]) -> bool:
+    return all(
+        math.isfinite(x) and math.isfinite(y)
+        for subcaminho in subcaminhos
+        for item in subcaminho
+        for x, y in item.pontos
+    )
+
+
+def _caminhos_e_glifos(pagina: Any) -> tuple[tuple[Caminho, ...], int]:
+    desenhos = _desenhos(pagina)
+    caminhos = _caminhos(desenhos, _transformacao(pagina))
+    return caminhos, sum(1 for desenho in desenhos if _is_glyph(desenho))
 
 
 def _subcaminhos(
@@ -308,10 +328,14 @@ def _subcaminhos(
 
 
 def _cor(valor: Sequence[float] | None) -> Cor | None:
-    if not valor:
+    """Cor RGB; aridade diferente de 3 ou componente não finito vira None."""
+    try:
+        componentes = tuple(float(v) for v in valor or ())
+    except (TypeError, ValueError):
         return None
-    vermelho, verde, azul = (float(v) for v in valor)
-    return (vermelho, verde, azul)
+    if len(componentes) != 3 or not all(math.isfinite(v) for v in componentes):
+        return None
+    return (componentes[0], componentes[1], componentes[2])
 
 
 def _estilo(desenho: dict[str, Any]) -> Estilo:
