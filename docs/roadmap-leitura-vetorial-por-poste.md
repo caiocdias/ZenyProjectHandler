@@ -72,7 +72,7 @@ A análise entrega, para cada poste da folha, a ficha correta: identificador, es
 |---|---|---|---|
 | H1 | Nas famílias sem texto nativo, cada forma pequena preenchida é um glifo de fonte fixa | a leitura por assinatura precisa segmentar glifos compostos ou tolerar variação de curva | E05 |
 | H2 | Os símbolos da rede são vetoriais em todas as famílias | símbolos rasterizados vão direto para o resíduo do detector (E12) | E06 |
-| H3 | As imagens das folhas Print To PDF e iText são só ladrilhos da ortofoto | se carregarem símbolos ou texto, o OCR não pode sair em E09 | E04 |
+| H3 | As imagens das folhas Print To PDF e iText são só ladrilhos da ortofoto. Resultado da E04: os ladrilhos são só ortofoto e nenhum símbolo é raster, mas as folhas iText trazem tabelas (CHI, servidão, APP) como imagem e a folha Ghostscript traz um rótulo de poste em imagem de anotação | se carregarem símbolos ou texto, o OCR não pode sair em E09 — há texto em raster: a E09 precisa tratá-lo ou declará-lo fora da ficha | E04, E09 |
 | H4 | O usuário reserva folhas novas, ainda não vistas, para o conjunto de avaliação antes de E09 | sem elas, E09 não tem prova cega e fica bloqueada | E09 |
 | H5 | PyTorch com ROCm treina na RX 9070 XT desta máquina (Windows nativo ou WSL2) | o treino cai para CPU ou para GPU alugada (D1) | E11 |
 | D1 | Treinar em GPU alugada por hora, se ROCm e CPU forem inviáveis | sem decisão, E12 só treina em CPU | E12 (só se E11 concluir que o treino local é inviável) |
@@ -176,7 +176,7 @@ Bloco B — leitura vetorial
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E04 | Modelo de desenho e perfis de família | #em-andamento | E01 | modelo de desenho por página, perfil por família e DXF de depuração |
+| E04 | Modelo de desenho e perfis de família | #concluida | E01 | modelo de desenho por página, perfil por família e DXF de depuração |
 | E05 | Texto por contorno de glifo | #pendente | E04, E03 | tabela de glifos e texto recuperado sem OCR nas 4 famílias |
 | E06 | Símbolos sobre o modelo de desenho | #pendente | E05 | pacotes declarativos avaliados sobre o modelo vetorial |
 | E07 | Ficha do poste | #pendente | E06 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
@@ -522,7 +522,7 @@ Bloco C — aprendizado
 
 ---
 
-## E04 — Modelo de desenho e perfis de família — #em-andamento
+## E04 — Modelo de desenho e perfis de família — #concluida
 
 **Objetivo:** transformar cada página num modelo de desenho derivado e reconhecer a família do PDF, conforme as decisões 1 e 2 do design.
 
@@ -546,11 +546,11 @@ Bloco C — aprendizado
 
 **Critérios de aceite:**
 
-- [ ] Fixtures sintéticas de cada família são reconhecidas corretamente, e uma família desconhecida cai no genérico com diagnóstico.
-- [ ] Uma fixture com segmentos colineares fragmentados vira uma polilinha, e uma fixture com círculo em 4 Béziers vira um círculo.
-- [ ] O DXF de depuração de uma fixture abre com ezdxf e preserva camadas e textos.
-- [ ] O resultado de H3 está no handoff.
-- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+- [x] Fixtures sintéticas de cada família são reconhecidas corretamente, e uma família desconhecida cai no genérico com diagnóstico.
+- [x] Uma fixture com segmentos colineares fragmentados vira uma polilinha, e uma fixture com círculo em 4 Béziers vira um círculo.
+- [x] O DXF de depuração de uma fixture abre com ezdxf e preserva camadas e textos.
+- [x] O resultado de H3 está no handoff.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
 **Validação obrigatória:**
 
@@ -570,12 +570,30 @@ Bloco C — aprendizado
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- Plano: `docs/superpowers/plans/2026-11-04-leitura-vetorial-por-poste-e04.md`. A revisão de arquitetura bloqueou nas rodadas 0 e 1 e aprovou com notas na rodada 2 (seção "Revisão de arquitetura" do plano).
+- Entregas: pacote puro `adapters/analysis/drawing_model/` (modelo com caminhos brutos, polilinhas, círculos/arcos, grupos candidatos, textos nativo/SHX, imagens; perfil por família; cache derivado `modelo-desenho-v1`), leitor `adapters/analysis/pymupdf_drawing_model.py`, scripts `drawing_model_dxf` (ezdxf só no lock de desenvolvimento) e `drawing_model_report`; guardas de import em `tests/unit/test_architecture.py`. O analisador padrão não mudou.
+- Commits: plano 83b0dc8, 526861c, 1c9aa27, d6b842c; Task 1 461d10f, 602b9de, de8b4fe, 406f2ae; Task 2 a13da40, 7b23406, 5abf36c, bb25bf9, 9a5cfc3; Task 3 6e37cae, 3694105, 11ed33c, 091fe29; Task 4 a4e8637, e653a73, 0a76c05/1bb063c (relatório do workspace versionado por engano e retirado), b23066d, e9a893d, 277d311, 904a95a, 41f58bc; Task 5 90bc49c, ae4240d, 1315bfb, 78f478f, 2b2fd89; Task 6 cbc03d4, 9b80de4; onda final f7e82da, 6d8f641, 29a6e4e, b8498dd, 019dfa8.
+- Revisão final (`revisor-seguranca`, opus) sobre 6a1f438..9b80de4: aprovado com ressalvas, sem Crítico; pediu o registro de H3 e handoff (feito aqui) e o teto de pixels na imagem de anotação. Onda única: teto de pixels, cache conferindo o sha256 no hit e antes de gravar, relatório com `erro_amostras`, `fonte_pixels` e `is_file`, linha de arquitetura no `CLAUDE.md`; o testador achou 2 contornos do teto (/Width real e indireto) e um despacho curto a mais corrigiu (exceção registrada para não deixar a suíte vermelha). Re-revisão escopada: os 6 achados resolvidos, sem quebra nova. Scanner `osv-scanner` nos 6 locks: `No issues found`. `check_test_integrity --base 6a1f438`: 1 apontamento (skip da junção NTFS fora do Windows, justificado; o teste roda nesta máquina). Gate de fechamento: `IniciarTestes.bat` real em 019dfa8 → 4229 passed, cobertura 88,51%, `RESULTADO FINAL: APROVADO`.
+- Cada tarefa passou por desenvolvedor, testador (que achou defeitos reais em todas as tarefas menos a 6: segmento duplicado, remoção quadrática, grade de camada sem limite com `Tm` gigante, coerção de tipos e estouros no cache, colisão de camadas no DXF), verificação mecânica e revisão limpa da `revisor-seguranca`. O gate de complexidade reprovou a Task 2 depois da revisão (CC 32) e ela foi reaberta e refatorada.
+- Execução nas 16 folhas reais (`tmp/e04/` do checkout principal): famílias 8 `electric_office_print`, 6 `itext`, 1 `ghostscript`, 1 `autocad` (bate com o esperado); 0,24–6,4 s por folha, pico Python até 44 MB (o `tracemalloc` não conta a memória nativa do MuPDF); nenhum diagnóstico de fonte; DXF de uma folha Electric Office e da folha AutoCAD (12 camadas = OCGs) em `tmp/e04/`, abrem no ezdxf.
+- **H3 — resultado:** os ladrilhos das folhas são só ortofoto (retangulares e triangulares de meia diagonal, sem rede, símbolo ou texto queimado), e nenhum símbolo da rede é raster. **Mas há texto em raster:** nas folhas iText, a tabela "CHI previsto / dispositivo de seccionamento", o quadro de servidão e a nota de intervenção em APP são imagens coladas (confirmado pela extração crua das imagens); na folha Ghostscript, uma correção de rótulo de poste chega como imagem de anotação. Nas folhas Electric Office essas tabelas são texto nativo. Impacto: o OCR não sai na E09 sem tratar esses blocos ou declará-los fora da ficha. O classificador `ladrilho` do relatório não pega os ladrilhos triangulares e de borda (caem em `outra`), então `ladrilho` e `fracao_ladrilhos` subestimam a cobertura de ortofoto.
+- Critérios verificados:
+  - famílias: `test_fixture_de_cada_familia_e_reconhecida` e testes de `family.py` (4 famílias + genérico com `familia.desconhecida`/`familia.print_to_pdf_sem_glifos`);
+  - polilinha e círculo: `test_segmentos_fragmentados_do_pdf_viram_uma_polilinha` e `test_circulo_desenhado_com_beziers_vira_circulo`;
+  - DXF: `test_dxf_da_fixture_abre_com_ezdxf_e_preserva_camadas_e_textos` (camadas `P` e `NOTAS`, texto em `NOTAS`);
+  - H3: acima;
+  - gate: `IniciarTestes.bat` → `RESULTADO FINAL: APROVADO` (linha "Revisão final").
+- Decisões para o usuário (tomadas pela opção recomendada):
+  - **ezdxf** só em `requirements-development.lock` e no extra `dev` (gate verifica o DXF; o servidor e o cliente não recebem a dependência); numpy fixado em 2.3.5 para o lock de desenvolvimento continuar instalável junto com o de experimentos. A linha de "Fronteiras" do design sobre locks fica como pendência do arquiteto.
+  - **Elementos grandes fora do agrupamento** e cobertura de curvas por item (sem isso, uma linha da rede encostada num símbolo apagava o símbolo).
+  - **Cache estrito:** qualquer tipo errado ou negativo em índice/dimensão = cache corrompido.
+- Notas para a próxima etapa (obrigatórias quando o modelo entrar no job do servidor, E05–E07):
+  - `VERSAO_MODELO_DESENHO` entra na assinatura de capacidade e na versão do extrator (ADR 0004/0006); se `application/` precisar dos tipos do modelo, eles migram para `ports/`.
+  - Robustez contra PDF hostil antes do servidor: orçamento no casamento de camada do texto (resíduo O(N²) com muitos trechos gigantes; diagnóstico `modelo.camadas_texto_limitadas`), limite de tamanho antes de ler o cache, NaN/Infinity no cache (quebram JSON estrito), custo de célula densa no union-find, unidade de falha mais fina (uma anotação malformada ou uma cor de aridade ≠ 3 esvazia a fonte inteira da página).
+  - Desenhos de anotação (bordas de carimbo, vetores do portador SHX) entram em `caminhos`; no AutoCAD o SHX também chega como traço vetorial e gera polilinhas e grupos que duplicam o texto (E06).
+  - Texto SHX sai com rotação 0, altura = altura da caixa e camada vazia; `ImagemModelo.sha256` é o sha256 do digest de pixels da PyMuPDF, exceto para imagem de anotação acima do teto de 16 MP ou com dimensão indeterminada, que usa o sha256 do stream bruto (não decodifica).
+  - O teto de pixels confia em /Width e /Height do dicionário: imagem JPX (dimensionada pelo codestream) e /SMask com dimensões próprias ainda escapam; tratar junto com os demais itens de PDF hostil.
+  - A onda final mudou a saída em casos de borda (dimensão real/indireta, identidade acima do teto) sem incrementar `modelo-desenho-v1`, porque não havia consumidor nem cache publicado; caches em `tmp/` gravados antes de 019dfa8 podem ter a identidade antiga — apague-os antes de reaproveitar.
 
 ---
 
