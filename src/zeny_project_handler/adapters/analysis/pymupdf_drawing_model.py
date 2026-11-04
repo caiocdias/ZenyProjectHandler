@@ -56,6 +56,8 @@ _TIPOS_CAMINHO: Final[dict[str, Literal["traco", "preenchimento", "traco_e_preen
 }
 _PROFUNDIDADE_APARENCIA: Final = 12
 _CELULA_TEXTO: Final = 20.0
+_MAXIMO_CELULAS_TEXTO: Final = 256
+_MARGEM_TEXTO: Final = 2.0
 
 _T = TypeVar("_T")
 _Transformar = Callable[[Any], Ponto]
@@ -281,13 +283,28 @@ def _estilo(desenho: dict[str, Any]) -> Estilo:
 
 
 class _CamadasDoTexto:
-    """Casa um span do RAWDICT com o trecho do `get_texttrace()` de maior sobreposição."""
+    """Casa um span do RAWDICT com o trecho do `get_texttrace()` de maior sobreposição.
 
-    def __init__(self, trechos: Iterable[dict[str, Any]]) -> None:
+    A grade só indexa a parte das caixas dentro da página (com margem), e uma caixa que
+    cobriria mais de `_MAXIMO_CELULAS_TEXTO` células vai para uma lista percorrida
+    linearmente: um `Tm` gigante não multiplica entradas na grade.
+    """
+
+    def __init__(self, trechos: Iterable[dict[str, Any]], limite: Caixa) -> None:
+        self._limite = (
+            limite[0] - _MARGEM_TEXTO,
+            limite[1] - _MARGEM_TEXTO,
+            limite[2] + _MARGEM_TEXTO,
+            limite[3] + _MARGEM_TEXTO,
+        )
         self._trechos: list[tuple[Caixa, str, str, float]] = []
         self._celulas: dict[tuple[int, int], list[int]] = defaultdict(list)
+        self._grandes: list[int] = []
         for trecho in trechos:
             caixa = cast(Caixa, tuple(float(v) for v in trecho["bbox"]))
+            recorte = self._recortar(caixa)
+            if recorte is None:
+                continue
             indice = len(self._trechos)
             self._trechos.append(
                 (
@@ -297,21 +314,41 @@ class _CamadasDoTexto:
                     float(trecho.get("size") or 0.0),
                 )
             )
-            for celula in self._celulas_de(caixa):
+            celulas = self._celulas_de(recorte)
+            if celulas is None:
+                self._grandes.append(indice)
+                continue
+            for celula in celulas:
                 self._celulas[celula].append(indice)
 
+    def _recortar(self, caixa: Caixa) -> Caixa | None:
+        x0, y0 = max(caixa[0], self._limite[0]), max(caixa[1], self._limite[1])
+        x1, y1 = min(caixa[2], self._limite[2]), min(caixa[3], self._limite[3])
+        return (x0, y0, x1, y1) if x0 <= x1 and y0 <= y1 else None
+
     @staticmethod
-    def _celulas_de(caixa: Caixa) -> Iterable[tuple[int, int]]:
+    def _celulas_de(caixa: Caixa) -> list[tuple[int, int]] | None:
+        """Células da caixa (já recortada), ou None acima do teto."""
         x0, y0, x1, y1 = (math.floor(v / _CELULA_TEXTO) for v in caixa)
-        return ((cx, cy) for cx in range(x0, x1 + 1) for cy in range(y0, y1 + 1))
+        if (x1 - x0 + 1) * (y1 - y0 + 1) > _MAXIMO_CELULAS_TEXTO:
+            return None
+        return [(cx, cy) for cx in range(x0, x1 + 1) for cy in range(y0, y1 + 1)]
+
+    def _candidatos(self, caixa: Caixa) -> Iterable[int]:
+        recorte = self._recortar(caixa)
+        if recorte is None:
+            return ()
+        celulas = self._celulas_de(recorte)
+        if celulas is None:
+            return range(len(self._trechos))
+        candidatos = {i for celula in celulas for i in self._celulas.get(celula, ())}
+        candidatos.update(self._grandes)
+        return sorted(candidatos)
 
     def camada(self, caixa: Caixa, fonte: str, tamanho: float) -> str:
-        candidatos = {
-            i for celula in self._celulas_de(caixa) for i in self._celulas.get(celula, ())
-        }
         melhor: tuple[bool, float] | None = None
         camada = ""
-        for indice in sorted(candidatos):
+        for indice in self._candidatos(caixa):
             (tx0, ty0, tx1, ty1), camada_trecho, fonte_trecho, tamanho_trecho = self._trechos[
                 indice
             ]
@@ -332,7 +369,11 @@ def _textos_nativos(pagina: Any) -> tuple[TextoModelo, ...]:
     bruto = cast(
         dict[str, Any], _native_textpage(pagina, pymupdf.TEXTFLAGS_RAWDICT).extractRAWDICT()
     )
-    camadas = _CamadasDoTexto(pagina.get_texttrace())
+    sem_rotacao = pagina.rect * pagina.derotation_matrix
+    camadas = _CamadasDoTexto(
+        pagina.get_texttrace(),
+        (sem_rotacao.x0, sem_rotacao.y0, sem_rotacao.x1, sem_rotacao.y1),
+    )
     transformar = _transformacao(pagina)
     origem = transformar((0.0, 0.0))
     textos: list[TextoModelo] = []

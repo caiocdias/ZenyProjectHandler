@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import time
 from pathlib import Path
 from typing import Any
 
@@ -445,3 +446,24 @@ def test_falha_dos_caminhos_esvazia_so_os_derivados(
     assert pagina_modelo.caminhos == ()
     assert pagina_modelo.primitivas == () and pagina_modelo.grupos == ()
     assert _nativos(pagina_modelo) == ["P1"]
+
+
+def test_texto_com_matriz_gigante_nao_explode_o_casamento_de_camada(tmp_path: Path) -> None:
+    with pymupdf.open() as documento:
+        pagina = documento.new_page(width=300, height=200)
+        ocg = documento.add_ocg("P", on=True)
+        pagina.insert_text((50, 80), "P1", fontsize=10, fontname="helv", oc=ocg)
+        xref_conteudo = pagina.get_contents()[-1]
+        conteudo = bytes(documento.xref_stream(xref_conteudo) or b"")
+        gigante = b"\nBT /helv 1 Tf 100000 0 0 100000 0 0 Tm (AAAA) Tj ET\n" * 3
+        documento.update_stream(xref_conteudo, conteudo + gigante)
+        pdf = _salvar(documento, tmp_path / "matriz-gigante.pdf")
+
+    inicio = time.perf_counter()
+    pagina_modelo = _pagina(extrair_modelo_desenho(pdf))
+    duracao = time.perf_counter() - inicio
+
+    assert duracao < 5.0
+    assert pagina_modelo.diagnosticos == ()
+    camadas = {t.texto: t.camada for t in pagina_modelo.textos}
+    assert camadas["P1"] == "P"
