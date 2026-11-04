@@ -20,6 +20,9 @@ Com ``--amostras-imagem``, grava PNGs nomeados pelo ``sha256`` da imagem: cada `
 ladrilhos sorteados com ``random.Random(sha256 do PDF)``. O PNG de imagem de página traz os
 pixels originais (localizados pelo digest do pixmap); quando não há como localizá-los (imagem de
 anotação), é um recorte renderizado da caixa a 150 dpi, que inclui o que estiver sobreposto.
+Cada amostra gravada traz ``fonte_pixels`` (``original`` ou ``recorte``); um sha256 já gravado
+na execução não é regravado. Falha ao gravar amostras não descarta a medição: vira
+``erro_amostras`` (nome da classe da exceção) no PDF.
 
 ``--saida`` e ``--amostras-imagem`` precisam ficar em ``tmp/`` da raiz do repositório (padrão:
 diretório atual). Nada no relatório nem nos nomes de arquivo traz caminho, nome, produtor ou
@@ -267,21 +270,35 @@ def _pixels_da_pagina(documento: Any, pagina: Any, sha256: str) -> bytes | None:
     return None
 
 
-def gravar_amostras(pdf: Path, amostras: Sequence[dict[str, Any]], destino: Path) -> None:
+def _pixels_da_amostra(documento: Any, amostra: dict[str, Any]) -> tuple[bytes, str]:
+    """PNG da amostra e a origem dos pixels: ``original`` ou ``recorte`` renderizado."""
+    pagina = documento.load_page(int(amostra["pagina"]))
+    if amostra["classe"] != "anotacao":
+        conteudo = _pixels_da_pagina(documento, pagina, str(amostra["sha256"]))
+        if conteudo is not None:
+            return conteudo, "original"
+    recorte = pagina.get_pixmap(clip=pymupdf.Rect(*amostra["bbox"]), dpi=DPI_RECORTE)
+    return bytes(recorte.tobytes("png")), "recorte"
+
+
+def gravar_amostras(
+    pdf: Path,
+    amostras: Sequence[dict[str, Any]],
+    destino: Path,
+    fontes: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """Grava um PNG por sha256 ainda ausente de ``fontes`` e anota nele a origem dos pixels."""
+    fontes = {} if fontes is None else fontes
     destino.mkdir(parents=True, exist_ok=True)
     with pymupdf.open(pdf) as documento:
         for amostra in amostras:
-            alvo = destino / f"{amostra['sha256']}.png"
-            if alvo.exists():
+            sha256 = str(amostra["sha256"])
+            if sha256 in fontes:
                 continue
-            pagina = documento.load_page(int(amostra["pagina"]))
-            conteudo = None
-            if amostra["classe"] != "anotacao":
-                conteudo = _pixels_da_pagina(documento, pagina, str(amostra["sha256"]))
-            if conteudo is None:
-                recorte = pagina.get_pixmap(clip=pymupdf.Rect(*amostra["bbox"]), dpi=DPI_RECORTE)
-                conteudo = bytes(recorte.tobytes("png"))
-            alvo.write_bytes(conteudo)
+            conteudo, fonte = _pixels_da_amostra(documento, amostra)
+            (destino / f"{sha256}.png").write_bytes(conteudo)
+            fontes[sha256] = fonte
+    return fontes
 
 
 def _dentro_de_tmp(caminho: Path, raiz: Path) -> bool:
@@ -297,13 +314,22 @@ def _argumentos(argv: Sequence[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _medir_com_amostras(pdf: Path, amostras_dir: Path | None) -> dict[str, Any]:
+def _medir_com_amostras(
+    pdf: Path, amostras_dir: Path | None, fontes: dict[str, str]
+) -> dict[str, Any]:
     try:
         medicao = medir_pdf(pdf)
-        if amostras_dir is not None:
-            gravar_amostras(pdf, medicao["amostras"], amostras_dir)
     except Exception as erro:  # um PDF ruim não pode derrubar o relatório inteiro
         return {"sha256": _sha256_do_arquivo(pdf), "erro": type(erro).__name__}
+    if amostras_dir is None:
+        return medicao
+    try:
+        gravar_amostras(pdf, medicao["amostras"], amostras_dir, fontes)
+    except Exception as erro:  # falha nas amostras não descarta a medição
+        medicao["erro_amostras"] = type(erro).__name__
+    for amostra in medicao["amostras"]:
+        if amostra["sha256"] in fontes:
+            amostra["fonte_pixels"] = fontes[amostra["sha256"]]
     return medicao
 
 
@@ -320,9 +346,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not argumentos.raiz.is_dir():
         print("--raiz inexistente", file=sys.stderr)
         return 2
-    pdfs = sorted(p for p in argumentos.raiz.rglob("*") if p.suffix.lower() == ".pdf")
+    pdfs = sorted(
+        p for p in argumentos.raiz.rglob("*") if p.suffix.lower() == ".pdf" and p.is_file()
+    )
+    fontes: dict[str, str] = {}
     medicoes = sorted(
-        (_medir_com_amostras(pdf, argumentos.amostras_imagem) for pdf in pdfs),
+        (_medir_com_amostras(pdf, argumentos.amostras_imagem, fontes) for pdf in pdfs),
         key=lambda medicao: str(medicao["sha256"]),
     )
     validas = [m for m in medicoes if "erro" not in m]
