@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from zeny_project_handler.adapters.analysis.drawing_model import glyph_table
 from zeny_project_handler.adapters.analysis.drawing_model.glyph_signature import (
     PONTOS_POR_SUBCAMINHO,
     AssinaturaGlifo,
@@ -64,11 +66,21 @@ def _serializar(*entradas: EntradaGlifo) -> str:
     )
 
 
-def test_tabela_empacotada_vazia_carrega() -> None:
+def _arquivo_empacotado() -> Path:
+    return Path(glyph_table.__file__).parent.parent / "data" / "tabela-glifos-v1.json"
+
+
+def test_tabela_empacotada_real_e_valida_e_sem_dados_de_folha() -> None:
     tabela = carregar_tabela_glifos()
     assert tabela.versao == "tabela-glifos-v1"
-    assert tabela.glifos == ()
     assert len(tabela.sha256) == 64
+    caracteres = {g.caractere for g in tabela.glifos if g.caractere is not None}
+    assert sum(1 for g in tabela.glifos if g.caractere is not None) >= 30
+    assert set("0123456789") <= caracteres
+    texto = _arquivo_empacotado().read_text(encoding="utf-8").lower()
+    for proibido in ("pdf", "png", "sha", "base64"):
+        assert proibido not in texto
+    assert re.search(r"[0-9a-f]{12,}", texto) is None
 
 
 def test_ida_e_volta_preserva_a_tabela(tmp_path: Path) -> None:
