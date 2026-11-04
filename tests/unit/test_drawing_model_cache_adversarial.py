@@ -636,3 +636,153 @@ def test_pdf_inexistente_propaga_erro_com_e_sem_cache(tmp_path: Path) -> None:
     for cache in (None, JsonDrawingModelCache(tmp_path / "c")):
         with pytest.raises(OSError):
             obter_modelo_desenho(tmp_path / "nao.pdf", cache)
+
+
+# --- segunda rodada: ataque à validação estrita ------------------------------------------
+
+
+def _reescrever(tmp_path: Path, texto_json: str) -> JsonDrawingModelCache:
+    cache, alvo = _salvar(tmp_path)
+    alvo.write_text(texto_json, encoding="utf-8")
+    return cache
+
+
+def _json_com(tmp_path: Path, mutar: Callable[[dict[str, Any]], object]) -> str:
+    _, alvo = _salvar(tmp_path)
+    bruto = json.loads(alvo.read_text(encoding="utf-8"))
+    mutar(bruto)
+    return json.dumps(bruto)
+
+
+def test_inteiro_gigante_em_campo_float_equivale_a_cache_vazio(tmp_path: Path) -> None:
+    texto = _json_com(tmp_path, lambda b: _pag(b).__setitem__("largura", 10**400))
+    cache = _reescrever(tmp_path / "x", texto)
+    assert cache.obter(_CHAVE) is None
+
+
+def test_inteiro_gigante_em_campo_inteiro_nao_derruba(tmp_path: Path) -> None:
+    texto = _json_com(tmp_path, lambda b: _pag(b).__setitem__("indice", 10**400))
+    cache = _reescrever(tmp_path / "x", texto)
+    cache.obter(_CHAVE)  # não pode levantar
+
+
+def test_aninhamento_profundo_equivale_a_cache_vazio(tmp_path: Path) -> None:
+    cache = _reescrever(tmp_path, "[" * 100000 + "]" * 100000)
+    assert cache.obter(_CHAVE) is None
+
+
+@pytest.mark.parametrize(
+    "mutar",
+    [
+        lambda b: _pag(b)["caminhos"][0]["subcaminhos"][0][1]["pontos"][2].__setitem__(1, "x"),
+        lambda b: _pag(b)["caminhos"][0]["subcaminhos"][2][0]["pontos"][1].__setitem__(0, None),
+        lambda b: _pag(b)["caminhos"][0]["subcaminhos"][0][0]["pontos"].__setitem__(1, True),
+        lambda b: _pag(b)["caminhos"][0]["subcaminhos"].__setitem__(1, {}),
+        lambda b: _pag(b)["caminhos"][0]["estilo"].__setitem__("cor", [1.0, 0.5, "0"]),
+        lambda b: _pag(b)["grupos"][0].__setitem__("indices_primitivas", [0, 1, "2"]),
+        lambda b: _pag(b)["grupos"][0].__setitem__("indices_caminhos", [0, True]),
+        lambda b: _pag(b)["primitivas"][0]["origens"].append(1.0),
+        lambda b: _pag(b)["primitivas"][0]["pontos"].__setitem__(0, [0.0, [1]]),
+        lambda b: _pag(b)["primitivas"][2].__setitem__("angulo_inicial", "0"),
+        lambda b: _pag(b)["diagnosticos"].append(7),
+        lambda b: b["modelo"]["familia"]["diagnosticos"].append(None),
+        lambda b: b["modelo"]["familia"]["sinais"].__setitem__(0, [1, "x"]),
+        lambda b: b["modelo"]["paginas"].append("lixo"),
+        lambda b: b["modelo"]["paginas"].__setitem__(1, {"indice": 1}),
+        lambda b: _pag(b)["imagens"][0].__setitem__("largura_px", True),
+        lambda b: _pag(b)["imagens"][0].__setitem__("altura_px", 2.0),
+        lambda b: _pag(b)["caminhos"][0].__setitem__("ordem", 1.0),
+        lambda b: _pag(b)["textos"][0].__setitem__("rotacao", True),
+        lambda b: _pag(b)["textos"][0].__setitem__("camada", ""),
+    ],
+    ids=[
+        "ponto_curva_y_texto",
+        "ponto_x_nulo",
+        "ponto_bool",
+        "subcaminho_dict",
+        "cor_canal_texto",
+        "indice_prim_texto",
+        "indice_cam_bool",
+        "origem_float",
+        "ponto_aninhado",
+        "angulo_texto",
+        "diag_pagina_numero",
+        "diag_familia_nulo",
+        "sinal_chave_numero",
+        "pagina_string",
+        "pagina_incompleta",
+        "largura_px_bool",
+        "altura_px_float",
+        "ordem_float",
+        "rotacao_bool",
+        "camada_vazia_valida",
+    ],
+)
+def test_elemento_de_tipo_errado_no_fundo_equivale_a_cache_vazio(
+    tmp_path: Path, mutar: Callable[[dict[str, Any]], object]
+) -> None:
+    texto = _json_com(tmp_path, mutar)
+    cache = _reescrever(tmp_path / "x", texto)
+    lido = cache.obter(_CHAVE)
+    if lido is not None:
+        # camada vazia é um valor legítimo: o caso deve voltar idêntico ao salvo
+        assert lido.paginas[0].textos[0].camada == ""
+    else:
+        assert lido is None
+
+
+def test_string_vazia_em_marcadores_de_tipo_e_decimal_vazio(tmp_path: Path) -> None:
+    for valor in ("", " ", "1,5", "1e999999999999", "٣"):
+
+        def _decimal(b: dict[str, Any], v: str = valor) -> object:
+            return _sinais(b).append(["k", {"decimal": v}])
+
+        cache = _reescrever(tmp_path / "y", _json_com(tmp_path / "x", _decimal))
+        cache.obter(_CHAVE)  # nunca levanta, qualquer que seja a decisão
+    for tipo_vazio in ("", "L"):
+
+        def _tipo(b: dict[str, Any], v: str = tipo_vazio) -> object:
+            return _pag(b)["caminhos"][0]["subcaminhos"][0][0].__setitem__("tipo", v)
+
+        texto = _json_com(tmp_path / "z", _tipo)
+        assert _reescrever(tmp_path / "w", texto).obter(_CHAVE) is None
+
+
+@pytest.mark.parametrize("valor", ["NaN", "Infinity", "-Infinity"])
+def test_nan_e_infinito_em_ponto_nao_derrubam_a_leitura(tmp_path: Path, valor: str) -> None:
+    _, alvo = _salvar(tmp_path)
+    texto = alvo.read_text(encoding="utf-8").replace('"largura":841.89', f'"largura":{valor}', 1)
+    assert valor in texto
+    alvo.write_text(texto, encoding="utf-8")
+    JsonDrawingModelCache(tmp_path / "c").obter(_CHAVE)  # não pode levantar
+
+
+@pytest.mark.parametrize(
+    "mutar",
+    [
+        lambda b: _pag(b).__setitem__("indice", -1),
+        lambda b: _pag(b)["imagens"][0].__setitem__("largura_px", -10),
+        lambda b: _pag(b)["imagens"][0].__setitem__("altura_px", -1),
+        lambda b: _pag(b)["grupos"][0].__setitem__("indices_primitivas", [-1]),
+        lambda b: _pag(b)["grupos"][0].__setitem__("indices_caminhos", [-3]),
+        lambda b: _pag(b)["primitivas"][0].__setitem__("origens", [-1]),
+        lambda b: _pag(b).__setitem__("largura", -841.89),
+        lambda b: _pag(b).__setitem__("altura", -1.0),
+    ],
+    ids=[
+        "indice_pagina",
+        "largura_px",
+        "altura_px",
+        "indices_primitivas",
+        "indices_caminhos",
+        "origens",
+        "largura_pagina",
+        "altura_pagina",
+    ],
+)
+def test_valor_negativo_onde_nao_cabe_equivale_a_cache_vazio(
+    tmp_path: Path, mutar: Callable[[dict[str, Any]], object]
+) -> None:
+    texto = _json_com(tmp_path, mutar)
+    cache = _reescrever(tmp_path / "x", texto)
+    assert cache.obter(_CHAVE) is None
