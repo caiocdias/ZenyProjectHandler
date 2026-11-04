@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import random
+import sys
 import time
 from collections.abc import Sequence
 from pathlib import Path
@@ -23,6 +24,27 @@ from zeny_project_handler.adapters.analysis.drawing_model.glyph_text import (
     LeituraGlifos,
     ler_texto_glifos,
 )
+
+# Sobrecarga medida do rastreamento de cobertura nesta leitura: 6.62 s com `--cov` contra
+# 2.14 s sem (~3.1x). Sob rastreador, o orçamento é multiplicado por este fator: o tempo
+# medido ali é o do rastreador, não o do código, mas um estouro catastrófico (laço quadrático)
+# ainda aparece.
+_FATOR_SOB_RASTREADOR = 4.0
+
+
+def _rastreador_ativo() -> bool:
+    """Cobertura, depurador ou profiler: `sys.settrace` (CTracer/PyTracer) ou, no 3.12+, uma
+    ferramenta registrada em `sys.monitoring` (coverage com `COVERAGE_CORE=sysmon`)."""
+    if sys.gettrace() is not None or sys.getprofile() is not None:
+        return True
+    monitoramento = getattr(sys, "monitoring", None)
+    if monitoramento is None:
+        return False
+    return any(monitoramento.get_tool(ferramenta) is not None for ferramenta in range(6))
+
+
+def _orcamento(segundos: float) -> float:
+    return segundos * _FATOR_SOB_RASTREADOR if _rastreador_ativo() else segundos
 
 
 @pytest.fixture(scope="module")
@@ -169,4 +191,4 @@ def test_custo_de_pagina_com_muitos_trechos_curtos_fica_no_orcamento(
 
     assert len(caminhos) >= 700
     assert not leitura.limitada
-    assert duracao < 5.0
+    assert duracao < _orcamento(5.0)
