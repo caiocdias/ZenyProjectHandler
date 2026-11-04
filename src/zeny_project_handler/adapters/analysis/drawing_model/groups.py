@@ -6,7 +6,7 @@ import math
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 
-from zeny_project_handler.adapters.analysis.drawing_model.geometry import _ponto_bezier
+from zeny_project_handler.adapters.analysis.drawing_model.geometry import ponto_bezier
 from zeny_project_handler.adapters.analysis.drawing_model.model import (
     Arco,
     Caixa,
@@ -45,7 +45,7 @@ def _no_circulo(figura: Circulo | Arco, ponto: tuple[float, float]) -> bool:
 
 
 def _item_coberto(item: ItemCaminho, figuras: Sequence[Circulo | Arco]) -> bool:
-    pontos = (item.pontos[0], _ponto_bezier(item.pontos, 0.5), item.pontos[-1])
+    pontos = (item.pontos[0], ponto_bezier(item.pontos, 0.5), item.pontos[-1])
     return any(all(_no_circulo(figura, ponto) for ponto in pontos) for figura in figuras)
 
 
@@ -74,6 +74,80 @@ def _caminhos_elegiveis(
     return elegiveis
 
 
+def _lado(caixa: Caixa) -> float:
+    return max(caixa[2] - caixa[0], caixa[3] - caixa[1])
+
+
+def _caixas_se_encostam(a: Caixa, b: Caixa, margem: float) -> bool:
+    return (
+        a[0] <= b[2] + margem
+        and b[0] <= a[2] + margem
+        and a[1] <= b[3] + margem
+        and b[1] <= a[3] + margem
+    )
+
+
+def _unir_proximos(caixas: Sequence[Caixa], ativos: Sequence[int], folga: float) -> list[int]:
+    """Union-find com grade espacial sobre caixas dilatadas por `folga`; devolve o vetor de pais."""
+    pai = list(range(len(caixas)))
+
+    def raiz(i: int) -> int:
+        while pai[i] != i:
+            pai[i] = pai[pai[i]]
+            i = pai[i]
+        return i
+
+    celulas: dict[tuple[int, int], list[int]] = defaultdict(list)
+    for i in ativos:
+        x0, y0, x1, y1 = caixas[i]
+        faixa_x = range(math.floor((x0 - folga) / _CELULA), math.floor((x1 + folga) / _CELULA) + 1)
+        faixa_y = range(math.floor((y0 - folga) / _CELULA), math.floor((y1 + folga) / _CELULA) + 1)
+        vizinhos: set[int] = set()
+        for cx in faixa_x:
+            for cy in faixa_y:
+                celula = celulas[(cx, cy)]
+                vizinhos.update(celula)
+                celula.append(i)
+        for j in vizinhos:
+            # Caixas dilatadas por `folga` cada uma: sobrepõem se a distância <= 2 * folga.
+            if _caixas_se_encostam(caixas[i], caixas[j], 2 * folga):
+                pai[raiz(i)] = raiz(j)
+    return [raiz(i) for i in range(len(caixas))]
+
+
+def _polilinha_aberta_de_dois_pontos(elemento: Polilinha | Circulo | Arco) -> bool:
+    return isinstance(elemento, Polilinha) and not elemento.fechada and len(elemento.pontos) == 2
+
+
+def _montar_grupo(
+    membros: Sequence[int],
+    caixas: Sequence[Caixa],
+    primitivas: Sequence[Polilinha | Circulo | Arco],
+    indices_caminhos: Sequence[int],
+    lado_maximo: float,
+) -> GrupoCandidato | None:
+    n_prim = len(primitivas)
+    caixa = (
+        min(caixas[i][0] for i in membros),
+        min(caixas[i][1] for i in membros),
+        max(caixas[i][2] for i in membros),
+        max(caixas[i][3] for i in membros),
+    )
+    if _lado(caixa) > lado_maximo:
+        return None
+    if (
+        len(membros) == 1
+        and membros[0] < n_prim
+        and _polilinha_aberta_de_dois_pontos(primitivas[membros[0]])
+    ):
+        return None
+    return GrupoCandidato(
+        caixa,
+        tuple(i for i in membros if i < n_prim),
+        tuple(indices_caminhos[i - n_prim] for i in membros if i >= n_prim),
+    )
+
+
 def agrupar_candidatos(
     primitivas: Sequence[Polilinha | Circulo | Arco],
     caminhos: Sequence[Caminho],
@@ -84,67 +158,17 @@ def agrupar_candidatos(
     indices_caminhos = _caminhos_elegiveis(primitivas, caminhos)
     caixas: list[Caixa] = [_caixa_primitiva(p) for p in primitivas]
     caixas.extend(_caixa_caminho(caminhos[i]) for i in indices_caminhos)
-    total = len(caixas)
-    pai = list(range(total))
-
-    def raiz(i: int) -> int:
-        while pai[i] != i:
-            pai[i] = pai[pai[i]]
-            i = pai[i]
-        return i
-
-    celulas: dict[tuple[int, int], list[int]] = defaultdict(list)
     # Elemento maior que `lado_maximo` sozinho é traçado da rede, não parte de símbolo.
-    grandes = {i for i, c in enumerate(caixas) if max(c[2] - c[0], c[3] - c[1]) > lado_maximo}
-    for i, (x0, y0, x1, y1) in enumerate(caixas):
-        if i in grandes:
-            continue
-        faixa_x = range(math.floor((x0 - folga) / _CELULA), math.floor((x1 + folga) / _CELULA) + 1)
-        faixa_y = range(math.floor((y0 - folga) / _CELULA), math.floor((y1 + folga) / _CELULA) + 1)
-        vizinhos: set[int] = set()
-        for cx in faixa_x:
-            for cy in faixa_y:
-                celula = celulas[(cx, cy)]
-                vizinhos.update(celula)
-                celula.append(i)
-        for j in vizinhos:
-            ox0, oy0, ox1, oy1 = caixas[j]
-            # Caixas dilatadas por `folga` cada uma: sobrepõem se a distância <= 2 * folga.
-            if (
-                ox0 <= x1 + 2 * folga
-                and x0 <= ox1 + 2 * folga
-                and oy0 <= y1 + 2 * folga
-                and y0 <= oy1 + 2 * folga
-            ):
-                pai[raiz(i)] = raiz(j)
-
+    ativos = [i for i, caixa in enumerate(caixas) if _lado(caixa) <= lado_maximo]
+    raizes = _unir_proximos(caixas, ativos, folga)
     membros: dict[int, list[int]] = defaultdict(list)
-    for i in range(total):
-        if i in grandes:
-            continue
-        membros[raiz(i)].append(i)
-
+    for i in ativos:
+        membros[raizes[i]].append(i)
+    montados = (
+        _montar_grupo(lista, caixas, primitivas, indices_caminhos, lado_maximo)
+        for lista in membros.values()
+    )
+    grupos = [grupo for grupo in montados if grupo is not None]
     n_prim = len(primitivas)
-    grupos: list[GrupoCandidato] = []
-    for lista in membros.values():
-        caixa = (
-            min(caixas[i][0] for i in lista),
-            min(caixas[i][1] for i in lista),
-            max(caixas[i][2] for i in lista),
-            max(caixas[i][3] for i in lista),
-        )
-        if max(caixa[2] - caixa[0], caixa[3] - caixa[1]) > lado_maximo:
-            continue
-        if len(lista) == 1 and lista[0] < n_prim:
-            unica = primitivas[lista[0]]
-            if isinstance(unica, Polilinha) and not unica.fechada and len(unica.pontos) == 2:
-                continue
-        grupos.append(
-            GrupoCandidato(
-                caixa,
-                tuple(i for i in lista if i < n_prim),
-                tuple(indices_caminhos[i - n_prim] for i in lista if i >= n_prim),
-            )
-        )
     grupos.sort(key=lambda g: (g.indices_primitivas or (n_prim,), g.indices_caminhos))
     return tuple(grupos)

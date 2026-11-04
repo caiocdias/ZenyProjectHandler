@@ -156,7 +156,7 @@ def _remover_colineares(pontos: list[Ponto], fechada: bool, tolerancia: float) -
     return pilha[inicio:]
 
 
-def _ponto_bezier(pontos: tuple[Ponto, ...], t: float) -> Ponto:
+def ponto_bezier(pontos: tuple[Ponto, ...], t: float) -> Ponto:
     u = 1.0 - t
     pesos = (u**3, 3 * u * u * t, 3 * u * t * t, t**3)
     return (
@@ -187,7 +187,7 @@ class _TrechoCircular:
 
 def _trecho_circular(item: ItemCaminho, tolerancia: float) -> _TrechoCircular | None:
     p0, _, _, p1 = item.pontos
-    meio = _ponto_bezier(item.pontos, 0.5)
+    meio = ponto_bezier(item.pontos, 0.5)
     ajuste = _circunferencia(p0, meio, p1)
     if ajuste is None:
         return None
@@ -195,7 +195,7 @@ def _trecho_circular(item: ItemCaminho, tolerancia: float) -> _TrechoCircular | 
     if raio <= 0 or not math.isfinite(raio):
         return None
     for t in (0.25, 0.75):
-        x, y = _ponto_bezier(item.pontos, t)
+        x, y = ponto_bezier(item.pontos, t)
         if abs(math.hypot(x - centro[0], y - centro[1]) - raio) > tolerancia * raio:
             return None
 
