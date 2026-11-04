@@ -12,6 +12,11 @@ Fonte ``base`` = ``TEXTO`` sem ``origem_texto`` (nativo); ``novo`` = todo ``TEXT
 contorno de glifo). Grava ``texto-ficha.json`` e ``texto-ficha.md`` em ``--saida``, sem nome de
 PDF nem caminho absoluto (o PDF é identificado pelo ID da rodada).
 
+O recall principal (``acertos``) é "presente na página": o valor aparece em algum texto da
+página do poste, atribuído ao poste mais próximo (uma ocorrência serve a um valor só).
+``acertos_ate_005`` e ``acertos_ate_010`` contam, desses acertos, os que estão a até 0.05 e a
+até 0.10 (cumulativo) do centro da caixa do poste, em coordenadas normalizadas da página.
+
 Erro afirmado (``erros_afirmados``): instância sem acerto cujo texto mais próximo do poste (até
 0.05 de distância normalizada) tem um token de comprimento igual ±1 e edição de 1 a 2 do
 valor, ou um token que contém o valor colado a outros alfanuméricos (fusão de tokens).
@@ -53,6 +58,9 @@ from zeny_project_handler.ports.pdf import ReferenciaFontePdf
 CAMPOS: Final = ("identificador", "poste", "estruturas", "coordenada")
 FONTES: Final = ("base", "novo")
 DISTANCIA_ERRO: Final = 0.05
+PROXIMIDADES: Final = (("acertos_ate_005", 0.05), ("acertos_ate_010", 0.10))
+CHAVES_RECALL: Final = ("total", "acertos", "erros_afirmados")
+CHAVES: Final = (*CHAVES_RECALL, *(chave for chave, _ in PROXIMIDADES))
 ESQUEMA: Final = "benchmark-texto-ficha-v1"
 
 Centro = tuple[float, float]
@@ -184,29 +192,47 @@ def _erro_afirmado(
     return any(_parecido(instancia.valor, c) or _fusao(instancia.valor, c) for c in candidatos)
 
 
-def recall_texto(
+def _zerado() -> dict[str, Contagem]:
+    return {campo: dict.fromkeys(CHAVES, 0) for campo in CAMPOS}
+
+
+def medir_texto(
     referencia: Mapping[str, Any], textos: Sequence[TextoMedido]
 ) -> dict[str, dict[str, int]]:
-    """Acertos e erros afirmados por campo; uma ocorrência de texto serve a uma instância."""
+    """Acertos (presentes na página), acertos perto do poste e erros afirmados por campo; uma
+    ocorrência de texto serve a uma instância."""
     instancias = _instancias(referencia)
     alvos = [(_normalizar(item.texto), item.centro) for item in textos]
     atribuidos = _atribuir(instancias, alvos)
     consumidos: dict[int, list[tuple[int, int]]] = defaultdict(list)
     for t, trecho in atribuidos.values():
         consumidos[t].append(trecho)
-    resultado = {campo: {"total": 0, "acertos": 0, "erros_afirmados": 0} for campo in CAMPOS}
+    resultado = _zerado()
     for i, instancia in enumerate(instancias):
         contagem = resultado[instancia.campo]
         contagem["total"] += 1
         if i in atribuidos:
             contagem["acertos"] += 1
+            distancia = dist(alvos[atribuidos[i][0]][1], instancia.centro)
+            for chave, limite in PROXIMIDADES:
+                contagem[chave] += distancia <= limite
         elif _erro_afirmado(instancia, alvos, consumidos):
             contagem["erros_afirmados"] += 1
     return resultado
 
 
+def recall_texto(
+    referencia: Mapping[str, Any], textos: Sequence[TextoMedido]
+) -> dict[str, dict[str, int]]:
+    """Acertos e erros afirmados por campo (``medir_texto`` sem as contagens de proximidade)."""
+    return {
+        campo: {chave: contagem[chave] for chave in CHAVES_RECALL}
+        for campo, contagem in medir_texto(referencia, textos).items()
+    }
+
+
 def _somar(blocos: Iterable[Mapping[str, Mapping[str, int]]]) -> dict[str, Contagem]:
-    soma = {campo: {"total": 0, "acertos": 0, "erros_afirmados": 0} for campo in CAMPOS}
+    soma = _zerado()
     for bloco in blocos:
         for campo, contagem in bloco.items():
             for chave, valor in contagem.items():
@@ -241,7 +267,7 @@ def _solicitacao(pdf: Path) -> SolicitacaoAnaliseDocumento:
     )
 
 
-def _medir_texto(evidencia: EvidenciaDocumento) -> TextoMedido | None:
+def _texto_da_evidencia(evidencia: EvidenciaDocumento) -> TextoMedido | None:
     if evidencia.tipo is not TipoEvidencia.TEXTO or not evidencia.conteudo_bruto:
         return None
     pontos = evidencia.geometria.pontos
@@ -258,7 +284,7 @@ def _recall_por_pagina(
 ) -> dict[str, dict[str, int]]:
     paginas = sorted({poste["pagina"] for poste in referencia["postes"]})
     return _somar(
-        recall_texto(
+        medir_texto(
             {"postes": [p for p in referencia["postes"] if p["pagina"] == pagina]},
             textos.get(pagina, ()),
         )
@@ -273,15 +299,17 @@ def _tempo(pdf: Path, tabela: TabelaGlifos | None) -> float:
 
 
 def _medir_pdf(pdf: Path, referencia: Mapping[str, Any], tabela: TabelaGlifos) -> dict[str, Any]:
+    # sem a tabela primeiro: a primeira análise do PDF paga a partida a frio (arquivo, fontes),
+    # que não pode ser atribuída à leitura de glifos
+    sem_glifos = _tempo(pdf, None)
     solicitacao = _solicitacao(pdf)
     numeros = {pagina.id: pagina.numero for pagina in solicitacao.documento.paginas}
     inicio = perf_counter()
     resultado = PyMuPdfDocumentAnalyzer(tabela_glifos=tabela).analisar(solicitacao)
     com_glifos = perf_counter() - inicio
-    sem_glifos = _tempo(pdf, None)
     textos: dict[str, dict[int, list[TextoMedido]]] = {fonte: defaultdict(list) for fonte in FONTES}
     for evidencia in resultado.evidencias:
-        medido = _medir_texto(evidencia)
+        medido = _texto_da_evidencia(evidencia)
         if medido is None:
             continue
         pagina = numeros[evidencia.pagina_id]
@@ -317,15 +345,15 @@ def _linhas_md(titulo: str, fontes: Mapping[str, Mapping[str, Contagem]]) -> lis
     linhas = [
         f"### {titulo}",
         "",
-        "| campo | fonte | acertos | total | recall | erros afirmados |",
-        "|---|---|---:|---:|---:|---:|",
+        "| campo | fonte | acertos | total | recall | ≤ 0.05 | ≤ 0.10 | erros afirmados |",
+        "|---|---|---:|---:|---:|---:|---:|---:|",
     ]
     for campo in CAMPOS:
         for fonte in FONTES:
             c = fontes[fonte][campo]
             linhas.append(
                 f"| {campo} | {fonte} | {c['acertos']} | {c['total']} | {_porcentagem(c)} "
-                f"| {c['erros_afirmados']} |"
+                f"| {c['acertos_ate_005']} | {c['acertos_ate_010']} | {c['erros_afirmados']} |"
             )
     return [*linhas, ""]
 
@@ -336,6 +364,9 @@ def _markdown(relatorio: Mapping[str, Any]) -> str:
         "",
         f"Analisador `{relatorio['versao_analisador']}`; tabela de glifos "
         f"`{relatorio['tabela_sha256']}`.",
+        "",
+        "Recall = valor presente na página (atribuído ao poste mais próximo); as colunas ≤ 0.05 "
+        "e ≤ 0.10 contam os acertos a essa distância normalizada do centro do poste.",
         "",
         *_linhas_md("Total", relatorio["total"]),
     ]

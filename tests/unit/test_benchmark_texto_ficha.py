@@ -9,13 +9,15 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from scripts.benchmark_texto_ficha import TextoMedido, main, recall_texto
+from scripts.benchmark_texto_ficha import TextoMedido, main, medir_texto, recall_texto
 from tests.fixtures.glyphs.fonte_livre import (
     LinhaTexto,
     pdf_texto_contorno,
     pdf_texto_nativo,
     tabela_do_alfabeto,
 )
+
+from zeny_project_handler.adapters.analysis import PyMuPdfDocumentAnalyzer
 
 _SHA = "b" * 64
 
@@ -32,7 +34,7 @@ def _poste(
 ) -> dict[str, Any]:
     x, y = centro
     return {
-        "id": f"P{abs(hash((identificador, poste, centro)))}",
+        "id": "P1",
         "pagina": pagina,
         "bbox": [x - 0.005, y - 0.005, x + 0.005, y + 0.005],
         "identificador": identificador,
@@ -125,6 +127,37 @@ def test_acerto_nao_e_erro_afirmado_nem_consome_token_alheio() -> None:
     assert r["estruturas"] == {"total": 2, "acertos": 1, "erros_afirmados": 0}
 
 
+def test_acertos_contados_por_proximidade_do_centro_do_poste() -> None:
+    ref = _ref(_poste(estruturas=["N1", "N2", "N3"], centro=(0.5, 0.5)))
+    textos = [_texto("N1", (0.5, 0.54)), _texto("N2", (0.5, 0.58)), _texto("N3", (0.5, 0.9))]
+    r = medir_texto(ref, textos)
+    assert r["estruturas"] == {
+        "total": 3,
+        "acertos": 3,
+        "erros_afirmados": 0,
+        "acertos_ate_005": 1,
+        "acertos_ate_010": 2,
+    }
+
+
+def test_proximidade_nao_conta_sem_acerto_nem_texto_proximo_de_outro_valor() -> None:
+    ref = _ref(_poste(poste="P1", estruturas=["N1"], centro=(0.5, 0.5)))
+    r = medir_texto(ref, [_texto("P2", (0.5, 0.5)), _texto("N1", (0.9, 0.9))])
+    assert (r["poste"]["acertos_ate_005"], r["poste"]["acertos_ate_010"]) == (0, 0)
+    assert r["estruturas"]["acertos"] == 1
+    assert (r["estruturas"]["acertos_ate_005"], r["estruturas"]["acertos_ate_010"]) == (0, 0)
+
+
+def test_recall_texto_e_a_medicao_sem_proximidade() -> None:
+    ref = _ref(_poste(estruturas=["N1"]))
+    textos = [_texto("N1", (0.5, 0.51))]
+    medido = medir_texto(ref, textos)
+    assert recall_texto(ref, textos) == {
+        campo: {k: c[k] for k in ("total", "acertos", "erros_afirmados")}
+        for campo, c in medido.items()
+    }
+
+
 def _tabela_e_pdfs(tmp_path: Path) -> tuple[Path, Path, Path]:
     tabela = tabela_do_alfabeto(tmp_path)
     arquivo = tmp_path / "tabela-alfabeto.json"
@@ -186,9 +219,16 @@ def test_cli_contorno_tem_base_zero_e_novo_positivo(
     assert sum(c["acertos"] for c in contorno_r["base"].values()) == 0
     assert sum(c["acertos"] for c in contorno_r["novo"].values()) > 0
     assert dados["total"]["novo"]["poste"]["total"] == 2
-    assert dados["versao_analisador"] == "1.21.0"
+    assert dados["versao_analisador"] == PyMuPdfDocumentAnalyzer.versao
     assert len(dados["tabela_sha256"]) == 64
     assert "tempo_glifos_s" in dados["por_pdf"]["002-bbbbbbbbbbbb"]
+    proximos = contorno_r["novo"]["estruturas"]
+    assert proximos["acertos_ate_010"] >= proximos["acertos_ate_005"]
+    assert dados["total"]["novo"]["poste"]["acertos_ate_010"] == sum(
+        b["fontes"]["novo"]["poste"]["acertos_ate_010"] for b in dados["por_pdf"].values()
+    )
+    assert "presente na página" in texto_md
+    assert "≤ 0.05" in texto_md and "≤ 0.10" in texto_md
     assert set(dados["por_familia"]) == {dados["por_pdf"][i]["familia"] for i in dados["por_pdf"]}
     for conteudo in (texto_json, texto_md, capsys.readouterr().out):
         assert str(tmp_path) not in conteudo
