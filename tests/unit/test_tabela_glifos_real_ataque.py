@@ -203,3 +203,99 @@ def test_par_11_nao_e_partido_quando_o_texto_so_tem_algarismos_planos(
     lidos = _ler(tmp_path, tabela, texto, 5.0)
     assert lidos in ([texto], [])
     assert re.search(r"\d \d", " ".join(lidos)) is None
+
+
+# --- rodada 1: escala das lacunas, espaço 0.48 e homóglifos fora -------------------------------
+
+# contagem de cada algarismo na tabela antes da exclusão de homóglifos (publicação de 9fd1454)
+_ALGARISMOS_PUBLICADOS = {
+    "0": 14,
+    "1": 11,
+    "2": 7,
+    "3": 15,
+    "4": 10,
+    "5": 9,
+    "6": 4,
+    "7": 8,
+    "8": 5,
+    "9": 3,
+}
+# altura de corpo do "1" (e dos algarismos planos) da fonte livre em corpo 5
+_H_CORPO_5 = 3.615
+
+
+def test_exclusao_de_homoglifos_nao_tira_nenhum_algarismo(tabela: TabelaGlifos) -> None:
+    contagem = Counter(g.caractere for g in tabela.glifos)
+    assert {c: contagem[c] for c in "0123456789"} == _ALGARISMOS_PUBLICADOS
+
+
+@pytest.mark.parametrize("contexto", ["{}-300", "300-{}", "N{}", "({})"])
+def test_todo_par_de_algarismos_e_lido_inteiro_em_qualquer_vizinhanca(
+    tmp_path: Path, tabela: TabelaGlifos, contexto: str
+) -> None:
+    # a escala nova não pode depender de quais glifos estão no texto: nenhum par de algarismos
+    # ganha espaço nem é trocado, com ou sem glifo redondo ao lado
+    errados = []
+    for a in "0123456789":
+        for b in "0123456789":
+            texto = contexto.format(a + b)
+            lidos = _ler(tmp_path, tabela, texto, 5.0)
+            if lidos != [texto]:
+                errados.append((texto, lidos))
+    assert errados == []
+
+
+def _borda(tmp_path: Path, tabela: TabelaGlifos, texto: str, origem_x: float) -> float:
+    """Com origem 0, a borda esquerda do primeiro glifo; senão, a direita do último."""
+    pdf = pdf_texto_contorno(tmp_path / "b.pdf", [LinhaTexto(texto, (origem_x, 150.0), 5.0)])
+    leitura = ler_texto_glifos(caminhos_do_pdf(pdf), tabela)
+    pdf.unlink()
+    (lido,) = leitura.textos
+    return float(lido.glifos[-1][1][2] if origem_x else lido.glifos[0][1][0])
+
+
+@pytest.mark.parametrize(
+    ("esquerda", "direita"),
+    [("11", "300"), ("300", "11"), ("11", "11"), ("300", "300"), ("1171", "1171")],
+)
+@pytest.mark.parametrize(("lacuna_h", "separa"), [(0.45, False), (0.51, True)])
+def test_lacuna_decide_o_espaco_igual_com_glifos_redondos_de_um_lado_so(
+    tmp_path: Path,
+    tabela: TabelaGlifos,
+    esquerda: str,
+    direita: str,
+    lacuna_h: float,
+    separa: bool,
+) -> None:
+    # Glifos redondos só de um lado inclinam o quadro (~0.6°) e mudam a escala em ~1%; o limiar
+    # efetivo medido fica entre 0.475 e 0.485 h. Lacuna de 0.45 h nunca vira espaço e de 0.51 h
+    # sempre vira, qualquer que seja a vizinhança.
+    fim = _borda(tmp_path, tabela, esquerda, 100.0)
+    inicio = _borda(tmp_path, tabela, direita, 0.0)
+    x = fim + lacuna_h * _H_CORPO_5 - inicio
+    linhas = [LinhaTexto(esquerda, (100.0, 150.0), 5.0), LinhaTexto(direita, (x, 150.0), 5.0)]
+    pdf = pdf_texto_contorno(tmp_path / "l.pdf", linhas)
+    leitura = ler_texto_glifos(caminhos_do_pdf(pdf), tabela)
+    esperado = f"{esquerda} {direita}" if separa else esquerda + direita
+    assert [t.texto for t in leitura.textos] == [esperado]
+
+
+@pytest.mark.parametrize("texto", ["OO7O", "O0O", "OoO", "ava", "vav", "awa", "aza", "aIa"])
+def test_maiuscula_e_minuscula_de_mesmo_desenho_nunca_sao_trocadas(
+    tmp_path: Path, tabela: TabelaGlifos, texto: str
+) -> None:
+    # A exclusão de homóglifos tirou só o par mais próximo de cada caso; seguem publicadas
+    # variantes de mesmo desenho (S/s a 0.0401 de contorno, O/o a 0.0454, C/c a 0.0488) e
+    # letras sem a outra caixa na tabela (W, Z): quando a altura da linha vem das próprias
+    # letras, a forma casa a variante do outro caso. O certo é ler o texto ou falhar fechado.
+    # (O mesmo acontece em corpo 3 e 7.)
+    lidos = _ler(tmp_path, tabela, texto, 5.0)
+    assert lidos in ([texto], [])
+
+
+@pytest.mark.parametrize("texto", ["QQ7Q", "Q0Q"])
+def test_q_maiusculo_nunca_e_afirmado_como_o_minusculo(
+    tmp_path: Path, tabela: TabelaGlifos, texto: str
+) -> None:
+    lidos = _ler(tmp_path, tabela, texto, 5.0)
+    assert lidos in ([texto], [])
