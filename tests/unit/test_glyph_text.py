@@ -285,6 +285,31 @@ def test_entrada_ignorar_divide_o_trecho(tmp_path: Path, tabela: TabelaGlifos) -
     assert (leitura.desconhecidos, leitura.ambiguos) == (0, 0)
 
 
+def test_escala_das_lacunas_nao_depende_dos_outros_glifos_do_texto(
+    tmp_path: Path, tabela: TabelaGlifos
+) -> None:
+    # "0" passa um pouco da altura de "1"; sem ele a altura bruta da linha cai e a mesma
+    # lacuna "1"+"1" cresce em unidades de h. Medida pela altura típica de cada caractere na
+    # tabela, ela é a mesma nos dois textos: para qualquer espaco, os dois partem o "11" ou
+    # nenhum parte. ("0110" é simétrico: o quadro fica horizontal nos dois textos.)
+    caminhos = {
+        texto: caminhos_do_pdf(
+            pdf_texto_contorno(tmp_path / f"{i}.pdf", [LinhaTexto(texto, (40.0, 60.0), 5.0)])
+        )
+        for i, texto in enumerate(("0110", "1171"))
+    }
+    divergentes = []
+    for milesimos in range(380, 470):
+        com_espaco = dataclasses.replace(tabela, espaco=milesimos / 1000)
+        partidos = {
+            texto: "1 1" in ler_texto_glifos(c, com_espaco).textos[0].texto
+            for texto, c in caminhos.items()
+        }
+        if len(set(partidos.values())) != 1:
+            divergentes.append(milesimos)
+    assert divergentes == []
+
+
 def test_cor_do_trecho(tmp_path: Path, tabela: TabelaGlifos) -> None:
     linhas = [
         LinhaTexto("P7 S1N", (40.0, 60.0), 5.0, cor=(0.0, 1.0, 0.0)),

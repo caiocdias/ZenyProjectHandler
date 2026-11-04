@@ -25,6 +25,12 @@ glifos de corpo inteiro ("-1", "Q-") o quadro não é determinado e o trecho int
 Trechos em que a maioria é pontuação alta ("(1)", "(((") têm altura errada e ficam
 desconhecidos. Glifo desconhecido ou ambíguo anula o texto em que cairia: a leitura falha
 fechada, nunca sai texto com caractere trocado ou faltando.
+
+Espaço e quebra são medidos numa escala que não depende de quais glifos o texto tem: a altura
+bruta da linha sobe com glifos redondos ("3", "0" passam um pouco da altura do "1") e a mesma
+lacuna mudaria de tamanho em unidades de h. A escala das lacunas é a mediana, sobre os glifos
+altos reconhecidos, da altura do glifo dividida pela altura típica do seu caractere na tabela
+(mediana das entradas do caractere).
 """
 
 from __future__ import annotations
@@ -511,11 +517,35 @@ def _lacuna(trecho: _Trecho, anterior: int, atual: int) -> float:
     return trecho.caixas_quadro[atual][0] - trecho.caixas_quadro[anterior][2]
 
 
+def alturas_tipicas(tabela: TabelaGlifos) -> dict[str, float]:
+    """Altura típica (em h) de cada caractere: mediana da altura das entradas dele."""
+    alturas: dict[str, list[float]] = {}
+    for entrada in tabela.glifos:
+        if entrada.caractere is not None:
+            alturas.setdefault(entrada.caractere, []).append(entrada.assinatura.caixa[1])
+    return {caractere: float(median(valores)) for caractere, valores in alturas.items()}
+
+
+def _escala_das_lacunas(
+    trecho: _Trecho, resolucoes: Sequence[Resolucao], tipicas: dict[str, float]
+) -> float:
+    """Altura da linha estimada glifo a glifo pela altura típica do caractere na tabela; sem
+    glifo alto reconhecido, a altura bruta do trecho."""
+    estimativas = [
+        (caixa[3] - caixa[1]) / tipicas[resolucao.caractere]
+        for caixa, resolucao in zip(trecho.caixas_quadro, resolucoes, strict=True)
+        if resolucao.situacao == "reconhecido"
+        and resolucao.caractere is not None
+        and tipicas.get(resolucao.caractere, 0.0) >= _FRACAO_GLIFO_ALTO
+    ]
+    return float(median(estimativas)) if estimativas else trecho.publico.altura
+
+
 def _grupos_de_texto(
-    trecho: _Trecho, resolucoes: Sequence[Resolucao], tabela: TabelaGlifos
+    trecho: _Trecho, resolucoes: Sequence[Resolucao], tabela: TabelaGlifos, escala: float
 ) -> list[list[int]]:
     """Índices dos glifos de cada texto: "ignorar" e lacuna acima de `quebra` dividem."""
-    limite = tabela.quebra * trecho.publico.altura
+    limite = tabela.quebra * escala
     grupos: list[list[int]] = []
     atual: list[int] = []
     for indice, resolucao in enumerate(resolucoes):
@@ -551,9 +581,10 @@ def _texto(
     grupo: Sequence[int],
     resolucoes: Sequence[Resolucao],
     tabela: TabelaGlifos,
+    escala: float,
 ) -> TextoGlifo:
     publico = trecho.publico
-    espaco = tabela.espaco * publico.altura
+    espaco = tabela.espaco * escala
     partes: list[str] = []
     for posicao, indice in enumerate(grupo):
         if posicao and _lacuna(trecho, grupo[posicao - 1], indice) > espaco:
@@ -615,6 +646,7 @@ def ler_texto_glifos(
     if indices is None:
         return LeituraGlifos((), 0, 0, limitada=True)
     memoria: dict[_ChaveAssinatura, Resolucao] = {}
+    tipicas = alturas_tipicas(tabela)
     textos: list[TextoGlifo] = []
     desconhecidos = ambiguos = 0
     venenos: set[_Veneno] = set()
@@ -623,12 +655,13 @@ def ler_texto_glifos(
             venenos.update(trecho.venenos)
             continue
         resolucoes = _resolucoes(trecho, tabela, memoria)
-        for grupo in _grupos_de_texto(trecho, resolucoes, tabela):
+        escala = _escala_das_lacunas(trecho, resolucoes, tipicas)
+        for grupo in _grupos_de_texto(trecho, resolucoes, tabela, escala):
             situacoes = [resolucoes[i].situacao for i in grupo]
             falhas = (situacoes.count("desconhecido"), situacoes.count("ambiguo"))
             if any(falhas):
                 desconhecidos += falhas[0]
                 ambiguos += falhas[1]
                 continue
-            textos.append(_texto(trecho, grupo, resolucoes, tabela))
+            textos.append(_texto(trecho, grupo, resolucoes, tabela, escala))
     return LeituraGlifos(tuple(textos), desconhecidos + len(venenos), ambiguos, limitada=False)
