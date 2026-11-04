@@ -64,7 +64,7 @@ A análise entrega, para cada poste da folha, a ficha correta: identificador, es
 - Leitura de avaliação é sempre cega, sem predições à vista. Pré-marcação vale só para o conjunto de treino. O conjunto de avaliação nunca alimenta o treino.
 - Pytest roda com `--strict-markers` e trata `ResourceWarning` como erro: feche documentos PyMuPDF e arquivos.
 - Documentação enxuta: nada de histórico de execução em arquivo versionado. Atualize só o que a mudança torna falso (`CLAUDE.md`, contrato de curadoria, especificação funcional).
-- Dependências novas: ONNX Runtime e ezdxf só nos locks do servidor ou de experimentos. Treino com lock próprio e opt-in. Licença Apache-2.0, BSD ou MIT; YOLO Ultralytics (AGPL) está excluído.
+- Dependências novas: ONNX Runtime e ezdxf só em locks do servidor, de desenvolvimento ou de experimentos, nunca no cliente nem no runtime sem consumidor. Treino com lock próprio e opt-in. Licença Apache-2.0, BSD ou MIT; YOLO Ultralytics (AGPL) está excluído.
 
 ## Hipóteses e decisões em aberto
 
