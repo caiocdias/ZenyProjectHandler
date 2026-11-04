@@ -1,22 +1,31 @@
 """Leitura de texto desenhado como contorno preenchido de glifo, contra a tabela versionada.
 
 Candidatos a glifo consecutivos na ordem de desenho, com a mesma cor e vizinhos, formam um
-trecho. O quadro do trecho põe o texto na horizontal para calcular a assinatura de cada glifo:
-o ângulo parte da reta de mínimos quadrados dos centros, orientada do primeiro para o último
-glifo, e é refinado pela mediana das inclinações entre os fundos (Theil-Sen) só dos glifos de
-corpo inteiro (altura perto da dos glifos altos; sem "-", "=", ".", ","), porque glifos fora do
-centro inclinam a reta dos centros e a assinatura, que mede a posição em relação à linha de
-base, deriva ao longo da linha. Altura e linha de base são as medianas dos mesmos glifos.
-Limitação: com menos de 2 glifos de corpo inteiro ("=1", "-1") fica a reta dos centros, e
-trechos em que a maioria é pontuação alta ("(1)", "(((") têm altura errada; nos dois casos a
-leitura falha fechada (desconhecido). Glifo desconhecido ou ambíguo anula o texto em que
-cairia; nunca sai um texto com caractere faltando.
+trecho; a vizinhança de um glifo pequeno (".", ",", "-") é medida pelo maior lado da faixa ao
+lado, para que pontuação em sequência não saia do valor em silêncio.
+
+O quadro do trecho põe o texto na horizontal para calcular a assinatura de cada glifo. O
+ângulo parte da reta de mínimos quadrados dos centros, orientada do primeiro para o último
+glifo, e é refinado até convergir pela mediana das inclinações entre os fundos (Theil-Sen) só
+dos glifos de corpo inteiro (altura perto da dos glifos altos; sem "-", "=", ".", ","), porque
+glifos fora do centro inclinam a reta dos centros e a assinatura, que mede a posição em
+relação à linha de base, deriva ao longo da linha. Altura e linha de base são as medianas dos
+mesmos glifos.
+
+Em trecho curto a geometria é mal determinada (a cauda do "Q" entorta a reta dos fundos e o
+"Q" passaria por "O"). Por isso cada glifo é resolvido também em quadros independentes: o
+refinado pelos topos e, com até `_CORPO_CURTO` glifos de corpo inteiro, a reta dos centros
+deles. Um glifo só vale se todos os quadros o leem igual; senão é ambíguo. Com menos de 2
+glifos de corpo inteiro ("-1", "Q-") o quadro não é determinado e o trecho inteiro é ambíguo.
+Trechos em que a maioria é pontuação alta ("(1)", "(((") têm altura errada e ficam
+desconhecidos. Glifo desconhecido ou ambíguo anula o texto em que cairia: a leitura falha
+fechada, nunca sai texto com caractere trocado ou faltando.
 """
 
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from statistics import median, median_low
 from typing import Final
@@ -45,6 +54,10 @@ _CASAS_MEMORIA: Final = 3
 _FRACAO_GLIFO_ALTO: Final = 0.5
 _DESVIO_CORPO: Final = 0.15
 _PONTOS_POR_TIPO: Final = {"l": 2, "c": 4}
+# Abaixo disso (radianos, ~0,006°) os quadros pelos fundos e pelos topos são o mesmo.
+_DIFERENCA_QUADROS: Final = 1e-4
+_ITERACOES_REFINO: Final = 4
+_CORPO_CURTO: Final = 4
 _TIPOS_PREENCHIDOS: Final = frozenset({"preenchimento", "traco_e_preenchimento"})
 
 _ChaveAssinatura = tuple[int, tuple[float, ...], tuple[tuple[float, ...], ...]]
@@ -98,6 +111,10 @@ class _Trecho:
     publico: TrechoGlifos
     angulo: float
     caixas_quadro: tuple[Caixa, ...]
+    # assinaturas nos outros quadros (topos; centros do corpo inteiro) que diferem do principal
+    alternativas: tuple[tuple[AssinaturaGlifo | None, ...], ...]
+    # menos de 2 glifos de corpo inteiro: o quadro não é determinado e nada é lido
+    quadro_incerto: bool
 
 
 # --- candidatos e trechos -------------------------------------------------------------------
@@ -141,24 +158,68 @@ def _maior_lado(caixa: Caixa) -> float:
     return max(caixa[2] - caixa[0], caixa[3] - caixa[1])
 
 
-def _vizinhos(anterior: _Candidato, atual: _Candidato) -> bool:
+def _vizinhos(anterior: _Candidato, atual: _Candidato, lado: float) -> bool:
+    """Consecutivos na ordem de desenho, mesma cor e centros a até 1,6 x `lado`."""
     if atual.indice != anterior.indice + 1 or atual.cor != anterior.cor:
         return False
-    alcance = _FATOR_VIZINHANCA * max(_maior_lado(anterior.caixa), _maior_lado(atual.caixa))
+    alcance = _FATOR_VIZINHANCA * max(lado, _maior_lado(anterior.caixa), _maior_lado(atual.caixa))
     return math.dist(_centro(anterior.caixa), _centro(atual.caixa)) <= alcance
 
 
+@dataclass(slots=True)
+class _Faixa:
+    """Faixa [inicio, fim) de candidatos consecutivos e o maior lado entre eles."""
+
+    inicio: int
+    fim: int
+    lado: float
+
+
+def _faixas(candidatos: Sequence[_Candidato]) -> list[_Faixa]:
+    faixas: list[_Faixa] = []
+    for indice, candidato in enumerate(candidatos):
+        lado = _maior_lado(candidato.caixa)
+        if faixas and _vizinhos(candidatos[indice - 1], candidato, 0.0):
+            faixas[-1].fim = indice + 1
+            faixas[-1].lado = max(faixas[-1].lado, lado)
+        else:
+            faixas.append(_Faixa(indice, indice + 1, lado))
+    return faixas
+
+
+def _encostam(candidatos: Sequence[_Candidato], esquerda: _Faixa, direita: _Faixa) -> bool:
+    lado = max(esquerda.lado, direita.lado)
+    return _vizinhos(candidatos[esquerda.fim - 1], candidatos[direita.inicio], lado)
+
+
+def _fundir(
+    candidatos: Sequence[_Candidato], faixas: list[_Faixa], *, para_tras: bool
+) -> list[_Faixa]:
+    """Funde faixas vizinhas medindo o alcance pelo maior lado das duas faixas, numa varredura."""
+    ordem = reversed(faixas) if para_tras else iter(faixas)
+    fundidas: list[_Faixa] = []
+    for faixa in ordem:
+        if fundidas:
+            ultima = fundidas[-1]
+            esquerda, direita = (faixa, ultima) if para_tras else (ultima, faixa)
+            if _encostam(candidatos, esquerda, direita):
+                fundidas[-1] = _Faixa(esquerda.inicio, direita.fim, max(faixa.lado, ultima.lado))
+                continue
+        fundidas.append(faixa)
+    return fundidas[::-1] if para_tras else fundidas
+
+
 def _agrupar(candidatos: Sequence[_Candidato]) -> list[list[_Candidato]]:
-    grupos: list[list[_Candidato]] = []
-    atual: list[_Candidato] = []
-    for candidato in candidatos:
-        if atual and not _vizinhos(atual[-1], candidato):
-            grupos.append(atual)
-            atual = []
-        atual.append(candidato)
-    if atual:
-        grupos.append(atual)
-    return [g for g in grupos if _MINIMO_GLIFOS_TRECHO <= len(g) <= _MAXIMO_GLIFOS_TRECHO]
+    """Trechos de candidatos vizinhos. Glifo pequeno (".", ",", "-") ao lado de outro pequeno
+    fica longe demais pela regra par a par; as varreduras de fusão medem o alcance pelo maior
+    lado da faixa vizinha, para que a pontuação na ponta de um valor não saia em silêncio."""
+    faixas = _faixas(candidatos)
+    faixas = _fundir(candidatos, _fundir(candidatos, faixas, para_tras=True), para_tras=False)
+    return [
+        list(candidatos[f.inicio : f.fim])
+        for f in faixas
+        if _MINIMO_GLIFOS_TRECHO <= f.fim - f.inicio <= _MAXIMO_GLIFOS_TRECHO
+    ]
 
 
 def _angulo(centros: Sequence[Ponto]) -> float:
@@ -205,14 +266,13 @@ def _corpo_inteiro(caixas: Sequence[Caixa]) -> list[int]:
     return [i for i, a in enumerate(alturas) if abs(a - referencia) <= _DESVIO_CORPO * referencia]
 
 
-def _refinar_pelos_fundos(caixas: Sequence[Caixa], angulo: float) -> float:
-    """Corrige o ângulo provisório pela mediana das inclinações par a par dos fundos (Theil-Sen)
-    das caixas, no quadro provisório; com menos de 2 caixas fica o ângulo provisório."""
-    fundos = [((x0 + x1) / 2.0, y1) for x0, _, x1, y1 in caixas]
+def _refinar(pontos: Sequence[Ponto], angulo: float) -> float:
+    """Corrige o ângulo provisório pela mediana das inclinações par a par dos pontos
+    (Theil-Sen), no quadro provisório; com menos de 2 pontos fica o ângulo provisório."""
     inclinacoes = [
         (b[1] - a[1]) / (b[0] - a[0])
-        for i, a in enumerate(fundos)
-        for b in fundos[i + 1 :]
+        for i, a in enumerate(pontos)
+        for b in pontos[i + 1 :]
         if abs(b[0] - a[0]) > 1e-9
     ]
     if not inclinacoes:
@@ -220,25 +280,76 @@ def _refinar_pelos_fundos(caixas: Sequence[Caixa], angulo: float) -> float:
     return angulo + math.atan(float(median(inclinacoes)))
 
 
-def _trecho(grupo: Sequence[_Candidato]) -> _Trecho:
-    provisorio = _angulo([_centro(c.caixa) for c in grupo])
-    caixas_provisorias = _caixas_no_quadro(grupo, provisorio)
-    corpo = _corpo_inteiro(caixas_provisorias)
-    angulo = _refinar_pelos_fundos([caixas_provisorias[i] for i in corpo], provisorio)
+def _quadro(
+    grupo: Sequence[_Candidato], angulo: float, corpo: Sequence[int]
+) -> tuple[tuple[Caixa, ...], float, tuple[AssinaturaGlifo | None, ...]]:
+    """Caixas no quadro, altura e assinaturas dos glifos no quadro de `angulo`."""
     no_quadro = [
         [[_para_quadro(p, angulo) for p in poligono] for poligono in c.poligonos] for c in grupo
     ]
     caixas = tuple(_caixa_de([p for poligono in pol for p in poligono]) for pol in no_quadro)
     altura = float(median(caixas[i][3] - caixas[i][1] for i in corpo))
     base = float(median(caixas[i][3] for i in corpo))
+    assinaturas = tuple(
+        assinatura_glifo(pol, altura_linha=altura, base_linha=base) for pol in no_quadro
+    )
+    return caixas, altura, assinaturas
+
+
+def _diferenca_angular(a: float, b: float) -> float:
+    return (a - b + math.pi) % (2.0 * math.pi) - math.pi
+
+
+def _fundo(caixa: Caixa) -> Ponto:
+    return ((caixa[0] + caixa[2]) / 2.0, caixa[3])
+
+
+def _topo(caixa: Caixa) -> Ponto:
+    return ((caixa[0] + caixa[2]) / 2.0, caixa[1])
+
+
+def _refinado(
+    grupo: Sequence[_Candidato],
+    corpo: Sequence[int],
+    angulo: float,
+    ponto: Callable[[Caixa], Ponto],
+) -> float:
+    """Refina até convergir: as caixas medidas num quadro torto não têm o fundo (ou o topo) no
+    ponto certo do glifo, então um passo só, partindo de longe, não chega à reta verdadeira."""
+    glifos = [grupo[i] for i in corpo]
+    for _ in range(_ITERACOES_REFINO):
+        anterior = angulo
+        angulo = _refinar([ponto(c) for c in _caixas_no_quadro(glifos, angulo)], angulo)
+        if abs(angulo - anterior) <= _DIFERENCA_QUADROS / 10:
+            break
+    return angulo
+
+
+def _trecho(grupo: Sequence[_Candidato]) -> _Trecho:
+    provisorio = _angulo([_centro(c.caixa) for c in grupo])
+    corpo = _corpo_inteiro(_caixas_no_quadro(grupo, provisorio))
+    angulo = _refinado(grupo, corpo, provisorio, _fundo)
+    corpo = _corpo_inteiro(_caixas_no_quadro(grupo, angulo))
+    angulo = _refinado(grupo, corpo, angulo, _fundo)
+    # estimativas independentes: os topos partem da reta dos centros, não do quadro dos fundos,
+    # para não caírem no mesmo ponto fixo errado; com poucos glifos de corpo inteiro a
+    # geometria é mal determinada e a reta dos centros deles entra como terceiro quadro
+    outros = [_refinado(grupo, corpo, provisorio, _topo)]
+    if 2 <= len(corpo) <= _CORPO_CURTO:
+        outros.append(_angulo([_centro(grupo[i].caixa) for i in corpo]))
+    caixas, altura, assinaturas = _quadro(grupo, angulo, corpo)
+    alternativas = tuple(
+        _quadro(grupo, outro, corpo)[2]
+        for outro in outros
+        if abs(_diferenca_angular(outro, angulo)) > _DIFERENCA_QUADROS
+    )
     glifos = tuple(
-        GlifoDoTrecho(
-            c.indice, c.caixa, assinatura_glifo(pol, altura_linha=altura, base_linha=base)
-        )
-        for c, pol in zip(grupo, no_quadro, strict=True)
+        GlifoDoTrecho(c.indice, c.caixa, assinatura)
+        for c, assinatura in zip(grupo, assinaturas, strict=True)
     )
     rotacao = round(math.degrees(angulo), 6) % 360.0
-    return _Trecho(TrechoGlifos(glifos, rotacao, altura, grupo[0].cor), angulo, caixas)
+    publico = TrechoGlifos(glifos, rotacao, altura, grupo[0].cor)
+    return _Trecho(publico, angulo, caixas, alternativas, len(corpo) < 2)
 
 
 def _indices_candidatos(caminhos: Sequence[Caminho]) -> list[int]:
@@ -353,7 +464,34 @@ def _texto(
     )
 
 
+def _concordar(principal: Resolucao, alternativa: Resolucao) -> Resolucao:
+    """Um glifo só vale se os dois quadros o resolvem igual; senão é ambíguo."""
+    if (principal.situacao, principal.caractere) == (alternativa.situacao, alternativa.caractere):
+        return principal
+    if principal.situacao == alternativa.situacao == "desconhecido":
+        return principal
+    return Resolucao("ambiguo", None, principal.distancia)
+
+
+def _resolucoes(
+    trecho: _Trecho, tabela: TabelaGlifos, memoria: dict[_ChaveAssinatura, Resolucao]
+) -> list[Resolucao]:
+    if trecho.quadro_incerto:
+        return [Resolucao("ambiguo", None, math.inf) for _ in trecho.publico.glifos]
+    resolucoes = [_resolver(tabela, g.assinatura, memoria) for g in trecho.publico.glifos]
+    for assinaturas in trecho.alternativas:
+        resolucoes = [
+            _concordar(resolucao, _resolver(tabela, alternativa, memoria))
+            for resolucao, alternativa in zip(resolucoes, assinaturas, strict=True)
+        ]
+    return resolucoes
+
+
 def ler_texto_glifos(caminhos: Sequence[Caminho], tabela: TabelaGlifos) -> LeituraGlifos:
+    """Lê os trechos no quadro refinado pelos fundos e, quando difere, também no refinado pelos
+    topos dos glifos de corpo inteiro: em trecho curto um glifo de fundo fora da linha de base
+    (a cauda do "Q") entorta um dos quadros, e um glifo que os dois quadros leem diferente é
+    ambíguo (falha fechada) em vez de virar outro caractere ("Q" lido como "O")."""
     indices = _indices_candidatos(caminhos)
     if len(indices) > LIMITE_GLIFOS_PAGINA:
         return LeituraGlifos((), 0, 0, limitada=True)
@@ -361,7 +499,7 @@ def ler_texto_glifos(caminhos: Sequence[Caminho], tabela: TabelaGlifos) -> Leitu
     textos: list[TextoGlifo] = []
     desconhecidos = ambiguos = 0
     for trecho in _trechos(caminhos, indices):
-        resolucoes = [_resolver(tabela, g.assinatura, memoria) for g in trecho.publico.glifos]
+        resolucoes = _resolucoes(trecho, tabela, memoria)
         for grupo in _grupos_de_texto(trecho, resolucoes, tabela):
             situacoes = [resolucoes[i].situacao for i in grupo]
             falhas = (situacoes.count("desconhecido"), situacoes.count("ambiguo"))

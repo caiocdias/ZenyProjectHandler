@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import dataclasses
 import math
+import random
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -362,3 +363,97 @@ def test_item_sem_os_pontos_do_seu_tipo_nao_e_candidato(
     assert extrair_trechos(caminhos) == ()
     assert ler_texto_glifos(caminhos, tabela) == LeituraGlifos((), 0, 0, False)
     assert extrair_trechos([_quadrado_preenchido(10.0, 0), _quadrado_preenchido(13.0, 1)])
+
+
+_CELULA = 45.0
+_ROTACOES_VARREDURA = (0.0, 17.5, 30.0, 90.0, 180.0, 270.0, 41.0, 133.0, 222.0, 301.0)
+
+
+def _varredura_curta(
+    tmp_path: Path, tabela: TabelaGlifos, semente: int, paginas: int
+) -> tuple[int, int, list[tuple[str, str]]]:
+    """Trechos de 2 a 4 glifos sorteados do alfabeto inteiro, um por célula de uma grade.
+
+    Devolve (trechos, lidos, erros), com erro = leitura diferente do texto desenhado."""
+    sorteio = random.Random(semente)
+    colunas, linhas_grade = int(400 // _CELULA), int(300 // _CELULA)
+    total = lidos = 0
+    erros: list[tuple[str, str]] = []
+    for pagina in range(paginas):
+        tamanho = (3.0, 4.0, 5.0, 6.0)[pagina % 4]
+        rotacao = _ROTACOES_VARREDURA[pagina % len(_ROTACOES_VARREDURA)]
+        linhas = []
+        for indice in range(colunas * linhas_grade):
+            texto = "".join(sorteio.choice(ALFABETO) for _ in range(sorteio.randint(2, 4)))
+            centro = (
+                _CELULA * (indice % colunas + 0.5),
+                _CELULA * (indice // colunas + 0.5),
+            )
+            linhas.append(LinhaTexto(texto, centro, tamanho, rotacao))
+        leitura = _ler(tmp_path, linhas, tabela)
+        total += len(linhas)
+        for lido in leitura.textos:
+            primeiro = lido.glifos[0][1]
+            centro_glifo = ((primeiro[0] + primeiro[2]) / 2, (primeiro[1] + primeiro[3]) / 2)
+            dono = min(linhas, key=lambda linha: math.dist(linha.origem, centro_glifo))
+            lidos += 1
+            if lido.texto != dono.texto:
+                erros.append((dono.texto, lido.texto))
+    return total, lidos, erros
+
+
+def test_varredura_de_trechos_curtos_nunca_le_errado(tmp_path: Path, tabela: TabelaGlifos) -> None:
+    total, lidos, erros = _varredura_curta(tmp_path, tabela, semente=20261104, paginas=24)
+
+    assert total == 24 * 48
+    assert erros == []
+    assert lidos >= total // 4
+
+
+@pytest.mark.parametrize("texto", ["P10 N1..", "..P10 N1", "N1,-55", "P7...N1"])
+def test_pontuacao_pequena_em_sequencia_fica_no_trecho(
+    tmp_path: Path, tabela: TabelaGlifos, texto: str
+) -> None:
+    leitura = _ler(tmp_path, [LinhaTexto(texto, (150.0, 150.0), 5.0)], tabela)
+
+    assert [t.texto for t in leitura.textos] == [texto]
+
+
+@pytest.mark.parametrize("texto", ["C0..", "..C0", "...C", ",-55", "1,-5"])
+def test_pontuacao_pequena_em_trecho_curto_le_inteira_ou_avisa(
+    tmp_path: Path, tabela: TabelaGlifos, texto: str
+) -> None:
+    leitura = _ler(tmp_path, [LinhaTexto(texto, (150.0, 150.0), 5.0)], tabela)
+
+    lidos = [t.texto for t in leitura.textos]
+    assert lidos in ([], [texto])
+    if not lidos:
+        # o trecho não sai, mas a perda nunca é silenciosa
+        assert leitura.desconhecidos + leitura.ambiguos >= 1
+    caminhos = caminhos_do_pdf(
+        pdf_texto_contorno(tmp_path / "t.pdf", [LinhaTexto(texto, (150.0, 150.0), 5.0)])
+    )
+    assert [len(t.glifos) for t in extrair_trechos(caminhos)] == [len(texto)]
+
+
+@pytest.mark.parametrize("texto", [".RQ", "RQ.", "-AQ", "Q.R", "(DQ"])
+def test_q_com_pontuacao_que_entorta_o_quadro_provisorio_nunca_vira_o(
+    tmp_path: Path, tabela: TabelaGlifos, texto: str
+) -> None:
+    # o "." torce a reta dos centros em ~12 graus; um passo só de refino a partir dali deixava
+    # os dois quadros concordando em "O"
+    for tamanho in (3.0, 5.0):
+        leitura = _ler(tmp_path, [LinhaTexto(texto, (150.0, 150.0), tamanho)], tabela)
+        assert [t.texto for t in leitura.textos] in ([], [texto])
+
+
+@pytest.mark.parametrize("rotacao", [0.0, 41.0, 133.0, 222.0, 301.0])
+@pytest.mark.parametrize("texto", ["Q-", "-Q", "Q.", "=Q", "-1", "Q"])
+def test_trecho_com_menos_de_2_glifos_de_corpo_inteiro_nao_e_lido(
+    tmp_path: Path, tabela: TabelaGlifos, texto: str, rotacao: float
+) -> None:
+    leitura = _ler(tmp_path, [LinhaTexto(texto, (150.0, 150.0), 5.0, rotacao)], tabela)
+
+    assert leitura.textos == ()
+    if len(texto) >= 2:
+        assert leitura.ambiguos == len(texto)
