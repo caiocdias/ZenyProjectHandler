@@ -261,3 +261,10 @@ def test_caminho_e_primitiva_agrupam_juntos_com_indices_em_cada_campo() -> None:
     grupos = agrupar_candidatos([circulo(8, 3)], [poligono((0, 0), (6, 0), (3, 5))])
     assert [(g.indices_primitivas, g.indices_caminhos) for g in grupos] == [((0,), (0,))]
     assert grupos[0].bbox == (0, 0, 10, 5)
+
+
+def test_caminho_grande_encostado_fica_fora_e_grupos_de_so_caminhos_ordenam_por_indice() -> None:
+    grande = Caminho(((ItemCaminho("l", ((0, 0), (100, 0))),),), E, "preenchimento", 0)
+    caminhos = [poligono((60, 0), (66, 0), (63, 5)), grande, poligono((0, 1), (6, 1), (3, 6))]
+    grupos = agrupar_candidatos([], caminhos)
+    assert [(g.indices_primitivas, g.indices_caminhos) for g in grupos] == [((), (0,)), ((), (2,))]
