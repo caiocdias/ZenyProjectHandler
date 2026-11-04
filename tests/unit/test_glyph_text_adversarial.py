@@ -180,10 +180,9 @@ def test_ignorar_nao_mascara_desconhecido_do_outro_lado(
 def test_ignorar_na_ponta_de_trecho_de_3_glifos_deixa_o_valor_lido(
     tmp_path: Path, tabela: TabelaGlifos, texto: str
 ) -> None:
-    # BUG (vermelho documentado): com 3 glifos, um deles fora da linha de base na ponta, a
-    # mediana de Theil-Sen (ponto de ruptura de 29%) pega a inclinação do "-" e o quadro vira
-    # ~13 graus; os três glifos viram "desconhecido" e o "11" se perde. Falha fechada (nunca
-    # sai texto errado), mas o recall cai onde o plano espera "11".
+    # Regressão do bug corrigido em 178e727: com 3 glifos e um deles fora da linha de base na
+    # ponta, a mediana de Theil-Sen (ponto de ruptura de 29%) pegava a inclinação do "-" e o
+    # quadro virava ~13 graus; os três glifos viravam "desconhecido" e o "11" se perdia.
     leitura = _ler(tmp_path, [LinhaTexto(texto, (40.0, 60.0), 5.0)], _ignorando(tabela, "-"))
 
     assert [t.texto for t in leitura.textos] == ["11"]

@@ -56,18 +56,28 @@ def test_trecho_de_pontuacao_alta_ou_sem_corpo_inteiro_falha_fechado(
 def test_tamanhos_misturados_no_mesmo_trecho_nunca_leem_errado(
     tmp_path: Path, tabela: TabelaGlifos
 ) -> None:
-    for linhas in (
-        [LinhaTexto("P7", (60.0, 100.0), 6.0), LinhaTexto("N1", (68.0, 100.0), 3.0)],
-        [LinhaTexto("P7N", (60.0, 100.0), 6.0), LinhaTexto("1", (75.0, 100.0), 3.0)],
-        [LinhaTexto("P7", (60.0, 100.0), 3.0), LinhaTexto("N1", (66.0, 100.0), 6.0)],
-    ):
-        lidos = [t.texto for t in _ler(tmp_path, linhas, tabela).textos]
-        assert all(t in {"P7", "N1", "P7N", "1", "P7N1"} for t in lidos)
+    casos: tuple[tuple[list[LinhaTexto], tuple[list[str], ...]], ...] = (
+        (
+            [LinhaTexto("P7", (60.0, 100.0), 6.0), LinhaTexto("N1", (68.0, 100.0), 3.0)],
+            ([], ["P7N1"], ["N1", "P7"]),
+        ),
+        (
+            [LinhaTexto("P7N", (60.0, 100.0), 6.0), LinhaTexto("1", (75.0, 100.0), 3.0)],
+            ([], ["P7N1"]),
+        ),
+        (
+            [LinhaTexto("P7", (60.0, 100.0), 3.0), LinhaTexto("N1", (66.0, 100.0), 6.0)],
+            ([], ["P7N1"], ["N1", "P7"]),
+        ),
+    )
+    for linhas, aceitos in casos:
+        lidos = sorted(t.texto for t in _ler(tmp_path, linhas, tabela).textos)
+        assert lidos in aceitos
 
 
 @pytest.mark.parametrize("texto", ["AQ", "QA", "8Q", "DQ", "OQ", "QHZ"])
 def test_q_em_trecho_curto_nao_vira_o(tmp_path: Path, tabela: TabelaGlifos, texto: str) -> None:
-    # BUG (vermelho documentado): a cauda do "Q" desce abaixo da linha de base, mas a altura
+    # Regressão (corrigida em dbe65e0): a cauda do "Q" desce abaixo da linha de base, mas a altura
     # dele fica dentro dos 15% de "corpo inteiro"; em trechos de 2 a 4 glifos o fundo do "Q"
     # entra no Theil-Sen, o quadro sai ~3 graus torto e o "Q" casa com "O" (distancia ~0,07,
     # dentro da tolerancia 0,08): sai "AO" no lugar de "AQ", sem diagnostico.
@@ -80,7 +90,7 @@ def test_q_em_trecho_curto_nao_vira_o(tmp_path: Path, tabela: TabelaGlifos, text
 def test_pontuacao_pequena_vizinha_de_pontuacao_nao_some_em_silencio(
     tmp_path: Path, tabela: TabelaGlifos, texto: str
 ) -> None:
-    # BUG (vermelho documentado): dois glifos pequenos consecutivos ficam a mais de 1,6 x o
+    # Regressão (corrigida em dbe65e0): dois glifos pequenos seguidos ficam a mais de 1,6 x o
     # maior lado um do outro; o primeiro sai do trecho sem diagnostico e o resto e lido como
     # valor completo: ".C0" no lugar de "..C0", "-55" no lugar de ",-55".
     leitura = _ler(tmp_path, [LinhaTexto(texto, (150.0, 150.0), 5.0)], tabela)
