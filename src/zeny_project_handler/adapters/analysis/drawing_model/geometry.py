@@ -115,7 +115,9 @@ def _polilinhas_do_estilo(
     for no in ordem_de_partida:
         while any(not arestas[i].usada for i in incidentes[no]):
             nos, origens = percorrer(no)
-            fechada = len(nos) > 2 and nos[0] == nos[-1]
+            if len(nos) == 3 and nos[0] == nos[2]:
+                nos = nos[:2]  # segmento pintado duas vezes: aberta, com as duas origens
+            fechada = len(nos) > 3 and nos[0] == nos[-1]
             usados = nos[:-1] if fechada else nos
             pontos = _remover_colineares(
                 [grade.posicoes[n] for n in usados], fechada, tolerancia_angulo
@@ -133,18 +135,25 @@ def _desvio_graus(anterior: Ponto, vertice: Ponto, seguinte: Ponto) -> float:
 
 
 def _remover_colineares(pontos: list[Ponto], fechada: bool, tolerancia: float) -> list[Ponto]:
-    mantidos = list(pontos)
-    minimo = 3 if fechada else 2
+    """Remove vértices colineares em passada única com pilha (linear)."""
+    pilha: list[Ponto] = []
+    for ponto in pontos:
+        while len(pilha) >= 2 and _desvio_graus(pilha[-2], pilha[-1], ponto) <= tolerancia:
+            pilha.pop()
+        pilha.append(ponto)
+    if not fechada:
+        return pilha
+    inicio = 0
     mudou = True
-    while mudou and len(mantidos) > minimo:
+    while mudou and len(pilha) - inicio > 3:
         mudou = False
-        n = len(mantidos)
-        for i in range(n) if fechada else range(1, n - 1):
-            if _desvio_graus(mantidos[i - 1], mantidos[i], mantidos[(i + 1) % n]) <= tolerancia:
-                del mantidos[i]
-                mudou = True
-                break
-    return mantidos
+        if _desvio_graus(pilha[-2], pilha[-1], pilha[inicio]) <= tolerancia:
+            pilha.pop()
+            mudou = True
+        elif _desvio_graus(pilha[-1], pilha[inicio], pilha[inicio + 1]) <= tolerancia:
+            inicio += 1
+            mudou = True
+    return pilha[inicio:]
 
 
 def _ponto_bezier(pontos: tuple[Ponto, ...], t: float) -> Ponto:
