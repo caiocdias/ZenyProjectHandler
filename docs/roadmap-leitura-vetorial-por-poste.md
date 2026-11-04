@@ -593,6 +593,7 @@ Bloco C — aprendizado
   - Desenhos de anotação (bordas de carimbo, vetores do portador SHX) entram em `caminhos`; no AutoCAD o SHX também chega como traço vetorial e gera polilinhas e grupos que duplicam o texto (E06).
   - Texto SHX sai com rotação 0, altura = altura da caixa e camada vazia; `ImagemModelo.sha256` é o sha256 do digest de pixels da PyMuPDF, exceto para imagem de anotação acima do teto de 16 MP ou com dimensão indeterminada, que usa o sha256 do stream bruto (não decodifica).
   - O teto de pixels confia em /Width e /Height do dicionário: imagem JPX (dimensionada pelo codestream) e /SMask com dimensões próprias ainda escapam; tratar junto com os demais itens de PDF hostil.
+  - Retomada: a próxima elegível é a E05 (dependências E04 e E03 concluídas). O `.venv` do checkout principal já tem o lock de desenvolvimento com ezdxf (2026-11-04); o `.bat` roda no worktree chamado pelo caminho completo (`cmd.exe //c "<caminho>\IniciarTestes.bat"`). O worktree `.claude/worktrees/roadmap-leitura-vetorial-por-poste` e a branch estão no mesmo commit de `main`.
   - A onda final mudou a saída em casos de borda (dimensão real/indireta, identidade acima do teto) sem incrementar `modelo-desenho-v1`, porque não havia consumidor nem cache publicado; caches em `tmp/` gravados antes de 019dfa8 podem ter a identidade antiga — apague-os antes de reaproveitar.
 
 ---
