@@ -30,7 +30,12 @@ from zeny_project_handler.adapters.analysis.drawing_model.glyph_text import (
     extrair_trechos,
     ler_texto_glifos,
 )
-from zeny_project_handler.adapters.analysis.drawing_model.model import TextoModelo
+from zeny_project_handler.adapters.analysis.drawing_model.model import (
+    Caminho,
+    Estilo,
+    ItemCaminho,
+    TextoModelo,
+)
 from zeny_project_handler.adapters.analysis.pymupdf_drawing_model import extrair_modelo_desenho
 
 
@@ -331,3 +336,29 @@ def test_trecho_expoe_glifos_em_ordem_de_leitura_e_rotacao(
     assert all(g.assinatura is not None for g in trecho.glifos)
     ys = [g.caixa[1] for g in trecho.glifos]
     assert ys == sorted(ys, reverse=True)
+
+
+def _quadrado_preenchido(x: float, ordem: int) -> Caminho:
+    cantos = [(x, 10.0), (x + 2.0, 10.0), (x + 2.0, 12.0), (x, 12.0)]
+    itens = tuple(ItemCaminho("l", (cantos[i], cantos[(i + 1) % 4])) for i in range(4))
+    return Caminho((itens,), Estilo("", None, (0.0, 0.0, 0.0), 0.0, ""), "preenchimento", ordem)
+
+
+@pytest.mark.parametrize(
+    "item_ruim",
+    [
+        ItemCaminho("l", ()),
+        ItemCaminho("l", ((1.0, 1.0),)),
+        ItemCaminho("c", ((1.0, 1.0), (2.0, 2.0))),
+    ],
+)
+def test_item_sem_os_pontos_do_seu_tipo_nao_e_candidato(
+    tabela: TabelaGlifos, item_ruim: ItemCaminho
+) -> None:
+    ruim = Caminho(((item_ruim,),), Estilo("", None, (0.0, 0.0, 0.0), 0.0, ""), "preenchimento", 1)
+    # o item ruim não é candidato: separa os dois quadrados, que sozinhos não formam trecho
+    caminhos = [_quadrado_preenchido(10.0, 0), ruim, _quadrado_preenchido(13.0, 2)]
+
+    assert extrair_trechos(caminhos) == ()
+    assert ler_texto_glifos(caminhos, tabela) == LeituraGlifos((), 0, 0, False)
+    assert extrair_trechos([_quadrado_preenchido(10.0, 0), _quadrado_preenchido(13.0, 1)])

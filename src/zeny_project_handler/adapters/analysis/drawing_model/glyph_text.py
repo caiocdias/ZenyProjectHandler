@@ -3,11 +3,14 @@
 Candidatos a glifo consecutivos na ordem de desenho, com a mesma cor e vizinhos, formam um
 trecho. O quadro do trecho põe o texto na horizontal para calcular a assinatura de cada glifo:
 o ângulo parte da reta de mínimos quadrados dos centros, orientada do primeiro para o último
-glifo, e é refinado pela mediana das inclinações entre os fundos dos glifos (Theil-Sen), porque
-glifos fora do centro ("=", "-", "(") inclinam a reta dos centros e a assinatura, que mede a
-posição em relação à linha de base, deriva ao longo da linha; altura e linha de base saem das
-medianas. Num trecho de 2 glifos com fundos diferentes o quadro continua torto. Glifo
-desconhecido ou ambíguo anula o texto em que cairia; nunca sai um texto com caractere faltando.
+glifo, e é refinado pela mediana das inclinações entre os fundos (Theil-Sen) só dos glifos de
+corpo inteiro (altura perto da dos glifos altos; sem "-", "=", ".", ","), porque glifos fora do
+centro inclinam a reta dos centros e a assinatura, que mede a posição em relação à linha de
+base, deriva ao longo da linha. Altura e linha de base são as medianas dos mesmos glifos.
+Limitação: com menos de 2 glifos de corpo inteiro ("=1", "-1") fica a reta dos centros, e
+trechos em que a maioria é pontuação alta ("(1)", "(((") têm altura errada; nos dois casos a
+leitura falha fechada (desconhecido). Glifo desconhecido ou ambíguo anula o texto em que
+cairia; nunca sai um texto com caractere faltando.
 """
 
 from __future__ import annotations
@@ -15,7 +18,7 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
-from statistics import median
+from statistics import median, median_low
 from typing import Final
 
 from zeny_project_handler.adapters.analysis.drawing_model.glyph_signature import (
@@ -39,6 +42,9 @@ _FATOR_VIZINHANCA: Final = 1.6
 _MINIMO_GLIFOS_TRECHO: Final = 2
 _MAXIMO_GLIFOS_TRECHO: Final = 64
 _CASAS_MEMORIA: Final = 3
+_FRACAO_GLIFO_ALTO: Final = 0.5
+_DESVIO_CORPO: Final = 0.15
+_PONTOS_POR_TIPO: Final = {"l": 2, "c": 4}
 _TIPOS_PREENCHIDOS: Final = frozenset({"preenchimento", "traco_e_preenchimento"})
 
 _ChaveAssinatura = tuple[int, tuple[float, ...], tuple[tuple[float, ...], ...]]
@@ -112,6 +118,8 @@ def _eh_candidato(caminho: Caminho) -> bool:
     itens = [item for subcaminho in caminho.subcaminhos for item in subcaminho]
     if not itens or len(itens) > _MAXIMO_ITENS:
         return False
+    if any(len(item.pontos) != _PONTOS_POR_TIPO.get(item.tipo) for item in itens):
+        return False
     pontos = [ponto for item in itens for ponto in item.pontos]
     if not all(math.isfinite(x) and math.isfinite(y) for x, y in pontos):
         return False
@@ -178,15 +186,29 @@ def _para_pagina(ponto: Ponto, angulo: float) -> Ponto:
     return (ponto[0] * c - ponto[1] * s, ponto[0] * s + ponto[1] * c)
 
 
-def _refinar_pelos_fundos(grupo: Sequence[_Candidato], angulo: float) -> float:
-    """Corrige o ângulo provisório pela mediana das inclinações par a par dos fundos dos glifos
-    no quadro provisório (Theil-Sen): fundos fora da linha de base ("-", "=", descendentes)
-    são minoria e não puxam a mediana, como puxariam a reta dos centros."""
-    fundos: list[Ponto] = []
-    for candidato in grupo:
-        pontos = [_para_quadro(p, angulo) for poligono in candidato.poligonos for p in poligono]
-        x0, _, x1, y1 = _caixa_de(pontos)
-        fundos.append(((x0 + x1) / 2.0, y1))
+def _caixas_no_quadro(grupo: Sequence[_Candidato], angulo: float) -> list[Caixa]:
+    return [
+        _caixa_de([_para_quadro(p, angulo) for poligono in c.poligonos for p in poligono])
+        for c in grupo
+    ]
+
+
+def _corpo_inteiro(caixas: Sequence[Caixa]) -> list[int]:
+    """Glifos "de corpo inteiro": altura perto da mediana (baixa) das alturas dos glifos altos.
+
+    Pontuação baixa ("-", "=", ".", ",") fica de fora, e também os parênteses quando a maioria
+    é de letras e algarismos. A mediana baixa é uma das alturas, então o conjunto nunca é vazio.
+    """
+    alturas = [caixa[3] - caixa[1] for caixa in caixas]
+    maior = max(alturas)
+    referencia = median_low([a for a in alturas if a >= _FRACAO_GLIFO_ALTO * maior])
+    return [i for i, a in enumerate(alturas) if abs(a - referencia) <= _DESVIO_CORPO * referencia]
+
+
+def _refinar_pelos_fundos(caixas: Sequence[Caixa], angulo: float) -> float:
+    """Corrige o ângulo provisório pela mediana das inclinações par a par dos fundos (Theil-Sen)
+    das caixas, no quadro provisório; com menos de 2 caixas fica o ângulo provisório."""
+    fundos = [((x0 + x1) / 2.0, y1) for x0, _, x1, y1 in caixas]
     inclinacoes = [
         (b[1] - a[1]) / (b[0] - a[0])
         for i, a in enumerate(fundos)
@@ -199,13 +221,16 @@ def _refinar_pelos_fundos(grupo: Sequence[_Candidato], angulo: float) -> float:
 
 
 def _trecho(grupo: Sequence[_Candidato]) -> _Trecho:
-    angulo = _refinar_pelos_fundos(grupo, _angulo([_centro(c.caixa) for c in grupo]))
+    provisorio = _angulo([_centro(c.caixa) for c in grupo])
+    caixas_provisorias = _caixas_no_quadro(grupo, provisorio)
+    corpo = _corpo_inteiro(caixas_provisorias)
+    angulo = _refinar_pelos_fundos([caixas_provisorias[i] for i in corpo], provisorio)
     no_quadro = [
         [[_para_quadro(p, angulo) for p in poligono] for poligono in c.poligonos] for c in grupo
     ]
     caixas = tuple(_caixa_de([p for poligono in pol for p in poligono]) for pol in no_quadro)
-    altura = float(median(caixa[3] - caixa[1] for caixa in caixas))
-    base = float(median(caixa[3] for caixa in caixas))
+    altura = float(median(caixas[i][3] - caixas[i][1] for i in corpo))
+    base = float(median(caixas[i][3] for i in corpo))
     glifos = tuple(
         GlifoDoTrecho(
             c.indice, c.caixa, assinatura_glifo(pol, altura_linha=altura, base_linha=base)
