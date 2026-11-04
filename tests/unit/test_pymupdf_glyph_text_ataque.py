@@ -820,6 +820,23 @@ def test_leitura_so_de_espacos_e_ignorada_como_a_vazia() -> None:
     assert cobertura.divergentes == 0
 
 
+@pytest.mark.parametrize(
+    "conteudo",
+    ["\u00a0", "\u2003\u3000", "\n", "\t", " \r\n\t "],
+    ids=["nbsp", "espacos-unicode", "quebra", "tab", "mistura"],
+)
+def test_leitura_so_de_espacos_nao_ascii_quebra_ou_tab_nao_conta_divergencia(
+    conteudo: str,
+) -> None:
+    vazia = _leitura(conteudo, _caixa(_A, 0, 7))
+
+    cobertura = _resolver_cobertura([vazia], [_A])
+
+    assert cobertura.mantidos == (vazia,)
+    assert cobertura.glifos == (0,)
+    assert cobertura.divergentes == 0
+
+
 def test_sem_leituras_ou_sem_glifos_nada_muda() -> None:
     leitura = _leitura("X", (0.7, 0.7, 0.72, 0.72))
 
