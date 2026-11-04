@@ -288,14 +288,44 @@ def test_altura_deslocada_nunca_escolhe_outro_caractere_pela_caixa() -> None:
     assert (resolucao.situacao, resolucao.caractere) == ("desconhecido", None)
 
 
-def test_mesmo_desenho_em_outra_altura_da_linha_nao_disputa_a_forma() -> None:
-    # "," e "'" têm o mesmo desenho e só a base os separa: a forma só é comparada com entradas
-    # de caixa próxima, e a vírgula continua lida
+def test_mesmo_desenho_em_outra_altura_da_linha_disputa_a_forma() -> None:
+    # a base vem da linha de base do próprio trecho e não escolhe o caractere: num trecho só de
+    # "g" ela fica no fim da descendente, e o "g" (base 0.3 na tabela) passaria por "9". Um
+    # desenho igual com outra base torna a leitura desconhecida
     glifo = AssinaturaGlifo(1, (0.15, 0.3, 0.2), _assinatura(0.15, 0.3).contornos)
     virgula = EntradaGlifo("g1", ",", glifo)
     apostrofo = EntradaGlifo("g2", "'", _com_caixa(glifo, (0.15, 0.3, -0.6)))
     resolucao = resolver_glifo(_tabela(virgula, apostrofo), glifo)
+    assert (resolucao.situacao, resolucao.caractere) == ("desconhecido", None)
+
+
+def test_desenho_diferente_em_outra_altura_da_linha_nao_disputa_a_forma() -> None:
+    glifo = AssinaturaGlifo(1, (0.15, 0.3, 0.2), _assinatura(0.15, 0.3).contornos)
+    virgula = EntradaGlifo("g1", ",", glifo)
+    outro = AssinaturaGlifo(1, (0.15, 0.3, -0.6), _assinatura(0.15, 0.3, extra=1.44).contornos)
+    resolucao = resolver_glifo(_tabela(virgula, EntradaGlifo("g2", "'", outro)), glifo)
     assert (resolucao.situacao, resolucao.caractere) == ("reconhecido", ",")
+
+
+def _escalada(assinatura: AssinaturaGlifo, fator: float) -> AssinaturaGlifo:
+    largura, altura, base = assinatura.caixa
+    return AssinaturaGlifo(
+        assinatura.subcaminhos,
+        (largura * fator, altura * fator, base * fator),
+        tuple(tuple((x * fator, y * fator) for x, y in c) for c in assinatura.contornos),
+    )
+
+
+def test_forma_sem_escala_aponta_o_caractere_de_outra_altura() -> None:
+    # "jj": o h do trecho vai até o fim da descendente e o "j" fica com altura 1.0, longe do "j"
+    # da tabela (1.27) e a 0.05 do "i". Com a escala igualada, o desenho é o do "j"
+    glifo = _assinatura(0.18, 1.0, extra=0.5)
+    j = EntradaGlifo("g1", "j", _escalada(glifo, 1.27))
+    i = EntradaGlifo("g2", "i", _assinatura(0.18, 1.0, extra=1.2))
+    tabela = _tabela(j, i)
+    assert resolver_glifo(tabela, glifo).caractere == "i"
+    assert not glyph_table.forma_sem_escala_confirma(tabela, glifo, "i")
+    assert glyph_table.forma_sem_escala_confirma(_tabela(i), glifo, "i")
 
 
 @pytest.mark.parametrize("delta", [-0.08, -0.07, -0.06, 0.06, 0.07, 0.08])

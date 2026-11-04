@@ -12,10 +12,12 @@ do trecho (não o das entradas casadas), então a condição não se ajusta à l
 caractere candidato tem o contorno tão próximo quanto o do melhor (até `margem_ambiguidade` a
 mais), só a caixa decidiria: a resolução é ambígua (falha fechada).
 
-A caixa nunca escolhe o caractere, só reprova: o melhor contorno entre as entradas de caixa a
-até `JANELA_FORMA` x tolerância (incluindo as que a caixa reprova) tem de ser do caractere
-lido. Senão o glifo fica desconhecido: um "f" fora da tabela não vira o "t" que cabe na
-tolerância, e um "8" de altura deslocada não vira o "B" que a distância total preferiria.
+A caixa nunca escolhe o caractere, só reprova: o melhor contorno entre as entradas de largura e
+altura a até `JANELA_FORMA` x tolerância (incluindo as que a caixa reprova, e qualquer que seja
+a base) tem de ser do caractere lido. Senão o glifo fica desconhecido: um "f" fora da tabela
+não vira o "t" que cabe na tolerância, um "8" de altura deslocada não vira o "B" que a
+distância total preferiria, e um "g" num trecho só de "g" (base no fim da descendente) não vira
+"9".
 """
 
 from __future__ import annotations
@@ -44,9 +46,10 @@ _LIMITE_COORDENADA: Final = 4.0
 _CASAS: Final = 4
 # Diferença máxima de altura (em h) entre o glifo e a entrada casada.
 TOLERANCIA_ALTURA: Final = 0.055
-# Janela (em múltiplos da tolerância, na diferença de caixa) das entradas cujo contorno disputa
-# a forma do glifo: inclui entradas que a caixa reprova (o "f" de largura um pouco maior) e
-# deixa de fora o mesmo desenho em outra posição da linha ("," e "'").
+# Janela (em múltiplos da tolerância, na largura e na altura) das entradas cujo contorno disputa
+# a forma do glifo: inclui entradas que a caixa reprova (o "f" de largura um pouco maior). A base
+# fica de fora: ela vem da linha de base do próprio trecho, que num trecho só de descendentes
+# ("gg") cai no fim da descendente.
 JANELA_FORMA: Final = 2.0
 
 
@@ -97,16 +100,22 @@ class _Medida:
 
 
 def _medidas(tabela: TabelaGlifos, assinatura: AssinaturaGlifo) -> list[_Medida]:
-    """Entradas na janela da forma (caixa a até `JANELA_FORMA` x tolerância), com o contorno."""
+    """Entradas na janela da forma (largura e altura a até `JANELA_FORMA` x tolerância), com o
+    contorno."""
     janela = JANELA_FORMA * tabela.tolerancia
     medidas: list[_Medida] = []
     for entrada in tabela.glifos:
         if entrada.assinatura.subcaminhos != assinatura.subcaminhos:
             continue
+        largura, altura, _ = entrada.assinatura.caixa
+        if (
+            abs(largura - assinatura.caixa[0]) > janela
+            or abs(altura - assinatura.caixa[1]) > janela
+        ):
+            continue
         caixa = diferenca_caixa(entrada.assinatura, assinatura)
-        if caixa <= janela:
-            contorno = _distancia_contorno(entrada.assinatura, assinatura)
-            medidas.append(_Medida(entrada, caixa, contorno))
+        contorno = _distancia_contorno(entrada.assinatura, assinatura)
+        medidas.append(_Medida(entrada, caixa, contorno))
     return medidas
 
 
@@ -115,6 +124,42 @@ def _forma_de_outro_caractere(medidas: Sequence[_Medida], caractere: str | None)
     contorno do `caractere`: o desenho não aponta só para ele."""
     proprio = min(m.contorno for m in medidas if m.entrada.caractere == caractere)
     return any(m.contorno <= proprio for m in medidas if m.entrada.caractere != caractere)
+
+
+def _na_altura(entrada: AssinaturaGlifo, altura: float) -> AssinaturaGlifo:
+    """A entrada reescalada para ter a `altura` dada (contorno e caixa)."""
+    fator = altura / entrada.caixa[1]
+    largura, _, base = entrada.caixa
+    return AssinaturaGlifo(
+        entrada.subcaminhos,
+        (largura * fator, altura, base * fator),
+        tuple(tuple((x * fator, y * fator) for x, y in c) for c in entrada.contornos),
+    )
+
+
+def forma_sem_escala_confirma(
+    tabela: TabelaGlifos, assinatura: AssinaturaGlifo, caractere: str
+) -> bool:
+    """Com todas as entradas reescaladas para a altura do glifo (a escala do h não decide), o
+    melhor contorno é só do `caractere`. Serve ao trecho cujo h vem só do próprio glifo: lá a
+    altura relativa não diz nada, e o "j" (h até o fim da descendente) casaria o "i"."""
+    altura = assinatura.caixa[1]
+    janela = JANELA_FORMA * tabela.tolerancia
+    proprio = outro = math.inf
+    for entrada in tabela.glifos:
+        if entrada.assinatura.subcaminhos != assinatura.subcaminhos:
+            continue
+        if entrada.assinatura.caixa[1] <= 0:
+            continue
+        igualada = _na_altura(entrada.assinatura, altura)
+        if abs(igualada.caixa[0] - assinatura.caixa[0]) > janela:
+            continue
+        contorno = _distancia_contorno(igualada, assinatura)
+        if entrada.caractere == caractere:
+            proprio = min(proprio, contorno)
+        else:
+            outro = min(outro, contorno)
+    return proprio < outro
 
 
 def resolver_glifo(tabela: TabelaGlifos, assinatura: AssinaturaGlifo) -> Resolucao:

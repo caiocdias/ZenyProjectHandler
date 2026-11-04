@@ -345,12 +345,39 @@ def test_glifos_lidos_em_escalas_diferentes_no_mesmo_trecho_anulam_o_texto(
     assert leitura.ambiguos >= 1
 
 
-@pytest.mark.parametrize("texto", ["0e0", "ee", "Ze0", "Z0"])
+@pytest.mark.parametrize("texto", ["0e0", "ee", "Ze0", "00e"])
 def test_glifos_da_mesma_escala_continuam_lidos(
     tmp_path: Path, tabela_com_e: TabelaGlifos, texto: str
 ) -> None:
     leitura = _ler(tmp_path, [LinhaTexto(texto, (40.0, 60.0), 5.0)], tabela_com_e)
     assert [t.texto for t in leitura.textos] == [texto]
+
+
+@pytest.mark.parametrize("texto", ["ZZ", "Z0", "PZ"])
+def test_trecho_sem_ancora_com_letra_sem_par_de_caixa_falha_fechado(
+    tmp_path: Path, tabela_com_e: TabelaGlifos, texto: str
+) -> None:
+    # a tabela tem as duas escalas (o "e"), mas nenhum caractere deste trecho foi colhido nas
+    # duas: nada diz se h é a altura de maiúscula ou a altura-x, e o "Z" não tem o "z" na tabela
+    # para separar ("zz" com h = altura-x sairia "ZZ"). Falha fechada
+    leitura = _ler(tmp_path, [LinhaTexto(texto, (40.0, 60.0), 5.0)], tabela_com_e)
+    assert [t.texto for t in leitura.textos] == []
+    assert leitura.ambiguos >= 1
+
+
+@pytest.mark.parametrize("texto", ["47", "11", "Ze0"])
+def test_trecho_sem_letra_sem_par_ou_ancorado_continua_lido(
+    tmp_path: Path, tabela_com_e: TabelaGlifos, texto: str
+) -> None:
+    leitura = _ler(tmp_path, [LinhaTexto(texto, (40.0, 60.0), 5.0)], tabela_com_e)
+    assert [t.texto for t in leitura.textos] == [texto]
+
+
+def test_tabela_numa_escala_so_nao_exige_ancora(tmp_path: Path, tabela: TabelaGlifos) -> None:
+    # a tabela do alfabeto (só maiúsculas e algarismos) não tem nenhum caractere nas duas
+    # escalas: não há o que confundir, e "Z0" continua lido
+    leitura = _ler(tmp_path, [LinhaTexto("Z0", (40.0, 60.0), 5.0)], tabela)
+    assert [t.texto for t in leitura.textos] == ["Z0"]
 
 
 def test_cor_do_trecho(tmp_path: Path, tabela: TabelaGlifos) -> None:

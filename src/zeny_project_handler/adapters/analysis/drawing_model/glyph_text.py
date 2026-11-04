@@ -36,7 +36,10 @@ O h do trecho é a altura de maiúscula ou, num trecho só de minúsculas, a alt
 tem entradas colhidas nas duas escalas ("e" a ~0,75 h e a ~1,0 h). Um "z" lido com h = altura-x
 tem o desenho e a altura relativa do "Z" colhido com h = altura de maiúscula. Por isso os glifos
 altos reconhecidos do trecho têm de indicar a mesma escala (altura acima ou até `RAZAO_ESCALA_X`
-x a menor altura do caractere na tabela); se indicam as duas, todos ficam ambíguos.
+x a menor altura do caractere na tabela); se indicam as duas, todos ficam ambíguos. Só um
+caractere colhido nas duas escalas ancora a escala; num trecho sem âncora (ver
+`_com_escala_coerente`), letra sem par de caixa na tabela ou forma que, com a escala igualada,
+aponta outro caractere faz o trecho falhar fechado.
 """
 
 from __future__ import annotations
@@ -56,6 +59,7 @@ from zeny_project_handler.adapters.analysis.drawing_model.glyph_signature import
 from zeny_project_handler.adapters.analysis.drawing_model.glyph_table import (
     Resolucao,
     TabelaGlifos,
+    forma_sem_escala_confirma,
     resolver_glifo,
 )
 from zeny_project_handler.adapters.analysis.drawing_model.model import Caixa, Caminho, Cor, Ponto
@@ -536,30 +540,75 @@ def alturas_tipicas(tabela: TabelaGlifos) -> dict[str, float]:
     return {caractere: float(median(valores)) for caractere, valores in alturas.items()}
 
 
-def alturas_minimas(tabela: TabelaGlifos) -> dict[str, float]:
-    """Menor altura (em h) das entradas de cada caractere alto (não pontuação baixa)."""
-    alturas: dict[str, float] = {}
+@dataclass(frozen=True, slots=True)
+class EscalasDaTabela:
+    """O que a tabela diz sobre a escala do h de um trecho (altura de maiúscula ou altura-x)."""
+
+    # menor altura de cada caractere alto
+    minimas: dict[str, float]
+    # caracteres altos colhidos nas duas escalas (alguma entrada acima de `RAZAO_ESCALA_X` x a
+    # menor): só neles a menor altura é, com certeza, a de maiúscula
+    referencias: frozenset[str]
+    # letras cujo par de caixa (maiúscula/minúscula) não está na tabela: na outra escala elas
+    # podem ser o par ("Z" lido onde está "z"), e a tabela não tem como dizer que não são
+    sem_par: frozenset[str]
+
+
+def escalas_da_tabela(tabela: TabelaGlifos) -> EscalasDaTabela:
+    alturas: dict[str, list[float]] = {}
     for entrada in tabela.glifos:
         if entrada.caractere is not None:
-            altura = entrada.assinatura.caixa[1]
-            alturas[entrada.caractere] = min(alturas.get(entrada.caractere, altura), altura)
-    return {c: altura for c, altura in alturas.items() if altura >= _FRACAO_GLIFO_ALTO}
+            alturas.setdefault(entrada.caractere, []).append(entrada.assinatura.caixa[1])
+    minimas = {c: min(v) for c, v in alturas.items() if min(v) >= _FRACAO_GLIFO_ALTO}
+    referencias = frozenset(c for c in minimas if max(alturas[c]) > RAZAO_ESCALA_X * minimas[c])
+    sem_par = frozenset(
+        c for c in minimas if len(par := c.swapcase()) == 1 and par != c and par not in alturas
+    )
+    return EscalasDaTabela(minimas, referencias, sem_par)
 
 
 def _com_escala_coerente(
-    trecho: _Trecho, resolucoes: list[Resolucao], minimas: dict[str, float]
+    trecho: _Trecho, resolucoes: list[Resolucao], tabela: TabelaGlifos, escalas: EscalasDaTabela
 ) -> list[Resolucao]:
-    """Os glifos altos reconhecidos têm de dizer a mesma escala do h do trecho; senão todos ficam
-    ambíguos. Um glifo acima de `RAZAO_ESCALA_X` x a menor altura do seu caractere na tabela foi
-    lido com h = altura-x; até ela, com h = altura de maiúscula."""
-    escalas = {
-        assinatura.caixa[1] > RAZAO_ESCALA_X * minimas[resolucao.caractere]
-        for glifo, resolucao in zip(trecho.publico.glifos, resolucoes, strict=True)
+    """Os glifos altos reconhecidos têm de dizer a mesma escala do h do trecho, e ela tem de estar
+    ancorada; senão todos ficam ambíguos. Um glifo acima de `RAZAO_ESCALA_X` x a menor altura do
+    seu caractere na tabela foi lido com h = altura-x; até ela, com h = altura de maiúscula.
+
+    Trecho sem âncora (um caractere alto só, repetido; ou, numa tabela com as duas escalas,
+    nenhum caractere de referência) tira a escala e a linha de base de si mesmo, e nada nele
+    contradiz uma leitura na escala errada. Ele falha fechado se tem letra sem par de caixa na
+    tabela ("zz" → "ZZ", "lzz" → "lZZ") ou, com um caractere só, se a forma com a escala
+    igualada aponta outro caractere ("jj" → "ii")."""
+    minimas = escalas.minimas
+    altos = [
+        (
+            indice,
+            resolucao.caractere,
+            assinatura,
+            assinatura.caixa[1] > RAZAO_ESCALA_X * minimas[resolucao.caractere],
+        )
+        for indice, (glifo, resolucao) in enumerate(
+            zip(trecho.publico.glifos, resolucoes, strict=True)
+        )
         if resolucao.situacao == "reconhecido"
         and resolucao.caractere in minimas
         and (assinatura := glifo.assinatura) is not None
-    }
-    if len(escalas) < 2:
+    ]
+    if not altos:
+        return resolucoes
+    caracteres = {caractere for _, caractere, _, _ in altos}
+    duas_escalas = bool(escalas.referencias)
+    um_so = len(caracteres) == 1
+    sem_ancora = um_so or (duas_escalas and caracteres.isdisjoint(escalas.referencias))
+    coerente = len({escala for *_, escala in altos}) == 1
+    if sem_ancora and duas_escalas and not caracteres.isdisjoint(escalas.sem_par):
+        coerente = False
+    if um_so and coerente:
+        coerente = all(
+            forma_sem_escala_confirma(tabela, assinatura, caractere)
+            for _, caractere, assinatura, _ in altos
+        )
+    if coerente:
         return resolucoes
     return [
         Resolucao("ambiguo", None, r.distancia) if r.situacao == "reconhecido" else r
@@ -688,7 +737,7 @@ def ler_texto_glifos(
         return LeituraGlifos((), 0, 0, limitada=True)
     memoria: dict[_ChaveAssinatura, Resolucao] = {}
     tipicas = alturas_tipicas(tabela)
-    minimas = alturas_minimas(tabela)
+    escalas = escalas_da_tabela(tabela)
     textos: list[TextoGlifo] = []
     desconhecidos = ambiguos = 0
     venenos: set[_Veneno] = set()
@@ -696,7 +745,9 @@ def ler_texto_glifos(
         if trecho.venenos:
             venenos.update(trecho.venenos)
             continue
-        resolucoes = _com_escala_coerente(trecho, _resolucoes(trecho, tabela, memoria), minimas)
+        resolucoes = _com_escala_coerente(
+            trecho, _resolucoes(trecho, tabela, memoria), tabela, escalas
+        )
         escala = _escala_das_lacunas(trecho, resolucoes, tipicas)
         for grupo in _grupos_de_texto(trecho, resolucoes, tabela, escala):
             situacoes = [resolucoes[i].situacao for i in grupo]
