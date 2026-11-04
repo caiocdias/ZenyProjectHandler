@@ -55,7 +55,9 @@ Pacotes em `src/` com fronteiras verificadas por testes:
     `market/`, catálogos/regras JSON em `*/data/` e `analysis/symbol_packages/`);
   - `adapters/analysis/drawing_model/` modelo de desenho derivado (caminhos, textos, primitivas,
     grupos, imagens, família), puro e com cache JSON próprio (`VERSAO_MODELO_DESENHO`); o único
-    leitor PyMuPDF dele é `pymupdf_drawing_model.py`;
+    leitor PyMuPDF dele é `pymupdf_drawing_model.py`; texto em contorno é lido por forma contra a
+    tabela de glifos (`glyph_signature/_table/_text.py`, `tabela-glifos-v1`), curada pela rodada
+    de glifos;
   - `composition.py` monta o grafo de dependências.
 - `zeny_project_handler_server` — FastAPI: routers `*_api.py`, autenticação bearer,
   `job_manager`/`job_store` (worker único, jobs persistentes, idempotência por `Idempotency-Key`,
@@ -90,9 +92,12 @@ Uma rodada é iniciada pela skill de projeto `/curadoria-simbologia`
 (`.claude/skills/curadoria-simbologia/SKILL.md`), que processa os PDFs de `examples/` em ondas de
 3 a 5 com os subagentes de `.claude/agents/curadoria-*.md` e os CLIs `scripts/curation_round.py`,
 `curation_render.py`, `curation_infer.py`, `curation_reference.py`, `curation_compare.py`,
-`curation_audit.py`, `curation_backlog.py` e `curation_ficha.py` (`python -m scripts.curation_*`).
+`curation_audit.py`, `curation_backlog.py`, `curation_ficha.py` e `curation_glifos.py`
+(`python -m scripts.curation_*`).
 A rodada de fichas do poste (leitores `a`/`b`/`c` em modo ficha, consolidação, amostra humana e
-baseline) segue a seção "Rodada de fichas do poste" do mesmo contrato. Invariantes: o
+baseline) segue a seção "Rodada de fichas do poste" do mesmo contrato; a rodada de glifos
+(agrupar, leitura dupla cega em modo glifo, consolidar, publicar a tabela), a seção "Rodada de
+glifos". Invariantes: o
 leitor visual nunca vê predições e a referência é congelada antes de qualquer comparação;
 correções rodam em série na árvore principal, com fixture sintética positiva/negativa; tudo da
 rodada (PDFs, PNG, referências, relatório) fica em `tmp/curadoria-simbologia/` (fora do Git); a

@@ -6,6 +6,7 @@
       "Bash(.venv/Scripts/python.exe -m scripts.curation_infer *)",
       "Bash(.venv/Scripts/python.exe -m scripts.curation_reference *)",
       "Bash(.venv/Scripts/python.exe -m scripts.curation_ficha *)",
+      "Bash(.venv/Scripts/python.exe -m scripts.curation_glifos *)",
       "Bash(.venv/Scripts/python.exe -m scripts.curation_compare *)",
       "Bash(.venv/Scripts/python.exe -m scripts.curation_audit *)",
       "Bash(.venv/Scripts/python.exe -m scripts.curation_backlog *)",

@@ -829,3 +829,57 @@ Recuperação após queda: se um congelamento, comparação, consolidação ou a
 metade (arquivo sem item no manifesto, `comparacao.json` sem `regioes-conferencia.json`,
 `amostra-vNNN` sem `amostra.json`), o CLI recusa seguir. A recuperação é manual e explícita:
 remova o arquivo órfão, repita o comando e registre o fato no relatório da rodada.
+
+## Rodada de glifos
+
+Texto desenhado como contorno preenchido (sem texto nativo) é lido por forma, contra uma tabela
+de glifos (`tabela-glifos-v1`) curada numa rodada própria, em
+`tmp/curadoria-simbologia/<AAAAMMDD-HHMM>-glifos/`, a partir dos PDFs de `examples/`. Folhas
+reservadas para a avaliação nunca entram: o orquestrador lista o `sha256` delas, um por linha, e
+passa o arquivo em `--excluir-sha`. Os JSON da rodada não levam nome de PDF nem caminho
+absoluto (a folha é `sha256[:12]`).
+
+Procedimento, na ordem:
+
+1. `agrupar` extrai os trechos de glifos, agrupa as formas de trechos de quadro confirmado e
+   grava `grupos.json`, `h1.json` e as folhas de contato `contato/folha-NNN.png` (até 40 grupos
+   por folha):
+
+   ```bash
+   .venv/Scripts/python.exe -m scripts.curation_glifos agrupar --pdfs examples --rodada RODADA --excluir-sha RESERVADAS.txt
+   ```
+
+2. Regra de parada, antes de despachar leitores: leia `h1.json`. Mais de 600 grupos, menos de 50%
+   dos candidatos das famílias de contorno em trechos (`fracao_candidatos_em_trecho`) ou mais de
+   30% dos glifos excluídos por quadro incerto (`fracao_excluida_quadro_incerto`): pare e
+   registre a decisão no relatório da rodada. Se H1 (o glifo é um caminho próprio dentro de um
+   trecho) falhar, o gatilho é segmentar por subcaminho; registre e devolva ao planejamento.
+3. Leitores `a` e `b`: instâncias novas do agente `curadoria-leitor-visual`, em paralelo, cada
+   uma com a tarefa `modo: glifo`, `leitor: a` ou `b`, e só as folhas de `contato/`. Cada leitura
+   passa por `validar`, que grava a cópia sem sobrescrever:
+
+   ```bash
+   .venv/Scripts/python.exe -m scripts.curation_glifos validar --rodada RODADA --leitor LEITOR --arquivo RODADA/rascunho-LEITOR/glifos.json
+   ```
+
+4. `consolidar`: A = B é aceito. Havendo divergência e sem leitura C, grava `divergencias.json` e
+   `contato-divergencias/` e sai com código 3. O leitor C (instância nova, `modo: glifo`,
+   `leitor: c`) recebe só as folhas de `contato-divergencias/`, nunca as leituras de A e B; depois
+   do `validar` dele, rode `consolidar` de novo. C igual a um deles desempata; senão o grupo fica
+   pendente:
+
+   ```bash
+   .venv/Scripts/python.exe -m scripts.curation_glifos consolidar --rodada RODADA
+   ```
+
+5. `publicar` escreve a tabela com os grupos aceitos (caractere, ou `ignorar` como `null`;
+   `ilegivel`, `composto`, `fragmento`, `misto` e pendentes ficam de fora):
+
+   ```bash
+   .venv/Scripts/python.exe -m scripts.curation_glifos publicar --rodada RODADA --saida RODADA/tabela-glifos-v1.json
+   ```
+
+A cegueira vale como nas demais rodadas: o leitor só vê os PNG de contato, nunca `grupos.json`,
+leituras de outro leitor, consolidação nem tabela. A tabela só chega ao pacote como mudança
+versionada revisada, contendo apenas assinaturas numéricas e caracteres (nenhum recorte, PNG ou
+coordenada de folha real).

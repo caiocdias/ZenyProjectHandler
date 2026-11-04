@@ -580,3 +580,37 @@ Recuperação após queda: se um congelamento, comparação, consolidação ou a
 metade (arquivo sem item no manifesto, `comparacao.json` sem `regioes-conferencia.json`,
 `amostra-vNNN` sem `amostra.json`), o CLI recusa seguir. A recuperação é manual e explícita:
 remova o arquivo órfão, repita o comando e registre o fato no relatório da rodada.
+
+## Rodada de glifos
+
+Rodada própria (`tmp/curadoria-simbologia/<AAAAMMDD-HHMM>-glifos/`) que rotula as formas de texto
+em contorno para a tabela de glifos; o contrato está na seção "Rodada de glifos" do documento
+de curadoria. Folhas reservadas para a avaliação ficam fora, por `--excluir-sha`.
+
+1. Agrupe e gere as folhas de contato:
+
+   ```bash
+   .venv/Scripts/python.exe -m scripts.curation_glifos agrupar --pdfs examples --rodada RODADA --excluir-sha RESERVADAS.txt
+   ```
+
+2. Leia `h1.json` antes dos leitores: mais de 600 grupos, menos de 50% dos candidatos das famílias
+   de contorno em trechos ou mais de 30% dos glifos em quadro incerto: pare e registre no relatório.
+3. Leitores `a` e `b` em paralelo, instâncias novas do `curadoria-leitor-visual` com `modo: glifo`
+   e só as folhas de `contato/`; cada leitura passa por:
+
+   ```bash
+   .venv/Scripts/python.exe -m scripts.curation_glifos validar --rodada RODADA --leitor LEITOR --arquivo RODADA/rascunho-LEITOR/glifos.json
+   ```
+
+4. Consolide. Com divergência e sem C, o CLI sai com código 3: despache o leitor C (instância nova,
+   `modo: glifo`, `leitor: c`) só com as folhas de `contato-divergencias/` e consolide de novo:
+
+   ```bash
+   .venv/Scripts/python.exe -m scripts.curation_glifos consolidar --rodada RODADA
+   ```
+
+5. Publique a tabela com os grupos aceitos:
+
+   ```bash
+   .venv/Scripts/python.exe -m scripts.curation_glifos publicar --rodada RODADA --saida RODADA/tabela-glifos-v1.json
+   ```
