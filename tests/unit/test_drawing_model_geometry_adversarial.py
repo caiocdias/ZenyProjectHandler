@@ -488,3 +488,64 @@ def test_imported_root_names_nao_acusa_nome_apenas_citado(tmp_path: Path) -> Non
         '"""usa ezdxf no texto"""\nx = "import ezdxf"\n# import fitz\n', encoding="utf-8"
     )
     assert imported_root_names(arquivo) == set()
+
+
+# ---------- remoção de colineares: fidelidade à curva original ----------
+
+
+def _distancia_ao_segmento(p: Ponto, a: Ponto, b: Ponto) -> float:
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    comprimento2 = dx * dx + dy * dy
+    t = 0.0
+    if comprimento2:
+        t = max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / comprimento2))
+    return math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy)
+
+
+def _afastamento_maximo(
+    originais: list[Ponto], polilinha: tuple[Ponto, ...], fechada: bool
+) -> float:
+    vertices = list(polilinha) + ([polilinha[0]] if fechada else [])
+    return max(
+        min(_distancia_ao_segmento(p, a, b) for a, b in pairwise(vertices)) for p in originais
+    )
+
+
+@pytest.mark.parametrize(
+    ("raio", "passo", "varredura"),
+    [(100, 0.5, 90), (1000, 0.3, 90), (1000, 0.9, 180)],
+)
+def test_arco_suave_com_desvio_menor_que_um_grau_por_passo_fica_fiel_a_curva(
+    raio: float, passo: float, varredura: float
+) -> None:
+    # Criterio: todo vertice original fica a no maximo 0,25 pt da polilinha resultante, metade
+    # da tolerancia de ponto padrao (0,5 pt), que e a escala em que o modulo trata pontos como
+    # iguais. Raios de ate 1000 pt cobrem uma folha de projeto inteira.
+    n = int(varredura / passo)
+    pts = [
+        (raio * math.cos(math.radians(passo * i)), raio * math.sin(math.radians(passo * i)))
+        for i in range(n + 1)
+    ]
+    (p,) = reconstruir_polilinhas([traco(*pts)])
+    assert p.pontos[0] == pts[0]
+    assert p.pontos[-1] == pts[-1]
+    assert len(p.pontos) < len(pts)
+    assert _afastamento_maximo(pts, p.pontos, p.fechada) <= 0.25
+
+
+def test_circulo_poligonal_fechado_de_passo_suave_fica_fiel_e_fechado() -> None:
+    n = 400
+    pts = [
+        (100 * math.cos(2 * math.pi * i / n), 100 * math.sin(2 * math.pi * i / n))
+        for i in range(n + 1)
+    ]
+    (p,) = reconstruir_polilinhas([traco(*pts)])
+    assert p.fechada
+    assert len(p.pontos) >= 8
+    assert _afastamento_maximo(pts, p.pontos, True) <= 0.25
+
+
+def test_remocao_de_colineares_preserva_ordem_dos_vertices_mantidos() -> None:
+    pts = [(float(i), 0.0) for i in range(50)] + [(49.0, float(i)) for i in range(1, 50)]
+    (p,) = reconstruir_polilinhas([traco(*pts)])
+    assert p.pontos == ((0, 0), (49, 0), (49, 49))
