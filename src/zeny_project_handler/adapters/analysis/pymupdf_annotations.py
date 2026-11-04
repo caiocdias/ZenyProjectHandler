@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import re
+from collections import deque
+from collections.abc import Iterator
 from hashlib import sha256
 from typing import Any, cast
 
@@ -166,14 +168,9 @@ def _walk_appearance(
     technical_annotation: bool,
 ) -> tuple[CandidatoEvidenciaDocumento, ...]:
     candidates: list[CandidatoEvidenciaDocumento] = []
-    queue: list[tuple[int, str | None, int]] = [(root_xref, root_name, 0)]
-    visited: set[int] = set()
-    while queue:
-        xref, resource_name, depth = queue.pop(0)
-        if xref in visited or depth > max_depth:
-            continue
-        visited.add(xref)
-        subtype = _object_subtype(document, xref)
+    for xref, resource_name, depth, subtype in _appearance_objects(
+        document, root_xref, root_name, max_depth
+    ):
         if subtype in {"Form", "Image"} or xref == root_xref:
             evidence_type = TipoEvidencia.IMAGEM if subtype == "Image" else TipoEvidencia.VETOR
             stream = _stream_bytes(document, xref)
@@ -202,12 +199,26 @@ def _walk_appearance(
                     ),
                 )
             )
+    return tuple(candidates)
+
+
+def _appearance_objects(
+    document: Any, root_xref: int, root_name: str, max_depth: int
+) -> Iterator[tuple[int, str | None, int, str | None]]:
+    """Objetos da appearance stream, em largura: (xref, nome, profundidade, subtipo)."""
+    queue: deque[tuple[int, str | None, int]] = deque([(root_xref, root_name, 0)])
+    visited: set[int] = set()
+    while queue:
+        xref, resource_name, depth = queue.popleft()
+        if xref in visited or depth > max_depth:
+            continue
+        visited.add(xref)
+        yield xref, resource_name, depth, _object_subtype(document, xref)
         if depth < max_depth:
             queue.extend(
                 (child_xref, name, depth + 1)
                 for name, child_xref in _named_references(document, xref)
             )
-    return tuple(candidates)
 
 
 def _named_references(document: Any, xref: int) -> tuple[tuple[str, int], ...]:
