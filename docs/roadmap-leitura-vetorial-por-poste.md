@@ -177,7 +177,7 @@ Bloco B — leitura vetorial
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E04 | Modelo de desenho e perfis de família | #concluida | E01 | modelo de desenho por página, perfil por família e DXF de depuração |
-| E05 | Texto por contorno de glifo | #pendente | E04, E03 | tabela de glifos e texto recuperado sem OCR nas 4 famílias |
+| E05 | Texto por contorno de glifo | #em-andamento | E04, E03 | tabela de glifos e texto recuperado sem OCR nas 4 famílias |
 | E06 | Símbolos sobre o modelo de desenho | #pendente | E05 | pacotes declarativos avaliados sobre o modelo vetorial |
 | E07 | Ficha do poste | #pendente | E06 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
 | E08 | Conferência UTM | #pendente | E07 | transformação página → UTM, checagem de posição e vão, pendências |
@@ -598,7 +598,7 @@ Bloco C — aprendizado
 
 ---
 
-## E05 — Texto por contorno de glifo — #pendente
+## E05 — Texto por contorno de glifo — #em-andamento
 
 **Objetivo:** recuperar o texto desenhado como contorno por assinatura de forma contra uma tabela de glifos versionada, sem OCR (decisão 3 do design).
 
