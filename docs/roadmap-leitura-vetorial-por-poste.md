@@ -1,6 +1,6 @@
 # Roadmap — Leitura vetorial por poste
 
-> Arquivo: `docs/roadmap-leitura-vetorial-por-poste.md` · branch de execução: `roadmap/leitura-vetorial-por-poste` · criado em 2026-10-30 · última revisão 2026-11-02
+> Arquivo: `docs/roadmap-leitura-vetorial-por-poste.md` · branch de execução: `roadmap/leitura-vetorial-por-poste` · criado em 2026-10-30 · última revisão 2026-11-03
 
 ## Como usar
 
@@ -479,7 +479,7 @@ Bloco C — aprendizado
 **Evidências e handoff:**
 
 - Plano: `docs/superpowers/plans/2026-11-03-leitura-vetorial-por-poste-e03.md`. A revisão de arquitetura bloqueou nas rodadas 0 e 1 e aprovou com notas na rodada 2 (seção "Revisão de arquitetura" do plano).
-- Estado em 2026-11-03: **código pronto e revisado; falta fechar a onda de correção final e toda a execução operacional.** A etapa continua `#em-andamento`.
+- Estado em 2026-11-03 (fim da 2ª sessão): **código pronto, revisão final fechada e branch integrada em `main` por fast-forward local (sem push); falta toda a execução operacional.** A etapa continua `#em-andamento`.
 - Commits:
   - roadmap e plano: 6b26843, 9aa127f, b301975, 1d1411e, 97ac1f3;
   - Task 1 (validar/congelar, `tiles_nao_cobertos`, allow novo): 3ea49b1, 4a180a5;
@@ -488,21 +488,16 @@ Bloco C — aprendizado
   - Task 4 (baseline por poste): 3c1cea4, 391d34f, 2911f81, d80d324;
   - Task 5 (amostra humana, responder, taxa): 0c5af8c, 231a1a6;
   - Task 6 (leitor em modo ficha, skill, contrato, CLAUDE.md): 36822f2, 929ac98;
-  - onda de correção final (M1–M3 da revisão final): ad8cb2d. M1 e M3 corrigidos. Em M2 o recorte já estava certo e só ganhou teste com /Rotate 0/90/180/270. Suíte completa 3729 passed, segundo o desenvolvedor.
+  - onda de correção final (M1–M3 da revisão final): ad8cb2d (desenvolvedor) e ec4a8a7 (testador, 70 testes de ataque). M1 e M3 corrigidos. Em M2 o recorte já estava certo e só ganhou teste com /Rotate 0/90/180/270.
+- Onda final fechada: gate equivalente ao `.bat` em ec4a8a7 → `RESULTADO FINAL: APROVADO`, 3799 passed, cobertura 88,25%; `check_test_integrity --base 9f50e35` → exit 0 (só os 5 `SEM_SOUL` dos commits do orquestrador, já justificados na revisão final); re-revisão escopada (`revisor-seguranca`, 929ac98..ec4a8a7): M1, M2 e M3 ADDRESSED, sem Crítico nem Importante novo. Menores deferidos: `file:///home/...` não é saneado; `?c=/d` numa URL vira `?c=<caminho>`; caminho absoluto sem aspas, com espaço e fora dos diretórios conhecidos deixa a cauda relativa (limitação travada em teste).
 - Cada tarefa passou por desenvolvedor, testador, verificação mecânica (`check_test_integrity`, exit 0) e revisão limpa da `revisor-seguranca`. Gate equivalente ao `.bat` em 929ac98: 3694 passed, cobertura 88,24%, APROVADO. Scanner (`osv-scanner -L requirements.txt:<lock>` nos 6 locks): `No issues found`; nenhum lock mudou.
 - Revisão final (`revisor-seguranca`, opus) sobre 9f50e35..929ac98: aprovado com ressalvas, sem Crítico nem Importante. Pediu na onda única: M1 (empate a favor de A quando C confirma A e B dentro da tolerância vira `pendentes`), M2 (recorte da amostra em página com `/Rotate`) e M3 (`_sanear` também remove `runtime_directory` e caminhos absolutos). Os demais Menores ficaram deferidos com triagem.
 - **Retomada (próxima sessão do orquestrador):**
-  1. Retome o worktree `.claude/worktrees/roadmap-leitura-vetorial-por-poste`. O ledger do SDD está em `.superpowers/sdd/2026-11-03-leitura-vetorial-por-poste-e03/progress.md` desse worktree, com todos os despachos, rulings e minors deferidos; `final-achados.md` e `final-report.md` ao lado descrevem a onda final.
-  2. Feche a onda final (ad8cb2d, sobre 929ac98). Falta:
-     - o `testador`: atacar M1–M3 e rodar a suíte;
-     - o gate (`.superpowers/sdd/gate.sh`, equivalente ao `.bat`) e `check_test_integrity --base 9f50e35`;
-     - a re-revisão escopada (`revisor-seguranca`, prompt re-review, 929ac98..HEAD, com `final-achados.md` como lista de achados).
-
-     Achado que sobrar é resíduo da revisão final: registre como ruling no ledger, sem segunda onda. Ressalva do desenvolvedor: um caminho absoluto sem aspas, com espaço e fora dos diretórios conhecidos ainda deixa à mostra o trecho depois do espaço.
-  3. Integre a branch em `main` por merge local (decisão do usuário: deixar `main` pronta para `git push origin main`, sem push). Motivo: a sessão carrega os agentes de projeto do checkout em que abriu, e o `curadoria-leitor-visual` com "Modo ficha" só existe na branch (sonda de 2026-11-03: a sessão aberta no checkout principal carregou a versão antiga). **Pare aí** e peça ao usuário uma sessão nova em `main` (rodar antes `.\setup.bat` no checkout principal, pendência da E13).
-  4. Na sessão nova, siga a "Execução operacional" do plano, passos 1 a 8: pré-condição do leitor por sonda, rodada `tmp/curadoria-simbologia/AAAAMMDD-HHMM-fichas` no checkout principal, leitores A e B, comparar, leitor C, consolidar, baseline `--native-only` (não há `tmp/benchmark-runtime` com OCR nesta máquina), amostra de 20 postes e relatório.
-  5. **Fim da etapa e do lote:** a amostra humana depende do usuário conferir os recortes de `amostra.md`. Gere a amostra, apresente-a e pare. Só com as respostas gravadas (`responder`), `taxa`, os 5 critérios com evidência e o `.bat` aprovado a E03 vira `#concluida`. Como a etapa tem "Revisão humana: sim", o lote para depois dela.
-- Critérios verificados: nenhum ainda. Os critérios 1–3 dependem da execução operacional. O 4 (`git grep -n "PROJETO DE REDE NS"` vazio) e o 5 (`.bat`) se conferem no fechamento.
+  1. Antes, no checkout principal (em `main`, que já contém a E03): rodar `.\setup.bat` (pendência da E13: os locks mudaram). Abrir a sessão nova **no checkout principal** com `claude --agent orquestrador`, para que ela carregue o `curadoria-leitor-visual` com "Modo ficha". Se a branch `roadmap/leitura-vetorial-por-poste` ainda aponta para o mesmo commit de `main`, retome o worktree `.claude/worktrees/roadmap-leitura-vetorial-por-poste` para os commits de documento; se `main` andou, avance a branch para `main` antes.
+  2. O ledger do SDD está em `.superpowers/sdd/2026-11-03-leitura-vetorial-por-poste-e03/progress.md` do worktree, com todos os despachos, rulings e minors deferidos; o gate bash fica em `.superpowers/sdd/gate.sh`. As tarefas 1–6 e a onda final estão `complete`: não redespache nenhuma.
+  3. Siga a "Execução operacional" do plano, passos 1 a 8: pré-condição do leitor por sonda (a definição tem de mostrar "Modo ficha"), rodada `tmp/curadoria-simbologia/AAAAMMDD-HHMM-fichas` no checkout principal, leitores A e B, comparar, leitor C, consolidar, baseline `--native-only` (não há `tmp/benchmark-runtime` com OCR nesta máquina), amostra de 20 postes e relatório.
+  4. **Fim da etapa e do lote:** a amostra humana depende do usuário conferir os recortes de `amostra.md`. Gere a amostra, apresente-a e pare. Só com as respostas gravadas (`responder`), `taxa`, os 5 critérios com evidência e o `.bat` aprovado a E03 vira `#concluida`. Como a etapa tem "Revisão humana: sim", o lote para depois dela.
+- Critérios verificados: os critérios 1–3 dependem da execução operacional. O 4 foi conferido em ec4a8a7: `git grep -n "PROJETO DE REDE NS"` só acha as três linhas que citam o próprio critério (este roadmap, duas vezes, e o passo 8 do plano), nenhum dado de folha. Confira de novo no fechamento. O 5 (`.bat` real) ainda falta: o gate bash equivalente está APROVADO.
 - Decisões para o usuário (tomadas pela opção recomendada, por instrução do usuário em 2026-11-03):
   - **Conferência pelo leitor C, não pelo auditor:** a spec citava o `curadoria-auditor-visual`; no modo ficha a conferência é um terceiro leitor e a auditoria amostral não roda (seção "Decisões de desenho" do plano).
   - **Allow novo** em `.claude/settings.json`: `Bash(.venv/Scripts/python.exe -m scripts.curation_ficha *)`, no padrão das regras `curation_*`. Ele também deixa o leitor tecnicamente rodar os outros subcomandos; a barreira é o texto do agente.
