@@ -15,8 +15,14 @@ FORBIDDEN_IMPORTS = frozenset(
         "networkx",
         "cv2",
         "PIL",
+        "ezdxf",
+        "onnxruntime",
     }
 )
+APPLICATION_FORBIDDEN_IMPORTS = frozenset({"pymupdf", "fitz", "ezdxf", "onnxruntime"})
+PACKAGE_DIRECTORY = Path(__file__).parents[2] / "src" / "zeny_project_handler"
+SRC_DIRECTORY = Path(__file__).parents[2] / "src"
+DRAWING_MODEL_DIRECTORY = PACKAGE_DIRECTORY / "adapters" / "analysis" / "drawing_model"
 GMAX_CLIENT_MODULES = (
     Path(__file__).parents[2] / "src" / "zeny_project_handler_client" / "ui" / "gmax_panel.py",
     Path(__file__).parents[2]
@@ -92,3 +98,37 @@ def test_gmax_client_uses_only_remote_contracts_and_presentation_dependencies() 
     }
 
     assert not {key: value for key, value in violations.items() if value}
+
+
+def test_aplicacao_nao_importa_leitores_de_pdf_nem_ezdxf() -> None:
+    violations: dict[str, list[str]] = {}
+    for source_file in (PACKAGE_DIRECTORY / "application").rglob("*.py"):
+        forbidden = sorted(imported_root_names(source_file) & APPLICATION_FORBIDDEN_IMPORTS)
+        if forbidden:
+            violations[str(source_file.relative_to(PACKAGE_DIRECTORY))] = forbidden
+
+    assert not violations, f"A aplicação possui dependências proibidas: {violations}"
+
+
+def test_src_nao_importa_ezdxf() -> None:
+    violations = [
+        str(source_file.relative_to(SRC_DIRECTORY))
+        for source_file in SRC_DIRECTORY.rglob("*.py")
+        if "ezdxf" in imported_root_names(source_file)
+    ]
+
+    assert not violations, f"Arquivos de src/ importam ezdxf: {violations}"
+
+
+def test_drawing_model_puro_nao_importa_pymupdf() -> None:
+    arquivos = list(DRAWING_MODEL_DIRECTORY.rglob("*.py"))
+    assert arquivos, "o pacote drawing_model deve existir"
+    violations = {
+        str(source_file.relative_to(DRAWING_MODEL_DIRECTORY)): sorted(
+            imported_root_names(source_file) & {"pymupdf", "fitz"}
+        )
+        for source_file in arquivos
+        if imported_root_names(source_file) & {"pymupdf", "fitz"}
+    }
+
+    assert not violations, f"O modelo de desenho importa leitores de PDF: {violations}"
