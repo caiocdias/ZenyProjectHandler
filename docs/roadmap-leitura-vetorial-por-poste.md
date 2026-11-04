@@ -176,7 +176,7 @@ Bloco B — leitura vetorial
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E04 | Modelo de desenho e perfis de família | #pendente | E01 | modelo de desenho por página, perfil por família e DXF de depuração |
+| E04 | Modelo de desenho e perfis de família | #em-andamento | E01 | modelo de desenho por página, perfil por família e DXF de depuração |
 | E05 | Texto por contorno de glifo | #pendente | E04, E03 | tabela de glifos e texto recuperado sem OCR nas 4 famílias |
 | E06 | Símbolos sobre o modelo de desenho | #pendente | E05 | pacotes declarativos avaliados sobre o modelo vetorial |
 | E07 | Ficha do poste | #pendente | E06 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
@@ -522,7 +522,7 @@ Bloco C — aprendizado
 
 ---
 
-## E04 — Modelo de desenho e perfis de família — #pendente
+## E04 — Modelo de desenho e perfis de família — #em-andamento
 
 **Objetivo:** transformar cada página num modelo de desenho derivado e reconhecer a família do PDF, conforme as decisões 1 e 2 do design.
 
