@@ -584,3 +584,24 @@ def test_falha_na_leitura_de_glifos_vira_diagnostico_de_fonte(
 
     assert pagina.diagnosticos == ("modelo.glifos_falhou",)
     assert pagina.caminhos and pagina.textos == ()
+
+
+def test_ultimo_desenho_descartado_envenena_o_trecho_no_modelo(
+    tmp_path: Path, tabela: TabelaGlifos, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pdf = pdf_texto_contorno(tmp_path / "c.pdf", [LinhaTexto("11-300", (40.0, 60.0), 5.0)])
+    original = pymupdf_drawing_model._desenhos
+
+    def _desenhos(pagina: Any) -> list[dict[str, Any]]:
+        desenhos = original(pagina)
+        ultimo = dict(desenhos[-1])
+        ultimo["items"] = [("l", pymupdf.Point(float("nan"), 0.0), pymupdf.Point(1.0, 1.0))]
+        return [*desenhos[:-1], ultimo]
+
+    monkeypatch.setattr(pymupdf_drawing_model, "_desenhos", _desenhos)
+
+    (pagina,) = extrair_modelo_desenho(pdf, tabela).paginas
+
+    assert len(pagina.caminhos) == 5
+    assert pagina.textos == ()
+    assert pagina.diagnosticos == ("modelo.glifos_desconhecidos",)

@@ -422,9 +422,12 @@ def _envenena(caminho: Caminho, vizinho: _Candidato, lado: float) -> bool:
     return math.dist(_centro(_caixa_de(pontos)), _centro(vizinho.caixa)) <= alcance
 
 
-def _descartado(caminhos: Sequence[Caminho], indice: int, vizinho: _Candidato) -> _Veneno | None:
+def _descartado(
+    caminhos: Sequence[Caminho], indice: int, vizinho: _Candidato, total_desenhos: int | None
+) -> _Veneno | None:
     """Desenho descartado por `caminhos_da_pagina` entre a ponta do trecho e o caminho vizinho
-    (salto em `Caminho.ordem`), ou antes do primeiro caminho da página (ordem acima de 0)."""
+    (salto em `Caminho.ordem`), antes do primeiro caminho da página (ordem acima de 0) ou,
+    sabendo quantos desenhos a página tem, depois do último."""
     passo = 1 if indice > vizinho.indice else -1
     if 0 <= indice < len(caminhos):
         if caminhos[indice].ordem == vizinho.ordem + passo:
@@ -432,17 +435,23 @@ def _descartado(caminhos: Sequence[Caminho], indice: int, vizinho: _Candidato) -
         return ("ordem", vizinho.ordem + passo)
     if indice < 0 < vizinho.ordem:
         return ("ordem", vizinho.ordem - 1)
+    sem_seguinte = indice >= len(caminhos)
+    if sem_seguinte and total_desenhos is not None and vizinho.ordem + 1 < total_desenhos:
+        return ("ordem", vizinho.ordem + 1)
     return None
 
 
 def _venenos(
-    caminhos: Sequence[Caminho], grupo: Sequence[_Candidato], candidatos: set[int]
+    caminhos: Sequence[Caminho],
+    grupo: Sequence[_Candidato],
+    candidatos: set[int],
+    total_desenhos: int | None,
 ) -> tuple[_Veneno, ...]:
     lado = max(_maior_lado(c.caixa) for c in grupo)
     pontas = ((grupo[0].indice - 1, grupo[0]), (grupo[-1].indice + 1, grupo[-1]))
     venenos: list[_Veneno] = []
     for indice, vizinho in pontas:
-        descartado = _descartado(caminhos, indice, vizinho)
+        descartado = _descartado(caminhos, indice, vizinho, total_desenhos)
         if descartado is not None:
             venenos.append(descartado)
         elif (
@@ -454,11 +463,13 @@ def _venenos(
     return tuple(venenos)
 
 
-def _trechos(caminhos: Sequence[Caminho], indices: Sequence[int]) -> list[_Trecho]:
+def _trechos(
+    caminhos: Sequence[Caminho], indices: Sequence[int], total_desenhos: int | None = None
+) -> list[_Trecho]:
     candidatos = [_candidato(indice, caminhos[indice]) for indice in indices]
     conjunto = set(indices)
     return [
-        replace(_trecho(grupo), venenos=_venenos(caminhos, grupo, conjunto))
+        replace(_trecho(grupo), venenos=_venenos(caminhos, grupo, conjunto, total_desenhos))
         for grupo in _agrupar(candidatos)
     ]
 
@@ -589,11 +600,17 @@ def _resolucoes(
     return resolucoes
 
 
-def ler_texto_glifos(caminhos: Sequence[Caminho], tabela: TabelaGlifos) -> LeituraGlifos:
+def ler_texto_glifos(
+    caminhos: Sequence[Caminho], tabela: TabelaGlifos, total_desenhos: int | None = None
+) -> LeituraGlifos:
     """Lê os trechos no quadro refinado pelos fundos e, quando difere, também no refinado pelos
     topos dos glifos de corpo inteiro: em trecho curto um glifo de fundo fora da linha de base
     (a cauda do "Q") entorta um dos quadros, e um glifo que os dois quadros leem diferente é
-    ambíguo (falha fechada) em vez de virar outro caractere ("Q" lido como "O")."""
+    ambíguo (falha fechada) em vez de virar outro caractere ("Q" lido como "O").
+
+    `total_desenhos` é quantos desenhos de traço/preenchimento a página tinha antes de
+    `caminhos_da_pagina` descartar os malformados; com ele, um descarte depois do último
+    caminho também envenena o trecho da ponta (sem ele, esse caso não é detectável)."""
     indices = _candidatos_limitados(caminhos)
     if indices is None:
         return LeituraGlifos((), 0, 0, limitada=True)
@@ -601,7 +618,7 @@ def ler_texto_glifos(caminhos: Sequence[Caminho], tabela: TabelaGlifos) -> Leitu
     textos: list[TextoGlifo] = []
     desconhecidos = ambiguos = 0
     venenos: set[_Veneno] = set()
-    for trecho in _trechos(caminhos, indices):
+    for trecho in _trechos(caminhos, indices, total_desenhos):
         if trecho.venenos:
             venenos.update(trecho.venenos)
             continue

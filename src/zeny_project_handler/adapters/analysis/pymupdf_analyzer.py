@@ -452,11 +452,15 @@ def _cover_glyphs_by_ocr(
     glyphs: GlifosDaPagina,
     page_number: int,
 ) -> tuple[tuple[CandidatoEvidenciaDocumento, ...], GlifosDaPagina, tuple[DiagnosticoAnalise, ...]]:
-    """OCR stays the reserve: compare it with the glyph text glyph by glyph."""
+    """OCR stays the reserve: compare it with the glyph text glyph by glyph. A failure here is
+    its own unit: both readings are kept and the page reports it."""
     if not glyphs.candidatos or not ocr_candidates:
         return ocr_candidates, glyphs, ()
     readings = tuple(item for item in ocr_candidates if item.tipo is TipoEvidencia.OCR)
-    coverage = _resolver_cobertura(readings, glyphs.textos)
+    try:
+        coverage = _resolver_cobertura(readings, glyphs.textos)
+    except Exception:
+        return ocr_candidates, glyphs, (_coverage_failure_diagnostic(page_number),)
     kept = {item.chave_estavel for item in coverage.mantidos}
     remaining = tuple(
         item
@@ -469,6 +473,18 @@ def _cover_glyphs_by_ocr(
         else ()
     )
     return remaining, glyphs.apenas(coverage.glifos), diagnostics
+
+
+def _coverage_failure_diagnostic(page_number: int) -> DiagnosticoAnalise:
+    return DiagnosticoAnalise(
+        codigo="analise.cobertura_glifo_ocr_falhou",
+        mensagem=(
+            "A comparação entre OCR e texto de glifo falhou nesta página; "
+            "as duas leituras foram mantidas."
+        ),
+        extrator="texto_glifos",
+        pagina_numero=page_number,
+    )
 
 
 def _geometry_area(candidate: CandidatoEvidenciaDocumento) -> Decimal:

@@ -354,8 +354,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     pdfs = sorted(
         p for p in argumentos.raiz.rglob("*") if p.suffix.lower() == ".pdf" and p.is_file()
     )
+    try:
+        tabela = carregar_tabela_glifos()
+    except ValueError as erro:  # tabela empacotada ausente ou inválida
+        print(str(erro), file=sys.stderr)
+        return 2
     fontes: dict[str, str] = {}
-    tabela = carregar_tabela_glifos()
     medicoes = sorted(
         (_medir_com_amostras(pdf, argumentos.amostras_imagem, fontes, tabela) for pdf in pdfs),
         key=lambda medicao: str(medicao["sha256"]),

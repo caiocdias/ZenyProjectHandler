@@ -23,7 +23,11 @@ from tests.fixtures.glyphs.fonte_livre import (
     tabela_do_alfabeto,
 )
 
-from zeny_project_handler.adapters.analysis import PyMuPdfDocumentAnalyzer, pymupdf_glyph_text
+from zeny_project_handler.adapters.analysis import (
+    PyMuPdfDocumentAnalyzer,
+    pymupdf_drawing_model,
+    pymupdf_glyph_text,
+)
 from zeny_project_handler.adapters.analysis import pymupdf_analyzer as analyzer_module
 from zeny_project_handler.adapters.analysis.drawing_model import glyph_text
 from zeny_project_handler.adapters.analysis.drawing_model.glyph_table import TabelaGlifos
@@ -464,6 +468,87 @@ def test_cobertura_ocr_x_glifo(
     assert cobertura.divergentes == divergentes
 
 
+def _texto_diagonal(texto: str, origem: tuple[float, float], angulo: float) -> TextoGlifo:
+    """Texto de glifo girado (graus horários visuais), um glifo a cada 0,04 ao longo da linha."""
+    dx, dy = math.cos(math.radians(angulo)), math.sin(math.radians(angulo))
+    ux, uy = dy, -dx  # "para cima" do texto, com y para baixo
+    meio, passo = 0.006, 0.04
+    centros = [(origem[0] + i * passo * dx, origem[1] + i * passo * dy) for i in range(len(texto))]
+    glifos = tuple(
+        (c, (x - meio / 2, y - meio / 2, x + meio / 2, y + meio / 2))
+        for c, (x, y) in zip(texto, centros, strict=True)
+    )
+    (x0, y0), (x1, y1) = centros[0], centros[-1]
+    inicio_base = (x0 - dx * meio - ux * meio, y0 - dy * meio - uy * meio)
+    fim_base = (x1 + dx * meio - ux * meio, y1 + dy * meio - uy * meio)
+    fim_topo = (fim_base[0] + 2 * ux * meio, fim_base[1] + 2 * uy * meio)
+    inicio_topo = (inicio_base[0] + 2 * ux * meio, inicio_base[1] + 2 * uy * meio)
+    cantos = (inicio_base, fim_base, fim_topo, inicio_topo)
+    xs, ys = [p[0] for p in cantos], [p[1] for p in cantos]
+    bbox = (min(xs), min(ys), max(xs), max(ys))
+    return TextoGlifo(texto, bbox, cantos, angulo, 2 * meio, len(texto), None, glifos)
+
+
+def test_ocr_no_canto_vazio_da_bbox_de_texto_girado_nao_vira_fragmento_dele() -> None:
+    # "11-300" a 45°: o canto superior direito da bbox é vazio e contém o rótulo "P7"
+    diagonal = _texto_diagonal("11-300", (0.30, 0.30), 45.0)
+    horizontal = _texto_glifo("P7", 0.36, y=0.30)
+    caixa = _caixa_dos_glifos(horizontal, 0, 2)
+    x0, y0, x1, y1 = diagonal.bbox
+    assert x0 <= caixa[0] and y0 <= caixa[1] and caixa[2] <= x1 and caixa[3] <= y1
+    leitura = _ocr("P7", caixa)
+
+    cobertura = _resolver_cobertura([leitura], [diagonal, horizontal])
+
+    assert cobertura.mantidos == (leitura,)
+    assert cobertura.glifos == (0,)
+    assert cobertura.divergentes == 0
+
+
+def test_ocr_alheio_no_canto_vazio_da_bbox_nao_conta_divergencia() -> None:
+    diagonal = _texto_diagonal("11-300", (0.30, 0.30), 45.0)
+    leitura = _ocr("N1", (0.36, 0.30, 0.39, 0.32))
+
+    cobertura = _resolver_cobertura([leitura], [diagonal])
+
+    assert (cobertura.mantidos, cobertura.glifos, cobertura.divergentes) == ((leitura,), (0,), 0)
+
+
+def test_leitura_que_removeu_um_texto_nunca_e_fragmento_de_outro() -> None:
+    # "P7" pequeno desenhado no vão de "1  -": a leitura "1P7" cobre "P7" inteiro (que sai) e
+    # fica dentro do quadrilátero de "1  -" (que fica); se saísse como fragmento, "P7" sumiria
+    externo = _texto_glifo("1  -", 0.10)
+    glifos_p7 = (("P", (0.116, 0.303, 0.122, 0.317)), ("7", (0.126, 0.303, 0.132, 0.317)))
+    p7 = TextoGlifo(
+        "P7",
+        (0.116, 0.303, 0.132, 0.317),
+        ((0.116, 0.317), (0.132, 0.317), (0.132, 0.303), (0.116, 0.303)),
+        0.0,
+        0.014,
+        2,
+        None,
+        glifos_p7,
+    )
+    leitura = _ocr("1P7", _uniao(_caixa_dos_glifos(externo, 0, 1), p7.bbox))
+
+    cobertura = _resolver_cobertura([leitura], [externo, p7])
+
+    assert cobertura.mantidos == (leitura,)
+    assert cobertura.glifos == (0,)
+    assert cobertura.divergentes == 0
+
+
+def test_fragmento_de_texto_girado_cuja_caixa_sai_do_quadrilatero_fica() -> None:
+    # a caixa alinhada de "11" a 45° sai do quadrilátero estreito do texto: não é fragmento
+    # contido, então o OCR fica junto com o glifo (duplicação parcial aceita, nada some)
+    diagonal = _texto_diagonal("11-300", (0.30, 0.30), 45.0)
+    leitura = _ocr("11", _caixa_dos_glifos(diagonal, 0, 2))
+
+    cobertura = _resolver_cobertura([leitura], [diagonal])
+
+    assert (cobertura.mantidos, cobertura.glifos, cobertura.divergentes) == ((leitura,), (0,), 0)
+
+
 def test_cobertura_nativa_nunca_descarta_o_nativo_nem_conta_divergencia() -> None:
     nativo = replace(_ocr("P7", _caixa_dos_glifos(_A, 0, 2)), tipo=TipoEvidencia.TEXTO)
     divergente = replace(_ocr("P1", _caixa_dos_glifos(_B, 0, 2)), tipo=TipoEvidencia.TEXTO)
@@ -627,3 +712,65 @@ def test_candidatos_texto_glifos_da_pagina(tmp_path: Path, tabela: TabelaGlifos)
         for c in candidatos
         for p in c.geometria.pontos
     )
+
+
+def _ultimo_desenho_malformado(monkeypatch: pytest.MonkeyPatch) -> None:
+    """O último desenho da página ganha uma coordenada não finita e `caminhos_da_pagina` o
+    descarta: não há caminho seguinte para revelar o salto na ordem."""
+    original = pymupdf_drawing_model._desenhos
+
+    def _desenhos(pagina: Any) -> list[dict[str, Any]]:
+        desenhos = original(pagina)
+        ultimo = dict(desenhos[-1])
+        ultimo["items"] = [("l", pymupdf.Point(math.nan, 0.0), pymupdf.Point(1.0, 1.0))]
+        return [*desenhos[:-1], ultimo]
+
+    monkeypatch.setattr(pymupdf_drawing_model, "_desenhos", _desenhos)
+
+
+def test_ultimo_desenho_da_pagina_descartado_envenena_o_trecho(
+    tmp_path: Path, tabela: TabelaGlifos, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    contorno = pdf_texto_contorno(tmp_path / "c.pdf", [LinhaTexto("11-300", (40.0, 60.0), 5.0)])
+    assert [e.conteudo_bruto for e in _glifos(_analisar(contorno, tabela_glifos=tabela))] == [
+        "11-300"
+    ]
+    _ultimo_desenho_malformado(monkeypatch)
+
+    resultado = _analisar(contorno, tabela_glifos=tabela)
+
+    assert not _glifos(resultado)
+    assert not any("11-30" in (e.conteudo_bruto or "") for e in resultado.evidencias)
+    assert "analise.glifos_desconhecidos" in _codigos(resultado)
+
+
+def test_cobertura_ocr_x_glifo_que_falha_mantem_os_dois_com_diagnostico(
+    tmp_path: Path, tabela: TabelaGlifos, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    contorno = pdf_texto_contorno(tmp_path / "c.pdf", [LinhaTexto("P7 U4(1)", (40.0, 60.0), 5.0)])
+    (glifo,) = _glifos(_analisar(contorno, tabela_glifos=tabela))
+    caixa = _caixa_normalizada(glifo, 0.002)
+    original = _resolver_cobertura
+
+    def _quebra_no_ocr(leituras: Any, glifos: Any, *, nativo: bool = False) -> Any:
+        if nativo:
+            return original(leituras, glifos, nativo=True)
+        raise RuntimeError("cobertura quebrou")
+
+    monkeypatch.setattr(analyzer_module, "_resolver_cobertura", _quebra_no_ocr)
+
+    resultado = _analisar(
+        contorno,
+        ConfiguracaoAnaliseDocumento(),
+        tabela_glifos=tabela,
+        motor_ocr=_OcrFixo("P7 U4(1)", (caixa[0], caixa[1], caixa[2], caixa[3])),
+    )
+
+    assert [e.conteudo_bruto for e in resultado.evidencias if e.tipo is TipoEvidencia.OCR] == [
+        "P7 U4(1)"
+    ]
+    assert [e.conteudo_bruto for e in _glifos(resultado)] == ["P7 U4(1)"]
+    (diagnostico,) = (
+        d for d in resultado.diagnosticos if d.codigo == "analise.cobertura_glifo_ocr_falhou"
+    )
+    assert diagnostico.pagina_numero == 1

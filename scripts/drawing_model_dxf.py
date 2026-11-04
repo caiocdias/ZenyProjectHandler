@@ -184,9 +184,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not argumentos.pdf.is_file():
         print("PDF inexistente", file=sys.stderr)
         return 2
+    try:
+        tabela = carregar_tabela_glifos()
+    except ValueError as erro:  # tabela empacotada ausente ou inválida
+        print(str(erro), file=sys.stderr)
+        return 2
     cache = JsonDrawingModelCache(argumentos.cache) if argumentos.cache is not None else None
     try:
-        modelo = obter_modelo_desenho(argumentos.pdf, cache, carregar_tabela_glifos())
+        modelo = obter_modelo_desenho(argumentos.pdf, cache, tabela)
     except pymupdf.FileDataError:
         print("arquivo nao e um PDF legivel", file=sys.stderr)
         return 2

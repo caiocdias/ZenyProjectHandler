@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any
 
 import pymupdf
+import pytest
+from scripts import drawing_model_report
 from scripts.drawing_model_report import main, medir_pdf
 
 from zeny_project_handler.adapters.analysis.pymupdf_drawing_model import extrair_modelo_desenho
@@ -211,3 +213,23 @@ def test_amostra_inclui_ladrilho_que_cruza_texto_e_sorteio_estavel(tmp_path: Pat
         if abs(i.bbox[0] - 110.0) < 1.0 and abs(i.bbox[1] - 10.0) < 1.0
     )
     assert cruzados[0]["sha256"] == coberto.sha256
+
+
+def test_cli_com_tabela_de_glifos_indisponivel_sai_com_2(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _indisponivel(_caminho: Path | None = None) -> object:
+        raise ValueError("Tabela de glifos inválida: JSON ilegível.")
+
+    monkeypatch.setattr(drawing_model_report, "carregar_tabela_glifos", _indisponivel)
+    pasta = tmp_path / "pdfs"
+    pasta.mkdir()
+    _pdf_completo(pasta / "a.pdf")
+    repo = _repo(tmp_path)
+    saida = repo / "tmp" / "r.json"
+
+    codigo = main(["--raiz", str(pasta), "--raiz-repositorio", str(repo), "--saida", str(saida)])
+
+    assert codigo == 2
+    assert not saida.exists()
+    assert "tabela de glifos" in capsys.readouterr().err.lower()

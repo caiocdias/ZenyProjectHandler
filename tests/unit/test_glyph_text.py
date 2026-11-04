@@ -499,16 +499,21 @@ _VALOR = LinhaTexto("P10 N1", (40.0, 60.0), 5.0)
         ((_OUTRO, _VALOR), 1),  # descartado logo antes do primeiro glifo
         ((_VALOR, _OUTRO), 3),  # descartado entre "P10" e "N1"
         ((_VALOR,), 0),  # descartados os desenhos do início da página
+        ((_VALOR,), None),  # descartado o último desenho da página (o "1" final)
     ],
-    ids=["depois", "antes", "meio", "inicio"],
+    ids=["depois", "antes", "meio", "inicio", "fim"],
 )
 def test_glifo_descartado_na_extracao_envenena_o_trecho(
-    tmp_path: Path, tabela: TabelaGlifos, linhas: Sequence[LinhaTexto], salto_em: int
+    tmp_path: Path, tabela: TabelaGlifos, linhas: Sequence[LinhaTexto], salto_em: int | None
 ) -> None:
     caminhos = caminhos_do_pdf(pdf_texto_contorno(tmp_path / "c.pdf", linhas))
-    assert [t.texto for t in ler_texto_glifos(caminhos, tabela).textos] == ["P10 N1"]
+    total = len(caminhos)
+    assert [t.texto for t in ler_texto_glifos(caminhos, tabela, total).textos] == ["P10 N1"]
 
-    leitura = ler_texto_glifos(_renumerado(caminhos, salto_em), tabela)
+    if salto_em is None:  # sem caminho seguinte: só o total de desenhos revela o descarte
+        leitura = ler_texto_glifos(caminhos[:-1], tabela, total)
+    else:
+        leitura = ler_texto_glifos(_renumerado(caminhos, salto_em), tabela)
 
     assert leitura.textos == ()
     assert leitura.desconhecidos >= 1

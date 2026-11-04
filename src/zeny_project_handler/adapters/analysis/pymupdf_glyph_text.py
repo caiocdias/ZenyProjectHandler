@@ -30,7 +30,7 @@ from zeny_project_handler.ports.analysis import CandidatoEvidenciaDocumento, Geo
 from .drawing_model.glyph_table import TabelaGlifos
 from .drawing_model.glyph_text import LeituraGlifos, TextoGlifo, ler_texto_glifos
 from .drawing_model.model import Caixa, Ponto
-from .pymupdf_drawing_model import caminhos_da_pagina
+from .pymupdf_drawing_model import caminhos_e_total_da_pagina
 from .pymupdf_support import (
     _extras,
     _normalized_point,
@@ -80,7 +80,8 @@ def candidatos_texto_glifos(
 
 
 def ler_glifos_da_pagina(pagina: Any, numero_pagina: int, tabela: TabelaGlifos) -> GlifosDaPagina:
-    leitura = ler_texto_glifos(caminhos_da_pagina(pagina), tabela)
+    caminhos, total_desenhos = caminhos_e_total_da_pagina(pagina)
+    leitura = ler_texto_glifos(caminhos, tabela, total_desenhos)
     largura, altura = float(pagina.rect.width), float(pagina.rect.height)
     derotacao = pagina.derotation_matrix
     candidatos: list[CandidatoEvidenciaDocumento] = []
@@ -220,14 +221,27 @@ def _contem_ponto(caixa: Caixa, ponto: Ponto) -> bool:
     return caixa[0] <= ponto[0] <= caixa[2] and caixa[1] <= ponto[1] <= caixa[3]
 
 
-def _dentro(interna: Caixa, externa: Caixa) -> bool:
-    """`interna` (já com a tolerância) dentro de `externa` acrescida da mesma tolerância."""
-    return (
-        externa[0] - 2 * _TOLERANCIA <= interna[0]
-        and externa[1] - 2 * _TOLERANCIA <= interna[1]
-        and interna[2] <= externa[2] + 2 * _TOLERANCIA
-        and interna[3] <= externa[3] + 2 * _TOLERANCIA
+def _dentro(caixa: Caixa, cantos: Sequence[Ponto]) -> bool:
+    """`caixa` (já com a tolerância) dentro do quadrilátero do texto acrescido da mesma
+    tolerância. O quadrilátero, não a bbox: num texto girado os cantos da bbox são vazios e
+    podem conter outro rótulo."""
+    arestas = list(zip(cantos, (*cantos[1:], cantos[0]), strict=True))
+    sinal = 1.0 if sum(a[0] * b[1] - b[0] * a[1] for a, b in arestas) >= 0 else -1.0
+    pontos = (
+        (caixa[0], caixa[1]),
+        (caixa[2], caixa[1]),
+        (caixa[2], caixa[3]),
+        (caixa[0], caixa[3]),
     )
+    for (ax, ay), (bx, by) in arestas:
+        comprimento = math.hypot(bx - ax, by - ay)
+        if comprimento == 0.0:
+            continue
+        for px, py in pontos:
+            distancia = sinal * ((bx - ax) * (py - ay) - (by - ay) * (px - ax)) / comprimento
+            if distancia < -2 * _TOLERANCIA:
+                return False
+    return True
 
 
 @dataclass(frozen=True, slots=True)
@@ -240,14 +254,14 @@ class _Toque:
 
 
 def _toques(caixa: Caixa, glifos: Sequence[TextoGlifo]) -> list[_Toque]:
+    """Textos com algum glifo de centro na caixa; caixa sem glifo sob ela não toca o texto."""
     toques: list[_Toque] = []
     for indice, texto in enumerate(glifos):
         sob = tuple(
             i for i, (_, glifo) in enumerate(texto.glifos) if _contem_ponto(caixa, _centro(glifo))
         )
-        dentro = _dentro(caixa, texto.bbox)
-        if sob or dentro:
-            toques.append(_Toque(indice, sob, dentro))
+        if sob:
+            toques.append(_Toque(indice, sob, _dentro(caixa, texto.cantos)))
     return toques
 
 
@@ -259,7 +273,7 @@ def _esperado(toques: Sequence[_Toque], glifos: Sequence[TextoGlifo]) -> str:
 
     def posicao(toque: _Toque) -> float:
         texto = glifos[toque.texto]
-        x, y = _centro(texto.glifos[toque.glifos[0]][1]) if toque.glifos else texto.cantos[0]
+        x, y = _centro(texto.glifos[toque.glifos[0]][1])
         return x * dx + y * dy
 
     return "".join(
@@ -299,12 +313,15 @@ def _resolver_cobertura(
         for toque in toques:
             cobertos[toque.texto].update(toque.glifos)
     removidos = {i for i, texto in enumerate(glifos) if len(cobertos[i]) == len(texto.glifos)}
+    # fragmento: leitura dentro de um texto mantido e que não removeu texto nenhum; a que
+    # removeu algum texto cobre glifos que só ela representa e nunca sai
     fragmentos = {
         indice
         for indice, toques in concordantes
         if not nativo
         and not _do_motor_de_contornos(leituras[indice])
-        and any(t.leitura_dentro and t.texto not in removidos for t in toques)
+        and all(t.texto not in removidos for t in toques)
+        and any(t.leitura_dentro for t in toques)
     }
     return Cobertura(
         mantidos=tuple(c for i, c in enumerate(leituras) if i not in fragmentos),

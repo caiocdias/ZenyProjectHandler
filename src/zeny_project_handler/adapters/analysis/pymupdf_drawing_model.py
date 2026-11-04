@@ -81,6 +81,7 @@ _Transformar = Callable[[Any], Ponto]
 @dataclass(slots=True)
 class _Fontes:
     caminhos: tuple[Caminho, ...] = ()
+    total_desenhos: int = 0
     formas_glifo: int = 0
     textos_nativos: tuple[TextoModelo, ...] = ()
     textos_shx: tuple[TextoModelo, ...] = ()
@@ -198,11 +199,11 @@ def _fonte(nome: str, diagnosticos: list[str], leitura: Callable[[], _T], vazio:
 def _ler_fontes(pagina: Any) -> _Fontes:
     fontes = _Fontes()
     diagnosticos = fontes.diagnosticos
-    sem_caminhos: tuple[tuple[Caminho, ...], int] = ((), 0)
+    sem_caminhos: tuple[tuple[Caminho, ...], int, int] = ((), 0, 0)
     sem_textos: tuple[TextoModelo, ...] = ()
     sem_shx: tuple[tuple[TextoModelo, ...], int] = ((), 0)
     sem_imagens: tuple[ImagemModelo, ...] = ()
-    fontes.caminhos, fontes.formas_glifo = _fonte(
+    fontes.caminhos, fontes.total_desenhos, fontes.formas_glifo = _fonte(
         "caminhos", diagnosticos, lambda: _caminhos_e_glifos(pagina), sem_caminhos
     )
     fontes.textos_nativos = _fonte(
@@ -237,7 +238,7 @@ def _montar_pagina(
     grupos = _fonte(
         "grupos", diagnosticos, lambda: agrupar_candidatos(primitivas, caminhos), sem_grupos
     )
-    textos_glifo = _textos_glifo(caminhos, tabela, diagnosticos)
+    textos_glifo = _textos_glifo(caminhos, fontes.total_desenhos, tabela, diagnosticos)
     return PaginaModelo(
         indice=indice,
         largura=float(pagina.rect.width),
@@ -252,13 +253,19 @@ def _montar_pagina(
 
 
 def _textos_glifo(
-    caminhos: Sequence[Caminho], tabela: TabelaGlifos | None, diagnosticos: list[str]
+    caminhos: Sequence[Caminho],
+    total_desenhos: int,
+    tabela: TabelaGlifos | None,
+    diagnosticos: list[str],
 ) -> tuple[TextoModelo, ...]:
     if tabela is None:
         return ()
     sem_leitura = LeituraGlifos((), 0, 0, limitada=False)
     leitura = _fonte(
-        "glifos", diagnosticos, lambda: ler_texto_glifos(caminhos, tabela), sem_leitura
+        "glifos",
+        diagnosticos,
+        lambda: ler_texto_glifos(caminhos, tabela, total_desenhos),
+        sem_leitura,
     )
     if leitura.limitada:
         diagnosticos.append("modelo.glifos_limitados")
@@ -305,7 +312,14 @@ def _desenhos(pagina: Any) -> list[dict[str, Any]]:
 
 def caminhos_da_pagina(pagina: Any) -> tuple[Caminho, ...]:
     """Caminhos da página visual; um desenho malformado sai sozinho, sem esvaziar a página."""
-    return _caminhos(_desenhos(pagina), _transformacao(pagina))
+    return caminhos_e_total_da_pagina(pagina)[0]
+
+
+def caminhos_e_total_da_pagina(pagina: Any) -> tuple[tuple[Caminho, ...], int]:
+    """Caminhos da página visual e quantos desenhos de traço/preenchimento ela tem, contando
+    os descartados: um salto no fim da numeração (`Caminho.ordem`) só aparece com o total."""
+    desenhos = _desenhos(pagina)
+    return _caminhos(desenhos, _transformacao(pagina)), len(desenhos)
 
 
 def _caminhos(desenhos: Sequence[dict[str, Any]], transformar: _Transformar) -> tuple[Caminho, ...]:
@@ -330,10 +344,10 @@ def _finitos(subcaminhos: tuple[tuple[ItemCaminho, ...], ...]) -> bool:
     )
 
 
-def _caminhos_e_glifos(pagina: Any) -> tuple[tuple[Caminho, ...], int]:
+def _caminhos_e_glifos(pagina: Any) -> tuple[tuple[Caminho, ...], int, int]:
     desenhos = _desenhos(pagina)
     caminhos = _caminhos(desenhos, _transformacao(pagina))
-    return caminhos, sum(1 for desenho in desenhos if _is_glyph(desenho))
+    return caminhos, len(desenhos), sum(1 for desenho in desenhos if _is_glyph(desenho))
 
 
 def _subcaminhos(

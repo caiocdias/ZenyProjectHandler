@@ -7,6 +7,7 @@ from pathlib import Path
 import pymupdf
 import pytest
 from ezdxf.filemanagement import readfile
+from scripts import drawing_model_dxf
 from scripts.drawing_model_dxf import exportar_dxf, main
 
 from zeny_project_handler.adapters.analysis.drawing_model.model import (
@@ -192,3 +193,20 @@ def test_cli_recusa_saida_e_cache_fora_de_tmp(
     )
     assert codigo != 0
     assert not cache_fora.exists()
+
+
+def test_cli_com_tabela_de_glifos_indisponivel_sai_com_2(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _indisponivel(_caminho: Path | None = None) -> object:
+        raise ValueError("Tabela de glifos indisponível: sem arquivo.")
+
+    monkeypatch.setattr(drawing_model_dxf, "carregar_tabela_glifos", _indisponivel)
+    pdf = _pdf_com_camadas(tmp_path / "a.pdf")
+    saida = tmp_path / "tmp" / "saida.dxf"
+
+    codigo = main([str(pdf), "--saida", str(saida), "--raiz-repositorio", str(tmp_path)])
+
+    assert codigo == 2
+    assert not saida.exists()
+    assert "tabela de glifos" in capsys.readouterr().err.lower()
