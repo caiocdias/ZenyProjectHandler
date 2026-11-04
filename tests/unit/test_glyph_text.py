@@ -479,6 +479,51 @@ def test_glifo_do_valor_reprovado_no_filtro_envenena_as_metades(
     assert leitura.desconhecidos + leitura.ambiguos >= 1
 
 
+def _renumerado(caminhos: Sequence[Caminho], salto_em: int) -> list[Caminho]:
+    """Caminhos com a `ordem` a partir da posição `salto_em` adiantada em 1: um desenho dali
+    foi descartado por `caminhos_da_pagina` (malformado) e não chegou à leitura."""
+    return [
+        dataclasses.replace(c, ordem=c.ordem + 1) if posicao >= salto_em else c
+        for posicao, c in enumerate(caminhos)
+    ]
+
+
+_OUTRO = LinhaTexto("X", (300.0, 250.0), 5.0, cor=(1.0, 0.0, 0.0))
+_VALOR = LinhaTexto("P10 N1", (40.0, 60.0), 5.0)
+
+
+@pytest.mark.parametrize(
+    ("linhas", "salto_em"),
+    [
+        ((_VALOR, _OUTRO), 5),  # descartado logo depois do último glifo
+        ((_OUTRO, _VALOR), 1),  # descartado logo antes do primeiro glifo
+        ((_VALOR, _OUTRO), 3),  # descartado entre "P10" e "N1"
+        ((_VALOR,), 0),  # descartados os desenhos do início da página
+    ],
+    ids=["depois", "antes", "meio", "inicio"],
+)
+def test_glifo_descartado_na_extracao_envenena_o_trecho(
+    tmp_path: Path, tabela: TabelaGlifos, linhas: Sequence[LinhaTexto], salto_em: int
+) -> None:
+    caminhos = caminhos_do_pdf(pdf_texto_contorno(tmp_path / "c.pdf", linhas))
+    assert [t.texto for t in ler_texto_glifos(caminhos, tabela).textos] == ["P10 N1"]
+
+    leitura = ler_texto_glifos(_renumerado(caminhos, salto_em), tabela)
+
+    assert leitura.textos == ()
+    assert leitura.desconhecidos >= 1
+
+
+def test_salto_de_ordem_longe_do_trecho_nao_envenena(tmp_path: Path, tabela: TabelaGlifos) -> None:
+    linhas = (_VALOR, _OUTRO, LinhaTexto("Y", (300.0, 280.0), 5.0, cor=(1.0, 0.0, 0.0)))
+    caminhos = caminhos_do_pdf(pdf_texto_contorno(tmp_path / "c.pdf", linhas))
+
+    leitura = ler_texto_glifos(_renumerado(caminhos, 6), tabela)
+
+    assert [t.texto for t in leitura.textos] == ["P10 N1"]
+    assert (leitura.desconhecidos, leitura.ambiguos) == (0, 0)
+
+
 @pytest.mark.parametrize("onde", ["depois", "antes"])
 def test_preenchimento_grande_colado_da_mesma_cor_anula_o_texto(
     tmp_path: Path, tabela: TabelaGlifos, onde: str

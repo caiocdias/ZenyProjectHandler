@@ -47,6 +47,10 @@ from typing import Any, Final
 
 import pymupdf
 
+from zeny_project_handler.adapters.analysis.drawing_model.glyph_table import (
+    TabelaGlifos,
+    carregar_tabela_glifos,
+)
 from zeny_project_handler.adapters.analysis.drawing_model.model import (
     Arco,
     Caixa,
@@ -154,6 +158,7 @@ def _medir_pagina(pagina: PaginaModelo, classes: list[str]) -> dict[str, Any]:
         "textos": {
             "nativo": sum(1 for t in pagina.textos if t.origem == "nativo"),
             "shx": sum(1 for t in pagina.textos if t.origem == "shx"),
+            "glifo": sum(1 for t in pagina.textos if t.origem == "glifo"),
         },
         "polilinhas": sum(1 for p in pagina.primitivas if isinstance(p, Polilinha)),
         "circulos": sum(1 for p in pagina.primitivas if isinstance(p, Circulo)),
@@ -215,14 +220,14 @@ def _sha256_do_arquivo(pdf: Path) -> str:
         return hashlib.file_digest(arquivo, "sha256").hexdigest()
 
 
-def _extrair_medindo(pdf: Path) -> tuple[ModeloDesenho, float, int]:
+def _extrair_medindo(pdf: Path, tabela: TabelaGlifos | None) -> tuple[ModeloDesenho, float, int]:
     iniciou = not tracemalloc.is_tracing()
     if iniciou:
         tracemalloc.start()
     tracemalloc.reset_peak()
     inicio = time.perf_counter()
     try:
-        modelo = extrair_modelo_desenho(pdf)
+        modelo = extrair_modelo_desenho(pdf, tabela)
         tempo = time.perf_counter() - inicio
         _, pico = tracemalloc.get_traced_memory()
     finally:
@@ -231,8 +236,8 @@ def _extrair_medindo(pdf: Path) -> tuple[ModeloDesenho, float, int]:
     return modelo, tempo, pico
 
 
-def medir_pdf(pdf: Path) -> dict[str, Any]:
-    modelo, tempo, pico = _extrair_medindo(pdf)
+def medir_pdf(pdf: Path, tabela: TabelaGlifos | None = None) -> dict[str, Any]:
+    modelo, tempo, pico = _extrair_medindo(pdf, tabela)
     tamanhos = Counter(
         (i.largura_px, i.altura_px)
         for pagina in modelo.paginas
@@ -315,10 +320,10 @@ def _argumentos(argv: Sequence[str] | None) -> argparse.Namespace:
 
 
 def _medir_com_amostras(
-    pdf: Path, amostras_dir: Path | None, fontes: dict[str, str]
+    pdf: Path, amostras_dir: Path | None, fontes: dict[str, str], tabela: TabelaGlifos
 ) -> dict[str, Any]:
     try:
-        medicao = medir_pdf(pdf)
+        medicao = medir_pdf(pdf, tabela)
     except Exception as erro:  # um PDF ruim não pode derrubar o relatório inteiro
         return {"sha256": _sha256_do_arquivo(pdf), "erro": type(erro).__name__}
     if amostras_dir is None:
@@ -350,8 +355,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         p for p in argumentos.raiz.rglob("*") if p.suffix.lower() == ".pdf" and p.is_file()
     )
     fontes: dict[str, str] = {}
+    tabela = carregar_tabela_glifos()
     medicoes = sorted(
-        (_medir_com_amostras(pdf, argumentos.amostras_imagem, fontes) for pdf in pdfs),
+        (_medir_com_amostras(pdf, argumentos.amostras_imagem, fontes, tabela) for pdf in pdfs),
         key=lambda medicao: str(medicao["sha256"]),
     )
     validas = [m for m in medicoes if "erro" not in m]

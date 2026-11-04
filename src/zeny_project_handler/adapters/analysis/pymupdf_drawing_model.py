@@ -3,7 +3,8 @@
 
 Tudo sai no espaço da página visual (`page.rotation_matrix` aplicada, y para baixo). Cada
 fonte de uma página é uma unidade de falha: a exceção vira `modelo.<fonte>_falhou` em
-`PaginaModelo.diagnosticos`, a fonte fica vazia e o resto continua.
+`PaginaModelo.diagnosticos`, a fonte fica vazia e o resto continua. Com uma tabela de glifos,
+o texto desenhado como contorno de glifo entra em `PaginaModelo.textos` com origem "glifo".
 """
 
 from __future__ import annotations
@@ -23,6 +24,8 @@ import pymupdf
 from .drawing_model.cache import JsonDrawingModelCache, chave_modelo_desenho
 from .drawing_model.family import ImpressaoEstrutural, reconhecer_familia
 from .drawing_model.geometry import reconstruir_polilinhas, recuperar_circulos_e_arcos
+from .drawing_model.glyph_table import TabelaGlifos
+from .drawing_model.glyph_text import LeituraGlifos, ler_texto_glifos
 from .drawing_model.groups import agrupar_candidatos
 from .drawing_model.model import (
     VERSAO_MODELO_DESENHO,
@@ -112,11 +115,14 @@ def _sha256_do_arquivo(pdf: Path) -> str:
         return hashlib.file_digest(arquivo, "sha256").hexdigest()
 
 
-def obter_modelo_desenho(pdf: Path, cache: JsonDrawingModelCache | None) -> ModeloDesenho:
+def obter_modelo_desenho(
+    pdf: Path, cache: JsonDrawingModelCache | None, tabela: TabelaGlifos | None = None
+) -> ModeloDesenho:
+    """Modelo do cache ou extraído; `tabela=None` não lê texto de glifo."""
     if cache is None:
-        return extrair_modelo_desenho(pdf)
+        return _extrair(pdf, tabela)
     sha = _sha256_do_arquivo(pdf)
-    chave = chave_modelo_desenho(sha, f"pymupdf-{pymupdf.VersionBind}")
+    chave = chave_modelo_desenho(sha, _versao_leitor(tabela))
     try:
         em_cache = cache.obter(chave)
     except Exception:
@@ -124,12 +130,23 @@ def obter_modelo_desenho(pdf: Path, cache: JsonDrawingModelCache | None) -> Mode
     # A extração refaz o hash; se o arquivo mudou entre as leituras, a chave não vale.
     if em_cache is not None and em_cache.documento_sha256 == sha:
         return em_cache
-    modelo = extrair_modelo_desenho(pdf)
+    modelo = _extrair(pdf, tabela)
     if modelo.documento_sha256 == sha and not _tem_fonte_falha(modelo):
         # o cache é descartável: falha de gravação não derruba a extração
         with suppress(Exception):
             cache.salvar(chave, modelo)
     return modelo
+
+
+def _versao_leitor(tabela: TabelaGlifos | None) -> str:
+    """Identidade do leitor na chave do cache: a versão da PyMuPDF e o conteúdo da tabela."""
+    leitor = f"pymupdf-{pymupdf.VersionBind}"
+    return leitor if tabela is None else f"{leitor}:glifos-{tabela.sha256}"
+
+
+def _extrair(pdf: Path, tabela: TabelaGlifos | None) -> ModeloDesenho:
+    # sem tabela, a chamada é a de um argumento, a mesma de antes da leitura de glifos
+    return extrair_modelo_desenho(pdf) if tabela is None else extrair_modelo_desenho(pdf, tabela)
 
 
 def _tem_fonte_falha(modelo: ModeloDesenho) -> bool:
@@ -141,7 +158,8 @@ def _tem_fonte_falha(modelo: ModeloDesenho) -> bool:
     )
 
 
-def extrair_modelo_desenho(pdf: Path) -> ModeloDesenho:
+def extrair_modelo_desenho(pdf: Path, tabela: TabelaGlifos | None = None) -> ModeloDesenho:
+    """Modelo de desenho do PDF; com `tabela`, também o texto em contorno de glifo."""
     documento_sha256 = _sha256_do_arquivo(pdf)
     with pymupdf.open(pdf) as documento:
         contagens = _Contagens()
@@ -150,7 +168,7 @@ def extrair_modelo_desenho(pdf: Path) -> ModeloDesenho:
             pagina = documento.load_page(indice)
             fontes = _ler_fontes(pagina)
             contagens.somar(fontes)
-            paginas.append(_montar_pagina(indice, pagina, fontes))
+            paginas.append(_montar_pagina(indice, pagina, fontes, tabela))
         familia = reconhecer_familia(_impressao(documento, contagens))
     return ModeloDesenho(VERSAO_MODELO_DESENHO, documento_sha256, familia, tuple(paginas))
 
@@ -203,7 +221,9 @@ def _ler_fontes(pagina: Any) -> _Fontes:
     return fontes
 
 
-def _montar_pagina(indice: int, pagina: Any, fontes: _Fontes) -> PaginaModelo:
+def _montar_pagina(
+    indice: int, pagina: Any, fontes: _Fontes, tabela: TabelaGlifos | None
+) -> PaginaModelo:
     diagnosticos = fontes.diagnosticos
     caminhos = fontes.caminhos
     vazias: tuple[Polilinha | Circulo | Arco, ...] = ()
@@ -217,16 +237,37 @@ def _montar_pagina(indice: int, pagina: Any, fontes: _Fontes) -> PaginaModelo:
     grupos = _fonte(
         "grupos", diagnosticos, lambda: agrupar_candidatos(primitivas, caminhos), sem_grupos
     )
+    textos_glifo = _textos_glifo(caminhos, tabela, diagnosticos)
     return PaginaModelo(
         indice=indice,
         largura=float(pagina.rect.width),
         altura=float(pagina.rect.height),
         caminhos=caminhos,
-        textos=(*fontes.textos_nativos, *fontes.textos_shx),
+        textos=(*fontes.textos_nativos, *fontes.textos_shx, *textos_glifo),
         primitivas=primitivas,
         grupos=grupos,
         imagens=fontes.imagens,
         diagnosticos=tuple(diagnosticos),
+    )
+
+
+def _textos_glifo(
+    caminhos: Sequence[Caminho], tabela: TabelaGlifos | None, diagnosticos: list[str]
+) -> tuple[TextoModelo, ...]:
+    if tabela is None:
+        return ()
+    sem_leitura = LeituraGlifos((), 0, 0, limitada=False)
+    leitura = _fonte(
+        "glifos", diagnosticos, lambda: ler_texto_glifos(caminhos, tabela), sem_leitura
+    )
+    if leitura.limitada:
+        diagnosticos.append("modelo.glifos_limitados")
+    if leitura.desconhecidos or leitura.ambiguos:
+        diagnosticos.append("modelo.glifos_desconhecidos")
+    fonte = f"{tabela.versao}:{tabela.sha256[:12]}"
+    return tuple(
+        TextoModelo(texto.texto, texto.bbox, "glifo", texto.rotacao, texto.altura, fonte, "")
+        for texto in leitura.textos
     )
 
 

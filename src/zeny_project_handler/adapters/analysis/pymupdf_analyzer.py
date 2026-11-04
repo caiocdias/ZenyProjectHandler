@@ -10,7 +10,7 @@ from decimal import Decimal
 from functools import cached_property
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any, Literal, TypeVar
 from uuid import uuid5
 
 import pymupdf
@@ -37,7 +37,16 @@ from zeny_project_handler.ports.analysis import (
     validar_fonte_solicitacao,
 )
 
+from .drawing_model.glyph_table import TabelaGlifos, carregar_tabela_glifos
+from .drawing_model.model import VERSAO_MODELO_DESENHO
 from .pymupdf_annotations import _extract_annotations
+from .pymupdf_glyph_text import (
+    GlifosDaPagina,
+    _resolver_cobertura,
+    diagnostico_divergencia,
+    eh_texto_de_glifo,
+    ler_glifos_da_pagina,
+)
 from .pymupdf_ocr import _conditional_ocr
 from .pymupdf_page_extractors import (
     _extract_forms,
@@ -50,13 +59,14 @@ from .pymupdf_symbols import _extract_symbolic_equipment
 
 _READ_CHUNK_SIZE = 1024 * 1024
 T = TypeVar("T")
+_NO_GLYPHS = GlifosDaPagina((), (), ())
 
 
 class PyMuPdfDocumentAnalyzer:
     """Converte recursos PDF nativos em evidências independentes da biblioteca."""
 
     nome = "pymupdf-nativo"
-    versao = "1.20.0"
+    versao = "1.21.0"
 
     def __init__(
         self,
@@ -64,26 +74,32 @@ class PyMuPdfDocumentAnalyzer:
         cache: CacheAnaliseDocumentoPort | None = None,
         motor_ocr: MotorOcrPort | None = None,
         complementar: ExtratorComplementarPort | None = None,
+        tabela_glifos: TabelaGlifos | Literal["pacote"] | None = None,
     ) -> None:
+        """`tabela_glifos`: None desativa a leitura de texto por contorno de glifo; "pacote"
+        carrega a tabela empacotada na primeira análise (ausente ou inválida, a leitura fica
+        desativada com diagnóstico, como o OCR indisponível)."""
         self._cache = cache
         self._motor_ocr = motor_ocr
         self._complementar = complementar
+        self._tabela_glifos = tabela_glifos
 
     @property
     def assinatura_capacidade(self) -> str:
-        payload = json.dumps(
-            {
-                "analisador": self.nome,
-                "versao": self.versao,
-                "ocr": self._ocr_runtime.assinatura,
-                "complementar": self._complementar.assinatura_capacidade
-                if self._complementar
-                else None,
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        )
+        payload = json.dumps(self._capacidade(), sort_keys=True, separators=(",", ":"))
         return sha256(payload.encode("utf-8")).hexdigest()
+
+    def _capacidade(self) -> dict[str, str | None]:
+        return {
+            "analisador": self.nome,
+            "versao": self.versao,
+            "ocr": self._ocr_runtime.assinatura,
+            "complementar": self._complementar.assinatura_capacidade
+            if self._complementar
+            else None,
+            "tabela_glifos": self._glyph_runtime.assinatura,
+            "modelo_desenho": VERSAO_MODELO_DESENHO,
+        }
 
     def analisar(self, solicitacao: SolicitacaoAnaliseDocumento) -> ResultadoAnaliseDocumento:
         source = validar_fonte_solicitacao(solicitacao).expanduser().resolve(strict=True)
@@ -107,6 +123,7 @@ class PyMuPdfDocumentAnalyzer:
             evidencias=evidence,
             diagnosticos=(
                 *self._ocr_runtime.diagnosticos,
+                *self._glyph_runtime.diagnosticos,
                 *extraction.diagnosticos,
                 *runtime_diagnostics,
             ),
@@ -139,6 +156,19 @@ class PyMuPdfDocumentAnalyzer:
             diagnosticos=result.diagnosticos,
         )
 
+    @cached_property
+    def _glyph_runtime(self) -> _GlyphRuntime:
+        if isinstance(self._tabela_glifos, TabelaGlifos):
+            return _GlyphRuntime(self._tabela_glifos, self._tabela_glifos.sha256)
+        if self._tabela_glifos is None:
+            return _GlyphRuntime(None, "desativada")
+        try:
+            table = carregar_tabela_glifos()
+        except Exception:
+            diagnostic = _glyph_table_diagnostic()
+            return _GlyphRuntime(None, f"indisponivel:{diagnostic.codigo}", (diagnostic,))
+        return _GlyphRuntime(table, table.sha256)
+
     def _load_or_extract(
         self,
         source: Path,
@@ -149,14 +179,18 @@ class PyMuPdfDocumentAnalyzer:
         cached, cache_diagnostics = self._read_cache(cache_key)
         if cached is not None:
             return cached, True, cache_diagnostics
-        extraction = _extract_document(source, request, self._ocr_runtime.motor)
+        extraction = _extract_document(
+            source, request, self._ocr_runtime.motor, self._glyph_runtime.tabela
+        )
         if self._complementar is not None:
             try:
                 auxiliary = self._complementar.extrair(request)
                 extraction = ExtracaoDocumentoNormalizada(
                     candidatos=(
                         *extraction.candidatos,
-                        *reconcile_readings(extraction.candidatos, auxiliary.candidatos),
+                        *reconcile_readings(
+                            _without_glyph_text(extraction.candidatos), auxiliary.candidatos
+                        ),
                     ),
                     diagnosticos=(*extraction.diagnosticos, *auxiliary.diagnosticos),
                 )
@@ -216,6 +250,23 @@ def _cache_diagnostic(code: str) -> DiagnosticoAnalise:
     )
 
 
+def _glyph_table_diagnostic() -> DiagnosticoAnalise:
+    return DiagnosticoAnalise(
+        codigo="analise.tabela_glifos_indisponivel",
+        mensagem=(
+            "A tabela de glifos empacotada está ausente ou inválida; "
+            "a leitura de texto por contorno de glifo foi desativada."
+        ),
+        extrator="texto_glifos",
+    )
+
+
+def _without_glyph_text(
+    candidates: tuple[CandidatoEvidenciaDocumento, ...],
+) -> tuple[CandidatoEvidenciaDocumento, ...]:
+    return tuple(item for item in candidates if not eh_texto_de_glifo(item))
+
+
 def _ocr_capability_diagnostic() -> DiagnosticoAnalise:
     return DiagnosticoAnalise(
         codigo="analise.ocr_capacidade_falhou",
@@ -228,6 +279,7 @@ def _extract_document(
     source: Path,
     request: SolicitacaoAnaliseDocumento,
     ocr_engine: MotorOcrPort | None,
+    glyph_table: TabelaGlifos | None = None,
 ) -> ExtracaoDocumentoNormalizada:
     document = _open_document(source, request.senha)
     candidates: list[CandidatoEvidenciaDocumento] = []
@@ -243,6 +295,7 @@ def _extract_document(
                 page_index + 1,
                 request,
                 ocr_engine,
+                glyph_table,
             )
             candidates.extend(page_candidates)
             diagnostics.extend(page_diagnostics)
@@ -274,6 +327,7 @@ def _extract_page(
     page_number: int,
     request: SolicitacaoAnaliseDocumento,
     ocr_engine: MotorOcrPort | None,
+    glyph_table: TabelaGlifos | None = None,
 ) -> tuple[tuple[CandidatoEvidenciaDocumento, ...], tuple[DiagnosticoAnalise, ...]]:
     config = request.configuracao
     candidates: list[CandidatoEvidenciaDocumento] = []
@@ -323,6 +377,11 @@ def _extract_page(
         )
         candidates.extend(symbolic_candidates)
         diagnostics.extend(symbolic_diagnostics)
+    glyphs = _NO_GLYPHS
+    if glyph_table is not None and config.extrair_texto:
+        glyphs, glyph_diagnostics = _page_glyphs(page, page_number, glyph_table, text_candidates)
+        diagnostics.extend(glyph_diagnostics)
+    # Glyph text is a reading of vectors, not native text: it never suppresses the OCR.
     native_characters = sum(
         len(item.conteudo_bruto or "")
         for item in text_candidates
@@ -339,8 +398,12 @@ def _extract_page(
         len(vector_candidates),
         image_candidates,
     )
+    ocr_candidates, glyphs, coverage_diagnostics = _cover_glyphs_by_ocr(
+        ocr_candidates, glyphs, page_number
+    )
     candidates.extend(ocr_candidates)
     diagnostics.extend(ocr_diagnostics)
+    diagnostics.extend(coverage_diagnostics)
     if config.extrair_anotacoes:
         # Failure to compare the source must fail the analysis, not approve hidden values.
         revisions = extract_revision_appearances(
@@ -359,7 +422,53 @@ def _extract_page(
                     mensagem="OCR da revisão falhou; comparação preservada e decisão pendente.",
                 )
             )
+    # Revisions and the complementary reconciliation never see glyph text.
+    candidates.extend(glyphs.candidatos)
     return tuple(candidates), tuple(diagnostics)
+
+
+def _page_glyphs(
+    page: Any,
+    page_number: int,
+    table: TabelaGlifos,
+    text_candidates: tuple[CandidatoEvidenciaDocumento, ...],
+) -> tuple[GlifosDaPagina, tuple[DiagnosticoAnalise, ...]]:
+    """Glyph text of the page minus the texts fully covered by agreeing native text."""
+
+    def read() -> tuple[GlifosDaPagina]:
+        glyphs = ler_glifos_da_pagina(page, page_number, table)
+        native = tuple(item for item in text_candidates if item.tipo is TipoEvidencia.TEXTO)
+        coverage = _resolver_cobertura(native, glyphs.textos, nativo=True)
+        return (glyphs.apenas(coverage.glifos),)
+
+    found, failures = _safe_extract("texto_glifos", page_number, read)
+    if not found:
+        return _NO_GLYPHS, failures
+    return found[0], found[0].diagnosticos
+
+
+def _cover_glyphs_by_ocr(
+    ocr_candidates: tuple[CandidatoEvidenciaDocumento, ...],
+    glyphs: GlifosDaPagina,
+    page_number: int,
+) -> tuple[tuple[CandidatoEvidenciaDocumento, ...], GlifosDaPagina, tuple[DiagnosticoAnalise, ...]]:
+    """OCR stays the reserve: compare it with the glyph text glyph by glyph."""
+    if not glyphs.candidatos or not ocr_candidates:
+        return ocr_candidates, glyphs, ()
+    readings = tuple(item for item in ocr_candidates if item.tipo is TipoEvidencia.OCR)
+    coverage = _resolver_cobertura(readings, glyphs.textos)
+    kept = {item.chave_estavel for item in coverage.mantidos}
+    remaining = tuple(
+        item
+        for item in ocr_candidates
+        if item.tipo is not TipoEvidencia.OCR or item.chave_estavel in kept
+    )
+    diagnostics = (
+        (diagnostico_divergencia(page_number, coverage.divergentes),)
+        if coverage.divergentes
+        else ()
+    )
+    return remaining, glyphs.apenas(coverage.glifos), diagnostics
 
 
 def _geometry_area(candidate: CandidatoEvidenciaDocumento) -> Decimal:
@@ -478,6 +587,13 @@ def _ensure_unique_candidate_keys(candidates: list[CandidatoEvidenciaDocumento])
     keys = [candidate.chave_estavel for candidate in candidates]
     if len(keys) != len(set(keys)):
         raise ValueError("Extração gerou chaves de evidência duplicadas")
+
+
+@dataclass(frozen=True, slots=True)
+class _GlyphRuntime:
+    tabela: TabelaGlifos | None
+    assinatura: str
+    diagnosticos: tuple[DiagnosticoAnalise, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

@@ -82,7 +82,7 @@ def executar_smoke_pdf(caminho: Path) -> ResultadoSmokePdf:
         tamanho_bytes=inspecao.tamanho_bytes,
         modificado_em_ns=inspecao.modificado_em_ns,
     )
-    extracao = PyMuPdfDocumentAnalyzer().analisar(
+    extracao = PyMuPdfDocumentAnalyzer(tabela_glifos="pacote").analisar(
         SolicitacaoAnaliseDocumento(
             projeto_id=projeto_id,
             documento=inspecao.documento,

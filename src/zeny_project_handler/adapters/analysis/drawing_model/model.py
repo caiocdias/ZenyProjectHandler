@@ -7,7 +7,7 @@ from typing import Final, Literal
 
 from zeny_project_handler.domain.catalog import JsonPrimitive
 
-VERSAO_MODELO_DESENHO: Final = "modelo-desenho-v1"
+VERSAO_MODELO_DESENHO: Final = "modelo-desenho-v2"
 
 Ponto = tuple[float, float]
 Caixa = tuple[float, float, float, float]
@@ -71,7 +71,7 @@ class Arco:
 class TextoModelo:
     texto: str
     bbox: Caixa
-    origem: Literal["nativo", "shx"]
+    origem: Literal["nativo", "shx", "glifo"]
     rotacao: float
     altura: float
     fonte: str

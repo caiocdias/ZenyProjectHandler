@@ -482,6 +482,7 @@ def _compose_analysis_workflow(
                 cache=JsonAnalysisCache(settings.core_settings().analysis_cache_directory),
                 motor_ocr=_ocr_engine(ocr),
                 complementar=RapidEvidenceExtractor() if settings.complementary_ocr else None,
+                tabela_glifos="pacote",
             ),
             unit_of_work,
         ),

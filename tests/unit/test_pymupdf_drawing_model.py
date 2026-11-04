@@ -6,14 +6,22 @@ from __future__ import annotations
 import hashlib
 import re
 import time
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 import pymupdf
 import pytest
+from tests.fixtures.glyphs.fonte_livre import LinhaTexto, pdf_texto_contorno, tabela_do_alfabeto
 
 from zeny_project_handler.adapters.analysis import pymupdf_drawing_model
+from zeny_project_handler.adapters.analysis.drawing_model import glyph_text
+from zeny_project_handler.adapters.analysis.drawing_model.cache import (
+    JsonDrawingModelCache,
+    chave_modelo_desenho,
+)
 from zeny_project_handler.adapters.analysis.drawing_model.family import LIMIAR_FORMAS_GLIFO
+from zeny_project_handler.adapters.analysis.drawing_model.glyph_table import TabelaGlifos
 from zeny_project_handler.adapters.analysis.drawing_model.model import (
     VERSAO_MODELO_DESENHO,
     Circulo,
@@ -24,6 +32,7 @@ from zeny_project_handler.adapters.analysis.drawing_model.model import (
 from zeny_project_handler.adapters.analysis.pymupdf_drawing_model import (
     extrair_modelo_desenho,
     impressao_estrutural,
+    obter_modelo_desenho,
 )
 
 _XREF = re.compile(r"(?<!\d)(\d+)\s+\d+\s+R")
@@ -499,3 +508,79 @@ def test_desenho_com_itens_invalidos_sai_sozinho_e_o_vizinho_fica(
 
     assert caminho.ordem == 2
     assert caminho.subcaminhos[0][0].pontos == ((30.0, 10.0), (32.0, 10.0))
+
+
+# --- texto de glifo (modelo v2) -------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def tabela(tmp_path_factory: pytest.TempPathFactory) -> TabelaGlifos:
+    return tabela_do_alfabeto(tmp_path_factory.mktemp("alfabeto-modelo"))
+
+
+def test_modelo_traz_texto_de_glifo_e_versao_v2(tmp_path: Path, tabela: TabelaGlifos) -> None:
+    linhas = [LinhaTexto("P7 U4(1)", (40.0, 60.0), 5.0), LinhaTexto("11-300", (40.0, 120.0), 5.0)]
+    pdf = pdf_texto_contorno(tmp_path / "c.pdf", linhas)
+    cache = JsonDrawingModelCache(tmp_path / "cache")
+
+    modelo = extrair_modelo_desenho(pdf, tabela)
+
+    assert VERSAO_MODELO_DESENHO == "modelo-desenho-v2"
+    assert modelo.versao == "modelo-desenho-v2"
+    (pagina,) = modelo.paginas
+    assert sorted(t.texto for t in pagina.textos) == ["11-300", "P7 U4(1)"]
+    for texto in pagina.textos:
+        assert texto.origem == "glifo"
+        assert texto.fonte == f"{tabela.versao}:{tabela.sha256[:12]}"
+        assert texto.camada == ""
+        assert texto.rotacao == pytest.approx(0.0, abs=1.0) or texto.rotacao == pytest.approx(
+            360.0, abs=1.0
+        )
+        assert 3.0 < texto.altura < 5.0
+    assert pagina.diagnosticos == ()
+    assert extrair_modelo_desenho(pdf).paginas[0].textos == ()
+    assert extrair_modelo_desenho(pdf, None).paginas[0].textos == ()
+
+    primeiro = obter_modelo_desenho(pdf, cache, tabela)
+    assert primeiro == modelo
+    assert obter_modelo_desenho(pdf, cache, tabela) == modelo
+    sha = hashlib.sha256(pdf.read_bytes()).hexdigest()
+    chave = chave_modelo_desenho(sha, f"pymupdf-{pymupdf.VersionBind}:glifos-{tabela.sha256}")
+    assert cache.obter(chave) == modelo
+
+    outra = replace(tabela, sha256="0" * 64)
+    obter_modelo_desenho(pdf, cache, outra)
+    sem_tabela = obter_modelo_desenho(pdf, cache)
+    assert sem_tabela.paginas[0].textos == ()
+    assert len(list((tmp_path / "cache").rglob("*.json"))) == 3
+
+
+def test_modelo_diagnostica_glifo_desconhecido_e_pagina_limitada(
+    tmp_path: Path, tabela: TabelaGlifos, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pdf = pdf_texto_contorno(tmp_path / "c.pdf", [LinhaTexto("11-300", (40.0, 60.0), 5.0)])
+    sem_tres = replace(tabela, glifos=tuple(g for g in tabela.glifos if g.caractere != "3"))
+
+    (desconhecido,) = extrair_modelo_desenho(pdf, sem_tres).paginas
+    monkeypatch.setattr(glyph_text, "LIMITE_GLIFOS_PAGINA", 3)
+    (limitada,) = extrair_modelo_desenho(pdf, tabela).paginas
+
+    assert desconhecido.textos == () and desconhecido.diagnosticos == (
+        "modelo.glifos_desconhecidos",
+    )
+    assert limitada.textos == () and limitada.diagnosticos == ("modelo.glifos_limitados",)
+
+
+def test_falha_na_leitura_de_glifos_vira_diagnostico_de_fonte(
+    tmp_path: Path, tabela: TabelaGlifos, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pdf = pdf_texto_contorno(tmp_path / "c.pdf", [LinhaTexto("11-300", (40.0, 60.0), 5.0)])
+
+    def _falha(*_args: object) -> object:
+        raise RuntimeError("quebrou")
+
+    monkeypatch.setattr(pymupdf_drawing_model, "ler_texto_glifos", _falha)
+    (pagina,) = extrair_modelo_desenho(pdf, tabela).paginas
+
+    assert pagina.diagnosticos == ("modelo.glifos_falhou",)
+    assert pagina.caminhos and pagina.textos == ()

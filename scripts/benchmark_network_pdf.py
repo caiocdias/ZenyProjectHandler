@@ -236,7 +236,9 @@ def run_variant(
         from zeny_project_handler.adapters.analysis.rapid_evidence import RapidEvidenceExtractor
 
         analyzer = PyMuPdfDocumentAnalyzer(
-            motor_ocr=ocr, complementar=RapidEvidenceExtractor() if complementary else None
+            motor_ocr=ocr,
+            complementar=RapidEvidenceExtractor() if complementary else None,
+            tabela_glifos="pacote",
         )
         extraction_started = perf_counter()
         extraction = ExecutarAnaliseDocumento(analyzer, work).executar(

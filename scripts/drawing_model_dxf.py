@@ -29,6 +29,9 @@ from ezdxf.filemanagement import new as novo_documento
 from ezdxf.layouts.layout import Modelspace
 
 from zeny_project_handler.adapters.analysis.drawing_model.cache import JsonDrawingModelCache
+from zeny_project_handler.adapters.analysis.drawing_model.glyph_table import (
+    carregar_tabela_glifos,
+)
 from zeny_project_handler.adapters.analysis.drawing_model.model import (
     Arco,
     Circulo,
@@ -183,7 +186,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
     cache = JsonDrawingModelCache(argumentos.cache) if argumentos.cache is not None else None
     try:
-        modelo = obter_modelo_desenho(argumentos.pdf, cache)
+        modelo = obter_modelo_desenho(argumentos.pdf, cache, carregar_tabela_glifos())
     except pymupdf.FileDataError:
         print("arquivo nao e um PDF legivel", file=sys.stderr)
         return 2

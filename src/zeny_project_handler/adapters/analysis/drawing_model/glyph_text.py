@@ -72,6 +72,8 @@ _ESPALHAMENTO_QUADROS: Final = math.radians(1.0)
 _TIPOS_PREENCHIDOS: Final = frozenset({"preenchimento", "traco_e_preenchimento"})
 
 _ChaveAssinatura = tuple[int, tuple[float, ...], tuple[tuple[float, ...], ...]]
+# ("caminho", posição) do vizinho reprovado, ou ("ordem", ordem) do desenho descartado
+_Veneno = tuple[str, int]
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +117,7 @@ class LeituraGlifos:
 @dataclass(frozen=True, slots=True)
 class _Candidato:
     indice: int
+    ordem: int
     poligonos: tuple[tuple[Ponto, ...], ...]
     caixa: Caixa
     cor: Cor | None
@@ -130,8 +133,9 @@ class _Trecho:
     # menos de 2 glifos de corpo inteiro: o quadro não é determinado e nada é lido
     sem_quadro: bool
     # caminhos preenchidos vizinhos, da mesma cor e encostados numa ponta, reprovados no filtro
-    # de candidato: podem ser glifos do próprio valor, então o trecho não é lido
-    venenos: tuple[int, ...] = ()
+    # de candidato, ou desenhos descartados na extração (salto em `Caminho.ordem` numa ponta):
+    # podem ser glifos do próprio valor, então o trecho não é lido
+    venenos: tuple[_Veneno, ...] = ()
 
 
 # --- candidatos e trechos -------------------------------------------------------------------
@@ -187,7 +191,7 @@ def _candidatos_limitados(caminhos: Sequence[Caminho]) -> list[int] | None:
 def _candidato(indice: int, caminho: Caminho) -> _Candidato:
     poligonos = tuple(achatar_subcaminho(subcaminho) for subcaminho in caminho.subcaminhos)
     caixa = _caixa_de([ponto for poligono in poligonos for ponto in poligono])
-    return _Candidato(indice, poligonos, caixa, caminho.estilo.preenchimento)
+    return _Candidato(indice, caminho.ordem, poligonos, caixa, caminho.estilo.preenchimento)
 
 
 def _centro(caixa: Caixa) -> Ponto:
@@ -199,8 +203,11 @@ def _maior_lado(caixa: Caixa) -> float:
 
 
 def _vizinhos(anterior: _Candidato, atual: _Candidato, lado: float) -> bool:
-    """Consecutivos na ordem de desenho, mesma cor e centros a até 1,6 x `lado`."""
-    if atual.indice != anterior.indice + 1 or atual.cor != anterior.cor:
+    """Consecutivos na ordem de desenho, mesma cor e centros a até 1,6 x `lado`. Um salto em
+    `Caminho.ordem` é um desenho descartado na extração: os dois lados não são vizinhos."""
+    if atual.indice != anterior.indice + 1 or atual.ordem != anterior.ordem + 1:
+        return False
+    if atual.cor != anterior.cor:
         return False
     alcance = _FATOR_VIZINHANCA * max(lado, _maior_lado(anterior.caixa), _maior_lado(atual.caixa))
     return math.dist(_centro(anterior.caixa), _centro(atual.caixa)) <= alcance
@@ -415,18 +422,36 @@ def _envenena(caminho: Caminho, vizinho: _Candidato, lado: float) -> bool:
     return math.dist(_centro(_caixa_de(pontos)), _centro(vizinho.caixa)) <= alcance
 
 
+def _descartado(caminhos: Sequence[Caminho], indice: int, vizinho: _Candidato) -> _Veneno | None:
+    """Desenho descartado por `caminhos_da_pagina` entre a ponta do trecho e o caminho vizinho
+    (salto em `Caminho.ordem`), ou antes do primeiro caminho da página (ordem acima de 0)."""
+    passo = 1 if indice > vizinho.indice else -1
+    if 0 <= indice < len(caminhos):
+        if caminhos[indice].ordem == vizinho.ordem + passo:
+            return None
+        return ("ordem", vizinho.ordem + passo)
+    if indice < 0 < vizinho.ordem:
+        return ("ordem", vizinho.ordem - 1)
+    return None
+
+
 def _venenos(
     caminhos: Sequence[Caminho], grupo: Sequence[_Candidato], candidatos: set[int]
-) -> tuple[int, ...]:
+) -> tuple[_Veneno, ...]:
     lado = max(_maior_lado(c.caixa) for c in grupo)
     pontas = ((grupo[0].indice - 1, grupo[0]), (grupo[-1].indice + 1, grupo[-1]))
-    return tuple(
-        indice
-        for indice, vizinho in pontas
-        if 0 <= indice < len(caminhos)
-        and indice not in candidatos
-        and _envenena(caminhos[indice], vizinho, lado)
-    )
+    venenos: list[_Veneno] = []
+    for indice, vizinho in pontas:
+        descartado = _descartado(caminhos, indice, vizinho)
+        if descartado is not None:
+            venenos.append(descartado)
+        elif (
+            0 <= indice < len(caminhos)
+            and indice not in candidatos
+            and _envenena(caminhos[indice], vizinho, lado)
+        ):
+            venenos.append(("caminho", indice))
+    return tuple(venenos)
 
 
 def _trechos(caminhos: Sequence[Caminho], indices: Sequence[int]) -> list[_Trecho]:
@@ -575,7 +600,7 @@ def ler_texto_glifos(caminhos: Sequence[Caminho], tabela: TabelaGlifos) -> Leitu
     memoria: dict[_ChaveAssinatura, Resolucao] = {}
     textos: list[TextoGlifo] = []
     desconhecidos = ambiguos = 0
-    venenos: set[int] = set()
+    venenos: set[_Veneno] = set()
     for trecho in _trechos(caminhos, indices):
         if trecho.venenos:
             venenos.update(trecho.venenos)

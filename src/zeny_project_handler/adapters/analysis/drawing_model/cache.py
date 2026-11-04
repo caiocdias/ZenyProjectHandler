@@ -219,7 +219,7 @@ def _caminho(valor: object) -> Caminho:
 def _texto_modelo(valor: object) -> TextoModelo:
     bruto = _objeto(valor)
     origem = bruto["origem"]
-    if origem not in ("nativo", "shx"):
+    if origem not in ("nativo", "shx", "glifo"):
         raise _CacheInvalidoError("origem de texto inválida")
     return TextoModelo(
         texto=_texto(bruto["texto"]),

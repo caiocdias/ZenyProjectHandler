@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import pytest
 
 from tests.market_fakes import FakeClassificadorMercado, FakeVerificadorAcoesConcluidas
+from zeny_project_handler.adapters.analysis import PyMuPdfDocumentAnalyzer
 from zeny_project_handler.adapters.analysis.tesseract_runtime import RuntimeTesseract
 from zeny_project_handler.application.compliance_analysis import ExecutarAnaliseConformidade
 from zeny_project_handler.application.mvp_workflow import ServicoFluxoMvp
@@ -97,5 +98,33 @@ def test_server_composes_one_market_backed_analyzer_for_pipeline_and_reanalysis(
         assert captured == [runtime.compliance_api.analysis_service]
         assert captured[0]._market_classifier is classifier
         assert captured[0]._action_verifier is action_verifier
+    finally:
+        runtime.close()
+
+
+def test_server_analyzer_reads_glyph_text_with_the_packaged_table(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    received: list[dict[str, object]] = []
+    original = PyMuPdfDocumentAnalyzer
+
+    def record_analyzer(**kwargs: Any) -> PyMuPdfDocumentAnalyzer:
+        received.append(kwargs)
+        return original(**kwargs)
+
+    monkeypatch.setattr(server_composition, "PyMuPdfDocumentAnalyzer", record_analyzer)
+    settings = ServerSettings(
+        password="senha de composição do mercado",
+        market_sqlserver_connection_string="fixture-market-connection",
+        data_directory=tmp_path / "server-data",
+    )
+    runtime = server_composition.compose_server_runtime(
+        settings,
+        market_classifier=FakeClassificadorMercado(),
+        action_verifier=FakeVerificadorAcoesConcluidas(),
+    )
+    try:
+        assert [item["tabela_glifos"] for item in received] == ["pacote"]
     finally:
         runtime.close()
