@@ -735,7 +735,8 @@ def test_string_vazia_em_marcadores_de_tipo_e_decimal_vazio(tmp_path: Path) -> N
     for valor in ("", " ", "1,5", "1e999999999999", "٣"):
 
         def _decimal(b: dict[str, Any], v: str = valor) -> object:
-            return _sinais(b).append(["k", {"decimal": v}])
+            _sinais(b).append(["k", {"decimal": v}])
+            return None
 
         cache = _reescrever(tmp_path / "y", _json_com(tmp_path / "x", _decimal))
         cache.obter(_CHAVE)  # nunca levanta, qualquer que seja a decisão
