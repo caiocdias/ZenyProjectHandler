@@ -60,6 +60,10 @@ _PROFUNDIDADE_APARENCIA: Final = 12
 _CELULA_TEXTO: Final = 20.0
 _MAXIMO_CELULAS_TEXTO: Final = 256
 _MARGEM_TEXTO: Final = 2.0
+# Teto de pixels (/Width x /Height declarados) para decodificar a imagem de um /AP só pelo
+# digest: acima dele, a identidade é o sha256 do fluxo bruto, sem decodificar (PDF hostil).
+# Mesma ordem de grandeza de MAXIMUM_GLYPH_PIXELS.
+_MAXIMO_PIXELS_IMAGEM_ANOTACAO: Final = 16_000_000
 
 _T = TypeVar("_T")
 _Transformar = Callable[[Any], Ponto]
@@ -105,15 +109,17 @@ def _sha256_do_arquivo(pdf: Path) -> str:
 def obter_modelo_desenho(pdf: Path, cache: JsonDrawingModelCache | None) -> ModeloDesenho:
     if cache is None:
         return extrair_modelo_desenho(pdf)
-    chave = chave_modelo_desenho(_sha256_do_arquivo(pdf), f"pymupdf-{pymupdf.VersionBind}")
+    sha = _sha256_do_arquivo(pdf)
+    chave = chave_modelo_desenho(sha, f"pymupdf-{pymupdf.VersionBind}")
     try:
         em_cache = cache.obter(chave)
     except Exception:
         em_cache = None
-    if em_cache is not None:
+    # A extração refaz o hash; se o arquivo mudou entre as leituras, a chave não vale.
+    if em_cache is not None and em_cache.documento_sha256 == sha:
         return em_cache
     modelo = extrair_modelo_desenho(pdf)
-    if not _tem_fonte_falha(modelo):
+    if modelo.documento_sha256 == sha and not _tem_fonte_falha(modelo):
         # o cache é descartável: falha de gravação não derruba a extração
         with suppress(Exception):
             cache.salvar(chave, modelo)
@@ -489,6 +495,24 @@ def _inteiro_do_objeto(documento: Any, xref: int, chave: str) -> int:
     return int(valor) if tipo == "int" else 0
 
 
+def _sha256_da_imagem_de_anotacao(documento: Any, xref: int, largura: int, altura: int) -> str:
+    if largura * altura > _MAXIMO_PIXELS_IMAGEM_ANOTACAO:
+        return hashlib.sha256(bytes(documento.xref_stream_raw(xref) or b"")).hexdigest()
+    return _sha256_do_digest(pymupdf.Pixmap(documento, xref).digest)
+
+
+def _imagem_de_anotacao(documento: Any, xref: int, caixa: Caixa) -> ImagemModelo:
+    largura = _inteiro_do_objeto(documento, xref, "Width")
+    altura = _inteiro_do_objeto(documento, xref, "Height")
+    return ImagemModelo(
+        bbox=caixa,
+        largura_px=largura,
+        altura_px=altura,
+        sha256=_sha256_da_imagem_de_anotacao(documento, xref, largura, altura),
+        de_anotacao=True,
+    )
+
+
 def _imagens_de_anotacoes(pagina: Any) -> tuple[ImagemModelo, ...]:
     """Imagens das appearance streams; a caixa é a da anotação (geometria aproximada)."""
     documento = pagina.parent
@@ -507,14 +531,5 @@ def _imagens_de_anotacoes(pagina: Any) -> tuple[ImagemModelo, ...]:
         if not xrefs_imagem:
             continue
         caixa = _caixa(transformar, pagina.load_annot(xref).rect)
-        imagens.extend(
-            ImagemModelo(
-                bbox=caixa,
-                largura_px=_inteiro_do_objeto(documento, imagem, "Width"),
-                altura_px=_inteiro_do_objeto(documento, imagem, "Height"),
-                sha256=_sha256_do_digest(pymupdf.Pixmap(documento, imagem).digest),
-                de_anotacao=True,
-            )
-            for imagem in xrefs_imagem
-        )
+        imagens.extend(_imagem_de_anotacao(documento, imagem, caixa) for imagem in xrefs_imagem)
     return tuple(imagens)
