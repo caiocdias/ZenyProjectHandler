@@ -23,6 +23,7 @@ from tests.fixtures.glyphs.fonte_livre import (
 
 from zeny_project_handler.adapters.analysis import PyMuPdfDocumentAnalyzer
 from zeny_project_handler.adapters.analysis.drawing_model import glyph_table
+from zeny_project_handler.adapters.analysis.drawing_model.glyph_signature import AssinaturaGlifo
 from zeny_project_handler.adapters.analysis.drawing_model.glyph_table import (
     TabelaGlifos,
     carregar_tabela_glifos,
@@ -297,5 +298,97 @@ def test_maiuscula_e_minuscula_de_mesmo_desenho_nunca_sao_trocadas(
 def test_q_maiusculo_nunca_e_afirmado_como_o_minusculo(
     tmp_path: Path, tabela: TabelaGlifos, texto: str
 ) -> None:
+    lidos = _ler(tmp_path, tabela, texto, 5.0)
+    assert lidos in ([texto], [])
+
+
+# --- rodada 3: altura relativa a h, desenho empatado e homóglifos pelo resolvedor -------------
+
+
+def test_ruido_de_caixa_ate_0_05_nunca_leva_uma_entrada_a_outro_caractere(
+    tabela: TabelaGlifos,
+) -> None:
+    # Cada entrada publicada com largura, altura ou base deslocada em ±0.05 h (abaixo do p99.5
+    # legítimo de altura, 0.053) é um glifo plausível daquele caractere: a resolução pode falhar
+    # fechada, mas nunca afirmar outro caractere.
+    trocados = []
+    for entrada in tabela.glifos:
+        assinatura = entrada.assinatura
+        for eixo in range(3):
+            for delta in (-0.05, 0.05):
+                caixa = list(assinatura.caixa)
+                caixa[eixo] += delta
+                ruidosa = AssinaturaGlifo(
+                    assinatura.subcaminhos, (caixa[0], caixa[1], caixa[2]), assinatura.contornos
+                )
+                r = resolver_glifo(tabela, ruidosa)
+                if r.situacao in ("reconhecido", "ignorar") and r.caractere != entrada.caractere:
+                    trocados.append((entrada.id, entrada.caractere, eixo, delta, r.caractere))
+    assert trocados == []
+
+
+_CONTEXTOS_DE_ALTURA = [
+    "({})",
+    "{})",
+    "l{}",
+    "{}g",
+    "{}j",
+    "{}q",
+    "{}p",
+    "{}y",
+    "{}Á",
+    "{}Ç",
+    "{}°",
+    "e{}",
+    "a{}",
+    "s{}",
+    "t{}",
+    "{}m",
+    "{}A",
+    "h{}",
+    "b{}d",
+]
+
+
+@pytest.mark.parametrize("contexto", _CONTEXTOS_DE_ALTURA)
+def test_algarismo_ao_lado_de_letra_alta_baixa_ou_acentuada_nunca_e_trocado(
+    tmp_path: Path, tabela: TabelaGlifos, contexto: str
+) -> None:
+    # vizinhos com ascendente, descendente, acento ou parêntese mudam o h do trecho; a condição
+    # de altura não pode trocar o algarismo nem a letra (falhar fechado é aceitável)
+    errados = []
+    for algarismo in "0123456789":
+        texto = contexto.format(algarismo)
+        lidos = _ler(tmp_path, tabela, texto, 5.0)
+        if lidos not in ([texto], []):
+            errados.append((texto, lidos))
+    assert errados == []
+
+
+@pytest.mark.parametrize("texto", ["ew", "we", "ez", "ze"])
+def test_minuscula_sem_entrada_na_tabela_nunca_vira_a_maiuscula(
+    tmp_path: Path, tabela: TabelaGlifos, texto: str
+) -> None:
+    # A tabela não tem "w" nem "z"; com o h do trecho vindo de "e", a forma minúscula fica a
+    # Δaltura 0.023 de "W"/"Z" (dentro de 0.055) e é afirmada maiúscula. "awa"/"aza" falham
+    # fechados só porque o "a" muda o h. (O mesmo em corpo 3 e 7.)
+    lidos = _ler(tmp_path, tabela, texto, 5.0)
+    assert lidos in ([texto], [])
+
+
+def test_l_minusculo_ao_lado_de_algarismos_nunca_vira_i_maiusculo(
+    tmp_path: Path, tabela: TabelaGlifos
+) -> None:
+    # "l" com h dos algarismos tem altura 1.028; o "I" restante da tabela casa a 0.0598 com
+    # Δaltura 0.049 (dentro de 0.055), e a variante de "l" que sobrou (1.368 h) não concorre.
+    lidos = _ler(tmp_path, tabela, "l-77", 5.0)
+    assert lidos in (["l-77"], [])
+
+
+@pytest.mark.parametrize("texto", ["f0", "f8"])
+def test_f_ao_lado_de_algarismo_nunca_e_afirmado_como_t(
+    tmp_path: Path, tabela: TabelaGlifos, texto: str
+) -> None:
+    # o "f" da fonte livre fica a 0.075 de "t" (tolerância 0.08) e longe dos "f" publicados
     lidos = _ler(tmp_path, tabela, texto, 5.0)
     assert lidos in ([texto], [])
