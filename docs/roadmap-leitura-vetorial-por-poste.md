@@ -79,6 +79,7 @@ A análise entrega, para cada poste da folha, a ficha correta: identificador, es
 | D2 | Decidido em 2026-11-02: a ficha predita vem do projeto promovido (R2 da E02), e o formato v1 e o casamento guloso 0,02/0,05 são mantidos, com calibração na E03 | se a E03 pedir outra fonte, entra nova `versao_extracao` no `gerador` | E03 |
 | D3 | Decidido em 2026-11-02: uma etapa própria de atualização de dependências entra antes da E03, com prioridade para o Pillow do lock do servidor. Criada como E13 | sem ela, a E03 roda sobre locks com vulnerabilidades conhecidas | E13, E03 |
 | D4 | Decidido em 2026-11-02: o usuário libera os agentes `curadoria-*` do projeto na soul `orquestrador` (lista de subagentes e pré-condição), para a leitura dupla cega da E03 rodar na sessão do orquestrador | sem isso, a E03 não roda pelo protocolo | E03 |
+| D5 | Recomendado em 2026-11-04 (E03), pendente de confirmação do usuário: a ficha predita ganha uma `versao_extracao` a partir das propostas, porque o projeto promovido não tem postes nas folhas reais (baseline 0/107) | sem ela, a E07 não tem baseline informativo para comparar | E07 |
 
 ## Definição global de pronto
 
@@ -169,7 +170,7 @@ Bloco A — base e medição
 | E01 | Limpeza do projeto | #concluida | — | scripts, testes e docs de etapas encerradas removidos, gate verde |
 | E02 | Ficha de referência e benchmark por poste | #concluida | E01 | formato da ficha, avaliador por poste e baseline sintético |
 | E13 | Atualização de dependências vulneráveis | #concluida | E01 | locks sem vulnerabilidade corrigível nos pacotes apontados pelo scanner, gate verde |
-| E03 | Rotulagem v0 e baseline real | #em-andamento | E02, E13 | fichas de referência das 16 folhas e baseline do analisador atual em `tmp/` |
+| E03 | Rotulagem v0 e baseline real | #concluida | E02, E13 | fichas de referência das 16 folhas e baseline do analisador atual em `tmp/` |
 
 Bloco B — leitura vetorial
 
@@ -434,7 +435,7 @@ Bloco C — aprendizado
 
 ---
 
-## E03 — Rotulagem v0 e baseline real — #em-andamento
+## E03 — Rotulagem v0 e baseline real — #concluida
 
 **Objetivo:** produzir fichas de referência das 16 folhas de `examples/` por leitura dupla cega com amostra humana, e medir o analisador atual contra elas.
 
@@ -453,11 +454,11 @@ Bloco C — aprendizado
 
 **Critérios de aceite:**
 
-- [ ] As 16 folhas têm ficha de referência congelada antes de qualquer comparação, com escopo de anotação declarado.
-- [ ] A amostra conferida pelo usuário e a taxa de erro de rótulo estão registradas no relatório local.
-- [ ] O baseline por poste do analisador atual existe em `tmp/` com denominadores.
-- [ ] Nenhuma ficha, recorte ou nome de folha entrou em arquivo versionado (`git grep -n "PROJETO DE REDE NS"` vazio).
-- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+- [x] As 16 folhas têm ficha de referência congelada antes de qualquer comparação, com escopo de anotação declarado.
+- [x] A amostra conferida pelo usuário e a taxa de erro de rótulo estão registradas no relatório local.
+- [x] O baseline por poste do analisador atual existe em `tmp/` com denominadores.
+- [x] Nenhuma ficha, recorte ou nome de folha entrou em arquivo versionado (`git grep -n "PROJETO DE REDE NS"` vazio).
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
 **Validação obrigatória:**
 
@@ -479,7 +480,7 @@ Bloco C — aprendizado
 **Evidências e handoff:**
 
 - Plano: `docs/superpowers/plans/2026-11-03-leitura-vetorial-por-poste-e03.md`. A revisão de arquitetura bloqueou nas rodadas 0 e 1 e aprovou com notas na rodada 2 (seção "Revisão de arquitetura" do plano).
-- Estado em 2026-11-03 (fim da 2ª sessão): **código pronto, revisão final fechada e branch integrada em `main` por fast-forward local (sem push); falta toda a execução operacional.** A etapa continua `#em-andamento`.
+- Estado em 2026-11-04 (3ª sessão): **execução operacional feita e etapa fechada.** Rodada local `tmp/curadoria-simbologia/20261103-2300-fichas/` do checkout principal, com `relatorio.md` completo (concordância, consolidação, calibração R4, taxa, baseline, pendências).
 - Commits:
   - roadmap e plano: 6b26843, 9aa127f, b301975, 1d1411e, 97ac1f3;
   - Task 1 (validar/congelar, `tiles_nao_cobertos`, allow novo): 3ea49b1, 4a180a5;
@@ -492,21 +493,32 @@ Bloco C — aprendizado
 - Onda final fechada: gate equivalente ao `.bat` em ec4a8a7 → `RESULTADO FINAL: APROVADO`, 3799 passed, cobertura 88,25%; `check_test_integrity --base 9f50e35` → exit 0 (só os 5 `SEM_SOUL` dos commits do orquestrador, já justificados na revisão final); re-revisão escopada (`revisor-seguranca`, 929ac98..ec4a8a7): M1, M2 e M3 ADDRESSED, sem Crítico nem Importante novo. Menores deferidos: `file:///home/...` não é saneado; `?c=/d` numa URL vira `?c=<caminho>`; caminho absoluto sem aspas, com espaço e fora dos diretórios conhecidos deixa a cauda relativa (limitação travada em teste).
 - Cada tarefa passou por desenvolvedor, testador, verificação mecânica (`check_test_integrity`, exit 0) e revisão limpa da `revisor-seguranca`. Gate equivalente ao `.bat` em 929ac98: 3694 passed, cobertura 88,24%, APROVADO. Scanner (`osv-scanner -L requirements.txt:<lock>` nos 6 locks): `No issues found`; nenhum lock mudou.
 - Revisão final (`revisor-seguranca`, opus) sobre 9f50e35..929ac98: aprovado com ressalvas, sem Crítico nem Importante. Pediu na onda única: M1 (empate a favor de A quando C confirma A e B dentro da tolerância vira `pendentes`), M2 (recorte da amostra em página com `/Rotate`) e M3 (`_sanear` também remove `runtime_directory` e caminhos absolutos). Os demais Menores ficaram deferidos com triagem.
-- **Retomada (próxima sessão do orquestrador):**
-  1. Antes, no checkout principal (em `main`, que já contém a E03): rodar `.\setup.bat` (pendência da E13: os locks mudaram). Abrir a sessão nova **no checkout principal** com `claude --agent orquestrador`, para que ela carregue o `curadoria-leitor-visual` com "Modo ficha". Se a branch `roadmap/leitura-vetorial-por-poste` ainda aponta para o mesmo commit de `main`, retome o worktree `.claude/worktrees/roadmap-leitura-vetorial-por-poste` para os commits de documento; se `main` andou, avance a branch para `main` antes.
-  2. O ledger do SDD está em `.superpowers/sdd/2026-11-03-leitura-vetorial-por-poste-e03/progress.md` do worktree, com todos os despachos, rulings e minors deferidos; o gate bash fica em `.superpowers/sdd/gate.sh`. As tarefas 1–6 e a onda final estão `complete`: não redespache nenhuma.
-  3. Siga a "Execução operacional" do plano, passos 1 a 8: pré-condição do leitor por sonda (a definição tem de mostrar "Modo ficha"), rodada `tmp/curadoria-simbologia/AAAAMMDD-HHMM-fichas` no checkout principal, leitores A e B, comparar, leitor C, consolidar, baseline `--native-only` (não há `tmp/benchmark-runtime` com OCR nesta máquina), amostra de 20 postes e relatório.
-  4. **Fim da etapa e do lote:** a amostra humana depende do usuário conferir os recortes de `amostra.md`. Gere a amostra, apresente-a e pare. Só com as respostas gravadas (`responder`), `taxa`, os 5 critérios com evidência e o `.bat` aprovado a E03 vira `#concluida`. Como a etapa tem "Revisão humana: sim", o lote para depois dela.
-- Critérios verificados: os critérios 1–3 dependem da execução operacional. O 4 foi conferido em ec4a8a7: `git grep -n "PROJETO DE REDE NS"` só acha as três linhas que citam o próprio critério (este roadmap, duas vezes, e o passo 8 do plano), nenhum dado de folha. Confira de novo no fechamento. O 5 (`.bat` real) ainda falta: o gate bash equivalente está APROVADO.
+- Execução operacional (2026-11-03/04):
+  - 16 PDFs, 48 leituras validadas e congeladas (A e B em todos, C em 15). Concordância A × B: postes 120/120 sem fp, campos 468/471, vãos 103/103, símbolos 198/262 (30 só em A). Distância de casamento A × B: mediana 0,0003, p90 0,0016, máx 0,0070 (R4: nenhum indício para mudar 0,02/0,05).
+  - Consolidação: 16/16 referências congeladas antes de qualquer comparação; 9 folhas com escopo `completo` e 7 `regional`; 25 divergências resolvidas por C, 35 pendentes, 30 zonas excluídas. 016 (pdfplot, símbolos esmaecidos) ficou com 1 poste e 12 zonas excluídas.
+  - Amostra: v001 (20 itens) conferida pelo usuário por entrevista → 5/20 (25%), acima de 20% → v002 (20 itens): 01–04 pelo usuário, 05–20 conferidos por IA (orquestrador) com autorização do usuário. **taxa-v002: 8/40 postes com erro = 20%, Wilson 95% [10,5%; 34,8%]**; parte humana 5/24. Nenhum erro em campo afirmado (0 em 35 avaliados por campo); os erros são 4 pontos de ligação do cliente registrados como poste e 4 postes com símbolos pendentes (o usuário decidiu contá-los como erro). Omissões 1/40.
+  - Baseline `baseline-v001 --native-only` (sem OCR português; Pillow 13.0.0, PyMuPDF 1.28.0, analisador 1.20.0, interpretador 25.0): postes 0/107, vãos 0/83, símbolos 0/179 em todas as folhas. Causa verificada: `run_variant` propõe postes, estruturas e equipamentos, mas a promoção automática só confirma cabos; a ficha predita vem do projeto promovido (R2) e não tem postes nas folhas reais. O baseline mede a promoção, não a leitura.
+- Critérios verificados:
+  - 1: `referencia.json` das 16 folhas, sha em `congelamento.json`, escopo declarado (9 completo, 7 regional).
+  - 2: `fichas/amostra-humana/taxa-v002.json` e `relatorio.md` (com a parte conferida por IA declarada).
+  - 3: `fichas/baseline-v001-resumo.{json,md}` com denominadores por PDF e total.
+  - 4: `git grep -n "PROJETO DE REDE NS"` só acha as linhas que citam o próprio critério (este roadmap e o passo 8 do plano).
+  - 5: gate de fechamento, `IniciarTestes.bat` real no worktree em e678d1d + documentos (2026-11-04 01:17): 3799 passed, cobertura 88,25%, `RESULTADO FINAL: APROVADO`.
 - Decisões para o usuário (tomadas pela opção recomendada, por instrução do usuário em 2026-11-03):
   - **Conferência pelo leitor C, não pelo auditor:** a spec citava o `curadoria-auditor-visual`; no modo ficha a conferência é um terceiro leitor e a auditoria amostral não roda (seção "Decisões de desenho" do plano).
   - **Allow novo** em `.claude/settings.json`: `Bash(.venv/Scripts/python.exe -m scripts.curation_ficha *)`, no padrão das regras `curation_*`. Ele também deixa o leitor tecnicamente rodar os outros subcomandos; a barreira é o texto do agente.
   - **Folha sem área anotável** (zonas excluídas cobrem todas as páginas) não gera referência: `consolidar` recusa, e a folha aparece como `sem_referencia` no baseline (exige `--parcial`).
   - **Baseline nativo:** sem OCR português nesta máquina, o baseline roda `--native-only` e subestima as famílias sem texto nativo; a alternativa é rodá-lo na imagem Docker, que tem o Tesseract.
-  - **Gate pelo equivalente bash:** o harness recusa `cmd.exe` no worktree isolado; o `.bat` real precisa rodar no fechamento (pelo usuário ou numa sessão não isolada).
+  - **Gate pelo equivalente bash:** na 2ª sessão o harness recusou `cmd.exe` no worktree; na 3ª o `.bat` rodou pelo caminho completo.
+- Decisões para o usuário (2026-11-04, tomadas pela opção recomendada por instrução do usuário):
+  - **Fonte da ficha predita (D2 revista):** o baseline do projeto promovido é 0 por construção nas folhas reais. Recomendado: nova `versao_extracao` a partir das propostas (postes, estruturas, equipamentos e cabos propostos), implementada no início da E07, que é a etapa que compara com o baseline; E04–E06 não dependem dele. Alternativa: implementar já como tarefa extra da E03.
+  - **Conferência por IA:** 16 dos 40 itens da amostra foram conferidos pelo orquestrador, com autorização do usuário; a taxa só humana (5/24) fica registrada ao lado.
+  - **Pontos de ligação do cliente:** o usuário julgou "não é poste"; a convenção da próxima rodada de leitura deve excluí-los.
+  - **Símbolos pendentes visíveis contam como erro** (decisão do usuário na entrevista).
+  - **Parada de revisão humana dispensada:** o usuário pediu para seguir com mais etapas depois da E03.
 - Notas para a próxima etapa:
-  - Minors deferidos relevantes para a operação: vão entre postes de páginas diferentes vira zona excluída nos dois extremos; o leitor A/B não é proibido por texto de abrir `regioes-conferencia.json` (o arquivo só existe depois de A e B congelados); queda no meio de um comando exige recuperação manual (skill e contrato descrevem).
-  - Commits do orquestrador ficaram com `Soul:` num parágrafo separado do `Co-Authored-By` (o git não reconhece). Nos próximos, ponha os dois no mesmo bloco final.
+  - Pendências acionáveis do relatório: o CLI `amostra` recorta com margem 0,04 e corta o rótulo do poste (a conferência usou recortes auxiliares com margem 0,12 e, quando a camada anotada cobre o poste, sem anotações); `ficha_leitura_dupla` poderia normalizar separador e ordem do cabo; baseline com OCR na imagem Docker.
+  - Minors deferidos relevantes para a operação: vão entre postes de páginas diferentes vira zona excluída nos dois extremos; o leitor A/B não é proibido por texto de abrir `regioes-conferencia.json`; queda no meio de um comando exige recuperação manual.
 
 ---
 
@@ -694,7 +706,7 @@ Bloco C — aprendizado
 
 **Revisão humana:** sim
 
-**Notas para o plano:** `application/symbol_reconciliation.py`, `analysis_regions.py` e `spans.py` já fazem associação e vãos. Decida no plano o que é reaproveitado e o que é substituído.
+**Notas para o plano:** `application/symbol_reconciliation.py`, `analysis_regions.py` e `spans.py` já fazem associação e vãos. Decida no plano o que é reaproveitado e o que é substituído. O baseline da E03 (projeto promovido) é 0/107 porque a promoção automática não confirma postes: comece pela fonte da ficha predita a partir das propostas (D5) e refaça o baseline sobre as referências da rodada da E03 antes de comparar.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
