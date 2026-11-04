@@ -168,3 +168,14 @@ def test_resolver_reconhece_ignora_desconhece_e_detecta_ambiguidade() -> None:
 
     sem_ambiguidade = resolver_glifo(_tabela(letra_o), letra_o.assinatura)
     assert sem_ambiguidade.situacao == "reconhecido"
+
+
+def test_sha256_nao_depende_do_fim_de_linha(tmp_path: Path) -> None:
+    texto = _serializar(EntradaGlifo("g0001", "P", _assinatura(0.6, 1.0)))
+    lf = tmp_path / "lf.json"
+    crlf = tmp_path / "crlf.json"
+    lf.write_bytes(texto.encode("utf-8"))
+    crlf.write_bytes(texto.replace("\n", "\r\n").encode("utf-8"))
+    a, b = carregar_tabela_glifos(lf), carregar_tabela_glifos(crlf)
+    assert a.sha256 == b.sha256
+    assert a.glifos == b.glifos

@@ -196,7 +196,9 @@ def _ler_bytes(caminho: Path | None) -> bytes:
 
 
 def carregar_tabela_glifos(caminho: Path | None = None) -> TabelaGlifos:
-    conteudo = _ler_bytes(caminho)
+    """Carrega a tabela (None = a empacotada). `sha256` é dos bytes com CRLF normalizado para LF,
+    para que a identidade não dependa do fim de linha do checkout."""
+    conteudo = _ler_bytes(caminho).replace(b"\r\n", b"\n")
     try:
         bruto = json.loads(conteudo.decode("utf-8"), parse_constant=_constante_proibida)
     except ValueError as erro:
