@@ -479,3 +479,62 @@ def test_trecho_de_uma_minuscula_repetida_nunca_e_afirmado_trocado(
     # "jj" sai "ii", "ww"/"zz" saem maiúsculas. (O mesmo em corpo 3 e 7, rotação 0 e 90.)
     lidos = _ler(tmp_path, tabela, texto, 5.0)
     assert lidos in ([texto], [])
+
+
+# --- rodada 5: base fora da janela de forma, âncora de escala ---------------------------------
+
+
+def _ler_girado(
+    tmp_path: Path, tabela: TabelaGlifos, texto: str, tamanho: float, rotacao: float
+) -> list[str]:
+    linha = LinhaTexto(texto, (150.0, 150.0), tamanho, rotacao=rotacao)
+    pdf = pdf_texto_contorno(tmp_path / "r.pdf", [linha])
+    lidos = [t.texto for t in ler_texto_glifos(caminhos_do_pdf(pdf), tabela).textos]
+    pdf.unlink()
+    return lidos
+
+
+@pytest.mark.parametrize("rotacao", [0.0, 90.0])
+@pytest.mark.parametrize("sinal", list(",.:'\"°/-"))
+def test_pontuacao_com_a_base_fora_da_janela_nunca_troca(
+    tmp_path: Path, tabela: TabelaGlifos, sinal: str, rotacao: float
+) -> None:
+    # a base deixou de restringir a disputa de forma: "," e "'", "." e "°" têm desenho parecido
+    # em alturas diferentes da linha; podem falhar fechados, nunca trocar um pelo outro
+    textos = [f"13{sinal}8", f"{sinal}10", f"10{sinal}", f"N1{sinal}N2", f"P{sinal}7", sinal * 2]
+    errados = []
+    for texto in textos:
+        lidos = _ler_girado(tmp_path, tabela, texto, 5.0, rotacao)
+        if lidos not in ([texto], []):
+            errados.append((texto, lidos))
+    assert errados == []
+
+
+@pytest.mark.parametrize("tamanho", [3.0, 5.0, 7.0])
+def test_algarismo_repetido_e_lido_sem_perda(
+    tmp_path: Path, tabela: TabelaGlifos, tamanho: float
+) -> None:
+    # trecho de um caractere só, sem âncora: o algarismo não tem par de caixa e a forma com a
+    # escala igualada confirma; "11", "000", "8888" têm de sair lidos, não só "não trocados"
+    perdidos = []
+    for algarismo in "0123456789":
+        for vezes in (2, 3, 4):
+            texto = algarismo * vezes
+            lidos = _ler_girado(tmp_path, tabela, texto, tamanho, 0.0)
+            if lidos != [texto]:
+                perdidos.append((texto, lidos))
+    assert perdidos == []
+
+
+@pytest.mark.parametrize("vezes", [2, 3])
+def test_letra_repetida_sozinha_no_trecho_nunca_e_trocada(
+    tmp_path: Path, tabela: TabelaGlifos, vezes: int
+) -> None:
+    # todas as letras, maiúsculas e minúsculas, sozinhas e repetidas (o caso sem âncora)
+    errados = []
+    for letra in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz":
+        texto = letra * vezes
+        lidos = _ler_girado(tmp_path, tabela, texto, 5.0, 0.0)
+        if lidos not in ([texto], []):
+            errados.append((texto, lidos))
+    assert errados == []
