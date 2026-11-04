@@ -53,6 +53,9 @@ Pacotes em `src/` com fronteiras verificadas por testes:
   - `ports/` protocolos; `adapters/` implementações (PyMuPDF/OCR em `analysis/`, regras de
     interpretação em `interpretation/`, SQLAlchemy+Alembic em `persistence/`, SQL Server em
     `market/`, catálogos/regras JSON em `*/data/` e `analysis/symbol_packages/`);
+  - `adapters/analysis/drawing_model/` modelo de desenho derivado (caminhos, textos, primitivas,
+    grupos, imagens, família), puro e com cache JSON próprio (`VERSAO_MODELO_DESENHO`); o único
+    leitor PyMuPDF dele é `pymupdf_drawing_model.py`;
   - `composition.py` monta o grafo de dependências.
 - `zeny_project_handler_server` — FastAPI: routers `*_api.py`, autenticação bearer,
   `job_manager`/`job_store` (worker único, jobs persistentes, idempotência por `Idempotency-Key`,
