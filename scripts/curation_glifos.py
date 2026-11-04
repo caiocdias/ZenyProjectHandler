@@ -27,7 +27,10 @@ divergências e desempata com um dos dois). ``publicar`` escreve a tabela de gli
 caracteres diferentes (``ignorar`` conta como um caractere) que o próprio resolvedor, só com as
 duas, não devolve cada uma ao seu caractere (mesmo desenho com caixa próxima, como "I" e "l" na
 Arial ou maiúscula e minúscula de mesmo desenho). Nenhuma das duas é publicada: o glifo dessa
-forma fica desconhecido e o texto falha fechado, em vez de sair com o caractere trocado.
+forma fica desconhecido e o texto falha fechado, em vez de sair com o caractere trocado. Até não
+mudar, sai também toda forma publicada de outro caractere que leria uma forma deixada fora com
+a caixa deslocada em ±``TOLERANCIA_ALTURA`` num eixo (ruído do h local do trecho): sem a forma
+certa na tabela, o glifo dela sairia trocado por essa vizinha.
 """
 
 from __future__ import annotations
@@ -61,6 +64,7 @@ from zeny_project_handler.adapters.analysis.drawing_model.glyph_signature import
     distancia_assinaturas,
 )
 from zeny_project_handler.adapters.analysis.drawing_model.glyph_table import (
+    TOLERANCIA_ALTURA,
     VERSAO_TABELA_GLIFOS,
     EntradaGlifo,
     TabelaGlifos,
@@ -835,6 +839,59 @@ def _homoglifos(
     return homoglifos
 
 
+def _com_ruido(assinatura: AssinaturaGlifo) -> list[AssinaturaGlifo]:
+    """A forma com a caixa deslocada em ±`TOLERANCIA_ALTURA` em cada eixo (ruído do h local)."""
+    ruidosas = []
+    for eixo in range(3):
+        for delta in (-TOLERANCIA_ALTURA, TOLERANCIA_ALTURA):
+            caixa = list(assinatura.caixa)
+            caixa[eixo] += delta
+            ruidosas.append(replace(assinatura, caixa=(caixa[0], caixa[1], caixa[2])))
+    return ruidosas
+
+
+def _capturadoras(
+    tabela: TabelaGlifos, excluidas: Sequence[EntradaGlifo], publicadas: Sequence[EntradaGlifo]
+) -> set[str]:
+    """Entradas publicadas de outro caractere que a tabela usaria para ler uma forma excluída
+    com ruído de caixa: sem a forma certa, o glifo dela sairia trocado."""
+    publicada = replace(tabela, glifos=tuple(publicadas))
+    capturadoras: set[str] = set()
+    for excluida in excluidas:
+        for ruidosa in _com_ruido(excluida.assinatura):
+            resolucao = resolver_glifo(publicada, ruidosa)
+            if resolucao.situacao not in ("reconhecido", "ignorar"):
+                continue
+            if resolucao.caractere == excluida.caractere:
+                continue
+            capturadoras.update(
+                entrada.id
+                for entrada in publicadas
+                if entrada.caractere == resolucao.caractere
+                and distancia_assinaturas(entrada.assinatura, ruidosa) <= tabela.tolerancia
+            )
+    return capturadoras
+
+
+def _fora_da_tabela(
+    publicaveis: Sequence[tuple[str, str | None]],
+    assinaturas: Mapping[str, AssinaturaGlifo],
+    tolerancia: float,
+    margem: float,
+) -> set[str]:
+    """Homóglifos e, até não mudar, as formas que capturariam um grupo deixado fora."""
+    tabela = TabelaGlifos(VERSAO_TABELA_GLIFOS, "", tolerancia, margem, 0.0, 0.0, ())
+    entradas = [EntradaGlifo(grupo, c, assinaturas[grupo]) for grupo, c in publicaveis]
+    fora = _homoglifos(publicaveis, assinaturas, tolerancia, margem)
+    while True:
+        excluidas = [e for e in entradas if e.id in fora]
+        publicadas = [e for e in entradas if e.id not in fora]
+        capturadoras = _capturadoras(tabela, excluidas, publicadas)
+        if not capturadoras:
+            return fora
+        fora |= capturadoras
+
+
 def publicar(
     rodada: Path, saida: Path, *, tolerancia: float, margem: float, espaco: float, quebra: float
 ) -> tuple[int, int]:
@@ -853,7 +910,7 @@ def publicar(
         for grupo in assinaturas
         if grupo in aceitos and (aceitos[grupo].get("marca") in (None, "ignorar"))
     ]
-    homoglifos = _homoglifos(publicaveis, assinaturas, tolerancia, margem)
+    homoglifos = _fora_da_tabela(publicaveis, assinaturas, tolerancia, margem)
     entradas = [
         EntradaGlifo(f"g{numero:04d}", caractere, assinaturas[grupo])
         for numero, (grupo, caractere) in enumerate(

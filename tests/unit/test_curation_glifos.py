@@ -19,6 +19,7 @@ from tests.fixtures.glyphs.fonte_livre import (
 )
 
 from zeny_project_handler.adapters.analysis.drawing_model.glyph_signature import (
+    AssinaturaGlifo,
     distancia_assinaturas,
 )
 from zeny_project_handler.adapters.analysis.drawing_model.glyph_table import (
@@ -491,6 +492,45 @@ def test_publicar_deixa_fora_homoglifos_de_caracteres_diferentes(
         leitura = ler_texto_glifos(caminhos_da_pagina(documento[0]), carregar_tabela_glifos(saida))
     assert [t.texto for t in leitura.textos] == []
     assert leitura.desconhecidos >= 1
+
+
+def test_publicar_tira_a_forma_que_capturaria_um_homoglifo_excluido(
+    rodada: Path,
+    rodada_base: tuple[Path, Path, Path],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # "1" e "l" com o mesmo desenho saem como homóglifos; um "I" do mesmo desenho, 0.07 h mais
+    # alto, fica separado dos dois pela altura e seria publicado. Sem o "1" e o "l" na tabela,
+    # um "1" ou "l" de altura um pouco maior (ruído do h do trecho) casaria esse "I": ele sai
+    # também, e o glifo falha fechado
+    original, copia_l = _com_copia_do_grupo(rodada, tmp_path, "1")
+    certos = _rotulos_corretos(rodada, tmp_path)
+    dados = _json(rodada / "grupos.json")
+    (base,) = (g for g in dados["grupos"] if g["id"] == original)
+    copia_i = json.loads(json.dumps(base))
+    copia_i["id"] = f"c{len(dados['grupos']) + 1:04d}"
+    copia_i["assinatura"]["caixa"][1] = round(base["assinatura"]["caixa"][1] + 0.07, 4)
+    for contorno in copia_i["assinatura"]["contornos"]:
+        for ponto in contorno:
+            ponto[0] = round(ponto[0] * 1.03, 4)
+    dados["grupos"].append(copia_i)
+    (rodada / "grupos.json").write_text(json.dumps(dados), encoding="utf-8")
+    certos[copia_l], certos[copia_i["id"]] = "l", "I"
+    for leitor in "ab":
+        assert _validar(rodada, leitor, _leitura(tmp_path, leitor, _rotulos_de(certos))) == 0
+    assert main(["consolidar", "--rodada", str(rodada)]) == 0
+    saida = tmp_path / "tabela.json"
+    assert main(["publicar", "--rodada", str(rodada), "--saida", str(saida)]) == 0
+    assert "3 homóglifos" in capsys.readouterr().out
+    tabela = carregar_tabela_glifos(saida)
+    assert sorted(g.caractere or "" for g in tabela.glifos) == sorted(LETRAS - {"1"})
+    um = assinatura_de_json(base["assinatura"])
+    for delta in (0.03, 0.055):
+        mais_alto = AssinaturaGlifo(
+            um.subcaminhos, (um.caixa[0], um.caixa[1] + delta, um.caixa[2]), um.contornos
+        )
+        assert resolver_glifo(tabela, mais_alto).caractere is None
 
 
 def test_publicar_mantem_forma_de_outro_caractere_com_desenho_diferente(
