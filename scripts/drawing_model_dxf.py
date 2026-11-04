@@ -16,11 +16,13 @@ textos rotacionados. ``--saida`` e ``--cache`` precisam ficar em ``tmp/`` da rai
 from __future__ import annotations
 
 import argparse
+import hashlib
 import re
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+import pymupdf
 from ezdxf.document import Drawing
 from ezdxf.enums import TextEntityAlignment
 from ezdxf.filemanagement import new as novo_documento
@@ -54,27 +56,58 @@ def exportar_dxf(modelo: ModeloDesenho, pagina: int, destino: Path) -> None:
         raise ValueError(f"pagina {pagina} inexistente no modelo")
     documento = novo_documento("R2010")
     espaco = documento.modelspace()
+    camadas = _Camadas(documento)
     for texto in alvo.textos:
-        _adicionar_texto(documento, espaco, alvo, texto)
+        _adicionar_texto(camadas, espaco, alvo, texto)
     for primitiva in alvo.primitivas:
-        _adicionar_primitiva(documento, espaco, alvo, primitiva)
+        _adicionar_primitiva(camadas, espaco, alvo, primitiva)
     for grupo in alvo.grupos:
         x0, y0, x1, y1 = grupo.bbox
         pontos = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
         espaco.add_lwpolyline(
             [_ponto(alvo, p) for p in pontos],
             close=True,
-            dxfattribs={"layer": _camada(documento, CAMADA_GRUPOS)},
+            dxfattribs={"layer": camadas.grupos()},
         )
     destino.parent.mkdir(parents=True, exist_ok=True)
     documento.saveas(destino)
 
 
-def _camada(documento: Drawing, nome: str) -> str:
-    saneado = nome_de_camada(nome)
-    if saneado not in documento.layers:
-        documento.layers.add(saneado)
-    return saneado
+class _Camadas:
+    """Mapeia nomes de camada do modelo para camadas DXF distintas e estáveis.
+
+    Nomes diferentes que colidem após o saneamento (ou com a camada reservada dos grupos)
+    recebem um sufixo com hash curto do nome original; quem aparece primeiro fica com o nome
+    saneado puro, então o resultado é determinístico para uma mesma ordem de entidades.
+    """
+
+    def __init__(self, documento: Drawing) -> None:
+        self._documento = documento
+        self._por_original: dict[str, str] = {}
+        self._usados: dict[str, str] = {CAMADA_GRUPOS.casefold(): CAMADA_GRUPOS}
+
+    def grupos(self) -> str:
+        return self._registrar(CAMADA_GRUPOS)
+
+    def __call__(self, original: str) -> str:
+        chave = original if original.strip() else CAMADA_PADRAO
+        existente = self._por_original.get(chave)
+        if existente is not None:
+            return existente
+        base = nome_de_camada(chave)
+        final = base
+        if final.casefold() in self._usados:
+            sufixo = hashlib.sha256(chave.encode("utf-8", "surrogatepass")).hexdigest()[:8]
+            final = f"{base[: _TAMANHO_MAXIMO_CAMADA - 9]}_{sufixo}"
+        self._usados[final.casefold()] = chave
+        self._por_original[chave] = final
+        self._registrar(final)
+        return final
+
+    def _registrar(self, nome: str) -> str:
+        if nome not in self._documento.layers:
+            self._documento.layers.add(nome)
+        return nome
 
 
 def _ponto(pagina: PaginaModelo, ponto: tuple[float, float]) -> tuple[float, float]:
@@ -82,14 +115,14 @@ def _ponto(pagina: PaginaModelo, ponto: tuple[float, float]) -> tuple[float, flo
 
 
 def _adicionar_texto(
-    documento: Drawing, espaco: Modelspace, pagina: PaginaModelo, texto: TextoModelo
+    camadas: _Camadas, espaco: Modelspace, pagina: PaginaModelo, texto: TextoModelo
 ) -> None:
     x0, y0, x1, y1 = texto.bbox
     entidade = espaco.add_text(
         texto.texto,
         height=texto.altura if texto.altura > 0 else 1.0,
         rotation=-texto.rotacao,
-        dxfattribs={"layer": _camada(documento, texto.camada)},
+        dxfattribs={"layer": camadas(texto.camada)},
     )
     entidade.set_placement(
         _ponto(pagina, ((x0 + x1) / 2, (y0 + y1) / 2)), align=TextEntityAlignment.MIDDLE_CENTER
@@ -97,12 +130,12 @@ def _adicionar_texto(
 
 
 def _adicionar_primitiva(
-    documento: Drawing,
+    camadas: _Camadas,
     espaco: Modelspace,
     pagina: PaginaModelo,
     primitiva: Polilinha | Circulo | Arco,
 ) -> None:
-    atributos = {"layer": _camada(documento, primitiva.estilo.camada)}
+    atributos = {"layer": camadas(primitiva.estilo.camada)}
     if isinstance(primitiva, Polilinha):
         espaco.add_lwpolyline(
             [_ponto(pagina, p) for p in primitiva.pontos],
@@ -149,7 +182,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         print("PDF inexistente", file=sys.stderr)
         return 2
     cache = JsonDrawingModelCache(argumentos.cache) if argumentos.cache is not None else None
-    modelo = obter_modelo_desenho(argumentos.pdf, cache)
+    try:
+        modelo = obter_modelo_desenho(argumentos.pdf, cache)
+    except pymupdf.FileDataError:
+        print("arquivo nao e um PDF legivel", file=sys.stderr)
+        return 2
     try:
         exportar_dxf(modelo, argumentos.pagina, argumentos.saida)
     except ValueError as erro:
