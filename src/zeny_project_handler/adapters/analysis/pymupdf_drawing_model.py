@@ -12,12 +12,14 @@ import hashlib
 import math
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Sequence
+from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Final, Literal, TypeVar, cast
 
 import pymupdf
 
+from .drawing_model.cache import JsonDrawingModelCache, chave_modelo_desenho
 from .drawing_model.family import ImpressaoEstrutural, reconhecer_familia
 from .drawing_model.geometry import reconstruir_polilinhas, recuperar_circulos_e_arcos
 from .drawing_model.groups import agrupar_candidatos
@@ -95,9 +97,40 @@ def impressao_estrutural(documento: pymupdf.Document) -> ImpressaoEstrutural:
     return _impressao(documento, contagens)
 
 
-def extrair_modelo_desenho(pdf: Path) -> ModeloDesenho:
+def _sha256_do_arquivo(pdf: Path) -> str:
     with pdf.open("rb") as arquivo:
-        documento_sha256 = hashlib.file_digest(arquivo, "sha256").hexdigest()
+        return hashlib.file_digest(arquivo, "sha256").hexdigest()
+
+
+def obter_modelo_desenho(pdf: Path, cache: JsonDrawingModelCache | None) -> ModeloDesenho:
+    if cache is None:
+        return extrair_modelo_desenho(pdf)
+    chave = chave_modelo_desenho(_sha256_do_arquivo(pdf), f"pymupdf-{pymupdf.VersionBind}")
+    try:
+        em_cache = cache.obter(chave)
+    except Exception:
+        em_cache = None
+    if em_cache is not None:
+        return em_cache
+    modelo = extrair_modelo_desenho(pdf)
+    if not _tem_fonte_falha(modelo):
+        # o cache é descartável: falha de gravação não derruba a extração
+        with suppress(Exception):
+            cache.salvar(chave, modelo)
+    return modelo
+
+
+def _tem_fonte_falha(modelo: ModeloDesenho) -> bool:
+    # Uma falha de fonte pode ser transitória e deve ser tentada de novo.
+    return any(
+        codigo.startswith("modelo.") and codigo.endswith("_falhou")
+        for pagina in modelo.paginas
+        for codigo in pagina.diagnosticos
+    )
+
+
+def extrair_modelo_desenho(pdf: Path) -> ModeloDesenho:
+    documento_sha256 = _sha256_do_arquivo(pdf)
     with pymupdf.open(pdf) as documento:
         contagens = _Contagens()
         paginas: list[PaginaModelo] = []
