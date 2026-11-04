@@ -386,3 +386,117 @@ def test_ezdxf_nunca_e_importado_em_src() -> None:
             if any(n == "ezdxf" or n.startswith("ezdxf.") for n in nomes):
                 ofensores.append(str(arquivo))
     assert ofensores == []
+
+
+def _camadas_por_ordem(tmp_path: Path, nomes: list[str], nome_arquivo: str = "k.dxf") -> list[str]:
+    destino = tmp_path / nome_arquivo
+    exportar_dxf(_modelo(_pagina(primitivas=tuple(_linha(n) for n in nomes))), 0, destino)
+    return [e.dxf.layer for e in readfile(destino).modelspace().query("LWPOLYLINE")]
+
+
+def test_tres_nomes_colidentes_ficam_distintos_e_o_primeiro_mantem_o_nome_saneado(
+    tmp_path: Path,
+) -> None:
+    camadas = _camadas_por_ordem(tmp_path, ["A/B", "A:B", "A*B"])
+
+    assert len(set(camadas)) == 3
+    assert camadas[0] == "A_B"
+    assert all(c.startswith("A_B_") for c in camadas[1:])
+
+
+def test_sufixo_e_deterministico_entre_execucoes_e_independe_do_processo(
+    tmp_path: Path,
+) -> None:
+    primeira = _camadas_por_ordem(tmp_path, ["A/B", "A:B"], "1.dxf")
+    segunda = _camadas_por_ordem(tmp_path, ["A/B", "A:B"], "2.dxf")
+    saida = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from scripts.drawing_model_dxf import _Camadas;"
+            "from ezdxf.filemanagement import new;"
+            "c=_Camadas(new('R2010'));print(c('A/B'), c('A:B'))",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=Path(__file__).resolve().parents[2],
+        env={**__import__("os").environ, "PYTHONHASHSEED": "12345"},
+    )
+
+    assert primeira == segunda
+    assert saida.stdout.split() == primeira
+
+
+def test_mesmo_nome_original_repetido_reutiliza_a_mesma_camada(tmp_path: Path) -> None:
+    camadas = _camadas_por_ordem(tmp_path, ["A/B", "A:B", "A:B", "A/B"])
+
+    assert camadas[1] == camadas[2]
+    assert camadas[0] == camadas[3]
+    assert camadas[0] != camadas[1]
+
+
+def test_sufixo_que_gera_nova_colisao_ainda_resulta_em_camadas_distintas(tmp_path: Path) -> None:
+    sufixado = _camadas_por_ordem(tmp_path, ["A_B", "A/B"], "s.dxf")[1]
+    assert sufixado != "A_B"
+
+    camadas = _camadas_por_ordem(tmp_path, ["A_B", "A/B", sufixado], "t.dxf")
+
+    assert len({c.casefold() for c in camadas}) == 3
+
+
+def test_colisao_que_so_difere_por_caixa_fica_distinta(tmp_path: Path) -> None:
+    camadas = _camadas_por_ordem(tmp_path, ["rede", "REDE"])
+
+    assert len({c.casefold() for c in camadas}) == 2
+
+
+def test_nome_longo_colidente_respeita_limite_de_255_caracteres(tmp_path: Path) -> None:
+    camadas = _camadas_por_ordem(tmp_path, ["X" * 300, "X" * 301])
+
+    assert len(set(camadas)) == 2
+    assert all(0 < len(c) <= 255 for c in camadas)
+
+
+def test_camada_literal_grupos_candidatos_em_caixa_diferente_nao_se_mistura(
+    tmp_path: Path,
+) -> None:
+    destino = tmp_path / "gc.dxf"
+    grupo = GrupoCandidato(bbox=(1.0, 2.0, 3.0, 4.0), indices_primitivas=(), indices_caminhos=())
+    modelo = _modelo(_pagina(primitivas=(_linha("grupos_candidatos"),), grupos=(grupo,)))
+
+    exportar_dxf(modelo, 0, destino)
+
+    ents = list(readfile(destino).modelspace().query("LWPOLYLINE"))
+    fechadas = {e.dxf.layer.casefold() for e in ents if e.dxf.flags & 1}
+    abertas = {e.dxf.layer.casefold() for e in ents if not e.dxf.flags & 1}
+    assert fechadas == {"grupos_candidatos"}
+    assert abertas.isdisjoint(fechadas)
+
+
+def test_arquivo_vazio_devolve_2_sem_gravar(tmp_path: Path) -> None:
+    vazio = tmp_path / "vazio.pdf"
+    vazio.write_bytes(b"")
+    saida = tmp_path / "tmp" / "x.dxf"
+
+    assert _rodar(vazio, tmp_path, saida) == 2
+    assert not saida.exists()
+
+
+def test_pdf_truncado_devolve_2_sem_gravar_e_sem_traceback(tmp_path: Path) -> None:
+    inteiro = _pdf(tmp_path / "ok.pdf", _circulo).read_bytes()
+    truncado = tmp_path / "trunc.pdf"
+    truncado.write_bytes(inteiro[: len(inteiro) // 3])
+    saida = tmp_path / "tmp" / "x.dxf"
+
+    assert _rodar(truncado, tmp_path, saida) == 2
+    assert not saida.exists()
+
+
+def test_nao_pdf_com_cache_nao_cria_entrada_no_cache(tmp_path: Path) -> None:
+    lixo = tmp_path / "lixo.pdf"
+    lixo.write_bytes(b"isto nao e um pdf")
+    cache = tmp_path / "tmp" / "cache"
+
+    assert _rodar(lixo, tmp_path, tmp_path / "tmp" / "x.dxf", "--cache", str(cache)) == 2
+    assert not any(cache.rglob("*.json")) if cache.exists() else True
