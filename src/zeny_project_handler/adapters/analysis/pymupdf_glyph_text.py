@@ -286,12 +286,13 @@ def _resolver_cobertura(
     concordantes: list[tuple[int, list[_Toque]]] = []
     divergentes = 0
     for indice, leitura in enumerate(leituras):
-        if not leitura.conteudo_bruto:
+        lido = "".join((leitura.conteudo_bruto or "").split())
+        if not lido:  # leitura vazia ou só de espaços não compara com glifo nenhum
             continue
         toques = _toques(_caixa_candidato(leitura), glifos)
         if not toques:
             continue
-        if _esperado(toques, glifos) != "".join(leitura.conteudo_bruto.split()):
+        if _esperado(toques, glifos) != lido:
             divergentes += 0 if nativo else 1
             continue
         concordantes.append((indice, toques))
