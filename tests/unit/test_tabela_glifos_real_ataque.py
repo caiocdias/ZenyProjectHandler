@@ -8,9 +8,11 @@ contorno), que tem as mesmas métricas da Arial das folhas e que a tabela real r
 from __future__ import annotations
 
 import json
+import math
+import random
 import re
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +24,7 @@ from tests.fixtures.glyphs.fonte_livre import (
 )
 
 from zeny_project_handler.adapters.analysis import PyMuPdfDocumentAnalyzer
-from zeny_project_handler.adapters.analysis.drawing_model import glyph_table
+from zeny_project_handler.adapters.analysis.drawing_model import glyph_signature, glyph_table
 from zeny_project_handler.adapters.analysis.drawing_model.glyph_signature import AssinaturaGlifo
 from zeny_project_handler.adapters.analysis.drawing_model.glyph_table import (
     TabelaGlifos,
@@ -30,6 +32,7 @@ from zeny_project_handler.adapters.analysis.drawing_model.glyph_table import (
     resolver_glifo,
 )
 from zeny_project_handler.adapters.analysis.drawing_model.glyph_text import ler_texto_glifos
+from zeny_project_handler.adapters.analysis.drawing_model.model import Ponto
 
 # sha256 (LF) da tabela publicada e medida no benchmark da Task 6 (relatório do desenvolvedor)
 _SHA_PUBLICADO = "39a80899b21d93a2f7b8c0c1a6b30f9258ee9794cf5c4084019f59df25c19421"
@@ -390,5 +393,89 @@ def test_f_ao_lado_de_algarismo_nunca_e_afirmado_como_t(
     tmp_path: Path, tabela: TabelaGlifos, texto: str
 ) -> None:
     # o "f" da fonte livre fica a 0.075 de "t" (tolerância 0.08) e longe dos "f" publicados
+    lidos = _ler(tmp_path, tabela, texto, 5.0)
+    assert lidos in ([texto], [])
+
+
+# --- rodada 4: forma decide, escala coerente no trecho, abandono antecipado -------------------
+
+
+def _distancia_contorno_completa(a: Sequence[Ponto], b: Sequence[Ponto]) -> float:
+    """Referência sem abandono: média ponto a ponto, mínima sobre os deslocamentos cíclicos de
+    `b` e dos seus pontos médios (a definição da docstring), somando na mesma ordem."""
+    n = len(a)
+    medios = [
+        ((b[i][0] + b[(i + 1) % n][0]) / 2.0, (b[i][1] + b[(i + 1) % n][1]) / 2.0) for i in range(n)
+    ]
+    melhor = math.inf
+    for alvo in (b, medios):
+        for deslocamento in range(n):
+            soma = 0.0
+            for i in range(n):
+                soma += math.dist(a[i], alvo[(i + deslocamento) % n])
+            melhor = min(melhor, soma / n)
+    return melhor
+
+
+def test_abandono_antecipado_da_distancia_de_contorno_da_o_mesmo_valor(
+    tabela: TabelaGlifos,
+) -> None:
+    contornos = [c for g in tabela.glifos for c in g.assinatura.contornos]
+    sorteio = random.Random(11)
+    pares = [(sorteio.choice(contornos), sorteio.choice(contornos)) for _ in range(1500)]
+    for _ in range(500):
+        a = sorteio.choice(contornos)
+        ruidoso = tuple(
+            (x + sorteio.uniform(-0.03, 0.03), y + sorteio.uniform(-0.03, 0.03)) for x, y in a
+        )
+        pares += [(a, ruidoso), (ruidoso, a), (a, a)]
+    diferentes = [
+        (a, b)
+        for a, b in pares
+        if glyph_signature._distancia_contorno(a, b) != _distancia_contorno_completa(a, b)
+    ]
+    assert diferentes == []
+
+
+@pytest.mark.parametrize("rotacao", [0.0, 90.0, 180.0])
+@pytest.mark.parametrize("tamanho", [3.0, 5.0, 7.0])
+def test_texto_so_de_algarismos_nunca_vira_letra_nem_outro_numero(
+    tmp_path: Path, tabela: TabelaGlifos, tamanho: float, rotacao: float
+) -> None:
+    # repetições do mesmo algarismo (o caso em que a escala vem de um caractere só) e valores
+    # típicos de campo: ler certo ou falhar fechado
+    textos = [d * k for d in "0123456789" for k in (2, 3)]
+    textos += ["11-300", "13,8", "4/0", "2x1/0", "(10)", "0.5", "69", "96", "86", "18"]
+    errados = []
+    for texto in textos:
+        pdf = pdf_texto_contorno(
+            tmp_path / "d.pdf", [LinhaTexto(texto, (150.0, 150.0), tamanho, rotacao=rotacao)]
+        )
+        lidos = [t.texto for t in ler_texto_glifos(caminhos_do_pdf(pdf), tabela).textos]
+        pdf.unlink()
+        if lidos not in ([texto], []):
+            errados.append((texto, lidos))
+    assert errados == []
+
+
+@pytest.mark.parametrize("texto", ["lzz", "zzl", "lww", "wwl"])
+def test_letra_publicada_so_na_escala_x_nao_esconde_a_escala_do_trecho(
+    tmp_path: Path, tabela: TabelaGlifos, texto: str
+) -> None:
+    # O único "l" publicado foi colhido com h = altura-x (1.368 h); a menor altura do "l" é essa
+    # mesma, então o "l" de um trecho com h = altura-x dá razão ~1.0 e é tomado como escala de
+    # maiúscula. "zz"/"ww" na altura-x casam "Z"/"W" de maiúscula e o trecho parece coerente.
+    # (O mesmo em corpo 3 e 7.)
+    lidos = _ler(tmp_path, tabela, texto, 5.0)
+    assert lidos in ([texto], [])
+
+
+@pytest.mark.parametrize("texto", ["gg", "jj", "ww", "zz", "gg 10"])
+def test_trecho_de_uma_minuscula_repetida_nunca_e_afirmado_trocado(
+    tmp_path: Path, tabela: TabelaGlifos, texto: str
+) -> None:
+    # Resíduo declarado pelo desenvolvedor na Rodada 4: sem outro glifo, a escala e a base do
+    # trecho vêm da própria letra. "gg" sai "99" (inventa algarismos, também com "10" ao lado),
+    # "jj" sai "ii", "ww"/"zz" saem maiúsculas. (O mesmo em corpo 3 e 7, rotação 0 e 90.)
     lidos = _ler(tmp_path, tabela, texto, 5.0)
     assert lidos in ([texto], [])
