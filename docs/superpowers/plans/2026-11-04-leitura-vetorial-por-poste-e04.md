@@ -47,7 +47,7 @@
   - `Polilinha(pontos: tuple[tuple[float, float], ...], fechada: bool, estilo: Estilo, origens: tuple[int, ...])`, `Circulo(centro, raio, estilo, origens)`, `Arco(centro, raio, angulo_inicial, angulo_final, estilo, origens)` — `origens` são índices em `PaginaModelo.caminhos`; ângulos em graus no espaço da página visual (y para baixo), medidos a partir do eixo x positivo no sentido horário visual, `angulo_final` > `angulo_inicial`;
   - `TextoModelo(texto: str, bbox: tuple[float, float, float, float], origem: Literal["nativo", "shx"], rotacao: float, altura: float, fonte: str, camada: str)`;
   - `ImagemModelo(bbox: tuple[float, float, float, float], largura_px: int, altura_px: int, sha256: str, de_anotacao: bool)`;
-  - `GrupoCandidato(bbox: tuple[float, float, float, float], indices_primitivas: tuple[int, ...])` (índices em `primitivas`);
+  - `GrupoCandidato(bbox: tuple[float, float, float, float], indices_primitivas: tuple[int, ...], indices_caminhos: tuple[int, ...])` (índices em `primitivas` e em `caminhos`; `indices_caminhos` traz os caminhos preenchidos que não viraram círculo nem arco);
   - `PaginaModelo(indice: int, largura: float, altura: float, caminhos: tuple[Caminho, ...], textos: tuple[TextoModelo, ...], primitivas: tuple[Polilinha | Circulo | Arco, ...], grupos: tuple[GrupoCandidato, ...], imagens: tuple[ImagemModelo, ...], diagnosticos: tuple[str, ...])`;
   - `PerfilFamilia(familia: str, sinais: tuple[tuple[str, JsonPrimitive], ...], diagnosticos: tuple[str, ...])`;
   - `ModeloDesenho(versao: str, documento_sha256: str, familia: PerfilFamilia, paginas: tuple[PaginaModelo, ...])`;
@@ -55,7 +55,7 @@
 - Produces (em `geometry.py`, funções puras):
   - `reconstruir_polilinhas(caminhos: Sequence[Caminho], *, tolerancia_ponto: float = 0.5, tolerancia_angulo_graus: float = 1.0) -> tuple[Polilinha, ...]`: usa **só** os itens `l` de caminhos de tipo `"traco"`; funde segmentos de mesmo `Estilo` que se tocam (extremos a até `tolerancia_ponto`) e são colineares (desvio até `tolerancia_angulo_graus`); depois encadeia segmentos contíguos de mesmo estilo em polilinhas (fechada quando volta ao início), com `origens` = caminhos que contribuíram. Índice espacial por grade (células de `tolerancia_ponto`), nada quadrático.
   - `recuperar_circulos_e_arcos(caminhos: Sequence[Caminho], *, tolerancia_relativa: float = 0.02) -> tuple[Circulo | Arco, ...]`: considera os itens `c` de qualquer tipo de caminho; uma Bézier é arco de círculo quando os extremos e os pontos em t=0,25, 0,5 e 0,75 caem num círculo comum (desvio radial ≤ `tolerancia_relativa` × raio); arcos contíguos do mesmo subcaminho, mesmo centro e raio são unidos; união de 360° vira `Circulo`. Os caminhos de origem continuam em `caminhos` (nada é descartado).
-- Guardas em `tests/unit/test_architecture.py`: `ezdxf` e `onnxruntime` entram em `FORBIDDEN_IMPORTS`; a varredura de domínio é estendida a `application/`; dois testes novos: `test_src_nao_importa_ezdxf` (nenhum arquivo de `src/` importa `ezdxf`) e `test_drawing_model_puro_nao_importa_pymupdf` (`adapters/analysis/drawing_model/` não importa `pymupdf` nem `fitz`).
+- Guardas em `tests/unit/test_architecture.py`: `ezdxf` e `onnxruntime` entram em `FORBIDDEN_IMPORTS` (domínio); um conjunto próprio `APPLICATION_FORBIDDEN_IMPORTS = frozenset({"pymupdf", "fitz", "ezdxf", "onnxruntime"})` (invariante do roadmap) com o teste `test_aplicacao_nao_importa_leitores_de_pdf_nem_ezdxf` varrendo `application/` (o PIL de `application/visual_occupancy.py` continua permitido ali); e dois testes novos: `test_src_nao_importa_ezdxf` (nenhum arquivo de `src/` importa `ezdxf`) e `test_drawing_model_puro_nao_importa_pymupdf` (`adapters/analysis/drawing_model/` não importa `pymupdf` nem `fitz`).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -101,7 +101,7 @@ def test_drawing_model_puro_nao_importa_pymupdf() -> None: ...    # em test_arch
   - `ImpressaoEstrutural(produtor: str, criador: str, nomes_ocg: tuple[str, ...], spans_texto_nativo: int, formas_glifo: int, anotacoes_shx: int, imagens: int)` (dataclass pura, preenchida pela Task 3; `formas_glifo` usa o critério vigente `_is_glyph` de `pymupdf_glyphs.py`: tipo `f`, até 256 itens, lados entre 0,05 e 6 pt);
   - `FAMILIAS: Final = ("electric_office_print", "itext", "ghostscript", "autocad", "generico")`, `LIMIAR_FORMAS_GLIFO: Final = 300`;
   - `reconhecer_familia(impressao: ImpressaoEstrutural) -> PerfilFamilia`, nesta ordem: `autocad` se `"pdfplot"` ou `"autocad"` em produtor/criador (sem diferenciar maiúsculas), ou `anotacoes_shx > 0`, ou há OCGs; `itext` se `"itext"` no produtor; `ghostscript` se `"ghostscript"` no produtor; `electric_office_print` se `"print to pdf"` no produtor e `formas_glifo >= LIMIAR_FORMAS_GLIFO`; `"print to pdf"` sem esse sinal → `generico` com diagnóstico `"familia.print_to_pdf_sem_glifos"`; o resto → `generico` com `"familia.desconhecida"`. `sinais` traz só valores derivados (`ocgs`, `spans_texto_nativo`, `formas_glifo`, `anotacoes_shx`, `imagens` e booleanos `produtor_itext`, `produtor_ghostscript`, `produtor_print_to_pdf`, `produtor_autocad`), nunca produtor/criador brutos;
-  - `agrupar_candidatos(primitivas: Sequence[Polilinha | Circulo | Arco], *, folga: float = 1.5, lado_maximo: float = 40.0) -> tuple[GrupoCandidato, ...]`: union-find com grade espacial sobre caixas dilatadas por `folga`; descarta grupos com lado maior que `lado_maximo` pt e grupos formados por uma única polilinha aberta de dois pontos.
+  - `agrupar_candidatos(primitivas: Sequence[Polilinha | Circulo | Arco], caminhos: Sequence[Caminho], *, folga: float = 1.5, lado_maximo: float = 40.0) -> tuple[GrupoCandidato, ...]`: os elementos agrupados são as primitivas e os caminhos de tipo `"preenchimento"`/`"traco_e_preenchimento"` que não aparecem nas `origens` de nenhum `Circulo`/`Arco` (polígonos e glifos preenchidos); union-find com grade espacial sobre caixas dilatadas por `folga`; descarta grupos com lado maior que `lado_maximo` pt e grupos formados por uma única polilinha aberta de dois pontos.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -115,6 +115,8 @@ def test_familia_desconhecida_cai_no_generico_com_diagnostico() -> None:
 def test_ocg_ou_shx_identifica_autocad_mesmo_com_outro_produtor() -> None: ...
 def test_sinais_nao_trazem_produtor_bruto() -> None: ...   # produtor com caminho/nome não aparece em sinais
 def test_agrupa_circulo_e_tracos_proximos_num_grupo() -> None: ...
+def test_triangulo_preenchido_entra_no_grupo_pelos_caminhos() -> None: ...   # indices_caminhos == (i,)
+def test_caminho_que_virou_circulo_nao_entra_duas_vezes() -> None: ...
 def test_nao_agrupa_formas_distantes() -> None: ...
 def test_descarta_grupo_maior_que_lado_maximo() -> None: ...
 def test_agrupamento_escala_linearmente() -> None: ...      # 10k e 20k círculos pequenos: razão de tempo < 3
@@ -243,7 +245,7 @@ def test_nome_de_camada_invalido_e_saneado(tmp_path) -> None: ...
   - `ladrilho`: imagem de página cujo tamanho em pixels se repete em pelo menos 4 imagens do PDF e cujas caixas se encaixam numa grade (bordas alinhadas com tolerância de 1 pt);
   - `anotacao`: `de_anotacao=True` (carimbo, assinatura, foto);
   - `outra`: o resto.
-  Contagens por classe, fração da página coberta pelos ladrilhos e, com `--amostras-imagem`, um PNG de cada imagem `outra` (e até 3 por PDF de `anotacao`), nomeado pelo `sha256` da imagem, para inspeção visual.
+  Contagens por classe, fração da página coberta pelos ladrilhos e, com `--amostras-imagem`, PNGs nomeados pelo `sha256` da imagem para inspeção visual: cada imagem `outra`; até 3 `anotacao` por PDF; e, por PDF, os ladrilhos cuja caixa cruza algum grupo candidato ou texto (até 5) mais 2 ladrilhos sorteados com semente fixa (`random.Random(sha256 do PDF)`).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -253,6 +255,7 @@ def test_medir_pdf_sintetico_conta_primitivas_e_classifica_imagens(tmp_path) -> 
 def test_relatorio_nao_tem_caminho_nome_nem_produtor(tmp_path) -> None: ...
 def test_cli_recusa_saida_fora_de_tmp(tmp_path) -> None: ...
 def test_amostras_de_imagem_sao_nomeadas_pelo_sha(tmp_path) -> None: ...
+def test_amostra_inclui_ladrilho_que_cruza_grupo_e_sorteio_estavel(tmp_path) -> None: ...
 ```
 
 - [ ] **Step 2–4:** FAIL → implementar → PASS; ruff, format, mypy.
@@ -264,7 +267,7 @@ def test_amostras_de_imagem_sao_nomeadas_pelo_sha(tmp_path) -> None: ...
 
 1. Do worktree, com a raiz do repositório no checkout principal: `python -m scripts.drawing_model_report --raiz <checkout principal>/examples --saida <checkout principal>/tmp/e04/relatorio-modelo.json --amostras-imagem <checkout principal>/tmp/e04/imagens --raiz-repositorio <checkout principal>`.
 2. Famílias: a distribuição nas 16 folhas precisa ser 8 `electric_office_print`, 6 `itext`, 1 `ghostscript`, 1 `autocad`. Divergência → ajuste do critério (nova rodada de correção da Task 2/3, com `VERSAO_MODELO_DESENHO` incrementada) antes de fechar.
-3. H3: o orquestrador inspeciona as amostras `outra` e `anotacao`. H3 vale se nenhuma imagem fora de `ladrilho`/`anotacao` contém símbolo ou texto da rede; o resultado (contagens por classe e o que as `outra` mostram) vai ao handoff.
+3. H3: o orquestrador inspeciona as amostras `outra`, `anotacao` e os ladrilhos amostrados. H3 vale se os ladrilhos amostrados mostram só a ortofoto (nenhuma rede, símbolo ou texto queimado no raster) e nenhuma imagem `outra` contém símbolo ou texto da rede; o resultado (contagens por classe e o que as amostras mostram) vai ao handoff.
 4. DXF de 2 folhas reais de famílias diferentes em `tmp/e04/`, para inspeção do usuário quando possível.
 5. Tempo e memória por folha no handoff (risco da etapa).
 6. Handoff para as próximas etapas: quando E05–E07 levarem o modelo ao analisador, `VERSAO_MODELO_DESENHO` entra na assinatura de capacidade e na versão do extrator (ADR 0004, ADR 0006); se `application/` precisar dos tipos do modelo, eles migram para `ports/`; no AutoCAD o SHX também chega como traço vetorial e vai gerar polilinhas e grupos que duplicam o texto (nota para a E06); a linha de "Fronteiras" do design sobre locks fica como pendência do arquiteto.
