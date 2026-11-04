@@ -541,3 +541,67 @@ def test_texto_so_com_espacos_e_ignorado_e_spans_multiplos_sao_separados(tmp_pat
 
     assert sorted((t.texto, t.altura) for t in textos) == [("A", 10.0), ("B", 14.0)]
     assert all(t.fonte for t in textos)
+
+
+def _pdf_com_gigantes(
+    caminho: Path, largura: float, altura: float, quantidade: int, ocg_gigante: bool = True
+) -> Path:
+    with pymupdf.open() as documento:
+        pagina = documento.new_page(width=largura, height=altura)
+        notas = documento.add_ocg("NOTAS", on=True)
+        pagina.insert_text((50, 80), "REAL", fontsize=10, fontname="helv", oc=notas)
+        pagina.insert_text((50, 120), "SEMOC", fontsize=10, fontname="helv")
+        xref = pagina.get_contents()[-1]
+        conteudo = bytes(documento.xref_stream(xref) or b"")
+        gigante = b"\nBT /helv 1 Tf 100000 0 0 100000 -1000 -1000 Tm (AAAA) Tj ET\n" * quantidade
+        documento.update_stream(xref, conteudo + gigante)
+        documento.save(caminho)
+    return caminho
+
+
+@pytest.mark.parametrize(("largura", "altura"), [(300.0, 300.0), (320.0, 300.0), (317.0, 317.0)])
+def test_caixa_gigante_no_limite_de_256_celulas_nao_rouba_a_camada_de_texto_normal(
+    tmp_path: Path, largura: float, altura: float
+) -> None:
+    pdf = _pdf_com_gigantes(tmp_path / "lim.pdf", largura, altura, 1)
+
+    camadas = {t.texto: t.camada for t in _pagina_unica(extrair_modelo_desenho(pdf)).textos}
+
+    assert camadas["REAL"] == "NOTAS"
+    assert camadas["SEMOC"] == ""
+
+
+def test_200_trechos_gigantes_terminam_em_tempo_razoavel_com_camadas_corretas(
+    tmp_path: Path,
+) -> None:
+    import time
+
+    pdf = _pdf_com_gigantes(tmp_path / "200.pdf", 300.0, 200.0, 200)
+
+    inicio = time.perf_counter()
+    pagina_modelo = _pagina_unica(extrair_modelo_desenho(pdf))
+    duracao = time.perf_counter() - inicio
+
+    assert duracao < 20.0
+    assert pagina_modelo.diagnosticos == ()
+    camadas = {t.texto: t.camada for t in pagina_modelo.textos}
+    assert camadas["REAL"] == "NOTAS" and camadas["SEMOC"] == ""
+
+
+@pytest.mark.parametrize("rotacao", [0, 90, 270])
+def test_texto_parcialmente_fora_da_pagina_recebe_a_camada_certa(
+    tmp_path: Path, rotacao: int
+) -> None:
+    with pymupdf.open() as documento:
+        pagina = documento.new_page(width=_LARGURA, height=_ALTURA)
+        notas = documento.add_ocg("NOTAS", on=True)
+        pagina.insert_text((250, 100), "TEXTO MUITO LONGO PARA SAIR", fontsize=12, oc=notas)
+        pagina.insert_text((-30, 150), "COMECA FORA DA PAGINA", fontsize=12, oc=notas)
+        pagina.set_rotation(rotacao)
+        pdf = tmp_path / "fora.pdf"
+        documento.save(pdf)
+
+    textos = _pagina_unica(extrair_modelo_desenho(pdf)).textos
+
+    assert textos, "o texto parcialmente dentro da página deve ser lido"
+    assert {t.camada for t in textos} == {"NOTAS"}
