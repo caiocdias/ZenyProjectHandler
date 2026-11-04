@@ -1,0 +1,205 @@
+"""Ataques à tabela de glifos real empacotada (tabela-glifos-v1, publicada da rodada de glifos):
+identidade, ausência de dados de folha, coerência interna e leitura de contorno sintético.
+
+Nenhum teste lê PDF de examples/: a leitura usa a fonte livre das fixtures (Helvetica em
+contorno), que tem as mesmas métricas da Arial das folhas e que a tabela real reconhece.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from collections import Counter
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
+
+import pytest
+from tests.fixtures.glyphs.fonte_livre import (
+    LinhaTexto,
+    caminhos_do_pdf,
+    pdf_texto_contorno,
+)
+
+from zeny_project_handler.adapters.analysis import PyMuPdfDocumentAnalyzer
+from zeny_project_handler.adapters.analysis.drawing_model import glyph_table
+from zeny_project_handler.adapters.analysis.drawing_model.glyph_table import (
+    TabelaGlifos,
+    carregar_tabela_glifos,
+    resolver_glifo,
+)
+from zeny_project_handler.adapters.analysis.drawing_model.glyph_text import ler_texto_glifos
+
+# sha256 (LF) da tabela publicada e medida no benchmark da Task 6 (relatório do desenvolvedor)
+_SHA_PUBLICADO = "4612202d74449902db27754dba116d31468aa5b0c157772aa1e551f69c6a50da"
+_CHAVES_JSON = {
+    "schema_version",
+    "versao",
+    "tolerancia",
+    "margem_ambiguidade",
+    "espaco",
+    "quebra",
+    "glifos",
+    "id",
+    "caractere",
+    "assinatura",
+    "subcaminhos",
+    "caixa",
+    "contornos",
+}
+
+
+@pytest.fixture(scope="module")
+def tabela() -> TabelaGlifos:
+    return carregar_tabela_glifos()
+
+
+def _bruto() -> Any:
+    arquivo = Path(glyph_table.__file__).parent.parent / "data" / "tabela-glifos-v1.json"
+    return json.loads(arquivo.read_text(encoding="utf-8"))
+
+
+def _percorrer(valor: Any) -> Iterator[tuple[str | None, Any]]:
+    """(chave do objeto que contém, valor) de cada folha do JSON."""
+    if isinstance(valor, dict):
+        for chave, item in valor.items():
+            if isinstance(item, dict | list):
+                yield from _percorrer(item)
+            else:
+                yield chave, item
+    elif isinstance(valor, list):
+        for item in valor:
+            yield from _percorrer(item) if isinstance(item, dict | list) else iter([(None, item)])
+
+
+def _chaves(valor: Any) -> Iterator[str]:
+    if isinstance(valor, dict):
+        for chave, item in valor.items():
+            yield chave
+            yield from _chaves(item)
+    elif isinstance(valor, list):
+        for item in valor:
+            yield from _chaves(item)
+
+
+def _ler(tmp_path: Path, tabela: TabelaGlifos, texto: str, tamanho: float) -> list[str]:
+    pdf = pdf_texto_contorno(tmp_path / "t.pdf", [LinhaTexto(texto, (150.0, 150.0), tamanho)])
+    leitura = ler_texto_glifos(caminhos_do_pdf(pdf), tabela)
+    pdf.unlink()
+    return [lido.texto for lido in leitura.textos]
+
+
+# --- identidade ---------------------------------------------------------------------------------
+
+
+def test_tabela_empacotada_e_a_publicada_e_medida_no_benchmark(tabela: TabelaGlifos) -> None:
+    assert tabela.sha256 == _SHA_PUBLICADO
+    contagem = Counter(g.caractere for g in tabela.glifos)
+    assert len(tabela.glifos) == 359
+    assert contagem[None] == 1
+    assert len([c for c in contagem if c is not None]) == 74
+
+
+def test_assinatura_de_capacidade_do_servidor_usa_a_tabela_publicada() -> None:
+    pacote = PyMuPdfDocumentAnalyzer(tabela_glifos="pacote")
+    explicita = PyMuPdfDocumentAnalyzer(tabela_glifos=carregar_tabela_glifos())
+    desativada = PyMuPdfDocumentAnalyzer(tabela_glifos=None)
+    assert pacote.assinatura_capacidade == explicita.assinatura_capacidade
+    assert pacote.assinatura_capacidade != desativada.assinatura_capacidade
+
+
+# --- sem dados de folha -------------------------------------------------------------------------
+
+
+def test_json_empacotado_so_tem_as_chaves_do_formato() -> None:
+    assert set(_chaves(_bruto())) <= _CHAVES_JSON
+
+
+def test_textos_do_json_sao_so_ids_sequenciais_opacos_e_caracteres_soltos() -> None:
+    # nenhum texto livre: nada de caminho, nome de arquivo, id de PDF ou de rodada
+    bruto = _bruto()
+    textos = [(chave, v) for chave, v in _percorrer(bruto) if isinstance(v, str)]
+    ids = [v for chave, v in textos if chave == "id"]
+    assert ids == [f"g{n:04d}" for n in range(1, len(bruto["glifos"]) + 1)]
+    for chave, valor in textos:
+        if chave == "caractere":
+            assert len(valor) == 1
+        else:
+            assert (chave, valor) == ("versao", "tabela-glifos-v1") or chave == "id"
+
+
+def test_numeros_do_json_sao_relativos_ao_glifo_e_nao_coordenadas_de_pagina() -> None:
+    bruto = _bruto()
+    for glifo in bruto["glifos"]:
+        assinatura = glifo["assinatura"]
+        for contorno in assinatura["contornos"]:
+            for x, y in contorno:
+                assert abs(x) <= 1.0 and abs(y) <= 1.0
+        assert all(abs(v) <= 2.0 for v in assinatura["caixa"])
+        assert assinatura["caixa"][0] > 0 and assinatura["caixa"][1] > 0
+
+
+def test_json_empacotado_nao_cita_pasta_de_exemplos_nem_de_rodada() -> None:
+    arquivo = Path(glyph_table.__file__).parent.parent / "data" / "tabela-glifos-v1.json"
+    texto = arquivo.read_text(encoding="utf-8").lower()
+    for proibido in ("examples", "curadoria", "rodada", "users", ".json", "tmp", ":\\\\"):
+        assert proibido not in texto
+
+
+# --- coerência interna --------------------------------------------------------------------------
+
+
+def test_cada_entrada_publicada_resolve_para_o_proprio_caractere(tabela: TabelaGlifos) -> None:
+    divergentes = []
+    for entrada in tabela.glifos:
+        r = resolver_glifo(tabela, entrada.assinatura)
+        esperado = "ignorar" if entrada.caractere is None else "reconhecido"
+        if (r.situacao, r.caractere) != (esperado, entrada.caractere):
+            divergentes.append((entrada.id, entrada.caractere, r.situacao, r.caractere))
+    assert divergentes == []
+
+
+# --- leitura de contorno sintético --------------------------------------------------------------
+
+
+@pytest.mark.parametrize("tamanho", [3.0, 5.0, 7.0])
+@pytest.mark.parametrize("texto", ["0123456789", "11-300", "P7", "69 96", "N1 N2"])
+def test_tabela_real_le_algarismos_e_valores_de_poste_em_contorno(
+    tmp_path: Path, tabela: TabelaGlifos, texto: str, tamanho: float
+) -> None:
+    assert _ler(tmp_path, tabela, texto, tamanho) == [texto]
+
+
+def test_analisador_com_a_tabela_do_pacote_emite_o_texto_de_glifo(tmp_path: Path) -> None:
+    from scripts.benchmark_texto_ficha import _solicitacao, _texto_da_evidencia
+
+    pdf = pdf_texto_contorno(tmp_path / "c.pdf", [LinhaTexto("11-300", (40.0, 120.0), 5.0)])
+    resultado = PyMuPdfDocumentAnalyzer(tabela_glifos="pacote").analisar(_solicitacao(pdf))
+    medidos = [m for e in resultado.evidencias if (m := _texto_da_evidencia(e)) is not None]
+    assert [(m.texto, m.origem) for m in medidos] == [("11-300", "glifo")]
+
+
+# --- defeitos: a tabela real afirma texto errado ------------------------------------------------
+
+
+@pytest.mark.parametrize("texto", ["BI-1", "IP 11", "II7I"])
+def test_i_maiusculo_nunca_e_afirmado_como_l_minusculo(
+    tmp_path: Path, tabela: TabelaGlifos, texto: str
+) -> None:
+    # Na Helvetica/Arial "I" e "l" são a mesma barra; a tabela publica as duas letras para
+    # barras quase iguais e decide pelo ruído da caixa: o certo é ler "I" ou falhar fechado.
+    # (O mesmo acontece em corpo 3 e 7.)
+    lidos = _ler(tmp_path, tabela, texto, 5.0)
+    assert lidos in ([texto], [])
+
+
+@pytest.mark.parametrize("texto", ["11-214", "11-147", "1171", "11"])
+def test_par_11_nao_e_partido_quando_o_texto_so_tem_algarismos_planos(
+    tmp_path: Path, tabela: TabelaGlifos, texto: str
+) -> None:
+    # "11-300" é lido inteiro (teste acima); sem algarismo redondo a altura da linha cai ~3% e a
+    # lacuna "1"+"1" (0.417 h com "3"/"0") passa a 0.4302 h, acima de 0.43: o texto sai com
+    # um espaço a mais. (O mesmo acontece em corpo 3 e 7.)
+    lidos = _ler(tmp_path, tabela, texto, 5.0)
+    assert lidos in ([texto], [])
+    assert re.search(r"\d \d", " ".join(lidos)) is None
