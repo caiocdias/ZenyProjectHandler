@@ -880,8 +880,8 @@ Procedimento, na ordem:
 
 5. `publicar` escreve a tabela com os grupos aceitos (caractere, ou `ignorar` como `null`;
    `ilegivel`, `composto`, `fragmento`, `misto` e pendentes ficam de fora). Homóglifos também
-   ficam de fora: formas de caracteres diferentes com o mesmo contorno (até `tolerancia / 2`) e
-   caixa não separável (até `tolerancia + margem`), como "I" e "l"; o glifo delas falha fechado:
+   ficam de fora: todo par de formas de caracteres diferentes que o próprio resolvedor, só com as
+   duas, não devolve cada uma ao seu caractere, como "I" e "l"; o glifo delas falha fechado:
 
    ```bash
    .venv/Scripts/python.exe -m scripts.curation_glifos publicar --rodada RODADA --saida RODADA/tabela-glifos-v1.json

@@ -23,13 +23,11 @@ Cada leitor (IA) lê só os PNG de contato e grava ``curadoria-glifos-v1`` com u
 sem sobrescrever. ``consolidar`` aceita A = B; havendo divergência, grava ``divergencias.json`` e
 ``contato-divergencias/`` e sai com código 3 até existir a leitura C (que cobre só as
 divergências e desempata com um dos dois). ``publicar`` escreve a tabela de glifos
-(``tabela-glifos-v1``) com os grupos aceitos, menos os homóglifos: duas formas de caracteres
-diferentes (``ignorar`` conta como um caractere) com o mesmo desenho, a menos da escala e da
-posição (contorno a até ``tolerancia / 2``), e caixas que a resolução não separa (diferença até
-``tolerancia + margem``), só se distinguem pela altura relativa a h, que varia com o contexto
-de onde a forma veio ("I" e "l" na Arial; maiúscula e minúscula de mesmo desenho num trecho só
-de minúsculas). Nenhuma das duas é publicada: o glifo dessa forma fica desconhecido e o texto
-falha fechado, em vez de sair com o caractere trocado.
+(``tabela-glifos-v1``) com os grupos aceitos, menos os homóglifos: todo par de formas de
+caracteres diferentes (``ignorar`` conta como um caractere) que o próprio resolvedor, só com as
+duas, não devolve cada uma ao seu caractere (mesmo desenho com caixa próxima, como "I" e "l" na
+Arial ou maiúscula e minúscula de mesmo desenho). Nenhuma das duas é publicada: o glifo dessa
+forma fica desconhecido e o texto falha fechado, em vez de sair com o caractere trocado.
 """
 
 from __future__ import annotations
@@ -63,8 +61,11 @@ from zeny_project_handler.adapters.analysis.drawing_model.glyph_signature import
     distancia_assinaturas,
 )
 from zeny_project_handler.adapters.analysis.drawing_model.glyph_table import (
+    VERSAO_TABELA_GLIFOS,
     EntradaGlifo,
+    TabelaGlifos,
     carregar_tabela_glifos,
+    resolver_glifo,
     serializar_tabela_glifos,
 )
 from zeny_project_handler.adapters.analysis.drawing_model.glyph_text import (
@@ -802,24 +803,35 @@ def consolidar(rodada: Path) -> Registro | None:
 # --- publicar -------------------------------------------------------------------------------
 
 
+def _separa(tabela: TabelaGlifos, a: EntradaGlifo, b: EntradaGlifo) -> bool:
+    """O resolvedor, só com as duas entradas, devolve cada uma ao seu caractere."""
+    par = replace(tabela, glifos=(a, b))
+    for entrada in (a, b):
+        resolucao = resolver_glifo(par, entrada.assinatura)
+        esperado = "ignorar" if entrada.caractere is None else "reconhecido"
+        if (resolucao.situacao, resolucao.caractere) != (esperado, entrada.caractere):
+            return False
+    return True
+
+
 def _homoglifos(
     publicaveis: Sequence[tuple[str, str | None]],
     assinaturas: Mapping[str, AssinaturaGlifo],
     tolerancia: float,
     margem: float,
 ) -> set[str]:
-    """Grupos com uma forma de outro caractere de mesmo desenho e caixa não separável."""
+    """Grupos de algum par de caracteres diferentes que o resolvedor não separa."""
+    tabela = TabelaGlifos(VERSAO_TABELA_GLIFOS, "", tolerancia, margem, 0.0, 0.0, ())
+    entradas = [EntradaGlifo(grupo, c, assinaturas[grupo]) for grupo, c in publicaveis]
     homoglifos: set[str] = set()
-    for i, (grupo, caractere) in enumerate(publicaveis):
-        a = assinaturas[grupo]
-        for outro, outro_caractere in publicaveis[i + 1 :]:
-            b = assinaturas[outro]
-            if caractere == outro_caractere or a.subcaminhos != b.subcaminhos:
+    for i, a in enumerate(entradas):
+        for b in entradas[i + 1 :]:
+            if a.caractere == b.caractere or a.assinatura.subcaminhos != b.assinatura.subcaminhos:
                 continue
-            if diferenca_caixa(a, b) > tolerancia + margem:
+            if diferenca_caixa(a.assinatura, b.assinatura) > tolerancia:
                 continue
-            if _distancia(a, replace(b, caixa=a.caixa)) <= tolerancia / 2:
-                homoglifos.update((grupo, outro))
+            if not _separa(tabela, a, b):
+                homoglifos.update((a.id, b.id))
     return homoglifos
 
 
