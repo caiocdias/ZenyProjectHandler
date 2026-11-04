@@ -9,13 +9,14 @@ from __future__ import annotations
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
+from itertools import permutations
 from typing import Final
 
 from zeny_project_handler.adapters.analysis.drawing_model.model import ItemCaminho, Ponto
 
 PONTOS_POR_SUBCAMINHO: Final = 24
 PASSOS_BEZIER: Final = 8
-_DESLOCAMENTO_MAXIMO: Final = 3
+_PERMUTAR_ATE: Final = 4
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,7 +135,7 @@ def assinatura_glifo(
         area = abs(_area_com_sinal(poligono)) / (h * h)
         cx = ((caixa[0] + caixa[2]) / 2.0 - centro_x) / h
         cy = ((caixa[1] + caixa[3]) / 2.0 - centro_y) / h
-        chave = (-round(area, 2) + 0.0, round(cy, 2) + 0.0, round(cx, 2) + 0.0)
+        chave = (-area, cy, cx)
         itens.append((chave, contorno))
     itens.sort(key=lambda item: item[0])
 
@@ -150,18 +151,33 @@ def diferenca_caixa(a: AssinaturaGlifo, b: AssinaturaGlifo) -> float:
 
 
 def _distancia_contorno(a: Sequence[Ponto], b: Sequence[Ponto]) -> float:
+    """Distância média ponto a ponto, minimizada sobre os deslocamentos cíclicos (inteiros e de
+    meio passo, pois a fase de amostragem do contorno é arbitrária)."""
     n = len(a)
+    pontos_medios = [
+        ((b[i][0] + b[(i + 1) % n][0]) / 2.0, (b[i][1] + b[(i + 1) % n][1]) / 2.0) for i in range(n)
+    ]
     melhor = math.inf
-    for deslocamento in range(-_DESLOCAMENTO_MAXIMO, _DESLOCAMENTO_MAXIMO + 1):
-        media = sum(math.dist(a[i], b[(i + deslocamento) % n]) for i in range(n)) / n
-        melhor = min(melhor, media)
+    for alvo in (b, pontos_medios):
+        for deslocamento in range(n):
+            media = sum(math.dist(a[i], alvo[(i + deslocamento) % n]) for i in range(n)) / n
+            melhor = min(melhor, media)
     return melhor
 
 
 def distancia_assinaturas(a: AssinaturaGlifo, b: AssinaturaGlifo) -> float:
+    """Com até `_PERMUTAR_ATE` subcaminhos, minimiza também sobre o pareamento entre eles."""
     if a.subcaminhos != b.subcaminhos:
         return math.inf
-    contorno = sum(
-        _distancia_contorno(ca, cb) for ca, cb in zip(a.contornos, b.contornos, strict=True)
-    ) / max(a.subcaminhos, 1)
-    return max(diferenca_caixa(a, b), contorno)
+    n = a.subcaminhos
+    caixa = diferenca_caixa(a, b)
+    if n <= _PERMUTAR_ATE:
+        matriz = [[_distancia_contorno(ca, cb) for cb in b.contornos] for ca in a.contornos]
+        contorno = min(
+            sum(matriz[i][j] for i, j in enumerate(ordem)) for ordem in permutations(range(n))
+        )
+    else:
+        contorno = sum(
+            _distancia_contorno(ca, cb) for ca, cb in zip(a.contornos, b.contornos, strict=True)
+        )
+    return max(caixa, contorno / max(n, 1))

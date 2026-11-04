@@ -123,10 +123,25 @@ def _constante_proibida(nome: str) -> NoReturn:
     _invalida(f"constante {nome} não é permitida")
 
 
+def _sem_chaves_repetidas(pares: list[tuple[str, Any]]) -> dict[str, Any]:
+    objeto: dict[str, Any] = {}
+    for chave, valor in pares:
+        if chave in objeto:
+            _invalida(f"chave repetida {chave!r}")
+        objeto[chave] = valor
+    return objeto
+
+
 def _numero(valor: Any, nome: str) -> float:
-    if isinstance(valor, bool) or not isinstance(valor, int | float) or not math.isfinite(valor):
+    if isinstance(valor, bool) or not isinstance(valor, int | float):
         _invalida(f"{nome} deve ser número finito")
-    return float(valor)
+    try:
+        numero = float(valor)
+    except OverflowError:
+        _invalida(f"{nome} deve ser número finito")
+    if not math.isfinite(numero):
+        _invalida(f"{nome} deve ser número finito")
+    return numero
 
 
 def _objeto(valor: Any, chaves: set[str], nome: str) -> dict[str, Any]:
@@ -200,7 +215,13 @@ def carregar_tabela_glifos(caminho: Path | None = None) -> TabelaGlifos:
     para que a identidade não dependa do fim de linha do checkout."""
     conteudo = _ler_bytes(caminho).replace(b"\r\n", b"\n")
     try:
-        bruto = json.loads(conteudo.decode("utf-8"), parse_constant=_constante_proibida)
+        bruto = json.loads(
+            conteudo.decode("utf-8"),
+            parse_constant=_constante_proibida,
+            object_pairs_hook=_sem_chaves_repetidas,
+        )
+    except RecursionError as erro:
+        raise ValueError("Tabela de glifos inválida: aninhamento excessivo.") from erro
     except ValueError as erro:
         if str(erro).startswith("Tabela de glifos"):
             raise
@@ -219,7 +240,7 @@ def carregar_tabela_glifos(caminho: Path | None = None) -> TabelaGlifos:
         "tabela",
     )
     version = dados["schema_version"]
-    if isinstance(version, bool) or version != 1:
+    if type(version) is not int or version != 1:
         _invalida("schema_version deve ser 1")
     if dados["versao"] != VERSAO_TABELA_GLIFOS:
         _invalida(f"versao deve ser {VERSAO_TABELA_GLIFOS}")
