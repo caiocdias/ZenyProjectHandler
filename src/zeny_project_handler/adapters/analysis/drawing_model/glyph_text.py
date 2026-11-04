@@ -2,7 +2,12 @@
 
 Candidatos a glifo consecutivos na ordem de desenho, com a mesma cor e vizinhos, formam um
 trecho; a vizinhança de um glifo pequeno (".", ",", "-") é medida pelo maior lado da faixa ao
-lado, para que pontuação em sequência não saia do valor em silêncio.
+lado, para que pontuação em sequência não saia do valor em silêncio. Um caminho preenchido da
+mesma cor, vizinho na ordem de desenho e encostado na ponta de um trecho, mas reprovado no
+filtro de candidato (grande demais, subcaminhos ou itens demais, coordenada não finita), pode
+ser um glifo do próprio valor: o trecho não é lido e o caminho conta como desconhecido.
+A página passa a `limitada` acima de `LIMITE_GLIFOS_PAGINA` candidatos ou de
+`LIMITE_PONTOS_PAGINA` pontos achatados somados dos candidatos.
 
 O quadro do trecho põe o texto na horizontal para calcular a assinatura de cada glifo. O
 ângulo parte da reta de mínimos quadrados dos centros, orientada do primeiro para o último
@@ -26,11 +31,12 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from statistics import median, median_low
 from typing import Final
 
 from zeny_project_handler.adapters.analysis.drawing_model.glyph_signature import (
+    PASSOS_BEZIER,
     AssinaturaGlifo,
     achatar_subcaminho,
     assinatura_glifo,
@@ -43,6 +49,9 @@ from zeny_project_handler.adapters.analysis.drawing_model.glyph_table import (
 from zeny_project_handler.adapters.analysis.drawing_model.model import Caixa, Caminho, Cor, Ponto
 
 LIMITE_GLIFOS_PAGINA: Final = 20_000
+# Orçamento de pontos achatados (1 por segmento, PASSOS_BEZIER por Bézier) somados dos
+# candidatos da página: o custo da leitura cresce com os pontos, não só com os candidatos.
+LIMITE_PONTOS_PAGINA: Final = 2_000_000
 LADO_MAXIMO_GLIFO: Final = 7.0
 _LADO_MINIMO_GLIFO: Final = 0.05
 _MAXIMO_SUBCAMINHOS: Final = 8
@@ -58,6 +67,8 @@ _PONTOS_POR_TIPO: Final = {"l": 2, "c": 4}
 _DIFERENCA_QUADROS: Final = 1e-4
 _ITERACOES_REFINO: Final = 4
 _CORPO_CURTO: Final = 4
+# Quadros (fundos, topos, centros do corpo) mais afastados que isso: quadro não confirmado.
+_ESPALHAMENTO_QUADROS: Final = math.radians(1.0)
 _TIPOS_PREENCHIDOS: Final = frozenset({"preenchimento", "traco_e_preenchimento"})
 
 _ChaveAssinatura = tuple[int, tuple[float, ...], tuple[tuple[float, ...], ...]]
@@ -76,6 +87,9 @@ class TrechoGlifos:
     rotacao: float
     altura: float
     cor: Cor | None
+    # quadro não confirmado: menos de 2 glifos de corpo inteiro, ou os quadros pelos fundos,
+    # pelos topos e pelos centros do corpo divergem mais que `_ESPALHAMENTO_QUADROS`
+    quadro_incerto: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,7 +128,10 @@ class _Trecho:
     # assinaturas nos outros quadros (topos; centros do corpo inteiro) que diferem do principal
     alternativas: tuple[tuple[AssinaturaGlifo | None, ...], ...]
     # menos de 2 glifos de corpo inteiro: o quadro não é determinado e nada é lido
-    quadro_incerto: bool
+    sem_quadro: bool
+    # caminhos preenchidos vizinhos, da mesma cor e encostados numa ponta, reprovados no filtro
+    # de candidato: podem ser glifos do próprio valor, então o trecho não é lido
+    venenos: tuple[int, ...] = ()
 
 
 # --- candidatos e trechos -------------------------------------------------------------------
@@ -142,6 +159,29 @@ def _eh_candidato(caminho: Caminho) -> bool:
         return False
     x0, y0, x1, y1 = _caixa_de(pontos)
     return _LADO_MINIMO_GLIFO < max(x1 - x0, y1 - y0) < LADO_MAXIMO_GLIFO
+
+
+def _pontos_achatados(caminho: Caminho) -> int:
+    return sum(
+        1 if item.tipo == "l" else PASSOS_BEZIER
+        for subcaminho in caminho.subcaminhos
+        for item in subcaminho
+    )
+
+
+def _candidatos_limitados(caminhos: Sequence[Caminho]) -> list[int] | None:
+    """Índices dos candidatos, ou None assim que a página passa do teto de candidatos ou do
+    orçamento de pontos (a contagem para ali: página hostil não custa a varredura inteira)."""
+    indices: list[int] = []
+    pontos = 0
+    for indice, caminho in enumerate(caminhos):
+        if not _eh_candidato(caminho):
+            continue
+        indices.append(indice)
+        pontos += _pontos_achatados(caminho)
+        if len(indices) > LIMITE_GLIFOS_PAGINA or pontos > LIMITE_PONTOS_PAGINA:
+            return None
+    return indices
 
 
 def _candidato(indice: int, caminho: Caminho) -> _Candidato:
@@ -237,9 +277,12 @@ def _angulo(centros: Sequence[Ponto]) -> float:
     return angulo
 
 
-def _para_quadro(ponto: Ponto, angulo: float) -> Ponto:
-    c, s = math.cos(angulo), math.sin(angulo)
-    return (ponto[0] * c + ponto[1] * s, -ponto[0] * s + ponto[1] * c)
+def _no_quadro(candidato: _Candidato, cosseno: float, seno: float) -> list[list[Ponto]]:
+    """Polígonos do glifo girados para o quadro (cosseno e seno calculados uma vez por quadro)."""
+    return [
+        [(x * cosseno + y * seno, -x * seno + y * cosseno) for x, y in poligono]
+        for poligono in candidato.poligonos
+    ]
 
 
 def _para_pagina(ponto: Ponto, angulo: float) -> Ponto:
@@ -248,9 +291,9 @@ def _para_pagina(ponto: Ponto, angulo: float) -> Ponto:
 
 
 def _caixas_no_quadro(grupo: Sequence[_Candidato], angulo: float) -> list[Caixa]:
+    cosseno, seno = math.cos(angulo), math.sin(angulo)
     return [
-        _caixa_de([_para_quadro(p, angulo) for poligono in c.poligonos for p in poligono])
-        for c in grupo
+        _caixa_de([p for poligono in _no_quadro(c, cosseno, seno) for p in poligono]) for c in grupo
     ]
 
 
@@ -284,9 +327,8 @@ def _quadro(
     grupo: Sequence[_Candidato], angulo: float, corpo: Sequence[int]
 ) -> tuple[tuple[Caixa, ...], float, tuple[AssinaturaGlifo | None, ...]]:
     """Caixas no quadro, altura e assinaturas dos glifos no quadro de `angulo`."""
-    no_quadro = [
-        [[_para_quadro(p, angulo) for p in poligono] for poligono in c.poligonos] for c in grupo
-    ]
+    cosseno, seno = math.cos(angulo), math.sin(angulo)
+    no_quadro = [_no_quadro(c, cosseno, seno) for c in grupo]
     caixas = tuple(_caixa_de([p for poligono in pol for p in poligono]) for pol in no_quadro)
     altura = float(median(caixas[i][3] - caixas[i][1] for i in corpo))
     base = float(median(caixas[i][3] for i in corpo))
@@ -338,17 +380,19 @@ def _trecho(grupo: Sequence[_Candidato]) -> _Trecho:
     if 2 <= len(corpo) <= _CORPO_CURTO:
         outros.append(_angulo([_centro(grupo[i].caixa) for i in corpo]))
     caixas, altura, assinaturas = _quadro(grupo, angulo, corpo)
+    afastamentos = [abs(_diferenca_angular(outro, angulo)) for outro in outros]
     alternativas = tuple(
         _quadro(grupo, outro, corpo)[2]
-        for outro in outros
-        if abs(_diferenca_angular(outro, angulo)) > _DIFERENCA_QUADROS
+        for outro, afastamento in zip(outros, afastamentos, strict=True)
+        if afastamento > _DIFERENCA_QUADROS
     )
     glifos = tuple(
         GlifoDoTrecho(c.indice, c.caixa, assinatura)
         for c, assinatura in zip(grupo, assinaturas, strict=True)
     )
     rotacao = round(math.degrees(angulo), 6) % 360.0
-    publico = TrechoGlifos(glifos, rotacao, altura, grupo[0].cor)
+    incerto = len(corpo) < 2 or max(afastamentos) > _ESPALHAMENTO_QUADROS
+    publico = TrechoGlifos(glifos, rotacao, altura, grupo[0].cor, incerto)
     return _Trecho(publico, angulo, caixas, alternativas, len(corpo) < 2)
 
 
@@ -356,9 +400,42 @@ def _indices_candidatos(caminhos: Sequence[Caminho]) -> list[int]:
     return [indice for indice, caminho in enumerate(caminhos) if _eh_candidato(caminho)]
 
 
+def _envenena(caminho: Caminho, vizinho: _Candidato, lado: float) -> bool:
+    """Caminho preenchido da mesma cor, reprovado no filtro de candidato e encostado na ponta
+    do trecho: pode ser um glifo do próprio valor (grande demais, subcaminhos ou itens demais,
+    coordenada não finita). Sem coordenada finita não dá para medir, e conta como encostado."""
+    if caminho.tipo not in _TIPOS_PREENCHIDOS or caminho.estilo.preenchimento != vizinho.cor:
+        return False
+    pontos = [p for subcaminho in caminho.subcaminhos for item in subcaminho for p in item.pontos]
+    if not pontos:
+        return False
+    if not all(math.isfinite(x) and math.isfinite(y) for x, y in pontos):
+        return True
+    alcance = _FATOR_VIZINHANCA * lado
+    return math.dist(_centro(_caixa_de(pontos)), _centro(vizinho.caixa)) <= alcance
+
+
+def _venenos(
+    caminhos: Sequence[Caminho], grupo: Sequence[_Candidato], candidatos: set[int]
+) -> tuple[int, ...]:
+    lado = max(_maior_lado(c.caixa) for c in grupo)
+    pontas = ((grupo[0].indice - 1, grupo[0]), (grupo[-1].indice + 1, grupo[-1]))
+    return tuple(
+        indice
+        for indice, vizinho in pontas
+        if 0 <= indice < len(caminhos)
+        and indice not in candidatos
+        and _envenena(caminhos[indice], vizinho, lado)
+    )
+
+
 def _trechos(caminhos: Sequence[Caminho], indices: Sequence[int]) -> list[_Trecho]:
     candidatos = [_candidato(indice, caminhos[indice]) for indice in indices]
-    return [_trecho(grupo) for grupo in _agrupar(candidatos)]
+    conjunto = set(indices)
+    return [
+        replace(_trecho(grupo), venenos=_venenos(caminhos, grupo, conjunto))
+        for grupo in _agrupar(candidatos)
+    ]
 
 
 def extrair_trechos(caminhos: Sequence[Caminho]) -> tuple[TrechoGlifos, ...]:
@@ -476,7 +553,7 @@ def _concordar(principal: Resolucao, alternativa: Resolucao) -> Resolucao:
 def _resolucoes(
     trecho: _Trecho, tabela: TabelaGlifos, memoria: dict[_ChaveAssinatura, Resolucao]
 ) -> list[Resolucao]:
-    if trecho.quadro_incerto:
+    if trecho.sem_quadro:
         return [Resolucao("ambiguo", None, math.inf) for _ in trecho.publico.glifos]
     resolucoes = [_resolver(tabela, g.assinatura, memoria) for g in trecho.publico.glifos]
     for assinaturas in trecho.alternativas:
@@ -492,13 +569,17 @@ def ler_texto_glifos(caminhos: Sequence[Caminho], tabela: TabelaGlifos) -> Leitu
     topos dos glifos de corpo inteiro: em trecho curto um glifo de fundo fora da linha de base
     (a cauda do "Q") entorta um dos quadros, e um glifo que os dois quadros leem diferente é
     ambíguo (falha fechada) em vez de virar outro caractere ("Q" lido como "O")."""
-    indices = _indices_candidatos(caminhos)
-    if len(indices) > LIMITE_GLIFOS_PAGINA:
+    indices = _candidatos_limitados(caminhos)
+    if indices is None:
         return LeituraGlifos((), 0, 0, limitada=True)
     memoria: dict[_ChaveAssinatura, Resolucao] = {}
     textos: list[TextoGlifo] = []
     desconhecidos = ambiguos = 0
+    venenos: set[int] = set()
     for trecho in _trechos(caminhos, indices):
+        if trecho.venenos:
+            venenos.update(trecho.venenos)
+            continue
         resolucoes = _resolucoes(trecho, tabela, memoria)
         for grupo in _grupos_de_texto(trecho, resolucoes, tabela):
             situacoes = [resolucoes[i].situacao for i in grupo]
@@ -508,4 +589,4 @@ def ler_texto_glifos(caminhos: Sequence[Caminho], tabela: TabelaGlifos) -> Leitu
                 ambiguos += falhas[1]
                 continue
             textos.append(_texto(trecho, grupo, resolucoes, tabela))
-    return LeituraGlifos(tuple(textos), desconhecidos, ambiguos, limitada=False)
+    return LeituraGlifos(tuple(textos), desconhecidos + len(venenos), ambiguos, limitada=False)

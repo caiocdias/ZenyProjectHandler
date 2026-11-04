@@ -6,6 +6,7 @@ from __future__ import annotations
 import dataclasses
 import math
 import random
+import time
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -457,3 +458,103 @@ def test_trecho_com_menos_de_2_glifos_de_corpo_inteiro_nao_e_lido(
     assert leitura.textos == ()
     if len(texto) >= 2:
         assert leitura.ambiguos == len(texto)
+
+
+def _retangulo_preenchido(
+    x: float, y: float, lado: float, ordem: int, cor: tuple[float, float, float] = (0.0, 0.0, 0.0)
+) -> Caminho:
+    cantos = [(x, y), (x + lado, y), (x + lado, y + lado), (x, y + lado)]
+    itens = tuple(ItemCaminho("l", (cantos[i], cantos[(i + 1) % 4])) for i in range(4))
+    return Caminho((itens,), Estilo("", None, cor, 0.0, ""), "preenchimento", ordem)
+
+
+def test_glifo_do_valor_reprovado_no_filtro_envenena_as_metades(
+    tmp_path: Path, tabela: TabelaGlifos
+) -> None:
+    # a 7,5 pt "(" e ")" medem mais que LADO_MAXIMO_GLIFO: não são candidatos e abririam um
+    # buraco na ordem de desenho; as metades "P7 U4" e "S1N" não podem sair como completas
+    leitura = _ler(tmp_path, [LinhaTexto("P7 U4(1) S1N", (40.0, 60.0), 7.5)], tabela)
+
+    assert leitura.textos == ()
+    assert leitura.desconhecidos + leitura.ambiguos >= 1
+
+
+@pytest.mark.parametrize("onde", ["depois", "antes"])
+def test_preenchimento_grande_colado_da_mesma_cor_anula_o_texto(
+    tmp_path: Path, tabela: TabelaGlifos, onde: str
+) -> None:
+    pdf = pdf_texto_contorno(tmp_path / "c.pdf", [LinhaTexto("P10 N1", (40.0, 60.0), 5.0)])
+    caminhos = list(caminhos_do_pdf(pdf))
+    (trecho,) = extrair_trechos(caminhos)
+    if onde == "depois":
+        _, y0, x1, _ = trecho.glifos[-1].caixa
+        caminhos.append(_retangulo_preenchido(x1 + 0.5, y0 - 2.0, 8.0, len(caminhos)))
+    else:
+        x0, y0, _, _ = trecho.glifos[0].caixa
+        caminhos.insert(0, _retangulo_preenchido(x0 - 8.5, y0 - 2.0, 8.0, -1))
+
+    leitura = ler_texto_glifos(caminhos, tabela)
+
+    assert leitura.textos == ()
+    assert leitura.desconhecidos >= 1
+
+
+def test_preenchimento_grande_distante_ou_de_outra_cor_nao_anula_o_texto(
+    tmp_path: Path, tabela: TabelaGlifos
+) -> None:
+    pdf = pdf_texto_contorno(tmp_path / "c.pdf", [LinhaTexto("P10 N1", (40.0, 60.0), 5.0)])
+    base = list(caminhos_do_pdf(pdf))
+    _, y0, x1, _ = extrair_trechos(base)[0].glifos[-1].caixa
+    colado = _retangulo_preenchido(x1 + 0.5, y0 - 2.0, 8.0, len(base))
+    variantes = [
+        [*base, _retangulo_preenchido(x1 + 60.0, y0, 40.0, len(base))],
+        [*base, dataclasses.replace(colado, estilo=Estilo("", None, (1.0, 0.0, 0.0), 0.0, ""))],
+        [*base, dataclasses.replace(colado, tipo="traco")],
+    ]
+
+    for caminhos in variantes:
+        leitura = ler_texto_glifos(caminhos, tabela)
+        assert [t.texto for t in leitura.textos] == ["P10 N1"]
+        assert (leitura.desconhecidos, leitura.ambiguos) == (0, 0)
+
+
+def test_orcamento_de_pontos_da_pagina_limita_a_leitura(
+    tmp_path: Path, tabela: TabelaGlifos, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pdf = pdf_texto_contorno(tmp_path / "c.pdf", [LinhaTexto("P10N1", (40.0, 60.0), 5.0)])
+    caminhos = caminhos_do_pdf(pdf)
+    assert glyph_text.LIMITE_PONTOS_PAGINA >= 1_000_000
+    assert [t.texto for t in ler_texto_glifos(caminhos, tabela).textos] == ["P10N1"]
+
+    monkeypatch.setattr(glyph_text, "LIMITE_PONTOS_PAGINA", 50)
+
+    assert ler_texto_glifos(caminhos, tabela) == LeituraGlifos((), 0, 0, limitada=True)
+
+
+def test_pagina_hostil_de_candidatos_pesados_e_limitada_rapido(tabela: TabelaGlifos) -> None:
+    # 5.000 candidatos de 256 Béziers: abaixo do teto de candidatos, acima do de pontos
+    def pesado(ordem: int) -> Caminho:
+        x, y = 10.0 * (ordem % 50), 10.0 * (ordem // 50)
+        bezier = ItemCaminho("c", ((x, y), (x + 1, y + 1), (x + 2, y + 1), (x + 3, y)))
+        estilo = Estilo("", None, (0.0, 0.0, 0.0), 0.0, "")
+        return Caminho(((bezier,) * 256,), estilo, "preenchimento", ordem)
+
+    caminhos = [pesado(i) for i in range(5_000)]
+    inicio = time.perf_counter()
+
+    leitura = ler_texto_glifos(caminhos, tabela)
+
+    assert leitura.limitada
+    assert time.perf_counter() - inicio < 5.0
+
+
+@pytest.mark.parametrize(
+    ("texto", "incerto"),
+    [("P10 N1", False), ("E=612345 N=7801234", False), ("AQ", True), ("-1", True), ("Q-", True)],
+)
+def test_trecho_marca_quadro_incerto(tmp_path: Path, texto: str, incerto: bool) -> None:
+    pdf = pdf_texto_contorno(tmp_path / "c.pdf", [LinhaTexto(texto, (40.0, 60.0), 5.0)])
+
+    (trecho,) = extrair_trechos(caminhos_do_pdf(pdf))
+
+    assert trecho.quadro_incerto is incerto

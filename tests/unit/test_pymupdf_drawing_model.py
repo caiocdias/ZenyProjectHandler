@@ -467,3 +467,35 @@ def test_texto_com_matriz_gigante_nao_explode_o_casamento_de_camada(tmp_path: Pa
     assert pagina_modelo.diagnosticos == ()
     camadas = {t.texto: t.camada for t in pagina_modelo.textos}
     assert camadas["P1"] == "P"
+
+
+def test_desenho_com_itens_invalidos_sai_sozinho_e_o_vizinho_fica(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def preenchido(x: float, itens: Any) -> dict[str, Any]:
+        return {
+            "type": "f",
+            "items": itens,
+            "fill": (0.0, 0.0, 0.0),
+            "color": None,
+            "width": 0.0,
+            "rect": pymupdf.Rect(x, 10, x + 2, 12),
+            "layer": "",
+        }
+
+    desenhos = [
+        preenchido(10, [("l", "nao e ponto", None)]),
+        preenchido(20, [("c", pymupdf.Point(20, 10))]),
+        preenchido(30, [("l", pymupdf.Point(30, 10), pymupdf.Point(32, 10))]),
+    ]
+    pdf = tmp_path / "vazio.pdf"
+    with pymupdf.open() as documento:
+        documento.new_page(width=100, height=100)
+        documento.save(pdf)
+    monkeypatch.setattr(pymupdf.Page, "get_drawings", lambda _pagina, extended=False: desenhos)
+
+    with pymupdf.open(pdf) as documento:
+        (caminho,) = pymupdf_drawing_model.caminhos_da_pagina(documento[0])
+
+    assert caminho.ordem == 2
+    assert caminho.subcaminhos[0][0].pontos == ((30.0, 10.0), (32.0, 10.0))

@@ -315,6 +315,8 @@ def _subcaminhos(
         if operacao == "l":
             novo = ItemCaminho("l", (transformar(item[1]), transformar(item[2])))
         elif operacao == "c":
+            if len(item) < 5:
+                raise ValueError("Bézier sem os quatro pontos.")
             novo = ItemCaminho("c", tuple(transformar(p) for p in item[1:5]))
         else:
             continue
