@@ -54,7 +54,15 @@ class JsonDrawingModelCache:
             if bruto.get("schema_version") != _SCHEMA_VERSION:
                 return None
             modelo = _decodificar_modelo(cast(dict[str, Any], bruto["modelo"]))
-        except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        except (
+            OSError,
+            ValueError,
+            TypeError,
+            KeyError,
+            AttributeError,
+            ArithmeticError,
+            RecursionError,
+        ):
             return None
         return modelo if modelo.versao == VERSAO_MODELO_DESENHO else None
 
@@ -115,6 +123,13 @@ def _inteiro(valor: object) -> int:
     return valor
 
 
+def _natural(valor: object) -> int:
+    inteiro = _inteiro(valor)
+    if inteiro < 0:
+        raise _CacheInvalidoError("valor não negativo esperado")
+    return inteiro
+
+
 def _booleano(valor: object) -> bool:
     if not isinstance(valor, bool):
         raise _CacheInvalidoError("booleano esperado")
@@ -125,6 +140,13 @@ def _numero(valor: object) -> float:
     if isinstance(valor, bool) or not isinstance(valor, (int, float)):
         raise _CacheInvalidoError("número esperado")
     return float(valor)
+
+
+def _dimensao(valor: object) -> float:
+    numero = _numero(valor)
+    if numero < 0:
+        raise _CacheInvalidoError("valor não negativo esperado")
+    return numero
 
 
 def _numeros(valor: object, quantidade: int) -> tuple[float, ...]:
@@ -152,7 +174,7 @@ def _cor(valor: object) -> tuple[float, float, float] | None:
 
 
 def _inteiros(valor: object) -> tuple[int, ...]:
-    return tuple(_inteiro(item) for item in _lista(valor))
+    return tuple(_natural(item) for item in _lista(valor))
 
 
 def _textos(valor: object) -> tuple[str, ...]:
@@ -204,7 +226,7 @@ def _texto_modelo(valor: object) -> TextoModelo:
         bbox=_caixa(bruto["bbox"]),
         origem=origem,
         rotacao=_numero(bruto["rotacao"]),
-        altura=_numero(bruto["altura"]),
+        altura=_dimensao(bruto["altura"]),
         fonte=_texto(bruto["fonte"]),
         camada=_texto(bruto["camada"]),
     )
@@ -244,8 +266,8 @@ def _imagem(valor: object) -> ImagemModelo:
     bruto = _objeto(valor)
     return ImagemModelo(
         _caixa(bruto["bbox"]),
-        _inteiro(bruto["largura_px"]),
-        _inteiro(bruto["altura_px"]),
+        _natural(bruto["largura_px"]),
+        _natural(bruto["altura_px"]),
         _texto(bruto["sha256"]),
         _booleano(bruto["de_anotacao"]),
     )
@@ -254,9 +276,9 @@ def _imagem(valor: object) -> ImagemModelo:
 def _pagina(valor: object) -> PaginaModelo:
     bruto = _objeto(valor)
     return PaginaModelo(
-        indice=_inteiro(bruto["indice"]),
-        largura=_numero(bruto["largura"]),
-        altura=_numero(bruto["altura"]),
+        indice=_natural(bruto["indice"]),
+        largura=_dimensao(bruto["largura"]),
+        altura=_dimensao(bruto["altura"]),
         caminhos=tuple(_caminho(i) for i in _lista(bruto["caminhos"])),
         textos=tuple(_texto_modelo(i) for i in _lista(bruto["textos"])),
         primitivas=tuple(_primitiva(i) for i in _lista(bruto["primitivas"])),
