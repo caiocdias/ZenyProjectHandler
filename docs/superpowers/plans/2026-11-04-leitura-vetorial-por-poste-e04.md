@@ -101,7 +101,7 @@ def test_drawing_model_puro_nao_importa_pymupdf() -> None: ...    # em test_arch
   - `ImpressaoEstrutural(produtor: str, criador: str, nomes_ocg: tuple[str, ...], spans_texto_nativo: int, formas_glifo: int, anotacoes_shx: int, imagens: int)` (dataclass pura, preenchida pela Task 3; `formas_glifo` usa o critério vigente `_is_glyph` de `pymupdf_glyphs.py`: tipo `f`, até 256 itens, lados entre 0,05 e 6 pt);
   - `FAMILIAS: Final = ("electric_office_print", "itext", "ghostscript", "autocad", "generico")`, `LIMIAR_FORMAS_GLIFO: Final = 300`;
   - `reconhecer_familia(impressao: ImpressaoEstrutural) -> PerfilFamilia`, nesta ordem: `autocad` se `"pdfplot"` ou `"autocad"` em produtor/criador (sem diferenciar maiúsculas), ou `anotacoes_shx > 0`, ou há OCGs; `itext` se `"itext"` no produtor; `ghostscript` se `"ghostscript"` no produtor; `electric_office_print` se `"print to pdf"` no produtor e `formas_glifo >= LIMIAR_FORMAS_GLIFO`; `"print to pdf"` sem esse sinal → `generico` com diagnóstico `"familia.print_to_pdf_sem_glifos"`; o resto → `generico` com `"familia.desconhecida"`. `sinais` traz só valores derivados (`ocgs`, `spans_texto_nativo`, `formas_glifo`, `anotacoes_shx`, `imagens` e booleanos `produtor_itext`, `produtor_ghostscript`, `produtor_print_to_pdf`, `produtor_autocad`), nunca produtor/criador brutos;
-  - `agrupar_candidatos(primitivas: Sequence[Polilinha | Circulo | Arco], caminhos: Sequence[Caminho], *, folga: float = 1.5, lado_maximo: float = 40.0) -> tuple[GrupoCandidato, ...]`: os elementos agrupados são as primitivas e os caminhos de tipo `"preenchimento"`/`"traco_e_preenchimento"` que não aparecem nas `origens` de nenhum `Circulo`/`Arco` (polígonos e glifos preenchidos); union-find com grade espacial sobre caixas dilatadas por `folga`; descarta grupos com lado maior que `lado_maximo` pt e grupos formados por uma única polilinha aberta de dois pontos.
+  - `agrupar_candidatos(primitivas: Sequence[Polilinha | Circulo | Arco], caminhos: Sequence[Caminho], *, folga: float = 1.5, lado_maximo: float = 40.0) -> tuple[GrupoCandidato, ...]`: os elementos agrupados são as primitivas e os caminhos que não foram convertidos **inteiramente** num `Circulo` (todos os seus itens viraram o mesmo círculo) e que são de tipo `"preenchimento"`/`"traco_e_preenchimento"` (polígonos e glifos preenchidos, inclusive os que têm só uma parte reconhecida como arco) ou de tipo `"traco"` com algum item `c` não coberto por círculo ou arco (elipses e curvas livres traçadas); union-find com grade espacial sobre caixas dilatadas por `folga`; descarta grupos com lado maior que `lado_maximo` pt e grupos formados por uma única polilinha aberta de dois pontos.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -117,6 +117,8 @@ def test_sinais_nao_trazem_produtor_bruto() -> None: ...   # produtor com caminh
 def test_agrupa_circulo_e_tracos_proximos_num_grupo() -> None: ...
 def test_triangulo_preenchido_entra_no_grupo_pelos_caminhos() -> None: ...   # indices_caminhos == (i,)
 def test_caminho_que_virou_circulo_nao_entra_duas_vezes() -> None: ...
+def test_preenchido_com_arco_parcial_entra_pelos_caminhos() -> None: ...   # "D" preenchido
+def test_elipse_tracada_entra_pelos_caminhos() -> None: ...
 def test_nao_agrupa_formas_distantes() -> None: ...
 def test_descarta_grupo_maior_que_lado_maximo() -> None: ...
 def test_agrupamento_escala_linearmente() -> None: ...      # 10k e 20k círculos pequenos: razão de tempo < 3
@@ -274,4 +276,7 @@ def test_amostra_inclui_ladrilho_que_cruza_grupo_e_sorteio_estavel(tmp_path) -> 
 
 ## Revisão de arquitetura
 
-(preenchida pelo orquestrador após a revisão)
+- **Veredito:** aprovado com notas, na rodada 2 (`revisor-arquitetura`, modelo opus).
+- **Rodadas:** 2. Rodada 0 bloqueou com 6 Importantes (modelo descartava contornos e Béziers que a E05/E06 consomem; texto de anotação como nativo; camada do texto indefinida; fronteira do ezdxf sem guarda; método da H3 cego a raster; regras de família sem conferência nas folhas reais) e 12 Menores; rodada 1 resolveu todos e bloqueou com 3 Importantes novos (guarda de `application/` × PIL; ladrilhos fora da inspeção da H3; preenchidos fora dos grupos); rodada 2 aprovou.
+- **Notas Menores da rodada 2:** caminho preenchido com arco parcial e curva traçada que não é círculo ficavam fora dos grupos — aplicadas no texto da Task 2 (`agrupar_candidatos`), com dois testes a mais.
+- **Não verificado pelo revisor:** se `get_texttrace()` da PyMuPDF 1.28 expõe `layer` (o plano prevê a alternativa) e o comportamento de `_is_glyph` com `get_drawings(extended=True)` depois de filtrar `clip`/`group`.
