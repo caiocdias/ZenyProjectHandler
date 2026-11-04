@@ -85,3 +85,37 @@ def test_dimensoes_abaixo_do_teto_mantem_o_digest_de_pixels(tmp_path: Path) -> N
     assert (anotacoes[0].largura_px, anotacoes[0].altura_px) == (6, 6)
     assert anotacoes[0].sha256 == hashlib.sha256(digest).hexdigest()
     assert anotacoes[0].sha256 != hashlib.sha256(_fluxo_bruto(pdf, xref)).hexdigest()
+
+
+def test_referencia_em_ciclo_na_largura_usa_o_fluxo_bruto(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base = tmp_path / "base.pdf"
+    xref = _pdf_com_carimbo(base)
+    sem_compressao = tmp_path / "indireta.pdf"
+    with pymupdf.open(base) as documento:
+        numero = documento.get_new_xref()
+        documento.update_object(numero, "200000")
+        documento.xref_set_key(xref, "Width", f"{numero} 0 R")
+        documento.save(sem_compressao, garbage=0, deflate=False, expand=0)
+    # `update_object` não aceita um objeto que é só referência: o ciclo (N 0 R dentro de N)
+    # entra no arquivo com o mesmo tamanho, sem mexer nos offsets da tabela xref.
+    original = f"{numero} 0 obj\n200000\nendobj".encode()
+    ciclo = f"{numero} 0 obj\n{f'{numero} 0 R':<6}\nendobj".encode()
+    assert len(ciclo) == len(original)
+    bruto = sem_compressao.read_bytes()
+    assert bruto.count(original) == 1
+    pdf = tmp_path / "ciclo.pdf"
+    pdf.write_bytes(bruto.replace(original, ciclo))
+    esperado = hashlib.sha256(_fluxo_bruto(pdf, xref)).hexdigest()
+
+    def _proibido(*_argumentos: object) -> object:
+        raise AssertionError("largura desconhecida não pode ser decodificada")
+
+    monkeypatch.setattr(pymupdf, "Pixmap", _proibido)
+    pagina = extrair_modelo_desenho(pdf).paginas[0]
+
+    assert "modelo.imagens_anotacao_falhou" not in pagina.diagnosticos
+    anotacoes = [i for i in pagina.imagens if i.de_anotacao]
+    assert len(anotacoes) == 1 and anotacoes[0].sha256 == esperado
+    assert anotacoes[0].largura_px == 0

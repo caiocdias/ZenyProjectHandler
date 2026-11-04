@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import re
 from collections import defaultdict
 from collections.abc import Callable, Iterable, Sequence
 from contextlib import suppress
@@ -64,6 +65,11 @@ _MARGEM_TEXTO: Final = 2.0
 # digest: acima dele, a identidade é o sha256 do fluxo bruto, sem decodificar (PDF hostil).
 # Mesma ordem de grandeza de MAXIMUM_GLYPH_PIXELS.
 _MAXIMO_PIXELS_IMAGEM_ANOTACAO: Final = 16_000_000
+# Elos de referência indireta seguidos ao ler /Width e /Height; além disso, ou num ciclo, a
+# dimensão é desconhecida e a imagem vai pelo fluxo bruto.
+_PROFUNDIDADE_REFERENCIA: Final = 32
+_NUMERO_PDF: Final = re.compile(r"[+-]?(?:\d+\.?\d*|\.\d+)")
+_REFERENCIA_PDF: Final = re.compile(r"(\d+) \d+ R")
 
 _T = TypeVar("_T")
 _Transformar = Callable[[Any], Ponto]
@@ -490,24 +496,39 @@ def _imagens_da_pagina(pagina: Any) -> tuple[ImagemModelo, ...]:
     )
 
 
-def _inteiro_do_objeto(documento: Any, xref: int, chave: str) -> int:
-    tipo, valor = documento.xref_get_key(xref, chave)
-    return int(valor) if tipo == "int" else 0
+def _numero_arredondado(texto: str) -> int:
+    """Número PDF (inteiro ou real) arredondado para cima; o resto vale 0, como na MuPDF."""
+    return math.ceil(float(texto)) if _NUMERO_PDF.fullmatch(texto) else 0
 
 
-def _sha256_da_imagem_de_anotacao(documento: Any, xref: int, largura: int, altura: int) -> str:
-    if largura * altura > _MAXIMO_PIXELS_IMAGEM_ANOTACAO:
+def _dimensao_da_imagem(documento: Any, xref: int, chave: str) -> int | None:
+    """/Width ou /Height com referências indiretas resolvidas; None se a cadeia não termina."""
+    tipo, texto = documento.xref_get_key(xref, chave)
+    if tipo not in {"int", "float", "xref"}:
+        return 0
+    for _ in range(_PROFUNDIDADE_REFERENCIA):
+        referencia = _REFERENCIA_PDF.fullmatch(texto)
+        if referencia is None:
+            return _numero_arredondado(texto)
+        texto = str(documento.xref_object(int(referencia.group(1)), compressed=True)).strip()
+    return None
+
+
+def _sha256_da_imagem_de_anotacao(
+    documento: Any, xref: int, largura: int | None, altura: int | None
+) -> str:
+    if largura is None or altura is None or largura * altura > _MAXIMO_PIXELS_IMAGEM_ANOTACAO:
         return hashlib.sha256(bytes(documento.xref_stream_raw(xref) or b"")).hexdigest()
     return _sha256_do_digest(pymupdf.Pixmap(documento, xref).digest)
 
 
 def _imagem_de_anotacao(documento: Any, xref: int, caixa: Caixa) -> ImagemModelo:
-    largura = _inteiro_do_objeto(documento, xref, "Width")
-    altura = _inteiro_do_objeto(documento, xref, "Height")
+    largura = _dimensao_da_imagem(documento, xref, "Width")
+    altura = _dimensao_da_imagem(documento, xref, "Height")
     return ImagemModelo(
         bbox=caixa,
-        largura_px=largura,
-        altura_px=altura,
+        largura_px=largura or 0,
+        altura_px=altura or 0,
         sha256=_sha256_da_imagem_de_anotacao(documento, xref, largura, altura),
         de_anotacao=True,
     )
