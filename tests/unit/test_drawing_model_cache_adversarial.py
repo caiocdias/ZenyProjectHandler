@@ -787,3 +787,104 @@ def test_valor_negativo_onde_nao_cabe_equivale_a_cache_vazio(
     texto = _json_com(tmp_path, mutar)
     cache = _reescrever(tmp_path / "x", texto)
     assert cache.obter(_CHAVE) is None
+
+
+# --- terceira rodada: prende a correção de estouro, recursão e negativos -----------------
+
+
+@pytest.mark.parametrize(
+    "mutar",
+    [
+        lambda b: _pag(b)["primitivas"][1].__setitem__("origens", [0, -1]),
+        lambda b: _pag(b)["primitivas"][2].__setitem__("origens", [-9]),
+        lambda b: _pag(b)["primitivas"][3].__setitem__("origens", [1, 2, -3]),
+        lambda b: _pag(b)["grupos"][1].__setitem__("indices_caminhos", [0, -1]),
+        lambda b: b["modelo"]["paginas"][1]["grupos"][0].__setitem__("indices_primitivas", [-2]),
+        lambda b: b["modelo"]["paginas"][1].__setitem__("indice", -4),
+        lambda b: _pag(b)["textos"][0].__setitem__("altura", -3.5),
+        lambda b: _pag(b)["textos"][1].__setitem__("altura", -1e-9),
+    ],
+    ids=[
+        "origens_circulo",
+        "origens_arco_a",
+        "origens_arco_b",
+        "grupo_vazio_com_negativo_depois",
+        "segunda_pagina_indices_primitivas",
+        "segunda_pagina_indice",
+        "texto_altura",
+        "texto_altura_minuscula",
+    ],
+)
+def test_negativo_em_primitivas_grupos_e_paginas_posteriores_e_rejeitado(
+    tmp_path: Path, mutar: Callable[[dict[str, Any]], object]
+) -> None:
+    texto = _json_com(tmp_path, mutar)
+    assert _reescrever(tmp_path / "x", texto).obter(_CHAVE) is None
+
+
+def test_zero_e_valores_limite_nao_negativos_continuam_validos(tmp_path: Path) -> None:
+    modelo = _modelo_completo()
+    pagina = replace(
+        modelo.paginas[0],
+        indice=0,
+        largura=0.0,
+        altura=0.0,
+        imagens=(ImagemModelo((0.0, 0.0, 0.0, 0.0), 0, 0, "0" * 64, False),),
+        grupos=(GrupoCandidato((0.0,) * 4, (0,), (0,)),),
+    )
+    cache, _ = _salvar(tmp_path, replace(modelo, paginas=(pagina,)))
+    assert cache.obter(_CHAVE) == replace(modelo, paginas=(pagina,))
+
+
+def test_negativos_legitimos_de_geometria_continuam_aceitos(tmp_path: Path) -> None:
+    # coordenadas, rotação e ângulos podem ser negativos; só índices e dimensões não
+    modelo = _modelo_completo()
+    cache, _ = _salvar(tmp_path, modelo)
+    lido = cache.obter(_CHAVE)
+    assert lido is not None
+    assert lido.paginas[0].caminhos[0].subcaminhos[2][0].pontos[0][0] == -3.25
+    texto = lido.paginas[0].textos[1]
+    assert str(texto.rotacao) == "-0.0"
+
+
+def test_erro_de_programacao_na_decodificacao_nao_e_engolido(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cache, _ = _salvar(tmp_path)
+
+    def _bug(_valor: object) -> ModeloDesenho:
+        raise RuntimeError("bug")
+
+    monkeypatch.setattr(modulo_cache, "_decodificar_modelo", _bug)
+    with pytest.raises(RuntimeError):
+        cache.obter(_CHAVE)
+
+
+def test_aritmetica_fora_da_decodificacao_nao_e_engolida_em_salvar(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cache = JsonDrawingModelCache(tmp_path)
+
+    def _estouro(_valor: object) -> object:
+        raise OverflowError("x")
+
+    monkeypatch.setattr(modulo_cache, "_codificar", _estouro)
+    with pytest.raises(OverflowError):
+        cache.salvar(_CHAVE, _modelo_completo())
+    assert not list(tmp_path.rglob("*.json"))
+
+
+def test_aritmetica_na_decodificacao_vira_cache_vazio_e_reextrai(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pdf = _pdf(tmp_path / "a.pdf")
+    cache = JsonDrawingModelCache(tmp_path / "c")
+    obter_modelo_desenho(pdf, cache)
+    alvo = next((tmp_path / "c").rglob("*.json"))
+    bruto = json.loads(alvo.read_text(encoding="utf-8"))
+    bruto["modelo"]["paginas"][0]["largura"] = 10**400
+    alvo.write_text(json.dumps(bruto), encoding="utf-8")
+    chamadas = _contar_extracoes(monkeypatch)
+    modelo = obter_modelo_desenho(pdf, cache)
+    assert len(chamadas) == 1
+    assert modelo.paginas[0].largura == 200.0
