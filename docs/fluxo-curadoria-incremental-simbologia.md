@@ -846,9 +846,15 @@ Procedimento, na ordem:
    por folha):
 
    ```bash
-   .venv/Scripts/python.exe -m scripts.curation_glifos agrupar --pdfs examples --rodada RODADA --excluir-sha RESERVADAS.txt
+   .venv/Scripts/python.exe -m scripts.curation_glifos agrupar --pdfs examples --rodada RODADA --excluir-sha RESERVADAS.txt --min-membros 3
    ```
 
+   `--min-membros N` (padrão 1) deixa de fora das folhas de contato, de `celulas.json` e da
+   exigência de rótulo os grupos com menos de N membros; `h1.json` registra quantos grupos e
+   glifos ficaram sem rótulo por esse corte (`grupos_nao_rotulados`, `glifos_nao_rotulados`),
+   reservados à fábrica de rótulos, e lista as formas que só aparecem em trechos de quadro
+   incerto (`formas_incertas`). `--excluir-sha` aceita só sha256 de 64 dígitos hexadecimais,
+   um por linha (linha vazia ou iniciada por `#` é ignorada); outra linha é erro.
 2. Regra de parada, antes de despachar leitores: leia `h1.json`. Mais de 600 grupos, menos de 50%
    dos candidatos das famílias de contorno em trechos (`fracao_candidatos_em_trecho`) ou mais de
    30% dos glifos excluídos por quadro incerto (`fracao_excluida_quadro_incerto`): pare e

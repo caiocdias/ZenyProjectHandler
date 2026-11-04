@@ -447,3 +447,60 @@ def test_publicar_exige_consolidacao_e_nao_sobrescreve(
     assert main(["publicar", "--rodada", str(rodada), "--saida", str(saida)]) == 0
     assert main(["publicar", "--rodada", str(rodada), "--saida", str(saida)]) == 1
     assert "já existe" in capsys.readouterr().err
+
+
+# --- --min-membros e formas incertas ------------------------------------------------------
+
+
+def _agrupar_com_corte(pdfs: Path, destino: Path, minimo: str) -> int:
+    argv = ["agrupar", "--pdfs", str(pdfs), "--rodada", str(destino), "--min-membros", minimo]
+    return main(argv)
+
+
+def test_agrupar_min_membros_corta_grupos_raros_e_registra_no_h1(
+    rodada_base: tuple[Path, Path, Path], tmp_path: Path
+) -> None:
+    saida = tmp_path / "corte"
+    assert _agrupar_com_corte(rodada_base[1], saida, "2") == 0
+    grupos = _grupos(saida)
+    assert len(grupos) == len(LETRAS) - 2
+    assert all(g["membros"] >= 2 for g in grupos)
+    assert [c["id"] for c in _json(saida / "celulas.json")["celulas"]] == [g["id"] for g in grupos]
+    h1 = _json(saida / "h1.json")
+    assert (h1["min_membros"], h1["grupos_nao_rotulados"], h1["glifos_nao_rotulados"]) == (2, 2, 2)
+
+
+def test_agrupar_min_membros_padrao_nao_corta_nada(rodada: Path) -> None:
+    h1 = _json(rodada / "h1.json")
+    assert (h1["min_membros"], h1["grupos_nao_rotulados"], h1["glifos_nao_rotulados"]) == (1, 0, 0)
+
+
+def test_validar_nao_exige_rotulo_de_grupo_cortado(
+    rodada_base: tuple[Path, Path, Path], tmp_path: Path
+) -> None:
+    saida = tmp_path / "corte"
+    assert _agrupar_com_corte(rodada_base[1], saida, "2") == 0
+    rotulos: list[Registro] = [{"grupo": g["id"], "marca": "ilegivel"} for g in _grupos(saida)]
+    assert _validar(saida, "a", _leitura(tmp_path, "a", rotulos)) == 0
+
+
+def test_agrupar_recusa_min_membros_invalido(
+    rodada_base: tuple[Path, Path, Path], tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert _agrupar_com_corte(rodada_base[1], tmp_path / "r0", "0") == 1
+    assert "--min-membros" in capsys.readouterr().err
+    assert _agrupar_com_corte(rodada_base[1], tmp_path / "r9", "999") == 1
+    assert "membros suficientes" in capsys.readouterr().err
+
+
+def test_h1_lista_as_formas_que_so_aparecem_em_trechos_incertos(tmp_path: Path) -> None:
+    pdfs = tmp_path / "pdfs"
+    pdfs.mkdir()
+    pdf_texto_contorno(pdfs / "a.pdf", [LinhaTexto(TEXTO_A, (20.0, 60.0), 5.0)])
+    pdf_texto_contorno(pdfs / "b.pdf", [LinhaTexto("-=", (20.0, 60.0), 5.0)])
+    rodada = tmp_path / "r"
+    assert main(["agrupar", "--pdfs", str(pdfs), "--rodada", str(rodada)]) == 0
+    formas = _json(rodada / "h1.json")["por_familia"]["generico"]["formas_incertas"]
+    assert len(formas) == 2
+    assert set(formas[0]) == {"subcaminhos", "caixa"}
+    assert "a.pdf" not in json.dumps(formas)

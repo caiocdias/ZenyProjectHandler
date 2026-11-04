@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import math
+import re
 import sys
 import unicodedata
 from collections import Counter
@@ -83,6 +84,7 @@ LEITORES: Final = ("a", "b", "c")
 MARCAS: Final = ("ignorar", "ilegivel", "composto", "fragmento", "misto")
 MARCAS_CONTADAS: Final = ("composto", "fragmento", "misto")
 LIMIAR_PADRAO: Final = 0.04
+_SHA256: Final = re.compile(r"[0-9a-f]{64}")
 GRUPOS_POR_FOLHA: Final = 40
 CODIGO_DIVERGENCIAS: Final = 3
 LIMITE_EXCLUSAO_INCERTA: Final = 0.30
@@ -174,6 +176,10 @@ def _chave_da_forma(assinatura: AssinaturaGlifo) -> _ChaveForma:
     )
 
 
+def _chave_exata(assinatura: AssinaturaGlifo) -> tuple[Any, ...]:
+    return (assinatura.subcaminhos, assinatura.caixa, assinatura.contornos)
+
+
 def _distancia(a: AssinaturaGlifo, b: AssinaturaGlifo) -> float:
     return min(distancia_assinaturas(a, b), distancia_assinaturas(b, a))
 
@@ -196,12 +202,23 @@ def _colher_trecho(
             colheita.incertas.setdefault(familia, set()).add(chave)
             continue
         forma = colheita.formas.setdefault(chave, _Forma(glifo.assinatura, chave))
+        if _chave_exata(glifo.assinatura) < _chave_exata(forma.assinatura):
+            forma.assinatura = glifo.assinatura
         forma.instancias.append(_Referencia(*ref, indice))
         forma.familias[familia] += 1
         forma.folhas.add(len(colheita.folhas) - 1)
 
 
 def _colher_pdf(colheita: _Colheita, indice: int, caminho: Path) -> None:
+    try:
+        _colher_pdf_sem_tratar(colheita, indice, caminho)
+    except (RuntimeError, ValueError, OSError) as erro:
+        raise RodadaError(
+            f"PDF ilegível (sha256 {hash_arquivo(caminho)[:12]}): {type(erro).__name__}"
+        ) from erro
+
+
+def _colher_pdf_sem_tratar(colheita: _Colheita, indice: int, caminho: Path) -> None:
     familia = extrair_modelo_desenho(caminho).familia.familia
     colheita.folhas.append(hash_arquivo(caminho)[:12])
     estatistica = colheita.familias.setdefault(familia, _Estatistica())
@@ -295,6 +312,9 @@ def _h1(colheita: _Colheita, excluidas: int) -> Registro:
             "glifos_excluidos_quadro_incerto": e.excluidos,
             "fracao_excluida_quadro_incerto": _fracao(e.excluidos, e.glifos_em_trecho),
             "formas_so_em_trechos_incertos": len(so_incertas),
+            "formas_incertas": [
+                {"subcaminhos": chave[0], "caixa": list(chave[1])} for chave in sorted(so_incertas)
+            ],
         }
     totais = list(colheita.familias.values())
     glifos = sum(e.glifos_em_trecho for e in totais)
@@ -482,22 +502,38 @@ def _folhas_reservadas(arquivo: Path | None) -> set[str]:
     if arquivo is None:
         return set()
     try:
-        linhas = arquivo.read_text(encoding="utf-8").splitlines()
-    except OSError as erro:
+        linhas = arquivo.read_text(encoding="utf-8-sig").splitlines()
+    except (OSError, UnicodeDecodeError) as erro:
         raise RodadaError(f"lista de folhas reservadas ilegível: {arquivo.name}") from erro
-    return {linha.strip().lower() for linha in linhas if linha.strip()}
+    reservadas: set[str] = set()
+    for numero, bruta in enumerate(linhas, 1):
+        linha = bruta.strip().lower()
+        if not linha or linha.startswith("#"):
+            continue
+        if not _SHA256.fullmatch(linha):
+            raise RodadaError(
+                f"linha {numero} de {arquivo.name} não é um sha256 de 64 dígitos hexadecimais"
+            )
+        reservadas.add(linha)
+    return reservadas
 
 
 def agrupar(
-    pdfs_dir: Path, rodada: Path, limiar: float = LIMIAR_PADRAO, excluir_sha: Path | None = None
+    pdfs_dir: Path,
+    rodada: Path,
+    limiar: float = LIMIAR_PADRAO,
+    excluir_sha: Path | None = None,
+    min_membros: int = 1,
 ) -> Registro:
     if not limiar > 0:
         raise RodadaError("--limiar deve ser positivo")
+    if min_membros < 1:
+        raise RodadaError("--min-membros deve ser pelo menos 1")
     if (rodada / "grupos.json").exists():
         raise RodadaError("a rodada de glifos já existe: escolha outro diretório")
     reservadas = _folhas_reservadas(excluir_sha)
-    todos = descobrir_pdfs(pdfs_dir)
-    pdfs = [p for p in todos if hash_arquivo(p) not in reservadas]
+    todos = {hash_arquivo(p): p for p in descobrir_pdfs(pdfs_dir)}
+    pdfs = [p for sha, p in sorted(todos.items()) if sha not in reservadas]
     if not pdfs:
         raise RodadaError("todas as folhas estão reservadas: nada a agrupar")
     colheita = _Colheita()
@@ -505,13 +541,26 @@ def agrupar(
         _colher_pdf(colheita, indice, caminho)
     if not colheita.formas:
         raise RodadaError("nenhum glifo em trecho de quadro confirmado nas folhas")
-    grupos = _agrupar_formas(list(colheita.formas.values()), limiar)
+    todos_grupos = _agrupar_formas(list(colheita.formas.values()), limiar)
+    grupos = [g for g in todos_grupos if g.membros >= min_membros]
+    if not grupos:
+        raise RodadaError("nenhum grupo com membros suficientes para rotular")
     registros = [_registro_do_grupo(n, g, colheita.folhas) for n, g in enumerate(grupos, 1)]
     celulas = _celulas(pdfs, grupos)
     h1 = _h1(colheita, len(todos) - len(pdfs))
+    sem_rotulo = todos_grupos[len(grupos) :]
+    h1["min_membros"] = min_membros
+    h1["grupos_nao_rotulados"] = len(sem_rotulo)
+    h1["glifos_nao_rotulados"] = sum(g.membros for g in sem_rotulo)
     h1["folhas_de_contato"] = _gravar_folhas(celulas, rodada / "contato")
     escrever_json_atomico(
-        rodada / "grupos.json", {"formato": FORMATO_GRUPOS, "limiar": limiar, "grupos": registros}
+        rodada / "grupos.json",
+        {
+            "formato": FORMATO_GRUPOS,
+            "limiar": limiar,
+            "min_membros": min_membros,
+            "grupos": registros,
+        },
     )
     escrever_json_atomico(rodada / "celulas.json", {"formato": FORMATO_CELULAS, "celulas": celulas})
     escrever_json_atomico(rodada / "h1.json", h1)
@@ -519,6 +568,15 @@ def agrupar(
 
 
 # --- leituras -------------------------------------------------------------------------------
+
+
+def _ler(arquivo: Path) -> Any:
+    try:
+        return ler_json(arquivo)
+    except RecursionError:
+        raise RodadaError(f"JSON aninhado demais em {arquivo.name}") from None
+    except UnicodeDecodeError:
+        raise RodadaError(f"{arquivo.name} não é texto UTF-8") from None
 
 
 def _objeto(dados: Any, nome: str) -> Registro:
@@ -531,7 +589,7 @@ def _carregar_grupos(rodada: Path) -> list[Registro]:
     arquivo = rodada / "grupos.json"
     if not arquivo.is_file():
         raise RodadaError("grupos.json ausente: rode agrupar antes")
-    grupos = _objeto(ler_json(arquivo), "grupos.json").get("grupos")
+    grupos = _objeto(_ler(arquivo), "grupos.json").get("grupos")
     if not isinstance(grupos, list):
         raise RodadaError("grupos.json malformado")
     return grupos
@@ -541,7 +599,7 @@ def _carregar_divergencias(rodada: Path) -> list[str] | None:
     arquivo = rodada / "divergencias.json"
     if not arquivo.is_file():
         return None
-    grupos = _objeto(ler_json(arquivo), "divergencias.json").get("grupos")
+    grupos = _objeto(_ler(arquivo), "divergencias.json").get("grupos")
     if not isinstance(grupos, list):
         raise RodadaError("divergencias.json malformado")
     return [str(g) for g in grupos]
@@ -612,12 +670,10 @@ def _validos_do_leitor(rodada: Path, leitor: str, ids: list[str]) -> list[str]:
     return divergencias
 
 
-def validar(rodada: Path, leitor: str, arquivo: Path) -> Registro:
-    if (rodada / "consolidacao.json").exists():
-        raise RodadaError("rodada já consolidada: não aceita novas leituras")
-    ids = [str(g["id"]) for g in _carregar_grupos(rodada)]
+def _rotulos_validados(
+    rodada: Path, leitor: str, dados: Registro, ids: list[str]
+) -> list[Registro]:
     validos = _validos_do_leitor(rodada, leitor, ids)
-    dados = _objeto(ler_json(arquivo), "a leitura")
     erros: list[str] = []
     if dados.get("formato") != FORMATO_LEITURA:
         erros.append(f"formato deve ser {FORMATO_LEITURA}")
@@ -632,14 +688,19 @@ def validar(rodada: Path, leitor: str, arquivo: Path) -> Registro:
         erros.extend(_erros_de_cobertura([r["grupo"] for r in rotulos], validos, set(ids)))
     if erros:
         raise RodadaError("\nerro: ".join(erros))
+    return [_normalizar(r) for r in rotulos]
+
+
+def validar(rodada: Path, leitor: str, arquivo: Path) -> Registro:
+    if (rodada / "consolidacao.json").exists():
+        raise RodadaError("rodada já consolidada: não aceita novas leituras")
+    ids = [str(g["id"]) for g in _carregar_grupos(rodada)]
+    dados = _objeto(_ler(arquivo), "a leitura")
+    rotulos = _rotulos_validados(rodada, leitor, dados, ids)
     destino = rodada / "leituras" / f"leitura-{leitor}.json"
     if destino.exists():
         raise RodadaError(f"leitura {leitor} já existe e não é sobrescrita")
-    copia = {
-        "formato": FORMATO_LEITURA,
-        "leitor": leitor,
-        "rotulos": [_normalizar(r) for r in rotulos],
-    }
+    copia = {"formato": FORMATO_LEITURA, "leitor": leitor, "rotulos": rotulos}
     destino.parent.mkdir(parents=True, exist_ok=True)
     with destino.open("x", encoding="utf-8") as saida:
         saida.write(json_canonico(copia))
@@ -651,11 +712,12 @@ def validar(rodada: Path, leitor: str, arquivo: Path) -> Registro:
 _Rotulo = tuple[str, str]
 
 
-def _rotulos_da_leitura(rodada: Path, leitor: str) -> dict[str, _Rotulo] | None:
+def _rotulos_da_leitura(rodada: Path, leitor: str, ids: list[str]) -> dict[str, _Rotulo] | None:
     arquivo = rodada / "leituras" / f"leitura-{leitor}.json"
     if not arquivo.is_file():
         return None
-    rotulos = _objeto(ler_json(arquivo), arquivo.name)["rotulos"]
+    dados = _objeto(_ler(arquivo), arquivo.name)
+    rotulos = _rotulos_validados(rodada, leitor, dados, ids)
     return {
         r["grupo"]: ("caractere", r["caractere"]) if "caractere" in r else ("marca", r["marca"])
         for r in rotulos
@@ -667,7 +729,7 @@ def _aceito(grupo: str, rotulo: _Rotulo) -> Registro:
 
 
 def _gravar_divergencias(rodada: Path, divergentes: Sequence[str]) -> None:
-    celulas = _objeto(ler_json(rodada / "celulas.json"), "celulas.json")["celulas"]
+    celulas = _objeto(_ler(rodada / "celulas.json"), "celulas.json")["celulas"]
     escolhidas = [c for c in celulas if c["id"] in set(divergentes)]
     escrever_json_atomico(rodada / "divergencias.json", {"grupos": list(divergentes)})
     _gravar_folhas(escolhidas, rodada / "contato-divergencias")
@@ -708,11 +770,11 @@ def consolidar(rodada: Path) -> Registro | None:
         raise RodadaError("rodada já consolidada")
     grupos = _carregar_grupos(rodada)
     ids = [str(g["id"]) for g in grupos]
-    a, b = _rotulos_da_leitura(rodada, "a"), _rotulos_da_leitura(rodada, "b")
+    a, b = _rotulos_da_leitura(rodada, "a", ids), _rotulos_da_leitura(rodada, "b", ids)
     if a is None or b is None:
         raise RodadaError("faltam a leitura a e a leitura b: rode validar para cada leitor")
     divergentes = [g for g in ids if a[g] != b[g]]
-    c = _rotulos_da_leitura(rodada, "c") if divergentes else None
+    c = _rotulos_da_leitura(rodada, "c", ids) if divergentes else None
     if divergentes and c is None:
         if _carregar_divergencias(rodada) is None:
             _gravar_divergencias(rodada, divergentes)
@@ -745,7 +807,7 @@ def publicar(
     assinaturas = {
         str(g["id"]): assinatura_de_json(g["assinatura"]) for g in _carregar_grupos(rodada)
     }
-    aceitos = {a["grupo"]: a for a in _objeto(ler_json(arquivo), arquivo.name)["aceitos"]}
+    aceitos = {a["grupo"]: a for a in _objeto(_ler(arquivo), arquivo.name)["aceitos"]}
     publicaveis = [
         (grupo, aceitos[grupo].get("caractere"))
         for grupo in assinaturas
@@ -786,6 +848,7 @@ def _parser() -> argparse.ArgumentParser:
     comando.add_argument("--rodada", type=Path, required=True)
     comando.add_argument("--limiar", type=float, default=LIMIAR_PADRAO)
     comando.add_argument("--excluir-sha", type=Path)
+    comando.add_argument("--min-membros", type=int, default=1)
     comando = sub.add_parser("validar", help="valida e copia a leitura de um leitor")
     comando.add_argument("--rodada", type=Path, required=True)
     comando.add_argument("--leitor", required=True, choices=LEITORES)
@@ -813,7 +876,9 @@ def _imprimir_agrupamento(h1: Mapping[str, Any]) -> None:
 
 def _executar(args: argparse.Namespace) -> int:
     if args.comando == "agrupar":
-        _imprimir_agrupamento(agrupar(args.pdfs, args.rodada, args.limiar, args.excluir_sha))
+        _imprimir_agrupamento(
+            agrupar(args.pdfs, args.rodada, args.limiar, args.excluir_sha, args.min_membros)
+        )
         return 0
     if args.comando == "validar":
         validar(args.rodada, args.leitor, args.arquivo)

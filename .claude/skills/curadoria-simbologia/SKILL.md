@@ -590,7 +590,7 @@ de curadoria. Folhas reservadas para a avaliação ficam fora, por `--excluir-sh
 1. Agrupe e gere as folhas de contato:
 
    ```bash
-   .venv/Scripts/python.exe -m scripts.curation_glifos agrupar --pdfs examples --rodada RODADA --excluir-sha RESERVADAS.txt
+   .venv/Scripts/python.exe -m scripts.curation_glifos agrupar --pdfs examples --rodada RODADA --excluir-sha RESERVADAS.txt --min-membros 3
    ```
 
 2. Leia `h1.json` antes dos leitores: mais de 600 grupos, menos de 50% dos candidatos das famílias
