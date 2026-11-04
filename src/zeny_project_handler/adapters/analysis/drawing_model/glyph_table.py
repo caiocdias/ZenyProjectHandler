@@ -11,6 +11,11 @@ da caixa: um limite próprio nela anulava algarismos legítimos sem separar caso
 do trecho (não o das entradas casadas), então a condição não se ajusta à leitura. Quando outro
 caractere candidato tem o contorno tão próximo quanto o do melhor (até `margem_ambiguidade` a
 mais), só a caixa decidiria: a resolução é ambígua (falha fechada).
+
+A caixa nunca escolhe o caractere, só reprova: o melhor contorno entre as entradas de caixa a
+até `JANELA_FORMA` x tolerância (incluindo as que a caixa reprova) tem de ser do caractere
+lido. Senão o glifo fica desconhecido: um "f" fora da tabela não vira o "t" que cabe na
+tolerância, e um "8" de altura deslocada não vira o "B" que a distância total preferiria.
 """
 
 from __future__ import annotations
@@ -39,6 +44,10 @@ _LIMITE_COORDENADA: Final = 4.0
 _CASAS: Final = 4
 # Diferença máxima de altura (em h) entre o glifo e a entrada casada.
 TOLERANCIA_ALTURA: Final = 0.055
+# Janela (em múltiplos da tolerância, na diferença de caixa) das entradas cujo contorno disputa
+# a forma do glifo: inclui entradas que a caixa reprova (o "f" de largura um pouco maior) e
+# deixa de fora o mesmo desenho em outra posição da linha ("," e "'").
+JANELA_FORMA: Final = 2.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,26 +84,47 @@ def _distancia_contorno(entrada: AssinaturaGlifo, assinatura: AssinaturaGlifo) -
     return distancia_assinaturas(replace(entrada, caixa=assinatura.caixa), assinatura)
 
 
-def _candidatos(
-    tabela: TabelaGlifos, assinatura: AssinaturaGlifo
-) -> tuple[list[tuple[float, EntradaGlifo]], float]:
-    candidatos: list[tuple[float, EntradaGlifo]] = []
-    menor = math.inf
+@dataclass(frozen=True, slots=True)
+class _Medida:
+    entrada: EntradaGlifo
+    caixa: float
+    contorno: float
+
+    @property
+    def distancia(self) -> float:
+        # igual a `distancia_assinaturas`: o maior entre a diferença de caixa e a de contorno
+        return max(self.caixa, self.contorno)
+
+
+def _medidas(tabela: TabelaGlifos, assinatura: AssinaturaGlifo) -> list[_Medida]:
+    """Entradas na janela da forma (caixa a até `JANELA_FORMA` x tolerância), com o contorno."""
+    janela = JANELA_FORMA * tabela.tolerancia
+    medidas: list[_Medida] = []
     for entrada in tabela.glifos:
         if entrada.assinatura.subcaminhos != assinatura.subcaminhos:
             continue
-        if diferenca_caixa(entrada.assinatura, assinatura) > tabela.tolerancia:
-            continue
-        distancia = distancia_assinaturas(entrada.assinatura, assinatura)
-        menor = min(menor, distancia)
-        if distancia <= tabela.tolerancia:
-            candidatos.append((distancia, entrada))
-    candidatos.sort(key=lambda c: (c[0], c[1].id))
-    return candidatos, menor
+        caixa = diferenca_caixa(entrada.assinatura, assinatura)
+        if caixa <= janela:
+            contorno = _distancia_contorno(entrada.assinatura, assinatura)
+            medidas.append(_Medida(entrada, caixa, contorno))
+    return medidas
+
+
+def _forma_de_outro_caractere(medidas: Sequence[_Medida], caractere: str | None) -> bool:
+    """Alguma entrada de outro caractere, na janela, tem contorno tão próximo quanto o melhor
+    contorno do `caractere`: o desenho não aponta só para ele."""
+    proprio = min(m.contorno for m in medidas if m.entrada.caractere == caractere)
+    return any(m.contorno <= proprio for m in medidas if m.entrada.caractere != caractere)
 
 
 def resolver_glifo(tabela: TabelaGlifos, assinatura: AssinaturaGlifo) -> Resolucao:
-    pela_forma, menor = _candidatos(tabela, assinatura)
+    medidas = _medidas(tabela, assinatura)
+    na_caixa = [m for m in medidas if m.caixa <= tabela.tolerancia]
+    menor = min((m.distancia for m in na_caixa), default=math.inf)
+    pela_forma = sorted(
+        ((m.distancia, m.entrada) for m in na_caixa if m.distancia <= tabela.tolerancia),
+        key=lambda c: (c[0], c[1].id),
+    )
     if not pela_forma:
         return Resolucao("desconhecido", None, menor)
     candidatos = [c for c in pela_forma if _altura_compativel(c[1].assinatura, assinatura)]
@@ -103,17 +133,17 @@ def resolver_glifo(tabela: TabelaGlifos, assinatura: AssinaturaGlifo) -> Resoluc
     if not candidatos or candidatos[0][1].caractere != pela_forma[0][1].caractere:
         return Resolucao("desconhecido", None, pela_forma[0][0])
     melhor_distancia, melhor = candidatos[0]
-    contorno_melhor: float | None = None
+    contornos = {m.entrada.id: m.contorno for m in medidas}
     for distancia, entrada in candidatos[1:]:
         if entrada.caractere == melhor.caractere:
             continue
         if distancia <= melhor_distancia + tabela.margem_ambiguidade:
             return Resolucao("ambiguo", None, melhor_distancia)
-        if contorno_melhor is None:
-            contorno_melhor = _distancia_contorno(melhor.assinatura, assinatura)
-        contorno = _distancia_contorno(entrada.assinatura, assinatura)
-        if contorno <= contorno_melhor + tabela.margem_ambiguidade:
+        if contornos[entrada.id] <= contornos[melhor.id] + tabela.margem_ambiguidade:
             return Resolucao("ambiguo", None, melhor_distancia)
+    # a caixa nunca escolhe o caractere: o melhor contorno da janela tem de ser do lido
+    if _forma_de_outro_caractere(medidas, melhor.caractere):
+        return Resolucao("desconhecido", None, melhor_distancia)
     if melhor.caractere is None:
         return Resolucao("ignorar", None, melhor_distancia)
     return Resolucao("reconhecido", melhor.caractere, melhor_distancia)

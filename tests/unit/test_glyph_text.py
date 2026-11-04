@@ -310,6 +310,49 @@ def test_escala_das_lacunas_nao_depende_dos_outros_glifos_do_texto(
     assert divergentes == []
 
 
+def _colher(tmp_path: Path, texto: str, posicoes: dict[int, str]) -> list[EntradaGlifo]:
+    """Entradas com a assinatura dos glifos de `texto` (corpo 5) nas posições pedidas."""
+    pdf = pdf_texto_contorno(
+        tmp_path / f"colher-{texto}.pdf", [LinhaTexto(texto, (40.0, 60.0), 5.0)]
+    )
+    (trecho,) = extrair_trechos(caminhos_do_pdf(pdf))
+    entradas = []
+    for posicao, caractere in posicoes.items():
+        assinatura = trecho.glifos[posicao].assinatura
+        assert assinatura is not None
+        entradas.append(EntradaGlifo(f"{texto}-{posicao}", caractere, assinatura))
+    return entradas
+
+
+@pytest.fixture(scope="module")
+def tabela_com_e(tmp_path_factory: pytest.TempPathFactory, tabela: TabelaGlifos) -> TabelaGlifos:
+    # "e" colhido em trecho de algarismos (h = altura de maiúscula, "e" a ~0.75 h) e em trecho só
+    # de minúsculas (h = altura-x, "e" a ~1.0 h), como na tabela real; sem "z" minúsculo
+    pasta = tmp_path_factory.mktemp("com-e")
+    entradas = [*_colher(pasta, "0e0", {1: "e"}), *_colher(pasta, "ee", {0: "e"})]
+    return dataclasses.replace(tabela, glifos=(*tabela.glifos, *entradas))
+
+
+@pytest.mark.parametrize("texto", ["ez", "ze"])
+def test_glifos_lidos_em_escalas_diferentes_no_mesmo_trecho_anulam_o_texto(
+    tmp_path: Path, tabela_com_e: TabelaGlifos, texto: str
+) -> None:
+    # com h vindo do "e" (altura-x), o "z" tem o desenho e a altura relativa do "Z" (colhido com
+    # h = altura de maiúscula): o "e" diz que h é a altura-x e o "Z", que é a de maiúscula. As
+    # duas leituras do trecho não cabem na mesma escala: falha fechada, nunca "eZ"
+    leitura = _ler(tmp_path, [LinhaTexto(texto, (40.0, 60.0), 5.0)], tabela_com_e)
+    assert [t.texto for t in leitura.textos] == []
+    assert leitura.ambiguos >= 1
+
+
+@pytest.mark.parametrize("texto", ["0e0", "ee", "Ze0", "Z0"])
+def test_glifos_da_mesma_escala_continuam_lidos(
+    tmp_path: Path, tabela_com_e: TabelaGlifos, texto: str
+) -> None:
+    leitura = _ler(tmp_path, [LinhaTexto(texto, (40.0, 60.0), 5.0)], tabela_com_e)
+    assert [t.texto for t in leitura.textos] == [texto]
+
+
 def test_cor_do_trecho(tmp_path: Path, tabela: TabelaGlifos) -> None:
     linhas = [
         LinhaTexto("P7 S1N", (40.0, 60.0), 5.0, cor=(0.0, 1.0, 0.0)),

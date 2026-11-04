@@ -160,9 +160,15 @@ def _distancia_contorno(a: Sequence[Ponto], b: Sequence[Ponto]) -> float:
     melhor = math.inf
     for alvo in (b, pontos_medios):
         for deslocamento in range(n):
-            media = sum(math.dist(a[i], alvo[(i + deslocamento) % n]) for i in range(n)) / n
-            melhor = min(melhor, media)
-    return melhor
+            # a soma parcial só cresce: passou da melhor soma, este deslocamento não ganha
+            soma = 0.0
+            for i in range(n):
+                soma += math.dist(a[i], alvo[(i + deslocamento) % n])
+                if soma > melhor:
+                    break
+            else:
+                melhor = soma
+    return melhor / n
 
 
 def distancia_assinaturas(a: AssinaturaGlifo, b: AssinaturaGlifo) -> float:

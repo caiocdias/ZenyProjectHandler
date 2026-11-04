@@ -31,6 +31,12 @@ bruta da linha sobe com glifos redondos ("3", "0" passam um pouco da altura do "
 lacuna mudaria de tamanho em unidades de h. A escala das lacunas é a mediana, sobre os glifos
 altos reconhecidos, da altura do glifo dividida pela altura típica do seu caractere na tabela
 (mediana das entradas do caractere).
+
+O h do trecho é a altura de maiúscula ou, num trecho só de minúsculas, a altura-x, e a tabela
+tem entradas colhidas nas duas escalas ("e" a ~0,75 h e a ~1,0 h). Um "z" lido com h = altura-x
+tem o desenho e a altura relativa do "Z" colhido com h = altura de maiúscula. Por isso os glifos
+altos reconhecidos do trecho têm de indicar a mesma escala (altura acima ou até `RAZAO_ESCALA_X`
+x a menor altura do caractere na tabela); se indicam as duas, todos ficam ambíguos.
 """
 
 from __future__ import annotations
@@ -76,6 +82,10 @@ _CORPO_CURTO: Final = 4
 # Quadros (fundos, topos, centros do corpo) mais afastados que isso: quadro não confirmado.
 _ESPALHAMENTO_QUADROS: Final = math.radians(1.0)
 _TIPOS_PREENCHIDOS: Final = frozenset({"preenchimento", "traco_e_preenchimento"})
+# Altura do glifo / menor altura do caractere na tabela que separa a escala do trecho: até ela,
+# h é a altura de maiúscula; acima, a altura-x (Arial: 0,716/0,519 ≈ 1,38). Nas 16 folhas
+# reais a razão fica em ≤ 1,168 e ≥ 1,214, sem nada entre as duas.
+RAZAO_ESCALA_X: Final = 1.19
 
 _ChaveAssinatura = tuple[int, tuple[float, ...], tuple[tuple[float, ...], ...]]
 # ("caminho", posição) do vizinho reprovado, ou ("ordem", ordem) do desenho descartado
@@ -526,6 +536,37 @@ def alturas_tipicas(tabela: TabelaGlifos) -> dict[str, float]:
     return {caractere: float(median(valores)) for caractere, valores in alturas.items()}
 
 
+def alturas_minimas(tabela: TabelaGlifos) -> dict[str, float]:
+    """Menor altura (em h) das entradas de cada caractere alto (não pontuação baixa)."""
+    alturas: dict[str, float] = {}
+    for entrada in tabela.glifos:
+        if entrada.caractere is not None:
+            altura = entrada.assinatura.caixa[1]
+            alturas[entrada.caractere] = min(alturas.get(entrada.caractere, altura), altura)
+    return {c: altura for c, altura in alturas.items() if altura >= _FRACAO_GLIFO_ALTO}
+
+
+def _com_escala_coerente(
+    trecho: _Trecho, resolucoes: list[Resolucao], minimas: dict[str, float]
+) -> list[Resolucao]:
+    """Os glifos altos reconhecidos têm de dizer a mesma escala do h do trecho; senão todos ficam
+    ambíguos. Um glifo acima de `RAZAO_ESCALA_X` x a menor altura do seu caractere na tabela foi
+    lido com h = altura-x; até ela, com h = altura de maiúscula."""
+    escalas = {
+        assinatura.caixa[1] > RAZAO_ESCALA_X * minimas[resolucao.caractere]
+        for glifo, resolucao in zip(trecho.publico.glifos, resolucoes, strict=True)
+        if resolucao.situacao == "reconhecido"
+        and resolucao.caractere in minimas
+        and (assinatura := glifo.assinatura) is not None
+    }
+    if len(escalas) < 2:
+        return resolucoes
+    return [
+        Resolucao("ambiguo", None, r.distancia) if r.situacao == "reconhecido" else r
+        for r in resolucoes
+    ]
+
+
 def _escala_das_lacunas(
     trecho: _Trecho, resolucoes: Sequence[Resolucao], tipicas: dict[str, float]
 ) -> float:
@@ -647,6 +688,7 @@ def ler_texto_glifos(
         return LeituraGlifos((), 0, 0, limitada=True)
     memoria: dict[_ChaveAssinatura, Resolucao] = {}
     tipicas = alturas_tipicas(tabela)
+    minimas = alturas_minimas(tabela)
     textos: list[TextoGlifo] = []
     desconhecidos = ambiguos = 0
     venenos: set[_Veneno] = set()
@@ -654,7 +696,7 @@ def ler_texto_glifos(
         if trecho.venenos:
             venenos.update(trecho.venenos)
             continue
-        resolucoes = _resolucoes(trecho, tabela, memoria)
+        resolucoes = _com_escala_coerente(trecho, _resolucoes(trecho, tabela, memoria), minimas)
         escala = _escala_das_lacunas(trecho, resolucoes, tipicas)
         for grupo in _grupos_de_texto(trecho, resolucoes, tabela, escala):
             situacoes = [resolucoes[i].situacao for i in grupo]

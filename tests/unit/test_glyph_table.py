@@ -260,6 +260,67 @@ def test_outro_caractere_de_desenho_diferente_nao_torna_ambiguo() -> None:
     assert (resolucao.situacao, resolucao.caractere) == ("reconhecido", "o")
 
 
+def test_forma_de_outro_caractere_fora_da_caixa_impede_a_leitura() -> None:
+    # o desenho do glifo é o do "f", mas a largura do "f" da tabela passa da tolerância; o "t",
+    # de desenho mais distante, cabe na tolerância: a forma aponta o "f" e o "t" não é afirmado
+    glifo = _assinatura(0.6, 1.0)
+    f = EntradaGlifo("g1", "f", _com_caixa(glifo, (0.695, 1.0, 0.0)))
+    t = EntradaGlifo("g2", "t", _assinatura(0.6, 1.0, extra=1.44))
+    tabela = _tabela(f, t)
+    assert diferenca_caixa(f.assinatura, glifo) > tabela.tolerancia
+    assert 0.05 < distancia_assinaturas(t.assinatura, glifo) <= tabela.tolerancia
+    resolucao = resolver_glifo(tabela, glifo)
+    assert (resolucao.situacao, resolucao.caractere) == ("desconhecido", None)
+
+
+def test_altura_deslocada_nunca_escolhe_outro_caractere_pela_caixa() -> None:
+    # "8" e "B": a altura do glifo saiu 0.07 h abaixo da do "8" (h local do trecho); pela
+    # distância total, que inclui a caixa, o "B" ficaria mais perto. A forma é a do "8", que a
+    # altura reprova: desconhecido, nunca "B"
+    glifo = _assinatura(0.6, 1.0)
+    oito = EntradaGlifo("g1", "8", _com_caixa(glifo, (0.6, 1.07, 0.0)))
+    b = EntradaGlifo("g2", "B", _assinatura(0.6, 1.0, extra=1.2))
+    tabela = _tabela(oito, b)
+    assert distancia_assinaturas(b.assinatura, glifo) < distancia_assinaturas(
+        oito.assinatura, glifo
+    )
+    resolucao = resolver_glifo(tabela, glifo)
+    assert (resolucao.situacao, resolucao.caractere) == ("desconhecido", None)
+
+
+def test_mesmo_desenho_em_outra_altura_da_linha_nao_disputa_a_forma() -> None:
+    # "," e "'" têm o mesmo desenho e só a base os separa: a forma só é comparada com entradas
+    # de caixa próxima, e a vírgula continua lida
+    glifo = AssinaturaGlifo(1, (0.15, 0.3, 0.2), _assinatura(0.15, 0.3).contornos)
+    virgula = EntradaGlifo("g1", ",", glifo)
+    apostrofo = EntradaGlifo("g2", "'", _com_caixa(glifo, (0.15, 0.3, -0.6)))
+    resolucao = resolver_glifo(_tabela(virgula, apostrofo), glifo)
+    assert (resolucao.situacao, resolucao.caractere) == ("reconhecido", ",")
+
+
+@pytest.mark.parametrize("delta", [-0.08, -0.07, -0.06, 0.06, 0.07, 0.08])
+def test_ruido_de_caixa_ate_a_tolerancia_nunca_troca_o_caractere_na_tabela_empacotada(
+    delta: float,
+) -> None:
+    # acima da tolerância de altura a resolução falha fechada; a caixa nunca escolhe outro
+    # caractere (antes: "O"/"o", "s"/"S", "c"/"C" e "8"/"B" com a altura a ±0.06 a 0.08)
+    tabela = carregar_tabela_glifos()
+    trocados = []
+    for entrada in tabela.glifos:
+        for eixo in range(3):
+            caixa = list(entrada.assinatura.caixa)
+            caixa[eixo] += delta
+            ruidosa = AssinaturaGlifo(
+                entrada.assinatura.subcaminhos,
+                (caixa[0], caixa[1], caixa[2]),
+                entrada.assinatura.contornos,
+            )
+            r = resolver_glifo(tabela, ruidosa)
+            if r.situacao in ("reconhecido", "ignorar") and r.caractere != entrada.caractere:
+                trocados.append((entrada.id, entrada.caractere, eixo, r.caractere))
+    assert trocados == []
+
+
 def test_sha256_nao_depende_do_fim_de_linha(tmp_path: Path) -> None:
     texto = _serializar(EntradaGlifo("g0001", "P", _assinatura(0.6, 1.0)))
     lf = tmp_path / "lf.json"
