@@ -1,4 +1,17 @@
-"""Tabela versionada de glifos (JSON) e resolução de uma assinatura contra ela."""
+"""Tabela versionada de glifos (JSON) e resolução de uma assinatura contra ela.
+
+O mesmo desenho em caixa alta e em caixa baixa ("O"/"o", "V"/"v", "Z"/"z"; "I"/"l" na Arial)
+só se distingue pela altura relativa a h. Por isso a altura tem tolerância própria,
+`TOLERANCIA_ALTURA`, menor que a da caixa: nas folhas reais, 99,5 % dos casamentos ficam a até
+0,053 h em altura, e a forma do outro caso fica a 0,058 h ou mais. A altura só reprova: entre
+os candidatos de altura compatível, o melhor tem de ser do mesmo caractere que o melhor pela
+forma; se não for (ou se não houver), o glifo fica desconhecido, e um candidato de outro
+caractere nunca é promovido por ela. A base segue só a tolerância
+da caixa: um limite próprio nela anulava algarismos legítimos sem separar caso nenhum. O h é o
+do trecho (não o das entradas casadas), então a condição não se ajusta à leitura. Quando outro
+caractere candidato tem o contorno tão próximo quanto o do melhor (até `margem_ambiguidade` a
+mais), só a caixa decidiria: a resolução é ambígua (falha fechada).
+"""
 
 from __future__ import annotations
 
@@ -6,7 +19,7 @@ import hashlib
 import json
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from importlib.resources import files
 from pathlib import Path
 from typing import Any, Final, Literal, NoReturn
@@ -24,6 +37,8 @@ _PACOTE_DADOS: Final = "zeny_project_handler.adapters.analysis.data"
 _ARQUIVO: Final = "tabela-glifos-v1.json"
 _LIMITE_COORDENADA: Final = 4.0
 _CASAS: Final = 4
+# Diferença máxima de altura (em h) entre o glifo e a entrada casada.
+TOLERANCIA_ALTURA: Final = 0.055
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,7 +66,18 @@ class Resolucao:
     distancia: float
 
 
-def resolver_glifo(tabela: TabelaGlifos, assinatura: AssinaturaGlifo) -> Resolucao:
+def _altura_compativel(entrada: AssinaturaGlifo, assinatura: AssinaturaGlifo) -> bool:
+    return abs(entrada.caixa[1] - assinatura.caixa[1]) <= TOLERANCIA_ALTURA
+
+
+def _distancia_contorno(entrada: AssinaturaGlifo, assinatura: AssinaturaGlifo) -> float:
+    """Distância só do desenho: a caixa da entrada igualada à do glifo."""
+    return distancia_assinaturas(replace(entrada, caixa=assinatura.caixa), assinatura)
+
+
+def _candidatos(
+    tabela: TabelaGlifos, assinatura: AssinaturaGlifo
+) -> tuple[list[tuple[float, EntradaGlifo]], float]:
     candidatos: list[tuple[float, EntradaGlifo]] = []
     menor = math.inf
     for entrada in tabela.glifos:
@@ -63,14 +89,30 @@ def resolver_glifo(tabela: TabelaGlifos, assinatura: AssinaturaGlifo) -> Resoluc
         menor = min(menor, distancia)
         if distancia <= tabela.tolerancia:
             candidatos.append((distancia, entrada))
-    if not candidatos:
-        return Resolucao("desconhecido", None, menor)
     candidatos.sort(key=lambda c: (c[0], c[1].id))
+    return candidatos, menor
+
+
+def resolver_glifo(tabela: TabelaGlifos, assinatura: AssinaturaGlifo) -> Resolucao:
+    pela_forma, menor = _candidatos(tabela, assinatura)
+    if not pela_forma:
+        return Resolucao("desconhecido", None, menor)
+    candidatos = [c for c in pela_forma if _altura_compativel(c[1].assinatura, assinatura)]
+    # a altura só reprova: se o melhor pela forma não tem altura compatível, nenhum candidato de
+    # outro caractere é promovido no lugar dele
+    if not candidatos or candidatos[0][1].caractere != pela_forma[0][1].caractere:
+        return Resolucao("desconhecido", None, pela_forma[0][0])
     melhor_distancia, melhor = candidatos[0]
+    contorno_melhor: float | None = None
     for distancia, entrada in candidatos[1:]:
-        if distancia > melhor_distancia + tabela.margem_ambiguidade:
-            break
-        if entrada.caractere != melhor.caractere:
+        if entrada.caractere == melhor.caractere:
+            continue
+        if distancia <= melhor_distancia + tabela.margem_ambiguidade:
+            return Resolucao("ambiguo", None, melhor_distancia)
+        if contorno_melhor is None:
+            contorno_melhor = _distancia_contorno(melhor.assinatura, assinatura)
+        contorno = _distancia_contorno(entrada.assinatura, assinatura)
+        if contorno <= contorno_melhor + tabela.margem_ambiguidade:
             return Resolucao("ambiguo", None, melhor_distancia)
     if melhor.caractere is None:
         return Resolucao("ignorar", None, melhor_distancia)

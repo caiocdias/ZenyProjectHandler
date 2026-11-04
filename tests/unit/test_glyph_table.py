@@ -12,6 +12,8 @@ from zeny_project_handler.adapters.analysis.drawing_model import glyph_table
 from zeny_project_handler.adapters.analysis.drawing_model.glyph_signature import (
     PONTOS_POR_SUBCAMINHO,
     AssinaturaGlifo,
+    diferenca_caixa,
+    distancia_assinaturas,
 )
 from zeny_project_handler.adapters.analysis.drawing_model.glyph_table import (
     VERSAO_TABELA_GLIFOS,
@@ -180,6 +182,82 @@ def test_resolver_reconhece_ignora_desconhece_e_detecta_ambiguidade() -> None:
 
     sem_ambiguidade = resolver_glifo(_tabela(letra_o), letra_o.assinatura)
     assert sem_ambiguidade.situacao == "reconhecido"
+
+
+def _com_caixa(assinatura: AssinaturaGlifo, caixa: tuple[float, float, float]) -> AssinaturaGlifo:
+    """Mesmo desenho (contorno) com outra caixa: outra largura, altura ou base relativas a h."""
+    return AssinaturaGlifo(subcaminhos=1, caixa=caixa, contornos=assinatura.contornos)
+
+
+@pytest.mark.parametrize(
+    ("caixa", "situacao"),
+    [
+        ((0.6, 1.06, 0.0), "desconhecido"),  # mesma forma, 6 % mais alta: outro caso (V/v)
+        ((0.6, 0.94, 0.0), "desconhecido"),
+        ((0.6, 1.03, 0.0), "reconhecido"),
+        ((0.6, 0.97, 0.0), "reconhecido"),
+        ((0.6, 1.0, 0.06), "reconhecido"),  # a base segue só a tolerância da caixa
+        ((0.6, 1.0, -0.06), "reconhecido"),
+        ((0.66, 1.0, 0.0), "reconhecido"),  # a largura também
+    ],
+)
+def test_altura_relativa_a_h_tem_tolerancia_propria(
+    caixa: tuple[float, float, float], situacao: str
+) -> None:
+    p = EntradaGlifo("g1", "P", _assinatura(0.6, 1.0))
+    glifo = _com_caixa(p.assinatura, caixa)
+    assert diferenca_caixa(p.assinatura, glifo) <= 0.08
+    assert 0.03 < glyph_table.TOLERANCIA_ALTURA < 0.06
+    assert resolver_glifo(_tabela(p), glifo).situacao == situacao
+
+
+def test_altura_so_reprova_e_nunca_promove_outro_caractere() -> None:
+    # o melhor ("Q") falha na altura; o "O", mais distante e de altura compatível, não pode
+    # virar a leitura: o glifo fica desconhecido
+    glifo = _assinatura(0.6, 1.0)
+    q = EntradaGlifo("g1", "Q", _com_caixa(glifo, (0.6, 1.056, 0.0)))
+    o = EntradaGlifo("g2", "O", _assinatura(0.6, 1.0, extra=1.872))
+    tabela = _tabela(q, o)
+    assert (
+        distancia_assinaturas(o.assinatura, glifo)
+        > distancia_assinaturas(q.assinatura, glifo) + tabela.margem_ambiguidade
+    )
+    assert distancia_assinaturas(o.assinatura, glifo) <= tabela.tolerancia
+    resolucao = resolver_glifo(tabela, glifo)
+    assert (resolucao.situacao, resolucao.caractere) == ("desconhecido", None)
+
+
+def test_variante_do_mesmo_caractere_com_altura_compativel_mantem_a_leitura() -> None:
+    glifo = _assinatura(0.6, 1.0)
+    alta = EntradaGlifo("g1", "P", _com_caixa(glifo, (0.6, 1.07, 0.0)))
+    compativel = EntradaGlifo(
+        "g2", "P", _com_caixa(_assinatura(0.6, 1.0, extra=0.6), (0.6, 1.0, 0.0))
+    )
+    resolucao = resolver_glifo(_tabela(alta, compativel), glifo)
+    assert (resolucao.situacao, resolucao.caractere) == ("reconhecido", "P")
+
+
+def test_outro_caractere_de_contorno_tao_proximo_quanto_o_melhor_e_ambiguo() -> None:
+    # "o" casa pela caixa, mas o "O" tem o mesmo desenho: só a caixa decide, e ela vem da
+    # altura da própria linha. Falha fechada em vez de afirmar o caractere da caixa mais próxima.
+    glifo = _assinatura(0.6, 1.0, extra=0.6)
+    minuscula = EntradaGlifo("g1", "o", _assinatura(0.6, 1.0))
+    maiuscula = EntradaGlifo("g2", "O", _com_caixa(glifo, (0.67, 1.0, 0.0)))
+    tabela = _tabela(minuscula, maiuscula)
+    melhor = distancia_assinaturas(minuscula.assinatura, glifo)
+    outro = distancia_assinaturas(maiuscula.assinatura, glifo)
+    assert outro > melhor + tabela.margem_ambiguidade and outro <= tabela.tolerancia
+    assert resolver_glifo(tabela, glifo).situacao == "ambiguo"
+
+
+def test_outro_caractere_de_desenho_diferente_nao_torna_ambiguo() -> None:
+    glifo = _assinatura(0.6, 1.0)
+    proprio = EntradaGlifo("g1", "o", _assinatura(0.6, 1.0, extra=0.6))
+    outro = EntradaGlifo("g2", "Q", _com_caixa(_assinatura(0.6, 1.0, extra=1.6), (0.6, 1.0, 0.0)))
+    tabela = _tabela(proprio, outro)
+    assert distancia_assinaturas(outro.assinatura, glifo) <= tabela.tolerancia
+    resolucao = resolver_glifo(tabela, glifo)
+    assert (resolucao.situacao, resolucao.caractere) == ("reconhecido", "o")
 
 
 def test_sha256_nao_depende_do_fim_de_linha(tmp_path: Path) -> None:
