@@ -18,6 +18,9 @@ from tests.fixtures.glyphs.fonte_livre import (
     tabela_do_alfabeto,
 )
 
+from zeny_project_handler.adapters.analysis.drawing_model.glyph_signature import (
+    distancia_assinaturas,
+)
 from zeny_project_handler.adapters.analysis.drawing_model.glyph_table import (
     carregar_tabela_glifos,
     resolver_glifo,
@@ -434,6 +437,80 @@ def test_publicar_deixa_fora_marcas_e_pendentes_e_ignorar_vira_null(
     caracteres = [g.caractere for g in tabela.glifos]
     assert caracteres[0] is None
     assert len(caracteres) == len(rotulos) - 2
+
+
+def _com_copia_do_grupo(
+    rodada: Path, tmp_path: Path, caractere: str, fator: float = 0.98
+) -> tuple[str, str]:
+    """Acrescenta a grupos.json uma cópia do grupo do `caractere` com o contorno estreitado por
+    `fator` (a caixa fica igual); devolve (id do original, id da cópia)."""
+    pasta = tmp_path / "alfabeto-copia"
+    pasta.mkdir()
+    tabela = tabela_do_alfabeto(pasta)
+    dados = _json(rodada / "grupos.json")
+    (original,) = (g for g in dados["grupos"] if _caractere_do_grupo(g, tabela) == caractere)
+    copia = json.loads(json.dumps(original))
+    copia["id"] = f"c{len(dados['grupos']) + 1:04d}"
+    for contorno in copia["assinatura"]["contornos"]:
+        for ponto in contorno:
+            ponto[0] = round(ponto[0] * fator, 4)
+    dados["grupos"].append(copia)
+    (rodada / "grupos.json").write_text(json.dumps(dados), encoding="utf-8")
+    return original["id"], copia["id"]
+
+
+def _publicar_com_copia(
+    rodada: Path, tmp_path: Path, caractere_da_copia: str, fator: float = 0.98
+) -> tuple[Path, list[str]]:
+    original, copia = _com_copia_do_grupo(rodada, tmp_path, "1", fator)
+    certos = _rotulos_corretos(rodada, tmp_path)
+    assert certos[original] == certos[copia] == "1"
+    certos[copia] = caractere_da_copia
+    for leitor in "ab":
+        assert _validar(rodada, leitor, _leitura(tmp_path, leitor, _rotulos_de(certos))) == 0
+    assert main(["consolidar", "--rodada", str(rodada)]) == 0
+    saida = tmp_path / "tabela.json"
+    assert main(["publicar", "--rodada", str(rodada), "--saida", str(saida)]) == 0
+    tabela = carregar_tabela_glifos(saida)
+    assert [g.id for g in tabela.glifos] == [f"g{i:04d}" for i in range(1, len(tabela.glifos) + 1)]
+    return saida, [g.caractere or "" for g in tabela.glifos]
+
+
+def test_publicar_deixa_fora_homoglifos_de_caracteres_diferentes(
+    rodada: Path,
+    rodada_base: tuple[Path, Path, Path],
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # duas formas que a tabela não separa (a até tolerancia + margem) com caracteres diferentes:
+    # nenhuma das duas é publicada, e o glifo dessa forma falha fechado em vez de sair trocado
+    saida, caracteres = _publicar_com_copia(rodada, tmp_path, "l")
+    assert sorted(caracteres) == sorted(LETRAS - {"1"})
+    assert "2 homóglifos" in capsys.readouterr().out
+    with pymupdf.open(rodada_base[1] / "folha-secreta-b.pdf") as documento:
+        leitura = ler_texto_glifos(caminhos_da_pagina(documento[0]), carregar_tabela_glifos(saida))
+    assert [t.texto for t in leitura.textos] == []
+    assert leitura.desconhecidos >= 1
+
+
+def test_publicar_mantem_forma_de_outro_caractere_com_desenho_diferente(
+    rodada: Path, tmp_path: Path
+) -> None:
+    # caixa igual, mas contorno além de tolerancia / 2: o desenho separa as duas formas
+    _, caracteres = _publicar_com_copia(rodada, tmp_path, "l", 0.6)
+    *outros, copia = (assinatura_de_json(g["assinatura"]) for g in _grupos(rodada))
+    contorno = min(
+        min(distancia_assinaturas(copia, o), distancia_assinaturas(o, copia))
+        for o in outros
+        if o.subcaminhos == copia.subcaminhos and o.caixa == copia.caixa
+    )
+    assert 0.04 < contorno <= 0.10
+    assert sorted(caracteres) == sorted([*LETRAS, "l"])
+
+
+def test_publicar_mantem_formas_proximas_do_mesmo_caractere(rodada: Path, tmp_path: Path) -> None:
+    _, caracteres = _publicar_com_copia(rodada, tmp_path, "1")
+    assert sorted(caracteres) == sorted([*LETRAS, "1"])
 
 
 def test_publicar_exige_consolidacao_e_nao_sobrescreve(

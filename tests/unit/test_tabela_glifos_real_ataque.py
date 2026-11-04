@@ -31,7 +31,7 @@ from zeny_project_handler.adapters.analysis.drawing_model.glyph_table import (
 from zeny_project_handler.adapters.analysis.drawing_model.glyph_text import ler_texto_glifos
 
 # sha256 (LF) da tabela publicada e medida no benchmark da Task 6 (relatório do desenvolvedor)
-_SHA_PUBLICADO = "4612202d74449902db27754dba116d31468aa5b0c157772aa1e551f69c6a50da"
+_SHA_PUBLICADO = "0894e4ec2ce36ea11821e56a9e8df59ac931cd0d70a7b9c3e2c27edb993de49b"
 _CHAVES_JSON = {
     "schema_version",
     "versao",
@@ -95,9 +95,9 @@ def _ler(tmp_path: Path, tabela: TabelaGlifos, texto: str, tamanho: float) -> li
 def test_tabela_empacotada_e_a_publicada_e_medida_no_benchmark(tabela: TabelaGlifos) -> None:
     assert tabela.sha256 == _SHA_PUBLICADO
     contagem = Counter(g.caractere for g in tabela.glifos)
-    assert len(tabela.glifos) == 359
+    assert len(tabela.glifos) == 338
     assert contagem[None] == 1
-    assert len([c for c in contagem if c is not None]) == 74
+    assert len([c for c in contagem if c is not None]) == 73
 
 
 def test_assinatura_de_capacidade_do_servidor_usa_a_tabela_publicada() -> None:

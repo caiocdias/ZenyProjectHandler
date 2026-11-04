@@ -23,7 +23,13 @@ Cada leitor (IA) lê só os PNG de contato e grava ``curadoria-glifos-v1`` com u
 sem sobrescrever. ``consolidar`` aceita A = B; havendo divergência, grava ``divergencias.json`` e
 ``contato-divergencias/`` e sai com código 3 até existir a leitura C (que cobre só as
 divergências e desempata com um dos dois). ``publicar`` escreve a tabela de glifos
-(``tabela-glifos-v1``) com os grupos aceitos.
+(``tabela-glifos-v1``) com os grupos aceitos, menos os homóglifos: duas formas de caracteres
+diferentes (``ignorar`` conta como um caractere) com o mesmo desenho, a menos da escala e da
+posição (contorno a até ``tolerancia / 2``), e caixas que a resolução não separa (diferença até
+``tolerancia + margem``), só se distinguem pela altura relativa a h, que varia com o contexto
+de onde a forma veio ("I" e "l" na Arial; maiúscula e minúscula de mesmo desenho num trecho só
+de minúsculas). Nenhuma das duas é publicada: o glifo dessa forma fica desconhecido e o texto
+falha fechado, em vez de sair com o caractere trocado.
 """
 
 from __future__ import annotations
@@ -35,7 +41,7 @@ import sys
 import unicodedata
 from collections import Counter
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Final
 
@@ -796,9 +802,31 @@ def consolidar(rodada: Path) -> Registro | None:
 # --- publicar -------------------------------------------------------------------------------
 
 
+def _homoglifos(
+    publicaveis: Sequence[tuple[str, str | None]],
+    assinaturas: Mapping[str, AssinaturaGlifo],
+    tolerancia: float,
+    margem: float,
+) -> set[str]:
+    """Grupos com uma forma de outro caractere de mesmo desenho e caixa não separável."""
+    homoglifos: set[str] = set()
+    for i, (grupo, caractere) in enumerate(publicaveis):
+        a = assinaturas[grupo]
+        for outro, outro_caractere in publicaveis[i + 1 :]:
+            b = assinaturas[outro]
+            if caractere == outro_caractere or a.subcaminhos != b.subcaminhos:
+                continue
+            if diferenca_caixa(a, b) > tolerancia + margem:
+                continue
+            if _distancia(a, replace(b, caixa=a.caixa)) <= tolerancia / 2:
+                homoglifos.update((grupo, outro))
+    return homoglifos
+
+
 def publicar(
     rodada: Path, saida: Path, *, tolerancia: float, margem: float, espaco: float, quebra: float
-) -> int:
+) -> tuple[int, int]:
+    """Grava a tabela; devolve (entradas publicadas, grupos deixados fora como homóglifos)."""
     if saida.exists():
         raise RodadaError("a saída já existe e não é sobrescrita")
     arquivo = rodada / "consolidacao.json"
@@ -813,9 +841,12 @@ def publicar(
         for grupo in assinaturas
         if grupo in aceitos and (aceitos[grupo].get("marca") in (None, "ignorar"))
     ]
+    homoglifos = _homoglifos(publicaveis, assinaturas, tolerancia, margem)
     entradas = [
         EntradaGlifo(f"g{numero:04d}", caractere, assinaturas[grupo])
-        for numero, (grupo, caractere) in enumerate(publicaveis, 1)
+        for numero, (grupo, caractere) in enumerate(
+            ((g, c) for g, c in publicaveis if g not in homoglifos), 1
+        )
     ]
     if not entradas:
         raise RodadaError("nenhum grupo aceito com caractere ou ignorar: nada a publicar")
@@ -832,7 +863,7 @@ def publicar(
     except ValueError as erro:
         saida.unlink(missing_ok=True)
         raise RodadaError(str(erro)) from erro
-    return len(entradas)
+    return len(entradas), len(homoglifos)
 
 
 # --- CLI ------------------------------------------------------------------------------------
@@ -894,7 +925,7 @@ def _executar(args: argparse.Namespace) -> int:
         aceitos, pendentes = len(consolidacao["aceitos"]), len(consolidacao["pendentes"])
         print(f"ok: {aceitos} aceitos, {pendentes} pendentes")
         return 0
-    entradas = publicar(
+    entradas, homoglifos = publicar(
         args.rodada,
         args.saida,
         tolerancia=args.tolerancia,
@@ -902,7 +933,7 @@ def _executar(args: argparse.Namespace) -> int:
         espaco=args.espaco,
         quebra=args.quebra,
     )
-    print(f"ok: tabela gravada com {entradas} entradas")
+    print(f"ok: tabela gravada com {entradas} entradas ({homoglifos} homóglifos fora)")
     return 0
 
 

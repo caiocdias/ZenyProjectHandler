@@ -496,7 +496,7 @@ def test_arquivo_empacotado_e_exatamente_a_saida_do_serializador() -> None:
 def test_tabela_empacotada_tem_os_parametros_publicados_e_sha_dos_bytes() -> None:
     tabela = carregar_tabela_glifos()
     assert (tabela.tolerancia, tabela.margem_ambiguidade) == (0.08, 0.02)
-    assert (tabela.espaco, tabela.quebra) == (0.43, 1.5)
+    assert (tabela.espaco, tabela.quebra) == (0.48, 1.5)
     bytes_lf = _arquivo_empacotado().read_bytes().replace(b"\r\n", b"\n")
     assert tabela.sha256 == hashlib.sha256(bytes_lf).hexdigest()
 
