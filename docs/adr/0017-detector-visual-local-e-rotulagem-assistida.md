@@ -39,8 +39,9 @@ fica limitada pela taxa de erro medida dos rótulos.
 ## Caminho de treino (E11)
 
 Spike de 2026-11-05. Escolhido: **CPU**, pela regra fixa de
-`scripts/treino_detector/decisao.py` aplicada aos relatórios dos ensaios (motivo registrado:
-"paridade ONNX ok; 22.3 img/s; 7.5 h na carga de referência; qualidade confirmada"). O
+`scripts/treino_detector/decisao.py` aplicada aos relatórios dos ensaios (motivo registrado no
+reensaio com o lock final: "paridade ONNX ok; 15.8 img/s; 10.5 h na carga de referência; qualidade
+confirmada"). O
 treino roda na CPU com PyTorch e exporta ONNX; a GPU AMD fica fora até o defeito abaixo ser
 corrigido numa release oficial.
 
@@ -51,23 +52,29 @@ de RAM, AMD Radeon RX 9070 XT (gfx1201), Windows 11 Home 10.0.26300, driver AMD 
 26.20.15.07 (DriverVersion 32.0.32015.7029). Versões: ambiente ROCm com Python 3.12.10, torch
 2.9.1+rocm7.2.1, torchvision 0.24.1+rocm7.2.1, HIP 7.2.53211-158bd99533, wheels do índice de
 release oficial da AMD (`repo.radeon.com/rocm/windows/rocm-rel-7.2.1/`, não o nightly); ambiente CPU
-com Python 3.11.9, torch 2.9.1+cpu, torchvision 0.24.1+cpu; ambos com onnx 1.23.2 e onnxruntime
-1.31.1. Modelo `ssdlite320_mobilenet_v3_large` (torchvision, BSD-3) sem pesos pré-treinados, 5
-classes (4 símbolos sintéticos + fundo), SGD (lr 0,01 com aquecimento linear nos 100 primeiros lotes,
-momentum 0,9, weight decay 4e-5), lote 16, ladrilhos sintéticos de 320 px.
+com Python 3.11.9, torch 2.14.1+cpu e torchvision 0.29.2+cpu (lock final; a primeira medição usou
+torch 2.9.1+cpu e torchvision 0.24.1+cpu); ambos com onnx 1.23.2 e onnxruntime 1.31.1. Modelo
+`ssdlite320_mobilenet_v3_large` (torchvision, BSD-3) sem pesos pré-treinados, 5 classes (4 símbolos
+sintéticos + fundo), SGD (lr 0,01 com aquecimento linear nos 100 primeiros lotes, momentum 0,9,
+weight decay 4e-5), lote 16, ladrilhos sintéticos de 320 px.
 
-| Medida | GPU ROCm nativo | CPU |
+| Medida | GPU ROCm nativo | CPU (torch 2.14.1, lock final) |
 | --- | --- | --- |
-| Vazão de treino (img/s, sem os 10 lotes de aquecimento) | sem medida: erro no 1º lote | 22,3 |
-| Aquecimento (10 primeiros lotes) | — | 7,9 s |
-| Segundos por época (2000 ladrilhos) | — | 92,8 / 89,4 / 87,4 |
+| Vazão de treino (img/s, sem os 10 lotes de aquecimento) | sem medida: erro no 1º lote | 15,8 (22,3 com torch 2.9.1, sem carga) |
+| Aquecimento (10 primeiros lotes) | — | 8,2 s |
+| Segundos por época (2000 ladrilhos) | — | 109,1 / 163,9 / 104,6 |
 | Paridade de treino na 1ª iteração (tolerância 1e-3) | sem resultado: erro no 1º passo na GPU | não se aplica |
 | Qualidade após o ensaio (precisão / recall) | — | 0,99 / 0,90 (3 épocas) |
 | Exportação ONNX (opset 18) | não alcançada | ok, TorchScript (`dynamo=False`) em 1,0 s; o exportador dynamo falhou por falta de `onnxscript`, fora do lock |
 | Paridade ONNX × PyTorch CPU (20 imagens) | não alcançada | ok, 0 divergentes, 48 detecções de referência com score ≥ 0,25 |
-| ONNX Runtime CPU por ladrilho de 320 px (100 execuções, 12 threads intra-op) | — | mediana 4,4 ms, p95 6,0 ms |
-| Estimativa por folha A1 (teto, 875 ladrilhos) | — | 3,9 s contra 60 s da E12 |
-| Carga de referência (20 000 ladrilhos × 30 épocas) | — | 7,5 h |
+| ONNX Runtime CPU por ladrilho de 320 px (100 execuções, 12 threads intra-op) | — | mediana 5,0 ms, p95 6,6 ms |
+| Estimativa por folha A1 (teto, 875 ladrilhos) | — | 4,4 s contra 60 s da E12 |
+| Carga de referência (20 000 ladrilhos × 30 épocas) | — | 10,5 h (7,5 h a 22,3 img/s) |
+
+O reensaio com o lock final coincidiu com uma suíte e2e de outra sessão rodando em laço; a época 1
+levou 163,9 s contra cerca de 105 s das outras. Por isso, 15,8 img/s é um limite pessimista. A
+medição sem carga, com torch 2.9.1, deu 22,3 img/s (épocas de 92,8, 89,4 e 87,4 s; ONNX Runtime com
+mediana de 4,4 ms). Com qualquer dos dois números, a CPU fica abaixo de 12 h.
 
 Premissas da regra (não são especificação; mudam com o conjunto real):
 
@@ -99,22 +106,26 @@ Alternativas descartadas:
 
 Riscos aceitos:
 
-- `torch` 2.9.1 tem 4 vulnerabilidades publicadas (osv-scanner 2.7.0 sobre o lock ROCm ensaiado,
-  único pacote afetado dos 22; o torch 2.9.1+cpu do lock atual tem as mesmas): PYSEC-2026-139
-  (CVSS 7,8, carregamento de `.pt2`, sem correção listada), PYSEC-2026-2286 / GHSA-63cw-57p8-fm3p
-  (8,8, desvio do unpickler `weights_only`, corrigida na 2.10.0), GHSA-qfhq-4f3w-5fph (5,3, `torch.lstm_cell`, 2.10.0) e GHSA-rrmf-rvhw-rf47 (5,3,
+- O lock CPU final (torch 2.14.1+cpu, torchvision 0.29.2+cpu, 19 pacotes) sai limpo no osv-scanner
+  2.7.0 ("No issues found"). As vulnerabilidades abaixo são do torch 2.9.1, o da primeira versão do
+  lock e o da variante ROCm medida, que segue nele (único release oficial da AMD para Windows).
+- `torch` 2.9.1 tem 4 vulnerabilidades publicadas (osv-scanner 2.7.0, único pacote afetado do lock
+  ROCm de 22 pacotes): PYSEC-2026-139 (CVSS 7,8, carregamento de `.pt2`, sem correção listada),
+  PYSEC-2026-2286 / GHSA-63cw-57p8-fm3p (8,8, desvio do unpickler `weights_only`, corrigida na
+  2.10.0), GHSA-qfhq-4f3w-5fph (5,3, `torch.lstm_cell`, 2.10.0) e GHSA-rrmf-rvhw-rf47 (5,3,
   `torch.jit.script`, 2.13.0). Todas exigem carregar arquivo de modelo ou entrada hostil ou usar as
-  funções citadas. Mitigação: no ambiente de treino nunca se carrega `.pt`, `.pt2` ou pickle de
-  terceiros, só pesos próprios; o artefato que sai é o ONNX; o exportador usado é o TorchScript por
-  rastreamento (`torch.jit.trace`), não `torch.jit.script`. Gatilhos de atualização: na
-  variante CPU, trocar o lock pelo torch estável ≥ 2.13 com nova medição; no ROCm, só voltar quando
-  a AMD publicar release para Windows com torch ≥ 2.13 e o defeito do MIOpen corrigido (hoje torch ≥
-  2.13 com ROCm só existe como pré-release no nightly TheRock, que o spike não usa).
+  funções citadas. Mitigação, válida para qualquer versão: no ambiente de treino nunca se carrega
+  `.pt`, `.pt2` ou pickle de terceiros, só pesos próprios; o artefato que sai é o ONNX; o exportador
+  usado é o TorchScript por rastreamento (`torch.jit.trace`), não `torch.jit.script`. Gatilho para o
+  ROCm: só voltar quando a AMD publicar release para Windows com torch ≥ 2.13 e o defeito do MIOpen
+  corrigido (hoje, torch ≥ 2.13 com ROCm só existe como pré-release no nightly TheRock, que o spike
+  não usa).
 - O pacote `rocm==7.2.1` é um sdist; no build isolado o pip baixa `setuptools>=70.2.0` do PyPI sem
   verificar hash (limite do modo hash do pip). Alternativa hermética: instalar com
   `--no-index --find-links` apontando para uma cópia local dos wheels.
 - Licenças do que o lock de treino instala (inventário feito no ambiente ROCm; o lock CPU tem os
-  mesmos pacotes, menos os três `rocm*`): torch e torchvision BSD-3, onnx Apache-2.0, onnxruntime
+  mesmos pacotes, menos os três `rocm*`): torch 2.9.1 e torchvision BSD-3 (o torch 2.14.1 declara
+  Apache-2.0, Apache-2.0 com exceção LLVM, BSD-2, BSD-3, BSL-1.0 e MIT), onnx Apache-2.0, onnxruntime
   MIT, numpy BSD-3 (com partes 0BSD/MIT/Zlib/CC0), Pillow MIT-CMU, protobuf BSD-3, flatbuffers e
   ml_dtypes Apache-2.0, filelock e setuptools MIT, typing_extensions PSF-2.0, packaging Apache-2.0 ou
   BSD-2, jinja2, markupsafe, fsspec, networkx, sympy e mpmath BSD. `rocm`, `rocm-sdk-core` e
@@ -124,7 +135,7 @@ Riscos aceitos:
   redistribuído.
 
 Como reproduzir: `requirements-treino.lock` fixa a variante CPU medida (Python 3.11,
-`torch==2.9.1+cpu` e `torchvision==0.24.1+cpu` do índice `https://download.pytorch.org/whl/cpu`, demais
+`torch==2.14.1+cpu` e `torchvision==0.29.2+cpu` do índice `https://download.pytorch.org/whl/cpu`, demais
 pinos do PyPI, todos com hash). O ambiente ROCm ensaiado (Python 3.12, `rocm-rel-7.2.1`) é
 reconstruído a partir dos pinos e hashes registrados em `tmp/treino-e11/instalacao.md` quando a AMD
 corrigir o defeito. Os comandos, em série, estão no docstring de `scripts/treino_detector/__init__.py`.
