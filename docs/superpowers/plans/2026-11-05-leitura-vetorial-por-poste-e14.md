@@ -63,11 +63,11 @@ Estimativa: Task 1 ≈ 45 min, Task 2 ≈ 75 min, Task 3 ≈ 50 min. A soma é 2
 
 ### Task 1: Asserções de tempo de parede viram contagem de trabalho
 
-**Estimativa:** 40 min. **Laboratório:** não.
+**Estimativa:** 45 min. **Laboratório:** não.
 
 **Files:**
 - Modify: `tests/unit/test_glyph_text_orcamento.py:133-145`
-- Modify (condicional, regra abaixo): os outros 8 arquivos com `perf_counter` da File Structure
+- Modify (condicional, regra abaixo): os arquivos da File Structure marcados Task 1 (os 8 de `perf_counter` e os prazos `monotonic()` de `tests/server` e `tests/integration`)
 
 **Interfaces:**
 - Consumes: `glyph_text.ler_texto_glifos`, `glyph_text.LIMITE_RESOLUCOES_PAGINA`, `glyph_text.LIMITE_GLIFOS_PAGINA`, helper `_contar` do próprio arquivo.
@@ -94,7 +94,7 @@ Ambiente: para medir a carga paralela antes da Task 2, instale no `.venv` do wor
 
 ### Task 2: Suíte paralela no gate
 
-**Estimativa:** 60 min. **Laboratório:** não.
+**Estimativa:** 75 min. **Laboratório:** não.
 
 **Files:**
 - Modify: `pyproject.toml` (extra `dev`), `requirements-development.lock`, `IniciarTestes.bat:55-58` (linha `Comando:` e a invocação do pytest), `tests/unit/test_project_scripts.py` (novo teste junto de `test_quality_script_enforces_the_relevant_quality_gates`, l.152-170), `CLAUDE.md` (seção "Comandos")
@@ -149,7 +149,9 @@ Desenho (o que o implementador não pode decidir sozinho):
 - **Validação:** `--processos` < 1 → `parser.error` (código 2), com mensagem `--processos precisa ser >= 1`.
 
 - [ ] **Step 1: Testes que falham.** Em cada arquivo novo, uma fixture com ≥ 5 folhas sintéticas de PDF (gere com os helpers já usados em `test_benchmark_texto_ficha.py` e `test_drawing_model_report.py`; no `drawing_model_report`, inclua uma folha com texto em contorno, uma com imagem que gera amostra repetida em duas folhas e um arquivo `.pdf` inválido). Testes:
-  - `test_processos_4_produz_a_mesma_saida_que_a_serial`: roda `main([... ])` serial e `main([..., "--processos", "4"])` em saídas distintas sob `tmp_path` e compara os arquivos byte a byte depois de `_sem_medidas_do_processo`, função do teste que troca por `0` o valor de toda chave JSON `tempo_*` e `pico_memoria_bytes` (regex `("(?:tempo_[a-z_]*s|pico_memoria_bytes)": )[0-9.]+`) e, no `texto-ficha.md`, as linhas que começam por `Tempo de análise:`. O teste confere antes que essas chaves existem na saída, para a normalização não passar em branco. No `drawing_model_report`, compare também os nomes e os bytes dos PNG de `--amostras-imagem`.
+  - `test_processos_4_produz_a_mesma_saida_que_a_serial`: roda `main([... ])` serial e `main([..., "--processos", "4"])` em saídas distintas sob `tmp_path` e compara os arquivos byte a byte depois de `_sem_medidas_do_processo`, função do teste que troca por `0` o valor de toda chave JSON `tempo_*` e `pico_memoria_bytes` (regex `("(?:tempo_[a-z_]*s|pico_memoria_bytes)": )[0-9.]+`) e, no `texto-ficha.md`, as linhas que começam por `Tempo de análise:`. Antes de normalizar, o teste confere que as chaves existem, para a normalização não passar em branco:
+    - no benchmark: `tempo_analise_com_glifos_s`, `tempo_analise_sem_glifos_s`, `tempo_glifos_s` e a linha `Tempo de análise:`;
+    - no report: `tempo_s` e `pico_memoria_bytes` em cada PDF medido (a entrada do PDF inválido não as tem). No `drawing_model_report`, compare também os nomes e os bytes dos PNG de `--amostras-imagem`.
   - `test_processos_maior_que_o_numero_de_pdfs_funciona` (`--processos 16`) e `test_corpus_vazio_com_processos` (relatório vazio igual ao serial).
   - `test_processos_invalido_sai_com_2` parametrizado com `0` e `-1`.
   - no `drawing_model_report`: `test_pdf_invalido_no_pool_vira_erro_no_relatorio` (a entrada do inválido é `{"sha256", "erro"}` e as outras são medidas).
@@ -164,9 +166,20 @@ Desenho (o que o implementador não pode decidir sozinho):
 ## Fechamento da etapa (orquestrador)
 
 - **Gate (critério 2):** o `.bat` é o que a etapa muda, por isso o espelho não basta.
-  - O `.bat` real roda no worktree (`cmd.exe //c IniciarTestes.bat`) antes do `#concluida`. Quem roda é o orquestrador; se o harness recusar `cmd.exe` na sessão isolada, ele sai do modo worktree (`ExitWorktree`, mantendo o worktree) e roda o `.bat` pelo caminho absoluto do worktree. O `relatorio-testes.txt` vai para a revisão final.
+  - O `.bat` real roda no worktree (`cmd.exe //c IniciarTestes.bat`) antes do `#concluida`. Quem roda é o orquestrador; se o harness recusar `cmd.exe` na sessão isolada, ele sai do modo worktree (`ExitWorktree`, mantendo o worktree) e roda o `.bat` pelo caminho absoluto do worktree. O `relatorio-testes.txt` vai para a revisão final. Depois do `.bat`, o orquestrador volta ao worktree (`EnterWorktree` com o caminho) antes de qualquer edição ou commit, ou usa só `git -C <worktree>`. Ele confere que `git -C <worktree> branch --show-current` dá `roadmap/leitura-vetorial-por-poste`.
   - Se nenhum caminho rodar o `.bat` real: o critério 2 vai para "Decisões para o usuário" como "verificado só pelo espelho", com o `.bat` real como condição do merge. O espelho `.superpowers/sdd/gate.sh` é atualizado para a invocação nova, e a revisão final compara linha a linha a seção pytest do `.bat` com a do espelho.
 - **Critério 1:** o conjunto de node IDs de `pytest --collect-only -q` em 425104a (gravado no workspace antes da Task 1) ⊆ o conjunto depois, com o renomeado da Task 1 mapeado. Com duas passadas no `.bat`, conta a união das duas.
 - **Critério 3:** tempo do passo pytest antes (1578 s, `relatorio-testes.txt` de 2026-11-04) e depois, e as 15 durações mais lentas, no handoff.
 - **Critério 4:** 3 suítes paralelas seguidas e 1 serial (`-n 0 --cov --cov-report=term-missing`), todas verdes, com as saídas na revisão final. A cobertura paralela e a serial vão lado a lado no handoff.
 - **Critério 6:** `pip check` e `osv-scanner` no `requirements-development.lock`.
+
+## Revisão de arquitetura
+
+- **Veredito:** aprovado com notas.
+- **Rodadas:** 1 (rodada 0 bloqueada por I1 — `.bat` real só pelo espelho — e I2 — `pico_memoria_bytes` na igualdade; ambos corrigidos, com M1–M9).
+- **Modelo:** opus (`revisor-arquitetura`).
+- **Notas Menores da rodada 1, aplicadas antes da Task 1:**
+  - N1: as estimativas dos cabeçalhos e o bloco "Files" da Task 1 igualados à File Structure;
+  - N2: as chaves exigidas por script na normalização da Task 3;
+  - N3: a volta ao worktree e a conferência da branch depois do `.bat` real.
+- **Não verificado pelo revisor (sem Bash):** a compatibilidade pytest-xdist 3.8.0 × pytest 9.0.3 × pytest-cov 7.1.0 e a versão do execnet (ficam com `pip check` e `osv-scanner`); a existência do `ExitWorktree` (confirmada pelo orquestrador: ferramenta da sessão).
