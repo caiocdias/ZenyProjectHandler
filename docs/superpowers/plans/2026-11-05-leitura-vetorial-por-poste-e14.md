@@ -23,12 +23,19 @@
 - O gate normal usa só fixtures sintéticas; nenhum teste lê `examples/` nem `examples/avaliacao-cega/`.
 - Código, docstrings e mensagens em português.
 - Documentação enxuta: atualize só o que a mudança torna falso (`CLAUDE.md`, docstrings de uso dos scripts).
+- ADR 0005: continua um só `.bat`, sem partição nem marcador de corpus. O paralelismo é de processos da mesma suíte, não um segundo gate. No `CLAUDE.md`, escreva "suíte em processos paralelos", nunca "gate paralelo".
+- `-n`/`--numprocesses` nunca entram em `addopts`: os pytest em subprocesso de `test_dependency_locks.py` copiam o `ini_options` e têm de continuar seriais.
 
 ## Review Focus
 
-1. Teste que só falha em processo paralelo (estado global, cwd, arquivo fixo no repositório, Qt) → isolar por `tmp_path`/fixture; serial só como último recurso e na passada serial do mesmo `.bat` (Task 2).
-2. Cobertura que cai ou deixa de ser exigida com xdist → o `.bat` mantém `--cov-fail-under=85.01` e a cobertura paralela fica a ≤ 0,2 p.p. da serial (Task 2, teste de script e medição no relatório).
-3. Exceção dentro de um processo do pool (PDF inválido, tabela ausente) → mesma saída da serial: o relatório grava `{"sha256", "erro"}` do PDF ruim e segue (Task 3).
+1. Teste que só falha em processo paralelo → isolar por `tmp_path`/fixture; serial só como último recurso e na passada serial do mesmo `.bat` (Task 2). Riscos já conhecidos:
+   - estado global, cwd e Qt offscreen;
+   - os pytest em subprocesso de `test_dependency_locks.py:455`, sem `--basetemp`, que usam o `pytest-of-<usuário>` padrão do `%TEMP%`: a limpeza numerada concorrente no Windows pode dar `PermissionError`. Correção preferida: passar `--basetemp=<tmp_path>/interno` ao subprocesso;
+   - `test_dependency_locks.py:699-712` grava e apaga `ROOT/build`;
+   - o `--basetemp` curto do `.bat` ganha `popen-gwN\` com xdist (caminho mais longo);
+   - prazos de espera com `monotonic()` em `tests/server` e `tests/integration` (por exemplo `test_jobs_api.py:252`, `+ 2` s), sob 20 processos (Task 1, Step 4).
+2. Cobertura que cai ou deixa de ser exigida com xdist → o `.bat` mantém `--cov-fail-under=85.01`, e a cobertura paralela fica a ≤ 0,2 p.p. da serial: as duas porcentagens são medidas no fechamento, lado a lado no handoff.
+3. Exceção dentro de um processo do pool (PDF inválido) → mesma saída da serial: o relatório grava `{"sha256", "erro"}` do PDF ruim e segue. Tabela ausente continua saindo com código 2 antes de abrir o pool (Task 3).
 4. Ordem e "primeiro vence" com processos → saída na ordem serial e amostras de imagem gravadas em série no processo principal (Task 3).
 5. `--processos` 0, negativo, maior que o número de PDFs ou corpus vazio → 0/negativo sai com código 2; os outros funcionam igual à serial (Task 3).
 
@@ -38,6 +45,7 @@
 |---|---|---|
 | `tests/unit/test_glyph_text_orcamento.py` | 1 | teste vermelho: tempo de parede → contagem de trabalho |
 | `tests/unit/test_drawing_model_geometry.py`, `test_drawing_model_geometry_adversarial.py`, `test_drawing_model_groups.py`, `test_glyph_text.py`, `test_glyph_text_varredura.py`, `test_pymupdf_drawing_model.py`, `test_pymupdf_drawing_model_adversarial.py`, `test_pymupdf_drawing_model_teto_pixels.py` | 1 | só os que não aguentam a carga paralela (regra na Task 1) |
+| arquivos de `tests/server` e `tests/integration` com prazo `monotonic()` (achados por `grep -rlnE "perf_counter\|monotonic" tests`) | 1 | só os prazos que não aguentam a carga paralela (regra na Task 1) |
 | `pyproject.toml` (extra `dev`) | 2 | `pytest-xdist>=3.8,<4` |
 | `requirements-development.lock` | 2 | `execnet==<última estável>` e `pytest-xdist==3.8.0`, em ordem alfabética |
 | `IniciarTestes.bat` | 2 | pytest paralelo com cobertura combinada e `--durations=15`; passada serial só se a Task 2 precisar |
@@ -49,7 +57,7 @@
 | `tests/unit/test_benchmark_texto_ficha_processos.py` (novo) | 3 | igualdade serial × paralela e validação da opção |
 | `tests/unit/test_drawing_model_report_processos.py` (novo) | 3 | idem |
 
-Estimativa: Task 1 ≈ 40 min, Task 2 ≈ 60 min, Task 3 ≈ 50 min — soma 2h30 de tarefas (ciclo completo de cada uma), abaixo do teto de ~3h; sem divisão.
+Estimativa: Task 1 ≈ 45 min, Task 2 ≈ 75 min, Task 3 ≈ 50 min. A soma é 2h50 de tarefas (ciclo completo de cada uma), abaixo do teto de ~3h, e a etapa não é dividida. Para caber, a Step 7 da Task 2 reaproveita as 3 últimas execuções da Step 5 quando nada mudou depois delas, e a execução serial do fechamento roda em segundo plano durante a revisão final.
 
 ---
 
@@ -70,10 +78,15 @@ Ambiente: para medir a carga paralela antes da Task 2, instale no `.venv` do wor
 - [ ] **Step 1: Perfil do teste vermelho.** Rode `python -m cProfile -s cumtime` (ou `pytest --profile` equivalente via script) sobre `test_pagina_hostil_acima_do_teto_de_resolucoes_e_limitada_em_tempo_limitado` e anote as funções de `glyph_text`/`glyph_signature` com ≥ 80% do tempo acumulado. Elas são as que o teste vai contar.
 - [ ] **Step 2: Reescreva o teste** como `test_pagina_hostil_acima_do_teto_de_resolucoes_e_limitada_em_trabalho_limitado`: remova `time.perf_counter` e a asserção `< 20.0`; mantenha `leitura == _LIMITADA` e a asserção de resoluções; acrescente, com `monkeypatch` contando como `_contar`, a contagem de cada função dominante do Step 1, com o limite que o código garante por construção (por exemplo `== len(candidatos)` ou `<= LIMITE_RESOLUCOES_PAGINA + _EXCESSO_POR_TRECHO`), escrito como constante ou expressão no teste e justificado num comentário de uma linha. Não mude `src/`.
 - [ ] **Step 3: Prove que o teste pega a regressão:** com um `monkeypatch` temporário que desliga o teto (`LIMITE_RESOLUCOES_PAGINA` alto), o teste falha pela contagem; reverta o experimento (não commite).
-- [ ] **Step 4: Regra para os outros 8 arquivos.** Rode a suíte inteira 3 vezes com `-n auto --durations=0 -p no:cacheprovider` e grave as durações dos testes desses arquivos. Converta para contagem de trabalho (mesma técnica) todo teste que:
+- [ ] **Step 4: Regra para os demais testes de tempo.** O conjunto é a saída de `grep -rlnE "perf_counter|monotonic" tests --include=*.py`: os 8 outros arquivos de `perf_counter` e os prazos de espera `monotonic() + L` de `tests/server` e `tests/integration`. Rode a suíte inteira 3 vezes com `-n auto --durations=0 -p no:cacheprovider` e grave as durações desses testes. Trate todo teste que:
   - falhou em alguma das 3 execuções; ou
-  - tem limite absoluto `L` segundos e durou ≥ `0,5 × L` em alguma execução.
-  Testes de razão (`melhor(grande) / melhor(pequeno) < 3`) que passaram nas 3 ficam. Liste no relatório cada teste, a duração máxima, o limite e a decisão.
+  - tem limite absoluto ou prazo de `L` segundos e durou ≥ `0,5 × L` em alguma execução.
+
+  Como tratar:
+  - asserção de tempo de parede → contagem de trabalho (mesma técnica);
+  - prazo de espera → espera por evento, ou prazo alargado para ≥ 4 × a duração máxima medida.
+
+  Testes de razão (`melhor(grande) / melhor(pequeno) < 3`) que passaram nas 3 execuções ficam como estão. No relatório, liste cada teste com a duração máxima, o limite e a decisão.
 - [ ] **Step 5: Verifique.** `.venv/Scripts/python.exe -m pytest tests/unit/test_glyph_text_orcamento.py -v` → PASS; suíte inteira `-n auto` → verde; `ruff check`, `ruff format --check`, `mypy` → limpos.
 - [ ] **Step 6: Commit** `test(analise): teto de resolucoes medido por contagem de trabalho` com o trailer `Soul: desenvolvedor`.
 
@@ -84,7 +97,7 @@ Ambiente: para medir a carga paralela antes da Task 2, instale no `.venv` do wor
 **Estimativa:** 60 min. **Laboratório:** não.
 
 **Files:**
-- Modify: `pyproject.toml` (extra `dev`), `requirements-development.lock`, `IniciarTestes.bat:56-63`, `tests/unit/test_project_scripts.py:150-169`, `CLAUDE.md` (seção "Comandos")
+- Modify: `pyproject.toml` (extra `dev`), `requirements-development.lock`, `IniciarTestes.bat:55-58` (linha `Comando:` e a invocação do pytest), `tests/unit/test_project_scripts.py` (novo teste junto de `test_quality_script_enforces_the_relevant_quality_gates`, l.152-170), `CLAUDE.md` (seção "Comandos")
 - Modify (condicional): testes que falharem só em paralelo
 
 **Interfaces:**
@@ -97,6 +110,9 @@ Ambiente: para medir a carga paralela antes da Task 2, instale no `.venv` do wor
   assert re.search(r"python -m pytest -n (auto|\d+)\b", quality_script)
   assert "--cov-fail-under=85.01" in quality_script
   assert "--durations=15" in quality_script
+  configuration = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+  addopts = configuration["tool"]["pytest"]["ini_options"]["addopts"].split()
+  assert not any(a == "-n" or a.startswith(("-n", "--numprocesses", "--dist")) for a in addopts)
   ```
   e `test_xdist_is_a_dev_dependency_pinned_in_the_development_lock`: `pytest-xdist` aparece no extra `dev` do `pyproject.toml` com limite `>=3.8,<4` e `pytest-xdist==3.8.0` e `execnet==` aparecem em `requirements-development.lock`, e nenhum dos dois aparece em `requirements-client.lock` nem em `requirements-server.lock`. Rode → FAIL.
 - [ ] **Step 2: Dependência.** `pytest-xdist>=3.8,<4` no extra `dev`; `execnet==<última estável no PyPI>` e `pytest-xdist==3.8.0` no lock de desenvolvimento, em ordem alfabética; instale pelo lock (`pip install -r requirements-development.lock`) e rode `pip check`.
@@ -104,7 +120,7 @@ Ambiente: para medir a carga paralela antes da Task 2, instale no `.venv` do wor
 - [ ] **Step 4: `.bat`.** Troque a invocação para `python -m pytest -n <N> --basetemp="!PYTEST_BASETEMP!" --cov --cov-report=term-missing --cov-fail-under=85.01 --durations=15` e a linha `Comando:` do cabeçalho da seção. Não mexa no resto do `.bat`.
 - [ ] **Step 5: Isolamento.** Rode a suíte paralela inteira 3 vezes seguidas. Todo teste que falhar só em paralelo (passa em `pytest <arquivo>::<teste>` serial) é corrigido pela causa (estado global, arquivo fixo, cwd, porta fixa) com `tmp_path`/fixtures. Se algum não puder ser isolado, registre o marcador `serial` em `[tool.pytest.ini_options].markers`, marque só esse teste e faça o `.bat` rodar duas passadas: `-n <N> -m "not serial" --cov ... --cov-fail-under=0` e `-m serial --cov --cov-append --cov-fail-under=85.01`, com o código de saída das duas somado ao `SUITE_STATUS`; acrescente ao teste do Step 1 a asserção das duas passadas. Explique no relatório cada caso.
 - [ ] **Step 6: `CLAUDE.md`.** Na seção "Comandos": o gate completo roda a suíte em paralelo; acrescente a linha `.\.venv\Scripts\python.exe -m pytest -n <N> --cov   # suíte inteira em paralelo (pytest-xdist); use antes de commit e no fim da tarefa` e diga que execuções focadas (`arquivo::teste`) continuam seriais e que `-n 0` força a suíte serial. Atualize a linha da cobertura se ela citar só a forma serial.
-- [ ] **Step 7: Verifique.** Os dois testes novos → PASS; 3 suítes paralelas seguidas verdes, com o total de testes de cada uma ≥ 5331 passed+xfailed e cobertura ≥ 85,01%; `ruff`, `format`, `mypy`, `pip check` limpos.
+- [ ] **Step 7: Verifique.** Os dois testes novos → PASS; 3 suítes paralelas seguidas verdes, com o total de testes de cada uma ≥ 5331 passed+xfailed e cobertura ≥ 85,01% (reaproveite as 3 últimas da Step 5 se nada mudou depois delas); `ruff`, `format`, `mypy`, `pip check` limpos.
 - [ ] **Step 8: Commit** `build(testes): suite paralela com pytest-xdist no gate` com o trailer `Soul: desenvolvedor`.
 
 ---
@@ -124,15 +140,16 @@ Ambiente: para medir a carga paralela antes da Task 2, instale no `.venv` do wor
   - `benchmark_texto_ficha.main` e `drawing_model_report.main` aceitam `--processos N` (inteiro ≥ 1, padrão 1).
 
 Desenho (o que o implementador não pode decidir sozinho):
-- **Pool:** `concurrent.futures.ProcessPoolExecutor(max_workers=min(processos, n_itens))`, aberto num `with`, só quando `processos > 1` e houver mais de um item; com `processos == 1` o caminho é o serial atual, sem pool. Funções de trabalho no nível do módulo (spawn no Windows), recebendo só `Path` e dados JSON-serializáveis; cada processo carrega a tabela de glifos por conta própria (`carregar_tabela_glifos(tabela_arquivo)` / `carregar_tabela_glifos()`).
+- **Pool:** `concurrent.futures.ProcessPoolExecutor(max_workers=min(processos, n_itens))`, aberto num `with`, só quando `processos > 1` e houver mais de um item. Com `processos == 1`, o caminho é o serial atual, sem pool. As funções de trabalho ficam no nível do módulo (spawn no Windows) e recebem só `Path` e dados JSON-serializáveis.
+- **Tabela de glifos:** o processo principal continua carregando e validando a tabela antes de medir, com o mesmo comportamento de hoje. No `drawing_model_report`, tabela ausente ou inválida → código 2. Cada processo do pool carrega a tabela uma vez, no `initializer` do pool (`carregar_tabela_glifos(tabela_arquivo)` / `carregar_tabela_glifos()`, guardada numa global do módulo), fora do `try` da medição por PDF.
 - **Ordem:** os resultados são montados na ordem da entrada serial (`pool.map`), nunca na ordem de término.
 - **`benchmark_texto_ficha`:** resolve todos os PDFs pelas referências antes de abrir o pool; referência sem PDF levanta o mesmo `ValueError` de hoje, sem medir nada. O trabalho paralelo é `_medir_pdf` por referência.
 - **`drawing_model_report`:** só `medir_pdf` vai para o pool, embrulhado numa função de módulo que devolve `{"sha256", "erro": type(erro).__name__}` quando a medição levanta, como hoje. A gravação das amostras (`gravar_amostras`) e o dicionário `fontes` continuam em série, no processo principal, na ordem ordenada dos PDFs, para manter o "primeiro PDF vence".
-- **Tempos:** os campos `tempo_*` medem a análise e, com `--processos > 1`, incluem a disputa por CPU. A docstring diz isso. A saída não registra o número de processos.
+- **Medidas do processo:** os campos `tempo_*` e `pico_memoria_bytes` (`drawing_model_report.py:223-256`, pico do `tracemalloc` por processo) medem a execução, não a leitura. Com `--processos > 1`, os tempos incluem a disputa por CPU, e o pico depende da partida a frio de cada processo do pool. A docstring diz isso. A saída não registra o número de processos.
 - **Validação:** `--processos` < 1 → `parser.error` (código 2), com mensagem `--processos precisa ser >= 1`.
 
 - [ ] **Step 1: Testes que falham.** Em cada arquivo novo, uma fixture com ≥ 5 folhas sintéticas de PDF (gere com os helpers já usados em `test_benchmark_texto_ficha.py` e `test_drawing_model_report.py`; no `drawing_model_report`, inclua uma folha com texto em contorno, uma com imagem que gera amostra repetida em duas folhas e um arquivo `.pdf` inválido). Testes:
-  - `test_processos_4_produz_a_mesma_saida_que_a_serial`: roda `main([... ])` serial e `main([..., "--processos", "4"])` em saídas distintas sob `tmp_path` e compara os arquivos byte a byte depois de `_sem_tempos`, função do teste que troca o valor de toda chave JSON `tempo_*` por `0` (regex `("tempo_[a-z_]*s": )[0-9.]+`) e, no `texto-ficha.md`, as linhas que começam por `Tempo de análise:`. No `drawing_model_report`, compare também os nomes e os bytes dos PNG de `--amostras-imagem`.
+  - `test_processos_4_produz_a_mesma_saida_que_a_serial`: roda `main([... ])` serial e `main([..., "--processos", "4"])` em saídas distintas sob `tmp_path` e compara os arquivos byte a byte depois de `_sem_medidas_do_processo`, função do teste que troca por `0` o valor de toda chave JSON `tempo_*` e `pico_memoria_bytes` (regex `("(?:tempo_[a-z_]*s|pico_memoria_bytes)": )[0-9.]+`) e, no `texto-ficha.md`, as linhas que começam por `Tempo de análise:`. O teste confere antes que essas chaves existem na saída, para a normalização não passar em branco. No `drawing_model_report`, compare também os nomes e os bytes dos PNG de `--amostras-imagem`.
   - `test_processos_maior_que_o_numero_de_pdfs_funciona` (`--processos 16`) e `test_corpus_vazio_com_processos` (relatório vazio igual ao serial).
   - `test_processos_invalido_sai_com_2` parametrizado com `0` e `-1`.
   - no `drawing_model_report`: `test_pdf_invalido_no_pool_vira_erro_no_relatorio` (a entrada do inválido é `{"sha256", "erro"}` e as outras são medidas).
@@ -146,7 +163,10 @@ Desenho (o que o implementador não pode decidir sozinho):
 
 ## Fechamento da etapa (orquestrador)
 
-- Gate: os passos do `.bat` rodados um a um pelo espelho `.superpowers/sdd/gate.sh` (o harness recusa `cmd.exe` neste worktree), atualizado para a invocação nova do `.bat`.
-- Critério 3: tempo do passo pytest antes (1578 s, `relatorio-testes.txt` de 2026-11-04) e depois, e as 15 durações mais lentas, no handoff.
-- Critério 4: 3 suítes paralelas seguidas e 1 serial (`-n 0`), verdes, com as saídas na revisão final.
-- Critério 6: `pip check` e `osv-scanner` no `requirements-development.lock`.
+- **Gate (critério 2):** o `.bat` é o que a etapa muda, por isso o espelho não basta.
+  - O `.bat` real roda no worktree (`cmd.exe //c IniciarTestes.bat`) antes do `#concluida`. Quem roda é o orquestrador; se o harness recusar `cmd.exe` na sessão isolada, ele sai do modo worktree (`ExitWorktree`, mantendo o worktree) e roda o `.bat` pelo caminho absoluto do worktree. O `relatorio-testes.txt` vai para a revisão final.
+  - Se nenhum caminho rodar o `.bat` real: o critério 2 vai para "Decisões para o usuário" como "verificado só pelo espelho", com o `.bat` real como condição do merge. O espelho `.superpowers/sdd/gate.sh` é atualizado para a invocação nova, e a revisão final compara linha a linha a seção pytest do `.bat` com a do espelho.
+- **Critério 1:** o conjunto de node IDs de `pytest --collect-only -q` em 425104a (gravado no workspace antes da Task 1) ⊆ o conjunto depois, com o renomeado da Task 1 mapeado. Com duas passadas no `.bat`, conta a união das duas.
+- **Critério 3:** tempo do passo pytest antes (1578 s, `relatorio-testes.txt` de 2026-11-04) e depois, e as 15 durações mais lentas, no handoff.
+- **Critério 4:** 3 suítes paralelas seguidas e 1 serial (`-n 0 --cov --cov-report=term-missing`), todas verdes, com as saídas na revisão final. A cobertura paralela e a serial vão lado a lado no handoff.
+- **Critério 6:** `pip check` e `osv-scanner` no `requirements-development.lock`.
