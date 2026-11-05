@@ -625,6 +625,10 @@ def test_restart_expires_abandoned_protected_upload_without_orphan(tmp_path: Pat
     assert list((data / "uploads" / "pending").glob("*.pdf")) == []
 
 
+# Ids fixos: ids aleatorios na coleta divergem entre workers do xdist.
+_ID_FIXO = "00000000-0000-4000-8000-000000000001"
+
+
 @pytest.mark.parametrize(
     ("method", "path"),
     (
@@ -632,19 +636,19 @@ def test_restart_expires_abandoned_protected_upload_without_orphan(tmp_path: Pat
         ("GET", "/api/v1/projects/search?query=0"),
         ("POST", "/api/v1/projects"),
         ("GET", "/api/v1/projects/by-service-note/0001234567"),
-        ("GET", f"/api/v1/projects/{uuid4()}"),
-        ("GET", f"/api/v1/projects/{uuid4()}/service-codes"),
-        ("PUT", f"/api/v1/projects/{uuid4()}/service-codes"),
-        ("PATCH", f"/api/v1/projects/{uuid4()}"),
-        ("DELETE", f"/api/v1/projects/{uuid4()}"),
-        ("POST", f"/api/v1/projects/{uuid4()}/document-uploads"),
-        ("POST", f"/api/v1/uploads/{uuid4()}/unlock"),
-        ("PUT", f"/api/v1/projects/{uuid4()}/page-order"),
-        ("DELETE", f"/api/v1/projects/{uuid4()}/documents/{uuid4()}"),
-        ("GET", f"/api/v1/projects/{uuid4()}/photos"),
-        ("POST", f"/api/v1/projects/{uuid4()}/elements/{uuid4()}/photos"),
-        ("DELETE", f"/api/v1/projects/{uuid4()}/elements/{uuid4()}/photos/{uuid4()}"),
-        ("GET", f"/api/v1/projects/{uuid4()}/photos/{uuid4()}/content"),
+        ("GET", f"/api/v1/projects/{_ID_FIXO}"),
+        ("GET", f"/api/v1/projects/{_ID_FIXO}/service-codes"),
+        ("PUT", f"/api/v1/projects/{_ID_FIXO}/service-codes"),
+        ("PATCH", f"/api/v1/projects/{_ID_FIXO}"),
+        ("DELETE", f"/api/v1/projects/{_ID_FIXO}"),
+        ("POST", f"/api/v1/projects/{_ID_FIXO}/document-uploads"),
+        ("POST", f"/api/v1/uploads/{_ID_FIXO}/unlock"),
+        ("PUT", f"/api/v1/projects/{_ID_FIXO}/page-order"),
+        ("DELETE", f"/api/v1/projects/{_ID_FIXO}/documents/{_ID_FIXO}"),
+        ("GET", f"/api/v1/projects/{_ID_FIXO}/photos"),
+        ("POST", f"/api/v1/projects/{_ID_FIXO}/elements/{_ID_FIXO}/photos"),
+        ("DELETE", f"/api/v1/projects/{_ID_FIXO}/elements/{_ID_FIXO}/photos/{_ID_FIXO}"),
+        ("GET", f"/api/v1/projects/{_ID_FIXO}/photos/{_ID_FIXO}/content"),
     ),
 )
 def test_every_stage_three_route_requires_bearer(

@@ -1,3 +1,4 @@
+import re
 import subprocess
 import tomllib
 from pathlib import Path
@@ -168,6 +169,33 @@ def test_quality_script_enforces_the_relevant_quality_gates() -> None:
     assert not any(
         item.startswith("ignore") and "ResourceWarning" in item for item in warning_filters
     )
+
+
+def test_quality_script_runs_pytest_in_parallel_with_combined_coverage() -> None:
+    quality_script = script_text("IniciarTestes.bat")
+    configuration = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+
+    assert re.search(r"python -m pytest -n (auto|\d+)\b", quality_script)
+    assert "--cov-fail-under=85.01" in quality_script
+    assert "--durations=15" in quality_script
+    addopts = configuration["tool"]["pytest"]["ini_options"]["addopts"].split()
+    assert not any(
+        item == "-n" or item.startswith(("-n", "--numprocesses", "--dist")) for item in addopts
+    )
+
+
+def test_xdist_is_a_dev_dependency_pinned_in_the_development_lock() -> None:
+    configuration = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    development_extra = configuration["project"]["optional-dependencies"]["dev"]
+    development_lock = script_text("requirements-development.lock")
+
+    assert "pytest-xdist>=3.8,<4" in development_extra
+    assert "pytest-xdist==3.8.0" in development_lock
+    assert "execnet==" in development_lock
+    for runtime_lock in ("requirements-client.lock", "requirements-server.lock"):
+        runtime_text = script_text(runtime_lock)
+        assert "pytest-xdist" not in runtime_text
+        assert "execnet" not in runtime_text
 
 
 def test_quality_gate_has_no_private_corpus_branch() -> None:

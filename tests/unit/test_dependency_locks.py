@@ -453,7 +453,15 @@ def _rodar_pytest_com_a_config_do_projeto(
     (tmp_path / "test_alvo.py").write_text(teste, encoding="utf-8")
     ambiente = {k: v for k, v in os.environ.items() if k != "PYTEST_ADDOPTS"}
     resultado = subprocess.run(
-        [sys.executable, "-m", "pytest", "-p", "no:cacheprovider", "test_alvo.py"],
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "-p",
+            "no:cacheprovider",
+            f"--basetemp={tmp_path / 'interno'}",
+            "test_alvo.py",
+        ],
         cwd=tmp_path,
         env=ambiente,
         capture_output=True,

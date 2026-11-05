@@ -20,7 +20,7 @@ Ambiente Windows, Python 3.11–3.13, venv em `.venv` (criado por `.\setup.bat`,
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m ruff format --check .
 .\.venv\Scripts\python.exe -m mypy                    # strict, cobre src e tests
-.\.venv\Scripts\python.exe -m pytest --cov            # cobertura mínima 85.01%
+.\.venv\Scripts\python.exe -m pytest -n auto --cov      # suíte inteira em paralelo (pytest-xdist); use antes de commit e no fim da tarefa; cobertura mínima 85.01%
 .\.venv\Scripts\python.exe -m pytest tests/unit/test_x.py::test_nome   # teste único
 .\.venv\Scripts\python.exe scripts\complexity_gate.py src              # falha em Radon rank E/F (CC >= 31)
 .\.venv\Scripts\python.exe scripts\client_artifact_gate.py --source-only
@@ -32,6 +32,9 @@ Ambiente Windows, Python 3.11–3.13, venv em `.venv` (criado por `.\setup.bat`,
 .\ZenyProjectHandler.bat                              # sobe servidor via compose.local.yaml + abre cliente
 ```
 
+- O gate roda a suíte em processos paralelos (`-n auto`, pytest-xdist; `-n 0` força a suíte serial).
+  Execuções focadas (`arquivo::teste`) continuam seriais. Teste novo não pode depender de ordem,
+  cwd, porta ou arquivo fixo: use `tmp_path` e ids de parametrização determinísticos.
 - Testes de UI usam `QT_QPA_PLATFORM=offscreen` (definido em `tests/conftest.py`).
 - Pytest roda com `--strict-markers` e transforma `ResourceWarning`/unraisable em erro: feche
   arquivos, documentos PyMuPDF e conexões explicitamente. No pytest 9.0 as flags `--strict-*` de
