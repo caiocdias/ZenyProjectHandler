@@ -655,3 +655,47 @@ def test_sanear_remove_caminhos_e_fica_na_primeira_linha() -> None:
     assert "home" not in erro
     assert ".pdf" not in erro
     assert erro.startswith("OSError: falhou em")
+
+
+@pytest.mark.parametrize(
+    "bruto",
+    [
+        "falhou em \\\\servidor\\projetos\\rede\\folha 12.bin ao abrir",
+        "falhou em \\\\?\\C:\\projetos\\rede\\folha 12.bin ao abrir",
+        "falhou em \\\\servidor ao abrir",
+    ],
+)
+def test_sanear_remove_caminho_de_rede_e_prefixo_estendido(bruto: str) -> None:
+    erro = bench.sanear(bruto)
+
+    for vazado in ("servidor", "projetos", "rede", "folha", "C:", "\\\\"):
+        assert vazado not in erro
+    assert erro.startswith("falhou em")
+    assert erro.endswith("ao abrir")
+
+
+def test_sanear_oculta_o_caminho_conhecido_em_qualquer_caixa() -> None:
+    erro = bench.sanear(
+        "falha em C:\\Pasta X\\Rua Tal 12.PDF aqui", ["c:\\pasta x\\rua tal 12.pdf"]
+    )
+
+    assert "Rua" not in erro
+    assert "Pasta" not in erro
+
+
+@pytest.mark.parametrize(
+    "parte",
+    [
+        "avaliacao-cega.",
+        "AVALIACAO-CEGA..",
+        "avaliacao-cega ",
+        "avaliacao-cega. .",
+        "avaliacao-cega:$I30",
+    ],
+)
+def test_componente_equivalente_no_windows_vira_avaliacao_cega(parte: str) -> None:
+    assert bench.COMPONENTE_CEGO in bench._componentes(f"x/{parte}/y.pdf")
+
+
+def test_componente_parecido_mas_diferente_nao_vira_avaliacao_cega() -> None:
+    assert bench.COMPONENTE_CEGO not in bench._componentes("x/avaliacao-cega-2/a.cega/y.pdf")

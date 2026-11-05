@@ -103,7 +103,14 @@ class _FolhaError(Exception):
 
 # --- saneamento -------------------------------------------------------------------------
 
-_CAMINHO_WINDOWS = re.compile(r"[A-Za-z]:[\\/](?:[^\\/:*?\"<>|\r\n]+[\\/])*[^\s\\/:*?\"<>|']*")
+# Dentro de um caminho do Windows os componentes podem ter espaço; o último pode ter espaço até
+# a extensão (nome de PDF com espaços) ou termina no primeiro espaço, se não houver extensão.
+_RESTO_WINDOWS = (
+    r"(?:[^\\/:*?\"<>|\r\n]+[\\/])*"
+    r"(?:[^\\/:*?\"<>|\r\n']*?\.[A-Za-z0-9]{1,5}\b|[^\s\\/:*?\"<>|']*)"
+)
+_CAMINHO_WINDOWS = re.compile(r"(?:\\\\[?.][\\/])?[A-Za-z]:[\\/]" + _RESTO_WINDOWS)
+_CAMINHO_UNC = re.compile(r"\\\\[^\\/\s'\"]+(?:[\\/]" + _RESTO_WINDOWS + ")?")
 _CAMINHO_POSIX = re.compile(r"(?<![\w.:])/(?:[\w.\-~]+/)+[\w.\-~]*")
 _NOME_PDF = re.compile(r"[^\s'\"\\/]+\.pdf", re.IGNORECASE)
 
@@ -111,9 +118,9 @@ _NOME_PDF = re.compile(r"[^\s'\"\\/]+\.pdf", re.IGNORECASE)
 def sanear(texto: str, ocultar: Iterable[str] = ()) -> str:
     """Primeira linha do erro, sem caminho absoluto nem nome de PDF."""
     for trecho in sorted({item for item in ocultar if item}, key=len, reverse=True):
-        texto = texto.replace(trecho, "<oculto>")
+        texto = re.sub(re.escape(trecho), "<oculto>", texto, flags=re.IGNORECASE)
     linha = next((item for item in texto.splitlines() if item.strip()), "")
-    for padrao in (_CAMINHO_WINDOWS, _CAMINHO_POSIX, _NOME_PDF):
+    for padrao in (_CAMINHO_WINDOWS, _CAMINHO_UNC, _CAMINHO_POSIX, _NOME_PDF):
         linha = padrao.sub("<caminho>", linha)
     return " ".join(linha.split())[:LIMITE_ERRO]
 
@@ -434,10 +441,15 @@ def medir_pdf(
 # --- localização do PDF e pool ----------------------------------------------------------
 
 
+def _componente_equivalente(parte: str) -> str:
+    """Nome equivalente no Windows: sem fluxo ``:x``, sem pontos/espaços finais, sem caixa."""
+    return parte.split(":", 1)[0].rstrip(". ").casefold()
+
+
 def _componentes(*caminhos: str) -> set[str]:
     partes: set[str] = set()
     for caminho in caminhos:
-        partes.update(parte.casefold() for parte in re.split(r"[\\/]+", caminho))
+        partes.update(_componente_equivalente(parte) for parte in re.split(r"[\\/]+", caminho))
     return partes
 
 
