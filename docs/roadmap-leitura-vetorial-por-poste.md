@@ -273,7 +273,7 @@ Trilha B — medição (branch `roadmap/leitura-vetorial-por-poste-b`)
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E15 | Ficha predita a partir das propostas | #pendente | E14 | nova `versao_extracao` e baseline real informativo nas 16 folhas |
+| E15 | Ficha predita a partir das propostas | #em-andamento | E14 | nova `versao_extracao` e baseline real informativo nas 16 folhas |
 | E16 | Conjunto de avaliação cego | #bloqueada | E03 | fichas de referência congeladas das folhas novas, antes de qualquer predição |
 
 Trilha C — aprendizado, e a E17 enquanto a trilha espera a E07 (D10) (branch `roadmap/leitura-vetorial-por-poste-c`)
@@ -1041,7 +1041,7 @@ Toda etapa seguinte paga esse custo.
 
 ---
 
-## E15 — Ficha predita a partir das propostas — #pendente
+## E15 — Ficha predita a partir das propostas — #em-andamento
 
 **Objetivo:** dar à ficha predita uma fonte que reflita a leitura, e não a promoção (D5). Assim o baseline real passa a ser informativo.
 
