@@ -895,7 +895,8 @@ def _fora_da_tabela(
 def publicar(
     rodada: Path, saida: Path, *, tolerancia: float, margem: float, espaco: float, quebra: float
 ) -> tuple[int, int]:
-    """Grava a tabela; devolve (entradas publicadas, grupos deixados fora como homóglifos)."""
+    """Grava a tabela; devolve (entradas publicadas, grupos deixados fora: homóglifos e as
+    formas que capturariam um deles)."""
     if saida.exists():
         raise RodadaError("a saída já existe e não é sobrescrita")
     arquivo = rodada / "consolidacao.json"
@@ -994,7 +995,7 @@ def _executar(args: argparse.Namespace) -> int:
         aceitos, pendentes = len(consolidacao["aceitos"]), len(consolidacao["pendentes"])
         print(f"ok: {aceitos} aceitos, {pendentes} pendentes")
         return 0
-    entradas, homoglifos = publicar(
+    entradas, fora = publicar(
         args.rodada,
         args.saida,
         tolerancia=args.tolerancia,
@@ -1002,7 +1003,10 @@ def _executar(args: argparse.Namespace) -> int:
         espaco=args.espaco,
         quebra=args.quebra,
     )
-    print(f"ok: tabela gravada com {entradas} entradas ({homoglifos} homóglifos fora)")
+    print(
+        f"ok: tabela gravada com {entradas} entradas "
+        f"({fora} formas fora (homóglifos e capturadoras))"
+    )
     return 0
 
 

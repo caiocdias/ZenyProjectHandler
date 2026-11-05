@@ -487,7 +487,7 @@ def test_publicar_deixa_fora_homoglifos_de_caracteres_diferentes(
     # nenhuma das duas é publicada, e o glifo dessa forma falha fechado em vez de sair trocado
     saida, caracteres = _publicar_com_copia(rodada, tmp_path, "l")
     assert sorted(caracteres) == sorted(LETRAS - {"1"})
-    assert "2 homóglifos" in capsys.readouterr().out
+    assert "2 formas fora (homóglifos e capturadoras)" in capsys.readouterr().out
     with pymupdf.open(rodada_base[1] / "folha-secreta-b.pdf") as documento:
         leitura = ler_texto_glifos(caminhos_da_pagina(documento[0]), carregar_tabela_glifos(saida))
     assert [t.texto for t in leitura.textos] == []
@@ -522,7 +522,7 @@ def test_publicar_tira_a_forma_que_capturaria_um_homoglifo_excluido(
     assert main(["consolidar", "--rodada", str(rodada)]) == 0
     saida = tmp_path / "tabela.json"
     assert main(["publicar", "--rodada", str(rodada), "--saida", str(saida)]) == 0
-    assert "3 homóglifos" in capsys.readouterr().out
+    assert "3 formas fora (homóglifos e capturadoras)" in capsys.readouterr().out
     tabela = carregar_tabela_glifos(saida)
     assert sorted(g.caractere or "" for g in tabela.glifos) == sorted(LETRAS - {"1"})
     um = assinatura_de_json(base["assinatura"])
