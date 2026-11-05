@@ -1221,13 +1221,15 @@ class ProjectPanelWidget(QWidget):
         worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)
         thread.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
-        thread.destroyed.connect(self._global_polling_destroyed)
+        # A thread antiga é destruída depois de um reinício; só a atual pode limpar as referências.
+        thread.destroyed.connect(lambda: self._global_polling_destroyed(thread))
         self._global_poll_thread = thread
         self._global_poll_worker = worker
         thread.start()
 
-    @Slot()
-    def _global_polling_destroyed(self) -> None:
+    def _global_polling_destroyed(self, thread: QThread) -> None:
+        if self._global_poll_thread is not thread:
+            return
         self._global_poll_thread = None
         self._global_poll_worker = None
 
