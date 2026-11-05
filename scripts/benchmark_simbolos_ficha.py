@@ -9,7 +9,10 @@ Uso::
 Para cada folha de ``RODADA/rodada.json`` lê a referência em ``pdfs/ID/ficha/referencia.json``,
 acha o PDF por ``raiz_corpus`` + ``caminho_relativo`` (recusando, antes de qualquer leitura, o
 caminho com o componente ``avaliacao-cega``), confere o ``sha256`` contra o da referência e mede
-cada método de detecção. Grava ``simbolos-ficha.json`` e ``simbolos-ficha.md`` em ``--saida``,
+cada método de detecção. Uma rodada cujo próprio diretório tem esse componente é recusada antes de
+ler o ``rodada.json``. A guarda é lexical (componentes do caminho, sem ``resolve``): não pega nome
+curto 8.3, symlink nem junction para a pasta cega; a proteção real é o protocolo da curadoria.
+Grava ``simbolos-ficha.json`` e ``simbolos-ficha.md`` em ``--saida``,
 sem caminho absoluto nem nome de PDF: a folha é identificada só pelo ``pdf_id`` da rodada.
 
 O método ``atual`` é a união do runner de benchmark sem raster nem estrutural: detector legado,
@@ -453,10 +456,20 @@ def _componentes(*caminhos: str) -> set[str]:
     return partes
 
 
+def _caminho_cego(*caminhos: str) -> bool:
+    return COMPONENTE_CEGO in _componentes(*caminhos)
+
+
 def localizar_pdf(rodada: Path, raiz_corpus: str, caminho_relativo: str) -> Path:
-    """Caminho do PDF; recusa o componente ``avaliacao-cega`` antes de qualquer acesso a disco."""
+    """Caminho do PDF; recusa o componente ``avaliacao-cega`` antes de qualquer acesso a disco.
+
+    A guarda é lexical: compara os componentes do diretório da rodada, de ``raiz_corpus`` e de
+    ``caminho_relativo``, e os do caminho normalizado dos três (``..`` incluído). Não pega nome
+    curto 8.3, symlink nem junction para a pasta cega; a proteção real é o protocolo da curadoria.
+    """
     normalizado = os.path.normpath(os.path.join(raiz_corpus, caminho_relativo))
-    if COMPONENTE_CEGO in _componentes(raiz_corpus, caminho_relativo, normalizado):
+    completo = os.path.normpath(os.path.join(str(rodada), raiz_corpus, caminho_relativo))
+    if _caminho_cego(str(rodada), raiz_corpus, caminho_relativo, normalizado, completo):
         raise _FolhaError(f"caminho recusado: componente {COMPONENTE_CEGO}")
     return rodada / raiz_corpus / caminho_relativo
 
@@ -736,6 +749,10 @@ def medir_simbolos(
         raise ValueError(f"método desconhecido ou ausente: {desconhecidos or 'nenhum'}")
     if processos < 1:
         raise ValueError("processos precisa ser >= 1")
+    # Antes de ler o rodada.json ou qualquer referência: rodada dentro da pasta cega não se abre.
+    absoluta = str(Path(rodada).absolute())
+    if _caminho_cego(absoluta, os.path.normpath(absoluta)):
+        raise RodadaError(f"rodada recusada: o diretório tem o componente {COMPONENTE_CEGO}")
     manifesto = carregar_rodada(rodada)
     raiz_corpus = str(manifesto["raiz_corpus"])
     por_pdf: dict[str, Registro] = {}

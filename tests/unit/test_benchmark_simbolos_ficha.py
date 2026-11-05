@@ -15,6 +15,7 @@ import pymupdf
 import pytest
 import scripts.benchmark_simbolos_ficha as bench
 import scripts.symbol_benchmark_runner as runner
+from scripts.curation_round import RodadaError
 from scripts.ficha_poste import validar_ficha
 
 import zeny_project_handler.adapters.analysis.pymupdf_guys as pymupdf_guys
@@ -699,3 +700,107 @@ def test_componente_equivalente_no_windows_vira_avaliacao_cega(parte: str) -> No
 
 def test_componente_parecido_mas_diferente_nao_vira_avaliacao_cega() -> None:
     assert bench.COMPONENTE_CEGO not in bench._componentes("x/avaliacao-cega-2/a.cega/y.pdf")
+
+
+# --- rodada dentro de avaliacao-cega ----------------------------------------------------
+
+
+def _rodada_em(base: Path, raiz_corpus: str, caminho_relativo: str, sha: str) -> Path:
+    """Rodada em ``base/r`` com uma folha e a ficha dela."""
+    rodada = base / "r"
+    pasta = rodada / "pdfs" / ID_COM_DESENHO / "ficha"
+    pasta.mkdir(parents=True)
+    ficha = _ficha([_poste("P1", _em((0.128, 0.15)))], sha)
+    (pasta / "referencia.json").write_text(json.dumps(ficha), encoding="utf-8")
+    manifesto = {
+        "schema_version": "curadoria-rodada-v1",
+        "raiz_corpus": raiz_corpus,
+        "pdfs": [{"pdf_id": ID_COM_DESENHO, "caminho_relativo": caminho_relativo}],
+    }
+    (rodada / "rodada.json").write_text(json.dumps(manifesto), encoding="utf-8")
+    return rodada
+
+
+def _vigiar_pasta_cega(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Registra todo acesso, a arquivo ou ao PyMuPDF, cujo argumento cite ``avaliacao-cega``."""
+    acessos: list[str] = []
+
+    def vigiar(original: Callable[..., Any]) -> Callable[..., Any]:
+        def interno(*args: Any, **kwargs: Any) -> Any:
+            if any("avaliacao-cega" in str(item).casefold() for item in (*args, *kwargs.values())):
+                acessos.append(str(getattr(original, "__name__", original)))
+            return original(*args, **kwargs)
+
+        return interno
+
+    for nome in ("is_file", "exists", "stat", "read_bytes", "read_text", "open", "resolve"):
+        monkeypatch.setattr(Path, nome, vigiar(getattr(Path, nome)))
+    monkeypatch.setattr(builtins, "open", vigiar(builtins.open))
+    monkeypatch.setattr(pymupdf, "open", vigiar(pymupdf.open))
+    monkeypatch.setattr(runner, "infer_pdf", vigiar(runner.infer_pdf))
+    return acessos
+
+
+@pytest.mark.parametrize("raiz_corpus", ["..", "."])
+def test_rodada_dentro_de_avaliacao_cega_e_recusada_sem_ler_nada(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, raiz_corpus: str
+) -> None:
+    base = tmp_path / "avaliacao-cega"
+    pdf = base if raiz_corpus == ".." else base / "r"
+    sha = _pdf(pdf / "x.pdf", com_aterramento=True)
+    rodada = _rodada_em(base, raiz_corpus, "x.pdf", sha)
+    acessos = _vigiar_pasta_cega(monkeypatch)
+    saida = tmp_path / "saida"
+
+    with pytest.raises(RodadaError, match="avaliacao-cega"):
+        _rodar(rodada, saida)
+
+    assert acessos == []
+    assert not saida.exists()
+
+
+def test_cli_com_rodada_dentro_de_avaliacao_cega_sai_com_erro_sem_relatorio(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    base = tmp_path / "Avaliacao-Cega"
+    rodada = _rodada_em(base, "..", "x.pdf", _pdf(base / "x.pdf", com_aterramento=True))
+    acessos = _vigiar_pasta_cega(monkeypatch)
+    saida = tmp_path / "saida"
+
+    with pytest.raises(SystemExit) as erro:
+        bench.main(["--rodada", str(rodada), "--saida", str(saida)])
+
+    assert erro.value.code not in (0, None)
+    assert acessos == []
+    assert not saida.exists()
+
+
+def test_rodada_fora_com_raiz_do_corpus_dentro_de_avaliacao_cega_e_falha_da_folha(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sha = _pdf(tmp_path / "avaliacao-cega" / "x.pdf", com_aterramento=True)
+    rodada = _rodada_em(tmp_path / "fora", "../../avaliacao-cega", "x.pdf", sha)
+    acessos = _vigiar_pasta_cega(monkeypatch)
+
+    relatorio = _rodar(rodada, tmp_path / "saida")
+
+    assert relatorio["por_pdf"][ID_COM_DESENHO]["situacao"] == "falha"
+    assert "avaliacao-cega" in relatorio["por_pdf"][ID_COM_DESENHO]["erro"]
+    assert acessos == []
+
+
+def test_rodada_fora_com_corpus_comum_continua_medindo(tmp_path: Path) -> None:
+    sha = _pdf(tmp_path / "corpus" / "x.pdf", com_aterramento=True)
+    rodada = _rodada_em(tmp_path / "fora", "../../corpus", "x.pdf", sha)
+
+    relatorio = _rodar(rodada, tmp_path / "saida")
+
+    assert relatorio["por_pdf"][ID_COM_DESENHO]["situacao"] == "ok"
+
+
+def test_localizar_pdf_confere_tambem_o_caminho_da_rodada() -> None:
+    rodada = Path("exemplos") / "avaliacao-cega" / "r"
+
+    with pytest.raises(bench._FolhaError, match="avaliacao-cega"):
+        bench.localizar_pdf(rodada, "..", "x.pdf")
+    assert bench.localizar_pdf(Path("exemplos") / "r", "../corpus", "x.pdf").name == "x.pdf"
