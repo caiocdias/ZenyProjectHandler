@@ -24,7 +24,12 @@ _PASTA_PACOTES = (
 )
 
 _CASAS_DECIMAIS_MAXIMAS = 4
-_COORDENADA_NO_TEXTO = re.compile(rf"\d\.\d{{{_CASAS_DECIMAIS_MAXIMAS + 1},}}")
+# Separador `.` ou `,` com dígitos antes ou não (".123456", "0,123456"), ou notação científica
+# com expoente <= -5 ("1e-05", "-1.5E-7").
+_COORDENADA_NO_TEXTO = re.compile(
+    rf"[.,]\d{{{_CASAS_DECIMAIS_MAXIMAS + 1},}}|\d[eE]-0*(?:[5-9]|[1-9]\d+)"
+)
+_ESPACOS = re.compile(r"\s+")
 _HEXADECIMAL_64 = re.compile(r"[0-9a-fA-F]{64}")
 # Montado por concatenação para o `git grep` do fechamento não achar este arquivo.
 _NOME_DE_FOLHA = re.compile("PROJETO" + " DE REDE", re.IGNORECASE)
@@ -43,7 +48,7 @@ def _violacoes_de_texto(texto: str, caminho: str) -> list[str]:
         violacoes.append(f"{caminho}: hexadecimal de 64 caracteres (sha256 de PDF)")
     if ".pdf" in texto.lower():
         violacoes.append(f"{caminho}: referência a arquivo .pdf")
-    if _NOME_DE_FOLHA.search(texto):
+    if _NOME_DE_FOLHA.search(_ESPACOS.sub(" ", texto)):
         violacoes.append(f"{caminho}: nome de folha real")
     return violacoes
 
@@ -105,6 +110,7 @@ def test_guarda_reprova(dados: Any) -> None:
         pytest.param({"x": 12.3456}, id="float-4-casas"),
         pytest.param({"x": "0.1234", "nota": "v1.2.3 e 0.1234,0.5"}, id="texto-numerico-curto"),
         pytest.param({"hash": "a1" * 31}, id="hexadecimal-curto"),
+        pytest.param({"x": "1e-04", "y": "1.234.567,89", "z": ",1234"}, id="texto-numerico-ate-4"),
     ],
 )
 def test_guarda_aceita_valores_legitimos(dados: Any) -> None:
