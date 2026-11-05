@@ -264,7 +264,7 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E14 | Gate de testes paralelo | #concluida | E05 | suíte paralela no `.bat` sem perder teste, `main` verde, scripts de corpus com processos |
-| E06.1 | Medição de símbolos e base dos pacotes | #em-andamento | E05, E14 | benchmark diagnóstico de símbolos contra as fichas, pacotes com as classes da ficha (pendentes), página do modelo com índice cru |
+| E06.1 | Medição de símbolos e base do modelo | #em-andamento | E05, E14 | benchmark diagnóstico de símbolos contra as fichas, página do modelo com índice cru, guarda contra memorização |
 | E06.2 | Método de pacotes sobre o modelo de desenho | #pendente | E06.1 | gramáticas atuais portadas para o modelo, método versionado no runner |
 | E06.3 | Gramáticas das classes da ficha | #pendente | E06.2 | estai, aterramento, para-raios, transformador e interrupção sobre o modelo, acima do atual |
 | E07 | Ficha do poste | #pendente | E06.3, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
@@ -1035,9 +1035,9 @@ Toda etapa seguinte paga esse custo.
 **Divisão (2026-11-05, orquestrador):**
 - **Por que dividir:** o levantamento do código estimou a etapa em 8 a 10 h, mais o laboratório das gramáticas novas. Os pacotes não têm nenhuma das classes da ficha: das 179 referências de símbolo da E03, 177 são de classes sem variante habilitada. Os detectores dedicados só rodam no runner opt-in, e o modelo de desenho não entra no job. Pelo "Orçamento", a etapa vira três subetapas completas.
 - **Como os critérios se repartem:**
-  - **E06.1**, medição, pacotes ampliados e base do modelo. Leva o critério 3 (auditor com 0 erros) e o baseline do analisador atual do critério 2.
+  - **E06.1**, medição e base do modelo. Leva o baseline do analisador atual do critério 2. A ampliação dos pacotes foi para a E06.3 (R-E06.1-0 do plano).
   - **E06.2**, método sobre o modelo com as gramáticas atuais, ligado no runner.
-  - **E06.3**, gramáticas das classes da ficha, com laboratório. Leva o critério 2 ("maiores que os do analisador atual") e H2.
+  - **E06.3**, ampliação dos pacotes e gramáticas das classes da ficha, com laboratório. Leva os critérios 2 ("maiores que os do analisador atual") e 3 (auditor com 0 erros e as variantes novas) e H2.
   - O critério 1 (fixtures sintéticas) vale nas três.
 - **Dependência:** a E07 passa a depender da E06.3.
 
@@ -1052,26 +1052,25 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 ---
 
-## E06.1 — Medição de símbolos e base dos pacotes — #em-andamento
+## E06.1 — Medição de símbolos e base do modelo — #em-andamento
 
-**Objetivo:** medir a detecção de símbolos do analisador atual contra as fichas de referência da E03 e preparar a base do método sobre o modelo de desenho. A base são as classes da ficha nos pacotes, com fonte rastreável, e a página do modelo com o índice cru das primitivas.
+**Objetivo:** medir a detecção de símbolos do analisador atual contra as fichas de referência da E03 e preparar a base do método sobre o modelo de desenho: a página do modelo, com o índice cru das primitivas.
 
-**Por que agora:** é a primeira subetapa da E06 (ver "Divisão"). Sem a medição, nenhuma gramática nova prova ganho. Sem as classes nos pacotes, não há onde habilitá-las.
+**Por que agora:** é a primeira subetapa da E06 (ver "Divisão"). Sem a medição, nenhuma gramática nova prova ganho.
 
 **Dependências:** E05, E14. O relógio começa no commit `#em-andamento` da E06 (dfc06e7).
 
 **Escopo:**
 - **Benchmark diagnóstico** `scripts/benchmark_simbolos_ficha.py`: precisão e recall por classe, família e folha contra os símbolos das fichas. Mede o "atual" (união do runner sem raster), nos dois critérios de casamento, com `--processos N`.
-- **Auditor de pacotes:** passa a aceitar variante de qualquer `owner_stage` do inventário que esteja nos pacotes. Os pacotes ganham, como `pending` e com o `source_ref` do inventário, as variantes de ESTAI, TRANSFORMADOR, ATERRAMENTO e PARA_RAIOS_MT/BT.
 - **Página do modelo de desenho** a partir da página aberta, com o mapa caminho → índice cru de `get_drawings(extended=True)`, sem mudar o cache nem `VERSAO_MODELO_DESENHO`.
 - **Guarda** contra memorização de folha real nos pacotes.
 
-**Fora de escopo:** gramáticas novas e o método sobre o modelo (E06.2 e E06.3); ligar algo no runner ou no analisador padrão.
+**Fora de escopo:** mudar os pacotes, as gramáticas e o método sobre o modelo (E06.2 e E06.3); ligar algo no runner ou no analisador padrão.
 
 **Critérios de aceite:**
 
 - [ ] Fixtures sintéticas positivas e negativas para o benchmark e para a página do modelo.
-- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros, com as variantes novas das classes da ficha.
+- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros (pacotes inalterados).
 - [ ] O baseline diagnóstico do analisador atual nas 16 folhas está em `tmp/`, com precisão e recall por classe, família e folha nos dois critérios. O handoff traz os totais.
 - [ ] A guarda passa: os pacotes não têm coordenada, hash nem nome de folha real.
 - [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
@@ -1087,7 +1086,7 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 **Riscos e mitigação:**
 
-- Uma variante nova pode alterar a detecção → ela só entra `pending`, e o auditor e o teste de pacotes conferem o total de habilitadas.
+- Uma falha de detector baixa a base que a E06.3 precisa superar → o método que falha numa folha sai dos totais, com registro.
 
 **Evidências e handoff:**
 
@@ -1142,7 +1141,8 @@ Rulings da divisão, registradas no ledger da E06.1:
 **Dependências:** E06.2.
 
 **Escopo:**
-- Gramáticas novas e variantes habilitadas, só com fonte rastreável no inventário, com laboratório para os limiares por classe e por família.
+- Ampliação dos pacotes com as variantes do inventário de ESTAI, TRANSFORMADOR, ATERRAMENTO e PARA_RAIOS_MT/BT, com fonte rastreável e `negative_examples` vindos de `confusable_negatives`. O auditor e `scripts/coverage_matrix_e16.py` passam a aceitar variante de outro `owner_stage` do inventário. A mudança é visível na tabela de suporte da revisão e nas exportações, e vai para "Decisões para o usuário".
+- Gramáticas novas e variantes habilitadas, com laboratório para os limiares por classe e por família.
 - Confirmar a hipótese H2: símbolos raster ficam marcados como resíduo para a E12.
 
 **Fora de escopo:** associação ao poste (E07); remover detectores antigos (E09).
@@ -1164,7 +1164,7 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
-**Riscos e mitigação:** pacote que memoriza a folha → exigir fixture sintética autoral; a guarda da E06.1 procura coordenadas e hashes.
+**Riscos e mitigação:** pacote que memoriza a folha → exigir fixture sintética autoral; a guarda da E06.1 procura coordenadas e hashes, e é estendida às gramáticas novas.
 
 **Evidências e handoff:** —
 ---
