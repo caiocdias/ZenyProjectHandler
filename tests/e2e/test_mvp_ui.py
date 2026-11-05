@@ -492,8 +492,7 @@ def test_rename_dialog_preserves_session_on_cancel_and_uses_current_version(
 
     QTimer.singleShot(0, lambda: interact(second.project.service_note, True))
     panel.alterar_numero_ns()
-    qtbot.waitUntil(lambda: not panel._project_action_active)
-    assert warnings
+    qtbot.waitUntil(lambda: bool(warnings) and not panel._project_action_active)
     assert panel._session.service_note == "0000000009"
     assert panel._gateway.get_project(second.project.project_id.root) == second
 

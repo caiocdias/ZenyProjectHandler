@@ -28,6 +28,9 @@ from zeny_project_handler_client.ui.review_gateway import ReviewGateway
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+# Prazo para as threads de observação do painel terminarem antes de a janela ser destruída.
+_PRAZO_ENCERRAR_THREADS_MS = 60_000
+
 
 @pytest.fixture(scope="session")
 def catalogo_inicial() -> CatalogoTecnico:
@@ -56,6 +59,22 @@ def app_log_capture(caplog: pytest.LogCaptureFixture) -> Iterator[pytest.LogCapt
             logger.propagate = previous_propagate
 
 
+def _esperar_threads_do_painel_ate_o_fim(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Estenda o prazo de 1 s que o fechamento da janela dá à thread de observação.
+
+    Sob carga a leitura da sessão passa desse prazo; o fechamento então desiste de juntar a
+    thread e destruir o painel com a QThread em execução aborta o processo inteiro.
+    """
+    from zeny_project_handler_client.ui.project_panel import ProjectPanelWidget
+
+    original = ProjectPanelWidget.shutdown_polling
+
+    def shutdown_polling(self: ProjectPanelWidget, timeout_ms: int = 1_000) -> bool:
+        return original(self, max(timeout_ms, _PRAZO_ENCERRAR_THREADS_MS))
+
+    monkeypatch.setattr(ProjectPanelWidget, "shutdown_polling", shutdown_polling)
+
+
 class ApplicationFactory(Protocol):
     def __call__(
         self,
@@ -72,11 +91,12 @@ class ApplicationFactory(Protocol):
 
 
 @pytest.fixture
-def application_factory() -> Iterator[ApplicationFactory]:
+def application_factory(monkeypatch: pytest.MonkeyPatch) -> Iterator[ApplicationFactory]:
     """Componha janelas e descarte seus engines antes da coleta do pytest."""
     created: list[tuple[QApplication, MainWindow]] = []
     gateways: list[Any] = []
     server_runtimes: list[Any] = []
+    _esperar_threads_do_painel_ate_o_fim(monkeypatch)
 
     def create(
         argv: Sequence[str] | None = None,
@@ -156,6 +176,10 @@ def application_factory() -> Iterator[ApplicationFactory]:
         yield create
     finally:
         for application, window in reversed(created):
+            # Sob carga a leitura da sessao passa de 1 s e o fechamento desiste de juntar a thread
+            # de observacao: destruir o painel com QThread em execucao aborta o processo.
+            if window.project_panel is not None:
+                assert window.project_panel.shutdown_polling(_PRAZO_ENCERRAR_THREADS_MS)
             window.close()
             window.release_resources()
             application.processEvents()
