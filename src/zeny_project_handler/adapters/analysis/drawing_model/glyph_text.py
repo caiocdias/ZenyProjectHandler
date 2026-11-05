@@ -6,8 +6,9 @@ lado, para que pontuação em sequência não saia do valor em silêncio. Um cam
 mesma cor, vizinho na ordem de desenho e encostado na ponta de um trecho, mas reprovado no
 filtro de candidato (grande demais, subcaminhos ou itens demais, coordenada não finita), pode
 ser um glifo do próprio valor: o trecho não é lido e o caminho conta como desconhecido.
-A página passa a `limitada` acima de `LIMITE_GLIFOS_PAGINA` candidatos ou de
-`LIMITE_PONTOS_PAGINA` pontos achatados somados dos candidatos.
+A página passa a `limitada` acima de `LIMITE_GLIFOS_PAGINA` candidatos, de
+`LIMITE_PONTOS_PAGINA` pontos achatados somados dos candidatos ou de `LIMITE_RESOLUCOES_PAGINA`
+resoluções distintas contra a tabela.
 
 O quadro do trecho põe o texto na horizontal para calcular a assinatura de cada glifo. O
 ângulo parte da reta de mínimos quadrados dos centros, orientada do primeiro para o último
@@ -45,8 +46,8 @@ aponta outro caractere faz o trecho falhar fechado.
 from __future__ import annotations
 
 import math
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass, replace
+from collections.abc import Callable, Iterator, Sequence
+from dataclasses import dataclass, field, replace
 from statistics import median, median_low
 from typing import Final
 
@@ -68,6 +69,11 @@ LIMITE_GLIFOS_PAGINA: Final = 20_000
 # Orçamento de pontos achatados (1 por segmento, PASSOS_BEZIER por Bézier) somados dos
 # candidatos da página: o custo da leitura cresce com os pontos, não só com os candidatos.
 LIMITE_PONTOS_PAGINA: Final = 2_000_000
+# Teto de resoluções distintas (varreduras da tabela que a memória não poupou: resolução de
+# glifo e confirmação de forma sem escala), conferido entre trechos. Formas que não se repetem
+# escapam da memória, e cada varredura custa ~5 ms na tabela real; nas 16 folhas reais a mais
+# pesada faz 2 277, e o teto põe o pior caso perto de 2x o dessa folha.
+LIMITE_RESOLUCOES_PAGINA: Final = 4_000
 LADO_MAXIMO_GLIFO: Final = 7.0
 _LADO_MINIMO_GLIFO: Final = 0.05
 _MAXIMO_SUBCAMINHOS: Final = 8
@@ -485,13 +491,12 @@ def _venenos(
 
 def _trechos(
     caminhos: Sequence[Caminho], indices: Sequence[int], total_desenhos: int | None = None
-) -> list[_Trecho]:
+) -> Iterator[_Trecho]:
+    """Trechos um a um: a leitura que para no teto de resoluções não mede os seguintes."""
     candidatos = [_candidato(indice, caminhos[indice]) for indice in indices]
     conjunto = set(indices)
-    return [
-        replace(_trecho(grupo), venenos=_venenos(caminhos, grupo, conjunto, total_desenhos))
-        for grupo in _agrupar(candidatos)
-    ]
+    for grupo in _agrupar(candidatos):
+        yield replace(_trecho(grupo), venenos=_venenos(caminhos, grupo, conjunto, total_desenhos))
 
 
 def extrair_trechos(caminhos: Sequence[Caminho]) -> tuple[TrechoGlifos, ...]:
@@ -513,18 +518,37 @@ def _chave(assinatura: AssinaturaGlifo) -> _ChaveAssinatura:
     )
 
 
+@dataclass(slots=True)
+class _Memoria:
+    """Varreduras da tabela já feitas na página, pela assinatura arredondada."""
+
+    resolucoes: dict[_ChaveAssinatura, Resolucao] = field(default_factory=dict)
+    formas: dict[tuple[_ChaveAssinatura, str], bool] = field(default_factory=dict)
+
+    def distintas(self) -> int:
+        return len(self.resolucoes) + len(self.formas)
+
+
 def _resolver(
-    tabela: TabelaGlifos,
-    assinatura: AssinaturaGlifo | None,
-    memoria: dict[_ChaveAssinatura, Resolucao],
+    tabela: TabelaGlifos, assinatura: AssinaturaGlifo | None, memoria: _Memoria
 ) -> Resolucao:
     if assinatura is None:
         return Resolucao("desconhecido", None, math.inf)
     chave = _chave(assinatura)
-    resolucao = memoria.get(chave)
+    resolucao = memoria.resolucoes.get(chave)
     if resolucao is None:
-        resolucao = memoria[chave] = resolver_glifo(tabela, assinatura)
+        resolucao = memoria.resolucoes[chave] = resolver_glifo(tabela, assinatura)
     return resolucao
+
+
+def _forma_confirma(
+    tabela: TabelaGlifos, assinatura: AssinaturaGlifo, caractere: str, memoria: _Memoria
+) -> bool:
+    chave = (_chave(assinatura), caractere)
+    confirma = memoria.formas.get(chave)
+    if confirma is None:
+        confirma = memoria.formas[chave] = forma_sem_escala_confirma(tabela, assinatura, caractere)
+    return confirma
 
 
 def _lacuna(trecho: _Trecho, anterior: int, atual: int) -> float:
@@ -568,7 +592,11 @@ def escalas_da_tabela(tabela: TabelaGlifos) -> EscalasDaTabela:
 
 
 def _com_escala_coerente(
-    trecho: _Trecho, resolucoes: list[Resolucao], tabela: TabelaGlifos, escalas: EscalasDaTabela
+    trecho: _Trecho,
+    resolucoes: list[Resolucao],
+    tabela: TabelaGlifos,
+    escalas: EscalasDaTabela,
+    memoria: _Memoria,
 ) -> list[Resolucao]:
     """Os glifos altos reconhecidos têm de dizer a mesma escala do h do trecho, e ela tem de estar
     ancorada; senão todos ficam ambíguos. Um glifo acima de `RAZAO_ESCALA_X` x a menor altura do
@@ -605,7 +633,7 @@ def _com_escala_coerente(
         coerente = False
     if um_so and coerente:
         coerente = all(
-            forma_sem_escala_confirma(tabela, assinatura, caractere)
+            _forma_confirma(tabela, assinatura, caractere, memoria)
             for _, caractere, assinatura, _ in altos
         )
     if coerente:
@@ -707,9 +735,7 @@ def _concordar(principal: Resolucao, alternativa: Resolucao) -> Resolucao:
     return Resolucao("ambiguo", None, principal.distancia)
 
 
-def _resolucoes(
-    trecho: _Trecho, tabela: TabelaGlifos, memoria: dict[_ChaveAssinatura, Resolucao]
-) -> list[Resolucao]:
+def _resolucoes(trecho: _Trecho, tabela: TabelaGlifos, memoria: _Memoria) -> list[Resolucao]:
     if trecho.sem_quadro:
         return [Resolucao("ambiguo", None, math.inf) for _ in trecho.publico.glifos]
     resolucoes = [_resolver(tabela, g.assinatura, memoria) for g in trecho.publico.glifos]
@@ -731,11 +757,14 @@ def ler_texto_glifos(
 
     `total_desenhos` é quantos desenhos de traço/preenchimento a página tinha antes de
     `caminhos_da_pagina` descartar os malformados; com ele, um descarte depois do último
-    caminho também envenena o trecho da ponta (sem ele, esse caso não é detectável)."""
+    caminho também envenena o trecho da ponta (sem ele, esse caso não é detectável).
+
+    Passando de `LIMITE_RESOLUCOES_PAGINA` resoluções distintas (conferido ao fim de cada
+    trecho), a leitura para e a página fica `limitada`, sem texto."""
     indices = _candidatos_limitados(caminhos)
     if indices is None:
         return LeituraGlifos((), 0, 0, limitada=True)
-    memoria: dict[_ChaveAssinatura, Resolucao] = {}
+    memoria = _Memoria()
     tipicas = alturas_tipicas(tabela)
     escalas = escalas_da_tabela(tabela)
     textos: list[TextoGlifo] = []
@@ -746,8 +775,10 @@ def ler_texto_glifos(
             venenos.update(trecho.venenos)
             continue
         resolucoes = _com_escala_coerente(
-            trecho, _resolucoes(trecho, tabela, memoria), tabela, escalas
+            trecho, _resolucoes(trecho, tabela, memoria), tabela, escalas, memoria
         )
+        if memoria.distintas() > LIMITE_RESOLUCOES_PAGINA:
+            return LeituraGlifos((), 0, 0, limitada=True)
         escala = _escala_das_lacunas(trecho, resolucoes, tipicas)
         for grupo in _grupos_de_texto(trecho, resolucoes, tabela, escala):
             situacoes = [resolucoes[i].situacao for i in grupo]
