@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from threading import Lock, RLock
 from uuid import UUID, uuid4
 
-from sqlalchemy import Engine, delete, insert, select, update
+from sqlalchemy import Engine, delete, insert, literal_column, select, update
 
 from zeny_project_handler.adapters.persistence.schema import (
     api_idempotency_records,
@@ -43,6 +43,12 @@ def _agora() -> datetime:
     instante. Como `created_at`/`updated_at` ordenam a retenção (`JobStore.prune`), o empate faria
     a ordem entre jobs depender da ordem física das linhas. O desempate é a ordem das escritas: um
     instante repetido ou regressivo avança 1 microssegundo sobre o último entregue.
+
+    O último instante é estado global do processo: o relógio nunca regride, então um salto para a
+    frente (relógio do sistema ou teste que adianta `datetime`) mantém os instantes entregues
+    adiantados até o relógio real alcançá-los. Testes que adiantam o relógio devem zerar
+    `_ultimo_instante` (monkeypatch). A retenção em `prune` não depende só deste relógio: ela tem
+    desempate próprio por `created_at` e `rowid`.
     """
     global _ultimo_instante
     with _RELOGIO_LOCK:
@@ -201,7 +207,13 @@ class JobStore:
         return len(rows)
 
     def prune(self) -> int:
-        """Remova terminais vencidos e limite a quantidade total de históricos."""
+        """Remova terminais vencidos e limite a quantidade total de históricos.
+
+        Os terminais mais recentes são retidos. A ordem é `updated_at`, depois `created_at` e, por
+        fim, a ordem física de inserção (`rowid`): linhas com `updated_at` empatado, como as
+        gravadas pelo relógio do Windows ou por `reconcile_interrupted`, desempatam pela ordem de
+        criação, sempre de forma determinística.
+        """
         now = _relogio_bruto().isoformat()
         terminal_values = tuple(item.value for item in _TERMINAL_STATUSES)
         with self._lock, self._engine.begin() as connection:
@@ -209,7 +221,11 @@ class JobStore:
                 connection.execute(
                     select(api_jobs.c.id, api_jobs.c.expires_at, api_jobs.c.updated_at)
                     .where(api_jobs.c.status.in_(terminal_values))
-                    .order_by(api_jobs.c.updated_at.desc())
+                    .order_by(
+                        api_jobs.c.updated_at.desc(),
+                        api_jobs.c.created_at.desc(),
+                        literal_column("api_jobs.rowid").desc(),
+                    )
                 )
             )
             removed_ids = {
