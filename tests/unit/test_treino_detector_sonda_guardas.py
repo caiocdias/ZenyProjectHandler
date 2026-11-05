@@ -490,42 +490,124 @@ def test_nenhum_lock_de_runtime_fixa_onnxruntime() -> None:
     assert achados == []
 
 
-def _linhas_do_lock() -> list[str]:
-    return [
-        t
-        for linha in LOCK_DE_TREINO.read_text(encoding="utf-8").splitlines()
-        if (t := linha.split("#", 1)[0].strip())
-    ]
+_HASH = re.compile(r"--hash=sha256:[0-9a-f]{64}")
+_OPCAO = re.compile(r"--(find-links|index-url|extra-index-url) https://\S+")
+_PINO = re.compile(r"([A-Za-z0-9._-]+)==([A-Za-z0-9._+!-]+)((?:\s+--hash=\S+)*)")
+
+
+def _ler_lock(texto: str) -> tuple[list[str], list[tuple[str, str, list[str]]]]:
+    """Devolva (opções, pinos), juntando continuações `\\` e ignorando comentários."""
+    logicas: list[str] = []
+    atual = ""
+    for bruta in texto.splitlines():
+        linha = bruta.split("#", 1)[0].rstrip()
+        continua = linha.endswith("\\")
+        atual += " " + linha.removesuffix("\\")
+        if not continua:
+            if atual.strip():
+                logicas.append(" ".join(atual.split()))
+            atual = ""
+    if atual.strip():
+        logicas.append(" ".join(atual.split()))
+    opcoes: list[str] = []
+    pinos: list[tuple[str, str, list[str]]] = []
+    for linha in logicas:
+        if linha.startswith("-"):
+            assert _OPCAO.fullmatch(linha), f"opcao invalida: {linha}"
+            opcoes.append(linha)
+            continue
+        m = _PINO.fullmatch(linha)
+        assert m, f"pino nao exato: {linha}"
+        hashes = m.group(3).split()
+        for h in hashes:
+            assert _HASH.fullmatch(h), f"hash invalido: {h}"
+        nome = re.sub(r"[-_.]+", "-", m.group(1)).lower()
+        pinos.append((nome, m.group(2), hashes))
+    return opcoes, pinos
+
+
+def _validar_lock(texto: str) -> list[tuple[str, str, list[str]]]:
+    _, pinos = _ler_lock(texto)
+    nomes = [p[0] for p in pinos]
+    assert len(nomes) == len(set(nomes)), "pino duplicado"
+    com_hash = [p[0] for p in pinos if p[2]]
+    sem_hash = [p[0] for p in pinos if not p[2]]
+    assert not (com_hash and sem_hash), f"hash so em alguns pinos; sem hash: {sem_hash}"
+    return pinos
 
 
 def test_lock_de_treino_so_tem_pinos_exatos_ou_opcoes_https_sem_duplicata() -> None:
-    nomes: list[str] = []
-    for linha in _linhas_do_lock():
-        if linha.startswith("-"):
-            assert re.fullmatch(r"--(find-links|index-url|extra-index-url) https://\S+", linha), (
-                linha
-            )
-            continue
-        m = re.fullmatch(r"([A-Za-z0-9._-]+)==([A-Za-z0-9._+!-]+)", linha)
-        assert m, f"pino nao exato: {linha}"
-        nomes.append(re.sub(r"[-_.]+", "-", m.group(1)).lower())
-    assert len(nomes) == len(set(nomes))
-    assert set(PACOTES_DE_TREINO) <= set(nomes)
+    pinos = _validar_lock(LOCK_DE_TREINO.read_text(encoding="utf-8"))
+    assert set(PACOTES_DE_TREINO) <= {p[0] for p in pinos}
+
+
+def _lock_sintetico(*, hash_em: set[str], continuacao: bool = False) -> str:
+    linhas = ["# cabecalho", "--find-links https://exemplo.test/rel/"]
+    for nome in PACOTES_DE_TREINO:
+        pino = f"{nome}==1.0"
+        if nome in hash_em:
+            sep = " \\\n    " if continuacao else " "
+            pino += f"{sep}--hash=sha256:{'a' * 64}{sep}--hash=sha256:{'b' * 64}"
+        linhas.append(pino)
+    return "\n".join(linhas) + "\n"
+
+
+@pytest.mark.parametrize("continuacao", [False, True])
+def test_validador_de_lock_aceita_hash_em_todos_os_pinos(tmp_path: Path, continuacao: bool) -> None:
+    lock = tmp_path / "requirements-treino.lock"
+    lock.write_text(
+        _lock_sintetico(hash_em=set(PACOTES_DE_TREINO), continuacao=continuacao), encoding="utf-8"
+    )
+
+    pinos = _validar_lock(lock.read_text(encoding="utf-8"))
+
+    assert len(pinos) == 4
+    assert all(len(p[2]) == 2 for p in pinos)
+
+
+def test_validador_de_lock_aceita_lock_sem_nenhum_hash(tmp_path: Path) -> None:
+    lock = tmp_path / "requirements-treino.lock"
+    lock.write_text(_lock_sintetico(hash_em=set()), encoding="utf-8")
+
+    assert len(_validar_lock(lock.read_text(encoding="utf-8"))) == 4
+
+
+@pytest.mark.parametrize("continuacao", [False, True])
+def test_validador_de_lock_rejeita_hash_so_em_alguns_pinos(
+    tmp_path: Path, continuacao: bool
+) -> None:
+    lock = tmp_path / "requirements-treino.lock"
+    lock.write_text(
+        _lock_sintetico(hash_em={"torch", "onnx"}, continuacao=continuacao), encoding="utf-8"
+    )
+
+    with pytest.raises(AssertionError, match="hash so em alguns"):
+        _validar_lock(lock.read_text(encoding="utf-8"))
+
+
+def test_validador_de_lock_rejeita_hash_malformado_pino_inexato_e_opcao_insegura() -> None:
+    with pytest.raises(AssertionError, match="hash invalido"):
+        _validar_lock("torch==1.0 --hash=sha256:abc\n")
+    with pytest.raises(AssertionError, match="pino nao exato"):
+        _validar_lock("torch>=1.0\n")
+    with pytest.raises(AssertionError, match="duplicado"):
+        _validar_lock("torch==1.0\ntorch==1.1\n")
+    with pytest.raises(AssertionError, match="opcao invalida"):
+        _validar_lock("--find-links http://inseguro.test/\n")
 
 
 def test_lock_de_treino_torch_e_torchvision_compartilham_variante_rocm_do_indice() -> None:
     texto = LOCK_DE_TREINO.read_text(encoding="utf-8")
-    pinos = dict(re.findall(r"(?m)^(torch|torchvision|rocm)==(\S+)$", texto))
-    assert set(pinos) == {"torch", "torchvision", "rocm"}
+    pinos = {nome: versao for nome, versao, _ in _validar_lock(texto)}
+    assert {"torch", "torchvision", "rocm"} <= set(pinos)
     variante = pinos["torch"].split("+", 1)[1]
     assert pinos["torchvision"].split("+", 1)[1] == variante
     assert variante == f"rocm{pinos['rocm']}"
     assert f"rocm-rel-{pinos['rocm']}" in texto
 
 
-def test_lock_de_treino_declara_python_312_e_opt_in_no_cabecalho_sem_hash() -> None:
+def test_lock_de_treino_declara_python_312_e_opt_in_no_cabecalho() -> None:
     texto = LOCK_DE_TREINO.read_text(encoding="utf-8")
     cabecalho = "\n".join(t for t in texto.splitlines() if t.startswith("#"))
     assert "3.12" in cabecalho
     assert "opt-in" in cabecalho
-    assert "--hash" not in texto
