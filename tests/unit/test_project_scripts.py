@@ -184,6 +184,29 @@ def test_quality_script_runs_pytest_in_parallel_with_combined_coverage() -> None
     )
 
 
+def test_quality_script_pytest_invocation_itself_is_parallel_with_the_required_flags() -> None:
+    # O eco "Comando:" do relatorio nao executa nada: o que vale e a linha real.
+    lines = script_text("IniciarTestes.bat").splitlines()
+    starts = [i for i, line in enumerate(lines) if line.startswith("python -m pytest")]
+    assert len(starts) == 1
+    invocation = lines[starts[0]]
+    position = starts[0]
+    while invocation.rstrip().endswith("^"):
+        position += 1
+        invocation = invocation.rstrip()[:-1] + " " + lines[position].strip()
+    tokens = invocation.split()
+
+    assert "-n" in tokens
+    workers = tokens[tokens.index("-n") + 1]
+    assert workers == "auto" or int(workers) >= 2
+    assert "--cov" in tokens
+    assert "--cov-fail-under=85.01" in tokens
+    assert "--durations=15" in tokens
+    echoed = [line for line in lines if "echo Comando: python -m pytest" in line]
+    assert len(echoed) == 1
+    assert f"-n {workers}" in echoed[0]
+
+
 def test_xdist_is_a_dev_dependency_pinned_in_the_development_lock() -> None:
     configuration = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     development_extra = configuration["project"]["optional-dependencies"]["dev"]
