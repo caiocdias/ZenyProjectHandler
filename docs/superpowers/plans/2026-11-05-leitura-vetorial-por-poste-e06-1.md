@@ -212,6 +212,29 @@ Regras, aplicadas a todo valor de todo pacote:
 | guarda verde | Task 3 |
 | `.bat` aprovado | passo 5 |
 
+---
+
+## Emenda durante a execução (R12)
+
+### Task 4: teste intermitente do `job_store`
+
+- **Estimativa:** 30 min. **Depende de:** nenhuma. **Risco:** normal. **Laboratório:** não.
+- **Por que entra:** `tests/server/test_jobs_api.py::test_job_store_accepts_complete_state_matrix_without_progress_regression` falha de forma intermitente, mesmo isolado e sem nenhum arquivo da E06.1. Na branch da trilha A, em 2026-11-05, o resultado foi 1 falha em 3 execuções: `limited.prune() == 2`, mas o job mais antigo continua existindo. Pela regra da E14, teste intermitente é defeito e é corrigido, nunca repetido. Ele ameaça o `.bat` de todas as etapas.
+
+**Files:**
+- Modify: o que a investigação provar ser a causa, só entre `src/zeny_project_handler_server/job_store.py` e `tests/server/test_jobs_api.py`. Os dois são disjuntos da E15 e da E17.
+
+**Interfaces:**
+- Consumes/Produces: o contrato público de `job_store` (`prune`, ordenação e retenção) não muda. Se a causa for de produção, por exemplo empate de timestamp na ordenação, o desempate tem de ser determinístico (por exemplo, pela ordem de criação) e documentado na docstring.
+
+- [ ] **Step 1:** use `superpowers:systematic-debugging`. Reproduza com `for i in $(seq 1 20); do .venv/Scripts/python.exe -m pytest "tests/server/test_jobs_api.py::test_job_store_accepts_complete_state_matrix_without_progress_regression" -q -p no:cacheprovider | tail -1; done` e registre a taxa de falha. Ache a causa: empate de relógio, resolução do `datetime`/`time` no Windows ou ordem não determinística.
+- [ ] **Step 2:** escreva um teste determinístico que reproduza a causa sempre, por exemplo com relógio injetado ou dois jobs com o mesmo timestamp, e veja-o falhar.
+- [ ] **Step 3:** corrija a causa, na produção ou no teste, conforme o que a investigação provar. Não use `sleep`, nem retry, nem afrouxe asserção.
+- [ ] **Step 4:** o mesmo laço de 20 execuções → 20/20 verdes; `tests/server/test_jobs_api.py` inteiro verde; ruff, format e mypy limpos.
+- [ ] **Step 5: Commit** (`fix: ...` ou `test: ...`, conforme a causa).
+
+Onda 2 passa a ter as Tasks 3 e 4, com arquivos disjuntos.
+
 ## Revisão de arquitetura
 
 - **Veredito:** aprovado com notas.
