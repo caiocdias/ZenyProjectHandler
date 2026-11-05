@@ -264,8 +264,10 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E14 | Gate de testes paralelo | #concluida | E05 | suíte paralela no `.bat` sem perder teste, `main` verde, scripts de corpus com processos |
-| E06 | Símbolos sobre o modelo de desenho | #em-andamento | E05, E14 | pacotes declarativos avaliados sobre o modelo vetorial |
-| E07 | Ficha do poste | #pendente | E06, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
+| E06.1 | Medição de símbolos e base dos pacotes | #em-andamento | E05, E14 | benchmark diagnóstico de símbolos contra as fichas, pacotes com as classes da ficha (pendentes), página do modelo com índice cru |
+| E06.2 | Método de pacotes sobre o modelo de desenho | #pendente | E06.1 | gramáticas atuais portadas para o modelo, método versionado no runner |
+| E06.3 | Gramáticas das classes da ficha | #pendente | E06.2 | estai, aterramento, para-raios, transformador e interrupção sobre o modelo, acima do atual |
+| E07 | Ficha do poste | #pendente | E06.3, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
 | E08 | Conferência UTM | #pendente | E07 | transformação página → UTM, checagem de posição e vão, pendências |
 | E09 | Troca do analisador e remoção do legado | #pendente | E08, E16 | analisador novo como padrão; detectores e, se provado, OCR removidos |
 
@@ -992,7 +994,7 @@ Toda etapa seguinte paga esse custo.
 
 ---
 
-## E06 — Símbolos sobre o modelo de desenho — #em-andamento
+## E06 — Símbolos sobre o modelo de desenho (dividida em E06.1–E06.3)
 
 **Objetivo:** reconhecer estais, para-raios MT/BT, transformadores e demais símbolos do inventário a partir dos grupos do modelo de desenho, usando os pacotes declarativos.
 
@@ -1030,6 +1032,63 @@ Toda etapa seguinte paga esse custo.
 
 - Pacote que memoriza a folha → exigir fixture sintética autoral, e o verificador procura coordenadas ou hashes de folhas reais.
 
+**Divisão (2026-11-05, orquestrador):**
+- **Por que dividir:** o levantamento do código estimou a etapa em 8 a 10 h, mais o laboratório das gramáticas novas. Os pacotes não têm nenhuma das classes da ficha: das 179 referências de símbolo da E03, 177 são de classes sem variante habilitada. Os detectores dedicados só rodam no runner opt-in, e o modelo de desenho não entra no job. Pelo "Orçamento", a etapa vira três subetapas completas.
+- **Como os critérios se repartem:**
+  - **E06.1**, medição, pacotes ampliados e base do modelo. Leva o critério 3 (auditor com 0 erros) e o baseline do analisador atual do critério 2.
+  - **E06.2**, método sobre o modelo com as gramáticas atuais, ligado no runner.
+  - **E06.3**, gramáticas das classes da ficha, com laboratório. Leva o critério 2 ("maiores que os do analisador atual") e H2.
+  - O critério 1 (fixtures sintéticas) vale nas três.
+- **Dependência:** a E07 passa a depender da E06.3.
+
+Rulings da divisão, registradas no ledger da E06.1:
+- **"Analisador atual" do critério 2:** é a união do runner sem raster (legado, estais, transformadores e pacotes), porque é o que o método novo substitui. O analisador padrão emite só 3 classes.
+- **Casamento:** o critério principal é o centro da predição dentro da caixa da referência, e IoU ≥ 0,5 (protocolo E02) fica como diagnóstico. O estai sai como polilinha fina e a ficha anota caixa, então com IoU ele dá 0 de 56 por construção. A precisão medida contra a ficha é um limite inferior, porque a ficha só anota símbolo associado a poste.
+- **Onde o método liga:** no `SymbolCompositionRunner` (opt-in), como os métodos atuais. A troca do analisador padrão é da E09.
+- **Detectores dedicados:** são o "atual" a superar e saem na E09.
+
+**Evidências e handoff:** ver as subetapas.
+
+
+---
+
+## E06.1 — Medição de símbolos e base dos pacotes — #em-andamento
+
+**Objetivo:** medir a detecção de símbolos do analisador atual contra as fichas de referência da E03 e preparar a base do método sobre o modelo de desenho. A base são as classes da ficha nos pacotes, com fonte rastreável, e a página do modelo com o índice cru das primitivas.
+
+**Por que agora:** é a primeira subetapa da E06 (ver "Divisão"). Sem a medição, nenhuma gramática nova prova ganho. Sem as classes nos pacotes, não há onde habilitá-las.
+
+**Dependências:** E05, E14. O relógio começa no commit `#em-andamento` da E06 (dfc06e7).
+
+**Escopo:**
+- **Benchmark diagnóstico** `scripts/benchmark_simbolos_ficha.py`: precisão e recall por classe, família e folha contra os símbolos das fichas. Mede o "atual" (união do runner sem raster), nos dois critérios de casamento, com `--processos N`.
+- **Auditor de pacotes:** passa a aceitar variante de qualquer `owner_stage` do inventário que esteja nos pacotes. Os pacotes ganham, como `pending` e com o `source_ref` do inventário, as variantes de ESTAI, TRANSFORMADOR, ATERRAMENTO e PARA_RAIOS_MT/BT.
+- **Página do modelo de desenho** a partir da página aberta, com o mapa caminho → índice cru de `get_drawings(extended=True)`, sem mudar o cache nem `VERSAO_MODELO_DESENHO`.
+- **Guarda** contra memorização de folha real nos pacotes.
+
+**Fora de escopo:** gramáticas novas e o método sobre o modelo (E06.2 e E06.3); ligar algo no runner ou no analisador padrão.
+
+**Critérios de aceite:**
+
+- [ ] Fixtures sintéticas positivas e negativas para o benchmark e para a página do modelo.
+- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros, com as variantes novas das classes da ficha.
+- [ ] O baseline diagnóstico do analisador atual nas 16 folhas está em `tmp/`, com precisão e recall por classe, família e folha nos dois critérios. O handoff traz os totais.
+- [ ] A guarda passa: os pacotes não têm coordenada, hash nem nome de folha real.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:**
+
+- `cmd.exe //c IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+- Benchmark de símbolos nas 16 folhas, rodado em paralelo → relatório em `tmp/`.
+
+**Revisão humana:** não
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:**
+
+- Uma variante nova pode alterar a detecção → ela só entra `pending`, e o auditor e o teste de pacotes conferem o total de habilitadas.
+
 **Evidências e handoff:**
 
 - Plano: —
@@ -1039,6 +1098,75 @@ Toda etapa seguinte paga esse custo.
 - Decisões para o usuário: —
 - Notas para a próxima etapa: —
 
+---
+
+## E06.2 — Método de pacotes sobre o modelo de desenho — #pendente
+
+**Objetivo:** executar os pacotes declarativos sobre a página do modelo de desenho como método de símbolos versionado, com as 6 gramáticas atuais portadas e o método ligado no runner.
+
+**Dependências:** E06.1.
+
+**Escopo:**
+- **Núcleo puro de gramáticas sobre o modelo:** molduras a partir de polilinhas fechadas e círculos, texto de `TextoModelo` (inclusive glifo), índice espacial e teto por página com diagnóstico.
+- **Porte das 6 gramáticas**, com paridade no corpus sintético.
+- **Método versionado:** `VERSAO_MODELO_DESENHO` e o sha dos pacotes no perfil, primitivas com índice cru e resíduo raster marcado para a E12.
+- **Ligação no `SymbolCompositionRunner`**, com a versão na assinatura.
+
+**Fora de escopo:** gramáticas novas (E06.3); analisador padrão (E09).
+
+**Critérios de aceite:**
+
+- [ ] Fixtures sintéticas positivas e negativas, e paridade de variantes por página com o motor atual no corpus sintético.
+- [ ] O benchmark de símbolos mede o método novo nas 16 folhas, ao lado do atual.
+- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:** a estimativa do levantamento passa de 3h. Divida de novo, se for preciso.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** laços O(F²) e `get_text` por moldura no motor atual → índice espacial e teto por página.
+
+**Evidências e handoff:** —
+
+---
+
+## E06.3 — Gramáticas das classes da ficha — #pendente
+
+**Objetivo:** reconhecer estais, aterramento, para-raios MT/BT, transformadores e equipamento de interrupção sobre o modelo de desenho, acima do analisador atual.
+
+**Dependências:** E06.2.
+
+**Escopo:**
+- Gramáticas novas e variantes habilitadas, só com fonte rastreável no inventário, com laboratório para os limiares por classe e por família.
+- Confirmar a hipótese H2: símbolos raster ficam marcados como resíduo para a E12.
+
+**Fora de escopo:** associação ao poste (E07); remover detectores antigos (E09).
+
+**Critérios de aceite:**
+
+- [ ] Fixtures sintéticas positivas e negativas para cada classe nova ou alterada.
+- [ ] Nas 16 folhas, precisão e recall de símbolo (diagnóstico) estão registrados em `tmp/` e são maiores que os do analisador atual com as mesmas referências.
+- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:**
+- O laboratório testa três hipóteses, conforme o levantamento da E06.1: H-A (grupo como unidade), H-B (grupo como semente e consulta espacial) e H-C (limiares por família).
+- Na E05, 5 rodadas desse ajuste dentro do ciclo custaram ~7h45. Divida por classe se passar de 3h.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** pacote que memoriza a folha → exigir fixture sintética autoral; a guarda da E06.1 procura coordenadas e hashes.
+
+**Evidências e handoff:** —
 ---
 
 ## E15 — Ficha predita a partir das propostas — #pendente
@@ -1103,7 +1231,7 @@ Toda etapa seguinte paga esse custo.
 
 **Por que agora:** a associação é um dos erros que mais custam ao usuário. Com texto e símbolos limpos, ela passa a ser geométrica.
 
-**Dependências:** E06, E15.
+**Dependências:** E06.3, E15.
 
 **Escopo:**
 - Associação geométrica por proximidade, linhas de chamada e convenções de layout, com vãos ligados à polilinha da rede entre dois postes.
