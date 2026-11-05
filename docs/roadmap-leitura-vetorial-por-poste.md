@@ -281,7 +281,7 @@ Trilha C — aprendizado, e a E17 enquanto a trilha espera a E07 (D10) (branch `
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E11 | Spike de treino na GPU AMD | #concluida | E01 | decisão registrada sobre onde e como treinar |
-| E17 | Fechamento do cliente com servidor lento | #pendente | E14 | fechar a janela nunca destrói `QThread` viva, sem o monkeypatch de 60 s no `conftest` |
+| E17 | Fechamento do cliente com servidor lento | #em-andamento | E14 | fechar a janela nunca destrói `QThread` viva, sem o monkeypatch de 60 s no `conftest` |
 | E10 | Fábrica de rótulos contínua | #pendente | E07 | fluxo mensal com pré-marcação, leitura dupla, amostra humana e dataset por hash |
 | E12 | Detector visual local | #pendente | E11, E09, E10 | detector ONNX em CPU para o resíduo, ganho medido por poste |
 
@@ -941,7 +941,7 @@ Toda etapa seguinte paga esse custo.
 
 ---
 
-## E17 — Fechamento do cliente com servidor lento — #pendente
+## E17 — Fechamento do cliente com servidor lento — #em-andamento
 
 **Objetivo:** fechar a janela do cliente nunca destrói uma `QThread` viva. Hoje, com o servidor lento, o processo aborta com qFatal (0xC0000409).
 
