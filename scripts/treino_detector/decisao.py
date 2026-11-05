@@ -74,12 +74,20 @@ class Decisao:
     descartados: tuple[tuple[str, str], ...]
 
 
+def _vazao_valida(resultado: ResultadoCaminho) -> float | None:
+    """Vazão utilizável na regra: medida e positiva; zero ou negativa é como não medida."""
+    vazao = resultado.imagens_por_segundo
+    return vazao if vazao is not None and vazao > 0 else None
+
+
 def _falhas_comuns(resultado: ResultadoCaminho, exige_paridade_treino: bool) -> list[str]:
     falhas: list[str] = []
     if resultado.erro_fase is not None:
         falhas.append(f"erro na fase {resultado.erro_fase}")
     if resultado.imagens_por_segundo is None:
         falhas.append("sem vazão de treino medida após o aquecimento")
+    elif _vazao_valida(resultado) is None:
+        falhas.append(f"vazão de treino inválida ({resultado.imagens_por_segundo:g} img/s)")
     if exige_paridade_treino and not resultado.paridade_treino:
         falhas.append("paridade de treino CPU x GPU na 1ª iteração não comprovada")
     if not resultado.exportacao_onnx:
@@ -93,14 +101,13 @@ def _falhas_gpu(gpu: ResultadoCaminho, vazao_cpu: float | None) -> list[str]:
     if not gpu.ensaiado:
         return [f"não ensaiado: {gpu.motivo_nao_ensaiado}"]
     falhas = _falhas_comuns(gpu, exige_paridade_treino=True)
-    if gpu.imagens_por_segundo is not None:
-        horas = horas_estimadas_treino(gpu.imagens_por_segundo)
-        rapida = vazao_cpu is not None and gpu.imagens_por_segundo >= (
-            RAZAO_MINIMA_GPU_CPU * vazao_cpu
-        )
+    vazao = _vazao_valida(gpu)
+    if vazao is not None:
+        horas = horas_estimadas_treino(vazao)
+        rapida = vazao_cpu is not None and vazao >= RAZAO_MINIMA_GPU_CPU * vazao_cpu
         if not rapida and horas > LIMITE_HORAS_TREINO:
             falhas.append(
-                f"{gpu.imagens_por_segundo:.1f} img/s abaixo de {RAZAO_MINIMA_GPU_CPU:g}x a CPU"
+                f"{vazao:.1f} img/s abaixo de {RAZAO_MINIMA_GPU_CPU:g}x a CPU"
                 f" e {horas:.1f} h > {LIMITE_HORAS_TREINO:g} h na carga de referência"
             )
     return falhas
@@ -110,8 +117,9 @@ def _falhas_cpu(cpu: ResultadoCaminho) -> list[str]:
     if not cpu.ensaiado:
         return [f"não ensaiado: {cpu.motivo_nao_ensaiado}"]
     falhas = _falhas_comuns(cpu, exige_paridade_treino=False)
-    if cpu.imagens_por_segundo is not None:
-        horas = horas_estimadas_treino(cpu.imagens_por_segundo)
+    vazao = _vazao_valida(cpu)
+    if vazao is not None:
+        horas = horas_estimadas_treino(vazao)
         if horas > LIMITE_HORAS_TREINO:
             falhas.append(f"{horas:.1f} h > {LIMITE_HORAS_TREINO:g} h na carga de referência")
     return falhas
@@ -150,7 +158,7 @@ def decidir_caminho(
     rocm: ResultadoCaminho, wsl2: ResultadoCaminho, cpu: ResultadoCaminho
 ) -> Decisao:
     """Aplique a regra fixa da E11 e devolva o caminho com os descartados e seus motivos."""
-    vazao_cpu = cpu.imagens_por_segundo if cpu.ensaiado else None
+    vazao_cpu = _vazao_valida(cpu) if cpu.ensaiado else None
     candidatos = (
         (
             "rocm-nativo",
@@ -174,6 +182,14 @@ def decidir_caminho(
         escolhido = "gpu-alugada"
         motivo = "nenhum caminho local viável: propor GPU alugada ao usuário (D1)"
     return Decisao(caminho=escolhido, motivo=motivo, descartados=tuple(descartados))
+
+
+def _fase_do_erro(erro: Any) -> str | None:
+    """Fase do erro do relatório; erro em qualquer forma conta, e sem fase vira "desconhecida"."""
+    if erro is None:
+        return None
+    fase = erro.get("fase") if isinstance(erro, dict) else None
+    return str(fase) if fase else "desconhecida"
 
 
 def _ok(bloco: Any) -> bool:
@@ -210,7 +226,7 @@ def resultado_de_relatorio(nome: str, relatorio: Path | None) -> ResultadoCaminh
         trajetoria_ok=paridade.get("trajetoria_equivalente")
         if isinstance(paridade, dict)
         else None,
-        erro_fase=erro.get("fase") if isinstance(erro, dict) else None,
+        erro_fase=_fase_do_erro(erro),
     )
 
 
