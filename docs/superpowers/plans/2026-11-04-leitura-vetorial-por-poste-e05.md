@@ -42,6 +42,8 @@
 
 ## Decisões de desenho
 
+> **Nota da revisão final (M2):** parte desta seção foi substituída pelas rulings registradas durante a execução. Valem a distância por deslocamentos cíclicos com meio passo e pareamento de subcaminhos (Task 1) e as regras da Task 6: a forma decide o caractere e a caixa só reprova, a altura relativa a `h` só reprova, há janela de forma, a escala do trecho tem de ser coerente, homóglifos e capturadoras são excluídos no `publicar`, e `espaco` é 0.48 sem faixa de dúvida. O comportamento vigente está nas docstrings de `glyph_table.py` e `glyph_text.py`.
+
 - **Candidatos e trechos:** candidato a glifo = caminho `preenchimento`/`traco_e_preenchimento` com 1–8 subcaminhos, até 256 itens e maior lado da caixa em `(0.05, 7.0)` pt (a sonda das 9 folhas de contorno tem 1.260 formas entre 5,5 e 6,5 pt e só 46 entre 6,5 e 7,5). Trecho = candidatos consecutivos na ordem de desenho, com a mesma cor de preenchimento e distância entre centros ≤ `1.6 × max(lados das duas caixas)` (regra do legado `pymupdf_glyphs._adjacent`); só trechos com 2–64 glifos são texto. Ângulo = reta de mínimos quadrados pelos centros, orientada do primeiro para o último glifo, refinada pela mediana das inclinações entre os fundos dos glifos (Theil–Sen; ruling da Task 2). Altura `h` = mediana das alturas dos glifos no quadro; linha de base = mediana dos fundos.
 - **Quadro confirmado (rulings da Task 2):** só glifos de altura plena definem ângulo, altura e base; cada glifo é lido em mais de uma orientação estimada de forma independente (fundos, topos e, em trecho curto, centros) e vira ambíguo se as leituras divergem; trecho com menos de 2 glifos de altura plena não é lido; `quadro_incerto=True` marca esse caso e também o espalhamento entre quadros acima de 1,0°. Glifos pequenos vizinhos entram no trecho do valor ao lado ou o trecho falha fechado; um caminho preenchido da mesma cor, vizinho e adjacente, mas reprovado como candidato, anula o trecho (nunca texto parcial). Além do teto de candidatos há um orçamento de pontos por página.
 - **Assinatura:** subcaminhos achatados (Bézier em 8 passos), girados para o quadro, reamostrados por comprimento de arco em 24 pontos, orientados no sentido anti-horário e expressos em unidades de `h` relativos ao centro da caixa do glifo; subcaminhos ordenados por (−área, centro y, centro x) arredondados a 2 casas. `caixa = (largura/h, altura/h, (fundo − base)/h)`.
@@ -62,6 +64,8 @@
 - **Erro de rótulo:** não há amostra humana nesta etapa; a taxa de leitura errada é medida contra as referências congeladas da E03 (que tiveram amostra humana): no benchmark, texto com padrão de campo perto do poste, a distância de edição 1–2 do valor de referência e diferente dele, conta como "erro afirmado". Vai para "Decisões para o usuário".
 
 ## File Structure
+
+> **Nota da revisão final (M1):** a execução também tocou `.claude/skills/curadoria-simbologia/SKILL.md` (Task 3). A mudança acrescenta os comandos de `curation_glifos`, exigidos por `test_skill_cobre_todos_os_clis_da_curadoria` e `test_contrato_e_skill_executam_os_mesmos_clis`. Não muda agente, hook nem permissão.
 
 - Create `src/zeny_project_handler/adapters/analysis/drawing_model/glyph_signature.py` — achatamento, assinatura e distância (puro).
 - Create `src/zeny_project_handler/adapters/analysis/drawing_model/glyph_table.py` — tipos, resolução, carga/validação estrita e serialização (puro; lê arquivo).
