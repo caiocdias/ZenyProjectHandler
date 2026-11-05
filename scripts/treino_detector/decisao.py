@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
+import math
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -75,9 +76,9 @@ class Decisao:
 
 
 def _vazao_valida(resultado: ResultadoCaminho) -> float | None:
-    """Vazão utilizável na regra: medida e positiva; zero ou negativa é como não medida."""
+    """Vazão utilizável na regra: medida, finita e positiva; o resto conta como inválida."""
     vazao = resultado.imagens_por_segundo
-    return vazao if vazao is not None and vazao > 0 else None
+    return vazao if vazao is not None and math.isfinite(vazao) and vazao > 0 else None
 
 
 def _falhas_comuns(resultado: ResultadoCaminho, exige_paridade_treino: bool) -> list[str]:
