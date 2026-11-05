@@ -611,3 +611,47 @@ def test_lock_de_treino_declara_python_312_e_opt_in_no_cabecalho() -> None:
     cabecalho = "\n".join(t for t in texto.splitlines() if t.startswith("#"))
     assert "3.12" in cabecalho
     assert "opt-in" in cabecalho
+
+
+def test_lock_real_esta_em_modo_hash_todo_pino_com_sha256_de_64_hex_e_unico() -> None:
+    pinos = _validar_lock(LOCK_DE_TREINO.read_text(encoding="utf-8"))
+
+    assert len(pinos) >= len(PACOTES_DE_TREINO)
+    sem_hash = [nome for nome, _, hashes in pinos if not hashes]
+    assert sem_hash == []
+    todos = [h for _, _, hashes in pinos for h in hashes]
+    assert all(_HASH.fullmatch(h) for h in todos)
+    assert len(todos) == len(set(todos)), "o mesmo hash aparece em pinos ou artefatos distintos"
+
+
+def test_lock_real_nenhum_pacote_aparece_duas_vezes_por_nome_canonico() -> None:
+    texto = LOCK_DE_TREINO.read_text(encoding="utf-8")
+    _, pinos = _ler_lock(texto)
+    nomes = [nome for nome, _, _ in pinos]
+
+    assert len(nomes) == len(set(nomes))
+    # contagem independente do parser: linhas logicas que nao sao opcoes
+    cruas = re.findall(r"(?m)^([A-Za-z0-9._-]+)==", texto)
+    assert len(cruas) == len(nomes)
+
+
+def test_pinos_do_isolamento_e_o_parser_do_testador_concordam_no_lock_real() -> None:
+    from tests.unit.test_treino_detector_isolamento import _pinos as pinos_isolamento
+
+    _, pinos = _ler_lock(LOCK_DE_TREINO.read_text(encoding="utf-8"))
+
+    assert pinos_isolamento(LOCK_DE_TREINO) == {nome: versao for nome, versao, _ in pinos}
+
+
+def test_pinos_do_isolamento_e_o_parser_concordam_em_lock_sintetico_com_continuacao(
+    tmp_path: Path,
+) -> None:
+    from tests.unit.test_treino_detector_isolamento import _pinos as pinos_isolamento
+
+    lock = tmp_path / "requirements-treino.lock"
+    lock.write_text(_lock_sintetico(hash_em=set(PACOTES_DE_TREINO), continuacao=True))
+
+    _, pinos = _ler_lock(lock.read_text(encoding="utf-8"))
+
+    assert pinos_isolamento(lock) == {nome: versao for nome, versao, _ in pinos}
+    assert set(pinos_isolamento(lock)) == set(PACOTES_DE_TREINO)
