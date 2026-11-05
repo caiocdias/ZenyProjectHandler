@@ -1,10 +1,10 @@
 # Roadmap — Leitura vetorial por poste
 
-> Arquivo: `docs/roadmap-leitura-vetorial-por-poste.md` · branch de execução: `roadmap/leitura-vetorial-por-poste` · criado em 2026-10-30 · última revisão 2026-11-03
+> Arquivo: `docs/roadmap-leitura-vetorial-por-poste.md` · branches de execução: `roadmap/leitura-vetorial-por-poste` (trilha A), `roadmap/leitura-vetorial-por-poste-b` e `roadmap/leitura-vetorial-por-poste-c` · criado em 2026-10-30 · última revisão 2026-11-05
 
 ## Como usar
 
-Inicie uma sessão limpa do Claude Code na raiz do repositório com `claude --agent orquestrador` e cole o "Prompt de execução". Ele executa até 3 etapas em sequência na branch `roadmap/leitura-vetorial-por-poste`, cada uma planejada pelo plugin superpowers e executada pelas souls (subagentes do Second Brain), e para para revisão. No fim do lote você decide como integrar a branch (merge, PR, manter ou descartar). Para não parar em cada pedido de permissão, libere antes os comandos de build/teste do projeto nas permissões do Claude Code.
+As etapas pendentes estão divididas em trilhas independentes (A — analisador, B — medição, C — aprendizado; ver "Índice de etapas"). Para cada trilha que tenha etapa elegível, inicie uma sessão limpa do Claude Code na raiz do repositório com `claude --agent orquestrador` e cole o "Prompt de execução" com a trilha preenchida. As sessões podem rodar ao mesmo tempo, cada uma no seu worktree e na sua branch. Cada uma executa até 3 etapas da sua trilha, planejadas pelo plugin superpowers e executadas pelas souls (subagentes do Second Brain), e para para revisão. No fim do lote você decide como integrar a branch (merge, PR, manter ou descartar). A ordem sugerida está em "Ondas", no índice. Para não parar em cada pedido de permissão, libere antes os comandos de build/teste do projeto nas permissões do Claude Code.
 
 ## Objetivo
 
@@ -16,7 +16,12 @@ A análise entrega, para cada poste da folha, a ficha correta: identificador, es
 - **Design:**
   - `docs/superpowers/specs/2026-10-30-leitura-vetorial-por-poste-design.md`, fonte deste roadmap;
   - `docs/adr/0016-leitura-vetorial-com-modelo-de-desenho.md`;
-  - `docs/adr/0017-detector-visual-local-e-rotulagem-assistida.md`.
+  - `docs/adr/0017-detector-visual-local-e-rotulagem-assistida.md`;
+  - `docs/superpowers/specs/2026-11-04-execucao-acelerada-leitura-vetorial-design.md`, fonte das trilhas, do laboratório, do orçamento e das etapas E14–E16 (com a evidência de tempo das E03–E05).
+- **Custo do gate** (2026-11-04):
+  - a suíte tem 5330 testes e leva 1578 s com cobertura, em série, sem `pytest-xdist` (`relatorio-testes.txt`). A máquina tem 20 núcleos lógicos;
+  - o `.bat` de `main` reprova num teste de tempo de parede, `test_glyph_text_orcamento.py::test_pagina_hostil_acima_do_teto_de_resolucoes_e_limitada_em_tempo_limitado` (29,7 s contra o limite de 20 s);
+  - as souls `desenvolvedor` e `testador` rodam a suíte inteira antes de cada commit e no fim da tarefa.
 - **Estrutura relevante:**
   - `src/zeny_project_handler/adapters/analysis/`: analisador PyMuPDF, OCR, detectores e `symbol_packages/`;
   - `src/zeny_project_handler/ports/analysis.py`: `AnalisadorDocumentoPort`, `MetodoSimbolosPort`, `ExtratorComplementarPort`;
@@ -43,7 +48,8 @@ A análise entrega, para cada poste da folha, a ficha correta: identificador, es
 - troca do analisador e remoção do legado;
 - fábrica de rótulos;
 - detector visual local;
-- atualização das dependências vulneráveis (E13, decisão D3).
+- atualização das dependências vulneráveis (E13, decisão D3);
+- gate de testes paralelo (E14), ficha predita das propostas (E15) e conjunto de avaliação cego em etapa própria (E16), conforme a decisão D6.
 
 **Fora de escopo:**
 - gerar DWG;
@@ -73,13 +79,16 @@ A análise entrega, para cada poste da folha, a ficha correta: identificador, es
 | H1 | Nas famílias sem texto nativo, cada forma pequena preenchida é um glifo de fonte fixa. Resultado da E05: se sustenta. Há 0 grupos compostos e 0 fragmentos; o resíduo misto é de cerca de 1,1% dos glifos. 88% (Electric Office) e 96% (Ghostscript) dos candidatos caem em trecho. Maiúscula e minúscula de mesmo desenho só se separam pela escala, e o leitor falha fechado quando ela não decide | a leitura por assinatura precisa segmentar glifos compostos ou tolerar variação de curva | E05 |
 | H2 | Os símbolos da rede são vetoriais em todas as famílias | símbolos rasterizados vão direto para o resíduo do detector (E12) | E06 |
 | H3 | As imagens das folhas Print To PDF e iText são só ladrilhos da ortofoto. Resultado da E04: os ladrilhos são só ortofoto e nenhum símbolo é raster, mas as folhas iText trazem tabelas (CHI, servidão, APP) como imagem e a folha Ghostscript traz um rótulo de poste em imagem de anotação | se carregarem símbolos ou texto, o OCR não pode sair em E09 — há texto em raster: a E09 precisa tratá-lo ou declará-lo fora da ficha | E04, E09 |
-| H4 | O usuário reserva folhas novas, ainda não vistas, para o conjunto de avaliação antes de E09 | sem elas, E09 não tem prova cega e fica bloqueada | E09 |
+| H4 | O usuário reserva folhas novas, ainda não vistas, para o conjunto de avaliação antes de E09. Em 2026-11-04 o usuário disse que consegue as folhas em breve | sem elas, a E16 fica bloqueada e a E09 não tem prova cega | E16, E09 |
 | H5 | PyTorch com ROCm treina na RX 9070 XT desta máquina (Windows nativo ou WSL2) | o treino cai para CPU ou para GPU alugada (D1) | E11 |
 | D1 | Treinar em GPU alugada por hora, se ROCm e CPU forem inviáveis | sem decisão, E12 só treina em CPU | E12 (só se E11 concluir que o treino local é inviável) |
 | D2 | Decidido em 2026-11-02: a ficha predita vem do projeto promovido (R2 da E02), e o formato v1 e o casamento guloso 0,02/0,05 são mantidos, com calibração na E03 | se a E03 pedir outra fonte, entra nova `versao_extracao` no `gerador` | E03 |
 | D3 | Decidido em 2026-11-02: uma etapa própria de atualização de dependências entra antes da E03, com prioridade para o Pillow do lock do servidor. Criada como E13 | sem ela, a E03 roda sobre locks com vulnerabilidades conhecidas | E13, E03 |
 | D4 | Decidido em 2026-11-02: o usuário libera os agentes `curadoria-*` do projeto na soul `orquestrador` (lista de subagentes e pré-condição), para a leitura dupla cega da E03 rodar na sessão do orquestrador | sem isso, a E03 não roda pelo protocolo | E03 |
-| D5 | Recomendado em 2026-11-04 (E03), pendente de confirmação do usuário: a ficha predita ganha uma `versao_extracao` a partir das propostas, porque o projeto promovido não tem postes nas folhas reais (baseline 0/107) | sem ela, a E07 não tem baseline informativo para comparar | E07 |
+| D5 | Decidido em 2026-11-04: a ficha predita ganha uma `versao_extracao` a partir das propostas, porque o projeto promovido não tem postes nas folhas reais (baseline 0/107). Vira a etapa E15, separada da E07 | sem ela, a E07 não tem baseline informativo para comparar | E15, E07 |
+| D6 | Decidido em 2026-11-04 por entrevista: execução acelerada. São trilhas paralelas, gate paralelo antes da E06 (E14), laboratório paralelo para calibração contra folhas reais, orçamento de ~3h por etapa e E15/E16 como etapas próprias. As alternativas descartadas e a evidência estão no design de execução acelerada (seção "Decisões") | — | protocolo, E06–E16 |
+| D7 | Decidido em 2026-11-04: os worktrees de laboratório são descartáveis, e o orquestrador os remove no fechamento da tarefa sem pedir confirmação | sem isso, cada remoção pararia o lote | protocolo |
+| D8 | Pendente, para o usuário numa sessão comum, fora deste roadmap: as propostas P1 (suíte por fase), P2 (tarefas paralelas na etapa) e P3 (revisão final repartida) para as souls, descritas no design de execução acelerada. A política "testes da área nas rodadas, suíte inteira antes de cada revisão" que o usuário escolheu depende de P1 | sem P1, vale a regra das souls (suíte inteira por commit), que a E14 torna barata; sem P2/P3, as tarefas e a revisão final seguem em série | todas as etapas |
 
 ## Definição global de pronto
 
@@ -109,20 +118,67 @@ Vale para toda execução deste roadmap. O planejamento e a execução de cada e
 
 Souls: este protocolo exige `orquestrador`, `desenvolvedor`, `testador`, `revisor-seguranca` e `revisor-arquitetura`. Não há fallback: se a sessão não roda como `orquestrador` ou alguma dessas souls não está instalada, pare e diga ao usuário para configurar a máquina (skill `configurar-maquina`) ou iniciar com `claude --agent orquestrador`. O caminho inline (`superpowers:executing-plans`) não vale aqui.
 
-**Branch**
+**Trilhas e branch**
 
-- Toda execução acontece no worktree/branch `roadmap/leitura-vetorial-por-poste`, criado ou retomado com `superpowers:using-git-worktrees`. Nunca execute na branch principal.
-- Se a branch já existir com trabalho não integrado, continue nela. Se o lote anterior já foi integrado, crie a branch de novo a partir da branch principal atualizada.
-- Este roadmap é atualizado dentro da branch: tags e handoffs viajam com o código.
-- Os PDFs de `examples/` e os artefatos de `tmp/` são ignorados pelo Git e não existem no worktree. Etapas que leem folhas reais apontam para o `examples/` do checkout principal, só para leitura, e gravam rodadas no `tmp/` dele.
+As regras abaixo resumem a seção "Trilhas" do design de execução acelerada. Em caso de dúvida, vale o design.
+
+- **Branch e worktree:** cada trilha tem os seus, criados ou retomados com `superpowers:using-git-worktrees`:
+  - trilha A em `roadmap/leitura-vetorial-por-poste`;
+  - trilha B em `roadmap/leitura-vetorial-por-poste-b`;
+  - trilha C em `roadmap/leitura-vetorial-por-poste-c`.
+
+  Nunca execute na branch principal. Uma sessão executa só a trilha do prompt.
+- **Retomada:** se a branch da trilha existir com trabalho não integrado, continue nela. Se o lote anterior dela já foi integrado, crie a branch de novo a partir da branch principal atualizada. O orquestrador nunca faz merge da principal na branch nem rebase.
+- **Dependência na mesma trilha** não precisa de integração. **Dependência de outra trilha** só vale `#concluida` e integrada na branch principal: confira com `git merge-base --is-ancestor <commit de fechamento> main`. Se a branch da trilha tem trabalho não integrado nesse ponto, o lote para antes da etapa (parada abaixo).
+- **Visibilidade entre trilhas:** na conferência, leia as outras branches com `git branch -a` e `git show <branch>:docs/roadmap-leitura-vetorial-por-poste.md`. Para cada etapa `#em-andamento` de outra trilha, leia também a "File Structure" do plano dela (`git show <branch>:<plano>`).
+- **Arquivos disjuntos:** duas trilhas nunca editam ao mesmo tempo o mesmo arquivo versionado. A regra vale para `src/`, `tests/` (inclusive `conftest.py`), `scripts/`, `pyproject.toml`, locks, `.bat`, `CLAUDE.md`, contrato de curadoria e ADRs. A exceção é este roadmap: cada trilha edita só as seções das suas etapas, a sua tabela no índice e as linhas de hipótese que elas fecham. O "Histórico de revisões" é do arquiteto. Se houver conflito no merge do roadmap, mantenha as duas versões.
+- **Roadmap na branch:** ele é atualizado dentro da branch da trilha, e tags e handoffs viajam com o código.
+- **Dados locais:** os PDFs de `examples/` e os artefatos de `tmp/` são ignorados pelo Git e não existem no worktree. Etapas que leem folhas reais apontam para o `examples/` do checkout principal, só para leitura, e gravam rodadas no `tmp/` dele.
+- **Conjunto cego:** `examples/avaliacao-cega/` (E16) não é lido por nenhuma etapa, laboratório, benchmark nem fixture antes da comparação da E09.
+
+**Laboratório** (seção "Laboratório" do design)
+
+- **Quando:** na tarefa cujo aceite depende de ajuste contra folhas reais (limiares, tabelas, heurísticas, recall por família). O plano a marca `Laboratório: sim`.
+- **O que o plano traz:**
+  - de 2 a 3 hipóteses concorrentes;
+  - o comando e a métrica do benchmark sobre as referências congeladas;
+  - o critério de vitória (leitura errada afirmada = 0 é obrigatório) e o de parada;
+  - a caixa de tempo por hipótese (padrão 60 min).
+- **Execução:** antes do ciclo da tarefa, o orquestrador despacha em paralelo um `desenvolvedor` por hipótese, cada um com `isolation: "worktree"`. Esse desenvolvedor:
+  - não commita e não roda a suíte inteira;
+  - entrega em `tmp/laboratorio/eNN/<hipotese>/` do checkout principal o patch, as métricas por iteração e as conclusões.
+- **Seleção:** o orquestrador escolhe pela métrica e registra a ruling no ledger.
+- **Ciclo:** a tarefa roda uma vez pelo ciclo completo do `orquestrador`, partindo do patch vencedor. Toda rodada de correção que mexe no comportamento medido repete o benchmark.
+- **Limpeza:** os worktrees de laboratório são removidos no fechamento da tarefa (D7).
+- **Guardas:** as referências estão congeladas antes e não são editadas; leitores visuais não participam.
+- **Por que não fere a SDD:** a proibição de implementadores em paralelo é por conflito no mesmo worktree, e nada do laboratório entra na branch da etapa.
+
+**Orçamento** (seção "Orçamento" do design)
+
+- **Relógio:** vai do commit `#em-andamento` ao commit `#concluida`, sem a espera pelo usuário nem por outra trilha.
+- **No plano:** o plano estima a duração por tarefa. Acima de ~3h, divida a etapa antes de executar em subetapas `Eyy.1`, `Eyy.2`… Cada subetapa tem seção própria, critérios repartidos e ruling no handoff. Ela é uma etapa completa, com plano, revisão de arquitetura, revisão final, `.bat` e handoff. Quem dependia de `Eyy` passa a depender da última subetapa.
+- **Estouro:** passar de 4h30 no relógio é parada (abaixo).
 
 **Por etapa**
 
-1. **Escolha:** a primeira etapa, na ordem do documento, marcada `#pendente` e com todas as dependências `#concluida`. Etapas `#bloqueada` e as que dependem delas ficam para trás.
-2. **Conferência:** leia a seção da etapa, os handoffs das dependências e o código que eles citam. Se o código divergiu do que a etapa supõe, pare e relate.
-3. **Início:** troque a tag para `#em-andamento` (índice e título).
-4. **Plano:** use `superpowers:writing-plans`. A spec é a seção desta etapa mais o design citado em "Contexto confirmado"; as "Restrições e invariantes" entram como Global Constraints. Salve em `docs/superpowers/plans/AAAA-MM-DD-leitura-vetorial-por-poste-eNN.md`. Antes de executar, o plano passa pela revisão de arquitetura do `orquestrador` (`revisor-arquitetura`); as regras (rodadas, veredito, seção no plano) vivem só nele. A execução já está definida (abaixo): não pergunte ao usuário o método, apenas siga.
-5. **Execução:** use `superpowers:subagent-driven-development` com esse plano, executado pelas souls conforme o ciclo por tarefa, a verificação mecânica dos testes e a revisão final da etapa definidos no `orquestrador` (as regras de encaixe vivem só nele). Não invoque `superpowers:finishing-a-development-branch` ao fim da etapa: ele roda uma vez, no fim do lote.
+1. **Escolha:** dentro da trilha do prompt, a primeira etapa, na ordem do documento, marcada `#pendente` e com todas as dependências satisfeitas (regra de trilhas acima). Etapas `#bloqueada` e as que dependem delas ficam para trás.
+2. **Conferência:**
+   - leia a seção da etapa, os handoffs das dependências e o código que eles citam. Se o código divergiu do que a etapa supõe, pare e relate;
+   - confira as outras trilhas (visibilidade e arquivos disjuntos);
+   - confira que nenhum plano ou script desta etapa lê `examples/avaliacao-cega/` antes da E09.
+3. **Início:** troque a tag para `#em-andamento` (índice e título) e commite. Esse commit inicia o relógio.
+4. **Plano:**
+   - use `superpowers:writing-plans`. A spec é a seção desta etapa mais o design citado em "Contexto confirmado", e as "Restrições e invariantes" entram como Global Constraints;
+   - o plano traz a "File Structure" completa, a estimativa de duração por tarefa e a marca `Laboratório: sim` onde couber;
+   - salve em `docs/superpowers/plans/AAAA-MM-DD-leitura-vetorial-por-poste-eNN.md`;
+   - antes de executar, o plano passa pela revisão de arquitetura do `orquestrador` (`revisor-arquitetura`). As regras (rodadas, veredito, seção no plano) vivem só nele;
+   - a execução já está definida (abaixo): não pergunte ao usuário o método, apenas siga.
+5. **Execução:**
+   - use `superpowers:subagent-driven-development` com esse plano, executado pelas souls conforme o ciclo por tarefa, a verificação mecânica dos testes e a revisão final da etapa definidos no `orquestrador`. As regras de encaixe vivem só nele;
+   - o laboratório (acima) precede o ciclo das tarefas marcadas;
+   - escolha o modelo de cada despacho explicitamente, conforme "Model Selection" da SDD;
+   - rode benchmarks de corpus em paralelo (processos ou comandos em segundo plano), nunca folha a folha em série;
+   - não invoque `superpowers:finishing-a-development-branch` ao fim da etapa: ele roda uma vez, no fim do lote.
 6. **Fechamento:** publique a captura de atualização do brain, se o bloco "Second Brain" se aplica. Marque `#concluida` (índice e título) só com a revisão final limpa e cada critério de aceite verificado com evidência. Diante de impedimento real, marque `#bloqueada` e preencha "Bloqueios" com causa, evidência, impacto e ação de desbloqueio. Preencha "Evidências e handoff". Rulings do ledger que mudam contrato, escopo, segurança, dados ou algo caro de desfazer vão para "Decisões para o usuário".
 
 **Second Brain**
@@ -135,7 +191,13 @@ Vale se o `CLAUDE.md` tiver a seção "Conhecimento do projeto no Second Brain";
 
 **Paradas**
 
-O lote para ao concluir uma etapa com **Revisão humana: sim**, diante de etapa `#bloqueada` ou divergência do plano, nas paradas do próprio superpowers (operação destrutiva, ação sensível de segurança, efeito fora da branch, plano sem caminho viável) e ao atingir o limite de etapas do prompt.
+O lote para nestes casos:
+- ao concluir uma etapa com **Revisão humana: sim**;
+- diante de etapa `#bloqueada` ou de divergência do plano;
+- antes de uma etapa cuja dependência de outra trilha ainda não está integrada, quando a branch da trilha tem trabalho não integrado;
+- quando o relógio da etapa passa de 4h30. O orquestrador relata a tarefa atual, a rodada, a causa e a proposta: dividir, estacionar ou continuar;
+- nas paradas do próprio superpowers: operação destrutiva, ação sensível de segurança, efeito fora da branch e plano sem caminho viável;
+- ao atingir o limite de etapas do prompt.
 
 **Fim do lote**
 
@@ -147,18 +209,19 @@ O lote para ao concluir uma etapa com **Revisão humana: sim**, diante de etapa 
 ```text
 Execute o roadmap docs/roadmap-leitura-vetorial-por-poste.md deste repositório seguindo a seção "Protocolo de execução" dele, com o plugin superpowers.
 
+Trilha desta execução: A (troque por B ou C conforme a sessão). Execute só etapas desta trilha.
 Limite desta execução: no máximo 3 etapas concluídas.
 
-1. Confira a pré-condição do protocolo: esta sessão roda como orquestrador e as souls desenvolvedor, testador, revisor-seguranca e revisor-arquitetura estão disponíveis; se não, pare e diga como resolver. Leia CLAUDE.md (e AGENTS.md, se existir) e, no roadmap, o cabeçalho inteiro, o protocolo e o índice. Se o CLAUDE.md exigir o Second Brain, confira a linha BRAIN: carregado no contexto e leia o hub. Rode git status e git branch -a.
-2. Se alguma etapa estiver #em-andamento, retome-a a partir do ledger do superpowers e do handoff; não recomece tarefas já commitadas.
-3. Crie ou retome o worktree/branch roadmap/leitura-vetorial-por-poste com superpowers:using-git-worktrees. Não trabalhe na branch principal.
-4. Repita, uma etapa por vez: escolha a próxima etapa elegível, marque #em-andamento, planeje com superpowers:writing-plans (spec = seção da etapa + design citado), execute com superpowers:subagent-driven-development, feche a etapa e preencha o handoff conforme o protocolo.
+1. Confira a pré-condição do protocolo: esta sessão roda como orquestrador e as souls desenvolvedor, testador, revisor-seguranca e revisor-arquitetura estão disponíveis; se não, pare e diga como resolver. Leia CLAUDE.md (e AGENTS.md, se existir) e, no roadmap, o cabeçalho inteiro, o protocolo e o índice. Se o CLAUDE.md exigir o Second Brain, confira a linha BRAIN: carregado no contexto e leia o hub. Rode git status e git branch -a, e leia o estado das outras trilhas nas branches delas.
+2. Se alguma etapa desta trilha estiver #em-andamento, retome-a a partir do ledger do superpowers e do handoff; não recomece tarefas já commitadas.
+3. Crie ou retome o worktree/branch desta trilha (protocolo, "Trilhas e branch") com superpowers:using-git-worktrees. Não trabalhe na branch principal.
+4. Repita, uma etapa por vez: escolha a próxima etapa elegível da trilha, confira as outras trilhas e os arquivos disjuntos, marque #em-andamento, planeje com superpowers:writing-plans (spec = seção da etapa + design citado; File Structure, estimativa por tarefa e laboratório no plano; divida se passar de ~3h), rode o laboratório das tarefas marcadas, execute com superpowers:subagent-driven-development, feche a etapa e preencha o handoff conforme o protocolo.
 5. Pare nas paradas do protocolo ou ao atingir o limite.
 6. No fim, rode superpowers:finishing-a-development-branch e deixe a decisão de integração comigo. Depois, apresente as decisões para o usuário como entrevista com opção recomendada.
 
 Nunca faça push, merge ou deploy sem minha decisão. Não altere tags de etapas que não executou.
 
-Ao parar, responda com: etapas concluídas e o resultado da revisão final de cada uma, a etapa atual e seu estado, o motivo da parada, as etapas #bloqueada com a ação de desbloqueio, a branch e os commits do lote e o próximo passo sugerido.
+Ao parar, responda com: etapas concluídas, o relógio e o resultado da revisão final de cada uma, a etapa atual e seu estado, o motivo da parada, as etapas #bloqueada com a ação de desbloqueio, a branch e os commits do lote e o próximo passo sugerido.
 ```
 
 ## Índice de etapas
@@ -172,24 +235,48 @@ Bloco A — base e medição
 | E13 | Atualização de dependências vulneráveis | #concluida | E01 | locks sem vulnerabilidade corrigível nos pacotes apontados pelo scanner, gate verde |
 | E03 | Rotulagem v0 e baseline real | #concluida | E02, E13 | fichas de referência das 16 folhas e baseline do analisador atual em `tmp/` |
 
-Bloco B — leitura vetorial
+Bloco B — leitura vetorial (concluídas)
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E04 | Modelo de desenho e perfis de família | #concluida | E01 | modelo de desenho por página, perfil por família e DXF de depuração |
 | E05 | Texto por contorno de glifo | #concluida | E04, E03 | tabela de glifos e texto recuperado sem OCR nas 4 famílias |
-| E06 | Símbolos sobre o modelo de desenho | #pendente | E05 | pacotes declarativos avaliados sobre o modelo vetorial |
-| E07 | Ficha do poste | #pendente | E06 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
-| E08 | Conferência UTM | #pendente | E07 | transformação página → UTM, checagem de posição e vão, pendências |
-| E09 | Troca do analisador e remoção do legado | #pendente | E08 | analisador novo como padrão; detectores e, se provado, OCR removidos |
 
-Bloco C — aprendizado
+Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
+| E14 | Gate de testes paralelo | #pendente | E05 | suíte paralela no `.bat` sem perder teste, `main` verde, scripts de corpus com processos |
+| E06 | Símbolos sobre o modelo de desenho | #pendente | E05, E14 | pacotes declarativos avaliados sobre o modelo vetorial |
+| E07 | Ficha do poste | #pendente | E06, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
+| E08 | Conferência UTM | #pendente | E07 | transformação página → UTM, checagem de posição e vão, pendências |
+| E09 | Troca do analisador e remoção do legado | #pendente | E08, E16 | analisador novo como padrão; detectores e, se provado, OCR removidos |
+
+Trilha B — medição (branch `roadmap/leitura-vetorial-por-poste-b`)
+
+| ID | Etapa | Estado | Dependências | Entrega principal |
+|---|---|---|---|---|
+| E15 | Ficha predita a partir das propostas | #pendente | E14 | nova `versao_extracao` e baseline real informativo nas 16 folhas |
+| E16 | Conjunto de avaliação cego | #bloqueada | E03 | fichas de referência congeladas das folhas novas, antes de qualquer predição |
+
+Trilha C — aprendizado (branch `roadmap/leitura-vetorial-por-poste-c`)
+
+| ID | Etapa | Estado | Dependências | Entrega principal |
+|---|---|---|---|---|
+| E11 | Spike de treino na GPU AMD | #pendente | E01 | decisão registrada sobre onde e como treinar |
 | E10 | Fábrica de rótulos contínua | #pendente | E07 | fluxo mensal com pré-marcação, leitura dupla, amostra humana e dataset por hash |
-| E11 | Spike de treino na GPU AMD | #pendente | E10 | decisão registrada sobre onde e como treinar |
-| E12 | Detector visual local | #pendente | E11, E09 | detector ONNX em CPU para o resíduo, ganho medido por poste |
+| E12 | Detector visual local | #pendente | E11, E09, E10 | detector ONNX em CPU para o resíduo, ganho medido por poste |
+
+Ondas (ordem sugerida de sessões paralelas; a elegibilidade real vem das dependências):
+
+| Onda | Ao mesmo tempo | Observação |
+|---|---|---|
+| 1 | E14 (A), E11 (C) | a E15 espera a E14 porque o `main` reprova até a E14 corrigir o teste de tempo de parede |
+| 2 | E06 (A), E15 (B); E16 (B) quando as folhas chegarem | começam com a E14 integrada em `main`; a E06 mexe em `src/` e a E15 em `scripts/` |
+| 3 | E07 (A) | com E06 e E15 integradas |
+| 4 | E08 (A), E10 (C) | |
+| 5 | E09 (A) | com E08 e E16 integradas |
+| 6 | E12 (C) | com E09, E10 e E11 integradas |
 
 ---
 
@@ -710,13 +797,84 @@ Bloco C — aprendizado
 
 ---
 
+## E14 — Gate de testes paralelo — #pendente
+
+**Objetivo:** a suíte inteira roda em processos paralelos no gate e nas souls, sem perder teste nem cobertura. O `main` volta a passar no `.bat` (decisão D6).
+
+**Por que agora:**
+- a suíte leva 26 min em série e roda antes de cada commit do desenvolvedor e no fim de cada tarefa do testador;
+- a E05 teve 45 commits desses;
+- o `main` reprova hoje num teste de tempo de parede.
+
+Toda etapa seguinte paga esse custo.
+
+**Dependências:** E05.
+
+**Escopo:**
+- **Teste que reprova o `main`:** a asserção de tempo de parede de `test_glyph_text_orcamento.py::test_pagina_hostil_acima_do_teto_de_resolucoes_e_limitada_em_tempo_limitado` vira contagem de trabalho determinística. Faça o mesmo nos demais testes que medem tempo de parede, se não aguentarem a carga paralela.
+- **Paralelismo:**
+  - `pytest-xdist` (MIT) no extra `dev` e em `requirements-development.lock`;
+  - a invocação do pytest no `IniciarTestes.bat` em processos paralelos, com a cobertura combinada e o mínimo de 85,01%;
+  - o comando paralelo documentado no `CLAUDE.md`.
+- **Isolamento** dos testes que não aguentam processo paralelo. Se algum não puder ser isolado, ele vai para uma passada serial no mesmo `.bat`, com a cobertura acumulada.
+- **Scripts de corpus:** `--processos N` em `scripts/benchmark_texto_ficha.py` e `scripts/drawing_model_report.py`, com saída idêntica à serial.
+
+**Fora de escopo:**
+- `scripts/benchmark_ficha_poste.py` (E15);
+- mudar comportamento do produto;
+- remover, pular ou desmarcar testes;
+- mudar as souls (D8).
+
+**Critérios de aceite:**
+
+- [ ] O total de testes coletados pelo `.bat` depois da etapa é ≥ o de antes. Nenhum teste fica de fora por marcador ou `deselect`.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`, com cobertura ≥ 85,01%.
+- [ ] O passo pytest do `.bat` leva ≤ 8 min nesta máquina. O tempo antes e depois e as 15 durações mais lentas (`--durations=15`) estão no handoff.
+- [ ] Três execuções paralelas seguidas da suíte inteira saem verdes, e uma execução serial sai verde.
+- [ ] Os scripts de corpus com `--processos 4` produzem saída byte a byte igual à serial numa fixture sintética de várias folhas.
+- [ ] `.venv/Scripts/python.exe -m pip check` sem quebra, e `osv-scanner` no lock de desenvolvimento sem vulnerabilidade nova.
+
+**Validação obrigatória:**
+
+- `cmd.exe //c IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+- Execução repetida da suíte (critério 4), com as saídas na revisão final.
+
+**Revisão humana:** não
+
+**Notas para o plano:**
+- Há 9 arquivos de teste com `perf_counter` ou `time.monotonic` (grep de 2026-11-04).
+- Riscos de isolamento conhecidos:
+  - Qt offscreen (`tests/conftest.py`);
+  - o `--basetemp` do `.bat`;
+  - `tests/unit/test_dependency_locks.py` e `test_project_scripts.py`, que leem os locks.
+- O teto de ~3h vale aqui também: a meta de 8 min é decisão do arquiteto, e o usuário pode ajustá-la.
+- Esta etapa não usa laboratório.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:**
+
+- O paralelismo esconde ou cria teste intermitente → critério 4 e a passada serial. Teste intermitente achado é corrigido, nunca marcado para repetir.
+- Uma fixture compartilhada falha só em processo paralelo → isolamento por `tmp_path` ou passada serial, registrada no handoff.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
 ## E06 — Símbolos sobre o modelo de desenho — #pendente
 
 **Objetivo:** reconhecer estais, para-raios MT/BT, transformadores e demais símbolos do inventário a partir dos grupos do modelo de desenho, usando os pacotes declarativos.
 
 **Por que agora:** símbolos são a segunda metade da ficha. Os grupos do modelo de desenho dão geometria limpa aos pacotes.
 
-**Dependências:** E05.
+**Dependências:** E05, E14.
 
 **Escopo:**
 - Execução dos pacotes de `symbol_packages/` sobre os grupos do modelo, como método de símbolos versionado.
@@ -738,7 +896,9 @@ Bloco C — aprendizado
 
 **Revisão humana:** não
 
-**Notas para o plano:** nenhuma.
+**Notas para o plano:**
+- Os limiares por classe e por família, ajustados contra as 16 folhas, são candidatos a laboratório. Na E05, 5 rodadas desse ajuste dentro do ciclo custaram ~7h45.
+- A trilha B (E15) roda ao mesmo tempo em `scripts/benchmark_ficha_poste.py`: não toque nesse arquivo.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -757,13 +917,69 @@ Bloco C — aprendizado
 
 ---
 
+## E15 — Ficha predita a partir das propostas — #pendente
+
+**Objetivo:** dar à ficha predita uma fonte que reflita a leitura, e não a promoção (D5). Assim o baseline real passa a ser informativo.
+
+**Por que agora:** o baseline da E03 é 0/107 postes por construção, porque a promoção automática só confirma cabos. A E07 precisa comparar contra algo que meça a leitura. A etapa não depende da E06 e roda ao mesmo tempo que ela, na trilha B.
+
+**Dependências:** E14.
+
+**Escopo:**
+- **Nova `versao_extracao`** do gerador da ficha predita, a partir das propostas: postes, estruturas, equipamentos e cabos propostos. A versão atual (projeto promovido) continua selecionável.
+- **Fixtures sintéticas** positiva e negativa: proposta presente vira campo da ficha; proposta ausente ou recusada não vira.
+- **Baseline novo** do analisador atual nas 16 folhas, sobre as referências congeladas da E03, em `tmp/` e com denominadores por folha e no total.
+
+**Fora de escopo:**
+- mudar o analisador ou a promoção;
+- mudar o formato v1 da ficha ou o casamento 0,02/0,05 (D2);
+- associação ao poste (E07).
+
+**Critérios de aceite:**
+
+- [ ] O relatório de avaliação traz a `versao_extracao` usada, e a versão anterior continua reproduzindo o `baseline-v003`.
+- [ ] As fixtures sintéticas produzem as métricas esperadas nas duas fontes.
+- [ ] O baseline novo existe em `tmp/` com denominadores, e o handoff traz os totais por campo e por família.
+- [ ] Nenhuma ficha, recorte ou nome de folha entra em arquivo versionado (`git grep -n "PROJETO DE REDE NS"` só acha as linhas que citam o critério).
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:**
+
+- `cmd.exe //c IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+- Benchmark por poste de E02 sobre as 16 folhas, rodado em paralelo → relatório em `tmp/`.
+
+**Revisão humana:** não
+
+**Notas para o plano:**
+- O único gerador hoje é `scripts/benchmark_ficha_poste.py` (`VERSAO_EXTRACAO`, linha 66).
+- Na E02, a escolha do projeto promovido foi a ruling R2. Leia as chaves de diagnóstico da raiz com `.get(chave, 0)` (nota da E02).
+- A E06 roda ao mesmo tempo em `src/`: esta etapa não toca em `src/` sem conferir a trilha A.
+- Rode o baseline na imagem Docker, que tem o Tesseract, se o plano quiser medir também o caminho com OCR. Sem isso, rode `--native-only`, como na E03.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:**
+
+- Propostas pendentes infladas contam como acerto → a métrica separa campo afirmado de pendente, como no formato v1, e o handoff registra os dois.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
 ## E07 — Ficha do poste — #pendente
 
 **Objetivo:** associar texto, símbolos e vãos ao poste certo e expressar a ficha nas propostas e relações atuais.
 
 **Por que agora:** a associação é um dos erros que mais custam ao usuário. Com texto e símbolos limpos, ela passa a ser geométrica.
 
-**Dependências:** E06.
+**Dependências:** E06, E15.
 
 **Escopo:**
 - Associação geométrica por proximidade, linhas de chamada e convenções de layout, com vãos ligados à polilinha da rede entre dois postes.
@@ -785,7 +1001,10 @@ Bloco C — aprendizado
 
 **Revisão humana:** sim
 
-**Notas para o plano:** `application/symbol_reconciliation.py`, `analysis_regions.py` e `spans.py` já fazem associação e vãos. Decida no plano o que é reaproveitado e o que é substituído. O baseline da E03 (projeto promovido) é 0/107 porque a promoção automática não confirma postes: comece pela fonte da ficha predita a partir das propostas (D5) e refaça o baseline sobre as referências da rodada da E03 antes de comparar.
+**Notas para o plano:**
+- `application/symbol_reconciliation.py`, `analysis_regions.py` e `spans.py` já fazem associação e vãos. Decida no plano o que é reaproveitado e o que é substituído.
+- Compare contra o baseline das propostas da E15, não contra o 0/107 do projeto promovido.
+- Os limiares de associação calibrados nas 16 folhas são candidatos a laboratório.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -854,16 +1073,77 @@ Bloco C — aprendizado
 
 ---
 
+## E16 — Conjunto de avaliação cego — #bloqueada
+
+**Objetivo:** fichas de referência das folhas novas reservadas pelo usuário (H4), lidas às cegas e congeladas antes de qualquer predição. É a prova da E09.
+
+**Por que agora:** a leitura não depende do código das E06–E08. Ela pode rodar em paralelo, na trilha B, assim que as folhas chegarem, em vez de alongar a E09.
+
+**Dependências:** E03.
+
+**Escopo:**
+- **Pasta:** as folhas ficam em `examples/avaliacao-cega/`, ignorada pelo Git, onde o usuário as coloca.
+- **Leitura:** o fluxo da E03 (leitores A e B em modo ficha, leitor C nas divergências, consolidação sem palpite), já com a convenção de não registrar ponto de ligação do cliente como poste (E03).
+- **Amostra humana** com taxa de erro e intervalo de Wilson, como na E03.
+- **Congelamento** das referências (sha em `congelamento.json`) antes de qualquer execução de analisador sobre essas folhas.
+- **Guarda:** nenhum benchmark, laboratório, fixture ou etapa lê a pasta antes da comparação da E09.
+
+**Fora de escopo:**
+- predição ou benchmark sobre as folhas novas (E09);
+- treino (E10, E12).
+
+**Critérios de aceite:**
+
+- [ ] Toda folha de `examples/avaliacao-cega/` tem referência congelada, com escopo de anotação declarado. O relatório local traz a família de cada folha.
+- [ ] A amostra conferida pelo usuário e a taxa de erro de rótulo estão no relatório local.
+- [ ] O relatório da rodada prova que nenhum analisador rodou sobre essas folhas antes do congelamento: não há `ficha-predita.json` nem cache de modelo de desenho delas com data anterior ao sha congelado.
+- [ ] Nenhuma ficha, recorte ou nome de folha entra em arquivo versionado.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`, se a etapa mudou código ou documento versionado.
+
+**Validação obrigatória:**
+
+- Inspeção manual: o usuário confere a amostra de fichas sobre os recortes renderizados.
+
+**Revisão humana:** sim
+
+**Notas para o plano:**
+- Pendências acionáveis da E03 que valem aqui:
+  - o recorte da amostra com margem 0,12 (o CLI `amostra` usa 0,04 e corta o rótulo);
+  - a recuperação manual quando um comando cai no meio;
+  - o leitor A/B não pode abrir `regioes-conferencia.json`.
+- Os leitores visuais rodam na sessão do orquestrador (D4), em ondas da skill de curadoria.
+
+**Bloqueios:**
+- **Causa:** as folhas novas ainda não foram reservadas (H4).
+- **Evidência:** resposta do usuário na entrevista de 2026-11-04 ("consigo em breve").
+- **Impacto:** sem a E16, a E09 não tem prova cega e não pode começar.
+- **Ação de desbloqueio:** o usuário coloca as folhas novas em `examples/avaliacao-cega/` do checkout principal, sem abri-las no analisador. Depois é preciso registrar a entrega em H4 e trocar a tag para `#pendente`.
+
+**Riscos e mitigação:**
+
+- Poucas folhas ou uma família ausente → o relatório declara a cobertura por família, e a E09 compara só onde há folha.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
 ## E09 — Troca do analisador e remoção do legado — #pendente
 
 **Objetivo:** tornar o analisador novo o padrão do servidor quando ele vencer o atual no conjunto cego, e remover o que ele substituiu (decisão 7 do design).
 
 **Por que agora:** fecha o bloco B e cumpre a parte de limpeza que dependia de prova.
 
-**Dependências:** E08.
+**Dependências:** E08, E16.
 
 **Escopo:**
-- **Conjunto de avaliação:** folhas novas reservadas pelo usuário (H4), lidas às cegas com o fluxo de E03 e congeladas antes de qualquer predição.
+- **Conjunto de avaliação:** as referências congeladas da E16, sem nova leitura.
 - **Comparação:** atual × novo pelo benchmark por poste.
 - **Troca do padrão em `composition.py`.**
 - **Remoção:**
@@ -889,7 +1169,9 @@ Bloco C — aprendizado
 
 **Revisão humana:** sim
 
-**Notas para o plano:** a inspeção na UI exige `.env` com a string ODBC do SQL Server de mercado. Isso já bloqueou uma etapa antes, então confira cedo.
+**Notas para o plano:**
+- A inspeção na UI exige `.env` com a string ODBC do SQL Server de mercado. Isso já bloqueou uma etapa antes, então confira cedo.
+- A troca e a remoção juntas tendem a passar de ~3h: o orçamento do protocolo divide a etapa, e a remoção vai na última subetapa, depois da troca medida (ver "Rollback / migração").
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -966,12 +1248,12 @@ Bloco C — aprendizado
 
 **Objetivo:** decidir onde e como treinar o detector, provando ou descartando PyTorch com ROCm na RX 9070 XT desta máquina (H5).
 
-**Por que agora:** a viabilidade do treino local decide o custo e o desenho de E12.
+**Por que agora:** a viabilidade do treino local decide o custo e o desenho de E12. O spike prova a cadeia treino → ONNX → CPU e não precisa do volume da fábrica (E10). Por isso roda já, na trilha C, ao mesmo tempo que a trilha A (D6).
 
-**Dependências:** E10.
+**Dependências:** E01.
 
 **Escopo:**
-- Ensaio, fora do produto, de um treino mínimo de detecção com licença Apache, BSD ou MIT na GPU, nativo no Windows e/ou via WSL2.
+- Ensaio, fora do produto, de um treino mínimo de detecção com licença Apache, BSD ou MIT na GPU, nativo no Windows e/ou via WSL2. O conjunto mínimo é sintético ou vem de recortes das referências da E03 em `tmp/`, nunca do conjunto cego (E16).
 - Exportação para ONNX e inferência em CPU com ONNX Runtime.
 - Medição de tempo.
 
@@ -988,7 +1270,10 @@ Bloco C — aprendizado
 
 **Revisão humana:** sim
 
-**Notas para o plano:** spike sem código de produção. Os scripts do ensaio ficam fora de `src/` e o lock de treino é opt-in.
+**Notas para o plano:**
+- Spike sem código de produção. Os scripts do ensaio ficam fora de `src/` e o lock de treino é opt-in.
+- A instalação de ROCm/PyTorch pede confirmação do usuário.
+- Na onda 1, a E14 mexe em `pyproject.toml`, nos locks e em `tests/`. O lock opt-in e os scripts do ensaio não podem tocar nesses arquivos enquanto ela estiver em andamento, inclusive `tests/unit/test_dependency_locks.py`.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -1013,7 +1298,7 @@ Bloco C — aprendizado
 
 **Por que agora:** é a última camada de precisão, com o volume de E10 e o caminho de treino de E11.
 
-**Dependências:** E11, E09.
+**Dependências:** E11, E09, E10.
 
 **Escopo:**
 - **Treino** com o conjunto de E10, pelo caminho decidido em E11.
@@ -1064,3 +1349,10 @@ Bloco C — aprendizado
 
 - 2026-10-30 — roadmap criado a partir do design `2026-10-30-leitura-vetorial-por-poste-design.md`, com 12 etapas em três blocos.
 - 2026-11-02 — E13 (atualização de dependências vulneráveis) incluída antes da E03, por decisão do usuário (D3). A E03 passa a depender de E13.
+- 2026-11-05 — execução acelerada (D6, design `2026-11-04-execucao-acelerada-leitura-vetorial-design.md`):
+  - o índice passa a ser por trilhas paralelas A/B/C, com ondas;
+  - o protocolo ganha trilhas, laboratório, orçamento de ~3h e duas paradas novas;
+  - o prompt passa a ser parametrizado por trilha;
+  - etapas novas: E14 (gate paralelo, antes da E06), E15 (ficha predita das propostas, que sai da E07, D5) e E16 (conjunto cego, que sai da E09, `#bloqueada` por H4);
+  - a E11 deixa de depender da E10, e a E12 passa a depender explicitamente da E10;
+  - ficam pendentes as propostas para as souls (D8).
