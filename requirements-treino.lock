@@ -4,8 +4,8 @@
 # escolhida pelo spike E11 (ADR 0017, seção "Caminho de treino (E11)").
 # Modo hash do pip: cada pino aceita só o artefato exato, o que bloqueia homônimos de outro
 # índice (confusão de dependência).
-# A variante ROCm medida (que falhou no BatchNorm de treino do MIOpen) está descrita no ADR 0017 e
-# em tmp\treino-e11\instalacao.md, com os hashes dos seus artefatos.
+# A variante ROCm medida (que falhou no BatchNorm de treino do MIOpen) está descrita no ADR 0017;
+# seus 22 pinos com hash estão no apêndice "Pinos da variante ROCm medida (E11)" do ADR.
 # Instalação num venv próprio fora do Git, com um Python 3.11, por exemplo:
 #   py -3.11 -m venv tmp\treino-e11\venv-cpu
 #   tmp\treino-e11\venv-cpu\Scripts\python.exe -m pip install -r requirements-treino.lock

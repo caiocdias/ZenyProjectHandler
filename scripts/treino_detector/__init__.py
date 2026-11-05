@@ -12,7 +12,7 @@ testes nem por `src/`).
 Como rodar, da raiz do repositório, em série e sem outro processo pesado, com as
 saídas em `tmp/treino-e11/` (fora do Git). O venv CPU sai de
 `requirements-treino.lock` (variante escolhida; ver o cabeçalho do lock); o venv
-ROCm é reconstruído pelos pinos registrados em `tmp/treino-e11/instalacao.md`:
+ROCm é reconstruído pelos pinos do apêndice do ADR 0017 (variante ROCm medida):
 
     set ROCM=tmp\\treino-e11\\venv-rocm\\Scripts\\python.exe
     set CPU=tmp\\treino-e11\\venv-cpu\\Scripts\\python.exe

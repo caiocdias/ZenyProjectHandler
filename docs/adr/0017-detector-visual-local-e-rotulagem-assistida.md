@@ -45,8 +45,9 @@ confirmada"). O
 treino roda na CPU com PyTorch e exporta ONNX; a GPU AMD fica fora até o defeito abaixo ser
 corrigido numa release oficial.
 
-Medição numa só máquina, em série, com a medição da CPU sem outro processo pesado (os ensaios na
-GPU falharam no primeiro lote, sem medida de tempo): Intel Core
+Medição numa só máquina, em série, com a 1ª medição CPU (torch 2.9.1) sem outro processo pesado;
+o reensaio com o lock final rodou sob carga externa (ver abaixo), e os ensaios na GPU falharam no
+primeiro lote, sem medida de tempo: Intel Core
 i7-12700KF (12 núcleos, 20 threads; `os.cpu_count()` = 20, `torch.get_num_threads()` = 12), 63,8 GB
 de RAM, AMD Radeon RX 9070 XT (gfx1201), Windows 11 Home 10.0.26300, driver AMD Adrenalin
 26.20.15.07 (DriverVersion 32.0.32015.7029). Versões: ambiente ROCm com Python 3.12.10, torch
@@ -108,21 +109,21 @@ Riscos aceitos:
 
 - O lock CPU final (torch 2.14.1+cpu, torchvision 0.29.2+cpu, 19 pacotes) sai limpo no osv-scanner
   2.7.0 ("No issues found"). As vulnerabilidades abaixo são do torch 2.9.1, o da primeira versão do
-  lock e o da variante ROCm medida, que segue nele (único release oficial da AMD para Windows).
+  lock e o da variante ROCm medida, que continua no torch 2.9.1 (único release oficial da AMD para
+  Windows).
 - `torch` 2.9.1 tem 4 vulnerabilidades publicadas (osv-scanner 2.7.0, único pacote afetado do lock
   ROCm de 22 pacotes): PYSEC-2026-139 (CVSS 7,8, carregamento de `.pt2`, sem correção listada),
   PYSEC-2026-2286 / GHSA-63cw-57p8-fm3p (8,8, desvio do unpickler `weights_only`, corrigida na
   2.10.0), GHSA-qfhq-4f3w-5fph (5,3, `torch.lstm_cell`, 2.10.0) e GHSA-rrmf-rvhw-rf47 (5,3,
   `torch.jit.script`, 2.13.0). Todas exigem carregar arquivo de modelo ou entrada hostil ou usar as
   funções citadas. Mitigação, válida para qualquer versão: no ambiente de treino nunca se carrega
-  `.pt`, `.pt2` ou pickle de terceiros, só pesos próprios; o artefato que sai é o ONNX; o exportador
-  usado é o TorchScript por rastreamento (`torch.jit.trace`), não `torch.jit.script`. Gatilho para o
-  ROCm: só voltar quando a AMD publicar release para Windows com torch ≥ 2.13 e o defeito do MIOpen
-  corrigido (hoje, torch ≥ 2.13 com ROCm só existe como pré-release no nightly TheRock, que o spike
-  não usa).
-- O pacote `rocm==7.2.1` é um sdist; no build isolado o pip baixa `setuptools>=70.2.0` do PyPI sem
-  verificar hash (limite do modo hash do pip). Alternativa hermética: instalar com
-  `--no-index --find-links` apontando para uma cópia local dos wheels.
+  `.pt`, `.pt2` ou pickle de terceiros, só pesos próprios; o artefato que sai é o ONNX; não se aplica
+  `torch.jit.script` a código ou modelo de terceiros. Gatilho para o ROCm: só voltar quando a AMD
+  publicar release para Windows com torch ≥ 2.13 e o defeito do MIOpen corrigido (hoje, torch ≥ 2.13
+  com ROCm só existe como pré-release no nightly TheRock, que o spike não usa).
+- Ao reconstruir o ambiente ROCm: o pacote `rocm==7.2.1` é um sdist; no build isolado o pip baixa
+  `setuptools>=70.2.0` do PyPI sem verificar hash (limite do modo hash do pip). Alternativa
+  hermética: instalar com `--no-index --find-links` apontando para uma cópia local dos wheels.
 - Licenças do que o lock de treino instala (inventário feito no ambiente ROCm; o lock CPU tem os
   mesmos pacotes, menos os três `rocm*`): torch 2.9.1 e torchvision BSD-3 (o torch 2.14.1 declara
   Apache-2.0, Apache-2.0 com exceção LLVM, BSD-2, BSD-3, BSL-1.0 e MIT), onnx Apache-2.0, onnxruntime
@@ -137,6 +138,61 @@ Riscos aceitos:
 Como reproduzir: `requirements-treino.lock` fixa a variante CPU medida (Python 3.11,
 `torch==2.14.1+cpu` e `torchvision==0.29.2+cpu` do índice `https://download.pytorch.org/whl/cpu`, demais
 pinos do PyPI, todos com hash). O ambiente ROCm ensaiado (Python 3.12, `rocm-rel-7.2.1`) é
-reconstruído a partir dos pinos e hashes registrados em `tmp/treino-e11/instalacao.md` quando a AMD
-corrigir o defeito. Os comandos, em série, estão no docstring de `scripts/treino_detector/__init__.py`.
-As saídas ficam em `tmp/treino-e11/`, fora do Git.
+reconstruído pelos 22 pinos com hash do apêndice "Pinos da variante ROCm medida (E11)", quando a
+AMD corrigir o defeito. Os comandos, em série, estão no docstring de
+`scripts/treino_detector/__init__.py`. As saídas ficam em `tmp/treino-e11/`, fora do Git.
+
+## Apêndice: pinos da variante ROCm medida (E11)
+
+Conteúdo de `requirements-treino.lock` na variante ROCm ensaiada (commit 1693569), para
+reconstruir o ambiente num venv próprio quando a AMD corrigir o defeito do MIOpen
+(`pip install -r` de um arquivo com este bloco, fora do Git):
+
+```text
+# Python exigido: 3.12 (os wheels ROCm para Windows só existem em cp312), Windows x64.
+--find-links https://repo.radeon.com/rocm/windows/rocm-rel-7.2.1/
+filelock==4.2.9 \
+    --hash=sha256:a379c50a729e5b68c8519a4d26489f755d9769960a236ecd838190e2a78db2e9
+flatbuffers==25.12.19 \
+    --hash=sha256:7634f50c427838bb021c2d66a3d1168e9d199b0607e6329399f04846d42e20b4
+fsspec==2026.9.0 \
+    --hash=sha256:8dd6e646e99ea382bd85f97a45e6b526a442d79423a7dc673f1e2756d05fcb5f
+Jinja2==3.1.6 \
+    --hash=sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67
+MarkupSafe==3.0.4 \
+    --hash=sha256:11935df9bf455ed0c04eb87bcd720f02b1fe5e02128a9430f23aed6f93336fc7
+ml_dtypes==0.6.0 \
+    --hash=sha256:2a3e9d53925597fbffafd2a37048dadeddd0bdaba58058f6ae0869ed709a184d
+mpmath==1.3.0 \
+    --hash=sha256:a0b2b9fe80bbcd81a6647ff13108738cfb482d481d826cc0e02f5b35e5c88d2c
+networkx==3.7 \
+    --hash=sha256:e3fd2c13a7814cee3746340d8d7f8598a67f16a58bf47fb7f8793fab6efca1b0
+numpy==2.5.4 \
+    --hash=sha256:a7b1b6353e36a7e50de2973a38d705c88ee93adcf120673cee7f45a4a3fa223a
+onnx==1.23.2 \
+    --hash=sha256:9b382ba898a7c142a0801d03cf04ecabced96c1543c7b643a86f0928143802de
+onnxruntime==1.31.1 \
+    --hash=sha256:ae8a9a351efda685cc59a66226cdefaa37a126c1d66872ca23a2de9425326130
+packaging==26.3 \
+    --hash=sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c
+Pillow==13.0.0 \
+    --hash=sha256:ff3fe9eb621fbb9db4c4be33ab946f6bac5f98ab50ca8d3260503653656c961b
+protobuf==7.36.2 \
+    --hash=sha256:a300819d441e078a5608c0d3c709796bb548136058fda017ae51d425b44fd353
+rocm==7.2.1 \
+    --hash=sha256:9084902eaa69213a00a90784ad89e6e5fe73c702df0cc6cc3a70d777c7a6142b
+rocm-sdk-core==7.2.1 \
+    --hash=sha256:f68989d48df71cbfc3cb68bf705dc37c0f56e9666feddb59a1a0f5ff7539fe1c
+rocm-sdk-libraries-custom==7.2.1 \
+    --hash=sha256:c7fe0b0731af8896093ff69e11496830d3cb6a4aed73e895c60b7cbdc200be92
+setuptools==84.1.0 \
+    --hash=sha256:5231689c6ac8156cd155cfb98c3fd6fb252c3e7e9bd3d78b64d3c55f132624c9
+sympy==1.14.0 \
+    --hash=sha256:e091cc3e99d2141a0ba2847328f5479b05d94a6635cb96148ccb3f34671bd8f5
+torch==2.9.1+rocm7.2.1 \
+    --hash=sha256:e88bf270163b48f7f27f7ea3db5ffb3be4ba107301933022bcb3c6ddedfeeabb
+torchvision==0.24.1+rocm7.2.1 \
+    --hash=sha256:b5c34d76a2f01fb97e1e0f224bd97fc3a58ec1ee1ef2376af2d72086e9aca34c
+typing_extensions==4.16.0 \
+    --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8
+```
