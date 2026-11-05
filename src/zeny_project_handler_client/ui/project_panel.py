@@ -229,6 +229,8 @@ class ProjectPanelWidget(QWidget):
         self._token_encerramento = 0
         self._pedido_encerramento: int | None = None
         self._ligado_aos_registros = False
+        # Geração do reinício que espera a observação antiga terminar; None sem reinício adiado.
+        self._reinicio_adiado: int | None = None
         self._search_timer = QTimer(self)
         self._search_timer.setSingleShot(True)
         self._search_timer.setInterval(300)
@@ -1167,9 +1169,25 @@ class ProjectPanelWidget(QWidget):
             else:
                 self._reset_to_initial_state()
         self._schedule_search()
+        self._reinicio_adiado = None
+        thread = self._global_poll_thread
+        if thread is not None and thread.isRunning():
+            if self._global_poll_stop.is_set():
+                # A antiga já recebeu o stop: a nova só nasce no finished dela, nunca as duas
+                # ao mesmo tempo. Uma interrupção depois daqui muda a geração e anula o reinício.
+                self._reinicio_adiado = self._connection_generation
+            return
+        self._global_poll_stop = Event()
+        self._start_global_polling()
+
+    @Slot()
+    def _retomar_observacao_adiada(self) -> None:
+        if self._reinicio_adiado != self._connection_generation:
+            return
         thread = self._global_poll_thread
         if thread is not None and thread.isRunning():
             return
+        self._reinicio_adiado = None
         self._global_poll_stop = Event()
         self._start_global_polling()
 
@@ -1298,6 +1316,7 @@ class ProjectPanelWidget(QWidget):
         thread.started.connect(worker.run)
         worker.session_received.connect(self._session_received)
         worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)
+        thread.finished.connect(self._retomar_observacao_adiada, Qt.ConnectionType.QueuedConnection)
         thread.finished.connect(self._conferir_encerramento, Qt.ConnectionType.QueuedConnection)
         thread.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)

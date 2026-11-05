@@ -384,3 +384,44 @@ def test_painel_destruido_com_pedido_pendente_nao_recebe_o_termino(
     # O _dispose avisa o notificador do módulo, já sem o painel destruído ligado a ele.
     QCoreApplication.processEvents()
     assert not remote_read.leituras_ativas()
+
+
+def test_restart_com_observacao_antiga_viva_so_inicia_a_nova_quando_ela_termina(
+    qtbot: QtBot, criar_painel: PainelFactory
+) -> None:
+    gateway = _GatewayFalso(sessao_lenta=True)
+    painel = criar_painel(gateway)
+    velha = _observacao(painel)
+    try:
+        qtbot.waitUntil(gateway.entrou.is_set)
+        assert painel.shutdown_polling(0) is False
+        painel.restart_polling()
+        # Nunca duas observações ao mesmo tempo: a nova espera o finished da antiga.
+        assert painel._global_poll_thread is velha
+    finally:
+        gateway.liberar.set()
+        assert velha.wait(_PRAZO_JUNTAR_MS)
+    qtbot.waitUntil(lambda: painel._global_poll_thread is not velha)
+    nova = _observacao(painel)
+    assert nova.isRunning()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert painel._global_poll_thread is nova
+
+
+def test_interrupcao_depois_do_restart_adiado_anula_o_reinicio(
+    qtbot: QtBot, criar_painel: PainelFactory
+) -> None:
+    gateway = _GatewayFalso(sessao_lenta=True)
+    painel = criar_painel(gateway)
+    velha = _observacao(painel)
+    try:
+        qtbot.waitUntil(gateway.entrou.is_set)
+        assert painel.shutdown_polling(0) is False
+        painel.restart_polling()
+        # Nova perda de conexão antes de a antiga terminar.
+        assert painel.shutdown_polling(0) is False
+    finally:
+        gateway.liberar.set()
+        assert velha.wait(_PRAZO_JUNTAR_MS)
+    qtbot.wait(_FOLGA_SEM_EMISSAO_MS)
+    assert not painel.rede_ativa()
