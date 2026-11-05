@@ -27,7 +27,7 @@ Ambiente Windows, Python 3.11–3.13, venv em `.venv` (criado por `.\setup.bat`,
 .\.venv\Scripts\python.exe scripts\generate_openapi_v1.py              # regenera docs/api/openapi-v1.json
 .\.venv\Scripts\python.exe scripts\smoke_examples.py                   # smoke opcional sobre examples/
 .\.venv\Scripts\python.exe -m scripts.drawing_model_dxf PDF --saida tmp\x.dxf   # DXF de depuração do modelo (ezdxf, só dev)
-.\.venv\Scripts\python.exe -m scripts.drawing_model_report --raiz DIR --saida tmp\rel.json   # relatório do modelo: famílias, imagens, custo (--amostras-imagem tmp\img)
+.\.venv\Scripts\python.exe -m scripts.drawing_model_report --raiz DIR --saida tmp\rel.json   # relatório do modelo: famílias, imagens, custo (--amostras-imagem tmp\img; --processos 4 mede em paralelo)
 .\.venv\Scripts\python.exe scripts\build_release.py --version 0.5.0
 .\ZenyProjectHandler.bat                              # sobe servidor via compose.local.yaml + abre cliente
 ```

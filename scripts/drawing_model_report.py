@@ -3,7 +3,7 @@
 
 Uso:
     python -m scripts.drawing_model_report --raiz DIR --saida ARQUIVO.json
-        [--amostras-imagem DIR] [--raiz-repositorio DIR]
+        [--amostras-imagem DIR] [--raiz-repositorio DIR] [--processos N]
 
 Por PDF: sha256, família e sinais; por página, contagens de caminhos, textos, polilinhas,
 círculos, arcos, grupos candidatos e diagnósticos; tempo e pico de memória (``tracemalloc``,
@@ -27,6 +27,11 @@ na execução não é regravado. Falha ao gravar amostras não descarta a mediç
 ``--saida`` e ``--amostras-imagem`` precisam ficar em ``tmp/`` da raiz do repositório (padrão:
 diretório atual). Nada no relatório nem nos nomes de arquivo traz caminho, nome, produtor ou
 criador do PDF; os PDFs saem ordenados pelo ``sha256``.
+
+Com ``--processos N`` (inteiro >= 1, padrão 1) os PDFs são medidos em até N processos; as
+amostras de imagem continuam sendo gravadas em série, na ordem dos PDFs. ``tempo_s`` e
+``pico_memoria_bytes`` medem a execução, não a leitura: com mais de um processo o tempo inclui a
+disputa por CPU e o pico depende da partida a frio de cada processo do pool.
 """
 
 from __future__ import annotations
@@ -41,6 +46,7 @@ import tracemalloc
 from bisect import bisect_left, bisect_right
 from collections import Counter
 from collections.abc import Sequence
+from concurrent.futures import ProcessPoolExecutor
 from itertools import pairwise
 from pathlib import Path
 from typing import Any, Final
@@ -316,18 +322,48 @@ def _argumentos(argv: Sequence[str] | None) -> argparse.Namespace:
     parser.add_argument("--saida", type=Path, required=True)
     parser.add_argument("--amostras-imagem", type=Path, default=None)
     parser.add_argument("--raiz-repositorio", type=Path, default=Path.cwd())
-    return parser.parse_args(argv)
+    parser.add_argument("--processos", type=int, default=1)
+    argumentos = parser.parse_args(argv)
+    if argumentos.processos < 1:
+        parser.error("--processos precisa ser >= 1")
+    return argumentos
 
 
-def _medir_com_amostras(
-    pdf: Path, amostras_dir: Path | None, fontes: dict[str, str], tabela: TabelaGlifos
-) -> dict[str, Any]:
+def _medir_com_tabela(pdf: Path, tabela: TabelaGlifos) -> dict[str, Any]:
     try:
-        medicao = medir_pdf(pdf, tabela)
+        return medir_pdf(pdf, tabela)
     except Exception as erro:  # um PDF ruim não pode derrubar o relatório inteiro
         return {"sha256": _sha256_do_arquivo(pdf), "erro": type(erro).__name__}
-    if amostras_dir is None:
-        return medicao
+
+
+_TABELA_DO_PROCESSO: TabelaGlifos | None = None
+
+
+def _iniciar_processo() -> None:
+    global _TABELA_DO_PROCESSO
+    _TABELA_DO_PROCESSO = carregar_tabela_glifos()
+
+
+def _medir_no_processo(pdf: Path) -> dict[str, Any]:
+    if _TABELA_DO_PROCESSO is None:
+        raise RuntimeError("processo do pool sem tabela de glifos")
+    return _medir_com_tabela(pdf, _TABELA_DO_PROCESSO)
+
+
+def _medir_todos(
+    pdfs: Sequence[Path], tabela: TabelaGlifos, processos: int
+) -> list[dict[str, Any]]:
+    if processos <= 1 or len(pdfs) <= 1:
+        return [_medir_com_tabela(pdf, tabela) for pdf in pdfs]
+    with ProcessPoolExecutor(
+        max_workers=min(processos, len(pdfs)), initializer=_iniciar_processo
+    ) as pool:
+        return list(pool.map(_medir_no_processo, pdfs))
+
+
+def _registrar_amostras(
+    pdf: Path, medicao: dict[str, Any], amostras_dir: Path, fontes: dict[str, str]
+) -> None:
     try:
         gravar_amostras(pdf, medicao["amostras"], amostras_dir, fontes)
     except Exception as erro:  # falha nas amostras não descarta a medição
@@ -335,7 +371,6 @@ def _medir_com_amostras(
     for amostra in medicao["amostras"]:
         if amostra["sha256"] in fontes:
             amostra["fonte_pixels"] = fontes[amostra["sha256"]]
-    return medicao
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -360,10 +395,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(str(erro), file=sys.stderr)
         return 2
     fontes: dict[str, str] = {}
-    medicoes = sorted(
-        (_medir_com_amostras(pdf, argumentos.amostras_imagem, fontes, tabela) for pdf in pdfs),
-        key=lambda medicao: str(medicao["sha256"]),
-    )
+    brutas = _medir_todos(pdfs, tabela, argumentos.processos)
+    if argumentos.amostras_imagem is not None:
+        for pdf, medicao in zip(pdfs, brutas, strict=True):
+            if "erro" not in medicao:
+                _registrar_amostras(pdf, medicao, argumentos.amostras_imagem, fontes)
+    medicoes = sorted(brutas, key=lambda medicao: str(medicao["sha256"]))
     validas = [m for m in medicoes if "erro" not in m]
     relatorio = {
         "resumo": {

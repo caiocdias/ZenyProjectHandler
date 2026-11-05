@@ -3,7 +3,7 @@
 Uso::
 
     python -m scripts.benchmark_texto_ficha --rodada RODADA_E03 --pdfs DIR --saida DIR \
-        [--tabela ARQ]
+        [--tabela ARQ] [--processos N]
 
 Para cada ``RODADA/pdfs/ID/ficha/referencia.json`` acha o PDF de ``DIR`` com o mesmo
 ``pdf_sha256``, roda o analisador sem OCR e mede quantos valores de campo da referência
@@ -20,6 +20,10 @@ até 0.10 (cumulativo) do centro da caixa do poste, em coordenadas normalizadas 
 Erro afirmado (``erros_afirmados``): instância sem acerto cujo texto mais próximo do poste (até
 0.05 de distância normalizada) tem um token de comprimento igual ±1 e edição de 1 a 2 do
 valor, ou um token que contém o valor colado a outros alfanuméricos (fusão de tokens).
+
+Com ``--processos N`` (inteiro >= 1, padrão 1) os PDFs são medidos em até N processos; a saída
+mantém a ordem serial. Os campos ``tempo_*`` medem a execução, não a leitura: com mais de um
+processo incluem a disputa por CPU.
 """
 
 from __future__ import annotations
@@ -30,6 +34,7 @@ import re
 import unicodedata
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -383,16 +388,56 @@ def _markdown(relatorio: Mapping[str, Any]) -> str:
     return "\n".join(linhas)
 
 
-def executar(rodada: Path, pdfs: Path, saida: Path, tabela_arquivo: Path | None) -> dict[str, Any]:
+_TABELA_DO_PROCESSO: TabelaGlifos | None = None
+
+
+def _iniciar_processo(tabela_arquivo: Path | None) -> None:
+    global _TABELA_DO_PROCESSO
+    _TABELA_DO_PROCESSO = carregar_tabela_glifos(tabela_arquivo)
+
+
+def _medir_no_processo(item: tuple[Path, dict[str, Any]]) -> dict[str, Any]:
+    if _TABELA_DO_PROCESSO is None:
+        raise RuntimeError("processo do pool sem tabela de glifos")
+    pdf, referencia = item
+    return _medir_pdf(pdf, referencia, _TABELA_DO_PROCESSO)
+
+
+def _medir_todos(
+    itens: Sequence[tuple[Path, dict[str, Any]]],
+    tabela: TabelaGlifos,
+    tabela_arquivo: Path | None,
+    processos: int,
+) -> list[dict[str, Any]]:
+    if processos <= 1 or len(itens) <= 1:
+        return [_medir_pdf(pdf, referencia, tabela) for pdf, referencia in itens]
+    with ProcessPoolExecutor(
+        max_workers=min(processos, len(itens)),
+        initializer=_iniciar_processo,
+        initargs=(tabela_arquivo,),
+    ) as pool:
+        return list(pool.map(_medir_no_processo, itens))
+
+
+def executar(
+    rodada: Path,
+    pdfs: Path,
+    saida: Path,
+    tabela_arquivo: Path | None,
+    processos: int = 1,
+) -> dict[str, Any]:
     tabela = carregar_tabela_glifos(tabela_arquivo)
     por_sha = _pdfs_por_sha(pdfs)
-    por_pdf: dict[str, Any] = {}
+    ids: list[str] = []
+    itens: list[tuple[Path, dict[str, Any]]] = []
     for pdf_id, arquivo in _referencias(rodada):
         referencia = carregar_ficha(arquivo)
         pdf = por_sha.get(referencia["pdf_sha256"])
         if pdf is None:
             raise ValueError(f"PDF da referência {pdf_id} não encontrado em --pdfs (pdf_sha256)")
-        por_pdf[pdf_id] = _medir_pdf(pdf, referencia, tabela)
+        ids.append(pdf_id)
+        itens.append((pdf, referencia))
+    por_pdf = dict(zip(ids, _medir_todos(itens, tabela, tabela_arquivo, processos), strict=True))
     por_familia: dict[str, list[Any]] = defaultdict(list)
     for bloco in por_pdf.values():
         por_familia[bloco["familia"]].append(bloco["fontes"])
@@ -420,8 +465,11 @@ def main(argumentos: list[str] | None = None) -> int:
     parser.add_argument("--pdfs", type=Path, required=True)
     parser.add_argument("--saida", type=Path, required=True)
     parser.add_argument("--tabela", type=Path, default=None)
+    parser.add_argument("--processos", type=int, default=1)
     opcoes = parser.parse_args(argumentos)
-    executar(opcoes.rodada, opcoes.pdfs, opcoes.saida, opcoes.tabela)
+    if opcoes.processos < 1:
+        parser.error("--processos precisa ser >= 1")
+    executar(opcoes.rodada, opcoes.pdfs, opcoes.saida, opcoes.tabela, opcoes.processos)
     return 0
 
 
