@@ -45,9 +45,14 @@
 - **R-E17-4, o que é "thread de rede".** A observação global do painel (`_global_poll_thread`) mais as threads registradas nos conjuntos de módulo `project_search._RUNNING_SEARCHES` e `remote_read._RUNNING`. Essas duas não têm pai, então destruir o painel não as destrói. O risco delas está no fim do processo, quando `run()` retorna com elas rodando. Elas são usadas por pesquisa, mercado, documentação e GMAX.
   - O fechamento pede `requestInterruption()` a todas e espera que terminem.
   - O contrato público é `rede_ativa() -> bool`, calculado a partir desses registros e da observação.
-- **R-E17-5, o sinal é de estado.** `rede_encerrada` é emitido na thread da UI, a partir do `finished` entregue em fila, quando `rede_ativa()` passa de `True` a `False` depois de um pedido de encerramento. Emite uma vez por pedido.
-  - `restart_polling()` cancela o pedido pendente. A thread velha que termina depois do reinício não emite, e a geração `_connection_generation` decide isso.
+- **R-E17-5, o sinal é de estado.** `rede_encerrada` é emitido na thread da UI quando `rede_ativa()` passa de `True` a `False` depois de um pedido de encerramento, e emite uma vez por pedido.
+  - **Token próprio:** o pedido guarda um `_token_encerramento` (inteiro) que **só** `restart_polling()` incrementa e cancela. `shutdown_polling` e `set_connection_available` não mexem nele, e é por isso que ele não usa `_connection_generation`. O motivo: com o servidor mudo, `ReconnectableGateway.guarded` emite `failure_detected` → `lost` → `connection_lost` → `set_connection_available(False)` → `shutdown_polling()`, que incrementa `_connection_generation` (`connection.py:50-53,81-87`; `bootstrap.py:249-251`; `main_window.py:636`; `project_panel.py:1059`). Com a geração, o pedido seria invalidado e a janela ficaria presa.
   - Pedido feito com nada rodando emite via `QTimer.singleShot(0, …)`.
+  - A conferência `_conferir_encerramento()` roda (i) no `finished` em fila da observação global e (ii) na notificação dos registros (R-E17-9).
+- **R-E17-8, rede de segurança contra notificação perdida.** Durante o adiamento, um `QTimer` da `MainWindow` de 250 ms reconfere `rede_ativa()` e chama `_concluir_fechamento_adiado()` assim que dá `False`. O timer para no fechamento. Assim, nenhuma classe de notificação perdida (ordem `_dispose` × conferência, thread de outro painel, perda de conexão) prende a janela. O sinal continua sendo o caminho rápido.
+  - Com `_fechamento_adiado` ligado, `MainWindow.set_connection_available` não chama `shutdown_polling` nem reconecta, e só registra o evento no log.
+- **R-E17-9, os registros notificam o término.** `remote_read` e `project_search` ganham, cada um, um `QObject` de módulo (`notificador_leituras`, `notificador_pesquisas`) com o sinal `terminou`. Ele é emitido dentro de `_dispose`, **depois** do `discard`. `leituras_ativas()` e `pesquisas_ativas()` contam só os membros com `isRunning()`. O painel liga `_conferir_encerramento` aos dois sinais. Os registros valem para o processo inteiro, então `rede_ativa()` conta também as threads de outra janela do mesmo processo: isso é seguro, porque só faz esperar mais, e fica na docstring.
+- **R-E17-10, o fechamento depois do `exec()`.** `bootstrap.run()` chama `window.close()` no `finally`, depois do `exec()` (`bootstrap.py:325-326`). Esse terceiro `closeEvent`, com a janela já fechada, não roda `release_resources()` de novo nem rearma o adiamento.
 - **R-E17-6, o conftest perde o monkeypatch.** `_esperar_threads_do_painel_ate_o_fim` e o seu uso (`tests/conftest.py:59-80`, `:103`) saem. O teardown da fábrica (`conftest.py:186`) continua juntando as threads com o prazo próprio `_PRAZO_ENCERRAR_THREADS_MS` antes de destruir as janelas: isso é higiene de teste e não encobre o `closeEvent`.
   - Os testes que só passavam por causa do monkeypatch são corrigidos no mesmo commit (Task 3). Os cenários de polling dormem 1,2 a 1,6 s em `session()` contra o prazo de 1000 ms (`test_project_panel_polling_restart.py:72`, `test_project_panel_polling_restart_casos.py:80,84,92,104,117,119`).
 - **R-E17-7, estimativa.** A spec previa ~1h. A revisão mostrou que o fechamento cobre também as threads remotas e que o monkeypatch encobre testes que dependem dele. A soma passa a ~2h50, dentro do teto de ~3h. A ruling fica no handoff.
@@ -102,9 +107,10 @@ As tarefas rodam em série na branch da trilha, porque cada uma depende da anter
   - `project_search.pesquisas_ativas() -> bool` e `project_search.interromper_pesquisas() -> None`, as mesmas funções sobre `_RUNNING_SEARCHES`.
   - `ProjectPanelWidget.rede_encerrada: Signal()`.
   - `ProjectPanelWidget.rede_ativa() -> bool`, que dá `True` quando a observação global roda ou quando `leituras_ativas()` ou `pesquisas_ativas()` é verdadeira.
-  - `ProjectPanelWidget.pedir_encerramento(timeout_ms: int) -> bool`. Faz o que `shutdown_polling` faz hoje e mais `interromper_leituras()` e `interromper_pesquisas()`. Espera até `timeout_ms` no total e devolve `not self.rede_ativa()`. O pedido fica pendente até a emissão.
+  - `ProjectPanelWidget.pedir_encerramento(timeout_ms: int) -> bool`. Faz o que `shutdown_polling` faz hoje e mais `interromper_leituras()` e `interromper_pesquisas()`. Espera até `timeout_ms` no total e devolve `not self.rede_ativa()`. O pedido fica pendente, sob `_token_encerramento`, até a emissão.
+  - `remote_read.notificador_leituras.terminou: Signal()` e `project_search.notificador_pesquisas.terminou: Signal()` são emitidos em `_dispose`, depois do `discard` (R-E17-9).
   - `shutdown_polling(timeout_ms=1_000) -> bool` continua com a mesma assinatura e o mesmo comportamento, para os chamadores atuais (teardown e `set_connection_available`).
-- Emissão (R-E17-5): o `finished` de cada thread de rede, entregue em fila, chama `_conferir_encerramento()`. Com pedido pendente, `not rede_ativa()` e geração igual, o painel emite `rede_encerrada` e limpa o pedido. `restart_polling()` limpa o pedido.
+- Emissão (R-E17-5/9): o `finished` em fila da observação global e os sinais `terminou` dos dois registros chamam `_conferir_encerramento()`. Com pedido pendente, `not rede_ativa()` e token igual, o painel emite `rede_encerrada` e limpa o pedido. Só `restart_polling()` cancela o pedido, incrementando o token.
 
 - [ ] **Step 1: Write the failing tests.** Use gateways falsos que bloqueiam `session()` ou `search` num `threading.Event`, sempre com `try/finally` que libera o evento e junta as threads:
   - `test_pedido_com_observacao_lenta_devolve_false_e_emite_uma_vez`;
@@ -112,7 +118,10 @@ As tarefas rodam em série na branch da trilha, porque cada uma depende da anter
   - `test_pesquisa_em_curso_entra_no_encerramento`;
   - `test_leitura_remota_em_curso_entra_no_encerramento`, com uma `RemoteRequestThread` bloqueada;
   - `test_restart_cancela_o_pedido_e_a_thread_velha_nao_emite` (Review Focus 3);
-  - `test_dois_pedidos_seguidos_emitem_uma_vez_cada`.
+  - `test_dois_pedidos_seguidos_emitem_uma_vez_cada`;
+  - `test_shutdown_por_perda_de_conexao_nao_cancela_o_pedido` (N1): pedido pendente com observação lenta, depois `shutdown_polling()`, que é o que a perda de conexão chama. A observação termina, e o sinal é emitido;
+  - `test_leitura_remota_de_outro_painel_e_a_ultima_viva` (N2): a última thread viva é uma `RemoteRequestThread` criada fora do painel de projeto (por exemplo, a do mercado ou uma criada no teste). Quando ela termina, o sinal é emitido;
+  - `test_ativas_conta_so_threads_rodando`: um membro do registro que já terminou, mas ainda não passou pelo `_dispose`, não conta.
 - [ ] **Step 2:** `.venv/Scripts/python.exe -m pytest tests/unit/test_project_panel_encerramento.py -q` → FAIL (`AttributeError`).
 - [ ] **Step 3:** implemente. Os testes existentes do painel, da pesquisa e das leituras remotas continuam verdes sem edição.
 - [ ] **Step 4:** testes novos e `-k "project_panel or search or remote or market or gmax or documentation"` → PASS. ruff, format, mypy, `complexity_gate` e `client_artifact_gate --source-only` limpos.
@@ -127,7 +136,8 @@ As tarefas rodam em série na branch da trilha, porque cada uma depende da anter
 **Interfaces:**
 - Consumes: `pedir_encerramento`, `rede_ativa` e `rede_encerrada` (Task 1).
 - Produces:
-  - `MainWindow._fechamento_adiado: bool`;
+  - `MainWindow._fechamento_adiado: bool` e o timer de reconferência de 250 ms (R-E17-8);
+  - `set_connection_available` não faz nada durante o adiamento, além do log (R-E17-8);
   - `MainWindow._concluir_fechamento_adiado()`, slot de uso único;
   - a docstring de `closeEvent` com o teto real e o estouro (R-E17-2);
   - o log `logging.getLogger(__name__)` no início do adiamento e no fim, com o tempo decorrido.
@@ -137,6 +147,9 @@ As tarefas rodam em série na branch da trilha, porque cada uma depende da anter
   - `test_exec_real_sai_depois_da_thread`: subprocesso que roda um script Python, não o pytest. O script monta `create_application` com gateways falsos, cuja `session()` dorme 1,6 s, agenda o fechamento com `QTimer` e chama `app.exec()`. Afirma: saída 0; duração < 30 s; nenhuma thread de rede rodando quando `exec()` retorna (o script imprime isso antes de sair).
   - `test_fechamento_adiado_fica_visivel_desabilitado_e_fecha_depois`, em processo: `close()` durante a leitura lenta → `isVisible()` e `not isEnabled()` e `_fechamento_adiado`. Depois da leitura, a janela fecha e `release_resources` roda 1 vez.
   - `test_dois_closes_rapidos_nao_duplicam_conexao`, `test_thread_termina_entre_pedido_e_conexao` e `test_gateway_sem_timeout_espera_o_evento` (Review Focus 1, 2 e 4; o último em subprocesso, com o evento liberado por timer depois de 2 s).
+  - `test_perda_de_conexao_durante_o_adiamento_nao_prende_a_janela` (N1): `window.set_connection_available(False, …)` durante o adiamento não impede o fechamento. De preferência, um segundo caso passa pelo `ReconnectableGateway` real, com um gateway falso que levanta `ProjectGatewayError(INTERNAL_ERROR)` depois de 1,6 s.
+  - `test_timer_de_reconferencia_fecha_sem_sinal`: com o sinal desconectado à força no teste, o timer de 250 ms fecha a janela quando a rede encerra.
+  - `test_run_com_close_no_finally_nao_repete_release` (R-E17-10): por `bootstrap.run()` com `dialog_factory` falsa, ou afirmando que o `closeEvent` seguinte ao fechamento não chama `release_resources` de novo.
 - [ ] **Step 2:** os testes novos → FAIL contra o código atual. Registre o código de saída do subprocesso.
 - [ ] **Step 3:** implemente o `closeEvent` (R-E17-1/2/3).
 - [ ] **Step 4:** testes novos, `tests/integration/test_application_factory_teardown.py` e `tests/e2e/test_mvp_ui.py` → PASS. ruff, format, mypy, `complexity_gate` e `client_artifact_gate --source-only` limpos. Suíte inteira uma vez, com o `-n` do despacho. O monkeypatch do conftest ainda existe nesta tarefa.
