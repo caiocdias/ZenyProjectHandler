@@ -233,7 +233,19 @@ Regras, aplicadas a todo valor de todo pacote:
 - [ ] **Step 4:** o mesmo laço de 20 execuções → 20/20 verdes; `tests/server/test_jobs_api.py` inteiro verde; ruff, format e mypy limpos.
 - [ ] **Step 5: Commit** (`fix: ...` ou `test: ...`, conforme a causa).
 
-Onda 2 passa a ter as Tasks 3 e 4, com arquivos disjuntos.
+### Task 5: teste de razão de tempos do modelo sob carga (R14)
+
+- **Estimativa:** 20 min. **Depende de:** nenhuma. **Risco:** normal. **Laboratório:** não. **Soul:** `testador` (mudança só de teste).
+- **Por que entra:** `tests/unit/test_drawing_model_geometry_adversarial.py::test_fusao_de_cadeia_unica_com_ziguezague_seguido_de_reta_escala_linearmente` compara a razão de `perf_counter` entre 4k e 8k vértices (`< 3`), medindo intervalos de ~14–46 ms. Sob a carga paralela da sessão, ele falhou (0,046/0,014). Pela regra da E14, a asserção de tempo de parede vira contagem de trabalho determinística.
+
+**Files:**
+- Modify: `tests/unit/test_drawing_model_geometry_adversarial.py` (só esse teste).
+
+- [ ] **Step 1:** troque a medição por uma contagem de trabalho da reconstrução. Por exemplo, conte com `monkeypatch` as chamadas a um helper interno de `drawing_model/geometry.py` por vértice, ou as comparações de colinearidade. Mantenha o requisito "nada quadrático": a contagem em 8k ≤ 2,5 × a contagem em 4k. O teste precisa continuar vermelho contra uma versão quadrática. Prove isso com um mutante numa cópia fora do repositório e registre no relatório.
+- [ ] **Step 2:** o arquivo inteiro fica verde 5 vezes seguidas e também sob `-n 6`.
+- [ ] **Step 3: Commit** (`test: razao de tempos do modelo vira contagem de trabalho`).
+
+Ondas da emenda: a Task 4 adiantada, em paralelo com a Task 1; depois as Tasks 3 e 5, com arquivos disjuntos.
 
 ## Revisão de arquitetura
 
