@@ -35,6 +35,8 @@ from zeny_project_handler.domain.values import GeometriaDocumento
 from zeny_project_handler.ports.analysis import MotorOcrPort
 
 VERSAO_EXTRACAO: Final = "projeto-promovido-v1"
+VERSAO_EXTRACAO_PROPOSTAS: Final = "propostas-v1"
+VERSOES_EXTRACAO: Final = (VERSAO_EXTRACAO, VERSAO_EXTRACAO_PROPOSTAS)
 
 
 def _json(valor: Any) -> Any:
@@ -61,9 +63,11 @@ def _atributos_de_origem(variante: Mapping[str, Any]) -> dict[UUID, dict[str, An
     return origem
 
 
-def _gerador(variante: Mapping[str, Any], *, native_only: bool) -> dict[str, Any]:
+def _gerador(
+    variante: Mapping[str, Any], *, native_only: bool, versao_extracao: str = VERSAO_EXTRACAO
+) -> dict[str, Any]:
     return {
-        "versao_extracao": VERSAO_EXTRACAO,
+        "versao_extracao": versao_extracao,
         "analisador_versao": _json(variante["analyzer"]["version"]),
         "analisador_assinatura": _json(variante["analyzer"]["signature"]),
         "interpretador_versao": _json(variante["interpreter_version"]),
@@ -225,9 +229,17 @@ def _grava(caminho: Path, dados: Mapping[str, Any]) -> None:
 
 
 def executar(
-    pdf: Path, referencia: Path, saida: Path, *, native_only: bool, runtime_directory: Path
+    pdf: Path,
+    referencia: Path,
+    saida: Path,
+    *,
+    native_only: bool,
+    runtime_directory: Path,
+    versao_extracao: str = VERSAO_EXTRACAO,
 ) -> dict[str, Any]:
     """Roda o analisador, avalia contra a referência e grava ficha e avaliação em ``saida``."""
+    if versao_extracao not in VERSOES_EXTRACAO:
+        raise ValueError(f"versao_extracao desconhecida: {versao_extracao}")
     pdf = pdf.resolve(strict=True)
     ficha_referencia = carregar_ficha(referencia)
     antes = _impressao(pdf)
@@ -237,7 +249,13 @@ def executar(
     saida.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(prefix="ficha-poste-", dir=saida) as temporario:
         variante = run_variant(pdf, Path(temporario), ocr=ocr)
-    predita = ficha_predita(variante, antes[2], native_only=native_only)
+    if versao_extracao == VERSAO_EXTRACAO_PROPOSTAS:
+        # Importado aqui porque o módulo das propostas importa este (sem ciclo no topo).
+        from scripts.ficha_predita_propostas import ficha_predita_propostas
+
+        predita = ficha_predita_propostas(variante, antes[2], native_only=native_only)
+    else:
+        predita = ficha_predita(variante, antes[2], native_only=native_only)
     erros = validar_ficha(predita)
     if erros:
         raise ValueError("ficha predita inválida: " + "; ".join(erros))
@@ -256,13 +274,21 @@ def main(argumentos: list[str] | None = None) -> int:
     parser.add_argument("--saida", type=Path, required=True)
     parser.add_argument("--runtime-directory", type=Path, default=Path("tmp/benchmark-runtime"))
     parser.add_argument("--native-only", action="store_true")
+    parser.add_argument("--versao-extracao", choices=VERSOES_EXTRACAO, default=VERSAO_EXTRACAO)
     opcoes = parser.parse_args(argumentos)
+    # A versão só é repassada quando difere do padrão: a chamada padrão segue idêntica à anterior.
+    extras = (
+        {}
+        if opcoes.versao_extracao == VERSAO_EXTRACAO
+        else {"versao_extracao": opcoes.versao_extracao}
+    )
     executar(
         opcoes.pdf,
         opcoes.referencia,
         opcoes.saida,
         native_only=opcoes.native_only,
         runtime_directory=opcoes.runtime_directory,
+        **extras,
     )
     return 0
 
