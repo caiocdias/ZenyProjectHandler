@@ -1124,7 +1124,7 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 **Revisão humana:** não
 
-**Notas para o plano:** a estimativa do levantamento passa de 3h. Divida de novo, se for preciso.
+**Notas para o plano:** a estimativa do levantamento passa de 3h. Divida de novo, se for preciso. **Antes do plano**, o usuário decide por entrevista onde o método liga: no runner opt-in (`symbol_composition`), como os métodos atuais, ou também no analisador padrão. A decisão é de system design, porque define de onde a E07 lê os símbolos. A comparação entre métodos usa o bloco `comparacao` do benchmark (interseção das folhas).
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
@@ -1141,7 +1141,7 @@ Rulings da divisão, registradas no ledger da E06.1:
 **Dependências:** E06.2.
 
 **Escopo:**
-- Ampliação dos pacotes com as variantes do inventário de ESTAI, TRANSFORMADOR, ATERRAMENTO e PARA_RAIOS_MT/BT, com fonte rastreável e `negative_examples` vindos de `confusable_negatives`. O auditor e `scripts/coverage_matrix_e16.py` passam a aceitar variante de outro `owner_stage` do inventário. A mudança é visível na tabela de suporte da revisão e nas exportações, e vai para "Decisões para o usuário".
+- Ampliação dos pacotes com as variantes do inventário de ESTAI, TRANSFORMADOR, ATERRAMENTO e PARA_RAIOS_MT/BT, com fonte rastreável e `negative_examples` vindos de `confusable_negatives`. O auditor e `scripts/coverage_matrix_e16.py` passam a aceitar variante de outro `owner_stage` do inventário. A mudança é visível na tabela de suporte da revisão e nas exportações, e vai para "Decisões para o usuário". Os números fixos de `tests/server/test_e14_symbol_review.py:287` entram na File Structure.
 - Gramáticas novas e variantes habilitadas, com laboratório para os limiares por classe e por família.
 - Confirmar a hipótese H2: símbolos raster ficam marcados como resíduo para a E12.
 

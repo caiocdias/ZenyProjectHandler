@@ -58,6 +58,7 @@
   A precisão é um limite inferior, porque a ficha só anota símbolo associado a poste, e o `.md` diz isso.
 - **R-E06.1-4, família:** `reconhecer_familia(impressao_estrutural(documento)).familia`, medida fora do `tempo_s` dos métodos.
 - **R-E06.1-5, falha de método:** se o manifesto de `infer_pdf` traz `failures` não vazio ou `status == "failed"`, aquele método naquela folha vira `{"situacao": "falha", "erro": …}` e sai dos totais dele. Um detector quebrado não pode baixar a base que a E06.3 tem de superar.
+- **R-E06.1-5b, mesmas folhas na comparação:** quando houver mais de um método, o relatório traz também `comparacao`. Ele tem os totais de cada método restritos à interseção das folhas em que todos tiveram sucesso, com a lista dessas folhas. É esse bloco que a E06.2 e a E06.3 comparam ("com as mesmas referências"). Com um método só, `comparacao` repete os totais dele.
 - **R-E06.1-6, identidade do "atual":** `opcoes.metodos_assinatura` traz, por método, o `metodo_id`, a `versao` e as `parametros`/assinaturas de perfil que o `infer_pdf` expõe (legado, `e06-estais-v3`, `e05-transformadores-v5`, `package_sha256`), mais a versão da PyMuPDF. O `tempo_s` é declarado no `.md` como "inclui o `tracemalloc` de `infer_pdf`".
 
 ## Review Focus
@@ -140,7 +141,7 @@ Com duas etapas abertas, cada onda tem até 2 tarefas. Onda 1: Tasks 1 e 2. Onda
   - `test_falha_de_detector_tira_o_metodo_dos_totais`: com `monkeypatch`, um detector de `infer_pdf` levanta erro → o método naquela folha fica `situacao: "falha"` e fora dos totais. Rode serial, porque o `monkeypatch` não atravessa o spawn;
   - `test_processos_2_igual_a_serial`: os JSON, carregados, são iguais depois de remover `tempo_s`;
   - `test_sha_diferente_e_falha_saneada`: sem `str(tmp_path)` no JSON;
-  - `test_caminho_avaliacao_cega_e_recusado_sem_ler`: o `caminho_relativo` aponta para `avaliacao-cega/x.pdf` em `tmp_path`, e um `monkeypatch` em `Path.read_bytes`/`open` acusa leitura daquele arquivo → falha, sem leitura;
+  - `test_caminho_avaliacao_cega_e_recusado_sem_ler`: o `caminho_relativo` aponta para `avaliacao-cega/x.pdf` em `tmp_path`, e um `monkeypatch` em `Path.read_bytes`/`open`, em `pymupdf.open` e em `infer_pdf` acusa qualquer uso daquele caminho → falha, sem leitura;
   - `test_cli_processos_invalido` → `SystemExit` com código 2;
   - `test_relatorio_sem_caminho_absoluto_nem_nome_de_pdf`.
 - [ ] **Step 2:** `.venv/Scripts/python.exe -m pytest tests/unit/test_benchmark_simbolos_ficha.py -q` → FAIL (`ModuleNotFoundError`).
@@ -210,3 +211,16 @@ Regras, aplicadas a todo valor de todo pacote:
 | baseline diagnóstico do atual em `tmp/`, totais no handoff | passos 1 e 2 do fechamento |
 | guarda verde | Task 3 |
 | `.bat` aprovado | passo 5 |
+
+## Revisão de arquitetura
+
+- **Veredito:** aprovado com notas.
+- **Rodadas:** 1. A rodada 0 bloqueou com I1–I5 e M1–M12, e a rodada 1 aprovou com notas.
+- **Modelo:** opus (`revisor-arquitetura`).
+- **Notas Menores, aplicadas:**
+  - a pendência da entrevista sobre o runner opt-in foi para o roadmap (E06.2) e vai para o handoff da E06.1;
+  - a comparação entre métodos usa a interseção das folhas (R-E06.1-5b);
+  - o teste de `avaliacao-cega` intercepta também `pymupdf.open` e `infer_pdf`;
+  - a E06.3 precisa listar `tests/server/test_e14_symbol_review.py:287` na File Structure;
+  - a Task 1 está no limite de 45 min; se estourar, o paralelismo e a CLI viram tarefa própria;
+  - M12: não há ARCHITECTURE.md.
