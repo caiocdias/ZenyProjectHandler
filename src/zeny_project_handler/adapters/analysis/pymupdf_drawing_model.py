@@ -81,6 +81,7 @@ _Transformar = Callable[[Any], Ponto]
 @dataclass(slots=True)
 class _Fontes:
     caminhos: tuple[Caminho, ...] = ()
+    indices_crus: tuple[int, ...] = ()
     total_desenhos: int = 0
     formas_glifo: int = 0
     textos_nativos: tuple[TextoModelo, ...] = ()
@@ -88,6 +89,17 @@ class _Fontes:
     anotacoes_shx: int = 0
     imagens: tuple[ImagemModelo, ...] = ()
     diagnosticos: list[str] = field(default_factory=list)
+
+
+class _DesenhosFiltrados(list[dict[str, Any]]):
+    """Desenhos de traço/preenchimento, com a posição de cada um em `get_drawings`."""
+
+    indices_crus: tuple[int, ...]
+
+    def __init__(self, filtrados: Iterable[tuple[int, dict[str, Any]]]) -> None:
+        pares = list(filtrados)
+        super().__init__(desenho for _, desenho in pares)
+        self.indices_crus = tuple(indice for indice, _ in pares)
 
 
 @dataclass(slots=True)
@@ -102,6 +114,18 @@ class _Contagens:
         self.formas_glifo += fontes.formas_glifo
         self.anotacoes_shx += fontes.anotacoes_shx
         self.imagens += len(fontes.imagens)
+
+
+def pagina_modelo_com_indices(
+    pagina: pymupdf.Page, indice: int, tabela: TabelaGlifos | None = None
+) -> tuple[PaginaModelo, tuple[int, ...]]:
+    """Página `indice` do modelo e, por caminho, a posição do desenho de origem em `get_drawings`.
+
+    O modelo é o mesmo de `extrair_modelo_desenho(...).paginas[indice]`. `caminhos[i]` veio do
+    desenho cru `indices[i]`: `get_drawings` traz também `clip` e `group`, que o modelo descarta.
+    """
+    fontes = _ler_fontes(pagina)
+    return _montar_pagina(indice, pagina, fontes, tabela), fontes.indices_crus
 
 
 def impressao_estrutural(documento: pymupdf.Document) -> ImpressaoEstrutural:
@@ -199,11 +223,11 @@ def _fonte(nome: str, diagnosticos: list[str], leitura: Callable[[], _T], vazio:
 def _ler_fontes(pagina: Any) -> _Fontes:
     fontes = _Fontes()
     diagnosticos = fontes.diagnosticos
-    sem_caminhos: tuple[tuple[Caminho, ...], int, int] = ((), 0, 0)
+    sem_caminhos: tuple[tuple[Caminho, ...], tuple[int, ...], int, int] = ((), (), 0, 0)
     sem_textos: tuple[TextoModelo, ...] = ()
     sem_shx: tuple[tuple[TextoModelo, ...], int] = ((), 0)
     sem_imagens: tuple[ImagemModelo, ...] = ()
-    fontes.caminhos, fontes.total_desenhos, fontes.formas_glifo = _fonte(
+    fontes.caminhos, fontes.indices_crus, fontes.total_desenhos, fontes.formas_glifo = _fonte(
         "caminhos", diagnosticos, lambda: _caminhos_e_glifos(pagina), sem_caminhos
     )
     fontes.textos_nativos = _fonte(
@@ -303,11 +327,11 @@ def _caixa(transformar: _Transformar, caixa: Any) -> Caixa:
 
 def _desenhos(pagina: Any) -> list[dict[str, Any]]:
     """Caminhos de traço/preenchimento; entradas `clip` e `group` ficam de fora."""
-    return [
-        desenho
-        for desenho in pagina.get_drawings(extended=True)
+    return _DesenhosFiltrados(
+        (indice, desenho)
+        for indice, desenho in enumerate(pagina.get_drawings(extended=True))
         if desenho.get("type") in _TIPOS_CAMINHO
-    ]
+    )
 
 
 def caminhos_da_pagina(pagina: Any) -> tuple[Caminho, ...]:
@@ -344,10 +368,13 @@ def _finitos(subcaminhos: tuple[tuple[ItemCaminho, ...], ...]) -> bool:
     )
 
 
-def _caminhos_e_glifos(pagina: Any) -> tuple[tuple[Caminho, ...], int, int]:
+def _caminhos_e_glifos(pagina: Any) -> tuple[tuple[Caminho, ...], tuple[int, ...], int, int]:
     desenhos = _desenhos(pagina)
     caminhos = _caminhos(desenhos, _transformacao(pagina))
-    return caminhos, len(desenhos), sum(1 for desenho in desenhos if _is_glyph(desenho))
+    # `_desenhos` trocado por uma lista simples não sabe as posições cruas: vale a ordem filtrada
+    posicoes = getattr(desenhos, "indices_crus", None) or tuple(range(len(desenhos)))
+    indices = tuple(posicoes[caminho.ordem] for caminho in caminhos)
+    return caminhos, indices, len(desenhos), sum(1 for desenho in desenhos if _is_glyph(desenho))
 
 
 def _subcaminhos(
