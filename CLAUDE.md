@@ -35,9 +35,9 @@ Ambiente Windows, Python 3.11–3.13, venv em `.venv` (criado por `.\setup.bat`,
 - O gate roda a suíte em processos paralelos (`-n auto`, pytest-xdist; `-n 0` força a suíte serial).
   Execuções focadas (`arquivo::teste`) continuam seriais. Teste novo não pode depender de ordem,
   cwd, porta ou arquivo fixo: use `tmp_path` e ids de parametrização determinísticos.
-  O gate só é garantido com a máquina quieta: sob CPU saturada (por exemplo, duas suítes ao mesmo
-  tempo), testes Qt podem abortar o worker com 0xC0000409 ou segfault, inclusive em série. Isso é
-  conhecido; a saída é rodar de novo com a máquina quieta.
+  Worker que morre sem traceback (`node down`, 0xC0000409) costuma ser `QThread` destruída em
+  execução: junte toda thread antes de destruir o dono e não deixe o `destroyed` de uma thread
+  antiga limpar a referência da atual (ver o reinício da observação em `ui/project_panel.py`).
 - Testes de UI usam `QT_QPA_PLATFORM=offscreen` (definido em `tests/conftest.py`).
 - Pytest roda com `--strict-markers` e transforma `ResourceWarning`/unraisable em erro: feche
   arquivos, documentos PyMuPDF e conexões explicitamente. No pytest 9.0 as flags `--strict-*` de
