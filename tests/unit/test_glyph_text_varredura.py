@@ -182,3 +182,35 @@ def test_custo_de_pagina_com_muitos_trechos_curtos_fica_no_orcamento(
     assert not leitura.limitada
     # resolver_glifo domina o custo; página não limitada fez no máximo o teto de resoluções
     assert 0 < resolucoes["resolver_glifo"] <= glyph_text.LIMITE_RESOLUCOES_PAGINA
+
+
+def test_pagina_com_muitos_trechos_curtos_resolve_cada_assinatura_uma_unica_vez(
+    tmp_path: Path, tabela: TabelaGlifos, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # a memória da página existe para que glifos repetidos não paguem a resolução de novo
+    rng = random.Random(5)
+    linhas = [
+        LinhaTexto(
+            "".join(rng.choice(ALFABETO) for _ in range(rng.randint(2, 5))),
+            (10.0 + 60.0 * (i % 6), 15.0 + 7.5 * (i // 6)),
+            4.0,
+            rng.choice([0.0, 90.0]),
+        )
+        for i in range(240)
+    ]
+    caminhos = caminhos_do_pdf(pdf_texto_contorno(tmp_path / "c.pdf", linhas))
+
+    por_assinatura = Counter[Any]()
+    original = resolver_glifo
+
+    def contando(tabela_: TabelaGlifos, assinatura: Any) -> Any:
+        por_assinatura[glyph_text._chave(assinatura)] += 1
+        return original(tabela_, assinatura)
+
+    monkeypatch.setattr(glyph_text, "resolver_glifo", contando)
+    leitura = ler_texto_glifos(caminhos, tabela)
+
+    assert not leitura.limitada
+    total = sum(por_assinatura.values())
+    assert total > len(ALFABETO)  # a página tem glifos repetidos: sem memória haveria repetição
+    assert max(por_assinatura.values()) == 1

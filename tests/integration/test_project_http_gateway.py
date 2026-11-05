@@ -925,3 +925,46 @@ def test_qt_http_delayed_search_cannot_cross_input_or_connection_context(
             assert not panel._open_project.isEnabled()
             panel.set_global_operation(None)
         assert gateway.list_projects().page.total == 2
+
+
+def _relogio_que_avanca_dez_segundos(monkeypatch: pytest.MonkeyPatch) -> None:
+    agora = [0.0]
+
+    def relogio() -> float:
+        agora[0] += 10.0
+        return agora[0]
+
+    monkeypatch.setattr(f"{__name__}.monotonic", relogio)
+
+
+def test_wait_job_falha_quando_o_job_nunca_chega_ao_estado_esperado(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _relogio_que_avanca_dez_segundos(monkeypatch)
+
+    class _GatewayPresoEmExecucao:
+        def get_job(self, _job_id: UUID) -> JobStatusResponse:
+            return JobStatusResponse.model_construct(status=JobStatus.RUNNING, error=None)
+
+    with pytest.raises(AssertionError, match="não chegou a SUCCEEDED"):
+        _wait_job(
+            _GatewayPresoEmExecucao(),  # type: ignore[arg-type]
+            uuid4(),
+            JobStatus.SUCCEEDED,
+        )
+
+
+def test_wait_until_started_falha_quando_o_servidor_nunca_inicia(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _relogio_que_avanca_dez_segundos(monkeypatch)
+    parar = Event()
+    thread = Thread(target=parar.wait, daemon=True)
+    thread.start()
+    try:
+        servidor = Server(Config(FastAPI()))
+        with pytest.raises(RuntimeError, match="não iniciou"):
+            _wait_until_started(servidor, thread)
+    finally:
+        parar.set()
+        thread.join()
