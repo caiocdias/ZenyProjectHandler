@@ -596,21 +596,36 @@ def test_validador_de_lock_rejeita_hash_malformado_pino_inexato_e_opcao_insegura
         _validar_lock("--find-links http://inseguro.test/\n")
 
 
-def test_lock_de_treino_torch_e_torchvision_compartilham_variante_rocm_do_indice() -> None:
+def test_lock_de_treino_torch_e_torchvision_compartilham_variante_coerente_com_o_indice() -> None:
+    # Variante derivada do próprio lock (+cpu hoje, +rocmX.Y se voltar a ROCm): torch e
+    # torchvision têm o mesmo rótulo local e o índice/pacote de apoio corresponde ao rótulo.
     texto = LOCK_DE_TREINO.read_text(encoding="utf-8")
-    pinos = {nome: versao for nome, versao, _ in _validar_lock(texto)}
-    assert {"torch", "torchvision", "rocm"} <= set(pinos)
+    opcoes, pinos_lista = _ler_lock(texto)
+    pinos = {nome: versao for nome, versao, _ in pinos_lista}
+    assert {"torch", "torchvision"} <= set(pinos)
+    assert "+" in pinos["torch"], "torch sem rótulo de variante local"
     variante = pinos["torch"].split("+", 1)[1]
+    assert variante
     assert pinos["torchvision"].split("+", 1)[1] == variante
-    assert variante == f"rocm{pinos['rocm']}"
-    assert f"rocm-rel-{pinos['rocm']}" in texto
+    if variante == "cpu":
+        assert "--index-url https://download.pytorch.org/whl/cpu" in opcoes
+        assert "rocm" not in pinos
+    elif variante.startswith("rocm"):
+        assert variante == f"rocm{pinos['rocm']}"
+        assert f"rocm-rel-{pinos['rocm']}" in texto
+    else:
+        pytest.fail(f"variante de torch desconhecida: {variante}")
 
 
-def test_lock_de_treino_declara_python_312_e_opt_in_no_cabecalho() -> None:
+def test_lock_de_treino_declara_python_do_lock_e_opt_in_no_cabecalho() -> None:
     texto = LOCK_DE_TREINO.read_text(encoding="utf-8")
     cabecalho = "\n".join(t for t in texto.splitlines() if t.startswith("#"))
-    assert "3.12" in cabecalho
     assert "opt-in" in cabecalho
+    exigido = re.search(r"Python exigido: (\d+\.\d+)\b", cabecalho)
+    assert exigido, "cabeçalho sem 'Python exigido: X.Y'"
+    assert exigido.group(1) == "3.11"
+    assert "3.12" not in cabecalho
+    assert "cp311" in cabecalho
 
 
 def test_lock_real_esta_em_modo_hash_todo_pino_com_sha256_de_64_hex_e_unico() -> None:
