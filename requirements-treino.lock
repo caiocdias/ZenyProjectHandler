@@ -1,0 +1,29 @@
+# Lock opt-in de treino do detector (E11/E12); nunca incluir nos requisitos de cliente, servidor, desenvolvimento ou release.
+# Python exigido: 3.12 (os wheels ROCm para Windows só existem em cp312), Windows x64.
+# Variante: PyTorch ROCm nativo no Windows, índice de release oficial da AMD (rocm-rel-7.2.1).
+# Instalação num venv próprio fora do Git, por exemplo:
+#   py -3.12 -m venv tmp\treino-e11\venv-rocm
+#   tmp\treino-e11\venv-rocm\Scripts\python.exe -m pip install -r requirements-treino.lock
+--find-links https://repo.radeon.com/rocm/windows/rocm-rel-7.2.1/
+filelock==4.2.9
+flatbuffers==25.12.19
+fsspec==2026.9.0
+Jinja2==3.1.6
+MarkupSafe==3.0.4
+ml_dtypes==0.6.0
+mpmath==1.3.0
+networkx==3.7
+numpy==2.5.4
+onnx==1.23.2
+onnxruntime==1.31.1
+packaging==26.3
+Pillow==13.0.0
+protobuf==7.36.2
+rocm==7.2.1
+rocm-sdk-core==7.2.1
+rocm-sdk-libraries-custom==7.2.1
+setuptools==84.1.0
+sympy==1.14.0
+torch==2.9.1+rocm7.2.1
+torchvision==0.24.1+rocm7.2.1
+typing_extensions==4.16.0
