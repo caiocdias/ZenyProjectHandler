@@ -10,9 +10,9 @@ Módulos: `dados_sinteticos` e `metricas` (puros), `ambiente` (sonda), `decisao`
 testes nem por `src/`).
 
 Como rodar, da raiz do repositório, em série e sem outro processo pesado, com as
-saídas em `tmp/treino-e11/` (fora do Git). O venv ROCm sai de
-`requirements-treino.lock` (ver o cabeçalho do lock); o venv CPU usa os wheels
-`+cpu` de torch/torchvision com os mesmos onnx e onnxruntime:
+saídas em `tmp/treino-e11/` (fora do Git). O venv CPU sai de
+`requirements-treino.lock` (variante escolhida; ver o cabeçalho do lock); o venv
+ROCm é reconstruído pelos pinos registrados em `tmp/treino-e11/instalacao.md`:
 
     set ROCM=tmp\\treino-e11\\venv-rocm\\Scripts\\python.exe
     set CPU=tmp\\treino-e11\\venv-cpu\\Scripts\\python.exe

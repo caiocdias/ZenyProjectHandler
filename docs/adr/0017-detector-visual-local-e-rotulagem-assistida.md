@@ -99,21 +99,22 @@ Alternativas descartadas:
 
 Riscos aceitos:
 
-- `torch` 2.9.1 tem 4 vulnerabilidades publicadas (osv-scanner 2.7.0 sobre `requirements-treino.lock`,
-  único pacote afetado dos 22): PYSEC-2026-139 (CVSS 7,8, carregamento de `.pt2`, sem correção
-  listada), PYSEC-2026-2286 / GHSA-63cw-57p8-fm3p (8,8, desvio do unpickler `weights_only`, corrigida
-  na 2.10.0), GHSA-qfhq-4f3w-5fph (5,3, `torch.lstm_cell`, 2.10.0) e GHSA-rrmf-rvhw-rf47 (5,3,
+- `torch` 2.9.1 tem 4 vulnerabilidades publicadas (osv-scanner 2.7.0 sobre o lock ROCm ensaiado,
+  único pacote afetado dos 22; o torch 2.9.1+cpu do lock atual tem as mesmas): PYSEC-2026-139
+  (CVSS 7,8, carregamento de `.pt2`, sem correção listada), PYSEC-2026-2286 / GHSA-63cw-57p8-fm3p
+  (8,8, desvio do unpickler `weights_only`, corrigida na 2.10.0), GHSA-qfhq-4f3w-5fph (5,3, `torch.lstm_cell`, 2.10.0) e GHSA-rrmf-rvhw-rf47 (5,3,
   `torch.jit.script`, 2.13.0). Todas exigem carregar arquivo de modelo ou entrada hostil ou usar as
   funções citadas. Mitigação: no ambiente de treino nunca se carrega `.pt`, `.pt2` ou pickle de
   terceiros, só pesos próprios; o artefato que sai é o ONNX; o exportador usado é o TorchScript por
-  rastreamento (`torch.jit.trace`), não `torch.jit.script`. Gatilho de atualização: trocar o lock
-  quando a AMD publicar release para Windows com torch ≥ 2.13 (hoje só existe como pré-release no
-  nightly TheRock, que o spike não usa). O torch 2.9.1+cpu medido tem as mesmas 4; quando o lock
-  passar para a variante CPU, o gatilho é o torch estável ≥ 2.13.
+  rastreamento (`torch.jit.trace`), não `torch.jit.script`. Gatilhos de atualização: na
+  variante CPU, trocar o lock pelo torch estável ≥ 2.13 com nova medição; no ROCm, só voltar quando
+  a AMD publicar release para Windows com torch ≥ 2.13 e o defeito do MIOpen corrigido (hoje torch ≥
+  2.13 com ROCm só existe como pré-release no nightly TheRock, que o spike não usa).
 - O pacote `rocm==7.2.1` é um sdist; no build isolado o pip baixa `setuptools>=70.2.0` do PyPI sem
   verificar hash (limite do modo hash do pip). Alternativa hermética: instalar com
   `--no-index --find-links` apontando para uma cópia local dos wheels.
-- Licenças do que o lock de treino instala: torch e torchvision BSD-3, onnx Apache-2.0, onnxruntime
+- Licenças do que o lock de treino instala (inventário feito no ambiente ROCm; o lock CPU tem os
+  mesmos pacotes, menos os três `rocm*`): torch e torchvision BSD-3, onnx Apache-2.0, onnxruntime
   MIT, numpy BSD-3 (com partes 0BSD/MIT/Zlib/CC0), Pillow MIT-CMU, protobuf BSD-3, flatbuffers e
   ml_dtypes Apache-2.0, filelock e setuptools MIT, typing_extensions PSF-2.0, packaging Apache-2.0 ou
   BSD-2, jinja2, markupsafe, fsspec, networkx, sympy e mpmath BSD. `rocm`, `rocm-sdk-core` e
@@ -122,8 +123,9 @@ Riscos aceitos:
   código de treino; as dependências acima são ferramenta do ambiente de treino, que não é
   redistribuído.
 
-Como reproduzir: o ambiente CPU usa Python 3.11 e os wheels `torch==2.9.1+cpu` e
-`torchvision==0.24.1+cpu` do índice `https://download.pytorch.org/whl/cpu`, com os mesmos onnx,
-onnxruntime, Pillow e setuptools de `requirements-treino.lock`. Esse lock ainda fixa a variante ROCm
-ensaiada (Python 3.12, `rocm-rel-7.2.1`). Os comandos, em série, estão no docstring de
-`scripts/treino_detector/__init__.py`. As saídas ficam em `tmp/treino-e11/`, fora do Git.
+Como reproduzir: `requirements-treino.lock` fixa a variante CPU medida (Python 3.11,
+`torch==2.9.1+cpu` e `torchvision==0.24.1+cpu` do índice `https://download.pytorch.org/whl/cpu`, demais
+pinos do PyPI, todos com hash). O ambiente ROCm ensaiado (Python 3.12, `rocm-rel-7.2.1`) é
+reconstruído a partir dos pinos e hashes registrados em `tmp/treino-e11/instalacao.md` quando a AMD
+corrigir o defeito. Os comandos, em série, estão no docstring de `scripts/treino_detector/__init__.py`.
+As saídas ficam em `tmp/treino-e11/`, fora do Git.
