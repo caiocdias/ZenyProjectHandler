@@ -614,3 +614,34 @@ def test_cli_sem_flag_mantem_o_projeto_promovido(
     ficha = json.loads((saida / "ficha-predita.json").read_text(encoding="utf-8"))
     assert ficha["gerador"]["versao_extracao"] == "projeto-promovido-v1"
     assert ficha["postes"] == []
+
+
+def test_poste_em_pagina_desconhecida_e_pulado_e_contado(catalogo_inicial: CatalogoTecnico) -> None:
+    cena = _Cena(catalogo_inicial)
+    cena.elemento(POSTE, codigo="POSTE")
+    fora = cena.elemento(POSTE, codigo="POSTE", x=0.6)
+    desconhecida = GeometriaDocumento.caixa(
+        uuid4(),
+        PontoNormalizado(Decimal("0.1"), Decimal("0.1")),
+        PontoNormalizado(Decimal("0.2"), Decimal("0.2")),
+    )
+    cena.elementos[1] = replace(fora, geometria=desconhecida)
+
+    ficha = cena.ficha()
+
+    assert validar_ficha(ficha) == []
+    assert len(ficha["postes"]) == 1
+    assert ficha["atributos_extras"]["postes_sem_pagina"] == 1
+
+
+@pytest.mark.parametrize("valor", ["1e400", "nan", "abc", float("inf")])
+def test_coordenada_nao_finita_vira_ausente(catalogo_inicial: CatalogoTecnico, valor: Any) -> None:
+    cena = _Cena(catalogo_inicial)
+    cena.elemento(
+        POSTE, codigo="POSTE", atributos={"coordenada_leste": valor, "coordenada_norte": 1}
+    )
+
+    ficha = cena.ficha()
+
+    assert validar_ficha(ficha) == []
+    assert ficha["postes"][0]["coordenada"] is None

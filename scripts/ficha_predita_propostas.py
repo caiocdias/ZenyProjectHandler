@@ -11,6 +11,7 @@ entra com o valor e o nome em ``pendentes`` do poste ou do vão, em ordem alfab�
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable, Mapping
 from decimal import Decimal, InvalidOperation
 from typing import Any, Final
@@ -66,12 +67,20 @@ def _texto(valor: object) -> str | None:
     return normalizado or None
 
 
+def _decimal_finito(valor: object) -> Decimal | None:
+    """Decimal finito e representável como ``float`` finito; qualquer outro valor é ausente."""
+    try:
+        numero = Decimal(str(valor))
+    except InvalidOperation:
+        return None
+    return numero if numero.is_finite() and math.isfinite(float(numero)) else None
+
+
 def _coordenada(proposta: PropostaElemento) -> tuple[Decimal, Decimal] | None:
     atributos = _atributos(proposta)
-    leste, norte = atributos.get("coordenada_leste"), atributos.get("coordenada_norte")
-    if leste is None or norte is None:
-        return None
-    return Decimal(str(leste)), Decimal(str(norte))
+    leste = _decimal_finito(atributos.get("coordenada_leste"))
+    norte = _decimal_finito(atributos.get("coordenada_norte"))
+    return None if leste is None or norte is None else (leste, norte)
 
 
 def _elementos_presentes(propostas: Iterable[PropostaElemento]) -> dict[UUID, PropostaElemento]:
@@ -189,22 +198,23 @@ def _comprimento(
     cabo: PropostaElemento, extremos: list[PropostaElemento]
 ) -> tuple[float | None, str | None, bool]:
     """Comprimento, origem e se ele depende de poste pendente (regra de ``_cable_length``)."""
-    try:
-        anotado = Decimal(str(_atributos(cabo).get("comprimento_m")))
-    except InvalidOperation:
-        anotado = Decimal(0)
-    if anotado > 0:
+    anotado = _decimal_finito(_atributos(cabo).get("comprimento_m"))
+    if anotado is not None and anotado > 0:
         return float(anotado), OrigemComprimentoVao.ANOTACAO_DESENHO.value, False
     if len(extremos) != 2:
         return None, None, False
     inicio, fim = _coordenada(extremos[0]), _coordenada(extremos[1])
     if inicio is None or fim is None:
         return None, None, False
-    distancia = ((fim[0] - inicio[0]) ** 2 + (fim[1] - inicio[1]) ** 2).sqrt()
-    if distancia <= 0:
+    try:
+        distancia = ((fim[0] - inicio[0]) ** 2 + (fim[1] - inicio[1]) ** 2).sqrt()
+        comprimento = float(distancia.quantize(Decimal("0.01")))
+    except InvalidOperation:  # coordenadas astronômicas estouram a precisão do contexto
+        return None, None, False
+    if comprimento <= 0 or not math.isfinite(comprimento):
         return None, None, False
     return (
-        float(distancia.quantize(Decimal("0.01"))),
+        comprimento,
         OrigemComprimentoVao.COORDENADAS.value,
         any(_pendente(extremo) for extremo in extremos),
     )
@@ -258,10 +268,15 @@ def ficha_predita_propostas(
     entregas = {
         item.id for item in candidatas if _atributos(item).get("tipo_ponto_rede") == "ENTREGA"
     }
+    sem_pagina = {
+        item.id
+        for item in candidatas
+        if item.id not in entregas and item.geometria.pagina_id not in paginas
+    }
     postes = {
         item.id: _poste(item, paginas[item.geometria.pagina_id])
         for item in candidatas
-        if item.id not in entregas
+        if item.id not in entregas and item.id not in sem_pagina
     }
     pendencias: dict[UUID, set[str]] = {
         poste_id: (
@@ -285,6 +300,7 @@ def ficha_predita_propostas(
             chave: valor
             for chave, valor in (
                 ("postes_entrega", len(entregas)),
+                ("postes_sem_pagina", len(sem_pagina)),
                 ("estruturas_sem_poste", estruturas_sem_poste),
                 ("cabos_sem_vao", cabos_sem_vao),
             )
