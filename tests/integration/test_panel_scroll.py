@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 from pathlib import Path
@@ -68,6 +69,20 @@ def _wheel(widget: QWidget, delta: int = -120, *, pixels: bool = False) -> None:
         False,
     )
     QApplication.sendEvent(widget, event)
+
+
+def _cards_comprimidos(panel: QWidget) -> list[QGroupBox]:
+    return [
+        card
+        for card in panel.findChildren(QGroupBox)
+        if card.isVisible() and card.height() < card.minimumSizeHint().height()
+    ]
+
+
+def _aguardar_layout_assentado(qtbot: QtBot, panel: QWidget) -> None:
+    # Sob carga o layout assenta depois dos 30 ms fixos; compressao que persiste e reportada.
+    with contextlib.suppress(qtbot.TimeoutError):
+        qtbot.waitUntil(lambda: not _cards_comprimidos(panel), timeout=5000)
 
 
 def _extensive(panel: QWidget) -> None:
@@ -358,9 +373,9 @@ def test_visual_matrix(
                         )
             app.processEvents()
             qtbot.wait(30)
-            for card in panel.findChildren(QGroupBox):
-                if card.isVisible() and card.height() < card.minimumSizeHint().height():
-                    compressed.append(f"{name}/{state}: {card.title()}")
+            _aguardar_layout_assentado(qtbot, panel)
+            for card in _cards_comprimidos(panel):
+                compressed.append(f"{name}/{state}: {card.title()}")
             tabs = panel.findChildren(QTabWidget)
             pages = range(tabs[0].count()) if tabs else range(1)
             for page in pages:

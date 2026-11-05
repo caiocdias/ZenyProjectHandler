@@ -20,18 +20,24 @@ Ambiente Windows, Python 3.11–3.13, venv em `.venv` (criado por `.\setup.bat`,
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m ruff format --check .
 .\.venv\Scripts\python.exe -m mypy                    # strict, cobre src e tests
-.\.venv\Scripts\python.exe -m pytest --cov            # cobertura mínima 85.01%
+.\.venv\Scripts\python.exe -m pytest -n auto --cov      # suíte inteira em paralelo (pytest-xdist); use antes de commit e no fim da tarefa; cobertura mínima 85.01%
 .\.venv\Scripts\python.exe -m pytest tests/unit/test_x.py::test_nome   # teste único
 .\.venv\Scripts\python.exe scripts\complexity_gate.py src              # falha em Radon rank E/F (CC >= 31)
 .\.venv\Scripts\python.exe scripts\client_artifact_gate.py --source-only
 .\.venv\Scripts\python.exe scripts\generate_openapi_v1.py              # regenera docs/api/openapi-v1.json
 .\.venv\Scripts\python.exe scripts\smoke_examples.py                   # smoke opcional sobre examples/
 .\.venv\Scripts\python.exe -m scripts.drawing_model_dxf PDF --saida tmp\x.dxf   # DXF de depuração do modelo (ezdxf, só dev)
-.\.venv\Scripts\python.exe -m scripts.drawing_model_report --raiz DIR --saida tmp\rel.json   # relatório do modelo: famílias, imagens, custo (--amostras-imagem tmp\img)
+.\.venv\Scripts\python.exe -m scripts.drawing_model_report --raiz DIR --saida tmp\rel.json   # relatório do modelo: famílias, imagens, custo (--amostras-imagem tmp\img; --processos 4 mede em paralelo)
 .\.venv\Scripts\python.exe scripts\build_release.py --version 0.5.0
 .\ZenyProjectHandler.bat                              # sobe servidor via compose.local.yaml + abre cliente
 ```
 
+- O gate roda a suíte em processos paralelos (`-n auto`, pytest-xdist; `-n 0` força a suíte serial).
+  Execuções focadas (`arquivo::teste`) continuam seriais. Teste novo não pode depender de ordem,
+  cwd, porta ou arquivo fixo: use `tmp_path` e ids de parametrização determinísticos.
+  Worker que morre sem traceback (`node down`, 0xC0000409) costuma ser `QThread` destruída em
+  execução: junte toda thread antes de destruir o dono e não deixe o `destroyed` de uma thread
+  antiga limpar a referência da atual (ver o reinício da observação em `ui/project_panel.py`).
 - Testes de UI usam `QT_QPA_PLATFORM=offscreen` (definido em `tests/conftest.py`).
 - Pytest roda com `--strict-markers` e transforma `ResourceWarning`/unraisable em erro: feche
   arquivos, documentos PyMuPDF e conexões explicitamente. No pytest 9.0 as flags `--strict-*` de

@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import random
-import time
 from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
@@ -130,19 +129,20 @@ def _pagina_hostil(quantidade: int) -> list[Caminho]:
     return caminhos
 
 
-def test_pagina_hostil_acima_do_teto_de_resolucoes_e_limitada_em_tempo_limitado(
+def test_pagina_hostil_acima_do_teto_de_resolucoes_e_limitada_em_trabalho_limitado(
     tabela: TabelaGlifos, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     caminhos = _pagina_hostil(glyph_text.LIMITE_GLIFOS_PAGINA)
     assert glyph_text._candidatos_limitados(caminhos) is not None  # os outros tetos não pegam
     chamadas = _contar(monkeypatch)
-    inicio = time.perf_counter()
+    teto = glyph_text.LIMITE_RESOLUCOES_PAGINA
 
     leitura = ler_texto_glifos(caminhos, tabela)
 
     assert leitura == _LIMITADA
-    assert sum(chamadas.values()) <= glyph_text.LIMITE_RESOLUCOES_PAGINA + _EXCESSO_POR_TRECHO
-    assert time.perf_counter() - inicio < 20.0
+    assert sum(chamadas.values()) <= teto + _EXCESSO_POR_TRECHO
+    # resolver_glifo (>= 80% do tempo no perfil) para no teto, com folga de no máximo um trecho
+    assert teto <= chamadas["resolver_glifo"] <= teto + _EXCESSO_POR_TRECHO
 
 
 def test_pagina_acima_do_teto_de_resolucoes_gera_o_diagnostico(

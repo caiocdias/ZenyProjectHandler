@@ -52,10 +52,10 @@ call :run_section "GATE DE FONTE DO CLIENTE MAGRO" "python scripts\client_artifa
 >> "%REPORT_FILE%" echo.
 >> "%REPORT_FILE%" echo ============================================================
 >> "%REPORT_FILE%" echo TESTES PUBLICOS E COBERTURA
->> "%REPORT_FILE%" echo Comando: python -m pytest --cov
+>> "%REPORT_FILE%" echo Comando: python -m pytest -n auto --cov
 >> "%REPORT_FILE%" echo ============================================================
-python -m pytest --basetemp="!PYTEST_BASETEMP!" ^
-    --cov --cov-report=term-missing --cov-fail-under=85.01 >> "%REPORT_FILE%" 2>&1
+python -m pytest -n auto --basetemp="!PYTEST_BASETEMP!" ^
+    --cov --cov-report=term-missing --cov-fail-under=85.01 --durations=15 >> "%REPORT_FILE%" 2>&1
 set "SECTION_EXIT_CODE=!ERRORLEVEL!"
 >> "%REPORT_FILE%" echo Codigo de saida: !SECTION_EXIT_CODE!
 if not "!SECTION_EXIT_CODE!"=="0" set "SUITE_STATUS=1"

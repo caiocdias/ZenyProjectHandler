@@ -685,12 +685,13 @@ def test_pagina_hostil_de_candidatos_pesados_e_limitada_rapido(tabela: TabelaGli
         return Caminho(((bezier,) * 256,), estilo, "preenchimento", ordem)
 
     caminhos = [pesado(i) for i in range(5_000)]
-    inicio = time.perf_counter()
+    # tempo de CPU do processo: o relogio de parede infla quando a maquina esta saturada
+    inicio = time.process_time()
 
     leitura = ler_texto_glifos(caminhos, tabela)
 
     assert leitura.limitada
-    assert time.perf_counter() - inicio < 5.0
+    assert time.process_time() - inicio < 5.0
 
 
 @pytest.mark.parametrize(

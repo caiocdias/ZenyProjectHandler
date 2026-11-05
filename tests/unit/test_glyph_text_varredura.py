@@ -4,10 +4,10 @@
 from __future__ import annotations
 
 import random
-import sys
-import time
+from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 import pymupdf
 import pytest
@@ -19,32 +19,15 @@ from tests.fixtures.glyphs.fonte_livre import (
     tabela_do_alfabeto,
 )
 
-from zeny_project_handler.adapters.analysis.drawing_model.glyph_table import TabelaGlifos
+from zeny_project_handler.adapters.analysis.drawing_model import glyph_text
+from zeny_project_handler.adapters.analysis.drawing_model.glyph_table import (
+    TabelaGlifos,
+    resolver_glifo,
+)
 from zeny_project_handler.adapters.analysis.drawing_model.glyph_text import (
     LeituraGlifos,
     ler_texto_glifos,
 )
-
-# Sobrecarga medida do rastreamento de cobertura nesta leitura: 6.62 s com `--cov` contra
-# 2.14 s sem (~3.1x). Sob rastreador, o orçamento é multiplicado por este fator: o tempo
-# medido ali é o do rastreador, não o do código, mas um estouro catastrófico (laço quadrático)
-# ainda aparece.
-_FATOR_SOB_RASTREADOR = 4.0
-
-
-def _rastreador_ativo() -> bool:
-    """Cobertura, depurador ou profiler: `sys.settrace` (CTracer/PyTracer) ou, no 3.12+, uma
-    ferramenta registrada em `sys.monitoring` (coverage com `COVERAGE_CORE=sysmon`)."""
-    if sys.gettrace() is not None or sys.getprofile() is not None:
-        return True
-    monitoramento = getattr(sys, "monitoring", None)
-    if monitoramento is None:
-        return False
-    return any(monitoramento.get_tool(ferramenta) is not None for ferramenta in range(6))
-
-
-def _orcamento(segundos: float) -> float:
-    return segundos * _FATOR_SOB_RASTREADOR if _rastreador_ativo() else segundos
 
 
 @pytest.fixture(scope="module")
@@ -171,7 +154,7 @@ def test_forma_pequena_da_mesma_cor_colada_ao_valor_nunca_cria_texto_errado(
 
 
 def test_custo_de_pagina_com_muitos_trechos_curtos_fica_no_orcamento(
-    tmp_path: Path, tabela: TabelaGlifos
+    tmp_path: Path, tabela: TabelaGlifos, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     rng = random.Random(5)
     linhas = [
@@ -185,10 +168,49 @@ def test_custo_de_pagina_com_muitos_trechos_curtos_fica_no_orcamento(
     ]
     caminhos = caminhos_do_pdf(pdf_texto_contorno(tmp_path / "c.pdf", linhas))
 
-    inicio = time.perf_counter()
+    resolucoes = Counter[str]()
+    original = resolver_glifo
+
+    def contando(*args: Any) -> Any:
+        resolucoes["resolver_glifo"] += 1
+        return original(*args)
+
+    monkeypatch.setattr(glyph_text, "resolver_glifo", contando)
     leitura = ler_texto_glifos(caminhos, tabela)
-    duracao = time.perf_counter() - inicio
 
     assert len(caminhos) >= 700
     assert not leitura.limitada
-    assert duracao < _orcamento(5.0)
+    # resolver_glifo domina o custo; página não limitada fez no máximo o teto de resoluções
+    assert 0 < resolucoes["resolver_glifo"] <= glyph_text.LIMITE_RESOLUCOES_PAGINA
+
+
+def test_pagina_com_muitos_trechos_curtos_resolve_cada_assinatura_uma_unica_vez(
+    tmp_path: Path, tabela: TabelaGlifos, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # a memória da página existe para que glifos repetidos não paguem a resolução de novo
+    rng = random.Random(5)
+    linhas = [
+        LinhaTexto(
+            "".join(rng.choice(ALFABETO) for _ in range(rng.randint(2, 5))),
+            (10.0 + 60.0 * (i % 6), 15.0 + 7.5 * (i // 6)),
+            4.0,
+            rng.choice([0.0, 90.0]),
+        )
+        for i in range(240)
+    ]
+    caminhos = caminhos_do_pdf(pdf_texto_contorno(tmp_path / "c.pdf", linhas))
+
+    por_assinatura = Counter[Any]()
+    original = resolver_glifo
+
+    def contando(tabela_: TabelaGlifos, assinatura: Any) -> Any:
+        por_assinatura[glyph_text._chave(assinatura)] += 1
+        return original(tabela_, assinatura)
+
+    monkeypatch.setattr(glyph_text, "resolver_glifo", contando)
+    leitura = ler_texto_glifos(caminhos, tabela)
+
+    assert not leitura.limitada
+    total = sum(por_assinatura.values())
+    assert total > len(ALFABETO)  # a página tem glifos repetidos: sem memória haveria repetição
+    assert max(por_assinatura.values()) == 1

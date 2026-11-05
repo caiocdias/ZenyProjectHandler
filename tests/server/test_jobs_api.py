@@ -249,7 +249,7 @@ def test_two_clients_observe_one_global_job_idempotency_progress_and_cancel(
         assert terminal["result_available"] is False
         assert runner.calls == 1
 
-        deadline = monotonic() + 2
+        deadline = monotonic() + 10
         while monotonic() < deadline:
             if first_client.get("/api/v1/session", headers=AUTH).json()["global_operation"] is None:
                 break
