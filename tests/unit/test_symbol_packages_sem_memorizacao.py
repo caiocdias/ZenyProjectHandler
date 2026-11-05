@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -23,22 +24,21 @@ _PASTA_PACOTES = (
 )
 
 _CASAS_DECIMAIS_MAXIMAS = 4
-_NUMERO_COM_MUITAS_CASAS = re.compile(rf"^\s*[-+]?\d*\.\d{{{_CASAS_DECIMAIS_MAXIMAS + 1},}}\s*$")
+_COORDENADA_NO_TEXTO = re.compile(rf"\d\.\d{{{_CASAS_DECIMAIS_MAXIMAS + 1},}}")
 _HEXADECIMAL_64 = re.compile(r"[0-9a-fA-F]{64}")
 # Montado por concatenação para o `git grep` do fechamento não achar este arquivo.
 _NOME_DE_FOLHA = re.compile("PROJETO" + " DE REDE", re.IGNORECASE)
 
 
 def _casas_decimais_excessivas(valor: float) -> bool:
-    return bool(_NUMERO_COM_MUITAS_CASAS.match(f"{valor:.15f}".rstrip("0"))) or bool(
-        _NUMERO_COM_MUITAS_CASAS.match(repr(valor))
-    )
+    expoente = Decimal(repr(valor)).as_tuple().exponent
+    return isinstance(expoente, int) and expoente < -_CASAS_DECIMAIS_MAXIMAS
 
 
 def _violacoes_de_texto(texto: str, caminho: str) -> list[str]:
     violacoes: list[str] = []
-    if _NUMERO_COM_MUITAS_CASAS.match(texto):
-        violacoes.append(f"{caminho}: string numérica com mais de 4 casas decimais")
+    if _COORDENADA_NO_TEXTO.search(texto):
+        violacoes.append(f"{caminho}: número com mais de 4 casas decimais no texto")
     if _HEXADECIMAL_64.search(texto):
         violacoes.append(f"{caminho}: hexadecimal de 64 caracteres (sha256 de PDF)")
     if ".pdf" in texto.lower():
@@ -53,6 +53,7 @@ def verificar_pacote(dados: Any, caminho: str = "$") -> list[str]:
     if isinstance(dados, dict):
         violacoes: list[str] = []
         for chave, valor in dados.items():
+            violacoes.extend(_violacoes_de_texto(str(chave), f"{caminho}.<chave>"))
             violacoes.extend(verificar_pacote(valor, f"{caminho}.{chave}"))
         return violacoes
     if isinstance(dados, list):
@@ -87,6 +88,9 @@ def test_pacotes_reais_passam_na_guarda() -> None:
             id="nome-de-folha-por-concatenacao",
         ),
         pytest.param({"variants": [{"origem": "folha.pdf"}]}, id="arquivo-pdf"),
+        pytest.param({"x": 1e-05}, id="float-em-notacao-cientifica"),
+        pytest.param({"a1" * 32: 1}, id="hexadecimal-de-64-na-chave"),
+        pytest.param({"nota": "0.123456,0.654321"}, id="coordenadas-no-texto"),
     ],
 )
 def test_guarda_reprova(dados: Any) -> None:
@@ -97,7 +101,9 @@ def test_guarda_reprova(dados: Any) -> None:
     "dados",
     [
         pytest.param({"x": 0.1234, "y": 3.5, "z": 2}, id="ate-4-casas"),
-        pytest.param({"x": "0.1234"}, id="string-numerica-curta"),
+        pytest.param({"x": 100.1234}, id="float-grande-sem-ruido-binario"),
+        pytest.param({"x": 12.3456}, id="float-4-casas"),
+        pytest.param({"x": "0.1234", "nota": "v1.2.3 e 0.1234,0.5"}, id="texto-numerico-curto"),
         pytest.param({"hash": "a1" * 31}, id="hexadecimal-curto"),
     ],
 )
