@@ -54,13 +54,26 @@ def _imports_de_treino_no_topo(texto: str) -> list[str]:
     ]
 
 
+def _linhas_logicas(texto: str) -> Iterator[str]:
+    """Junte continuações `\\` e descarte comentários, como o pip lê um arquivo de requisitos."""
+    atual = ""
+    for bruta in texto.splitlines():
+        linha = bruta.split("#", 1)[0].rstrip()
+        atual += " " + linha.removesuffix("\\")
+        if not linha.endswith("\\"):
+            if atual.strip():
+                yield atual.strip()
+            atual = ""
+    if atual.strip():
+        yield atual.strip()
+
+
 def _pinos(lock: Path) -> dict[str, str]:
     pinos: dict[str, str] = {}
-    for linha in lock.read_text(encoding="utf-8").splitlines():
-        texto = linha.split("#", 1)[0].strip()
-        if not texto or texto.startswith("-"):
+    for linha in _linhas_logicas(lock.read_text(encoding="utf-8")):
+        if linha.startswith("-"):
             continue
-        requisito = Requirement(texto)
+        requisito = Requirement(linha.split(" --hash", 1)[0])
         for especificador in requisito.specifier:
             if especificador.operator == "==":
                 pinos[canonicalize_name(requisito.name)] = especificador.version
@@ -123,6 +136,21 @@ def test_lock_de_treino_nao_entra_em_runtime_nem_build() -> None:
 def test_lock_de_treino_existe_e_fixa_torch_e_onnxruntime() -> None:
     pinos = _pinos(LOCK_DE_TREINO)
     assert set(pinos) >= RAIZES_DE_TREINO
+
+
+def test_pinos_juntam_continuacoes_e_ignoram_hash(tmp_path: Path) -> None:
+    lock = tmp_path / "requirements-treino.lock"
+    lock.write_text(
+        "# cabecalho\n"
+        "--find-links https://exemplo.test/rel/\n"
+        f"torch==2.9.1+rocm7.2.1 \\\n    --hash=sha256:{'a' * 64} \\\n"
+        f"    --hash=sha256:{'b' * 64}\n"
+        f"Pillow==13.0.0 --hash=sha256:{'c' * 64}\n"
+        "onnx==1.23.2\n",
+        encoding="utf-8",
+    )
+
+    assert _pinos(lock) == {"torch": "2.9.1+rocm7.2.1", "pillow": "13.0.0", "onnx": "1.23.2"}
 
 
 def test_modulos_testados_nao_importam_torch_no_topo() -> None:
