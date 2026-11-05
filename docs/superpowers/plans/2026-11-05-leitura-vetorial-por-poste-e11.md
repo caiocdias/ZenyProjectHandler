@@ -218,18 +218,19 @@ Cabeçalho em comentário: "Lock opt-in de treino do detector (E11/E12); nunca i
   - Premissas (constantes, registradas no ADR como premissas, não como spec): `CARGA_REFERENCIA_LADRILHOS = 20_000`, `CARGA_REFERENCIA_EPOCAS = 30`, `LIMITE_HORAS_TREINO = 12.0`, `RAZAO_MINIMA_GPU_CPU = 3.0`, `FOLHA_REFERENCIA_PX = (9933, 7016)` (A1 a 300 dpi → 875 ladrilhos de 320 px com 10% de sobreposição), `ORCAMENTO_FOLHA_S = 60.0` (orçamento da E12).
   - `horas_estimadas_treino(imagens_por_segundo: float, ladrilhos: int = CARGA_REFERENCIA_LADRILHOS, epocas: int = CARGA_REFERENCIA_EPOCAS) -> float` — `ladrilhos * epocas / imagens_por_segundo / 3600`; `ValueError` se `imagens_por_segundo <= 0`.
   - `segundos_estimados_por_folha(mediana_ladrilho_s: float, largura_px: int = 9933, altura_px: int = 7016) -> float` — `mediana × ladrilhos_por_folha(largura_px, altura_px)`; é um teto (a E12 só atua no resíduo e roda no container).
-  - `@dataclass(frozen=True) class ResultadoCaminho: nome: str; ensaiado: bool; paridade_treino: bool; exportacao_onnx: bool; paridade_onnx: bool; imagens_por_segundo: float | None; qualidade_ok: bool | None; motivo_nao_ensaiado: str | None = None`.
+  - `@dataclass(frozen=True) class ResultadoCaminho: nome: str; ensaiado: bool; paridade_treino: bool; exportacao_onnx: bool; paridade_onnx: bool; imagens_por_segundo: float | None; qualidade_ok: bool | None; trajetoria_ok: bool | None = None; erro_fase: str | None = None; motivo_nao_ensaiado: str | None = None`.
   - `@dataclass(frozen=True) class Decisao: caminho: str` (um de `"rocm-nativo"`, `"wsl2"`, `"cpu"`, `"gpu-alugada"`) `; motivo: str; descartados: tuple[tuple[str, str], ...]` (caminho, motivo medido ou "não ensaiado: …").
   - `decidir_caminho(rocm: ResultadoCaminho, wsl2: ResultadoCaminho, cpu: ResultadoCaminho) -> Decisao` — regra fixa, nesta ordem:
-    1. caminho GPU (`rocm`, depois `wsl2`) é escolhido se `ensaiado`, `paridade_treino`, `exportacao_onnx`, `paridade_onnx` e (`imagens_por_segundo >= RAZAO_MINIMA_GPU_CPU × cpu.imagens_por_segundo` ou `horas_estimadas_treino(imagens_por_segundo) <= LIMITE_HORAS_TREINO`); sem vazão da CPU, vale só o critério de horas. Caminho não ensaiado nunca é escolhido;
+    0. `imagens_por_segundo is None` (ensaio com `erro` ou sem lote pós-aquecimento) torna o caminho inviável, com o motivo (fase do erro, se houver);
+    1. caminho GPU (`rocm`, depois `wsl2`) é escolhido se `ensaiado`, `paridade_treino` (= `paridade_primeira_iteracao`), `exportacao_onnx`, `paridade_onnx` e (`imagens_por_segundo >= RAZAO_MINIMA_GPU_CPU × cpu.imagens_por_segundo` ou `horas_estimadas_treino(imagens_por_segundo) <= LIMITE_HORAS_TREINO`); sem vazão da CPU, vale só o critério de horas. Caminho não ensaiado nunca é escolhido;
     2. `cpu` se `ensaiado`, `exportacao_onnx`, `paridade_onnx` e `horas_estimadas_treino(cpu.imagens_por_segundo) <= LIMITE_HORAS_TREINO`;
     3. senão `gpu-alugada` (D1, proposta ao usuário).
     `qualidade_ok` não reprova caminho: entra no `motivo` como confirmação ou ressalva.
   - `resultado_de_relatorio(nome: str, relatorio: Path | None) -> ResultadoCaminho` — `None` ou arquivo ausente → `ensaiado=False` com motivo; lê os campos do `relatorio.json` do ensaio (abaixo) e, para GPU, o `relatorio.json` da paridade de treino passado via o campo `paridade_treino` do próprio ensaio.
   - `main(argv: Sequence[str] | None = None) -> int` — `python -m scripts.treino_detector.decisao --rocm A.json --cpu B.json [--wsl2 C.json] --saida decisao.json`; imprime a `Decisao` em JSON.
 - Produces (`ensaio.py`): CLI com dois subcomandos, rodados da raiz do worktree com o Python do venv de treino:
-  - `paridade --saida DIR [--iteracoes 30] [--lote 16] [--semente 0] [--tolerancia 0.05]` — no venv ROCm: mesmo `state_dict` inicial (semeado), os mesmos lotes, sem aumento de dados, `train()`, SGD; roda as N iterações na CPU e depois na GPU e grava as duas curvas de loss e `perdas_equivalentes(cpu, gpu, tolerancia)`.
-  - `treino --dispositivo {cuda,cpu} --saida DIR [--treino 2000] [--validacao 200] [--epocas 20] [--lote 16] [--minutos-max 30] [--semente 0] [--paridade-treino ARQUIVO]` — grava `relatorio.json` com: `ambiente` (Task 2), `nucleos` (`os.cpu_count()`), `torch_threads`, `modelo`, `dispositivo`, `epocas_feitas`, `aquecimento_s` (1ª época), `imagens_por_segundo_treino` e `segundos_por_epoca` (sem a 1ª época), `qualidade` (`precisao`, `recall` a IoU 0,5 e score 0,5 na validação) e `qualidade_ok` (`recall >= 0.80 and precisao >= 0.80`), `paridade_treino` (conteúdo do arquivo passado, ou `null`), `exportacao_onnx` (`ok`, `exportador`, `opset`, `segundos`, `erro`), `paridade_onnx` (`deteccoes_equivalentes` entre PyTorch em CPU `eval()` e ONNX Runtime em 20 imagens de validação), `inferencia_cpu_onnxruntime` (`ResumoTempo` por ladrilho 320 px em 100 execuções após 5 de aquecimento, com `intra_op_num_threads`), `segundos_estimados_por_folha` e `horas_estimadas_treino_referencia` (das funções de `decisao.py`), `erro` (`fase` e `mensagem`, ou `null`).
+  - `paridade --saida DIR [--iteracoes 30] [--lote 16] [--semente 0] [--tolerancia 0.05]` — no venv ROCm: mesmo `state_dict` inicial (semeado), os mesmos lotes, sem aumento de dados, `train()`, SGD; roda as N iterações na CPU e depois na GPU e grava as duas curvas de loss, `paridade_primeira_iteracao` = `perdas_equivalentes(cpu[:1], gpu[:1], 1e-3)` (pesos idênticos: é a prova de que o ROCm calcula certo), `trajetoria_equivalente` = `perdas_equivalentes(cpu, gpu, tolerancia)` e `primeira_divergencia` (índice da 1ª iteração fora da tolerância, ou `null`). A trajetória é prova secundária: divergir nela com a 1ª iteração ok é ressalva no motivo, não reprovação (SGD, mineração de negativos e MIOpen acumulam diferença).
+  - `treino --dispositivo {cuda,cpu} --saida DIR [--treino 2000] [--validacao 200] [--epocas 20] [--lote 16] [--minutos-max 30] [--semente 0] [--paridade-treino ARQUIVO]` — grava `relatorio.json` com: `ambiente` (Task 2), `nucleos` (`os.cpu_count()`), `torch_threads`, `modelo`, `dispositivo`, `epocas_feitas`, `aquecimento_s` (os 10 primeiros lotes da execução, que incluem a compilação de kernels), `imagens_por_segundo_treino` (imagens ÷ tempo de todos os lotes depois desses 10; `null` se não houver lote depois deles), `medida_vazao` (`"lotes-apos-10"`), `segundos_por_epoca` (épocas completas), `qualidade` (`precisao`, `recall` a IoU 0,5 e score 0,5 na validação) e `qualidade_ok` (`recall >= 0.80 and precisao >= 0.80`), `paridade_treino` (conteúdo do arquivo passado, ou `null`), `exportacao_onnx` (`ok`, `exportador`, `opset`, `segundos`, `erro`), `paridade_onnx` (`deteccoes_equivalentes` entre PyTorch em CPU `eval()` e ONNX Runtime em 20 imagens de validação), `inferencia_cpu_onnxruntime` (`ResumoTempo` por ladrilho 320 px em 100 execuções após 5 de aquecimento, com `intra_op_num_threads`), `segundos_estimados_por_folha` e `horas_estimadas_treino_referencia` (das funções de `decisao.py`), `erro` (`fase` e `mensagem`, ou `null`).
 
 - [ ] **Step 1: Escreva os testes de `decisao.py` que falham**
 
@@ -250,6 +251,9 @@ def test_cpu_acima_de_12h_vira_gpu_alugada(): ...                   # cpu 5 img/
 def test_cpu_sem_paridade_onnx_vira_gpu_alugada(): ...
 def test_resultado_de_relatorio_ausente_e_nao_ensaiado(tmp_path): ...
 def test_resultado_de_relatorio_le_campos(tmp_path): ...            # json mínimo escrito no teste → ResultadoCaminho com os valores
+def test_relatorio_com_erro_e_ensaiado_e_nao_escolhido(tmp_path): ...  # erro {"fase": "exportacao", ...} → ensaiado, descartados cita "exportacao"
+def test_vazao_ausente_torna_caminho_inviavel(): ...                # rocm com imagens_por_segundo None → não escolhido, sem TypeError
+def test_trajetoria_divergente_com_primeira_iteracao_ok_e_ressalva(): ...  # rocm escolhido, motivo cita a trajetória
 def test_main_grava_decisao(tmp_path): ...
 ```
 
@@ -280,3 +284,13 @@ Seção "Caminho de treino (E11)", com data: caminho escolhido conforme `decisao
 `-m pytest tests/unit/test_treino_detector_*.py tests/unit/test_dependency_locks.py -v` → PASS; ruff, format, mypy → sem erros; suíte inteira conforme a soul.
 
 - [ ] **Step 9: Commit** (`docs(adr): caminho de treino do detector decidido pelo spike E11`, trailer `Soul: desenvolvedor`). O relatório cita inteiros os `relatorio.json` de paridade e dos ensaios e o `decisao.json`.
+
+## Revisão de arquitetura
+
+- Veredito: aprovado com notas (revisor-arquitetura, modelo opus).
+- Rodadas: 1 (rodada 0 bloqueada por I1–I4; rodada 1 aprovou com os 14 achados resolvidos).
+- Notas Menores da rodada 1, incorporadas a este plano antes da execução:
+  - N1: a paridade de treino que reprova é a da 1ª iteração (tolerância 1e-3); a trajetória de 30 iterações é ressalva, com `primeira_divergencia`.
+  - N2: relatório com `erro` ou sem vazão vira caminho ensaiado e inviável, com testes.
+  - N3: vazão medida por lotes depois de 10 lotes de aquecimento, não por época.
+- Para o handoff: na integração com a E14, rodar de novo `tests/unit/test_dependency_locks.py` sobre o `main` com `requirements-treino.lock` (M5).
