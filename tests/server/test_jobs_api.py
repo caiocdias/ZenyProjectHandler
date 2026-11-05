@@ -28,6 +28,7 @@ from zeny_project_handler.domain.values import (
 )
 from zeny_project_handler.ports.market import DependenciaMercadoError
 from zeny_project_handler_contracts.enums import JobKind, JobStatus
+from zeny_project_handler_server import job_store as job_store_module
 from zeny_project_handler_server.app import create_app
 from zeny_project_handler_server.composition import ServerRuntime, compose_server_runtime
 from zeny_project_handler_server.config import ServerSettings
@@ -493,6 +494,29 @@ def test_divergent_header_finishes_job_as_safe_validation_without_sql_or_snapsho
         assert classifier.consultas == []
         assert verifier.consultas == []
         assert runtime.compliance_api.analysis_service.obter_ultima(project_id) is None
+
+
+def test_job_store_prune_keeps_latest_finished_job_when_clock_does_not_advance(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # No Windows o relógio avança em passos de ~15,6 ms: escritas seguidas recebem o mesmo instante.
+    instante = datetime.now(UTC)
+    monkeypatch.setattr(job_store_module, "_relogio_bruto", lambda: instante)
+    runtime = compose_server_runtime(_settings(tmp_path / "data"))
+    runtime.jobs.stop_accepting()
+    runtime.jobs.cancel_and_wait()
+    store = JobStore(runtime.core.engine, retention=timedelta(hours=1), maximum_retained=1)
+    try:
+        ids = [uuid4() for _ in range(8)]
+        for job_id in ids:
+            store.create(job_id, None, JobKind.ANALYSIS)
+            store.finish(job_id, status=JobStatus.SUCCEEDED, message="Concluído", result_json="{}")
+        updated = [store.get(job_id).updated_at for job_id in ids]  # type: ignore[union-attr]
+        assert updated == sorted(set(updated))
+        assert store.prune() == len(ids) - 1
+        assert [store.get(job_id) is not None for job_id in ids] == [False] * 7 + [True]
+    finally:
+        runtime.close()
 
 
 def test_job_store_accepts_complete_state_matrix_without_progress_regression(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from threading import RLock
+from threading import Lock, RLock
 from uuid import UUID, uuid4
 
 from sqlalchemy import Engine, delete, insert, select, update
@@ -28,6 +28,31 @@ _ACTIVE_STATUSES = frozenset(
 _TERMINAL_STATUSES = frozenset({JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELLED})
 
 
+_RELOGIO_LOCK = Lock()
+_ultimo_instante: datetime | None = None
+
+
+def _relogio_bruto() -> datetime:
+    return datetime.now(UTC)
+
+
+def _agora() -> datetime:
+    """Devolva um instante estritamente crescente dentro do processo.
+
+    O relógio do Windows avança em passos de ~15,6 ms, então escritas seguidas recebem o mesmo
+    instante. Como `created_at`/`updated_at` ordenam a retenção (`JobStore.prune`), o empate faria
+    a ordem entre jobs depender da ordem física das linhas. O desempate é a ordem das escritas: um
+    instante repetido ou regressivo avança 1 microssegundo sobre o último entregue.
+    """
+    global _ultimo_instante
+    with _RELOGIO_LOCK:
+        instante = _relogio_bruto()
+        if _ultimo_instante is not None and instante <= _ultimo_instante:
+            instante = _ultimo_instante + timedelta(microseconds=1)
+        _ultimo_instante = instante
+        return instante
+
+
 @dataclass(frozen=True, slots=True)
 class JobRecord:
     job_id: UUID
@@ -44,7 +69,11 @@ class JobRecord:
 
 
 class JobStore:
-    """Serialize alterações e nunca permita regressão de progresso ou estado terminal."""
+    """Serialize alterações e nunca permita regressão de progresso ou estado terminal.
+
+    A retenção ordena os terminais por `updated_at`, que vem de um relógio estritamente crescente
+    (`_agora`): jobs finalizados no mesmo tique do relógio do sistema mantêm a ordem das escritas.
+    """
 
     def __init__(self, engine: Engine, *, retention: timedelta, maximum_retained: int) -> None:
         if retention.total_seconds() <= 0:
@@ -57,7 +86,7 @@ class JobStore:
         self._lock = RLock()
 
     def create(self, job_id: UUID, project_id: UUID | None, kind: JobKind) -> JobRecord:
-        now = datetime.now(UTC)
+        now = _agora()
         with self._lock, self._engine.begin() as connection:
             connection.execute(
                 insert(api_jobs).values(
@@ -148,7 +177,7 @@ class JobStore:
                     )
                 )
             )
-            now = datetime.now(UTC).isoformat()
+            now = _agora().isoformat()
             for row in rows:
                 envelope = ErrorEnvelope(
                     code=ErrorCode.INTERNAL_ERROR,
@@ -173,7 +202,7 @@ class JobStore:
 
     def prune(self) -> int:
         """Remova terminais vencidos e limite a quantidade total de históricos."""
-        now = datetime.now(UTC).isoformat()
+        now = _relogio_bruto().isoformat()
         terminal_values = tuple(item.value for item in _TERMINAL_STATUSES)
         with self._lock, self._engine.begin() as connection:
             terminal_rows = tuple(
@@ -205,7 +234,7 @@ class JobStore:
         return record
 
     def _update(self, job_id: UUID, **values: object) -> None:
-        now = datetime.now(UTC)
+        now = _agora()
         with self._engine.begin() as connection:
             result = connection.execute(
                 update(api_jobs)
