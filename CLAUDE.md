@@ -95,14 +95,13 @@ Uma rodada é iniciada pela skill de projeto `/curadoria-simbologia`
 `curation_audit.py`, `curation_backlog.py`, `curation_ficha.py` e `curation_glifos.py`
 (`python -m scripts.curation_*`).
 A rodada de fichas do poste (leitores `a`/`b`/`c` em modo ficha, consolidação, amostra humana e
-baseline) segue a seção "Rodada de fichas do poste" do mesmo contrato; a rodada de glifos
-(agrupar, leitura dupla cega em modo glifo, consolidar, publicar a tabela), a seção "Rodada de
-glifos". Invariantes: o
-leitor visual nunca vê predições e a referência é congelada antes de qualquer comparação;
-correções rodam em série na árvore principal, com fixture sintética positiva/negativa; tudo da
-rodada (PDFs, PNG, referências, relatório) fica em `tmp/curadoria-simbologia/` (fora do Git); a
-matriz `docs/data/matriz-simbologia-curadoria-atual*` só é publicada com os gates aprovados; e o
-conhecimento persiste apenas como mudanças versionadas em pacotes, algoritmos e fixtures/testes.
+baseline) segue a seção "Rodada de fichas do poste" do mesmo contrato; a rodada de glifos (agrupar,
+leitura dupla cega em modo glifo, consolidar, publicar a tabela), a seção "Rodada de glifos".
+Invariantes: o leitor visual nunca vê predições e a referência é congelada antes de qualquer
+comparação; correções rodam em série na árvore principal, com fixture sintética positiva/negativa;
+tudo da rodada (PDFs, PNG, referências, relatório) fica em `tmp/curadoria-simbologia/` (fora do
+Git); a matriz `docs/data/matriz-simbologia-curadoria-atual*` só é publicada com os gates aprovados;
+e o conhecimento persiste apenas como mudanças versionadas em pacotes, algoritmos e fixtures/testes.
 Não declare aceite/homologação sem as métricas exigidas no documento. Benchmarks ficam em
-`scripts/`; `requirements-experiments.lock` é o lock opt-in de dependências fora do runtime
-padrão (hoje, o OCR complementar do servidor).
+`scripts/`; `requirements-experiments.lock` é o lock opt-in de dependências fora do runtime padrão
+(hoje, o OCR complementar do servidor).

@@ -1,6 +1,6 @@
 ---
 name: curadoria-leitor-visual
-description: Leitor visual cego da curadoria de simbologia. Lê os PNG renderizados de UM PDF da rodada (visão geral e tiles a revisar, em duas passagens) e grava a referência visual regional no formato curadoria-referencia-visual-v1, validada pelo CLI. Nunca vê predições, comparações nem auditorias. Em modo ficha (tarefa com modo ficha) lê o mesmo PDF como ficha do poste, validada pelo CLI. Em modo glifo (tarefa com modo glifo) rotula grupos de glifos das folhas de contato. Use só quando a sessão orquestradora da skill curadoria-simbologia pedir a leitura de um PDF.
+description: Leitor visual cego da curadoria de simbologia. Lê os PNG renderizados de UM PDF da rodada (visão geral e tiles a revisar, em duas passagens) e grava a referência visual regional no formato curadoria-referencia-visual-v1, validada pelo CLI. Nunca vê predições, comparações nem auditorias. Em modo ficha (tarefa com modo ficha) lê o mesmo PDF como ficha do poste, validada pelo CLI. Em modo glifo (tarefa com modo glifo) rotula grupos de glifos das folhas de contato. Use só quando a sessão orquestradora da skill curadoria-simbologia pedir a leitura de um PDF ou, em modo glifo, a rotulagem das folhas de contato de uma rodada de glifos.
 tools: Read, Write, Glob, Bash
 ---
 
