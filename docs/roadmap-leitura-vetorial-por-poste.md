@@ -247,6 +247,7 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E14 | Gate de testes paralelo | #concluida | E05 | suíte paralela no `.bat` sem perder teste, `main` verde, scripts de corpus com processos |
+| E17 | Fechamento do cliente com servidor lento | #pendente | E14 | fechar a janela nunca destrói `QThread` viva, sem o monkeypatch de 60 s no `conftest` |
 | E06 | Símbolos sobre o modelo de desenho | #pendente | E05, E14 | pacotes declarativos avaliados sobre o modelo vetorial |
 | E07 | Ficha do poste | #pendente | E06, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
 | E08 | Conferência UTM | #pendente | E07 | transformação página → UTM, checagem de posição e vão, pendências |
@@ -272,7 +273,7 @@ Ondas (ordem sugerida de sessões paralelas; a elegibilidade real vem das depend
 | Onda | Ao mesmo tempo | Observação |
 |---|---|---|
 | 1 | E14 (A), E11 (C) | a E15 espera a E14 porque o `main` reprova até a E14 corrigir o teste de tempo de parede |
-| 2 | E06 (A), E15 (B); E16 (B) quando as folhas chegarem | começam com a E14 integrada em `main`; a E06 mexe em `src/` e a E15 em `scripts/` |
+| 2 | E17 e E06 (A, em série), E15 (B); E16 (B) quando as folhas chegarem | começam com a E14 integrada em `main`; a E17 mexe no cliente, a E06 em `src/` de análise e a E15 em `scripts/` |
 | 3 | E07 (A) | com E06 e E15 integradas |
 | 4 | E08 (A), E10 (C) | |
 | 5 | E09 (A) | com E08 e E16 integradas |
@@ -898,6 +899,10 @@ Toda etapa seguinte paga esse custo.
   4. Três execuções paralelas verdes seguidas: os 3 `.bat` do desenvolvedor no 37bc2ee (5371 passed; 189,84, 230,48 e 194,38 s; cobertura 88,80–88,81%), mais o `.bat` final e a suíte do testador no 1b27f91 (5372 passed). Serial `-n 0 --cov` no 37bc2ee: 5371 passed, 1 xfailed, 1154 s, cobertura 88,81%. A cobertura paralela (88,80%) e a serial (88,81%) diferem 0,01 p.p.
   5. `test_processos_4_produz_a_mesma_saida_que_a_serial` nos dois scripts. JSON e MD são comparados depois de zerar só `tempo_*` e `pico_memoria_bytes`, que medem o processo (ruling I2), e os PNG byte a byte. Outros 20 ataques ficam em `test_processos_corpus_ataque.py`.
   6. `pip check`: "No broken requirements found". `osv-scanner --lockfile=requirements.txt:requirements-development.lock`: 58 pacotes, "No issues found".
+- Decisões do usuário em 2026-11-05, por entrevista, todas pela opção recomendada:
+  - integração: merge local em `main`;
+  - exceção em `src/`: aceita;
+  - I-1: virou a etapa E17.
 - Decisões para o usuário (tomadas pela opção recomendada, conforme a instrução da execução):
   - **Exceção em `src/`:** a correção do ciclo de vida da `QThread` de observação (37bc2ee) entrou nesta etapa, embora o escopo dissesse "src/ não muda". Sem ela, o gate paralelo reprovava 2/2. O comportamento só muda no caso defeituoso.
   - **Defeito de produto estacionado (I-1):** com o servidor lento (> 1 s), fechar o cliente pode abortar o processo. `MainWindow.closeEvent` chama `shutdown_polling()` com 1000 ms e ignora o retorno. Nos testes, o monkeypatch de 60 s do `conftest` encobre isso. Proposta: uma etapa curta que faça o fechamento esperar ou cancelar a leitura de sessão.
@@ -916,6 +921,57 @@ Toda etapa seguinte paga esse custo.
   - O aviso `_readerthread` (`PytestUnhandledThreadExceptionWarning`) em `test_drawing_model_dxf_adversarial.py::test_juncao_dentro_de_tmp_apontando_para_fora_e_recusada`, com `PYTHONUTF8=1`, é anterior à etapa.
   - O `--basetemp` precisa ser curto: um basetemp longo quebra `test_atomic_files.py`.
   - Retomada: a próxima da Trilha A é a E06 (depende de E05 e E14). Pela tabela de ondas, a onda 2 (E06, E15) começa com a E14 integrada em `main`. Integre esta branch antes da próxima execução. A E07 depende da E15 (Trilha B) integrada em `main`.
+
+---
+
+## E17 — Fechamento do cliente com servidor lento — #pendente
+
+**Objetivo:** fechar a janela do cliente nunca destrói uma `QThread` viva. Hoje, com o servidor lento, o processo aborta com qFatal (0xC0000409).
+
+**Por que agora:**
+- é o achado I-1 da revisão final da E14: `MainWindow.closeEvent` (`src/zeny_project_handler_client/ui/main_window.py:702-705`) chama `ProjectPanelWidget.shutdown_polling()` com o prazo padrão de 1000 ms e ignora o retorno;
+- se a leitura de sessão (`gateway.session()`, HTTP) demora mais de 1 s, a janela é destruída com a thread de observação viva;
+- nos testes, o monkeypatch de 60 s do `application_factory` (`tests/conftest.py`) encobre o defeito.
+
+**Dependências:** E14.
+
+**Escopo:**
+- O fechamento espera ou cancela a leitura de sessão antes de destruir o painel. Exemplos: adiar a destruição até a thread terminar, ou cancelamento cooperativo da observação. Vale também para as outras `QThread` do cliente que o fechamento encerra com prazo.
+- Remover o monkeypatch de 60 s do `conftest`, ou reduzi-lo ao padrão, com o teste de teardown em subprocesso ainda verde.
+- Teste de regressão em subprocesso, no padrão de `tests/integration/test_application_factory_teardown.py`: com o servidor lento (> 1 s), fechar a janela termina sem abortar.
+
+**Fora de escopo:** servidor, contratos e API; o ciclo de vida já corrigido na E14 (37bc2ee).
+
+**Critérios de aceite:**
+
+- [ ] Teste em subprocesso que fecha a janela com uma leitura de sessão de 1,6 s: vermelho (código 3221226505) antes, verde depois, sem o monkeypatch de 60 s.
+- [ ] O fechamento não trava a UI além do necessário. O prazo máximo de espera e o comportamento ao estourá-lo ficam documentados no plano.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:**
+
+- `cmd.exe //c IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:**
+- Etapa curta, de ~1h. O mecanismo e os testes em subprocesso já existem (handoff da E14, I-1 e I-2).
+- Pode rodar antes da E06 ou depois dela, em série na Trilha A. A E06 não depende da E17.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:**
+
+- Esperar a thread sem limite congela o fechamento com o servidor fora do ar → cancelamento cooperativo ou prazo com destruição adiada, nunca destruir a thread viva.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
 
 ---
 
@@ -1407,3 +1463,4 @@ Toda etapa seguinte paga esse custo.
   - etapas novas: E14 (gate paralelo, antes da E06), E15 (ficha predita das propostas, que sai da E07, D5) e E16 (conjunto cego, que sai da E09, `#bloqueada` por H4);
   - a E11 deixa de depender da E10, e a E12 passa a depender explicitamente da E10;
   - ficam pendentes as propostas para as souls (D8).
+- 2026-11-05: E17 (fechamento do cliente com servidor lento) incluída na Trilha A, depois da E14, por decisão do usuário sobre o achado I-1 da revisão final da E14.
