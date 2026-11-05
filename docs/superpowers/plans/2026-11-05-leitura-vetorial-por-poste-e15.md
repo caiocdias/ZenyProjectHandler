@@ -152,7 +152,7 @@ Regras de montagem (R-E15-2 a R-E15-6):
 - Produces:
   - `baseline(rodada_dir, pdf_ids=(), *, native_only=False, runtime_directory=RUNTIME_PADRAO, parcial=False, versao_extracao: str = VERSAO_EXTRACAO, processos: int = 1, _executor: Callable[..., Registro] | None = None) -> Registro`. `_executor` é parâmetro privado para teste e tem de ser função de nível de módulo, picklável, porque o spawn do Windows reimporta o módulo e não enxerga `monkeypatch`. Com `None`, o executor é resolvido **na chamada** pelo global `executar_benchmark` do módulo, no processo principal e no filho (`_medir_pdf_no_pool`). Assim, os testes existentes que fazem `monkeypatch.setattr(curation_ficha, "executar_benchmark", …)` continuam valendo no caminho serial;
   - resumo com `opcoes = {"native_only", "pdfs", "versao_extracao"}`, mais a chave aditiva `pendencia = {"por_pdf": {pdf_id: bloco}, "total": bloco}`, em que `bloco = {campo: {"acertos_afirmados": int, "acertos_com_pendencia": int}}` para os 4 campos de `CAMPOS_DO_POSTE`. A conta usa `avaliacao["pares"][*]`: `["predicao"]` é o id do poste predito e `["campos"][campo]` vale `True` para acerto, `False` para erro e `None` para pendente na referência, que fica fora. O id do predito é cruzado com o `pendentes` do poste de mesmo id em `ficha-predita.json`, na pasta do PDF. Ficam fora da `pendencia`, sem erro: PDF em falha ou sem referência, PDF sem `ficha-predita.json` (os executores falsos dos testes existentes não o gravam) e par sem `campos` ou sem `predicao`;
-  - `.md`: abaixo do título, "Versão de extração: <versao>" e "Processos: <n>"; no fim, a seção "## Acertos afirmados e com pendência (total)" com uma linha por campo e a frase "Vãos e símbolos: sem separação de pendência.";
+  - `.md`: abaixo do título, "Versão de extração: <versao>" e "Processos: <pedido> (efetivos: <efetivo>)", em que o efetivo é `min(pedido, PDFs com referência, 61)` e vale 1 no caminho serial; no fim, a seção "## Acertos afirmados e com pendência (total)" com uma linha por campo e a frase "Vãos e símbolos: sem separação de pendência.";
   - CLI `baseline`:
     - `--versao-extracao`, com choices = `VERSOES_EXTRACAO` e default `VERSAO_EXTRACAO`;
     - `--processos N`: inteiro ≥ 1, e `0` ou negativo dá erro do argparse (exit 2). O valor efetivo é `min(N, PDFs com referência, 61)`, porque `ProcessPoolExecutor` recusa mais de 61 no Windows (minor da E14).
@@ -171,7 +171,7 @@ Paralelismo:
   - `test_pendencia_separa_afirmado_de_pendente`: o executor falso monta referência e predição sintéticas de 2 postes com o mesmo identificador, a 2ª predição com `"identificador"` em `pendentes`. Ele grava a `ficha-predita.json` e devolve o relatório de `scripts.ficha_poste_avaliador.avaliar()` **real**, e não um dicionário escrito à mão, para travar o formato verdadeiro. Afirma `resumo["pendencia"]["total"]["identificador"] == {"acertos_afirmados": 1, "acertos_com_pendencia": 1}`.
   - `test_pendencia_tolera_relatorio_sem_pares_completos`: executor falso no formato dos testes existentes (`pares` só com `distancia`, sem `ficha-predita.json`) → o comando sai 0, e `resumo["pendencia"]["total"]` tem os 4 campos zerados.
   - `test_processos_invalido_e_recusado`: `main(["baseline", "--rodada", …, "--processos", "0"])` → `SystemExit` com código 2.
-  - `test_markdown_traz_versao_e_pendencia`: o `.md` contém `Versão de extração: propostas-v1`, `Processos: 4` e `Vãos e símbolos: sem separação de pendência.`
+  - `test_markdown_traz_versao_e_pendencia`: o `.md` contém `Versão de extração: propostas-v1`, `Processos: 4 (efetivos: 3)` e `Vãos e símbolos: sem separação de pendência.`
 - [ ] **Step 2:** `.venv/Scripts/python.exe -m pytest tests/unit/test_curation_ficha_baseline_processos.py -q` → FAIL (`TypeError: unexpected keyword argument 'versao_extracao'`).
 - [ ] **Step 3:** implemente em `scripts/curation_ficha.py`.
 - [ ] **Step 4:** `.venv/Scripts/python.exe -m pytest tests/unit/test_curation_ficha_baseline_processos.py tests/unit/test_curation_ficha_baseline.py tests/unit/test_curation_ficha_baseline_ataque.py tests/unit/test_curation_ficha_baseline_sanear.py -q` → todos PASS; ruff, format e mypy limpos.
@@ -202,3 +202,13 @@ Se a revisão final mexer no gerador, os passos 1–3 se repetem.
 | baseline novo em `tmp/` com denominadores; totais por campo e família no handoff | passos 1 e 3 do fechamento |
 | nenhum nome de folha em arquivo versionado | passo 4 |
 | `.bat` aprovado | passo 5 |
+
+## Revisão de arquitetura
+
+- **Veredito:** aprovado com notas.
+- **Rodadas:** 2. A rodada 0 bloqueou com I1–I5 e M1–M12, a rodada 1 com N1–N2 e N3–N5, e a rodada 2 aprovou com notas.
+- **Modelo:** opus (`revisor-arquitetura`).
+- **Notas Menores:**
+  - M-R3, o valor de "Processos" no `.md`: aplicado, com pedido e efetivo.
+  - M12, sem ARCHITECTURE.md: a revisão julgou contra o `CLAUDE.md`, o roadmap, o design e os ADRs 0005, 0006 e 0009.
+  - Não verificados pela revisão: o comportamento real do spawn e do `BrokenProcessPool` e o editable do venv B. O plano exige conferir por `__file__`.
