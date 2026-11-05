@@ -273,7 +273,7 @@ Trilha B — medição (branch `roadmap/leitura-vetorial-por-poste-b`)
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E15 | Ficha predita a partir das propostas | #em-andamento | E14 | nova `versao_extracao` e baseline real informativo nas 16 folhas |
+| E15 | Ficha predita a partir das propostas | #concluida | E14 | nova `versao_extracao` e baseline real informativo nas 16 folhas |
 | E16 | Conjunto de avaliação cego | #bloqueada | E03 | fichas de referência congeladas das folhas novas, antes de qualquer predição |
 
 Trilha C — aprendizado, e a E17 enquanto a trilha espera a E07 (D10) (branch `roadmap/leitura-vetorial-por-poste-c`)
@@ -1041,7 +1041,7 @@ Toda etapa seguinte paga esse custo.
 
 ---
 
-## E15 — Ficha predita a partir das propostas — #em-andamento
+## E15 — Ficha predita a partir das propostas — #concluida
 
 **Objetivo:** dar à ficha predita uma fonte que reflita a leitura, e não a promoção (D5). Assim o baseline real passa a ser informativo.
 
@@ -1061,11 +1061,11 @@ Toda etapa seguinte paga esse custo.
 
 **Critérios de aceite:**
 
-- [ ] O relatório de avaliação traz a `versao_extracao` usada, e a versão anterior continua reproduzindo o `baseline-v003`.
-- [ ] As fixtures sintéticas produzem as métricas esperadas nas duas fontes.
-- [ ] O baseline novo existe em `tmp/` com denominadores, e o handoff traz os totais por campo e por família.
-- [ ] Nenhuma ficha, recorte ou nome de folha entra em arquivo versionado (`git grep -n "PROJETO DE REDE NS"` só acha as linhas que citam o critério).
-- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+- [x] O relatório de avaliação traz a `versao_extracao` usada, e a versão anterior continua reproduzindo o `baseline-v003`.
+- [x] As fixtures sintéticas produzem as métricas esperadas nas duas fontes.
+- [x] O baseline novo existe em `tmp/` com denominadores, e o handoff traz os totais por campo e por família.
+- [x] Nenhuma ficha, recorte ou nome de folha entra em arquivo versionado (`git grep -n "PROJETO DE REDE NS"` só acha as linhas que citam o critério).
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
 **Validação obrigatória:**
 
@@ -1088,13 +1088,60 @@ Toda etapa seguinte paga esse custo.
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
-
+- Plano: `docs/superpowers/plans/2026-11-05-leitura-vetorial-por-poste-e15.md`.
+  - Revisão de arquitetura (opus) bloqueou nas rodadas 0 e 1 e aprovou com notas na rodada 2:
+    - rodada 0: I1 pendência sem mecanismo, I2 entrega virando poste, I3 `CONECTA` a equipamento, I4 import circular, I5 dependência entre tarefas;
+    - rodada 1: N1 formato real de `pares`, N2 default de `_executor`.
+- Relógio: de ed2759d (15:56) ao commit `#concluida` (18:06, 2026-11-05): 2h10). Correu em paralelo com a E06.1.
+- Entregas:
+  - `scripts/ficha_predita_propostas.py`, fonte `propostas-v1` da ficha predita, com estas regras:
+    - postes, estruturas (`INSTALADA_EM`), equipamentos (`INSTALADO_EM`) e vãos (`CONECTA` para exatamente 2 postes distintos da ficha) vêm das propostas presentes;
+    - `REJEITADA` e ponto de entrega ficam fora;
+    - campo de proposta `CONFLITANTE`, ou com chave de pendência da promoção, vai para `pendentes`;
+    - atributo hostil vira ausente.
+  - `scripts/benchmark_ficha_poste.py`: `--versao-extracao {projeto-promovido-v1,propostas-v1}`, com o default inalterado.
+  - `scripts/curation_ficha.py baseline`:
+    - `--versao-extracao` e `--processos N`; a saída paralela é igual à serial, com teto de 61 e `BrokenProcessPool` gravando o resumo;
+    - chave aditiva `pendencia`, com os acertos afirmados × com pendência dos 4 campos do poste;
+    - ficha ilegível conta como ausente.
+  - Documentação: `examples/README.md` e o contrato de curadoria (bloco `baseline`).
+- Commits (2dd743e..bde10ef, mais o fechamento):
+  - roadmap e plano: ed2759d, 7c5d3a9, 68fd0fb, d9bda3a, d2c2f07;
+  - Task 1: aa20c5b, 0f5fe87, 6fc67df;
+  - Task 2: 087ca74, 9385d28, b8e980d;
+  - onda final: 0bd1d0b e bde10ef (gate).
+- Ciclo das tarefas: desenvolvedor, testador, verificação mecânica e revisão da `revisor-seguranca`, todas aprovadas.
+  - O testador achou defeitos reais nas duas tarefas: atributo hostil derrubava o gerador, e uma `ficha-predita.json` ilegível derrubava o baseline. Cada um custou uma rodada de correção.
+- Revisão final (`revisor-seguranca`, opus, 2dd743e..b8e980d): aprovado com ressalvas, sem Crítico.
+  - I1 (memória) e I2 (pendência universal) foram para o handoff. M1 (docstring) foi corrigido na onda única 0bd1d0b.
+  - Re-revisão da onda (sonnet): M1, contrato e I2 ADDRESSED, sem quebra nova; a correção do gate (bde10ef) foi re-revisada (haiku): ADDRESSED.
+- Critérios verificados:
+  1. `versao_extracao` no relatório: está em `gerador.versao_extracao` das 16 `ficha-predita.json` e `avaliacao.json` e em `opcoes.versao_extracao` dos resumos. A fonte anterior reproduz a `baseline-v003`: a `baseline-v005` (`projeto-promovido-v1`) tem `total`, `por_pdf` e `gerador` iguais aos da v003, conferido por script e linha a linha pela revisora. A suíte existente passa sem edição.
+  2. Fixtures sintéticas nas duas fontes: `test_metricas_nas_duas_fontes` dá tp 0 na promovida e tp 2/fp 0 nas propostas. Positivos e negativos estão em `tests/unit/test_ficha_predita_propostas*.py`.
+  3. Baseline novo em `tmp/curadoria-simbologia/20261103-2300-fichas/fichas/baseline-v004-resumo.{json,md}`, com denominadores por PDF e no total. Rodou `--native-only --processos 6` em 119 s.
+     - Total: postes tp 43, fp 41, fn 64 (recall 40,2%, precisão 51,2%); vãos 19/83 (fp 37), comprimento 13/19, cabo 0/19; símbolos 0/179.
+     - Campos: identificador 43/43, poste 42/43, coordenada 40/43, estruturas 0/43.
+     - Pendência: todos os acertos são **com pendência** (afirmados = 0).
+     - Por família (postes rec/prec; vãos): electric_office_print (8) 30/59 e 30/50, vãos 15/44; itext (6) 5/37 e 5/20, vãos 1/31; ghostscript (1) 8/10 e 8/8, vãos 3/8; autocad (1) 0/1 e 0/6.
+     - Contagens extras da v004: `cabos_sem_vao` 68, `estruturas_sem_poste` 7, `postes_entrega` 3.
+  4. `git grep -n "PROJETO DE REDE NS"`: só acha as linhas que citam o critério (roadmap 565, 610 e 1067; planos E03 e E15).
+  5. `.bat`: `cmd.exe //c IniciarTestes.bat` em bde10ef → `RESULTADO FINAL: APROVADO`: 6594 passed, 1 xfailed, cobertura 88,80%, 229 s. O 1º `.bat` (0bd1d0b) reprovou em `test_contrato_e_skill_executam_os_mesmos_clis`, por causa de um exemplo de CLI que a onda final pôs no contrato e a skill não executa. Foi corrigido em bde10ef.
+  - Suíte inteira `-n 6` em b8e980d: 6594 passed, 1 xfailed (preexistente).
+  - `osv-scanner` nos 7 locks: `No issues found` (nenhum lock mudou).
+  - `check_test_integrity --base 2dd743e`: 5 `SEM_SOUL` (commits docs do orquestrador com os trailers separados por linha em branco) e 1 `SKIP_ADICIONADO` (premissa do limite de 61 do Windows), todos justificados.
+- Decisões para o usuário (tomadas pela opção recomendada):
+  - **Default `projeto-promovido-v1`**: a fonte nova é pedida com `--versao-extracao propostas-v1`, e a E07 deve passar o flag.
+  - **Pendente = proposta `CONFLITANTE` ou com chave de pendência da promoção.** No dado real, isso marca **todos** os postes. A causa foi diagnosticada na onda final: `mark_conflicts` (`relation_rules.py:26-44`) marca `CONFLITANTE` o poste que divide evidência de texto com uma estrutura ou um equipamento. Em 006, 012 e 014, 9, 8 e 3 postes estão todos `CONFLITANTE`, sem nenhuma chave de pendência e sem tipo de catálogo sugerido, e por isso nunca são promovidos. A alavanca para "afirmado" está na interpretação (E07), não no gerador.
+  - **Zeros de estruturas (0/43) e de cabo (0/19):** as estruturas são anexadas, mas o avaliador compara a lista e o texto com igualdade estrita (`ficha_poste_avaliador.py:153-163, 297-298`).
+  - **Separação afirmado × pendente só para os 4 campos do poste:** vãos e símbolos ficam sem separação (R-E15-3, opção b versionada).
+  - **Pico de memória por processo: não medido.** O baseline não mede memória, e o `tracemalloc` não vê a memória nativa do MuPDF. As 6 folhas simultâneas rodaram ao lado da E06.1 sem falha.
+  - **Símbolos 0 por construção nas duas fontes:** `run_variant` não passa símbolos. A E06/E07 não deve ler esse 0 como medida da leitura.
+  - **Atributo hostil vira ausente** (R-E15-9), e ficha ilegível conta como ausente no baseline (R-E15-12).
+  - **Testes do cliente intermitentes sob carga** (`test_project_panel_polling_restart*`, `test_application_factory_teardown`): vistos várias vezes com 3 suítes simultâneas, fora do diff. Vão para a E17.
+- Notas para a próxima etapa:
+  - Minors adiados: distância menor que 0,005 m vira `comprimento_m None` (a promoção grava 0.0); `simbolo_classe` sem `strip` (avise a E06 quando ela alimentar a classe); estrutura ou equipamento com várias relações usa a primeira; `main` só repassa `versao_extracao` quando ela difere do padrão; `_pendencia_do_pdf` supõe `par` dict; pool quebrado pode deixar pasta de PDF marcado como falha (`gerador` igual nos 16, sem impacto hoje); `**opcoes: Any`; alias `CAMPOS_COM_PENDENCIA`.
+  - Dois testes da E15 dependem de `src/`: `test_chaves_de_pendencia_iguais_as_da_promocao` lê `automatic_promotion.py`, e o spawn real espera tp > 0. Rode a suíte na `main` depois de integrar as trilhas.
+  - Retomada: a E07 depende da E06.3 e da E15. A E15 está pronta para integrar no fim do lote.
 ---
 
 ## E07 — Ficha do poste — #pendente
