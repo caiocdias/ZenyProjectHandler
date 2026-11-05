@@ -3,12 +3,20 @@
 Uso::
 
     python -m scripts.benchmark_ficha_poste PDF --referencia REF --saida DIR \
-        [--native-only] [--runtime-directory DIR]
+        [--native-only] [--runtime-directory DIR] \
+        [--versao-extracao projeto-promovido-v1|propostas-v1]
 
-Roda o analisador no PDF, monta a ficha predita a partir do projeto promovido (``Poste``,
-``EstruturaMt/Bt``, ``Equipamento``, ``Cabo`` e ``detectar_vaos``; propostas pendentes não
-entram), avalia contra a referência e grava ``ficha-predita.json`` e ``avaliacao.json`` em
-``DIR``. A referência precisa ser do mesmo PDF (``pdf_sha256``); do contrário o comando é
+Roda o analisador no PDF, monta a ficha predita, avalia contra a referência e grava
+``ficha-predita.json`` e ``avaliacao.json`` em ``DIR``.
+
+Fontes da ficha predita (``--versao-extracao``):
+
+- ``projeto-promovido-v1`` (padrão): o projeto promovido (``Poste``, ``EstruturaMt/Bt``,
+  ``Equipamento``, ``Cabo`` e ``detectar_vaos``); propostas pendentes não entram.
+- ``propostas-v1``: as propostas da interpretação (``scripts.ficha_predita_propostas``);
+  propostas pendentes entram, com o campo em ``pendentes``.
+
+A referência precisa ser do mesmo PDF (``pdf_sha256``); do contrário o comando é
 recusado antes de rodar o analisador. Os arquivos gravados não têm caminho absoluto nem o nome
 do PDF. Símbolos de suporte, como estai, nunca são promovidos: o recall deles é 0 por construção.
 """
