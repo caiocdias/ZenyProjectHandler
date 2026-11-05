@@ -21,7 +21,7 @@ A análise entrega, para cada poste da folha, a ficha correta: identificador, es
 - **Custo do gate** (2026-11-04):
   - a suíte tem 5330 testes e leva 1578 s com cobertura, em série, sem `pytest-xdist` (`relatorio-testes.txt`). A máquina tem 20 núcleos lógicos;
   - o `.bat` de `main` reprova num teste de tempo de parede, `test_glyph_text_orcamento.py::test_pagina_hostil_acima_do_teto_de_resolucoes_e_limitada_em_tempo_limitado` (29,7 s contra o limite de 20 s);
-  - as souls `desenvolvedor` e `testador` rodam a suíte inteira antes de cada commit e no fim da tarefa.
+  - as souls `desenvolvedor` e `testador` rodavam a suíte inteira antes de cada commit e no fim da tarefa. Desde 2026-11-05 (D8), o desenvolvedor roda os testes da área a cada commit e a suíte inteira uma vez por tarefa, e o testador só entra nas tarefas `Risco: alto`, nas lacunas da revisão e uma vez por etapa. Depois da E14, a suíte paralela leva 189–233 s.
 - **Estrutura relevante:**
   - `src/zeny_project_handler/adapters/analysis/`: analisador PyMuPDF, OCR, detectores e `symbol_packages/`;
   - `src/zeny_project_handler/ports/analysis.py`: `AnalisadorDocumentoPort`, `MetodoSimbolosPort`, `ExtratorComplementarPort`;
@@ -88,7 +88,7 @@ A análise entrega, para cada poste da folha, a ficha correta: identificador, es
 | D5 | Decidido em 2026-11-04: a ficha predita ganha uma `versao_extracao` a partir das propostas, porque o projeto promovido não tem postes nas folhas reais (baseline 0/107). Vira a etapa E15, separada da E07 | sem ela, a E07 não tem baseline informativo para comparar | E15, E07 |
 | D6 | Decidido em 2026-11-04 por entrevista: execução acelerada. São trilhas paralelas, gate paralelo antes da E06 (E14), laboratório paralelo para calibração contra folhas reais, orçamento de ~3h por etapa e E15/E16 como etapas próprias. As alternativas descartadas e a evidência estão no design de execução acelerada (seção "Decisões") | — | protocolo, E06–E16 |
 | D7 | Decidido em 2026-11-04: os worktrees de laboratório são descartáveis, e o orquestrador os remove no fechamento da tarefa sem pedir confirmação | sem isso, cada remoção pararia o lote | protocolo |
-| D8 | Pendente, para o usuário numa sessão comum, fora deste roadmap: as propostas P1 (suíte por fase), P2 (tarefas paralelas na etapa) e P3 (revisão final repartida) para as souls, descritas no design de execução acelerada. A política "testes da área nas rodadas, suíte inteira antes de cada revisão" que o usuário escolheu depende de P1 | sem P1, vale a regra das souls (suíte inteira por commit), que a E14 torna barata; sem P2/P3, as tarefas e a revisão final seguem em série | todas as etapas |
+| D8 | Decidido em 2026-11-05 pelo usuário, numa sessão do vault, e aplicado nas souls (as regras vivem no `orquestrador`). P1 adotada: testes da área por commit e suíte inteira uma vez por tarefa e por rodada devolvida. P2 adotada como ondas paralelas: tarefas sem dependência e com arquivos disjuntos, até 3 por onda, cada uma em worktree próprio, integradas em série com a suíte inteira por onda. P3 descartada, porque a revisão é ~8% do tempo dos subagentes. Junto: testador condicional (`Risco: alto`, lacunas da revisão e uma vez por etapa), tarefas de até ~45 min, intervenções decididas pela opção recomendada (só arquitetura espera o usuário) e lote que termina com merge local na `main`, sem push | se as ondas criarem conflito ou teste intermitente sob carga, baixe o limite da onda no prompt (por exemplo, "ondas de até 2") | todas as etapas |
 
 ## Definição global de pronto
 
@@ -109,8 +109,8 @@ Vale para toda execução deste roadmap. O planejamento e a execução de cada e
 |---|---|---|
 | Orquestrador | `orquestrador` (a sessão principal, iniciada com `claude --agent orquestrador`) | este protocolo; atualiza tags e handoffs; roda a verificação mecânica dos testes |
 | Planejador | `orquestrador` | `superpowers:writing-plans` |
-| Implementador | `desenvolvedor`, subagente por tarefa | `superpowers:subagent-driven-development`, prompt implementer |
-| Testador | `testador`, subagente por tarefa, depois do implementador | testes da tarefa, sem tocar em código de produção |
+| Implementador | `desenvolvedor`, subagente por tarefa; tarefas independentes em ondas paralelas | `superpowers:subagent-driven-development`, prompt implementer |
+| Testador | `testador`, subagente nas tarefas `Risco: alto`, nas lacunas da revisão e uma vez por etapa | testes, sem tocar em código de produção |
 | Revisor de plano | `revisor-arquitetura`, subagente novo por etapa, modelo mais capaz | revisão do plano antes da execução |
 | Revisor de tarefa | `revisor-seguranca`, subagente novo por tarefa | revisão da `subagent-driven-development` |
 | Revisor final | `revisor-seguranca`, subagente novo, modelo mais capaz | revisão final da `subagent-driven-development` |
@@ -128,7 +128,7 @@ As regras abaixo resumem a seção "Trilhas" do design de execução acelerada. 
   - trilha C em `roadmap/leitura-vetorial-por-poste-c`.
 
   Nunca execute na branch principal. Uma sessão executa só a trilha do prompt.
-- **Retomada:** se a branch da trilha existir com trabalho não integrado, continue nela. Se o lote anterior dela já foi integrado, crie a branch de novo a partir da branch principal atualizada. O orquestrador nunca faz merge da principal na branch nem rebase.
+- **Retomada:** se a branch da trilha existir com trabalho não integrado, continue nela. Se o lote anterior dela já foi integrado, a branch já está na principal (o fechamento a avança), ou é recriada a partir da principal atualizada. Fora do fechamento do lote (passo 6 do `orquestrador`), o orquestrador não faz merge da principal na branch nem rebase.
 - **Dependência na mesma trilha** não precisa de integração. **Dependência de outra trilha** só vale `#concluida` e integrada na branch principal: confira com `git merge-base --is-ancestor <commit de fechamento> main`. Se a branch da trilha tem trabalho não integrado nesse ponto, o lote para antes da etapa (parada abaixo).
 - **Visibilidade entre trilhas:** na conferência, leia as outras branches com `git branch -a` e `git show <branch>:docs/roadmap-leitura-vetorial-por-poste.md`. Para cada etapa `#em-andamento` de outra trilha, leia também a "File Structure" do plano dela (`git show <branch>:<plano>`).
 - **Arquivos disjuntos:** duas trilhas nunca editam ao mesmo tempo o mesmo arquivo versionado. A regra vale para `src/`, `tests/` (inclusive `conftest.py`), `scripts/`, `pyproject.toml`, locks, `.bat`, `CLAUDE.md`, contrato de curadoria e ADRs. A exceção é este roadmap: cada trilha edita só as seções das suas etapas, a sua tabela no índice e as linhas de hipótese que elas fecham. O "Histórico de revisões" é do arquiteto. Se houver conflito no merge do roadmap, mantenha as duas versões.
@@ -157,13 +157,13 @@ As regras abaixo resumem a seção "Trilhas" do design de execução acelerada. 
 
 - **Relógio:** vai do commit `#em-andamento` ao commit `#concluida`, sem a espera pelo usuário nem por outra trilha.
 - **No plano:** o plano estima a duração por tarefa. Acima de ~3h, divida a etapa antes de executar em subetapas `Eyy.1`, `Eyy.2`… Cada subetapa tem seção própria, critérios repartidos e ruling no handoff. Ela é uma etapa completa, com plano, revisão de arquitetura, revisão final, `.bat` e handoff. Quem dependia de `Eyy` passa a depender da última subetapa.
-- **Estouro:** passar de 4h30 no relógio é parada (abaixo).
+- **Estouro:** ao passar de 4h30 no relógio, o orquestrador escolhe dividir, estacionar ou continuar pela opção recomendada, depois de pesar prós e contras, registra a ruling no handoff e segue.
 
 **Por etapa**
 
 1. **Escolha:** dentro da trilha do prompt, a primeira etapa, na ordem do documento, marcada `#pendente` e com todas as dependências satisfeitas (regra de trilhas acima). Etapas `#bloqueada` e as que dependem delas ficam para trás.
 2. **Conferência:**
-   - leia a seção da etapa, os handoffs das dependências e o código que eles citam. Se o código divergiu do que a etapa supõe, pare e relate;
+   - leia a seção da etapa, os handoffs das dependências e o código que eles citam. Se o código divergiu do que a etapa supõe de um jeito que muda arquitetura ou contrato, pare e relate; divergência menor vira ruling e ajuste no plano;
    - confira as outras trilhas (visibilidade e arquivos disjuntos);
    - confira que nenhum plano ou script desta etapa lê `examples/avaliacao-cega/` antes da E09.
 3. **Início:** troque a tag para `#em-andamento` (índice e título) e commite. Esse commit inicia o relógio.
@@ -191,18 +191,20 @@ Vale se o `CLAUDE.md` tiver a seção "Conhecimento do projeto no Second Brain";
 
 **Paradas**
 
-O lote para nestes casos:
+Qualquer outra necessidade de intervenção é decidida pelo orquestrador pela opção recomendada, depois de avaliar prós e contras, com a ruling registrada; só decisão de arquitetura ou system design espera o usuário (regras em "Decisões" do `orquestrador`). O lote para nestes casos:
 - ao concluir uma etapa com **Revisão humana: sim**;
-- diante de etapa `#bloqueada` ou de divergência do plano;
-- antes de uma etapa cuja dependência de outra trilha ainda não está integrada, quando a branch da trilha tem trabalho não integrado;
-- quando o relógio da etapa passa de 4h30. O orquestrador relata a tarefa atual, a rodada, a causa e a proposta: dividir, estacionar ou continuar;
-- nas paradas do próprio superpowers: operação destrutiva, ação sensível de segurança, efeito fora da branch e plano sem caminho viável;
+- diante de decisão de arquitetura ou system design sem a qual nada mais da trilha anda;
+- antes de uma etapa cuja dependência de outra trilha ainda não está integrada, quando a branch da trilha tem trabalho não integrado (o fechamento integra esse trabalho);
+- nas paradas que ficam com o usuário: push, deploy, publicação, instalação na máquina, apagar trabalho fora da etapa e segredo exposto;
+- quando não resta etapa elegível na trilha;
 - ao atingir o limite de etapas do prompt.
+
+Etapa que fica `#bloqueada` não para o lote: o orquestrador segue para a próxima elegível da trilha que não depende dela.
 
 **Fim do lote**
 
-1. Use `superpowers:finishing-a-development-branch`: o usuário decide merge, PR, manter ou descartar a branch. Nunca faça push, merge ou deploy sem essa decisão.
-2. Apresente as "Decisões para o usuário" acumuladas como entrevista: perguntas de múltipla escolha, cada uma com uma opção recomendada e justificada (no Claude Code, `AskUserQuestion` com a recomendada em primeiro lugar e o rótulo "(Recomendado)"). Registre as respostas no handoff das etapas e em "Hipóteses e decisões em aberto".
+1. Use `superpowers:finishing-a-development-branch` com a integração já decidida: merge local na branch principal, conforme o passo de fechamento do `orquestrador` (branch atualizada e com gate verde, `merge --no-ff`, repositório limpo e pronto para o próximo orquestrador). Push e deploy ficam com o usuário: o relatório termina com o comando `git push origin main` pronto.
+2. Liste as "Decisões para o usuário" acumuladas, que já foram tomadas pela opção recomendada, com prós e contras, para revisão. As de arquitetura que esperam o usuário vão como entrevista: perguntas de múltipla escolha, cada uma com uma opção recomendada e justificada (no Claude Code, `AskUserQuestion` com a recomendada em primeiro lugar e o rótulo "(Recomendado)"). Registre as respostas no handoff das etapas e em "Hipóteses e decisões em aberto".
 
 ## Prompt de execução
 
@@ -217,9 +219,9 @@ Limite desta execução: no máximo 3 etapas concluídas.
 3. Crie ou retome o worktree/branch desta trilha (protocolo, "Trilhas e branch") com superpowers:using-git-worktrees. Não trabalhe na branch principal.
 4. Repita, uma etapa por vez: escolha a próxima etapa elegível da trilha, confira as outras trilhas e os arquivos disjuntos, marque #em-andamento, planeje com superpowers:writing-plans (spec = seção da etapa + design citado; File Structure, estimativa por tarefa e laboratório no plano; divida se passar de ~3h), rode o laboratório das tarefas marcadas, execute com superpowers:subagent-driven-development, feche a etapa e preencha o handoff conforme o protocolo.
 5. Pare nas paradas do protocolo ou ao atingir o limite.
-6. No fim, rode superpowers:finishing-a-development-branch e deixe a decisão de integração comigo. Depois, apresente as decisões para o usuário como entrevista com opção recomendada.
+6. No fim, rode superpowers:finishing-a-development-branch com merge local na main, conforme o fechamento do orquestrador: tudo commitado, pronto para git push origin main e o repositório pronto para o próximo orquestrador. Depois, liste as decisões tomadas e apresente como entrevista com opção recomendada só as de arquitetura que esperam por mim.
 
-Nunca faça push, merge ou deploy sem minha decisão. Não altere tags de etapas que não executou.
+Qualquer necessidade de intervenção: escolha a opção recomendada depois de uma avaliação crítica dos prós e contras e registre a ruling; intervenção humana só para decisão de arquitetura ou system design. Nunca faça push ou deploy. Não altere tags de etapas que não executou.
 
 Ao parar, responda com: etapas concluídas, o relógio e o resultado da revisão final de cada uma, a etapa atual e seu estado, o motivo da parada, as etapas #bloqueada com a ação de desbloqueio, a branch e os commits do lote e o próximo passo sugerido.
 ```
@@ -1480,3 +1482,8 @@ Toda etapa seguinte paga esse custo.
   - a E11 deixa de depender da E10, e a E12 passa a depender explicitamente da E10;
   - ficam pendentes as propostas para as souls (D8).
 - 2026-11-05: E17 (fechamento do cliente com servidor lento) incluída na Trilha A, depois da E14, por decisão do usuário sobre o achado I-1 da revisão final da E14.
+- 2026-11-05 — D8 decidida pelo usuário (sessão do vault):
+  - souls com suíte por fase, testador condicional, tarefas de até ~45 min e ondas paralelas;
+  - intervenções decididas pela opção recomendada, e só arquitetura espera o usuário;
+  - o lote termina com merge local na `main`, sem push;
+  - protocolo (papéis, retomada, estouro, paradas, fim do lote) e prompt atualizados.

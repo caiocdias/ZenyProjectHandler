@@ -20,7 +20,7 @@ Ambiente Windows, Python 3.11–3.13, venv em `.venv` (criado por `.\setup.bat`,
 .\.venv\Scripts\python.exe -m ruff check .
 .\.venv\Scripts\python.exe -m ruff format --check .
 .\.venv\Scripts\python.exe -m mypy                    # strict, cobre src e tests
-.\.venv\Scripts\python.exe -m pytest -n auto --cov      # suíte inteira em paralelo (pytest-xdist); use antes de commit e no fim da tarefa; cobertura mínima 85.01%
+.\.venv\Scripts\python.exe -m pytest -n auto --cov      # suíte inteira em paralelo (pytest-xdist); uma vez por tarefa (a cada commit, só os testes da área); cobertura mínima 85.01%
 .\.venv\Scripts\python.exe -m pytest tests/unit/test_x.py::test_nome   # teste único
 .\.venv\Scripts\python.exe scripts\complexity_gate.py src              # falha em Radon rank E/F (CC >= 31)
 .\.venv\Scripts\python.exe scripts\client_artifact_gate.py --source-only
@@ -32,6 +32,10 @@ Ambiente Windows, Python 3.11–3.13, venv em `.venv` (criado por `.\setup.bat`,
 .\ZenyProjectHandler.bat                              # sobe servidor via compose.local.yaml + abre cliente
 ```
 
+- Worktree de tarefa (onda paralela do orquestrador) não tem `.venv` próprio: use o do worktree da
+  etapa com `PYTHONPATH=<worktree da tarefa>/src`, rodando a partir da raiz do worktree da tarefa.
+  Confira antes com `python -c "import zeny_project_handler as m; print(m.__file__)"`, que precisa
+  apontar para o worktree da tarefa. Com N tarefas ativas, a suíte inteira usa `-n` = 20 ÷ N.
 - O gate roda a suíte em processos paralelos (`-n auto`, pytest-xdist; `-n 0` força a suíte serial).
   Execuções focadas (`arquivo::teste`) continuam seriais. Teste novo não pode depender de ordem,
   cwd, porta ou arquivo fixo: use `tmp_path` e ids de parametrização determinísticos.
