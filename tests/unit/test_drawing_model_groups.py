@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import math
-import time
 from itertools import pairwise
-from typing import Literal
+from typing import Any, Literal
 
+import pytest
+
+from zeny_project_handler.adapters.analysis.drawing_model import groups
 from zeny_project_handler.adapters.analysis.drawing_model.groups import agrupar_candidatos
 from zeny_project_handler.adapters.analysis.drawing_model.model import (
     Arco,
@@ -121,18 +123,28 @@ def test_traco_com_um_arco_reconhecido_e_outra_curva_livre_entra_pelos_caminhos(
     assert [g.indices_caminhos for g in grupos] == [(0,)]
 
 
-def _melhor_tempo(n: int) -> float:
-    primitivas = [circulo((i % 100) * 20.0, (i // 100) * 20.0, 2.0) for i in range(n)]
-    melhor = math.inf
-    for _ in range(3):
-        inicio = time.perf_counter()
+def _comparacoes(n: int, monkeypatch: pytest.MonkeyPatch) -> int:
+    """Conta os pares de caixas comparados no agrupamento de `n` círculos."""
+    primitivas = [circulo((i % 100) * 5.0, (i // 100) * 5.0, 2.0) for i in range(n)]
+    comparacoes = 0
+    original = groups._caixas_se_encostam
+
+    def contando(*args: Any) -> bool:
+        nonlocal comparacoes
+        comparacoes += 1
+        return bool(original(*args))
+
+    with monkeypatch.context() as contexto:
+        contexto.setattr(groups, "_caixas_se_encostam", contando)
         agrupar_candidatos(primitivas, [])
-        melhor = min(melhor, time.perf_counter() - inicio)
-    return melhor
+    return comparacoes
 
 
-def test_agrupamento_escala_linearmente() -> None:
-    assert _melhor_tempo(20_000) / _melhor_tempo(10_000) < 3
+def test_agrupamento_escala_linearmente(monkeypatch: pytest.MonkeyPatch) -> None:
+    # a grade espacial limita as comparações por elemento: dobrar a entrada não passa de 3x
+    pequeno, grande = _comparacoes(10_000, monkeypatch), _comparacoes(20_000, monkeypatch)
+    assert pequeno > 0
+    assert grande / pequeno < 3
 
 
 def test_dois_circulos_a_exatamente_duas_folgas_agrupam() -> None:

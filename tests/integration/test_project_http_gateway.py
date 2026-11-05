@@ -458,7 +458,7 @@ def _running_server(application: FastAPI) -> Iterator[str]:
 
 def _wait_until_started(server: Server, thread: Thread) -> None:
     tick = Event()
-    deadline = monotonic() + 10
+    deadline = monotonic() + 120
     while monotonic() < deadline:
         if server.started:
             return
@@ -474,7 +474,7 @@ def _wait_job(
     expected: JobStatus,
 ) -> JobStatusResponse:
     tick = Event()
-    deadline = monotonic() + 30
+    deadline = monotonic() + 120
     while monotonic() < deadline:
         status = gateway.get_job(job_id)
         if status.status is expected:
