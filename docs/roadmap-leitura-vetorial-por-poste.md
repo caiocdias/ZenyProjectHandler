@@ -263,7 +263,7 @@ Trilha C — aprendizado (branch `roadmap/leitura-vetorial-por-poste-c`)
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E11 | Spike de treino na GPU AMD | #pendente | E01 | decisão registrada sobre onde e como treinar |
+| E11 | Spike de treino na GPU AMD | #em-andamento | E01 | decisão registrada sobre onde e como treinar |
 | E10 | Fábrica de rótulos contínua | #pendente | E07 | fluxo mensal com pré-marcação, leitura dupla, amostra humana e dataset por hash |
 | E12 | Detector visual local | #pendente | E11, E09, E10 | detector ONNX em CPU para o resíduo, ganho medido por poste |
 
@@ -1244,7 +1244,7 @@ Toda etapa seguinte paga esse custo.
 
 ---
 
-## E11 — Spike de treino na GPU AMD — #pendente
+## E11 — Spike de treino na GPU AMD — #em-andamento
 
 **Objetivo:** decidir onde e como treinar o detector, provando ou descartando PyTorch com ROCm na RX 9070 XT desta máquina (H5).
 
