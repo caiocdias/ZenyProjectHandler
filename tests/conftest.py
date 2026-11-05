@@ -59,6 +59,10 @@ def app_log_capture(caplog: pytest.LogCaptureFixture) -> Iterator[pytest.LogCapt
             logger.propagate = previous_propagate
 
 
+# Encobre um limite de produção: MainWindow.closeEvent (main_window.py:702-705) chama
+# shutdown_polling() com 1000 ms e ignora o retorno. Com o servidor lento (> 1 s), fechar o
+# cliente pode destruir a QThread de observação viva e abortar o processo (qFatal, 0xC0000409).
+# Defeito de produto conhecido, estacionado para decisão do usuário no handoff da E14 do roadmap.
 def _esperar_threads_do_painel_ate_o_fim(monkeypatch: pytest.MonkeyPatch) -> None:
     """Estenda o prazo de 1 s que o fechamento da janela dá à thread de observação.
 
