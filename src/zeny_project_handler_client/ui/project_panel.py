@@ -11,6 +11,7 @@ from typing import Any, TypeVar
 from uuid import UUID, uuid4
 
 from PySide6.QtCore import (
+    QDeadlineTimer,
     QObject,
     QRegularExpression,
     QSettings,
@@ -61,7 +62,19 @@ from zeny_project_handler_contracts.session import SessionCapabilitiesResponse
 
 from .project_gateway import ProjectGateway, ProjectGatewayError
 from .project_market import ProjectMarketWidget
-from .project_search import ProjectSearchThread
+from .project_search import (
+    ProjectSearchThread,
+    aguardar_pesquisas,
+    interromper_pesquisas,
+    notificador_pesquisas,
+    pesquisas_ativas,
+)
+from .remote_read import (
+    aguardar_leituras,
+    interromper_leituras,
+    leituras_ativas,
+    notificador_leituras,
+)
 from .responsive_row import ResponsiveRowLayout
 
 T = TypeVar("T")
@@ -176,6 +189,7 @@ class ProjectPanelWidget(QWidget):
     busy_changed = Signal(bool)
     project_opened = Signal(object)
     project_cleared = Signal()
+    rede_encerrada = Signal()
 
     def __init__(
         self,
@@ -211,6 +225,10 @@ class ProjectPanelWidget(QWidget):
         self._search_stopped = False
         self._search_thread: ProjectSearchThread | None = None
         self._project_action_active = False
+        # Só restart_polling() incrementa o token; a perda de conexão não cancela o pedido.
+        self._token_encerramento = 0
+        self._pedido_encerramento: int | None = None
+        self._ligado_aos_registros = False
         self._search_timer = QTimer(self)
         self._search_timer.setSingleShot(True)
         self._search_timer.setInterval(300)
@@ -1054,6 +1072,63 @@ class ProjectPanelWidget(QWidget):
         return finished
 
     def shutdown_polling(self, timeout_ms: int = 1_000) -> bool:
+        self._interromper_observacao()
+        return self._aguardar_observacao(timeout_ms)
+
+    def rede_ativa(self) -> bool:
+        """Diga se a observação global ou alguma leitura/pesquisa remota ainda roda.
+
+        Os registros de leituras e pesquisas valem para o processo inteiro, então contam também
+        as threads de outra janela do mesmo processo: isso só faz o encerramento esperar mais.
+        """
+        thread = self._global_poll_thread
+        observando = thread is not None and thread.isRunning()
+        return observando or leituras_ativas() or pesquisas_ativas()
+
+    def pedir_encerramento(self, timeout_ms: int) -> bool:
+        """Interrompa toda thread de rede, espere até ``timeout_ms`` e diga se todas pararam.
+
+        O pedido fica pendente até ``rede_encerrada``, emitido uma vez, na thread da UI e nunca
+        dentro desta chamada, quando ``rede_ativa()`` passa a falso. Só ``restart_polling()``
+        cancela o pedido; ``shutdown_polling()`` (perda de conexão) não.
+        """
+        prazo = QDeadlineTimer(max(0, timeout_ms))
+        self._pedido_encerramento = self._token_encerramento
+        self._ligar_aos_registros()
+        self._interromper_observacao()
+        interromper_leituras()
+        interromper_pesquisas()
+        self._aguardar_observacao(prazo.remainingTime())
+        aguardar_leituras(prazo)
+        aguardar_pesquisas(prazo)
+        # Sem thread a esperar, nenhum término chegaria: a conferência vem pela fila.
+        QTimer.singleShot(0, self, self._conferir_encerramento)
+        return not self.rede_ativa()
+
+    @Slot()
+    def _conferir_encerramento(self) -> None:
+        if self._pedido_encerramento != self._token_encerramento or self.rede_ativa():
+            return
+        self._descartar_pedido_encerramento()
+        self.rede_encerrada.emit()
+
+    def _ligar_aos_registros(self) -> None:
+        # Ligado só com pedido pendente: o painel destruído nunca fica no notificador do módulo.
+        if self._ligado_aos_registros:
+            return
+        notificador_leituras.terminou.connect(self._conferir_encerramento)
+        notificador_pesquisas.terminou.connect(self._conferir_encerramento)
+        self._ligado_aos_registros = True
+
+    def _descartar_pedido_encerramento(self) -> None:
+        self._pedido_encerramento = None
+        if not self._ligado_aos_registros:
+            return
+        notificador_leituras.terminou.disconnect(self._conferir_encerramento)
+        notificador_pesquisas.terminou.disconnect(self._conferir_encerramento)
+        self._ligado_aos_registros = False
+
+    def _interromper_observacao(self) -> None:
         self.market.set_connected(False)
         self._search_stopped = True
         self._connection_generation += 1
@@ -1063,6 +1138,8 @@ class ProjectPanelWidget(QWidget):
             self._search_thread.requestInterruption()
         self._search_status.setText("Pesquisa interrompida")
         self._global_poll_stop.set()
+
+    def _aguardar_observacao(self, timeout_ms: int) -> bool:
         thread = self._global_poll_thread
         if thread is None or not thread.isRunning():
             return True
@@ -1074,6 +1151,8 @@ class ProjectPanelWidget(QWidget):
 
     def restart_polling(self) -> None:
         """Retome a observação global usando o gateway reconectável já atualizado."""
+        self._token_encerramento += 1
+        self._descartar_pedido_encerramento()
         self._search_stopped = False
         self._connection_generation += 1
         self.market.set_connected(True)
@@ -1219,6 +1298,7 @@ class ProjectPanelWidget(QWidget):
         thread.started.connect(worker.run)
         worker.session_received.connect(self._session_received)
         worker.finished.connect(thread.quit, Qt.ConnectionType.DirectConnection)
+        thread.finished.connect(self._conferir_encerramento, Qt.ConnectionType.QueuedConnection)
         thread.finished.connect(worker.deleteLater)
         thread.finished.connect(thread.deleteLater)
         # A thread antiga é destruída depois de um reinício; só a atual pode limpar as referências.
