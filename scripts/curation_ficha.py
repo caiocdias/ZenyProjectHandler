@@ -711,11 +711,25 @@ def _versao_instalada(pacote: str) -> str | None:
         return None
 
 
+def _ficha_predita_legivel(pasta: Path) -> Registro | None:
+    """``ficha-predita.json`` da pasta, ou ``None`` se ausente ou ilegível (tratada como ausente).
+
+    Escrita interrompida (JSON inválido, vazio, bytes inválidos) ou raiz que não é objeto não pode
+    derrubar o comando: o resumo é sempre gravado.
+    """
+    arquivo = pasta / "ficha-predita.json"
+    try:
+        ficha = ler_json(arquivo) if arquivo.is_file() else None
+    except (RodadaError, OSError, ValueError):
+        return None
+    return ficha if isinstance(ficha, dict) else None
+
+
 def _gerador_do_baseline(pastas: Sequence[Path]) -> Registro | None:
     for pasta in pastas:
-        arquivo = pasta / "ficha-predita.json"
-        if arquivo.is_file():
-            gerador = ler_json(arquivo).get("gerador")
+        ficha = _ficha_predita_legivel(pasta)
+        if ficha is not None:
+            gerador = ficha.get("gerador")
             return gerador if isinstance(gerador, dict) else None
     return None
 
@@ -726,11 +740,8 @@ def _bloco_pendencia_zerado() -> Registro:
 
 def _pendentes_por_poste(pasta: Path) -> dict[str, Collection[str]] | None:
     """``id`` do poste predito -> campos pendentes; ``None`` sem ``ficha-predita.json`` legível."""
-    arquivo = pasta / "ficha-predita.json"
-    if not arquivo.is_file():
-        return None
-    ficha = ler_json(arquivo)
-    postes = ficha.get("postes") if isinstance(ficha, dict) else None
+    ficha = _ficha_predita_legivel(pasta)
+    postes = ficha.get("postes") if ficha is not None else None
     if not isinstance(postes, list):
         return None
     return {
