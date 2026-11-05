@@ -810,7 +810,6 @@ execução serial:
 ```bash
 .venv/Scripts/python.exe -m scripts.curation_ficha baseline --rodada RODADA
 .venv/Scripts/python.exe -m scripts.curation_ficha baseline --rodada RODADA --native-only
-.venv/Scripts/python.exe -m scripts.curation_ficha baseline --rodada RODADA --versao-extracao propostas-v1 --processos 4
 ```
 
 `amostra` sorteia postes das `referencia.json` (rodízio entre PDFs, semente fixa) para o usuário
