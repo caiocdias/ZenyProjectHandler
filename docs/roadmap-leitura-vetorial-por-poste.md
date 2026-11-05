@@ -246,7 +246,7 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E14 | Gate de testes paralelo | #em-andamento | E05 | suíte paralela no `.bat` sem perder teste, `main` verde, scripts de corpus com processos |
+| E14 | Gate de testes paralelo | #concluida | E05 | suíte paralela no `.bat` sem perder teste, `main` verde, scripts de corpus com processos |
 | E06 | Símbolos sobre o modelo de desenho | #pendente | E05, E14 | pacotes declarativos avaliados sobre o modelo vetorial |
 | E07 | Ficha do poste | #pendente | E06, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
 | E08 | Conferência UTM | #pendente | E07 | transformação página → UTM, checagem de posição e vão, pendências |
@@ -797,7 +797,7 @@ Ondas (ordem sugerida de sessões paralelas; a elegibilidade real vem das depend
 
 ---
 
-## E14 — Gate de testes paralelo — #em-andamento
+## E14 — Gate de testes paralelo — #concluida
 
 **Objetivo:** a suíte inteira roda em processos paralelos no gate e nas souls, sem perder teste nem cobertura. O `main` volta a passar no `.bat` (decisão D6).
 
@@ -827,12 +827,12 @@ Toda etapa seguinte paga esse custo.
 
 **Critérios de aceite:**
 
-- [ ] O total de testes coletados pelo `.bat` depois da etapa é ≥ o de antes. Nenhum teste fica de fora por marcador ou `deselect`.
-- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`, com cobertura ≥ 85,01%.
-- [ ] O passo pytest do `.bat` leva ≤ 8 min nesta máquina. O tempo antes e depois e as 15 durações mais lentas (`--durations=15`) estão no handoff.
-- [ ] Três execuções paralelas seguidas da suíte inteira saem verdes, e uma execução serial sai verde.
-- [ ] Os scripts de corpus com `--processos 4` produzem saída byte a byte igual à serial numa fixture sintética de várias folhas.
-- [ ] `.venv/Scripts/python.exe -m pip check` sem quebra, e `osv-scanner` no lock de desenvolvimento sem vulnerabilidade nova.
+- [x] O total de testes coletados pelo `.bat` depois da etapa é ≥ o de antes. Nenhum teste fica de fora por marcador ou `deselect`.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`, com cobertura ≥ 85,01%.
+- [x] O passo pytest do `.bat` leva ≤ 8 min nesta máquina. O tempo antes e depois e as 15 durações mais lentas (`--durations=15`) estão no handoff.
+- [x] Três execuções paralelas seguidas da suíte inteira saem verdes, e uma execução serial sai verde.
+- [x] Os scripts de corpus com `--processos 4` produzem saída byte a byte igual à serial numa fixture sintética de várias folhas.
+- [x] `.venv/Scripts/python.exe -m pip check` sem quebra, e `osv-scanner` no lock de desenvolvimento sem vulnerabilidade nova.
 
 **Validação obrigatória:**
 
@@ -859,12 +859,63 @@ Toda etapa seguinte paga esse custo.
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- Plano: `docs/superpowers/plans/2026-11-05-leitura-vetorial-por-poste-e14.md`. Revisão de arquitetura (opus): bloqueado na rodada 0 (I1: `.bat` real só pelo espelho; I2: `pico_memoria_bytes` na igualdade), aprovado com notas na rodada 1.
+- Relógio: de cce8fda (00:31) ao `#concluida` (04:59): 4h28, dentro do limite de 4h30, que quase foi atingido no fechamento. A parada foi resolvida pela opção recomendada da instrução da execução: continuar até fechar, porque todas as tarefas estavam feitas.
+- Entregas:
+  - Asserções de tempo de parede viram contagem de trabalho: `resolver_glifo` no teste hostil, renomeado para `…em_trabalho_limitado`; comparações em `_caixas_se_encostam`. Os prazos de espera em `tests/server` e `tests/integration` foram alargados.
+  - `pytest-xdist==3.8.0` e `execnet==2.1.2` (MIT) entram só no extra `dev` e em `requirements-development.lock`. O `.bat` roda `python -m pytest -n auto … --cov --cov-fail-under=85.01 --durations=15`, numa passada só; nenhum teste precisou de passada serial. `-n` nunca entra em `addopts`.
+  - Os ids de `test_project_document_api.py` ficaram determinísticos (os `uuid4` quebravam a coleta do xdist). Os pytest em subprocesso de `test_dependency_locks.py` ganharam `--basetemp`.
+  - `--processos N` em `scripts/benchmark_texto_ficha.py` e `scripts/drawing_model_report.py`: `ProcessPoolExecutor` com `pool.map` na ordem serial, tabela validada no processo principal (exit 2), amostras e `fontes` gravadas em série.
+  - **Correção de produto (exceção à restrição "src/ não muda"):** 37bc2ee em `src/zeny_project_handler_client/ui/project_panel.py`.
+    - Causa: depois de `shutdown_polling()` + `restart_polling()`, o `destroyed` tardio da thread de observação antiga zerava as referências da thread nova. O fechamento seguinte destruía uma `QThread` viva (qFatal, 0xC0000409), o que derrubava o worker do xdist em `test_mvp_ui.py::test_search_response_is_discarded_after_reconnection_or_close[True]`. Reprovou 2/2 `.bat` no 27d76d5.
+    - Correção: só a thread atual limpa as referências. São 8 linhas, com testes de regressão em subprocesso (`test_project_panel_polling_restart*.py`).
+- Commits (425104a..010d5f1):
+  - roadmap e plano: cce8fda, b389e57, 11883c1, b8a4fc6;
+  - Task 1: 91bc22c, 7d8899a;
+  - Task 2: 9679153, 77dc135, 69a7a2f, da66c39, f83844a, 37bc2ee, 1b27f91, 13c5496;
+  - Task 3: 64807c5, 27d76d5;
+  - onda final: 010d5f1.
+- Cada tarefa passou por desenvolvedor, testador, verificação mecânica e revisão da `revisor-seguranca`, todas aprovadas.
+  - Task 2: 2 rodadas de correção. Na rodada 1, o teardown da fábrica de janelas joinava a thread de observação por só 1 s. Na rodada 2, com desenvolvedor novo (opus), saiu a causa real acima.
+  - O Important da revisão da Task 2 (teste que abortava o processo em vez de falhar legível) virou teste em subprocesso.
+- Revisão final (`revisor-seguranca`, opus) sobre 425104a..13c5496: aprovado com ressalvas, sem Crítico.
+  - I-1: o `closeEvent` do cliente espera a observação por só 1 s. O monkeypatch de 60 s do `conftest` encobre isso; agora está comentado (010d5f1) e vai para as decisões.
+  - I-2: o parked do aborto sob carga fica aberto.
+  - Re-revisão da onda final (opus, 13c5496..010d5f1, com a serial anexada): **aprovado**. I-1 e I-2 foram resolvidos nos termos acima, e o diff não trouxe nada novo.
+- Critérios verificados:
+  1. Antes: 5331 node IDs coletados em 425104a. Depois: 5373 itens no `.bat`. Ficam 14 ausentes, todos mapeados: 13 ids `uuid4` aleatórios de `test_every_stage_three_route_requires_bearer` (17 casos antes e depois) e 1 renomeado. Nenhum `-m`, `-k` ou `--deselect`.
+  2. `cmd.exe //c IniciarTestes.bat` no 13c5496 → `RESULTADO FINAL: APROVADO`: 5372 passed, 1 xfailed, cobertura 88,80%. Os 2 `.bat` anteriores, no 27d76d5, reprovaram pelo worker morto, e o desenvolvedor rodou 3 `.bat` aprovados no 37bc2ee. O harness recusa `cmd.exe` no modo isolado, por isso o orquestrador saiu do modo worktree (`ExitWorktree keep`) e rodou o `.bat` pelo caminho absoluto, na branch `roadmap/leitura-vetorial-por-poste`.
+  3. Passo pytest: 1578 s em série (2026-11-04) contra 189–233 s em paralelo (20 workers, `-n auto`).
+     - As 15 durações mais lentas no `.bat` final, todas de 20 a 55 s:
+       - `test_tabela_glifos_real_ataque` (ruído de caixa 54,7 s, pares de algarismos 27–30 s);
+       - `test_glyph_table` (ruído até a tolerância, 20–44 s);
+       - `test_pymupdf_glyph_text_ataque` (dezenas de milhares de preenchimentos, 43,0 s);
+       - `test_curation_backlog` (pistas paralelas, 29–42 s);
+       - `test_glyph_text` (varredura, 41,1 s);
+       - `test_glyph_text_orcamento` (35,2 s);
+       - `test_project_http_gateway` (33,5 s).
+     - O limite do relógio é a cauda desses testes de glifo, não o número de workers.
+  4. Três execuções paralelas verdes seguidas: os 3 `.bat` do desenvolvedor no 37bc2ee (5371 passed; 189,84, 230,48 e 194,38 s; cobertura 88,80–88,81%), mais o `.bat` final e a suíte do testador no 1b27f91 (5372 passed). Serial `-n 0 --cov` no 37bc2ee: 5371 passed, 1 xfailed, 1154 s, cobertura 88,81%. A cobertura paralela (88,80%) e a serial (88,81%) diferem 0,01 p.p.
+  5. `test_processos_4_produz_a_mesma_saida_que_a_serial` nos dois scripts. JSON e MD são comparados depois de zerar só `tempo_*` e `pico_memoria_bytes`, que medem o processo (ruling I2), e os PNG byte a byte. Outros 20 ataques ficam em `test_processos_corpus_ataque.py`.
+  6. `pip check`: "No broken requirements found". `osv-scanner --lockfile=requirements.txt:requirements-development.lock`: 58 pacotes, "No issues found".
+- Decisões para o usuário (tomadas pela opção recomendada, conforme a instrução da execução):
+  - **Exceção em `src/`:** a correção do ciclo de vida da `QThread` de observação (37bc2ee) entrou nesta etapa, embora o escopo dissesse "src/ não muda". Sem ela, o gate paralelo reprovava 2/2. O comportamento só muda no caso defeituoso.
+  - **Defeito de produto estacionado (I-1):** com o servidor lento (> 1 s), fechar o cliente pode abortar o processo. `MainWindow.closeEvent` chama `shutdown_polling()` com 1000 ms e ignora o retorno. Nos testes, o monkeypatch de 60 s do `conftest` encobre isso. Proposta: uma etapa curta que faça o fechamento esperar ou cancelar a leitura de sessão.
+  - **Aborto sob carga saturada (I-2), provavelmente resolvido:** a rodada 1 viu workers Qt morrerem sob 60 processos de carga, inclusive em série, em mais de um teste. A causa achada explica o caso do gate. Os outros não foram reproduzidos de novo depois da correção, e o risco residual fica aberto.
+  - **"Byte a byte" do critério 5:** a comparação zera `tempo_*` e `pico_memoria_bytes`, porque duas execuções seriais já diferem nesses campos.
+  - **`test_glyph_text.py`:** a asserção de parede virou `process_time() < 5.0`, tempo de CPU, em vez de contagem de trabalho.
+  - **`IniciarTestes.bat` com `-n auto`:** usa todos os núcleos (20 aqui), e máquinas menores ficam mais lentas, mas corretas.
+- Notas para a próxima etapa:
+  - Minors adiados:
+    - `max_workers` sem teto de 61 no Windows (`--processos` ≥ 62 com ≥ 62 PDFs dá traceback);
+    - teste de ordem fraco contra `as_completed`;
+    - spawn real do `benchmark_texto_ficha` sem teste de CLI;
+    - cenários de reinício com `sleep` de 1,2 e 1,6 s contra o prazo padrão de 1000 ms;
+    - comentários sem acento em `conftest.py` e `test_panel_scroll.py`;
+    - helpers de pool quase duplicados nos dois scripts.
+  - O aviso `_readerthread` (`PytestUnhandledThreadExceptionWarning`) em `test_drawing_model_dxf_adversarial.py::test_juncao_dentro_de_tmp_apontando_para_fora_e_recusada`, com `PYTHONUTF8=1`, é anterior à etapa.
+  - O `--basetemp` precisa ser curto: um basetemp longo quebra `test_atomic_files.py`.
+  - Retomada: a próxima da Trilha A é a E06 (depende de E05 e E14). Pela tabela de ondas, a onda 2 (E06, E15) começa com a E14 integrada em `main`. Integre esta branch antes da próxima execução. A E07 depende da E15 (Trilha B) integrada em `main`.
 
 ---
 
