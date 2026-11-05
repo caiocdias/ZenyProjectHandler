@@ -218,7 +218,7 @@ Regras, aplicadas a todo valor de todo pacote:
 
 ### Task 4: teste intermitente do `job_store`
 
-- **Estimativa:** 30 min. **Depende de:** nenhuma. **Risco:** normal. **Laboratório:** não.
+- **Estimativa:** 30 min. **Depende de:** nenhuma. **Risco:** normal, reclassificado para alto durante a execução (R13: toca persistência e concorrência). **Laboratório:** não.
 - **Por que entra:** `tests/server/test_jobs_api.py::test_job_store_accepts_complete_state_matrix_without_progress_regression` falha de forma intermitente, mesmo isolado e sem nenhum arquivo da E06.1. Na branch da trilha A, em 2026-11-05, o resultado foi 1 falha em 3 execuções: `limited.prune() == 2`, mas o job mais antigo continua existindo. Pela regra da E14, teste intermitente é defeito e é corrigido, nunca repetido. Ele ameaça o `.bat` de todas as etapas.
 
 **Files:**

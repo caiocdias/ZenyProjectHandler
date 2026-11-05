@@ -264,7 +264,7 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E14 | Gate de testes paralelo | #concluida | E05 | suíte paralela no `.bat` sem perder teste, `main` verde, scripts de corpus com processos |
-| E06.1 | Medição de símbolos e base do modelo | #em-andamento | E05, E14 | benchmark diagnóstico de símbolos contra as fichas, página do modelo com índice cru, guarda contra memorização |
+| E06.1 | Medição de símbolos e base do modelo | #concluida | E05, E14 | benchmark diagnóstico de símbolos contra as fichas, página do modelo com índice cru, guarda contra memorização |
 | E06.2 | Método de pacotes sobre o modelo de desenho | #pendente | E06.1 | gramáticas atuais portadas para o modelo, método versionado no runner |
 | E06.3 | Gramáticas das classes da ficha | #pendente | E06.2 | estai, aterramento, para-raios, transformador e interrupção sobre o modelo, acima do atual |
 | E07 | Ficha do poste | #pendente | E06.3, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
@@ -1052,7 +1052,7 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 ---
 
-## E06.1 — Medição de símbolos e base do modelo — #em-andamento
+## E06.1 — Medição de símbolos e base do modelo — #concluida
 
 **Objetivo:** medir a detecção de símbolos do analisador atual contra as fichas de referência da E03 e preparar a base do método sobre o modelo de desenho: a página do modelo, com o índice cru das primitivas.
 
@@ -1069,11 +1069,11 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 **Critérios de aceite:**
 
-- [ ] Fixtures sintéticas positivas e negativas para o benchmark e para a página do modelo.
-- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros (pacotes inalterados).
-- [ ] O baseline diagnóstico do analisador atual nas 16 folhas está em `tmp/`, com precisão e recall por classe, família e folha nos dois critérios. O handoff traz os totais.
-- [ ] A guarda passa: os pacotes não têm coordenada, hash nem nome de folha real.
-- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+- [x] Fixtures sintéticas positivas e negativas para o benchmark e para a página do modelo.
+- [x] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros (pacotes inalterados).
+- [x] O baseline diagnóstico do analisador atual nas 16 folhas está em `tmp/`, com precisão e recall por classe, família e folha nos dois critérios. O handoff traz os totais.
+- [x] A guarda passa: os pacotes não têm coordenada, hash nem nome de folha real.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
 **Validação obrigatória:**
 
@@ -1090,13 +1090,92 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
-
+- Plano: `docs/superpowers/plans/2026-11-05-leitura-vetorial-por-poste-e06-1.md`.
+  - Revisão de arquitetura (opus): bloqueou na rodada 0 e aprovou com notas na rodada 1.
+  - Na rodada 0, I1–I4 vinham da ampliação dos pacotes: `negative_examples`, `coverage_matrix_e16`, mudança visível na revisão e nas exportações. A ampliação foi adiada para a E06.3 (R-E06.1-0). O I5 era falha de detector silenciosa.
+  - O plano ganhou duas emendas durante a execução: Task 4 (R12) e Task 5 (R14). A Task 4 foi reclassificada para `Risco: alto` (R13).
+- Relógio: de dfc06e7 (15:56) até o commit `#concluida` (18:40 de 2026-11-05): 2h44). Correu em paralelo com a E15 e, no fim, com a E17.
+- Entregas:
+  - `scripts/benchmark_simbolos_ficha.py`, o benchmark diagnóstico de símbolos contra as fichas da rodada:
+    - método `atual` (união do runner sem raster);
+    - critérios `centro` (principal) e `iou` (diagnóstico);
+    - escopo de classe, regiões e postes pendentes fora do FP;
+    - falha de método fora dos totais e bloco `comparacao` só com as folhas comuns;
+    - `--processos N`;
+    - guarda lexical de `avaliacao-cega` antes de qualquer I/O, inclusive no diretório da rodada.
+  - `pagina_modelo_com_indices(pagina, indice, tabela=None)` em `pymupdf_drawing_model.py`: a página do modelo vem da página aberta, com o índice cru de `get_drawings(extended=True)` de cada caminho. O cache, o formato e `VERSAO_MODELO_DESENHO` não mudam.
+  - `tests/unit/test_symbol_packages_sem_memorizacao.py`, a guarda contra coordenada, hash, `.pdf` e nome de folha nos pacotes, em valores e chaves.
+  - Correção do teste intermitente do `job_store` (R12):
+    - a causa era o tique de 15,6 ms do relógio do Windows, que empatava o `updated_at`;
+    - o `prune` agora desempata por `updated_at, created_at, rowid`;
+    - o relógio monotônico global da 1ª tentativa foi removido (R15).
+  - As asserções de razão de tempo de parede do modelo viraram contagem de trabalho, em `test_drawing_model_geometry*.py` (R14 e testador de etapa).
+- Commits (2dd743e..d875caa, mais o fechamento):
+  - roadmap e plano: dfc06e7, e7de2a4, 82916cc, dc433d6, 8039d12, 92df7f7, c32a9c4;
+  - Task 1: ef81bba, e421ea0, cf7f949;
+  - Task 2: 473844c, bb4b7cd;
+  - Task 3: 905f3e9, 568f185;
+  - Task 4: série 53d7f4a..ed2ce30, integrada como e37a495;
+  - Task 5: 66bbf75;
+  - testador de etapa: ffb8be9, 62523c3, dc97548;
+  - onda final: d875caa.
+- Ciclo por tarefa: desenvolvedor, testador nas tarefas de risco alto, verificação mecânica e revisão da `revisor-seguranca`. Todas aprovadas.
+  - O testador achou defeitos reais nas Tasks 1 e 4:
+    - a guarda de `avaliacao-cega` era burlada por ponto final no Windows;
+    - `sanear` deixava vazar caminho UNC;
+    - o `prune` não desempatava `updated_at` vindo do banco.
+  - O testador de etapa achou D1–D3 (ver Decisões).
+- Revisão final (`revisor-seguranca`, opus, 2dd743e..dc97548): aprovado com ressalvas, sem Crítico.
+  - I1, a guarda que não conferia o diretório da rodada, foi corrigido na onda única d875caa.
+  - I2, amarrar D1 à E06.2, está aqui e nos riscos da E06.2.
+  - Re-revisão da onda: I1 e o minor da docstring ADDRESSED, sem quebra nova; minors: falta teste ponta a ponta de rodada com nome parecido, e o vigia não cobre os.scandir/listdir/iterdir.
+- Critérios verificados:
+  1. Fixtures sintéticas positivas e negativas.
+     - Benchmark: rodada sintética com TP no aterramento desenhado e FN na referência sem desenho, mais o ataque.
+     - Página do modelo: `clip`/`group` intercalados e aninhados, rotação, CropBox e página sem desenhos.
+  2. `scripts.audit_symbol_packages` → `errors []` (habilitadas 22, pendentes 343). Os pacotes não mudaram.
+  3. Baseline diagnóstico do "atual" nas 16 folhas, em `tmp/e06/simbolos-atual/simbolos-ficha.{json,md}`, com `--processos 6`, 190 s e 0 falhas:
+     - **centro**, geral: tp 131, fp 58, fn 48, precisão 69,3%, recall 73,2%.
+     - **iou**, geral: tp 119, fp 70, fn 60, precisão 63,0%, recall 66,5%.
+     - Por classe (centro, tp/fp/fn):
+       - ATERRAMENTO 41/32/2; ESTAI 64/2/12; TRANSFORMADOR 14/2/0; PARA_RAIOS_MT 10/4/3;
+       - PARA_RAIOS_BT 0/0/10; EQUIPAMENTO_INTERRUPCAO 0/0/20; PONTO_CONEXAO 2/18/0; CONECTOR 0/0/1.
+     - Por classe (iou, tp/fp/fn):
+       - ATERRAMENTO 33/40/10; ESTAI 63/3/13; TRANSFORMADOR 14/2/0; PARA_RAIOS_MT 7/7/6;
+       - PARA_RAIOS_BT 0/0/10; EQUIPAMENTO_INTERRUPCAO 0/0/20; PONTO_CONEXAO 2/18/0; CONECTOR 0/0/1.
+     - Por família (centro, tp/fp/fn): electric_office_print 60/15/24, itext 47/38/19, ghostscript 24/4/5, autocad 0/1/0.
+     - Fora das regiões: 35. Perto de poste pendente: 53. Duplicatas: ESTAI 3. Os números por folha e o tempo por folha estão no `.json`.
+  4. A guarda passa: `test_pacotes_reais_passam_na_guarda` verde. `git grep -n "PROJETO DE REDE NS"` só acha as linhas que citam o critério.
+  5. `.bat`: `cmd.exe //c IniciarTestes.bat` em d875caa → `RESULTADO FINAL: APROVADO`: 6598 passed, 3 xfailed, cobertura 88,86%, 197 s.
+  - Suíte inteira `-n 10 --cov` em d875caa: 6598 passed, 3 xfailed (1 preexistente e 2 da R18), cobertura 88,82%.
+  - `osv-scanner` nos 7 locks: `No issues found`. Nenhum lock mudou.
+  - `check_test_integrity --base 2dd743e`: os apontamentos foram todos justificados na revisão final.
+    - 7 `SEM_SOUL` em commits docs do orquestrador. Até aqui, os trailers saíam separados por linha em branco; os commits novos já trazem o trailer no último parágrafo.
+    - `TESTE_REMOVIDO` e `ASSERCAO_REMOVIDA` vêm das conversões de tempo para contagem. O `len(...) == 200` foi preservado.
+    - 1 `SKIP_ADICIONADO`, o alias NTFS, que só existe no Windows.
+- Decisões para o usuário (tomadas pela opção recomendada):
+  - **"Atual" = união do runner sem raster** (R6/R-E06.1-1): legado, estais, transformadores e pacotes, sem passar por `reconcile_symbols`. O raster do perfil `balanced` ficou fora. É a base que a E06.3 tem de superar.
+  - **Critério principal `centro`**, com tolerância de 0,005, e IoU como diagnóstico (R7/R-E06.1-2). Isso substitui, neste gate, o `symbols-e02-v1` só com IoU aprovado na E02. A precisão contra a ficha é um limite inferior.
+  - **Divisão da E06** em E06.1–E06.3 (R5), com a E07 passando a depender da E06.3.
+  - **Ampliação dos pacotes adiada para a E06.3** (R9): com variantes só `pending`, ela quebraria o fechamento da curadoria e mudaria a tabela de suporte e as exportações.
+  - **Tarefas fora do escopo de símbolos**, por estabilidade do gate:
+    - Task 4: teste intermitente do `job_store` (R12/R13/R15). Mexeu em `src/zeny_project_handler_server/job_store.py`, só no `ORDER BY` do `prune`.
+    - Task 5 e testador de etapa: razões de tempo de parede viraram contagem (R14).
+  - **D1 como `xfail(strict=True)`** (R18): `reconstruir_polilinhas` é quadrática em nó de grau alto, em forma de estrela ou com segmento repetido. Hoje o servidor não passa por ela. Corrigir antes da E06.2 ligar o modelo no runner é pré-condição.
+- Decisão de system design que espera o usuário (entrevista no fim do lote, antes do plano da E06.2):
+  - **Onde o método de símbolos sobre o modelo liga** (R8/R10): só no `SymbolCompositionRunner` opt-in, como os métodos atuais, ou também no analisador padrão. A escolha define de onde a E07 lê os símbolos.
+- Notas para a próxima etapa (E06.2):
+  - O levantamento do código feito para planejar a E06 (motor declarativo, métodos atuais, modelo de desenho, custo, riscos, hipóteses H-A/H-B/H-C) está em `tmp/e06/levantamento-e06.md` do checkout principal, fora do Git.
+  - **Pré-condição:** corrigir D1, a reconstrução quadrática em nó de grau alto (`_polilinhas_do_estilo`, ponteiro por nó), e tirar o `xfail` de `tests/unit/test_e06_1_etapa_ataque.py`.
+  - O `fallback getattr(desenhos, "indices_crus", None) or range(...)` em `_caminhos_e_glifos` existe só para monkeypatch de teste e deve falhar alto antes de a E06.2 consumir os índices.
+  - O benchmark tem 805 linhas. Na E06.2, quando entrar o método `"modelo"` em `METODOS`, desmembre-o e mova `KeyError` de `rodada.json` malformado para dentro do `try`.
+  - Minors adiados:
+    - teste de página girada sem cropbox;
+    - helpers duplicados nos testes;
+    - `Congelado.now` por `fromtimestamp`;
+    - a contagem da T5 enxerga só `_desvio_graus`;
+    - `SIMBOLOGIA.pdf` em `metodos_assinatura` é id de perfil, não folha.
+  - Testes de cliente intermitentes sob carga (polling restart e application_factory_teardown) estão rastreados na E17.
 ---
 
 ## E06.2 — Método de pacotes sobre o modelo de desenho — #pendente
@@ -1128,7 +1207,7 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
-**Riscos e mitigação:** laços O(F²) e `get_text` por moldura no motor atual → índice espacial e teto por página.
+**Riscos e mitigação:** laços O(F²) e `get_text` por moldura no motor atual → índice espacial e teto por página. A `reconstruir_polilinhas` é quadrática em nó de grau alto (D1 da E06.1, `xfail(strict=True)` em `tests/unit/test_e06_1_etapa_ataque.py`) → corrigir antes de ligar o modelo no runner é **pré-condição** desta etapa.
 
 **Evidências e handoff:** —
 
