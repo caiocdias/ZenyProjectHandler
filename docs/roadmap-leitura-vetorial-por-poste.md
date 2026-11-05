@@ -1092,7 +1092,7 @@ Toda etapa seguinte paga esse custo.
   - Revisão de arquitetura (opus) bloqueou nas rodadas 0 e 1 e aprovou com notas na rodada 2:
     - rodada 0: I1 pendência sem mecanismo, I2 entrega virando poste, I3 `CONECTA` a equipamento, I4 import circular, I5 dependência entre tarefas;
     - rodada 1: N1 formato real de `pares`, N2 default de `_executor`.
-- Relógio: de ed2759d (15:56) ao commit `#concluida` (18:06, 2026-11-05): 2h10). Correu em paralelo com a E06.1.
+- Relógio: de ed2759d (15:56) ao commit `#concluida` (18:06 de 2026-11-05): 2h10. Correu em paralelo com a E06.1.
 - Entregas:
   - `scripts/ficha_predita_propostas.py`, fonte `propostas-v1` da ficha predita, com estas regras:
     - postes, estruturas (`INSTALADA_EM`), equipamentos (`INSTALADO_EM`) e vãos (`CONECTA` para exatamente 2 postes distintos da ficha) vêm das propostas presentes;
