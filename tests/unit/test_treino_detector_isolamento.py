@@ -14,7 +14,8 @@ ROOT = Path(__file__).resolve().parents[2]
 LOCK_DE_TREINO = ROOT / "requirements-treino.lock"
 RAIZES_PROIBIDAS_EM_SRC = frozenset({"torch", "torchvision", "onnx", "scripts"})
 RAIZES_DE_TREINO = frozenset({"torch", "torchvision", "onnx", "onnxruntime"})
-MODULOS_PUROS = ("dados_sinteticos", "metricas", "ambiente")
+MODULOS_PUROS = ("dados_sinteticos", "metricas", "ambiente", "decisao")
+MODULO_DE_ENSAIO = "scripts.treino_detector.ensaio"
 
 
 def _modulos_importados(arvore: ast.AST) -> Iterator[str]:
@@ -32,6 +33,21 @@ def _imports_proibidos_em_src(texto: str) -> list[str]:
         for nome in _modulos_importados(ast.parse(texto))
         if nome.split(".")[0] in RAIZES_PROIBIDAS_EM_SRC
     ]
+
+
+def _importa_ensaio(texto: str) -> bool:
+    """Diga se o fonte importa o módulo de ensaio (torch/onnx) em qualquer ponto."""
+    for no in ast.walk(ast.parse(texto)):
+        if isinstance(no, ast.Import) and any(alias.name == MODULO_DE_ENSAIO for alias in no.names):
+            return True
+        if isinstance(no, ast.ImportFrom) and no.level == 0 and no.module:
+            if no.module == MODULO_DE_ENSAIO:
+                return True
+            if no.module == "scripts.treino_detector" and any(
+                alias.name == "ensaio" for alias in no.names
+            ):
+                return True
+    return False
 
 
 def _nos_de_topo(no: ast.AST) -> Iterator[ast.AST]:
@@ -182,3 +198,32 @@ def test_detector_de_topo_ve_blocos_mas_nao_corpos_de_funcao(
     texto: str, esperado: list[str]
 ) -> None:
     assert _imports_de_treino_no_topo(texto) == esperado
+
+
+def test_nenhum_teste_nem_src_importa_o_ensaio() -> None:
+    fontes = sorted([*(ROOT / "tests").rglob("*.py"), *(ROOT / "src").rglob("*.py")])
+    assert fontes, "nenhum fonte encontrado: a guarda passaria vazia"
+    violacoes = [
+        str(fonte.relative_to(ROOT))
+        for fonte in fontes
+        if _importa_ensaio(fonte.read_text(encoding="utf-8"))
+    ]
+    assert violacoes == []
+
+
+@pytest.mark.parametrize(
+    ("texto", "esperado"),
+    [
+        ("import scripts.treino_detector.ensaio", True),
+        ("import scripts.treino_detector.ensaio as e", True),
+        ("from scripts.treino_detector.ensaio import main", True),
+        ("from scripts.treino_detector import ensaio", True),
+        ("from scripts.treino_detector import decisao, ensaio", True),
+        ("def f():\n    from scripts.treino_detector import ensaio\n", True),
+        ("from scripts.treino_detector import decisao", False),
+        ("from scripts.treino_detector.decisao import main", False),
+        ("import scripts.treino_detector.ensaio_x", False),
+    ],
+)
+def test_guarda_de_ensaio_acusa_imports_do_ensaio(texto: str, esperado: bool) -> None:
+    assert _importa_ensaio(texto) is esperado
