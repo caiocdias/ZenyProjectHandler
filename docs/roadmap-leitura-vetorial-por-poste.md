@@ -80,7 +80,7 @@ A análise entrega, para cada poste da folha, a ficha correta: identificador, es
 | H2 | Os símbolos da rede são vetoriais em todas as famílias | símbolos rasterizados vão direto para o resíduo do detector (E12) | E06 |
 | H3 | As imagens das folhas Print To PDF e iText são só ladrilhos da ortofoto. Resultado da E04: os ladrilhos são só ortofoto e nenhum símbolo é raster, mas as folhas iText trazem tabelas (CHI, servidão, APP) como imagem e a folha Ghostscript traz um rótulo de poste em imagem de anotação | se carregarem símbolos ou texto, o OCR não pode sair em E09 — há texto em raster: a E09 precisa tratá-lo ou declará-lo fora da ficha | E04, E09 |
 | H4 | O usuário reserva folhas novas, ainda não vistas, para o conjunto de avaliação antes de E09. Em 2026-11-04 o usuário disse que consegue as folhas em breve | sem elas, a E16 fica bloqueada e a E09 não tem prova cega | E16, E09 |
-| H5 | PyTorch com ROCm treina na RX 9070 XT desta máquina (Windows nativo ou WSL2) | o treino cai para CPU ou para GPU alugada (D1) | E11 |
+| H5 | PyTorch com ROCm treina na RX 9070 XT desta máquina (Windows nativo ou WSL2). Resultado da E11: não se sustenta no Windows nativo com o release oficial ROCm 7.2.1 (torch 2.9.1). O BatchNorm de treino falha no MIOpen para a gfx1201. O WSL2 não foi ensaiado. O treino vai para a CPU, com 7,5 a 10,5 h na carga de referência (ADR 0017) | o treino cai para CPU ou para GPU alugada (D1) | E11 |
 | D1 | Treinar em GPU alugada por hora, se ROCm e CPU forem inviáveis | sem decisão, E12 só treina em CPU | E12 (só se E11 concluir que o treino local é inviável) |
 | D2 | Decidido em 2026-11-02: a ficha predita vem do projeto promovido (R2 da E02), e o formato v1 e o casamento guloso 0,02/0,05 são mantidos, com calibração na E03 | se a E03 pedir outra fonte, entra nova `versao_extracao` no `gerador` | E03 |
 | D3 | Decidido em 2026-11-02: uma etapa própria de atualização de dependências entra antes da E03, com prioridade para o Pillow do lock do servidor. Criada como E13 | sem ela, a E03 roda sobre locks com vulnerabilidades conhecidas | E13, E03 |
@@ -263,7 +263,7 @@ Trilha C — aprendizado (branch `roadmap/leitura-vetorial-por-poste-c`)
 
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
-| E11 | Spike de treino na GPU AMD | #em-andamento | E01 | decisão registrada sobre onde e como treinar |
+| E11 | Spike de treino na GPU AMD | #concluida | E01 | decisão registrada sobre onde e como treinar |
 | E10 | Fábrica de rótulos contínua | #pendente | E07 | fluxo mensal com pré-marcação, leitura dupla, amostra humana e dataset por hash |
 | E12 | Detector visual local | #pendente | E11, E09, E10 | detector ONNX em CPU para o resíduo, ganho medido por poste |
 
@@ -1244,7 +1244,7 @@ Toda etapa seguinte paga esse custo.
 
 ---
 
-## E11 — Spike de treino na GPU AMD — #em-andamento
+## E11 — Spike de treino na GPU AMD — #concluida
 
 **Objetivo:** decidir onde e como treinar o detector, provando ou descartando PyTorch com ROCm na RX 9070 XT desta máquina (H5).
 
@@ -1261,8 +1261,8 @@ Toda etapa seguinte paga esse custo.
 
 **Critérios de aceite:**
 
-- [ ] A decisão está registrada no ADR 0017, com o caminho escolhido (ROCm nativo, WSL2, CPU ou GPU alugada), versões, tempos medidos e alternativas descartadas.
-- [ ] Um modelo mínimo exportado para ONNX roda em CPU com ONNX Runtime.
+- [x] A decisão está registrada no ADR 0017, com o caminho escolhido (ROCm nativo, WSL2, CPU ou GPU alugada), versões, tempos medidos e alternativas descartadas.
+- [x] Um modelo mínimo exportado para ONNX roda em CPU com ONNX Runtime.
 
 **Validação obrigatória:**
 
@@ -1283,12 +1283,28 @@ Toda etapa seguinte paga esse custo.
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- Plano: `docs/superpowers/plans/2026-11-05-leitura-vetorial-por-poste-e11.md` (revisão de arquitetura: aprovado com notas, 1 rodada).
+- Commits: `9071cc9..460e9a2` na branch `roadmap/leitura-vetorial-por-poste-c` (relógio de 00:33 a 05:34, ≈ 5h01, acima das 4h30; parada tratada como "continuar" pela delegação do usuário).
+- Revisão final: aprovada com ressalvas de documentação, corrigidas em `460e9a2` e re-revisadas (5/5 resolvidas). Suíte com cobertura: 6295 passed, 1 xfailed, 88,81%. ruff, format, mypy, `client_artifact_gate` e `complexity_gate` aprovados. `osv-scanner` sobre `requirements-treino.lock`: 19 pacotes, nenhum achado.
+- Critérios verificados:
+  - ADR 0017, seção "Caminho de treino (E11)": caminho **CPU**, escolhido pela regra pura `scripts/treino_detector/decisao.py` aplicada aos relatórios.
+  - ROCm nativo: torch 2.9.1+rocm7.2.1, HIP 7.2.53211, Python 3.12.10, driver 26.20.15.07. Ensaiado e inviável: `miopenStatusUnknownError` no BatchNorm de treino, porque o MIOpen 7.2.1 não compila o kernel para a gfx1201 (`'type_traits' file not found`).
+  - WSL2: não ensaiado (o harness recusou `wsl.exe`).
+  - GPU alugada: desnecessária.
+  - CPU com torch 2.9.1+cpu (i7-12700KF): 22,3 img/s sem carga, 7,5 h na carga de referência.
+  - CPU com o lock final (torch 2.14.1+cpu, sob carga externa): 15,8 img/s e 10,5 h, abaixo das 12 h da regra.
+  - Modelo `ssdlite320_mobilenet_v3_large`: qualidade 0,99/0,90.
+  - Cadeia ONNX: exportação ONNX (TorchScript, opset 18) e paridade com o PyTorch em CPU (0 divergentes em 20 imagens). ONNX Runtime em CPU: 5,0/6,6 ms por ladrilho (mediana/p95), estimativa de 4,4 s por folha A1, contra 60 s da E12.
+- Decisões para o usuário (tomadas pela opção recomendada, por delegação do prompt; reversíveis):
+  - Instalação sem confirmação explícita: pip em venvs sob `tmp\treino-e11\` e Python 3.12 extraído por `py install -t` (nada no sistema). Recomendado e adotado: ratificar.
+  - Evidências em `tmp\treino-e11\` do checkout principal, gravadas por `cp` quando a ferramenta Write recusou o caminho. Recomendado e adotado: ratificar.
+  - GPU AMD. Recomendado e adotado: a E12 treina em CPU. A GPU volta quando a AMD publicar release para Windows com o MIOpen corrigido: reensaiar com `ensaio` + `decisao` a partir do apêndice do ADR.
+  - Contornos ROCm (MIOpen desligado no BatchNorm, nightly TheRock, WSL2 com distro) ficam como alternativas. Não foram ensaiados.
+- Notas para a próxima etapa:
+  - E12: usar `requirements-treino.lock` (CPU, modo hash, Python 3.11) e `python -m scripts.treino_detector.ensaio`.
+  - A guarda `test_nenhum_lock_de_runtime_fixa_onnxruntime` (`tests/unit/test_treino_detector_sonda_guardas.py`) vai exigir mudança explícita, justificada no commit, quando a E12 puser `onnxruntime` no lock do servidor.
+  - Na integração com a E14 (trilha A), rodar de novo `tests/unit/test_dependency_locks.py` sobre o `main`.
+  - Ambientes e relatórios do spike ficam em `tmp\treino-e11\` (fora do Git, podem ser apagados).
 
 ---
 
