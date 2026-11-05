@@ -264,7 +264,7 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E14 | Gate de testes paralelo | #concluida | E05 | suíte paralela no `.bat` sem perder teste, `main` verde, scripts de corpus com processos |
-| E06 | Símbolos sobre o modelo de desenho | #pendente | E05, E14 | pacotes declarativos avaliados sobre o modelo vetorial |
+| E06 | Símbolos sobre o modelo de desenho | #em-andamento | E05, E14 | pacotes declarativos avaliados sobre o modelo vetorial |
 | E07 | Ficha do poste | #pendente | E06, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
 | E08 | Conferência UTM | #pendente | E07 | transformação página → UTM, checagem de posição e vão, pendências |
 | E09 | Troca do analisador e remoção do legado | #pendente | E08, E16 | analisador novo como padrão; detectores e, se provado, OCR removidos |
@@ -992,7 +992,7 @@ Toda etapa seguinte paga esse custo.
 
 ---
 
-## E06 — Símbolos sobre o modelo de desenho — #pendente
+## E06 — Símbolos sobre o modelo de desenho — #em-andamento
 
 **Objetivo:** reconhecer estais, para-raios MT/BT, transformadores e demais símbolos do inventário a partir dos grupos do modelo de desenho, usando os pacotes declarativos.
 
