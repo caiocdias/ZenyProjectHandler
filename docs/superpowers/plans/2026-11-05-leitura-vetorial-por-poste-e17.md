@@ -51,7 +51,7 @@
   - A conferência `_conferir_encerramento()` roda (i) no `finished` em fila da observação global e (ii) na notificação dos registros (R-E17-9).
 - **R-E17-8, rede de segurança contra notificação perdida.** Durante o adiamento, um `QTimer` da `MainWindow` de 250 ms reconfere `rede_ativa()` e chama `_concluir_fechamento_adiado()` assim que dá `False`. O timer para no fechamento. Assim, nenhuma classe de notificação perdida (ordem `_dispose` × conferência, thread de outro painel, perda de conexão) prende a janela. O sinal continua sendo o caminho rápido.
   - Com `_fechamento_adiado` ligado, `MainWindow.set_connection_available` não chama `shutdown_polling` nem reconecta, e só registra o evento no log.
-- **R-E17-9, os registros notificam o término.** `remote_read` e `project_search` ganham, cada um, um `QObject` de módulo (`notificador_leituras`, `notificador_pesquisas`) com o sinal `terminou`. Ele é emitido dentro de `_dispose`, **depois** do `discard`. `leituras_ativas()` e `pesquisas_ativas()` contam só os membros com `isRunning()`. O painel liga `_conferir_encerramento` aos dois sinais. Os registros valem para o processo inteiro, então `rede_ativa()` conta também as threads de outra janela do mesmo processo: isso é seguro, porque só faz esperar mais, e fica na docstring.
+- **R-E17-9, os registros notificam o término.** `remote_read` e `project_search` ganham, cada um, um `QObject` de módulo (`notificador_leituras`, `notificador_pesquisas`) com o sinal `terminou`. Ele é emitido dentro de `_dispose`, **depois** do `discard`. `leituras_ativas()` e `pesquisas_ativas()` contam só os membros com `isRunning()`. O painel liga `_conferir_encerramento` aos dois sinais **só enquanto há pedido pendente**, e desconecta ao emitir ou ao cancelar (R2-M1: o painel destruído nunca fica ligado ao notificador de módulo). Os notificadores são criados de forma preguiçosa, no primeiro `launch()`, na thread principal (R2-M2). Os registros valem para o processo inteiro, então `rede_ativa()` conta também as threads de outra janela do mesmo processo: isso é seguro, porque só faz esperar mais, e fica na docstring.
 - **R-E17-10, o fechamento depois do `exec()`.** `bootstrap.run()` chama `window.close()` no `finally`, depois do `exec()` (`bootstrap.py:325-326`). Esse terceiro `closeEvent`, com a janela já fechada, não roda `release_resources()` de novo nem rearma o adiamento.
 - **R-E17-6, o conftest perde o monkeypatch.** `_esperar_threads_do_painel_ate_o_fim` e o seu uso (`tests/conftest.py:59-80`, `:103`) saem. O teardown da fábrica (`conftest.py:186`) continua juntando as threads com o prazo próprio `_PRAZO_ENCERRAR_THREADS_MS` antes de destruir as janelas: isso é higiene de teste e não encobre o `closeEvent`.
   - Os testes que só passavam por causa do monkeypatch são corrigidos no mesmo commit (Task 3). Os cenários de polling dormem 1,2 a 1,6 s em `session()` contra o prazo de 1000 ms (`test_project_panel_polling_restart.py:72`, `test_project_panel_polling_restart_casos.py:80,84,92,104,117,119`).
@@ -197,3 +197,13 @@ Depois das Tasks 1–3, a parte determinística (o prazo de 1000 ms e as threads
 | teste em subprocesso com leitura de 1,6 s: vermelho antes (3221226505), verde depois, sem o monkeypatch | Task 2, Steps 2 e 4; Task 3; passo 1 do fechamento |
 | fechamento sem travar a UI além do necessário; prazo máximo e estouro documentados | R-E17-1/2; docstring; passo 2 |
 | `.bat` aprovado | passo 3 |
+
+## Revisão de arquitetura
+
+- **Veredito:** aprovado com notas.
+- **Rodadas:** 2. A rodada 0 bloqueou com C1, I1–I6 e M1–M6, a rodada 1 com N1 e N2 (e N3–N5 menores), e a rodada 2 aprovou com notas.
+- **Modelo:** opus (`revisor-arquitetura`).
+- **Notas Menores:**
+  - R2-M1 (sinal de módulo ligado só com pedido pendente) e R2-M2 (notificadores preguiçosos): aplicadas no R-E17-9.
+  - N5: o despacho da Task 2 avisa que os testes que fecham e conferem correm sem o monkeypatch protetor até a Task 3.
+  - Não há ARCHITECTURE.md: a revisão julgou contra o CLAUDE.md, a spec E17, o ADR 0013 e o código.
