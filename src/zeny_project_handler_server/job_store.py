@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from threading import Lock, RLock
+from threading import RLock
 from uuid import UUID, uuid4
 
 from sqlalchemy import Engine, delete, insert, literal_column, select, update
@@ -28,37 +28,6 @@ _ACTIVE_STATUSES = frozenset(
 _TERMINAL_STATUSES = frozenset({JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELLED})
 
 
-_RELOGIO_LOCK = Lock()
-_ultimo_instante: datetime | None = None
-
-
-def _relogio_bruto() -> datetime:
-    return datetime.now(UTC)
-
-
-def _agora() -> datetime:
-    """Devolva um instante estritamente crescente dentro do processo.
-
-    O relógio do Windows avança em passos de ~15,6 ms, então escritas seguidas recebem o mesmo
-    instante. Como `created_at`/`updated_at` ordenam a retenção (`JobStore.prune`), o empate faria
-    a ordem entre jobs depender da ordem física das linhas. O desempate é a ordem das escritas: um
-    instante repetido ou regressivo avança 1 microssegundo sobre o último entregue.
-
-    O último instante é estado global do processo: o relógio nunca regride, então um salto para a
-    frente (relógio do sistema ou teste que adianta `datetime`) mantém os instantes entregues
-    adiantados até o relógio real alcançá-los. Testes que adiantam o relógio devem zerar
-    `_ultimo_instante` (monkeypatch). A retenção em `prune` não depende só deste relógio: ela tem
-    desempate próprio por `created_at` e `rowid`.
-    """
-    global _ultimo_instante
-    with _RELOGIO_LOCK:
-        instante = _relogio_bruto()
-        if _ultimo_instante is not None and instante <= _ultimo_instante:
-            instante = _ultimo_instante + timedelta(microseconds=1)
-        _ultimo_instante = instante
-        return instante
-
-
 @dataclass(frozen=True, slots=True)
 class JobRecord:
     job_id: UUID
@@ -75,11 +44,7 @@ class JobRecord:
 
 
 class JobStore:
-    """Serialize alterações e nunca permita regressão de progresso ou estado terminal.
-
-    A retenção ordena os terminais por `updated_at`, que vem de um relógio estritamente crescente
-    (`_agora`): jobs finalizados no mesmo tique do relógio do sistema mantêm a ordem das escritas.
-    """
+    """Serialize alterações e nunca permita regressão de progresso ou estado terminal."""
 
     def __init__(self, engine: Engine, *, retention: timedelta, maximum_retained: int) -> None:
         if retention.total_seconds() <= 0:
@@ -92,7 +57,7 @@ class JobStore:
         self._lock = RLock()
 
     def create(self, job_id: UUID, project_id: UUID | None, kind: JobKind) -> JobRecord:
-        now = _agora()
+        now = datetime.now(UTC)
         with self._lock, self._engine.begin() as connection:
             connection.execute(
                 insert(api_jobs).values(
@@ -183,7 +148,7 @@ class JobStore:
                     )
                 )
             )
-            now = _agora().isoformat()
+            now = datetime.now(UTC).isoformat()
             for row in rows:
                 envelope = ErrorEnvelope(
                     code=ErrorCode.INTERNAL_ERROR,
@@ -210,11 +175,12 @@ class JobStore:
         """Remova terminais vencidos e limite a quantidade total de históricos.
 
         Os terminais mais recentes são retidos. A ordem é `updated_at`, depois `created_at` e, por
-        fim, a ordem física de inserção (`rowid`): linhas com `updated_at` empatado, como as
-        gravadas pelo relógio do Windows ou por `reconcile_interrupted`, desempatam pela ordem de
-        criação, sempre de forma determinística.
+        fim, `rowid`. O relógio do Windows avança em passos de ~15,6 ms, então jobs escritos em
+        seguida (ou reconciliados juntos por `reconcile_interrupted`) podem ter `updated_at` e até
+        `created_at` iguais; nesse caso a ordem de inserção decide, e os mais novos são mantidos.
+        O desempate final depende do `rowid` do SQLite: `api_jobs` não pode ser `WITHOUT ROWID`.
         """
-        now = _relogio_bruto().isoformat()
+        now = datetime.now(UTC).isoformat()
         terminal_values = tuple(item.value for item in _TERMINAL_STATUSES)
         with self._lock, self._engine.begin() as connection:
             terminal_rows = tuple(
@@ -250,7 +216,7 @@ class JobStore:
         return record
 
     def _update(self, job_id: UUID, **values: object) -> None:
-        now = _agora()
+        now = datetime.now(UTC)
         with self._engine.begin() as connection:
             result = connection.execute(
                 update(api_jobs)

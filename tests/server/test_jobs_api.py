@@ -33,7 +33,7 @@ from zeny_project_handler_server.app import create_app
 from zeny_project_handler_server.composition import ServerRuntime, compose_server_runtime
 from zeny_project_handler_server.config import ServerSettings
 from zeny_project_handler_server.job_manager import JobManager
-from zeny_project_handler_server.job_store import JobStore
+from zeny_project_handler_server.job_store import JobRecord, JobStore
 
 PASSWORD = "senha segura para jobs remotos"
 AUTH = {"Authorization": f"Bearer {PASSWORD}"}
@@ -501,7 +501,13 @@ def test_job_store_prune_keeps_latest_finished_job_when_clock_does_not_advance(
 ) -> None:
     # No Windows o relógio avança em passos de ~15,6 ms: escritas seguidas recebem o mesmo instante.
     instante = datetime.now(UTC)
-    monkeypatch.setattr(job_store_module, "_relogio_bruto", lambda: instante)
+
+    class Congelado(datetime):
+        @classmethod
+        def now(cls, tz: tzinfo | None = None) -> Congelado:
+            return cls.fromtimestamp(instante.timestamp(), tz)
+
+    monkeypatch.setattr(job_store_module, "datetime", Congelado)
     runtime = compose_server_runtime(_settings(tmp_path / "data"))
     runtime.jobs.stop_accepting()
     runtime.jobs.cancel_and_wait()
@@ -511,12 +517,17 @@ def test_job_store_prune_keeps_latest_finished_job_when_clock_does_not_advance(
         for job_id in ids:
             store.create(job_id, None, JobKind.ANALYSIS)
             store.finish(job_id, status=JobStatus.SUCCEEDED, message="Concluído", result_json="{}")
-        updated = [store.get(job_id).updated_at for job_id in ids]  # type: ignore[union-attr]
-        assert updated == sorted(set(updated))
+        assert {_registro(store, job_id).updated_at for job_id in ids} == {instante}
         assert store.prune() == len(ids) - 1
         assert [store.get(job_id) is not None for job_id in ids] == [False] * 7 + [True]
     finally:
         runtime.close()
+
+
+def _registro(store: JobStore, job_id: UUID) -> JobRecord:
+    record = store.get(job_id)
+    assert record is not None
+    return record
 
 
 def test_job_store_accepts_complete_state_matrix_without_progress_regression(
