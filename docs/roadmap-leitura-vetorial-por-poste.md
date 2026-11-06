@@ -94,6 +94,7 @@ A análise entrega, para cada poste da folha, a ficha correta: identificador, es
 | D9 | Decidido em 2026-11-05 pelo arquiteto, revisto com a D11: um orçamento de máquina para o paralelismo empilhado (etapas simultâneas × ondas × laboratório), com teto de ~4 desenvolvedores ativos na sessão. Com uma etapa aberta, as ondas têm até 3 tarefas; com duas, até 2 em cada. O laboratório ocupa a cota da etapa dele, e `-n` e `--processos` repartem os 20 núcleos pelas suítes simultâneas da sessão (protocolo, "Orçamento de máquina"). Descartadas: limite fixo de ondas, porque a etapa longa ficaria sem ondas depois que a curta fecha; e nenhum teto, porque duas etapas com ondas de 3 dariam 6 desenvolvedores e ~36 workers do pytest em 20 núcleos, rumo à carga de 60 processos em que a E14 viu workers Qt morrerem (I-2) | teto baixo demais deixa a E06 com ondas de 2 enquanto a E15 ou a E17 estão abertas; teto alto demais traz de volta a instabilidade de Qt sob carga. Em ambos os casos, ajuste a tabela do protocolo | protocolo, prompt |
 | D10 | Decidido em 2026-11-05 pelo arquiteto: a E17 passa da trilha A para a C, que já tem worktree com `.venv` e está ociosa até a E07. Assim a trilha A vai direto à E06, no caminho crítico E06 → E07 → E08 → E09, e a E17 abre como segunda etapa quando a E15 fechar. Descartadas: a E17 na A antes da E06, porque atrasaria o caminho crítico em uma etapa; e a E17 na B depois da E15, porque misturaria cliente e medição na mesma branch, sem ganho de tempo | nenhum além de uma branch a mais no fim do lote. A E17 pode voltar para a A depois da E06 sem mudar o escopo | E17 |
 | D11 | Decidido em 2026-11-05 pelo usuário: um orquestrador aberto por vez, e o paralelismo entre etapas é feito por ele. Isso substitui as sessões paralelas por trilha da D6. Desenho do arquiteto: as trilhas continuam como agrupamento, com os mesmos worktrees e branches, e a sessão abre até 2 etapas de trilhas diferentes ao mesmo tempo (protocolo, "Trilhas, branch e etapas simultâneas"). Descartadas: uma sessão por trilha (a D6 original, recusada pelo usuário); uma sessão sem etapas simultâneas, só com ondas de tarefas, que perderia a E15 e a E17 em paralelo com a E06; e 3 etapas abertas, porque três planos, três ledgers e três revisões finais no mesmo contexto aumentam a compactação e o risco de confundir etapas, e o teto de ~4 desenvolvedores já não comporta ondas em três etapas | se a sessão se confundir entre as etapas abertas (despacho no worktree errado, ledger trocado), baixe para 1 etapa aberta no prompt; as ondas de tarefas continuam | protocolo, prompt, índice |
+| D12 | Decidido em 2026-11-06 pelo usuário, por entrevista: o método de pacotes sobre o modelo de desenho liga só no `SymbolCompositionRunner` (`symbol_composition`, opt-in), como os métodos atuais, e passa pela reconciliação com eles. O analisador padrão só muda na E09, depois da prova cega. Descartada: ligar também no analisador padrão, que anteciparia a troca sem prova cega, duplicaria com o legado (o job padrão não reconcilia), subiria o custo de toda análise e invalidaria caches | a E07 e a E08 leem os símbolos com o runner ligado até a E09 | E06.2, E07, E08 |
 
 ## Definição global de pronto
 
@@ -265,7 +266,7 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 |---|---|---|---|---|
 | E14 | Gate de testes paralelo | #concluida | E05 | suíte paralela no `.bat` sem perder teste, `main` verde, scripts de corpus com processos |
 | E06.1 | Medição de símbolos e base do modelo | #concluida | E05, E14 | benchmark diagnóstico de símbolos contra as fichas, página do modelo com índice cru, guarda contra memorização |
-| E06.2 | Método de pacotes sobre o modelo de desenho | #pendente | E06.1 | gramáticas atuais portadas para o modelo, método versionado no runner |
+| E06.2 | Método de pacotes sobre o modelo de desenho | #em-andamento | E06.1 | gramáticas atuais portadas para o modelo, método versionado no runner |
 | E06.3 | Gramáticas das classes da ficha | #pendente | E06.2 | estai, aterramento, para-raios, transformador e interrupção sobre o modelo, acima do atual |
 | E07 | Ficha do poste | #pendente | E06.3, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
 | E08 | Conferência UTM | #pendente | E07 | transformação página → UTM, checagem de posição e vão, pendências |
@@ -1218,7 +1219,7 @@ Rulings da divisão, registradas no ledger da E06.1:
   - Testes de cliente intermitentes sob carga (polling restart e application_factory_teardown) estão rastreados na E17.
 ---
 
-## E06.2 — Método de pacotes sobre o modelo de desenho — #pendente
+## E06.2 — Método de pacotes sobre o modelo de desenho — #em-andamento
 
 **Objetivo:** executar os pacotes declarativos sobre a página do modelo de desenho como método de símbolos versionado, com as 6 gramáticas atuais portadas e o método ligado no runner.
 
