@@ -11,7 +11,6 @@ Toda thread bloqueada num ``Event`` é liberada e juntada no ``finally`` antes d
 from __future__ import annotations
 
 import logging
-import os
 import subprocess
 import sys
 import textwrap
@@ -27,6 +26,7 @@ from PySide6.QtCore import SIGNAL, QCoreApplication, QDeadlineTimer
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QMessageBox
 from pytestqt.qtbot import QtBot
+from tests.cenario_subprocesso import RAIZ, ambiente_subprocesso, comando_pytest_cenario
 from tests.conftest import ApplicationFactory
 from tests.market_fakes import FakeClassificadorMercado
 from tests.remote_gateways import (
@@ -50,7 +50,6 @@ from zeny_project_handler_server.config import ServerSettings
 
 pytestmark = pytest.mark.integration
 
-_RAIZ = Path(__file__).resolve().parents[2]
 _PRAZO_SUBPROCESSO_S = 300
 _DURACAO_MAXIMA_EXEC_S = 30.0
 _TRECHO_MAXIMO = 4_000
@@ -208,20 +207,13 @@ def _truncar(texto: str) -> str:
     return f"[...]{texto[-_TRECHO_MAXIMO:]}"
 
 
-def _ambiente() -> dict[str, str]:
-    ambiente = {k: v for k, v in os.environ.items() if not k.startswith("PYTEST_XDIST")}
-    herdados = [c for c in ambiente.get("PYTHONPATH", "").split(os.pathsep) if c]
-    caminhos = os.pathsep.join([*herdados, str(_RAIZ), str(_RAIZ / "src")])
-    return ambiente | {"QT_QPA_PLATFORM": "offscreen", "PYTHONPATH": caminhos}
-
-
 def _executar(comando: list[str]) -> tuple[subprocess.CompletedProcess[str], float]:
     inicio = time.monotonic()
     try:
         resultado = subprocess.run(
             comando,
-            cwd=_RAIZ,
-            env=_ambiente(),
+            cwd=RAIZ,
+            env=ambiente_subprocesso(),
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -262,14 +254,7 @@ def test_fechar_com_leitura_de_sessao_de_1_6_s_nao_aborta(tmp_path: Path) -> Non
     cenario = tmp_path / "cenario" / "test_cenario_fechamento.py"
     cenario.parent.mkdir()
     cenario.write_text(_CENARIO_PYTEST, encoding="utf-8")
-    comando = [
-        *[sys.executable, "-m", "pytest", str(cenario), "-q", "-n", "0"],
-        *["--rootdir", str(_RAIZ), "-c", str(_RAIZ / "pyproject.toml")],
-        # Sem confcutdir a coleta lista cada pasta acima do cenário, inclusive o %TEMP%
-        # compartilhado, onde outros testes criam e apagam pastas durante a listagem.
-        *["--confcutdir", str(cenario.parent)],
-        *["-p", "no:cacheprovider", "--basetemp", str(tmp_path / "base")],
-    ]
+    comando = comando_pytest_cenario(cenario, tmp_path / "base")
 
     resultado, _duracao = _executar(comando)
 

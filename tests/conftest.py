@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Iterator, Sequence
+from time import monotonic, sleep
 from typing import TYPE_CHECKING, Any, Protocol
 
 import pytest
@@ -30,6 +31,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 # Prazo para as threads de observação do painel terminarem antes de a janela ser destruída.
 _PRAZO_ENCERRAR_THREADS_MS = 60_000
+_INTERVALO_FECHAMENTO_ADIADO_S = 0.01
 
 
 @pytest.fixture(scope="session")
@@ -72,6 +74,23 @@ class ApplicationFactory(Protocol):
         portability_gateway: PortabilityGateway | None = None,
         action_verifier: VerificadorAcoesConcluidasPort | None = None,
     ) -> tuple[QApplication, MainWindow]: ...
+
+
+def _esperar_fechamento_adiado(application: QApplication, window: MainWindow) -> None:
+    """Processe eventos até concluir o fechamento que a janela adiou por rede ainda ativa.
+
+    Vale também para janela nunca exibida, que não muda de visibilidade ao fechar. Sem a espera,
+    a liberação correria com a rede viva e o fechamento adiado terminaria nos eventos de outro
+    teste.
+    """
+    limite = monotonic() + _PRAZO_ENCERRAR_THREADS_MS / 1000
+    while window._fechamento_adiado and not window._fechamento_concluido:
+        if monotonic() >= limite:
+            raise AssertionError(
+                f"o fechamento adiado não concluiu em {_PRAZO_ENCERRAR_THREADS_MS} ms"
+            )
+        application.processEvents()
+        sleep(_INTERVALO_FECHAMENTO_ADIADO_S)
 
 
 @pytest.fixture
@@ -164,6 +183,7 @@ def application_factory() -> Iterator[ApplicationFactory]:
             if window.project_panel is not None:
                 assert window.project_panel.shutdown_polling(_PRAZO_ENCERRAR_THREADS_MS)
             window.close()
+            _esperar_fechamento_adiado(application, window)
             window.release_resources()
             application.processEvents()
         for gateway in gateways:
