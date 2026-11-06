@@ -472,9 +472,11 @@ def _fundir_spans_colados(
     """Spans `nativo` horizontais colados viram um texto só, e o `bool` diz quem foi fundido.
 
     A tolerância é folga acima do que o `words` da PyMuPDF junta, sem emular a heurística dele
-    (R-E06.2.1-4): onde o motor lê duas palavras e a fusão lê uma, o núcleo perde recall e não
-    afirma nada a mais. Limitação: rotacionado não é fundido, e `shx` e `glifo` também não. O
-    texto unido fica na posição do primeiro span da cadeia, e o resto da lista mantém a ordem.
+    (R-E06.2.1-4): onde o motor lê duas palavras e a fusão lê uma, o núcleo em geral perde
+    recall. Exceções conhecidas: rótulo cuja concatenação exata é o texto pedido (`C`+`T`, ou
+    `Q`+`DP` com outro texto entre eles no fluxo) e sobreimpressão acima de `t`, em que `words`
+    junta e a fusão não, com rótulo e guarda abertos. Rotacionado, `shx` e `glifo` não fundem.
+    O texto unido fica na posição do primeiro span da cadeia, e o resto da lista mantém a ordem.
     """
     candidatos = [posicao for posicao, texto in enumerate(textos) if _pode_colar(texto)]
     proximo = _proximo_colado(textos, candidatos, orcamento)
