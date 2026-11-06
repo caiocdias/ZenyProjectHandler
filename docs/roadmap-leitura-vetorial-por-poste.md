@@ -266,8 +266,9 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 |---|---|---|---|---|
 | E14 | Gate de testes paralelo | #concluida | E05 | suíte paralela no `.bat` sem perder teste, `main` verde, scripts de corpus com processos |
 | E06.1 | Medição de símbolos e base do modelo | #concluida | E05, E14 | benchmark diagnóstico de símbolos contra as fichas, página do modelo com índice cru, guarda contra memorização |
-| E06.2 | Método de pacotes sobre o modelo de desenho | #em-andamento | E06.1 | gramáticas atuais portadas para o modelo, método versionado no runner |
-| E06.3 | Gramáticas das classes da ficha | #pendente | E06.2 | estai, aterramento, para-raios, transformador e interrupção sobre o modelo, acima do atual |
+| E06.2.1 | Núcleo de gramáticas sobre o modelo | #em-andamento | E06.1 | núcleo puro com índice espacial e teto, 6 gramáticas portadas, paridade no corpus sintético |
+| E06.2.2 | Método versionado no runner | #pendente | E06.2.1 | método de pacotes sobre o modelo no runner opt-in, resíduo raster marcado, benchmark nas 16 folhas |
+| E06.3 | Gramáticas das classes da ficha | #pendente | E06.2.2 | estai, aterramento, para-raios, transformador e interrupção sobre o modelo, acima do atual |
 | E07 | Ficha do poste | #pendente | E06.3, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
 | E08 | Conferência UTM | #pendente | E07 | transformação página → UTM, checagem de posição e vão, pendências |
 | E09 | Troca do analisador e remoção do legado | #pendente | E08, E16 | analisador novo como padrão; detectores e, se provado, OCR removidos |
@@ -1219,23 +1220,68 @@ Rulings da divisão, registradas no ledger da E06.1:
   - Testes de cliente intermitentes sob carga (polling restart e application_factory_teardown) estão rastreados na E17.
 ---
 
-## E06.2 — Método de pacotes sobre o modelo de desenho — #em-andamento
+## E06.2 — Método de pacotes sobre o modelo de desenho (dividida em E06.2.1 e E06.2.2)
 
 **Objetivo:** executar os pacotes declarativos sobre a página do modelo de desenho como método de símbolos versionado, com as 6 gramáticas atuais portadas e o método ligado no runner.
 
-**Dependências:** E06.1.
+**Divisão (2026-11-06, orquestrador):**
+- **Por que dividir:** as tarefas somam ~5h15 (nota do plano e "Orçamento"). Cada subetapa é uma etapa completa, e a E06.3 passa a depender da E06.2.2.
+- **Como os critérios se repartem:** a E06.2.1 leva a pré-condição D1, as fixtures e a paridade no corpus sintético. A E06.2.2 leva o método versionado, a ligação no runner, o resíduo raster e o benchmark nas 16 folhas. Auditor e `.bat` valem nas duas.
+- **Onde liga:** só no runner opt-in (D12), como 5º método, ao lado de `declarative_symbols`. O motor antigo sai na E09, junto com os detectores dedicados.
+
+**Decisão de system design do plano (entrevista):** resolvida pela D12.
+
+---
+
+## E06.2.1 — Núcleo de gramáticas sobre o modelo — #em-andamento
+
+**Objetivo:** portar as 6 gramáticas dos pacotes para um núcleo puro sobre a página do modelo de desenho, com paridade de variantes no corpus sintético e custo limitado por página.
+
+**Dependências:** E06.1. O relógio começa no commit `#em-andamento` da E06.2 (36ec385).
 
 **Escopo:**
-- **Núcleo puro de gramáticas sobre o modelo:** molduras a partir de polilinhas fechadas e círculos, texto de `TextoModelo` (inclusive glifo), índice espacial e teto por página com diagnóstico.
-- **Porte das 6 gramáticas**, com paridade no corpus sintético.
-- **Método versionado:** `VERSAO_MODELO_DESENHO` e o sha dos pacotes no perfil, primitivas com índice cru e resíduo raster marcado para a E12.
+- **Pré-condição D1:** `reconstruir_polilinhas` linear em nó de grau alto, sem o `xfail`.
+- **Núcleo puro:** molduras a partir de caminhos, polilinhas fechadas e círculos; texto de `TextoModelo` (inclusive glifo), em palavras; índice espacial e teto de trabalho por página.
+- **Porte das 6 gramáticas**, com paridade de variantes por página, geometria e índice cru contra o motor atual.
+- **Página para as gramáticas** a partir da página aberta, com índice cru e preenchimentos translúcidos, sem mudar o modelo, o cache nem `VERSAO_MODELO_DESENHO`.
+
+**Fora de escopo:** método versionado, ligação no runner, resíduo raster e benchmark (E06.2.2); gramáticas novas (E06.3); analisador padrão (E09).
+
+**Critérios de aceite:**
+
+- [ ] Fixtures sintéticas positivas e negativas, e paridade de variantes por página com o motor atual no corpus sintético.
+- [ ] O teste de nó de grau alto da D1 passa sem `xfail`.
+- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** laços O(F²) e `get_text` por moldura no motor atual → índice espacial e teto por página.
+
+**Evidências e handoff:** —
+
+---
+
+## E06.2.2 — Método versionado no runner — #pendente
+
+**Objetivo:** expor o núcleo da E06.2.1 como método de símbolos versionado, ligado no `SymbolCompositionRunner` opt-in (D12) e medido nas 16 folhas ao lado do atual.
+
+**Dependências:** E06.2.1.
+
+**Escopo:**
+- **Método versionado:** `VERSAO_MODELO_DESENHO`, o sha dos pacotes e o da tabela de glifos no perfil, primitivas com índice cru e resíduo raster marcado para a E12.
 - **Ligação no `SymbolCompositionRunner`**, com a versão na assinatura.
+- **Benchmark:** método `modelo` em `scripts/benchmark_simbolos_ficha.py`, com o script desmembrado.
 
 **Fora de escopo:** gramáticas novas (E06.3); analisador padrão (E09).
 
 **Critérios de aceite:**
 
-- [ ] Fixtures sintéticas positivas e negativas, e paridade de variantes por página com o motor atual no corpus sintético.
+- [ ] Fixtures sintéticas positivas e negativas do método e da ligação no runner.
 - [ ] O benchmark de símbolos mede o método novo nas 16 folhas, ao lado do atual.
 - [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
 - [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
@@ -1244,11 +1290,11 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 **Revisão humana:** não
 
-**Notas para o plano:** a estimativa do levantamento passa de 3h. Divida de novo, se for preciso. **Antes do plano**, o usuário decide por entrevista onde o método liga: no runner opt-in (`symbol_composition`), como os métodos atuais, ou também no analisador padrão. A decisão é de system design, porque define de onde a E07 lê os símbolos. A comparação entre métodos usa o bloco `comparacao` do benchmark (interseção das folhas).
+**Notas para o plano:** a comparação entre métodos usa o bloco `comparacao` do benchmark (interseção das folhas).
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
-**Riscos e mitigação:** laços O(F²) e `get_text` por moldura no motor atual → índice espacial e teto por página. A `reconstruir_polilinhas` é quadrática em nó de grau alto (D1 da E06.1, `xfail(strict=True)` em `tests/unit/test_e06_1_etapa_ataque.py`) → corrigir antes de ligar o modelo no runner é **pré-condição** desta etapa.
+**Riscos e mitigação:** o modelo com glifos custa até ~20 s por folha no runner → opt-in até a E09; o tempo por folha sai no benchmark.
 
 **Evidências e handoff:** —
 
@@ -1258,7 +1304,7 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 **Objetivo:** reconhecer estais, aterramento, para-raios MT/BT, transformadores e equipamento de interrupção sobre o modelo de desenho, acima do analisador atual.
 
-**Dependências:** E06.2.
+**Dependências:** E06.2.2.
 
 **Escopo:**
 - Ampliação dos pacotes com as variantes do inventário de ESTAI, TRANSFORMADOR, ATERRAMENTO e PARA_RAIOS_MT/BT, com fonte rastreável e `negative_examples` vindos de `confusable_negatives`. O auditor e `scripts/coverage_matrix_e16.py` passam a aceitar variante de outro `owner_stage` do inventário. A mudança é visível na tabela de suporte da revisão e nas exportações, e vai para "Decisões para o usuário". Os números fixos de `tests/server/test_e14_symbol_review.py:287` entram na File Structure.
