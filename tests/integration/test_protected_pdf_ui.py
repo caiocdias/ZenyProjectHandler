@@ -10,6 +10,7 @@ from PySide6.QtCore import Qt, QThread
 from PySide6.QtWidgets import QFileDialog, QInputDialog, QLineEdit, QMessageBox, QPushButton
 from pytestqt.qtbot import QtBot
 from tests.conftest import ApplicationFactory
+from tests.janela_fechamento import PRAZO_FECHAMENTO_S, esperar_fechamento
 from tests.pdf_fixtures import create_golden_pdf, create_protected_pdf
 
 from zeny_project_handler_client.config import ClientSettings
@@ -140,6 +141,7 @@ def test_distinct_passwords_are_reused_in_session_and_never_leak_to_artifacts(
             assert secret.encode() not in payload, artifact
 
     window.close()
+    esperar_fechamento(window, PRAZO_FECHAMENTO_S)
     _restarted_application, restarted = application_factory([], settings=settings)
     qtbot.addWidget(restarted)
     restarted.show()

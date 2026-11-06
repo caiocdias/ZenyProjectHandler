@@ -7,17 +7,15 @@ defeito que ele guarda aborta o processo (qFatal); assim a falha vira ``returnco
 
 from __future__ import annotations
 
-import os
 import subprocess
-import sys
 import textwrap
 from pathlib import Path
 
 import pytest
+from tests.cenario_subprocesso import RAIZ, ambiente_subprocesso, comando_pytest_cenario
 
 pytestmark = pytest.mark.integration
 
-_RAIZ = Path(__file__).resolve().parents[2]
 _PRAZO_SUBPROCESSO_S = 300
 _TRECHO_MAXIMO = 4_000
 _TOTAL_CENARIOS = 3
@@ -38,6 +36,10 @@ _CENARIOS = textwrap.dedent(
     from zeny_project_handler_client.config import ClientSettings
     from zeny_project_handler_client.ui.main_window import MainWindow
     from zeny_project_handler_client.ui.project_panel import ProjectPanelWidget
+
+    # A sessão dorme mais que o prazo padrão de 1000 ms de shutdown_polling: o cenário dá à
+    # junção um prazo explícito, sem alargar o prazo do produto.
+    _PRAZO_JUNTAR_MS = 60_000
 
 
     @pytest.fixture
@@ -77,11 +79,11 @@ _CENARIOS = textwrap.dedent(
         app, _, panel = _painel(
             tmp_path, monkeypatch, application_factory, destruir_janelas_depois_da_fabrica, "dois"
         )
-        assert panel.shutdown_polling()
+        assert panel.shutdown_polling(_PRAZO_JUNTAR_MS)
         panel.restart_polling()
         segunda = panel._global_poll_thread
         assert segunda is not None
-        assert panel.shutdown_polling()
+        assert panel.shutdown_polling(_PRAZO_JUNTAR_MS)
         panel.restart_polling()
         terceira = panel._global_poll_thread
         assert terceira is not None and terceira is not segunda
@@ -89,7 +91,7 @@ _CENARIOS = textwrap.dedent(
         assert panel._global_poll_thread is terceira
         assert panel._global_poll_worker is not None
         assert terceira.isRunning()
-        assert panel.shutdown_polling()
+        assert panel.shutdown_polling(_PRAZO_JUNTAR_MS)
         assert panel._global_poll_thread is None
         assert panel._global_poll_worker is None
 
@@ -101,7 +103,7 @@ _CENARIOS = textwrap.dedent(
             tmp_path, monkeypatch, application_factory, destruir_janelas_depois_da_fabrica, "sem"
         )
         assert panel._global_poll_thread is not None
-        assert panel.shutdown_polling()
+        assert panel.shutdown_polling(_PRAZO_JUNTAR_MS)
         assert panel._global_poll_thread is None
         _entregar_destruicoes(app)
         assert panel._global_poll_thread is None
@@ -114,9 +116,9 @@ _CENARIOS = textwrap.dedent(
         _, _, panel = _painel(
             tmp_path, monkeypatch, application_factory, destruir_janelas_depois_da_fabrica, "pai"
         )
-        assert panel.shutdown_polling()
+        assert panel.shutdown_polling(_PRAZO_JUNTAR_MS)
         panel.restart_polling()
-        assert panel.shutdown_polling()
+        assert panel.shutdown_polling(_PRAZO_JUNTAR_MS)
         # Sem entregar os deleteLater: o fim do teste destrói o painel com as threads pendentes,
         # e o destroyed delas chega com o painel já em destruição.
     """
@@ -133,19 +135,13 @@ def test_casos_de_borda_da_destruicao_tardia_da_thread_de_observacao(tmp_path: P
     cenario = tmp_path / "cenario" / "test_cenarios_reinicio.py"
     cenario.parent.mkdir()
     cenario.write_text(_CENARIOS, encoding="utf-8")
-    ambiente = {k: v for k, v in os.environ.items() if not k.startswith("PYTEST_XDIST")}
-    ambiente |= {"QT_QPA_PLATFORM": "offscreen", "PYTHONPATH": str(_RAIZ)}
-    comando = [
-        *[sys.executable, "-m", "pytest", str(cenario), "-p", "tests.conftest", "-q", "-n", "0"],
-        *["--rootdir", str(_RAIZ), "-c", str(_RAIZ / "pyproject.toml")],
-        *["-p", "no:cacheprovider", "--basetemp", str(tmp_path / "base"), "--no-cov"],
-    ]
+    comando = comando_pytest_cenario(cenario, tmp_path / "base", "-p", "tests.conftest", "--no-cov")
 
     try:
         resultado = subprocess.run(
             comando,
-            cwd=_RAIZ,
-            env=ambiente,
+            cwd=RAIZ,
+            env=ambiente_subprocesso(),
             capture_output=True,
             text=True,
             encoding="utf-8",

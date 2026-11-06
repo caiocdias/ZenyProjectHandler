@@ -283,7 +283,7 @@ Trilha C — aprendizado, e a E17 enquanto a trilha espera a E07 (D10) (branch `
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E11 | Spike de treino na GPU AMD | #concluida | E01 | decisão registrada sobre onde e como treinar |
-| E17 | Fechamento do cliente com servidor lento | #pendente | E14 | fechar a janela nunca destrói `QThread` viva, sem o monkeypatch de 60 s no `conftest` |
+| E17 | Fechamento do cliente com servidor lento | #concluida | E14 | fechar a janela nunca destrói `QThread` viva, sem o monkeypatch de 60 s no `conftest` |
 | E10 | Fábrica de rótulos contínua | #pendente | E07 | fluxo mensal com pré-marcação, leitura dupla, amostra humana e dataset por hash |
 | E12 | Detector visual local | #pendente | E11, E09, E10 | detector ONNX em CPU para o resíduo, ganho medido por poste |
 
@@ -943,7 +943,7 @@ Toda etapa seguinte paga esse custo.
 
 ---
 
-## E17 — Fechamento do cliente com servidor lento — #pendente
+## E17 — Fechamento do cliente com servidor lento — #concluida
 
 **Objetivo:** fechar a janela do cliente nunca destrói uma `QThread` viva. Hoje, com o servidor lento, o processo aborta com qFatal (0xC0000409).
 
@@ -963,9 +963,9 @@ Toda etapa seguinte paga esse custo.
 
 **Critérios de aceite:**
 
-- [ ] Teste em subprocesso que fecha a janela com uma leitura de sessão de 1,6 s: vermelho (código 3221226505) antes, verde depois, sem o monkeypatch de 60 s.
-- [ ] O fechamento não trava a UI além do necessário. O prazo máximo de espera e o comportamento ao estourá-lo ficam documentados no plano.
-- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+- [x] Teste em subprocesso que fecha a janela com uma leitura de sessão de 1,6 s: vermelho (código 3221226505) antes, verde depois, sem o monkeypatch de 60 s.
+- [x] O fechamento não trava a UI além do necessário. O prazo máximo de espera e o comportamento ao estourá-lo ficam documentados no plano.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
 **Validação obrigatória:**
 
@@ -985,12 +985,52 @@ Toda etapa seguinte paga esse custo.
 
 **Evidências e handoff:**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- Plano: `docs/superpowers/plans/2026-11-05-leitura-vetorial-por-poste-e17.md`.
+  - A revisão de arquitetura (opus) bloqueou nas rodadas 0 e 1 e aprovou com notas na rodada 2:
+    - rodada 0: C1 (pedido invalidado pela perda de conexão) e I1–I6;
+    - rodada 1: N1 (o `shutdown_polling` da perda de conexão cancelava o pedido) e N2 (thread de outro painel como última viva).
+- Relógio: de 8e54de2 (18:06 de 2026-11-05) ao commit `#concluida` (01:10 de 2026-11-06), 7h04, acima do orçamento de ~3h:
+  - até o fim da E15, a etapa correu em paralelo com a E06.1;
+  - a Task 3 sozinha levou ~3h, porque o turno do desenvolvedor acabou sem commit enquanto as rodadas de estabilidade rodavam em segundo plano, e ele teve de ser retomado.
+- Entregas:
+  - `ProjectPanelWidget.pedir_encerramento(timeout_ms)`, `rede_ativa()` e o sinal `rede_encerrada`:
+    - o encerramento é por estado, com um token próprio que só o `restart_polling()` cancela;
+    - os registros `remote_read` e `project_search` têm notificadores `terminou` emitidos depois do `discard` e contam só threads com `isRunning()`.
+  - `MainWindow.closeEvent` espera até 1000 ms. Se a rede continua ativa, ele adia o fechamento com a janela visível, desabilitada e com o texto "Encerrando…". Detalhes:
+    - o fechamento conclui no `rede_encerrada` (slot de uso único) ou pelo timer de reconferência de 250 ms;
+    - durante o adiamento, `set_connection_available` não faz nada;
+    - o `close()` do `finally` de `bootstrap.run()` não libera os recursos de novo.
+  - `restart_polling()` com a observação antiga ainda viva adia o reinício até o `finished` dela, controlado por geração (R-E17-11). Era um defeito real: o painel ficava sem observação depois de reconectar.
+  - `tests/conftest.py`:
+    - sai o monkeypatch `_esperar_threads_do_painel_ate_o_fim` de 60 s;
+    - o descarte da fábrica espera o fechamento adiado antes de `release_resources()`; a liberação com rede viva era outro defeito real, com vermelho provado.
+  - Helpers de teste: `tests/janela_fechamento.py::esperar_fechamento` e `tests/cenario_subprocesso.py`, que monta o ambiente e o comando dos subprocessos e corrige o `PYTHONPATH` em worktree de tarefa.
+- Commits (2dd743e..9993ec7, mais o merge da `main` 55e934f e o fechamento):
+  - roadmap e plano: 8e54de2, 1a3bb79, 089fa0d, 7278c6d, 42708eb;
+  - Task 1: cb81f38, b01d8d1, 6023e06;
+  - Task 2: bdec2a7, 9e0fb81;
+  - Task 3: 831aa05, 7cd20c2, 5715ace;
+  - Task 4: f006d1f, de7aeec, 8fc3463;
+  - onda final: d3fff32, 6d93c89, 9993ec7.
+- Ciclo das tarefas: as 4 tarefas eram de risco alto. Cada uma passou por desenvolvedor, testador, verificação mecânica e revisão da `revisor-seguranca`, todas aprovadas.
+  - O testador da Task 1 achou o defeito do reinício, corrigido na rodada 1.
+  - A Task 4 não reproduziu o intermitente sob carga: 0/10, 0/25 com a suíte simultânea e 0/10 em 17 arquivos com `faulthandler_timeout=120`. O registro fica como "não reproduzido, monitorar".
+- Revisão final (`revisor-seguranca`, opus, 2dd743e..8fc3463): aprovado com ressalvas, sem Crítico.
+  - I1: os testes de regressão do reinício adiado estavam sem dono. Foram escritos na onda única (d3fff32), com mutações vermelhas.
+  - A re-revisão da onda (sonnet) deu tudo ADDRESSED, sem quebra nova.
+  - Integridade `--base 2dd743e`: 7 `ASSERCAO_REMOVIDA`, justificadas. São o mesmo `assert panel.shutdown_polling(...)` com prazo explícito de 60 s, igual ao do monkeypatch removido.
+  - osv-scanner nos 7 `requirements*.lock` (189 pacotes): `No issues found`.
+- Critérios verificados:
+  1. `test_main_window_fechamento_servidor_lento.py::test_fechar_com_leitura_de_sessao_de_1_6_s_nao_aborta` roda em subprocesso, sem o conftest. Contra o código anterior saiu com 3221226505 (relatório da Task 2) e hoje sai com 0. A saída é por `exec()` real. `git grep -n "_esperar_threads_do_painel_ate_o_fim" tests/` não acha nada.
+  2. Prazo e estouro estão documentados na docstring de `MainWindow.closeEvent` e no plano (R-E17-1/2). A janela espera até 1000 ms e depois adia, visível e desabilitada. Com o servidor mudo, o teto real fica em torno de 60 s (30 s de timeout × 2 tentativas). Com um servidor que goteja bytes, não há teto, e não há `os._exit`.
+  3. `.bat`: `cmd.exe //c IniciarTestes.bat` em 55e934f (C com a `main`) → `RESULTADO FINAL: APROVADO`, com 6949 passed, 3 xfailed, cobertura de 88,94% e 186 s.
+- Decisões para o usuário (já tomadas e revisáveis):
+  - R-E17-2, sobre a espera sem teto com um servidor que goteja bytes: a janela fica em "Encerrando…" até o gateway desistir. As alternativas descartadas foram cancelar o HTTP pelo socket, porque mudaria o gateway inteiro, e `os._exit` com teto. Se isso incomodar em campo, a saída é o cancelamento cooperativo no gateway.
+- Notas para a próxima etapa:
+  - Ficaram parked (R-E17-14) três `wait()` sem teto no cliente, sem causa comprovada: `portability_panel.py:401`, `pdf_viewer.py:857` e `pdf_rendering.py:258`. São candidatos se um travamento voltar.
+  - O travamento de 18 min que o testador da Task 3 viu uma vez não foi reproduzido. Se voltar, rode com `-o faulthandler_timeout=120` para obter o traceback.
+  - O teardown da fábrica lê os privados `_fechamento_adiado` e `_fechamento_concluido`. Uma propriedade pública somente leitura, por exemplo `fechamento_pendente`, desacoplaria a fixture.
+  - Os cenários de polling ainda dormem de verdade (5 a 10 s por subprocesso). Um gateway controlado por evento deixaria a suíte mais rápida.
 
 ---
 

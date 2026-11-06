@@ -10,6 +10,7 @@ import pytest
 from PySide6.QtCore import QCoreApplication, QSettings
 from PySide6.QtWidgets import QDialog, QWidget
 from pytestqt.qtbot import QtBot
+from tests.janela_fechamento import PRAZO_FECHAMENTO_S, esperar_fechamento
 from uvicorn import Config, Server
 
 from zeny_project_handler_client.bootstrap import (
@@ -113,7 +114,7 @@ def test_client_opens_authenticated_blocks_on_disconnect_and_reconnects(
 
     with _running_server(create_app(server_settings)) as first_url:
         connection_targets.append(first_url)
-        application, window = create_application(
+        _application, window = create_application(
             [],
             settings=client_settings,
             dialog_factory=cast_dialog_factory(factory),
@@ -139,7 +140,7 @@ def test_client_opens_authenticated_blocks_on_disconnect_and_reconnects(
         assert not window._reconnect_action.isEnabled()
 
     window.close()
-    application.processEvents()
+    esperar_fechamento(window, PRAZO_FECHAMENTO_S)
     ui_settings = QSettings(str(client_settings.ui_state_path), QSettings.Format.IniFormat)
     assert ui_settings.value(CONNECTION_URL_SETTING_KEY) == restarted_url
     assert all(

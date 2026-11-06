@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Iterator, Sequence
+from time import monotonic, sleep
 from typing import TYPE_CHECKING, Any, Protocol
 
 import pytest
@@ -30,6 +31,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 # Prazo para as threads de observação do painel terminarem antes de a janela ser destruída.
 _PRAZO_ENCERRAR_THREADS_MS = 60_000
+_INTERVALO_FECHAMENTO_ADIADO_S = 0.01
 
 
 @pytest.fixture(scope="session")
@@ -59,26 +61,6 @@ def app_log_capture(caplog: pytest.LogCaptureFixture) -> Iterator[pytest.LogCapt
             logger.propagate = previous_propagate
 
 
-# Encobre um limite de produção: MainWindow.closeEvent (main_window.py:702-705) chama
-# shutdown_polling() com 1000 ms e ignora o retorno. Com o servidor lento (> 1 s), fechar o
-# cliente pode destruir a QThread de observação viva e abortar o processo (qFatal, 0xC0000409).
-# Defeito de produto conhecido, estacionado para decisão do usuário no handoff da E14 do roadmap.
-def _esperar_threads_do_painel_ate_o_fim(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Estenda o prazo de 1 s que o fechamento da janela dá à thread de observação.
-
-    Sob carga a leitura da sessão passa desse prazo; o fechamento então desiste de juntar a
-    thread e destruir o painel com a QThread em execução aborta o processo inteiro.
-    """
-    from zeny_project_handler_client.ui.project_panel import ProjectPanelWidget
-
-    original = ProjectPanelWidget.shutdown_polling
-
-    def shutdown_polling(self: ProjectPanelWidget, timeout_ms: int = 1_000) -> bool:
-        return original(self, max(timeout_ms, _PRAZO_ENCERRAR_THREADS_MS))
-
-    monkeypatch.setattr(ProjectPanelWidget, "shutdown_polling", shutdown_polling)
-
-
 class ApplicationFactory(Protocol):
     def __call__(
         self,
@@ -94,13 +76,29 @@ class ApplicationFactory(Protocol):
     ) -> tuple[QApplication, MainWindow]: ...
 
 
+def _esperar_fechamento_adiado(application: QApplication, window: MainWindow) -> None:
+    """Processe eventos até concluir o fechamento que a janela adiou por rede ainda ativa.
+
+    Vale também para janela nunca exibida, que não muda de visibilidade ao fechar. Sem a espera,
+    a liberação correria com a rede viva e o fechamento adiado terminaria nos eventos de outro
+    teste.
+    """
+    limite = monotonic() + _PRAZO_ENCERRAR_THREADS_MS / 1000
+    while window._fechamento_adiado and not window._fechamento_concluido:
+        if monotonic() >= limite:
+            raise AssertionError(
+                f"o fechamento adiado não concluiu em {_PRAZO_ENCERRAR_THREADS_MS} ms"
+            )
+        application.processEvents()
+        sleep(_INTERVALO_FECHAMENTO_ADIADO_S)
+
+
 @pytest.fixture
-def application_factory(monkeypatch: pytest.MonkeyPatch) -> Iterator[ApplicationFactory]:
+def application_factory() -> Iterator[ApplicationFactory]:
     """Componha janelas e descarte seus engines antes da coleta do pytest."""
     created: list[tuple[QApplication, MainWindow]] = []
     gateways: list[Any] = []
     server_runtimes: list[Any] = []
-    _esperar_threads_do_painel_ate_o_fim(monkeypatch)
 
     def create(
         argv: Sequence[str] | None = None,
@@ -180,11 +178,12 @@ def application_factory(monkeypatch: pytest.MonkeyPatch) -> Iterator[Application
         yield create
     finally:
         for application, window in reversed(created):
-            # Sob carga a leitura da sessao passa de 1 s e o fechamento desiste de juntar a thread
-            # de observacao: destruir o painel com QThread em execucao aborta o processo.
+            # Higiene de teste, com prazo próprio: junta a observação antes de fechar e liberar a
+            # janela, porque destruir o painel com QThread em execução aborta o processo.
             if window.project_panel is not None:
                 assert window.project_panel.shutdown_polling(_PRAZO_ENCERRAR_THREADS_MS)
             window.close()
+            _esperar_fechamento_adiado(application, window)
             window.release_resources()
             application.processEvents()
         for gateway in gateways:

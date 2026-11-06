@@ -1,5 +1,6 @@
 """Janela principal do cliente magro."""
 
+import logging
 from collections.abc import Callable
 from itertools import pairwise
 from pathlib import Path
@@ -8,6 +9,7 @@ from time import monotonic
 from PySide6.QtCore import (
     QByteArray,
     QEvent,
+    QMetaObject,
     QObject,
     QPoint,
     QPointF,
@@ -49,8 +51,13 @@ from .review_panel import ReviewPanelWidget
 from .theme import THEME_SETTING_KEY, Tema, aplicar_tema
 
 _CLOSE_WAIT_MS = 300
+_PRAZO_OBSERVACAO_MS = 1000
+_RECONFERENCIA_FECHAMENTO_MS = 250
+_STATUS_ENCERRANDO = "Encerrando: aguardando o servidor responder"
 _WINDOW_GEOMETRY_SETTING_KEY = "window/geometry"
 _WINDOW_DOCK_STATE_SETTING_KEY = "window/dock-state"
+
+_logger = logging.getLogger(__name__)
 
 
 class _DockTitleBar(QWidget):
@@ -327,6 +334,14 @@ class MainWindow(QMainWindow):
         self._resource_cleanup: Callable[[], None] = lambda: None
         self._reconnect_callback = reconnect_callback
         self._connection_available = True
+        self._fechamento_adiado = False
+        self._fechamento_concluido = False
+        self._inicio_adiamento = 0.0
+        self._conexao_rede_encerrada: QMetaObject.Connection | None = None
+        # Rede de segurança do adiamento: nenhuma notificação perdida prende a janela.
+        self._timer_reconferencia = QTimer(self)
+        self._timer_reconferencia.setInterval(_RECONFERENCIA_FECHAMENTO_MS)
+        self._timer_reconferencia.timeout.connect(self._reconferir_fechamento_adiado)
         self._startup_ocr_diagnostic = startup_ocr_diagnostic
         self._theme = initial_theme
         self._ui_settings = (
@@ -625,6 +640,11 @@ class MainWindow(QMainWindow):
     @Slot(bool, str)
     def set_connection_available(self, available: bool, message: str = "") -> None:
         """Bloqueie operações remotas e reative os mesmos painéis após reconectar."""
+        if self._fechamento_adiado:
+            # Reconectar ou parar a observação aqui recriaria threads ou cancelaria o pedido.
+            estado = "disponível" if available else "indisponível"
+            _logger.info(f"Conexão {estado} durante o fechamento adiado: ignorada")
+            return
         if self._connection_available == available and not message:
             return
         self._connection_available = available
@@ -676,21 +696,30 @@ class MainWindow(QMainWindow):
         self._resource_cleanup()
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - API Qt
-        active = (self.project_panel is not None and self.project_panel.processando) or (
-            self.portability_panel is not None and self.portability_panel.processando
-        )
-        if active:
-            deadline = monotonic() + (_CLOSE_WAIT_MS / 1000)
-            finished = True
-            if self.project_panel is not None:
-                remaining = max(0, round((deadline - monotonic()) * 1000))
-                finished = self.project_panel.cancelar_e_aguardar(remaining) and finished
-            if self.portability_panel is not None:
-                remaining = max(0, round((deadline - monotonic()) * 1000))
-                finished = self.portability_panel.cancelar_e_aguardar(remaining) and finished
-            if finished:
-                active = False
-        if active:
+        """Feche só quando nenhuma thread de rede ainda roda; senão adie, visível e desabilitada.
+
+        Análise e portabilidade em andamento recebem o cancelamento e até 300 ms; se não
+        terminarem, o aviso existente pede um novo fechamento. Depois, o painel de projeto pede o
+        encerramento da observação, das leituras e das pesquisas remotas e espera até 1000 ms.
+        Se alguma ainda roda, o fechamento é ignorado: a janela continua visível e desabilitada,
+        com o motivo na barra de status, e fecha sozinha quando a rede encerra (sinal
+        ``rede_encerrada`` ou reconferência a cada 250 ms). Nenhuma thread é destruída viva.
+
+        Teto real: não há teto total, só o timeout por operação de socket do gateway (30 s).
+        ``session()`` é GET com uma repetição, então um servidor que aceita a conexão e não
+        responde segura o fechamento por cerca de 2 x 30 s = 60 s. Estouro: um servidor que
+        goteja bytes segura a janela sem teto, visível e desabilitada, com o motivo na tela; não
+        há destruição forçada nem ``os._exit``.
+        """
+        if self._fechamento_concluido:
+            # O finally de bootstrap.run() fecha de novo a janela já fechada.
+            event.accept()
+            return
+        if self._fechamento_adiado:
+            if self._rede_ativa():
+                event.ignore()
+                return
+        elif not self._operacoes_locais_encerradas():
             QMessageBox.information(
                 self,
                 "Operação em andamento",
@@ -699,10 +728,78 @@ class MainWindow(QMainWindow):
             )
             event.ignore()
             return
-        if self.project_panel is not None:
-            self.project_panel.shutdown_polling()
+        elif self._adiar_fechamento_se_rede_ativa():
+            event.ignore()
+            return
         self.pdf_viewer.encerrar()
         super().closeEvent(event)
         if event.isAccepted():
+            self._encerrar_espera_do_fechamento()
+            self._fechamento_concluido = True
             self._save_ui_state()
             self.release_resources()
+
+    def _operacoes_locais_encerradas(self) -> bool:
+        active = (self.project_panel is not None and self.project_panel.processando) or (
+            self.portability_panel is not None and self.portability_panel.processando
+        )
+        if not active:
+            return True
+        deadline = monotonic() + (_CLOSE_WAIT_MS / 1000)
+        finished = True
+        if self.project_panel is not None:
+            remaining = max(0, round((deadline - monotonic()) * 1000))
+            finished = self.project_panel.cancelar_e_aguardar(remaining) and finished
+        if self.portability_panel is not None:
+            remaining = max(0, round((deadline - monotonic()) * 1000))
+            finished = self.portability_panel.cancelar_e_aguardar(remaining) and finished
+        return finished
+
+    def _rede_ativa(self) -> bool:
+        return self.project_panel is not None and self.project_panel.rede_ativa()
+
+    def _adiar_fechamento_se_rede_ativa(self) -> bool:
+        panel = self.project_panel
+        if panel is None or panel.pedir_encerramento(_PRAZO_OBSERVACAO_MS):
+            return False
+        self._conexao_rede_encerrada = panel.rede_encerrada.connect(
+            self._concluir_fechamento_adiado
+        )
+        if not panel.rede_ativa():
+            # A rede encerrou entre o pedido e a conexão: fecha agora, sem adiar.
+            self._desligar_rede_encerrada()
+            return False
+        self._fechamento_adiado = True
+        self._inicio_adiamento = monotonic()
+        self.setEnabled(False)
+        self.statusBar().showMessage(_STATUS_ENCERRANDO)
+        self._timer_reconferencia.start()
+        esperado = _PRAZO_OBSERVACAO_MS
+        _logger.info(f"Fechamento adiado: aguardando o servidor responder (esperou {esperado} ms)")
+        return True
+
+    @Slot()
+    def _concluir_fechamento_adiado(self) -> None:
+        """Refaça o fechamento quando nada mais roda; uso único por adiamento."""
+        self._desligar_rede_encerrada()
+        if not self._fechamento_adiado or self._fechamento_concluido or self._rede_ativa():
+            return
+        self.close()
+
+    @Slot()
+    def _reconferir_fechamento_adiado(self) -> None:
+        if not self._rede_ativa():
+            self._concluir_fechamento_adiado()
+
+    def _desligar_rede_encerrada(self) -> None:
+        conexao = self._conexao_rede_encerrada
+        self._conexao_rede_encerrada = None
+        if conexao is not None:
+            QObject.disconnect(conexao)
+
+    def _encerrar_espera_do_fechamento(self) -> None:
+        self._timer_reconferencia.stop()
+        self._desligar_rede_encerrada()
+        if self._fechamento_adiado:
+            decorrido = monotonic() - self._inicio_adiamento
+            _logger.info(f"Fechamento adiado concluído em {decorrido:.1f} s")

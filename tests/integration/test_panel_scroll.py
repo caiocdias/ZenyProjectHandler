@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 )
 from pytestqt.qtbot import QtBot
 from tests.conftest import ApplicationFactory
+from tests.janela_fechamento import PRAZO_FECHAMENTO_S, esperar_fechamento
 from tests.pdf_fixtures import create_feature_pdf
 
 from zeny_project_handler_client.config import ClientSettings
@@ -287,7 +288,7 @@ def test_floating_tabbed_and_saved_docks_keep_identity(
     gmax.setFloating(True)
     gmax.resize(480, 330)
     window.close()
-    app.processEvents()
+    esperar_fechamento(window, PRAZO_FECHAMENTO_S)
     _, restored = application_factory([], settings=settings)
     qtbot.addWidget(restored)
     restored.show()

@@ -21,6 +21,7 @@ from PySide6.QtWidgets import QApplication, QDialog, QLineEdit, QMessageBox, QPu
 from pytestqt.qtbot import QtBot
 from starlette.requests import Request
 from starlette.responses import Response
+from tests.janela_fechamento import PRAZO_FECHAMENTO_S, esperar_fechamento
 from tests.market_fakes import FakeClassificadorMercado, FakeVerificadorAcoesConcluidas
 from tests.pdf_fixtures import create_action_requirements_pdf, create_golden_pdf
 from tests.remote_gateways import DirectProjectGateway
@@ -549,6 +550,7 @@ def _http_window(base_url: str, directory: Path, qtbot: QtBot) -> Iterator[MainW
         yield window
     finally:
         window.close()
+        esperar_fechamento(window, PRAZO_FECHAMENTO_S)
         window.release_resources()
         app.processEvents()
 

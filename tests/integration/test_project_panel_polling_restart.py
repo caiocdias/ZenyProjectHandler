@@ -8,17 +8,15 @@ aborto vira ``returncode != 0`` com saída legível, em vez de um "worker crashe
 
 from __future__ import annotations
 
-import os
 import subprocess
-import sys
 import textwrap
 from pathlib import Path
 
 import pytest
+from tests.cenario_subprocesso import RAIZ, ambiente_subprocesso, comando_pytest_cenario
 
 pytestmark = pytest.mark.integration
 
-_RAIZ = Path(__file__).resolve().parents[2]
 _PRAZO_SUBPROCESSO_S = 300
 _TRECHO_MAXIMO = 4_000
 
@@ -38,6 +36,10 @@ _CENARIO = textwrap.dedent(
     from zeny_project_handler_client.config import ClientSettings
     from zeny_project_handler_client.ui.main_window import MainWindow
     from zeny_project_handler_client.ui.project_panel import ProjectPanelWidget
+
+    # A sessão dorme mais que o prazo padrão de 1000 ms de shutdown_polling: o cenário dá à
+    # junção um prazo explícito, sem alargar o prazo do produto.
+    _PRAZO_JUNTAR_MS = 60_000
 
 
     @pytest.fixture
@@ -69,7 +71,7 @@ _CENARIO = textwrap.dedent(
         destruir_janelas_depois_da_fabrica.append(window)
         panel = window.project_panel
         assert isinstance(panel, ProjectPanelWidget)
-        assert panel.shutdown_polling()
+        assert panel.shutdown_polling(_PRAZO_JUNTAR_MS)
         panel.restart_polling()
         nova = panel._global_poll_thread
         assert nova is not None
@@ -94,19 +96,13 @@ def test_destruicao_tardia_da_thread_antiga_nao_solta_a_thread_reiniciada(
     cenario = tmp_path / "cenario" / "test_cenario_reinicio.py"
     cenario.parent.mkdir()
     cenario.write_text(_CENARIO, encoding="utf-8")
-    ambiente = {k: v for k, v in os.environ.items() if not k.startswith("PYTEST_XDIST")}
-    ambiente |= {"QT_QPA_PLATFORM": "offscreen", "PYTHONPATH": str(_RAIZ)}
-    comando = [
-        *[sys.executable, "-m", "pytest", str(cenario), "-p", "tests.conftest", "-q", "-n", "0"],
-        *["--rootdir", str(_RAIZ), "-c", str(_RAIZ / "pyproject.toml")],
-        *["-p", "no:cacheprovider", "--basetemp", str(tmp_path / "base")],
-    ]
+    comando = comando_pytest_cenario(cenario, tmp_path / "base", "-p", "tests.conftest")
 
     try:
         resultado = subprocess.run(
             comando,
-            cwd=_RAIZ,
-            env=ambiente,
+            cwd=RAIZ,
+            env=ambiente_subprocesso(),
             capture_output=True,
             text=True,
             encoding="utf-8",
