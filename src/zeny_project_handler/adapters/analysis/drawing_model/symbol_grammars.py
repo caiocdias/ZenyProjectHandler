@@ -173,8 +173,8 @@ class Segmento:
 
 @dataclass(frozen=True, slots=True)
 class Palavra:
-    """`inteira` marca a palavra de um span de várias palavras que não pôde ser repartido:
-    a caixa é a do span inteiro (R-E06.2.1-4)."""
+    """`inteira` marca a caixa maior que a palavra, a do span inteiro (R-E06.2.1-4): nativo com
+    várias palavras ou espaços nas pontas, e shx ou rotacionado com várias palavras."""
 
     texto: str
     caixa: Caixa
