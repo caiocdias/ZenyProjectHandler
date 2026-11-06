@@ -922,9 +922,9 @@ def test_guarda_com_spans_separados_recusa_onde_o_motor_casa_e_e_so_recall(
 
 def test_residuo_aceito_sobreimpressao_alem_da_folga_ainda_casa_onde_o_motor_recusa() -> None:
     """LIMITAÇÃO CONHECIDA (R-E06.2.1-4; medir na E06.2.2). Com sobreposição de 4 pt em fonte 11
-    (acima da folga de fusão de ~1,5 pt) o `words` da PyMuPDF ainda junta "QDP" e "12" e o motor
-    recusa; o núcleo não funde e casa. Valor de hoje; se a fusão passar a cobrir, o teste deve
-    ser invertido, não removido."""
+    (acima da folga de fusão `t = max(0,5; 0,2 x altura)`, ~3 pt na altura de 15 pt) o `words`
+    da PyMuPDF ainda junta "QDP" e "12" e o motor recusa; o núcleo não funde e casa.
+    Valor de hoje; se a fusão passar a cobrir, o teste deve ser invertido, não removido."""
     desenhar = _spans_colados(
         "QDP", "12", 116.0, "helv", lambda p: p.draw_rect(QUADRADO, color=PRETO, width=1), -4.0
     )
@@ -932,6 +932,84 @@ def test_residuo_aceito_sobreimpressao_alem_da_folga_ainda_casa_onde_o_motor_rec
         assert [w[4] for w in pagina.get_text("words")] == ["QDP12"]
 
     motor, nucleo = _comparar(desenhar, QDP)
+
+    assert motor == set()
+    assert nucleo != set()
+
+
+def test_guarda_com_sobreimpressao_alem_da_folga_recusa_como_o_motor() -> None:
+    """Par do resíduo anterior na guarda de texto (R-E06.2.1-4). Medido: com "CT" e "12"
+    sobrepostos em 4 pt (acima de `t`) o `words` junta "CT12" e o motor recusa; o núcleo também
+    recusa, pelos spans separados que cruzam a moldura. Não há resíduo na guarda a 0 grau."""
+    desenhar = _spans_colados("CT", "12", 100.0, "helv", _moldura_pequena_com_x, -4.0)
+    with _pdf(desenhar) as pagina:
+        assert [w[4] for w in pagina.get_text("words")] == ["CT12"]
+
+    motor, nucleo = _comparar(desenhar, DIAGONAIS)
+
+    assert motor == set()
+    assert nucleo == set()
+
+
+def _spans_colados_rotacionados(
+    primeiro: str,
+    segundo: str,
+    inicio: tuple[float, float],
+    rotacao: int,
+    moldura: Callable[[pymupdf.Page], object],
+) -> Callable[[pymupdf.Page], object]:
+    """Dois spans nativos de estilos diferentes, colados ao longo da direção do texto."""
+
+    def desenhar(pagina: pymupdf.Page) -> None:
+        moldura(pagina)
+        x, y = inicio
+        pagina.insert_text((x, y), primeiro, fontsize=11, rotate=rotacao)
+        passo = pymupdf.get_text_length(primeiro, fontsize=11)
+        segue = {0: (x + passo, y), 90: (x, y - passo), 180: (x - passo, y), 270: (x, y + passo)}
+        pagina.insert_text(segue[rotacao], segundo, fontsize=11, color=VERMELHO, rotate=rotacao)
+
+    return desenhar
+
+
+# início do primeiro span, escolhido para o centro da palavra colada cair sobre a moldura
+_INICIO_ROTULO = {90: (130.0, 155.0), 180: (155.0, 139.0), 270: (130.0, 115.0)}
+_INICIO_GUARDA = {90: (118.0, 147.0), 180: (126.0, 130.0), 270: (109.0, 122.0)}
+
+
+@pytest.mark.parametrize("rotacao", [90, 180, 270])
+def test_residuo_aceito_rotulo_rotacionado_colado_casa_onde_o_motor_recusa(rotacao: int) -> None:
+    """LIMITAÇÃO CONHECIDA (R-E06.2.1-4; medir na E06.2.2). A 90, 180 e 270 graus `_pode_colar`
+    não funde (aceita só 0 +- 1 grau), mas o `words` da PyMuPDF junta "QDP" e "12" em QDP12 e o
+    motor recusa; o núcleo lê `QDP` exato e casa. Valor de hoje; se a fusão passar a cobrir
+    texto rotacionado, o teste deve ser invertido, não removido."""
+    desenhar = _spans_colados_rotacionados(
+        "QDP",
+        "12",
+        _INICIO_ROTULO[rotacao],
+        rotacao,
+        lambda p: p.draw_rect(QUADRADO, color=PRETO, width=1),
+    )
+    with _pdf(desenhar) as pagina:
+        assert [w[4] for w in pagina.get_text("words")] == ["QDP12"]
+
+    motor, nucleo = _comparar(desenhar, QDP)
+
+    assert motor == set()
+    assert nucleo != set()
+
+
+@pytest.mark.parametrize("rotacao", [90, 180, 270])
+def test_residuo_aceito_guarda_rotacionada_colada_abre_onde_o_motor_recusa(rotacao: int) -> None:
+    """LIMITAÇÃO CONHECIDA (R-E06.2.1-4; medir na E06.2.2). Par do teste anterior na guarda: o
+    `words` junta "CT12" com o centro na moldura e o motor recusa; o núcleo não funde texto
+    rotacionado e abre. Valor de hoje; se a fusão passar a cobrir, inverter, não remover."""
+    desenhar = _spans_colados_rotacionados(
+        "CT", "12", _INICIO_GUARDA[rotacao], rotacao, _moldura_pequena_com_x
+    )
+    with _pdf(desenhar) as pagina:
+        assert [w[4] for w in pagina.get_text("words")] == ["CT12"]
+
+    motor, nucleo = _comparar(desenhar, DIAGONAIS)
 
     assert motor == set()
     assert nucleo != set()

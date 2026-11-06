@@ -70,6 +70,7 @@ def _comparacoes_sobrepostas(n: int, monkeypatch: pytest.MonkeyPatch) -> int:
 
 
 @pytest.mark.xfail(
+    raises=AssertionError,
     strict=True,
     reason=(
         "R-E06.2.1-9: _unir_proximos compara cada item com tudo o que já está nas suas células "

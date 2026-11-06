@@ -614,3 +614,27 @@ def test_cadeia_longa_de_faixas_gasta_linear() -> None:
 
     assert gasto_de(200) == 199
     assert gasto_de(400) == 399
+
+
+# --- cobertura posterior conta a partir do ÚLTIMO membro, não do primeiro ----------------------
+
+
+def _faixas_com_cobertura_na_posicao(posicao_da_cobertura: int) -> list[Caminho]:
+    """Vertical + 12 faixas do disco, com um preenchimento opaco que contém o disco inserido na
+    posição dada; `ordem` acompanha a posição."""
+    faixas = _faixas_de_disco_a_mao(ROXO)[:]
+    cobertura = _faixa_a_mao((140.0, 140.0, 160.0, 160.0), 0, (0.9, 0.9, 0.9))
+    caminhos = [_vertical(150.0, 0), *faixas]
+    caminhos.insert(posicao_da_cobertura, cobertura)
+    return [Caminho(c.subcaminhos, c.estilo, c.tipo, ordem) for ordem, c in enumerate(caminhos)]
+
+
+def test_cobertura_opaca_desenhada_entre_duas_faixas_nao_esconde_o_disco() -> None:
+    """As faixas posteriores à cobertura ainda a repintam por cima: o disco aparece. Só uma
+    cobertura depois do ÚLTIMO membro o esconde (`posicao > min(membros)` erraria aqui)."""
+    assert _casados_a_mao(_faixas_com_cobertura_na_posicao(6)) == 1
+
+
+def test_cobertura_opaca_desenhada_depois_da_ultima_faixa_esconde_o_disco() -> None:
+    """Controle do teste anterior: a mesma cobertura, após a última faixa, esconde o disco."""
+    assert _casados_a_mao(_faixas_com_cobertura_na_posicao(13)) == 0
