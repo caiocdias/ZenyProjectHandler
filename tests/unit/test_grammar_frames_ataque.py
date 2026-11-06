@@ -471,9 +471,9 @@ def _span(rotulo: str, x: float, y: float = 139.0) -> Callable[[pymupdf.Page], o
 def test_rotulo_de_span_de_varias_palavras_nao_casa_onde_o_motor_recusa(
     conteudo: str, x: float
 ) -> None:
-    """A repartição por caracteres põe a palavra dentro da caixa interna onde os glifos reais
-    (Helvetica, proporcional) saem dela: o motor recusa e o núcleo casa. Review Focus 3: o rótulo
-    casa como no motor ou falha fechado."""
+    """Regressão da repartição por caracteres (hoje nenhum span é repartido): com glifos reais
+    (Helvetica, proporcional) fora da caixa interna o motor recusa, e o núcleo precisa recusar.
+    Review Focus 3: o rótulo casa como no motor ou falha fechado."""
     motor, nucleo = _comparar(_span(conteudo, x), QDP)
 
     assert motor == set(), "premissa: a palavra real não cabe na caixa interna"
@@ -488,8 +488,8 @@ def test_rotulo_de_span_de_varias_palavras_nao_casa_onde_o_motor_recusa(
     ],
 )
 def test_guarda_de_texto_nao_abre_onde_o_motor_recusa(conteudo: str, x: float) -> None:
-    """Mesma repartição, na guarda `_moldura_tem_texto`: o centro estimado cai fora da moldura e o
-    real, dentro. O motor vê o texto e recusa o X; o núcleo casa."""
+    """Regressão da repartição, na guarda `_moldura_tem_texto`: o centro real da palavra está
+    dentro da moldura, o motor vê o texto e recusa o X; o núcleo também precisa recusar."""
 
     def desenhar(pagina: pymupdf.Page) -> None:
         _diagonais(X)(pagina)
@@ -503,8 +503,8 @@ def test_guarda_de_texto_nao_abre_onde_o_motor_recusa(conteudo: str, x: float) -
 
 def test_nucleo_nunca_casa_onde_o_motor_recusa_em_fonte_monoespacada() -> None:
     """Invariante unilateral (R-4 emendado): o núcleo pode perder recall, nunca ganhar casamento
-    que o motor recusa. Perdas esperadas: rótulo nativo de várias palavras e span que a guarda
-    não pode repartir."""
+    que o motor recusa. Perdas esperadas: rótulo de span de várias palavras (a caixa é a do span
+    inteiro) e guarda que recusa por sobreposição fechada com o span."""
     ganhos = []
     perdas: set[tuple[str, int]] = set()
     for dx in range(-30, 60, 3):
@@ -590,7 +590,7 @@ def test_guarda_com_palavra_inteira_recusa_por_sobreposicao_fechada(
 
 
 def test_span_nativo_que_cruza_a_moldura_recusa_a_guarda_mesmo_com_centro_fora() -> None:
-    """Nativo fica com a caixa do span: de várias palavras é `inteira` e recusa por interseção."""
+    """Nativo fica com a caixa do span: de várias palavras é `inteira` e recusa por sobreposição."""
     textos = [texto("AB CD", (154.0, 120.0, 194.0, 130.0), origem="nativo")]
     contexto = _contexto([retangulo_traco(MOLDURA_X), *DIAGONAIS_DO_X], textos)
     palavras = contexto.grade_palavras.consultar((-16.0, -16.0, 316.0, 316.0))
@@ -794,16 +794,22 @@ def test_pagina_hostil_estoura_o_teto_e_para_perto_do_limite(gramatica: dict[str
 
 
 def _spans_colados(
-    primeiro: str, segundo: str, x: float, fonte2: str, moldura: Callable[[pymupdf.Page], object]
+    primeiro: str,
+    segundo: str,
+    x: float,
+    fonte2: str,
+    moldura: Callable[[pymupdf.Page], object],
+    lacuna: float = 0.0,
 ) -> Callable[[pymupdf.Page], object]:
-    """Dois spans de estilos diferentes, sem espaço: a PyMuPDF os junta numa palavra só."""
+    """Dois spans de estilos diferentes, sem espaço: a PyMuPDF os junta numa palavra só.
+    `lacuna` afasta (ou, se negativa, sobrepõe) o segundo span."""
 
     def desenhar(pagina: pymupdf.Page) -> None:
         moldura(pagina)
         pagina.insert_text((x, 139), primeiro, fontsize=11)
         largura = pymupdf.get_text_length(primeiro, fontsize=11)
         pagina.insert_text(
-            (x + largura, 139), segundo, fontsize=11, color=VERMELHO, fontname=fonte2
+            (x + largura + lacuna, 139), segundo, fontsize=11, color=VERMELHO, fontname=fonte2
         )
 
     return desenhar
@@ -853,6 +859,62 @@ def test_guarda_com_spans_colados_nao_abre_onde_o_motor_le_uma_palavra() -> None
 def test_palavra_inteira_achatada_que_cruza_a_moldura_recusa_a_guarda(
     caixa_do_span: Caixa,
 ) -> None:
-    """`intersecta` exige área: a caixa achatada que atravessa a borda, com o centro fora, não
-    recusa. O plano quer que a guarda não abra para o span que passa pela moldura."""
+    """A caixa achatada que atravessa a borda, com o centro fora, tem de recusar a guarda: o span
+    que passa pela moldura não pode abri-la, mesmo sem área."""
     assert _x_com_span_vertical(caixa_do_span) is False
+
+
+# --- lacuna da junção contra `words` da PyMuPDF --------------------------------------------
+# Medido (fontsize 11, altura do span ~15, tolerância do núcleo max(0,5; 0,1 x altura) ~ 1,5):
+#   lacuna <= -0,005   words junta; núcleo não cola (exige >= 0)   -> núcleo casa, motor não
+#   lacuna 0 a 1,0     words junta; núcleo cola                              -> os dois recusam
+#   lacuna 1,4..1,6    words junta; o núcleo cola só se a tolerância cobre   -> varia com a fonte
+#   lacuna >= 2,0      words separa; rótulo: os dois casam; guarda: o motor casa (os centros
+#                      dos pedaços ficam fora) e o núcleo recusa (o segundo span tem espaço na
+#                      frente e é `inteira`): perda de recall, direção fechada.
+LACUNAS = [-0.5, -0.1, -0.01, -0.005, 0.0, 0.5, 1.0, 1.4, 1.5, 1.52, 1.6, 2.0, 3.0]
+
+
+def _moldura_pequena_com_x(pagina: pymupdf.Page) -> None:
+    pagina.draw_rect(pymupdf.Rect(110, 131, 117, 138), color=PRETO, width=1)
+    pagina.draw_line((110, 131), (117, 138), color=PRETO)
+    pagina.draw_line((117, 131), (110, 138), color=PRETO)
+
+
+@pytest.mark.parametrize("fonte2", ["helv", "cour", "tiro"])
+@pytest.mark.parametrize("lacuna", LACUNAS)
+def test_rotulo_com_lacuna_na_juncao_nao_casa_onde_o_motor_recusa(
+    lacuna: float, fonte2: str
+) -> None:
+    desenhar = _spans_colados(
+        "QDP", "12", 116.0, fonte2, lambda p: p.draw_rect(QUADRADO, color=PRETO, width=1), lacuna
+    )
+
+    motor, nucleo = _comparar(desenhar, QDP)
+
+    assert nucleo - motor == set()
+
+
+@pytest.mark.parametrize("fonte2", ["helv", "cour", "tiro"])
+@pytest.mark.parametrize("lacuna", LACUNAS)
+def test_guarda_com_lacuna_na_juncao_nao_abre_onde_o_motor_recusa(
+    lacuna: float, fonte2: str
+) -> None:
+    desenhar = _spans_colados("CT", "12", 100.0, fonte2, _moldura_pequena_com_x, lacuna)
+
+    motor, nucleo = _comparar(desenhar, DIAGONAIS)
+
+    assert nucleo - motor == set()
+
+
+@pytest.mark.parametrize("fonte2", ["helv", "cour", "tiro"])
+@pytest.mark.parametrize("lacuna", [2.0, 3.0])
+def test_guarda_com_spans_separados_recusa_onde_o_motor_casa_e_e_so_recall(
+    lacuna: float, fonte2: str
+) -> None:
+    desenhar = _spans_colados("CT", "12", 100.0, fonte2, _moldura_pequena_com_x, lacuna)
+
+    motor, nucleo = _comparar(desenhar, DIAGONAIS)
+
+    assert motor != set()
+    assert nucleo == set()

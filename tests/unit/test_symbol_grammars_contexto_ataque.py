@@ -1030,7 +1030,7 @@ def test_spans_em_colunas_vizinhas_pagam_cada_candidato_da_janela(
     assert chamadas["n"] <= gasto // 10
 
 
-def test_palavra_na_margem_entra_e_alem_dela_nao_gasta() -> None:
+def test_palavra_na_margem_entra_e_a_de_fora_so_paga_a_colagem() -> None:
     margem = texto("MARGEM", (305.0, 10.0, 310.0, 20.0))
     fora = texto("FORA", (320.0, 10.0, 330.0, 20.0))
 
