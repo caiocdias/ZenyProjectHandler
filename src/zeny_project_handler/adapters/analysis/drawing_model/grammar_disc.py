@@ -108,7 +108,8 @@ def _altura(caixa: Caixa) -> float:
 
 def _aspecto_redondo(caixa: Caixa) -> bool:
     largura, altura = _largura(caixa), _altura(caixa)
-    if largura <= 0 or altura <= 0:
+    # Pela metade: a de um lado subnormal arredonda a 0, e quem vem depois divide por ela.
+    if largura / 2 <= 0 or altura / 2 <= 0:
         return False
     return (
         _ASPECTO_MINIMO <= largura / altura <= _ASPECTO_MAXIMO
