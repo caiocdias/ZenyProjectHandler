@@ -501,18 +501,23 @@ def test_guarda_de_texto_nao_abre_onde_o_motor_recusa(conteudo: str, x: float) -
     assert nucleo - motor == set()
 
 
-def test_fonte_monoespacada_continua_igual_ao_motor_em_todo_deslocamento() -> None:
-    """Controle: com largura fixa a repartição é exata, em rótulo e em guarda."""
-    divergencias = []
+def test_nucleo_nunca_casa_onde_o_motor_recusa_em_fonte_monoespacada() -> None:
+    """Invariante unilateral (R-4 emendado): o núcleo pode perder recall, nunca ganhar casamento
+    que o motor recusa. Perdas esperadas: rótulo nativo de várias palavras e span que a guarda
+    não pode repartir."""
+    ganhos = []
+    perdas = 0
     for dx in range(-30, 60, 3):
         for gramatica, desenhar in (
             (QDP, _span_cour("QDP 12", 116.0 + dx)),
             (DIAGONAIS, _x_com_cour("CT 12", 116.0 + dx)),
         ):
             motor, nucleo = _comparar(desenhar, gramatica)
-            if motor != nucleo:
-                divergencias.append((gramatica["kind"], dx))
-    assert divergencias == []
+            if nucleo - motor:
+                ganhos.append((gramatica["kind"], dx))
+            perdas += len(motor - nucleo)
+    assert ganhos == []
+    assert perdas == PERDAS_DE_RECALL_ACEITAS
 
 
 def _span_cour(rotulo: str, x: float) -> Callable[[pymupdf.Page], object]:
@@ -533,6 +538,7 @@ def _x_com_cour(rotulo: str, x: float) -> Callable[[pymupdf.Page], object]:
 
 # --- palavra `inteira` e itens de caminho pagos: as duas decisões do desenvolvedor ----------
 
+PERDAS_DE_RECALL_ACEITAS = 9
 MOLDURA_X: Caixa = (110.0, 110.0, 158.0, 158.0)
 DIAGONAIS_DO_X = [
     linha((111.0, 111.0), (157.0, 157.0), 1),
@@ -577,9 +583,48 @@ def test_guarda_com_palavra_inteira_recusa_por_interseccao(
     assert _x_com_span_vertical(caixa_do_span) is casa
 
 
-def test_palavra_nao_inteira_com_centro_fora_nao_recusa_mesmo_cruzando_a_moldura() -> None:
+def test_span_nativo_que_cruza_a_moldura_recusa_a_guarda_mesmo_com_centro_fora() -> None:
+    """Nativo fica com a caixa do span: de várias palavras é `inteira` e recusa por interseção."""
+    textos = [texto("AB CD", (154.0, 120.0, 194.0, 130.0), origem="nativo")]
+    contexto = _contexto([retangulo_traco(MOLDURA_X), *DIAGONAIS_DO_X], textos)
+    palavras = contexto.grade_palavras.consultar((-16.0, -16.0, 316.0, 316.0))
+    assert [p.inteira for p in palavras] == [True, True]
+
+    assert casa_moldura(contexto, DIAGONAIS, _moldura_em(contexto, MOLDURA_X)) is False
+
+
+def test_nativo_de_uma_palavra_com_centro_fora_cruzando_a_moldura_nao_recusa() -> None:
+    textos = [texto("AB", (154.0, 120.0, 170.0, 130.0), origem="nativo")]
+    contexto = _contexto([retangulo_traco(MOLDURA_X), *DIAGONAIS_DO_X], textos)
+    assert [p.inteira for p in contexto.grade_palavras.consultar((-16.0, -16.0, 316.0, 316.0))] == [
+        False
+    ]
+
+    assert casa_moldura(contexto, DIAGONAIS, _moldura_em(contexto, MOLDURA_X)) is True
+
+
+def test_nativo_com_espacos_nas_pontas_e_inteiro_recusa_a_guarda_cruzando() -> None:
+    textos = [texto("  AB ", (154.0, 120.0, 190.0, 130.0), origem="nativo")]
+    contexto = _contexto([retangulo_traco(MOLDURA_X), *DIAGONAIS_DO_X], textos)
+
+    assert casa_moldura(contexto, DIAGONAIS, _moldura_em(contexto, MOLDURA_X)) is False
+
+
+def test_rotulo_nativo_com_espacos_nas_pontas_casa_se_o_span_cabe_na_interna() -> None:
+    rotulo = {"kind": "label_in_frame", "frame": "rectangle", "label": "CT", "max_span": 72}
+    for caixa, casa in (
+        ((115.0, 118.0, 153.0, 152.0), True),
+        ((115.0, 118.0, 160.0, 152.0), False),
+    ):
+        contexto = _contexto([retangulo_traco(MOLDURA_X)], [texto(" CT ", caixa)])
+        assert casa_moldura(contexto, rotulo, _moldura_em(contexto, MOLDURA_X)) is casa
+
+
+def test_palavra_nao_inteira_mesmo_cruzando_a_moldura() -> None:
     """Contraste: o span horizontal é repartido e cada palavra vale pelo centro, como no motor."""
-    textos = [texto("AB CD", (154.0, 120.0, 194.0, 130.0))]  # "AB" cruza a borda, com o centro fora
+    textos = [
+        texto("AB CD", (154.0, 120.0, 194.0, 130.0), origem="glifo")
+    ]  # "AB" cruza a borda, com o centro fora
     contexto = _contexto([retangulo_traco(MOLDURA_X), *DIAGONAIS_DO_X], textos)
     palavras = contexto.grade_palavras.consultar((-16.0, -16.0, 316.0, 316.0))
     assert [p.inteira for p in palavras] == [False, False]

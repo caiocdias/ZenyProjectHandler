@@ -908,16 +908,39 @@ def test_mediabox_gigante_nao_chega_como_pagina_nao_finita(mediabox: str) -> Non
     ids=["1", "menos-1", "359", "360", "720"],
 )
 def test_borda_da_tolerancia_em_pe_reparte_na_ordem_de_leitura(rotacao: float) -> None:
-    assert _palavras(texto("CT 12", (0.0, 0.0, 50.0, 10.0), rotacao=rotacao)) == [
+    assert _palavras(texto("CT 12", (0.0, 0.0, 50.0, 10.0), origem="glifo", rotacao=rotacao)) == [
         Palavra("CT", (0.0, 0.0, 20.0, 10.0), False),
         Palavra("12", (30.0, 0.0, 50.0, 10.0), False),
     ]
 
 
+@pytest.mark.parametrize("rotacao", [0.0, 1.0, 180.0, 359.0], ids=["0", "1", "180", "359"])
+def test_nativo_nunca_e_repartido_em_nenhuma_rotacao(rotacao: float) -> None:
+    caixa: Caixa = (0.0, 0.0, 50.0, 10.0)
+
+    assert _palavras(texto("CT 12", caixa, origem="nativo", rotacao=rotacao)) == [
+        Palavra("CT", caixa, True),
+        Palavra("12", caixa, True),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("conteudo", "inteira"),
+    [("CT", False), ("ct", False), ("  CT", True), ("CT  ", True), ("	CT	", True)],
+    ids=["uma-palavra", "minuscula", "espacos-na-frente", "espacos-atras", "tabs"],
+)
+def test_nativo_de_uma_palavra_so_e_inteiro_se_tem_espaco_nas_pontas(
+    conteudo: str, inteira: bool
+) -> None:
+    caixa: Caixa = (0.0, 0.0, 50.0, 10.0)
+
+    assert _palavras(texto(conteudo, caixa)) == [Palavra("CT", caixa, inteira)]
+
+
 @pytest.mark.parametrize(
     ("origem", "rotacao"),
-    [("nativo", 179.0), ("nativo", 181.0), ("nativo", 540.0), ("nativo", -180.0), ("glifo", 180.0)],
-    ids=["179", "181", "540", "menos-180", "glifo-180"],
+    [("glifo", 179.0), ("glifo", 181.0), ("glifo", 540.0), ("glifo", -180.0), ("glifo", 180.0)],
+    ids=["179", "181", "540", "menos-180", "180"],
 )
 def test_borda_da_tolerancia_invertida_reparte_espelhado(origem: Any, rotacao: float) -> None:
     assert _palavras(texto("CT 12", (0.0, 0.0, 50.0, 10.0), origem=origem, rotacao=rotacao)) == [
@@ -947,7 +970,7 @@ def test_qualquer_espaco_separa_e_conta_na_reparticao(separador: str) -> None:
     conteudo = f"CT{separador}12"
     largura = 10.0 * len(conteudo)
 
-    palavras = _palavras(texto(conteudo, (0.0, 0.0, largura, 10.0)))
+    palavras = _palavras(texto(conteudo, (0.0, 0.0, largura, 10.0), origem="glifo"))
 
     assert palavras == [
         Palavra("CT", (0.0, 0.0, 20.0, 10.0), False),
@@ -956,7 +979,7 @@ def test_qualquer_espaco_separa_e_conta_na_reparticao(separador: str) -> None:
 
 
 def test_espacos_assimetricos_invertidos_ficam_do_lado_certo() -> None:
-    assert _palavras(texto(" ct", (0.0, 0.0, 30.0, 10.0), rotacao=180.0)) == [
+    assert _palavras(texto(" ct", (0.0, 0.0, 30.0, 10.0), origem="glifo", rotacao=180.0)) == [
         Palavra("CT", (0.0, 0.0, 20.0, 10.0), False)
     ]
 
@@ -994,10 +1017,10 @@ def test_palavra_na_margem_entra_e_alem_dela_nao_gasta() -> None:
     ],
     ids=["em-pe", "invertido", "com-espacos-em-pe", "com-espacos-invertido"],
 )
-def test_reparticao_bate_com_as_palavras_do_pdf_em_fonte_monoespacada(
+def test_texto_nativo_do_pdf_fica_com_a_caixa_do_span_que_contem_as_palavras_do_motor(
     conteudo: str, rotacao: int
 ) -> None:
-    """O motor lê `words`; em Courier a repartição proporcional é exata, inclusive espelhada."""
+    """O motor lê `words`; o núcleo guarda o span inteiro, que contém cada palavra dele."""
     with pymupdf.open() as documento:
         pagina = documento.new_page(width=400, height=400)
         pagina.insert_text((200, 200), conteudo, fontname="cour", fontsize=10, rotate=rotacao)
@@ -1008,9 +1031,11 @@ def test_reparticao_bate_com_as_palavras_do_pdf_em_fonte_monoespacada(
     palavras = contexto.grade_palavras.consultar((0.0, 0.0, 400.0, 400.0))
 
     assert [p.texto for p in palavras] == [texto_esperado for texto_esperado, _ in esperadas]
-    assert not any(p.inteira for p in palavras)
+    assert all(p.inteira and p.caixa == modelo.textos[0].bbox for p in palavras)
     for palavra, (_, caixa) in zip(palavras, esperadas, strict=True):
-        assert palavra.caixa == pytest.approx(tuple(caixa), abs=0.01)
+        assert contem(
+            palavra.caixa, (caixa[0] + 0.01, caixa[1] + 0.01, caixa[2] - 0.01, caixa[3] - 0.01)
+        )
 
 
 def test_span_vertical_do_pdf_fica_inteiro() -> None:
