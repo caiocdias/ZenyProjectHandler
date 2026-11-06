@@ -6,7 +6,7 @@ Uso:
     python -m scripts.curation_ficha comparar --rodada DIR --pdf ID
     python -m scripts.curation_ficha consolidar --rodada DIR --pdf ID [--sem-terceiro --motivo T]
     python -m scripts.curation_ficha baseline --rodada DIR [--pdf ID ...] [--native-only]
-        [--runtime-directory DIR] [--parcial]
+        [--runtime-directory DIR] [--parcial] [--versao-extracao VERSAO] [--processos N]
     python -m scripts.curation_ficha amostra --rodada DIR --tamanho N --semente S [--ampliar]
     python -m scripts.curation_ficha responder --rodada DIR --versao N --arquivo ARQ
     python -m scripts.curation_ficha taxa --rodada DIR
@@ -44,6 +44,12 @@ denominadores (taxas recalculadas das somas). Recusa PDF sem referência, salvo 
 referência cujo SHA-256 difere do registrado em ``congelamento.json``. Sem ``--native-only``,
 confere o OCR português antes do primeiro PDF. Falha do analisador num PDF fica registrada como
 ``falha`` (não é zero) e o comando termina com código 1 depois de gravar o resumo.
+``--versao-extracao`` escolhe a fonte da ficha predita (``projeto-promovido-v1``, o padrão, ou
+``propostas-v1``) e fica em ``opcoes.versao_extracao``. ``--processos N`` mede os PDFs em até N
+processos (no máximo 61, o limite do Windows, e nunca mais que os PDFs com referência); o resumo
+JSON é igual ao serial, e o número de processos aparece só no ``.md``. A chave ``pendencia`` separa,
+nos 4 campos do poste, os acertos afirmados dos acertos de campo que a predição declara pendente;
+vãos e símbolos ficam sem essa separação.
 
 ``amostra`` sorteia postes das referências (rodízio entre PDFs, semente fixa) e grava
 ``fichas/amostra-humana/amostra-vNNN/`` (``amostra.json``, ``amostra.md`` e um recorte ``NN.png``
@@ -63,7 +69,9 @@ import re
 import shutil
 import sys
 from collections import Counter
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
+from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -71,6 +79,7 @@ from typing import Any
 
 import pymupdf
 
+from scripts.benchmark_ficha_poste import VERSAO_EXTRACAO, VERSOES_EXTRACAO
 from scripts.benchmark_ficha_poste import executar as executar_benchmark
 from scripts.curation_reference import contida_na_uniao, tiles_nao_cobertos
 from scripts.curation_render import carregar_indice
@@ -93,6 +102,7 @@ from scripts.ficha_leitura_dupla import (
     regioes_de_conferencia,
 )
 from scripts.ficha_poste import validar_ficha
+from scripts.ficha_poste_avaliador import CAMPOS_DO_POSTE as CAMPOS_COM_PENDENCIA
 from zeny_project_handler.adapters.analysis.tesseract_runtime import inspect_tesseract_runtime
 
 LEITORES = ("a", "b", "c")
@@ -108,6 +118,8 @@ CAMADAS = ("base", "annotation")
 ESQUEMA_BASELINE = "curadoria-ficha-baseline-v1"
 DIRETORIO_FICHAS = "fichas"
 RUNTIME_PADRAO = Path("tmp/benchmark-runtime")
+LIMITE_PROCESSOS = 61  # ProcessPoolExecutor recusa mais que isso no Windows
+FALHA_DO_POOL = "processo de medição interrompido"
 NOME_BASELINE = re.compile(r"baseline-v(\d{3,})")
 ESQUEMA_TAXA = "curadoria-ficha-taxa-v1"
 DIRETORIO_AMOSTRA = "amostra-humana"
@@ -625,19 +637,71 @@ def _medir_pdf(
     *,
     native_only: bool,
     runtime_directory: Path,
+    versao_extracao: str = VERSAO_EXTRACAO,
+    executor: Callable[..., Registro] | None = None,
 ) -> Registro:
     pdf = caminho_pdf_fonte(rodada_dir, pdf_id)
+    # Resolvido na chamada (e não no def) para os testes poderem trocar ``executar_benchmark``.
+    executar = executor if executor is not None else executar_benchmark
     try:
-        return executar_benchmark(
+        return executar(
             pdf,
             referencia,
             saida,
             native_only=native_only,
             runtime_directory=runtime_directory,
+            versao_extracao=versao_extracao,
         )
     except Exception as erro:
         diretorios = (rodada_dir.resolve(), runtime_directory.resolve())
         return {"situacao": "falha", "erro": _sanear(str(erro), pdf, pdf_id, *diretorios)}
+
+
+def _medir_pdf_no_pool(argumentos: tuple[Any, ...]) -> Registro:
+    """Ponto de entrada do processo filho: um PDF, só na própria pasta de saída."""
+    return _medir_pdf(*argumentos[:4], **argumentos[4])
+
+
+def _processos_efetivos(pedido: int, com_referencia: int) -> int:
+    return max(1, min(pedido, com_referencia, LIMITE_PROCESSOS))
+
+
+def _medir_em_pool(
+    ids: Sequence[str], argumentos: Sequence[tuple[Any, ...]], processos: int
+) -> dict[str, Registro]:
+    resultados: dict[str, Registro] = {}
+    with ProcessPoolExecutor(max_workers=processos) as pool:
+        try:
+            for pdf_id, resultado in zip(
+                ids, pool.map(_medir_pdf_no_pool, argumentos), strict=True
+            ):
+                resultados[pdf_id] = resultado
+        except BrokenProcessPool:
+            pass  # crash nativo num worker: os PDFs sem resultado viram falha abaixo
+    return {
+        pdf_id: resultados.get(pdf_id, {"situacao": "falha", "erro": FALHA_DO_POOL})
+        for pdf_id in ids
+    }
+
+
+def _medir_pdfs(
+    rodada_dir: Path,
+    referencias: Mapping[str, Path | None],
+    saidas: Mapping[str, Path],
+    *,
+    processos: int,
+    **opcoes: Any,
+) -> dict[str, Registro | None]:
+    """Mede cada PDF com referência (serial ou em pool) e preserva a ordem de ``referencias``."""
+    ids = [pdf_id for pdf_id, referencia in referencias.items() if referencia is not None]
+    argumentos = [
+        (rodada_dir, pdf_id, referencias[pdf_id], saidas[pdf_id], opcoes) for pdf_id in ids
+    ]
+    if processos > 1 and len(ids) > 1:
+        medidos = _medir_em_pool(ids, argumentos, processos)
+    else:
+        medidos = {pdf_id: _medir_pdf_no_pool(a) for pdf_id, a in zip(ids, argumentos, strict=True)}
+    return {pdf_id: medidos.get(pdf_id) for pdf_id in referencias}
 
 
 def _versao_instalada(pacote: str) -> str | None:
@@ -647,13 +711,84 @@ def _versao_instalada(pacote: str) -> str | None:
         return None
 
 
+def _ficha_predita_legivel(pasta: Path) -> Registro | None:
+    """``ficha-predita.json`` da pasta, ou ``None`` se ausente ou ilegível (tratada como ausente).
+
+    Escrita interrompida (JSON inválido, vazio, bytes inválidos) ou raiz que não é objeto não pode
+    derrubar o comando: o resumo é sempre gravado.
+    """
+    arquivo = pasta / "ficha-predita.json"
+    try:
+        ficha = ler_json(arquivo) if arquivo.is_file() else None
+    except (RodadaError, OSError, ValueError):
+        return None
+    return ficha if isinstance(ficha, dict) else None
+
+
 def _gerador_do_baseline(pastas: Sequence[Path]) -> Registro | None:
     for pasta in pastas:
-        arquivo = pasta / "ficha-predita.json"
-        if arquivo.is_file():
-            gerador = ler_json(arquivo).get("gerador")
+        ficha = _ficha_predita_legivel(pasta)
+        if ficha is not None:
+            gerador = ficha.get("gerador")
             return gerador if isinstance(gerador, dict) else None
     return None
+
+
+def _bloco_pendencia_zerado() -> Registro:
+    return {c: {"acertos_afirmados": 0, "acertos_com_pendencia": 0} for c in CAMPOS_COM_PENDENCIA}
+
+
+def _pendentes_por_poste(pasta: Path) -> dict[str, Collection[str]] | None:
+    """``id`` do poste predito -> campos pendentes; ``None`` sem ``ficha-predita.json`` legível."""
+    ficha = _ficha_predita_legivel(pasta)
+    postes = ficha.get("postes") if ficha is not None else None
+    if not isinstance(postes, list):
+        return None
+    return {
+        str(poste["id"]): poste["pendentes"]
+        for poste in postes
+        if isinstance(poste, dict) and "id" in poste and isinstance(poste.get("pendentes"), list)
+    }
+
+
+def _pendencia_do_pdf(avaliacao: Mapping[str, Any], pasta: Path) -> Registro | None:
+    """Acertos afirmados e com pendência de um PDF, ou ``None`` quando não dá para separar."""
+    pendentes = None if "situacao" in avaliacao else _pendentes_por_poste(pasta)
+    if pendentes is None:
+        return None
+    bloco = _bloco_pendencia_zerado()
+    for par in avaliacao.get("pares", []):
+        campos, predicao = par.get("campos"), par.get("predicao")
+        if not isinstance(campos, dict) or predicao not in pendentes:
+            continue
+        for campo in CAMPOS_COM_PENDENCIA:
+            if campos.get(campo) is True:
+                chave = (
+                    "acertos_com_pendencia" if campo in pendentes[predicao] else "acertos_afirmados"
+                )
+                bloco[campo][chave] += 1
+    return bloco
+
+
+def _pendencia(
+    avaliacoes: Mapping[str, Mapping[str, Any] | None], saidas: Mapping[str, Path]
+) -> Registro:
+    """Separa, por PDF e no total, os acertos afirmados dos acertos de campo pendente.
+
+    Fica fora o PDF em falha ou sem referência, sem ``ficha-predita.json`` e o par sem ``campos``
+    ou sem ``predicao``: o que não dá para cruzar não entra, nem como erro.
+    """
+    por_pdf: Registro = {}
+    for pdf_id, avaliacao in avaliacoes.items():
+        bloco = None if avaliacao is None else _pendencia_do_pdf(avaliacao, saidas[pdf_id])
+        if bloco is not None:
+            por_pdf[pdf_id] = bloco
+    total = _bloco_pendencia_zerado()
+    for bloco in por_pdf.values():
+        for campo, contagem in bloco.items():
+            for chave, valor in contagem.items():
+                total[campo][chave] += valor
+    return {"por_pdf": por_pdf, "total": total}
 
 
 def _percentual(parte: int, todo: int) -> str:
@@ -675,9 +810,13 @@ def _linha_baseline(rotulo: str, bloco: Mapping[str, Any]) -> str:
     return f"| {rotulo} | medido | " + " | ".join(colunas) + " |"
 
 
-def _markdown_baseline(resumo: Mapping[str, Any]) -> str:
+def _markdown_baseline(resumo: Mapping[str, Any], processos: tuple[int, int] = (1, 1)) -> str:
+    pedido, efetivo = processos
     linhas = [
         f"# {resumo['versao']}",
+        "",
+        f"Versão de extração: {resumo['opcoes']['versao_extracao']}",
+        f"Processos: {pedido} (efetivos: {efetivo})",
         "",
         f"Parcial: {'sim' if resumo['parcial'] else 'não'}. Todas as taxas são acertos/total.",
         "",
@@ -692,6 +831,18 @@ def _markdown_baseline(resumo: Mapping[str, Any]) -> str:
         f"| {campo} | {_percentual(bloco['acertos'], bloco['total'])} |"
         for campo, bloco in resumo["total"]["campos"].items()
     ]
+    linhas += [
+        "",
+        "## Acertos afirmados e com pendência (total)",
+        "",
+        "| Campo | Acertos afirmados | Acertos com pendência |",
+        "|---|---|---|",
+    ]
+    linhas += [
+        f"| {campo} | {bloco['acertos_afirmados']} | {bloco['acertos_com_pendencia']} |"
+        for campo, bloco in resumo["pendencia"]["total"].items()
+    ]
+    linhas += ["", "Vãos e símbolos: sem separação de pendência."]
     return "\n".join(linhas) + "\n"
 
 
@@ -702,8 +853,18 @@ def baseline(
     native_only: bool = False,
     runtime_directory: Path = RUNTIME_PADRAO,
     parcial: bool = False,
+    versao_extracao: str = VERSAO_EXTRACAO,
+    processos: int = 1,
+    _executor: Callable[..., Registro] | None = None,
 ) -> Registro:
-    """Mede o analisador atual contra as referências e grava a próxima ``baseline-vNNN``."""
+    """Mede o analisador atual contra as referências e grava a próxima ``baseline-vNNN``.
+
+    ``_executor`` é privado, para teste: função de nível de módulo (o spawn a reimporta).
+    """
+    if versao_extracao not in VERSOES_EXTRACAO:
+        raise ValueError(f"versao_extracao desconhecida: {versao_extracao}")
+    if processos < 1:
+        raise ValueError("processos deve ser pelo menos 1")
     selecionados = _pdfs_do_baseline(rodada_dir, pdf_ids)
     referencias = _referencias_do_baseline(rodada_dir, selecionados, parcial=parcial)
     if not native_only:
@@ -713,23 +874,27 @@ def baseline(
     with trava(pasta_fichas / "baseline"):
         nome = f"baseline-v{_proxima_versao_baseline(rodada_dir, selecionados):03d}"
         saidas = {p: diretorio_ficha(rodada_dir, p) / nome for p in selecionados}
-        avaliacoes = {
-            pdf_id: None
-            if referencia is None
-            else _medir_pdf(
-                rodada_dir,
-                pdf_id,
-                referencia,
-                saidas[pdf_id],
-                native_only=native_only,
-                runtime_directory=runtime_directory,
-            )
-            for pdf_id, referencia in referencias.items()
-        }
+        efetivos = _processos_efetivos(
+            processos, sum(1 for r in referencias.values() if r is not None)
+        )
+        avaliacoes = _medir_pdfs(
+            rodada_dir,
+            referencias,
+            saidas,
+            processos=efetivos,
+            native_only=native_only,
+            runtime_directory=runtime_directory,
+            versao_extracao=versao_extracao,
+            executor=_executor,
+        )
         resumo: Registro = {
             "schema_version": ESQUEMA_BASELINE,
             "versao": nome,
-            "opcoes": {"native_only": native_only, "pdfs": selecionados},
+            "opcoes": {
+                "native_only": native_only,
+                "pdfs": selecionados,
+                "versao_extracao": versao_extracao,
+            },
             "parcial": parcial,
             "versoes": {
                 "pillow": _versao_instalada("pillow"),
@@ -737,10 +902,12 @@ def baseline(
             },
             "gerador": _gerador_do_baseline(list(saidas.values())),
             **agregar_avaliacoes(avaliacoes),
+            "pendencia": _pendencia(avaliacoes, saidas),
         }
         escrever_json_atomico(pasta_fichas / f"{nome}-resumo.json", resumo)
         escrever_bytes_atomico(
-            pasta_fichas / f"{nome}-resumo.md", _markdown_baseline(resumo).encode("utf-8")
+            pasta_fichas / f"{nome}-resumo.md",
+            _markdown_baseline(resumo, (processos, efetivos)).encode("utf-8"),
         )
     return resumo
 
@@ -1074,6 +1241,16 @@ def calcular_taxa(rodada_dir: Path) -> Registro:
 # --- CLI ----------------------------------------------------------------------------------
 
 
+def _inteiro_positivo(texto: str) -> int:
+    try:
+        valor = int(texto)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{texto!r} não é um inteiro") from None
+    if valor < 1:
+        raise argparse.ArgumentTypeError("deve ser um inteiro maior ou igual a 1")
+    return valor
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     sub = parser.add_subparsers(dest="comando", required=True)
@@ -1106,6 +1283,8 @@ def _parser() -> argparse.ArgumentParser:
     comando.add_argument("--native-only", action="store_true")
     comando.add_argument("--runtime-directory", type=Path, default=RUNTIME_PADRAO)
     comando.add_argument("--parcial", action="store_true")
+    comando.add_argument("--versao-extracao", choices=VERSOES_EXTRACAO, default=VERSAO_EXTRACAO)
+    comando.add_argument("--processos", type=_inteiro_positivo, default=1)
     comando = sub.add_parser(
         "amostra", help="sorteia postes das referências para conferência humana"
     )
@@ -1182,6 +1361,8 @@ def _executar(args: argparse.Namespace) -> int:
                 native_only=args.native_only,
                 runtime_directory=args.runtime_directory,
                 parcial=args.parcial,
+                versao_extracao=args.versao_extracao,
+                processos=args.processos,
             )
         )
     if args.comando == "consolidar":

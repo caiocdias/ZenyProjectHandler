@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-import time
 from itertools import pairwise
 from pathlib import Path
 from typing import Literal
@@ -11,6 +10,7 @@ from typing import Literal
 import pytest
 from tests.unit.test_architecture import imported_root_names
 
+from zeny_project_handler.adapters.analysis.drawing_model import geometry
 from zeny_project_handler.adapters.analysis.drawing_model.geometry import (
     reconstruir_polilinhas,
     recuperar_circulos_e_arcos,
@@ -272,26 +272,37 @@ def test_caminho_com_varios_subcaminhos_nao_os_liga_sem_toque() -> None:
     assert all(p.origens == (0,) for p in polilinhas)
 
 
-def test_fusao_de_cadeia_unica_com_ziguezague_seguido_de_reta_escala_linearmente() -> None:
-    # BUG DOCUMENTADO (vermelho): _remover_colineares reinicia a varredura do inicio a cada
-    # vertice removido; com muitos vertices colineares apos um trecho nao colinear, o custo e
-    # quadratico (4k -> 8k vertices: razao ~4), contra o requisito "nada quadratico".
+def test_fusao_de_cadeia_unica_com_ziguezague_seguido_de_reta_escala_linearmente(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Requisito "nada quadratico", medido por trabalho e nao por tempo de parede (E14): conta as
+    # avaliacoes de colinearidade (`_desvio_graus`), que rodam por vertice na passada com pilha.
+    # Uma varredura que reinicia do inicio a cada vertice removido faria 4k -> 8k custar ~4x.
     def cadeia(n: int) -> list[Caminho]:
         pontos: list[Ponto] = [(float(i), float(i % 2) * 5) for i in range(n // 2)]
         ultimo_x = pontos[-1][0]
         pontos += [(ultimo_x + 1 + i, pontos[-1][1]) for i in range(n // 2)]
         return [traco(*pontos)]
 
-    def melhor(caminhos: list[Caminho]) -> float:
-        tempos = []
-        for _ in range(2):
-            inicio = time.perf_counter()
-            reconstruir_polilinhas(caminhos)
-            tempos.append(time.perf_counter() - inicio)
-        return min(tempos)
+    original = geometry._desvio_graus
+    chamadas = 0
 
-    pequeno, grande = cadeia(4_000), cadeia(8_000)
-    assert melhor(grande) / max(melhor(pequeno), 1e-6) < 3
+    def contando(anterior: Ponto, vertice: Ponto, seguinte: Ponto) -> float:
+        nonlocal chamadas
+        chamadas += 1
+        return original(anterior, vertice, seguinte)
+
+    monkeypatch.setattr(geometry, "_desvio_graus", contando)
+
+    def trabalho(caminhos: list[Caminho]) -> int:
+        nonlocal chamadas
+        chamadas = 0
+        reconstruir_polilinhas(caminhos)
+        return chamadas
+
+    pequeno, grande = trabalho(cadeia(4_000)), trabalho(cadeia(8_000))
+    assert pequeno >= 4_000 - 2  # ao menos uma avaliacao por vertice interno: a contagem mede algo
+    assert grande <= 2.5 * pequeno
 
 
 # ---------- círculos e arcos ----------

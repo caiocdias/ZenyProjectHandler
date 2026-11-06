@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import math
-import time
 from itertools import pairwise
 from typing import Literal
 
 import pytest
 
+from zeny_project_handler.adapters.analysis.drawing_model import geometry
 from zeny_project_handler.adapters.analysis.drawing_model.geometry import (
     reconstruir_polilinhas,
     recuperar_circulos_e_arcos,
@@ -165,16 +165,39 @@ def _segmentos(quantidade: int) -> list[Caminho]:
     ]
 
 
-def _melhor_tempo(caminhos: list[Caminho]) -> float:
-    melhor = math.inf
-    for _ in range(3):
-        inicio = time.perf_counter()
+def test_fusao_escala_linearmente(monkeypatch: pytest.MonkeyPatch) -> None:
+    # "Nada quadratico" medido por trabalho e nao por tempo de parede (E14): conta as consultas
+    # de no da grade (`math.hypot` em `geometry`) e as avaliacoes de colinearidade. Uma busca
+    # linear de nos, ou uma varredura que reinicia a cada vertice removido, dobraria o custo
+    # a mais que 2x quando a entrada dobra.
+    contagem = {"hypot": 0, "desvio": 0}
+
+    class _MathContado:
+        def __getattr__(self, nome: str) -> object:
+            return getattr(math, nome)
+
+        @staticmethod
+        def hypot(*coordenadas: float) -> float:
+            contagem["hypot"] += 1
+            return math.hypot(*coordenadas)
+
+    original = geometry._desvio_graus
+
+    def desvio_contado(anterior: Ponto, vertice: Ponto, seguinte: Ponto) -> float:
+        contagem["desvio"] += 1
+        return original(anterior, vertice, seguinte)
+
+    monkeypatch.setattr(geometry, "math", _MathContado())
+    monkeypatch.setattr(geometry, "_desvio_graus", desvio_contado)
+
+    def trabalho(caminhos: list[Caminho]) -> dict[str, int]:
+        contagem.update(hypot=0, desvio=0)
         reconstruir_polilinhas(caminhos)
-        melhor = min(melhor, time.perf_counter() - inicio)
-    return melhor
+        return dict(contagem)
 
-
-def test_fusao_escala_linearmente() -> None:
-    pequeno, grande = _segmentos(10_000), _segmentos(20_000)
-    assert len(reconstruir_polilinhas(grande)) == 200
-    assert _melhor_tempo(grande) / _melhor_tempo(pequeno) < 3
+    pequeno_caminhos, grande_caminhos = _segmentos(10_000), _segmentos(20_000)
+    assert len(reconstruir_polilinhas(grande_caminhos)) == 200
+    pequeno, grande = trabalho(pequeno_caminhos), trabalho(grande_caminhos)
+    for medida in ("hypot", "desvio"):
+        assert pequeno[medida] >= 9_000  # ao menos ~um por segmento: a contagem mede algo
+        assert grande[medida] <= 2.5 * pequeno[medida], (medida, pequeno, grande)

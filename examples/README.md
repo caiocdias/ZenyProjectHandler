@@ -61,6 +61,9 @@ Grava `ficha-predita.json` (do projeto promovido) e `avaliacao.json`; recusa ref
 PDF antes de rodar o analisador. Símbolos de suporte, como estai, não são promovidos: o recall
 deles é 0 por construção.
 
+Com `--versao-extracao propostas-v1`, a ficha predita sai das propostas da interpretação (as
+pendentes entram com o campo em `pendentes`); o padrão é `projeto-promovido-v1`.
+
 Os exemplos vistos são desenvolvimento/diagnóstico, inclusive os que já tenham
 sido chamados de reserva em relatórios históricos. As reservas sintéticas
 anteriores já foram consumidas e não podem servir como teste cego repetido.

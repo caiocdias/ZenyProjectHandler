@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from threading import RLock
 from uuid import UUID, uuid4
 
-from sqlalchemy import Engine, delete, insert, select, update
+from sqlalchemy import Engine, delete, insert, literal_column, select, update
 
 from zeny_project_handler.adapters.persistence.schema import (
     api_idempotency_records,
@@ -172,7 +172,14 @@ class JobStore:
         return len(rows)
 
     def prune(self) -> int:
-        """Remova terminais vencidos e limite a quantidade total de históricos."""
+        """Remova terminais vencidos e limite a quantidade total de históricos.
+
+        Os terminais mais recentes são retidos. A ordem é `updated_at`, depois `created_at` e, por
+        fim, `rowid`. O relógio do Windows avança em passos de ~15,6 ms, então jobs escritos em
+        seguida (ou reconciliados juntos por `reconcile_interrupted`) podem ter `updated_at` e até
+        `created_at` iguais; nesse caso a ordem de inserção decide, e os mais novos são mantidos.
+        O desempate final depende do `rowid` do SQLite: `api_jobs` não pode ser `WITHOUT ROWID`.
+        """
         now = datetime.now(UTC).isoformat()
         terminal_values = tuple(item.value for item in _TERMINAL_STATUSES)
         with self._lock, self._engine.begin() as connection:
@@ -180,7 +187,11 @@ class JobStore:
                 connection.execute(
                     select(api_jobs.c.id, api_jobs.c.expires_at, api_jobs.c.updated_at)
                     .where(api_jobs.c.status.in_(terminal_values))
-                    .order_by(api_jobs.c.updated_at.desc())
+                    .order_by(
+                        api_jobs.c.updated_at.desc(),
+                        api_jobs.c.created_at.desc(),
+                        literal_column("api_jobs.rowid").desc(),
+                    )
                 )
             )
             removed_ids = {
