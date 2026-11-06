@@ -1280,21 +1280,23 @@ Rulings da divisão, registradas no ledger da E06.1:
   - **Critério novo pedido pela revisão final (I1):** o benchmark por ficha não vê a maior parte dos falsos positivos, porque descarta classes fora das referências e o que está fora das regiões anotadas. As divergências abaixo em que o núcleo afirma a mais só fecham com um diff por variante e folha, núcleo contra motor, sem passar pela ficha, com cada casamento "só no núcleo" listado e classificado.
   - **Primeira tarefa (I3):** fixture de rótulo em contorno real pelo adaptador (`pdf_texto_contorno` e `carregar_tabela_glifos`). O ganho "rótulo em glifo" de R-5 só está provado em página pura. Com `empty_interior`, o contorno de uma letra com 6% ou mais da moldura pode recusar a própria variante, justo na família que motiva a etapa. Não medido em folha real.
   - **Pré-condição:** `_unir_proximos` quadrático (`xfail` de R-9).
-  - **Divergências em que o núcleo pode afirmar a mais, fixadas em teste como valor de hoje (inverter, não remover):**
-    - rótulo cuja concatenação é o texto pedido (`C`+`T`, `Q`+`DP` com intruso no fluxo);
-    - sobreimpressão acima de `t`: o rótulo casa; na guarda, a varredura da Task 6 mediu abertura em `-3` e `-4` e a onda final mediu recusa no caso de `-4` que ficou em teste, ou seja, depende da geometria;
-    - spans colados a 90°, 180° e 270°, no rótulo e na guarda (`_pode_colar` só funde a 0 ± 1°);
-    - `qu` inclinado conta como segmento: diagonais e barra casam onde o motor não casa;
-    - borda: `ponto_em` fechado contra o `contains` semiaberto do motor.
+  - **Divergências em que o núcleo pode afirmar a mais.** As fixadas em teste como valor de hoje se invertem, não se removem:
+    - fixado: `Q`+`DP` com intruso no fluxo;
+    - fixado: sobreimpressão acima de `t` no rótulo;
+    - fixado: spans colados a 90°, 180° e 270°, no rótulo e na guarda (`_pode_colar` só funde a 0 ± 1°);
+    - fixado: `qu` inclinado conta como segmento, e diagonais e barra casam onde o motor não casa. Na direção contrária, `empty_interior` recusa onde o motor casa. O efeito na linha terminal de caminho `fs` não foi testado;
+    - fixado: borda, com `ponto_em` fechado contra o `contains` semiaberto do motor;
+    - **sem teste:** `C`+`T` com lacuna entre o limite do `words` (~2 pt) e `t` (~3 pt);
+    - **sem teste:** sobreimpressão acima de `t` na guarda. A varredura da Task 6 mediu a abertura (fonte 11 `cour` em -3, fonte 14 em -4). `test_guarda_com_sobreimpressao_alem_da_folga_recusa_como_o_motor` recusa só porque, nessa geometria, o centro de `12` cai na moldura, e a docstring dele ("não há resíduo") está **errada**: corrija-a na E06.2.2 e acrescente o resíduo, parametrizado nesses dois casos.
   - **Divergências em que o núcleo perde recall:**
     - família de R-6: linha que dobra no disco, duas linhas de lados opostos e traço solto a menos de 0,5 pt do centro. É o caso mais provável de perda em folha real: um disco com rede dos dois lados no mesmo estilo deixa de casar;
     - losango de 4 `l` sem encadeamento (o X dobrado, recusado de propósito, é falso positivo do motor);
     - lados de losango fora de `grade_segmentos`;
     - rótulo nativo dentro de span maior que ele (R-4);
     - vários `qu` inclinados contam uma banda; disco além de 16 pt da página não casa; segundo retângulo do mesmo caminho; dois discos de dois arcos viram uma elipse.
-  - **Custo a medir à parte nas 16 folhas:** a colagem é paga por candidato na janela `±t` e é quadrática em colunas alinhadas; `grandes` com diagonais longas; o orçamento cobra candidato distinto, então o trabalho real chega a 64 vezes o gasto.
+  - **Custo a medir à parte nas 16 folhas:** a colagem é paga por candidato na janela `±t` e é quadrática em colunas alinhadas; `grandes` com diagonais longas; o orçamento cobra candidato distinto, então o trabalho real chega a 64 vezes o gasto, e a grade guarda até 64 entradas por item.
   - **Fontes:**
-    - desenho com ponto não finito é descartado sem diagnóstico (`_caminhos`), e a guarda perde esse elemento. Dá para detectar sem tocar no modelo, comparando `total_desenhos` com `len(caminhos)`;
+    - desenho malformado ou com ponto não finito é descartado sem diagnóstico (`_caminhos`), e a guarda perde esse elemento. Dá para detectar sem tocar no modelo, comparando `total_desenhos` com `len(caminhos)`, tolerando desenho sem subcaminho, que `_caminhos` também não inclui;
     - `tabela=None` em `pagina_para_gramaticas` abre as guardas: considere o parâmetro obrigatório na ligação;
     - glifo anulado pelo leitor (`glifos_desconhecidos`) não bloqueia e deixa a guarda sem aquele texto.
   - **Adiado para a E06.3:** promover a públicos os privados importados entre módulos (`grammar_disc`, `symbol_matcher`), onde as gramáticas vão mudar.
