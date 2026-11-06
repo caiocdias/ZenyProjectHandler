@@ -1262,7 +1262,42 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 **Riscos e mitigação:** laços O(F²) e `get_text` por moldura no motor atual → índice espacial e teto por página.
 
-**Evidências e handoff:** —
+**Evidências e handoff:**
+
+- Plano: `docs/superpowers/plans/2026-11-06-leitura-vetorial-por-poste-e06-2-1.md`. Revisão de arquitetura (opus): bloqueou na rodada 0 (C1, I1–I4) e aprovou com notas na rodada 1.
+- Relógio: de 36ec385 (11:45 de 2026-11-06) até o commit `#concluida`, sem os 7 min da interrupção. A marca de 4h30 passou na revisão final, e a ruling foi continuar, porque as tarefas já estavam integradas.
+- Entregas, todas puras, sem PyMuPDF, salvo o adaptador, e nada ligado no job nem no runner (D12):
+  - `reconstruir_polilinhas` linear em nó de grau alto (D1, sem `xfail`);
+  - `drawing_model/symbol_grammars.py`: página, orçamento, grade, molduras, palavras e segmentos;
+  - `drawing_model/grammar_frames.py` e `grammar_disc.py`: as 6 gramáticas;
+  - `drawing_model/symbol_matcher.py`: `casar_variantes`;
+  - `pagina_para_gramaticas` em `pymupdf_drawing_model.py`, com índice cru e translúcidos.
+- Ciclo: Task 1 e Task 3 sem rodada de correção; Task 2 sem correção; Task 5, 1 rodada; Task 4, 4 rodadas; Task 6 sem correção. Testador em todas (`Risco: alto`). Revisão de cada tarefa aprovada ao fim do ciclo.
+- Decisões tomadas (revisáveis):
+  - **R-4 emendada três vezes na execução:** a repartição de span por caracteres foi revogada, porque dava falso positivo em fonte proporcional e o texto de glifo também não tem largura fixa. Toda palavra usa a caixa do span. Spans nativos horizontais colados, com lacuna em `[-t, +t]` e `t = max(0.5, 0.2·altura)`, fundem em uma palavra `inteira`. Nas guardas, palavra `inteira` recusa por sobreposição fechada. Custo: recall em rótulo dentro de span maior. Saída se pesar: caixa real da palavra (`TextoGlifo.glifos`, `words`).
+  - **R-E06.2.1-1 a 11**, no plano.
+- **Para a E06.2.2, além do que o plano lista em "Fechamento operacional":**
+  - **Critério novo pedido pela revisão final (I1):** o benchmark por ficha não vê a maior parte dos falsos positivos, porque descarta classes fora das referências e o que está fora das regiões anotadas. As divergências abaixo em que o núcleo afirma a mais só fecham com um diff por variante e folha, núcleo contra motor, sem passar pela ficha, com cada casamento "só no núcleo" listado e classificado.
+  - **Primeira tarefa (I3):** fixture de rótulo em contorno real pelo adaptador (`pdf_texto_contorno` e `carregar_tabela_glifos`). O ganho "rótulo em glifo" de R-5 só está provado em página pura. Com `empty_interior`, o contorno de uma letra com 6% ou mais da moldura pode recusar a própria variante, justo na família que motiva a etapa. Não medido em folha real.
+  - **Pré-condição:** `_unir_proximos` quadrático (`xfail` de R-9).
+  - **Divergências em que o núcleo pode afirmar a mais, fixadas em teste como valor de hoje (inverter, não remover):**
+    - rótulo cuja concatenação é o texto pedido (`C`+`T`, `Q`+`DP` com intruso no fluxo);
+    - sobreimpressão acima de `t`: o rótulo casa; na guarda, a varredura da Task 6 mediu abertura em `-3` e `-4` e a onda final mediu recusa no caso de `-4` que ficou em teste, ou seja, depende da geometria;
+    - spans colados a 90°, 180° e 270°, no rótulo e na guarda (`_pode_colar` só funde a 0 ± 1°);
+    - `qu` inclinado conta como segmento: diagonais e barra casam onde o motor não casa;
+    - borda: `ponto_em` fechado contra o `contains` semiaberto do motor.
+  - **Divergências em que o núcleo perde recall:**
+    - família de R-6: linha que dobra no disco, duas linhas de lados opostos e traço solto a menos de 0,5 pt do centro. É o caso mais provável de perda em folha real: um disco com rede dos dois lados no mesmo estilo deixa de casar;
+    - losango de 4 `l` sem encadeamento (o X dobrado, recusado de propósito, é falso positivo do motor);
+    - lados de losango fora de `grade_segmentos`;
+    - rótulo nativo dentro de span maior que ele (R-4);
+    - vários `qu` inclinados contam uma banda; disco além de 16 pt da página não casa; segundo retângulo do mesmo caminho; dois discos de dois arcos viram uma elipse.
+  - **Custo a medir à parte nas 16 folhas:** a colagem é paga por candidato na janela `±t` e é quadrática em colunas alinhadas; `grandes` com diagonais longas; o orçamento cobra candidato distinto, então o trabalho real chega a 64 vezes o gasto.
+  - **Fontes:**
+    - desenho com ponto não finito é descartado sem diagnóstico (`_caminhos`), e a guarda perde esse elemento. Dá para detectar sem tocar no modelo, comparando `total_desenhos` com `len(caminhos)`;
+    - `tabela=None` em `pagina_para_gramaticas` abre as guardas: considere o parâmetro obrigatório na ligação;
+    - glifo anulado pelo leitor (`glifos_desconhecidos`) não bloqueia e deixa a guarda sem aquele texto.
+  - **Adiado para a E06.3:** promover a públicos os privados importados entre módulos (`grammar_disc`, `symbol_matcher`), onde as gramáticas vão mudar.
 
 ---
 
@@ -1283,14 +1318,15 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 - [ ] Fixtures sintéticas positivas e negativas do método e da ligação no runner.
 - [ ] O benchmark de símbolos mede o método novo nas 16 folhas, ao lado do atual.
+- [ ] Diff por variante e folha, núcleo contra motor, sem passar pela ficha, em `tmp/`: cada casamento "só no núcleo" listado e classificado (ver handoff da E06.2.1).
 - [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
 - [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
-**Validação obrigatória:** `cmd.exe //c IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+**Validação obrigatória:** `cmd.exe //c ".\\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`. Confira a data do `relatorio-testes.txt`: sem o `.\`, o `cmd` da sessão não acha o `.bat` e o relatório lido é o antigo.
 
 **Revisão humana:** não
 
-**Notas para o plano:** a comparação entre métodos usa o bloco `comparacao` do benchmark (interseção das folhas).
+**Notas para o plano:** a comparação entre métodos usa o bloco `comparacao` do benchmark (interseção das folhas). Leia o handoff da E06.2.1: traz a primeira tarefa e as divergências a medir.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
