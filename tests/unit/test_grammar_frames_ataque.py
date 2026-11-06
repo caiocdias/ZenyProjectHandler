@@ -918,3 +918,20 @@ def test_guarda_com_spans_separados_recusa_onde_o_motor_casa_e_e_so_recall(
 
     assert motor != set()
     assert nucleo == set()
+
+
+def test_residuo_aceito_sobreimpressao_alem_da_folga_ainda_casa_onde_o_motor_recusa() -> None:
+    """LIMITAÇÃO CONHECIDA (R-E06.2.1-4; medir na E06.2.2). Com sobreposição de 4 pt em fonte 11
+    (acima da folga de fusão de ~1,5 pt) o `words` da PyMuPDF ainda junta "QDP" e "12" e o motor
+    recusa; o núcleo não funde e casa. Valor de hoje; se a fusão passar a cobrir, o teste deve
+    ser invertido, não removido."""
+    desenhar = _spans_colados(
+        "QDP", "12", 116.0, "helv", lambda p: p.draw_rect(QUADRADO, color=PRETO, width=1), -4.0
+    )
+    with _pdf(desenhar) as pagina:
+        assert [w[4] for w in pagina.get_text("words")] == ["QDP12"]
+
+    motor, nucleo = _comparar(desenhar, QDP)
+
+    assert motor == set()
+    assert nucleo != set()

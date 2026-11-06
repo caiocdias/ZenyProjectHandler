@@ -973,7 +973,8 @@ def test_colagem_de_uma_linha_de_spans_gasta_linear() -> None:
     ]
 
     pequeno, grande = _gasto_da_colagem(linha_de(2000)), _gasto_da_colagem(linha_de(4000))
-    assert pequeno <= 4 * 2000
+    # A janela dá cerca de 6 por span (candidato + janela [-t, +t]); linear, não quadrático.
+    assert pequeno <= 7 * 2000
     assert grande <= 2 * pequeno + 10
 
 
