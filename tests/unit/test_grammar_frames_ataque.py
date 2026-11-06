@@ -935,3 +935,64 @@ def test_residuo_aceito_sobreimpressao_alem_da_folga_ainda_casa_onde_o_motor_rec
 
     assert motor == set()
     assert nucleo != set()
+
+
+# --- varredura da lacuna por tamanho de fonte (8 e 14, além da 11 acima) ----------------------
+# Medido: fora do limite ±t o núcleo ainda casa onde o `words` junta quando a sobreposição passa
+# de t (resíduo aceito de R-E06.2.1-4, ver o teste acima); dentro de ±t nunca afirma a mais.
+
+
+def _spans_colados_em_fonte(
+    primeiro: str,
+    segundo: str,
+    x: float,
+    fonte: str,
+    tamanho: float,
+    moldura: Callable[[pymupdf.Page], object],
+    lacuna: float,
+) -> Callable[[pymupdf.Page], object]:
+    def desenhar(pagina: pymupdf.Page) -> None:
+        moldura(pagina)
+        pagina.insert_text((x, 139), primeiro, fontsize=tamanho)
+        largura = pymupdf.get_text_length(primeiro, fontsize=tamanho)
+        pagina.insert_text(
+            (x + largura + lacuna, 139), segundo, fontsize=tamanho, color=VERMELHO, fontname=fonte
+        )
+
+    return desenhar
+
+
+def _tolerancia_da_juncao(desenhar: Callable[[pymupdf.Page], object]) -> float:
+    """`t = max(0,5; 0,2 x menor altura)`, medido nos dois spans que o modelo guarda."""
+    with _pdf(desenhar) as pagina:
+        contexto, _ = _contexto_do_pdf(pagina)
+        alturas = [t.bbox[3] - t.bbox[1] for t in contexto.pagina.modelo.textos]
+    return max(0.5, 0.2 * min(alturas))
+
+
+# fração de t: negativa é sobreposição; só até -t (exato é o fio da navalha, pelo float32 da bbox)
+_FRACOES_DE_T = [-0.99, -0.95, -0.5, 0.0, 0.5, 0.95, 1.01, 1.05, 1.5, 2.0, 3.0]
+
+
+@pytest.mark.parametrize("fonte2", ["helv", "cour", "tiro"])
+@pytest.mark.parametrize("tamanho", [8, 14])
+@pytest.mark.parametrize("fracao", _FRACOES_DE_T)
+def test_varredura_de_lacuna_por_fonte_nao_afirma_a_mais_dentro_de_t(
+    fracao: float, tamanho: int, fonte2: str
+) -> None:
+    def moldura(pagina: pymupdf.Page) -> None:
+        pagina.draw_rect(QUADRADO, color=PRETO, width=1)
+
+    t = _tolerancia_da_juncao(
+        _spans_colados_em_fonte("QDP", "12", 116.0, fonte2, tamanho, moldura, 0.0)
+    )
+    rotulo = _spans_colados_em_fonte("QDP", "12", 116.0, fonte2, tamanho, moldura, fracao * t)
+    guarda = _spans_colados_em_fonte(
+        "CT", "12", 100.0, fonte2, tamanho, _moldura_pequena_com_x, fracao * t
+    )
+
+    motor_r, nucleo_r = _comparar(rotulo, QDP)
+    motor_g, nucleo_g = _comparar(guarda, DIAGONAIS)
+
+    assert nucleo_r - motor_r == set()
+    assert nucleo_g - motor_g == set()
