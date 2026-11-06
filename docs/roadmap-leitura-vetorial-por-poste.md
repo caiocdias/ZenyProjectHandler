@@ -267,7 +267,7 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E14 | Gate de testes paralelo | #concluida | E05 | suíte paralela no `.bat` sem perder teste, `main` verde, scripts de corpus com processos |
 | E06.1 | Medição de símbolos e base do modelo | #concluida | E05, E14 | benchmark diagnóstico de símbolos contra as fichas, página do modelo com índice cru, guarda contra memorização |
 | E06.2.1 | Núcleo de gramáticas sobre o modelo | #concluida | E06.1 | núcleo puro com índice espacial e teto, 6 gramáticas portadas, paridade no corpus sintético |
-| E06.2.2 | Método versionado no runner | #pendente | E06.2.1 | método de pacotes sobre o modelo no runner opt-in, resíduo raster marcado, benchmark nas 16 folhas |
+| E06.2.2 | Método versionado no runner | #em-andamento | E06.2.1 | método de pacotes sobre o modelo no runner opt-in, resíduo raster marcado, benchmark nas 16 folhas |
 | E06.3 | Gramáticas das classes da ficha | #pendente | E06.2.2 | estai, aterramento, para-raios, transformador e interrupção sobre o modelo, acima do atual |
 | E07 | Ficha do poste | #pendente | E06.3, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
 | E08 | Conferência UTM | #pendente | E07 | transformação página → UTM, checagem de posição e vão, pendências |
@@ -1310,7 +1310,7 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 ---
 
-## E06.2.2 — Método versionado no runner — #pendente
+## E06.2.2 — Método versionado no runner — #em-andamento
 
 **Objetivo:** expor o núcleo da E06.2.1 como método de símbolos versionado, ligado no `SymbolCompositionRunner` opt-in (D12) e medido nas 16 folhas ao lado do atual.
 
