@@ -266,7 +266,7 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 |---|---|---|---|---|
 | E14 | Gate de testes paralelo | #concluida | E05 | suíte paralela no `.bat` sem perder teste, `main` verde, scripts de corpus com processos |
 | E06.1 | Medição de símbolos e base do modelo | #concluida | E05, E14 | benchmark diagnóstico de símbolos contra as fichas, página do modelo com índice cru, guarda contra memorização |
-| E06.2.1 | Núcleo de gramáticas sobre o modelo | #em-andamento | E06.1 | núcleo puro com índice espacial e teto, 6 gramáticas portadas, paridade no corpus sintético |
+| E06.2.1 | Núcleo de gramáticas sobre o modelo | #concluida | E06.1 | núcleo puro com índice espacial e teto, 6 gramáticas portadas, paridade no corpus sintético |
 | E06.2.2 | Método versionado no runner | #pendente | E06.2.1 | método de pacotes sobre o modelo no runner opt-in, resíduo raster marcado, benchmark nas 16 folhas |
 | E06.3 | Gramáticas das classes da ficha | #pendente | E06.2.2 | estai, aterramento, para-raios, transformador e interrupção sobre o modelo, acima do atual |
 | E07 | Ficha do poste | #pendente | E06.3, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
@@ -1233,7 +1233,7 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 ---
 
-## E06.2.1 — Núcleo de gramáticas sobre o modelo — #em-andamento
+## E06.2.1 — Núcleo de gramáticas sobre o modelo — #concluida
 
 **Objetivo:** portar as 6 gramáticas dos pacotes para um núcleo puro sobre a página do modelo de desenho, com paridade de variantes no corpus sintético e custo limitado por página.
 
@@ -1249,12 +1249,12 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 **Critérios de aceite:**
 
-- [ ] Fixtures sintéticas positivas e negativas, e paridade de variantes por página com o motor atual no corpus sintético.
-- [ ] O teste de nó de grau alto da D1 passa sem `xfail`.
-- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
-- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+- [x] Fixtures sintéticas positivas e negativas, e paridade de variantes por página com o motor atual no corpus sintético.
+- [x] O teste de nó de grau alto da D1 passa sem `xfail`.
+- [x] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
-**Validação obrigatória:** `cmd.exe //c IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
 
 **Revisão humana:** não
 
@@ -1265,7 +1265,14 @@ Rulings da divisão, registradas no ledger da E06.1:
 **Evidências e handoff:**
 
 - Plano: `docs/superpowers/plans/2026-11-06-leitura-vetorial-por-poste-e06-2-1.md`. Revisão de arquitetura (opus): bloqueou na rodada 0 (C1, I1–I4) e aprovou com notas na rodada 1.
-- Relógio: de 36ec385 (11:45 de 2026-11-06) até o commit `#concluida`, sem os 7 min da interrupção. A marca de 4h30 passou na revisão final, e a ruling foi continuar, porque as tarefas já estavam integradas.
+- Relógio: de 36ec385 (11:45 de 2026-11-06) até o commit `#concluida` (16:40), 4h48 sem os 7 min da interrupção. A marca de 4h30 passou na revisão final, e a ruling foi continuar, porque as tarefas já estavam integradas.
+- Revisão final (`revisor-seguranca`, opus, 5ed40ed..59ecdf0): aprovada com ressalvas, sem Crítico e sem defeito de código bloqueante. I1–I4 e M1–M8 foram tratados na onda única e neste handoff. Restos sem correção, por limite da onda: uma docstring errada e dois testes de resíduo, listados abaixo para a E06.2.2.
+- Critérios verificados:
+  1. Paridade: `test_paridade_de_variantes_por_pagina_no_corpus` verde, com fixtures positivas e negativas nas 6 gramáticas.
+  2. D1: sem `xfail`; os únicos xfail são R-9 e a memória de glifos da E05.
+  3. `scripts.audit_symbol_packages` → `errors []` em 02359d3; depois disso `src/` só mudou em docstring.
+  4. `.bat` em 59ecdf0 → `RESULTADO FINAL: APROVADO`: 8412 passed, 2 xfailed, cobertura 89,25%. Depois disso, só docs.
+  - `osv-scanner` nos 7 locks → `No issues found`; nenhum lock mudou. `check_test_integrity --base 5ed40ed` → exit 0, sem apontamentos.
 - Entregas, todas puras, sem PyMuPDF, salvo o adaptador, e nada ligado no job nem no runner (D12):
   - `reconstruir_polilinhas` linear em nó de grau alto (D1, sem `xfail`);
   - `drawing_model/symbol_grammars.py`: página, orçamento, grade, molduras, palavras e segmentos;
