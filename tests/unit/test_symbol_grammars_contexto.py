@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import math
-from itertools import pairwise
+from itertools import pairwise, permutations
 from typing import Any
 
+import pymupdf
 import pytest
 from tests.fixtures.symbol_grammars.paginas import (
     circulo_bezier,
@@ -17,6 +18,7 @@ from tests.fixtures.symbol_grammars.paginas import (
     texto,
 )
 
+from zeny_project_handler.adapters.analysis.drawing_model import symbol_grammars
 from zeny_project_handler.adapters.analysis.drawing_model.model import (
     Arco,
     Caixa,
@@ -42,6 +44,7 @@ from zeny_project_handler.adapters.analysis.drawing_model.symbol_grammars import
     ponto_em,
     sobrepoe,
 )
+from zeny_project_handler.adapters.analysis.pymupdf_drawing_model import pagina_modelo_com_indices
 
 LIMITES: Caixa = (0.0, 0.0, 300.0, 300.0)
 
@@ -497,27 +500,29 @@ def test_spans_colados_viram_uma_palavra_com_a_caixa_unida() -> None:
     esquerdo = texto("qdp", (100.0, 130.0, 120.0, 141.0))
     direito = texto("12", (120.0, 131.0, 132.0, 140.0))
 
-    assert _palavras_de(esquerdo, direito) == [
-        Palavra("QDP12", (100.0, 130.0, 132.0, 141.0), False)
-    ]
+    assert _palavras_de(esquerdo, direito) == [Palavra("QDP12", (100.0, 130.0, 132.0, 141.0), True)]
 
 
 def test_caixa_unida_inclui_o_span_da_direita_mais_alto() -> None:
     esquerdo = texto("AB", (100.0, 131.0, 120.0, 140.0))
     direito = texto("CD", (120.0, 130.0, 132.0, 141.0))
 
-    assert _palavras_de(esquerdo, direito) == [Palavra("ABCD", (100.0, 130.0, 132.0, 141.0), False)]
+    assert _palavras_de(esquerdo, direito) == [Palavra("ABCD", (100.0, 130.0, 132.0, 141.0), True)]
 
 
 @pytest.mark.parametrize(
     ("altura", "lacuna", "colam"),
     [
         pytest.param(10.0, 0.0, True, id="sem-lacuna"),
-        pytest.param(10.0, 1.0, True, id="10-por-cento-da-altura"),
-        pytest.param(10.0, 1.01, False, id="alem-de-10-por-cento"),
-        pytest.param(10.0, -0.01, False, id="sobreposto-em-x"),
+        pytest.param(10.0, 2.0, True, id="20-por-cento-da-altura"),
+        pytest.param(10.0, 2.01, False, id="alem-de-20-por-cento"),
+        pytest.param(10.0, -0.01, True, id="sobreposto-em-x"),
+        pytest.param(10.0, -2.0, True, id="sobreposto-em-20-por-cento-da-altura"),
+        pytest.param(10.0, -2.01, False, id="sobreposto-alem-de-20-por-cento"),
         pytest.param(2.0, 0.5, True, id="piso-de-meio-ponto"),
         pytest.param(2.0, 0.51, False, id="alem-do-piso"),
+        pytest.param(2.0, -0.5, True, id="sobreposto-no-piso"),
+        pytest.param(2.0, -0.51, False, id="sobreposto-alem-do-piso"),
     ],
 )
 def test_lacuna_entre_spans_colados(altura: float, lacuna: float, colam: bool) -> None:
@@ -529,11 +534,125 @@ def test_lacuna_entre_spans_colados(altura: float, lacuna: float, colam: bool) -
     assert [p.texto for p in palavras] == (["ABCD"] if colam else ["AB", "CD"])
 
 
-def test_lacuna_usa_a_menor_altura() -> None:
+@pytest.mark.parametrize("lacuna", [0.6, -0.6], ids=["afastado", "sobreposto"])
+def test_lacuna_usa_a_menor_altura(lacuna: float) -> None:
     alto: Caixa = (100.0, 120.0, 120.0, 140.0)
-    baixo = _a_direita(0.6, 130.0, 132.0)
+    baixo = _a_direita(lacuna, 130.0, 132.0)
 
     assert [p.texto for p in _palavras_de(texto("AB", alto), texto("CD", baixo))] == ["AB", "CD"]
+
+
+@pytest.mark.parametrize("lacuna", [0.6, -0.6], ids=["afastado", "sobreposto"])
+def test_lacuna_usa_a_menor_altura_com_o_baixo_a_esquerda(lacuna: float) -> None:
+    """Altura 4 daria folga de 0,8 e a janela a alcança; quem decide é a altura 2, com 0,5."""
+    baixo: Caixa = (100.0, 130.0, 120.0, 132.0)
+    alto: Caixa = (120.0 + lacuna, 129.0, 132.0, 133.0)
+
+    assert [p.texto for p in _palavras_de(texto("AB", baixo), texto("CD", alto))] == ["AB", "CD"]
+
+
+@pytest.mark.parametrize(
+    "direito",
+    [
+        pytest.param(texto("CD", _a_direita(-0.3, 150.0, 160.0)), id="outra-linha"),
+        pytest.param(texto("CD", _a_direita(-0.3), rotacao=0.5), id="outra-rotacao"),
+        pytest.param(texto(" CD", _a_direita(-0.3)), id="espaco-na-juncao"),
+        pytest.param(texto("CD", _a_direita(-0.3), origem="glifo"), id="glifo"),
+        pytest.param(texto("CD", _a_direita(-0.3), origem="shx"), id="shx"),
+    ],
+)
+def test_sobreposto_em_x_segue_as_outras_regras_da_colagem(direito: TextoModelo) -> None:
+    assert [p.texto for p in _palavras_de(texto("AB", ESQUERDO), direito)] == ["AB", "CD"]
+
+
+def test_palavra_fundida_e_inteira_para_a_guarda_recusar_por_sobreposicao() -> None:
+    palavras = _palavras_de(texto("AB", ESQUERDO), texto("CD", _a_direita(1.5)))
+
+    assert palavras == [Palavra("ABCD", (100.0, 130.0, 133.5, 140.0), True)]
+
+
+# Caixas medidas na PyMuPDF: "i" de Helvetica 11 desenhado sobre o fim de "QDP" (lacuna -2,94).
+QDP_MEDIDO: Caixa = (116.0, 127.18, 139.84, 142.29)
+
+
+@pytest.mark.parametrize(
+    "contido",
+    [
+        pytest.param((136.9, 127.18, 139.34, 142.29), id="dentro"),
+        pytest.param((137.4, 127.18, 139.84, 142.29), id="mesma-borda-direita"),
+    ],
+)
+def test_span_contido_na_ponta_do_outro_funde_porque_o_motor_le_uma_palavra(
+    contido: Caixa,
+) -> None:
+    """Contenção funde: deixá-lo de fora faria o núcleo ver `QDP` onde o motor lê `QDPi`."""
+    esperado = [Palavra("QDPI", QDP_MEDIDO, True)]
+
+    assert _palavras_de(texto("QDP", QDP_MEDIDO), texto("i", contido)) == esperado
+    assert _palavras_de(texto("i", contido), texto("QDP", QDP_MEDIDO)) == esperado
+
+
+def test_span_contido_longe_da_borda_nao_funde() -> None:
+    """Fora de [-t, +t]: mesmo contido, a lacuna é do início dele à borda direita do outro."""
+    contido: Caixa = (120.0, 127.18, 122.0, 142.29)
+
+    assert [p.texto for p in _palavras_de(texto("QDP", QDP_MEDIDO), texto("i", contido))] == [
+        "QDP",
+        "I",
+    ]
+
+
+def test_span_contido_na_ponta_funde_no_pdf_como_o_motor_le() -> None:
+    with pymupdf.open() as documento:  # type: ignore[no-untyped-call]
+        pagina = documento.new_page(width=400, height=400)
+        pagina.insert_text((116, 139), "QDP", fontsize=11)
+        x = 116 + pymupdf.get_text_length("QDP", fontsize=11) - 2.94
+        pagina.insert_text((x, 139), "i", fontsize=11, color=(1, 0, 0))
+        assert [str(w[4]) for w in pagina.get_text("words")] == ["QDPi"]
+        modelo, indices = pagina_modelo_com_indices(pagina, 0)
+    contexto = contexto_gramaticas(PaginaGramatica(modelo, indices, frozenset()))
+
+    palavras = contexto.grade_palavras.consultar((0.0, 0.0, 400.0, 400.0))
+
+    assert [(p.texto, p.inteira) for p in palavras] == [("QDPI", True)]
+
+
+@pytest.mark.parametrize(
+    ("ordem", "esperado"),
+    [pytest.param((0, 1), "IL", id="i-primeiro"), pytest.param((1, 0), "LI", id="l-primeiro")],
+)
+def test_caixas_iguais_fundem_na_ordem_da_pagina(ordem: tuple[int, int], esperado: str) -> None:
+    """Sem borda para desempatar, a ordem da página decide e a união termina."""
+    caixa: Caixa = (100.0, 130.0, 101.0, 140.0)
+    spans = (texto("i", caixa), texto("l", caixa))
+
+    palavras = _palavras_de(spans[ordem[0]], spans[ordem[1]])
+
+    assert palavras == [Palavra(esperado, caixa, True)]
+
+
+def test_spans_mutuamente_na_tolerancia_nao_formam_ciclo() -> None:
+    """Cada um está em [-t, +t] do outro nos dois sentidos: o início da caixa decide o sentido."""
+    menor = texto("A", (100.0, 130.0, 100.3, 140.0))
+    maior = texto("B", (99.9, 130.0, 100.4, 140.0))
+
+    assert _palavras_de(menor, maior) == [Palavra("BA", (99.9, 130.0, 100.4, 140.0), True)]
+    assert _palavras_de(maior, menor) == [Palavra("BA", (99.9, 130.0, 100.4, 140.0), True)]
+
+
+def test_fusao_independe_da_ordem_da_pagina_quando_as_caixas_nao_empatam() -> None:
+    spans = (
+        texto("A", (100.0, 130.0, 100.4, 140.0)),
+        texto("B", (100.1, 130.0, 100.5, 140.0)),
+        texto("C", (100.2, 130.0, 100.6, 140.0)),
+        texto("D", (100.3, 130.0, 100.7, 140.0)),
+    )
+
+    resultados = {
+        tuple(_palavras_de(*permutacao)) for permutacao in permutations(spans, len(spans))
+    }
+
+    assert resultados == {(Palavra("ABCD", (100.0, 130.0, 100.7, 140.0), True),)}
 
 
 @pytest.mark.parametrize(
@@ -627,7 +746,7 @@ def test_cadeia_de_spans_colados_vira_um_texto_na_posicao_do_primeiro() -> None:
 
     assert _palavras_de(c, longe, b, a) == [
         Palavra("Z", longe.bbox, False),
-        Palavra("ABC", (100.0, 130.0, 130.0, 140.0), False),
+        Palavra("ABC", (100.0, 130.0, 130.0, 140.0), True),
     ]
 
 
@@ -646,6 +765,15 @@ def test_cola_no_vizinho_de_menor_lacuna() -> None:
     direito = texto("C", _a_direita(0.0))
 
     assert [p.texto for p in _palavras_de(longe, perto, direito)] == ["A", "BC"]
+
+
+def test_menor_lacuna_e_em_modulo() -> None:
+    sobreposto = texto("A", (90.0, 130.0, 120.4, 140.0))
+    afastado = texto("B", (100.0, 130.0, 119.9, 140.0))
+    direito = texto("C", _a_direita(0.0))
+
+    assert sorted(p.texto for p in _palavras_de(sobreposto, afastado, direito)) == ["A", "BC"]
+    assert sorted(p.texto for p in _palavras_de(afastado, sobreposto, direito)) == ["A", "BC"]
 
 
 def test_span_cola_em_um_vizinho_so() -> None:
@@ -700,6 +828,33 @@ def test_mesma_borda_direita_em_toda_a_pagina_paga_e_estoura_o_orcamento() -> No
     assert contexto_gramaticas(pagina).orcamento.gasto >= quantidade * quantidade
     with pytest.raises(TetoGramaticasExcedido):
         contexto_gramaticas(pagina, limite=quantidade * quantidade // 2)
+
+
+def test_janela_da_lacuna_negativa_paga_cada_candidato_antes_de_comparar(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Quem termina depois do início do span também é visitado, e pago antes de `_colados`."""
+    quantidade = 200
+    esquerdos = [texto("A", (100.0, i * 0.7, 120.4, i * 0.7 + 0.5)) for i in range(quantidade)]
+    direitos = [
+        texto("B", (120.0, 150.0 + i * 0.7, 130.0, 150.5 + i * 0.7)) for i in range(quantidade)
+    ]
+    pagina = pagina_gramatica((), (*esquerdos, *direitos), primitivas=())
+    chamadas = {"n": 0}
+    original = symbol_grammars._colados
+
+    def contada(esquerdo: TextoModelo, direito: TextoModelo) -> bool:
+        chamadas["n"] += 1
+        return bool(original(esquerdo, direito))
+
+    monkeypatch.setattr(symbol_grammars, "_colados", contada)
+
+    assert contexto_gramaticas(pagina).orcamento.gasto >= quantidade * quantidade
+    chamadas["n"] = 0
+    limite = quantidade * quantidade // 2
+    with pytest.raises(TetoGramaticasExcedido):
+        contexto_gramaticas(pagina, limite=limite)
+    assert chamadas["n"] <= limite
 
 
 # --- segmentos ----------------------------------------------------------------------------

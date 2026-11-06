@@ -39,7 +39,7 @@ _TOLERANCIA_RELATIVA_LOSANGO: Final = 0.08
 _PONTAS_POR_CANTO: Final = 2
 _TOLERANCIA_HORIZONTAL_GRAUS: Final = 1.0
 _LACUNA_MINIMA_COLADOS: Final = 0.5
-_LACUNA_RELATIVA_COLADOS: Final = 0.1
+_LACUNA_RELATIVA_COLADOS: Final = 0.2
 _SOBREPOSICAO_VERTICAL_COLADOS: Final = 0.5
 
 _FONTES_CONSUMIDAS: Final = frozenset(
@@ -178,7 +178,7 @@ class Segmento:
 @dataclass(frozen=True, slots=True)
 class Palavra:
     """A caixa é a do span inteiro (R-E06.2.1-4); `inteira` marca o span que tem mais que a
-    palavra, com várias palavras ou espaços nas pontas."""
+    palavra, com várias palavras ou espaços nas pontas, e a palavra de spans fundidos."""
 
     texto: str
     caixa: Caixa
@@ -397,11 +397,12 @@ def _lacuna_maxima(altura: float) -> float:
 
 
 def _colados(esquerdo: TextoModelo, direito: TextoModelo) -> bool:
+    """Lacuna em módulo, porque o `words` da PyMuPDF também junta o que se sobrepõe."""
     a, b = esquerdo.bbox, direito.bbox
     menor_altura = min(a[3] - a[1], b[3] - b[1])
     return (
         esquerdo.rotacao == direito.rotacao
-        and 0.0 <= b[0] - a[2] <= _lacuna_maxima(menor_altura)
+        and abs(b[0] - a[2]) <= _lacuna_maxima(menor_altura)
         and min(a[3], b[3]) - max(a[1], b[1]) >= menor_altura * _SOBREPOSICAO_VERTICAL_COLADOS
         and not esquerdo.texto[-1].isspace()
         and not direito.texto[0].isspace()
@@ -423,45 +424,62 @@ def _unir(cadeia: Sequence[TextoModelo]) -> TextoModelo:
     )
 
 
+def _de_menor_lacuna(textos: Sequence[TextoModelo], colados: Sequence[int], x0: float) -> int:
+    return min(colados, key=lambda esquerdo: abs(x0 - textos[esquerdo].bbox[2]))
+
+
 def _proximo_colado(
     textos: Sequence[TextoModelo], candidatos: Sequence[int], orcamento: OrcamentoConsultas
 ) -> dict[int, int]:
-    """Para cada span, o span colado à direita dele: o de menor lacuna ainda livre.
+    """Para cada span, o span colado à direita dele: o de menor lacuna em módulo ainda livre.
+
+    A ordem de leitura, pelo início da caixa e, no empate, pela posição na página, é estrita: só
+    quem vem antes pode ser o esquerdo, e por isso a cadeia não fecha ciclo, mesmo com lacuna
+    negativa, e um span contido na ponta do outro funde, como no `words` da PyMuPDF.
 
     Ordenados pela borda direita, só os de borda na janela da lacuna são visitados, a 1 do
-    orçamento cada; a janela é estreita, e só uma página hostil, com a mesma borda em toda
-    parte, gasta mais que 1 por span.
+    orçamento cada, antes de comparar. O gasto cresce onde as bordas se acumulam: colunas
+    alinhadas, com a mesma borda em cada linha, gastam linhas por span, e não só a página hostil.
     """
     orcamento.gastar(len(candidatos))
     por_borda = sorted(candidatos, key=lambda posicao: (textos[posicao].bbox[2], posicao))
     bordas = [textos[posicao].bbox[2] for posicao in por_borda]
+    por_leitura = sorted(candidatos, key=lambda posicao: (textos[posicao].bbox[0], posicao))
+    ordem = {posicao: lugar for lugar, posicao in enumerate(por_leitura)}
     proximo: dict[int, int] = {}
-    for posicao in candidatos:
+    for posicao in por_leitura:
         direito = textos[posicao]
         x0, y0, _, y1 = direito.bbox
-        inicio = bisect_left(bordas, x0 - _lacuna_maxima(y1 - y0))
-        fim = bisect_right(bordas, x0)
+        folga = _lacuna_maxima(y1 - y0)
+        inicio = bisect_left(bordas, x0 - folga)
+        fim = bisect_right(bordas, x0 + folga)
         orcamento.gastar(fim - inicio)
-        for indice in reversed(range(inicio, fim)):
-            esquerdo = por_borda[indice]
-            if esquerdo not in proximo and _colados(textos[esquerdo], direito):
-                proximo[esquerdo] = posicao
-                break
+        colados = [
+            esquerdo
+            for esquerdo in por_borda[inicio:fim]
+            if ordem[esquerdo] < ordem[posicao]
+            and esquerdo not in proximo
+            and _colados(textos[esquerdo], direito)
+        ]
+        if colados:
+            proximo[_de_menor_lacuna(textos, colados, x0)] = posicao
     return proximo
 
 
 def _fundir_spans_colados(
     textos: Sequence[TextoModelo], orcamento: OrcamentoConsultas
-) -> list[TextoModelo]:
-    """Spans `nativo` horizontais colados viram um texto só, como em `words` da PyMuPDF.
+) -> list[tuple[TextoModelo, bool]]:
+    """Spans `nativo` horizontais colados viram um texto só, e o `bool` diz quem foi fundido.
 
-    Limitação: rotacionado não é fundido, e `shx` e `glifo` também não. O texto unido fica na
-    posição do primeiro span da cadeia, e o resto da lista mantém a ordem.
+    A tolerância é folga acima do que o `words` da PyMuPDF junta, sem emular a heurística dele
+    (R-E06.2.1-4): onde o motor lê duas palavras e a fusão lê uma, o núcleo perde recall e não
+    afirma nada a mais. Limitação: rotacionado não é fundido, e `shx` e `glifo` também não. O
+    texto unido fica na posição do primeiro span da cadeia, e o resto da lista mantém a ordem.
     """
     candidatos = [posicao for posicao, texto in enumerate(textos) if _pode_colar(texto)]
     proximo = _proximo_colado(textos, candidatos, orcamento)
     seguintes = set(proximo.values())
-    fundidos = []
+    fundidos: list[tuple[TextoModelo, bool]] = []
     for posicao, texto in enumerate(textos):
         if posicao in seguintes:
             continue
@@ -469,20 +487,21 @@ def _fundir_spans_colados(
         while posicao in proximo:
             posicao = proximo[posicao]
             cadeia.append(textos[posicao])
-        fundidos.append(_unir(cadeia) if len(cadeia) > 1 else texto)
+        fundidos.append((_unir(cadeia), True) if len(cadeia) > 1 else (texto, False))
     return fundidos
 
 
-def _palavras_do_texto(texto: TextoModelo) -> list[Palavra]:
+def _palavras_do_texto(texto: TextoModelo, *, fundido: bool) -> list[Palavra]:
     """Palavras do span, todas com a caixa dele (R-E06.2.1-4), em qualquer origem e rotação.
 
     Nenhum span é repartido: por caracteres, a caixa só seria exata em largura fixa, e falso
-    positivo é pior que perda de recall. `inteira` diz se o texto do span tem mais que a palavra.
+    positivo é pior que perda de recall. `inteira` diz se o texto do span tem mais que a palavra
+    ou se veio de spans fundidos, cuja caixa pode ser maior que a palavra que o motor lê.
     """
     if not all(math.isfinite(valor) for valor in texto.bbox):
         return []
     return [
-        Palavra(trecho.group().upper(), texto.bbox, trecho.group() != texto.texto)
+        Palavra(trecho.group().upper(), texto.bbox, fundido or trecho.group() != texto.texto)
         for trecho in _PALAVRA.finditer(texto.texto)
     ]
 
@@ -535,7 +554,11 @@ def contexto_gramaticas(
     )
     molduras, segmentos = _molduras_e_segmentos(modelo)
     textos = _fundir_spans_colados(modelo.textos, orcamento)
-    palavras = (palavra for texto in textos for palavra in _palavras_do_texto(texto))
+    palavras = (
+        palavra
+        for texto, fundido in textos
+        for palavra in _palavras_do_texto(texto, fundido=fundido)
+    )
     caixas_caminhos = _caixas_de_caminhos(modelo.caminhos)
     return ContextoGramatica(
         pagina=pagina,
