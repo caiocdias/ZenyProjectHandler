@@ -1262,6 +1262,14 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 **Riscos e mitigação:** laços O(F²) e `get_text` por moldura no motor atual → índice espacial e teto por página.
 
+**Estado ao interromper (2026-11-06, o usuário precisou desligar o computador; apague este bloco ao retomar):**
+- **Retomada:** continue nesta etapa, no worktree da trilha A, sem refazer o plano nem a revisão de arquitetura (aprovado com notas, rodada 1, seção no fim do plano). O ledger está em `.superpowers/sdd/2026-11-06-leitura-vetorial-por-poste-e06-2-1/progress.md` deste worktree, com os briefs das 6 tarefas.
+- **Task 1:** completa, revisão limpa, integrada nesta branch (9055032, 162315a).
+- **Task 2:** implementada em df16bd5 e ff1652a, na branch `roadmap/leitura-vetorial-por-poste-t2` (worktree `-t2`), ainda não integrada. O testador foi parado no meio, sem relatório. Falta: testador, verificação mecânica `--base 7024032`, revisão e integração. Em `tests/unit/test_symbol_grammars_contexto_ataque.py`, não rastreado no `-t2`, está o rascunho dele, sem verificação: entregue-o ao novo testador como rascunho ou descarte-o.
+- **Tasks 3 a 6:** não começaram (ondas 2 e 3 do plano).
+- **Relógio:** a interrupção não conta; ao retomar, registre a hora no ledger e desconte o intervalo.
+- **Rulings desta etapa até aqui:** a D12 (entrevista); a divisão da E06.2; o método novo como 5º método do runner, ao lado de `declarative_symbols`; e R-E06.2.1-1 a 11, no plano.
+
 **Evidências e handoff:** —
 
 ---
