@@ -506,7 +506,7 @@ def test_nucleo_nunca_casa_onde_o_motor_recusa_em_fonte_monoespacada() -> None:
     que o motor recusa. Perdas esperadas: rótulo nativo de várias palavras e span que a guarda
     não pode repartir."""
     ganhos = []
-    perdas = 0
+    perdas: set[tuple[str, int]] = set()
     for dx in range(-30, 60, 3):
         for gramatica, desenhar in (
             (QDP, _span_cour("QDP 12", 116.0 + dx)),
@@ -515,7 +515,8 @@ def test_nucleo_nunca_casa_onde_o_motor_recusa_em_fonte_monoespacada() -> None:
             motor, nucleo = _comparar(desenhar, gramatica)
             if nucleo - motor:
                 ganhos.append((gramatica["kind"], dx))
-            perdas += len(motor - nucleo)
+            if motor - nucleo:
+                perdas.add((gramatica["kind"], dx))
     assert ganhos == []
     assert perdas == PERDAS_DE_RECALL_ACEITAS
 
@@ -538,7 +539,11 @@ def _x_com_cour(rotulo: str, x: float) -> Callable[[pymupdf.Page], object]:
 
 # --- palavra `inteira` e itens de caminho pagos: as duas decisões do desenvolvedor ----------
 
-PERDAS_DE_RECALL_ACEITAS = 9
+PERDAS_DE_RECALL_ACEITAS = {
+    *(("label_in_frame", dx) for dx in range(0, 19, 3)),
+    ("framed_diagonals", 36),
+    ("framed_diagonals", 39),
+}
 MOLDURA_X: Caixa = (110.0, 110.0, 158.0, 158.0)
 DIAGONAIS_DO_X = [
     linha((111.0, 111.0), (157.0, 157.0), 1),
@@ -618,21 +623,6 @@ def test_rotulo_nativo_com_espacos_nas_pontas_casa_se_o_span_cabe_na_interna() -
     ):
         contexto = _contexto([retangulo_traco(MOLDURA_X)], [texto(" CT ", caixa)])
         assert casa_moldura(contexto, rotulo, _moldura_em(contexto, MOLDURA_X)) is casa
-
-
-def test_palavra_nao_inteira_mesmo_cruzando_a_moldura() -> None:
-    """Contraste: o span horizontal é repartido e cada palavra vale pelo centro, como no motor."""
-    textos = [
-        texto("AB CD", (154.0, 120.0, 194.0, 130.0), origem="glifo")
-    ]  # "AB" cruza a borda, com o centro fora
-    contexto = _contexto([retangulo_traco(MOLDURA_X), *DIAGONAIS_DO_X], textos)
-    palavras = contexto.grade_palavras.consultar((-16.0, -16.0, 316.0, 316.0))
-    assert [p.inteira for p in palavras] == [False, False]
-    assert palavras[0].caixa[2] > MOLDURA_X[2] > palavras[0].caixa[0]
-    centro_ab = (palavras[0].caixa[0] + palavras[0].caixa[2]) / 2
-    assert centro_ab > MOLDURA_X[2]
-
-    assert casa_moldura(contexto, DIAGONAIS, _moldura_em(contexto, MOLDURA_X)) is True
 
 
 @pytest.mark.parametrize(
@@ -797,3 +787,71 @@ def test_pagina_hostil_estoura_o_teto_e_para_perto_do_limite(gramatica: dict[str
 
     # Uma consulta passa do limite por, no máximo, o tamanho do que ela devolveu.
     assert contexto.orcamento.gasto <= limite + len(contexto.molduras) * 8
+
+
+# --- sondas da revisão -----------------------------------------------------------------------
+
+
+def _spans_colados(
+    primeiro: str, segundo: str, x: float, fonte2: str, moldura: Callable[[pymupdf.Page], object]
+) -> Callable[[pymupdf.Page], object]:
+    """Dois spans de estilos diferentes, sem espaço: a PyMuPDF os junta numa palavra só."""
+
+    def desenhar(pagina: pymupdf.Page) -> None:
+        moldura(pagina)
+        pagina.insert_text((x, 139), primeiro, fontsize=11)
+        largura = pymupdf.get_text_length(primeiro, fontsize=11)
+        pagina.insert_text(
+            (x + largura, 139), segundo, fontsize=11, color=VERMELHO, fontname=fonte2
+        )
+
+    return desenhar
+
+
+@pytest.mark.parametrize("fonte2", ["helv", "cour", "tiro"])
+def test_rotulo_colado_a_outro_span_nao_casa_onde_o_motor_le_uma_palavra(fonte2: str) -> None:
+    """`get_text("words")` junta "QDP" e "12" em QDP12 e o motor recusa; o núcleo tem os dois
+    spans separados e casa com `QDP` exato."""
+    desenhar = _spans_colados(
+        "QDP", "12", 116.0, fonte2, lambda p: p.draw_rect(QUADRADO, color=PRETO, width=1)
+    )
+    with _pdf(desenhar) as pagina:
+        assert [w[4] for w in pagina.get_text("words")] == ["QDP12"]
+
+    motor, nucleo = _comparar(desenhar, QDP)
+
+    assert motor == set()
+    assert nucleo - motor == set()
+
+
+def test_guarda_com_spans_colados_nao_abre_onde_o_motor_le_uma_palavra() -> None:
+    """Moldura pequena com o centro de "CT12" dentro e o de cada pedaço fora."""
+
+    def moldura(pagina: pymupdf.Page) -> None:
+        pagina.draw_rect(pymupdf.Rect(110, 131, 117, 138), color=PRETO, width=1)
+        pagina.draw_line((110, 131), (117, 138), color=PRETO)
+        pagina.draw_line((117, 131), (110, 138), color=PRETO)
+
+    desenhar = _spans_colados("CT", "12", 100.0, "helv", moldura)
+    with _pdf(desenhar) as pagina:
+        assert [w[4] for w in pagina.get_text("words")] == ["CT12"]
+
+    motor, nucleo = _comparar(desenhar, DIAGONAIS)
+
+    assert motor == set()
+    assert nucleo - motor == set()
+
+
+@pytest.mark.parametrize(
+    "caixa_do_span",
+    [
+        pytest.param((150.0, 134.0, 170.0, 134.0), id="altura-zero"),
+        pytest.param((134.0, 150.0, 134.0, 170.0), id="largura-zero"),
+    ],
+)
+def test_palavra_inteira_achatada_que_cruza_a_moldura_recusa_a_guarda(
+    caixa_do_span: Caixa,
+) -> None:
+    """`intersecta` exige área: a caixa achatada que atravessa a borda, com o centro fora, não
+    recusa. O plano quer que a guarda não abra para o span que passa pela moldura."""
+    assert _x_com_span_vertical(caixa_do_span) is False
