@@ -126,7 +126,7 @@ def _observacao(painel: ProjectPanelWidget) -> QThread:
 
 
 def _observacoes_rodando(painel: ProjectPanelWidget) -> list[QThread]:
-    """Threads de observação global vivas: ``QThread`` pura filha do painel (pesquisa é subclasse)."""
+    """Observações globais vivas: ``QThread`` pura filha do painel (a pesquisa é subclasse)."""
     return [
         thread
         for thread in painel.findChildren(QThread)
