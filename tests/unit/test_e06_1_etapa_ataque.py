@@ -292,13 +292,6 @@ def _segmento_repetido(n: int) -> list[Caminho]:
     return [traco((0.0, 0.0), (10.0, 0.0), ordem=i) for i in range(n)]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "reconstruir_polilinhas quadrática em nó de grau alto (estrela/segmento repetido); "
-        "corrigir antes da E06.2 ligar o modelo no servidor — ruling R18 da E06.1"
-    ),
-)
 @pytest.mark.parametrize(
     "construir",
     [
