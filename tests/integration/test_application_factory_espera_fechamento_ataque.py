@@ -214,9 +214,10 @@ _CENARIO_ESTOURO = textwrap.dedent(
 
         def leitura_lenta() -> None:
             em_execucao.set()
-            time.sleep(1.9)
+            time.sleep(3.0)
 
-        # O closeEvent espera 1 s e adia; a leitura termina cerca de 0,9 s depois, acima dos 400 ms.
+        # O closeEvent espera 1 s e adia; a leitura termina cerca de 2 s depois, bem acima dos
+        # 400 ms do prazo, mesmo com a máquina sob carga.
         RemoteRequestThread(0, leitura_lenta).launch()
         # Sem esperar o início, o pedido de interrupção do closeEvent a cancelaria antes do run().
         assert em_execucao.wait(10)

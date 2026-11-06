@@ -22,6 +22,7 @@ _TRECHO_MAXIMO = 4_000
 
 _CENARIO = textwrap.dedent(
     '''
+    import threading
     import time
     from collections.abc import Iterator
     from pathlib import Path
@@ -61,8 +62,17 @@ _CENARIO = textwrap.dedent(
             liberar_original()
 
         window.set_resource_cleanup(liberar)
-        # Passa com folga do 1 s que o closeEvent espera antes de adiar o fechamento.
-        RemoteRequestThread(0, lambda: time.sleep(3.0)).launch()
+        em_execucao = threading.Event()
+
+        def leitura_lenta() -> None:
+            em_execucao.set()
+            # Passa com folga do 1 s que o closeEvent espera antes de adiar o fechamento.
+            time.sleep(3.0)
+
+        RemoteRequestThread(0, leitura_lenta).launch()
+        # Sem esperar o início, o pedido de interrupção do close() no descarte a cancelaria antes
+        # do run() e o cenário passaria sem exercitar o fechamento adiado.
+        assert em_execucao.wait(10)
     '''
 )
 
