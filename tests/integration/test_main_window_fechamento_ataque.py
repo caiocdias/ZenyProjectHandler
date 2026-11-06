@@ -13,7 +13,6 @@ aborto da ``QThread`` vira ``returncode != 0`` com saída legível. Toda thread 
 from __future__ import annotations
 
 import logging
-import os
 import subprocess
 import sys
 import textwrap
@@ -30,6 +29,7 @@ from PySide6.QtGui import QCloseEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDockWidget, QMessageBox, QWidget
 from pytestqt.qtbot import QtBot
+from tests.cenario_subprocesso import RAIZ, ambiente_subprocesso
 from tests.conftest import ApplicationFactory
 
 from zeny_project_handler_client.config import ClientSettings
@@ -42,7 +42,6 @@ from zeny_project_handler_contracts.projects import ProjectSummaryListResponse
 
 pytestmark = pytest.mark.integration
 
-_RAIZ = Path(__file__).resolve().parents[2]
 _PRAZO_SUBPROCESSO_S = 300
 _DURACAO_MAXIMA_S = 30.0
 _TRECHO_MAXIMO = 4_000
@@ -655,13 +654,6 @@ def _truncar(texto: str) -> str:
     return f"[...]{texto[-_TRECHO_MAXIMO:]}"
 
 
-def _ambiente() -> dict[str, str]:
-    ambiente = {k: v for k, v in os.environ.items() if not k.startswith("PYTEST_XDIST")}
-    herdados = [c for c in ambiente.get("PYTHONPATH", "").split(os.pathsep) if c]
-    caminhos = os.pathsep.join([*herdados, str(_RAIZ), str(_RAIZ / "src")])
-    return ambiente | {"QT_QPA_PLATFORM": "offscreen", "PYTHONPATH": caminhos}
-
-
 def _executar_script(
     tmp_path: Path, nome: str, codigo: str, *argumentos: str
 ) -> tuple[subprocess.CompletedProcess[str], float]:
@@ -672,8 +664,8 @@ def _executar_script(
     try:
         resultado = subprocess.run(
             [sys.executable, str(script), str(tmp_path / "dados"), *argumentos],
-            cwd=_RAIZ,
-            env=_ambiente(),
+            cwd=RAIZ,
+            env=ambiente_subprocesso(),
             capture_output=True,
             text=True,
             encoding="utf-8",
