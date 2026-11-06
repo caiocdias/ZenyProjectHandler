@@ -959,19 +959,88 @@ def test_bbox_invertida_nao_gera_palavra_nem_excecao() -> None:
     assert _palavras(texto("CT 12", (50.0, 0.0, 0.0, 10.0))) == []
 
 
+def _gasto_da_colagem(textos: list[Any]) -> int:
+    return contexto_gramaticas(pagina_gramatica((), textos, largura=100000.0)).orcamento.gasto
+
+
+def test_colagem_de_uma_linha_de_spans_gasta_linear() -> None:
+    def linha_de(quantidade: int) -> list[Any]:
+        return [texto("A", (float(i), 10.0, float(i + 1), 20.0)) for i in range(quantidade)]
+
+    palavras = contexto_gramaticas(pagina_gramatica((), linha_de(2000), largura=100000.0))
+    assert [p.texto for p in palavras.grade_palavras.consultar((-16.0, -16.0, 1e5, 1e5))] == [
+        "A" * 2000
+    ]
+
+    pequeno, grande = _gasto_da_colagem(linha_de(2000)), _gasto_da_colagem(linha_de(4000))
+    assert pequeno <= 4 * 2000
+    assert grande <= 2 * pequeno + 10
+
+
+def _conta_colados(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
+    chamadas = {"n": 0}
+    original = symbol_grammars._colados
+
+    def contada(esquerdo: Any, direito: Any) -> bool:
+        chamadas["n"] += 1
+        return bool(original(esquerdo, direito))
+
+    monkeypatch.setattr(symbol_grammars, "_colados", contada)
+    return chamadas
+
+
+def test_spans_com_a_mesma_borda_estouram_o_teto_antes_de_comparar(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pior caso da janela: spans mínimos e quase na mesma coluna, de rotações distintas, de modo
+    que nenhum cola e cada um enxerga todos os anteriores."""
+    quantidade = 4000
+    textos = [
+        texto("A", (i * 1e-6, 10.0, i * 1e-6 + 1e-7, 20.0), rotacao=i * 1e-4)
+        for i in range(quantidade)
+    ]
+    chamadas = _conta_colados(monkeypatch)
+    limite = 5 * quantidade
+
+    with pytest.raises(TetoGramaticasExcedido):
+        contexto_gramaticas(pagina_gramatica((), textos), limite=limite)
+
+    assert chamadas["n"] <= limite
+
+
+def test_spans_em_colunas_vizinhas_pagam_cada_candidato_da_janela(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cada span da coluna seguinte vê as `linhas` bordas da coluna anterior na janela."""
+    linhas, colunas = 200, 5
+    textos = [
+        texto("A", (2.0 * c, 0.5 * r, 2.0 * c + 2.0, 0.5 * r + 10.0))
+        for c in range(colunas)
+        for r in range(linhas)
+    ]
+    chamadas = _conta_colados(monkeypatch)
+
+    gasto = _gasto_da_colagem(textos)
+
+    assert gasto >= (colunas - 1) * linhas * linhas
+    assert chamadas["n"] <= gasto
+    chamadas["n"] = 0
+    with pytest.raises(TetoGramaticasExcedido):
+        contexto_gramaticas(pagina_gramatica((), textos), limite=gasto // 10)
+    assert chamadas["n"] <= gasto // 10
+
+
 def test_palavra_na_margem_entra_e_alem_dela_nao_gasta() -> None:
-    pagina = pagina_gramatica(
-        (),
-        (
-            texto("MARGEM", (305.0, 10.0, 310.0, 20.0)),
-            texto("FORA", (320.0, 10.0, 330.0, 20.0)),
-        ),
-    )
+    margem = texto("MARGEM", (305.0, 10.0, 310.0, 20.0))
+    fora = texto("FORA", (320.0, 10.0, 330.0, 20.0))
 
-    contexto = contexto_gramaticas(pagina)
+    sem_fora = contexto_gramaticas(pagina_gramatica((), (margem,)))
+    com_fora = contexto_gramaticas(pagina_gramatica((), (margem, fora)))
 
-    assert contexto.orcamento.gasto == 1
-    assert [p.texto for p in contexto.grade_palavras.consultar(TUDO)] == ["MARGEM"]
+    # Cada span nativo paga 1 para entrar na colagem; a indexação só cobra a palavra na margem.
+    assert sem_fora.orcamento.gasto == 1 + 1
+    assert com_fora.orcamento.gasto == 2 + 1
+    assert [p.texto for p in com_fora.grade_palavras.consultar(TUDO)] == ["MARGEM"]
 
 
 @pytest.mark.parametrize(

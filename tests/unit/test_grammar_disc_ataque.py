@@ -576,13 +576,32 @@ def test_muitos_discos_sob_muitos_caminhos_gastam_o_produto_e_estouram_o_teto() 
 
 
 def test_palavras_na_celula_do_disco_gastam_uma_por_palavra() -> None:
+    """Duas fileiras de 100 spans de 1 pt, passo 0,01: nenhum cola (a fileira só chegaria ao
+    vizinho a 100 passos, e as fileiras se sobrepõem 0,4 < 50%)."""
     quantidade = 200
     textos = [
-        texto("X", (155.0 + 0.01 * i, 145.0, 156.0 + 0.01 * i, 146.0)) for i in range(quantidade)
+        texto(
+            "X",
+            (
+                155.0 + 0.01 * (i % 100),
+                145.0 + 0.6 * (i // 100),
+                156.0 + 0.01 * (i % 100),
+                146.0 + 0.6 * (i // 100),
+            ),
+        )
+        for i in range(quantidade)
     ]
     gasto, casados = _gasto_de_casar_todos([_vertical(150.0, 0), _disco_a_mao(CENTRO, 1)], textos)
     assert casados == 1
     assert quantidade <= gasto <= quantidade + 10
+
+
+def test_palavras_coladas_na_celula_do_disco_gastam_uma_por_palavra_fundida() -> None:
+    """Passo 0,01 numa fileira só: o span `i` encosta no `i - 100` e os 200 viram 100 palavras."""
+    textos = [texto("X", (155.0 + 0.01 * i, 145.0, 156.0 + 0.01 * i, 146.0)) for i in range(200)]
+    gasto, casados = _gasto_de_casar_todos([_vertical(150.0, 0), _disco_a_mao(CENTRO, 1)], textos)
+    assert casados == 1
+    assert 100 <= gasto <= 110
 
 
 def test_disco_que_falha_na_cor_ou_no_vao_nao_gasta_consulta() -> None:

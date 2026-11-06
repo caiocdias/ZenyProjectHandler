@@ -543,6 +543,7 @@ PERDAS_DE_RECALL_ACEITAS = {
     *(("label_in_frame", dx) for dx in range(0, 19, 3)),
     ("framed_diagonals", 36),
     ("framed_diagonals", 39),
+    ("framed_diagonals", 42),  # o span começa exatamente na borda: sobreposição fechada recusa
 }
 MOLDURA_X: Caixa = (110.0, 110.0, 158.0, 158.0)
 DIAGONAIS_DO_X = [
@@ -578,11 +579,11 @@ def _x_com_span_vertical(caixa_do_span: Caixa, conteudo: str = "CT 12") -> bool:
         pytest.param((120.0, 156.0, 148.0, 170.0), False, id="cruza-a-borda-de-baixo"),
         pytest.param((100.0, 100.0, 200.0, 200.0), False, id="engole-a-moldura"),
         pytest.param((120.0, 120.0, 148.0, 148.0), False, id="dentro-da-moldura"),
-        pytest.param((158.0, 120.0, 170.0, 148.0), True, id="so-encosta-por-fora"),
+        pytest.param((158.0, 120.0, 170.0, 148.0), False, id="encosta-por-fora-recusa"),
         pytest.param((160.0, 120.0, 172.0, 148.0), True, id="inteiramente-fora"),
     ],
 )
-def test_guarda_com_palavra_inteira_recusa_por_interseccao(
+def test_guarda_com_palavra_inteira_recusa_por_sobreposicao_fechada(
     caixa_do_span: Caixa, casa: bool
 ) -> None:
     assert _x_com_span_vertical(caixa_do_span) is casa
