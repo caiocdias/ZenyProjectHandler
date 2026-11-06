@@ -267,8 +267,9 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E14 | Gate de testes paralelo | #concluida | E05 | suíte paralela no `.bat` sem perder teste, `main` verde, scripts de corpus com processos |
 | E06.1 | Medição de símbolos e base do modelo | #concluida | E05, E14 | benchmark diagnóstico de símbolos contra as fichas, página do modelo com índice cru, guarda contra memorização |
 | E06.2.1 | Núcleo de gramáticas sobre o modelo | #concluida | E06.1 | núcleo puro com índice espacial e teto, 6 gramáticas portadas, paridade no corpus sintético |
-| E06.2.2 | Método versionado no runner | #em-andamento | E06.2.1 | método de pacotes sobre o modelo no runner opt-in, resíduo raster marcado, benchmark nas 16 folhas |
-| E06.3 | Gramáticas das classes da ficha | #pendente | E06.2.2 | estai, aterramento, para-raios, transformador e interrupção sobre o modelo, acima do atual |
+| E06.2.2.1 | Método versionado no runner | #em-andamento | E06.2.1 | método de pacotes sobre o modelo no runner opt-in, resíduo raster marcado, agrupamento sem laço quadrático fora de teto |
+| E06.2.2.2 | Medição do método nas 16 folhas | #pendente | E06.2.2.1 | benchmark ao lado do atual e diff por variante, com cada "só no núcleo" classificado |
+| E06.3 | Gramáticas das classes da ficha | #pendente | E06.2.2.2 | estai, aterramento, para-raios, transformador e interrupção sobre o modelo, acima do atual |
 | E07 | Ficha do poste | #pendente | E06.3, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
 | E08 | Conferência UTM | #pendente | E07 | transformação página → UTM, checagem de posição e vão, pendências |
 | E09 | Troca do analisador e remoção do legado | #pendente | E08, E16 | analisador novo como padrão; detectores e, se provado, OCR removidos |
@@ -1310,36 +1311,80 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 ---
 
-## E06.2.2 — Método versionado no runner — #em-andamento
+## E06.2.2 — Método versionado no runner (dividida em E06.2.2.1 e E06.2.2.2)
 
-**Objetivo:** expor o núcleo da E06.2.1 como método de símbolos versionado, ligado no `SymbolCompositionRunner` opt-in (D12) e medido nas 16 folhas ao lado do atual.
+**Divisão (2026-11-06, orquestrador):**
+- **Por que dividir:** as tarefas somam cerca de 4h, e a E06.2.1 mostrou que o porte consome mais do que a estimativa. Cada subetapa é uma etapa completa, e a E06.3 passa a depender da E06.2.2.2.
+- **Como os critérios se repartem:** a E06.2.2.1 leva a pré-condição R-9, a fixture de contorno real, o método versionado, o resíduo raster e a ligação no runner. A E06.2.2.2 leva o benchmark ao lado do atual, o diff por variante e a classificação. Auditor e `.bat` valem nas duas.
 
-**Dependências:** E06.2.1.
+---
+
+## E06.2.2.1 — Método versionado no runner — #em-andamento
+
+**Objetivo:** expor o núcleo da E06.2.1 como método de símbolos versionado, ligado no `SymbolCompositionRunner` opt-in (D12), com o agrupamento do modelo limitado.
+
+**Dependências:** E06.2.1. O relógio começa no commit `#em-andamento` da E06.2.2 (ca9783a).
 
 **Escopo:**
-- **Método versionado:** `VERSAO_MODELO_DESENHO`, o sha dos pacotes e o da tabela de glifos no perfil, primitivas com índice cru e resíduo raster marcado para a E12.
+- **Pré-condição R-9:** `_unir_proximos` sem comparação repetida e com teto de visitas.
+- **Primeira tarefa do handoff (I3):** rótulo em contorno real pelo adaptador, e a guarda corrigida se o defeito se confirmar.
+- **Método versionado:** `VERSAO_MODELO_DESENHO`, o sha dos pacotes e o da tabela de glifos no perfil, primitivas com índice cru, teto e falha de fonte traduzidos em cobertura, e resíduo raster marcado para a E12.
 - **Ligação no `SymbolCompositionRunner`**, com a versão na assinatura.
+- **Resíduos herdados da revisão final da E06.2.1:** a docstring errada e os dois testes.
+
+**Fora de escopo:** benchmark e diff (E06.2.2.2); gramáticas novas (E06.3); analisador padrão (E09).
+
+**Critérios de aceite:**
+
+- [ ] Fixtures sintéticas positivas e negativas do método e da ligação no runner.
+- [ ] O teste de agrupamento de R-9 passa sem `xfail`.
+- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`. Confira a data do `relatorio-testes.txt`: sem o `.\`, o `cmd` da sessão não acha o `.bat` e o relatório lido é o antigo.
+
+**Revisão humana:** não
+
+**Notas para o plano:** leia o handoff da E06.2.1: traz a primeira tarefa e as divergências a medir.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** o modelo com glifos custa até ~20 s por folha no runner → opt-in até a E09. `_unir_proximos` é quadrático em caixas sobrepostas (R-9) → teto antes de ligar no runner.
+
+**Evidências e handoff:** —
+
+---
+
+## E06.2.2.2 — Medição do método nas 16 folhas — #pendente
+
+**Objetivo:** medir o método novo nas 16 folhas, ao lado do atual, e classificar cada divergência em que ele afirma a mais.
+
+**Dependências:** E06.2.2.1.
+
+**Escopo:**
 - **Benchmark:** método `modelo` em `scripts/benchmark_simbolos_ficha.py`, com o script desmembrado.
+- **Diff por variante e folha**, núcleo contra motor, sem passar pela ficha, com o gasto de orçamento separado entre colagem e gramáticas.
+- **Classificação** de cada "só no núcleo", e as decisões que ela pede sobre as divergências do handoff da E06.2.1.
 
 **Fora de escopo:** gramáticas novas (E06.3); analisador padrão (E09).
 
 **Critérios de aceite:**
 
-- [ ] Fixtures sintéticas positivas e negativas do método e da ligação no runner.
 - [ ] O benchmark de símbolos mede o método novo nas 16 folhas, ao lado do atual.
 - [ ] Diff por variante e folha, núcleo contra motor, sem passar pela ficha, em `tmp/`: cada casamento "só no núcleo" listado e classificado (ver handoff da E06.2.1).
+- [ ] O gasto real de orçamento e o limite de `LIMITE_CONSULTAS_PAGINA` estão registrados no handoff.
 - [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
 - [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
-**Validação obrigatória:** `cmd.exe //c ".\\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`. Confira a data do `relatorio-testes.txt`: sem o `.\`, o `cmd` da sessão não acha o `.bat` e o relatório lido é o antigo.
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
 
 **Revisão humana:** não
 
-**Notas para o plano:** a comparação entre métodos usa o bloco `comparacao` do benchmark (interseção das folhas). Leia o handoff da E06.2.1: traz a primeira tarefa e as divergências a medir.
+**Notas para o plano:** a comparação entre métodos usa o bloco `comparacao` do benchmark (interseção das folhas). Decida o que acontece com um casamento classificado como falso positivo: corrigir, aceitar com ruling ou bloquear.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
-**Riscos e mitigação:** o modelo com glifos custa até ~20 s por folha no runner → opt-in até a E09; o tempo por folha sai no benchmark. `_unir_proximos` (`groups.py`) é quadrático em caixas sobrepostas (`xfail(strict=True)` da E06.2.1, R-E06.2.1-9) → corrigir antes de ligar no runner é **pré-condição** desta etapa.
+**Riscos e mitigação:** o benchmark por ficha não vê a maior parte dos falsos positivos (I1 da E06.2.1) → o diff não passa pela ficha.
 
 **Evidências e handoff:** —
 
@@ -1349,7 +1394,7 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 **Objetivo:** reconhecer estais, aterramento, para-raios MT/BT, transformadores e equipamento de interrupção sobre o modelo de desenho, acima do analisador atual.
 
-**Dependências:** E06.2.2.
+**Dependências:** E06.2.2.2.
 
 **Escopo:**
 - Ampliação dos pacotes com as variantes do inventário de ESTAI, TRANSFORMADOR, ATERRAMENTO e PARA_RAIOS_MT/BT, com fonte rastreável e `negative_examples` vindos de `confusable_negatives`. O auditor e `scripts/coverage_matrix_e16.py` passam a aceitar variante de outro `owner_stage` do inventário. A mudança é visível na tabela de suporte da revisão e nas exportações, e vai para "Decisões para o usuário". Os números fixos de `tests/server/test_e14_symbol_review.py:287` entram na File Structure.
