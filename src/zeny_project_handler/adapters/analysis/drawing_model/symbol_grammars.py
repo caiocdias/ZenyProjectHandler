@@ -373,11 +373,23 @@ def _distancia_angular(rotacao: float, alvo: float) -> float:
 
 
 def _palavras_do_texto(texto: TextoModelo) -> list[Palavra]:
+    """Palavras do span (R-E06.2.1-4). Repartir por caracteres só é exato em largura fixa.
+
+    Só `glifo` horizontal é repartido. `nativo`, em qualquer rotação, fica com a caixa do span:
+    falso positivo é pior que perda de recall, e `inteira` marca o span que tem mais que a
+    palavra. `shx` e `glifo` girado também ficam com a caixa do span, e `inteira` marca o span
+    de várias palavras.
+    """
     if not all(math.isfinite(valor) for valor in texto.bbox):
         return []
     trechos = list(_PALAVRA.finditer(texto.texto))
     if not trechos:
         return []
+    if texto.origem == "nativo":
+        return [
+            Palavra(trecho.group().upper(), texto.bbox, trecho.group() != texto.texto)
+            for trecho in trechos
+        ]
     em_pe = _distancia_angular(texto.rotacao, 0.0) <= _TOLERANCIA_HORIZONTAL_GRAUS
     invertido = _distancia_angular(texto.rotacao, 180.0) <= _TOLERANCIA_HORIZONTAL_GRAUS
     if texto.origem == "shx" or not (em_pe or invertido):

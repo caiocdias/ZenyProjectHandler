@@ -388,15 +388,27 @@ def test_alinhamento_de_indices_validado() -> None:
 def test_palavras_de_um_span() -> None:
     caixa: Caixa = (0.0, 0.0, 50.0, 10.0)
 
-    assert _palavras(texto("CT 12", caixa)) == [
+    assert _palavras(texto("CT 12", caixa, origem="glifo")) == [
         Palavra("CT", (0.0, 0.0, 20.0, 10.0), False),
         Palavra("12", (30.0, 0.0, 50.0, 10.0), False),
+    ]
+    assert _palavras(texto("CT 12", caixa)) == [
+        Palavra("CT", caixa, True),
+        Palavra("12", caixa, True),
     ]
     assert _palavras(texto("ct", (0.0, 0.0, 20.0, 10.0))) == [
         Palavra("CT", (0.0, 0.0, 20.0, 10.0), False)
     ]
+    assert _palavras(texto("ct", (0.0, 0.0, 20.0, 10.0), origem="glifo")) == [
+        Palavra("CT", (0.0, 0.0, 20.0, 10.0), False)
+    ]
     assert _palavras(texto("   ", caixa)) == []
+    assert _palavras(texto("   ", caixa, origem="glifo")) == []
     assert _palavras(texto("CT 12", caixa, rotacao=45.0)) == [
+        Palavra("CT", caixa, True),
+        Palavra("12", caixa, True),
+    ]
+    assert _palavras(texto("CT 12", caixa, origem="glifo", rotacao=45.0)) == [
         Palavra("CT", caixa, True),
         Palavra("12", caixa, True),
     ]
@@ -406,10 +418,17 @@ def test_palavras_de_um_span() -> None:
     ]
     assert _palavras(texto("CT", (math.nan, 0.0, 50.0, 10.0))) == []
     assert _palavras(texto("CT", (0.0, 0.0, math.inf, 10.0))) == []
+    assert _palavras(texto("CT", (math.nan, 0.0, 50.0, 10.0), origem="glifo")) == []
 
 
 def test_largura_que_estoura_o_float_nao_quebra() -> None:
-    assert _palavras(texto("CT 12", (-1e308, 0.0, 1e308, 10.0))) == []
+    caixa: Caixa = (-1e308, 0.0, 1e308, 10.0)
+
+    assert _palavras(texto("CT 12", caixa, origem="glifo")) == []
+    assert _palavras(texto("CT 12", caixa)) == [
+        Palavra("CT", caixa, True),
+        Palavra("12", caixa, True),
+    ]
 
 
 def test_palavra_unica_nao_repartida_nao_e_inteira() -> None:
@@ -417,19 +436,64 @@ def test_palavra_unica_nao_repartida_nao_e_inteira() -> None:
 
     assert _palavras(texto("CT", caixa, rotacao=90.0)) == [Palavra("CT", caixa, False)]
     assert _palavras(texto("CT", caixa, origem="shx")) == [Palavra("CT", caixa, False)]
+    assert _palavras(texto("CT", caixa, origem="glifo", rotacao=90.0)) == [
+        Palavra("CT", caixa, False)
+    ]
 
 
 def test_espacos_nas_pontas_ocupam_largura_e_saem_do_texto() -> None:
-    assert _palavras(texto(" ct ", (0.0, 0.0, 40.0, 10.0))) == [
+    assert _palavras(texto(" ct ", (0.0, 0.0, 40.0, 10.0), origem="glifo")) == [
         Palavra("CT", (10.0, 0.0, 30.0, 10.0), False)
     ]
+
+
+def test_palavra_unica_com_espacos_fora_do_nativo_nao_e_inteira() -> None:
+    caixa: Caixa = (0.0, 0.0, 40.0, 10.0)
+
+    assert _palavras(texto(" ct ", caixa, origem="shx")) == [Palavra("CT", caixa, False)]
+    assert _palavras(texto(" ct ", caixa, origem="glifo", rotacao=90.0)) == [
+        Palavra("CT", caixa, False)
+    ]
+
+
+@pytest.mark.parametrize(
+    "rotacao",
+    [0.0, 0.9, 45.0, 90.0, 180.0, math.nan],
+    ids=["0", "0.9", "45", "90", "180", "nan"],
+)
+def test_texto_nativo_nunca_e_repartido(rotacao: float) -> None:
+    """Repartir por caracteres só é exato em largura fixa, e o nativo é proporcional (R-4)."""
+    caixa: Caixa = (0.0, 0.0, 50.0, 10.0)
+
+    assert _palavras(texto("CT 12", caixa, rotacao=rotacao)) == [
+        Palavra("CT", caixa, True),
+        Palavra("12", caixa, True),
+    ]
+
+
+@pytest.mark.parametrize("rotacao", [0.0, 90.0, 180.0, math.nan], ids=["0", "90", "180", "nan"])
+@pytest.mark.parametrize(
+    "cru", [" ct ", "ct ", " ct", "ct\t"], ids=["ambos", "fim", "inicio", "tab"]
+)
+def test_nativo_com_espacos_nas_pontas_e_inteira(cru: str, rotacao: float) -> None:
+    """O span tem mais que a palavra: a caixa dele não diz onde ela está."""
+    caixa: Caixa = (0.0, 0.0, 50.0, 10.0)
+
+    assert _palavras(texto(cru, caixa, rotacao=rotacao)) == [Palavra("CT", caixa, True)]
+
+
+@pytest.mark.parametrize("rotacao", [0.0, 90.0, 180.0, math.nan], ids=["0", "90", "180", "nan"])
+def test_nativo_que_e_exatamente_a_palavra_nao_e_inteira(rotacao: float) -> None:
+    caixa: Caixa = (0.0, 0.0, 50.0, 10.0)
+
+    assert _palavras(texto("ct", caixa, rotacao=rotacao)) == [Palavra("CT", caixa, False)]
 
 
 @pytest.mark.parametrize(
     "rotacao", [179.5, 180.0, 180.9], ids=["abaixo-de-180", "em-180", "acima-de-180"]
 )
 def test_texto_de_cabeca_para_baixo_e_repartido_espelhado(rotacao: float) -> None:
-    assert _palavras(texto("CT 12", (0.0, 0.0, 50.0, 10.0), rotacao=rotacao)) == [
+    assert _palavras(texto("CT 12", (0.0, 0.0, 50.0, 10.0), origem="glifo", rotacao=rotacao)) == [
         Palavra("CT", (30.0, 0.0, 50.0, 10.0), False),
         Palavra("12", (0.0, 0.0, 20.0, 10.0), False),
     ]
@@ -441,7 +505,9 @@ def test_texto_de_cabeca_para_baixo_e_repartido_espelhado(rotacao: float) -> Non
 def test_tolerancia_de_um_grau_reparte(rotacao: float) -> None:
     assert not any(
         palavra.inteira
-        for palavra in _palavras(texto("CT 12", (0.0, 0.0, 50.0, 10.0), rotacao=rotacao))
+        for palavra in _palavras(
+            texto("CT 12", (0.0, 0.0, 50.0, 10.0), origem="glifo", rotacao=rotacao)
+        )
     )
 
 
@@ -453,7 +519,7 @@ def test_tolerancia_de_um_grau_reparte(rotacao: float) -> None:
 def test_fora_da_tolerancia_nao_reparte(rotacao: float) -> None:
     caixa: Caixa = (0.0, 0.0, 50.0, 10.0)
 
-    assert _palavras(texto("CT 12", caixa, rotacao=rotacao)) == [
+    assert _palavras(texto("CT 12", caixa, origem="glifo", rotacao=rotacao)) == [
         Palavra("CT", caixa, True),
         Palavra("12", caixa, True),
     ]
