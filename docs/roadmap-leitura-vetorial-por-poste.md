@@ -1294,7 +1294,7 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
-**Riscos e mitigação:** o modelo com glifos custa até ~20 s por folha no runner → opt-in até a E09; o tempo por folha sai no benchmark.
+**Riscos e mitigação:** o modelo com glifos custa até ~20 s por folha no runner → opt-in até a E09; o tempo por folha sai no benchmark. `_unir_proximos` (`groups.py`) é quadrático em caixas sobrepostas (`xfail(strict=True)` da E06.2.1, R-E06.2.1-9) → corrigir antes de ligar no runner é **pré-condição** desta etapa.
 
 **Evidências e handoff:** —
 
