@@ -272,6 +272,23 @@ def test_rotulo_logo_alem_da_caixa_interna_nao_casa(caixa: Caixa) -> None:
     assert not _casa(ROTULO, moldura, [retangulo_traco(moldura)], [texto("CT", caixa)])
 
 
+def test_rotulo_colado_a_outro_span_nao_casa() -> None:
+    """O motor lê `CT12` nos dois spans de estilos diferentes, e o rótulo `CT` não está ali."""
+    pedacos = [
+        texto("CT", (116.0, 130.0, 132.0, 141.0)),
+        texto("12", (132.0, 130.0, 144.0, 141.0)),
+    ]
+    assert not _casa(ROTULO, QUADRADO, [retangulo_traco(QUADRADO)], pedacos)
+
+
+def test_rotulo_em_span_afastado_de_outro_casa() -> None:
+    pedacos = [
+        texto("CT", (116.0, 130.0, 132.0, 141.0)),
+        texto("12", (140.0, 130.0, 152.0, 141.0)),
+    ]
+    assert _casa(ROTULO, QUADRADO, [retangulo_traco(QUADRADO)], pedacos)
+
+
 def test_rotulo_minusculo_casa() -> None:
     palavra = texto("ct", (116.0, 130.0, 132.0, 141.0))
     assert _casa(ROTULO, QUADRADO, [retangulo_traco(QUADRADO)], [palavra])
@@ -788,9 +805,67 @@ def test_diagonais_com_span_que_e_exatamente_a_palavra_julga_o_centro(origem: An
     assert _casa(DIAGONAIS, QUADRADO, [retangulo_traco(QUADRADO), *X_NO_QUADRADO], [palavra])
 
 
-def test_diagonais_com_span_inteiro_que_so_encosta_casa() -> None:
+def test_diagonais_com_span_inteiro_que_so_encosta_recusa() -> None:
+    """A sobreposição das guardas é fechada: encostar conta."""
     span = texto("AB CD", (90.0, 120.0, 110.0, 130.0), origem="shx")
+    assert not _casa(DIAGONAIS, QUADRADO, [retangulo_traco(QUADRADO), *X_NO_QUADRADO], [span])
+
+
+def test_diagonais_com_span_inteiro_logo_antes_da_moldura_casa() -> None:
+    span = texto("AB CD", (90.0, 120.0, 109.9, 130.0), origem="shx")
     assert _casa(DIAGONAIS, QUADRADO, [retangulo_traco(QUADRADO), *X_NO_QUADRADO], [span])
+
+
+@pytest.mark.parametrize(
+    "caixa",
+    [
+        pytest.param((150.0, 134.0, 170.0, 134.0), id="altura-zero"),
+        pytest.param((134.0, 150.0, 134.0, 170.0), id="largura-zero"),
+    ],
+)
+def test_diagonais_com_span_inteiro_achatado_que_cruza_recusa(caixa: Caixa) -> None:
+    """Sem área, a caixa não `intersecta` nada, e o centro dela fica fora da moldura."""
+    span = texto("AB CD", caixa, origem="shx")
+    assert not _casa(DIAGONAIS, QUADRADO, [retangulo_traco(QUADRADO), *X_NO_QUADRADO], [span])
+
+
+def test_diagonais_com_palavra_unica_achatada_julga_o_centro() -> None:
+    palavra = texto("ABCD", (150.0, 134.0, 170.0, 134.0), origem="shx")
+    assert _casa(DIAGONAIS, QUADRADO, [retangulo_traco(QUADRADO), *X_NO_QUADRADO], [palavra])
+
+
+def test_diagonais_com_span_inteiro_achatado_fora_da_moldura_casa() -> None:
+    span = texto("AB CD", (160.0, 134.0, 170.0, 134.0), origem="shx")
+    assert _casa(DIAGONAIS, QUADRADO, [retangulo_traco(QUADRADO), *X_NO_QUADRADO], [span])
+
+
+MOLDURA_PEQUENA: Caixa = (110.0, 131.0, 117.0, 138.0)
+
+
+def _x_na_moldura_pequena() -> list[Caminho]:
+    x0, y0, x1, y1 = MOLDURA_PEQUENA
+    return [
+        retangulo_traco(MOLDURA_PEQUENA),
+        linha((x0, y0), (x1, y1), 1),
+        linha((x1, y0), (x0, y1), 2),
+    ]
+
+
+def test_diagonais_com_spans_colados_julgam_o_centro_da_palavra_unida() -> None:
+    """O centro de cada pedaço fica fora da moldura; o da palavra que o motor lê, dentro."""
+    pedacos = [
+        texto("CT", (100.0, 132.0, 109.0, 137.0)),
+        texto("12", (109.0, 132.0, 127.0, 137.0)),
+    ]
+    assert not _casa(DIAGONAIS, MOLDURA_PEQUENA, _x_na_moldura_pequena(), pedacos)
+
+
+def test_diagonais_com_spans_afastados_julgam_cada_palavra() -> None:
+    pedacos = [
+        texto("CT", (100.0, 132.0, 109.0, 137.0)),
+        texto("12", (118.0, 132.0, 127.0, 137.0)),
+    ]
+    assert _casa(DIAGONAIS, MOLDURA_PEQUENA, _x_na_moldura_pequena(), pedacos)
 
 
 def test_diagonais_com_span_inteiro_de_caixa_achatada_dentro_recusa() -> None:

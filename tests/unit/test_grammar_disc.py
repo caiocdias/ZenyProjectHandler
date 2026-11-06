@@ -500,15 +500,46 @@ def test_span_inteiro_sobre_o_disco_recusa() -> None:
     caixa: Caixa = (149.0, 149.0, 180.0, 151.0)
     assert not _casa(caminhos, [texto("A B C", caixa, origem="shx")])
     assert not _casa(caminhos, [texto("A B C", caixa, rotacao=45.0)])
-    # De controle: repartida, nenhuma palavra tem o centro no disco; e palavra única não é
-    # `inteira`, então vale o centro.
-    assert _casa(caminhos, [texto("A B C", caixa)])
+    # Nenhum span é repartido (R-4): em qualquer origem e rotação, a caixa é a do span.
+    assert not _casa(caminhos, [texto("A B C", caixa)])
+    assert not _casa(caminhos, [texto("A B C", caixa, origem="glifo")])
+    # De controle: palavra única não é `inteira`, então vale o centro.
     assert _casa(caminhos, [texto("ABC", caixa, origem="shx")])
 
 
-def test_span_inteiro_que_so_encosta_no_disco_nao_recusa() -> None:
+def test_span_inteiro_que_so_encosta_no_disco_recusa() -> None:
+    """A sobreposição das guardas é fechada: encostar conta."""
     caixa: Caixa = (151.5, 149.0, 180.0, 151.0)
+    assert not _casa(
+        [_linha_terminal(), _disco(raio=RAIO_EXATO)], [texto("A B", caixa, origem="shx")]
+    )
+
+
+def test_span_inteiro_logo_depois_do_disco_nao_recusa() -> None:
+    caixa: Caixa = (151.6, 149.0, 180.0, 151.0)
     assert _casa([_linha_terminal(), _disco(raio=RAIO_EXATO)], [texto("A B", caixa, origem="shx")])
+
+
+@pytest.mark.parametrize(
+    "caixa",
+    [
+        pytest.param((149.0, 150.0, 180.0, 150.0), id="altura-zero"),
+        pytest.param((150.0, 149.0, 150.0, 180.0), id="largura-zero"),
+    ],
+)
+def test_span_inteiro_achatado_sobre_o_disco_recusa(caixa: Caixa) -> None:
+    """Sem área, a caixa não `intersecta` nada, e o centro dela fica fora do disco."""
+    assert not _casa([_linha_terminal(), _disco()], [texto("A B", caixa, origem="shx")])
+
+
+def test_palavra_unica_achatada_sobre_o_disco_julga_o_centro() -> None:
+    caixa: Caixa = (149.0, 150.0, 180.0, 150.0)
+    assert _casa([_linha_terminal(), _disco()], [texto("AB", caixa, origem="shx")])
+
+
+def test_span_inteiro_achatado_fora_do_disco_nao_recusa() -> None:
+    caixa: Caixa = (160.0, 150.0, 180.0, 150.0)
+    assert _casa([_linha_terminal(), _disco()], [texto("A B", caixa, origem="shx")])
 
 
 # --- faixas -------------------------------------------------------------------------------

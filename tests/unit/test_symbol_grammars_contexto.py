@@ -40,6 +40,7 @@ from zeny_project_handler.adapters.analysis.drawing_model.symbol_grammars import
     contexto_gramaticas,
     intersecta,
     ponto_em,
+    sobrepoe,
 )
 
 LIMITES: Caixa = (0.0, 0.0, 300.0, 300.0)
@@ -476,6 +477,231 @@ def test_span_que_e_exatamente_a_palavra_nao_e_inteira(origem: Any, rotacao: flo
     ]
 
 
+# --- spans colados ------------------------------------------------------------------------
+
+
+def _palavras_de(*textos: TextoModelo) -> list[Palavra]:
+    pagina = pagina_gramatica((), textos, primitivas=())
+    return contexto_gramaticas(pagina).grade_palavras.consultar(LIMITES)
+
+
+ESQUERDO: Caixa = (100.0, 130.0, 120.0, 140.0)
+
+
+def _a_direita(lacuna: float, y0: float = 130.0, y1: float = 140.0) -> Caixa:
+    return (120.0 + lacuna, y0, 132.0 + lacuna, y1)
+
+
+def test_spans_colados_viram_uma_palavra_com_a_caixa_unida() -> None:
+    """O motor lê `words`, e a PyMuPDF junta spans de estilos diferentes na mesma linha."""
+    esquerdo = texto("qdp", (100.0, 130.0, 120.0, 141.0))
+    direito = texto("12", (120.0, 131.0, 132.0, 140.0))
+
+    assert _palavras_de(esquerdo, direito) == [
+        Palavra("QDP12", (100.0, 130.0, 132.0, 141.0), False)
+    ]
+
+
+def test_caixa_unida_inclui_o_span_da_direita_mais_alto() -> None:
+    esquerdo = texto("AB", (100.0, 131.0, 120.0, 140.0))
+    direito = texto("CD", (120.0, 130.0, 132.0, 141.0))
+
+    assert _palavras_de(esquerdo, direito) == [Palavra("ABCD", (100.0, 130.0, 132.0, 141.0), False)]
+
+
+@pytest.mark.parametrize(
+    ("altura", "lacuna", "colam"),
+    [
+        pytest.param(10.0, 0.0, True, id="sem-lacuna"),
+        pytest.param(10.0, 1.0, True, id="10-por-cento-da-altura"),
+        pytest.param(10.0, 1.01, False, id="alem-de-10-por-cento"),
+        pytest.param(10.0, -0.01, False, id="sobreposto-em-x"),
+        pytest.param(2.0, 0.5, True, id="piso-de-meio-ponto"),
+        pytest.param(2.0, 0.51, False, id="alem-do-piso"),
+    ],
+)
+def test_lacuna_entre_spans_colados(altura: float, lacuna: float, colam: bool) -> None:
+    esquerdo: Caixa = (100.0, 130.0, 120.0, 130.0 + altura)
+    direito = _a_direita(lacuna, 130.0, 130.0 + altura)
+
+    palavras = _palavras_de(texto("AB", esquerdo), texto("CD", direito))
+
+    assert [p.texto for p in palavras] == (["ABCD"] if colam else ["AB", "CD"])
+
+
+def test_lacuna_usa_a_menor_altura() -> None:
+    alto: Caixa = (100.0, 120.0, 120.0, 140.0)
+    baixo = _a_direita(0.6, 130.0, 132.0)
+
+    assert [p.texto for p in _palavras_de(texto("AB", alto), texto("CD", baixo))] == ["AB", "CD"]
+
+
+@pytest.mark.parametrize(
+    ("y0", "y1", "colam"),
+    [
+        pytest.param(108.0, 112.0, True, id="metade-da-menor-altura"),
+        pytest.param(108.1, 112.1, False, id="menos-da-metade"),
+        pytest.param(98.0, 102.0, True, id="metade-por-cima"),
+        pytest.param(97.9, 101.9, False, id="menos-da-metade-por-cima"),
+        pytest.param(120.0, 124.0, False, id="outra-linha"),
+    ],
+)
+def test_sobreposicao_vertical_de_spans_colados(y0: float, y1: float, colam: bool) -> None:
+    palavras = _palavras_de(
+        texto("AB", (100.0, 100.0, 120.0, 110.0)), texto("CD", _a_direita(0.0, y0, y1))
+    )
+
+    assert [p.texto for p in palavras] == (["ABCD"] if colam else ["AB", "CD"])
+
+
+@pytest.mark.parametrize(
+    ("rotacao_a", "rotacao_b", "colam"),
+    [
+        pytest.param(0.0, 0.0, True, id="zero"),
+        pytest.param(1.0, 1.0, True, id="um-grau"),
+        pytest.param(359.5, 359.5, True, id="logo-abaixo-de-360"),
+        pytest.param(-0.5, -0.5, True, id="negativa"),
+        pytest.param(0.0, 0.5, False, id="rotacoes-diferentes"),
+        pytest.param(1.5, 1.5, False, id="alem-de-um-grau"),
+        pytest.param(180.0, 180.0, False, id="invertido"),
+        pytest.param(90.0, 90.0, False, id="vertical"),
+        pytest.param(math.nan, math.nan, False, id="nan"),
+    ],
+)
+def test_so_span_horizontal_de_mesma_rotacao_cola(
+    rotacao_a: float, rotacao_b: float, colam: bool
+) -> None:
+    """Limitação registrada: rotacionado não é fundido."""
+    palavras = _palavras_de(
+        texto("AB", ESQUERDO, rotacao=rotacao_a), texto("CD", _a_direita(0.0), rotacao=rotacao_b)
+    )
+
+    assert [p.texto for p in palavras] == (["ABCD"] if colam else ["AB", "CD"])
+
+
+@pytest.mark.parametrize(
+    ("origem_a", "origem_b"),
+    [
+        ("shx", "shx"),
+        ("glifo", "glifo"),
+        ("nativo", "glifo"),
+        ("glifo", "nativo"),
+        ("shx", "nativo"),
+    ],
+    ids=["shx", "glifo", "nativo-glifo", "glifo-nativo", "shx-nativo"],
+)
+def test_so_nativo_cola(origem_a: Any, origem_b: Any) -> None:
+    palavras = _palavras_de(
+        texto("AB", ESQUERDO, origem=origem_a), texto("CD", _a_direita(0.0), origem=origem_b)
+    )
+
+    assert [p.texto for p in palavras] == ["AB", "CD"]
+
+
+def test_espaco_na_juncao_nao_cola() -> None:
+    assert _palavras_de(texto("AB ", ESQUERDO), texto("CD", _a_direita(0.0))) == [
+        Palavra("AB", ESQUERDO, True),
+        Palavra("CD", _a_direita(0.0), False),
+    ]
+    assert _palavras_de(texto("AB", ESQUERDO), texto(" CD", _a_direita(0.0))) == [
+        Palavra("AB", ESQUERDO, False),
+        Palavra("CD", _a_direita(0.0), True),
+    ]
+
+
+def test_varias_palavras_nos_spans_colados_seguem_a_regra_do_span() -> None:
+    uniao: Caixa = (100.0, 130.0, 132.0, 140.0)
+
+    assert _palavras_de(texto("AB C", ESQUERDO), texto("D E", _a_direita(0.0))) == [
+        Palavra("AB", uniao, True),
+        Palavra("CD", uniao, True),
+        Palavra("E", uniao, True),
+    ]
+
+
+def test_cadeia_de_spans_colados_vira_um_texto_na_posicao_do_primeiro() -> None:
+    longe = texto("Z", (200.0, 10.0, 210.0, 20.0))
+    a = texto("A", (100.0, 130.0, 110.0, 140.0))
+    b = texto("B", (110.0, 130.0, 120.0, 140.0))
+    c = texto("C", (120.0, 130.0, 130.0, 140.0))
+
+    assert _palavras_de(c, longe, b, a) == [
+        Palavra("Z", longe.bbox, False),
+        Palavra("ABC", (100.0, 130.0, 130.0, 140.0), False),
+    ]
+
+
+def test_texto_de_outra_coluna_entre_as_alturas_nao_impede_a_colagem() -> None:
+    """Colar não pode depender de os dois spans serem vizinhos numa ordem por y."""
+    esquerdo = texto("AB", (100.0, 130.0, 120.0, 140.0))
+    outra_coluna = texto("ZZ", (200.0, 130.1, 220.0, 140.1))
+    direito = texto("CD", (120.0, 130.3, 132.0, 140.3))
+
+    assert [p.texto for p in _palavras_de(esquerdo, outra_coluna, direito)] == ["ABCD", "ZZ"]
+
+
+def test_cola_no_vizinho_de_menor_lacuna() -> None:
+    longe = texto("A", (90.0, 130.0, 119.5, 140.0))
+    perto = texto("B", ESQUERDO)
+    direito = texto("C", _a_direita(0.0))
+
+    assert [p.texto for p in _palavras_de(longe, perto, direito)] == ["A", "BC"]
+
+
+def test_span_cola_em_um_vizinho_so() -> None:
+    assert [
+        p.texto
+        for p in _palavras_de(
+            texto("A", ESQUERDO), texto("B", _a_direita(0.0)), texto("C", _a_direita(0.0))
+        )
+    ] == ["AB", "C"]
+
+
+@pytest.mark.parametrize(
+    "degenerado",
+    [
+        pytest.param(texto("Z", (120.0, 130.0, 120.0, 140.0)), id="largura-zero"),
+        pytest.param(texto("Z", (120.0, 130.0, 130.0, 130.0)), id="altura-zero"),
+        pytest.param(texto("Z", (130.0, 130.0, 120.0, 140.0)), id="invertida"),
+        pytest.param(texto("Z", (120.0, math.nan, 130.0, 140.0)), id="nan"),
+        pytest.param(texto("Z", (120.0, 130.0, math.inf, 140.0)), id="inf"),
+        pytest.param(texto("", (120.0, 130.0, 130.0, 140.0)), id="vazio"),
+        pytest.param(texto("   ", (120.0, 130.0, 130.0, 140.0)), id="so-espacos"),
+    ],
+)
+def test_span_degenerado_nao_cola(degenerado: TextoModelo) -> None:
+    palavras = _palavras_de(texto("AB", ESQUERDO), degenerado)
+
+    assert palavras[0] == Palavra("AB", ESQUERDO, False)
+
+
+def test_colagem_paga_um_por_span_que_pode_colar() -> None:
+    nativos = (texto("A", (10.0, 10.0, 20.0, 20.0)), texto("B", (50.0, 50.0, 60.0, 60.0)))
+    outros = (
+        texto("C", (90.0, 90.0, 99.0, 99.0), origem="shx"),
+        texto("D", (120.0, 120.0, 130.0, 130.0), origem="glifo"),
+        texto("E", (150.0, 150.0, 160.0, 160.0), rotacao=90.0),
+    )
+
+    # 2 para colar e 5 palavras indexadas.
+    pagina = pagina_gramatica((), (*nativos, *outros), primitivas=())
+    assert contexto_gramaticas(pagina).orcamento.gasto == 2 + 5
+
+
+def test_mesma_borda_direita_em_toda_a_pagina_paga_e_estoura_o_orcamento() -> None:
+    """Cada span à direita visita os que terminam junto dele: quem paga é a página densa."""
+    quantidade = 200
+    esquerdos = [texto("A", (100.0, i * 0.7, 120.0, i * 0.7 + 0.5)) for i in range(quantidade)]
+    direitos = [
+        texto("B", (120.0, 150.0 + i * 0.7, 130.0, 150.5 + i * 0.7)) for i in range(quantidade)
+    ]
+    pagina = pagina_gramatica((), (*esquerdos, *direitos), primitivas=())
+
+    assert contexto_gramaticas(pagina).orcamento.gasto >= quantidade * quantidade
+    with pytest.raises(TetoGramaticasExcedido):
+        contexto_gramaticas(pagina, limite=quantidade * quantidade // 2)
+
+
 # --- segmentos ----------------------------------------------------------------------------
 
 
@@ -633,6 +859,28 @@ def test_pagina_densa_estoura_o_orcamento_ao_construir() -> None:
         contexto_gramaticas(pagina, limite=1_000)
 
 
+@pytest.mark.parametrize(
+    ("a", "b", "esperado"),
+    [
+        pytest.param((0.0, 0.0, 10.0, 10.0), (5.0, 5.0, 15.0, 15.0), True, id="cruza"),
+        pytest.param((0.0, 0.0, 10.0, 10.0), (10.0, 0.0, 20.0, 10.0), True, id="encosta-em-x"),
+        pytest.param((0.0, 0.0, 10.0, 10.0), (0.0, 10.0, 10.0, 20.0), True, id="encosta-em-y"),
+        pytest.param((0.0, 0.0, 10.0, 10.0), (10.0, 10.0, 20.0, 20.0), True, id="encosta-no-canto"),
+        pytest.param((0.0, 0.0, 10.0, 10.0), (5.0, 5.0, 20.0, 5.0), True, id="altura-zero"),
+        pytest.param((0.0, 0.0, 10.0, 10.0), (5.0, 5.0, 5.0, 20.0), True, id="largura-zero"),
+        pytest.param((0.0, 0.0, 10.0, 10.0), (5.0, 5.0, 5.0, 5.0), True, id="ponto-dentro"),
+        pytest.param((0.0, 0.0, 10.0, 10.0), (10.1, 0.0, 20.0, 10.0), False, id="longe-em-x"),
+        pytest.param((0.0, 0.0, 10.0, 10.0), (0.0, 10.1, 10.0, 20.0), False, id="longe-em-y"),
+        pytest.param((0.0, 0.0, 10.0, 10.0), (-5.0, 0.0, -0.1, 10.0), False, id="antes-em-x"),
+        pytest.param((0.0, 0.0, 10.0, 10.0), (0.0, -5.0, 10.0, -0.1), False, id="antes-em-y"),
+    ],
+)
+def test_sobrepoe_e_fechado(a: Caixa, b: Caixa, esperado: bool) -> None:
+    """Ao contrário de `intersecta`, encostar conta, e caixa de lado 0 também."""
+    assert sobrepoe(a, b) is esperado
+    assert sobrepoe(b, a) is esperado
+
+
 def test_contexto_gasta_um_por_item_indexado() -> None:
     pagina = pagina_gramatica(
         (
@@ -644,9 +892,9 @@ def test_contexto_gasta_um_por_item_indexado() -> None:
         primitivas=(),
     )
 
-    # 1 moldura, 2 palavras, 1 segmento e 2 caminhos: o retângulo fora da página não vira
-    # moldura, e nem seus segmentos nem seu caminho são indexados.
-    assert contexto_gramaticas(pagina).orcamento.gasto == 1 + 2 + 1 + 2
+    # 1 span que pode colar, 1 moldura, 2 palavras, 1 segmento e 2 caminhos: o retângulo fora
+    # da página não vira moldura, e nem seus segmentos nem seu caminho são indexados.
+    assert contexto_gramaticas(pagina).orcamento.gasto == 1 + 1 + 2 + 1 + 2
 
 
 def test_trabalho_da_consulta_cresce_com_a_densidade_local_e_nao_com_a_pagina() -> None:

@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import math
 import re
+from bisect import bisect_left, bisect_right
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Final, Generic, Literal, TypeVar
 
 from zeny_project_handler.adapters.analysis.drawing_model.model import (
@@ -36,6 +37,10 @@ _LADO_MINIMO_LOSANGO: Final = 4.0
 _TOLERANCIA_MINIMA_LOSANGO: Final = 1.0
 _TOLERANCIA_RELATIVA_LOSANGO: Final = 0.08
 _PONTAS_POR_CANTO: Final = 2
+_TOLERANCIA_HORIZONTAL_GRAUS: Final = 1.0
+_LACUNA_MINIMA_COLADOS: Final = 0.5
+_LACUNA_RELATIVA_COLADOS: Final = 0.1
+_SOBREPOSICAO_VERTICAL_COLADOS: Final = 0.5
 
 _FONTES_CONSUMIDAS: Final = frozenset(
     {
@@ -219,6 +224,12 @@ def intersecta(a: Caixa, b: Caixa) -> bool:
     )
 
 
+def sobrepoe(a: Caixa, b: Caixa) -> bool:
+    """Sobreposição fechada, das guardas: encostar conta e caixa de lado 0 também, ao contrário
+    de `intersecta`."""
+    return a[0] <= b[2] and b[0] <= a[2] and a[1] <= b[3] and b[1] <= a[3]
+
+
 def ponto_em(caixa: Caixa, ponto: Ponto) -> bool:
     """Borda fechada."""
     return caixa[0] <= ponto[0] <= caixa[2] and caixa[1] <= ponto[1] <= caixa[3]
@@ -366,6 +377,102 @@ def _molduras_e_segmentos(modelo: PaginaModelo) -> tuple[tuple[Moldura, ...], li
 # --- palavras -----------------------------------------------------------------------------
 
 
+def _distancia_angular(rotacao: float, alvo: float) -> float:
+    """Distância em graus; `rotacao` não finita dá nan, que nenhuma tolerância aceita."""
+    return abs((rotacao - alvo + 180.0) % 360.0 - 180.0)
+
+
+def _pode_colar(texto: TextoModelo) -> bool:
+    return (
+        texto.origem == "nativo"
+        and _distancia_angular(texto.rotacao, 0.0) <= _TOLERANCIA_HORIZONTAL_GRAUS
+        and all(math.isfinite(valor) for valor in texto.bbox)
+        and _tem_area(texto.bbox)
+        and bool(texto.texto)
+    )
+
+
+def _lacuna_maxima(altura: float) -> float:
+    return max(_LACUNA_MINIMA_COLADOS, altura * _LACUNA_RELATIVA_COLADOS)
+
+
+def _colados(esquerdo: TextoModelo, direito: TextoModelo) -> bool:
+    a, b = esquerdo.bbox, direito.bbox
+    menor_altura = min(a[3] - a[1], b[3] - b[1])
+    return (
+        esquerdo.rotacao == direito.rotacao
+        and 0.0 <= b[0] - a[2] <= _lacuna_maxima(menor_altura)
+        and min(a[3], b[3]) - max(a[1], b[1]) >= menor_altura * _SOBREPOSICAO_VERTICAL_COLADOS
+        and not esquerdo.texto[-1].isspace()
+        and not direito.texto[0].isspace()
+    )
+
+
+def _unir(cadeia: Sequence[TextoModelo]) -> TextoModelo:
+    caixas = [texto.bbox for texto in cadeia]
+    return replace(
+        cadeia[0],
+        texto="".join(texto.texto for texto in cadeia),
+        bbox=(
+            min(caixa[0] for caixa in caixas),
+            min(caixa[1] for caixa in caixas),
+            max(caixa[2] for caixa in caixas),
+            max(caixa[3] for caixa in caixas),
+        ),
+        altura=max(texto.altura for texto in cadeia),
+    )
+
+
+def _proximo_colado(
+    textos: Sequence[TextoModelo], candidatos: Sequence[int], orcamento: OrcamentoConsultas
+) -> dict[int, int]:
+    """Para cada span, o span colado à direita dele: o de menor lacuna ainda livre.
+
+    Ordenados pela borda direita, só os de borda na janela da lacuna são visitados, a 1 do
+    orçamento cada; a janela é estreita, e só uma página hostil, com a mesma borda em toda
+    parte, gasta mais que 1 por span.
+    """
+    orcamento.gastar(len(candidatos))
+    por_borda = sorted(candidatos, key=lambda posicao: (textos[posicao].bbox[2], posicao))
+    bordas = [textos[posicao].bbox[2] for posicao in por_borda]
+    proximo: dict[int, int] = {}
+    for posicao in candidatos:
+        direito = textos[posicao]
+        x0, y0, _, y1 = direito.bbox
+        inicio = bisect_left(bordas, x0 - _lacuna_maxima(y1 - y0))
+        fim = bisect_right(bordas, x0)
+        orcamento.gastar(fim - inicio)
+        for indice in reversed(range(inicio, fim)):
+            esquerdo = por_borda[indice]
+            if esquerdo not in proximo and _colados(textos[esquerdo], direito):
+                proximo[esquerdo] = posicao
+                break
+    return proximo
+
+
+def _fundir_spans_colados(
+    textos: Sequence[TextoModelo], orcamento: OrcamentoConsultas
+) -> list[TextoModelo]:
+    """Spans `nativo` horizontais colados viram um texto só, como em `words` da PyMuPDF.
+
+    Limitação: rotacionado não é fundido, e `shx` e `glifo` também não. O texto unido fica na
+    posição do primeiro span da cadeia, e o resto da lista mantém a ordem.
+    """
+    candidatos = [posicao for posicao, texto in enumerate(textos) if _pode_colar(texto)]
+    proximo = _proximo_colado(textos, candidatos, orcamento)
+    seguintes = set(proximo.values())
+    fundidos = []
+    for posicao, texto in enumerate(textos):
+        if posicao in seguintes:
+            continue
+        cadeia = [texto]
+        while posicao in proximo:
+            posicao = proximo[posicao]
+            cadeia.append(textos[posicao])
+        fundidos.append(_unir(cadeia) if len(cadeia) > 1 else texto)
+    return fundidos
+
+
 def _palavras_do_texto(texto: TextoModelo) -> list[Palavra]:
     """Palavras do span, todas com a caixa dele (R-E06.2.1-4), em qualquer origem e rotação.
 
@@ -427,7 +534,8 @@ def contexto_gramaticas(
         modelo.altura + _MARGEM_PAGINA,
     )
     molduras, segmentos = _molduras_e_segmentos(modelo)
-    palavras = (palavra for texto in modelo.textos for palavra in _palavras_do_texto(texto))
+    textos = _fundir_spans_colados(modelo.textos, orcamento)
+    palavras = (palavra for texto in textos for palavra in _palavras_do_texto(texto))
     caixas_caminhos = _caixas_de_caminhos(modelo.caminhos)
     return ContextoGramatica(
         pagina=pagina,

@@ -18,6 +18,7 @@ from zeny_project_handler.adapters.analysis.drawing_model.symbol_grammars import
     contem,
     intersecta,
     ponto_em,
+    sobrepoe,
 )
 
 _FORMAS: Final = {"rectangle": "retangulo", "ellipse": "elipse", "diamond": "losango"}
@@ -227,9 +228,9 @@ def _triangulo_na_moldura(contexto: ContextoGramatica, caixa: Caixa, preenchimen
 
 
 def _palavra_na_moldura(caixa: Caixa, palavra: Palavra) -> bool:
-    """O centro decide, como no motor; a palavra `inteira` recusa também por interseção (R-4)."""
+    """O centro decide, como no motor; a palavra `inteira` recusa também por sobreposição (R-4)."""
     return ponto_em(caixa, _centro(palavra.caixa)) or (
-        palavra.inteira and intersecta(caixa, palavra.caixa)
+        palavra.inteira and sobrepoe(caixa, palavra.caixa)
     )
 
 

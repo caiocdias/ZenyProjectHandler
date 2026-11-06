@@ -35,8 +35,8 @@ from zeny_project_handler.adapters.analysis.drawing_model.symbol_grammars import
     _moldura_do_subcaminho,
     _segmentos_do_subcaminho,
     contem,
-    intersecta,
     ponto_em,
+    sobrepoe,
 )
 
 _ROXO_MINIMO: Final = 0.2
@@ -383,7 +383,7 @@ def _palavra_sobre_o_disco(contexto: ContextoGramatica, caixa: Caixa) -> bool:
     """`ponto_em` é fechado: diferente do motor, o centro exato na borda também recusa."""
     return any(
         ponto_em(caixa, _centro(palavra.caixa))
-        or (palavra.inteira and intersecta(caixa, palavra.caixa))
+        or (palavra.inteira and sobrepoe(caixa, palavra.caixa))
         for palavra in contexto.grade_palavras.consultar(caixa)
     )
 
