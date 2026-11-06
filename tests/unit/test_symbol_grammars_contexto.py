@@ -17,6 +17,7 @@ from tests.fixtures.symbol_grammars.paginas import (
 )
 
 from zeny_project_handler.adapters.analysis.drawing_model.model import (
+    Arco,
     Caixa,
     Caminho,
     Circulo,
@@ -284,6 +285,13 @@ def test_degenerados_nao_viram_moldura() -> None:
     assert contexto.molduras == ()
     assert 2 not in contexto.caixas_caminhos
     assert contexto.grade_caminhos.consultar(LIMITES) == [0]
+
+
+def test_elipse_fora_da_pagina_e_arco_nao_viram_moldura() -> None:
+    fora = circulo_bezier((500.0, 500.0), 10.0)
+    arco = Arco((50.0, 50.0), 10.0, 0.0, 90.0, estilo(), (0,))
+
+    assert contexto_gramaticas(pagina_gramatica((fora,), primitivas=(arco,))).molduras == ()
 
 
 def test_moldura_so_encostada_na_pagina_fica_de_fora() -> None:
