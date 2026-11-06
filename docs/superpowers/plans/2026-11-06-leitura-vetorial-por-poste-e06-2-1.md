@@ -120,7 +120,7 @@ Expected: PASS, sem xfail no teste da D1 e com o xfail de R-9.
   - `@dataclass(frozen=True, slots=True) class Palavra: texto: str; caixa: Caixa; inteira: bool` (`texto` em maiúsculas, sem espaços nas pontas; `inteira` conforme R-4, só para span de várias palavras não repartido)
   - `@dataclass(frozen=True, slots=True) class ContextoGramatica` com `pagina: PaginaGramatica`, `orcamento`, `molduras: tuple[Moldura, ...]`, `grade_molduras: GradeEspacial[Moldura]`, `grade_palavras: GradeEspacial[Palavra]`, `grade_segmentos: GradeEspacial[Segmento]`, `grade_caminhos: GradeEspacial[int]`, `caixas_caminhos: Mapping[int, Caixa]`.
   - `contexto_gramaticas(pagina: PaginaGramatica, *, limite: int = LIMITE_CONSULTAS_PAGINA) -> ContextoGramatica`
-  - Auxiliares públicos `contem(externa: Caixa, interna: Caixa) -> bool`, `intersecta(a: Caixa, b: Caixa) -> bool`, com borda fechada (encostar conta); caixa de lado 0 não `intersecta` nada e não `contem` nada, e pode estar contida. A paridade da Task 6 confere a semântica contra o motor.
+  - Auxiliares públicos `contem(externa: Caixa, interna: Caixa) -> bool`, com borda fechada, `intersecta(a: Caixa, b: Caixa) -> bool`, com comparação estrita (encostar não conta, como `Rect.intersects`), e `ponto_em(caixa: Caixa, ponto: Ponto) -> bool`, com borda fechada. Caixa de lado 0 não `intersecta` nada e não `contem` nada, e pode estar contida. O corpus não tem caso de borda: quem prova essa semântica são os testes de borda das Tasks 2 e 4.
 
 Regras que o implementador não decide:
 - **Grade:** célula de 16 pt; só indexa a parte da caixa dentro de `limites` (página com margem de 16 pt), e caixa que cobriria mais de 64 células vai para uma lista `grandes`, percorrida em toda consulta, contando orçamento. Item inteiramente fora é ignorado. Mesmo desenho de `_CamadasDoTexto` em `pymupdf_drawing_model.py`, sem compartilhar código (ele é adaptador).
@@ -146,6 +146,7 @@ Regras que o implementador não decide:
   - `test_alinhamento_de_indices_validado`: `PaginaGramatica` com `indices_crus` de outro tamanho levanta `ValueError`.
   - `test_palavras_de_um_span`: `"CT 12"` a x∈[0, 50] → `CT` em x∈[0, 20] e `12` em x∈[30, 50], `"ct"` vira `CT`, `"   "` não gera nada, o texto com `rotacao=45` e duas palavras gera duas palavras com a caixa inteira e `inteira=True`, e o mesmo com `origem="shx"` e `rotacao=0.0`. `bbox` com `nan` ou `inf` não gera nada.
   - `test_segmentos_excluem_moldura_fechada`.
+  - `test_semantica_de_borda`: `contem` e `ponto_em` aceitam borda; `intersecta` recusa caixas só encostadas e caixa de lado 0.
   - `test_fonte_que_falhou_levanta` (parametrizado nos 5 códigos de R-8), `test_fonte_que_nao_consumo_nao_bloqueia` (`modelo.grupos_falhou`, `modelo.imagens_falhou`, `modelo.imagens_anotacao_falhou`), `test_glifos_limitados_levanta_teto` e `test_glifos_desconhecidos_nao_bloqueia`.
   - `test_pagina_densa_estoura_o_orcamento_ao_construir`: 5.000 retângulos sobrepostos com `limite=1_000` levantam `TetoGramaticasExcedido`.
   - `test_trabalho_da_consulta_cresce_com_a_densidade_local_e_nao_com_a_pagina`: mesma consulta, 1.000 e 2.000 itens distantes dela: o gasto da consulta não muda.
@@ -222,9 +223,10 @@ Porte, com os mesmos limiares (constantes nomeadas), da função correspondente 
   - `test_empty_interior_recusa_marca_preenchida` (≥ 6% da área) e `test_empty_interior_recusa_diagonal_longa` (≥ 55% nos dois eixos); `test_empty_interior_aceita_marca_pequena`.
   - `test_moldura_interna_cinza` e os negativos `sem preenchimento`, `colorida` e `descentrada`; `test_moldura_interna_cinza_pintada_em_dois_caminhos`: traço e depois preenchimento na mesma caixa casa (R-10).
   - `test_empty_interior_com_externa_de_traco_e_preenchimento`: paridade com o motor, que avalia cada caminho como moldura própria (R-10).
-  - `test_tres_pontos_com_centro_nao_inteiro`: os 3 pontos, cada um em dois formatos de origem, contam como no motor (R-10).
+  - `test_empty_interior_aceita_linha_longa_que_so_encosta_no_canto`: a caixa da linha só encosta na moldura, e `intersecta` não conta.
+  - `test_tres_pontos_com_centro_nao_inteiro`: cada ponto é 1 caminho de 4 `c` mais o seu `Circulo` primitivo, que a proveniência descarta: conta 3 e casa (R-10). `test_tres_pontos_em_dois_caminhos_cada_nao_casa`: cada ponto pintado em 2 caminhos conta 6 e não casa, como no motor.
   - `test_triangulo_vazio_e_solido`, `test_triangulo_de_preenchimento_trocado`, `test_triangulo_pequeno_nao_casa`, `test_triangulo_invertido_nao_casa` (no espaço visual, R-7).
-  - `test_duas_diagonais`, `test_uma_diagonal`, `test_diagonais_com_texto` e `test_diagonais_com_span_inteiro_que_encosta_recusa`: palavra `inteira` cujo centro fica fora e cuja caixa cruza a moldura (R-4).
+  - `test_duas_diagonais`, `test_uma_diagonal`, `test_diagonais_com_texto` e `test_diagonais_com_span_inteiro_que_cruza_recusa`: palavra `inteira` cujo centro fica fora e cuja caixa cruza a moldura (R-4).
   - `test_retangulos_com_barra`, `test_sem_interno`, `test_sem_barra`, `test_barra_de_outro_retangulo_nao_conta`.
   - `test_losango_tres_pontos`, `test_dois_pontos`, `test_ponto_fora_do_losango`.
   - `test_moldura_fora_dos_limites_de_tamanho`: `max_span`, lado < 4 e aspecto.
@@ -284,7 +286,7 @@ Expected: PASS.
 
 ### Task 6: Casamento de variantes e paridade com o motor atual
 
-**Estimativa:** 30 min · **Depende de:** Tasks 3, 4 e 5 · **Risco:** alto · **Laboratório:** não
+**Estimativa:** 40 min · **Depende de:** Tasks 3, 4 e 5 · **Risco:** alto · **Laboratório:** não
 
 **Files:**
 - Create: `src/zeny_project_handler/adapters/analysis/drawing_model/symbol_matcher.py`
@@ -304,7 +306,7 @@ Expected: PASS.
   - `test_cropbox_nao_desloca_a_caixa`: página do corpus com `set_cropbox`, mesma comparação.
   - `test_ganho_moldura_de_quatro_tracos`: rótulo `CT` em moldura de 4 `draw_line` separados: o núcleo casa e `observar_pacotes` não. E `test_quase_acerto_de_quatro_tracos_com_folga`: um canto aberto em 2 pt: nenhum dos dois casa.
   - `test_ganho_rotulo_em_glifo` e `test_ganho_rotulo_em_shx`: página pura com `texto(..., origem=...)` e moldura casa; sem o texto, não.
-  - `test_ganho_retangulo_de_quatro_linhas_em_um_caminho`, `test_ganho_qu_alinhado` e `test_ganho_circulo_de_dois_arcos` (R-5), cada um com o quase-acerto correspondente.
+  - `test_ganho_retangulo_de_quatro_linhas_em_um_caminho` em página pura (`poligono`), sem comparar com o motor: a PyMuPDF troca 4 linhas fechadas por `qu` ou `re`, e o que chega dela depende de como foi desenhado. `test_ganho_qu_alinhado` e `test_ganho_circulo_de_dois_arcos` (R-5), comparando com o motor. Cada um com o quase-acerto correspondente.
   - `test_pagina_sem_desenhos_nao_casa_nada` e `test_variantes_vazias_nao_montam_discos`.
   - `test_ordem_e_deterministica`: duas execuções, mesma tupla.
   - `test_teto_propaga`: `limite=10` em página densa levanta `TetoGramaticasExcedido`. `test_fonte_falhou_propaga`: `modelo.diagnosticos=("modelo.caminhos_falhou",)` levanta `FonteGramaticaFalhou`.
@@ -334,7 +336,9 @@ Expected: `errors []` e os gates verdes.
 | 2 | Tasks 3, 4 e 5 | só dependem da Task 2; arquivos disjuntos; a fixture de `tests/fixtures/symbol_grammars/` é só leitura |
 | 3 | Task 6 | depende das três |
 
-Soma das estimativas: 200 min (~3h20), no limite do "~3h" do orçamento. As ondas reduzem o relógio; o estouro de 4h30 segue a regra do protocolo.
+Soma das estimativas: 210 min (~3h30), um pouco acima do "~3h" do orçamento.
+
+**R-E06.2.1-11, não dividir de novo:** as 6 tarefas formam um só porte, e a paridade da Task 6 precisa das outras cinco; cortar aqui daria uma subetapa sem critério de aceite próprio e mais uma rodada de plano e de revisão final, que custam mais do que os ~30 min excedentes. As ondas 1 e 2 correm em paralelo e reduzem o relógio. Custo se errado: o estouro de 4h30 segue a regra do protocolo.
 
 ## Fechamento operacional
 
@@ -350,4 +354,12 @@ No handoff, para a E06.2.2:
 - o `xfail` de R-9 é pré-condição de ligar no runner;
 - `pontos_originais` desfaz a rotação com a página aberta (R-7);
 - R-2: `indices_crus` e `translucidos` no modelo, se a E09 usar o cache;
-- o método passa sempre a tabela de glifos: sem ela, o texto de glifo some e as guardas negativas abrem.
+- o método passa sempre a tabela de glifos: sem ela, o texto de glifo some e as guardas negativas abrem;
+- decidir o tratamento da falha determinística de fonte: `modelo.textos_shx_falhou` é superfície nova, porque o motor atual não lê anotações, e uma anotação estranha abortaria a composição do documento em toda nova tentativa. R-8 trata falha de fonte como transitória, e R-3 não quer que página hostil derrube os outros métodos.
+
+## Revisão de arquitetura
+
+- **Veredito:** aprovado com notas.
+- **Rodadas:** 1.
+- **Modelo:** opus.
+- **Notas Menores:** N1–N5 da rodada 1 aplicadas ao plano (semântica de `intersecta` e `ponto_em`, teste de ganho em página pura, decisão da falha determinística no handoff, R-11 com a Task 6 em 40 min, ambiguidade dos 3 pontos). Não verificado pelo revisor: nada executado; semântica de `fz_is_point_inside_rect` em C; custo real do teto e de `glifos_limitados` em folhas reais (medição da E06.2.2).
