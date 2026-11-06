@@ -30,6 +30,7 @@ from zeny_project_handler.adapters.analysis.drawing_model.model import (
     Polilinha,
 )
 from zeny_project_handler.adapters.analysis.pymupdf_drawing_model import (
+    _DesenhosFiltrados,
     extrair_modelo_desenho,
     impressao_estrutural,
     obter_modelo_desenho,
@@ -592,11 +593,11 @@ def test_ultimo_desenho_descartado_envenena_o_trecho_no_modelo(
     pdf = pdf_texto_contorno(tmp_path / "c.pdf", [LinhaTexto("11-300", (40.0, 60.0), 5.0)])
     original = pymupdf_drawing_model._desenhos
 
-    def _desenhos(pagina: Any) -> list[dict[str, Any]]:
+    def _desenhos(pagina: Any) -> _DesenhosFiltrados:
         desenhos = original(pagina)
         ultimo = dict(desenhos[-1])
         ultimo["items"] = [("l", pymupdf.Point(float("nan"), 0.0), pymupdf.Point(1.0, 1.0))]
-        return [*desenhos[:-1], ultimo]
+        return _DesenhosFiltrados(enumerate([*desenhos[:-1], ultimo]))
 
     monkeypatch.setattr(pymupdf_drawing_model, "_desenhos", _desenhos)
 
