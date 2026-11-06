@@ -39,6 +39,10 @@ _CENARIOS = textwrap.dedent(
     from zeny_project_handler_client.ui.main_window import MainWindow
     from zeny_project_handler_client.ui.project_panel import ProjectPanelWidget
 
+    # A sessão dorme mais que o prazo padrão de 1000 ms de shutdown_polling: o cenário dá à
+    # junção um prazo explícito, sem alargar o prazo do produto.
+    _PRAZO_JUNTAR_MS = 60_000
+
 
     @pytest.fixture
     def destruir_janelas_depois_da_fabrica() -> Iterator[list[MainWindow]]:
@@ -77,11 +81,11 @@ _CENARIOS = textwrap.dedent(
         app, _, panel = _painel(
             tmp_path, monkeypatch, application_factory, destruir_janelas_depois_da_fabrica, "dois"
         )
-        assert panel.shutdown_polling()
+        assert panel.shutdown_polling(_PRAZO_JUNTAR_MS)
         panel.restart_polling()
         segunda = panel._global_poll_thread
         assert segunda is not None
-        assert panel.shutdown_polling()
+        assert panel.shutdown_polling(_PRAZO_JUNTAR_MS)
         panel.restart_polling()
         terceira = panel._global_poll_thread
         assert terceira is not None and terceira is not segunda
@@ -89,7 +93,7 @@ _CENARIOS = textwrap.dedent(
         assert panel._global_poll_thread is terceira
         assert panel._global_poll_worker is not None
         assert terceira.isRunning()
-        assert panel.shutdown_polling()
+        assert panel.shutdown_polling(_PRAZO_JUNTAR_MS)
         assert panel._global_poll_thread is None
         assert panel._global_poll_worker is None
 
@@ -101,7 +105,7 @@ _CENARIOS = textwrap.dedent(
             tmp_path, monkeypatch, application_factory, destruir_janelas_depois_da_fabrica, "sem"
         )
         assert panel._global_poll_thread is not None
-        assert panel.shutdown_polling()
+        assert panel.shutdown_polling(_PRAZO_JUNTAR_MS)
         assert panel._global_poll_thread is None
         _entregar_destruicoes(app)
         assert panel._global_poll_thread is None
@@ -114,9 +118,9 @@ _CENARIOS = textwrap.dedent(
         _, _, panel = _painel(
             tmp_path, monkeypatch, application_factory, destruir_janelas_depois_da_fabrica, "pai"
         )
-        assert panel.shutdown_polling()
+        assert panel.shutdown_polling(_PRAZO_JUNTAR_MS)
         panel.restart_polling()
-        assert panel.shutdown_polling()
+        assert panel.shutdown_polling(_PRAZO_JUNTAR_MS)
         # Sem entregar os deleteLater: o fim do teste destrói o painel com as threads pendentes,
         # e o destroyed delas chega com o painel já em destruição.
     """
@@ -138,6 +142,9 @@ def test_casos_de_borda_da_destruicao_tardia_da_thread_de_observacao(tmp_path: P
     comando = [
         *[sys.executable, "-m", "pytest", str(cenario), "-p", "tests.conftest", "-q", "-n", "0"],
         *["--rootdir", str(_RAIZ), "-c", str(_RAIZ / "pyproject.toml")],
+        # Sem confcutdir a coleta lista cada pasta acima do cenário, inclusive o %TEMP%
+        # compartilhado, onde outros testes criam e apagam pastas durante a listagem.
+        *["--confcutdir", str(cenario.parent)],
         *["-p", "no:cacheprovider", "--basetemp", str(tmp_path / "base"), "--no-cov"],
     ]
 

@@ -82,10 +82,15 @@ def test_leitura_de_sessao_mais_lenta_que_o_fechamento_nao_destroi_thread_em_exe
     cenario.parent.mkdir()
     cenario.write_text(_CENARIO, encoding="utf-8")
     ambiente = {k: v for k, v in os.environ.items() if not k.startswith("PYTEST_XDIST")}
-    ambiente |= {"QT_QPA_PLATFORM": "offscreen", "PYTHONPATH": str(_RAIZ)}
+    herdados = [c for c in ambiente.get("PYTHONPATH", "").split(os.pathsep) if c]
+    caminhos = os.pathsep.join([*herdados, str(_RAIZ), str(_RAIZ / "src")])
+    ambiente |= {"QT_QPA_PLATFORM": "offscreen", "PYTHONPATH": caminhos}
     comando = [
         *[sys.executable, "-m", "pytest", str(cenario), "-p", "tests.conftest", "-q", "-n", "0"],
         *["--rootdir", str(_RAIZ), "-c", str(_RAIZ / "pyproject.toml")],
+        # Sem confcutdir a coleta lista cada pasta acima do cenário, inclusive o %TEMP%
+        # compartilhado, onde outros testes criam e apagam pastas durante a listagem.
+        *["--confcutdir", str(cenario.parent)],
         *["-p", "no:cacheprovider", "--basetemp", str(tmp_path / "base")],
     ]
 

@@ -210,7 +210,9 @@ def _truncar(texto: str) -> str:
 
 def _ambiente() -> dict[str, str]:
     ambiente = {k: v for k, v in os.environ.items() if not k.startswith("PYTEST_XDIST")}
-    return ambiente | {"QT_QPA_PLATFORM": "offscreen", "PYTHONPATH": str(_RAIZ)}
+    herdados = [c for c in ambiente.get("PYTHONPATH", "").split(os.pathsep) if c]
+    caminhos = os.pathsep.join([*herdados, str(_RAIZ), str(_RAIZ / "src")])
+    return ambiente | {"QT_QPA_PLATFORM": "offscreen", "PYTHONPATH": caminhos}
 
 
 def _executar(comando: list[str]) -> tuple[subprocess.CompletedProcess[str], float]:
@@ -263,6 +265,9 @@ def test_fechar_com_leitura_de_sessao_de_1_6_s_nao_aborta(tmp_path: Path) -> Non
     comando = [
         *[sys.executable, "-m", "pytest", str(cenario), "-q", "-n", "0"],
         *["--rootdir", str(_RAIZ), "-c", str(_RAIZ / "pyproject.toml")],
+        # Sem confcutdir a coleta lista cada pasta acima do cenário, inclusive o %TEMP%
+        # compartilhado, onde outros testes criam e apagam pastas durante a listagem.
+        *["--confcutdir", str(cenario.parent)],
         *["-p", "no:cacheprovider", "--basetemp", str(tmp_path / "base")],
     ]
 

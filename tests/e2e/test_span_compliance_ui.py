@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 from pytestqt.qtbot import QtBot
 
 from tests.conftest import ApplicationFactory
+from tests.janela_fechamento import PRAZO_FECHAMENTO_S, esperar_fechamento
 from zeny_project_handler.adapters.catalog import carregar_catalogo_inicial
 from zeny_project_handler.adapters.compliance import carregar_registro_conformidade_inicial
 from zeny_project_handler.adapters.persistence import (
@@ -148,6 +149,7 @@ def test_span_rule_full_ui_cycle_survives_restart(
     assert confirmations and "IDs existentes substituídos: 0" in confirmations[0]
 
     window.close()
+    esperar_fechamento(window, PRAZO_FECHAMENTO_S)
     window.release_resources()
     application.processEvents()
 

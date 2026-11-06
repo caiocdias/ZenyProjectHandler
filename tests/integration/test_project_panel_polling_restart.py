@@ -39,6 +39,10 @@ _CENARIO = textwrap.dedent(
     from zeny_project_handler_client.ui.main_window import MainWindow
     from zeny_project_handler_client.ui.project_panel import ProjectPanelWidget
 
+    # A sessão dorme mais que o prazo padrão de 1000 ms de shutdown_polling: o cenário dá à
+    # junção um prazo explícito, sem alargar o prazo do produto.
+    _PRAZO_JUNTAR_MS = 60_000
+
 
     @pytest.fixture
     def destruir_janelas_depois_da_fabrica() -> Iterator[list[MainWindow]]:
@@ -69,7 +73,7 @@ _CENARIO = textwrap.dedent(
         destruir_janelas_depois_da_fabrica.append(window)
         panel = window.project_panel
         assert isinstance(panel, ProjectPanelWidget)
-        assert panel.shutdown_polling()
+        assert panel.shutdown_polling(_PRAZO_JUNTAR_MS)
         panel.restart_polling()
         nova = panel._global_poll_thread
         assert nova is not None
@@ -99,6 +103,9 @@ def test_destruicao_tardia_da_thread_antiga_nao_solta_a_thread_reiniciada(
     comando = [
         *[sys.executable, "-m", "pytest", str(cenario), "-p", "tests.conftest", "-q", "-n", "0"],
         *["--rootdir", str(_RAIZ), "-c", str(_RAIZ / "pyproject.toml")],
+        # Sem confcutdir a coleta lista cada pasta acima do cenário, inclusive o %TEMP%
+        # compartilhado, onde outros testes criam e apagam pastas durante a listagem.
+        *["--confcutdir", str(cenario.parent)],
         *["-p", "no:cacheprovider", "--basetemp", str(tmp_path / "base")],
     ]
 

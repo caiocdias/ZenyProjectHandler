@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 )
 from pytestqt.qtbot import QtBot
 from tests.conftest import ApplicationFactory
+from tests.janela_fechamento import PRAZO_FECHAMENTO_S, esperar_fechamento
 from tests.pdf_fixtures import TEST_RENDER_BUDGET, create_feature_pdf, create_golden_pdf
 from tests.remote_gateways import DirectProjectGateway
 from tests.viewer_gateway import LocalTestPdfViewerGateway
@@ -162,7 +163,7 @@ def test_gmax_dock_visibility_is_restored_from_ui_state(
     application_factory: ApplicationFactory,
 ) -> None:
     settings = ClientSettings(data_directory=tmp_path / "gmax-dock-state")
-    application, window = application_factory([], settings=settings)
+    _application, window = application_factory([], settings=settings)
     qtbot.addWidget(window)
     window.show()
     gmax_dock = window.findChild(QDockWidget, "gmaxDock")
@@ -171,7 +172,7 @@ def test_gmax_dock_visibility_is_restored_from_ui_state(
     assert not gmax_dock.toggleViewAction().isChecked()
 
     window.close()
-    application.processEvents()
+    esperar_fechamento(window, PRAZO_FECHAMENTO_S)
 
     stored = QSettings(str(settings.ui_state_path), QSettings.Format.IniFormat)
     assert stored.contains("window/geometry")
@@ -921,6 +922,7 @@ def test_main_window_stops_pdf_render_queue_when_closing_central_viewer(
     assert window.pdf_viewer._render_queue.isRunning()
 
     window.close()
+    esperar_fechamento(window, PRAZO_FECHAMENTO_S)
 
     assert not window.pdf_viewer._render_queue.isRunning()
 
