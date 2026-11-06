@@ -36,7 +36,6 @@ _LADO_MINIMO_LOSANGO: Final = 4.0
 _TOLERANCIA_MINIMA_LOSANGO: Final = 1.0
 _TOLERANCIA_RELATIVA_LOSANGO: Final = 0.08
 _PONTAS_POR_CANTO: Final = 2
-_TOLERANCIA_HORIZONTAL_GRAUS: Final = 1.0
 
 _FONTES_CONSUMIDAS: Final = frozenset(
     {
@@ -173,8 +172,8 @@ class Segmento:
 
 @dataclass(frozen=True, slots=True)
 class Palavra:
-    """`inteira` marca a caixa maior que a palavra, a do span inteiro (R-E06.2.1-4): nativo com
-    várias palavras ou espaços nas pontas, e shx ou rotacionado com várias palavras."""
+    """A caixa é a do span inteiro (R-E06.2.1-4); `inteira` marca o span que tem mais que a
+    palavra, com várias palavras ou espaços nas pontas."""
 
     texto: str
     caixa: Caixa
@@ -367,44 +366,18 @@ def _molduras_e_segmentos(modelo: PaginaModelo) -> tuple[tuple[Moldura, ...], li
 # --- palavras -----------------------------------------------------------------------------
 
 
-def _distancia_angular(rotacao: float, alvo: float) -> float:
-    """Distância em graus; `rotacao` não finita dá nan, que nenhuma tolerância aceita."""
-    return abs((rotacao - alvo + 180.0) % 360.0 - 180.0)
-
-
 def _palavras_do_texto(texto: TextoModelo) -> list[Palavra]:
-    """Palavras do span (R-E06.2.1-4). Repartir por caracteres só é exato em largura fixa.
+    """Palavras do span, todas com a caixa dele (R-E06.2.1-4), em qualquer origem e rotação.
 
-    Só `glifo` horizontal é repartido. `nativo`, em qualquer rotação, fica com a caixa do span:
-    falso positivo é pior que perda de recall, e `inteira` marca o span que tem mais que a
-    palavra. `shx` e `glifo` girado também ficam com a caixa do span, e `inteira` marca o span
-    de várias palavras.
+    Nenhum span é repartido: por caracteres, a caixa só seria exata em largura fixa, e falso
+    positivo é pior que perda de recall. `inteira` diz se o texto do span tem mais que a palavra.
     """
     if not all(math.isfinite(valor) for valor in texto.bbox):
         return []
-    trechos = list(_PALAVRA.finditer(texto.texto))
-    if not trechos:
-        return []
-    if texto.origem == "nativo":
-        return [
-            Palavra(trecho.group().upper(), texto.bbox, trecho.group() != texto.texto)
-            for trecho in trechos
-        ]
-    em_pe = _distancia_angular(texto.rotacao, 0.0) <= _TOLERANCIA_HORIZONTAL_GRAUS
-    invertido = _distancia_angular(texto.rotacao, 180.0) <= _TOLERANCIA_HORIZONTAL_GRAUS
-    if texto.origem == "shx" or not (em_pe or invertido):
-        inteira = len(trechos) > 1
-        return [Palavra(trecho.group().upper(), texto.bbox, inteira) for trecho in trechos]
-    x0, y0, x1, y1 = texto.bbox
-    largura_por_caractere = (x1 - x0) / len(texto.texto)
-    palavras = []
-    for trecho in trechos:
-        inicio, fim = trecho.span()
-        if invertido:
-            inicio, fim = len(texto.texto) - fim, len(texto.texto) - inicio
-        caixa = (x0 + inicio * largura_por_caractere, y0, x0 + fim * largura_por_caractere, y1)
-        palavras.append(Palavra(trecho.group().upper(), caixa, False))
-    return palavras
+    return [
+        Palavra(trecho.group().upper(), texto.bbox, trecho.group() != texto.texto)
+        for trecho in _PALAVRA.finditer(texto.texto)
+    ]
 
 
 # --- contexto -----------------------------------------------------------------------------

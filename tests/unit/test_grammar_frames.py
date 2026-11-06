@@ -287,17 +287,6 @@ def test_rotulo_em_shx_casa() -> None:
     assert _casa(ROTULO, QUADRADO, [retangulo_traco(QUADRADO)], [palavra])
 
 
-def test_rotulo_dentro_de_span_repartido_casa_pela_propria_palavra() -> None:
-    """O span de glifo cruza a moldura, mas a palavra repartida fica dentro dela."""
-    span = texto("CT LONGO", (116.0, 130.0, 196.0, 141.0), origem="glifo")
-    assert _casa(ROTULO, QUADRADO, [retangulo_traco(QUADRADO)], [span])
-
-
-def test_rotulo_em_glifo_com_espacos_e_span_que_cruza_casa() -> None:
-    span = texto("ct      ", (116.0, 130.0, 196.0, 141.0), origem="glifo")
-    assert _casa(ROTULO, QUADRADO, [retangulo_traco(QUADRADO)], [span])
-
-
 @pytest.mark.parametrize(
     "span",
     [
@@ -307,21 +296,31 @@ def test_rotulo_em_glifo_com_espacos_e_span_que_cruza_casa() -> None:
             texto("CT LONGO", (116.0, 130.0, 196.0, 141.0), origem="glifo", rotacao=90.0),
             id="glifo-girado",
         ),
+        pytest.param(
+            texto("CT LONGO", (116.0, 130.0, 196.0, 141.0), origem="glifo"), id="glifo-horizontal"
+        ),
+        pytest.param(
+            texto("LONGO CT", (116.0, 130.0, 196.0, 141.0), origem="glifo"),
+            id="glifo-rotulo-no-fim",
+        ),
         pytest.param(texto("CT LONGO", (116.0, 130.0, 196.0, 141.0)), id="nativo-horizontal"),
         pytest.param(texto("LONGO CT", (116.0, 130.0, 196.0, 141.0)), id="nativo-rotulo-no-fim"),
         pytest.param(texto("ct      ", (116.0, 130.0, 196.0, 141.0)), id="nativo-com-espacos"),
         pytest.param(texto("   ", (116.0, 130.0, 132.0, 141.0)), id="so-espacos"),
     ],
 )
-def test_rotulo_em_span_sem_reparticao_falha_fechado(span: TextoModelo) -> None:
+def test_rotulo_em_span_que_cruza_a_moldura_falha_fechado(span: TextoModelo) -> None:
+    """A caixa da palavra é a do span (R-4): a parte dele fora da caixa interna recusa."""
     assert not _casa(ROTULO, QUADRADO, [retangulo_traco(QUADRADO)], [span])
 
 
 def test_rotulo_com_espacos_nas_pontas_e_span_inteiro_dentro_casa() -> None:
     espacado = texto("  ct  ", (116.0, 130.0, 150.0, 141.0))
     inteiro = texto("CT LONGO", (116.0, 130.0, 150.0, 141.0), origem="shx")
+    em_glifo = texto("CT LONGO", (116.0, 130.0, 150.0, 141.0), origem="glifo")
     assert _casa(ROTULO, QUADRADO, [retangulo_traco(QUADRADO)], [espacado])
     assert _casa(ROTULO, QUADRADO, [retangulo_traco(QUADRADO)], [inteiro])
+    assert _casa(ROTULO, QUADRADO, [retangulo_traco(QUADRADO)], [em_glifo])
 
 
 # --- interior vazio ------------------------------------------------------------------------
@@ -775,15 +774,17 @@ def test_diagonais_com_palavra_unica_do_mesmo_tamanho_casa() -> None:
     assert _casa(DIAGONAIS, QUADRADO, [retangulo_traco(QUADRADO), *X_NO_QUADRADO], [palavra])
 
 
+@pytest.mark.parametrize("origem", ["nativo", "shx", "glifo"])
 @pytest.mark.parametrize("cru", ["AB CDE", "ABCDE "], ids=["varias-palavras", "espaco-no-fim"])
-def test_diagonais_com_span_nativo_que_cruza_recusa(cru: str) -> None:
-    """Repartido, o centro da palavra cairia fora; a caixa real dela não é conhecida (R-4)."""
-    span = texto(cru, (90.0, 120.0, 111.0, 130.0))
+def test_diagonais_com_span_que_cruza_recusa(cru: str, origem: Any) -> None:
+    """O centro do span fica fora, e a caixa real da palavra não é conhecida (R-4)."""
+    span = texto(cru, (90.0, 120.0, 111.0, 130.0), origem=origem)
     assert not _casa(DIAGONAIS, QUADRADO, [retangulo_traco(QUADRADO), *X_NO_QUADRADO], [span])
 
 
-def test_diagonais_com_nativo_que_e_exatamente_a_palavra_julga_o_centro() -> None:
-    palavra = texto("ABCDEF", (90.0, 120.0, 111.0, 130.0))
+@pytest.mark.parametrize("origem", ["nativo", "shx", "glifo"])
+def test_diagonais_com_span_que_e_exatamente_a_palavra_julga_o_centro(origem: Any) -> None:
+    palavra = texto("ABCDEF", (90.0, 120.0, 111.0, 130.0), origem=origem)
     assert _casa(DIAGONAIS, QUADRADO, [retangulo_traco(QUADRADO), *X_NO_QUADRADO], [palavra])
 
 
