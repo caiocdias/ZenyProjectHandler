@@ -410,3 +410,67 @@ def test_pagina_densa_vira_grupos_falhou(tmp_path: Path, monkeypatch: pytest.Mon
     assert "modelo.grupos_falhou" in modelo.diagnosticos
     assert modelo.caminhos == normal.caminhos
     assert modelo.primitivas == normal.primitivas
+
+
+def _particao(caixas: list[Any], raizes: list[int]) -> set[tuple[int, ...]]:
+    por_raiz: dict[int, list[int]] = defaultdict(list)
+    for i in range(len(caixas)):
+        por_raiz[raizes[i]].append(i)
+    return {tuple(m) for m in por_raiz.values()}
+
+
+@pytest.mark.parametrize(
+    ("semente", "folga", "lado_max_caixa"),
+    [(1, 0.5, 6.0), (2, 1.5, 30.0), (3, 4.0, 12.0), (4, 1.5, 80.0)],
+    ids=["folga-pequena", "folga-padrao", "folga-grande", "caixas-largas-varias-celulas"],
+)
+def test_uniao_igual_a_anterior_com_caixas_arbitrarias_e_coordenadas_negativas(
+    semente: int, folga: float, lado_max_caixa: float
+) -> None:
+    sorteio = random.Random(semente)
+    caixas: list[Any] = []
+    for _ in range(300):
+        x, y = sorteio.uniform(-150, 150), sorteio.uniform(-150, 150)
+        caixas.append((x, y, x + sorteio.uniform(0, lado_max_caixa), y + sorteio.uniform(0, 3)))
+    esperado = _particao(caixas, _uniao_anterior(caixas, folga))
+    obtido = _particao(
+        caixas, groups._unir_proximos(caixas, list(range(len(caixas))), folga, 10**9)
+    )
+    assert obtido == esperado
+    assert any(len(m) > 1 for m in esperado)
+
+
+def test_visitas_contam_uma_por_entrada_de_celula_lida() -> None:
+    # 30 circulos concentricos em (0, 0), raio ~2 e folga 1,5: cada caixa cobre 4 celulas
+    # e a i-esima le i entradas em cada uma: 4 * (0 + 1 + ... + 29) = 1740.
+    densa = _concentricos(30)
+    assert len(agrupar_candidatos(densa, [], limite_visitas=1740)) == 1
+    with pytest.raises(AgrupamentoExcedido):
+        agrupar_candidatos(densa, [], limite_visitas=1739)
+
+
+def test_teto_zero_passa_sem_celula_compartilhada_e_levanta_com_ela() -> None:
+    assert agrupar_candidatos([circulo(0, 0), circulo(100, 100, origem=1)], [], limite_visitas=0)
+    with pytest.raises(AgrupamentoExcedido):
+        agrupar_candidatos([circulo(0, 0), circulo(1, 0, origem=1)], [], limite_visitas=0)
+
+
+def test_teto_vale_para_caminhos_e_so_conta_elementos_ativos() -> None:
+    caminhos = [
+        poligono((0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)),
+        poligono((1.0, 1.0), (5.0, 1.0), (5.0, 5.0), (1.0, 5.0)),
+    ]
+    with pytest.raises(AgrupamentoExcedido):
+        agrupar_candidatos([], caminhos, limite_visitas=0)
+    # Elemento maior que lado_maximo nao e ativo: nao le celula alguma.
+    grande = linha((0.0, 0.0), (500.0, 0.0), (500.0, 1.0))
+    assert agrupar_candidatos([grande, circulo(0, 0)], [], limite_visitas=0)
+
+
+def test_excecao_e_reproduzivel_e_nao_deixa_estado_entre_chamadas() -> None:
+    densa = _concentricos(30)
+    primeiro = agrupar_candidatos(densa, [])
+    for _ in range(2):
+        with pytest.raises(AgrupamentoExcedido):
+            agrupar_candidatos(densa, [], limite_visitas=10)
+    assert agrupar_candidatos(densa, []) == primeiro
