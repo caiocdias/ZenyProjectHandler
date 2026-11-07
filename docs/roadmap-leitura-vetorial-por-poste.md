@@ -268,7 +268,7 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E06.1 | Medição de símbolos e base do modelo | #concluida | E05, E14 | benchmark diagnóstico de símbolos contra as fichas, página do modelo com índice cru, guarda contra memorização |
 | E06.2.1 | Núcleo de gramáticas sobre o modelo | #concluida | E06.1 | núcleo puro com índice espacial e teto, 6 gramáticas portadas, paridade no corpus sintético |
 | E06.2.2.1 | Método versionado no runner | #concluida | E06.2.1 | método de pacotes sobre o modelo no runner opt-in, resíduo raster marcado, agrupamento sem laço quadrático fora de teto |
-| E06.2.2.2 | Medição do método nas 16 folhas | #pendente | E06.2.2.1 | benchmark ao lado do atual e diff por variante, com cada "só no núcleo" classificado |
+| E06.2.2.2 | Medição do método nas 16 folhas | #em-andamento | E06.2.2.1 | benchmark ao lado do atual e diff por variante, com cada "só no núcleo" classificado |
 | E06.3 | Gramáticas das classes da ficha | #pendente | E06.2.2.2 | estai, aterramento, para-raios, transformador e interrupção sobre o modelo, acima do atual |
 | E07 | Ficha do poste | #pendente | E06.3, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
 | E08 | Conferência UTM | #pendente | E07 | transformação página → UTM, checagem de posição e vão, pendências |
@@ -1354,7 +1354,7 @@ Rulings da divisão, registradas no ledger da E06.1:
 **Evidências e handoff:**
 
 - Plano: `docs/superpowers/plans/2026-11-06-leitura-vetorial-por-poste-e06-2-2-1.md`. Revisão de arquitetura (opus): bloqueou nas rodadas 0 e 1 e aprovou com notas na rodada 2.
-- Relógio: de ca9783a (16:40 de 2026-11-06) até o commit `#concluida` (17:25 de 2026-11-07), cerca de 4h30 sem as duas paradas (16:46–22:46 e 23:00–13:15). Cerca de 80 min são uma suíte do testador da Task 6 que travou com outra suíte ativa; encerrada, a segunda rodou normal. Não reproduzido nem investigado.
+- Relógio: de ca9783a (16:40 de 2026-11-06) até o commit `#concluida` (17:23 de 2026-11-07), 4h28 sem as duas paradas (16:46–22:46 e 23:00–13:15). Cerca de 80 min são uma suíte do testador da Task 6 que travou com outra suíte ativa; encerrada, a segunda rodou normal. Não reproduzido nem investigado.
 - Revisão final (`revisor-seguranca`, opus, ca9783a..d953b28): pronto com correções, sem Crítico. Onda única: I1 e M1 (696d68f), I2, I3 e lacunas de teste (ad0b669). Re-revisão: todos fechados.
 - Critérios verificados:
   1. Fixtures: `test_model_symbols.py`, `test_model_symbols_ataque.py`, `test_model_symbols_costuras_etapa.py` e `test_model_symbols_runner.py`.
@@ -1419,7 +1419,7 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 ---
 
-## E06.2.2.2 — Medição do método nas 16 folhas — #pendente
+## E06.2.2.2 — Medição do método nas 16 folhas — #em-andamento
 
 **Objetivo:** medir o método novo nas 16 folhas, ao lado do atual, e classificar cada divergência em que ele afirma a mais.
 
