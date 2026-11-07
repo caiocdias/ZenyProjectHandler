@@ -1556,11 +1556,11 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 **Dependências:** E06.2.2.2. O relógio começa no commit `#em-andamento` da E06.3 (107d89e).
 
 **Escopo:**
-- **58 variantes** de `docs/data/inventario-simbologia-v1.json` com `owner_stage` ≠ E07, fora das famílias de convenção (f02-01 e f02-02, E10): f02-14 (15) e f02-15 (2), ESTAI; f02-18 (23), f02-24 (2) e f02-25 (4), TRANSFORMADOR e um CONJUNTO_EO; f02-19 (4), ATERRAMENTO; f02-21 (8), PARA_RAIOS_MT/BT. Todas `pending`, com motivo e `source_ref` do inventário.
+- **58 variantes** de `docs/data/inventario-simbologia-v1.json` com `owner_stage` ≠ E07, fora das famílias de convenção (f02-01 e f02-02, E10): f02-14 (15) e f02-15 (2), ESTAI; f02-18 (23), f02-24 (2) e f02-25 (4), TRANSFORMADOR e um CONJUNTO_EO; f02-19 (4), ATERRAMENTO; f02-21 (8), PARA_RAIOS_MT/BT. Todas `pending`, com motivo, `source_ref` do inventário e `negative_examples` vindos de `confusable_negatives`, como as `pending` que já existem.
 - **Auditor e `scripts/coverage_matrix_e16.py`** aceitam variante de outro `owner_stage` do inventário, relatada por estágio. O que hoje exige `E07` continua exigindo para as variantes E07.
 - **Números fixos:** `tests/server/test_e14_symbol_review.py:287` e as contagens de `tests/unit/test_declarative_symbol_packages.py`. A tabela de suporte da revisão e as exportações passam a mostrar as novas `pending`.
 
-**Fora de escopo:** gramáticas e habilitação (E06.3.2 a E06.3.5); `negative_examples`, que só a variante habilitada exige, vêm na subetapa que a habilita, a partir de `confusable_negatives`.
+**Fora de escopo:** gramáticas e habilitação (E06.3.2 a E06.3.5); regenerar a matriz publicada da E16 (`docs/data/matriz-simbologia-e16*`), que é artefato da curadoria e exige relatórios novos das E05, E06 e E07.
 
 **Critérios de aceite:**
 
