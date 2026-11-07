@@ -94,7 +94,7 @@ Soma: 75 min.
   - em `test_e14_symbol_review.py:287`, o total de `pending` passa ao valor medido com os pacotes da Task 1 (343 + 58 = 401, se nenhuma das 58 cair fora da tabela; confira e use o valor real).
 - [ ] **Step 2: Rodar** e ver falhar pelo motivo certo.
 - [ ] **Step 3: Implementar** em `_method_states`: variante de outro estágio com pacote ganha o estado do método de pacotes pelo `recognition.status` do pacote, como já acontece em E07. O resto não muda.
-- [ ] **Step 4: Rodar** `tests/unit/test_e16_coverage_matrix.py`, `tests/server/test_e14_symbol_review.py`, `tests/server/test_deliverable_exports*.py` (se existir), ruff e format. Expected: PASS.
+- [ ] **Step 4: Rodar** `tests/unit/test_e16_coverage_matrix.py`, `tests/server/test_e14_symbol_review.py`, `tests/unit/test_deliverable_exports.py`, ruff e format. Expected: PASS.
 - [ ] **Step 5: Commit** (`feat: matriz e16 reconhece variante empacotada de outro estagio`).
 
 ## Fechamento operacional
