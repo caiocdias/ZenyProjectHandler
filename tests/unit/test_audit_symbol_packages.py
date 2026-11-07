@@ -106,14 +106,14 @@ def test_familia_e10_nao_e_aceita(tmp_path: Path) -> None:
     assert result["errors"] == ["unexpected variant: v-e10"]
 
 
-def test_variante_e07_ausente_acusa_e_outro_estagio_ausente_nao(tmp_path: Path) -> None:
+def test_variantes_e07_e_e06_ausentes_acusam_e_a_empacotada_nao(tmp_path: Path) -> None:
     inventory, packages = _montar(tmp_path, empacotar=("E05",))
 
     result = audit(inventory, packages)
 
     assert "missing variant: v-e07" in result["errors"]
+    assert "missing variant: v-e06" in result["errors"]
     assert "missing variant: v-e05" not in result["errors"]
-    assert "missing variant: v-e06" not in result["errors"]
 
 
 def test_relato_por_estagio(tmp_path: Path) -> None:

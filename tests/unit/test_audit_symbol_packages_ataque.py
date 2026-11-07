@@ -205,7 +205,7 @@ def test_by_owner_stage_fecha_com_o_total_empacotado_e_enabled_mais_pending(
     result = audit(inventory, packages)
 
     por_estagio = result["by_owner_stage"]
-    assert result["errors"] == []
+    assert result["errors"] == ["missing variant: v-e06", "missing family: fam-e06"]
     assert sum(item["packaged"] for item in por_estagio.values()) == result["package_variants"]
     assert sum(item["enabled"] for item in por_estagio.values()) == result["enabled"]
     assert sum(item["pending"] for item in por_estagio.values()) == result["pending"]
@@ -228,8 +228,7 @@ def test_by_owner_stage_conta_expected_de_todas_as_variantes_do_estagio(tmp_path
         "enabled": 1,
         "pending": 0,
     }
-    # so a E07 e exigida: a segunda variante E05 ausente nao acusa
-    assert result["errors"] == []
+    assert result["errors"] == ["missing variant: v-e05-b"]
 
 
 def test_complete_recognition_verdadeiro_com_todas_as_nao_e10_habilitadas(
@@ -258,7 +257,7 @@ def test_complete_recognition_falso_com_variante_de_outro_estagio_nao_empacotada
 
     result = audit(inventory, packages)
 
-    assert result["errors"] == []
+    assert result["errors"] == ["missing variant: v-e06", "missing family: fam-e06"]
     assert result["complete_recognition"] is False
 
 
@@ -288,26 +287,33 @@ def test_e07_ausente_continua_acusando_variante_e_familia(tmp_path: Path) -> Non
     result = audit(inventory, packages)
 
     assert result["errors"] == ["missing variant: v-e07", "missing family: fam-e07"]
-    assert result["expected_variants"] == 1
-    assert result["expected_families"] == 1
+    assert result["expected_variants"] == 4
+    assert result["expected_families"] == 4
 
 
-def test_ausencia_de_outro_estagio_nao_acusa_variante_nem_familia(tmp_path: Path) -> None:
+def test_ausencia_de_e04_a_e06_acusa_variante_e_familia_como_a_e07(tmp_path: Path) -> None:
     inventory, packages = _montar(tmp_path, ausentes=("E04", "E05", "E06"))
 
     result = audit(inventory, packages)
 
-    assert result["errors"] == []
-    assert result["expected_variants"] == 1
+    assert result["errors"] == [
+        "missing variant: v-e04",
+        "missing variant: v-e05",
+        "missing variant: v-e06",
+        "missing family: fam-e04",
+        "missing family: fam-e05",
+        "missing family: fam-e06",
+    ]
+    assert result["expected_variants"] == 4
 
 
-def test_expected_variants_e_families_contam_so_e07(tmp_path: Path) -> None:
+def test_expected_variants_e_families_contam_todas_as_nao_e10(tmp_path: Path) -> None:
     inventory, packages = _montar(tmp_path)
 
     result = audit(inventory, packages)
 
-    assert result["expected_variants"] == 1
-    assert result["expected_families"] == 1
+    assert result["expected_variants"] == 4
+    assert result["expected_families"] == 4
     assert result["package_variants"] == 4
     assert result["package_families"] == 4
 
