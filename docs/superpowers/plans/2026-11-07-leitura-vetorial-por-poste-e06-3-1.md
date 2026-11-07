@@ -127,6 +127,13 @@ Soma: 2h00 (30 + 45 + 45).
 - [ ] **Step 5: Rodar** os testes de pacotes, auditor e revisão, `tests/unit/test_symbol_packages_sem_memorizacao.py`, `tests/unit/test_deliverable_exports.py`, `tests/integration/test_model_symbols_runner.py` e `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` (`errors: []`, `expected_variants: 423`, `pending: 401`). Depois, a suíte inteira uma vez, mypy, ruff e format.
 - [ ] **Step 6: Commit** (`feat: variantes das classes da ficha nos pacotes como pending`).
 
+## Revisão de arquitetura
+
+- **Veredito:** aprovado.
+- **Rodadas:** 2.
+- **Modelo:** opus.
+- **Notas Menores:** nenhuma pendente. Observação do revisor: o helper `_matrix` de `tests/unit/test_curation_coverage_e16.py` fixa `owner_stage` "E07"; o teste novo da E05 usa linhas próprias ou um parâmetro opcional, sem mudar as asserções atuais.
+
 ## Fechamento operacional
 
 | Critério de aceite | Evidência |
