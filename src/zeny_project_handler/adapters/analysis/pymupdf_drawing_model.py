@@ -44,6 +44,7 @@ from .drawing_model.model import (
     Ponto,
     TextoModelo,
 )
+from .drawing_model.symbol_grammars import PaginaGramatica
 from .pymupdf_annotations import (
     _annotation_info,
     _annotation_subtype,
@@ -61,6 +62,8 @@ _TIPOS_CAMINHO: Final[dict[str, Literal["traco", "preenchimento", "traco_e_preen
     "fs": "traco_e_preenchimento",
 }
 _PROFUNDIDADE_APARENCIA: Final = 12
+# Preenchimento com opacidade abaixo disso deixa ver o que está por baixo.
+_OPACIDADE_OPACA: Final = 0.99
 _CELULA_TEXTO: Final = 20.0
 _MAXIMO_CELULAS_TEXTO: Final = 256
 _MARGEM_TEXTO: Final = 2.0
@@ -76,12 +79,15 @@ _REFERENCIA_PDF: Final = re.compile(r"(\d+) \d+ R")
 
 _T = TypeVar("_T")
 _Transformar = Callable[[Any], Ponto]
+_CaminhosLidos = tuple[tuple[Caminho, ...], tuple[int, ...], frozenset[int], int, int]
 
 
 @dataclass(slots=True)
 class _Fontes:
     caminhos: tuple[Caminho, ...] = ()
     indices_crus: tuple[int, ...] = ()
+    translucidos: frozenset[int] = frozenset()
+    glifos_lidos: frozenset[int] = frozenset()
     total_desenhos: int = 0
     formas_glifo: int = 0
     textos_nativos: tuple[TextoModelo, ...] = ()
@@ -126,6 +132,19 @@ def pagina_modelo_com_indices(
     """
     fontes = _ler_fontes(pagina)
     return _montar_pagina(indice, pagina, fontes, tabela), fontes.indices_crus
+
+
+def pagina_para_gramaticas(
+    pagina: pymupdf.Page, indice: int, tabela: TabelaGlifos | None = None
+) -> PaginaGramatica:
+    """Página `indice` do modelo para as gramáticas de símbolos.
+
+    Além do modelo, traz por caminho a posição do desenho de origem em `get_drawings` e quais
+    caminhos são translúcidos ou foram lidos como glifo (posições em `modelo.caminhos`).
+    """
+    fontes = _ler_fontes(pagina)
+    modelo = _montar_pagina(indice, pagina, fontes, tabela)
+    return PaginaGramatica(modelo, fontes.indices_crus, fontes.translucidos, fontes.glifos_lidos)
 
 
 def impressao_estrutural(documento: pymupdf.Document) -> ImpressaoEstrutural:
@@ -223,13 +242,17 @@ def _fonte(nome: str, diagnosticos: list[str], leitura: Callable[[], _T], vazio:
 def _ler_fontes(pagina: Any) -> _Fontes:
     fontes = _Fontes()
     diagnosticos = fontes.diagnosticos
-    sem_caminhos: tuple[tuple[Caminho, ...], tuple[int, ...], int, int] = ((), (), 0, 0)
+    sem_caminhos: _CaminhosLidos = ((), (), frozenset(), 0, 0)
     sem_textos: tuple[TextoModelo, ...] = ()
     sem_shx: tuple[tuple[TextoModelo, ...], int] = ((), 0)
     sem_imagens: tuple[ImagemModelo, ...] = ()
-    fontes.caminhos, fontes.indices_crus, fontes.total_desenhos, fontes.formas_glifo = _fonte(
-        "caminhos", diagnosticos, lambda: _caminhos_e_glifos(pagina), sem_caminhos
-    )
+    (
+        fontes.caminhos,
+        fontes.indices_crus,
+        fontes.translucidos,
+        fontes.total_desenhos,
+        fontes.formas_glifo,
+    ) = _fonte("caminhos", diagnosticos, lambda: _caminhos_e_glifos(pagina), sem_caminhos)
     fontes.textos_nativos = _fonte(
         "textos_nativos", diagnosticos, lambda: _textos_nativos(pagina), sem_textos
     )
@@ -262,7 +285,7 @@ def _montar_pagina(
     grupos = _fonte(
         "grupos", diagnosticos, lambda: agrupar_candidatos(primitivas, caminhos), sem_grupos
     )
-    textos_glifo = _textos_glifo(caminhos, fontes.total_desenhos, tabela, diagnosticos)
+    textos_glifo = _textos_glifo(fontes, tabela)
     return PaginaModelo(
         indice=indice,
         largura=float(pagina.rect.width),
@@ -276,21 +299,19 @@ def _montar_pagina(
     )
 
 
-def _textos_glifo(
-    caminhos: Sequence[Caminho],
-    total_desenhos: int,
-    tabela: TabelaGlifos | None,
-    diagnosticos: list[str],
-) -> tuple[TextoModelo, ...]:
+def _textos_glifo(fontes: _Fontes, tabela: TabelaGlifos | None) -> tuple[TextoModelo, ...]:
+    """Textos em contorno de glifo; deixa em `fontes` os caminhos lidos, para não ler de novo."""
     if tabela is None:
         return ()
+    diagnosticos = fontes.diagnosticos
     sem_leitura = LeituraGlifos((), 0, 0, limitada=False)
     leitura = _fonte(
         "glifos",
         diagnosticos,
-        lambda: ler_texto_glifos(caminhos, tabela, total_desenhos),
+        lambda: ler_texto_glifos(fontes.caminhos, tabela, fontes.total_desenhos),
         sem_leitura,
     )
+    fontes.glifos_lidos = leitura.caminhos_lidos
     if leitura.limitada:
         diagnosticos.append("modelo.glifos_limitados")
     if leitura.desconhecidos or leitura.ambiguos:
@@ -325,7 +346,7 @@ def _caixa(transformar: _Transformar, caixa: Any) -> Caixa:
 # --- caminhos -----------------------------------------------------------------------------
 
 
-def _desenhos(pagina: Any) -> list[dict[str, Any]]:
+def _desenhos(pagina: Any) -> _DesenhosFiltrados:
     """Caminhos de traço/preenchimento; entradas `clip` e `group` ficam de fora."""
     return _DesenhosFiltrados(
         (indice, desenho)
@@ -368,13 +389,24 @@ def _finitos(subcaminhos: tuple[tuple[ItemCaminho, ...], ...]) -> bool:
     )
 
 
-def _caminhos_e_glifos(pagina: Any) -> tuple[tuple[Caminho, ...], tuple[int, ...], int, int]:
+def _translucido(desenho: dict[str, Any]) -> bool:
+    opacidade = desenho.get("fill_opacity")
+    return (
+        isinstance(opacidade, int | float)
+        and math.isfinite(opacidade)
+        and opacidade < _OPACIDADE_OPACA
+    )
+
+
+def _caminhos_e_glifos(pagina: Any) -> _CaminhosLidos:
     desenhos = _desenhos(pagina)
     caminhos = _caminhos(desenhos, _transformacao(pagina))
-    # `_desenhos` trocado por uma lista simples não sabe as posições cruas: vale a ordem filtrada
-    posicoes = getattr(desenhos, "indices_crus", None) or tuple(range(len(desenhos)))
-    indices = tuple(posicoes[caminho.ordem] for caminho in caminhos)
-    return caminhos, indices, len(desenhos), sum(1 for desenho in desenhos if _is_glyph(desenho))
+    indices = tuple(desenhos.indices_crus[caminho.ordem] for caminho in caminhos)
+    translucidos = frozenset(
+        posicao for posicao, caminho in enumerate(caminhos) if _translucido(desenhos[caminho.ordem])
+    )
+    glifos = sum(1 for desenho in desenhos if _is_glyph(desenho))
+    return caminhos, indices, translucidos, len(desenhos), glifos
 
 
 def _subcaminhos(

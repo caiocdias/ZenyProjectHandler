@@ -45,7 +45,13 @@ def read_matrix(path: Path) -> dict[str, dict[str, str]]:
             raise ValueError(f"invalid coverage status for {identity}: {row['status']}")
         if row["owner_stage"] not in ROUTES:
             raise ValueError(f"unknown owner for {identity}: {row['owner_stage']}")
-        if row["package_status"] == "pending" and row["status"] == "reconhecido_exato":
+        # Only E07 IDs are recognized by the package method; another stage keeps the status of
+        # its own evidence even when its package is still pending.
+        if (
+            row["status"] == "reconhecido_exato"
+            and row["package_status"] == "pending"
+            and row["owner_stage"] == "E07"
+        ):
             raise ValueError(f"pending package counted as exact recognition: {identity}")
         indexed[identity] = row
     return indexed

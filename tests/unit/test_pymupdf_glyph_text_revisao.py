@@ -32,7 +32,10 @@ from zeny_project_handler.adapters.analysis.drawing_model.glyph_text import (
     ler_texto_glifos,
 )
 from zeny_project_handler.adapters.analysis.drawing_model.model import Caixa
-from zeny_project_handler.adapters.analysis.pymupdf_drawing_model import extrair_modelo_desenho
+from zeny_project_handler.adapters.analysis.pymupdf_drawing_model import (
+    _DesenhosFiltrados,
+    extrair_modelo_desenho,
+)
 from zeny_project_handler.adapters.analysis.pymupdf_glyph_text import (
     _resolver_cobertura,
     ler_glifos_da_pagina,
@@ -336,7 +339,7 @@ def test_desenho_descartado_no_fim_da_pagina_nao_vira_texto_parcial_na_analise_e
     monkeypatch.setattr(
         pymupdf_drawing_model,
         "_desenhos",
-        lambda pagina: [*original(pagina), _desenho_nao_finito()],
+        lambda pagina: _DesenhosFiltrados(enumerate([*original(pagina), _desenho_nao_finito()])),
     )
 
     resultado = _analisar(contorno, tabela_glifos=tabela)

@@ -285,6 +285,26 @@ def test_entrada_ignorar_divide_o_trecho(tmp_path: Path, tabela: TabelaGlifos) -
     assert (leitura.desconhecidos, leitura.ambiguos) == (0, 0)
 
 
+def test_caminhos_lidos_so_de_grupo_resolvido(tmp_path: Path, tabela: TabelaGlifos) -> None:
+    # "-" como "ignorar" divide o trecho em "11" e "300", e sem o "3" o segundo grupo se anula
+    hifen = _entrada(tabela, "-")
+    glifos = tuple(
+        dataclasses.replace(g, caractere=None) if g == hifen else g
+        for g in tabela.glifos
+        if g.caractere != "3"
+    )
+
+    leitura = _ler(
+        tmp_path,
+        [LinhaTexto("11-300", (40.0, 60.0), 5.0)],
+        dataclasses.replace(tabela, glifos=glifos),
+    )
+
+    assert [t.texto for t in leitura.textos] == ["11"]
+    assert leitura.desconhecidos >= 1
+    assert leitura.caminhos_lidos == {0, 1}
+
+
 def test_escala_das_lacunas_nao_depende_dos_outros_glifos_do_texto(
     tmp_path: Path, tabela: TabelaGlifos
 ) -> None:

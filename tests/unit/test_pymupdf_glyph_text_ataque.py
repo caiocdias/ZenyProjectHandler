@@ -46,6 +46,7 @@ from zeny_project_handler.adapters.analysis.drawing_model.model import (
     Caixa,
 )
 from zeny_project_handler.adapters.analysis.pymupdf_drawing_model import (
+    _DesenhosFiltrados,
     extrair_modelo_desenho,
     obter_modelo_desenho,
 )
@@ -345,9 +346,9 @@ def _injetar_desenho(
 ) -> None:
     original = pymupdf_drawing_model._desenhos
 
-    def _desenhos(pagina: Any) -> list[dict[str, Any]]:
+    def _desenhos(pagina: Any) -> _DesenhosFiltrados:
         desenhos = original(pagina)
-        return [*desenhos[:posicao], desenho, *desenhos[posicao:]]
+        return _DesenhosFiltrados(enumerate([*desenhos[:posicao], desenho, *desenhos[posicao:]]))
 
     monkeypatch.setattr(pymupdf_drawing_model, "_desenhos", _desenhos)
 

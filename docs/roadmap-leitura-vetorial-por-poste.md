@@ -94,6 +94,7 @@ A análise entrega, para cada poste da folha, a ficha correta: identificador, es
 | D9 | Decidido em 2026-11-05 pelo arquiteto, revisto com a D11: um orçamento de máquina para o paralelismo empilhado (etapas simultâneas × ondas × laboratório), com teto de ~4 desenvolvedores ativos na sessão. Com uma etapa aberta, as ondas têm até 3 tarefas; com duas, até 2 em cada. O laboratório ocupa a cota da etapa dele, e `-n` e `--processos` repartem os 20 núcleos pelas suítes simultâneas da sessão (protocolo, "Orçamento de máquina"). Descartadas: limite fixo de ondas, porque a etapa longa ficaria sem ondas depois que a curta fecha; e nenhum teto, porque duas etapas com ondas de 3 dariam 6 desenvolvedores e ~36 workers do pytest em 20 núcleos, rumo à carga de 60 processos em que a E14 viu workers Qt morrerem (I-2) | teto baixo demais deixa a E06 com ondas de 2 enquanto a E15 ou a E17 estão abertas; teto alto demais traz de volta a instabilidade de Qt sob carga. Em ambos os casos, ajuste a tabela do protocolo | protocolo, prompt |
 | D10 | Decidido em 2026-11-05 pelo arquiteto: a E17 passa da trilha A para a C, que já tem worktree com `.venv` e está ociosa até a E07. Assim a trilha A vai direto à E06, no caminho crítico E06 → E07 → E08 → E09, e a E17 abre como segunda etapa quando a E15 fechar. Descartadas: a E17 na A antes da E06, porque atrasaria o caminho crítico em uma etapa; e a E17 na B depois da E15, porque misturaria cliente e medição na mesma branch, sem ganho de tempo | nenhum além de uma branch a mais no fim do lote. A E17 pode voltar para a A depois da E06 sem mudar o escopo | E17 |
 | D11 | Decidido em 2026-11-05 pelo usuário: um orquestrador aberto por vez, e o paralelismo entre etapas é feito por ele. Isso substitui as sessões paralelas por trilha da D6. Desenho do arquiteto: as trilhas continuam como agrupamento, com os mesmos worktrees e branches, e a sessão abre até 2 etapas de trilhas diferentes ao mesmo tempo (protocolo, "Trilhas, branch e etapas simultâneas"). Descartadas: uma sessão por trilha (a D6 original, recusada pelo usuário); uma sessão sem etapas simultâneas, só com ondas de tarefas, que perderia a E15 e a E17 em paralelo com a E06; e 3 etapas abertas, porque três planos, três ledgers e três revisões finais no mesmo contexto aumentam a compactação e o risco de confundir etapas, e o teto de ~4 desenvolvedores já não comporta ondas em três etapas | se a sessão se confundir entre as etapas abertas (despacho no worktree errado, ledger trocado), baixe para 1 etapa aberta no prompt; as ondas de tarefas continuam | protocolo, prompt, índice |
+| D12 | Decidido em 2026-11-06 pelo usuário, por entrevista: o método de pacotes sobre o modelo de desenho liga só no `SymbolCompositionRunner` (`symbol_composition`, opt-in), como os métodos atuais, e passa pela reconciliação com eles. O analisador padrão só muda na E09, depois da prova cega. Descartada: ligar também no analisador padrão, que anteciparia a troca sem prova cega, duplicaria com o legado (o job padrão não reconcilia), subiria o custo de toda análise e invalidaria caches | a E07 e a E08 leem os símbolos com o runner ligado até a E09 | E06.2, E07, E08 |
 
 ## Definição global de pronto
 
@@ -265,9 +266,15 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 |---|---|---|---|---|
 | E14 | Gate de testes paralelo | #concluida | E05 | suíte paralela no `.bat` sem perder teste, `main` verde, scripts de corpus com processos |
 | E06.1 | Medição de símbolos e base do modelo | #concluida | E05, E14 | benchmark diagnóstico de símbolos contra as fichas, página do modelo com índice cru, guarda contra memorização |
-| E06.2 | Método de pacotes sobre o modelo de desenho | #pendente | E06.1 | gramáticas atuais portadas para o modelo, método versionado no runner |
-| E06.3 | Gramáticas das classes da ficha | #pendente | E06.2 | estai, aterramento, para-raios, transformador e interrupção sobre o modelo, acima do atual |
-| E07 | Ficha do poste | #pendente | E06.3, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
+| E06.2.1 | Núcleo de gramáticas sobre o modelo | #concluida | E06.1 | núcleo puro com índice espacial e teto, 6 gramáticas portadas, paridade no corpus sintético |
+| E06.2.2.1 | Método versionado no runner | #concluida | E06.2.1 | método de pacotes sobre o modelo no runner opt-in, resíduo raster marcado, agrupamento sem laço quadrático fora de teto |
+| E06.2.2.2 | Medição do método nas 16 folhas | #concluida | E06.2.2.1 | benchmark ao lado do atual e diff por variante, com cada "só no núcleo" classificado |
+| E06.3.1 | Pacotes das classes da ficha | #concluida | E06.2.2.2 | 58 variantes do inventário de ESTAI, TRANSFORMADOR, ATERRAMENTO e PARA_RAIOS_MT/BT nos pacotes, como `pending`; auditor e matriz aceitam outro `owner_stage` |
+| E06.3.2 | Aterramento, para-raios MT e H2 | #pendente | E06.3.1 | gramática de haste com barras, com laboratório, acima do atual nas duas classes; confirmação da H2 (raster como resíduo) |
+| E06.3.3 | Para-raios BT e transformador | #pendente | E06.3.2 | gramáticas de moldura das duas classes, com laboratório, acima do atual |
+| E06.3.4 | Estai | #pendente | E06.3.3 | gramática de estai, com laboratório, acima do atual |
+| E06.3.5 | Equipamento de interrupção | #pendente | E06.3.4 | gramática de interrupção, acima do atual (que não emite a classe) |
+| E07 | Ficha do poste | #pendente | E06.3.5, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
 | E08 | Conferência UTM | #pendente | E07 | transformação página → UTM, checagem de posição e vão, pendências |
 | E09 | Troca do analisador e remoção do legado | #pendente | E08, E16 | analisador novo como padrão; detectores e, se provado, OCR removidos |
 
@@ -1218,46 +1225,299 @@ Rulings da divisão, registradas no ledger da E06.1:
   - Testes de cliente intermitentes sob carga (polling restart e application_factory_teardown) estão rastreados na E17.
 ---
 
-## E06.2 — Método de pacotes sobre o modelo de desenho — #pendente
+## E06.2 — Método de pacotes sobre o modelo de desenho (dividida em E06.2.1 e E06.2.2)
 
 **Objetivo:** executar os pacotes declarativos sobre a página do modelo de desenho como método de símbolos versionado, com as 6 gramáticas atuais portadas e o método ligado no runner.
 
-**Dependências:** E06.1.
+**Divisão (2026-11-06, orquestrador):**
+- **Por que dividir:** as tarefas somam ~5h15 (nota do plano e "Orçamento"). Cada subetapa é uma etapa completa, e a E06.3 passa a depender da E06.2.2.
+- **Como os critérios se repartem:** a E06.2.1 leva a pré-condição D1, as fixtures e a paridade no corpus sintético. A E06.2.2 leva o método versionado, a ligação no runner, o resíduo raster e o benchmark nas 16 folhas. Auditor e `.bat` valem nas duas.
+- **Onde liga:** só no runner opt-in (D12), como 5º método, ao lado de `declarative_symbols`. O motor antigo sai na E09, junto com os detectores dedicados.
+
+**Decisão de system design do plano (entrevista):** resolvida pela D12.
+
+---
+
+## E06.2.1 — Núcleo de gramáticas sobre o modelo — #concluida
+
+**Objetivo:** portar as 6 gramáticas dos pacotes para um núcleo puro sobre a página do modelo de desenho, com paridade de variantes no corpus sintético e custo limitado por página.
+
+**Dependências:** E06.1. O relógio começa no commit `#em-andamento` da E06.2 (36ec385).
 
 **Escopo:**
-- **Núcleo puro de gramáticas sobre o modelo:** molduras a partir de polilinhas fechadas e círculos, texto de `TextoModelo` (inclusive glifo), índice espacial e teto por página com diagnóstico.
-- **Porte das 6 gramáticas**, com paridade no corpus sintético.
-- **Método versionado:** `VERSAO_MODELO_DESENHO` e o sha dos pacotes no perfil, primitivas com índice cru e resíduo raster marcado para a E12.
+- **Pré-condição D1:** `reconstruir_polilinhas` linear em nó de grau alto, sem o `xfail`.
+- **Núcleo puro:** molduras a partir de caminhos, polilinhas fechadas e círculos; texto de `TextoModelo` (inclusive glifo), em palavras; índice espacial e teto de trabalho por página.
+- **Porte das 6 gramáticas**, com paridade de variantes por página, geometria e índice cru contra o motor atual.
+- **Página para as gramáticas** a partir da página aberta, com índice cru e preenchimentos translúcidos, sem mudar o modelo, o cache nem `VERSAO_MODELO_DESENHO`.
+
+**Fora de escopo:** método versionado, ligação no runner, resíduo raster e benchmark (E06.2.2); gramáticas novas (E06.3); analisador padrão (E09).
+
+**Critérios de aceite:**
+
+- [x] Fixtures sintéticas positivas e negativas, e paridade de variantes por página com o motor atual no corpus sintético.
+- [x] O teste de nó de grau alto da D1 passa sem `xfail`.
+- [x] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** laços O(F²) e `get_text` por moldura no motor atual → índice espacial e teto por página.
+
+**Evidências e handoff:**
+
+- Plano: `docs/superpowers/plans/2026-11-06-leitura-vetorial-por-poste-e06-2-1.md`. Revisão de arquitetura (opus): bloqueou na rodada 0 (C1, I1–I4) e aprovou com notas na rodada 1.
+- Relógio: de 36ec385 (11:45 de 2026-11-06) até o commit `#concluida` (16:40), 4h48 sem os 7 min da interrupção. A marca de 4h30 passou na revisão final, e a ruling foi continuar, porque as tarefas já estavam integradas.
+- Revisão final (`revisor-seguranca`, opus, 5ed40ed..59ecdf0): aprovada com ressalvas, sem Crítico e sem defeito de código bloqueante. I1–I4 e M1–M8 foram tratados na onda única e neste handoff. Restos sem correção, por limite da onda: uma docstring errada e dois testes de resíduo, listados abaixo para a E06.2.2.
+- Critérios verificados:
+  1. Paridade: `test_paridade_de_variantes_por_pagina_no_corpus` verde, com fixtures positivas e negativas nas 6 gramáticas.
+  2. D1: sem `xfail`; os únicos xfail são R-9 e a memória de glifos da E05.
+  3. `scripts.audit_symbol_packages` → `errors []` em 02359d3; depois disso `src/` só mudou em docstring.
+  4. `.bat` em 59ecdf0 → `RESULTADO FINAL: APROVADO`: 8412 passed, 2 xfailed, cobertura 89,25%. Depois disso, só docs.
+  - `osv-scanner` nos 7 locks → `No issues found`; nenhum lock mudou. `check_test_integrity --base 5ed40ed` → exit 0, sem apontamentos.
+- Entregas, todas puras, sem PyMuPDF, salvo o adaptador, e nada ligado no job nem no runner (D12):
+  - `reconstruir_polilinhas` linear em nó de grau alto (D1, sem `xfail`);
+  - `drawing_model/symbol_grammars.py`: página, orçamento, grade, molduras, palavras e segmentos;
+  - `drawing_model/grammar_frames.py` e `grammar_disc.py`: as 6 gramáticas;
+  - `drawing_model/symbol_matcher.py`: `casar_variantes`;
+  - `pagina_para_gramaticas` em `pymupdf_drawing_model.py`, com índice cru e translúcidos.
+- Ciclo: Task 1 e Task 3 sem rodada de correção; Task 2 sem correção; Task 5, 1 rodada; Task 4, 4 rodadas; Task 6 sem correção. Testador em todas (`Risco: alto`). Revisão de cada tarefa aprovada ao fim do ciclo.
+- Decisões tomadas (revisáveis):
+  - **R-4 emendada três vezes na execução:** a repartição de span por caracteres foi revogada, porque dava falso positivo em fonte proporcional e o texto de glifo também não tem largura fixa. Toda palavra usa a caixa do span. Spans nativos horizontais colados, com lacuna em `[-t, +t]` e `t = max(0.5, 0.2·altura)`, fundem em uma palavra `inteira`. Nas guardas, palavra `inteira` recusa por sobreposição fechada. Custo: recall em rótulo dentro de span maior. Saída se pesar: caixa real da palavra (`TextoGlifo.glifos`, `words`).
+  - **R-E06.2.1-1 a 11**, no plano.
+- **Para a E06.2.2, além do que o plano lista em "Fechamento operacional":**
+  - **Critério novo pedido pela revisão final (I1):** o benchmark por ficha não vê a maior parte dos falsos positivos, porque descarta classes fora das referências e o que está fora das regiões anotadas. As divergências abaixo em que o núcleo afirma a mais só fecham com um diff por variante e folha, núcleo contra motor, sem passar pela ficha, com cada casamento "só no núcleo" listado e classificado.
+  - **Primeira tarefa (I3):** fixture de rótulo em contorno real pelo adaptador (`pdf_texto_contorno` e `carregar_tabela_glifos`). O ganho "rótulo em glifo" de R-5 só está provado em página pura. Com `empty_interior`, o contorno de uma letra com 6% ou mais da moldura pode recusar a própria variante, justo na família que motiva a etapa. Não medido em folha real.
+  - **Pré-condição:** `_unir_proximos` quadrático (`xfail` de R-9).
+  - **Divergências em que o núcleo pode afirmar a mais.** As fixadas em teste como valor de hoje se invertem, não se removem:
+    - fixado: `Q`+`DP` com intruso no fluxo;
+    - fixado: sobreimpressão acima de `t` no rótulo;
+    - fixado: spans colados a 90°, 180° e 270°, no rótulo e na guarda (`_pode_colar` só funde a 0 ± 1°);
+    - fixado: `qu` inclinado conta como segmento, e diagonais e barra casam onde o motor não casa. Na direção contrária, `empty_interior` recusa onde o motor casa. O efeito na linha terminal de caminho `fs` não foi testado;
+    - fixado: borda, com `ponto_em` fechado contra o `contains` semiaberto do motor;
+    - fixado na E06.2.2.1: sobreimpressão acima de `t` na guarda, em (14, helv, -4) e (11, cour, -3). Em (11, helv, -4), a guarda recusa, porque nessa geometria o centro de `12` cai na moldura.
+    - medido na E06.2.2.1 e descartado: `C`+`T` simples não diverge, em 3 fontes e tamanhos 8, 11 e 14. Onde `words` separa, a PyMuPDF já põe espaço no segundo span, e a fusão recusa. A concatenação só diverge com outro texto entre os pedaços no fluxo (`Q`+`DP`).
+  - **Divergências em que o núcleo perde recall:**
+    - família de R-6: linha que dobra no disco, duas linhas de lados opostos e traço solto a menos de 0,5 pt do centro. É o caso mais provável de perda em folha real: um disco com rede dos dois lados no mesmo estilo deixa de casar;
+    - losango de 4 `l` sem encadeamento (o X dobrado, recusado de propósito, é falso positivo do motor);
+    - lados de losango fora de `grade_segmentos`;
+    - rótulo nativo dentro de span maior que ele (R-4);
+    - vários `qu` inclinados contam uma banda; disco além de 16 pt da página não casa; segundo retângulo do mesmo caminho; dois discos de dois arcos viram uma elipse.
+  - **Custo a medir à parte nas 16 folhas:** a colagem é paga por candidato na janela `±t` e é quadrática em colunas alinhadas; `grandes` com diagonais longas; o orçamento cobra candidato distinto, então o trabalho real chega a 64 vezes o gasto, e a grade guarda até 64 entradas por item.
+  - **Fontes:**
+    - desenho malformado ou com ponto não finito é descartado sem diagnóstico (`_caminhos`), e a guarda perde esse elemento. Dá para detectar sem tocar no modelo, comparando `total_desenhos` com `len(caminhos)`, tolerando desenho sem subcaminho, que `_caminhos` também não inclui;
+    - `tabela=None` em `pagina_para_gramaticas` abre as guardas: considere o parâmetro obrigatório na ligação;
+    - glifo anulado pelo leitor (`glifos_desconhecidos`) não bloqueia e deixa a guarda sem aquele texto.
+  - **Adiado para a E06.3:** promover a públicos os privados importados entre módulos (`grammar_disc`, `symbol_matcher`), onde as gramáticas vão mudar.
+
+---
+
+## E06.2.2 — Método versionado no runner (dividida em E06.2.2.1 e E06.2.2.2)
+
+**Divisão (2026-11-06, orquestrador):**
+- **Por que dividir:** as tarefas somam cerca de 4h, e a E06.2.1 mostrou que o porte consome mais do que a estimativa. Cada subetapa é uma etapa completa, e a E06.3 passa a depender da E06.2.2.2.
+- **Como os critérios se repartem:** a E06.2.2.1 leva a pré-condição R-9, a fixture de contorno real, o método versionado, o resíduo raster e a ligação no runner. A E06.2.2.2 leva o benchmark ao lado do atual, o diff por variante e a classificação. Auditor e `.bat` valem nas duas.
+
+---
+
+## E06.2.2.1 — Método versionado no runner — #concluida
+
+**Objetivo:** expor o núcleo da E06.2.1 como método de símbolos versionado, ligado no `SymbolCompositionRunner` opt-in (D12), com o agrupamento do modelo limitado.
+
+**Dependências:** E06.2.1. O relógio começa no commit `#em-andamento` da E06.2.2 (ca9783a).
+
+**Escopo:**
+- **Pré-condição R-9:** `_unir_proximos` sem comparação repetida e com teto de visitas.
+- **Primeira tarefa do handoff (I3):** rótulo em contorno real pelo adaptador, e a guarda corrigida se o defeito se confirmar.
+- **Método versionado:** `VERSAO_MODELO_DESENHO`, o sha dos pacotes e o da tabela de glifos no perfil, primitivas com índice cru, teto e falha de fonte traduzidos em cobertura, e resíduo raster marcado para a E12. "Marcado" é a função pública `residuos_raster(...)`, com caixa e hash, mais a contagem em `motivo` da cobertura; o resíduo não vira observação nem proposta (R-E06.2.2.1-4 do plano).
 - **Ligação no `SymbolCompositionRunner`**, com a versão na assinatura.
+- **Resíduos herdados da revisão final da E06.2.1:** a docstring errada e os dois testes.
+
+**Fora de escopo:** benchmark e diff (E06.2.2.2); gramáticas novas (E06.3); analisador padrão (E09).
+
+**Critérios de aceite:**
+
+- [x] Fixtures sintéticas positivas e negativas do método e da ligação no runner.
+- [x] O teste de agrupamento de R-9 passa sem `xfail`.
+- [x] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`. Confira a data do `relatorio-testes.txt`: sem o `.\`, o `cmd` da sessão não acha o `.bat` e o relatório lido é o antigo.
+
+**Revisão humana:** não
+
+**Notas para o plano:** leia o handoff da E06.2.1: traz a primeira tarefa e as divergências a medir.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** o modelo com glifos custa até ~20 s por folha no runner → opt-in até a E09. `_unir_proximos` é quadrático em caixas sobrepostas (R-9) → teto antes de ligar no runner.
+
+**Evidências e handoff:**
+
+- Plano: `docs/superpowers/plans/2026-11-06-leitura-vetorial-por-poste-e06-2-2-1.md`. Revisão de arquitetura (opus): bloqueou nas rodadas 0 e 1 e aprovou com notas na rodada 2.
+- Relógio: de ca9783a (16:40 de 2026-11-06) até o commit `#concluida` (17:23 de 2026-11-07), 4h28 sem as duas paradas (16:46–22:46 e 23:00–13:15). Cerca de 80 min são uma suíte do testador da Task 6 que travou com outra suíte ativa; encerrada, a segunda rodou normal. Não reproduzido nem investigado.
+- Revisão final (`revisor-seguranca`, opus, ca9783a..d953b28): pronto com correções, sem Crítico. Onda única: I1 e M1 (696d68f), I2, I3 e lacunas de teste (ad0b669). Re-revisão: todos fechados.
+- Critérios verificados:
+  1. Fixtures: `test_model_symbols.py`, `test_model_symbols_ataque.py`, `test_model_symbols_costuras_etapa.py` e `test_model_symbols_runner.py`.
+  2. R-9: sem `xfail`. Os dois xfail são a memória de glifos da E05 e os centros aglomerados (limitação aceita).
+  3. `scripts.audit_symbol_packages` em ad0b669 → `errors []`.
+  4. `.bat` em ad0b669 → `RESULTADO FINAL: APROVADO`: 8633 passed, 2 xfailed, cobertura 89,28%.
+  - `osv-scanner` nos 7 locks, com o formato declarado (189 pacotes) → `No issues found`; nenhum lock mudou. `check_test_integrity --base ca9783a` → exit 1, com 3 apontamentos justificados pela revisora (2 renomeações e 1 acréscimo do desenvolvedor em arquivo do testador).
+- Ciclo: Task 1, 2, 5 e 6 sem rodada de correção; Task 3, 2 rodadas; Task 4, 1 rodada de teste. Testador nas tarefas de risco alto, mais o testador de etapa. Onda 1: tasks 1, 2 e 5; onda 2: tasks 3 e 6; onda 3: task 4.
+- Entregas:
+  - método `declarative-drawing-model`, versão 1.0.0, em `adapters/analysis/model_symbols.py`: `perfil_pacotes_modelo(pacotes, tabela, *, limite)`, `observar_pacotes_modelo`, `residuos_raster`, `ResiduoRaster`;
+  - 5º método do `SymbolCompositionRunner` opt-in, `_VERSION = "e06-server-symbol-composition-2"`, com os módulos no digest;
+  - agrupamento com um só orçamento de visitas, `LIMITE_VISITAS_AGRUPAMENTO = 50_000_000`;
+  - `PaginaGramatica.glifos_lidos`: a guarda de marca pula só o caminho lido como glifo.
+- Medição nas 16 folhas, com a guarda da Task 6 (15 `CONCLUIDO`, 1 `NAO_DETECCAO`, sem `FORA_DOMINIO` nem `FALHA`; máx. 18,59 s por folha sob carga; 19,0 s de parede com 10 processos; 115 resíduos). Medida antes da onda final, que não muda a saída abaixo do teto:
+
+  | Folha | Tempo (s) | Resíduos | Observações |
+  |---|---|---|---|
+  | 1235863754.1 | 18,59 | 62 | 2 |
+  | 1242910617 | 4,88 | 5 | 1 |
+  | 1246619503 | 15,81 | 11 | 5 |
+  | 1248863234 | 13,72 | 7 | 4 |
+  | 1248924977 | 3,17 | 0 | 1 |
+  | 1249479371 | 16,05 | 22 | 1 |
+  | 1250203925 | 2,27 | 0 | 2 |
+  | 1251077960 | 0,27 | 1 | 3 |
+  | 1254146081 | 6,90 | 2 | 1 |
+  | 1255172677 | 0,38 | 0 | 0 |
+  | 1256403718 | 0,16 | 0 | 1 |
+  | 1256505864 | 12,58 | 1 | 3 |
+  | 1256702690 | 7,53 | 2 | 1 |
+  | 1257009501 | 6,87 | 2 | 1 |
+  | 1257190578 | 0,14 | 0 | 1 |
+  | 1257760087 | 3,52 | 0 | 2 |
+
+- Visitas do agrupamento: máx. ~3,7 milhões por folha (1257760087), 7,4% do teto. Teto medido: 5.000 círculos sobrepostos, ~2,08 s; 11.000 arcos disjuntos num traço, 23,21 s por página (com outra suíte rodando).
+- Decisões para o usuário (tomadas pela opção recomendada):
+  - **R-1, exceção ao invariante de versão:** o agrupamento mudou sem subir `VERSAO_MODELO_DESENHO`, porque nenhum consumidor lê `grupos`. Custo se errada: o cache do modelo guarda `grupos` antigos até alguém subir a versão.
+  - **R-3, fonte nova que falha deixa de ser fail-closed:** só `modelo.caminhos_falhou` aborta. `primitivas`, `textos_nativos`, `textos_shx` e `glifos` viram `FORA_DOMINIO` e entram no cache. Prós: não aborta documento que hoje compõe. Custo se errada: falha transitória fica no cache até a assinatura mudar.
+  - **R-4, resíduo raster como dado:** não vira observação nem proposta. Custo se errada: a E12 ganha um caminho de observação depois.
+  - **Sinal "Exclusivo" com o 5º método, aceito até a E09, sem mudar produção:** em símbolo de pacote, `exclusive` passa a falso, porque os dois métodos veem o mesmo desenho; em página no teto, volta a verdadeiro. Em símbolo com papel de ativo, o status passa de "Exclusivo" a "Suportado", no XLSX, na anotação do PDF e no cliente. "Suportado" aqui não é corroboração: são dois portes da mesma regra. Hoje as 22 variantes habilitadas têm papel `desconhecido`, então só o `exclusive` muda; o status passa a mudar quando a E06.3 habilitar variante de ativo. Decisão e probabilidade não mudam. Prós: opt-in desligado por padrão; a alternativa, contar por família, exige gravar família em `simbolo_observacoes`. Custo se errada: exportações opt-in com rótulo enganoso; reverter exige nova análise.
+  - **Limite de visitas 50 milhões, em vez de redesenhar a união:** folga de ~13× sobre o máximo medido. Custo se errada: página hostil leva até ~23 s antes do teto, e o trabalho continua quadrático em célula densa.
+  - **Resíduos acima de 20 por folha (62 e 22), sem regra nova de mosaico:** uma regra "colada em outra imagem" tiraria 87 de 115, mas esconderia um carimbo encostado, justamente o caso que refuta a H2. Custo se errada: triagem a mais na E06.3.
+  - **Centros aglomerados numa célula, aceito até a E09:** o custo é N imagens × M casamentos, com N sem teto (`xfail` estrito em `test_model_symbols_ataque.py`; estimativa não medida: minutos em PDF hostil). Custo se errada: job preso no worker único, em execução opt-in.
+- **Para a E06.2.2.2:**
+  - método: `declarative-drawing-model` 1.0.0, assinatura pelo perfil de `perfil_pacotes_modelo` (modelo, sha dos pacotes, sha da tabela e teto);
+  - no diff, separe o gasto de orçamento entre colagem e gramáticas;
+  - `fonte_falhou:` conta como falha, não como exclusão; `glifos_desconhecidos` deixa a guarda sem aquele texto;
+  - contorno de qualquer letra lida como glifo dentro da moldura não aciona a guarda (inerente a R-5, igual ao texto nativo), sem teste com segundo texto legível: confira nas classificações;
+  - a tabela acima é a linha de base do tempo e dos resíduos.
+- **Para a E06.3:**
+  - a H2 se confirma chamando `residuos_raster` folha a folha, não lendo a ocorrência reconciliada, e página `FORA_DOMINIO` não conta como 0 resíduos;
+  - composição dos 115 resíduos: 87 colados em outra imagem de página, 17 de anotação, 11 isolados; hashes em várias folhas: `0084746843` e `debb149f09` (5 folhas, anotação), `a2f1377bd8` e `2cc3d96d36` (3, anotação), `7ccaa4d25c` (3, página), `cfa408d465` (2, página). Causa provável (inferida, imagens não abertas): recortes de borda da ortofoto;
+  - quem consumir `grupos` adiciona `modelo.grupos_falhou` às fontes consumidas, sobe a versão (R-1) e põe `LIMITE_VISITAS_AGRUPAMENTO` nos `parametros` do perfil, que hoje só o digest cobre. Docstrings de `_unir_proximos` e `agrupar_candidatos` ainda falam só de entrada de célula; `_item_coberto` levanta sem argumento. A varredura de figuras segue quadrática sob o teto: um índice por item a eliminaria sem mudar a saída (o `any` não depende da ordem);
+  - módulos novos entram no digest: troque `_MODULOS_DO_DIGEST` (cópia manual no teste) por um teste de fecho por imports; `drawing_model/model.py` hoje fica fora do digest;
+  - habilitar variante de ativo muda o status "Exclusivo" para "Suportado" (decisão acima): reavalie.
+- **Para a E12:** `residuos_raster` é o ponto de partida; o contrato do que ela consome é dela.
+- **Para a E09, como critério de aceite ao trocar o padrão:**
+  - teto para imagens em `_ler_fontes`, decode por anotação (até 16 MP, sem memória entre anotações) e `_CamadasDoTexto` (spans × trechos gigantes), além dos centros aglomerados, com cancelamento interno ou prazo por página: o worker é único e o cancelamento só ocorre entre métodos;
+  - R-6 (desenho malformado descartado sem diagnóstico, `tabela` obrigatória); R-E06.2.1-2; `model_symbols` depende de privados de `declarative_symbols`, que ela remove;
+  - o digest cobre só adaptadores (`ports`, `domain/symbols.py` e o codec podem mudar a saída cacheada sem invalidar), preexistente;
+  - o que fazer com o sinal "Exclusivo" (acima).
+
+---
+
+## E06.2.2.2 — Medição do método nas 16 folhas — #concluida
+
+**Objetivo:** medir o método novo nas 16 folhas, ao lado do atual, e classificar cada divergência em que ele afirma a mais.
+
+**Dependências:** E06.2.2.1.
+
+**Escopo:**
+- **Benchmark:** método `modelo` em `scripts/benchmark_simbolos_ficha.py`, com o script desmembrado.
+- **Diff por variante e folha**, núcleo contra motor, sem passar pela ficha, com o gasto de orçamento separado entre colagem e gramáticas.
+- **Classificação** de cada "só no núcleo", e as decisões que ela pede sobre as divergências do handoff da E06.2.1.
 
 **Fora de escopo:** gramáticas novas (E06.3); analisador padrão (E09).
 
 **Critérios de aceite:**
 
-- [ ] Fixtures sintéticas positivas e negativas, e paridade de variantes por página com o motor atual no corpus sintético.
-- [ ] O benchmark de símbolos mede o método novo nas 16 folhas, ao lado do atual.
-- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
-- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+- [x] O benchmark de símbolos mede o método novo nas 16 folhas, ao lado do atual.
+- [x] Diff por variante e folha, núcleo contra motor, sem passar pela ficha, em `tmp/`: cada casamento "só no núcleo" listado e classificado (ver handoff da E06.2.1).
+- [x] O gasto real de orçamento e o limite de `LIMITE_CONSULTAS_PAGINA` estão registrados no handoff.
+- [x] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
-**Validação obrigatória:** `cmd.exe //c IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
 
 **Revisão humana:** não
 
-**Notas para o plano:** a estimativa do levantamento passa de 3h. Divida de novo, se for preciso. **Antes do plano**, o usuário decide por entrevista onde o método liga: no runner opt-in (`symbol_composition`), como os métodos atuais, ou também no analisador padrão. A decisão é de system design, porque define de onde a E07 lê os símbolos. A comparação entre métodos usa o bloco `comparacao` do benchmark (interseção das folhas).
+**Notas para o plano:** a comparação entre métodos usa o bloco `comparacao` do benchmark (interseção das folhas). Decida o que acontece com um casamento classificado como falso positivo: corrigir, aceitar com ruling ou bloquear.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
-**Riscos e mitigação:** laços O(F²) e `get_text` por moldura no motor atual → índice espacial e teto por página. A `reconstruir_polilinhas` é quadrática em nó de grau alto (D1 da E06.1, `xfail(strict=True)` em `tests/unit/test_e06_1_etapa_ataque.py`) → corrigir antes de ligar o modelo no runner é **pré-condição** desta etapa.
+**Riscos e mitigação:** o benchmark por ficha não vê a maior parte dos falsos positivos (I1 da E06.2.1) → o diff não passa pela ficha.
 
-**Evidências e handoff:** —
+**Evidências e handoff:**
+
+- Plano: `docs/superpowers/plans/2026-11-07-leitura-vetorial-por-poste-e06-2-2-2.md`. Revisão de arquitetura (opus): bloqueou nas rodadas 0 e 1 e aprovou com notas na rodada 2.
+- Relógio: de 1aec214 (17:23 de 2026-11-07) até o commit `#concluida` (19:21), 1h58.
+- Revisão final (`revisor-seguranca`, opus, 1aec214..f751a16): pronto com correções, sem Crítico, e as correções eram só de registro (este handoff, ledger e plano). Depois dela, o `.bat` reprovou no mypy de um teste; a tipagem foi corrigida em c6e1876, só no teste.
+- Critérios verificados:
+  1. Benchmark (em 7405d16) nas 16 folhas, sem falha, critério `centro`. A tabela é a linha de base:
+
+     | método | tp | fp | fn | precisão | recall | predições |
+     |---|---|---|---|---|---|---|
+     | `atual` | 131 | 58 | 48 | 69,3% | 73,2% | 277 |
+     | `pacotes` | 2 | 18 | 177 | 10,0% | 1,1% | 29 |
+     | `modelo` | 2 | 18 | 177 | 10,0% | 1,1% | 29 |
+
+     O benchmark por ficha quase não discrimina: 177 das 179 referências são de classes sem variante habilitada. As 18 FP de `PONTO_CONEXAO` estão nos dois métodos: o novo as herda do motor, e elas não contam como "afirma a mais".
+  2. Diff (em f751a16): 16 páginas comparadas, nenhuma girada, sem falha. Resultado: `ambos` 29, `so_nucleo` 0, `so_motor` 0, `indice_diverge` 0, `geometria_diverge` 0. Com 0 itens, o critério "cada só no núcleo listado e classificado" está cumprido sem classificação, porque não houve o que classificar. **Ressalva:** as 29 observações são todas de `cemig-eo-r3-s28-v001` (disco terminal). As outras 21 variantes habilitadas, as gramáticas de moldura, não casam em nenhuma folha, nem no motor nem no núcleo, então esta medição não valida o núcleo em moldura de folha real.
+  3. Gasto real (limite de medição 10¹²): o maior foi 133.352 consultas, na folha `016` (colagem 171, índices 45.768, gramáticas 87.413), 6,7% de `LIMITE_CONSULTAS_PAGINA` = 2.000.000. As outras folhas ficaram em ≤ 30.467. O limite fica (R-E06.2.2.2-4: ≤ 200.000).
+  4. `scripts.audit_symbol_packages` em c6e1876 → `errors []`.
+  5. `.bat` em c6e1876 → `RESULTADO FINAL: APROVADO`: 9048 passed, 2 xfailed, cobertura 89,29%, mypy limpo em 557 arquivos.
+  - `osv-scanner` nos 7 locks (189 pacotes) → `No issues found`; nenhum lock mudou. `check_test_integrity --base 1aec214` → exit 1, um apontamento justificado (a linha de `METODOS` que o plano autoriza).
+- Ciclo: Onda 1, Tasks 1 e 3; Onda 2, Tasks 2 e 4. Testador nas quatro, todas de risco alto. A Task 1 teve uma rodada de correção (`caminho_cego` público), a Task 2 uma de teste (golden no lugar de `git show`) e a Task 4 uma (orientação do disco em faixas, com emenda de R-E06.2.2.2-2). A Task 3 passou sem correção. As Tasks 5 e 7 e os Steps 2 a 4 da Task 6 foram pulados por ruling, porque o diff deu 0 itens. O testador de etapa não foi despachado: nenhuma tarefa de risco normal produziu código.
+- Entregas:
+  - `scripts/simbolos_corpus.py`, `simbolos_ficha_metricas.py` e `simbolos_ficha_relatorio.py`, o benchmark desmembrado;
+  - métodos `pacotes` e `modelo` no benchmark;
+  - `gasto_por_fase` e `GastoPagina` em `symbol_matcher.py`, mais `ContextoGramatica.gasto_colagem`, sem mudar a saída nem o gasto de `casar_variantes`;
+  - `scripts/diff_simbolos_nucleo_motor.py` (esquema `diff-nucleo-motor-v1`).
+- Linha de base congelada, em `tmp/e06-2-2-2/` do checkout principal: `diff/diff-nucleo-motor.json` (sha256 `20f3b708…6eeeee`) e `simbolos/simbolos-ficha.json` (sha256 `b6a3118d…6008d`). Tempo por página no diff: motor até 3,48 s, núcleo até 26,21 s, com 8 processos e a suíte rodando ao lado. O `tempo_s` de `pacotes` e `modelo` no benchmark inclui a carga de pacotes e tabela por folha; prefira o do diff como linha de base.
+- Divergências do handoff da E06.2.1: as que fazem o núcleo afirmar a mais (`Q`+`DP`, sobreimpressão, spans girados, `qu` inclinado, borda) aparecem em 0 itens e ficam sem decisão. As que perdem recall: `so_motor` 0 em todas as variantes. **Não verificado:** o contorno de letra lido como glifo dentro da moldura (handoff da E06.2.2.1), porque nenhuma moldura casou.
+- Decisões para o usuário (tomadas pela opção recomendada):
+  - **Classificação pulada com 0 itens.** O critério foi cumprido com 0 casamentos "só no núcleo", mas a medição só exercita a variante de disco. Prós: não há o que classificar, e as duas medições independentes concordam (29/29/29). Custo se errada: a E06.3 ou a E09 tomar isto por validação das gramáticas de moldura em folha real.
+  - **`LIMITE_CONSULTAS_PAGINA` fica em 2.000.000,** com o maior gasto em 6,7%.
+- **Para a E06.3:**
+  - as gramáticas novas gastam do mesmo limite; a fase `indices` já chega a 45.768 na folha `016`;
+  - a especificação de recortes e fila de classificação (Task 5 do plano) está pronta, mas **não foi construída**: `--recortes`, `--dpi`, `fila.json` e os testes dela não existem;
+  - antes de rotular itens, o item do diff precisa da caixa de cada texto (ou de `contido`) e da caixa visual do item, com folga de 0,5 pt, e `textos` precisa passar por `ocultar`. `glifos_lidos` não tem teste positivo. Extraia o markdown do script (853 linhas) antes de pôr os recortes nele;
+  - `runner._package_prediction` é privado e usado pelo benchmark: torne-o público ou fixe-o num teste de contrato;
+  - `tests/unit/test_gasto_por_fase_ataque.py` guarda uma cópia do corpo antigo de `casar_variantes` como oráculo, que vale só para esta refatoração: remova-o quando os helpers mudarem;
+  - o diff casa por guloso (o erro vai para `so_*`, nunca esconde item), e um `pdf_id` repetido na rodada colapsaria uma folha em silêncio (o benchmark faz o mesmo);
+  - a comparação depois de mudar gramáticas usa a chave natural `(pdf_id, página, variante, índice cru)`, contra os dois JSON congelados acima.
 
 ---
 
-## E06.3 — Gramáticas das classes da ficha — #pendente
+## E06.3 — Gramáticas das classes da ficha (dividida em E06.3.1–E06.3.5)
+
+**Divisão (2026-11-07, orquestrador):**
+- **Por que dividir:** a seção pede a divisão por classe acima de 3h. A ampliação dos pacotes sozinha leva cerca de 2h, e cada gramática tem laboratório próprio (na E05, cinco rodadas desse ajuste custaram ~7h45).
+- **Subetapas,** cada uma uma etapa completa, em série:
+  - E06.3.1, pacotes: as 58 variantes do inventário fora dos pacotes, como `pending`;
+  - E06.3.2, ATERRAMENTO e PARA_RAIOS_MT (haste com barras) e a H2, que não depende de gramática nova e pode mudar a abordagem: medir cedo;
+  - E06.3.3, PARA_RAIOS_BT e TRANSFORMADOR: molduras;
+  - E06.3.4, ESTAI;
+  - E06.3.5, EQUIPAMENTO_INTERRUPCAO.
+- **Como os critérios se repartem:**
+  - A E06.3.1 leva a ampliação do escopo abaixo, sem gramática nova. Por isso as fixtures e o "acima do atual" não se aplicam a ela.
+  - Cada subetapa de gramática leva as fixtures e o "acima do atual" das suas classes, e estende a guarda contra memorização às gramáticas dela.
+  - A E06.3.2 confirma a H2.
+  - O auditor e o `.bat` valem em todas.
+- **Dependência:** a E07 passa a depender da E06.3.5.
+
+O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Objetivo:** reconhecer estais, aterramento, para-raios MT/BT, transformadores e equipamento de interrupção sobre o modelo de desenho, acima do analisador atual.
 
-**Dependências:** E06.2.
+**Dependências:** E06.2.2.2.
 
 **Escopo:**
 - Ampliação dos pacotes com as variantes do inventário de ESTAI, TRANSFORMADOR, ATERRAMENTO e PARA_RAIOS_MT/BT, com fonte rastreável e `negative_examples` vindos de `confusable_negatives`. O auditor e `scripts/coverage_matrix_e16.py` passam a aceitar variante de outro `owner_stage` do inventário. A mudança é visível na tabela de suporte da revisão e nas exportações, e vai para "Decisões para o usuário". Os números fixos de `tests/server/test_e14_symbol_review.py:287` entram na File Structure.
@@ -1285,7 +1545,204 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 **Riscos e mitigação:** pacote que memoriza a folha → exigir fixture sintética autoral; a guarda da E06.1 procura coordenadas e hashes, e é estendida às gramáticas novas.
 
+**Evidências e handoff:** nas subetapas.
+
+---
+
+## E06.3.1 — Pacotes das classes da ficha — #concluida
+
+**Objetivo:** pôr nos pacotes, como `pending`, as variantes do inventário das classes da ficha que ainda estão fora deles, com fonte rastreável, para as subetapas de gramática só precisarem habilitar.
+
+**Dependências:** E06.2.2.2. O relógio começa no commit `#em-andamento` da E06.3 (107d89e).
+
+**Escopo:**
+- **58 variantes** de `docs/data/inventario-simbologia-v1.json` com `owner_stage` ≠ E07, fora das famílias de convenção (f02-01 e f02-02, E10): f02-14 (15) e f02-15 (2), ESTAI; f02-18 (23), f02-24 (2) e f02-25 (4), TRANSFORMADOR e um CONJUNTO_EO; f02-19 (4), ATERRAMENTO; f02-21 (8), PARA_RAIOS_MT/BT. Todas `pending`, com motivo, `source_ref` do inventário e `negative_examples` vindos de `confusable_negatives`, como as `pending` que já existem.
+- **Auditor, `scripts/coverage_matrix_e16.py` e `scripts/curation_coverage_e16.py`** aceitam variante de outro `owner_stage` do inventário, relatada por estágio. O que hoje exige `E07` continua exigindo para as variantes E07. A recusa de `pending` exato no fechamento da curadoria passa a valer só para a variante E07, com a frase correspondente de `docs/fluxo-curadoria-incremental-simbologia.md` ajustada (decisão do plano).
+- **Números fixos:** `tests/server/test_e14_symbol_review.py:287` e as contagens de `tests/unit/test_declarative_symbol_packages.py`. A tabela de suporte da revisão e as exportações passam a mostrar as novas `pending`.
+
+**Fora de escopo:** gramáticas e habilitação (E06.3.2 a E06.3.5); a matriz histórica da E16 (`docs/data/matriz-simbologia-e16*`), imutável por contrato; a próxima rodada de curadoria publica a matriz atual a partir dela.
+
+**Critérios de aceite:**
+
+- [x] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros, com as 58 variantes novas como `pending` e o relato por estágio.
+- [x] A tabela de suporte da revisão conta as novas `pending`, e os testes fixos foram atualizados com o número novo.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:** a mudança visível na revisão e nas exportações vai para "Decisões para o usuário". O levantamento em `tmp/e06/levantamento-e06.md` do checkout principal (§2, §5) mapeia auditor, inventário e testes fixos.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** a matriz da E16 e o fechamento da curadoria contam variantes → relatar por estágio, sem mudar o que já é exigido das E07.
+
+**Evidências e handoff:**
+
+- Plano: `docs/superpowers/plans/2026-11-07-leitura-vetorial-por-poste-e06-3-1.md`. Revisão de arquitetura (opus): bloqueou nas rodadas 0 (C1: as 12 E05 exatas quebrariam o fechamento da curadoria) e 1, e aprovou na rodada 2.
+- Relógio: de 107d89e (19:22 de 2026-11-07, `#em-andamento` da E06.3) até o commit `#concluida` (20:37), 1h15. A divisão da E06.3 entra nesse tempo.
+- Revisão final (`revisor-seguranca`, opus, 107d89e..8b721b6): pronta com correções de registro, sem Crítico nem código. Onda única: docstring do auditor e mensagem de teste (08b5c3d) e as notas da E06.3.2.
+- Critérios verificados:
+  1. Auditor em 77f401d: `errors []`, 423 variantes em 31 famílias, 22 `enabled` e 401 `pending`. `by_owner_stage`: E04 12/12, E05 29/29 e E06 17/17, todas `pending`; E07 365, com 22 `enabled`.
+  2. Tabela de suporte: 401 `pending` e 22 `enabled` (`tests/server/test_e14_symbol_review.py:287` e `tests/unit/test_pacotes_classes_da_ficha.py`). As 58 foram conferidas uma a uma contra o inventário, as variantes antigas ficaram intactas (golden por id) e as observações não mudam com as `pending`.
+  3. `.bat` em 77f401d: `RESULTADO FINAL: APROVADO`, com 9273 passed, 2 xfailed, cobertura de 89,29% e mypy limpo em 561 arquivos.
+  - `osv-scanner` nos 7 locks: `No issues found`; nenhum lock mudou. `check_test_integrity --base 107d89e`: exit 1, com 9 apontamentos justificados. São contagens que o plano manda mudar: 343→401, 365→423, 27→31 e 17→21.
+- Ciclo:
+  - Onda 1: Tasks 1 (auditor) e 2 (matriz e comparador). Onda 2: Task 3 (pacotes), precedida de um Step 0 em que o testador inverteu os próprios testes de "só E07 exigida".
+  - Testador nas três tarefas, todas de risco alto. Nenhuma rodada de correção.
+- Entregas:
+  - 4 famílias novas (f02-14, -15, -24 e -25) e 35 variantes novas em f02-18, -19 e -21, todas `pending`, com `negative_examples` de `confusable_negatives`;
+  - o auditor exige todas as variantes não E10 e relata por estágio;
+  - a matriz e o comparador aceitam pacote `pending` de outro estágio.
+- Decisões para o usuário (tomadas pela opção recomendada):
+  - **Contrato da curadoria (R-E06.3.1-2):** a recusa de "`pending` contado como exato" vale só para a variante E07: `status == reconhecido_exato`, `package_status == pending` e `owner_stage == E07`. A frase de `docs/fluxo-curadoria-incremental-simbologia.md:44-45` mudou. Prós: as 12 E05 exatas pela evidência do detector de transformadores continuam exatas. As alternativas eram não empacotá-las (fere o escopo) ou rebaixá-las (perda falsa). Custo se errada: o fechamento aceita uma E05 exata com pacote `pending`, o que é verdade pela evidência E05.
+  - **Mudança visível:** a tabela de suporte da revisão e a planilha de capacidade mostram 4 famílias novas, todas pendentes, e 401 `pending`. ESTAI e TRANSFORMADOR aparecem como pendentes no pacote, embora os detectores dedicados do runner opt-in os reconheçam.
+  - **`complete_recognition` do auditor** passa a exigir também as variantes E04 a E06 habilitadas. Continua `false`, e nada no fluxo o consome.
+  - **`missing family`** aparece só para a família de uma variante que falta. Uma variante empacotada em outra família já gera `family mismatch`, sem erro redundante.
+  - **Pacote `enabled` de outro estágio** ganha `id_exato_sintetico` na coluna de pacotes da matriz, com o status vindo do próprio estágio, como na E07. A E06.3.2 decide (nas notas dela).
+  - **`read_matrix` mais permissivo:** aceita combinações que o `build` nunca gera (E10 com pacote, E04 ou E10 exata e `pending`). Endurecer o leitor vai além de R-2. Custo se errada: uma matriz montada à mão passa no gate.
+- **Não verificado:** a rodada real de curadoria de ponta a ponta (`.claude/skills/curadoria-simbologia/SKILL.md:456-458`, com a matriz histórica como "antes"). A prova é sintética, com as 12 E05 nos dois sentidos. O esperado é `transitions: []` e `net_exact_change: 0`.
+- **Para a E06.3.2 a E06.3.5:** as notas da E06.3.2 trazem os handoffs a ler e as decisões pendentes. Cada subetapa habilita só as variantes da sua classe, já empacotadas, e troca o `reason` e as contagens `enabled`. O golden das variantes antigas em `tests/unit/test_pacotes_classes_da_ficha.py` muda de propósito ao habilitar. O `compare` não confere se `owner_stage`, `family_id` ou `class_code` de um ID mudou entre as matrizes: uma linha de `raise` resolve, se pesar.
+
+---
+
+## E06.3.2 — Aterramento, para-raios MT e H2 — #pendente
+
+**Objetivo:** reconhecer ATERRAMENTO e PARA_RAIOS_MT sobre o modelo de desenho, acima do analisador atual, e confirmar ou refutar a hipótese H2.
+
+**Dependências:** E06.3.1.
+
+**Escopo:**
+- Gramática de haste com barras (aterramento: barras decrescentes; para-raios MT: barras alternadas).
+- Habilitação das variantes de f02-19 e f02-21 (MT), já empacotadas na E06.3.1.
+- Laboratório H-A/H-B/H-C.
+- A guarda contra memorização estendida às gramáticas novas.
+- A H2: chamar `residuos_raster` folha a folha (handoff da E06.2.2.1), sem contar página `FORA_DOMINIO`, e registrar a contagem por folha em `tmp/`.
+
+**Fora de escopo:** as outras classes (E06.3.3 a E06.3.5).
+
+**Critérios de aceite:**
+
+- [ ] Fixtures sintéticas positivas e negativas das duas classes.
+- [ ] Nas 16 folhas, precisão e recall de ATERRAMENTO e PARA_RAIOS_MT em `tmp/`, maiores que os do atual com as mesmas referências.
+- [ ] H2 confirmada ou refutada, com a contagem por folha em `tmp/`.
+- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:**
+- As notas da E06.3 valem aqui.
+- Linha de base, do handoff da E06.2.2.2: atual, ATERRAMENTO 41 tp / 32 fp / 2 fn e PARA_RAIOS_MT 10 / 4 / 3 (critério `centro`).
+- Leia os blocos "Para a E06.3" dos handoffs da E06.2.1, da E06.2.2.1 e da E06.2.2.2. Esta é a primeira subetapa que os consome.
+- Esta é a primeira subetapa que habilita variante de ativo (`operational`), e por isso o status "Exclusivo" vira "Suportado" no XLSX, na anotação do PDF e no cliente (decisão da E06.2.2.1): reavalie.
+- Habilite só as variantes ATERRAMENTO de f02-19 e PARA_RAIOS_MT de f02-21. As famílias também têm CONECTOR (E07) e EQUIPAMENTO_PROTECAO.
+- Da E06.3.1, decida:
+  - variante não E07 `enabled` ganha `declarative-vector-packages` = `id_exato_sintetico` na matriz (`scripts/coverage_matrix_e16.py:131-136`), sem evidência própria;
+  - o status de variante E04 é fixo em `nao_avaliavel` (`:194-196`), então habilitar ATERRAMENTO e PARA_RAIOS_MT nunca aparece como ganho na matriz da curadoria.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** os da E06.3.
+
 **Evidências e handoff:** —
+
+---
+
+## E06.3.3 — Para-raios BT e transformador — #pendente
+
+**Objetivo:** reconhecer PARA_RAIOS_BT e TRANSFORMADOR sobre o modelo de desenho, acima do analisador atual.
+
+**Dependências:** E06.3.2.
+
+**Escopo:** gramáticas de moldura (para-raios BT: retângulo com diagonal; transformador: triângulo ou meio preenchido em círculo), habilitação das variantes de f02-21 (BT), f02-18, f02-24 e f02-25, laboratório e guarda.
+
+**Fora de escopo:** as outras classes.
+
+**Critérios de aceite:**
+
+- [ ] Fixtures sintéticas positivas e negativas das duas classes.
+- [ ] Nas 16 folhas, precisão e recall de PARA_RAIOS_BT e TRANSFORMADOR em `tmp/`, maiores que os do atual.
+- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:** as notas da E06.3 valem aqui. As duas gramáticas compartilham `grammar_frames.py`: em série.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** os da E06.3.
+
+**Evidências e handoff:** —
+
+---
+
+## E06.3.4 — Estai — #pendente
+
+**Objetivo:** reconhecer ESTAI sobre o modelo de desenho, acima do analisador atual.
+
+**Dependências:** E06.3.3.
+
+**Escopo:** gramática de estai (traço bifurcado, com ou sem envolvente, e o X de retirada), habilitação das variantes de f02-14 e f02-15, laboratório e guarda.
+
+**Fora de escopo:** as outras classes.
+
+**Critérios de aceite:**
+
+- [ ] Fixtures sintéticas positivas e negativas de ESTAI.
+- [ ] Nas 16 folhas, precisão e recall de ESTAI em `tmp/`, maiores que os do atual.
+- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:** as notas da E06.3 valem aqui. O atual dá ESTAI 64 tp / 2 fp / 12 fn (`centro`) e 0 por IoU, porque sai como polilinha fina.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** os da E06.3.
+
+**Evidências e handoff:** —
+
+---
+
+## E06.3.5 — Equipamento de interrupção — #pendente
+
+**Objetivo:** reconhecer EQUIPAMENTO_INTERRUPCAO sobre o modelo de desenho.
+
+**Dependências:** E06.3.4.
+
+**Escopo:** gramática de interrupção (chevrons e curva sinuosa, f02-20), habilitação das variantes, laboratório e guarda.
+
+**Fora de escopo:** associação ao poste (E07); remover detectores antigos (E09).
+
+**Critérios de aceite:**
+
+- [ ] Fixtures sintéticas positivas e negativas de EQUIPAMENTO_INTERRUPCAO.
+- [ ] Nas 16 folhas, precisão e recall de EQUIPAMENTO_INTERRUPCAO em `tmp/`, maiores que os do atual (que não emite a classe: 0 tp, 20 fn).
+- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:** as notas da E06.3 valem aqui.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** os da E06.3.
+
+**Evidências e handoff:** —
+
 ---
 
 ## E15 — Ficha predita a partir das propostas — #concluida
@@ -1397,7 +1854,7 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 **Por que agora:** a associação é um dos erros que mais custam ao usuário. Com texto e símbolos limpos, ela passa a ser geométrica.
 
-**Dependências:** E06.3, E15.
+**Dependências:** E06.3.5 (última subetapa da E06.3), E15.
 
 **Escopo:**
 - Associação geométrica por proximidade, linhas de chamada e convenções de layout, com vãos ligados à polilinha da rede entre dois postes.

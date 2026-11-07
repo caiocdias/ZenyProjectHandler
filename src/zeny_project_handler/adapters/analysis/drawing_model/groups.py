@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
+from typing import Final
 
 from zeny_project_handler.adapters.analysis.drawing_model.geometry import ponto_bezier
 from zeny_project_handler.adapters.analysis.drawing_model.model import (
@@ -19,6 +20,11 @@ from zeny_project_handler.adapters.analysis.drawing_model.model import (
 
 _CELULA = 10.0
 _TOLERANCIA_RELATIVA = 0.02
+LIMITE_VISITAS_AGRUPAMENTO: Final = 50_000_000
+
+
+class AgrupamentoExcedido(Exception):  # noqa: N818 - nome fixado pelo plano da E06.2.2.1
+    """O agrupamento da página passou do teto de visitas às células."""
 
 
 def _caixa_pontos(pontos: Iterable[tuple[float, float]]) -> Caixa:
@@ -44,13 +50,24 @@ def _no_circulo(figura: Circulo | Arco, ponto: tuple[float, float]) -> bool:
     return abs(distancia - figura.raio) <= _TOLERANCIA_RELATIVA * figura.raio
 
 
-def _item_coberto(item: ItemCaminho, figuras: Sequence[Circulo | Arco]) -> bool:
+def _item_coberto(
+    item: ItemCaminho, figuras: Sequence[Circulo | Arco], orcamento: list[int]
+) -> bool:
+    """Cada figura comparada gasta uma visita de `orcamento`; esgotá-lo levanta o teto."""
     pontos = (item.pontos[0], ponto_bezier(item.pontos, 0.5), item.pontos[-1])
-    return any(all(_no_circulo(figura, ponto) for ponto in pontos) for figura in figuras)
+    for figura in figuras:
+        orcamento[0] -= 1
+        if orcamento[0] < 0:
+            raise AgrupamentoExcedido
+        if all(_no_circulo(figura, ponto) for ponto in pontos):
+            return True
+    return False
 
 
 def _caminhos_elegiveis(
-    primitivas: Sequence[Polilinha | Circulo | Arco], caminhos: Sequence[Caminho]
+    primitivas: Sequence[Polilinha | Circulo | Arco],
+    caminhos: Sequence[Caminho],
+    orcamento: list[int],
 ) -> list[int]:
     figuras_por_origem: dict[int, list[Circulo | Arco]] = defaultdict(list)
     for primitiva in primitivas:
@@ -65,10 +82,10 @@ def _caminhos_elegiveis(
         figuras = figuras_por_origem.get(indice, [])
         if figuras and all(item.tipo == "c" for item in itens):
             circulos = [f for f in figuras if isinstance(f, Circulo)]
-            if any(all(_item_coberto(item, [c]) for item in itens) for c in circulos):
+            if any(all(_item_coberto(item, [c], orcamento) for item in itens) for c in circulos):
                 continue  # inteiramente convertido num mesmo círculo
         if caminho.tipo != "traco" or any(
-            item.tipo == "c" and not _item_coberto(item, figuras) for item in itens
+            item.tipo == "c" and not _item_coberto(item, figuras, orcamento) for item in itens
         ):
             elegiveis.append(indice)
     return elegiveis
@@ -87,8 +104,15 @@ def _caixas_se_encostam(a: Caixa, b: Caixa, margem: float) -> bool:
     )
 
 
-def _unir_proximos(caixas: Sequence[Caixa], ativos: Sequence[int], folga: float) -> list[int]:
-    """Union-find com grade espacial sobre caixas dilatadas por `folga`; devolve o vetor de pais."""
+def _unir_proximos(
+    caixas: Sequence[Caixa], ativos: Sequence[int], folga: float, limite_visitas: int
+) -> list[int]:
+    """Union-find com grade espacial sobre caixas dilatadas por `folga`; devolve o vetor de pais.
+
+    Uma visita é cada entrada de célula lida; passar de `limite_visitas` levanta
+    `AgrupamentoExcedido`. Comparações repetidas entre quem já tem a mesma raiz são puladas, mas a
+    leitura de célula densa segue quadrática em visitas: o teto é quem limita o caso hostil.
+    """
     pai = list(range(len(caixas)))
 
     def raiz(i: int) -> int:
@@ -98,6 +122,7 @@ def _unir_proximos(caixas: Sequence[Caixa], ativos: Sequence[int], folga: float)
         return i
 
     celulas: dict[tuple[int, int], list[int]] = defaultdict(list)
+    visitas = 0
     for i in ativos:
         x0, y0, x1, y1 = caixas[i]
         faixa_x = range(math.floor((x0 - folga) / _CELULA), math.floor((x1 + folga) / _CELULA) + 1)
@@ -106,9 +131,14 @@ def _unir_proximos(caixas: Sequence[Caixa], ativos: Sequence[int], folga: float)
         for cx in faixa_x:
             for cy in faixa_y:
                 celula = celulas[(cx, cy)]
+                visitas += len(celula)
+                if visitas > limite_visitas:
+                    raise AgrupamentoExcedido(limite_visitas)
                 vizinhos.update(celula)
                 celula.append(i)
         for j in vizinhos:
+            if raiz(j) == raiz(i):
+                continue
             # Caixas dilatadas por `folga` cada uma: sobrepõem se a distância <= 2 * folga.
             if _caixas_se_encostam(caixas[i], caixas[j], 2 * folga):
                 pai[raiz(i)] = raiz(j)
@@ -154,13 +184,19 @@ def agrupar_candidatos(
     *,
     folga: float = 1.5,
     lado_maximo: float = 40.0,
+    limite_visitas: int = LIMITE_VISITAS_AGRUPAMENTO,
 ) -> tuple[GrupoCandidato, ...]:
-    indices_caminhos = _caminhos_elegiveis(primitivas, caminhos)
+    # Um só orçamento: a varredura de figuras por item de caminho gasta antes das células.
+    orcamento = [limite_visitas]
+    try:
+        indices_caminhos = _caminhos_elegiveis(primitivas, caminhos, orcamento)
+    except AgrupamentoExcedido:
+        raise AgrupamentoExcedido(limite_visitas) from None
     caixas: list[Caixa] = [_caixa_primitiva(p) for p in primitivas]
     caixas.extend(_caixa_caminho(caminhos[i]) for i in indices_caminhos)
     # Elemento maior que `lado_maximo` sozinho é traçado da rede, não parte de símbolo.
     ativos = [i for i, caixa in enumerate(caixas) if _lado(caixa) <= lado_maximo]
-    raizes = _unir_proximos(caixas, ativos, folga)
+    raizes = _unir_proximos(caixas, ativos, folga, orcamento[0])
     membros: dict[int, list[int]] = defaultdict(list)
     for i in ativos:
         membros[raizes[i]].append(i)

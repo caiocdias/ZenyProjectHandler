@@ -92,12 +92,24 @@ def _polilinhas_do_estilo(
         incidentes.setdefault(a, []).append(indice)
         incidentes.setdefault(b, []).append(indice)
 
+    # Cursor por nó: aresta usada nunca volta a ser livre, então o ponteiro só avança e a
+    # "primeira aresta livre" é a mesma de uma busca desde o início, em custo amortizado linear.
+    cursor: dict[int, int] = dict.fromkeys(incidentes, 0)
+
+    def primeira_livre(no: int) -> int | None:
+        lista = incidentes[no]
+        posicao = cursor[no]
+        while posicao < len(lista) and arestas[lista[posicao]].usada:
+            posicao += 1
+        cursor[no] = posicao
+        return lista[posicao] if posicao < len(lista) else None
+
     def percorrer(no_inicial: int) -> tuple[list[int], list[int]]:
         nos = [no_inicial]
         origens: list[int] = []
         atual = no_inicial
         while True:
-            proxima = next((i for i in incidentes[atual] if not arestas[i].usada), None)
+            proxima = primeira_livre(atual)
             if proxima is None:
                 return nos, origens
             aresta = arestas[proxima]
@@ -113,7 +125,7 @@ def _polilinhas_do_estilo(
     # Primeiro as pontas e junções (grau != 2); depois o que sobrou são ciclos.
     ordem_de_partida = [n for n in nos_ordenados if len(incidentes[n]) != 2] + nos_ordenados
     for no in ordem_de_partida:
-        while any(not arestas[i].usada for i in incidentes[no]):
+        while primeira_livre(no) is not None:
             nos, origens = percorrer(no)
             if len(nos) == 3 and nos[0] == nos[2]:
                 nos = nos[:2]  # segmento pintado duas vezes: aberta, com as duas origens
