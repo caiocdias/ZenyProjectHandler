@@ -269,8 +269,12 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E06.2.1 | Núcleo de gramáticas sobre o modelo | #concluida | E06.1 | núcleo puro com índice espacial e teto, 6 gramáticas portadas, paridade no corpus sintético |
 | E06.2.2.1 | Método versionado no runner | #concluida | E06.2.1 | método de pacotes sobre o modelo no runner opt-in, resíduo raster marcado, agrupamento sem laço quadrático fora de teto |
 | E06.2.2.2 | Medição do método nas 16 folhas | #concluida | E06.2.2.1 | benchmark ao lado do atual e diff por variante, com cada "só no núcleo" classificado |
-| E06.3 | Gramáticas das classes da ficha | #em-andamento | E06.2.2.2 | estai, aterramento, para-raios, transformador e interrupção sobre o modelo, acima do atual |
-| E07 | Ficha do poste | #pendente | E06.3, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
+| E06.3.1 | Pacotes das classes da ficha | #em-andamento | E06.2.2.2 | 58 variantes do inventário de ESTAI, TRANSFORMADOR, ATERRAMENTO e PARA_RAIOS_MT/BT nos pacotes, como `pending`; auditor e matriz aceitam outro `owner_stage` |
+| E06.3.2 | Aterramento e para-raios MT | #pendente | E06.3.1 | gramática de haste com barras, com laboratório, acima do atual nas duas classes |
+| E06.3.3 | Para-raios BT e transformador | #pendente | E06.3.2 | gramáticas de moldura das duas classes, com laboratório, acima do atual |
+| E06.3.4 | Estai | #pendente | E06.3.3 | gramática de estai, com laboratório, acima do atual |
+| E06.3.5 | Equipamento de interrupção e H2 | #pendente | E06.3.4 | gramática de interrupção e confirmação da H2 (raster como resíduo) |
+| E07 | Ficha do poste | #pendente | E06.3.5, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
 | E08 | Conferência UTM | #pendente | E07 | transformação página → UTM, checagem de posição e vão, pendências |
 | E09 | Troca do analisador e remoção do legado | #pendente | E08, E16 | analisador novo como padrão; detectores e, se provado, OCR removidos |
 
@@ -1492,7 +1496,24 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 ---
 
-## E06.3 — Gramáticas das classes da ficha — #em-andamento
+## E06.3 — Gramáticas das classes da ficha (dividida em E06.3.1–E06.3.5)
+
+**Divisão (2026-11-07, orquestrador):**
+- **Por que dividir:** a seção pede a divisão por classe acima de 3h. A ampliação dos pacotes sozinha leva cerca de 2h, e cada gramática tem laboratório próprio (na E05, cinco rodadas desse ajuste custaram ~7h45).
+- **Subetapas,** cada uma uma etapa completa, em série:
+  - E06.3.1, pacotes: as 58 variantes do inventário fora dos pacotes, como `pending`;
+  - E06.3.2, ATERRAMENTO e PARA_RAIOS_MT: haste com barras;
+  - E06.3.3, PARA_RAIOS_BT e TRANSFORMADOR: molduras;
+  - E06.3.4, ESTAI;
+  - E06.3.5, EQUIPAMENTO_INTERRUPCAO e a H2.
+- **Como os critérios se repartem:**
+  - A E06.3.1 leva a ampliação do escopo abaixo, sem gramática nova. Por isso as fixtures e o "acima do atual" não se aplicam a ela.
+  - Cada subetapa de gramática leva as fixtures e o "acima do atual" das suas classes, e estende a guarda contra memorização às gramáticas dela.
+  - A E06.3.5 confirma a H2.
+  - O auditor e o `.bat` valem em todas.
+- **Dependência:** a E07 passa a depender da E06.3.5.
+
+O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Objetivo:** reconhecer estais, aterramento, para-raios MT/BT, transformadores e equipamento de interrupção sobre o modelo de desenho, acima do analisador atual.
 
@@ -1524,7 +1545,166 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 **Riscos e mitigação:** pacote que memoriza a folha → exigir fixture sintética autoral; a guarda da E06.1 procura coordenadas e hashes, e é estendida às gramáticas novas.
 
+**Evidências e handoff:** nas subetapas.
+
+---
+
+## E06.3.1 — Pacotes das classes da ficha — #em-andamento
+
+**Objetivo:** pôr nos pacotes, como `pending`, as variantes do inventário das classes da ficha que ainda estão fora deles, com fonte rastreável, para as subetapas de gramática só precisarem habilitar.
+
+**Dependências:** E06.2.2.2. O relógio começa no commit `#em-andamento` da E06.3 (107d89e).
+
+**Escopo:**
+- **58 variantes** de `docs/data/inventario-simbologia-v1.json` com `owner_stage` ≠ E07, fora das famílias de convenção (f02-01 e f02-02, E10): f02-14 (15) e f02-15 (2), ESTAI; f02-18 (23), f02-24 (2) e f02-25 (4), TRANSFORMADOR e um CONJUNTO_EO; f02-19 (4), ATERRAMENTO; f02-21 (8), PARA_RAIOS_MT/BT. Todas `pending`, com motivo e `source_ref` do inventário.
+- **Auditor e `scripts/coverage_matrix_e16.py`** aceitam variante de outro `owner_stage` do inventário, relatada por estágio. O que hoje exige `E07` continua exigindo para as variantes E07.
+- **Números fixos:** `tests/server/test_e14_symbol_review.py:287` e as contagens de `tests/unit/test_declarative_symbol_packages.py`. A tabela de suporte da revisão e as exportações passam a mostrar as novas `pending`.
+
+**Fora de escopo:** gramáticas e habilitação (E06.3.2 a E06.3.5); `negative_examples`, que só a variante habilitada exige, vêm na subetapa que a habilita, a partir de `confusable_negatives`.
+
+**Critérios de aceite:**
+
+- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros, com as 58 variantes novas como `pending` e o relato por estágio.
+- [ ] A tabela de suporte da revisão conta as novas `pending`, e os testes fixos foram atualizados com o número novo.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:** a mudança visível na revisão e nas exportações vai para "Decisões para o usuário". O levantamento em `tmp/e06/levantamento-e06.md` do checkout principal (§2, §5) mapeia auditor, inventário e testes fixos.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** a matriz da E16 e o fechamento da curadoria contam variantes → relatar por estágio, sem mudar o que já é exigido das E07.
+
 **Evidências e handoff:** —
+
+---
+
+## E06.3.2 — Aterramento e para-raios MT — #pendente
+
+**Objetivo:** reconhecer ATERRAMENTO e PARA_RAIOS_MT sobre o modelo de desenho, acima do analisador atual.
+
+**Dependências:** E06.3.1.
+
+**Escopo:** gramática de haste com barras (aterramento: barras decrescentes; para-raios MT: barras alternadas), habilitação das variantes de f02-19 e f02-21 (MT) com `negative_examples` de `confusable_negatives`, laboratório H-A/H-B/H-C e a guarda contra memorização estendida.
+
+**Fora de escopo:** as outras classes (E06.3.3 a E06.3.5).
+
+**Critérios de aceite:**
+
+- [ ] Fixtures sintéticas positivas e negativas das duas classes.
+- [ ] Nas 16 folhas, precisão e recall de ATERRAMENTO e PARA_RAIOS_MT em `tmp/`, maiores que os do atual com as mesmas referências.
+- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:** as notas da E06.3 valem aqui. Linha de base no handoff da E06.2.2.2: atual, ATERRAMENTO 41 tp / 32 fp / 2 fn e PARA_RAIOS_MT 10 / 4 / 3 (critério `centro`).
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** os da E06.3.
+
+**Evidências e handoff:** —
+
+---
+
+## E06.3.3 — Para-raios BT e transformador — #pendente
+
+**Objetivo:** reconhecer PARA_RAIOS_BT e TRANSFORMADOR sobre o modelo de desenho, acima do analisador atual.
+
+**Dependências:** E06.3.2.
+
+**Escopo:** gramáticas de moldura (para-raios BT: retângulo com diagonal; transformador: triângulo ou meio preenchido em círculo), habilitação das variantes de f02-21 (BT), f02-18, f02-24 e f02-25, laboratório e guarda.
+
+**Fora de escopo:** as outras classes.
+
+**Critérios de aceite:**
+
+- [ ] Fixtures sintéticas positivas e negativas das duas classes.
+- [ ] Nas 16 folhas, precisão e recall de PARA_RAIOS_BT e TRANSFORMADOR em `tmp/`, maiores que os do atual.
+- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:** as notas da E06.3 valem aqui. As duas gramáticas compartilham `grammar_frames.py`: em série.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** os da E06.3.
+
+**Evidências e handoff:** —
+
+---
+
+## E06.3.4 — Estai — #pendente
+
+**Objetivo:** reconhecer ESTAI sobre o modelo de desenho, acima do analisador atual.
+
+**Dependências:** E06.3.3.
+
+**Escopo:** gramática de estai (traço bifurcado, com ou sem envolvente, e o X de retirada), habilitação das variantes de f02-14 e f02-15, laboratório e guarda.
+
+**Fora de escopo:** as outras classes.
+
+**Critérios de aceite:**
+
+- [ ] Fixtures sintéticas positivas e negativas de ESTAI.
+- [ ] Nas 16 folhas, precisão e recall de ESTAI em `tmp/`, maiores que os do atual.
+- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:** as notas da E06.3 valem aqui. O atual dá ESTAI 64 tp / 2 fp / 12 fn (`centro`) e 0 por IoU, porque sai como polilinha fina.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** os da E06.3.
+
+**Evidências e handoff:** —
+
+---
+
+## E06.3.5 — Equipamento de interrupção e H2 — #pendente
+
+**Objetivo:** reconhecer EQUIPAMENTO_INTERRUPCAO sobre o modelo de desenho e confirmar a hipótese H2.
+
+**Dependências:** E06.3.4.
+
+**Escopo:** gramática de interrupção (chevrons e curva sinuosa, f02-20), habilitação das variantes, laboratório e guarda; H2 confirmada chamando `residuos_raster` folha a folha (handoff da E06.2.2.1), com página `FORA_DOMINIO` fora da contagem.
+
+**Fora de escopo:** associação ao poste (E07); remover detectores antigos (E09).
+
+**Critérios de aceite:**
+
+- [ ] Fixtures sintéticas positivas e negativas de EQUIPAMENTO_INTERRUPCAO.
+- [ ] Nas 16 folhas, precisão e recall de EQUIPAMENTO_INTERRUPCAO em `tmp/`, maiores que os do atual (que não emite a classe: 0 tp, 20 fn).
+- [ ] H2 confirmada ou refutada, com a contagem por folha em `tmp/`.
+- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:** as notas da E06.3 valem aqui.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** os da E06.3.
+
+**Evidências e handoff:** —
+
 ---
 
 ## E15 — Ficha predita a partir das propostas — #concluida
@@ -1636,7 +1816,7 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 **Por que agora:** a associação é um dos erros que mais custam ao usuário. Com texto e símbolos limpos, ela passa a ser geométrica.
 
-**Dependências:** E06.3, E15.
+**Dependências:** E06.3.5 (última subetapa da E06.3), E15.
 
 **Escopo:**
 - Associação geométrica por proximidade, linhas de chamada e convenções de layout, com vãos ligados à polilinha da rede entre dois postes.
