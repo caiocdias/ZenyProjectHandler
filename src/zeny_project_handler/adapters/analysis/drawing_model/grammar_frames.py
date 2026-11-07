@@ -168,9 +168,10 @@ def _marca_de_proposta(contexto: ContextoGramatica, moldura: Moldura) -> bool:
     largura, altura = _lados(caixa)
     area = largura * altura
     caminhos = contexto.pagina.modelo.caminhos
+    lidos = contexto.pagina.glifos_lidos
     for posicao in contexto.grade_caminhos.consultar(caixa):
         limites = contexto.caixas_caminhos[posicao]
-        if posicao == moldura.caminho or not intersecta(caixa, limites):
+        if posicao == moldura.caminho or posicao in lidos or not intersecta(caixa, limites):
             continue
         lado_x, lado_y = _lados(limites)
         if (

@@ -3,13 +3,19 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Final
 
 import pymupdf
 import pytest
-from tests.fixtures.glyphs.fonte_livre import LinhaTexto, pdf_texto_contorno, tabela_do_alfabeto
+from tests.fixtures.glyphs.fonte_livre import (
+    LinhaTexto,
+    pdf_texto_contorno,
+    pdf_texto_nativo,
+    tabela_do_alfabeto,
+)
 
 from zeny_project_handler.adapters.analysis.declarative_symbols import carregar_pacotes
 from zeny_project_handler.adapters.analysis.drawing_model.glyph_table import TabelaGlifos
@@ -44,13 +50,23 @@ def variante_ct() -> Variante:
     return pacote, variante
 
 
-def _pagina_ct_emoldurado(tmp_path: Path, tabela: TabelaGlifos) -> PaginaGramatica:
-    """`CT` em contorno com a moldura desenhada por cima, pelo adaptador real."""
-    contorno = pdf_texto_contorno(
-        tmp_path / "contorno.pdf", [LinhaTexto("CT", (100.0, 100.0), 5.0)]
-    )
+_LINHA_CT: Final = [LinhaTexto("CT", (100.0, 100.0), 5.0)]
+_AZUL: Final = (0.0, 0.0, 1.0)
+
+
+def _pagina_ct_emoldurado(
+    tmp_path: Path,
+    tabela: TabelaGlifos,
+    *,
+    base: Callable[..., Path] = pdf_texto_contorno,
+    desenhar: Callable[[Any], None] | None = None,
+) -> PaginaGramatica:
+    """`CT` (em contorno, ou nativo) com a moldura desenhada por cima, pelo adaptador real."""
+    contorno = base(tmp_path / "contorno.pdf", _LINHA_CT)
     with pymupdf.open(contorno) as documento:
         documento[0].draw_rect(pymupdf.Rect(*_MOLDURA), color=(0.7, 0.0, 0.0))
+        if desenhar is not None:
+            desenhar(documento[0])
         documento.save(tmp_path / "emoldurado.pdf")
     with pymupdf.open(tmp_path / "emoldurado.pdf") as documento:
         return pagina_para_gramaticas(documento[0], 0, tabela)
@@ -62,11 +78,6 @@ def _sem_guarda(variante: Variante) -> Variante:
     return pacote, {**dados, "recognition": {**dados["recognition"], "grammar": gramatica}}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="I3: o contorno da letra aciona `_marca_de_proposta`; a guarda muda na Task 6.",
-)
 def test_rotulo_em_contorno_casa(
     tmp_path: Path, tabela: TabelaGlifos, variante_ct: Variante
 ) -> None:
@@ -95,3 +106,80 @@ def test_so_a_guarda_de_marca_separa_o_rotulo_da_variante(
         area = (max(xs) - min(xs)) * (max(ys) - min(ys))
         assert area >= area_moldura * _AREA_MARCA
     assert len(casar_variantes(pagina, (_sem_guarda(variante_ct),))) == 1
+
+
+def _casa(pagina: PaginaGramatica, variante: Variante) -> bool:
+    return len(casar_variantes(pagina, (variante,))) == 1
+
+
+def _sem_letra(tabela: TabelaGlifos, letra: str) -> TabelaGlifos:
+    return replace(tabela, glifos=tuple(g for g in tabela.glifos if g.caractere != letra))
+
+
+def _marca_ao_lado(pagina: Any) -> None:
+    pagina.draw_rect(pymupdf.Rect(105.5, 94.0, 109.5, 102.0), fill=_AZUL, color=None)
+
+
+def _triangulo_na_caixa_do_rotulo(pagina: Any) -> None:
+    pagina.draw_polyline(
+        [pymupdf.Point(101.0, 99.5), pymupdf.Point(105.0, 99.5), pymupdf.Point(103.0, 96.5)],
+        fill=_AZUL,
+        color=None,
+        closePath=True,
+    )
+
+
+def test_rotulo_em_contorno_nao_resolvido_nao_casa(
+    tmp_path: Path, tabela: TabelaGlifos, variante_ct: Variante
+) -> None:
+    """Sem a letra na tabela não há texto e o contorno não é pulado: nada casa."""
+    pagina = _pagina_ct_emoldurado(tmp_path, _sem_letra(tabela, "T"))
+
+    assert pagina.modelo.textos == ()
+    assert pagina.glifos_lidos == frozenset()
+    assert not _casa(pagina, variante_ct)
+
+
+def test_marca_preenchida_ao_lado_do_rotulo_recusa(
+    tmp_path: Path, tabela: TabelaGlifos, variante_ct: Variante
+) -> None:
+    pagina = _pagina_ct_emoldurado(tmp_path, tabela, desenhar=_marca_ao_lado)
+
+    assert [t.texto for t in pagina.modelo.textos] == ["CT"]
+    assert not _casa(pagina, variante_ct)
+    assert _casa(pagina, _sem_guarda(variante_ct))
+
+
+@pytest.mark.parametrize("base", [pdf_texto_contorno, pdf_texto_nativo], ids=["contorno", "nativo"])
+def test_triangulo_preenchido_na_caixa_do_rotulo_recusa(
+    tmp_path: Path, tabela: TabelaGlifos, variante_ct: Variante, base: Callable[..., Path]
+) -> None:
+    """`negative_examples` da CT: o triângulo de outra cor dentro da caixa do span não é pulado."""
+    pagina = _pagina_ct_emoldurado(
+        tmp_path, tabela, base=base, desenhar=_triangulo_na_caixa_do_rotulo
+    )
+
+    assert [t.texto for t in pagina.modelo.textos] == ["CT"]
+    assert not _casa(pagina, variante_ct)
+    assert _casa(pagina, _sem_guarda(variante_ct))
+
+
+def test_rotulo_nativo_igual_ao_contorno(
+    tmp_path: Path, tabela: TabelaGlifos, variante_ct: Variante
+) -> None:
+    for desenhar in (None, _marca_ao_lado):
+        resultados = []
+        for nome, base in (("c", pdf_texto_contorno), ("n", pdf_texto_nativo)):
+            pasta = tmp_path / f"{nome}{desenhar is None}"
+            pasta.mkdir()
+            pagina = _pagina_ct_emoldurado(pasta, tabela, base=base, desenhar=desenhar)
+            resultados.append(
+                (
+                    [t.texto for t in pagina.modelo.textos],
+                    _casa(pagina, variante_ct),
+                    _casa(pagina, _sem_guarda(variante_ct)),
+                )
+            )
+        assert resultados[0] == resultados[1]
+        assert resultados[0][0] == ["CT"]
+        assert resultados[0][1] is (desenhar is None)
