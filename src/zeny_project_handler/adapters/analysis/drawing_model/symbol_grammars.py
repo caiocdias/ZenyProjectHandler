@@ -475,9 +475,9 @@ def _fundir_spans_colados(
 
     A tolerância é folga acima do que o `words` da PyMuPDF junta, sem emular a heurística dele
     (R-E06.2.1-4): onde o motor lê duas palavras e a fusão lê uma, o núcleo em geral perde
-    recall. Exceções conhecidas: rótulo cuja concatenação exata é o texto pedido (`C`+`T`, ou
-    `Q`+`DP` com outro texto entre eles no fluxo) e sobreimpressão acima de `t`, em que `words`
-    junta e a fusão não, com rótulo e guarda abertos. Rotacionado, `shx` e `glifo` não fundem.
+    recall. Exceções conhecidas: rótulo cuja concatenação exata é o texto pedido, com outro texto
+    entre os spans no fluxo (`Q`+`DP`), e sobreimpressão acima de `t`, em que `words` junta e a
+    fusão não, com rótulo e guarda abertos. Rotacionado, `shx` e `glifo` não fundem.
     O texto unido fica na posição do primeiro span da cadeia, e o resto da lista mantém a ordem.
     """
     candidatos = [posicao for posicao, texto in enumerate(textos) if _pode_colar(texto)]
@@ -514,7 +514,10 @@ def _palavras_do_texto(texto: TextoModelo, *, fundido: bool) -> list[Palavra]:
 
 
 def _verificar_fontes(diagnosticos: Sequence[str]) -> None:
-    """R-E06.2.1-8: a falha de fonte vem antes, porque o teto não seria tentado de novo."""
+    """R-E06.2.1-8: a falha de fonte vem antes, porque o teto não seria tentado de novo.
+
+    Só levanta: quem traduz em cobertura é `model_symbols`, por R-E06.2.2.1-3.
+    """
     for codigo in diagnosticos:
         if codigo in _FONTES_CONSUMIDAS:
             raise FonteGramaticaFalhou(codigo)
