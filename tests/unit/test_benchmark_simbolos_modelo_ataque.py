@@ -9,9 +9,6 @@ imutabilidade do método ``atual``.
 from __future__ import annotations
 
 import dataclasses
-import importlib.util
-import subprocess
-import sys
 from pathlib import Path
 from typing import Any, Final
 
@@ -26,7 +23,6 @@ from zeny_project_handler.domain.enums import EstadoMetodoSimbolos
 _MOLDURA_CT: Final = (101.0, 115.0, 169.0, 149.0)
 _TOLERANCIA: Final = 0.005
 _METODOS: Final = ("pacotes", "modelo")
-_RAIZ: Final = Path(__file__).resolve().parents[2]
 
 # (módulo, atributo) do observador de cada método, para trocar por um que devolve cobertura falsa.
 _OBSERVADORES: Final = {
@@ -339,32 +335,42 @@ def test_excecao_do_observador_com_caminho_sai_saneada(
 # --- o método atual não mudou ------------------------------------------------------------
 
 
-def _carregar_modulo_antigo(destino: Path) -> Any:
-    fonte = subprocess.run(
-        ["git", "-C", str(_RAIZ), "show", "c0f0432:scripts/benchmark_simbolos_ficha.py"],
-        check=True,
-        capture_output=True,
-    ).stdout
-    arquivo = destino / "benchmark_simbolos_ficha_antigo.py"
-    arquivo.write_bytes(fonte)
-    spec = importlib.util.spec_from_file_location("benchmark_simbolos_ficha_antigo", arquivo)
-    assert spec is not None
-    assert spec.loader is not None
-    modulo = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = modulo
-    try:
-        spec.loader.exec_module(modulo)
-    except BaseException:
-        sys.modules.pop(spec.name, None)
-        raise
-    return modulo
+_ATUAL_PREDICOES: Final = [
+    {
+        "pagina": 1,
+        "classe": "ATERRAMENTO",
+        "bbox": [0.6833333333333333, 0.18333333333333332, 0.7433333333333333, 0.21666666666666667],
+        "metodo": "legacy-vector-symbols",
+        "contexto": "operational",
+    },
+    {
+        "pagina": 1,
+        "classe": "CAMARA",
+        "bbox": [0.33666666666666667, 0.38333333333333336, 0.5633333333333334, 0.49666666666666665],
+        "metodo": "declarative-vector-packages",
+        "contexto": "operational",
+    },
+]
+_ATUAL_ASSINATURA: Final = {
+    "metodo_id": "atual",
+    "versao": "uniao-runner-v1",
+    "composicao": "legado + estais + transformadores + pacotes; sem raster nem estrutural",
+    "reconcile_symbols": False,
+    "componentes": [
+        ("pymupdf-symbols-legacy", "1.20.0:vetorial-6:observacoes-1"),
+        ("pymupdf-guys", "e06-estais-v3"),
+        ("pymupdf-transformers", "e05-transformadores-v5"),
+        ("declarative-vector-packages", "1.1.0"),
+    ],
+}
 
 
-def test_metodo_atual_tem_a_mesma_saida_e_assinatura_de_antes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    antigo = _carregar_modulo_antigo(tmp_path)
-    monkeypatch.setitem(sys.modules, "benchmark_simbolos_ficha_antigo", antigo)
+def test_metodo_atual_tem_a_mesma_saida_e_assinatura_de_antes(tmp_path: Path) -> None:
+    """Golden medido em c0f0432 (antes dos métodos novos), sem depender do histórico do Git.
+
+    Congela as predições e a parte estática da assinatura. Os hashes (pacotes, assinaturas dos
+    componentes, versão do PyMuPDF) mudam de propósito com dados e dependências, então ficam fora.
+    """
     pdf = tmp_path / "folha.pdf"
     with pymupdf.open() as documento:
         pagina = documento.new_page(width=300, height=300)
@@ -375,12 +381,23 @@ def test_metodo_atual_tem_a_mesma_saida_e_assinatura_de_antes(
             pagina.draw_line((x, 60 - comprimento / 2), (x, 60 + comprimento / 2))
         documento.new_page(width=300, height=300)
         documento.save(pdf)
-    depois = bench.METODOS["atual"](pdf, "pdf-1")
-    antes = antigo.METODOS["atual"](pdf, "pdf-1")
-    assert depois["predicoes"]
-    assert depois == antes
-    assert bench.ASSINATURAS["atual"]() == antigo.ASSINATURAS["atual"]()
-    assert set(antigo.METODOS) == {"atual"}
+    resultado = bench.METODOS["atual"](pdf, "pdf-1")
+    assert resultado["falha"] is None
+    assert len(resultado["predicoes"]) == len(_ATUAL_PREDICOES)
+    for obtida, esperada in zip(resultado["predicoes"], _ATUAL_PREDICOES, strict=True):
+        assert {k: v for k, v in obtida.items() if k != "bbox"} == {
+            k: v for k, v in esperada.items() if k != "bbox"
+        }
+        for x, y in zip(obtida["bbox"], esperada["bbox"], strict=True):
+            assert x == pytest.approx(y, abs=1e-9)
+    assinatura = bench.ASSINATURAS["atual"]()
+    assert {k: v for k, v in assinatura.items() if k != "componentes"} == {
+        k: v for k, v in _ATUAL_ASSINATURA.items() if k != "componentes"
+    }
+    assert [(c["metodo_id"], c["versao"]) for c in assinatura["componentes"]] == (
+        _ATUAL_ASSINATURA["componentes"]
+    )
+    assert set(bench.METODOS) >= {"atual"}
 
 
 # --- pacotes e modelo na CLI e no relatório ----------------------------------------------
