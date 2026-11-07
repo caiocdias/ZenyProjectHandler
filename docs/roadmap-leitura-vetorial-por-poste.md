@@ -1328,7 +1328,7 @@ Rulings da divisão, registradas no ledger da E06.1:
 **Escopo:**
 - **Pré-condição R-9:** `_unir_proximos` sem comparação repetida e com teto de visitas.
 - **Primeira tarefa do handoff (I3):** rótulo em contorno real pelo adaptador, e a guarda corrigida se o defeito se confirmar.
-- **Método versionado:** `VERSAO_MODELO_DESENHO`, o sha dos pacotes e o da tabela de glifos no perfil, primitivas com índice cru, teto e falha de fonte traduzidos em cobertura, e resíduo raster marcado para a E12.
+- **Método versionado:** `VERSAO_MODELO_DESENHO`, o sha dos pacotes e o da tabela de glifos no perfil, primitivas com índice cru, teto e falha de fonte traduzidos em cobertura, e resíduo raster marcado para a E12. "Marcado" é a função pública `residuos_raster(...)`, com caixa e hash, mais a contagem em `motivo` da cobertura; o resíduo não vira observação nem proposta (R-E06.2.2.1-4 do plano).
 - **Ligação no `SymbolCompositionRunner`**, com a versão na assinatura.
 - **Resíduos herdados da revisão final da E06.2.1:** a docstring errada e os dois testes.
 
