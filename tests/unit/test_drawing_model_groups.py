@@ -15,6 +15,9 @@ import pytest
 
 from zeny_project_handler.adapters.analysis import pymupdf_drawing_model
 from zeny_project_handler.adapters.analysis.drawing_model import groups
+from zeny_project_handler.adapters.analysis.drawing_model.geometry import (
+    recuperar_circulos_e_arcos,
+)
 from zeny_project_handler.adapters.analysis.drawing_model.groups import (
     AgrupamentoExcedido,
     agrupar_candidatos,
@@ -474,3 +477,36 @@ def test_excecao_e_reproduzivel_e_nao_deixa_estado_entre_chamadas() -> None:
         with pytest.raises(AgrupamentoExcedido):
             agrupar_candidatos(densa, [], limite_visitas=10)
     assert agrupar_candidatos(densa, []) == primeiro
+
+
+def _traco_de_arcos_disjuntos(n: int) -> Caminho:
+    subcaminhos = tuple((quarto(100.0 * i, 0.0, 4.0, 0),) for i in range(n))
+    return Caminho(subcaminhos, E, "traco", 0)
+
+
+def test_caminho_de_traco_com_muitos_arcos_disjuntos_tem_varredura_limitada(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    caminho = _traco_de_arcos_disjuntos(300)
+    figuras = recuperar_circulos_e_arcos([caminho])
+    assert len(figuras) == 300
+    chamadas = 0
+    original = groups._no_circulo
+
+    def contando(figura: Circulo | Arco, ponto: Ponto) -> bool:
+        nonlocal chamadas
+        chamadas += 1
+        return bool(original(figura, ponto))
+
+    monkeypatch.setattr(groups, "_no_circulo", contando)
+    with pytest.raises(AgrupamentoExcedido):
+        agrupar_candidatos(figuras, [caminho], limite_visitas=1_000)
+    assert chamadas <= 3 * 1_000 + 3
+
+
+def test_caminho_de_traco_com_poucos_arcos_disjuntos_segue_sem_grupo_de_caminho() -> None:
+    caminho = _traco_de_arcos_disjuntos(5)
+    figuras = recuperar_circulos_e_arcos([caminho])
+    grupos = agrupar_candidatos(figuras, [caminho])
+    assert all(g.indices_caminhos == () for g in grupos)
+    assert agrupar_candidatos(figuras, [caminho], limite_visitas=1_000) == grupos

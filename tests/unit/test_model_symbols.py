@@ -36,7 +36,10 @@ from zeny_project_handler.adapters.analysis.drawing_model.symbol_grammars import
     LIMITE_CONSULTAS_PAGINA,
     PaginaGramatica,
 )
-from zeny_project_handler.adapters.analysis.drawing_model.symbol_matcher import CasamentoGramatica
+from zeny_project_handler.adapters.analysis.drawing_model.symbol_matcher import (
+    CasamentoGramatica,
+    casar_variantes,
+)
 from zeny_project_handler.adapters.analysis.model_symbols import (
     ResiduoRaster,
     observar_pacotes_modelo,
@@ -1105,3 +1108,24 @@ def test_imagens_falhou_de_verdade_na_leitura(
 
     assert _unica_cobertura(resultado).motivo == "residuo_raster:0;imagens_falhou"
     assert [o.template for o in resultado.observacoes] == [_CAMARA_CT]
+
+
+def test_casamentos_que_colapsam_na_mesma_caixa_crua_viram_uma_observacao(
+    monkeypatch: pytest.MonkeyPatch, pagina_ct: pymupdf.Page, pacotes: Pacotes, tabela: TabelaGlifos
+) -> None:
+    (unico,) = _metodo(pagina_ct, pacotes, tabela).observacoes
+    original = casar_variantes
+
+    def duplicado(*args: Any, **kwargs: Any) -> Any:
+        (casamento,) = original(*args, **kwargs)
+        x0, y0, x1, y1 = casamento.caixa
+        # Diferença abaixo da resolução float32 da matriz de rotação: mesma caixa crua, mesmo id.
+        vizinho = replace(casamento, caixa=(x0 + 1e-9, y0, x1, y1))
+        return (casamento, vizinho)
+
+    monkeypatch.setattr(model_symbols, "casar_variantes", duplicado)
+
+    resultado = _metodo(pagina_ct, pacotes, tabela)
+
+    assert resultado.observacoes == (unico,)
+    assert _unica_cobertura(resultado).estado is EstadoMetodoSimbolos.CONCLUIDO

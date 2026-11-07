@@ -345,8 +345,12 @@ def observar_pacotes_modelo(
         motivo = "glifos_limitados" if _GLIFOS_LIMITADOS in diagnosticos else "teto_consultas"
         return _resultado(metodo, fonte, EstadoMetodoSimbolos.FORA_DOMINIO, motivo)
     assinatura = metodo.assinatura()
-    observacoes = tuple(
-        _observacao(page, fonte, assinatura, pagina, casamento) for casamento in casamentos
-    )
+    # A matriz de derrotação passa por float32: caixas distintas podem colapsar na mesma caixa
+    # crua e no mesmo id. Fica a primeira na ordem do núcleo (o domínio recusa id repetido).
+    por_id: dict[str, ObservacaoSimbolo] = {}
+    for casamento in casamentos:
+        observacao = _observacao(page, fonte, assinatura, pagina, casamento)
+        por_id.setdefault(observacao.id, observacao)
+    observacoes = tuple(por_id.values())
     estado = EstadoMetodoSimbolos.CONCLUIDO if observacoes else EstadoMetodoSimbolos.NAO_DETECCAO
     return _resultado(metodo, fonte, estado, _motivo_medido(pagina, casamentos), observacoes)
