@@ -191,3 +191,158 @@ def test_residuo_raster_nao_gera_proposta(tmp_path: Path) -> None:
     (cobertura,) = _cobertura_do_novo(_journals(runner)[-1])
     assert cobertura["status"] == "NAO_DETECCAO"
     assert cobertura["reason"] == "residuo_raster:1"
+
+
+_MODULOS_DO_DIGEST = [
+    "model_symbols",
+    "pymupdf_drawing_model",
+    "pymupdf_annotations",
+    "pymupdf_page_extractors",
+    "pymupdf_support",
+    "pymupdf_glyphs",
+    "symbol_grammars",
+    "grammar_frames",
+    "grammar_disc",
+    "symbol_matcher",
+    "groups",
+    "geometry",
+    "glyph_text",
+    "glyph_signature",
+    "glyph_table",
+]
+
+
+@pytest.mark.parametrize("modulo", _MODULOS_DO_DIGEST)
+def test_cada_modulo_do_digest_invalida_a_assinatura(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, modulo: str
+) -> None:
+    configuracao = _settings(tmp_path / "dados")
+    original = SymbolCompositionRunner(configuracao).signature
+    digest_original = symbol_execution._module_digest
+
+    def digest(alvo: Any) -> str:
+        return "alterado" if alvo.__name__.rsplit(".", 1)[-1] == modulo else digest_original(alvo)
+
+    monkeypatch.setattr(symbol_execution, "_module_digest", digest)
+
+    assert SymbolCompositionRunner(configuracao).signature != original
+
+
+def test_assinatura_e_estavel_entre_instancias(tmp_path: Path) -> None:
+    configuracao = _settings(tmp_path / "dados")
+
+    assert (
+        SymbolCompositionRunner(configuracao).signature
+        == SymbolCompositionRunner(configuracao).signature
+    )
+
+
+def test_cancelamento_antes_do_metodo_novo_nao_deixa_resultado_nem_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from zeny_project_handler.adapters.analysis import declarative_symbols
+    from zeny_project_handler.application.errors import FluxoMvpCanceladoError
+
+    documento, fonte = _fonte(_pdf(tmp_path / "a.pdf", paginas=2))
+    runner = SymbolCompositionRunner(_settings(tmp_path / "dados"))
+    cancelar = [False]
+    original = declarative_symbols.observar_pacotes
+
+    def observar_e_cancelar(*args: Any, **kwargs: Any) -> Any:
+        resultado = original(*args, **kwargs)
+        cancelar[0] = True
+        return resultado
+
+    monkeypatch.setattr(declarative_symbols, "observar_pacotes", observar_e_cancelar)
+
+    with pytest.raises(FluxoMvpCanceladoError):
+        runner.run(documento, fonte, cancelado=lambda: cancelar[0])
+
+    (journal,) = _journals(runner)
+    assert journal["status"] == "cancelled"
+    assert _cobertura_do_novo(journal) == []
+    assert not list(runner.cache_directory.glob("*.json"))
+    # nova execução sem cancelamento reprocessa tudo e conclui
+    runner.run(documento, fonte)
+    assert _journals(runner)[-1]["status"] == "completed"
+    assert len(list(runner.cache_directory.glob("*.json"))) == 1
+
+
+def test_cancelamento_apos_a_primeira_pagina_nao_grava_cache_parcial(tmp_path: Path) -> None:
+    from zeny_project_handler.application.errors import FluxoMvpCanceladoError
+
+    documento, fonte = _fonte(_pdf(tmp_path / "a.pdf", paginas=2))
+    runner = SymbolCompositionRunner(_settings(tmp_path / "dados"))
+    chamadas = [0]
+
+    def cancelado() -> bool:
+        chamadas[0] += 1
+        return chamadas[0] > 9  # passa da página 1 (checagens por método) e cai na 2
+
+    with pytest.raises(FluxoMvpCanceladoError):
+        runner.run(documento, fonte, cancelado=cancelado)
+
+    (journal,) = _journals(runner)
+    assert journal["status"] == "cancelled"
+    assert [c["page"] for c in _cobertura_do_novo(journal)] == [1]
+    assert not list(runner.cache_directory.glob("*.json"))
+
+
+@pytest.mark.parametrize("variante", ["girada", "cropbox"])
+def test_reconciliacao_com_pagina_girada_ou_cropbox_nao_duplica(
+    tmp_path: Path, variante: str
+) -> None:
+    pdf = _pdf(tmp_path / "a.pdf", paginas=1)
+    with pymupdf.open(pdf) as aberto:
+        pagina = aberto[0]
+        if variante == "girada":
+            pagina.set_rotation(90)
+        else:
+            pagina.set_cropbox(pymupdf.Rect(50, 50, 280, 280))
+        aberto.save(tmp_path / "b.pdf")
+    documento, fonte = _fonte(tmp_path / "b.pdf")
+    runner = SymbolCompositionRunner(_settings(tmp_path / "dados"))
+    novo = next(p for p in runner._profiles if p.metodo_id == _METODO_NOVO).assinatura()
+
+    composto = runner.run(documento, fonte)
+
+    com_o_novo = [
+        o for o in composto.occurrences if any(x.metodo_assinatura == novo for x in o.observations)
+    ]
+    assert len(com_o_novo) == 1
+    assert len({x.metodo_assinatura for x in com_o_novo[0].observations}) == 2
+
+
+def test_falha_de_fonte_numa_pagina_tardia_aborta_sem_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    documento, fonte = _fonte(_pdf(tmp_path / "a.pdf", paginas=2))
+    runner = SymbolCompositionRunner(_settings(tmp_path / "dados"))
+    original = pymupdf_drawing_model._caminhos_e_glifos
+    chamadas = [0]
+
+    def segunda_falha(pagina: Any) -> Any:
+        chamadas[0] += 1
+        if chamadas[0] >= 2:
+            raise RuntimeError("falha de caminhos")
+        return original(pagina)
+
+    monkeypatch.setattr(pymupdf_drawing_model, "_caminhos_e_glifos", segunda_falha)
+
+    with pytest.raises(SymbolCompositionError, match=r"modelo.caminhos_falhou"):
+        runner.run(documento, fonte)
+
+    assert not list(runner.cache_directory.glob("*.json"))
+    assert _journals(runner)[-1]["status"] == "failed"
+
+
+def test_residuo_raster_so_aparece_como_contagem_no_motivo(tmp_path: Path) -> None:
+    documento, fonte = _fonte(_pdf(tmp_path / "a.pdf", paginas=1, imagem=True))
+    runner = SymbolCompositionRunner(_settings(tmp_path / "dados"))
+
+    composto = runner.run(documento, fonte)
+
+    journal = _journals(runner)[-1]
+    novos = [r for r in journal["results"] if r["method_id"] == _METODO_NOVO]
+    assert all(r["observations"] == [] for r in novos)
+    assert composto.occurrences == ()
