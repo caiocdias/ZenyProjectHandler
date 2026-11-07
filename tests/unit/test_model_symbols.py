@@ -821,6 +821,70 @@ def test_residuo_raster(
     assert obtidos == tuple(_residuo(imagens[indice]) for indice in restantes)
 
 
+def _copia_do_ladrilho_0(caixa: Caixa) -> ImagemModelo:
+    return _imagem(caixa, _hash(0))
+
+
+@pytest.mark.parametrize(
+    ("imagens", "casamentos", "restantes"),
+    [
+        pytest.param(_ladrilhos(9), (), _NENHUM, id="mosaico-puro"),
+        pytest.param(
+            (*_ladrilhos(9), _copia_do_ladrilho_0(_caixa_da_grade(20))),
+            (),
+            (0, 9),
+            id="hash-em-duas-caixas-conta-e-os-unicos-nao",
+        ),
+        pytest.param(
+            (*_ladrilhos(9), _imagem(_caixa_da_grade(20)), _imagem(_caixa_da_grade(21))),
+            (),
+            (9, 10),
+            id="carimbo-ao-lado-dos-ladrilhos",
+        ),
+        pytest.param(
+            (*_ladrilhos(9), _copia_do_ladrilho_0(_caixa_da_grade(0))),
+            (),
+            _NENHUM,
+            id="mesma-caixa-e-uma-caixa-so",
+        ),
+        pytest.param(
+            (*_ladrilhos(9), _copia_do_ladrilho_0((10.0001, 10.0, 20.0, 20.0))),
+            (),
+            _NENHUM,
+            id="caixa-igual-a-3-casas-e-uma-caixa-so",
+        ),
+        pytest.param(
+            (*_ladrilhos(9), _copia_do_ladrilho_0((10.01, 10.0, 20.0, 20.0))),
+            (),
+            (0, 9),
+            id="caixa-diferente-a-3-casas",
+        ),
+        pytest.param(
+            (*_ladrilhos(9), _copia_do_ladrilho_0((400.0, 400.0, 420.0, 420.0))),
+            (),
+            (0,),
+            id="copia-fora-da-pagina-nao-conta-mas-repete",
+        ),
+        pytest.param(
+            (*_ladrilhos(9), _copia_do_ladrilho_0(_caixa_da_grade(20))),
+            (_casamento(_caixa_da_grade(20)),),
+            (0,),
+            id="copia-sob-casamento-nao-conta-mas-repete",
+        ),
+    ],
+)
+def test_hash_repetido_em_dimensao_de_mosaico(
+    imagens: tuple[ImagemModelo, ...],
+    casamentos: tuple[CasamentoGramatica, ...],
+    restantes: tuple[int, ...],
+) -> None:
+    """O hash em mais de uma caixa é carimbo mesmo entre ladrilhos: sem isso, ícones repetidos do
+    mesmo tamanho dariam `residuo_raster:0`, um falso zero a favor da H2."""
+    obtidos = residuos_raster(_pagina_com_imagens(imagens), casamentos)
+
+    assert obtidos == tuple(_residuo(imagens[indice]) for indice in restantes)
+
+
 _NAN: Final = float("nan")
 _INF: Final = float("inf")
 _NA_DIVISA: Final[Caixa] = (60.0, 60.0, 80.0, 80.0)

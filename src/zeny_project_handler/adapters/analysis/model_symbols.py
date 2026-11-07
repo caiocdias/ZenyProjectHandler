@@ -126,6 +126,18 @@ def _dimensoes_de_mosaico(imagens: Iterable[ImagemModelo]) -> set[tuple[int, int
     }
 
 
+def _hashes_repetidos(imagens: Iterable[ImagemModelo]) -> set[str]:
+    """Hashes em mais de uma caixa, arredondada como no dedupe: símbolo carimbado.
+
+    A cópia na mesma caixa não repete, e a que depois não conta como resíduo, por estar fora da
+    página ou sob um casamento, repete do mesmo jeito.
+    """
+    caixas: defaultdict[str, set[Caixa]] = defaultdict(set)
+    for imagem in imagens:
+        caixas[imagem.sha256].add(_caixa_arredondada(imagem.bbox))
+    return {sha256 for sha256, distintas in caixas.items() if len(distintas) > 1}
+
+
 def _compacta(caixa: Caixa) -> bool:
     largura, altura = caixa[2] - caixa[0], caixa[3] - caixa[1]
     return (
@@ -169,13 +181,18 @@ def residuos_raster(
 ) -> tuple[ResiduoRaster, ...]:
     """Imagens compactas, dentro da página e sem centro de casamento, na ordem de `modelo.imagens`.
 
+    Numa dimensão de mosaico, só o hash de uma caixa só é ladrilho e sai; o hash em mais de uma
+    caixa é carimbo e continua resíduo.
+
     Determinístico: é o contrato para quem precisa de caixa e hash, folha a folha. A contagem pode
     superestimar em folha com ortofoto: recortes de borda têm dimensão quase única e escapam da
-    regra de mosaico, que exige a mesma dimensão exata.
+    regra de mosaico, que exige a mesma dimensão exata, e o ladrilho uniforme repetido conta como
+    carimbo.
     """
     modelo = pagina.modelo
     limites: Caixa = (0.0, 0.0, modelo.largura, modelo.altura)
     mosaicos = _dimensoes_de_mosaico(modelo.imagens)
+    repetidos = _hashes_repetidos(modelo.imagens)
     centros = _grade_de_centros(casamentos)
     residuos: list[ResiduoRaster] = []
     vistos: set[tuple[str, Caixa]] = set()
@@ -183,7 +200,9 @@ def residuos_raster(
         chave = (imagem.sha256, _caixa_arredondada(imagem.bbox))
         if (
             chave in vistos
-            or (imagem.largura_px, imagem.altura_px) in mosaicos
+            or (
+                (imagem.largura_px, imagem.altura_px) in mosaicos and imagem.sha256 not in repetidos
+            )
             or not _compacta(imagem.bbox)
             or not contem(limites, imagem.bbox)
             or _tem_centro(imagem.bbox, centros)
