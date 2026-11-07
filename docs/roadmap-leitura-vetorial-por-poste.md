@@ -269,7 +269,7 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E06.2.1 | Núcleo de gramáticas sobre o modelo | #concluida | E06.1 | núcleo puro com índice espacial e teto, 6 gramáticas portadas, paridade no corpus sintético |
 | E06.2.2.1 | Método versionado no runner | #concluida | E06.2.1 | método de pacotes sobre o modelo no runner opt-in, resíduo raster marcado, agrupamento sem laço quadrático fora de teto |
 | E06.2.2.2 | Medição do método nas 16 folhas | #concluida | E06.2.2.1 | benchmark ao lado do atual e diff por variante, com cada "só no núcleo" classificado |
-| E06.3 | Gramáticas das classes da ficha | #pendente | E06.2.2.2 | estai, aterramento, para-raios, transformador e interrupção sobre o modelo, acima do atual |
+| E06.3 | Gramáticas das classes da ficha | #em-andamento | E06.2.2.2 | estai, aterramento, para-raios, transformador e interrupção sobre o modelo, acima do atual |
 | E07 | Ficha do poste | #pendente | E06.3, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
 | E08 | Conferência UTM | #pendente | E07 | transformação página → UTM, checagem de posição e vão, pendências |
 | E09 | Troca do analisador e remoção do legado | #pendente | E08, E16 | analisador novo como padrão; detectores e, se provado, OCR removidos |
@@ -1453,7 +1453,7 @@ Rulings da divisão, registradas no ledger da E06.1:
 **Evidências e handoff:**
 
 - Plano: `docs/superpowers/plans/2026-11-07-leitura-vetorial-por-poste-e06-2-2-2.md`. Revisão de arquitetura (opus): bloqueou nas rodadas 0 e 1 e aprovou com notas na rodada 2.
-- Relógio: de 1aec214 (17:23 de 2026-11-07) até o commit `#concluida` (19:23), 2h00.
+- Relógio: de 1aec214 (17:23 de 2026-11-07) até o commit `#concluida` (19:21), 1h58.
 - Revisão final (`revisor-seguranca`, opus, 1aec214..f751a16): pronto com correções, sem Crítico, e as correções eram só de registro (este handoff, ledger e plano). Depois dela, o `.bat` reprovou no mypy de um teste; a tipagem foi corrigida em c6e1876, só no teste.
 - Critérios verificados:
   1. Benchmark (em 7405d16) nas 16 folhas, sem falha, critério `centro`. A tabela é a linha de base:
@@ -1492,7 +1492,7 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 ---
 
-## E06.3 — Gramáticas das classes da ficha — #pendente
+## E06.3 — Gramáticas das classes da ficha — #em-andamento
 
 **Objetivo:** reconhecer estais, aterramento, para-raios MT/BT, transformadores e equipamento de interrupção sobre o modelo de desenho, acima do analisador atual.
 
