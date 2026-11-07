@@ -183,3 +183,42 @@ def test_rotulo_nativo_igual_ao_contorno(
         assert resultados[0] == resultados[1]
         assert resultados[0][0] == ["CT"]
         assert resultados[0][1] is (desenhar is None)
+
+
+def _linha_longa_na_moldura(pagina: Any) -> None:
+    pagina.draw_line(pymupdf.Point(97.0, 93.0), pymupdf.Point(110.0, 103.0), color=_AZUL)
+
+
+def _marca_preta_ao_lado(pagina: Any) -> None:
+    pagina.draw_rect(pymupdf.Rect(105.5, 94.0, 109.5, 102.0), fill=(0.0, 0.0, 0.0), color=None)
+
+
+@pytest.mark.parametrize("base", [pdf_texto_contorno, pdf_texto_nativo], ids=["contorno", "nativo"])
+@pytest.mark.parametrize(
+    "desenhar",
+    [_marca_ao_lado, _marca_preta_ao_lado, _linha_longa_na_moldura],
+    ids=["azul", "preta", "linha-longa"],
+)
+def test_marca_real_nao_e_pulada_pela_guarda(
+    tmp_path: Path,
+    tabela: TabelaGlifos,
+    variante_ct: Variante,
+    base: Callable[..., Path],
+    desenhar: Callable[[Any], None],
+) -> None:
+    """A guarda só pula o que foi lido como glifo: marca real, de qualquer cor, ainda recusa."""
+    pagina = _pagina_ct_emoldurado(tmp_path, tabela, base=base, desenhar=desenhar)
+
+    assert [t.texto for t in pagina.modelo.textos] == ["CT"]
+    assert not _casa(pagina, variante_ct)
+    assert _casa(pagina, _sem_guarda(variante_ct))
+
+
+def test_glifos_lidos_so_apontam_caminhos_existentes(tmp_path: Path, tabela: TabelaGlifos) -> None:
+    pagina = _pagina_ct_emoldurado(tmp_path, tabela, desenhar=_marca_ao_lado)
+
+    assert pagina.glifos_lidos
+    assert all(0 <= i < len(pagina.modelo.caminhos) for i in pagina.glifos_lidos)
+    marca = pagina.modelo.caminhos[-1]
+    assert marca.estilo.preenchimento is not None
+    assert len(pagina.modelo.caminhos) - 1 not in pagina.glifos_lidos
