@@ -269,7 +269,7 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E06.2.1 | Núcleo de gramáticas sobre o modelo | #concluida | E06.1 | núcleo puro com índice espacial e teto, 6 gramáticas portadas, paridade no corpus sintético |
 | E06.2.2.1 | Método versionado no runner | #concluida | E06.2.1 | método de pacotes sobre o modelo no runner opt-in, resíduo raster marcado, agrupamento sem laço quadrático fora de teto |
 | E06.2.2.2 | Medição do método nas 16 folhas | #concluida | E06.2.2.1 | benchmark ao lado do atual e diff por variante, com cada "só no núcleo" classificado |
-| E06.3.1 | Pacotes das classes da ficha | #em-andamento | E06.2.2.2 | 58 variantes do inventário de ESTAI, TRANSFORMADOR, ATERRAMENTO e PARA_RAIOS_MT/BT nos pacotes, como `pending`; auditor e matriz aceitam outro `owner_stage` |
+| E06.3.1 | Pacotes das classes da ficha | #concluida | E06.2.2.2 | 58 variantes do inventário de ESTAI, TRANSFORMADOR, ATERRAMENTO e PARA_RAIOS_MT/BT nos pacotes, como `pending`; auditor e matriz aceitam outro `owner_stage` |
 | E06.3.2 | Aterramento, para-raios MT e H2 | #pendente | E06.3.1 | gramática de haste com barras, com laboratório, acima do atual nas duas classes; confirmação da H2 (raster como resíduo) |
 | E06.3.3 | Para-raios BT e transformador | #pendente | E06.3.2 | gramáticas de moldura das duas classes, com laboratório, acima do atual |
 | E06.3.4 | Estai | #pendente | E06.3.3 | gramática de estai, com laboratório, acima do atual |
@@ -1549,7 +1549,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
-## E06.3.1 — Pacotes das classes da ficha — #em-andamento
+## E06.3.1 — Pacotes das classes da ficha — #concluida
 
 **Objetivo:** pôr nos pacotes, como `pending`, as variantes do inventário das classes da ficha que ainda estão fora deles, com fonte rastreável, para as subetapas de gramática só precisarem habilitar.
 
@@ -1564,9 +1564,9 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Critérios de aceite:**
 
-- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros, com as 58 variantes novas como `pending` e o relato por estágio.
-- [ ] A tabela de suporte da revisão conta as novas `pending`, e os testes fixos foram atualizados com o número novo.
-- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+- [x] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros, com as 58 variantes novas como `pending` e o relato por estágio.
+- [x] A tabela de suporte da revisão conta as novas `pending`, e os testes fixos foram atualizados com o número novo.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
 **Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
 
@@ -1578,7 +1578,32 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Riscos e mitigação:** a matriz da E16 e o fechamento da curadoria contam variantes → relatar por estágio, sem mudar o que já é exigido das E07.
 
-**Evidências e handoff:** —
+**Evidências e handoff:**
+
+- Plano: `docs/superpowers/plans/2026-11-07-leitura-vetorial-por-poste-e06-3-1.md`. Revisão de arquitetura (opus): bloqueou nas rodadas 0 (C1: as 12 E05 exatas quebrariam o fechamento da curadoria) e 1, e aprovou na rodada 2.
+- Relógio: de 107d89e (19:22 de 2026-11-07, `#em-andamento` da E06.3) até o commit `#concluida` (20:40), 1h18. A divisão da E06.3 entra nesse tempo.
+- Revisão final (`revisor-seguranca`, opus, 107d89e..8b721b6): pronta com correções de registro, sem Crítico nem código. Onda única: docstring do auditor e mensagem de teste (08b5c3d) e as notas da E06.3.2.
+- Critérios verificados:
+  1. Auditor em 77f401d: `errors []`, 423 variantes em 31 famílias, 22 `enabled` e 401 `pending`. `by_owner_stage`: E04 12/12, E05 29/29 e E06 17/17, todas `pending`; E07 365, com 22 `enabled`.
+  2. Tabela de suporte: 401 `pending` e 22 `enabled` (`tests/server/test_e14_symbol_review.py:287` e `tests/unit/test_pacotes_classes_da_ficha.py`). As 58 foram conferidas uma a uma contra o inventário, as variantes antigas ficaram intactas (golden por id) e as observações não mudam com as `pending`.
+  3. `.bat` em 77f401d: `RESULTADO FINAL: APROVADO`, com 9273 passed, 2 xfailed, cobertura de 89,29% e mypy limpo em 561 arquivos.
+  - `osv-scanner` nos 7 locks: `No issues found`; nenhum lock mudou. `check_test_integrity --base 107d89e`: exit 1, com 9 apontamentos justificados. São contagens que o plano manda mudar: 343→401, 365→423, 27→31 e 17→21.
+- Ciclo:
+  - Onda 1: Tasks 1 (auditor) e 2 (matriz e comparador). Onda 2: Task 3 (pacotes), precedida de um Step 0 em que o testador inverteu os próprios testes de "só E07 exigida".
+  - Testador nas três tarefas, todas de risco alto. Nenhuma rodada de correção.
+- Entregas:
+  - 4 famílias novas (f02-14, -15, -24 e -25) e 35 variantes novas em f02-18, -19 e -21, todas `pending`, com `negative_examples` de `confusable_negatives`;
+  - o auditor exige todas as variantes não E10 e relata por estágio;
+  - a matriz e o comparador aceitam pacote `pending` de outro estágio.
+- Decisões para o usuário (tomadas pela opção recomendada):
+  - **Contrato da curadoria (R-E06.3.1-2):** a recusa de "`pending` contado como exato" vale só para a variante E07: `status == reconhecido_exato`, `package_status == pending` e `owner_stage == E07`. A frase de `docs/fluxo-curadoria-incremental-simbologia.md:44-45` mudou. Prós: as 12 E05 exatas pela evidência do detector de transformadores continuam exatas. As alternativas eram não empacotá-las (fere o escopo) ou rebaixá-las (perda falsa). Custo se errada: o fechamento aceita uma E05 exata com pacote `pending`, o que é verdade pela evidência E05.
+  - **Mudança visível:** a tabela de suporte da revisão e a planilha de capacidade mostram 4 famílias novas, todas pendentes, e 401 `pending`. ESTAI e TRANSFORMADOR aparecem como pendentes no pacote, embora os detectores dedicados do runner opt-in os reconheçam.
+  - **`complete_recognition` do auditor** passa a exigir também as variantes E04 a E06 habilitadas. Continua `false`, e nada no fluxo o consome.
+  - **`missing family`** aparece só para a família de uma variante que falta. Uma variante empacotada em outra família já gera `family mismatch`, sem erro redundante.
+  - **Pacote `enabled` de outro estágio** ganha `id_exato_sintetico` na coluna de pacotes da matriz, com o status vindo do próprio estágio, como na E07. A E06.3.2 decide (nas notas dela).
+  - **`read_matrix` mais permissivo:** aceita combinações que o `build` nunca gera (E10 com pacote, E04 ou E10 exata e `pending`). Endurecer o leitor vai além de R-2. Custo se errada: uma matriz montada à mão passa no gate.
+- **Não verificado:** a rodada real de curadoria de ponta a ponta (`.claude/skills/curadoria-simbologia/SKILL.md:456-458`, com a matriz histórica como "antes"). A prova é sintética, com as 12 E05 nos dois sentidos. O esperado é `transitions: []` e `net_exact_change: 0`.
+- **Para a E06.3.2 a E06.3.5:** as notas da E06.3.2 trazem os handoffs a ler e as decisões pendentes. Cada subetapa habilita só as variantes da sua classe, já empacotadas, e troca o `reason` e as contagens `enabled`. O golden das variantes antigas em `tests/unit/test_pacotes_classes_da_ficha.py` muda de propósito ao habilitar. O `compare` não confere se `owner_stage`, `family_id` ou `class_code` de um ID mudou entre as matrizes: uma linha de `raise` resolve, se pesar.
 
 ---
 
