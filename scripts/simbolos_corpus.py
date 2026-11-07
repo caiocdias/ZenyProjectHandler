@@ -79,14 +79,17 @@ def _componentes(*caminhos: str) -> set[str]:
     return partes
 
 
-def _caminho_cego(*caminhos: str) -> bool:
+def caminho_cego(*caminhos: str) -> bool:
     return COMPONENTE_CEGO in _componentes(*caminhos)
+
+
+_caminho_cego = caminho_cego
 
 
 def recusar_rodada_cega(rodada: Path) -> None:
     """Antes de ler o rodada.json ou qualquer referência: rodada na pasta cega não se abre."""
     absoluta = str(Path(rodada).absolute())
-    if _caminho_cego(absoluta, os.path.normpath(absoluta)):
+    if caminho_cego(absoluta, os.path.normpath(absoluta)):
         raise RodadaError(f"rodada recusada: o diretório tem o componente {COMPONENTE_CEGO}")
 
 
@@ -99,7 +102,7 @@ def localizar_pdf(rodada: Path, raiz_corpus: str, caminho_relativo: str) -> Path
     """
     normalizado = os.path.normpath(os.path.join(raiz_corpus, caminho_relativo))
     completo = os.path.normpath(os.path.join(str(rodada), raiz_corpus, caminho_relativo))
-    if _caminho_cego(str(rodada), raiz_corpus, caminho_relativo, normalizado, completo):
+    if caminho_cego(str(rodada), raiz_corpus, caminho_relativo, normalizado, completo):
         raise FolhaError(f"caminho recusado: componente {COMPONENTE_CEGO}")
     return rodada / raiz_corpus / caminho_relativo
 
