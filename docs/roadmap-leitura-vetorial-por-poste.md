@@ -1581,7 +1581,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 **Evidências e handoff:**
 
 - Plano: `docs/superpowers/plans/2026-11-07-leitura-vetorial-por-poste-e06-3-1.md`. Revisão de arquitetura (opus): bloqueou nas rodadas 0 (C1: as 12 E05 exatas quebrariam o fechamento da curadoria) e 1, e aprovou na rodada 2.
-- Relógio: de 107d89e (19:22 de 2026-11-07, `#em-andamento` da E06.3) até o commit `#concluida` (20:40), 1h18. A divisão da E06.3 entra nesse tempo.
+- Relógio: de 107d89e (19:22 de 2026-11-07, `#em-andamento` da E06.3) até o commit `#concluida` (20:37), 1h15. A divisão da E06.3 entra nesse tempo.
 - Revisão final (`revisor-seguranca`, opus, 107d89e..8b721b6): pronta com correções de registro, sem Crítico nem código. Onda única: docstring do auditor e mensagem de teste (08b5c3d) e as notas da E06.3.2.
 - Critérios verificados:
   1. Auditor em 77f401d: `errors []`, 423 variantes em 31 famílias, 22 `enabled` e 401 `pending`. `by_owner_stage`: E04 12/12, E05 29/29 e E06 17/17, todas `pending`; E07 365, com 22 `enabled`.
