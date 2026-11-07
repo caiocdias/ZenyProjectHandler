@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import pymupdf
@@ -40,12 +40,13 @@ def _settings(data: Path, **opcoes: Any) -> ServerSettings:
         market_sqlserver_connection_string="fixture-market-connection",
         data_directory=data,
         symbol_composition=True,
-        symbol_profile="vector-only",
-        **opcoes,
+        **{"symbol_profile": "vector-only", **opcoes},
     )
 
 
-def _pdf(caminho: Path, *, paginas: int = 2, ocg: bool = False, imagem: bool = False) -> Path:
+def _pdf(
+    caminho: Path, *, paginas: int = 2, ocg: bool = False, imagem: bool = False, ct: bool = True
+) -> Path:
     with pymupdf.open() as documento:
         oc = documento.add_ocg("REDE") if ocg else 0
         for _ in range(paginas):
@@ -54,7 +55,7 @@ def _pdf(caminho: Path, *, paginas: int = 2, ocg: bool = False, imagem: bool = F
                 pixmap = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 4, 4), False)
                 pixmap.clear_with(128)
                 pagina.insert_image(pymupdf.Rect(10, 10, 30, 30), pixmap=pixmap)
-            else:
+            if ct:
                 pagina.draw_rect(pymupdf.Rect(_MOLDURA_CT), color=_PRETO, width=1, oc=oc)
                 pagina.insert_text((_MOLDURA_CT[0] + 6, _MOLDURA_CT[1] + 25), "CT", fontsize=11)
         documento.save(caminho)
@@ -74,8 +75,15 @@ def _fonte(pdf: Path) -> tuple[DocumentoProjeto, ReferenciaFontePdf]:
 
 
 def _journals(runner: SymbolCompositionRunner) -> list[dict[str, Any]]:
-    arquivos = sorted(runner.partial_directory.glob("*.json"), key=lambda a: a.stat().st_mtime_ns)
+    """Todos os journals, sem ordem: o mtime não distingue duas gravações no mesmo tique."""
+    arquivos = runner.partial_directory.glob("*.json")
     return [json.loads(arquivo.read_text(encoding="utf-8")) for arquivo in arquivos]
+
+
+def _journal(runner: SymbolCompositionRunner, status: str) -> dict[str, Any]:
+    """O único journal com esse `status`."""
+    (achado,) = [j for j in _journals(runner) if j["status"] == status]
+    return achado
 
 
 def _cobertura_do_novo(journal: dict[str, Any]) -> list[dict[str, Any]]:
@@ -153,9 +161,8 @@ def test_teto_no_metodo_novo_e_cacheado_e_nao_derruba_os_outros(
     runner.run(documento, fonte)
     runner.run(documento, fonte)
 
-    primeiro, segundo = _journals(runner)
-    assert primeiro["status"] == "completed"
-    assert segundo["status"] == "cache_hit"
+    primeiro = _journal(runner, "completed")
+    assert _journal(runner, "cache_hit")["cache_status"] == "hit"
     (cobertura,) = _cobertura_do_novo(primeiro)
     assert (cobertura["status"], cobertura["reason"]) == ("FORA_DOMINIO", "teto_consultas")
     outros = [r for r in primeiro["results"] if r["method_id"] != _METODO_NOVO]
@@ -178,19 +185,7 @@ def test_falha_de_fonte_aborta_e_nao_entra_no_cache(
         runner.run(documento, fonte)
 
     assert not list(runner.cache_directory.glob("*.json"))
-    assert _journals(runner)[-1]["status"] == "failed"
-
-
-def test_residuo_raster_nao_gera_proposta(tmp_path: Path) -> None:
-    com_imagem, fonte_com = _fonte(_pdf(tmp_path / "com.pdf", paginas=1, imagem=True))
-    runner = SymbolCompositionRunner(_settings(tmp_path / "dados"))
-
-    composto = runner.run(com_imagem, fonte_com)
-
-    assert composto.occurrences == ()
-    (cobertura,) = _cobertura_do_novo(_journals(runner)[-1])
-    assert cobertura["status"] == "NAO_DETECCAO"
-    assert cobertura["reason"] == "residuo_raster:1"
+    assert _journal(runner, "failed")["error"]
 
 
 _MODULOS_DO_DIGEST = [
@@ -258,32 +253,36 @@ def test_cancelamento_antes_do_metodo_novo_nao_deixa_resultado_nem_cache(
     with pytest.raises(FluxoMvpCanceladoError):
         runner.run(documento, fonte, cancelado=lambda: cancelar[0])
 
-    (journal,) = _journals(runner)
-    assert journal["status"] == "cancelled"
+    journal = _journal(runner, "cancelled")
     assert _cobertura_do_novo(journal) == []
     assert not list(runner.cache_directory.glob("*.json"))
     # nova execução sem cancelamento reprocessa tudo e conclui
     runner.run(documento, fonte)
-    assert _journals(runner)[-1]["status"] == "completed"
+    assert _journal(runner, "completed")["cache_status"] == "stored"
     assert len(list(runner.cache_directory.glob("*.json"))) == 1
 
 
-def test_cancelamento_apos_a_primeira_pagina_nao_grava_cache_parcial(tmp_path: Path) -> None:
+def test_cancelamento_a_partir_do_metodo_novo_na_pagina_1_nao_grava_cache_parcial(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from zeny_project_handler.adapters.analysis import model_symbols
     from zeny_project_handler.application.errors import FluxoMvpCanceladoError
 
     documento, fonte = _fonte(_pdf(tmp_path / "a.pdf", paginas=2))
     runner = SymbolCompositionRunner(_settings(tmp_path / "dados"))
-    chamadas = [0]
+    cancelar = [False]
+    original = model_symbols.observar_pacotes_modelo
 
-    def cancelado() -> bool:
-        chamadas[0] += 1
-        return chamadas[0] > 9  # passa da página 1 (checagens por método) e cai na 2
+    def cancelando(*args: Any, **kwargs: Any) -> Any:
+        cancelar[0] = True  # o pedido chega durante o método novo, na página 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(model_symbols, "observar_pacotes_modelo", cancelando)
 
     with pytest.raises(FluxoMvpCanceladoError):
-        runner.run(documento, fonte, cancelado=cancelado)
+        runner.run(documento, fonte, cancelado=lambda: cancelar[0])
 
-    (journal,) = _journals(runner)
-    assert journal["status"] == "cancelled"
+    journal = _journal(runner, "cancelled")
     assert [c["page"] for c in _cobertura_do_novo(journal)] == [1]
     assert not list(runner.cache_directory.glob("*.json"))
 
@@ -333,16 +332,262 @@ def test_falha_de_fonte_numa_pagina_tardia_aborta_sem_cache(
         runner.run(documento, fonte)
 
     assert not list(runner.cache_directory.glob("*.json"))
-    assert _journals(runner)[-1]["status"] == "failed"
+    assert _journal(runner, "failed")["error"]
 
 
-def test_residuo_raster_so_aparece_como_contagem_no_motivo(tmp_path: Path) -> None:
-    documento, fonte = _fonte(_pdf(tmp_path / "a.pdf", paginas=1, imagem=True))
+def test_residuo_raster_sozinho_nao_gera_ocorrencia_nem_observacao(tmp_path: Path) -> None:
+    documento, fonte = _fonte(_pdf(tmp_path / "com.pdf", paginas=1, imagem=True, ct=False))
     runner = SymbolCompositionRunner(_settings(tmp_path / "dados"))
 
     composto = runner.run(documento, fonte)
 
-    journal = _journals(runner)[-1]
-    novos = [r for r in journal["results"] if r["method_id"] == _METODO_NOVO]
-    assert all(r["observations"] == [] for r in novos)
     assert composto.occurrences == ()
+    journal = _journal(runner, "completed")
+    (cobertura,) = _cobertura_do_novo(journal)
+    assert cobertura["status"] == "NAO_DETECCAO"
+    assert cobertura["reason"] == "residuo_raster:1"
+    (novo,) = [r for r in journal["results"] if r["method_id"] == _METODO_NOVO]
+    assert novo["observations"] == []
+
+
+def test_ct_com_imagem_compacta_ao_lado_mantem_as_ocorrencias_e_conta_o_residuo(
+    tmp_path: Path,
+) -> None:
+    sem, fonte_sem = _fonte(_pdf(tmp_path / "sem.pdf", paginas=1))
+    com, fonte_com = _fonte(_pdf(tmp_path / "com.pdf", paginas=1, imagem=True))
+    runner_sem = SymbolCompositionRunner(_settings(tmp_path / "dados-sem"))
+    runner_com = SymbolCompositionRunner(_settings(tmp_path / "dados-com"))
+
+    composto_sem = runner_sem.run(sem, fonte_sem)
+    composto_com = runner_com.run(com, fonte_com)
+
+    assert len(composto_com.occurrences) == len(composto_sem.occurrences) == 1
+    (cobertura,) = _cobertura_do_novo(_journal(runner_com, "completed"))
+    assert cobertura["status"] == "CONCLUIDO"
+    assert "residuo_raster:1" in cobertura["reason"]
+    (cobertura_sem,) = _cobertura_do_novo(_journal(runner_sem, "completed"))
+    assert "residuo_raster:1" not in cobertura_sem["reason"]
+
+
+def test_falha_de_fonte_que_nao_e_caminhos_conclui_e_entra_no_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    documento, fonte = _fonte(_pdf(tmp_path / "a.pdf", paginas=1))
+    runner = SymbolCompositionRunner(_settings(tmp_path / "dados"))
+
+    def falhar(*_args: Any, **_kwargs: Any) -> Any:
+        raise RuntimeError("falha de primitivas")
+
+    monkeypatch.setattr(pymupdf_drawing_model, "reconstruir_polilinhas", falhar)
+
+    runner.run(documento, fonte)
+    runner.run(documento, fonte)
+
+    primeiro = _journal(runner, "completed")
+    assert _journal(runner, "cache_hit")["cache_status"] == "hit"
+    (cobertura,) = _cobertura_do_novo(primeiro)
+    assert cobertura["status"] == "FORA_DOMINIO"
+    assert cobertura["reason"] == "fonte_falhou:modelo.primitivas_falhou"
+    (novo,) = [r for r in primeiro["results"] if r["method_id"] == _METODO_NOVO]
+    assert novo["observations"] == []
+    assert len(list(runner.cache_directory.glob("*.json"))) == 1
+
+
+def test_raster_de_pagina_girada_nao_muda_por_causa_do_metodo_novo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """O método novo roda antes do raster; a página que o raster recebe tem de ser a mesma."""
+    from hashlib import sha256
+
+    from zeny_project_handler.adapters.analysis import legacy_symbols, raster_symbols
+
+    pdf = _pdf(tmp_path / "a.pdf", paginas=1)
+    with pymupdf.open(pdf) as aberto:
+        aberto[0].set_rotation(90)
+        aberto.save(tmp_path / "girada.pdf")
+    documento, fonte = _fonte(tmp_path / "girada.pdf")
+    runner = SymbolCompositionRunner(_settings(tmp_path / "dados", symbol_profile="balanced"))
+    if not runner._templates:
+        pytest.skip("sem templates raster verificados nesta instalação")
+    vistas: dict[str, tuple[int, str, tuple[float, ...]]] = {}
+
+    def instantaneo(page: Any) -> tuple[int, str, tuple[float, ...]]:
+        pixmap = page.get_pixmap(dpi=36)
+        return page.rotation, sha256(pixmap.samples).hexdigest(), tuple(page.rect)
+
+    original_legado = legacy_symbols.observar_simbolos_legados
+    original_raster = raster_symbols.observar_simbolos_raster
+
+    def legado(page: Any, **kwargs: Any) -> Any:
+        vistas["antes"] = instantaneo(page)  # nenhum método rodou ainda
+        return original_legado(page, **kwargs)
+
+    def raster(page: Any, *args: Any, **kwargs: Any) -> Any:
+        vistas["no_raster"] = instantaneo(page)  # o método novo já rodou
+        return original_raster(page, *args, **kwargs)
+
+    monkeypatch.setattr(legacy_symbols, "observar_simbolos_legados", legado)
+    monkeypatch.setattr(raster_symbols, "observar_simbolos_raster", raster)
+
+    runner.run(documento, fonte)
+
+    assert vistas["antes"][0] == 90
+    assert vistas["no_raster"] == vistas["antes"]
+
+
+@pytest.fixture
+def contexto_pipeline(tmp_path: Path, catalogo_inicial: Any) -> Any:
+    from datetime import UTC, datetime
+
+    from tests.factories import complete_project
+
+    from zeny_project_handler.adapters.persistence import (
+        SqlAlchemyUnitOfWork,
+        create_sqlite_engine,
+        upgrade_database,
+    )
+    from zeny_project_handler.domain.analysis import ExecucaoAnalise
+    from zeny_project_handler.domain.enums import EstadoExecucaoAnalise
+
+    projeto = complete_project(catalogo_inicial)
+    engine = create_sqlite_engine(tmp_path / "pipeline.sqlite3")
+    upgrade_database(engine)
+    origem = ExecucaoAnalise(
+        id=uuid4(),
+        projeto_id=projeto.id,
+        metodo="fixture-e06",
+        versao_metodo="1",
+        parametros=(),
+        estado=EstadoExecucaoAnalise.CONCLUIDA,
+        iniciada_em=datetime(2026, 9, 24, 9, tzinfo=UTC),
+        finalizada_em=datetime(2026, 9, 24, 9, 1, tzinfo=UTC),
+    )
+    with SqlAlchemyUnitOfWork(engine) as work:
+        work.catalogos.salvar(catalogo_inicial)
+        work.projetos.salvar(projeto)
+        work.execucoes_analise.salvar(origem)
+        work.commit()
+    try:
+        yield engine, projeto, origem
+    finally:
+        engine.dispose()
+
+
+def _projetar(contexto: Any, composicao: Any) -> Any:
+    """Composição -> pipeline de interpretação -> `project_symbol` da única ocorrência."""
+    from zeny_project_handler.adapters.interpretation import (
+        InterpretadorRegrasExplicitas,
+        carregar_registro_regras_inicial,
+    )
+    from zeny_project_handler.adapters.persistence import SqlAlchemyUnitOfWork
+    from zeny_project_handler.application.interpretation_pipeline import (
+        ExecutarPipelineInterpretacao,
+    )
+    from zeny_project_handler_contracts.base import EvidenceId
+    from zeny_project_handler_contracts.common import EvidenceNavigationDto
+    from zeny_project_handler_server.symbol_review import project_symbol
+
+    engine, projeto, origem = contexto
+    composto, documento = composicao
+    projeto = replace(projeto, documentos=(documento,))
+    with SqlAlchemyUnitOfWork(engine) as work:
+        work.projetos.salvar(projeto)
+        work.commit()
+    registro = carregar_registro_regras_inicial()
+    resultado = ExecutarPipelineInterpretacao(
+        InterpretadorRegrasExplicitas(registro),
+        registro,
+        lambda: SqlAlchemyUnitOfWork(engine),
+    ).executar(projeto.id, origem.id, simbolos=composto)
+    (proposta,) = [
+        p
+        for p in resultado.elementos
+        if dict(p.atributos_sugeridos).get("origem_simbolo_ocorrencia_id")
+    ]
+    with SqlAlchemyUnitOfWork(engine) as work:
+        achadas = (work.evidencias.obter(i) for i in proposta.evidencia_ids)
+        evidencias = {e.id: e for e in achadas if e is not None}
+    navegacao = tuple(
+        EvidenceNavigationDto(
+            evidence_id=EvidenceId(e.id), document_id=documento.id, page_id=documento.paginas[0].id
+        )
+        for e in evidencias.values()
+        if e.id in proposta.evidencia_ids
+    )
+    simbolo = project_symbol(
+        proposta, evidencias, navegacao, cast(Any, proposta.situacao_projeto), confirmed=False
+    )
+    assert simbolo is not None
+    return proposta, simbolo
+
+
+def _compor(tmp_path: Path, projeto: Any, nome: str, *, sem_novo: bool) -> Any:
+    """Roda o runner sobre o PDF do projeto; `sem_novo` reconcilia sem o método novo."""
+    from zeny_project_handler.application.symbol_reconciliation import reconcile_symbols
+
+    pdf = _pdf(tmp_path / f"{nome}.pdf", paginas=1)
+    documento = replace(
+        projeto.documentos[0],
+        sha256=PyMuPdfReader().inspecionar(pdf).documento.sha256,
+        tamanho_bytes=pdf.stat().st_size,
+    )
+    fonte = ReferenciaFontePdf(
+        documento_id=documento.id,
+        projeto_id=projeto.id,
+        caminho_canonico=pdf.resolve(),
+        sha256=documento.sha256,
+        tamanho_bytes=pdf.stat().st_size,
+        modificado_em_ns=pdf.stat().st_mtime_ns,
+    )
+    runner = SymbolCompositionRunner(_settings(tmp_path / f"dados-{nome}"))
+    composto = runner.run(documento, fonte)
+    if not sem_novo:
+        return composto, documento
+    agregados = runner._read_cache(documento)
+    assert agregados is not None
+    filtrados = tuple(r for r in agregados if r.perfil.metodo_id != _METODO_NOVO)
+    return reconcile_symbols(filtrados, runner._calibration), documento
+
+
+def test_caracterizacao_ct_com_o_quinto_metodo_deixa_de_ser_exclusivo(
+    tmp_path: Path, contexto_pipeline: Any
+) -> None:
+    """Comportamento aceito até a E09: um segundo método concordando tira a ocorrência de
+    `exclusive`; decisão e probabilidade calibrada não mudam, pois a calibração ainda não usa
+    o método novo. Quando a E09 mexer nisso, este teste deve ser revisto, não apagado.
+
+    O CT sintético é a família CAMARA, sem modelo de ativo (papel `desconhecido`): o `status`
+    fica `unknown` nos dois casos e só o indicador `exclusive` muda. A troca de status
+    `exclusive` para `supported` exige uma família com papel de ativo e não está coberta aqui.
+    """
+    _, projeto, _ = contexto_pipeline
+    sem = _compor(tmp_path, projeto, "sem", sem_novo=True)
+    com = _compor(tmp_path, projeto, "com", sem_novo=False)
+
+    proposta_sem, simbolo_sem = _projetar(contexto_pipeline, sem)
+    proposta_com, simbolo_com = _projetar(contexto_pipeline, com)
+
+    assert simbolo_sem.exclusive
+    assert not simbolo_com.exclusive
+    assert simbolo_sem.status == simbolo_com.status == "unknown"
+    assert simbolo_com.symbol_class == simbolo_sem.symbol_class
+    attrs_sem = dict(proposta_sem.atributos_sugeridos)
+    attrs_com = dict(proposta_com.atributos_sugeridos)
+    assert attrs_com["simbolo_decisao_e12"] == attrs_sem["simbolo_decisao_e12"]
+    assert attrs_com.get("simbolo_probabilidade_calibrada") == attrs_sem.get(
+        "simbolo_probabilidade_calibrada"
+    )
+
+
+def test_caracterizacao_pagina_que_bate_no_teto_volta_a_exclusivo(
+    tmp_path: Path, contexto_pipeline: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sem observação do método novo (teto), a ocorrência volta a ter um único método."""
+    _, projeto, _ = contexto_pipeline
+    monkeypatch.setattr(symbol_execution, "LIMITE_CONSULTAS_PAGINA", 1)
+    composto = _compor(tmp_path, projeto, "teto", sem_novo=False)
+
+    _, simbolo = _projetar(contexto_pipeline, composto)
+
+    assert simbolo.exclusive
+    assert len(simbolo.methods) == 1
