@@ -865,7 +865,7 @@ def test_palavra_inteira_achatada_que_cruza_a_moldura_recusa_a_guarda(
 
 
 # --- lacuna da junção contra `words` da PyMuPDF --------------------------------------------
-# Medido (fontsize 11, altura do span ~15, tolerância do núcleo max(0,5; 0,1 x altura) ~ 1,5):
+# Medido (fontsize 11, altura do span ~15, tolerância do núcleo max(0,5; 0,2 x altura) ~ 3):
 #   lacuna <= -0,005   words junta; núcleo não cola (exige >= 0)   -> núcleo casa, motor não
 #   lacuna 0 a 1,0     words junta; núcleo cola                              -> os dois recusam
 #   lacuna 1,4..1,6    words junta; o núcleo cola só se a tolerância cobre   -> varia com a fonte
@@ -937,15 +937,65 @@ def test_residuo_aceito_sobreimpressao_alem_da_folga_ainda_casa_onde_o_motor_rec
     assert nucleo != set()
 
 
-def test_guarda_com_sobreimpressao_alem_da_folga_recusa_como_o_motor() -> None:
-    """Par do resíduo anterior na guarda de texto (R-E06.2.1-4). Medido: com "CT" e "12"
-    sobrepostos em 4 pt (acima de `t`) o `words` junta "CT12" e o motor recusa; o núcleo também
-    recusa, pelos spans separados que cruzam a moldura. Não há resíduo na guarda a 0 grau."""
+def test_guarda_sobreimpressao_de_4_pt_em_helv_11_recusa_como_o_motor_neste_ponto() -> None:
+    """Um ponto só da medida, e não a prova de que a guarda não tem resíduo (R-E06.2.1-4). Com
+    "CT" e "12" sobrepostos em 4 pt, em helv 11, o `words` junta "CT12" e o motor recusa; o núcleo
+    também recusa. Em outras fontes e tamanhos a guarda abre: ver
+    `test_residuo_aceito_guarda_sobreimpressao_alem_da_folga`."""
     desenhar = _spans_colados("CT", "12", 100.0, "helv", _moldura_pequena_com_x, -4.0)
     with _pdf(desenhar) as pagina:
         assert [w[4] for w in pagina.get_text("words")] == ["CT12"]
 
     motor, nucleo = _comparar(desenhar, DIAGONAIS)
+
+    assert motor == set()
+    assert nucleo == set()
+
+
+@pytest.mark.parametrize(
+    ("tamanho", "fonte2", "lacuna"),
+    [
+        pytest.param(14, "helv", -4.0, id="14-helv-4"),
+        pytest.param(11, "cour", -3.0, id="11-cour-3"),
+    ],
+)
+def test_residuo_aceito_guarda_sobreimpressao_alem_da_folga(
+    tamanho: int, fonte2: str, lacuna: float
+) -> None:
+    """LIMITAÇÃO CONHECIDA (R-E06.2.1-4). Medido: com "CT" e "12" sobrepostos além da folga de
+    fusão, o `words` junta "CT12" e o motor recusa a guarda; o núcleo não funde e abre. Valor de
+    hoje: se a fusão passar a cobrir a sobreimpressão, inverter o teste, não removê-lo."""
+
+    desenhar = _spans_colados_em_fonte(
+        "CT", "12", 100.0, fonte2, tamanho, _moldura_pequena_com_x, lacuna
+    )
+    with _pdf(desenhar) as pagina:
+        assert [w[4] for w in pagina.get_text("words")] == ["CT12"]
+    assert -lacuna > _tolerancia_da_juncao(desenhar)
+
+    motor, nucleo = _comparar(desenhar, DIAGONAIS)
+
+    assert motor == set()
+    assert nucleo != set()
+
+
+@pytest.mark.parametrize("fonte2", ["helv", "cour", "tiro"])
+@pytest.mark.parametrize("lacuna", [1.8, 2.5, 2.7])
+def test_rotulo_concatenado_na_faixa_entre_words_e_a_folga_nao_diverge(
+    lacuna: float, fonte2: str
+) -> None:
+    """O resíduo previsto para `C`+`T` não se confirmou (R-E06.2.1-4): onde o `words` separa
+    (lacuna acima de ~1,6 pt a 11 pt), a PyMuPDF já põe um espaço na frente do segundo span, e a
+    fusão não cola span que começa em espaço. Motor e núcleo recusam juntos. Se a fusão passar a
+    colar acima da folga do `words`, este teste passa a divergir: tratar como resíduo e inverter."""
+    desenhar = _spans_colados_em_fonte(
+        "C", "T", 116.0, fonte2, 11, lambda p: p.draw_rect(QUADRADO, color=PRETO, width=1), lacuna
+    )
+    with _pdf(desenhar) as pagina:
+        assert [w[4] for w in pagina.get_text("words")] == ["C", "T"]
+        assert _tolerancia_da_juncao(desenhar) >= lacuna
+
+    motor, nucleo = _comparar(desenhar, CT_VAZIO)
 
     assert motor == set()
     assert nucleo == set()

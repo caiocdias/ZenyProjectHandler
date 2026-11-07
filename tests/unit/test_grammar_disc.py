@@ -496,7 +496,8 @@ def test_centro_da_palavra_fora_do_disco_nao_recusa() -> None:
 
 def test_span_inteiro_sobre_o_disco_recusa() -> None:
     caminhos = [_linha_terminal(), _disco()]
-    # O centro da caixa (164,5; 150) fica fora do disco, e só a interseção recusa.
+    # O centro da caixa (164,5; 150) fica fora do disco: recusa a caixa do span, que é `inteira`
+    # (palavras separadas por espaço), e não o centro.
     caixa: Caixa = (149.0, 149.0, 180.0, 151.0)
     assert not _casa(caminhos, [texto("A B C", caixa, origem="shx")])
     assert not _casa(caminhos, [texto("A B C", caixa, rotacao=45.0)])
