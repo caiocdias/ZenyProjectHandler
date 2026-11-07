@@ -1,8 +1,14 @@
 # mypy: disable-error-code="no-untyped-call"
-"""Audit E07 package coverage against the frozen E01 inventory.
+"""Audit package coverage against the frozen E01 inventory.
 
-This checks declaration integrity, not recognition accuracy. Pending variants are
-reported separately and cannot satisfy the E07 acceptance gate.
+This checks declaration integrity, not recognition accuracy. Every inventory variant
+whose ``owner_stage`` is not E10 is accepted in the packages and goes through the
+same family, profile, class, destination, source and role checks; an E10 variant is
+``unexpected``. For now only the E07 variants are required (``missing variant``);
+the others are optional. Coverage is also reported per ``owner_stage``. Pending
+variants are reported separately and cannot satisfy the acceptance gate.
+``complete_recognition`` additionally requires every non-E10 variant packaged and
+enabled (E04 to E06 included); nothing consumes it yet.
 """
 
 from __future__ import annotations
@@ -26,7 +32,10 @@ def audit(
     source_pdf: Path | None = None,
 ) -> dict[str, Any]:
     inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
-    expected = {item["id"]: item for item in inventory["variants"] if item["owner_stage"] == "E07"}
+    accepted = {item["id"]: item for item in inventory["variants"] if item["owner_stage"] != "E10"}
+    expected = {
+        identity: item for identity, item in accepted.items() if item["owner_stage"] == "E07"
+    }
     sources = {item["id"]: item for item in inventory["sources"]}
     profiles = {item["id"] for item in inventory["profiles"]}
     errors: list[str] = []
@@ -51,7 +60,7 @@ def audit(
             actual[identity] = item
             status = item.get("recognition", {}).get("status")
             statuses[status] += 1
-            reference = expected.get(identity)
+            reference = accepted.get(identity)
             if reference is None:
                 errors.append(f"unexpected variant: {identity}")
                 continue
@@ -116,6 +125,18 @@ def audit(
             page = reference.get("pdf_page")
             if type(page) is not int or not 1 <= page <= page_count:
                 errors.append(f"{identity}: page outside source PDF")
+    by_owner_stage: dict[str, dict[str, int]] = {}
+    for identity, reference in sorted(accepted.items()):
+        counts = by_owner_stage.setdefault(
+            reference["owner_stage"], {"expected": 0, "packaged": 0, "enabled": 0, "pending": 0}
+        )
+        counts["expected"] += 1
+        packaged = actual.get(identity)
+        if packaged is not None:
+            counts["packaged"] += 1
+            packaged_status = packaged.get("recognition", {}).get("status")
+            if packaged_status in {"enabled", "pending"}:
+                counts[packaged_status] += 1
     return {
         "inventory_version": inventory["inventory_version"],
         "inventory_sha256": sha256(inventory_path.read_bytes()).hexdigest(),
@@ -130,9 +151,10 @@ def audit(
         ),
         "verified_source": verified_source,
         "families": families,
+        "by_owner_stage": dict(sorted(by_owner_stage.items())),
         "errors": errors,
         "complete_recognition": not errors
-        and len(actual) == len(expected)
+        and len(actual) == len(accepted)
         and all(item["pending"] == 0 for item in families.values()),
     }
 
@@ -160,6 +182,7 @@ def main(argv: list[str] | None = None) -> int:
                     "enabled",
                     "pending",
                     "families_without_recognition",
+                    "by_owner_stage",
                     "verified_source",
                     "errors",
                     "complete_recognition",
