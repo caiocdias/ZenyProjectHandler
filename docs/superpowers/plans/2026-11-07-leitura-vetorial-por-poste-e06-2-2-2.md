@@ -57,7 +57,7 @@
 | `scripts/simbolos_ficha_relatorio.py` (novo) | markdown do relatório | 1 |
 | `scripts/simbolos_corpus.py` (novo) | saneamento, guarda cega, localização, referência, pool, cobertura para falha | 1 |
 | `scripts/benchmark_simbolos_ficha.py` | métodos, `medir_pdf`, `medir_simbolos`, CLI | 1, 2 |
-| `tests/unit/test_benchmark_simbolos_ficha.py`, `tests/unit/test_benchmark_simbolos_ficha_ataque.py` | só alvo de monkeypatch, se a separação pedir | 1 |
+| `tests/unit/test_benchmark_simbolos_ficha_ataque.py` | só a linha 205: o conjunto de `METODOS` (autorizado, com o apontamento de integridade esperado) | 2 |
 | `tests/unit/test_benchmark_simbolos_modelo.py` (novo) | métodos `pacotes` e `modelo` | 2 |
 | `src/zeny_project_handler/adapters/analysis/drawing_model/symbol_grammars.py` | `ContextoGramatica.gasto_colagem` | 3 |
 | `src/zeny_project_handler/adapters/analysis/drawing_model/symbol_matcher.py` | `GastoPagina`, `gasto_por_fase` | 3 |
@@ -84,7 +84,7 @@ Alto porque move a guarda do conjunto cego e o saneamento.
 **Files:**
 - Create: `scripts/simbolos_ficha_metricas.py`, `scripts/simbolos_ficha_relatorio.py`, `scripts/simbolos_corpus.py`
 - Create: `tests/unit/test_simbolos_corpus.py`
-- Modify: `scripts/benchmark_simbolos_ficha.py`; `tests/unit/test_benchmark_simbolos_ficha.py` e `tests/unit/test_benchmark_simbolos_ficha_ataque.py`, só no alvo de monkeypatch
+- Modify: `scripts/benchmark_simbolos_ficha.py`. `tests/unit/test_benchmark_simbolos_ficha.py` e `tests/unit/test_benchmark_simbolos_ficha_ataque.py` não mudam; se algum precisar mudar, devolva ao orquestrador
 
 **Interfaces:**
 - Produces, em `scripts/simbolos_corpus.py`:
@@ -101,7 +101,7 @@ Alto porque move a guarda do conjunto cego e o saneamento.
 
 - [ ] **Step 1: Rodar os testes atuais** `.venv/Scripts/python.exe -m pytest tests/unit/test_benchmark_simbolos_ficha.py tests/unit/test_benchmark_simbolos_ficha_ataque.py -q` e guardar a contagem.
 - [ ] **Step 2: Escrever** `test_falha_da_cobertura`, parametrizado no `EstadoMetodoSimbolos` inteiro, em `tests/unit/test_simbolos_corpus.py`, e vê-lo falhar.
-- [ ] **Step 3: Mover**, sem mudar comportamento: casamento, contadores, avaliação e agregação para `simbolos_ficha_metricas.py`; `_pct`, `_linhas_*` e `_markdown` para `simbolos_ficha_relatorio.py`; o resto da lista acima para `simbolos_corpus.py`. O benchmark reimporta o que os testes usam. Nenhum assert muda; se um monkeypatch precisar de outro alvo, troque só o alvo e diga no relatório.
+- [ ] **Step 3: Mover**, sem mudar comportamento: casamento, contadores, avaliação e agregação para `simbolos_ficha_metricas.py`; `_pct`, `_linhas_*` e `_markdown` para `simbolos_ficha_relatorio.py`; o resto da lista acima para `simbolos_corpus.py`. O benchmark reimporta o que os testes usam, inclusive `ProcessPoolExecutor` e os aliases (`_FolhaError`, `_componentes`, `sanear`, `localizar_pdf`, constantes).
 - [ ] **Step 4: Conferir** a contagem do Step 1 nos dois arquivos, `tests/unit/test_simbolos_corpus.py` verde, `.venv/Scripts/python.exe -m ruff check scripts tests/unit/test_simbolos_corpus.py` e `ruff format --check`. Nenhum arquivo novo passa de 400 linhas. `python -m scripts.benchmark_simbolos_ficha --help` funciona.
 - [ ] **Step 5: Commit** (`refactor: benchmark de simbolos em metricas, relatorio e corpus`).
 
@@ -110,7 +110,7 @@ Alto porque move a guarda do conjunto cego e o saneamento.
 **Estimativa:** 30 min · **Depende de:** Task 1 · **Risco:** alto · **Laboratório:** não
 
 **Files:**
-- Modify: `scripts/benchmark_simbolos_ficha.py`
+- Modify: `scripts/benchmark_simbolos_ficha.py`; `tests/unit/test_benchmark_simbolos_ficha_ataque.py:205`, uma única mudança: `{"atual"}` vira `{"atual", "pacotes", "modelo"}`, porque a etapa amplia o contrato de propósito. É arquivo do testador, autorizado aqui; a verificação mecânica aponta, e a revisora confere que só isso mudou
 - Create: `tests/unit/test_benchmark_simbolos_modelo.py`
 
 **Interfaces:**
@@ -216,16 +216,17 @@ Sem código e sem commit. Não entra no ciclo testador/revisora; a conferência 
 - [ ] **Step 1: Medir.** O orquestrador roda, com o `--processos` do orçamento:
   - `.venv/Scripts/python.exe -m scripts.benchmark_simbolos_ficha --rodada <checkout principal>/tmp/curadoria-simbologia/20261103-2300-fichas --saida <checkout principal>/tmp/e06-2-2-2/simbolos --metodo atual --metodo pacotes --metodo modelo --processos 10`
   - `.venv/Scripts/python.exe -m scripts.diff_simbolos_nucleo_motor --rodada <checkout principal>/tmp/curadoria-simbologia/20261103-2300-fichas --saida <checkout principal>/tmp/e06-2-2-2/diff --processos 10 --recortes`
+- [ ] **Antes do Step 2:** o orquestrador grava no ledger o hash dos `referencia.json` da rodada, a linha de base da conferência de R-E06.2.2.2-7.
 - [ ] **Step 2: Rotular** (R-E06.2.2.2-5 e -7). Uma instância lê `recortes/fila.json` e, para cada id, abre a miniatura, o limpo e o marcado, com a `descricao` da fila. Grava em `<checkout principal>/tmp/e06-2-2-2/classificacao.md`: id; forma; papel; o que os pixels mostram; `exposicao: sim`; o id do modelo. Não vê a ficha, o JSON nem o `.md` do diff, nem as predições do motor.
-- [ ] **Step 3: Causa e segunda leitura.** Para cada `nao_confere`, uma segunda instância nova lê os mesmos recortes sem ver o primeiro rótulo; divergência entre as duas vira `ilegivel`. Para cada `falso_positivo` que sobrar, uma instância com acesso ao item do JSON (`textos`, `glifos_lidos`, `diagnosticos`) e ao código dá `causa_confirmada`, `causa_refutada` ou `indeterminada`, pela lista de divergências do handoff da E06.2.1 (`Q`+`DP`, sobreimpressão, spans a 90/180/270°, `qu` inclinado, borda, contorno de letra na moldura, orientação R-7) ou `nova`. Cada `ilegivel` relê em `--dpi 600`, com `--saida` própria (`tmp/e06-2-2-2/diff-600`), localizando o item pela chave natural.
-- [ ] **Step 4: Conferir.** O orquestrador lê os recortes de todo `falso_positivo` e `provisorio`, e de uma amostra de até 5 `verdadeiro` sorteada com `random.Random(20261107)`, registra a conferência como não independente e aplica R-E06.2.2.2-6, com uma ruling por item no ledger. Grava no ledger o `sha256` de `classificacao.md` e de `diff/diff-nucleo-motor.json` e o hash dos `referencia.json` da rodada: a partir daqui os dois arquivos estão congelados.
+- [ ] **Step 3: Segunda leitura e causa, nesta ordem.** Para cada `nao_confere`, uma segunda instância nova lê os mesmos recortes sem ver o primeiro rótulo; divergência entre as duas vira `ilegivel`. Cada `ilegivel` relê em `--dpi 600`, com `--saida` própria (`tmp/e06-2-2-2/diff-600`), localizando o item pela chave natural. Só então, para cada `falso_positivo`, uma instância com acesso ao item do JSON (`textos`, `glifos_lidos`, `diagnosticos`) e ao código dá `causa_confirmada`, `causa_refutada` ou `indeterminada`, pela lista de divergências do handoff da E06.2.1 (`Q`+`DP`, sobreimpressão, spans a 90/180/270°, `qu` inclinado, borda, contorno de letra na moldura, orientação R-7) ou `nova`.
+- [ ] **Step 4: Conferir.** O orquestrador lê os recortes de todo `falso_positivo` e `provisorio`, e de uma amostra de até 5 `verdadeiro` sorteada com `random.Random(20261107)`, registra a conferência como não independente e aplica R-E06.2.2.2-6, com uma ruling por item no ledger. Grava no ledger o `sha256` de `classificacao.md` e de `diff/diff-nucleo-motor.json`, e confere o hash dos `referencia.json` contra a linha de base: a partir daqui os dois arquivos estão congelados.
 - [ ] **Step 5: Decidir as divergências.** Para cada divergência em que o núcleo afirma a mais, do handoff da E06.2.1: observada em quantos itens e qual decisão. Para as que perdem recall: quantos `so_motor` por variante e causa provável, sem classificar um a um. Vai ao handoff.
 
 ### Task 7: Fechar os itens em código (condicional)
 
 **Estimativa:** até 45 min · **Depende de:** Task 6 · **Risco:** alto · **Laboratório:** não
 
-Só existe se a Task 6 decidir corrigir um item, aceitar uma divergência `nova` com `causa_confirmada` ou mudar o limite (R-E06.2.2.2-4). Sem isso, o ledger registra e a tarefa é pulada. Antes do despacho, o orquestrador emenda esta seção com arquivos, estimativa e o item (R-E06.2.2.2-8).
+Só existe se a Task 6 decidir corrigir um item, aceitar uma divergência `nova` com `causa_confirmada` ou mudar o limite (R-E06.2.2.2-4). Sem isso, o ledger registra e a tarefa é pulada. Antes do despacho, o orquestrador emenda esta seção com arquivos, estimativa e o item (R-E06.2.2.2-8). Se for mudança de limite, a emenda diz quais testes mudam, e a `_VERSAO` e a repetição abaixo valem também.
 
 **Files:** os da emenda, em `drawing_model/` e `tests/unit/`; para correção, também `adapters/analysis/model_symbols.py` e `tests/unit/test_model_symbols.py:588` (literal da versão).
 
@@ -236,6 +237,13 @@ Só existe se a Task 6 decidir corrigir um item, aceitar uma divergência `nova`
 - [ ] **Step 5: Commit**, um por divergência (`fix: <divergencia> deixa de afirmar a mais no nucleo` ou `test: fixa <divergencia> como valor de hoje`).
 
 Depois de uma correção, o orquestrador repete uma vez o benchmark e o diff, com `--saida` própria (`tmp/e06-2-2-2/simbolos-pos` e `diff-pos`), e compara com o JSON congelado pela chave natural (R-E06.2.2.2-9): o item saiu; `ambos` por variante não cai; `so_motor` não sobe; e todo `so_nucleo` novo é classificado como na Task 6. Se falhar, a correção é revertida e o item vira aceite com ruling.
+
+## Revisão de arquitetura
+
+- **Veredito:** aprovado com notas.
+- **Rodadas:** 2.
+- **Modelo:** opus.
+- **Notas Menores:** M1 a M5 da rodada 2 aplicadas ao plano. M6: a Task 5 fica `Risco: normal`; o testador de etapa cobre a transformação em página girada e `test_fila_so_traz_id_e_descricao`. Não verificado pelo revisor: nada executado; página girada nas 16 folhas, desencontro real de índice e custo de 400 dpi ficam para a Task 6.
 
 ## Fechamento operacional
 
