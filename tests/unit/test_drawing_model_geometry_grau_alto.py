@@ -69,9 +69,14 @@ def _comparacoes_sobrepostas(n: int, monkeypatch: pytest.MonkeyPatch) -> int:
     return comparacoes
 
 
-def test_agrupamento_escala_linearmente_com_caixas_sobrepostas(
+def test_comparacoes_de_caixas_escalam_linearmente_com_caixas_sobrepostas(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Mede só `_caixas_se_encostam`, não o agrupamento inteiro.
+
+    As visitas às células seguem quadráticas nessas caixas sobrepostas, e quem as limita é o teto
+    (`test_visitas_contam_uma_por_entrada_de_celula_lida`).
+    """
     pequeno = _comparacoes_sobrepostas(500, monkeypatch)
     grande = _comparacoes_sobrepostas(1_000, monkeypatch)
     assert pequeno > 0

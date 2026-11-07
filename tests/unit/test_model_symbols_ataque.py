@@ -72,8 +72,12 @@ def _casamentos_longe(quantidade: int) -> tuple[CasamentoGramatica, ...]:
     return tuple(_casamento((10.0 * i, 50.0, 10.0 * i + 1.0, 51.0)) for i in range(quantidade))
 
 
-def _trabalho(monkeypatch: pytest.MonkeyPatch, imagens: int, casamentos: int) -> int:
-    """Conta as consultas de ponto em caixa de `residuos_raster`: trabalho, não tempo."""
+def _consultas(
+    monkeypatch: pytest.MonkeyPatch,
+    imagens: Sequence[ImagemModelo],
+    casamentos: Sequence[CasamentoGramatica],
+) -> tuple[int, int]:
+    """Consultas de ponto em caixa de `residuos_raster` (trabalho, não tempo) e resíduos achados."""
     chamadas = 0
     original = ponto_em
 
@@ -83,19 +87,26 @@ def _trabalho(monkeypatch: pytest.MonkeyPatch, imagens: int, casamentos: int) ->
         return original(caixa, ponto)
 
     monkeypatch.setattr(model_symbols, "ponto_em", contar)
-    pagina = _pagina(_imagens_soltas(imagens), lado=1_000_000.0)
-    resultado = residuos_raster(pagina, _casamentos_longe(casamentos))
-    assert len(resultado) == imagens
+    resultado = residuos_raster(_pagina(imagens, lado=1_000_000.0), casamentos)
+    return chamadas, len(resultado)
+
+
+def _trabalho(monkeypatch: pytest.MonkeyPatch, imagens: int, casamentos: int) -> int:
+    chamadas, residuos = _consultas(
+        monkeypatch, _imagens_soltas(imagens), _casamentos_longe(casamentos)
+    )
+    assert residuos == imagens
     return chamadas
 
 
 def test_trabalho_do_residuo_nao_cresce_com_o_produto_de_imagens_e_casamentos(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Em PDF hostil, N imagens e M casamentos não podem custar N*M consultas.
+    """Com imagens e centros espalhados pela folha, a grade evita o custo de N*M consultas.
 
     `residuos_raster` não gasta o orçamento de consultas da página. Dobrar os dois deve, no
-    máximo, dobrar o trabalho (com folga até 3x); o produto o quadruplica.
+    máximo, dobrar o trabalho (com folga até 3x); o produto o quadruplica. Só vale espalhado:
+    com os centros numa só célula o custo é N*M, no teste logo abaixo.
     """
     pequeno = _trabalho(monkeypatch, 200, 200)
     grande = _trabalho(monkeypatch, 400, 400)
@@ -104,8 +115,51 @@ def test_trabalho_do_residuo_nao_cresce_com_o_produto_de_imagens_e_casamentos(
     assert grande <= 3 * pequeno, f"{pequeno} consultas com 200x200; {grande} com 400x400"
 
 
+def _imagens_numa_celula(quantidade: int) -> tuple[ImagemModelo, ...]:
+    """Mesma caixa, na célula (0, 0); hashes e dimensões distintos: nem mosaico nem duplicata."""
+    return tuple(_imagem((10.0, 10.0, 15.0, 15.0), i, (10 + i, 20)) for i in range(quantidade))
+
+
+def _casamentos_numa_celula(quantidade: int) -> tuple[CasamentoGramatica, ...]:
+    """Centros distintos na célula (0, 0), fora da caixa das imagens: nenhuma consulta dá certo."""
+    return tuple(
+        _casamento((60.0 + i * 1e-3, 60.0, 61.0 + i * 1e-3, 61.0)) for i in range(quantidade)
+    )
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="limitação aceita até a E09; ledger E06.2.2.1",
+)
+def test_trabalho_do_residuo_nao_cresce_com_o_produto_com_centros_numa_so_celula(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """N imagens e M centros numa só célula custam N*M consultas: a grade não separa nada.
+
+    A montagem errada usa `pytest.fail`, que `raises=AssertionError` não aceita como xfail: só o
+    custo pode explicar a falha esperada.
+    """
+
+    def medir(quantidade: int) -> int:
+        chamadas, residuos = _consultas(
+            monkeypatch, _imagens_numa_celula(quantidade), _casamentos_numa_celula(quantidade)
+        )
+        if residuos != quantidade or chamadas == 0:
+            pytest.fail(f"montagem errada: {residuos} resíduos e {chamadas} consultas")
+        return chamadas
+
+    pequeno, grande = medir(200), medir(400)
+
+    assert grande <= 3 * pequeno, f"{pequeno} consultas com 200x200; {grande} com 400x400"
+
+
 def test_trabalho_do_residuo_e_linear_so_nas_imagens(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Controle: com casamentos fixos, dobrar as imagens dobra o trabalho."""
+    """Controle: com casamentos fixos, dobrar as imagens não passa do dobro do trabalho.
+
+    É um teto, não prova de linearidade: aqui o trabalho nem cresce, porque as imagens a mais caem
+    em células sem centro.
+    """
     pequeno = _trabalho(monkeypatch, 200, 50)
     grande = _trabalho(monkeypatch, 400, 50)
 

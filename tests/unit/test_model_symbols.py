@@ -245,6 +245,8 @@ def _divergencias_de_geometria(nossa: ObservacaoSimbolo, dele: ObservacaoSimbolo
         achados.append(f"normalizados {normalizados_a} != {normalizados_b}")
     if a.transformacao != b.transformacao or a.tipo != b.tipo:
         achados.append(f"transformação {a.transformacao} != {b.transformacao}")
+    if a.normalizacao_limitada != b.normalizacao_limitada:
+        achados.append(f"limitada {a.normalizacao_limitada} != {b.normalizacao_limitada}")
     primitiva_a, primitiva_b = nossa.primitivas[0], dele.primitivas[0]
     if _difere(primitiva_a.pontos_originais, primitiva_b.pontos_originais):
         achados.append(f"primitiva {primitiva_a} != {primitiva_b}")
@@ -261,6 +263,8 @@ def _divergencias_de_geometria(nossa: ObservacaoSimbolo, dele: ObservacaoSimbolo
         pytest.param(270, False, id="rotacao-270"),
         pytest.param(0, True, id="cropbox"),
         pytest.param(90, True, id="cropbox-rotacao-90"),
+        pytest.param(180, True, id="cropbox-rotacao-180"),
+        pytest.param(270, True, id="cropbox-rotacao-270"),
     ],
 )
 def test_geometria_com_rotacao_e_cropbox(
@@ -291,6 +295,38 @@ def test_geometria_com_rotacao_e_cropbox(
                 achados = _divergencias_de_geometria(nossa, do_motor)
                 divergencias.extend(f"{_rotulo(row)}: {achado}" for achado in achados)
     assert divergencias == []
+
+
+@pytest.mark.parametrize("rotacao", [0, 90, 180, 270], ids=lambda r: f"rotacao-{r}")
+@pytest.mark.parametrize(
+    "recorte",
+    [
+        pytest.param((110.0, 60.0, 250.0, 280.0), id="corta-a-esquerda"),
+        pytest.param((50.0, 60.0, 160.0, 280.0), id="corta-a-direita"),
+        pytest.param((50.0, 120.0, 250.0, 280.0), id="corta-o-topo"),
+        pytest.param((50.0, 60.0, 250.0, 140.0), id="corta-a-base"),
+    ],
+)
+def test_normalizacao_limitada_igual_a_do_motor_com_cropbox_que_corta_o_simbolo(
+    pagina_ct: pymupdf.Page,
+    pacotes: Pacotes,
+    tabela: TabelaGlifos,
+    rotacao: int,
+    recorte: Caixa,
+) -> None:
+    """No corpus o símbolo cabe no recorte e o campo é sempre falso; só aqui ele chega a valer.
+
+    É o primeiro critério da geometria que a reconciliação escolhe (`by_quality`).
+    """
+    pagina_ct.set_cropbox(pymupdf.Rect(recorte))
+    pagina_ct.set_rotation(rotacao)
+
+    (nossa,) = _metodo(pagina_ct, pacotes, tabela).observacoes
+    (do_motor,) = _motor(pagina_ct, pacotes).observacoes
+
+    assert nossa.geometria.normalizacao_limitada
+    assert do_motor.geometria.normalizacao_limitada
+    assert _divergencias_de_geometria(nossa, do_motor) == []
 
 
 def test_divergencia_de_orientacao_continua_explicita(

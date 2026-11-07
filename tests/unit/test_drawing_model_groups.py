@@ -325,17 +325,16 @@ def _uniao_anterior(caixas: list[Any], folga: float) -> list[int]:
     return [raiz(i) for i in range(len(caixas))]
 
 
-def test_saida_igual_a_uniao_anterior() -> None:
-    sorteio = random.Random(20261106)
-    primitivas = [
-        circulo(sorteio.uniform(0, 100), sorteio.uniform(0, 100), sorteio.uniform(0.5, 3.0), i)
-        for i in range(200)
-    ]
+def _mantidos_e_descartados(
+    primitivas: list[Circulo],
+) -> tuple[set[tuple[int, ...]], set[tuple[int, ...]]]:
+    """A saída pela união de antes do teto: os grupos que cabem no lado máximo e os que não."""
     caixas = [groups._caixa_primitiva(p) for p in primitivas]
     por_raiz: dict[int, list[int]] = defaultdict(list)
     for i, r in enumerate(_uniao_anterior(caixas, 1.5)):
         por_raiz[r].append(i)
-    esperado = set()
+    mantidos: set[tuple[int, ...]] = set()
+    descartados: set[tuple[int, ...]] = set()
     for membros in por_raiz.values():
         caixa = (
             min(caixas[i][0] for i in membros),
@@ -343,8 +342,35 @@ def test_saida_igual_a_uniao_anterior() -> None:
             max(caixas[i][2] for i in membros),
             max(caixas[i][3] for i in membros),
         )
-        if groups._lado(caixa) <= 40.0:
-            esperado.add(tuple(membros))
+        (mantidos if groups._lado(caixa) <= 40.0 else descartados).add(tuple(membros))
+    return mantidos, descartados
+
+
+def test_saida_igual_a_uniao_anterior() -> None:
+    """200 sementes com 60 círculos em 60x60: densos o bastante para unir em toda semente e, em
+    parte delas, formar cadeia que passa do lado máximo e é descartada."""
+    sementes_com_descarte = 0
+    for semente in range(200):
+        sorteio = random.Random(semente)
+        primitivas = [
+            circulo(sorteio.uniform(0, 60), sorteio.uniform(0, 60), sorteio.uniform(0.5, 3.0), i)
+            for i in range(60)
+        ]
+        esperado, descartados = _mantidos_e_descartados(primitivas)
+        obtido = {g.indices_primitivas for g in agrupar_candidatos(primitivas, [])}
+        assert obtido == esperado, f"semente {semente}"
+        assert any(len(m) > 1 for m in esperado), f"semente {semente}"
+        sementes_com_descarte += bool(descartados)
+    assert sementes_com_descarte > 0
+
+
+def test_saida_igual_a_uniao_anterior_com_200_circulos() -> None:
+    sorteio = random.Random(20261106)
+    primitivas = [
+        circulo(sorteio.uniform(0, 100), sorteio.uniform(0, 100), sorteio.uniform(0.5, 3.0), i)
+        for i in range(200)
+    ]
+    esperado, _ = _mantidos_e_descartados(primitivas)
     obtido = {g.indices_primitivas for g in agrupar_candidatos(primitivas, [])}
     assert obtido == esperado
     assert any(len(m) > 1 for m in esperado)

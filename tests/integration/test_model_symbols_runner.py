@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from dataclasses import replace
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
@@ -12,16 +14,25 @@ from uuid import uuid4
 import pymupdf
 import pytest
 
-from zeny_project_handler.adapters.analysis import pymupdf_drawing_model
+from zeny_project_handler.adapters.analysis import (
+    declarative_symbols,
+    model_symbols,
+    pymupdf_drawing_model,
+)
 from zeny_project_handler.adapters.analysis.drawing_model.glyph_table import (
     TabelaGlifos,
     carregar_tabela_glifos,
 )
 from zeny_project_handler.adapters.pdf import PyMuPdfReader
+from zeny_project_handler.application.symbol_reconciliation import (
+    CalibrationEntry,
+    CalibrationPolicy,
+)
 from zeny_project_handler.domain.documents import DocumentoProjeto
 from zeny_project_handler.ports.pdf import ReferenciaFontePdf
 from zeny_project_handler_server import symbol_execution
 from zeny_project_handler_server.config import ServerSettings
+from zeny_project_handler_server.deliverable_exports import _symbol_status
 from zeny_project_handler_server.symbol_execution import (
     SymbolCompositionError,
     SymbolCompositionRunner,
@@ -32,6 +43,9 @@ pytestmark = pytest.mark.integration
 _METODO_NOVO = "declarative-drawing-model"
 _MOLDURA_CT = (101.0, 115.0, 169.0, 149.0)
 _PRETO = (0, 0, 0)
+_VARIANTE_CT = "cemig-eo-r3-s06-v001"
+_CLASSE_DE_ATIVO = "TRANSFORMADOR"
+_PROBABILIDADE = Decimal("0.995")
 
 
 def _settings(data: Path, **opcoes: Any) -> ServerSettings:
@@ -521,7 +535,15 @@ def _projetar(contexto: Any, composicao: Any) -> Any:
     return proposta, simbolo
 
 
-def _compor(tmp_path: Path, projeto: Any, nome: str, *, sem_novo: bool) -> Any:
+def _compor(
+    tmp_path: Path,
+    projeto: Any,
+    nome: str,
+    *,
+    sem_novo: bool,
+    pacotes: tuple[Any, ...] | None = None,
+    calibracao: CalibrationPolicy | None = None,
+) -> Any:
     """Roda o runner sobre o PDF do projeto; `sem_novo` reconcilia sem o método novo."""
     from zeny_project_handler.application.symbol_reconciliation import reconcile_symbols
 
@@ -539,7 +561,9 @@ def _compor(tmp_path: Path, projeto: Any, nome: str, *, sem_novo: bool) -> Any:
         tamanho_bytes=pdf.stat().st_size,
         modificado_em_ns=pdf.stat().st_mtime_ns,
     )
-    runner = SymbolCompositionRunner(_settings(tmp_path / f"dados-{nome}"))
+    runner = SymbolCompositionRunner(
+        _settings(tmp_path / f"dados-{nome}"), packages=pacotes, calibration=calibracao
+    )
     composto = runner.run(documento, fonte)
     if not sem_novo:
         return composto, documento
@@ -547,6 +571,35 @@ def _compor(tmp_path: Path, projeto: Any, nome: str, *, sem_novo: bool) -> Any:
     assert agregados is not None
     filtrados = tuple(r for r in agregados if r.perfil.metodo_id != _METODO_NOVO)
     return reconcile_symbols(filtrados, runner._calibration), documento
+
+
+def _calibracao_do_motor(pacotes: tuple[Any, ...], classe: str) -> CalibrationPolicy:
+    """Uma entrada real, só para o motor declarativo: o método novo não tem célula calibrada."""
+    return CalibrationPolicy(
+        entries=(
+            CalibrationEntry(
+                method_signature=declarative_symbols.perfil_pacotes(pacotes).assinatura(),
+                class_code=classe,
+                stratum="default",
+                probability=_PROBABILIDADE,
+                sample_size=90,
+            ),
+        )
+    )
+
+
+def _pacotes_com_ct_de_ativo() -> tuple[Any, ...]:
+    """O CT sob uma classe de ativo: nenhuma variante habilitada hoje tem papel de ativo."""
+    pacotes = copy.deepcopy(declarative_symbols.carregar_pacotes())
+    (variante,) = [v for p in pacotes for v in p["variants"] if v["id"] == _VARIANTE_CT]
+    variante["class_code"] = _CLASSE_DE_ATIVO
+    return tuple(pacotes)
+
+
+def _probabilidade(proposta: Any) -> Decimal:
+    valor = dict(proposta.atributos_sugeridos).get("simbolo_probabilidade_calibrada")
+    assert valor is not None
+    return Decimal(str(valor))
 
 
 def test_caracterizacao_ct_com_o_quinto_metodo_deixa_de_ser_exclusivo(
@@ -558,11 +611,12 @@ def test_caracterizacao_ct_com_o_quinto_metodo_deixa_de_ser_exclusivo(
 
     O CT sintético é a família CAMARA, sem modelo de ativo (papel `desconhecido`): o `status`
     fica `unknown` nos dois casos e só o indicador `exclusive` muda. A troca de status
-    `exclusive` para `supported` exige uma família com papel de ativo e não está coberta aqui.
+    `exclusive` para `supported`, com família de papel de ativo, está no teste seguinte.
     """
     _, projeto, _ = contexto_pipeline
-    sem = _compor(tmp_path, projeto, "sem", sem_novo=True)
-    com = _compor(tmp_path, projeto, "com", sem_novo=False)
+    calibracao = _calibracao_do_motor(declarative_symbols.carregar_pacotes(), "CAMARA")
+    sem = _compor(tmp_path, projeto, "sem", sem_novo=True, calibracao=calibracao)
+    com = _compor(tmp_path, projeto, "com", sem_novo=False, calibracao=calibracao)
 
     proposta_sem, simbolo_sem = _projetar(contexto_pipeline, sem)
     proposta_com, simbolo_com = _projetar(contexto_pipeline, com)
@@ -574,9 +628,81 @@ def test_caracterizacao_ct_com_o_quinto_metodo_deixa_de_ser_exclusivo(
     attrs_sem = dict(proposta_sem.atributos_sugeridos)
     attrs_com = dict(proposta_com.atributos_sugeridos)
     assert attrs_com["simbolo_decisao_e12"] == attrs_sem["simbolo_decisao_e12"]
-    assert attrs_com.get("simbolo_probabilidade_calibrada") == attrs_sem.get(
-        "simbolo_probabilidade_calibrada"
+    assert _probabilidade(proposta_com) == _probabilidade(proposta_sem) == _PROBABILIDADE
+
+
+def test_caracterizacao_familia_de_ativo_passa_de_exclusivo_a_suportado(
+    tmp_path: Path, contexto_pipeline: Any
+) -> None:
+    """Comportamento aceito até a E09: com o método novo, o `status` de um ativo vai de "Exclusivo"
+    a "Suportado", sem mudar decisão nem probabilidade. Quando a E09 mexer nisso, este teste deve
+    ser revisto, não apagado.
+
+    "Suportado" aqui não é corroboração independente: `exclusive` só conta assinaturas distintas
+    (`symbol_review.py:54`) e o `status` só lê esse indicador (`symbol_review.py:182`), mas os dois
+    métodos aplicam os mesmos pacotes ao mesmo desenho. A probabilidade segue a célula calibrada
+    do motor, sem somar o apoio do segundo método (`symbol_reconciliation.py:469-485`).
+    """
+    _, projeto, _ = contexto_pipeline
+    pacotes = _pacotes_com_ct_de_ativo()
+    calibracao = _calibracao_do_motor(pacotes, _CLASSE_DE_ATIVO)
+    opcoes: dict[str, Any] = {"pacotes": pacotes, "calibracao": calibracao}
+    sem = _compor(tmp_path, projeto, "sem", sem_novo=True, **opcoes)
+    com = _compor(tmp_path, projeto, "com", sem_novo=False, **opcoes)
+
+    proposta_sem, simbolo_sem = _projetar(contexto_pipeline, sem)
+    proposta_com, simbolo_com = _projetar(contexto_pipeline, com)
+
+    assert simbolo_sem.role == simbolo_com.role == "equipamento"
+    assert simbolo_sem.exclusive
+    assert not simbolo_com.exclusive
+    assert _symbol_status(simbolo_sem.status) == "Exclusivo"
+    assert _symbol_status(simbolo_com.status) == "Suportado"
+    attrs_sem = dict(proposta_sem.atributos_sugeridos)
+    attrs_com = dict(proposta_com.atributos_sugeridos)
+    assert attrs_sem["simbolo_decisao_e12"] == attrs_com["simbolo_decisao_e12"] == "eligible"
+    assert _probabilidade(proposta_com) == _probabilidade(proposta_sem) == _PROBABILIDADE
+
+
+def test_caracterizacao_variantes_diferentes_na_mesma_caixa_viram_conflitante(
+    tmp_path: Path, contexto_pipeline: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Os dois métodos na mesma caixa, cada um com a sua variante, e a classe é a mesma.
+
+    Comportamento aceito até a E09: a referência ambígua manda a ocorrência para revisão, e o
+    `status` vira "Conflitante" em vez de "Suportado". O método novo lê aqui um pacote em que o
+    id da variante é outro; o desenho e a classe não mudam.
+    """
+    _, projeto, _ = contexto_pipeline
+    pacotes = _pacotes_com_ct_de_ativo()
+    outra_id = f"{_VARIANTE_CT}-outra"
+    outros = copy.deepcopy(pacotes)
+    (variante,) = [v for p in outros for v in p["variants"] if v["id"] == _VARIANTE_CT]
+    variante["id"] = outra_id
+    original = model_symbols.observar_pacotes_modelo
+
+    def com_outra_variante(*args: Any, **kwargs: Any) -> Any:
+        return original(*args, **{**kwargs, "pacotes": outros})
+
+    monkeypatch.setattr(model_symbols, "observar_pacotes_modelo", com_outra_variante)
+    composicao = _compor(
+        tmp_path,
+        projeto,
+        "conflito",
+        sem_novo=False,
+        pacotes=pacotes,
+        calibracao=_calibracao_do_motor(pacotes, _CLASSE_DE_ATIVO),
     )
+
+    (ocorrencia,) = composicao[0].occurrences
+    assert {o.template for o in ocorrencia.observations} == {_VARIANTE_CT, outra_id}
+    assert {a.classe for a in ocorrencia.alternatives} == {_CLASSE_DE_ATIVO}
+    assert "ambiguous_reference_id" in ocorrencia.reasons
+    assert ocorrencia.decision == "review"
+    _, simbolo = _projetar(contexto_pipeline, composicao)
+    assert simbolo.role == "equipamento"
+    assert _symbol_status(simbolo.status) == "Conflitante"
+    assert not simbolo.exclusive
 
 
 def test_caracterizacao_pagina_que_bate_no_teto_volta_a_exclusivo(
