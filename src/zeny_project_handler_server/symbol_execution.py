@@ -20,9 +20,35 @@ from zeny_project_handler.adapters.analysis import (
     declarative_symbols,
     legacy_symbols,
     legend_symbols,
+    model_symbols,
+    pymupdf_annotations,
+    pymupdf_glyphs,
     pymupdf_guys,
+    pymupdf_page_extractors,
+    pymupdf_support,
     pymupdf_transformers,
     raster_symbols,
+)
+from zeny_project_handler.adapters.analysis import pymupdf_drawing_model as _pymupdf_drawing_model
+from zeny_project_handler.adapters.analysis.drawing_model import (
+    geometry,
+    glyph_signature,
+    glyph_text,
+    grammar_disc,
+    grammar_frames,
+    groups,
+    symbol_grammars,
+    symbol_matcher,
+)
+from zeny_project_handler.adapters.analysis.drawing_model import (
+    glyph_table as glyph_table_module,
+)
+from zeny_project_handler.adapters.analysis.drawing_model.glyph_table import (
+    TabelaGlifos,
+    carregar_tabela_glifos,
+)
+from zeny_project_handler.adapters.analysis.drawing_model.symbol_grammars import (
+    LIMITE_CONSULTAS_PAGINA,
 )
 from zeny_project_handler.adapters.analysis.pymupdf_analyzer import (
     _open_document,
@@ -45,7 +71,7 @@ from zeny_project_handler.ports.pdf import ReferenciaFontePdf
 
 from .config import ServerSettings
 
-_VERSION = "e15-server-symbol-composition-1"
+_VERSION = "e06-server-symbol-composition-2"
 _COMPLETE = frozenset(
     {
         EstadoMetodoSimbolos.CONCLUIDO,
@@ -69,6 +95,7 @@ class SymbolCompositionRunner:
         templates: tuple[raster_symbols.TemplateRasterVerificado, ...] | None = None,
         packages: tuple[declarative_symbols.Package, ...] | None = None,
         calibration: CalibrationPolicy | None = None,
+        glyph_table: TabelaGlifos | None = None,
     ) -> None:
         self._settings = settings
         self._templates = (
@@ -77,6 +104,9 @@ class SymbolCompositionRunner:
         self._packages = (
             declarative_symbols.carregar_pacotes() if packages is None else tuple(packages)
         )
+        self._glyph_table = carregar_tabela_glifos() if glyph_table is None else glyph_table
+        # O teto e o perfil nascem juntos: `observar_pacotes_modelo` não confere um contra o outro.
+        self._query_limit = LIMITE_CONSULTAS_PAGINA
         self._calibration = calibration or CalibrationPolicy()
         self._raster_config = raster_symbols.ConfiguracaoDetectorRaster(
             dpi=settings.symbol_raster_dpi,
@@ -93,11 +123,15 @@ class SymbolCompositionRunner:
         self.partial_directory = settings.data_directory / "symbol_partial_runs"
         self.cache_directory = settings.core_settings().analysis_cache_directory / "symbols"
         self._model_identity = _model_identity(settings.symbol_model_path)
+        self._model_profile = model_symbols.perfil_pacotes_modelo(
+            self._packages, self._glyph_table, limite=self._query_limit
+        )
         profiles = [
             legacy_symbols.perfil_simbolos_legados(),
             pymupdf_transformers.perfil_transformadores(),
             pymupdf_guys.perfil_estais(),
             declarative_symbols.perfil_pacotes(self._packages),
+            self._model_profile,
         ]
         if settings.symbol_profile == "balanced":
             # E08 Hough is explicitly disabled; only the verified template result is used.
@@ -135,6 +169,21 @@ class SymbolCompositionRunner:
                     pymupdf_transformers,
                     pymupdf_guys,
                     declarative_symbols,
+                    model_symbols,
+                    _pymupdf_drawing_model,
+                    pymupdf_annotations,
+                    pymupdf_page_extractors,
+                    pymupdf_support,
+                    pymupdf_glyphs,
+                    symbol_grammars,
+                    grammar_frames,
+                    grammar_disc,
+                    symbol_matcher,
+                    groups,
+                    geometry,
+                    glyph_text,
+                    glyph_signature,
+                    glyph_table_module,
                     raster_symbols,
                     legend_symbols,
                     symbol_reconciliation,
@@ -362,6 +411,17 @@ class SymbolCompositionRunner:
             documento_sha256=document_sha256,
             pagina_numero=page_number,
             pacotes=self._packages,
+        )
+        self._check_cancelled(cancelado)
+        yield model_symbols.observar_pacotes_modelo(
+            page,
+            documento_id=document_id,
+            documento_sha256=document_sha256,
+            pagina_numero=page_number,
+            pacotes=self._packages,
+            tabela=self._glyph_table,
+            perfil=self._model_profile,
+            limite=self._query_limit,
         )
         if self._settings.symbol_profile == "balanced":
             self._check_cancelled(cancelado)
