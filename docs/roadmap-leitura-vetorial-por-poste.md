@@ -1351,6 +1351,18 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 **Riscos e mitigação:** o modelo com glifos custa até ~20 s por folha no runner → opt-in até a E09. `_unir_proximos` é quadrático em caixas sobrepostas (R-9) → teto antes de ligar no runner.
 
+**Estado ao interromper (2026-11-06 23:00, a pedido do usuário; apague este bloco ao retomar):**
+- **Retomada:** continue nesta etapa, no worktree da trilha A, sem refazer o plano nem a revisão de arquitetura (aprovado com notas, rodada 2, seção no fim do plano). O ledger está em `.superpowers/sdd/2026-11-06-leitura-vetorial-por-poste-e06-2-2-1/progress.md` deste worktree, com os briefs e relatórios das tarefas. O plano segue `docs/superpowers/plans/2026-11-06-leitura-vetorial-por-poste-e06-2-2-1.md`.
+- **Integração:** nada deste lote está na `main`. A E06.2.1 está `#concluida` nesta branch e entra com o merge do fim do lote, junto do resto. As trilhas B e C não têm trabalho.
+- **Task 5:** completa, revisão limpa, integrada nesta branch (e389316).
+- **Task 1:** interrompida com o código **sem commit** no worktree `-t1` (branch `roadmap/leitura-vetorial-por-poste-t1`, BASE 29758e6). O limite já é 50.000.000 (ruling no ledger). Os testes da área passaram antes da troca do limite (50 passed). Falta: atualizar a docstring, medir uma vez o tempo no teto (~5.000 círculos sobrepostos), rodar suíte, ruff, format, mypy e complexidade, commitar, e então o ciclo normal: testador, verificação mecânica `--base 29758e6`, revisão e integração. Máximo medido nas 16 folhas: 3.708.277 visitas.
+- **Task 2:** interrompida depois do commit bd125b1 (trailer certo, worktree `-t2` limpo), mas **sem relatório nem conferência**: não sei se o desenvolvedor rodou a suíte. O teste do defeito ficou em `xfail`, o que indica I3 confirmado. Falta: rodar os testes do Step 4 e a suíte, escrever o relatório, e então testador, verificação mecânica `--base 29758e6`, revisão e integração.
+- **Tasks 3, 4 e 6:** não começaram (ondas 2 e 3 do plano). A Task 3 também corrige a docstring de `_fundir_spans_colados`, que ainda cita `C`+`T` como exceção: a medida da Task 5 mostrou que só `Q`+`DP` com intruso diverge.
+- **Depois desta etapa:** a E06.2.2.2, e o limite de etapas é o do novo prompt.
+- **Gate:** `cmd.exe //c ".\\IniciarTestes.bat"`, conferindo a data do `relatorio-testes.txt`. Sem o `.\`, o `cmd` não acha o `.bat`, e o relatório lido é o antigo.
+- **Relógio:** a interrupção não conta; ao retomar, registre a hora no ledger e desconte o intervalo. Já foram descontadas as 6h de parada entre 16:46 e 22:46.
+- **Rulings:** as desta etapa estão no ledger; as da E06.2.1, com minors e evidências, em `rulings-e06-2-1.md` na mesma pasta. Os worktrees `-t1` e `-t2` ficam até a integração, e o `.venv` é o do worktree da etapa.
+
 **Evidências e handoff:** —
 
 ---
