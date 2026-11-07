@@ -8,6 +8,7 @@ nem não detecção, e a imagem compacta sem casamento é dado, não observaçã
 
 from __future__ import annotations
 
+import math
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -72,6 +73,8 @@ _IMAGENS_FALHOU: Final = frozenset({"modelo.imagens_falhou", "modelo.imagens_ano
 _LADO_MINIMO_RESIDUO: Final = 4.0
 _LADO_MAXIMO_RESIDUO: Final = 72.0
 _MAXIMO_HASHES_POR_DIMENSAO: Final = 8
+# Do tamanho do maior lado do resíduo: cada imagem consulta no máximo 2 x 2 células.
+_CELULA_CENTROS: Final = _LADO_MAXIMO_RESIDUO
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,13 +129,39 @@ def _dimensoes_de_mosaico(imagens: Iterable[ImagemModelo]) -> set[tuple[int, int
 def _compacta(caixa: Caixa) -> bool:
     largura, altura = caixa[2] - caixa[0], caixa[3] - caixa[1]
     return (
-        min(largura, altura) >= _LADO_MINIMO_RESIDUO
-        and max(largura, altura) <= _LADO_MAXIMO_RESIDUO
+        _LADO_MINIMO_RESIDUO <= largura <= _LADO_MAXIMO_RESIDUO
+        and _LADO_MINIMO_RESIDUO <= altura <= _LADO_MAXIMO_RESIDUO
     )
 
 
 def _centro(caixa: Caixa) -> Ponto:
     return ((caixa[0] + caixa[2]) / 2, (caixa[1] + caixa[3]) / 2)
+
+
+def _celula_de_centro(valor: float) -> int:
+    return math.floor(valor / _CELULA_CENTROS)
+
+
+def _grade_de_centros(
+    casamentos: Iterable[CasamentoGramatica],
+) -> dict[tuple[int, int], list[Ponto]]:
+    """Centros por célula; o não finito não está em caixa nenhuma e fica de fora."""
+    grade: defaultdict[tuple[int, int], list[Ponto]] = defaultdict(list)
+    for casamento in casamentos:
+        x, y = _centro(casamento.caixa)
+        if math.isfinite(x) and math.isfinite(y):
+            grade[_celula_de_centro(x), _celula_de_centro(y)].append((x, y))
+    return grade
+
+
+def _tem_centro(caixa: Caixa, grade: Mapping[tuple[int, int], Sequence[Ponto]]) -> bool:
+    """Só para caixa compacta: é o que limita as células consultadas."""
+    return any(
+        ponto_em(caixa, centro)
+        for cx in range(_celula_de_centro(caixa[0]), _celula_de_centro(caixa[2]) + 1)
+        for cy in range(_celula_de_centro(caixa[1]), _celula_de_centro(caixa[3]) + 1)
+        for centro in grade.get((cx, cy), ())
+    )
 
 
 def residuos_raster(
@@ -147,7 +176,7 @@ def residuos_raster(
     modelo = pagina.modelo
     limites: Caixa = (0.0, 0.0, modelo.largura, modelo.altura)
     mosaicos = _dimensoes_de_mosaico(modelo.imagens)
-    centros = [_centro(casamento.caixa) for casamento in casamentos]
+    centros = _grade_de_centros(casamentos)
     residuos: list[ResiduoRaster] = []
     vistos: set[tuple[str, Caixa]] = set()
     for imagem in modelo.imagens:
@@ -157,7 +186,7 @@ def residuos_raster(
             or (imagem.largura_px, imagem.altura_px) in mosaicos
             or not _compacta(imagem.bbox)
             or not contem(limites, imagem.bbox)
-            or any(ponto_em(imagem.bbox, centro) for centro in centros)
+            or _tem_centro(imagem.bbox, centros)
         ):
             continue
         vistos.add(chave)

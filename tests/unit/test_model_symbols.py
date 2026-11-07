@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import copy
+import random
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
@@ -818,6 +819,86 @@ def test_residuo_raster(
     obtidos = residuos_raster(_pagina_com_imagens(imagens), casamentos)
 
     assert obtidos == tuple(_residuo(imagens[indice]) for indice in restantes)
+
+
+_NAN: Final = float("nan")
+_INF: Final = float("inf")
+_NA_DIVISA: Final[Caixa] = (60.0, 60.0, 80.0, 80.0)
+_LONGE_DA_DIVISA: Final[Caixa] = (100.0, 100.0, 120.0, 120.0)
+
+
+@pytest.mark.parametrize(
+    ("imagem", "casamento", "conta"),
+    [
+        pytest.param(_NA_DIVISA, (71.0, 71.0, 73.0, 73.0), False, id="centro-na-divisa"),
+        pytest.param(_NA_DIVISA, (59.0, 59.0, 61.0, 61.0), False, id="canto-inferior"),
+        pytest.param(_NA_DIVISA, (79.0, 79.0, 81.0, 81.0), False, id="canto-superior"),
+        pytest.param(_NA_DIVISA, (79.0, 79.0, 81.1, 81.1), True, id="logo-depois"),
+        pytest.param((72.0, 72.0, 144.0, 144.0), (143.0, 143.0, 145.0, 145.0), False, id="lado-72"),
+        pytest.param(_LONGE_DA_DIVISA, (-10.0, -10.0, -5.0, -5.0), True, id="negativo"),
+        pytest.param(_LONGE_DA_DIVISA, (_NAN, 100.0, 120.0, 120.0), True, id="nan"),
+        pytest.param(_LONGE_DA_DIVISA, (100.0, 100.0, _INF, 120.0), True, id="inf"),
+        pytest.param(_LONGE_DA_DIVISA, (1e308, 1e308, 1.7e308, 1.7e308), True, id="soma-estoura"),
+    ],
+)
+def test_centro_nas_divisas_da_grade(imagem: Caixa, casamento: Caixa, conta: bool) -> None:
+    obtidos = residuos_raster(_pagina_com_imagens((_imagem(imagem),)), (_casamento(casamento),))
+
+    assert bool(obtidos) is conta
+
+
+def _coordenada_sorteada(sorteio: random.Random) -> float:
+    """Metade dos valores cai em múltiplo da célula: é onde a grade pode errar."""
+    return 72.0 * sorteio.randrange(5) if sorteio.random() < 0.5 else sorteio.uniform(-20.0, 320.0)
+
+
+def test_grade_decide_como_a_varredura_de_todos_os_centros() -> None:
+    sorteio = random.Random(11)
+    imagens = []
+    for indice in range(300):
+        x0, y0 = _coordenada_sorteada(sorteio), _coordenada_sorteada(sorteio)
+        largura, altura = sorteio.choice((4.0, 20.0, 72.0)), sorteio.choice((4.0, 33.3, 72.0))
+        caixa = (x0, y0, x0 + largura, y0 + altura)
+        imagens.append(_imagem(caixa, _hash(indice), (indice + 1, 7)))
+    centros = [(_coordenada_sorteada(sorteio), _coordenada_sorteada(sorteio)) for _ in range(300)]
+    casamentos = [_casamento((x - 1.0, y - 1.0, x + 1.0, y + 1.0)) for x, y in centros]
+
+    def sobra(imagem: ImagemModelo) -> bool:
+        x0, y0, x1, y1 = imagem.bbox
+        # o lado somado a uma coordenada sorteada pode sair de 4 a 72 por arredondamento
+        return (
+            4.0 <= x1 - x0 <= 72.0
+            and 4.0 <= y1 - y0 <= 72.0
+            and x0 >= 0.0
+            and y0 >= 0.0
+            and x1 <= 300.0
+            and y1 <= 300.0
+            and not any(x0 <= x <= x1 and y0 <= y <= y1 for x, y in centros)
+        )
+
+    obtidos = residuos_raster(_pagina_com_imagens(imagens), casamentos)
+
+    assert obtidos == tuple(_residuo(imagem) for imagem in imagens if sobra(imagem))
+    assert 0 < len(obtidos) < len(imagens)
+
+
+@pytest.mark.parametrize(
+    "caixa",
+    [
+        pytest.param((10.0, 10.0, 290.0, 290.0), id="grande"),
+        pytest.param((10.0, 10.0, 13.0, 13.0), id="pequena"),
+    ],
+)
+def test_imagem_fora_da_faixa_nao_consulta_os_centros(
+    monkeypatch: pytest.MonkeyPatch, caixa: Caixa
+) -> None:
+    def falhar(*_args: Any) -> bool:
+        raise AssertionError("consultou os centros")
+
+    monkeypatch.setattr(model_symbols, "ponto_em", falhar)
+    casamentos = (_casamento((11.0, 11.0, 12.0, 12.0)),)
+
+    assert residuos_raster(_pagina_com_imagens((_imagem(caixa),)), casamentos) == ()
 
 
 def test_residuo_raster_e_deterministico() -> None:
