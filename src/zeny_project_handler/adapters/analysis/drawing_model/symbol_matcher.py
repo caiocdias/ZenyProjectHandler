@@ -74,18 +74,10 @@ def _achados_em_discos(
     ]
 
 
-def casar_variantes(
-    pagina: PaginaGramatica,
+def _casar_no_contexto(
+    contexto: ContextoGramatica,
     variantes: Sequence[tuple[Mapping[str, Any], Mapping[str, Any]]],
-    *,
-    limite: int = LIMITE_CONSULTAS_PAGINA,
 ) -> tuple[CasamentoGramatica, ...]:
-    """Casamentos na ordem de `variantes` e dos candidatos, um por variante e caixa arredondada.
-
-    `variantes` são os pares (pacote, variante) habilitados. Tudo ou nada: levanta
-    `TetoGramaticasExcedido` e `FonteGramaticaFalhou`, sem casamento parcial.
-    """
-    contexto = contexto_gramaticas(pagina, limite=limite)
     tem_disco = any(_gramatica(variante)["kind"] == _DISCO_TERMINAL for _, variante in variantes)
     discos = discos_candidatos(contexto) if tem_disco else ()
     # Sem disco, ninguém consulta as pontas: a página não paga por elas.
@@ -106,3 +98,47 @@ def casar_variantes(
                 vistos.add(chave)
                 casamentos.append(CasamentoGramatica(pacote, variante, caixa, caminho))
     return tuple(casamentos)
+
+
+def casar_variantes(
+    pagina: PaginaGramatica,
+    variantes: Sequence[tuple[Mapping[str, Any], Mapping[str, Any]]],
+    *,
+    limite: int = LIMITE_CONSULTAS_PAGINA,
+) -> tuple[CasamentoGramatica, ...]:
+    """Casamentos na ordem de `variantes` e dos candidatos, um por variante e caixa arredondada.
+
+    `variantes` são os pares (pacote, variante) habilitados. Tudo ou nada: levanta
+    `TetoGramaticasExcedido` e `FonteGramaticaFalhou`, sem casamento parcial.
+    """
+    return _casar_no_contexto(contexto_gramaticas(pagina, limite=limite), variantes)
+
+
+@dataclass(frozen=True, slots=True)
+class GastoPagina:
+    """Gasto do orçamento da página por fase: colagem de spans, índices e gramáticas."""
+
+    colagem: int
+    indices: int
+    gramaticas: int
+
+    @property
+    def total(self) -> int:
+        return self.colagem + self.indices + self.gramaticas
+
+
+def gasto_por_fase(
+    pagina: PaginaGramatica,
+    variantes: Sequence[tuple[Mapping[str, Any], Mapping[str, Any]]],
+    *,
+    limite: int = LIMITE_CONSULTAS_PAGINA,
+) -> GastoPagina:
+    """O gasto que `casar_variantes` faria, repartido por fase; levanta o mesmo que ele."""
+    contexto = contexto_gramaticas(pagina, limite=limite)
+    depois_dos_indices = contexto.orcamento.gasto
+    _casar_no_contexto(contexto, variantes)
+    return GastoPagina(
+        colagem=contexto.gasto_colagem,
+        indices=depois_dos_indices - contexto.gasto_colagem,
+        gramaticas=contexto.orcamento.gasto - depois_dos_indices,
+    )

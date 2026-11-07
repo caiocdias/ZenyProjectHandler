@@ -191,6 +191,7 @@ class Palavra:
 class ContextoGramatica:
     pagina: PaginaGramatica
     orcamento: OrcamentoConsultas
+    gasto_colagem: int
     molduras: tuple[Moldura, ...]
     grade_molduras: GradeEspacial[Moldura]
     grade_palavras: GradeEspacial[Palavra]
@@ -561,6 +562,7 @@ def contexto_gramaticas(
     )
     molduras, segmentos = _molduras_e_segmentos(modelo)
     textos = _fundir_spans_colados(modelo.textos, orcamento)
+    gasto_colagem = orcamento.gasto
     palavras = (
         palavra
         for texto, fundido in textos
@@ -570,6 +572,7 @@ def contexto_gramaticas(
     return ContextoGramatica(
         pagina=pagina,
         orcamento=orcamento,
+        gasto_colagem=gasto_colagem,
         molduras=molduras,
         grade_molduras=GradeEspacial(((m.caixa, m) for m in molduras), limites, orcamento),
         grade_palavras=GradeEspacial(((p.caixa, p) for p in palavras), limites, orcamento),
