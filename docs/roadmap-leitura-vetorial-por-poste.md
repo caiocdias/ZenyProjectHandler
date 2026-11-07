@@ -1294,8 +1294,8 @@ Rulings da divisão, registradas no ledger da E06.1:
     - fixado: spans colados a 90°, 180° e 270°, no rótulo e na guarda (`_pode_colar` só funde a 0 ± 1°);
     - fixado: `qu` inclinado conta como segmento, e diagonais e barra casam onde o motor não casa. Na direção contrária, `empty_interior` recusa onde o motor casa. O efeito na linha terminal de caminho `fs` não foi testado;
     - fixado: borda, com `ponto_em` fechado contra o `contains` semiaberto do motor;
-    - **sem teste:** `C`+`T` com lacuna entre o limite do `words` (~2 pt) e `t` (~3 pt);
-    - **sem teste:** sobreimpressão acima de `t` na guarda. A varredura da Task 6 mediu a abertura (fonte 11 `cour` em -3, fonte 14 em -4). `test_guarda_com_sobreimpressao_alem_da_folga_recusa_como_o_motor` recusa só porque, nessa geometria, o centro de `12` cai na moldura, e a docstring dele ("não há resíduo") está **errada**: corrija-a na E06.2.2 e acrescente o resíduo, parametrizado nesses dois casos.
+    - fixado na E06.2.2.1: sobreimpressão acima de `t` na guarda, em (14, helv, -4) e (11, cour, -3). Em (11, helv, -4), a guarda recusa, porque nessa geometria o centro de `12` cai na moldura.
+    - medido na E06.2.2.1 e descartado: `C`+`T` simples não diverge, em 3 fontes e tamanhos 8, 11 e 14. Onde `words` separa, a PyMuPDF já põe espaço no segundo span, e a fusão recusa. A concatenação só diverge com outro texto entre os pedaços no fluxo (`Q`+`DP`).
   - **Divergências em que o núcleo perde recall:**
     - família de R-6: linha que dobra no disco, duas linhas de lados opostos e traço solto a menos de 0,5 pt do centro. É o caso mais provável de perda em folha real: um disco com rede dos dois lados no mesmo estilo deixa de casar;
     - losango de 4 `l` sem encadeamento (o X dobrado, recusado de propósito, é falso positivo do motor);
