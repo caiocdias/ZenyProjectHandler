@@ -8,7 +8,9 @@ checks; an E10 variant is ``unexpected``. Coverage is also reported per
 ``owner_stage``. Pending variants are reported separately and cannot satisfy the
 acceptance gate. ``complete_recognition`` additionally requires every non-E10
 variant enabled (E04 to E06 included); it stays false while any is pending, and
-nothing consumes it yet.
+nothing consumes it yet. ``missing family`` appears only for the family of a missing
+variant: a variant packaged in another family already yields ``family mismatch``, so
+no redundant error is emitted.
 """
 
 from __future__ import annotations

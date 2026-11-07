@@ -99,7 +99,7 @@ def _inventory_variants() -> dict[str, dict[str, Any]]:
 
 def _packages() -> tuple[dict[str, Any], ...]:
     paths = sorted(_PACKAGES.glob("family-f02-*.json"))
-    assert len(paths) == 31, "E07 needs one package file per family"
+    assert len(paths) == 31, "uma familia por arquivo, para toda variante nao E10"
     packages = tuple(_read_json(path) for path in paths)
     for path, package in zip(paths, packages, strict=True):
         assert path.stem == package["family_id"]
