@@ -267,7 +267,7 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E14 | Gate de testes paralelo | #concluida | E05 | suíte paralela no `.bat` sem perder teste, `main` verde, scripts de corpus com processos |
 | E06.1 | Medição de símbolos e base do modelo | #concluida | E05, E14 | benchmark diagnóstico de símbolos contra as fichas, página do modelo com índice cru, guarda contra memorização |
 | E06.2.1 | Núcleo de gramáticas sobre o modelo | #concluida | E06.1 | núcleo puro com índice espacial e teto, 6 gramáticas portadas, paridade no corpus sintético |
-| E06.2.2.1 | Método versionado no runner | #em-andamento | E06.2.1 | método de pacotes sobre o modelo no runner opt-in, resíduo raster marcado, agrupamento sem laço quadrático fora de teto |
+| E06.2.2.1 | Método versionado no runner | #concluida | E06.2.1 | método de pacotes sobre o modelo no runner opt-in, resíduo raster marcado, agrupamento sem laço quadrático fora de teto |
 | E06.2.2.2 | Medição do método nas 16 folhas | #pendente | E06.2.2.1 | benchmark ao lado do atual e diff por variante, com cada "só no núcleo" classificado |
 | E06.3 | Gramáticas das classes da ficha | #pendente | E06.2.2.2 | estai, aterramento, para-raios, transformador e interrupção sobre o modelo, acima do atual |
 | E07 | Ficha do poste | #pendente | E06.3, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
@@ -1319,7 +1319,7 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 ---
 
-## E06.2.2.1 — Método versionado no runner — #em-andamento
+## E06.2.2.1 — Método versionado no runner — #concluida
 
 **Objetivo:** expor o núcleo da E06.2.1 como método de símbolos versionado, ligado no `SymbolCompositionRunner` opt-in (D12), com o agrupamento do modelo limitado.
 
@@ -1336,10 +1336,10 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 **Critérios de aceite:**
 
-- [ ] Fixtures sintéticas positivas e negativas do método e da ligação no runner.
-- [ ] O teste de agrupamento de R-9 passa sem `xfail`.
-- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
-- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+- [x] Fixtures sintéticas positivas e negativas do método e da ligação no runner.
+- [x] O teste de agrupamento de R-9 passa sem `xfail`.
+- [x] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
 **Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`. Confira a data do `relatorio-testes.txt`: sem o `.\`, o `cmd` da sessão não acha o `.bat` e o relatório lido é o antigo.
 
@@ -1351,7 +1351,71 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 **Riscos e mitigação:** o modelo com glifos custa até ~20 s por folha no runner → opt-in até a E09. `_unir_proximos` é quadrático em caixas sobrepostas (R-9) → teto antes de ligar no runner.
 
-**Evidências e handoff:** —
+**Evidências e handoff:**
+
+- Plano: `docs/superpowers/plans/2026-11-06-leitura-vetorial-por-poste-e06-2-2-1.md`. Revisão de arquitetura (opus): bloqueou nas rodadas 0 e 1 e aprovou com notas na rodada 2.
+- Relógio: de ca9783a (16:40 de 2026-11-06) até o commit `#concluida` (17:25 de 2026-11-07), cerca de 4h30 sem as duas paradas (16:46–22:46 e 23:00–13:15). Cerca de 80 min são uma suíte do testador da Task 6 que travou com outra suíte ativa; encerrada, a segunda rodou normal. Não reproduzido nem investigado.
+- Revisão final (`revisor-seguranca`, opus, ca9783a..d953b28): pronto com correções, sem Crítico. Onda única: I1 e M1 (696d68f), I2, I3 e lacunas de teste (ad0b669). Re-revisão: todos fechados.
+- Critérios verificados:
+  1. Fixtures: `test_model_symbols.py`, `test_model_symbols_ataque.py`, `test_model_symbols_costuras_etapa.py` e `test_model_symbols_runner.py`.
+  2. R-9: sem `xfail`. Os dois xfail são a memória de glifos da E05 e os centros aglomerados (limitação aceita).
+  3. `scripts.audit_symbol_packages` em ad0b669 → `errors []`.
+  4. `.bat` em ad0b669 → `RESULTADO FINAL: APROVADO`: 8633 passed, 2 xfailed, cobertura 89,28%.
+  - `osv-scanner` nos 7 locks, com o formato declarado (189 pacotes) → `No issues found`; nenhum lock mudou. `check_test_integrity --base ca9783a` → exit 1, com 3 apontamentos justificados pela revisora (2 renomeações e 1 acréscimo do desenvolvedor em arquivo do testador).
+- Ciclo: Task 1, 2, 5 e 6 sem rodada de correção; Task 3, 2 rodadas; Task 4, 1 rodada de teste. Testador nas tarefas de risco alto, mais o testador de etapa. Onda 1: tasks 1, 2 e 5; onda 2: tasks 3 e 6; onda 3: task 4.
+- Entregas:
+  - método `declarative-drawing-model`, versão 1.0.0, em `adapters/analysis/model_symbols.py`: `perfil_pacotes_modelo(pacotes, tabela, *, limite)`, `observar_pacotes_modelo`, `residuos_raster`, `ResiduoRaster`;
+  - 5º método do `SymbolCompositionRunner` opt-in, `_VERSION = "e06-server-symbol-composition-2"`, com os módulos no digest;
+  - agrupamento com um só orçamento de visitas, `LIMITE_VISITAS_AGRUPAMENTO = 50_000_000`;
+  - `PaginaGramatica.glifos_lidos`: a guarda de marca pula só o caminho lido como glifo.
+- Medição nas 16 folhas, com a guarda da Task 6 (15 `CONCLUIDO`, 1 `NAO_DETECCAO`, sem `FORA_DOMINIO` nem `FALHA`; máx. 18,59 s por folha sob carga; 19,0 s de parede com 10 processos; 115 resíduos). Medida antes da onda final, que não muda a saída abaixo do teto:
+
+  | Folha | Tempo (s) | Resíduos | Observações |
+  |---|---|---|---|
+  | 1235863754.1 | 18,59 | 62 | 2 |
+  | 1242910617 | 4,88 | 5 | 1 |
+  | 1246619503 | 15,81 | 11 | 5 |
+  | 1248863234 | 13,72 | 7 | 4 |
+  | 1248924977 | 3,17 | 0 | 1 |
+  | 1249479371 | 16,05 | 22 | 1 |
+  | 1250203925 | 2,27 | 0 | 2 |
+  | 1251077960 | 0,27 | 1 | 3 |
+  | 1254146081 | 6,90 | 2 | 1 |
+  | 1255172677 | 0,38 | 0 | 0 |
+  | 1256403718 | 0,16 | 0 | 1 |
+  | 1256505864 | 12,58 | 1 | 3 |
+  | 1256702690 | 7,53 | 2 | 1 |
+  | 1257009501 | 6,87 | 2 | 1 |
+  | 1257190578 | 0,14 | 0 | 1 |
+  | 1257760087 | 3,52 | 0 | 2 |
+
+- Visitas do agrupamento: máx. ~3,7 milhões por folha (1257760087), 7,4% do teto. Teto medido: 5.000 círculos sobrepostos, ~2,08 s; 11.000 arcos disjuntos num traço, 23,21 s por página (com outra suíte rodando).
+- Decisões para o usuário (tomadas pela opção recomendada):
+  - **R-1, exceção ao invariante de versão:** o agrupamento mudou sem subir `VERSAO_MODELO_DESENHO`, porque nenhum consumidor lê `grupos`. Custo se errada: o cache do modelo guarda `grupos` antigos até alguém subir a versão.
+  - **R-3, fonte nova que falha deixa de ser fail-closed:** só `modelo.caminhos_falhou` aborta. `primitivas`, `textos_nativos`, `textos_shx` e `glifos` viram `FORA_DOMINIO` e entram no cache. Prós: não aborta documento que hoje compõe. Custo se errada: falha transitória fica no cache até a assinatura mudar.
+  - **R-4, resíduo raster como dado:** não vira observação nem proposta. Custo se errada: a E12 ganha um caminho de observação depois.
+  - **Sinal "Exclusivo" com o 5º método, aceito até a E09, sem mudar produção:** em símbolo de pacote, `exclusive` passa a falso, porque os dois métodos veem o mesmo desenho; em página no teto, volta a verdadeiro. Em símbolo com papel de ativo, o status passa de "Exclusivo" a "Suportado", no XLSX, na anotação do PDF e no cliente. "Suportado" aqui não é corroboração: são dois portes da mesma regra. Hoje as 22 variantes habilitadas têm papel `desconhecido`, então só o `exclusive` muda; o status passa a mudar quando a E06.3 habilitar variante de ativo. Decisão e probabilidade não mudam. Prós: opt-in desligado por padrão; a alternativa, contar por família, exige gravar família em `simbolo_observacoes`. Custo se errada: exportações opt-in com rótulo enganoso; reverter exige nova análise.
+  - **Limite de visitas 50 milhões, em vez de redesenhar a união:** folga de ~13× sobre o máximo medido. Custo se errada: página hostil leva até ~23 s antes do teto, e o trabalho continua quadrático em célula densa.
+  - **Resíduos acima de 20 por folha (62 e 22), sem regra nova de mosaico:** uma regra "colada em outra imagem" tiraria 87 de 115, mas esconderia um carimbo encostado, justamente o caso que refuta a H2. Custo se errada: triagem a mais na E06.3.
+  - **Centros aglomerados numa célula, aceito até a E09:** o custo é N imagens × M casamentos, com N sem teto (`xfail` estrito em `test_model_symbols_ataque.py`; estimativa não medida: minutos em PDF hostil). Custo se errada: job preso no worker único, em execução opt-in.
+- **Para a E06.2.2.2:**
+  - método: `declarative-drawing-model` 1.0.0, assinatura pelo perfil de `perfil_pacotes_modelo` (modelo, sha dos pacotes, sha da tabela e teto);
+  - no diff, separe o gasto de orçamento entre colagem e gramáticas;
+  - `fonte_falhou:` conta como falha, não como exclusão; `glifos_desconhecidos` deixa a guarda sem aquele texto;
+  - contorno de qualquer letra lida como glifo dentro da moldura não aciona a guarda (inerente a R-5, igual ao texto nativo), sem teste com segundo texto legível: confira nas classificações;
+  - a tabela acima é a linha de base do tempo e dos resíduos.
+- **Para a E06.3:**
+  - a H2 se confirma chamando `residuos_raster` folha a folha, não lendo a ocorrência reconciliada, e página `FORA_DOMINIO` não conta como 0 resíduos;
+  - composição dos 115 resíduos: 87 colados em outra imagem de página, 17 de anotação, 11 isolados; hashes em várias folhas: `0084746843` e `debb149f09` (5 folhas, anotação), `a2f1377bd8` e `2cc3d96d36` (3, anotação), `7ccaa4d25c` (3, página), `cfa408d465` (2, página). Causa provável (inferida, imagens não abertas): recortes de borda da ortofoto;
+  - quem consumir `grupos` adiciona `modelo.grupos_falhou` às fontes consumidas, sobe a versão (R-1) e põe `LIMITE_VISITAS_AGRUPAMENTO` nos `parametros` do perfil, que hoje só o digest cobre. Docstrings de `_unir_proximos` e `agrupar_candidatos` ainda falam só de entrada de célula; `_item_coberto` levanta sem argumento. A varredura de figuras segue quadrática sob o teto: um índice por item a eliminaria sem mudar a saída (o `any` não depende da ordem);
+  - módulos novos entram no digest: troque `_MODULOS_DO_DIGEST` (cópia manual no teste) por um teste de fecho por imports; `drawing_model/model.py` hoje fica fora do digest;
+  - habilitar variante de ativo muda o status "Exclusivo" para "Suportado" (decisão acima): reavalie.
+- **Para a E12:** `residuos_raster` é o ponto de partida; o contrato do que ela consome é dela.
+- **Para a E09, como critério de aceite ao trocar o padrão:**
+  - teto para imagens em `_ler_fontes`, decode por anotação (até 16 MP, sem memória entre anotações) e `_CamadasDoTexto` (spans × trechos gigantes), além dos centros aglomerados, com cancelamento interno ou prazo por página: o worker é único e o cancelamento só ocorre entre métodos;
+  - R-6 (desenho malformado descartado sem diagnóstico, `tabela` obrigatória); R-E06.2.1-2; `model_symbols` depende de privados de `declarative_symbols`, que ela remove;
+  - o digest cobre só adaptadores (`ports`, `domain/symbols.py` e o codec podem mudar a saída cacheada sem invalidar), preexistente;
+  - o que fazer com o sinal "Exclusivo" (acima).
 
 ---
 
