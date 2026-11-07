@@ -38,8 +38,9 @@ _INVENTORY = _ROOT / "docs/data/inventario-simbologia-v1.json"
 _PACKAGES = _ROOT / "src/zeny_project_handler/adapters/analysis/symbol_packages"
 _SCHEMA = _ROOT / "docs/schemas/pacotes-simbologia.schema.json"
 
-# Denominador independente do registro de pacotes. f02-18 inclui apenas os quatro
-# reguladores atribuídos a E07; os outros transformadores continuam em E05.
+# Denominador independente do registro de pacotes: todas as variantes não E10 do
+# inventário. f02-18 junta os quatro reguladores de E07 aos transformadores de E05,
+# empacotados como pendentes, assim como os estais, aterramentos e para-raios de E04 a E06.
 _FAMILY_COUNTS = {
     "family-f02-03": 25,
     "family-f02-04": 1,
@@ -52,14 +53,18 @@ _FAMILY_COUNTS = {
     "family-f02-11": 3,
     "family-f02-12": 3,
     "family-f02-13": 6,
+    "family-f02-14": 15,
+    "family-f02-15": 2,
     "family-f02-16": 22,
     "family-f02-17": 17,
-    "family-f02-18": 4,
-    "family-f02-19": 13,
+    "family-f02-18": 27,
+    "family-f02-19": 17,
     "family-f02-20": 40,
-    "family-f02-21": 7,
+    "family-f02-21": 15,
     "family-f02-22": 5,
     "family-f02-23": 16,
+    "family-f02-24": 2,
+    "family-f02-25": 4,
     "family-f02-26": 1,
     "family-f02-27": 13,
     "family-f02-28": 4,
@@ -85,16 +90,16 @@ def _inventory_variants() -> dict[str, dict[str, Any]]:
     selected = {
         variant["id"]: variant
         for variant in inventory["variants"]
-        if variant["owner_stage"] == "E07"
+        if variant["owner_stage"] != "E10"
     }
-    assert len(selected) == 365
+    assert len(selected) == 423
     assert Counter(v["family_id"] for v in selected.values()) == _FAMILY_COUNTS
     return selected
 
 
 def _packages() -> tuple[dict[str, Any], ...]:
     paths = sorted(_PACKAGES.glob("family-f02-*.json"))
-    assert len(paths) == 27, "E07 needs one package file per family"
+    assert len(paths) == 31, "E07 needs one package file per family"
     packages = tuple(_read_json(path) for path in paths)
     for path, package in zip(paths, packages, strict=True):
         assert path.stem == package["family_id"]
@@ -117,7 +122,9 @@ def test_e07_package_matrix_preserves_all_e01_variants_and_sources() -> None:
         for variant in package["variants"]:
             variant_id = variant["id"]
             seen.append(variant_id)
-            assert variant_id in inventory, f"E07 package contains non-E07 variant: {variant_id}"
+            assert variant_id in inventory, (
+                f"pacote contém variante E10 ou fora do inventário: {variant_id}"
+            )
             original = inventory[variant_id]
             assert original["family_id"] == package["family_id"]
             assert original["profile_id"] == package["profile_id"]
@@ -144,8 +151,8 @@ def test_e07_package_matrix_preserves_all_e01_variants_and_sources() -> None:
                 assert recognition.get("reason", "").strip(), variant_id
                 assert "grammar" not in recognition, variant_id
 
-    assert len(seen) == 365
-    assert len(set(seen)) == 365, "duplicate variant is not extra coverage"
+    assert len(seen) == 423
+    assert len(set(seen)) == 423, "duplicate variant is not extra coverage"
     assert set(seen) == inventory.keys(), "a pending or missing E01 ID cannot disappear"
     assert Counter(inventory[v]["family_id"] for v in seen) == _FAMILY_COUNTS
 
@@ -159,7 +166,7 @@ def test_enabled_status_is_distinct_from_registered_coverage() -> None:
     assert pending
     assert enabled == set(_ENABLED_IDS), "new enabled grammar needs its own positive/negative case"
     assert enabled.isdisjoint(pending)
-    assert len(enabled | pending) == 365
+    assert len(enabled | pending) == 423
     assert all(v["recognition"].get("grammar") for v in all_variants if v["id"] in enabled)
     assert all(not v["recognition"].get("grammar") for v in all_variants if v["id"] in pending)
 
@@ -182,6 +189,18 @@ def test_coverage_audit_reports_missing_variant_even_if_package_loads(tmp_path: 
     report = audit(package_dir=tmp_path / "packages")
     assert "missing variant: cemig-eo-r3-s30-v001" in report["errors"]
     assert report["complete_recognition"] is False
+
+
+def test_variante_de_outro_estagio_e_esperada(tmp_path: Path) -> None:
+    from scripts.audit_symbol_packages import audit
+
+    inventory = _inventory_variants()
+    assert inventory["cemig-eo-r3-s25-v001"]["owner_stage"] == "E05"
+    shutil.copytree(_PACKAGES, tmp_path / "packages")
+    (tmp_path / "packages/family-f02-25.json").unlink(missing_ok=True)
+    report = audit(package_dir=tmp_path / "packages")
+    assert "missing variant: cemig-eo-r3-s25-v001" in report["errors"]
+    assert "missing family: family-f02-25" in report["errors"]
 
 
 @pytest.mark.parametrize("field", ["family_id", "source_id", "variants"])
@@ -306,7 +325,7 @@ def test_enabled_corpus_has_explicit_per_package_positive_and_negative_gates(
     assert reference["pdf_sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
     assert {row["variant_id"] for row in reference["cases"]} == set(_ENABLED_IDS)
     packages = carregar_pacotes()
-    assert len(packages) == 27
+    assert len(packages) == 31
     counts: Counter[str] = Counter()
     with pymupdf.open(path) as document:
         assert len(document) == reference["pages"] == len(reference["cases"])
@@ -363,7 +382,7 @@ def test_pending_only_families_are_out_of_domain_even_when_a_frame_matches(
         for package in _packages()
         if all(v["recognition"]["status"] == "pending" for v in package["variants"])
     ]
-    assert len(pending_only) == 17
+    assert len(pending_only) == 21
     for package in pending_only:
         assert perfil_pacotes((package,)).classes_suportadas == ()
         result = _observe(path, (package,))

@@ -302,6 +302,98 @@
           "Detalhe ampliado pode repetir a mesma ocorrência"
         ]
       }
+    },
+    {
+      "id": "cemig-eo-r3-s19-v001",
+      "class_code": "ATERRAMENTO",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 22,
+        "locator": "§19; página PDF/impressa 22; desenho/linha 1 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Três barras transversais decrescentes ligadas a uma haste; símbolo base",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Três barras transversais decrescentes ligadas a uma haste; símbolo base. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Círculos de situação e componentes não equivalem a ativos adicionais",
+          "Detalhe ampliado pode repetir a mesma ocorrência"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s19-v002",
+      "class_code": "ATERRAMENTO",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 22,
+        "locator": "§19; página PDF/impressa 22; desenho/linha 2 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Três barras transversais decrescentes ligadas a uma haste; círculo/oval envolvente",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Três barras transversais decrescentes ligadas a uma haste; círculo/oval envolvente. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Círculos de situação e componentes não equivalem a ativos adicionais",
+          "Detalhe ampliado pode repetir a mesma ocorrência"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s19-v003",
+      "class_code": "ATERRAMENTO",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 22,
+        "locator": "§19; página PDF/impressa 22; desenho/linha 3 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Três barras transversais decrescentes ligadas a uma haste; círculo/oval e X vermelho",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Três barras transversais decrescentes ligadas a uma haste; círculo/oval e X vermelho. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Círculos de situação e componentes não equivalem a ativos adicionais",
+          "Detalhe ampliado pode repetir a mesma ocorrência"
+        ]
+      }
+    },
+    {
+      "id": "cemig-eo-r3-s19-v004",
+      "class_code": "ATERRAMENTO",
+      "role": "operational",
+      "destination": "network_context",
+      "source_ref": {
+        "source_id": "F02",
+        "pdf_page": 22,
+        "locator": "§19; página PDF/impressa 22; desenho/linha 4 da seção nesta página",
+        "review_status": "visual_checked"
+      },
+      "visual_note": "Três barras transversais decrescentes ligadas a uma haste; X vermelho sem envolvente",
+      "recognition": {
+        "status": "pending",
+        "reason": "Forma E01: Três barras transversais decrescentes ligadas a uma haste; X vermelho sem envolvente. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado.",
+        "negative_examples": [
+          "Exemplar de legenda/tabela não é ocorrência operacional",
+          "Glifos, molduras e líderes de anotação",
+          "Círculos de situação e componentes não equivalem a ativos adicionais",
+          "Detalhe ampliado pode repetir a mesma ocorrência"
+        ]
+      }
     }
   ]
 }
