@@ -32,9 +32,9 @@
 
 - **R-E06.3.1-1, o que o auditor exige:** todas as variantes do inventário com `owner_stage` ≠ E10, e não só as E07. Assim, as 58 novas também acusam `missing variant`, e o relato ganha `by_owner_stage` com variantes esperadas, empacotadas, `enabled` e `pending` por estágio. Uma variante E10 empacotada é `unexpected variant`. `complete_recognition` passa a exigir também as variantes E04 a E06 habilitadas. Hoje o valor continua `false` e nada no fluxo o consome. A docstring diz isso.
 - **R-E06.3.1-2, "pending não é exato" vale só para o método de pacotes:** 12 das 58 (s18-v017 a v023, s24-v001/002, s25-v001/003/004) já são `reconhecido_exato` na matriz da E16, pela evidência E05 do detector de transformadores. Empacotá-las como `pending` faria `curation_coverage_e16 compare` recusar a próxima matriz (`pending package counted as exact recognition`), que é o motivo de a ampliação ter sido adiada na E06.1 (R9).
-  - **Decisão:** a recusa passa a olhar a coluna `declarative-vector-packages` (pendente no método de pacotes contado como exato pelo método de pacotes), e não `package_status`. Variante E07 `pending` e exata continua recusada. Variante de outro estágio mantém o status da evidência do próprio estágio.
+  - **Decisão:** o predicado da recusa passa a ser `status == "reconhecido_exato" and package_status == "pending" and owner_stage == "E07"`. Só a variante E07 é reconhecida pelo método de pacotes, então só nela o `pending` contradiz o exato. Variante de outro estágio mantém o status da evidência do próprio estágio. O leitor `read_matrix` já exige `owner_stage`, e nenhuma coluna nova entra.
   - **Alternativas descartadas:** não empacotar as 12 contradiz o escopo. Rebaixar o status delas seria uma perda falsa (`lost_exact_ids`).
-  - **Contrato:** é mudança no contrato da curadoria. A frase "Nenhum `pending` é reconhecimento" de `docs/fluxo-curadoria-incremental-simbologia.md` passa a "`pending` do pacote não conta como reconhecimento pelo método de pacotes". Vai para "Decisões para o usuário".
+  - **Contrato:** é mudança no contrato da curadoria. Só a frase "Nenhum `pending` é reconhecimento" de `docs/fluxo-curadoria-incremental-simbologia.md:44-45` passa a "`pending` do pacote não conta como reconhecimento pelo método de pacotes". A de `:572` continua verdadeira e não muda. Vai para "Decisões para o usuário".
 - **R-E06.3.1-3, conjunto de pacotes na matriz:** os pacotes contêm todas as variantes E07, só variantes do inventário e nenhuma E10. A matriz aceita subconjunto das não E07; o auditor, não (R-1). As duas regras ficam escritas no código e nos testes.
 - **R-E06.3.1-4, matriz histórica da E16:** é imutável por contrato, e o script já recusa gravá-la. A próxima rodada publica `matriz-simbologia-curadoria-atual*` a partir dela, com os pacotes novos.
 - **R-E06.3.1-5, `reason` das variantes novas:** descreve a lacuna técnica, como os atuais, sem citar etapa: `"Forma E01: <visual_note>. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado."`. O mapa classe → subetapa fica no roadmap.
@@ -69,7 +69,7 @@ Soma: 2h00 (30 + 45 + 45).
 **Interfaces:**
 - Produces: `audit(...)` devolve também `by_owner_stage: dict[str, {"expected": int, "packaged": int, "enabled": int, "pending": int}]`. Nesta tarefa, `expected` de cada estágio conta as variantes do inventário, mas só as E07 são exigidas (`missing variant`). Variante não E07 e não E10 empacotada passa pelas mesmas checagens de família, perfil, classe, destino, `source_ref` e papel. A saída curta da CLI ganha `by_owner_stage`.
 
-- [ ] **Step 1: Escrever os testes** em `test_audit_symbol_packages.py`, com inventário e pacotes sintéticos em `tmp_path`:
+- [ ] **Step 1: Escrever os testes** em `test_audit_symbol_packages.py`, com inventário e pacotes sintéticos em `tmp_path`. Nas fixtures, toda variante não E10 do inventário sintético está empacotada, para nenhuma asserção mudar quando a Task 3 passar a exigir todas:
   - `test_variante_de_outro_estagio_empacotada_e_aceita`;
   - `test_variante_de_outro_estagio_divergente_acusa`: E06 empacotada com classe errada dá `class mismatch`;
   - `test_familia_e10_nao_e_aceita`: E10 empacotada dá `unexpected variant`;
@@ -95,9 +95,10 @@ Soma: 2h00 (30 + 45 + 45).
     - `test_outro_estagio_sem_pacote_continua_aceito`: o caso atual de `:90-177` continua verde.
   - em `test_curation_coverage_e16.py`:
     - `test_e05_exata_com_pacote_pending_e_aceita`;
-    - o caso que já existe (E07 `pending` exata recusada) continua verde.
+    - o caso que já existe (E07 `pending` exata recusada) continua verde, com o helper `_matrix` sem mudança nas asserções atuais;
+  - ponta a ponta, em `test_curation_coverage_e16.py`: `test_matriz_gerada_com_e05_exata_e_pacote_pending_passa_no_compare`: `coverage_matrix_e16.build(...)` com a E05 exata herdada do baseline e o pacote `pending`, o CSV gravado em `tmp_path`, `read_matrix` e `compare` contra a mesma matriz sem erro.
 - [ ] **Step 2: Rodar** e ver falhar pelo motivo certo.
-- [ ] **Step 3: Implementar** R-2 e R-3 e trocar a frase do fluxo nos dois pontos (`:44-45` e `:572`).
+- [ ] **Step 3: Implementar** R-2 e R-3 e trocar a frase do fluxo em `:44-45`.
 - [ ] **Step 4: Rodar** os dois arquivos, `tests/unit/test_claude_curation_assets.py`, a suíte inteira uma vez, mypy, ruff e format.
 - [ ] **Step 5: Commit** (`feat: matriz e comparador da curadoria aceitam pacote pending de outro estagio`).
 
