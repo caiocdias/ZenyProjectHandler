@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
+from typing import Final
 
 from zeny_project_handler.adapters.analysis.drawing_model.geometry import ponto_bezier
 from zeny_project_handler.adapters.analysis.drawing_model.model import (
@@ -19,6 +20,11 @@ from zeny_project_handler.adapters.analysis.drawing_model.model import (
 
 _CELULA = 10.0
 _TOLERANCIA_RELATIVA = 0.02
+LIMITE_VISITAS_AGRUPAMENTO: Final = 50_000_000
+
+
+class AgrupamentoExcedido(Exception):  # noqa: N818 - nome fixado pelo plano da E06.2.2.1
+    """O agrupamento da página passou do teto de visitas às células."""
 
 
 def _caixa_pontos(pontos: Iterable[tuple[float, float]]) -> Caixa:
@@ -87,8 +93,15 @@ def _caixas_se_encostam(a: Caixa, b: Caixa, margem: float) -> bool:
     )
 
 
-def _unir_proximos(caixas: Sequence[Caixa], ativos: Sequence[int], folga: float) -> list[int]:
-    """Union-find com grade espacial sobre caixas dilatadas por `folga`; devolve o vetor de pais."""
+def _unir_proximos(
+    caixas: Sequence[Caixa], ativos: Sequence[int], folga: float, limite_visitas: int
+) -> list[int]:
+    """Union-find com grade espacial sobre caixas dilatadas por `folga`; devolve o vetor de pais.
+
+    Uma visita é cada entrada de célula lida; passar de `limite_visitas` levanta
+    `AgrupamentoExcedido`. Comparações repetidas entre quem já tem a mesma raiz são puladas, mas a
+    leitura de célula densa segue quadrática em visitas: o teto é quem limita o caso hostil.
+    """
     pai = list(range(len(caixas)))
 
     def raiz(i: int) -> int:
@@ -98,6 +111,7 @@ def _unir_proximos(caixas: Sequence[Caixa], ativos: Sequence[int], folga: float)
         return i
 
     celulas: dict[tuple[int, int], list[int]] = defaultdict(list)
+    visitas = 0
     for i in ativos:
         x0, y0, x1, y1 = caixas[i]
         faixa_x = range(math.floor((x0 - folga) / _CELULA), math.floor((x1 + folga) / _CELULA) + 1)
@@ -106,9 +120,14 @@ def _unir_proximos(caixas: Sequence[Caixa], ativos: Sequence[int], folga: float)
         for cx in faixa_x:
             for cy in faixa_y:
                 celula = celulas[(cx, cy)]
+                visitas += len(celula)
+                if visitas > limite_visitas:
+                    raise AgrupamentoExcedido(limite_visitas)
                 vizinhos.update(celula)
                 celula.append(i)
         for j in vizinhos:
+            if raiz(j) == raiz(i):
+                continue
             # Caixas dilatadas por `folga` cada uma: sobrepõem se a distância <= 2 * folga.
             if _caixas_se_encostam(caixas[i], caixas[j], 2 * folga):
                 pai[raiz(i)] = raiz(j)
@@ -154,13 +173,14 @@ def agrupar_candidatos(
     *,
     folga: float = 1.5,
     lado_maximo: float = 40.0,
+    limite_visitas: int = LIMITE_VISITAS_AGRUPAMENTO,
 ) -> tuple[GrupoCandidato, ...]:
     indices_caminhos = _caminhos_elegiveis(primitivas, caminhos)
     caixas: list[Caixa] = [_caixa_primitiva(p) for p in primitivas]
     caixas.extend(_caixa_caminho(caminhos[i]) for i in indices_caminhos)
     # Elemento maior que `lado_maximo` sozinho é traçado da rede, não parte de símbolo.
     ativos = [i for i, caixa in enumerate(caixas) if _lado(caixa) <= lado_maximo]
-    raizes = _unir_proximos(caixas, ativos, folga)
+    raizes = _unir_proximos(caixas, ativos, folga, limite_visitas)
     membros: dict[int, list[int]] = defaultdict(list)
     for i in ativos:
         membros[raizes[i]].append(i)

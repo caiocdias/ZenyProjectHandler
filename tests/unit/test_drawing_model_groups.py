@@ -1,15 +1,24 @@
+# mypy: disable-error-code="no-untyped-call"
 """Grupos candidatos a símbolo."""
 
 from __future__ import annotations
 
 import math
+import random
+from collections import defaultdict
 from itertools import pairwise
+from pathlib import Path
 from typing import Any, Literal
 
+import pymupdf
 import pytest
 
+from zeny_project_handler.adapters.analysis import pymupdf_drawing_model
 from zeny_project_handler.adapters.analysis.drawing_model import groups
-from zeny_project_handler.adapters.analysis.drawing_model.groups import agrupar_candidatos
+from zeny_project_handler.adapters.analysis.drawing_model.groups import (
+    AgrupamentoExcedido,
+    agrupar_candidatos,
+)
 from zeny_project_handler.adapters.analysis.drawing_model.model import (
     Arco,
     Caminho,
@@ -280,3 +289,124 @@ def test_caminho_grande_encostado_fica_fora_e_grupos_de_so_caminhos_ordenam_por_
     caminhos = [poligono((60, 0), (66, 0), (63, 5)), grande, poligono((0, 1), (6, 1), (3, 6))]
     grupos = agrupar_candidatos([], caminhos)
     assert [(g.indices_primitivas, g.indices_caminhos) for g in grupos] == [((), (0,)), ((), (2,))]
+
+
+def _uniao_anterior(caixas: list[Any], folga: float) -> list[int]:
+    """Cópia da união de antes do teto: compara cada item com tudo o que está nas suas células."""
+    lado_celula = 10.0
+    pai = list(range(len(caixas)))
+
+    def raiz(i: int) -> int:
+        while pai[i] != i:
+            pai[i] = pai[pai[i]]
+            i = pai[i]
+        return i
+
+    celulas: dict[tuple[int, int], list[int]] = defaultdict(list)
+    for i, (x0, y0, x1, y1) in enumerate(caixas):
+        faixa_x = range(
+            math.floor((x0 - folga) / lado_celula), math.floor((x1 + folga) / lado_celula) + 1
+        )
+        faixa_y = range(
+            math.floor((y0 - folga) / lado_celula), math.floor((y1 + folga) / lado_celula) + 1
+        )
+        vizinhos: set[int] = set()
+        for cx in faixa_x:
+            for cy in faixa_y:
+                celula = celulas[(cx, cy)]
+                vizinhos.update(celula)
+                celula.append(i)
+        for j in vizinhos:
+            if groups._caixas_se_encostam(caixas[i], caixas[j], 2 * folga):
+                pai[raiz(i)] = raiz(j)
+    return [raiz(i) for i in range(len(caixas))]
+
+
+def test_saida_igual_a_uniao_anterior() -> None:
+    sorteio = random.Random(20261106)
+    primitivas = [
+        circulo(sorteio.uniform(0, 100), sorteio.uniform(0, 100), sorteio.uniform(0.5, 3.0), i)
+        for i in range(200)
+    ]
+    caixas = [groups._caixa_primitiva(p) for p in primitivas]
+    por_raiz: dict[int, list[int]] = defaultdict(list)
+    for i, r in enumerate(_uniao_anterior(caixas, 1.5)):
+        por_raiz[r].append(i)
+    esperado = set()
+    for membros in por_raiz.values():
+        caixa = (
+            min(caixas[i][0] for i in membros),
+            min(caixas[i][1] for i in membros),
+            max(caixas[i][2] for i in membros),
+            max(caixas[i][3] for i in membros),
+        )
+        if groups._lado(caixa) <= 40.0:
+            esperado.add(tuple(membros))
+    obtido = {g.indices_primitivas for g in agrupar_candidatos(primitivas, [])}
+    assert obtido == esperado
+    assert any(len(m) > 1 for m in esperado)
+
+
+def _concentricos(n: int) -> list[Circulo]:
+    return [circulo(0, 0, 2.0 + i * 1e-4, i) for i in range(n)]
+
+
+def _visitas(primitivas: list[Circulo]) -> int:
+    """Menor `limite_visitas` com que o agrupamento passa: o número de visitas feitas."""
+    baixo, alto = 0, 1
+    while True:
+        try:
+            agrupar_candidatos(primitivas, [], limite_visitas=alto)
+            break
+        except AgrupamentoExcedido:
+            baixo, alto = alto, alto * 2
+    while alto - baixo > 1:
+        meio = (baixo + alto) // 2
+        try:
+            agrupar_candidatos(primitivas, [], limite_visitas=meio)
+            alto = meio
+        except AgrupamentoExcedido:
+            baixo = meio
+    return alto
+
+
+def test_teto_de_visitas_levanta() -> None:
+    densa = _concentricos(30)
+    with pytest.raises(AgrupamentoExcedido):
+        agrupar_candidatos(densa, [], limite_visitas=10)
+    exato = _visitas(densa)
+    assert exato > 10
+    assert len(agrupar_candidatos(densa, [], limite_visitas=exato)) == 1
+    with pytest.raises(AgrupamentoExcedido):
+        agrupar_candidatos(densa, [], limite_visitas=exato - 1)
+
+
+def test_visita_nao_multiplica_em_caixas_distantes() -> None:
+    def espalhadas(n: int) -> list[Circulo]:
+        return [circulo(i * 25.0, 0, 2.0, i) for i in range(n)]
+
+    pequeno, grande = _visitas(espalhadas(500)), _visitas(espalhadas(1_000))
+    assert pequeno > 0
+    assert grande <= 2.5 * pequeno, (pequeno, grande)
+
+
+def test_pagina_densa_vira_grupos_falhou(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pdf = tmp_path / "densa.pdf"
+    with pymupdf.open() as documento:
+        pagina = documento.new_page(width=200, height=200)
+        for i in range(12):
+            pagina.draw_circle((100, 100), 5 + i * 0.01, color=(0, 0, 0))
+        documento.save(pdf)
+    normal = pymupdf_drawing_model.extrair_modelo_desenho(pdf).paginas[0]
+    assert normal.grupos
+    original = agrupar_candidatos
+    monkeypatch.setattr(
+        pymupdf_drawing_model,
+        "agrupar_candidatos",
+        lambda primitivas, caminhos: original(primitivas, caminhos, limite_visitas=5),
+    )
+    modelo = pymupdf_drawing_model.extrair_modelo_desenho(pdf).paginas[0]
+    assert modelo.grupos == ()
+    assert "modelo.grupos_falhou" in modelo.diagnosticos
+    assert modelo.caminhos == normal.caminhos
+    assert modelo.primitivas == normal.primitivas

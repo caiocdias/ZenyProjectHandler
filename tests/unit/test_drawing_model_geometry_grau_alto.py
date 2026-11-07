@@ -69,14 +69,6 @@ def _comparacoes_sobrepostas(n: int, monkeypatch: pytest.MonkeyPatch) -> int:
     return comparacoes
 
 
-@pytest.mark.xfail(
-    raises=AssertionError,
-    strict=True,
-    reason=(
-        "R-E06.2.1-9: _unir_proximos compara cada item com tudo o que já está nas suas células "
-        "(quadrático em caixas sobrepostas); corrigir antes da etapa seguinte"
-    ),
-)
 def test_agrupamento_escala_linearmente_com_caixas_sobrepostas(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
