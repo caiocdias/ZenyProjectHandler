@@ -270,10 +270,10 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E06.2.2.1 | Método versionado no runner | #concluida | E06.2.1 | método de pacotes sobre o modelo no runner opt-in, resíduo raster marcado, agrupamento sem laço quadrático fora de teto |
 | E06.2.2.2 | Medição do método nas 16 folhas | #concluida | E06.2.2.1 | benchmark ao lado do atual e diff por variante, com cada "só no núcleo" classificado |
 | E06.3.1 | Pacotes das classes da ficha | #em-andamento | E06.2.2.2 | 58 variantes do inventário de ESTAI, TRANSFORMADOR, ATERRAMENTO e PARA_RAIOS_MT/BT nos pacotes, como `pending`; auditor e matriz aceitam outro `owner_stage` |
-| E06.3.2 | Aterramento e para-raios MT | #pendente | E06.3.1 | gramática de haste com barras, com laboratório, acima do atual nas duas classes |
+| E06.3.2 | Aterramento, para-raios MT e H2 | #pendente | E06.3.1 | gramática de haste com barras, com laboratório, acima do atual nas duas classes; confirmação da H2 (raster como resíduo) |
 | E06.3.3 | Para-raios BT e transformador | #pendente | E06.3.2 | gramáticas de moldura das duas classes, com laboratório, acima do atual |
 | E06.3.4 | Estai | #pendente | E06.3.3 | gramática de estai, com laboratório, acima do atual |
-| E06.3.5 | Equipamento de interrupção e H2 | #pendente | E06.3.4 | gramática de interrupção e confirmação da H2 (raster como resíduo) |
+| E06.3.5 | Equipamento de interrupção | #pendente | E06.3.4 | gramática de interrupção, acima do atual (que não emite a classe) |
 | E07 | Ficha do poste | #pendente | E06.3.5, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
 | E08 | Conferência UTM | #pendente | E07 | transformação página → UTM, checagem de posição e vão, pendências |
 | E09 | Troca do analisador e remoção do legado | #pendente | E08, E16 | analisador novo como padrão; detectores e, se provado, OCR removidos |
@@ -1502,14 +1502,14 @@ Rulings da divisão, registradas no ledger da E06.1:
 - **Por que dividir:** a seção pede a divisão por classe acima de 3h. A ampliação dos pacotes sozinha leva cerca de 2h, e cada gramática tem laboratório próprio (na E05, cinco rodadas desse ajuste custaram ~7h45).
 - **Subetapas,** cada uma uma etapa completa, em série:
   - E06.3.1, pacotes: as 58 variantes do inventário fora dos pacotes, como `pending`;
-  - E06.3.2, ATERRAMENTO e PARA_RAIOS_MT: haste com barras;
+  - E06.3.2, ATERRAMENTO e PARA_RAIOS_MT (haste com barras) e a H2, que não depende de gramática nova e pode mudar a abordagem: medir cedo;
   - E06.3.3, PARA_RAIOS_BT e TRANSFORMADOR: molduras;
   - E06.3.4, ESTAI;
-  - E06.3.5, EQUIPAMENTO_INTERRUPCAO e a H2.
+  - E06.3.5, EQUIPAMENTO_INTERRUPCAO.
 - **Como os critérios se repartem:**
   - A E06.3.1 leva a ampliação do escopo abaixo, sem gramática nova. Por isso as fixtures e o "acima do atual" não se aplicam a ela.
   - Cada subetapa de gramática leva as fixtures e o "acima do atual" das suas classes, e estende a guarda contra memorização às gramáticas dela.
-  - A E06.3.5 confirma a H2.
+  - A E06.3.2 confirma a H2.
   - O auditor e o `.bat` valem em todas.
 - **Dependência:** a E07 passa a depender da E06.3.5.
 
@@ -1582,13 +1582,18 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
-## E06.3.2 — Aterramento e para-raios MT — #pendente
+## E06.3.2 — Aterramento, para-raios MT e H2 — #pendente
 
-**Objetivo:** reconhecer ATERRAMENTO e PARA_RAIOS_MT sobre o modelo de desenho, acima do analisador atual.
+**Objetivo:** reconhecer ATERRAMENTO e PARA_RAIOS_MT sobre o modelo de desenho, acima do analisador atual, e confirmar ou refutar a hipótese H2.
 
 **Dependências:** E06.3.1.
 
-**Escopo:** gramática de haste com barras (aterramento: barras decrescentes; para-raios MT: barras alternadas), habilitação das variantes de f02-19 e f02-21 (MT) com `negative_examples` de `confusable_negatives`, laboratório H-A/H-B/H-C e a guarda contra memorização estendida.
+**Escopo:**
+- Gramática de haste com barras (aterramento: barras decrescentes; para-raios MT: barras alternadas).
+- Habilitação das variantes de f02-19 e f02-21 (MT), já empacotadas na E06.3.1.
+- Laboratório H-A/H-B/H-C.
+- A guarda contra memorização estendida às gramáticas novas.
+- A H2: chamar `residuos_raster` folha a folha (handoff da E06.2.2.1), sem contar página `FORA_DOMINIO`, e registrar a contagem por folha em `tmp/`.
 
 **Fora de escopo:** as outras classes (E06.3.3 a E06.3.5).
 
@@ -1596,6 +1601,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 - [ ] Fixtures sintéticas positivas e negativas das duas classes.
 - [ ] Nas 16 folhas, precisão e recall de ATERRAMENTO e PARA_RAIOS_MT em `tmp/`, maiores que os do atual com as mesmas referências.
+- [ ] H2 confirmada ou refutada, com a contagem por folha em `tmp/`.
 - [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
 - [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
@@ -1675,13 +1681,13 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
-## E06.3.5 — Equipamento de interrupção e H2 — #pendente
+## E06.3.5 — Equipamento de interrupção — #pendente
 
-**Objetivo:** reconhecer EQUIPAMENTO_INTERRUPCAO sobre o modelo de desenho e confirmar a hipótese H2.
+**Objetivo:** reconhecer EQUIPAMENTO_INTERRUPCAO sobre o modelo de desenho.
 
 **Dependências:** E06.3.4.
 
-**Escopo:** gramática de interrupção (chevrons e curva sinuosa, f02-20), habilitação das variantes, laboratório e guarda; H2 confirmada chamando `residuos_raster` folha a folha (handoff da E06.2.2.1), com página `FORA_DOMINIO` fora da contagem.
+**Escopo:** gramática de interrupção (chevrons e curva sinuosa, f02-20), habilitação das variantes, laboratório e guarda.
 
 **Fora de escopo:** associação ao poste (E07); remover detectores antigos (E09).
 
@@ -1689,7 +1695,6 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 - [ ] Fixtures sintéticas positivas e negativas de EQUIPAMENTO_INTERRUPCAO.
 - [ ] Nas 16 folhas, precisão e recall de EQUIPAMENTO_INTERRUPCAO em `tmp/`, maiores que os do atual (que não emite a classe: 0 tp, 20 fn).
-- [ ] H2 confirmada ou refutada, com a contagem por folha em `tmp/`.
 - [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
 - [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 

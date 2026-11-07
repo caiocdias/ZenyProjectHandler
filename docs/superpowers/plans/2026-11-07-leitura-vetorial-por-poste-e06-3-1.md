@@ -2,109 +2,141 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** pôr nos pacotes, como `pending`, as 58 variantes do inventário de ESTAI, TRANSFORMADOR, ATERRAMENTO e PARA_RAIOS_MT/BT que estão fora deles, com o auditor e a matriz da E16 aceitando variante de outro `owner_stage`.
+**Goal:** pôr nos pacotes, como `pending`, as 58 variantes do inventário de ESTAI, TRANSFORMADOR, ATERRAMENTO e PARA_RAIOS_MT/BT que estão fora deles. O auditor, a matriz da E16 e o comparador da curadoria passam a aceitar variante de outro `owner_stage`.
 
-**Architecture:** só dados e ferramentas de auditoria. Os pacotes JSON em `adapters/analysis/symbol_packages/` ganham 4 famílias novas e variantes novas em 3 existentes. O auditor passa a exigir todas as variantes não E10 do inventário, com relato por estágio. A matriz marca a variante empacotada de outro estágio como `pendente_sem_inferencia` no método de pacotes. Nada é reconhecido de novo: `pending` não gera observação.
+**Architecture:** dados e ferramentas de auditoria, sem mudança no reconhecimento: `pending` não gera observação. Os pacotes JSON em `adapters/analysis/symbol_packages/` ganham 4 famílias novas e variantes novas em 3 existentes. O auditor passa a exigir todas as variantes não E10 do inventário, com relato por estágio. A matriz e o comparador da curadoria distinguem o reconhecimento pelo método de pacotes (variante E07) do reconhecimento pelo método do próprio estágio (E04 a E06).
 
 **Tech Stack:** Python 3.11–3.13, JSON, pytest, mypy strict.
 
-**Spec:** `docs/roadmap-leitura-vetorial-por-poste.md`, seções "E06.3" (escopo e divisão) e "E06.3.1"; `docs/data/inventario-simbologia-v1.json`; o levantamento em `tmp/e06/levantamento-e06.md` do checkout principal (§2, §5).
+**Spec:** `docs/roadmap-leitura-vetorial-por-poste.md`, seções "E06.3" (escopo e divisão) e "E06.3.1"; `docs/data/inventario-simbologia-v1.json`; `docs/fluxo-curadoria-incremental-simbologia.md` (matriz e fechamento); o levantamento em `tmp/e06/levantamento-e06.md` do checkout principal (§2, §5).
 
 ## Global Constraints
 
-- O inventário `docs/data/inventario-simbologia-v1.json` é congelado: nada aqui o edita.
-- Cada variante nova copia do inventário `id`, `class_code`, `destination`, `visual_note` e `source_refs[0]` (como `source_ref`). O `role` deriva de `function`: `informative` se `function` ∈ {`convention`, `non_asset`}, senão `operational`. O mesmo vale para as variantes que já existem. `recognition` = `{"status": "pending", "reason": ..., "negative_examples": confusable_negatives}`, no formato das `pending` atuais.
+- O inventário `docs/data/inventario-simbologia-v1.json` e a matriz histórica da E16 (`docs/data/matriz-simbologia-e16*`) são congelados: nada aqui os edita.
+- Cada variante nova copia do inventário `id`, `class_code`, `destination`, `visual_note` e `source_refs[0]` (como `source_ref`). O `role` deriva de `function`: `informative` se `function` ∈ {`convention`, `non_asset`}, senão `operational`. `recognition` = `{"status": "pending", "reason": ..., "negative_examples": confusable_negatives}`, no formato das `pending` atuais. As variantes que já estão nos pacotes já obedecem a isso, e nada muda nelas.
 - O pacote da família nova segue o cabeçalho dos atuais (`schema_version` 1, `family_id` igual ao nome do arquivo, `profile_id` e `source_id` da família no inventário), e a validação de `declarative_symbols.carregar_pacotes` aceita tudo sem mudança no código dela.
 - Sem mudança em `declarative_symbols.py`, no núcleo, no runner, na API ou nos DTOs. A assinatura do perfil de pacotes muda porque o sha dos pacotes muda: é esperado (cache miss no runner opt-in).
-- A matriz publicada (`docs/data/matriz-simbologia-e16*`) não é regenerada.
 - Testes sem dependência de ordem, cwd ou arquivo fixo fora do repositório. mypy strict, ruff check e ruff format.
 - Nada lê `examples/` nem `examples/avaliacao-cega/`.
-- Worktree da etapa: `.venv/Scripts/python.exe`.
+- Worktree da etapa: `.venv/Scripts/python.exe`. Em onda, `PYTHONPATH=<worktree da tarefa>/src`, e a suíte inteira usa `-n` = 20 ÷ suítes ativas.
 
 ## Review Focus
 
 1. Variante empacotada que diverge do inventário (classe, destino, `source_ref`, papel) → o auditor acusa erro, como já faz para E07 (Task 1).
-2. Variante esperada que falta, inclusive de estágio não E07 → `missing variant` (Task 1).
-3. As famílias E10 (f02-01, f02-02) continuam fora: nem esperadas, nem aceitas se aparecerem (Task 1).
-4. Tabela de suporte da revisão: as classes novas (ESTAI, TRANSFORMADOR, ...) aparecem com as `pending` novas, e a ordem continua estável (Task 2).
-5. Matriz: variante E04, E05 ou E06 empacotada mantém o status da evidência do próprio estágio e só ganha `pendente_sem_inferencia` no método de pacotes (Task 2).
+2. Variante esperada que falta, inclusive de estágio não E07 → `missing variant` (Task 3).
+3. As famílias E10 (f02-01, f02-02) continuam fora: nem esperadas nem aceitas se aparecerem, no auditor e na matriz (Tasks 1 e 2).
+4. A tabela de suporte da revisão é por família: as 4 famílias novas aparecem como só pendentes, e a ordem continua estável (Task 3).
+5. Uma variante E05 com `reconhecido_exato` herdado, agora empacotada como `pending`, passa pelo comparador da curadoria. Uma E07 `pending` com `reconhecido_exato` continua recusada (Task 2).
 
 ## Decisões do plano
 
-- **R-E06.3.1-1, o que o auditor exige:** todas as variantes do inventário com `owner_stage` ≠ E10, e não só as E07. Assim, as 58 novas também acusam `missing variant`, e o relato ganha `by_owner_stage` com variantes, `enabled` e `pending` por estágio. Uma variante E10 empacotada é `unexpected variant`.
-- **R-E06.3.1-2, matriz publicada:** não é regenerada aqui. Ela é artefato da curadoria e exige relatórios novos das E05, E06 e E07; a coluna `package_status` das 58 fica defasada até a próxima rodada. O script passa a aceitar a variante empacotada de outro estágio, e um teste com fixture prova isso.
-- **R-E06.3.1-3, `reason` das variantes novas:** `"Forma E01: <visual_note>. Gramática sobre o modelo de desenho planejada na <subetapa> (E06.3); positivo/negativo ainda não validado."`, com `<subetapa>` por classe: ATERRAMENTO e PARA_RAIOS_MT → E06.3.2; PARA_RAIOS_BT e TRANSFORMADOR (e o CONJUNTO_EO da f02-25) → E06.3.3; ESTAI → E06.3.4.
-- **R-E06.3.1-4, 7 arquivos JSON numa tarefa:** acima do limite de 3 arquivos de produção, mas são dados gerados mecanicamente do inventário. Dividir exigiria deixar o auditor vermelho entre tarefas. O gerador é descartável e não entra no Git.
+- **R-E06.3.1-1, o que o auditor exige:** todas as variantes do inventário com `owner_stage` ≠ E10, e não só as E07. Assim, as 58 novas também acusam `missing variant`, e o relato ganha `by_owner_stage` com variantes esperadas, empacotadas, `enabled` e `pending` por estágio. Uma variante E10 empacotada é `unexpected variant`. `complete_recognition` passa a exigir também as variantes E04 a E06 habilitadas. Hoje o valor continua `false` e nada no fluxo o consome. A docstring diz isso.
+- **R-E06.3.1-2, "pending não é exato" vale só para o método de pacotes:** 12 das 58 (s18-v017 a v023, s24-v001/002, s25-v001/003/004) já são `reconhecido_exato` na matriz da E16, pela evidência E05 do detector de transformadores. Empacotá-las como `pending` faria `curation_coverage_e16 compare` recusar a próxima matriz (`pending package counted as exact recognition`), que é o motivo de a ampliação ter sido adiada na E06.1 (R9).
+  - **Decisão:** a recusa passa a olhar a coluna `declarative-vector-packages` (pendente no método de pacotes contado como exato pelo método de pacotes), e não `package_status`. Variante E07 `pending` e exata continua recusada. Variante de outro estágio mantém o status da evidência do próprio estágio.
+  - **Alternativas descartadas:** não empacotar as 12 contradiz o escopo. Rebaixar o status delas seria uma perda falsa (`lost_exact_ids`).
+  - **Contrato:** é mudança no contrato da curadoria. A frase "Nenhum `pending` é reconhecimento" de `docs/fluxo-curadoria-incremental-simbologia.md` passa a "`pending` do pacote não conta como reconhecimento pelo método de pacotes". Vai para "Decisões para o usuário".
+- **R-E06.3.1-3, conjunto de pacotes na matriz:** os pacotes contêm todas as variantes E07, só variantes do inventário e nenhuma E10. A matriz aceita subconjunto das não E07; o auditor, não (R-1). As duas regras ficam escritas no código e nos testes.
+- **R-E06.3.1-4, matriz histórica da E16:** é imutável por contrato, e o script já recusa gravá-la. A próxima rodada publica `matriz-simbologia-curadoria-atual*` a partir dela, com os pacotes novos.
+- **R-E06.3.1-5, `reason` das variantes novas:** descreve a lacuna técnica, como os atuais, sem citar etapa: `"Forma E01: <visual_note>. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado."`. O mapa classe → subetapa fica no roadmap.
 
 ## File Structure
 
 | Arquivo | Responsabilidade | Task |
 |---|---|---|
-| `src/zeny_project_handler/adapters/analysis/symbol_packages/family-f02-14.json`, `-15`, `-24`, `-25` (novos) | famílias ESTAI MT/AT, transformador terciário e de medida | 1 |
-| `src/zeny_project_handler/adapters/analysis/symbol_packages/family-f02-18.json`, `-19`, `-21` | variantes novas (transformador; aterramento; para-raios MT/BT) | 1 |
-| `scripts/audit_symbol_packages.py` | universo esperado e relato por estágio | 1 |
-| `tests/unit/test_declarative_symbol_packages.py` | contagens e paridade com o inventário | 1 |
-| `tests/unit/test_audit_symbol_packages.py` (novo) | auditor por estágio | 1 |
-| `scripts/coverage_matrix_e16.py` | estado do método de pacotes para variante de outro estágio | 2 |
-| `tests/unit/test_e16_coverage_matrix.py` | caso da variante empacotada de outro estágio | 2 |
-| `tests/server/test_e14_symbol_review.py:287` | total de `pending` na tabela de suporte | 2 |
+| `scripts/audit_symbol_packages.py` | aceita variante não E10 empacotada; relato por estágio; depois exige todas | 1, 3 |
+| `tests/unit/test_audit_symbol_packages.py` (novo) | auditor por estágio | 1, 3 |
+| `scripts/coverage_matrix_e16.py` | conjunto de pacotes (R-3) e estado do método de pacotes para variante de outro estágio | 2 |
+| `scripts/curation_coverage_e16.py` | a recusa de `pending` exato olha o método de pacotes (R-2) | 2 |
+| `tests/unit/test_e16_coverage_matrix.py`, `tests/unit/test_curation_coverage_e16.py` | casos novos, sem remover os atuais | 2 |
+| `docs/fluxo-curadoria-incremental-simbologia.md` | a frase de R-2 | 2 |
+| `src/zeny_project_handler/adapters/analysis/symbol_packages/family-f02-14.json`, `-15`, `-24`, `-25` (novos) e `family-f02-18.json`, `-19`, `-21` | as 58 variantes | 3 |
+| `tests/unit/test_declarative_symbol_packages.py`, `tests/server/test_e14_symbol_review.py:287` | contagens | 3 |
 
-Ondas: Task 1; Task 2.
+Ondas: Tasks 1 e 2 (arquivos disjuntos); Task 3.
 
-Soma: 75 min.
+Soma: 2h00 (30 + 45 + 45).
 
 ## Tasks
 
-### Task 1: Pacotes e auditor
+### Task 1: Auditor por estágio
+
+**Estimativa:** 30 min · **Depende de:** nenhuma · **Risco:** alto · **Laboratório:** não
+
+**Files:**
+- Modify: `scripts/audit_symbol_packages.py`
+- Create: `tests/unit/test_audit_symbol_packages.py`
+
+**Interfaces:**
+- Produces: `audit(...)` devolve também `by_owner_stage: dict[str, {"expected": int, "packaged": int, "enabled": int, "pending": int}]`. Nesta tarefa, `expected` de cada estágio conta as variantes do inventário, mas só as E07 são exigidas (`missing variant`). Variante não E07 e não E10 empacotada passa pelas mesmas checagens de família, perfil, classe, destino, `source_ref` e papel. A saída curta da CLI ganha `by_owner_stage`.
+
+- [ ] **Step 1: Escrever os testes** em `test_audit_symbol_packages.py`, com inventário e pacotes sintéticos em `tmp_path`:
+  - `test_variante_de_outro_estagio_empacotada_e_aceita`;
+  - `test_variante_de_outro_estagio_divergente_acusa`: E06 empacotada com classe errada dá `class mismatch`;
+  - `test_familia_e10_nao_e_aceita`: E10 empacotada dá `unexpected variant`;
+  - `test_relato_por_estagio`.
+- [ ] **Step 2: Rodar** e ver falhar pelo motivo certo.
+- [ ] **Step 3: Implementar** e atualizar a docstring do módulo (R-1).
+- [ ] **Step 4: Rodar** o arquivo novo, `tests/unit/test_declarative_symbol_packages.py` e `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` (`errors: []`, com os pacotes de hoje), ruff e format.
+- [ ] **Step 5: Commit** (`feat: auditor de pacotes aceita outro estagio e relata por estagio`).
+
+### Task 2: Matriz e comparador da curadoria
 
 **Estimativa:** 45 min · **Depende de:** nenhuma · **Risco:** alto · **Laboratório:** não
 
 **Files:**
-- Create: `family-f02-14.json`, `family-f02-15.json`, `family-f02-24.json`, `family-f02-25.json` em `src/zeny_project_handler/adapters/analysis/symbol_packages/`; `tests/unit/test_audit_symbol_packages.py`
-- Modify: `family-f02-18.json`, `family-f02-19.json`, `family-f02-21.json`; `scripts/audit_symbol_packages.py`; `tests/unit/test_declarative_symbol_packages.py`
+- Modify: `scripts/coverage_matrix_e16.py`, `scripts/curation_coverage_e16.py`, `tests/unit/test_e16_coverage_matrix.py`, `tests/unit/test_curation_coverage_e16.py`, `docs/fluxo-curadoria-incremental-simbologia.md`
 
-**Interfaces:**
-- Produces: `audit(...)` devolve, além do que já devolve, `by_owner_stage: dict[str, {"expected": int, "packaged": int, "enabled": int, "pending": int}]`. `expected_variants` passa a 423 e `package_families` a 31. A saída curta da CLI ganha `by_owner_stage`.
-
-- [ ] **Step 1: Escrever os testes** (vermelhos):
-  - em `test_audit_symbol_packages.py`, com inventário e pacotes sintéticos em `tmp_path`:
-    - `test_variante_de_outro_estagio_e_esperada`: variante E05 do inventário sem pacote dá `missing variant`;
-    - `test_variante_de_outro_estagio_divergente_acusa`: E06 empacotada com classe errada dá `class mismatch`;
-    - `test_familia_e10_nao_e_esperada_nem_aceita`: E10 ausente não acusa; E10 empacotada dá `unexpected variant`;
-    - `test_relato_por_estagio`: `by_owner_stage` conta esperadas, empacotadas, `enabled` e `pending`;
-  - em `test_declarative_symbol_packages.py`: as contagens passam a 423 variantes e 31 famílias, com as contagens por família novas, e a checagem "E07 package contains non-E07 variant" passa a aceitar qualquer estágio do inventário menos E10. Nenhuma checagem é removida: cada contagem muda para o valor novo.
+- [ ] **Step 1: Escrever os testes**, com fixtures em `tmp_path` e sem remover nenhum atual:
+  - em `test_e16_coverage_matrix.py`:
+    - `test_variante_empacotada_de_outro_estagio`: uma variante E05 empacotada como `pending` mantém o `status` da evidência E05 (relatório ou baseline) e tem `declarative-vector-packages` = `pendente_sem_inferencia` e `package_status` = `pending`;
+    - `test_pacotes_sem_alguma_e07_recusa`;
+    - `test_pacote_com_variante_fora_do_inventario_recusa`;
+    - `test_pacote_com_variante_e10_recusa`;
+    - `test_outro_estagio_sem_pacote_continua_aceito`: o caso atual de `:90-177` continua verde.
+  - em `test_curation_coverage_e16.py`:
+    - `test_e05_exata_com_pacote_pending_e_aceita`;
+    - o caso que já existe (E07 `pending` exata recusada) continua verde.
 - [ ] **Step 2: Rodar** e ver falhar pelo motivo certo.
-- [ ] **Step 3: Gerar os pacotes** com um script descartável (fora do Git, em `tmp/`), aplicando as Global Constraints e R-E06.3.1-3, na ordem das variantes no inventário. As variantes novas vão ao fim do arquivo existente; o que já existe não muda.
-- [ ] **Step 4: Ajustar o auditor** (R-E06.3.1-1).
-- [ ] **Step 5: Rodar** os dois arquivos de teste, `tests/unit/test_declarative_symbols*.py`, `tests/unit/test_symbol_packages_sem_memorizacao.py`, `tests/integration/test_model_symbols_runner.py` e `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` (`errors: []`, `expected_variants: 423`). Depois, a suíte inteira uma vez, mypy, ruff e format.
-- [ ] **Step 6: Commit** (`feat: variantes das classes da ficha nos pacotes como pending`).
+- [ ] **Step 3: Implementar** R-2 e R-3 e trocar a frase do fluxo nos dois pontos (`:44-45` e `:572`).
+- [ ] **Step 4: Rodar** os dois arquivos, `tests/unit/test_claude_curation_assets.py`, a suíte inteira uma vez, mypy, ruff e format.
+- [ ] **Step 5: Commit** (`feat: matriz e comparador da curadoria aceitam pacote pending de outro estagio`).
 
-### Task 2: Matriz da E16 e tabela de suporte
+### Task 3: As 58 variantes nos pacotes
 
-**Estimativa:** 30 min · **Depende de:** Task 1 · **Risco:** normal · **Laboratório:** não
+**Estimativa:** 45 min · **Depende de:** Tasks 1 e 2 · **Risco:** alto · **Laboratório:** não
 
 **Files:**
-- Modify: `scripts/coverage_matrix_e16.py`, `tests/unit/test_e16_coverage_matrix.py`, `tests/server/test_e14_symbol_review.py`
+- Create: `family-f02-14.json`, `family-f02-15.json`, `family-f02-24.json`, `family-f02-25.json` em `src/zeny_project_handler/adapters/analysis/symbol_packages/`
+- Modify: `family-f02-18.json`, `family-f02-19.json`, `family-f02-21.json`; `scripts/audit_symbol_packages.py` (passa a exigir todas as não E10); `tests/unit/test_audit_symbol_packages.py`; `tests/unit/test_declarative_symbol_packages.py`; `tests/server/test_e14_symbol_review.py`
 
-**Interfaces:**
-- Consumes: os pacotes da Task 1.
-
-- [ ] **Step 1: Escrever os testes:**
-  - em `test_e16_coverage_matrix.py`, `test_variante_empacotada_de_outro_estagio`: com fixtures em `tmp_path`, uma variante E05 empacotada como `pending` mantém o `status` da evidência E05 (relatório ou baseline) e tem `declarative-vector-packages` = `pendente_sem_inferencia` e `package_status` = `pending`;
-  - em `test_e14_symbol_review.py:287`, o total de `pending` passa ao valor medido com os pacotes da Task 1 (343 + 58 = 401, se nenhuma das 58 cair fora da tabela; confira e use o valor real).
+- [ ] **Step 1: Escrever os testes** (vermelhos):
+  - em `test_audit_symbol_packages.py`, `test_variante_de_outro_estagio_e_esperada`: E05 do inventário sem pacote dá `missing variant`;
+  - em `test_declarative_symbol_packages.py`, cada contagem passa ao valor novo, sem remover checagem:
+    - `:88`: o filtro só E07 passa a não E10;
+    - `:90`, `:147`, `:148` e `:162`: 365 passa a 423;
+    - `:97` e `:309`: 27 pacotes passam a 31;
+    - `:113`: `_FAMILY_COUNTS` ganha as famílias novas, e as alteradas mudam de contagem;
+    - `:120`: "non-E07 variant" passa a "variante E10 ou fora do inventário";
+    - `:366`: 17 famílias só pendentes passam a 21;
+    - o comentário de `:41-42` acompanha;
+  - em `test_e14_symbol_review.py:287`: 343 passa a 401.
 - [ ] **Step 2: Rodar** e ver falhar pelo motivo certo.
-- [ ] **Step 3: Implementar** em `_method_states`: variante de outro estágio com pacote ganha o estado do método de pacotes pelo `recognition.status` do pacote, como já acontece em E07. O resto não muda.
-- [ ] **Step 4: Rodar** `tests/unit/test_e16_coverage_matrix.py`, `tests/server/test_e14_symbol_review.py`, `tests/unit/test_deliverable_exports.py`, ruff e format. Expected: PASS.
-- [ ] **Step 5: Commit** (`feat: matriz e16 reconhece variante empacotada de outro estagio`).
+- [ ] **Step 3: Gerar os pacotes** com um script descartável (fora do Git, em `tmp/`), conforme as Global Constraints e R-5, na ordem das variantes no inventário. As variantes novas vão ao fim do arquivo existente.
+- [ ] **Step 4: Exigir todas as não E10** no auditor (R-1).
+- [ ] **Step 5: Rodar** os testes de pacotes, auditor e revisão, `tests/unit/test_symbol_packages_sem_memorizacao.py`, `tests/unit/test_deliverable_exports.py`, `tests/integration/test_model_symbols_runner.py` e `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` (`errors: []`, `expected_variants: 423`, `pending: 401`). Depois, a suíte inteira uma vez, mypy, ruff e format.
+- [ ] **Step 6: Commit** (`feat: variantes das classes da ficha nos pacotes como pending`).
 
 ## Fechamento operacional
 
 | Critério de aceite | Evidência |
 |---|---|
-| Auditor com 0 erros, as 58 como `pending` e relato por estágio | Task 1; saída da CLI no handoff |
-| Tabela de suporte conta as novas `pending`, testes fixos atualizados | Task 2 |
+| Auditor com 0 erros, as 58 como `pending` e relato por estágio | Task 3; saída da CLI no handoff |
+| Tabela de suporte conta as novas `pending`, testes fixos atualizados | Task 3 |
 | `IniciarTestes.bat` → `RESULTADO FINAL: APROVADO` | `cmd.exe //c ".\\IniciarTestes.bat"`, conferindo a data do relatório |
 
-Em "Decisões para o usuário": as 58 `pending` passam a aparecer na tabela de suporte da revisão e nas exportações (a classe aparece com referências pendentes, sem reconhecimento), e a matriz publicada fica defasada na coluna `package_status` até a próxima rodada de curadoria.
+Em "Decisões para o usuário":
+- R-2: a mudança no contrato da curadoria;
+- a tabela de suporte da revisão e a planilha de capacidade passam a mostrar 4 famílias novas (ESTAI MT/AT, transformador terciário e de medida) e as novas `pending` nas famílias existentes. ESTAI e TRANSFORMADOR aparecem como pendentes no pacote, embora os detectores dedicados do runner opt-in os reconheçam;
+- `complete_recognition` do auditor muda de significado (R-1).
 
-Para a E06.3.2 a E06.3.5: a subetapa habilita as variantes da sua classe (já empacotadas) e atualiza o `reason` e as contagens `enabled`.
+Para a E06.3.2 a E06.3.5: a subetapa habilita as variantes da sua classe, já empacotadas, e troca o `reason` e as contagens `enabled`.
