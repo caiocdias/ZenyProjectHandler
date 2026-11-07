@@ -245,6 +245,10 @@ Depois de uma correção, o orquestrador repete uma vez o benchmark e o diff, co
 - **Modelo:** opus.
 - **Notas Menores:** M1 a M5 da rodada 2 aplicadas ao plano. M6: a Task 5 fica `Risco: normal`; o testador de etapa cobre a transformação em página girada e `test_fila_so_traz_id_e_descricao`. Não verificado pelo revisor: nada executado; página girada nas 16 folhas, desencontro real de índice e custo de 400 dpi ficam para a Task 6.
 
+## Execução
+
+O diff nas 16 folhas deu 0 "só no núcleo", então a Task 5 (recortes e fila), os Steps 2 a 4 da Task 6 e a Task 7 foram pulados, com ruling. `--recortes`, `--dpi`, `fila.json` e `tests/unit/test_diff_simbolos_recortes.py` **não existem**: a especificação da Task 5 fica aqui para quem precisar dela quando o diff tiver itens.
+
 ## Fechamento operacional
 
 | Critério de aceite | Evidência |

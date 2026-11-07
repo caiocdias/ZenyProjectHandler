@@ -268,7 +268,7 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E06.1 | Medição de símbolos e base do modelo | #concluida | E05, E14 | benchmark diagnóstico de símbolos contra as fichas, página do modelo com índice cru, guarda contra memorização |
 | E06.2.1 | Núcleo de gramáticas sobre o modelo | #concluida | E06.1 | núcleo puro com índice espacial e teto, 6 gramáticas portadas, paridade no corpus sintético |
 | E06.2.2.1 | Método versionado no runner | #concluida | E06.2.1 | método de pacotes sobre o modelo no runner opt-in, resíduo raster marcado, agrupamento sem laço quadrático fora de teto |
-| E06.2.2.2 | Medição do método nas 16 folhas | #em-andamento | E06.2.2.1 | benchmark ao lado do atual e diff por variante, com cada "só no núcleo" classificado |
+| E06.2.2.2 | Medição do método nas 16 folhas | #concluida | E06.2.2.1 | benchmark ao lado do atual e diff por variante, com cada "só no núcleo" classificado |
 | E06.3 | Gramáticas das classes da ficha | #pendente | E06.2.2.2 | estai, aterramento, para-raios, transformador e interrupção sobre o modelo, acima do atual |
 | E07 | Ficha do poste | #pendente | E06.3, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
 | E08 | Conferência UTM | #pendente | E07 | transformação página → UTM, checagem de posição e vão, pendências |
@@ -1419,7 +1419,7 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 ---
 
-## E06.2.2.2 — Medição do método nas 16 folhas — #em-andamento
+## E06.2.2.2 — Medição do método nas 16 folhas — #concluida
 
 **Objetivo:** medir o método novo nas 16 folhas, ao lado do atual, e classificar cada divergência em que ele afirma a mais.
 
@@ -1434,11 +1434,11 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 **Critérios de aceite:**
 
-- [ ] O benchmark de símbolos mede o método novo nas 16 folhas, ao lado do atual.
-- [ ] Diff por variante e folha, núcleo contra motor, sem passar pela ficha, em `tmp/`: cada casamento "só no núcleo" listado e classificado (ver handoff da E06.2.1).
-- [ ] O gasto real de orçamento e o limite de `LIMITE_CONSULTAS_PAGINA` estão registrados no handoff.
-- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
-- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+- [x] O benchmark de símbolos mede o método novo nas 16 folhas, ao lado do atual.
+- [x] Diff por variante e folha, núcleo contra motor, sem passar pela ficha, em `tmp/`: cada casamento "só no núcleo" listado e classificado (ver handoff da E06.2.1).
+- [x] O gasto real de orçamento e o limite de `LIMITE_CONSULTAS_PAGINA` estão registrados no handoff.
+- [x] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
 **Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
 
@@ -1450,7 +1450,45 @@ Rulings da divisão, registradas no ledger da E06.1:
 
 **Riscos e mitigação:** o benchmark por ficha não vê a maior parte dos falsos positivos (I1 da E06.2.1) → o diff não passa pela ficha.
 
-**Evidências e handoff:** —
+**Evidências e handoff:**
+
+- Plano: `docs/superpowers/plans/2026-11-07-leitura-vetorial-por-poste-e06-2-2-2.md`. Revisão de arquitetura (opus): bloqueou nas rodadas 0 e 1 e aprovou com notas na rodada 2.
+- Relógio: de 1aec214 (17:23 de 2026-11-07) até o commit `#concluida` (19:23), 2h00.
+- Revisão final (`revisor-seguranca`, opus, 1aec214..f751a16): pronto com correções, sem Crítico, e as correções eram só de registro (este handoff, ledger e plano). Depois dela, o `.bat` reprovou no mypy de um teste; a tipagem foi corrigida em c6e1876, só no teste.
+- Critérios verificados:
+  1. Benchmark (em 7405d16) nas 16 folhas, sem falha, critério `centro`. A tabela é a linha de base:
+
+     | método | tp | fp | fn | precisão | recall | predições |
+     |---|---|---|---|---|---|---|
+     | `atual` | 131 | 58 | 48 | 69,3% | 73,2% | 277 |
+     | `pacotes` | 2 | 18 | 177 | 10,0% | 1,1% | 29 |
+     | `modelo` | 2 | 18 | 177 | 10,0% | 1,1% | 29 |
+
+     O benchmark por ficha quase não discrimina: 177 das 179 referências são de classes sem variante habilitada. As 18 FP de `PONTO_CONEXAO` estão nos dois métodos: o novo as herda do motor, e elas não contam como "afirma a mais".
+  2. Diff (em f751a16): 16 páginas comparadas, nenhuma girada, sem falha. Resultado: `ambos` 29, `so_nucleo` 0, `so_motor` 0, `indice_diverge` 0, `geometria_diverge` 0. Com 0 itens, o critério "cada só no núcleo listado e classificado" está cumprido sem classificação, porque não houve o que classificar. **Ressalva:** as 29 observações são todas de `cemig-eo-r3-s28-v001` (disco terminal). As outras 21 variantes habilitadas, as gramáticas de moldura, não casam em nenhuma folha, nem no motor nem no núcleo, então esta medição não valida o núcleo em moldura de folha real.
+  3. Gasto real (limite de medição 10¹²): o maior foi 133.352 consultas, na folha `016` (colagem 171, índices 45.768, gramáticas 87.413), 6,7% de `LIMITE_CONSULTAS_PAGINA` = 2.000.000. As outras folhas ficaram em ≤ 30.467. O limite fica (R-E06.2.2.2-4: ≤ 200.000).
+  4. `scripts.audit_symbol_packages` em c6e1876 → `errors []`.
+  5. `.bat` em c6e1876 → `RESULTADO FINAL: APROVADO`: 9048 passed, 2 xfailed, cobertura 89,29%, mypy limpo em 557 arquivos.
+  - `osv-scanner` nos 7 locks (189 pacotes) → `No issues found`; nenhum lock mudou. `check_test_integrity --base 1aec214` → exit 1, um apontamento justificado (a linha de `METODOS` que o plano autoriza).
+- Ciclo: Onda 1, Tasks 1 e 3; Onda 2, Tasks 2 e 4. Testador nas quatro, todas de risco alto. A Task 1 teve uma rodada de correção (`caminho_cego` público), a Task 2 uma de teste (golden no lugar de `git show`) e a Task 4 uma (orientação do disco em faixas, com emenda de R-E06.2.2.2-2). A Task 3 passou sem correção. As Tasks 5 e 7 e os Steps 2 a 4 da Task 6 foram pulados por ruling, porque o diff deu 0 itens. O testador de etapa não foi despachado: nenhuma tarefa de risco normal produziu código.
+- Entregas:
+  - `scripts/simbolos_corpus.py`, `simbolos_ficha_metricas.py` e `simbolos_ficha_relatorio.py`, o benchmark desmembrado;
+  - métodos `pacotes` e `modelo` no benchmark;
+  - `gasto_por_fase` e `GastoPagina` em `symbol_matcher.py`, mais `ContextoGramatica.gasto_colagem`, sem mudar a saída nem o gasto de `casar_variantes`;
+  - `scripts/diff_simbolos_nucleo_motor.py` (esquema `diff-nucleo-motor-v1`).
+- Linha de base congelada, em `tmp/e06-2-2-2/` do checkout principal: `diff/diff-nucleo-motor.json` (sha256 `20f3b708…6eeeee`) e `simbolos/simbolos-ficha.json` (sha256 `b6a3118d…6008d`). Tempo por página no diff: motor até 3,48 s, núcleo até 26,21 s, com 8 processos e a suíte rodando ao lado. O `tempo_s` de `pacotes` e `modelo` no benchmark inclui a carga de pacotes e tabela por folha; prefira o do diff como linha de base.
+- Divergências do handoff da E06.2.1: as que fazem o núcleo afirmar a mais (`Q`+`DP`, sobreimpressão, spans girados, `qu` inclinado, borda) aparecem em 0 itens e ficam sem decisão. As que perdem recall: `so_motor` 0 em todas as variantes. **Não verificado:** o contorno de letra lido como glifo dentro da moldura (handoff da E06.2.2.1), porque nenhuma moldura casou.
+- Decisões para o usuário (tomadas pela opção recomendada):
+  - **Classificação pulada com 0 itens.** O critério foi cumprido com 0 casamentos "só no núcleo", mas a medição só exercita a variante de disco. Prós: não há o que classificar, e as duas medições independentes concordam (29/29/29). Custo se errada: a E06.3 ou a E09 tomar isto por validação das gramáticas de moldura em folha real.
+  - **`LIMITE_CONSULTAS_PAGINA` fica em 2.000.000,** com o maior gasto em 6,7%.
+- **Para a E06.3:**
+  - as gramáticas novas gastam do mesmo limite; a fase `indices` já chega a 45.768 na folha `016`;
+  - a especificação de recortes e fila de classificação (Task 5 do plano) está pronta, mas **não foi construída**: `--recortes`, `--dpi`, `fila.json` e os testes dela não existem;
+  - antes de rotular itens, o item do diff precisa da caixa de cada texto (ou de `contido`) e da caixa visual do item, com folga de 0,5 pt, e `textos` precisa passar por `ocultar`. `glifos_lidos` não tem teste positivo. Extraia o markdown do script (853 linhas) antes de pôr os recortes nele;
+  - `runner._package_prediction` é privado e usado pelo benchmark: torne-o público ou fixe-o num teste de contrato;
+  - `tests/unit/test_gasto_por_fase_ataque.py` guarda uma cópia do corpo antigo de `casar_variantes` como oráculo, que vale só para esta refatoração: remova-o quando os helpers mudarem;
+  - o diff casa por guloso (o erro vai para `so_*`, nunca esconde item), e um `pdf_id` repetido na rodada colapsaria uma folha em silêncio (o benchmark faz o mesmo);
+  - a comparação depois de mudar gramáticas usa a chave natural `(pdf_id, página, variante, índice cru)`, contra os dois JSON congelados acima.
 
 ---
 
