@@ -1609,7 +1609,15 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Revisão humana:** não
 
-**Notas para o plano:** as notas da E06.3 valem aqui. Linha de base no handoff da E06.2.2.2: atual, ATERRAMENTO 41 tp / 32 fp / 2 fn e PARA_RAIOS_MT 10 / 4 / 3 (critério `centro`).
+**Notas para o plano:**
+- As notas da E06.3 valem aqui.
+- Linha de base, do handoff da E06.2.2.2: atual, ATERRAMENTO 41 tp / 32 fp / 2 fn e PARA_RAIOS_MT 10 / 4 / 3 (critério `centro`).
+- Leia os blocos "Para a E06.3" dos handoffs da E06.2.1, da E06.2.2.1 e da E06.2.2.2. Esta é a primeira subetapa que os consome.
+- Esta é a primeira subetapa que habilita variante de ativo (`operational`), e por isso o status "Exclusivo" vira "Suportado" no XLSX, na anotação do PDF e no cliente (decisão da E06.2.2.1): reavalie.
+- Habilite só as variantes ATERRAMENTO de f02-19 e PARA_RAIOS_MT de f02-21. As famílias também têm CONECTOR (E07) e EQUIPAMENTO_PROTECAO.
+- Da E06.3.1, decida:
+  - variante não E07 `enabled` ganha `declarative-vector-packages` = `id_exato_sintetico` na matriz (`scripts/coverage_matrix_e16.py:131-136`), sem evidência própria;
+  - o status de variante E04 é fixo em `nao_avaliavel` (`:194-196`), então habilitar ATERRAMENTO e PARA_RAIOS_MT nunca aparece como ganho na matriz da curadoria.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
