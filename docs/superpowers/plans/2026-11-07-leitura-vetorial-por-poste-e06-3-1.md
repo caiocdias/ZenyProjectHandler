@@ -110,6 +110,13 @@ Soma: 2h00 (30 + 45 + 45).
 - Create: `family-f02-14.json`, `family-f02-15.json`, `family-f02-24.json`, `family-f02-25.json` em `src/zeny_project_handler/adapters/analysis/symbol_packages/`
 - Modify: `family-f02-18.json`, `family-f02-19.json`, `family-f02-21.json`; `scripts/audit_symbol_packages.py` (passa a exigir todas as não E10); `tests/unit/test_audit_symbol_packages.py`; `tests/unit/test_declarative_symbol_packages.py`; `tests/server/test_e14_symbol_review.py`
 
+- [ ] **Step 0 (emenda na execução, antes do desenvolvedor): o testador inverte os testes dele** que fixam "só E07 exigida", com a asserção nova mais forte, sem remover nenhum. Ficam vermelhos até o Step 4. Em `tests/unit/test_audit_symbol_packages_ataque.py`:
+  - `:285-292`: `expected_variants`/`expected_families` vão de 1 a 4;
+  - `:295-301`: a ausência de E04 a E06 passa a acusar `missing variant` e `missing family`;
+  - `:304-310`: os campos contam todas as não E10;
+  - `:200-217`, `:219-232` e `:254-262`: `errors == []` passa ao `missing variant` esperado.
+
+  Em `tests/unit/test_audit_symbol_packages.py`, `test_variante_e07_ausente_acusa_e_outro_estagio_ausente_nao` passa a exigir os dois `missing variant`.
 - [ ] **Step 1: Escrever os testes** (vermelhos):
   - em `test_audit_symbol_packages.py`, `test_variante_de_outro_estagio_e_esperada`: E05 do inventário sem pacote dá `missing variant`;
   - em `test_declarative_symbol_packages.py`, cada contagem passa ao valor novo, sem remover checagem:
