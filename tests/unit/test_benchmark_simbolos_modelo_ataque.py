@@ -335,7 +335,7 @@ def test_excecao_do_observador_com_caminho_sai_saneada(
 # --- o método atual não mudou ------------------------------------------------------------
 
 
-_ATUAL_PREDICOES: Final = [
+_ATUAL_PREDICOES: Final[list[dict[str, Any]]] = [
     {
         "pagina": 1,
         "classe": "ATERRAMENTO",
@@ -351,7 +351,7 @@ _ATUAL_PREDICOES: Final = [
         "contexto": "operational",
     },
 ]
-_ATUAL_ASSINATURA: Final = {
+_ATUAL_ASSINATURA: Final[dict[str, Any]] = {
     "metodo_id": "atual",
     "versao": "uniao-runner-v1",
     "composicao": "legado + estais + transformadores + pacotes; sem raster nem estrutural",
@@ -388,8 +388,8 @@ def test_metodo_atual_tem_a_mesma_saida_e_assinatura_de_antes(tmp_path: Path) ->
         assert {k: v for k, v in obtida.items() if k != "bbox"} == {
             k: v for k, v in esperada.items() if k != "bbox"
         }
-        for x, y in zip(obtida["bbox"], esperada["bbox"], strict=True):
-            assert x == pytest.approx(y, abs=1e-9)
+        for valor, esperado in zip(obtida["bbox"], esperada["bbox"], strict=True):
+            assert valor == pytest.approx(esperado, abs=1e-9)
     assinatura = bench.ASSINATURAS["atual"]()
     assert {k: v for k, v in assinatura.items() if k != "componentes"} == {
         k: v for k, v in _ATUAL_ASSINATURA.items() if k != "componentes"
