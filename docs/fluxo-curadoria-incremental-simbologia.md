@@ -41,9 +41,10 @@ existir, parte do checkpoint histórico
 [`data/matriz-simbologia-e16.csv`](data/matriz-simbologia-e16.csv) e do seu
 [`resumo`](data/matriz-simbologia-e16-resumo.json). A rodada **lê os números** da matriz de
 partida — IDs por status, variantes `enabled` e `pending` por pacote, destinos informativos — e
-os registra no relatório local; este documento não fixa contagens. Nenhum `pending` é
-reconhecimento. Esses números são o começo, não metas reduzidas nem estimativas de campo. Se o
-inventário crescer, a rodada recalcula o denominador e justifica cada ID novo.
+os registra no relatório local; este documento não fixa contagens. `pending` do pacote não
+conta como reconhecimento pelo método de pacotes. Esses números são o começo, não metas
+reduzidas nem estimativas de campo. Se o inventário crescer, a rodada recalcula o denominador e
+justifica cada ID novo.
 
 Um localizador `SRC-LOCAL.url` do inventário congelado aponta para documentação histórica
 retirada; ele é metadado de origem e não instrui este fluxo. O arquivo permanece byte a byte

@@ -126,15 +126,14 @@ def _method_states(row: Record, package: Record | None) -> dict[str, str]:
         state["guy-vector-shapes"] = (
             "alternativa_sintetica" if status == "alternativa_sem_id_resolvido" else "nao_avaliavel"
         )
-    elif owner == "E07":
-        assert package is not None
+    elif owner == "E10":
+        state["document-local-legend"] = "contexto_informativo_sem_id"
+    if package is not None:
         state["declarative-vector-packages"] = (
             "id_exato_sintetico"
             if package["recognition"]["status"] == "enabled"
             else "pendente_sem_inferencia"
         )
-    elif owner == "E10":
-        state["document-local-legend"] = "contexto_informativo_sem_id"
     if status == "informativo":
         state["document-local-legend"] = "informativo_nao_ativo"
     if row["class_code"] in {
@@ -268,8 +267,15 @@ def build(
         }
         row.update(_method_states(row, package))
         rows.append(row)
-    if set(packages) != {item["id"] for item in variants if item["owner_stage"] == "E07"}:
-        raise ValueError("E07 package IDs do not reconcile with E01 inventory")
+    # Packages hold every E07 ID (checked above), only E01 IDs and no E10 ID. Packaging a subset
+    # of the other stages is accepted here; the package auditor is the one that requires them all.
+    owners = {item["id"]: item["owner_stage"] for item in variants}
+    outside = sorted(set(packages) - set(owners))
+    if outside:
+        raise ValueError(f"package IDs outside E01 inventory: {outside}")
+    e10_packaged = sorted(identity for identity in packages if owners[identity] == "E10")
+    if e10_packaged:
+        raise ValueError(f"E10 IDs must not be packaged: {e10_packaged}")
     totals = Counter(row["status"] for row in rows)
     by_family: dict[str, Counter[str]] = defaultdict(Counter)
     by_owner: dict[str, Counter[str]] = defaultdict(Counter)

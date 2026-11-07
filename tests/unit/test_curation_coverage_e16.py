@@ -7,10 +7,13 @@ import json
 from pathlib import Path
 
 import pytest
+from scripts.coverage_matrix_e16 import _package_digest, build
 from scripts.curation_coverage_e16 import compare, plan, read_demand, read_matrix
 
 
-def _matrix(path: Path, rows: list[tuple[str, str, str]]) -> dict[str, dict[str, str]]:
+def _matrix(
+    path: Path, rows: list[tuple[str, str, str]], owner_stage: str = "E07"
+) -> dict[str, dict[str, str]]:
     with path.open("w", encoding="utf-8", newline="") as stream:
         writer = csv.DictWriter(
             stream,
@@ -30,7 +33,7 @@ def _matrix(path: Path, rows: list[tuple[str, str, str]]) -> dict[str, dict[str,
                     "id": identity,
                     "family_id": "family-f02-03",
                     "class_code": "POSTE",
-                    "owner_stage": "E07",
+                    "owner_stage": owner_stage,
                     "status": status,
                     "package_status": package_status,
                 }
@@ -76,6 +79,104 @@ def test_pending_cannot_be_exact_or_disappear(tmp_path: Path) -> None:
         _matrix(tmp_path / "invalid.csv", [("a", "reconhecido_exato", "pending")])
     with pytest.raises(ValueError, match="disappeared"):
         compare(before, _matrix(tmp_path / "after.csv", [("b", "informativo", "pending")]))
+
+
+def test_e05_exata_com_pacote_pending_e_aceita(tmp_path: Path) -> None:
+    before = _matrix(
+        tmp_path / "before.csv", [("t", "reconhecido_exato", "nao_aplicavel")], owner_stage="E05"
+    )
+    after = _matrix(
+        tmp_path / "after.csv", [("t", "reconhecido_exato", "pending")], owner_stage="E05"
+    )
+    assert after["t"]["package_status"] == "pending"
+    delta = compare(before, after)
+    assert delta["transitions"] == []
+    assert delta["lost_exact_ids"] == []
+    assert delta["net_exact_change"] == 0
+
+
+def test_matriz_gerada_com_e05_exata_e_pacote_pending_passa_no_compare(tmp_path: Path) -> None:
+    def write(path: Path, value: object) -> Path:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(value), encoding="utf-8")
+        return path
+
+    inventory = write(
+        tmp_path / "inventory.json",
+        {
+            "inventory_version": "test",
+            "families": [{"id": "family-f02-03"}],
+            "variants": [
+                {
+                    "id": identity,
+                    "family_id": "family-f02-03",
+                    "class_code": class_code,
+                    "source_kind": "vector",
+                    "owner_stage": owner,
+                    "destination": "equipment_review",
+                }
+                for identity, class_code, owner in (
+                    ("transformer", "TRANSFORMADOR", "E05"),
+                    ("package", "POSTE", "E07"),
+                )
+            ],
+        },
+    )
+    packages = tmp_path / "packages"
+    write(
+        packages / "family-f02-03.json",
+        {
+            "variants": [
+                {"id": identity, "recognition": {"status": "pending", "reason": "gap"}}
+                for identity in ("transformer", "package")
+            ]
+        },
+    )
+    e07 = write(
+        tmp_path / "e07.json",
+        {
+            "complete_inference": True,
+            "package_sha256": _package_digest(packages),
+            "by_family": {},
+            "decisions": [],
+        },
+    )
+    baseline = tmp_path / "baseline.csv"
+    with baseline.open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.DictWriter(
+            stream,
+            fieldnames=[
+                "id",
+                "family_id",
+                "class_code",
+                "owner_stage",
+                "status",
+                "possible_reference_ids",
+            ],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "id": "transformer",
+                "family_id": "family-f02-03",
+                "class_code": "TRANSFORMADOR",
+                "owner_stage": "E05",
+                "status": "reconhecido_exato",
+                "possible_reference_ids": "transformer",
+            }
+        )
+    rows, _ = build(inventory, packages, None, None, e07, baseline)
+    generated = tmp_path / "matriz.csv"
+    with generated.open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+    matrix = read_matrix(generated)
+    assert matrix["transformer"]["status"] == "reconhecido_exato"
+    assert matrix["transformer"]["package_status"] == "pending"
+    delta = compare(matrix, matrix)
+    assert delta["transitions"] == []
+    assert delta["lost_exact_ids"] == []
 
 
 def test_inventory_growth_is_visible_in_denominator_and_exact_delta(tmp_path: Path) -> None:
