@@ -61,6 +61,7 @@ from scripts.simbolos_corpus import (
     _componentes,
     carregar_referencia,
     falha,
+    falha_da_cobertura,
     localizar_pdf,
     medir_em_paralelo,
     recusar_rodada_cega,
@@ -83,14 +84,21 @@ from scripts.simbolos_ficha_relatorio import _markdown
 from zeny_project_handler.adapters.analysis import (
     declarative_symbols,
     legacy_symbols,
+    model_symbols,
     pymupdf_guys,
     pymupdf_transformers,
 )
 from zeny_project_handler.adapters.analysis.drawing_model.family import reconhecer_familia
+from zeny_project_handler.adapters.analysis.drawing_model.glyph_table import carregar_tabela_glifos
+from zeny_project_handler.adapters.analysis.drawing_model.symbol_grammars import (
+    LIMITE_CONSULTAS_PAGINA,
+)
 from zeny_project_handler.adapters.analysis.pymupdf_drawing_model import impressao_estrutural
 
 ESQUEMA: Final = "simbolos-ficha-v1"
 MAXIMO_PROCESSOS: Final = 61
+# Teto de consultas por página do método `modelo`; lido na chamada, para o teste poder baixá-lo.
+LIMITE_MODELO: Final = LIMITE_CONSULTAS_PAGINA
 
 _FolhaError = FolhaError
 
@@ -99,6 +107,7 @@ __all__ = [
     "COMPONENTE_CEGO",
     "CONTEXTOS_NAO_DESENHO",
     "LIMITE_ERRO",
+    "LIMITE_MODELO",
     "RAIO_POSTE_PENDENTE",
     "TOLERANCIA_CENTRO",
     "FolhaError",
@@ -191,8 +200,104 @@ def _assinatura_atual() -> Registro:
     }
 
 
-METODOS: Final[dict[str, Callable[[Path, str], ResultadoMetodo]]] = {"atual": _predicoes_atual}
-ASSINATURAS: Final[dict[str, Callable[[], Registro]]] = {"atual": _assinatura_atual}
+def _predicao_de_pacote(item: Any, pdf_id: str, metodo: str | None = None) -> Predicao:
+    """Mesma conversão do ramo `include_packages` do runner: `bbox` dos pontos normalizados."""
+    predicao = _predicao_do_runner(runner._package_prediction(item, pdf_id))
+    if metodo is not None:
+        predicao["metodo"] = metodo
+    return predicao
+
+
+def _predicoes_de_paginas(
+    pdf: Path,
+    pdf_id: str,
+    observar: Callable[[Any, int, str], Any],
+    metodo: str | None,
+) -> ResultadoMetodo:
+    """Chama `observar(pagina, numero, sha)` em cada página; a primeira falha vira a da folha."""
+    sha = sha256(pdf.read_bytes()).hexdigest()
+    predicoes: list[Predicao] = []
+    assinatura = ""
+    with pymupdf.open(pdf) as documento:
+        for indice in range(len(documento)):
+            resultado = observar(documento[indice], indice + 1, sha)
+            assinatura = resultado.perfil.assinatura()
+            for cobertura in resultado.coberturas:
+                motivo = falha_da_cobertura(cobertura)
+                if motivo is not None:
+                    return {
+                        "predicoes": [],
+                        "assinatura": {},
+                        "falha": f"{motivo} (página {indice + 1})",
+                    }
+            predicoes.extend(
+                _predicao_de_pacote(item, pdf_id, metodo) for item in resultado.observacoes
+            )
+    return {"predicoes": predicoes, "assinatura": {metodo or "pacotes": assinatura}, "falha": None}
+
+
+def _predicoes_pacotes(pdf: Path, pdf_id: str) -> ResultadoMetodo:
+    """Motor declarativo isolado: pacotes calculados uma vez por folha."""
+    pacotes = declarative_symbols.carregar_pacotes()
+
+    def observar(pagina: Any, numero: int, sha: str) -> Any:
+        return declarative_symbols.observar_pacotes(
+            pagina,
+            documento_id=pdf_id,
+            documento_sha256=sha,
+            pagina_numero=numero,
+            pacotes=pacotes,
+        )
+
+    return _predicoes_de_paginas(pdf, pdf_id, observar, None)
+
+
+def _predicoes_modelo(pdf: Path, pdf_id: str) -> ResultadoMetodo:
+    """Método sobre o modelo de desenho; perfil, pacotes e tabela calculados uma vez por folha."""
+    pacotes = declarative_symbols.carregar_pacotes()
+    tabela = carregar_tabela_glifos()
+    limite = LIMITE_MODELO
+    perfil = model_symbols.perfil_pacotes_modelo(pacotes, tabela, limite=limite)
+
+    def observar(pagina: Any, numero: int, sha: str) -> Any:
+        return model_symbols.observar_pacotes_modelo(
+            pagina,
+            documento_id=pdf_id,
+            documento_sha256=sha,
+            pagina_numero=numero,
+            pacotes=pacotes,
+            tabela=tabela,
+            perfil=perfil,
+            limite=limite,
+        )
+
+    return _predicoes_de_paginas(pdf, pdf_id, observar, perfil.metodo_id)
+
+
+def _assinatura_pacotes() -> Registro:
+    pacotes = declarative_symbols.carregar_pacotes()
+    hash_pacotes = runner.package_method_metadata(pacotes)["package_sha256"]
+    return _componente(declarative_symbols.perfil_pacotes(pacotes), package_sha256=hash_pacotes)
+
+
+def _assinatura_modelo() -> Registro:
+    pacotes = declarative_symbols.carregar_pacotes()
+    perfil = model_symbols.perfil_pacotes_modelo(
+        pacotes, carregar_tabela_glifos(), limite=LIMITE_MODELO
+    )
+    return _componente(perfil)
+
+
+METODOS: Final[dict[str, Callable[[Path, str], ResultadoMetodo]]] = {
+    "atual": _predicoes_atual,
+    "pacotes": _predicoes_pacotes,
+    "modelo": _predicoes_modelo,
+}
+ASSINATURAS: Final[dict[str, Callable[[], Registro]]] = {
+    "atual": _assinatura_atual,
+    "pacotes": _assinatura_pacotes,
+    "modelo": _assinatura_modelo,
+}
 
 
 def _medir_metodo(

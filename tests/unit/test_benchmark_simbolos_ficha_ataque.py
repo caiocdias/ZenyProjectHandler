@@ -202,7 +202,7 @@ def test_constantes_do_contrato_seguem_o_plano() -> None:
     assert bench.TOLERANCIA_CENTRO == 0.005
     assert bench.RAIO_POSTE_PENDENTE == 0.05
     assert bench.ESQUEMA == "simbolos-ficha-v1"
-    assert set(bench.METODOS) == {"atual"}
+    assert set(bench.METODOS) == {"atual", "pacotes", "modelo"}
 
 
 # --- casar: empates, ordem e bordas -----------------------------------------------------
