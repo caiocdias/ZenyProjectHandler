@@ -73,12 +73,14 @@ class FonteGramaticaFalhou(Exception):  # noqa: N818
 
 @dataclass(frozen=True, slots=True)
 class PaginaGramatica:
-    """A página do modelo e o que falta nela; `indices_crus` e `translucidos` falam da posição
-    do caminho em `modelo.caminhos`."""
+    """A página do modelo e o que falta nela; `indices_crus`, `translucidos` e `glifos_lidos`
+    falam da posição do caminho em `modelo.caminhos`. `glifos_lidos` são os contornos de glifo
+    que viraram texto (R-E06.2.2.1-5): glifo não resolvido anula o texto e fica de fora."""
 
     modelo: PaginaModelo
     indices_crus: tuple[int, ...]
     translucidos: frozenset[int]
+    glifos_lidos: frozenset[int] = frozenset()
 
     def __post_init__(self) -> None:
         if len(self.indices_crus) != len(self.modelo.caminhos):

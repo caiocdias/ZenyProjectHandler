@@ -87,6 +87,7 @@ class _Fontes:
     caminhos: tuple[Caminho, ...] = ()
     indices_crus: tuple[int, ...] = ()
     translucidos: frozenset[int] = frozenset()
+    glifos_lidos: frozenset[int] = frozenset()
     total_desenhos: int = 0
     formas_glifo: int = 0
     textos_nativos: tuple[TextoModelo, ...] = ()
@@ -139,12 +140,11 @@ def pagina_para_gramaticas(
     """Página `indice` do modelo para as gramáticas de símbolos.
 
     Além do modelo, traz por caminho a posição do desenho de origem em `get_drawings` e quais
-    caminhos são translúcidos (posições em `modelo.caminhos`).
+    caminhos são translúcidos ou foram lidos como glifo (posições em `modelo.caminhos`).
     """
     fontes = _ler_fontes(pagina)
-    return PaginaGramatica(
-        _montar_pagina(indice, pagina, fontes, tabela), fontes.indices_crus, fontes.translucidos
-    )
+    modelo = _montar_pagina(indice, pagina, fontes, tabela)
+    return PaginaGramatica(modelo, fontes.indices_crus, fontes.translucidos, fontes.glifos_lidos)
 
 
 def impressao_estrutural(documento: pymupdf.Document) -> ImpressaoEstrutural:
@@ -285,7 +285,7 @@ def _montar_pagina(
     grupos = _fonte(
         "grupos", diagnosticos, lambda: agrupar_candidatos(primitivas, caminhos), sem_grupos
     )
-    textos_glifo = _textos_glifo(caminhos, fontes.total_desenhos, tabela, diagnosticos)
+    textos_glifo = _textos_glifo(fontes, tabela)
     return PaginaModelo(
         indice=indice,
         largura=float(pagina.rect.width),
@@ -299,21 +299,19 @@ def _montar_pagina(
     )
 
 
-def _textos_glifo(
-    caminhos: Sequence[Caminho],
-    total_desenhos: int,
-    tabela: TabelaGlifos | None,
-    diagnosticos: list[str],
-) -> tuple[TextoModelo, ...]:
+def _textos_glifo(fontes: _Fontes, tabela: TabelaGlifos | None) -> tuple[TextoModelo, ...]:
+    """Textos em contorno de glifo; deixa em `fontes` os caminhos lidos, para não ler de novo."""
     if tabela is None:
         return ()
+    diagnosticos = fontes.diagnosticos
     sem_leitura = LeituraGlifos((), 0, 0, limitada=False)
     leitura = _fonte(
         "glifos",
         diagnosticos,
-        lambda: ler_texto_glifos(caminhos, tabela, total_desenhos),
+        lambda: ler_texto_glifos(fontes.caminhos, tabela, fontes.total_desenhos),
         sem_leitura,
     )
+    fontes.glifos_lidos = leitura.caminhos_lidos
     if leitura.limitada:
         diagnosticos.append("modelo.glifos_limitados")
     if leitura.desconhecidos or leitura.ambiguos:

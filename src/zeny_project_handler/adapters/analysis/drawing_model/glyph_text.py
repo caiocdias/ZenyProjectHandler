@@ -138,6 +138,8 @@ class LeituraGlifos:
     desconhecidos: int
     ambiguos: int
     limitada: bool
+    # posições em `caminhos` dos glifos dos grupos que viraram `TextoGlifo`
+    caminhos_lidos: frozenset[int] = frozenset()
 
 
 @dataclass(frozen=True, slots=True)
@@ -768,6 +770,7 @@ def ler_texto_glifos(
     tipicas = alturas_tipicas(tabela)
     escalas = escalas_da_tabela(tabela)
     textos: list[TextoGlifo] = []
+    lidos: set[int] = set()
     desconhecidos = ambiguos = 0
     venenos: set[_Veneno] = set()
     for trecho in _trechos(caminhos, indices, total_desenhos):
@@ -788,4 +791,11 @@ def ler_texto_glifos(
                 ambiguos += falhas[1]
                 continue
             textos.append(_texto(trecho, grupo, resolucoes, tabela, escala))
-    return LeituraGlifos(tuple(textos), desconhecidos + len(venenos), ambiguos, limitada=False)
+            lidos.update(trecho.publico.glifos[i].indice_caminho for i in grupo)
+    return LeituraGlifos(
+        tuple(textos),
+        desconhecidos + len(venenos),
+        ambiguos,
+        limitada=False,
+        caminhos_lidos=frozenset(lidos),
+    )
