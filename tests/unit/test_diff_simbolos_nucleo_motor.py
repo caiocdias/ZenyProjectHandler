@@ -268,6 +268,14 @@ def test_orientacao_nao_marca_pagina_em_pe() -> None:
     assert diff.sensivel_a_orientacao("label_in_frame", 90) is False
 
 
+@pytest.mark.parametrize(
+    ("rotacao", "esperado"), [(0, False), (90, True), (180, False), (270, True)]
+)
+def test_disco_terminal_so_e_sensivel_deitado(rotacao: int, esperado: bool) -> None:
+    """Emenda de R-E06.2.2.2-2: as faixas do disco só ficam em pé a 0 e 180 graus."""
+    assert diff.sensivel_a_orientacao("terminal_disc", rotacao) is esperado
+
+
 # --- multiconjunto e divergências, na função pura -------------------------------------------
 
 

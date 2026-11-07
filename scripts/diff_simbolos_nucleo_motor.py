@@ -22,8 +22,9 @@ Comparação (R-E06.2.2.2-2), por página e variante, com as caixas cruas das ob
 
 A página em que um dos lados falha (cobertura fora de ``CONCLUIDO``/``NAO_DETECCAO`` ou exceção)
 sai como ``nao_comparada``, com o motivo, fora dos totais: nunca vira "só no outro". O item de
-variante sensível à orientação em página girada leva ``orientacao: true`` (R-E06.2.1-7), salvo a
-barra a 180 graus. Cada ``so_nucleo`` recebe um ``id`` opaco (``item-0001``...) na ordem da
+variante sensível à orientação em página girada leva ``orientacao: true`` (R-E06.2.1-7): o
+triângulo em 90, 180 e 270 graus; a barra e o disco terminal (faixas) só em 90 e 270. Cada
+``so_nucleo`` recebe um ``id`` opaco (``item-0001``...) na ordem da
 rodada, da página e da variante; ele muda entre execuções (R-E06.2.2.2-9).
 """
 
@@ -93,9 +94,12 @@ TOLERANCIA_CAIXA: Final = 0.5
 MAXIMO_PROCESSOS: Final = 61
 CATEGORIAS: Final = ("ambos", "so_motor", "so_nucleo", "indice_diverge", "geometria_diverge")
 
-# R-E06.2.1-7: estas gramáticas leem a página visual; a barra a 180 graus continua em pé.
-_SENSIVEIS_A_ORIENTACAO: Final = frozenset({"triangle_in_frame", "nested_rectangles_bar"})
-_EM_PE_A_180: Final = frozenset({"nested_rectangles_bar"})
+# R-E06.2.1-7: estas gramáticas leem a página visual. A barra e as faixas do disco (o disco por
+# curva casa nos dois e cai em `ambos`) continuam em pé a 180 graus (emenda de R-E06.2.2.2-2).
+_SENSIVEIS_A_ORIENTACAO: Final = frozenset(
+    {"triangle_in_frame", "nested_rectangles_bar", "terminal_disc"}
+)
+_EM_PE_A_180: Final = frozenset({"nested_rectangles_bar", "terminal_disc"})
 
 _T = TypeVar("_T")
 
