@@ -26,6 +26,7 @@ from zeny_project_handler.adapters.analysis.drawing_model.grammar_marcas import 
     MarcasDaPagina,
     _mesma_cor,
     angulo,
+    cruzamentos_da_borda,
     envolvente,
     marcas_do_contexto,
     tem_x,
@@ -220,24 +221,8 @@ def _ganchos(contexto: ContextoGramatica, diagonal: Segmento, comprimento: float
 
 
 def _bordas_no_eixo(quad: Quadrilatero, contorno: Contorno) -> list[Ponto]:
-    """Onde o eixo do corpo, pelo centro do retângulo, cruza a elipse inscrita na caixa."""
-    caixa = contorno.caixa
-    a, b = (caixa[2] - caixa[0]) / 2, (caixa[3] - caixa[1]) / 2
-    if a <= 0 or b <= 0:
-        return []
-    dx = (quad.centro[0] - (caixa[0] + caixa[2]) / 2) / a
-    dy = (quad.centro[1] - (caixa[1] + caixa[3]) / 2) / b
-    ux, uy = quad.eixo[0] / a, quad.eixo[1] / b
-    # |d + t u|² = 1 nas coordenadas da elipse unitária.
-    qa, qb, qc = ux * ux + uy * uy, 2 * (dx * ux + dy * uy), dx * dx + dy * dy - 1
-    discriminante = qb * qb - 4 * qa * qc
-    if discriminante < 0:
-        return []
-    raiz = math.sqrt(discriminante)
-    return [
-        (quad.centro[0] + t * quad.eixo[0], quad.centro[1] + t * quad.eixo[1])
-        for t in ((-qb + raiz) / (2 * qa), (-qb - raiz) / (2 * qa))
-    ]
+    """Onde o eixo do corpo, pelo centro do retângulo, cruza a elipse (girada) do contorno."""
+    return cruzamentos_da_borda(contorno, quad.centro, quad.eixo)
 
 
 def _haste_de_ligacao(
