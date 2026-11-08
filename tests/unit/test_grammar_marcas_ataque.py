@@ -214,7 +214,9 @@ _DOURADO: Final[
     ),
     "estrela": (
         (("cemig-eo-r3-s21-v005", (146.0, 137.5, 154.0, 153.0), 0, (1, 2, 3, 4)),),
-        (0, 27, 87),
+        # +1 (87 -> 88): a estrela fecha com 16 retas e paga o filtro estrutural da
+        # R-E06.3.3.2.1-1; não é elíptica, não vira contorno nem entra no índice.
+        (0, 27, 88),
     ),
 }
 

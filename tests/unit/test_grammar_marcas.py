@@ -291,7 +291,9 @@ def test_marcas_pagam_os_contornos_uma_vez() -> None:
     contornos = marcas.contornos
     pago = contexto.orcamento.gasto - antes
 
-    assert pago == 5
+    # 2 polilinhas fechadas + 3 inserções no índice + 2 da R-E06.3.3.2.1-1: os dois polígonos
+    # de 32 retas passam no filtro estrutural e pagam 1 cada (o círculo de Béziers, não).
+    assert pago == 7
     assert marcas.contornos is contornos
     assert contexto.orcamento.gasto - antes == pago
     assert len(list(contornos.consultar((0.0, 0.0, 300.0, 300.0)))) == 3
@@ -369,7 +371,10 @@ def _so_contornos(pagina: pymupdf.Page) -> None:
 
 @pytest.mark.parametrize(
     ("desenhar", "indices", "gramaticas"),
-    [(_todas_as_variantes, 96, 319), (_poligonal_com_x, 47, 224), (_so_contornos, 107, 105)],
+    # poligonal-com-x 224 -> 225: +1, o contorno de 32 retas fecha e paga o filtro estrutural da
+    # R-E06.3.3.2.1-1 (a deduplicação mantém um contorno só no índice). As outras não pedem
+    # contornos de subcaminho: envolvente de Béziers e contornos sem haste não são pagos.
+    [(_todas_as_variantes, 96, 319), (_poligonal_com_x, 47, 225), (_so_contornos, 107, 105)],
     ids=["oito-variantes", "poligonal-com-x", "contornos-sem-haste"],
 )
 def test_gasto_da_haste_e_o_medido_antes_da_extracao(
