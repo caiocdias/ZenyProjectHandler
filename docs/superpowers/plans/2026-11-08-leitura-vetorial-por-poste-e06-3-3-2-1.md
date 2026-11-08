@@ -57,10 +57,15 @@ O benchmark de símbolos ganha a concordância entre a situação predita e a si
   - **Predição:** cada predição do benchmark passa a levar `variante: str | None` e `situacoes_preditas: frozenset[str]` (normalizadas e vazias quando não há), porque uma variante pode declarar várias situações. A regra: a predição é concordante se a situação normalizada da ficha está no conjunto. As fontes são estas:
     - a variante vem do `template` da observação ou de `provenance.variant_id` (pacotes no `atual`);
     - a situação vem da `situation` do legado ou das situações da variante no inventário;
-    - fica `None` quando não há.
+    - sem nenhuma das duas, a variante fica `None` e o conjunto fica vazio.
   - **Normalização:** a situação da ficha (`atributos_extras.situacao`) e a predita passam por minúsculas, sem acento, `_` → espaço, e só o prefixo antes de parêntese.
   - **Métrica:** por classe e método, sobre os TP (critério `centro`) cuja referência tem situação anotada: `concordantes` / (`concordantes` + `discordantes`).
-  - **Baldes à parte:** `sem_situacao_ficha`, `sem_situacao_predita` e `situacao_nao_declarada` (variante com `situation` vazia ou "N/A").
+  - **Baldes à parte**, decididos na métrica:
+    - `sem_situacao_ficha`: a referência não tem situação anotada;
+    - `situacao_nao_declarada`: `variante` não nula com `situacoes_da_variante(variante) is None`, isto é, `situation` vazia (`[]`) ou "N/A";
+    - `sem_situacao_predita`: o conjunto vazio fora do caso anterior.
+
+    O teste dos três baldes cobre a variante com `situation: []`.
   - **Saída:** a chave aditiva se chama `concordancia_situacao`, para não confundir com `metodos.<m>.situacao`. O inventário é carregado pelo caminho do módulo, sem depender do cwd.
 - **R-E06.3.3.2.1-5, itens herdados do BT (E06.3.3.1):**
   - todos os caminhos de `origens` do retângulo entram nos componentes, com a âncora em `origens[0]`;
@@ -99,6 +104,14 @@ Ondas:
 - Task 5 (medição).
 
 Soma: 3h00 (40 + 40 + 40 + 35 + 25). O relógio conta desde 0529544. Os Step 0 e o testador de etapa ficam fora da soma, que está no limite do orçamento: o orquestrador acompanha o relógio por tarefa e vale a regra de estouro de 4h30.
+
+## Revisão de arquitetura
+
+- **Veredito:** aprovado com notas.
+- **Rodadas:** 2. A rodada 0 bloqueou com I-1 a I-6, a rodada 1 com N-I1, e a rodada 2 aprovou com notas.
+- **Modelo:** opus (revisor-arquitetura).
+- **Nota Menor da rodada 2:** havia contradição entre `None` e o conjunto vazio da situação predita, e os baldes `sem_situacao_predita` e `situacao_nao_declarada` se confundiam. Já foi aplicada no texto da R-4.
+- **Menores aceitos como estão:** M-10, a nota de `grammar_frames.py`, que é da E06.3.3. N-M5, o orçamento no limite: o orquestrador acompanha o relógio por tarefa.
 
 ## Tasks
 
