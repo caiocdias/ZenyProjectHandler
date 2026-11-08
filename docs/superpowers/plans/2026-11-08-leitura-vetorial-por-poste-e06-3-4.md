@@ -141,3 +141,11 @@
 ## Operação do orquestrador (fora das tarefas)
 
 Medição final na trilha B: `scripts.benchmark_simbolos_ficha ... --metodo atual --metodo modelo --saida <checkout principal>/tmp/e06-3-4/final`, `scripts.diff_simbolos_nucleo_motor` e o auditor. Critério da R-E06.3.4-4 verificado por folha. `check_test_integrity --base b2ec3df`, `osv-scanner` nos locks. Gate com `cmd.exe //c ".\\IniciarTestes.bat"`. O handoff registra R-2 (variantes `pending`, s15 v001), R-4, R-6, a tabela de suporte e a exportação ("Decisões para o usuário") e o "Para a E07" (desfecho da fusão) e "Para a E06.3.5" (gasto restante).
+
+## Revisão de arquitetura
+
+- Veredito: aprovado com notas.
+- Rodadas: 2.
+- Modelo: opus.
+- Notas Menores: a medida de fusão usa `reconcile_symbols`; se não houver fusão, o desfecho vai ao plano da E07.2, e não só ao handoff.
+- Custo aceito: o desenho do âncora AT sai como s14 v001, do pacote MT (R-2), em "Decisões para o usuário".
