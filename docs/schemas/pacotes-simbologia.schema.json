@@ -120,6 +120,18 @@
             {"properties": {"bars": {"const": 3}, "taper": {"const": "decreasing"}}},
             {"properties": {"bars": {"const": 4}, "taper": {"const": "alternating"}}}
           ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "enclosure", "removal_mark", "max_span"],
+          "$comment": "Retângulo atravessado por diagonal; só o método sobre o modelo de desenho a executa.",
+          "properties": {
+            "kind": {"const": "rect_diagonal"},
+            "enclosure": {"enum": ["none", "ellipse"]},
+            "removal_mark": {"type": "boolean"},
+            "max_span": {"type": "number", "exclusiveMinimum": 0, "maximum": 72}
+          }
         }
       ]
     },

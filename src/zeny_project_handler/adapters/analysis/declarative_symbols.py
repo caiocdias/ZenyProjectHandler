@@ -48,9 +48,10 @@ _GRAMMARS = {
     "diamond_three_dots",
     "terminal_disc",
     "stem_bars",
+    "rect_diagonal",
 }
 # Tipos que só o método sobre o modelo de desenho executa; o motor antigo os ignora.
-GRAMATICAS_SO_MODELO: Final[frozenset[str]] = frozenset({"stem_bars"})
+GRAMATICAS_SO_MODELO: Final[frozenset[str]] = frozenset({"stem_bars", "rect_diagonal"})
 _INFORMATIVE_DESTINATIONS = {"informative_only", "document_convention"}
 
 
@@ -196,6 +197,15 @@ def _stem_bars_grammar_ok(grammar: Package) -> bool:
     )
 
 
+def _rect_diagonal_grammar_ok(grammar: Package) -> bool:
+    return (
+        set(grammar) == {"kind", "enclosure", "removal_mark", "max_span"}
+        and isinstance(grammar["enclosure"], str)
+        and grammar["enclosure"] in {"none", "ellipse"}
+        and type(grammar["removal_mark"]) is bool
+    )
+
+
 # Field validation per grammar kind; keys mirror ``_GRAMMARS``.
 _GRAMMAR_FIELD_VALIDATORS: dict[str, Callable[[Package], bool]] = {
     "label_in_frame": _label_in_frame_grammar_ok,
@@ -205,6 +215,7 @@ _GRAMMAR_FIELD_VALIDATORS: dict[str, Callable[[Package], bool]] = {
     "diamond_three_dots": _diamond_three_dots_grammar_ok,
     "terminal_disc": _terminal_disc_grammar_ok,
     "stem_bars": _stem_bars_grammar_ok,
+    "rect_diagonal": _rect_diagonal_grammar_ok,
 }
 
 
