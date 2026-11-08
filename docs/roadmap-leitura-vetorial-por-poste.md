@@ -370,7 +370,7 @@ Trilha C — aprendizado, e a E17 enquanto a trilha espera a E07 (D10) (branch `
 | E17 | Fechamento do cliente com servidor lento | #concluida | E14 | fechar a janela nunca destrói `QThread` viva, sem o monkeypatch de 60 s no `conftest` |
 | E10 | Fábrica de rótulos contínua | #pendente | E07 | fluxo mensal com pré-marcação, leitura dupla, amostra humana e dataset por hash |
 | E12 | Detector visual local | #pendente | E11, E09, E10 | detector ONNX em CPU para o resíduo, ganho medido por poste |
-| E18 | Versão 0.6.0 e candidata de segurança | #pendente | E17 | versão 0.6.0 no produto, build medido e candidata completa em `dist/release/0.6.0/` |
+| E18 | Versão 0.6.0 e candidata de segurança | #em-andamento | E17 | versão 0.6.0 no produto, build medido e candidata completa em `dist/release/0.6.0/` |
 | E19 | Release final 0.6.0 | #pendente | E18 | release gerada da `main` integrada, com integridade conferida |
 
 Na "Janela de release 0.6.0" (protocolo), a ordem de abertura é a dela, e não a das janelas abaixo.
@@ -2907,7 +2907,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
-## E18 — Versão 0.6.0 e candidata de segurança — #pendente
+## E18 — Versão 0.6.0 e candidata de segurança — #em-andamento
 
 **Objetivo:** o produto passa a declarar a versão 0.6.0, e a release completa do cliente e do servidor é gerada de verdade, deixando uma entrega válida em `dist/release/0.6.0/` logo no começo da janela.
 
