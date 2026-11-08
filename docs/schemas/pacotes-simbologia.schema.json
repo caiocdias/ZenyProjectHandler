@@ -132,6 +132,19 @@
             "removal_mark": {"type": "boolean"},
             "max_span": {"type": "number", "exclusiveMinimum": 0, "maximum": 72}
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "fill", "enclosure", "removal_mark", "max_span"],
+          "$comment": "Triângulo dividido (meio ciano ou contorno); só o método sobre o modelo de desenho o executa.",
+          "properties": {
+            "kind": {"const": "split_triangle"},
+            "fill": {"enum": ["half_cyan", "outline"]},
+            "enclosure": {"enum": ["none", "ellipse"]},
+            "removal_mark": {"type": "boolean"},
+            "max_span": {"type": "number", "exclusiveMinimum": 0, "maximum": 72}
+          }
         }
       ]
     },

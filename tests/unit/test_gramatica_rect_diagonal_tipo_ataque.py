@@ -248,7 +248,7 @@ def test_pacotes_reais_tem_rect_diagonal_e_o_motor_segue_com_22() -> None:
     assert "rect_diagonal" in tipos
     assert len(_enabled(reais)) == 34
     assert len(variantes_do_motor(reais)) == 22
-    assert frozenset({"stem_bars", "rect_diagonal"}) == GRAMATICAS_SO_MODELO
+    assert frozenset({"stem_bars", "rect_diagonal", "split_triangle"}) == GRAMATICAS_SO_MODELO
     modelo = perfil_pacotes_modelo(reais, carregar_tabela_glifos())
     motor = perfil_pacotes(reais)
     assert set(modelo.classes_suportadas) - set(motor.classes_suportadas) == {
