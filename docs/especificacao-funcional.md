@@ -15,12 +15,12 @@ Estado versionado relevante:
 
 | Componente | Versão atual |
 |---|---|
-| Pacote Python | `0.5.0` |
+| Pacote Python | `0.6.0` |
 | Catálogo técnico | `2` |
 | Registro de interpretação | `1.6.0` |
 | Registro de conformidade distribuído | `cemig-normas-distribuicao-2026.1` |
 | Método de conformidade | `14` |
-| Extrator documental | `1.18.0` |
+| Extrator documental | `1.21.0` |
 | Interpretador semântico | `25.0` |
 | API / piso compatível | `1.6.0` |
 | Migração SQLite mais recente | `0009_remote_jobs` |

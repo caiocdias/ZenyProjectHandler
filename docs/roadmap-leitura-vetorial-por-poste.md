@@ -370,7 +370,7 @@ Trilha C — aprendizado, e a E17 enquanto a trilha espera a E07 (D10) (branch `
 | E17 | Fechamento do cliente com servidor lento | #concluida | E14 | fechar a janela nunca destrói `QThread` viva, sem o monkeypatch de 60 s no `conftest` |
 | E10 | Fábrica de rótulos contínua | #pendente | E07 | fluxo mensal com pré-marcação, leitura dupla, amostra humana e dataset por hash |
 | E12 | Detector visual local | #pendente | E11, E09, E10 | detector ONNX em CPU para o resíduo, ganho medido por poste |
-| E18 | Versão 0.6.0 e candidata de segurança | #pendente | E17 | versão 0.6.0 no produto, build medido e candidata completa em `dist/release/0.6.0/` |
+| E18 | Versão 0.6.0 e candidata de segurança | #concluida | E17 | versão 0.6.0 no produto, build medido e candidata completa em `dist/release/0.6.0/` |
 | E19 | Release final 0.6.0 | #pendente | E18 | release gerada da `main` integrada, com integridade conferida |
 
 Na "Janela de release 0.6.0" (protocolo), a ordem de abertura é a dela, e não a das janelas abaixo.
@@ -2907,7 +2907,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
-## E18 — Versão 0.6.0 e candidata de segurança — #pendente
+## E18 — Versão 0.6.0 e candidata de segurança — #concluida
 
 **Objetivo:** o produto passa a declarar a versão 0.6.0, e a release completa do cliente e do servidor é gerada de verdade, deixando uma entrega válida em `dist/release/0.6.0/` logo no começo da janela.
 
@@ -2925,13 +2925,13 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Critérios de aceite:**
 
-- [ ] Fora de histórico e de documentos de etapas passadas, `git grep -n "0\.5\.0"` não acha declaração da versão do produto.
-- [ ] `scripts/build_release.py --version 0.6.0 --output-root` apontando para `dist/release` do checkout principal termina com `BUILD DE RELEASE: APROVADO`.
-- [ ] `dist/release/0.6.0/` contém `client/ZenyProjectHandler-Client-0.6.0-win-x64.zip`, `server/ZenyProjectHandler-Server-0.6.0.oci.tar`, `server/compose.release.yaml`, `server/.env-example`, os guias, os dois SBOMs, `RELEASE_NOTES.md`, `release-manifest.json` e `SHA256SUMS.txt`.
-- [ ] `sha256sum -c SHA256SUMS.txt`, dentro dessa pasta, confere todos os arquivos.
-- [ ] As notas citam o commit de origem e dizem que a leitura nova vem desligada.
-- [ ] O commit citado nas notas é o HEAD da branch no momento do build, com árvore limpa, e nenhum código, `Dockerfile` ou script mudou depois dele.
-- [ ] T_build está no handoff.
+- [x] Fora de histórico e de documentos de etapas passadas, `git grep -n "0\.5\.0"` não acha declaração da versão do produto.
+- [x] `scripts/build_release.py --version 0.6.0 --output-root` apontando para `dist/release` do checkout principal termina com `BUILD DE RELEASE: APROVADO`.
+- [x] `dist/release/0.6.0/` contém `client/ZenyProjectHandler-Client-0.6.0-win-x64.zip`, `server/ZenyProjectHandler-Server-0.6.0.oci.tar`, `server/compose.release.yaml`, `server/.env-example`, os guias, os dois SBOMs, `RELEASE_NOTES.md`, `release-manifest.json` e `SHA256SUMS.txt`.
+- [x] `sha256sum -c SHA256SUMS.txt`, dentro dessa pasta, confere todos os arquivos.
+- [x] As notas citam o commit de origem e dizem que a leitura nova vem desligada.
+- [x] O commit citado nas notas é o HEAD da branch no momento do build, com árvore limpa, e nenhum código, `Dockerfile` ou script mudou depois dele.
+- [x] T_build está no handoff.
 - [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
 **Validação obrigatória:**
@@ -2955,14 +2955,28 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 - Build quebrado por rede ou por pacote externo → falha cedo, com a janela inteira para corrigir (H6).
 - Dependências atualizadas na E13 quebrarem o PyInstaller ou a imagem → o gate de artefatos pega, e a correção é tarefa desta etapa.
 
-**Evidências e handoff:**
+**Evidências e handoff (2026-11-08, orquestrador):**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Plano:** `docs/superpowers/plans/2026-11-08-leitura-vetorial-por-poste-e18.md`. A revisão de arquitetura (opus) bloqueou na rodada 0 (8 Importantes, todos de execução e veracidade das notas) e aprovou com notas na rodada 1.
+- **Commits:** `1701886..0ba0567`, mais este fechamento. Relógio: de 00e045a (15:40) a 17:17, cerca de 1h37.
+- **T_build medido:** 2m14 de build + cerca de 1 s de conferência + 6m16 do gate, sob carga de outras tarefas, ou seja, cerca de 8,5 min. Como `1,25 × T_build` fica muito abaixo de 75 min, os marcos da janela não mudam. H6 resolvida: o build não leva 1 h nesta máquina.
+- **Revisão final** (opus): `With fixes`, sem Crítico, 5 Importantes (afirmações sem prova nas notas, troca do destino não atômica, guarda de checkout) e 4 Menores, corrigidos na onda única `0ba0567`. A re-revisão (sonnet) confirmou tudo, sem quebra nova.
+- **Critérios verificados** (HEAD `0ba0567`):
+  - `git grep -n "0\.5\.0"` fora de histórico: só o texto "O que mudou desde a 0.5.0" nas notas e os casos de teste que exigem versão divergente, que não declaram a versão do produto.
+  - Build (`--output-root .../dist/release`, na trilha C): `BUILD DE RELEASE: APROVADO`, com a pasta completa.
+  - `sha256sum -c SHA256SUMS.txt`: todos `OK`.
+  - Notas: citam `0ba056795668a79f9d26e2454466b22ae70e0e21` e a leitura desligada. Depois desse commit, só o roadmap mudou.
+  - Gate: `.\IniciarTestes.bat` em `0ba0567` → `RESULTADO FINAL: APROVADO`, 11173 passed, 5 xfailed, cobertura 89,56%.
+  - Integridade (`--base 1701886`): `SEM_SOUL` em 4 commits de documentos do orquestrador (trailers separados por linha em branco; corrigido nos seguintes) e apontamentos justificados pela revisora (trocas literais da versão, parágrafo removido das notas e refatoração de teste do testador).
+  - `osv-scanner` nos 7 locks: `No issues found`, sem lock alterado.
+- **Pendência da E05 resolvida:** na imagem, `carregar_tabela_glifos()` devolve `tabela-glifos-v1`; os testes `test_glyph_*` e `test_tabela_glifos_real_ataque.py` passaram em Python 3.13 (`python:3.13.7-slim-bookworm`, lock de desenvolvimento e bibliotecas do Qt): 664 passed, 1 xfailed.
+- **Entregas:** versão 0.6.0 em todos os pontos; notas que leem do código e do git, com recusa de árvore suja, de HEAD que muda durante o build e de pacote fora do checkout; troca do destino sem apagar a release anterior antes do sucesso; `ZENY_SERVER_SYMBOL_COMPOSITION=false` no kit e no guia.
+- **Candidata em `dist/release/0.6.0/`:** commit `0ba0567`, válida até o build da E19.
+- **Decisões para o usuário** (tomadas pela opção recomendada):
+  - **Primeiro build em worktree destacado (825fd7a).** Evitou esperar a revisão para descobrir falha; a candidata desse build foi substituída pela de `0ba0567`, feita na trilha C.
+  - **Afirmação de segurança das notas restrita às dependências Python dos locks.** O scanner não cobre a camada Debian da imagem, o CPython nem o Tesseract: quem quiser essa garantia precisa escanear a imagem.
+  - **O histórico anterior à E18 não mostra a imagem da 0.5.0**, que nunca foi gerada nesta máquina; a comparação de leitura com a 0.5.0 não foi medida, e as notas não afirmam isso.
+- **Notas para a próxima etapa:** um `cmd.exe //c IniciarTestes.bat` sem `.\` falhou nesta sessão (o `cmd` não acha o `.bat`) e deixou à vista o relatório antigo: use `cmd.exe //c ".\IniciarTestes.bat"` e confira a contagem de testes no relatório. Worktree com `build/` da release tem caminhos longos: `git worktree remove` falha, e a remoção precisa do prefixo `\\?\`.
 
 ---
 

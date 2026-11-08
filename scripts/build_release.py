@@ -11,8 +11,17 @@ import shutil
 import subprocess
 import sys
 import tomllib
+from dataclasses import dataclass
 from pathlib import Path
 
+import zeny_project_handler
+from zeny_project_handler.adapters.analysis.pymupdf_analyzer import PyMuPdfDocumentAnalyzer
+from zeny_project_handler.adapters.compliance.json_registry import (
+    carregar_registro_conformidade_json,
+)
+from zeny_project_handler.adapters.interpretation.rule_based import InterpretadorRegrasExplicitas
+from zeny_project_handler.application.compliance_analysis import VERSAO_METODO_CONFORMIDADE
+from zeny_project_handler.domain.errors import DomainValidationError
 from zeny_project_handler_contracts.versioning import (
     API_VERSION,
     MAX_COMPATIBLE_API_VERSION,
@@ -22,6 +31,7 @@ from zeny_project_handler_contracts.versioning import (
 ROOT = Path(__file__).resolve().parents[1]
 SEMVER = re.compile(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\Z")
 VOLUME_FORMAT_VERSION = 1
+VERSAO_ANTERIOR = "0.5.0"
 ALEMBIC_REVISION = "0009_remote_jobs"
 BASE_IMAGE = (
     "python:3.13.7-slim-bookworm@"
@@ -34,6 +44,15 @@ DOCKERFILE_FRONTEND = (
 
 class ReleaseBuildError(RuntimeError):
     """Erro seguro e acionável na montagem da release."""
+
+
+@dataclass(frozen=True, slots=True)
+class _FatosProduto:
+    versao_extracao: str
+    versao_interpretacao: str
+    metodo_conformidade: str
+    registro_conformidade: str
+    regras_habilitadas: int
 
 
 def main() -> int:
@@ -69,6 +88,9 @@ def build_release(
     image_repository: str,
 ) -> dict[str, object]:
     _validate_version(version)
+    _garantir_pacote_do_checkout()
+    commit = _commit_de_origem()
+    fatos = _fatos_do_produto()
     source_date_epoch = _source_date_epoch()
     os.environ["SOURCE_DATE_EPOCH"] = str(source_date_epoch)
     os.environ["PYTHONHASHSEED"] = "0"
@@ -156,7 +178,9 @@ def build_release(
         server_directory / "LEIA-ME-SERVIDOR.md",
     )
     _write_json(server_directory / "server-sbom.json", _server_sbom(version, image_reference))
-    _write_release_notes(staging / "RELEASE_NOTES.md", version, image_reference, image_digest)
+    _write_release_notes(
+        staging / "RELEASE_NOTES.md", version, image_reference, image_digest, commit, fatos
+    )
 
     payload_records = _file_records(staging)
     manifest: dict[str, object] = {
@@ -235,10 +259,41 @@ def build_release(
         image_reference,
     )
     target.parent.mkdir(parents=True, exist_ok=True)
-    if target.exists():
-        shutil.rmtree(target)
-    shutil.move(str(staging), str(target))
-    return json.loads((target / "release-manifest.json").read_text(encoding="utf-8"))
+    if _commit_de_origem() != commit:
+        raise ReleaseBuildError("o commit de origem mudou durante o build; refaça a release")
+    _trocar_destino(staging, target)
+    published: dict[str, object] = json.loads(
+        (target / "release-manifest.json").read_text(encoding="utf-8")
+    )
+    return published
+
+
+def _trocar_destino(staging: Path, target: Path) -> None:
+    anterior = target.with_name(f"{target.name}.anterior")
+    if anterior.exists():
+        shutil.rmtree(anterior)
+    tinha_destino = target.exists()
+    if tinha_destino:
+        target.rename(anterior)
+    try:
+        shutil.move(str(staging), str(target))
+    except OSError as error:
+        if tinha_destino:
+            if target.exists():
+                shutil.rmtree(target)
+            anterior.rename(target)
+        raise ReleaseBuildError(f"não foi possível publicar a release: {error}") from error
+    if tinha_destino:
+        shutil.rmtree(anterior)
+
+
+def _garantir_pacote_do_checkout() -> None:
+    pacote = Path(zeny_project_handler.__file__).resolve()
+    if not pacote.is_relative_to((ROOT / "src").resolve()):
+        raise ReleaseBuildError(
+            f"o pacote zeny_project_handler está fora do checkout ({pacote}); "
+            "use o venv e o código deste checkout"
+        )
 
 
 def _validate_version(version: str) -> None:
@@ -259,6 +314,50 @@ def _validate_version(version: str) -> None:
         raise ReleaseBuildError(
             f"versão {version} diverge dos manifestos do produto: {', '.join(mismatches)}"
         )
+
+
+def _commit_de_origem(root: Path = ROOT) -> str:
+    def git(*arguments: str) -> str:
+        try:
+            completed = subprocess.run(
+                ["git", *arguments],
+                cwd=root,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        except FileNotFoundError as error:
+            raise ReleaseBuildError(
+                "não foi possível obter o commit de origem: git não está instalado"
+            ) from error
+        if completed.returncode != 0:
+            raise ReleaseBuildError(
+                "não foi possível obter o commit de origem: "
+                f"{(completed.stderr or completed.stdout).strip() or 'git falhou'}"
+            )
+        return completed.stdout.strip()
+
+    commit = git("rev-parse", "HEAD")
+    if git("status", "--porcelain"):
+        raise ReleaseBuildError(
+            "árvore suja: faça commit ou descarte as mudanças antes de gerar a release"
+        )
+    return commit
+
+
+def _fatos_do_produto(root: Path = ROOT) -> _FatosProduto:
+    seed = root / "src/zeny_project_handler/adapters/compliance/data/regras_conformidade_v1.json"
+    try:
+        registro = carregar_registro_conformidade_json(seed)
+    except DomainValidationError as error:
+        raise ReleaseBuildError(f"registro de conformidade inválido: {error}") from error
+    return _FatosProduto(
+        versao_extracao=PyMuPdfDocumentAnalyzer.versao,
+        versao_interpretacao=InterpretadorRegrasExplicitas.versao,
+        metodo_conformidade=VERSAO_METODO_CONFORMIDADE,
+        registro_conformidade=registro.versao,
+        regras_habilitadas=sum(1 for regra in registro.regras if regra.ativa),
+    )
 
 
 def _project_data(path: Path) -> dict[str, object]:
@@ -378,7 +477,14 @@ def _locked_components(path: Path) -> list[dict[str, str]]:
     return components
 
 
-def _write_release_notes(path: Path, version: str, image: str, digest: str) -> None:
+def _write_release_notes(
+    path: Path,
+    version: str,
+    image: str,
+    digest: str,
+    commit: str,
+    fatos: _FatosProduto,
+) -> None:
     path.write_text(
         f"""# Notas da release {version}
 
@@ -388,14 +494,25 @@ def _write_release_notes(path: Path, version: str, image: str, digest: str) -> N
   `{MAX_COMPATIBLE_API_VERSION}`.
 - Volume: formato `{VOLUME_FORMAT_VERSION}`; revisão Alembic `{ALEMBIC_REVISION}`.
 
-Esta release inclui a escolha persistida Rural/Urbano/Ambos, rolagem independente dos painéis,
-marca-textos por situação, leitura de revisões técnicas e reconciliação de evidências OCR.
-A aba **Trechos físicos** agrupa caminhos preservando seus condutores, situações e pendências;
-**Vãos** conserva a projeção por cabo confirmado. O detector de símbolos exige barras lineares
-e corpos retangulares para evitar equipamentos falsos formados por letras e linhas vizinhas.
+- Origem: commit `{commit}`.
 
-O registro distribuído `cemig-normas-distribuicao-2026.1` contém 42 regras habilitadas e usa o
-método de conformidade 14. A extração usa a versão 1.18.0 e a interpretação 25.0.
+## O que mudou desde a {VERSAO_ANTERIOR}
+
+- As dependências Python dos locks do cliente e do servidor foram atualizadas e não têm
+  vulnerabilidade conhecida na varredura desta release.
+- Ao fechar a janela do cliente com o servidor lento, ela fica visível, indicando que está
+  encerrando, até a rede terminar, em vez de derrubar o programa.
+- A extração recupera texto desenhado em contorno em parte das folhas sem texto nativo.
+- A leitura vetorial nova de símbolos está incluída como opção desligada por padrão
+  (`ZENY_SERVER_SYMBOL_COMPOSITION=false`). Com ela desligada, o método novo não é
+  executado.
+
+## Versões
+
+O registro distribuído `{fatos.registro_conformidade}` contém {fatos.regras_habilitadas} regras
+habilitadas e usa o método de conformidade {fatos.metodo_conformidade}. A extração usa a versão
+{fatos.versao_extracao} e a interpretação {fatos.versao_interpretacao}.
+
 O reconhecimento integral dos PDFs ainda não está homologado: classificação de postes/entregas,
 medidas ambíguas e os bloqueios documentados do segundo PDF continuam exigindo revisão técnica.
 Uma proposta ou trecho visível não equivale a ativo confirmado nem aprovação de conformidade.
