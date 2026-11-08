@@ -22,6 +22,7 @@ from tests.fixtures.symbol_grammars.paginas import (
 )
 
 from zeny_project_handler.adapters.analysis import declarative_symbols as motor_antigo
+from zeny_project_handler.adapters.analysis.declarative_symbols import GRAMATICAS_SO_MODELO
 from zeny_project_handler.adapters.analysis.drawing_model import grammar_frames
 from zeny_project_handler.adapters.analysis.drawing_model.grammar_frames import casa_moldura
 from zeny_project_handler.adapters.analysis.drawing_model.model import (
@@ -48,13 +49,16 @@ FORMA_DO_MOTOR = {"retangulo": "rectangle", "elipse": "ellipse", "losango": "dia
 _Achado = tuple[str, tuple[float, ...], int]
 
 
+_FORA_DO_MOTOR = GRAMATICAS_SO_MODELO | {"terminal_disc"}
+
+
 def _gramaticas() -> dict[str, dict[str, Any]]:
     return {
         variante["id"]: dict(variante["recognition"]["grammar"])
         for pacote in motor_antigo.carregar_pacotes()
         for variante in pacote["variants"]
         if variante["recognition"]["status"] == "enabled"
-        and variante["recognition"]["grammar"]["kind"] != "terminal_disc"
+        and variante["recognition"]["grammar"]["kind"] not in _FORA_DO_MOTOR
     }
 
 
