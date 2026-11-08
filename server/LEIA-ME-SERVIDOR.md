@@ -30,6 +30,11 @@ duas consultas. Não altere `ZENY_SERVER_IMAGE`, salvo numa atualização/rollba
 clientes de outra máquina, defina `ZENY_SERVER_BIND_ADDRESS` com o IPv4 privado específico do
 servidor.
 
+`ZENY_SERVER_SYMBOL_COMPOSITION` controla a leitura vetorial nova de símbolos, que vem desligada por
+padrão (`false`). Com ela desligada, a análise funciona como antes. Ligar custa mais tempo por
+análise e muda os resultados guardados em cache; só ligue em homologação, e não há ganho de
+confiança declarado para o resultado.
+
 ```powershell
 docker compose --env-file .env -f compose.release.yaml config --quiet
 docker compose --env-file .env -f compose.release.yaml up -d --no-build
