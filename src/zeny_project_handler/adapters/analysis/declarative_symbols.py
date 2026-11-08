@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from hashlib import sha256
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import pymupdf
 
@@ -47,7 +47,10 @@ _GRAMMARS = {
     "nested_rectangles_bar",
     "diamond_three_dots",
     "terminal_disc",
+    "stem_bars",
 }
+# Tipos que só o método sobre o modelo de desenho executa; o motor antigo os ignora.
+GRAMATICAS_SO_MODELO: Final[frozenset[str]] = frozenset({"stem_bars"})
 _INFORMATIVE_DESTINATIONS = {"informative_only", "document_convention"}
 
 
@@ -176,6 +179,20 @@ def _terminal_disc_grammar_ok(grammar: Package) -> bool:
     )
 
 
+_STEM_BARS_PARES = {(3, "decreasing"), (4, "alternating")}
+
+
+def _stem_bars_grammar_ok(grammar: Package) -> bool:
+    return (
+        set(grammar) == {"kind", "bars", "taper", "enclosure", "removal_mark", "max_span"}
+        and type(grammar["bars"]) is int
+        and isinstance(grammar["taper"], str)
+        and (grammar["bars"], grammar["taper"]) in _STEM_BARS_PARES
+        and grammar["enclosure"] in {"none", "ellipse"}
+        and type(grammar["removal_mark"]) is bool
+    )
+
+
 # Field validation per grammar kind; keys mirror ``_GRAMMARS``.
 _GRAMMAR_FIELD_VALIDATORS: dict[str, Callable[[Package], bool]] = {
     "label_in_frame": _label_in_frame_grammar_ok,
@@ -184,6 +201,7 @@ _GRAMMAR_FIELD_VALIDATORS: dict[str, Callable[[Package], bool]] = {
     "nested_rectangles_bar": _nested_rectangles_bar_grammar_ok,
     "diamond_three_dots": _diamond_three_dots_grammar_ok,
     "terminal_disc": _terminal_disc_grammar_ok,
+    "stem_bars": _stem_bars_grammar_ok,
 }
 
 
@@ -320,12 +338,21 @@ def _enabled(pacotes: tuple[Package, ...]) -> tuple[tuple[Package, Package], ...
     )
 
 
+def variantes_do_motor(pacotes: tuple[Package, ...]) -> tuple[tuple[Package, Package], ...]:
+    """Habilitadas que o motor antigo executa: fora das gramáticas só do modelo."""
+    return tuple(
+        (package, variant)
+        for package, variant in _enabled(pacotes)
+        if variant["recognition"]["grammar"]["kind"] not in GRAMATICAS_SO_MODELO
+    )
+
+
 def perfil_pacotes(pacotes: tuple[Package, ...] | None = None) -> PerfilMetodoSimbolos:
     """Method signature includes data content, so changed grammars cannot share identity."""
     loaded = carregar_pacotes() if pacotes is None else pacotes
     canonical = json.dumps(loaded, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     digest = sha256(canonical.encode("utf-8")).hexdigest()
-    classes = tuple(sorted({variant["class_code"] for _, variant in _enabled(loaded)}))
+    classes = tuple(sorted({variant["class_code"] for _, variant in variantes_do_motor(loaded)}))
     return PerfilMetodoSimbolos(
         metodo_id="declarative-vector-packages",
         versao="1.1.0",
@@ -335,7 +362,10 @@ def perfil_pacotes(pacotes: tuple[Package, ...] | None = None) -> PerfilMetodoSi
         camadas_suportadas=("base",),
         fontes_compartilhadas=("pymupdf:get_drawings:extended", "pymupdf:get_text:words"),
         perfil_referencia="E01:F02:IT-EO-008:revisao-3",
-        parametros=(("package_sha256", digest), ("enabled_variants", len(_enabled(loaded)))),
+        parametros=(
+            ("package_sha256", digest),
+            ("enabled_variants", len(variantes_do_motor(loaded))),
+        ),
     )
 
 
@@ -1143,7 +1173,7 @@ def observar_pacotes(
         camada="base",
     )
     drawings = tuple(page.get_drawings(extended=True))
-    enabled = _enabled(loaded)
+    enabled = variantes_do_motor(loaded)
     context = _page_context(page, source, profile, drawings, enabled)
     observations: list[ObservacaoSimbolo] = []
     seen: set[_ObservationKey] = set()

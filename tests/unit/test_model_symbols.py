@@ -587,7 +587,9 @@ def test_perfil_declara_o_metodo(
     assert perfil.metodo_id == "declarative-drawing-model"
     assert perfil.versao == "1.0.0"
     assert perfil.familia == motor.familia
-    assert perfil.classes_suportadas == motor.classes_suportadas
+    assert perfil.classes_suportadas == tuple(
+        sorted({variante["class_code"] for _, variante in _enabled(pacotes)})
+    )
     assert perfil.camadas_suportadas == motor.camadas_suportadas
     assert perfil.perfil_referencia == motor.perfil_referencia
     assert (
@@ -610,7 +612,7 @@ def test_perfil_declara_o_metodo(
         "tabela_glifos_versao": tabela.versao,
         "tabela_glifos_sha256": tabela.sha256,
         "limite_consultas": LIMITE_CONSULTAS_PAGINA,
-        "enabled_variants": dict(motor.parametros)["enabled_variants"],
+        "enabled_variants": len(_enabled(pacotes)),
     }
 
 

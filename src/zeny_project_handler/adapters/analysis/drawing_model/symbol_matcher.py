@@ -35,12 +35,16 @@ _Achado = tuple[Caixa, int]
 
 @dataclass(frozen=True, slots=True)
 class CasamentoGramatica:
-    """`caminho` é a posição em `modelo.caminhos`; o índice cru sai de `indices_crus`."""
+    """`caminho` é a posição em `modelo.caminhos`; o índice cru sai de `indices_crus`.
+
+    `componentes` são as posições dos demais caminhos do símbolo (vazio nas gramáticas atuais).
+    """
 
     pacote: Mapping[str, Any]
     variante: Mapping[str, Any]
     caixa: Caixa
     caminho: int
+    componentes: tuple[int, ...] = ()
 
 
 def _gramatica(variante: Mapping[str, Any]) -> Mapping[str, Any]:

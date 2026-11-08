@@ -22,9 +22,9 @@ from tests.fixtures.symbol_grammars.paginas import (
 )
 
 from zeny_project_handler.adapters.analysis.declarative_symbols import (
-    _enabled,
     carregar_pacotes,
     observar_pacotes,
+    variantes_do_motor,
 )
 from zeny_project_handler.adapters.analysis.drawing_model import (
     grammar_disc,
@@ -86,7 +86,7 @@ def pacotes() -> Pacotes:
 
 @pytest.fixture(scope="module")
 def variantes(pacotes: Pacotes) -> Variantes:
-    return _enabled(pacotes)
+    return variantes_do_motor(pacotes)
 
 
 @pytest.fixture(scope="module")
@@ -132,7 +132,7 @@ def _divergencias_de_caixa_e_indice(pagina: pymupdf.Page, pacotes: Pacotes) -> l
     """Pares casamento e observação por variante, nas duas ordens: caixa e índice cru."""
     gramatica = pagina_para_gramaticas(pagina, pagina.number or 0)
     modelo = gramatica.modelo
-    casamentos = casar_variantes(gramatica, _enabled(pacotes))
+    casamentos = casar_variantes(gramatica, variantes_do_motor(pacotes))
     observacoes = _motor(pagina, pacotes).observacoes
     if [c.variante["id"] for c in casamentos] != [str(o.template) for o in observacoes]:
         return [

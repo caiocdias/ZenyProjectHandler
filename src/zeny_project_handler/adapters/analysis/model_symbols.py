@@ -89,16 +89,23 @@ class ResiduoRaster:
 def perfil_pacotes_modelo(
     pacotes: tuple[Package, ...], tabela: TabelaGlifos, *, limite: int = LIMITE_CONSULTAS_PAGINA
 ) -> PerfilMetodoSimbolos:
-    """Mesmas classes, família e referência do motor; a identidade inclui modelo, tabela e teto."""
+    """Família do motor, com todas as habilitadas; a identidade inclui modelo, tabela e teto."""
     motor = perfil_pacotes(pacotes)
+    habilitadas = _enabled(pacotes)
     return replace(
         motor,
+        classes_suportadas=tuple(sorted({variante["class_code"] for _, variante in habilitadas})),
         metodo_id=_METODO_ID,
         versao=_VERSAO,
         dominio_aplicacao=_DOMINIO,
         fontes_compartilhadas=_FONTES,
         parametros=(
-            *motor.parametros,
+            *(
+                ("enabled_variants", len(habilitadas))
+                if nome == "enabled_variants"
+                else (nome, valor)
+                for nome, valor in motor.parametros
+            ),
             ("modelo_desenho", VERSAO_MODELO_DESENHO),
             ("tabela_glifos_versao", tabela.versao),
             ("tabela_glifos_sha256", tabela.sha256),
