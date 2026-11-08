@@ -14,7 +14,7 @@
 
 - Arquitetura hexagonal: domínio e aplicação não importam PyMuPDF; o núcleo `drawing_model/` não importa PyMuPDF; o cliente não importa nada do servidor; DTOs seguem `tests/contracts/test_architecture.py`.
 - Nenhuma migração SQLite, nenhuma mudança de API ou DTO. O analisador padrão não muda; o método sobre o modelo liga só no `SymbolCompositionRunner` opt-in (D12).
-- Mudança de comportamento de saída incrementa a versão do método (ADR 0006). Aqui nenhum método muda de saída com os pacotes atuais (nenhuma `stem_bars` habilitada); a assinatura dos perfis só muda pelo sha dos pacotes, que não muda nesta etapa.
+- Mudança de comportamento de saída incrementa a versão do método (ADR 0006). Aqui nenhum método muda de saída com os pacotes atuais (nenhuma `stem_bars` habilitada), e os perfis mantêm a ordem dos `parametros` para a assinatura deles não mudar à toa. A assinatura do runner opt-in muda mesmo assim, porque `declarative_symbols.py`, `model_symbols.py` e `symbol_matcher.py` estão no digest dele: cache miss esperado.
 - Sem dependência nova em nenhum lock.
 - PDFs reais, recortes e conjuntos de dados nunca entram no Git. Fixture sintética autoral positiva e negativa; nenhuma coordenada, hash ou nome de folha real em código ou teste.
 - Nada lê `examples/avaliacao-cega/`. As referências da rodada E03 (`tmp/curadoria-simbologia/20261103-2300-fichas/`) estão congeladas.
@@ -36,7 +36,7 @@
 - **R-E06.3.2-2, campos da gramática** (exatos): `{"kind": "stem_bars", "bars": 3 | 4, "taper": "decreasing" | "alternating", "enclosure": "none" | "ellipse", "removal_mark": bool, "max_span": número em (0, 72]}`. Só os pares `bars` 3 com `decreasing` e `bars` 4 com `alternating` são válidos. O validador não amarra `class_code` a `bars` (o auditor confere a classe contra o inventário).
 - **R-E06.3.2-3 (parte desta etapa):** `CasamentoGramatica` ganha `componentes: tuple[int, ...] = ()` (posições em `modelo.caminhos` dos demais caminhos do símbolo); as gramáticas atuais deixam vazio. Quem o preenche e o consome é a E06.3.2.2.
 - **R-E06.3.2-4 (parte desta etapa), leitura errada afirmada:** uma predição **não casada** (FP no critério do benchmark) cujo centro cai na caixa, com a mesma tolerância do critério `centro`, de uma referência de **outra** classe. A predição casada é leitura certa e não conta. O benchmark grava, por método, a lista e o total, somados por classe da predição, família e folha. A E06.3.2.2 exige 0 em ATERRAMENTO e PARA_RAIOS_MT.
-- **R-E06.3.2-7, H2:** é confirmada se nenhum resíduo das 16 folhas for símbolo da rede, pela triagem visual dos recortes (o orquestrador lê os PNG; hash repetido é triado uma vez) e pelo cruzamento com as referências. Página `FORA_DOMINIO` ou com imagens que falharam não conta como zero. Como `residuos_raster` só vê imagem compacta (4–72 pt) fora de mosaico, o script também lista as referências de símbolo cujo centro cai sob **qualquer** imagem (`referencias_sob_imagem`); as que o `atual` não casa são triadas. A medição usa as variantes habilitadas de hoje (a haste ainda não está habilitada): um casamento só tira resíduo, então a contagem fica, no máximo, maior, o lado conservador para a H2.
+- **R-E06.3.2-7, H2:** é confirmada se nenhum resíduo das 16 folhas for símbolo da rede, pela triagem visual dos recortes (o orquestrador lê os PNG; hash repetido é triado uma vez) e pelo cruzamento com as referências. Página `FORA_DOMINIO` ou com imagens que falharam não conta como zero. Como `residuos_raster` só vê imagem compacta (4–72 pt) fora de mosaico, o script também lista as referências de símbolo cujo centro cai sob **qualquer** imagem (`referencias_sob_imagem`); todas são triadas (devem ser poucas). A medição usa as variantes habilitadas de hoje (a haste ainda não está habilitada): um casamento só tira resíduo, então a contagem fica, no máximo, maior, o lado conservador para a H2.
 
 ## File Structure
 
@@ -50,7 +50,7 @@
 | `tests/unit/test_model_symbols.py` | `test_perfil_declara_o_metodo` | 1 |
 | `tests/unit/test_symbol_matcher_paridade.py` | paridade sobre `variantes_do_motor` (`:89`, `:135`) | 1 |
 | `scripts/residuos_raster_folhas.py` (novo), `tests/unit/test_residuos_raster_folhas.py` (novo) | H2 | 2 |
-| `scripts/simbolos_ficha_metricas.py`, `tests/unit/test_leituras_erradas.py` (novo) | leitura errada afirmada no benchmark | 3 |
+| `scripts/simbolos_ficha_metricas.py`, `scripts/simbolos_ficha_relatorio.py`, `tests/unit/test_leituras_erradas.py` (novo) | leitura errada afirmada no benchmark e linha no `.md` | 3 |
 
 Onda 1: Tasks 1, 2 e 3 (arquivos disjuntos). Depois, a Task 4 (orquestrador).
 
@@ -117,11 +117,11 @@ Soma: 1h50 (35 + 40 + 25 + 10).
 **Estimativa:** 25 min · **Depende de:** nenhuma · **Risco:** alto · **Laboratório:** não
 
 **Files:**
-- Modify: `scripts/simbolos_ficha_metricas.py`
+- Modify: `scripts/simbolos_ficha_metricas.py`, `scripts/simbolos_ficha_relatorio.py` (só a linha do `.md`)
 - Create: `tests/unit/test_leituras_erradas.py`
 
 **Interfaces:**
-- Produces: `simbolos_ficha_metricas.leituras_erradas(referencias: Sequence[Mapping[str, Any]], predicoes: Sequence[Mapping[str, Any]], casadas: Collection[int], tolerancia: float) -> list[dict[str, Any]]` — função pura: para cada predição de índice fora de `casadas`, uma entrada `{"classe_predita", "classe_referencia", "referencia_id"}` por referência de **outra** classe cuja caixa, alargada pela tolerância do critério `centro`, contém o centro da predição. Nomes dos parâmetros podem seguir os tipos internos que `avaliar_predicoes` já usa; a semântica é esta. `avaliar_predicoes` grava no bloco do método a chave aditiva `"leituras_erradas": {"total": int, "por_classe": {classe: int}, "itens": [...]}`, somada pelos agregadores atuais (por família, folha e geral), como as contagens tp/fp/fn. O relatório `.md` ganha uma linha com o total por método.
+- Produces: `simbolos_ficha_metricas.leituras_erradas(referencias: Sequence[Mapping[str, Any]], predicoes: Sequence[Mapping[str, Any]], casadas: Collection[int], tolerancia: float) -> list[dict[str, Any]]` — função pura: para cada predição de índice fora de `casadas`, uma entrada `{"classe_predita", "classe_referencia", "referencia_id"}` por referência de **outra** classe cuja caixa, alargada pela tolerância do critério `centro`, contém o centro da predição. Nomes dos parâmetros podem seguir os tipos internos que `avaliar_predicoes` já usa; a semântica é esta. A chave aditiva `"leituras_erradas": {"total": int, "por_classe": {classe: int}, "itens": [...]}` é calculada por critério em `_bloco_criterio` (onde o casamento de cada critério é feito), com as casadas daquele critério, e somada em `_somar_criterio` e nos agregadores atuais (por família, folha e geral), como as contagens tp/fp/fn. R-4 lê o bloco `centro`. O relatório `.md` (`simbolos_ficha_relatorio._markdown`) ganha uma linha com o total por método no critério `centro`.
 
 - [ ] **Step 1: Escrever os testes** em `test_leituras_erradas.py`:
   - predição ATERRAMENTO não casada com centro na caixa de uma referência PARA_RAIOS_BT → 1 item, `classe_referencia == "PARA_RAIOS_BT"`;
@@ -130,7 +130,7 @@ Soma: 1h50 (35 + 40 + 25 + 10).
   - `avaliar_predicoes` grava `leituras_erradas` com `total` e `por_classe`, e a agregação soma duas folhas;
   - a chave nova não muda nenhuma das chaves existentes do bloco (compare tp/fp/fn de um caso dos testes atuais).
 - [ ] **Step 2: Rodar** e ver falhar.
-- [ ] **Step 3: Implementar** a função e a chamada em `avaliar_predicoes`, que já tem referências, predições e o casamento em mãos; sem importar `benchmark_simbolos_ficha` (import circular).
+- [ ] **Step 3: Implementar** a função e a chamada em `_bloco_criterio`, que já tem referências, predições e o casamento em mãos; sem importar `benchmark_simbolos_ficha` (import circular).
 - [ ] **Step 4: Rodar** `tests/unit/test_leituras_erradas.py`, `tests/unit/test_benchmark_simbolos_ficha*.py` e os demais testes de `simbolos_ficha_*`, ruff, format e mypy.
 - [ ] **Step 5: Commit** (`feat: leitura errada afirmada no benchmark de simbolos`).
 
@@ -147,3 +147,9 @@ Sem código: o orquestrador roda, na branch da etapa com a Onda 1 integrada, com
 
 - Suíte inteira com a onda integrada; nenhuma tarefa `Risco: normal` produz código, então sem testador de etapa; `osv-scanner` nos 7 locks; `check_test_integrity --base <MERGE_BASE>`; revisão final; `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO` (conferir a data do `relatorio-testes.txt`).
 - Handoff com: H2 por folha e veredito, linha de base de leituras erradas, R-1 em "Decisões para o usuário" (o motor antigo ignora tipo só do modelo; outros consumidores de `status == "enabled"` passarão a contar variantes que ele não executa), e o bloco "Para a E06.3.2.2".
+
+## Revisão de arquitetura
+
+- **Veredito:** aprovado com notas, na rodada 2 (`revisor-arquitetura`, opus). Rodada 0 (plano da E06.3.2 inteiro): bloqueado, 2 Críticos e 6 Importantes. Rodada 1: bloqueado, 4 Importantes novos; a etapa foi dividida e este plano recortado. Rodada 2: aprovado com notas.
+- **Modelo:** opus.
+- **Notas Menores da rodada 2, aplicadas antes da execução:** M1 (chave por critério em `_bloco_criterio`), M2 (`simbolos_ficha_relatorio.py` na Task 3), M3 (triar todas as `referencias_sob_imagem`), M4 (o rascunho da E06.3.2.2 lê a chave `leituras_erradas` do relatório, sem CLI), M5 (assinatura do runner muda pelo digest; ordem dos `parametros` mantida).
