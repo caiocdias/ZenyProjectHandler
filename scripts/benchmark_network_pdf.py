@@ -197,6 +197,12 @@ def _settings_benchmark(directory: Path) -> Any:
     )
 
 
+def _interpretador_ficha_poste() -> type[InterpretadorRegrasExplicitas]:
+    from zeny_project_handler.adapters.interpretation.ficha_poste import InterpretadorFichaPoste
+
+    return InterpretadorFichaPoste
+
+
 def run_variant(
     source: Path,
     directory: Path,
@@ -284,7 +290,10 @@ def run_variant(
                 AnalisadorEquipamento(),
             )
         )
-        interpreter = InterpretadorRegrasExplicitas(registry, analisadores=recorders)
+        classe_interpretador = (
+            _interpretador_ficha_poste() if simbolos_modelo else InterpretadorRegrasExplicitas
+        )
+        interpreter = classe_interpretador(registry, analisadores=recorders)
         interpretation_started = perf_counter()
         semantic = ExecutarPipelineInterpretacao(interpreter, registry, work).executar(
             project.id,
