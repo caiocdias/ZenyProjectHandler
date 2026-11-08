@@ -83,6 +83,27 @@ Soma das tarefas: 3h00 (45 + 25 + 30 + 35 + 20 + 25), mais o laboratório (caixa
 - **Entrega:** em `<checkout principal>/tmp/laboratorio/e06-3-2-2/<hipotese>/`: `patch.diff` (contra a base), `metricas.json` por iteração e `conclusoes.md` (o que mudou, falsos positivos vistos por tipo, sem coordenada de folha real no patch).
 - **Seleção:** pela métrica, com ruling no ledger. Se nenhuma vencer, a ruling registra a melhor e o déficit, e a Task 1 parte dela; o critério 2 vira impedimento real se a Task 6 não fechar. Se vencer H-A, R-9.
 
+## Resultado do laboratório (2026-11-07)
+
+- H-A: ATERRAMENTO 6/20/37, PARA_RAIOS_MT 0/0/13 (os grupos quebram a unidade: só 27 de 65 hastes têm haste e barras no mesmo grupo). Descartada.
+- H-B: 41/20/2 e 10/4/3, gasto máximo 611.402 (acima de 200.000). Descartada.
+- **H-C, escolhida:** 41/7/2 e 10/4/3, gasto máximo 191.334, sem `teto_consultas`, até 26,6 s por folha sob carga. O sinal da página (texto em glifo) é um proxy da escala do símbolo (haste de 4 a 6 pt), e R-10 se aplica. Patch em `tmp/laboratorio/e06-3-2-2/h-c/patch.diff` do checkout principal.
+- **Triagem** (`tmp/laboratorio/e06-3-2-2/h-c/triagem/`): os 5 FN restantes são referências com rótulo trocado na ficha congelada:
+  - 006 `P8-para-raios`, 010 `b-P1-circulo-norte` e 012 `P8-pr-2` estão rotuladas PARA_RAIOS_MT sobre um desenho que não tem 4 barras alternadas;
+  - 006 `P8-aterramento-1` e 010 `b-P1-aterramento-oval-sul` estão rotuladas ATERRAMENTO sobre 4 barras alternadas;
+  - o `atual` também não casa nenhuma delas.
+- **Leituras erradas** (17 pares):
+  - 5 são essas trocas;
+  - 8 são o terra real na ponta de estai;
+  - 2 são uma haste real na borda da caixa de uma chave;
+  - 2 são leitura errada de fato: 011, X falso formado pelos traços do para-raios.
+- **Critério aplicado** (ruling no ledger, desvio previsto em R-4):
+  - por classe, o recall é calculado sem as 5 referências trocadas, nos dois métodos, e precisa ser ≥ o do `atual`;
+  - a precisão (bruta) precisa ser estritamente maior que a do `atual`;
+  - as leituras erradas **de fato** precisam ser 0, com a triagem refeita sobre o patch final;
+  - as referências trocadas vão à curadoria.
+  - Para PARA_RAIOS_MT, a Task 1 precisa cortar ao menos um FP que não seja troca (X falso, colados).
+
 ## Tasks
 
 ### Task 1: Gramática de haste com barras
