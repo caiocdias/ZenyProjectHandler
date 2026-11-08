@@ -68,6 +68,10 @@ def _schema_aceita(gramatica: dict[str, Any]) -> bool:
             return False
     if not isinstance(gramatica["removal_mark"], bool):
         return False
+    # Minor 1 da revisão final: elipse com X não é grupo da R-1 (o mesmo que
+    # test_envolvente_com_marcador_de_retirada_recusa_no_schema afirma do ramo).
+    if gramatica["enclosure"] == "ellipse" and gramatica["removal_mark"] is True:
+        return False
     span = gramatica["max_span"]
     regra = props["max_span"]
     if not _numero_json(span) or not math.isfinite(span):
