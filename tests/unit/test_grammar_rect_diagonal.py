@@ -19,12 +19,15 @@ from tests.fixtures.symbol_grammars.rect_diagonal import (
     pagina_desenhada,
 )
 
+from zeny_project_handler.adapters.analysis.drawing_model import grammar_rect_diagonal
+from zeny_project_handler.adapters.analysis.drawing_model.grammar_marcas import tem_x
 from zeny_project_handler.adapters.analysis.drawing_model.grammar_rect_diagonal import (
     casa_retangulos_diagonal,
 )
 from zeny_project_handler.adapters.analysis.drawing_model.model import Caixa, Ponto
 from zeny_project_handler.adapters.analysis.drawing_model.symbol_grammars import (
     PaginaGramatica,
+    Segmento,
     contexto_gramaticas,
 )
 from zeny_project_handler.adapters.analysis.drawing_model.symbol_matcher import (
@@ -161,6 +164,63 @@ def test_componentes(variante: str, esperados: tuple[int, ...]) -> None:
     [casamento] = _casamentos(pagina)
     assert casamento.caminho == 0
     assert casamento.componentes == esperados
+
+
+@pytest.mark.parametrize(
+    ("variante", "esperados"),
+    [(_V001, (1, 2, 3, 4)), (_V002, (1, 2, 3, 4, 5)), (_V004, (1, 2, 3, 4, 5, 6))],
+)
+def test_retangulo_de_quatro_caminhos_poe_os_lados_nos_componentes(
+    variante: str, esperados: tuple[int, ...]
+) -> None:
+    """Um caminho por lado: a âncora é o primeiro lado e os outros três entram nos componentes."""
+    pagina, _ = _desenhada(variante, lados_separados=True)
+
+    [casamento] = _casamentos(pagina)
+    assert casamento.caminho == 0
+    assert casamento.componentes == esperados
+
+
+@pytest.mark.parametrize("graus", [0.0, 30.0], ids=["0", "30"])
+@pytest.mark.parametrize(("variante", "esperados"), [(_V002, (1, 2, 3)), (_V003, (1, 2, 3, 4, 5))])
+def test_haste_que_sai_da_envolvente_entra_nos_componentes(
+    variante: str, esperados: tuple[int, ...], graus: float
+) -> None:
+    """Com envolvente, a haste visível sai da borda dela, alinhada ao corpo, e não do corpo."""
+    pagina, desenho = _desenhada(variante, graus, ganchos=True, haste_da_envolvente=True)
+
+    [casamento] = _casamentos(pagina)
+    assert casamento.variante["id"] == variante
+    assert casamento.componentes == esperados
+    assert desenho.haste is not None
+    assert not _contem(casamento.caixa, desenho.haste[1])
+
+
+@pytest.mark.parametrize("variante", [_V002, _V003])
+def test_haste_que_sai_da_envolvente_entra_nos_proprios_do_x(
+    variante: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    proprios_vistos: list[frozenset[Segmento]] = []
+
+    def espiao(
+        contexto: Any, pictograma: Caixa, escala: float, eixo: float, proprios: frozenset[Segmento]
+    ) -> Any:
+        proprios_vistos.append(proprios)
+        return tem_x(contexto, pictograma, escala, eixo, proprios)
+
+    monkeypatch.setattr(grammar_rect_diagonal, "tem_x", espiao)
+    pagina, _ = _desenhada(variante, haste_da_envolvente=True)
+
+    _casamentos(pagina)
+    [proprios] = proprios_vistos
+    assert any(segmento.caminho == 2 for segmento in proprios)
+
+
+def test_traco_tangente_a_envolvente_nao_e_haste_de_ligacao() -> None:
+    pagina, _ = _desenhada(_V002, traco_tangente=True)
+
+    [casamento] = _casamentos(pagina)
+    assert casamento.componentes == (1, 3)
 
 
 def test_traco_perpendicular_na_ponta_nao_e_haste_de_ligacao() -> None:

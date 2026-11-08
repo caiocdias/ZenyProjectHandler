@@ -1,7 +1,8 @@
 """Retângulos atravessados por diagonal sintéticos (PARA_RAIOS_BT), desenhados com PyMuPDF.
 
 Desenho autoral: corpo retangular de `CORPO` pt (lado maior sobre o eixo), diagonal que o cruza
-pelos lados longos e passa além dele; ganchos, haste de ligação, envolvente e X opcionais.
+pelos lados longos e passa além dele; ganchos, haste de ligação (do corpo ou da borda da
+envolvente), envolvente e X opcionais.
 `desenhar_bt_classico` desenha o estilo do analisador legado (haste alinhada ao corpo, diagonal
 mais íngreme que a de canto a canto). Nada vem de folha real.
 """
@@ -24,6 +25,7 @@ VERMELHO: Final[Cor] = (1.0, 0.0, 0.0)
 CENTRO: Final[Ponto] = (150.0, 150.0)
 CORPO: Final = (8.0, 3.0)
 HASTE: Final = 10.0
+RAIO_ENVOLVENTE: Final = 7.0
 # Estilo clássico: haste de `HASTE` pt alinhada ao corpo, que começa onde ela termina.
 CORPO_CLASSICO: Final = (9.0, 3.0)
 DIAGONAL_CLASSICA: Final = (8.0, math.radians(60))
@@ -112,7 +114,10 @@ def desenhar_retangulo(
     cauda: float = 0.0,
     haste: bool = False,
     haste_longa: float = 0.0,
+    haste_da_envolvente: bool = False,
     traco_de_lado: bool = False,
+    traco_tangente: bool = False,
+    lados_separados: bool = False,
     envolvente: bool = False,
     x: bool = False,
     segunda_diagonal: bool = False,
@@ -120,8 +125,10 @@ def desenhar_retangulo(
 ) -> DesenhoRetangulo:
     """Corpo `corpo` (lado maior na vertical) centrado em `centro`, tudo girado `graus`.
 
-    Ordem dos caminhos: retângulo, diagonal (com ganchos ou `cauda` no mesmo caminho), segunda
-    diagonal, haste de ligação, traço de lado, envolvente e os dois braços do X.
+    Ordem dos caminhos: retângulo (quatro, um por lado, com `lados_separados`), diagonal (com
+    ganchos ou `cauda` no mesmo caminho), segunda diagonal, haste de ligação (do corpo, com
+    `haste`, ou da borda da envolvente, com `haste_da_envolvente`), traço de lado ou traço
+    tangente à envolvente, envolvente e os dois braços do X.
     """
     cx, cy = centro
     meio_h, meio_l = corpo[0] / 2, corpo[1] / 2
@@ -132,7 +139,11 @@ def desenhar_retangulo(
     cantos = [(cx - meio_l, cy - meio_h), (cx + meio_l, cy - meio_h)]
     cantos += [(cx + meio_l, cy + meio_h), (cx - meio_l, cy + meio_h)]
     gc = [g(p) for p in cantos]
-    pagina.draw_polyline([*gc, gc[0]], color=cor, width=0.5)
+    if lados_separados:
+        for inicio, fim in zip(gc, [*gc[1:], gc[0]], strict=True):
+            pagina.draw_line(inicio, fim, color=cor, width=0.5)
+    else:
+        pagina.draw_polyline([*gc, gc[0]], color=cor, width=0.5)
     a, b = diagonal or ((cx - meio_l * 2, cy + meio_h * 0.5), (cx + meio_l * 2, cy - meio_h * 0.5))
     ga, gb = g(a), g(b)
     pontas_ganchos: tuple[Ponto, ...] = ()
@@ -149,16 +160,20 @@ def desenhar_retangulo(
     if segunda_diagonal:
         pagina.draw_line(g((a[0], b[1])), g((b[0], a[1])), color=cor, width=0.5)
     ligacao = None
-    if haste:
-        topo = (cx, cy - meio_h)
+    if haste or haste_da_envolvente:
+        topo = (cx, cy - (RAIO_ENVOLVENTE if haste_da_envolvente else meio_h))
         ligacao = (g(topo), g((cx, topo[1] - (haste_longa or HASTE))))
         pagina.draw_line(ligacao[0], ligacao[1], color=cor, width=0.5)
     if traco_de_lado:
         # Encosta no meio da ponta de baixo, mas perpendicular ao corpo: não é haste.
         base = (cx, cy + meio_h)
         pagina.draw_line(g(base), g((cx + HASTE, base[1])), color=cor, width=0.5)
+    if traco_tangente:
+        # Encosta na borda da envolvente, no eixo do corpo, mas tangente a ela: não é haste.
+        borda = (cx, cy - RAIO_ENVOLVENTE)
+        pagina.draw_line(g(borda), g((cx + HASTE, borda[1])), color=cor, width=0.5)
     if envolvente:
-        _envolvente(pagina, g(centro), 7.0, graus, cor)
+        _envolvente(pagina, g(centro), RAIO_ENVOLVENTE, graus, cor)
     bracos = _x(pagina, centro, 5.0, graus) if x else ()
     return DesenhoRetangulo(tuple(gc), (ga, gb), pontas_ganchos, ligacao, bracos)
 
@@ -253,6 +268,15 @@ def _losango(pagina: pymupdf.Page) -> None:
     pagina.draw_line((146, 154), (154, 146), color=PRETO, width=0.5)
 
 
+def _celula_de_tabela_riscada(pagina: pymupdf.Page) -> None:
+    """Grade de 3 por 3 células vazias de 30 por 10 pt; um risco atravessa a do meio."""
+    for linha in range(3):
+        for coluna in range(3):
+            x0, y0 = 105.0 + 30.0 * coluna, 135.0 + 10.0 * linha
+            pagina.draw_rect(pymupdf.Rect(x0, y0, x0 + 30.0, y0 + 10.0), color=PRETO, width=0.5)  # type: ignore[no-untyped-call]
+    pagina.draw_line((140, 158), (160, 142), color=PRETO, width=0.5)
+
+
 def diagonal_inclinada(corpo: tuple[float, float], radianos: float) -> tuple[Ponto, Ponto]:
     """Diagonal centrada no corpo vertical, a `radianos` do eixo, com as pontas a 0,8 vezes o lado
     menor fora de cada lado longo."""
@@ -292,6 +316,8 @@ NEGATIVOS: Final[dict[str, Callable[[pymupdf.Page], object]]] = {
         p, corpo=(8.8, 2.0), diagonal=diagonal_inclinada((8.8, 2.0), 0.35)
     ),
     "diagonal_longe_do_centro": lambda p: desenhar_retangulo(p, diagonal=diagonal_deslocada(0.3)),
+    "celula_de_tabela_riscada": _celula_de_tabela_riscada,
+    "lado_maior_acima_do_maximo": lambda p: desenhar_retangulo(p, corpo=(17.4, 5.0)),
 }
 """Desenhos que nenhuma variante de `CASOS_RECT_DIAGONAL` pode casar."""
 
@@ -305,6 +331,7 @@ VIZINHOS_POSITIVOS: Final[dict[str, Callable[[pymupdf.Page], object]]] = {
         p, corpo=(8.8, 2.0), diagonal=diagonal_inclinada((8.8, 2.0), 0.45)
     ),
     "diagonal_pouco_deslocada": lambda p: desenhar_retangulo(p, diagonal=diagonal_deslocada(0.2)),
+    "lado_maior_abaixo_do_maximo": lambda p: desenhar_retangulo(p, corpo=(16.8, 5.0)),
 }
 """O vizinho de cada limiar que ainda casa a v001: o negativo correspondente falha só nele."""
 

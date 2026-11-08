@@ -5,10 +5,12 @@ plausível é uma semente que consulta o índice dos quadriláteros fechados da 
 quadrilátero precisa ter a proporção do corpo do para-raios (lado maior/menor entre 2 e 4,5, como
 o legado), e a diagonal tem de cruzá-lo pelos lados longos, perto do centro, e passar além dele.
 Um retângulo com duas diagonais assim (TORRE_AT, moldura riscada) ou com texto no miolo (moldura
-de rótulo) não casa. Ganchos nas pontas e a haste de ligação são opcionais e entram nos
-componentes. A caixa do casamento é o pictograma (R-E06.3.3.1-3): a envolvente, quando há, senão
-o retângulo unido à diagonal e aos ganchos. A envolvente, o X e o sinal da página vêm de
-`grammar_marcas`; o perfil por origem fica aqui.
+de rótulo) não casa, nem um quadrilátero maior que o corpo de BT (célula de tabela). Ganchos
+nas pontas e a haste de ligação, que sai do corpo ou da borda da envolvente, são opcionais e
+entram nos componentes, como os lados do retângulo montado de vários caminhos. A caixa do
+casamento é o pictograma (R-E06.3.3.1-3): a envolvente, quando há, senão o retângulo unido à
+diagonal e aos ganchos. A envolvente, o X e o sinal da página vêm de `grammar_marcas`; o perfil
+por origem fica aqui.
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ from dataclasses import dataclass
 from typing import Any, Final
 
 from zeny_project_handler.adapters.analysis.drawing_model.grammar_marcas import (
+    Contorno,
     MarcasDaPagina,
     angulo,
     envolvente,
@@ -43,6 +46,10 @@ from zeny_project_handler.adapters.analysis.drawing_model.symbol_grammars import
 _PROPORCAO: Final = (2.0, 4.5)
 _PERPENDICULAR: Final = 0.1
 _PARALELOGRAMO: Final = 0.05
+# Lado maior máximo (pt), em qualquer perfil (R-E06.3.3.2.1-5): 2 vezes o maior lado de corpo
+# dos PARA_RAIOS_BT lidos nas 16 folhas da rodada de fichas, 8,58 pt. Acima disso, o
+# quadrilátero é célula de tabela ou moldura, não corpo de para-raios.
+_LADO_MAIOR_MAXIMO: Final = 2 * 8.58
 # Diagonal: inclinação sobre o eixo (rad), desvio do centro relativo ao lado maior, quanto passa
 # além dos lados longos relativo ao lado menor e comprimento relativo ao lado maior.
 _ANGULO_DIAGONAL: Final = (0.4, 1.2)
@@ -79,11 +86,16 @@ class Quadrilatero:
     """Retângulo (girado ou não) de proporção de corpo de para-raios."""
 
     caixa: Caixa
-    caminho: int
+    origens: tuple[int, ...]
     centro: Ponto
     eixo: Ponto
     maior: float
     menor: float
+
+    @property
+    def caminho(self) -> int:
+        """A âncora: o primeiro caminho de que o retângulo é feito."""
+        return self.origens[0]
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,13 +109,19 @@ class RetanguloDiagonal:
     x: bool
 
 
-def _quadrilatero(pontos: tuple[Ponto, ...], caminho: int, perfil: Perfil) -> Quadrilatero | None:
+def _quadrilatero(
+    pontos: tuple[Ponto, ...], origens: tuple[int, ...], perfil: Perfil
+) -> Quadrilatero | None:
     p0, p1, p2, p3 = pontos
     s0 = (p1[0] - p0[0], p1[1] - p0[1])
     s1 = (p2[0] - p1[0], p2[1] - p1[1])
     c0, c1 = math.hypot(*s0), math.hypot(*s1)
     maior, menor = max(c0, c1), min(c0, c1)
-    if menor < perfil.lado_menor_minimo or maior < perfil.lado_maior_minimo:
+    if (
+        menor < perfil.lado_menor_minimo
+        or maior < perfil.lado_maior_minimo
+        or maior > _LADO_MAIOR_MAXIMO
+    ):
         return None
     if not _PROPORCAO[0] <= maior / menor <= _PROPORCAO[1]:
         return None
@@ -118,14 +136,14 @@ def _quadrilatero(pontos: tuple[Ponto, ...], caminho: int, perfil: Perfil) -> Qu
     longo = s0 if c0 >= c1 else s1
     eixo = longo[0] / maior, longo[1] / maior
     centro = sum(p[0] for p in pontos) / 4, sum(p[1] for p in pontos) / 4
-    return Quadrilatero(caixa, caminho, centro, eixo, maior, menor)
+    return Quadrilatero(caixa, origens, centro, eixo, maior, menor)
 
 
 def _quadrilateros(modelo: PaginaModelo, perfil: Perfil) -> list[Quadrilatero]:
     achados: dict[tuple[float, ...], Quadrilatero] = {}
 
-    def somar(pontos: tuple[Ponto, ...], caminho: int) -> None:
-        quad = _quadrilatero(pontos, caminho, perfil)
+    def somar(pontos: tuple[Ponto, ...], origens: tuple[int, ...]) -> None:
+        quad = _quadrilatero(pontos, origens, perfil)
         if quad is not None:
             chave = (*(round(v, 1) for v in quad.caixa), round(quad.maior, 1), round(quad.menor, 1))
             achados.setdefault(chave, quad)
@@ -136,14 +154,14 @@ def _quadrilateros(modelo: PaginaModelo, perfil: Perfil) -> list[Quadrilatero]:
                 pontos = tuple(item.pontos[0] for item in subcaminho)
                 fecha = math.dist(subcaminho[-1].pontos[1], pontos[0]) <= 0.05
                 if fecha:
-                    somar(pontos, posicao)
+                    somar(pontos, (posicao,))
     for primitiva in modelo.primitivas:
         if isinstance(primitiva, Polilinha) and primitiva.fechada and primitiva.origens:
             pontos = primitiva.pontos
             if len(pontos) == 5 and pontos[0] == pontos[-1]:
                 pontos = pontos[:4]
             if len(pontos) == 4:
-                somar(pontos, primitiva.origens[0])
+                somar(pontos, primitiva.origens)
     return list(achados.values())
 
 
@@ -199,15 +217,44 @@ def _ganchos(contexto: ContextoGramatica, diagonal: Segmento, comprimento: float
     return achados
 
 
-def _haste_de_ligacao(contexto: ContextoGramatica, quad: Quadrilatero) -> Segmento | None:
-    """Traço alinhado ao corpo, que sai do meio de uma das pontas do retângulo."""
+def _bordas_no_eixo(quad: Quadrilatero, contorno: Contorno) -> list[Ponto]:
+    """Onde o eixo do corpo, pelo centro do retângulo, cruza a elipse inscrita na caixa."""
+    caixa = contorno.caixa
+    a, b = (caixa[2] - caixa[0]) / 2, (caixa[3] - caixa[1]) / 2
+    if a <= 0 or b <= 0:
+        return []
+    dx = (quad.centro[0] - (caixa[0] + caixa[2]) / 2) / a
+    dy = (quad.centro[1] - (caixa[1] + caixa[3]) / 2) / b
+    ux, uy = quad.eixo[0] / a, quad.eixo[1] / b
+    # |d + t u|² = 1 nas coordenadas da elipse unitária.
+    qa, qb, qc = ux * ux + uy * uy, 2 * (dx * ux + dy * uy), dx * dx + dy * dy - 1
+    discriminante = qb * qb - 4 * qa * qc
+    if discriminante < 0:
+        return []
+    raiz = math.sqrt(discriminante)
+    return [
+        (quad.centro[0] + t * quad.eixo[0], quad.centro[1] + t * quad.eixo[1])
+        for t in ((-qb + raiz) / (2 * qa), (-qb - raiz) / (2 * qa))
+    ]
+
+
+def _haste_de_ligacao(
+    contexto: ContextoGramatica, quad: Quadrilatero, achada: Contorno | None
+) -> Segmento | None:
+    """Traço alinhado ao corpo, que sai do meio de uma das pontas do retângulo ou, com
+    envolvente, de onde o eixo do corpo cruza a borda dela (R-E06.3.3.1-3); a mais longa."""
     escolhida: Segmento | None = None
     tolerancia = max(0.1, quad.menor * _PONTA_RELATIVA)
-    for sinal in (1, -1):
-        ponta = (
+    pontas = [
+        (
             quad.centro[0] + sinal * quad.eixo[0] * quad.maior / 2,
             quad.centro[1] + sinal * quad.eixo[1] * quad.maior / 2,
         )
+        for sinal in (1, -1)
+    ]
+    if achada is not None:
+        pontas += _bordas_no_eixo(quad, achada)
+    for ponta in pontas:
         janela = (
             ponta[0] - tolerancia,
             ponta[1] - tolerancia,
@@ -215,7 +262,7 @@ def _haste_de_ligacao(contexto: ContextoGramatica, quad: Quadrilatero) -> Segmen
             ponta[1] + tolerancia,
         )
         for s in contexto.grade_segmentos.consultar(janela):
-            if s.caminho == quad.caminho:
+            if s.caminho in quad.origens:
                 continue
             perto = min(math.dist(s.a, ponta), math.dist(s.b, ponta)) <= tolerancia
             alinhada = abs(math.sin(angulo(s) - math.atan2(quad.eixo[1], quad.eixo[0]))) <= (
@@ -238,17 +285,17 @@ def _ler(
 ) -> RetanguloDiagonal:
     comprimento = math.dist(diagonal.a, diagonal.b)
     ganchos = _ganchos(contexto, diagonal, comprimento)
-    haste = _haste_de_ligacao(contexto, quad)
-    proprios = frozenset({diagonal, *ganchos, *([] if haste is None else [haste])})
     pontos = [diagonal.a, diagonal.b, *(p for g in ganchos for p in (g.a, g.b))]
     cantos = _cantos(quad)
     uniao = _caixa_de_pontos([*pontos, *cantos]) or quad.caixa
     ancora = quad.centro
     achada = envolvente(
-        marcas.contornos, [*pontos, *cantos], quad.maior, ancora, frozenset({quad.caminho})
+        marcas.contornos, [*pontos, *cantos], quad.maior, ancora, frozenset(quad.origens)
     )
+    haste = _haste_de_ligacao(contexto, quad, achada)
+    proprios = frozenset({diagonal, *ganchos, *([] if haste is None else [haste])})
     caixa = uniao
-    caminhos = {diagonal.caminho, *(g.caminho for g in ganchos)}
+    caminhos = {*quad.origens, diagonal.caminho, *(g.caminho for g in ganchos)}
     if haste is not None:
         caminhos.add(haste.caminho)
     if achada is not None:
@@ -259,7 +306,7 @@ def _ler(
     lados = frozenset(
         s
         for s in contexto.grade_segmentos.consultar(uniao)
-        if s.caminho == quad.caminho or s.caminho == diagonal.caminho
+        if s.caminho in quad.origens or s.caminho == diagonal.caminho
     )
     x = tem_x(contexto, caixa, quad.maior, eixo, proprios | lados)
     if x is not None:
