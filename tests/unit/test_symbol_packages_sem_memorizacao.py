@@ -115,3 +115,36 @@ def test_guarda_reprova(dados: Any) -> None:
 )
 def test_guarda_aceita_valores_legitimos(dados: Any) -> None:
     assert verificar_pacote(dados) == []
+
+
+_RAIZ = Path(__file__).resolve().parents[2]
+_GRAMATICAS_NOVAS = (
+    _RAIZ
+    / "src"
+    / "zeny_project_handler"
+    / "adapters"
+    / "analysis"
+    / "drawing_model"
+    / "grammar_stem.py",
+    _RAIZ / "tests" / "fixtures" / "symbol_grammars" / "stem_bars.py",
+)
+
+
+@pytest.mark.parametrize(
+    "arquivo",
+    [
+        pytest.param(
+            _GRAMATICAS_NOVAS[0],
+            id="grammar_stem.py",
+            marks=pytest.mark.xfail(
+                strict=True,
+                reason="epsilons numéricos 1e-9 e 1e-12 em grammar_stem.py casam a regex de "
+                "coordenada da guarda (falso positivo); decisão do orquestrador",
+            ),
+        ),
+        pytest.param(_GRAMATICAS_NOVAS[1], id="stem_bars.py"),
+    ],
+)
+def test_gramaticas_novas_passam_na_guarda(arquivo: Path) -> None:
+    texto = arquivo.read_text(encoding="utf-8")
+    assert _violacoes_de_texto(texto, arquivo.name) == []

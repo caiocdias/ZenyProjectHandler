@@ -29,6 +29,7 @@ from zeny_project_handler.adapters.analysis.declarative_symbols import (
 from zeny_project_handler.adapters.analysis.drawing_model import (
     grammar_disc,
     grammar_frames,
+    grammar_stem,
     symbol_grammars,
     symbol_matcher,
 )
@@ -934,7 +935,7 @@ def test_detector_de_import_proibido(fonte: str) -> None:
 
 
 def test_modulos_do_nucleo_nao_importam_pymupdf() -> None:
-    modulos = (symbol_grammars, grammar_frames, grammar_disc, symbol_matcher)
+    modulos = (symbol_grammars, grammar_frames, grammar_disc, grammar_stem, symbol_matcher)
     for modulo in modulos:
         assert modulo.__file__ is not None
         fonte = Path(modulo.__file__).read_text(encoding="utf-8")
