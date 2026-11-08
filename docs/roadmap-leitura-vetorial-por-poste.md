@@ -79,7 +79,7 @@ A análise entrega, para cada poste da folha, a ficha correta: identificador, es
 | # | Hipótese ou decisão | Impacto se errada / sem decisão | Etapa afetada |
 |---|---|---|---|
 | H1 | Nas famílias sem texto nativo, cada forma pequena preenchida é um glifo de fonte fixa. Resultado da E05: se sustenta. Há 0 grupos compostos e 0 fragmentos; o resíduo misto é de cerca de 1,1% dos glifos. 88% (Electric Office) e 96% (Ghostscript) dos candidatos caem em trecho. Maiúscula e minúscula de mesmo desenho só se separam pela escala, e o leitor falha fechado quando ela não decide | a leitura por assinatura precisa segmentar glifos compostos ou tolerar variação de curva | E05 |
-| H2 | Os símbolos da rede são vetoriais em todas as famílias | símbolos rasterizados vão direto para o resíduo do detector (E12) | E06 |
+| H2 | Os símbolos da rede são vetoriais em todas as famílias. Resultado da E06.3.2.1: refutada no sentido estrito. Nas 16 folhas há 1 símbolo da rede em raster (folha 004, iText: disco laranja com "~" no fim de um ramal, classe fora da ficha), e `residuos_raster` o marca. Para as classes da ficha ela se sustenta: nenhuma das 179 referências é raster | símbolos rasterizados vão direto para o resíduo do detector (E12) | E06, E12 |
 | H3 | As imagens das folhas Print To PDF e iText são só ladrilhos da ortofoto. Resultado da E04: os ladrilhos são só ortofoto e nenhum símbolo é raster, mas as folhas iText trazem tabelas (CHI, servidão, APP) como imagem e a folha Ghostscript traz um rótulo de poste em imagem de anotação | se carregarem símbolos ou texto, o OCR não pode sair em E09 — há texto em raster: a E09 precisa tratá-lo ou declará-lo fora da ficha | E04, E09 |
 | H4 | O usuário reserva folhas novas, ainda não vistas, para o conjunto de avaliação antes de E09. Em 2026-11-04 o usuário disse que consegue as folhas em breve | sem elas, a E16 fica bloqueada e a E09 não tem prova cega | E16, E09 |
 | H5 | PyTorch com ROCm treina na RX 9070 XT desta máquina (Windows nativo ou WSL2). Resultado da E11: não se sustenta no Windows nativo com o release oficial ROCm 7.2.1 (torch 2.9.1). O BatchNorm de treino falha no MIOpen para a gfx1201. O WSL2 não foi ensaiado. O treino vai para a CPU, com 7,5 a 10,5 h na carga de referência (ADR 0017) | o treino cai para CPU ou para GPU alugada (D1) | E11 |
@@ -270,7 +270,7 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E06.2.2.1 | Método versionado no runner | #concluida | E06.2.1 | método de pacotes sobre o modelo no runner opt-in, resíduo raster marcado, agrupamento sem laço quadrático fora de teto |
 | E06.2.2.2 | Medição do método nas 16 folhas | #concluida | E06.2.2.1 | benchmark ao lado do atual e diff por variante, com cada "só no núcleo" classificado |
 | E06.3.1 | Pacotes das classes da ficha | #concluida | E06.2.2.2 | 58 variantes do inventário de ESTAI, TRANSFORMADOR, ATERRAMENTO e PARA_RAIOS_MT/BT nos pacotes, como `pending`; auditor e matriz aceitam outro `owner_stage` |
-| E06.3.2.1 | Base da haste, leituras erradas e H2 | #em-andamento | E06.3.1 | tipo de gramática só do modelo, métrica de leitura errada afirmada, resíduos raster por folha e veredito da H2 |
+| E06.3.2.1 | Base da haste, leituras erradas e H2 | #concluida | E06.3.1 | tipo de gramática só do modelo, métrica de leitura errada afirmada, resíduos raster por folha e veredito da H2 |
 | E06.3.2.2 | Gramática de haste com barras | #pendente | E06.3.2.1 | gramática de haste com barras, com laboratório, ATERRAMENTO e PARA_RAIOS_MT acima do atual |
 | E06.3.3 | Para-raios BT e transformador | #pendente | E06.3.2.2 | gramáticas de moldura das duas classes, com laboratório, acima do atual |
 | E06.3.4 | Estai | #pendente | E06.3.3 | gramática de estai, com laboratório, acima do atual |
@@ -1663,7 +1663,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
-## E06.3.2.1 — Base da haste, leituras erradas e H2 — #em-andamento
+## E06.3.2.1 — Base da haste, leituras erradas e H2 — #concluida
 
 **Objetivo:** preparar o tipo de gramática que só o método sobre o modelo executa, medir a leitura errada afirmada no benchmark e confirmar ou refutar a H2.
 
@@ -1678,10 +1678,10 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Critérios de aceite:**
 
-- [ ] Fixtures sintéticas positivas e negativas do tipo só do modelo e das duas medições.
-- [ ] H2 confirmada ou refutada, com a contagem por folha em `tmp/`.
-- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
-- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+- [x] Fixtures sintéticas positivas e negativas do tipo só do modelo e das duas medições.
+- [x] H2 confirmada ou refutada, com a contagem por folha em `tmp/`.
+- [x] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
 **Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
 
@@ -1693,7 +1693,47 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Riscos e mitigação:** os da E06.3.
 
-**Evidências e handoff:** —
+**Evidências e handoff:**
+
+- Plano: `docs/superpowers/plans/2026-11-07-leitura-vetorial-por-poste-e06-3-2-1.md`. Revisão de arquitetura (opus): bloqueou nas rodadas 0 e 1, sobre o plano da E06.3.2 inteiro (C1: o perfil do modelo herdava as classes do motor; C2: a caixa da haste não era o pictograma do legado), e aprovou com notas na rodada 2, sobre o plano recortado.
+- Relógio: de e609bda (21:14 de 2026-11-07, `#em-andamento` da E06.3.2) até o commit `#concluida` (23:00), 1h46. A divisão da E06.3.2 entra nesse tempo.
+- Revisão final (`revisor-seguranca`, opus, 2d9d303..14544d5): aprovada com ressalvas, sem Crítico e sem correção de código. Os dois Importantes eram de registro e estão fechados neste handoff. Os Menores ficaram com ruling no ledger, e nenhum bloqueia.
+- Critérios verificados:
+  1. Fixtures sintéticas: `tests/unit/test_gramatica_so_modelo*.py`, `test_residuos_raster_folhas*.py` e `test_leituras_erradas*.py`, com positivos e negativos de cada peça.
+  2. H2 (em 14544d5, `tmp/e06-3-2-1/h2/residuos-raster.json` do checkout principal, com recortes):
+     - 16 folhas medidas, nenhuma `fora_dominio`;
+     - 115 resíduos, com 100 hashes distintos. Por folha: 001: 62, 002: 5, 003: 11, 004: 7, 005: 0, 006: 22, 007: 0, 008: 1, 009: 2, 010: 0, 011: 0, 012: 1, 013: 2, 014: 2, 015: 0 e 016: 0;
+     - 3 resíduos estão sobre referência, todos ESTAI (001 e 006). Os três são ortofoto com o estai vetorial desenhado por cima;
+     - as 92 referências sob alguma imagem têm desenho vetorial na caixa, e as outras 87 não estão sob imagem;
+     - triagem visual dos 100 hashes: ortofoto, assinaturas, QR codes, logos, fotos, blocos de texto, um ícone de imagem quebrada (008 e 009) e o rótulo de poste em anotação (012, já descrito na H3);
+     - **1 símbolo da rede em raster:** disco laranja com "~" no fim do ramal ABN-16, folha 004 (iText). A classe está fora da ficha (provavelmente geração);
+     - **Veredito:** H2 refutada no sentido estrito (critério R-E06.3.2-7) e sustentada para as classes da ficha. A linha H2 de "Hipóteses" foi atualizada.
+  3. `scripts.audit_symbol_packages` em 14544d5 → `errors []`, 22 `enabled` e 401 `pending`. Nenhum pacote mudou.
+  4. `.bat` em 14544d5 → `RESULTADO FINAL: APROVADO`: 9413 passed, 2 xfailed, cobertura 89,29%, mypy limpo em 567 arquivos.
+  - `osv-scanner` nos 7 locks → `No issues found`; nenhum lock mudou. `check_test_integrity --base 2d9d303` → exit 1, com 1 apontamento justificado (a asserção do perfil do modelo, trocada como o plano manda).
+- Benchmark de símbolos em 14544d5, `atual` e `modelo` (`tmp/e06-3-2-1/simbolos/`):
+  - igual à linha de base congelada `tmp/e06-2-2-2/simbolos/simbolos-ficha.json`: `atual` 131/58/48 e `modelo` 2/18/177 (tp/fp/fn, `centro`), sem divergência em nenhuma folha;
+  - **linha de base de leituras erradas** (`centro`): `atual` 19 (ATERRAMENTO 13, PARA_RAIOS_MT 4, PONTO_CONEXAO 2) e `modelo` 2 (PONTO_CONEXAO 2);
+  - a unidade é o par (predição, referência de outra classe), e não a predição: uma predição sobre duas referências conta 2. `referencia_id` é o índice local da folha e só identifica a referência dentro do bloco por folha.
+- Ciclo: Onda 1 com as Tasks 1, 2 e 3 em paralelo e testador nas três (risco alto). Cada uma teve uma rodada de correção, vinda de um vermelho do testador: `TypeError` com campo de tipo errado; recorte de página girada em branco; predição fora do FP contada como leitura errada. A Task 4 foi a medição. Testador de etapa não foi despachado: nenhuma tarefa de risco normal produziu código.
+- Entregas:
+  - tipo `stem_bars` só do modelo: `GRAMATICAS_SO_MODELO`, `variantes_do_motor`, ramo no schema `pacotes-simbologia.schema.json`, perfil do método sobre o modelo com todas as habilitadas e `CasamentoGramatica.componentes`;
+  - `scripts/residuos_raster_folhas.py` (esquema `residuos-raster-v1`);
+  - chave `leituras_erradas` no benchmark de símbolos e uma linha no `.md`.
+- Decisões para o usuário (tomadas pela opção recomendada):
+  - **Divisão da E06.3.2** em E06.3.2.1 e E06.3.2.2: com os achados da revisão de arquitetura, as tarefas passaram de 4h.
+  - **R-E06.3.2-1, tipo de gramática só do modelo:** o motor antigo ignora `stem_bars`. Quando a E06.3.2.2 habilitar as hastes, a tabela de suporte da revisão (`symbol_support.py`), a matriz da curadoria (`coverage_matrix_e16.py`, que vai marcar `fora_do_dominio` no motor antigo), `scripts/symbol_benchmark_runner.py` e `scripts/curation_backlog.py` vão contar como habilitadas variantes que o motor antigo não executa. Prós: o motor antigo sai na E09, e portar a gramática para ele seria trabalho jogado fora. Custo se errada: leitura enganosa nessas tabelas até a E09.
+  - **Leitura errada afirmada** conta só a predição que o benchmark já conta como FP. Fora das regiões e perto de poste pendente não conta.
+  - **H2 refutada no sentido estrito.** O raster fica como resíduo para a E12, e as gramáticas vetoriais seguem.
+- **Pendente, intermitente:** `tests/unit/test_curation_round.py::test_transicoes_concorrentes_no_mesmo_pdf_nao_perdem_eventos` falhou uma vez sob `-n 20`, com nenhum arquivo dele tocado. Passou 6/6 isolado, na 2ª suíte e no `.bat`. Não investigado. Uma perda real de eventos na rodada de curadoria seria defeito de dados.
+- **Para a E06.3.2.2:**
+  - parta do rascunho do plano. A nota no topo carrega N3, N4, M-a, M-c e M4 da revisão de arquitetura. Ao abrir, tire dele a H2 (já medida aqui) e a CLI `leituras-erradas`: o critério lê a chave `leituras_erradas` do bloco `centro`, com 0 exigido em ATERRAMENTO e PARA_RAIOS_MT contra a linha de base acima;
+  - `tests/unit/test_gramatica_so_modelo_ataque.py::test_modelo_ainda_nao_executa_stem_bars_e_falha_alto` fica vermelho de propósito quando o casador ganhar `stem_bars`. Reescreva-o na tarefa da gramática;
+  - `scripts/diff_simbolos_nucleo_motor.py` ainda usa `_enabled` (troca prevista na tarefa de habilitação);
+  - a docstring de `leituras_erradas` ainda diz "não casadas" para o parâmetro `casadas`, que hoje significa "fora do FP" (corrigir se tocar o arquivo);
+  - `residuos_raster_folhas` deixa PNG órfãos quando uma folha falha no meio e soma `referencias_sob_imagem` de página com imagens que falharam. Nenhuma das duas coisas afetou esta medição.
+- **Para a E12:** o disco laranja com "~" da folha 004 é o primeiro símbolo da rede raster confirmado (resíduo `2a7dd179c5da`).
+- **Para a E09:** `GRAMATICAS_SO_MODELO` e a validação dos pacotes moram em `declarative_symbols.py`, que ela remove. `review_status` e `role` têm `in {...}` sem guarda de tipo: o pior caso é `TypeError` em vez de `ValueError`.
 
 ---
 
