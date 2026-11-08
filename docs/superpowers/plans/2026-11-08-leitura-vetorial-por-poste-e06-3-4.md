@@ -84,6 +84,22 @@
 - **Parada:** 60 min por hipótese, ou a vitória literal com 0 leitura errada de fato.
 - **Entrega:** em `tmp/laboratorio/e06-3-4/<hipotese>/`: `patch.diff`, `metricas.json`, `conclusoes.md`, e os recortes dos FP em PNG.
 
+## Resultado do laboratório (2026-11-08)
+
+O laboratório está em `tmp/laboratorio/e06-3-4/` do checkout principal, com base em 53ad6d4.
+
+| hipótese | ESTAI centro (tp/fp/fn) | ESTAI IoU (tp/fp/fn) | gasto máximo (016) | fusão com o legado |
+|---|---|---|---|---|
+| **H-1, escolhida** | 74/2/2 | 72/4/4 | 199.962 | não funde |
+| H-2 | 74/2/2 | 72/4/4 | 245.087 | não funde |
+
+- Vitória literal da R-E06.3.4-4: precisão e recall de centro de 97,4% e 97,4%, contra 97,0% e 84,2% brutos do `atual`. O empate entre as hipóteses é decidido pelo menor gasto, e a âncora da H-2 não reduz FP na região anotada.
+- As duas caixas (R-E06.3.4-3): só o pictograma dá centro 74/1/2 e IoU 10/65/66; a haste inteira dá centro 74/2/2 e IoU 72/4/4. **Ruling: caixa do pictograma unida à haste inteira**, porque a referência cobre os dois, e o IoU 72 > 10 vale mais que um FP de centro, que a triagem absolve.
+- Triagem em render dos 2 FP: 008, estai real não anotado; 010, garfo parcialmente encoberto pela faixa de título, com desenho real no vetor. Nenhum é forma de outra coisa.
+- Demais classes iguais por folha a `final2`, leituras erradas 20 (nenhuma nova), diff núcleo × motor 29 igual ao congelado.
+- Concordância de situação: 20 concordantes, 19 discordantes por redação da ficha que `normalizar_situacao` não reduz ("ancora existente" etc.); semanticamente batem com a variante predita. A concordância continua maior que a do `atual` (0).
+- Fusão com o legado (R-E06.3.4-6): **não funde**, nas duas caixas e formas. Cada estai fica em dobro no runner. Vai ao plano da E07.2.
+
 ## Tasks
 
 ### Task 1: Tipo `forked_stem`
@@ -105,6 +121,8 @@
 
 **Files:** `drawing_model/grammar_estai.py` (novo), `drawing_model/symbol_matcher.py`, `src/zeny_project_handler_server/symbol_execution.py`, `tests/fixtures/symbol_grammars/estai.py` (novo), `tests/unit/test_grammar_estai.py` (novo).
 
+Parte de `tmp/laboratorio/e06-3-4/H-1/patch.diff` (do checkout principal), sem a habilitação em `family-f02-14.json` e sem `tests/unit/test_grammar_estai_fusao.py`, que ficam com a Task 3.
+
 **Interfaces:** Produces `estai_candidatos(contexto, *, marcas: MarcasDaPagina) -> tuple[CandidatoEstai, ...]` e `casa_estai(contexto, gramatica, *, candidatos: tuple[CandidatoEstai, ...]) -> list[tuple[Caixa, int, tuple[int, ...]]]` (o mesmo contrato de `casa_triangulos`: caixa, caminho âncora e componentes; quem monta `CasamentoGramatica` é o despacho), com `CandidatoEstai` dataclass frozen levando `contexto`, `caixa`, `caminho_ancora`, `componentes`, `enclosure` e `removal_mark`; a fixture `tests/fixtures/symbol_grammars/estai.py` exporta `pagina_estai(destino, formas)` e `GRAMATICAS_ESTAI`, e um teste afirma que as três variantes habilitadas do pacote usam exatamente `GRAMATICAS_ESTAI`. Tudo partindo do patch vencedor do laboratório. `casa_estai(..., candidatos=)` levanta `ValueError` para candidato de outro contexto. Cor por `_mesma_cor` de `grammar_marcas` (uso privado já feito em `grammar_rect_diagonal`, declarado aqui) e preto/cinza por componentes iguais até 0,05 e abaixo de 0,4. Limiar por `origem_predominante` da página, sem número com mais de 4 casas.
 
 - [ ] **Step 1: Testes** com a fixture sintética: os três grupos de forma (preto ou cinza sem envolvente, verde com círculo, X sobre garfo com círculo e sem círculo) casam exatamente uma gramática; dois estais opostos saem como dois casamentos; todos os negativos do Review Focus, inclusive garfo colorido sem marca, não casam; a envolvente de outro desenho não conta. → FAIL.
@@ -121,7 +139,7 @@
 **Interfaces:** Consumes: `forked_stem` e a gramática. Produces: `_VERSAO = "1.5.0"`.
 
 - [ ] **Step 1: Habilite** as 3 variantes de f02-14 da R-E06.3.4-2 com `grammar` e `status: enabled`, retirando o `reason` só dessas; as outras 14 ficam como estão, e `family-f02-15.json` não muda.
-- [ ] **Step 2: Teste de integração:** com os pacotes reais e a fixture, uma observação por forma, sem observação duplicada do mesmo desenho; o caso com a opção desligada sem nenhuma observação do método; e a fusão com o legado (R-6), com a asserção do resultado observado.
+- [ ] **Step 2: Teste de integração:** com os pacotes reais e a fixture, uma observação por forma, sem observação duplicada do mesmo desenho; o caso com a opção desligada sem nenhuma observação do método; e a fusão com o legado (R-6), com a asserção do resultado observado. O desfecho medido é "não funde"; `tests/unit/test_grammar_estai_fusao.py` do patch H-1 pode ser aproveitado. O `max_span` das 3 variantes é 40.
 - [ ] **Step 3: Ajuste contagens e versão** (49 → 52, 374 → 371, 1.4.0 → 1.5.0), incluindo o sentido novo de `test_pacotes_classes_da_ficha.py:370-375,463-475` e as listas `_GRAMATICA_HABILITADAS` desse arquivo.
 - [ ] **Step 4: Rode** `scripts.audit_symbol_packages` e os testes → `errors []` e PASS.
 - [ ] **Step 5: Commit**; suíte inteira uma vez antes do relatório.
