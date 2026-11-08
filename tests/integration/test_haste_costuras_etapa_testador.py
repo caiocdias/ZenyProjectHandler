@@ -95,7 +95,7 @@ def _e07_do_pacote(tmp_path: Path, pacotes: Path) -> Path:
     return caminho
 
 
-def test_matriz_dos_pacotes_reais_marca_as_doze_so_do_modelo_fora_do_dominio_no_motor(
+def test_matriz_dos_pacotes_reais_marca_as_so_do_modelo_fora_do_dominio_no_motor(
     tmp_path: Path,
 ) -> None:
     pacotes = ROOT / "src/zeny_project_handler/adapters/analysis/symbol_packages"
