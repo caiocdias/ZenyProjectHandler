@@ -219,6 +219,32 @@
 - **Parada:** 60 min por hipótese, ou 14/≤2/0 com 0 leitura errada de fato e os FP triados.
 - **Entrega:** em `tmp/laboratorio/e06-3-3-2-2/<hipotese>/`, os arquivos `patch.diff`, `metricas.json` e `conclusoes.md`, com os recortes dos FP em PNG.
 
+## Resultado do laboratório (2026-11-08)
+
+O laboratório está em `tmp/laboratorio/e06-3-3-2-2/` do checkout principal, com base em 4a572d2.
+
+| hipótese | TRANSFORMADOR (tp/fp/fn) | FP | gasto máximo (016) | leitura errada de fato |
+|---|---|---|---|---|
+| H-1 | 14/1/0 | 014 (real) | 191.645 | 0 |
+| **H-2, escolhida** | 14/2/0 | 012 e 014 (reais) | 190.284 | 0 |
+| H-3 | 14/2/0 | 012 e 014 (reais) | 195.031 | 0 |
+
+- **Resultado comum às três:**
+  - as demais classes ficam iguais por folha;
+  - o diff é igual ao congelado;
+  - a concordância de situação de TRANSFORMADOR é 1, contra 0 do `atual`;
+  - os 2 FP são os mesmos do `atual`, triados em render como transformadores reais.
+- **Por que a H-2:**
+  - O desempate literal (menos FP brutos) daria a H-1. Mas o FP a menos dela é o transformador real da 012 (metade vermelho-escura com X), que a H-1 não lê. Pela R-4, isso é leitura pior, não melhor.
+  - Entre H-2 e H-3, decide o gasto: 190.284 contra 195.031.
+- **Rulings para a Task 3:**
+  - **X vence envolvente** quando os dois estão no mesmo desenho, como no E05 (`_referencias_triangulo`). A 002 e a 007 da ficha têm círculo e X, e a tabela de R-1 não tem essa combinação.
+  - **Metade preenchida de cor não ciano conta como `outline`**, como no E05 (`_toca_ciano`).
+- **O que levar das outras hipóteses:**
+  - da H-1: indexar só as sementes para o gasto;
+  - da H-3: a lista de sugestões em `conclusoes.md`, que fala, por exemplo, do uso de `_dentro_da_elipse`, hoje privado.
+- `grammar_marcas` não muda, e não há Task 2b.
+
 ## Revisão de arquitetura
 
 - **Veredito:** aprovado com notas, na rodada 1 (`revisor-arquitetura`, opus).
