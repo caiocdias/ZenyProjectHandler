@@ -80,11 +80,6 @@ def test_v2_token_vazio_cai_para_codigo_observado(
     assert _ficha(cena)["postes"][0]["estruturas"] == ["N3"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Defeito conhecido: _estrutura_v2 usa str() e vaza o repr de lista/dict/tupla/objeto "
-    "como estrutura em vez de cair para codigo_observado. Remover o xfail ao corrigir.",
-)
 @pytest.mark.parametrize(
     "token", [["U4"], {"a": 1}, ("U4",), object()], ids=["lista", "dict", "tupla", "objeto"]
 )
