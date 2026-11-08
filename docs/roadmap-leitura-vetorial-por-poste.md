@@ -271,7 +271,7 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E06.2.2.2 | Medição do método nas 16 folhas | #concluida | E06.2.2.1 | benchmark ao lado do atual e diff por variante, com cada "só no núcleo" classificado |
 | E06.3.1 | Pacotes das classes da ficha | #concluida | E06.2.2.2 | 58 variantes do inventário de ESTAI, TRANSFORMADOR, ATERRAMENTO e PARA_RAIOS_MT/BT nos pacotes, como `pending`; auditor e matriz aceitam outro `owner_stage` |
 | E06.3.2.1 | Base da haste, leituras erradas e H2 | #concluida | E06.3.1 | tipo de gramática só do modelo, métrica de leitura errada afirmada, resíduos raster por folha e veredito da H2 |
-| E06.3.2.2 | Gramática de haste com barras | #em-andamento | E06.3.2.1 | gramática de haste com barras, com laboratório, ATERRAMENTO e PARA_RAIOS_MT acima do atual |
+| E06.3.2.2 | Gramática de haste com barras | #concluida | E06.3.2.1 | gramática de haste com barras, com laboratório, ATERRAMENTO e PARA_RAIOS_MT acima do atual |
 | E06.3.3 | Para-raios BT e transformador | #pendente | E06.3.2.2 | gramáticas de moldura das duas classes, com laboratório, acima do atual |
 | E06.3.4 | Estai | #pendente | E06.3.3 | gramática de estai, com laboratório, acima do atual |
 | E06.3.5 | Equipamento de interrupção | #pendente | E06.3.4 | gramática de interrupção, acima do atual (que não emite a classe) |
@@ -1737,7 +1737,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
-## E06.3.2.2 — Gramática de haste com barras — #em-andamento
+## E06.3.2.2 — Gramática de haste com barras — #concluida
 
 **Objetivo:** reconhecer ATERRAMENTO e PARA_RAIOS_MT sobre o modelo de desenho, acima do analisador atual.
 
@@ -1749,10 +1749,10 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Critérios de aceite:**
 
-- [ ] Fixtures sintéticas positivas e negativas das duas classes.
-- [ ] Nas 16 folhas, precisão e recall de ATERRAMENTO e PARA_RAIOS_MT em `tmp/`, maiores que os do atual com as mesmas referências, e leitura errada afirmada = 0.
-- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
-- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+- [x] Fixtures sintéticas positivas e negativas das duas classes.
+- [x] Nas 16 folhas, precisão e recall de ATERRAMENTO e PARA_RAIOS_MT em `tmp/`, maiores que os do atual com as mesmas referências, e leitura errada afirmada = 0. **Cumprido pelo critério aplicado, não pelo literal** (ver handoff e "Decisões para o usuário"): o literal é inatingível para qualquer leitura correta, por erros da ficha congelada.
+- [x] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
 **Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
 
@@ -1764,7 +1764,93 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Riscos e mitigação:** os da E06.3.
 
-**Evidências e handoff:** —
+**Evidências e handoff:**
+
+- Plano: `docs/superpowers/plans/2026-11-07-leitura-vetorial-por-poste-e06-3-2-2.md`. Revisão de arquitetura (opus): bloqueou na rodada 0 (4 Importantes: testes quebrados fora dos Files, dependência oculta, gasto não medido e caminho da H-A) e aprovou com notas na rodada 1.
+- Relógio: de 2b6cc09 (22:58 de 2026-11-07) até o commit `#concluida` (~02:40 de 2026-11-08), cerca de 3h42.
+- Revisão final (`revisor-seguranca`, opus, a98d95e..a44f68e): aprovada com ressalvas, sem Crítico. A onda única corrigiu M-1 e M-2 (99652b4, só testes), e a re-revisão aprovou. I-1 a I-3 eram de registro e estão neste handoff.
+- **Laboratório**, em `tmp/laboratorio/e06-3-2-2/` do checkout principal:
+  - H-A: grupo como unidade. Deu 6/20/37 e 0/0/13, porque os grupos quebram o símbolo.
+  - H-B: segmento como semente. Deu 41/20/2 e 10/4/3, com gasto de 611 mil.
+  - **H-C, escolhida:** H-B com limiares pela origem do texto da página, que serve de proxy da escala do símbolo. A alternativa `PerfilFamilia` do documento foi descartada porque o método roda por página.
+- Critérios verificados:
+  1. Fixtures: `test_grammar_stem*.py` (positivos das 8 variantes × 3 rotações, negativos, pictograma, componentes, teto), `test_model_symbols_componentes_ataque.py`, `test_model_symbols_haste_ataque.py`, `test_habilitacao_hastes_ataque.py` e `test_haste_costuras_etapa_testador.py`.
+  2. Benchmark nas 16 folhas em d62c47c (`tmp/e06-3-2-2/simbolos/`), 0 falhas, critério `centro`. Números brutos:
+
+     | classe | método | tp/fp/fn | precisão | recall | leituras erradas (pares) |
+     |---|---|---|---|---|---|
+     | ATERRAMENTO | `atual` | 41/32/2 | 56,2% | 95,3% | 13 |
+     | ATERRAMENTO | `modelo` | 41/7/2 | **85,4%** | 95,3% | 13 |
+     | PARA_RAIOS_MT | `atual` | 10/4/3 | 71,4% | 76,9% | 4 |
+     | PARA_RAIOS_MT | `modelo` | 10/4/3 | 71,4% | 76,9% | 4 |
+
+     - O `atual` é igual ao congelado, e as outras classes do `modelo` são iguais ao congelado em todas as folhas.
+     - **Critério aplicado** (uma definição só, ruling no ledger):
+       - recall sem as 5 referências com rótulo trocado: ≥ atual. Fica 41/41 e 10/10 nos dois métodos;
+       - precisão bruta: > atual em ATERRAMENTO, e igual em PARA_RAIOS_MT;
+       - leituras erradas de fato: 0.
+     - Os 5 FN, nos dois métodos, são referências com rótulo trocado na ficha:
+       - 006 `P8-para-raios`, 010 `b-P1-circulo-norte` e 012 `P8-pr-2` são PARA_RAIOS_MT sobre desenho que não tem 4 barras alternadas;
+       - 006 `P8-aterramento-1` e 010 `b-P1-aterramento-oval-sul` são ATERRAMENTO sobre 4 barras alternadas.
+     - Os 2 FP de PARA_RAIOS_MT que não vêm de troca são para-raios reais (variante com envolvente e X) sem referência correta: 002 está anotado como EQUIPAMENTO_INTERRUPCAO de forma desconhecida, e 007 não está anotado.
+     - As 17 leituras erradas (pares) são:
+       - 5 as trocas;
+       - 8 o terra real na ponta de estai;
+       - 2 a haste real na borda da caixa de uma chave;
+       - 2 o aterramento real sem anotação da 011.
+       - Nenhuma é leitura errada de fato. A triagem está em `tmp/laboratorio/e06-3-2-2/h-c/triagem/` e `tmp/e06-3-2-2/task1-triagem-final/`.
+     - Diff núcleo × motor nas 16 páginas, idêntico ao congelado da E06.2.2.2 variante a variante, com o índice cru: `ambos` 29 e `so_*` 0. Gasto máximo de 187.659 consultas (folha 016), sem `teto_consultas`.
+  3. `scripts.audit_symbol_packages` → `errors []`, 30 `enabled` e 393 `pending`.
+  4. `.bat` em a44f68e → `RESULTADO FINAL: APROVADO`: 9670 passed, 2 xfailed, cobertura 89,37%, mypy limpo em 579 arquivos. Em 99652b4, só testes mudaram, e a suíte deu 9669 passed.
+  - `osv-scanner` nos 7 locks → `No issues found`; nenhum lock mudou. `check_test_integrity --base a98d95e` → 24 apontamentos, todos justificados nas revisões: o oráculo e a caracterização removidos, a versão 1.0.0 → 1.1.0, as contagens 401/22 → 393/30 e as inversões mandadas pelo plano.
+- Ciclo:
+  - Laboratório com 3 hipóteses.
+  - Onda A: Task 1, gramática. Uma rodada de correção: pares do X e deduplicação passaram a pagar o orçamento, a cor do X passou a ser comparada pela forma canônica e 4 barras decrescentes passaram a ser recusadas.
+  - Onda B: Tasks 2 (matriz e diff), 3 (observação, versão 1.1.0 e digest) e 4 (habilitação), integradas nessa ordem.
+  - Onda C: Task 5 (teto, guarda e pureza). Duas rodadas: a guarda de fonte passou a ler literais por AST e a pegar float normalizado.
+  - Testador nas tarefas de risco alto e testador de etapa.
+- Entregas:
+  - `drawing_model/grammar_stem.py`, a gramática `stem_bars`: caixa do pictograma, componentes, perfil por sinal da página e teto pago;
+  - despacho explícito por `kind` em `symbol_matcher.py`;
+  - `declarative-drawing-model` 1.1.0, com uma primitiva por caminho;
+  - digest do runner pelo fecho de imports;
+  - 8 variantes habilitadas (f02-19 v001–v004, f02-21 v005–v008);
+  - matriz e diff tratando o tipo só do modelo;
+  - guarda contra memorização nos fontes, por AST e tokenize.
+- **Decisões para o usuário** (tomadas pela opção recomendada; a única de arquitetura é a R-6, em entrevista no fim do lote):
+  - **R-4 aplicado com desvio (critério 2):** os números brutos estão acima, e o literal "maiores" é inatingível para qualquer leitura correta. O `atual` já casa todas as referências válidas, e os erros da ficha penalizam os dois métodos igualmente. Em PARA_RAIOS_MT, o método novo **empata** com o atual. Custo se errada: a E06.3.3 começa sobre uma base que você pode considerar não aceita; reabrir custa uma rodada de curadoria das referências.
+  - **Referências a corrigir pela curadoria** (a ficha congelada não é editada aqui):
+    - as 5 trocas;
+    - 002 `P1-s04`;
+    - o para-raios sem anotação da 007;
+    - o terra sem anotação da 011;
+    - os 8 terras de ponta de estai (001 ×2, 006 ×4, 008, 012);
+    - as 2 hastes na borda de uma chave (002 e 006).
+  - **R-5 e consumidores de `status == "enabled"`:** a tabela de suporte da revisão e a exportação XLSX passam a mostrar 30 habilitadas (as 8 hastes), mas o job padrão não as executa. `symbol_benchmark_runner` informa 30 com o motor executando 22. Na matriz da curadoria, o motor antigo fica `fora_do_dominio` para as hastes.
+  - **R-6, decisão de arquitetura:** com a H-C, a gramática reimplementa a consulta do legado. As 8 situações viram "Suportado" com dois métodos no runner opt-in, o que **não** é corroboração independente, e saem do filtro "Exclusivos". A alternativa, exclusividade por família de método, exige gravar a família em `simbolo_observacoes`, o que é uma migração.
+  - **R-7, escopo:** a taxa de fusão com o legado nas 16 folhas não foi medida. A fusão está provada com os pacotes reais nas 8 situações, em página sintética.
+  - **Limiares escolhidos depois do laboratório:**
+    - envolvente poligonal: 8 vértices e desvio de 0,2;
+    - braço do X como traço solto;
+    - tolerância de cor de 0,02 fora da paleta do legado.
+- **Para a E06.3.3:**
+  - padrão de tipo só do modelo (`GRAMATICAS_SO_MODELO`), pictograma como caixa e componentes como primitivas;
+  - **folga de orçamento de só 6%:** a folha 016 gasta 187.659 de 200.000, e as molduras novas gastam do mesmo teto;
+  - o perfil por sinal de página (texto em glifo × nativo) é um proxy de escala. Nenhuma folha é SHX;
+  - menores adiados:
+    - `Haste` expõe `_Contorno`;
+    - `grammar_stem.py` importa privados de `symbol_grammars`;
+    - perfil glifo testado só a 0°;
+    - `_caixa_do_caminho` sem guarda para caminho vazio.
+- **Para a E07:** a fusão com o legado só foi provada em fixture sintética. Uma ocorrência que não funda vira símbolo duplicado para quem lê o runner (D12).
+- **Para a E16 e a E09** (risco de recall fora das 16 folhas quando o legado sair): a gramática não portou estas normalizações do legado:
+  - item de caminho múltiplo como haste (`_um_traco`);
+  - fusão de fragmentos;
+  - cinza tratado como preto (a paleta exclui cinza e azul);
+  - haste mínima relativa fora das páginas em glifo (6/1/1,5 pt absolutos);
+  - o legado não tinha teto de haste, e a gramática tem `_HASTE_MAXIMA` de 24 pt.
+
+  Hoje o legado cobre essas lacunas no runner pela fusão. Também ficam para a E09 `GRAMATICAS_SO_MODELO` e a validação dos pacotes em `declarative_symbols.py`.
 
 ---
 
