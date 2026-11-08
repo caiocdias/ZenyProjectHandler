@@ -443,9 +443,10 @@ def test_contorno_duplicado_com_deslocamento_gera_um_casamento_so() -> None:
     assert _variantes(pagina_desenhada(desenhar)) == [_V001]
 
 
-@pytest.mark.xfail(strict=True, raises=AssertionError, reason=f"ponto cego do X curto ({_LEDGER})")
-def test_x_proprio_de_bracos_curtos_nao_e_segunda_diagonal() -> None:
-    """Bracos de 1,2 vezes o lado maior cruzam o retangulo como diagonais, mas sao o X da v004."""
+def test_x_curto_de_cor_diferente_da_do_retangulo_nao_e_lido_como_diagonal() -> None:
+    """Bracos vermelhos de 1,2 vezes o lado maior cruzam o retangulo preto como diagonais, mas
+    a cor canonica difere da do retangulo (R-E06.3.3.2.1-5): nao sao diagonais, sao o X da
+    v004. O X curto da mesma cor do retangulo continua sem cobertura (ledger)."""
     cx, cy = CENTRO
     meio = 1.2 * CORPO[0] / 2 / math.sqrt(2)
 
