@@ -109,6 +109,23 @@ Soma: 3h05 (25 + 35 + 45 + 40 + 20 + 20), mais o laboratório (caixa de 60 min).
 - **Parada:** 60 min por hipótese, ou 8 tp ou mais com 0 leitura errada de fato.
 - **Entrega:** `tmp/laboratorio/e06-3-3-1/<hipotese>/`: `patch.diff`, `metricas.json` e `conclusoes.md`.
 
+## Resultado do laboratório (2026-11-08)
+
+O laboratório está em `tmp/laboratorio/e06-3-3-1/` do checkout principal.
+
+| hipótese | PARA_RAIOS_BT (tp/fp/fn) | F1 | gasto máximo | leitura errada de fato |
+|---|---|---|---|---|
+| H-1 | 9/1/1 | 0,90 | 197.282 | 0 |
+| **H-2, escolhida** | 10/2/0 | 0,909 | 192.308 | 0 |
+| H-3 | 10/1/0 | 0,952 | 199.695 | 0 |
+
+- **Por que a H-2:** a única diferença de F1 em relação à H-3 é o BT real da 006, que a ficha rotula PARA_RAIOS_MT (R-5). A H-2 o lê certo, e a ficha conta essa leitura como FP. O outro FP das duas é um BT real sem poste (014). Descontados os erros de referência, a H-2 lê mais símbolos reais, sem leitura errada, e deixa 7,7 mil de folga de gasto, contra 305 da H-3.
+- **Achados que valem para a Task 3:**
+  - nas folhas reais, a diagonal vem num caminho de 3 traços (gancho, diagonal e gancho);
+  - a H-3 tem uma guarda para "diagonal que é braço de um X", que pode entrar se o FP do retângulo riscado se reproduzir;
+  - a envolvente partida em vários traços não é reconhecida por `grammar_marcas` (achado da H-1), e a v002 pode sair como v001. A Task 3 mede a distribuição de variantes dos tp.
+- As demais classes não mudam, e o diff fica igual ao congelado nas três hipóteses.
+
 ## Tasks
 
 ### Task 1: Tipo `rect_diagonal`
