@@ -19,7 +19,13 @@ Decisões do laboratório da E06.3.3.2.2, como no método E05 (`pymupdf_transfor
   o grupo da envolvente exige que não haja X;
 - uma metade cheia de outra cor que não o ciano não é `half_cyan`: o desenho cai em `outline`
   pelo contorno, porque só o ciano decide o `fill` (`_toca_ciano`), e a cor nunca decide a
-  situação.
+  situação; as metades entram nos componentes.
+
+Rulings da rodada de correção da Task 3:
+- o contorno tracejado e o roxo (o triângulo com S, v016 a v018, fora de escopo) não casam;
+- a gravata (dois triângulos que se tocam pelo vértice, num caminho ou em dois) não casa;
+- o triângulo cheio de cor, inteiro ou em duas metades (ciano inteiro), não casa;
+- a metade ciano sobre o fundo branco do triângulo inteiro é `half_cyan`.
 """
 
 from __future__ import annotations
@@ -27,7 +33,7 @@ from __future__ import annotations
 import math
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Final, Literal
+from typing import Any, Final, Generic, Literal, TypeVar
 
 from zeny_project_handler.adapters.analysis.drawing_model.grammar_marcas import (
     MarcasDaPagina,
@@ -51,11 +57,13 @@ from zeny_project_handler.adapters.analysis.drawing_model.symbol_grammars import
     _MARGEM_PAGINA,
     ContextoGramatica,
     GradeEspacial,
+    OrcamentoConsultas,
     Segmento,
     _caixa_de_pontos,
 )
 
 _Triangulo = tuple[Ponto, Ponto, Ponto]
+T = TypeVar("T")
 Preenchimento = Literal["half_cyan", "outline"]
 
 # Forma: lados parecidos e ângulos internos perto de 60°, como o contorno do E05.
@@ -71,8 +79,19 @@ _VERTICE_RELATIVO: Final = 0.04
 _VERTICE_MINIMO: Final = 0.15
 # O vértice do meio da aresta dividida fica entre estas frações dela.
 _MEIO_DA_ARESTA: Final = (0.25, 0.75)
-# Preenchimento de outra cor que cobre o contorno: vértices a até esta fração do lado.
+# Dois contornos são o mesmo triângulo com os vértices a até esta fração do lado.
 _COBERTURA_RELATIVA: Final = 0.08
+# Preenchimentos de cor (ciano ou outra, não branca) com o centro no contorno que cobrem esta
+# fração da área dele o tornam um triângulo cheio, e não um pictograma; maiores que
+# `_PREENCHIMENTO_MAXIMO` vezes o contorno não são dele.
+_COBERTURA_CHEIA: Final = 0.9
+_PREENCHIMENTO_MAXIMO: Final = 1.5
+# Células dos índices de vértices e de centros: o maior alcance das tolerâncias acima, para que
+# dois pontos dentro da tolerância caiam em células vizinhas.
+_CELULA_VERTICE: Final = max(_VERTICE_MINIMO, _LADO_MAXIMO * _VERTICE_RELATIVO)
+_CELULA_CENTRO: Final = _LADO_MAXIMO * _COBERTURA_RELATIVA
+# Traço contínuo: `dashes` vazio ou o padrão vazio do PyMuPDF.
+_TRACOS_CONTINUOS: Final = frozenset({"", "[]", "[]0"})
 # Haste de ligação: sai de um vértice, para fora, alinhada à mediana dele.
 _HASTE_MINIMA: Final = 0.5
 _HASTE_ANGULO: Final = math.radians(20)
@@ -148,16 +167,46 @@ def _branco(cor: Cor | None) -> bool:
     return cor is not None and min(cor) >= 0.9
 
 
+def _roxo(cor: Cor | None) -> bool:
+    """O roxo do E05 (`_colored(..., "purple")`): o traço do triângulo com S, fora de escopo."""
+    if cor is None:
+        return False
+    r, g, b = cor
+    return r > 0.2 and b > 0.2 and g < min(r, b) * 0.8
+
+
+def _traco_de_pictograma(caminho: Caminho) -> bool:
+    """Traço contínuo e não roxo: o tracejado e o roxo (v016 a v018) não são o transformador."""
+    return caminho.estilo.tracejado.replace(" ", "") in _TRACOS_CONTINUOS and not _roxo(
+        caminho.estilo.cor
+    )
+
+
+def _mediana_depois_do_fecho(subcaminho: Sequence[ItemCaminho]) -> bool:
+    """Depois das 3 retas que fecham, no máximo uma reta, que sai do fecho para dentro do
+    triângulo (a mediana desenhada no mesmo caminho). Mais retas são outra figura (a gravata)."""
+    if len(subcaminho) == 3:
+        return True
+    if len(subcaminho) != 4:
+        return False
+    a, b, c = (item.pontos[0] for item in subcaminho[:3])
+    inicio, fim = subcaminho[3].pontos[0], subcaminho[3].pontos[-1]
+    folga = max(_FECHAMENTO, sum(_lados((a, b, c))) / 3 * _VERTICE_RELATIVO)
+    return math.dist(inicio, a) <= _FECHAMENTO and _dentro(fim, (a, b, c), folga)
+
+
 def _vertices(subcaminho: Sequence[ItemCaminho], implicito: bool) -> _Triangulo | None:
     """Os 3 vértices de um subcaminho de retas que fecha um triângulo.
 
     Um preenchimento fecha implícito. Um traço fecha nas 3 primeiras retas; uma reta a mais
-    depois do fecho (a mediana desenhada no mesmo caminho) não desfaz o triângulo.
+    depois do fecho, para dentro (a mediana desenhada no mesmo caminho), não desfaz o triângulo.
     """
     if len(subcaminho) < 2 or any(item.tipo != "l" for item in subcaminho):
         return None
     pontos = [item.pontos[0] for item in subcaminho] + [subcaminho[-1].pontos[-1]]
     if len(subcaminho) >= 3 and math.dist(subcaminho[2].pontos[-1], pontos[0]) <= _FECHAMENTO:
+        if not _mediana_depois_do_fecho(subcaminho):
+            return None
         pontos = pontos[:3]
     elif math.dist(pontos[-1], pontos[0]) <= _FECHAMENTO:
         pontos = pontos[:-1]
@@ -315,7 +364,11 @@ def _triangulos_da_pagina(
                 )
                 destino.append((vertices, posicao))
         # O traço de um preenchimento de hachura contorna as fatias, não o pictograma.
-        if _traca(caminho) and (caminho.tipo == "traco" or len(caminho.subcaminhos) == 1):
+        if (
+            _traca(caminho)
+            and (caminho.tipo == "traco" or len(caminho.subcaminhos) == 1)
+            and _traco_de_pictograma(caminho)
+        ):
             for subcaminho in caminho.subcaminhos:
                 vertices = _vertices(subcaminho, implicito=False)
                 if vertices is not None and _quase_equilatero(vertices, perfil) is not None:
@@ -323,7 +376,10 @@ def _triangulos_da_pagina(
     for primitiva in modelo.primitivas:
         if not isinstance(primitiva, Polilinha) or not primitiva.fechada or not primitiva.origens:
             continue
-        if any(origem in excluidos for origem in primitiva.origens):
+        if any(
+            origem in excluidos or not _traco_de_pictograma(modelo.caminhos[origem])
+            for origem in primitiva.origens
+        ):
             continue
         pontos = list(primitiva.pontos)
         if len(pontos) == 4 and math.dist(pontos[0], pontos[-1]) <= _FECHAMENTO:
@@ -355,7 +411,11 @@ def _no_segmento(ponto: Ponto, a: Ponto, b: Ponto, tolerancia: float) -> float |
 def _meio_ciano(
     ciano: _Triangulo, branco: _Triangulo, perfil: Perfil
 ) -> tuple[_Triangulo, float] | None:
-    """O triângulo união e o ângulo da aresta dividida, se os dois dividem uma mediana."""
+    """O triângulo união e o ângulo da aresta dividida, se os dois dividem uma mediana.
+
+    O branco é a outra metade (os dois dividem a mediana) ou o fundo do triângulo inteiro, com a
+    metade ciano por cima: o meio da aresta, vértice livre do ciano, fica num lado do branco.
+    """
     lado = sum(_lados(ciano)) / 3
     tolerancia = max(_VERTICE_MINIMO, lado * _VERTICE_RELATIVO)
     comuns = _comuns(ciano, branco, tolerancia)
@@ -365,18 +425,29 @@ def _meio_ciano(
     usados_b = {j for _, j in comuns}
     b = next(p for i, p in enumerate(ciano) if i not in usados_c)
     c = next(p for j, p in enumerate(branco) if j not in usados_b)
-    for apice, meio in (
+    pares = (
         (ciano[comuns[0][0]], ciano[comuns[1][0]]),
         (ciano[comuns[1][0]], ciano[comuns[0][0]]),
-    ):
+    )
+    for apice, meio in pares:
+        # Metade ao lado da outra: o meio da aresta é comum e fica entre os vértices livres.
         t = _no_segmento(meio, b, c, tolerancia)
-        if t is None or not _MEIO_DA_ARESTA[0] <= t <= _MEIO_DA_ARESTA[1]:
-            continue
-        uniao = (apice, b, c)
-        if _quase_equilatero(uniao, perfil) is None:
-            return None
-        return uniao, angulo(Segmento(apice, meio, -1))
+        if t is not None and _MEIO_DA_ARESTA[0] <= t <= _MEIO_DA_ARESTA[1]:
+            return _uniao((apice, b, c), apice, meio, perfil)
+    for apice, lateral in pares:
+        # Fundo inteiro: o vértice livre do ciano é o meio do lado `lateral`-`c` do branco.
+        t = _no_segmento(b, lateral, c, tolerancia)
+        if t is not None and _MEIO_DA_ARESTA[0] <= t <= _MEIO_DA_ARESTA[1]:
+            return _uniao((apice, lateral, c), apice, b, perfil)
     return None
+
+
+def _uniao(
+    uniao: _Triangulo, apice: Ponto, meio: Ponto, perfil: Perfil
+) -> tuple[_Triangulo, float] | None:
+    if _quase_equilatero(uniao, perfil) is None:
+        return None
+    return uniao, angulo(Segmento(apice, meio, -1))
 
 
 def _dentro(ponto: Ponto, vertices: _Triangulo, folga: float) -> bool:
@@ -440,6 +511,90 @@ def _meios_cianos(contexto: ContextoGramatica, lidos: _Lidos, perfil: Perfil) ->
     return achados
 
 
+def _centro_de(vertices: _Triangulo) -> Ponto:
+    return sum(p[0] for p in vertices) / 3, sum(p[1] for p in vertices) / 3
+
+
+class _IndicePontos(Generic[T]):
+    """Pontos por célula, com inserção a qualquer momento: os vizinhos de um ponto estão nas 9
+    células em volta. Cada vizinho devolvido gasta 1 do orçamento, como uma consulta à grade."""
+
+    __slots__ = ("_celula", "_celulas", "_orcamento")
+
+    def __init__(self, celula: float, orcamento: OrcamentoConsultas) -> None:
+        self._celula = celula
+        self._orcamento = orcamento
+        self._celulas: dict[tuple[int, int], list[T]] = {}
+
+    def _chave(self, ponto: Ponto) -> tuple[int, int]:
+        return math.floor(ponto[0] / self._celula), math.floor(ponto[1] / self._celula)
+
+    def inserir(self, ponto: Ponto, valor: T) -> None:
+        self._celulas.setdefault(self._chave(ponto), []).append(valor)
+
+    def vizinhos(self, ponto: Ponto) -> list[T]:
+        cx, cy = self._chave(ponto)
+        achados = [
+            valor
+            for dx in (-1, 0, 1)
+            for dy in (-1, 0, 1)
+            for valor in self._celulas.get((cx + dx, cy + dy), ())
+        ]
+        self._orcamento.gastar(len(achados))
+        return achados
+
+
+def _que_se_tocam(
+    contexto: ContextoGramatica, contornos: Sequence[tuple[_Triangulo, object]], perfil: Perfil
+) -> set[int]:
+    """Os contornos que encostam um vértice num outro triângulo de fora (a gravata): nenhum dos
+    dois é o pictograma isolado. O mesmo triângulo lido duas vezes não conta."""
+    indice: _IndicePontos[tuple[int, Ponto]] = _IndicePontos(_CELULA_VERTICE, contexto.orcamento)
+    lados: dict[int, float] = {}
+    for i, (vertices, _) in enumerate(contornos):
+        lado = _quase_equilatero(vertices, perfil)
+        if lado is not None:
+            lados[i] = lado
+            for vertice in vertices:
+                indice.inserir(vertice, (i, vertice))
+    tocados: set[int] = set()
+    for i, lado in lados.items():
+        vertices = contornos[i][0]
+        tolerancia = max(_VERTICE_MINIMO, lado * _VERTICE_RELATIVO)
+        for vertice in vertices:
+            for j, outro in indice.vizinhos(vertice):
+                if j == i or math.dist(vertice, outro) > tolerancia:
+                    continue
+                alheio = contornos[j][0]
+                if not _mesmo_triangulo(vertices, alheio, lado * _COBERTURA_RELATIVA) and not (
+                    _dentro(_centro_de(alheio), vertices, tolerancia)
+                ):
+                    tocados.update((i, j))
+    return tocados
+
+
+def _preenchimentos_dentro(
+    grade: GradeEspacial[tuple[_Triangulo, int, bool]], vertices: _Triangulo, caixa: Caixa
+) -> list[tuple[_Triangulo, int, bool]]:
+    """Os preenchimentos com o centro no triângulo e do tamanho dele, no máximo."""
+    area = _area(vertices)
+    folga = sum(_lados(vertices)) / 3 * _VERTICE_RELATIVO
+    return [
+        item
+        for item in grade.consultar(caixa)
+        if _area(item[0]) <= area * _PREENCHIMENTO_MAXIMO
+        and _dentro(_centro_de(item[0]), vertices, folga)
+    ]
+
+
+def _cheio(vertices: _Triangulo, dentro: Sequence[tuple[_Triangulo, int, bool]]) -> bool:
+    """Preenchimentos de cor (ciano ou outra, não branca) cobrem o triângulo: é um triângulo
+    cheio, como o ciano inteiro em uma ou em duas metades, e não um pictograma de contorno."""
+    area = _area(vertices)
+    coberta = sum(min(_area(v), area) for v, _, de_cor in dentro if de_cor)
+    return area > 0 and coberta >= _COBERTURA_CHEIA * area
+
+
 def _contornos(
     contexto: ContextoGramatica,
     lidos: _Lidos,
@@ -447,31 +602,40 @@ def _contornos(
     perfil: Perfil,
 ) -> tuple[list[_Forma], dict[int, set[int]]]:
     """Contornos de pictograma, sem os que pertencem a um meio ciano (cujos caminhos vão para
-    ele, pelo índice do meio) nem os cobertos por um preenchimento opaco de outra cor."""
+    ele, pelo índice do meio), os cheios de cor e os que encostam noutro triângulo (gravata).
+
+    Os preenchimentos dentro do contorno (a metade de outra cor e a branca) são caminhos dele.
+    O mesmo triângulo lido de vários caminhos vira uma forma só, achada pelo índice de centros.
+    """
     modelo = contexto.pagina.modelo
     limites = _limites(modelo)
     grade_meios = GradeEspacial(
         ((m.forma.caixa, i) for i, m in enumerate(meios)), limites, contexto.orcamento
     )
-    cobertos = [*lidos.opacos, *lidos.cianos]
-    grade_opacos = GradeEspacial(
-        ((_caixa_de_pontos(v) or (0.0, 0.0, 0.0, 0.0), v) for v, _ in cobertos),
+    preenchidos = [
+        *((v, p, True) for v, p in (*lidos.opacos, *lidos.cianos)),
+        *((v, p, False) for v, p in lidos.brancos),
+    ]
+    grade_preenchidos = GradeEspacial(
+        ((_caixa_de_pontos(item[0]) or (0.0, 0.0, 0.0, 0.0), item) for item in preenchidos),
         limites,
         contexto.orcamento,
     )
-    anexos: dict[int, set[int]] = {}
-    formas: list[_Forma] = []
     candidatos: list[tuple[_Triangulo, int | tuple[int, ...]]] = [
         *lidos.contornos,
-        *((v, p) for v, p in lidos.brancos),
+        *((v, p) for v, p in lidos.brancos if _traco_de_pictograma(modelo.caminhos[p])),
     ]
-    for vertices, origem in candidatos:
+    tocados = _que_se_tocam(contexto, candidatos, perfil)
+    anexos: dict[int, set[int]] = {}
+    formas: list[_Forma] = []
+    centros: _IndicePontos[int] = _IndicePontos(_CELULA_CENTRO, contexto.orcamento)
+    for k, (vertices, origem) in enumerate(candidatos):
         contexto.orcamento.gastar()
         lado = _quase_equilatero(vertices, perfil)
         caixa = _caixa_de_pontos(vertices)
         if lado is None or caixa is None:
             continue
-        centro = (sum(p[0] for p in vertices) / 3, sum(p[1] for p in vertices) / 3)
+        centro = _centro_de(vertices)
         dono = next(
             (
                 i
@@ -483,18 +647,27 @@ def _contornos(
         if dono is not None:
             anexos.setdefault(dono, set()).update(_origens(origem))
             continue
-        tolerancia = lado * _COBERTURA_RELATIVA
-        if any(_mesmo_triangulo(vertices, v, tolerancia) for v in grade_opacos.consultar(caixa)):
+        dentro = _preenchimentos_dentro(grade_preenchidos, vertices, caixa)
+        if k in tocados or _cheio(vertices, dentro):
             continue
+        caminhos = {*_origens(origem), *(p for _, p, _ in dentro)}
+        tolerancia = lado * _COBERTURA_RELATIVA
         igual = next(
-            (f for f in formas if _mesmo_triangulo(vertices, f.vertices, tolerancia)), None
+            (
+                i
+                for i in centros.vizinhos(centro)
+                if _mesmo_triangulo(vertices, formas[i].vertices, tolerancia)
+            ),
+            None,
         )
         if igual is not None:
-            formas[formas.index(igual)] = _Forma(
-                igual.vertices, tuple(sorted({*igual.origens, *_origens(origem)})), igual.lado
+            antiga = formas[igual]
+            formas[igual] = _Forma(
+                antiga.vertices, tuple(sorted({*antiga.origens, *caminhos})), antiga.lado
             )
             continue
-        formas.append(_Forma(vertices, tuple(sorted(set(_origens(origem)))), lado))
+        centros.inserir(centro, len(formas))
+        formas.append(_Forma(vertices, tuple(sorted(caminhos)), lado))
     return formas, anexos
 
 
