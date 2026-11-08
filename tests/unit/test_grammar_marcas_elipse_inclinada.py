@@ -115,9 +115,9 @@ def test_subcaminho_eliptico_girado_vira_contorno(graus: float, razao: float) ->
 
     [contorno] = contornos
     assert (contorno.origem, contorno.caminhos) == ("subcaminho", (0,))
-    assert contorno.centro == pytest.approx(_CENTRO, abs=1e-6)
-    assert sorted(contorno.semieixos) == pytest.approx([10.0 / razao, 10.0], abs=1e-6)
-    assert all(_raio_normalizado(contorno, p) == pytest.approx(1.0, abs=1e-6) for p in vertices)
+    assert contorno.centro == pytest.approx(_CENTRO, abs=1e-7)
+    assert sorted(contorno.semieixos) == pytest.approx([10.0 / razao, 10.0], abs=1e-7)
+    assert all(_raio_normalizado(contorno, p) == pytest.approx(1.0, abs=1e-7) for p in vertices)
 
 
 @pytest.mark.parametrize("graus", _GRAUS, ids=["30", "45", "60"])
@@ -129,7 +129,7 @@ def test_polilinha_eliptica_girada_vira_contorno(graus: float) -> None:
 
     [contorno] = contornos
     assert contorno.origem == "polilinha"
-    assert all(_raio_normalizado(contorno, p) == pytest.approx(1.0, abs=1e-6) for p in vertices)
+    assert all(_raio_normalizado(contorno, p) == pytest.approx(1.0, abs=1e-7) for p in vertices)
 
 
 # --- o que não vira contorno ------------------------------------------------------------------
