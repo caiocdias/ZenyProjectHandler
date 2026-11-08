@@ -271,7 +271,7 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E06.2.2.2 | Medição do método nas 16 folhas | #concluida | E06.2.2.1 | benchmark ao lado do atual e diff por variante, com cada "só no núcleo" classificado |
 | E06.3.1 | Pacotes das classes da ficha | #concluida | E06.2.2.2 | 58 variantes do inventário de ESTAI, TRANSFORMADOR, ATERRAMENTO e PARA_RAIOS_MT/BT nos pacotes, como `pending`; auditor e matriz aceitam outro `owner_stage` |
 | E06.3.2.1 | Base da haste, leituras erradas e H2 | #concluida | E06.3.1 | tipo de gramática só do modelo, métrica de leitura errada afirmada, resíduos raster por folha e veredito da H2 |
-| E06.3.2.2 | Gramática de haste com barras | #pendente | E06.3.2.1 | gramática de haste com barras, com laboratório, ATERRAMENTO e PARA_RAIOS_MT acima do atual |
+| E06.3.2.2 | Gramática de haste com barras | #em-andamento | E06.3.2.1 | gramática de haste com barras, com laboratório, ATERRAMENTO e PARA_RAIOS_MT acima do atual |
 | E06.3.3 | Para-raios BT e transformador | #pendente | E06.3.2.2 | gramáticas de moldura das duas classes, com laboratório, acima do atual |
 | E06.3.4 | Estai | #pendente | E06.3.3 | gramática de estai, com laboratório, acima do atual |
 | E06.3.5 | Equipamento de interrupção | #pendente | E06.3.4 | gramática de interrupção, acima do atual (que não emite a classe) |
@@ -1696,7 +1696,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 **Evidências e handoff:**
 
 - Plano: `docs/superpowers/plans/2026-11-07-leitura-vetorial-por-poste-e06-3-2-1.md`. Revisão de arquitetura (opus): bloqueou nas rodadas 0 e 1, sobre o plano da E06.3.2 inteiro (C1: o perfil do modelo herdava as classes do motor; C2: a caixa da haste não era o pictograma do legado), e aprovou com notas na rodada 2, sobre o plano recortado.
-- Relógio: de e609bda (21:14 de 2026-11-07, `#em-andamento` da E06.3.2) até o commit `#concluida` (23:00), 1h46. A divisão da E06.3.2 entra nesse tempo.
+- Relógio: de e609bda (21:14 de 2026-11-07, `#em-andamento` da E06.3.2) até o commit `#concluida` (a98d95e, 22:58), 1h44. A divisão da E06.3.2 entra nesse tempo.
 - Revisão final (`revisor-seguranca`, opus, 2d9d303..14544d5): aprovada com ressalvas, sem Crítico e sem correção de código. Os dois Importantes eram de registro e estão fechados neste handoff. Os Menores ficaram com ruling no ledger, e nenhum bloqueia.
 - Critérios verificados:
   1. Fixtures sintéticas: `tests/unit/test_gramatica_so_modelo*.py`, `test_residuos_raster_folhas*.py` e `test_leituras_erradas*.py`, com positivos e negativos de cada peça.
@@ -1737,7 +1737,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
-## E06.3.2.2 — Gramática de haste com barras — #pendente
+## E06.3.2.2 — Gramática de haste com barras — #em-andamento
 
 **Objetivo:** reconhecer ATERRAMENTO e PARA_RAIOS_MT sobre o modelo de desenho, acima do analisador atual.
 
