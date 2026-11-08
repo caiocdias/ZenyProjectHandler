@@ -1,8 +1,10 @@
 # Roadmap — Leitura vetorial por poste
 
-> Arquivo: `docs/roadmap-leitura-vetorial-por-poste.md` · branches de execução: `roadmap/leitura-vetorial-por-poste` (trilha A), `roadmap/leitura-vetorial-por-poste-b` e `roadmap/leitura-vetorial-por-poste-c` · criado em 2026-10-30 · última revisão 2026-11-05
+> Arquivo: `docs/roadmap-leitura-vetorial-por-poste.md` · branches de execução: `roadmap/leitura-vetorial-por-poste` (trilha A), `roadmap/leitura-vetorial-por-poste-b` e `roadmap/leitura-vetorial-por-poste-c` · criado em 2026-10-30 · última revisão 2026-11-08
 
 ## Como usar
+
+**Próxima execução: use o "Prompt da janela de release 0.6.0", que termina até 09:30 de 2026-11-09 e entrega os arquivos da versão nova em `dist/release/0.6.0/`.** Depois dela, volte ao "Prompt de execução".
 
 As etapas pendentes estão agrupadas em trilhas (A — analisador, B — medição, C — aprendizado; ver "Índice de etapas"), mas um único orquestrador executa todas. Inicie uma sessão limpa do Claude Code na raiz do repositório com `claude --agent orquestrador` e cole o "Prompt de execução". Não abra uma segunda sessão de orquestrador enquanto essa estiver aberta. A própria sessão abre até 2 etapas de trilhas diferentes ao mesmo tempo, cada uma no worktree da sua trilha, e roda as tarefas independentes em ondas. Cada execução conclui até 3 etapas, planejadas pelo plugin superpowers e executadas pelas souls (subagentes do Second Brain), e para para revisão. No fim do lote, o orquestrador integra as branches das trilhas na `main` com merge local e deixa pronto o `git push origin main`, que fica com você. A ordem em que as etapas abrem está em "Janelas", no índice. Para não parar em cada pedido de permissão, libere antes os comandos de build/teste do projeto nas permissões do Claude Code.
 
@@ -51,12 +53,13 @@ A análise entrega, para cada poste da folha, a ficha correta: identificador, es
 - detector visual local;
 - atualização das dependências vulneráveis (E13, decisão D3);
 - gate de testes paralelo (E14), ficha predita das propostas (E15) e conjunto de avaliação cego em etapa própria (E16), conforme a decisão D6;
-- fechamento do cliente com servidor lento (E17), achado da revisão final da E14.
+- fechamento do cliente com servidor lento (E17), achado da revisão final da E14;
+- release 0.6.0 do cliente e do servidor (E18 e E19), conforme a decisão D16.
 
 **Fora de escopo:**
 - gerar DWG;
 - Claude chamado pelo servidor;
-- mudanças em conformidade, exportação, portabilidade e cliente, além de campos aditivos para mostrar pendências da ficha;
+- mudanças em conformidade, exportação, portabilidade e cliente, além de campos aditivos para mostrar pendências da ficha e da troca do número de versão (E18);
 - novas regras normativas.
 
 ## Restrições e invariantes
@@ -98,6 +101,12 @@ A análise entrega, para cada poste da folha, a ficha correta: identificador, es
 | D13 | Decidido em 2026-11-08 pelo usuário, por entrevista (R-6 da E06.3.2.2). No runner opt-in, o sinal "Exclusivo"/"Suportado" fica como está até a E09: o símbolo lido pelo legado e pela gramática nova vira "Suportado", ainda que não seja corroboração independente. Descartadas: gravar a família do método em `simbolo_observacoes` (migração e formato persistido novo, uma etapa a mais) e rebaixar os pacotes no opt-in (esconderia a corroboração real) | até a E09, "Suportado" superestima a confiança desses símbolos no runner opt-in | E06.3, E07, E09 |
 | D14 | Decidido em 2026-11-08 pelo usuário, por entrevista (R-7 da E06.3.3.2.1). O mapa variante → situação fica no consumidor, na E07, que deriva o conjunto de situações de `referencias_possiveis` e da variante pelo inventário. O método sobre o modelo não preenche `situacao`. Descartadas: preencher no adaptador só quando a situação é única (cobre parte dos casos e duplica lógica) e um campo multivalorado na observação (contrato novo e migração) | a E07 precisa ler `referencias_possiveis` (lista) e não só `variante_inventario` | E07 |
 | D15 | Decidido em 2026-11-08 pelo usuário, por entrevista. O alvo de gasto por folha do método sobre o modelo sobe de 200.000 para **300.000** consultas. O limite duro `LIMITE_CONSULTAS_PAGINA` (2.000.000) não muda, e a folga cai de 10× para cerca de 6,7×. Cada etapa continua medindo e registrando o gasto. Descartadas: manter 200.000 com otimização obrigatória (custo por etapa, risco de travar a E06.3.4) e teto por gramática (novo desenho de `OrcamentoConsultas`) | se as gramáticas restantes crescerem mais que o previsto, a folga até o limite duro diminui; a E09 mede o custo real | E06.3.4, E06.3.5, E09 |
+| H6 | O build completo da release (`scripts/build_release.py`, com `docker build --no-cache`, PyInstaller e gate de artefatos) cabe em cerca de 1 h. Nunca foi medido nesta máquina desde a 0.5.0, e o `dist/` não existe. O Docker Desktop está instalado, mas o daemon estava desligado em 2026-11-08 15:10 | se demorar mais, o corte do build final antecipa pela fórmula da janela; a E18 mede | E18, E19 |
+| D16 | Decidido em 2026-11-08 pelo usuário: a próxima execução faz o máximo possível e tem de estar parada às 10:00 de 2026-11-09, com os arquivos da versão nova prontos. Desenho do arquiteto: execução limitada pelo relógio, e não pelo número de etapas (protocolo, "Janela de release 0.6.0"). O prazo corta escopo, nunca revisão ou gate. A versão é 0.6.0, seguindo as versões menores anteriores (0.3.0, 0.4.0, 0.5.0). Descartadas: limite de 3 etapas (deixaria horas ociosas), build só no fim (uma falha às 8h perderia a entrega) e cortar revisões para caber mais etapas (antiobjetivo do design de execução acelerada) | etapa que não fecha até o corte fica fora da 0.6.0 e continua na branch dela | E18, E19, protocolo |
+| D17 | Decidido em 2026-11-08 pelo usuário, por entrevista: na 0.6.0 a leitura vetorial nova continua desligada por padrão (`ZENY_SERVER_SYMBOL_COMPOSITION=false`), opcional por configuração. Confirma a D12. Descartada: kit com a opção ligada, que anteciparia a E09 sem prova cega, encareceria cada análise, invalidaria caches e deixaria "Suportado" superestimado (D13) | sem ligar a opção, a leitura de símbolos da 0.6.0 é igual à da 0.5.0 | E07, E08, E18, E19 |
+| D18 | Decidido em 2026-11-08 pelo usuário, por entrevista: nesta janela, a revisão humana da E07 fica para depois da release e não para a execução. Em troca, com a opção da D17 desligada, a E07 e a E08 não podem mudar a saída da análise padrão. Descartadas: E07 fora da release até a revisão (a versão sairia sem a ficha) e parar na E07 (horas ociosas de madrugada) | a E08 se apoia numa E07 ainda não revisada; se a revisão reprovar, as duas são corrigidas numa versão seguinte, e o padrão continua protegido pela opção desligada | E07, E08 |
+| D19 | Decidido em 2026-11-08 pelo arquiteto: nesta janela, a E07 abre sem esperar a E06.3.4 e a E06.3.5, porque só a E07 e a E08 estão no caminho crítico, e as gramáticas restantes não mudam a associação. A E07 passa a depender da E06.3.3.2.2 (já na `main`), e a E06.3.4 e a E06.3.5 vão para a trilha B, para a E08 seguir a E07 na mesma trilha. Descartada: manter a fila única E06.3.4 → E06.3.5 → E07, que consumiria cerca de 7 h da janela antes de abrir a E07 (as últimas 5 etapas levaram 3h26 em média) | a E07 mede sem as duas classes novas; o critério dela trata disso, e a E19 remede se houver tempo. A regra de arquivos disjuntos continua valendo entre as trilhas | E06.3.4, E06.3.5, E07, E08 |
+| D20 | Decidido em 2026-11-08 pelo arquiteto, depois do builder check: na janela, cada etapa ou subetapa entra na `main` ao fechar, e a release final é gerada numa pasta separada e só troca a oficial depois de conferida. Toda parada, exceto push, deploy e segredo, estaciona a etapa. Descartadas: integrar tudo no corte, porque a branch da trilha teria etapa fechada e etapa pela metade juntas, sem commit de corte definido; e build final direto na pasta oficial, porque `build_release` apaga o destino antes de mover o novo, e uma interrupção nesse ponto eliminaria a candidata | custa um gate por etapa, de minutos, em troca de a `main` estar sempre pronta para o build | protocolo, E18, E19 |
 
 ## Definição global de pronto
 
@@ -224,6 +233,37 @@ Etapa que fica `#bloqueada` não para o lote: o orquestrador segue para a próxi
 1. Use `superpowers:finishing-a-development-branch` com a integração já decidida: merge local na branch principal de cada branch de trilha com trabalho no lote, uma por vez, na ordem A, B, C, conforme o passo de fechamento do `orquestrador`. Cada branch é atualizada com a `main`, que já traz as anteriores, passa no gate e entra com `merge --no-ff`; no fim, o repositório fica limpo e pronto para o próximo orquestrador. Push e deploy ficam com o usuário: o relatório termina com o comando `git push origin main` pronto.
 2. Liste as "Decisões para o usuário" acumuladas, que já foram tomadas pela opção recomendada, com prós e contras, para revisão. As de arquitetura que esperam o usuário vão como entrevista: perguntas de múltipla escolha, cada uma com uma opção recomendada e justificada (no Claude Code, `AskUserQuestion` com a recomendada em primeiro lugar e o rótulo "(Recomendado)"). Registre as respostas no handoff das etapas e em "Hipóteses e decisões em aberto".
 
+**Janela de release 0.6.0** (D16; vale só para a execução iniciada com o "Prompt da janela de release 0.6.0")
+
+O prazo é **10:00 de 2026-11-09 (horário de Brasília, -03:00)**, com os arquivos em `dist/release/0.6.0/` do checkout principal. O relógio corta escopo; plano revisado, revisão por tarefa, revisão final e gate continuam iguais, e nada vermelho entra na `main`. Onde esta seção diverge do resto do protocolo, ela vale.
+
+| Marco | O que acontece |
+|---|---|
+| 22:00 de 08/11 | **Conferência da candidata.** Sem candidata aprovada, a E18 vira prioridade única: nada novo abre, e os despachos vão só para ela |
+| 05:00 de 09/11 | Não abre etapa nem subetapa nova. As etapas abertas continuam |
+| 06:30 | **Corte de trabalho** (receita abaixo). Nenhum despacho novo de `desenvolvedor` ou `testador`, e os ativos param |
+| 07:15 | Limite para fechar e integrar a etapa cuja revisão final foi despachada antes das 06:30 |
+| 07:45 | Início da E19, se ela ainda não começou |
+| 09:00 | **Corte do build.** Build final não terminado é interrompido, e fica valendo a candidata da E18 |
+| 09:30 | Sessão encerrada, com relatório entregue. Não inicia mais nada |
+| 10:00 | Prazo do usuário; a meia hora final é folga, não tempo de trabalho |
+
+- **Como o relógio é vigiado:** no início da sessão, um comando em segundo plano por marco, que termina na hora e acorda a sessão mesmo com subagentes ativos (`until [ "$(date +%s)" -ge "$(date -d '2026-11-09 05:00:00 -0300' +%s)" ]; do sleep 30; done; echo MARCO-0500`). Além disso, `date` antes de cada despacho e a cada retorno. Marco atingido é cumprido antes de qualquer outra coisa.
+- **Recalcular os marcos:** T_build é o tempo de um build, da conferência e de um gate, medido na E18. Se `1,25 × T_build` passar de 75 min, a E19 começa em `09:00 − 1,25 × T_build`, e os marcos de 05:00, 06:30 e 07:15 antecipam na mesma medida. Troque os vigias nesse momento.
+- **Terminar mais cedo:** sem etapa aberta nem elegível, rode a E19 imediatamente e encerre. Não espere o marco.
+- **Ordem de abertura:** E18 (trilha C) e E07 (trilha A) primeiro. Quando a E18 fechar, E06.3.4 e depois E06.3.5 (trilha B). A E08 (trilha A) abre depois da E07, inclusive das subetapas dela. Continua o limite de 2 etapas abertas. E19 é a etapa do fim e não ocupa vaga. E09, E10, E12 e E16 ficam de fora: a E09 e a E16 dependem das folhas do conjunto cego (H4), a E10 e a E16 da amostra conferida pelo usuário, e a E12 da E09.
+- **Paradas:** nesta janela não há limite de etapas, e a E07 não para pela **Revisão humana: sim** (D18). Toda outra parada da soul ou do protocolo, incluindo divergência de código, scanner ausente, erro da verificação mecânica e decisão de arquitetura, vira estacionar a etapa afetada e seguir. Só push, deploy e segredo exposto interrompem. A divisão de etapas acima de ~3h continua, porque subetapa fechada é o que entra na release.
+- **Invariantes da janela:** com `ZENY_SERVER_SYMBOL_COMPOSITION=false`, a análise padrão não muda de saída nem de versão de extrator, de interpretador ou de método (D18). Qualquer incremento de versão ocorre só no caminho com a opção ligada. A API fica em 1.6.0 sem mudança de contrato, o formato de volume em 1 e o Alembic em `0009_remote_jobs`. Etapa que não conseguir respeitar isso fica estacionada, e o problema vai para o relatório.
+- **Integração por etapa** (D20): cada etapa ou subetapa entra na `main` assim que fecha, com o gate e o `merge --no-ff` do fechamento normal, sem mexer na outra etapa aberta. A `main` fica sempre pronta para o build. Antes de integrar, espere as suítes da outra etapa ("Orçamento de máquina").
+- **Candidata:** é um build com `BUILD DE RELEASE: APROVADO` e `sha256sum -c` limpo em `dist/release/0.6.0/`, válida para o commit citado nas notas, mesmo que a E18 não feche. Mudança de código, `Dockerfile` ou scripts depois dela exige novo build.
+- **Estado da entrega:** reescreva `dist/release/ESTADO-0.6.0.md` a cada build e a cada marco, com o estado (nenhuma, candidata ou final), o commit, a hora e as etapas incluídas. O arquivo sobrevive à morte da sessão.
+- **Receita do corte de trabalho:**
+  - pare os subagentes com `TaskStop` e encerre pytest ou benchmark órfão dos worktrees desta sessão;
+  - revisão final conta como em curso só se foi despachada antes do corte, e achado Crítico ou Importante depois disso estaciona a etapa;
+  - conflito ou gate vermelho depois do corte deixa a branch fora, sem despacho de correção.
+- **Etapa estacionada:** continua `#em-andamento`, com o handoff dizendo onde parou, sem merge e sem `finishing-a-development-branch`. Salve `git diff` em `tmp/estacionada/` do checkout principal, commite só o handoff na branch da trilha e preserve worktree, ledger e workspace do SDD. Não entra na 0.6.0, e a próxima execução retoma dela.
+- **Build local autorizado:** gerar a release com `scripts/build_release.py` (venv em `build/`, `docker build`, `docker load`) e gravar em `dist/release/0.6.0/` do checkout principal faz parte destas etapas. Não é publicação, deploy nem instalação na máquina. Push, envio dos arquivos a alguém e deploy continuam com o usuário.
+
 ## Prompt de execução
 
 ```text
@@ -243,6 +283,37 @@ Ondas de tarefas: limite do "Orçamento de máquina" do protocolo (um número aq
 Qualquer necessidade de intervenção: escolha a opção recomendada depois de uma avaliação crítica dos prós e contras e registre a ruling; intervenção humana só para decisão de arquitetura ou system design. Nunca faça push ou deploy. Não altere tags de etapas que não executou.
 
 Ao parar, responda com: etapas concluídas, o relógio e o resultado da revisão final de cada uma, as etapas ainda abertas e seu estado, o motivo da parada, as etapas #bloqueada com a ação de desbloqueio, as branches e os commits do lote e o próximo passo sugerido.
+```
+
+## Prompt da janela de release 0.6.0
+
+```text
+Execute o roadmap docs/roadmap-leitura-vetorial-por-poste.md deste repositório seguindo a seção "Protocolo de execução" dele e, acima dela, o bloco "Janela de release 0.6.0", com o plugin superpowers.
+
+Faça o máximo possível até os marcos da janela. A sessão precisa estar encerrada até 09:30 de 2026-11-09 (-03:00), com os arquivos da versão 0.6.0 do cliente e do servidor em dist/release/0.6.0/ do checkout principal. O prazo corta escopo, nunca revisão ou gate.
+
+Esta é a única sessão de orquestrador deste roadmap: execute aqui todas as trilhas, com até 2 etapas abertas ao mesmo tempo, de trilhas diferentes, cada uma no worktree da sua trilha.
+Sem limite de etapas: o limite é o relógio.
+Ondas de tarefas: limite do "Orçamento de máquina" do protocolo.
+Estas instruções trocam a soul orquestrador nestes pontos, só nesta sessão: cada etapa ou subetapa integra na main ao fechar, usando superpowers:finishing-a-development-branch nesse momento e não no fim do lote; toda parada da soul ou do protocolo, exceto push, deploy e segredo exposto, vira estacionar a etapa afetada e seguir; e a E19 roda como o passo 7 define.
+
+1. Com o usuário ainda presente, confira e, se algo falhar, pare antes de abrir etapa e diga como resolver:
+   - esta sessão roda como orquestrador e as souls desenvolvedor, testador, revisor-seguranca e revisor-arquitetura estão disponíveis;
+   - git status --porcelain sai vazio no checkout principal e git show main:docs/roadmap-leitura-vetorial-por-poste.md contém "Janela de release 0.6.0";
+   - docker version responde com o servidor, e osv-scanner, sha256sum e cmd.exe rodam sem pedido de permissão;
+   - no worktree da trilha C, depois de avançá-la para a main com merge --ff-only, o pacote zeny_project_handler_contracts importado aponta para esse worktree.
+   Leia CLAUDE.md (e AGENTS.md, se existir) e, no roadmap, o cabeçalho inteiro, o protocolo, a janela e o índice. Rode git branch -a e git worktree list.
+2. Antes de qualquer etapa, deixe os marcos da janela vigiados por comandos em segundo plano, um por marco, crie dist/release/ESTADO-0.6.0.md com o estado "nenhuma" e consulte date antes de cada despacho e a cada retorno. Marco atingido é cumprido antes de qualquer outra coisa.
+3. Se alguma etapa estiver #em-andamento, retome-a no worktree da trilha dela, a partir do ledger do superpowers e do handoff; não recomece tarefas já commitadas. Avance a branch da trilha B para a main com merge --ff-only.
+4. Abra as etapas na ordem da janela, enquanto houver vaga e antes do marco de 05:00: marque #em-andamento, planeje com superpowers:writing-plans (spec = seção da etapa + design citado; File Structure, estimativa, dependência e risco por tarefa e laboratório no plano; divida se passar de ~3h), confira os arquivos contra a outra etapa aberta, rode o laboratório das tarefas marcadas, execute com superpowers:subagent-driven-development em ondas dentro do Orçamento de máquina, feche a etapa, preencha o handoff e integre na main conforme o protocolo. As etapas abertas correm em paralelo.
+5. Ao fechar a E18, recalcule os marcos pelo T_build e troque os vigias, se a janela mandar.
+6. No corte de trabalho, siga a receita da janela e estacione o que não fechou.
+7. No marco da E19, ou antes, se não restar etapa aberta nem elegível, execute a E19 como a seção dela manda: sem plano, sem revisão de arquitetura, sem SDD e sem revisão final; sem commit antes do build; o gate vale se a árvore da main for igual à da branch que passou no gate; o handoff integra sem gate novo. Não passe do corte de 09:00. Se o build final falhar ou não terminar, mantenha o que está em dist/release/0.6.0/, reconfira com sha256sum -c e registre.
+8. Encerre até 09:30. Depois, liste as decisões tomadas e apresente como entrevista com opção recomendada só as de arquitetura que esperam por mim.
+
+Qualquer necessidade de intervenção: escolha a opção recomendada depois de uma avaliação crítica dos prós e contras e registre a ruling. Decisão de arquitetura ou system design estaciona a etapa afetada e vai para o relatório; siga com o que não depende dela, sem esperar. Nunca faça push ou deploy. Não altere tags de etapas que não executou.
+
+Ao parar, responda com: o caminho e o commit de origem da release entregue, e se ela é a final ou a candidata; o resultado de sha256sum -c; as etapas que entraram na 0.6.0, com o relógio e o resultado da revisão final de cada uma; as etapas estacionadas e onde pararam; as etapas #bloqueada com a ação de desbloqueio; a revisão da E07 que ficou pendente; as branches e os commits do lote; o comando git push origin main pronto e o próximo passo sugerido.
 ```
 
 ## Índice de etapas
@@ -278,9 +349,7 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E06.3.3.1 | Para-raios BT | #concluida | E06.3.2.2 | gramática do retângulo com diagonal, com laboratório, PARA_RAIOS_BT acima do atual (que não casa nenhuma) |
 | E06.3.3.2.1 | Marcas: envolvente e X | #concluida | E06.3.3.1 | envolvente por subcaminho, X perto do símbolo e concordância de situação medida |
 | E06.3.3.2.2 | Transformador | #concluida | E06.3.3.2.1 | gramática do triângulo em círculo, com laboratório, TRANSFORMADOR acima do atual |
-| E06.3.4 | Estai | #pendente | E06.3.3.2.2 | gramática de estai, com laboratório, acima do atual |
-| E06.3.5 | Equipamento de interrupção | #pendente | E06.3.4 | gramática de interrupção, acima do atual (que não emite a classe) |
-| E07 | Ficha do poste | #pendente | E06.3.5, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
+| E07 | Ficha do poste | #pendente | E06.3.3.2.2, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
 | E08 | Conferência UTM | #pendente | E07 | transformação página → UTM, checagem de posição e vão, pendências |
 | E09 | Troca do analisador e remoção do legado | #pendente | E08, E16 | analisador novo como padrão; detectores e, se provado, OCR removidos |
 
@@ -289,6 +358,8 @@ Trilha B — medição (branch `roadmap/leitura-vetorial-por-poste-b`)
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E15 | Ficha predita a partir das propostas | #concluida | E14 | nova `versao_extracao` e baseline real informativo nas 16 folhas |
+| E06.3.4 | Estai (na trilha B desde a D19) | #pendente | E06.3.3.2.2 | gramática de estai, com laboratório, acima do atual |
+| E06.3.5 | Equipamento de interrupção (na trilha B desde a D19) | #pendente | E06.3.4 | gramática de interrupção, acima do atual (que não emite a classe) |
 | E16 | Conjunto de avaliação cego | #bloqueada | E03 | fichas de referência congeladas das folhas novas, antes de qualquer predição |
 
 Trilha C — aprendizado, e a E17 enquanto a trilha espera a E07 (D10) (branch `roadmap/leitura-vetorial-por-poste-c`)
@@ -299,6 +370,10 @@ Trilha C — aprendizado, e a E17 enquanto a trilha espera a E07 (D10) (branch `
 | E17 | Fechamento do cliente com servidor lento | #concluida | E14 | fechar a janela nunca destrói `QThread` viva, sem o monkeypatch de 60 s no `conftest` |
 | E10 | Fábrica de rótulos contínua | #pendente | E07 | fluxo mensal com pré-marcação, leitura dupla, amostra humana e dataset por hash |
 | E12 | Detector visual local | #pendente | E11, E09, E10 | detector ONNX em CPU para o resíduo, ganho medido por poste |
+| E18 | Versão 0.6.0 e candidata de segurança | #pendente | E17 | versão 0.6.0 no produto, build medido e candidata completa em `dist/release/0.6.0/` |
+| E19 | Release final 0.6.0 | #pendente | E18 | release gerada da `main` integrada, com integridade conferida |
+
+Na "Janela de release 0.6.0" (protocolo), a ordem de abertura é a dela, e não a das janelas abaixo.
 
 Janelas (ordem em que a sessão única abre as etapas, até 2 ao mesmo tempo; a elegibilidade real vem das dependências). Até 2026-11-05 elas se chamavam "ondas"; o nome agora fica reservado às ondas de tarefas do `orquestrador` e às da curadoria:
 
@@ -2448,11 +2523,11 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Por que agora:** a associação é um dos erros que mais custam ao usuário. Com texto e símbolos limpos, ela passa a ser geométrica.
 
-**Dependências:** E06.3.5 (última subetapa da E06.3), E15.
+**Dependências:** E06.3.3.2.2, E15 (D19).
 
 **Escopo:**
 - Associação geométrica por proximidade, linhas de chamada e convenções de layout, com vãos ligados à polilinha da rede entre dois postes.
-- Montagem da ficha como propostas e relações atuais (sem entidade persistida nova), com a versão do interpretador incrementada.
+- Montagem da ficha como propostas e relações atuais (sem entidade persistida nova), com a versão do interpretador incrementada. Na janela de release 0.6.0, o incremento ocorre só no caminho com a opção da D17 ligada.
 - Ambiguidade de associação vira pendência, não escolha arbitrária.
 
 **Fora de escopo:** conferência UTM (E08).
@@ -2460,7 +2535,8 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 **Critérios de aceite:**
 
 - [ ] Uma fixture sintética com dois postes próximos e rótulos entre eles associa corretamente ou marca pendência. Nunca associa ao vizinho errado com confiança.
-- [ ] O benchmark por poste sobre as 16 folhas supera o baseline de E03 em todas as métricas, com relatório em `tmp/`.
+- [ ] O benchmark por poste sobre as 16 folhas supera o baseline das propostas da E15 em todas as métricas, com relatório em `tmp/`. Medida sem a E06.3.4 ou a E06.3.5 integradas, a métrica de ESTAI ou de EQUIPAMENTO_INTERRUPCAO só não pode piorar, e o handoff registra essa exceção (D19).
+- [ ] Com `ZENY_SERVER_SYMBOL_COMPOSITION=false`, um caso sintético produz as mesmas propostas e a mesma versão de método de antes da etapa (D18).
 - [ ] Promoção, regiões, vãos e conformidade continuam funcionando sobre as propostas novas (testes de integração existentes passam).
 - [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
@@ -2468,7 +2544,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 - `cmd.exe //c IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
-**Revisão humana:** sim
+**Revisão humana:** sim. Na janela de release 0.6.0, ela acontece depois da release e não para a execução (D18); o handoff deixa o pedido de revisão registrado.
 
 **Notas para o plano:**
 - `application/symbol_reconciliation.py`, `analysis_regions.py` e `spans.py` já fazem associação e vãos. Decida no plano o que é reaproveitado e o que é substituído.
@@ -2514,7 +2590,8 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 - [ ] Fixtures sintéticas cobrem quatro casos: folha consistente sem pendência, uma coordenada trocada (só esse poste pendente), vão escrito errado (só esse vão pendente) e menos de 2 coordenadas (conferência não avaliável, com diagnóstico).
 - [ ] Nas 16 folhas, toda ficha divergente da referência que a conferência poderia detectar está marcada como pendência. Os números ficam em `tmp/`.
 - [ ] As tolerâncias calibradas estão registradas no design (seção "Decisões", item 4).
-- [ ] Se a API mudou, `docs/api/openapi-v1.json` foi regenerado e o teste de snapshot passa.
+- [ ] Se a API mudou, `docs/api/openapi-v1.json` foi regenerado e o teste de snapshot passa. Na janela de release 0.6.0, a API não muda.
+- [ ] Com `ZENY_SERVER_SYMBOL_COMPOSITION=false`, um caso sintético produz as mesmas propostas e a mesma versão de método de antes da etapa (D18).
 - [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
 **Validação obrigatória:**
@@ -2830,6 +2907,112 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
+## E18 — Versão 0.6.0 e candidata de segurança — #pendente
+
+**Objetivo:** o produto passa a declarar a versão 0.6.0, e a release completa do cliente e do servidor é gerada de verdade, deixando uma entrega válida em `dist/release/0.6.0/` logo no começo da janela.
+
+**Por que agora:** o build não roda desde a 0.5.0 e depende de Docker, rede e PyInstaller. Descobrir uma falha no início custa pouco; às 8h, custaria a entrega. A candidata é o seguro do prazo (D16).
+
+**Dependências:** E17. Roda na trilha C.
+
+**Escopo:**
+- Troca de 0.5.0 para 0.6.0 em todos os pontos em que o produto, o build ou os testes a declaram.
+- Notas da release verdadeiras para a 0.6.0: o que mudou desde a 0.5.0, os limites de homologação, a leitura vetorial nova como opcional e desligada, o commit de origem do build e as versões reais de extração e interpretação, sem número que possa divergir do código.
+- A opção `ZENY_SERVER_SYMBOL_COMPOSITION` documentada no exemplo de ambiente e no guia do administrador, com o valor padrão desligado (D17).
+- Build real, com o tempo medido (T_build).
+
+**Fora de escopo:** mudança de API, de formato de volume ou de migração; ligar a leitura nova; publicar ou enviar os arquivos.
+
+**Critérios de aceite:**
+
+- [ ] Fora de histórico e de documentos de etapas passadas, `git grep -n "0\.5\.0"` não acha declaração da versão do produto.
+- [ ] `scripts/build_release.py --version 0.6.0 --output-root` apontando para `dist/release` do checkout principal termina com `BUILD DE RELEASE: APROVADO`.
+- [ ] `dist/release/0.6.0/` contém `client/ZenyProjectHandler-Client-0.6.0-win-x64.zip`, `server/ZenyProjectHandler-Server-0.6.0.oci.tar`, `server/compose.release.yaml`, `server/.env-example`, os guias, os dois SBOMs, `RELEASE_NOTES.md`, `release-manifest.json` e `SHA256SUMS.txt`.
+- [ ] `sha256sum -c SHA256SUMS.txt`, dentro dessa pasta, confere todos os arquivos.
+- [ ] As notas citam o commit de origem e dizem que a leitura nova vem desligada.
+- [ ] O commit citado nas notas é o HEAD da branch no momento do build, com árvore limpa, e nenhum código, `Dockerfile` ou script mudou depois dele.
+- [ ] T_build está no handoff.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:**
+
+- `cmd.exe //c IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+- Na raiz do worktree da trilha C: `.venv/Scripts/python.exe scripts/build_release.py --version 0.6.0 --output-root C:/Users/Caio/Desktop/repos/ZenyProjectHandler/dist/release` → `BUILD DE RELEASE: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:**
+- A versão aparece nos três `pyproject.toml`, nos `__init__.py` do núcleo e do cliente, no valor de reserva de `_server_version`, no `ARG` do `Dockerfile`, no `README.md` e nos testes de pacote e de release.
+- As notas são texto fixo em `_write_release_notes`, com extração 1.18.0 e interpretação 25.0 escritas à mão; a E07 pode mudar esses números.
+- Rode um primeiro build logo depois da troca de versão, para achar falha cedo, e repita depois da revisão final, sobre o commit que vai entrar. A primeira execução, sem cache de pip e apt, é a pior medida do T_build.
+- O build roda no worktree da trilha C, para o resultado entrar no handoff antes do merge, sem commit direto na `main`.
+- Sem `--output-root`, o build grava em `dist/` do próprio worktree.
+
+**Bloqueios:** Nenhum bloqueio conhecido. O Docker Desktop precisa estar ligado.
+
+**Riscos e mitigação:**
+
+- Build quebrado por rede ou por pacote externo → falha cedo, com a janela inteira para corrigir (H6).
+- Dependências atualizadas na E13 quebrarem o PyInstaller ou a imagem → o gate de artefatos pega, e a correção é tarefa desta etapa.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
+## E19 — Release final 0.6.0 — #pendente
+
+**Objetivo:** gerar a release final da `main` já integrada e conferir que os arquivos entregues em `dist/release/0.6.0/` estão íntegros, antes do corte de 09:00.
+
+**Por que agora:** é a entrega pedida. Abre no marco do build final, com o que tiver sido integrado até lá (protocolo, "Janela de release 0.6.0").
+
+**Dependências:** E18. Roda na trilha C, depois de avançar a branch para a `main`.
+
+**Escopo:** operação, sem código novo e sem plano do superpowers: build final, conferência de integridade e handoff. A remedição do benchmark por poste com todas as etapas integradas é informativa e só acontece se não atrasar o build.
+
+**Fora de escopo:** corrigir produto. Build final reprovado não abre ciclo de correção; fica valendo a candidata da E18.
+
+**Critérios de aceite:**
+
+- [ ] O gate terminou com `RESULTADO FINAL: APROVADO` numa branch com a mesma árvore da `main` usada no build (`git rev-parse main^{tree}` igual).
+- [ ] `BUILD DE RELEASE: APROVADO` e `sha256sum -c SHA256SUMS.txt` limpo em `dist/release/0.6.0/`.
+- [ ] As notas em `dist/release/0.6.0/RELEASE_NOTES.md` citam o commit da `main` usada.
+- [ ] O handoff lista as etapas que entraram e as que ficaram de fora.
+
+**Validação obrigatória:**
+
+- Pré-condição, com a trilha C avançada para a `main`: `git -C` no worktree dela dá o mesmo `rev-parse HEAD` da `main` e `status --porcelain` vazio.
+- Na raiz do worktree da trilha C: `.venv/Scripts/python.exe scripts/build_release.py --version 0.6.0 --output-root C:/Users/Caio/Desktop/repos/ZenyProjectHandler/dist/release-e19` → `BUILD DE RELEASE: APROVADO`.
+- `sha256sum -c SHA256SUMS.txt`, dentro de `dist/release-e19/0.6.0/` → todos `OK`.
+- Só então, troca na mesma unidade: `dist/release/0.6.0` vira `dist/release/0.6.0-candidata`, e `dist/release-e19/0.6.0` vira `dist/release/0.6.0`. Repita `sha256sum -c` na pasta oficial.
+
+**Revisão humana:** não
+
+**Notas para o plano:** não há commit nem troca de tag antes do build. Se o build falhar ou chegar às 09:00 sem terminar, a pasta oficial não foi tocada: reconfira-a com `sha256sum -c`, marque a etapa `#bloqueada`, com a causa, e entregue a candidata, dizendo no relatório de qual commit ela é. Se a E18 não integrou, a `main` ainda declara 0.5.0 e o build final reprova: pule o build, entregue a candidata e registre em `dist/release/ESTADO-0.6.0.md`. Só depois do build, commite o handoff na branch da trilha C e integre, sem gate novo, porque a mudança é só no roadmap.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:**
+
+- Build final acima do tempo previsto → o marco de início usa o T_build medido na E18, e a candidata continua valendo.
+
+**Evidências e handoff:**
+
+- Plano: não se aplica (operação).
+- Commits: —
+- Revisão final: não se aplica (sem código novo).
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
 ## Histórico de revisões
 
 - 2026-10-30 — roadmap criado a partir do design `2026-10-30-leitura-vetorial-por-poste-design.md`, com 12 etapas em três blocos.
@@ -2854,3 +3037,8 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
   - a E17 passa da trilha A para a C (D10);
   - "Ondas" do índice passam a se chamar "Janelas", e a janela 1 fica registrada como concluída;
   - o plano de cada etapa traz os campos por tarefa do `orquestrador`, e o escopo passa a listar a E17.
+- 2026-11-08 — janela de release 0.6.0, com prazo às 10:00 de 2026-11-09 (D16–D19):
+  - o protocolo ganha o bloco "Janela de release 0.6.0", e o roadmap, um prompt próprio para ela;
+  - etapas novas: E18 (versão e candidata de segurança) e E19 (release final);
+  - a E07 passa a depender da E06.3.3.2.2, e a E06.3.4 e a E06.3.5 vão para a trilha B (D19);
+  - a E07 e a E08 ganham o critério de não mudar a análise padrão (D18).
