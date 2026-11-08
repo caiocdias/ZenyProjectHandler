@@ -41,17 +41,20 @@ O benchmark de símbolos ganha a concordância entre a situação predita e a si
   - **Fonte:** `grammar_marcas._contornos` examina também os subcaminhos de **caminhos de traço** (`tipo == "traco"`). Entram só os que passam primeiro no filtro estrutural barato: pelo menos `_VERTICES_MINIMOS_ELIPSE` itens de reta e fechamento dentro de `_TOLERANCIA_FECHAMENTO` (constante nomeada; o valor sai da medição do Step 0 da Task 1).
   - **Critério:** o mesmo critério elíptico de hoje. Cada subcaminho que passa no filtro paga 1, e quem não passa não paga.
   - **Duplicata:** a mesma elipse vinda de polilinha, de moldura e de subcaminho vira um contorno só.
-  - **Exclusão:** `Contorno` passa a identificar a origem (caminho e subcaminho). A exclusão de `proprios` das gramáticas deixa de descartar uma elipse que é outro subcaminho do mesmo caminho do símbolo.
+  - **Exclusão:** resolve-se só em `grammar_marcas`, sem mudar o que as gramáticas passam em `proprios: frozenset[int]`.
+    - O campo `caminhos` de `Contorno` fica como está. `test_grammar_marcas.py:93`, `grammar_stem.py:435` e `grammar_rect_diagonal.py:255` o leem.
+    - A origem entra como campo novo: polilinha, moldura ou subcaminho, e o índice do subcaminho.
+    - Um contorno de subcaminho elíptico (≥ `_VERTICES_MINIMOS_ELIPSE` retas) nunca é o retângulo nem um traço da haste. Por isso a checagem de `proprios` não o descarta quando o caminho dele coincide com um caminho próprio.
   - Os limiares elípticos não mudam.
 - **R-E06.3.3.2.1-2, X perto do símbolo:**
   - o critério sai da medição do Step 0 da Task 3: nas 16 folhas, a distância do cruzamento ao centro do pictograma, relativa à escala, para os X próprios (v004/v003 que o desenho confirma) e para os 3 X de vizinho da E06.3.3.1;
   - candidatos: cruzamento dentro do pictograma sem margem, ou a até `k × escala` da âncora;
   - escolhe-se o que separa os dois grupos com folga, e `tem_x` passa a exigi-lo;
   - a fixture é relativa à escala;
-  - critério de parada: as 3 v004 indevidas somem e nenhum tp com X próprio se perde. Se nenhum critério separa, DONE_WITH_CONCERNS com a medição.
+  - critério de parada: os 3 casos de X de vizinho perdem a marca de X (nem v003 nem v004) e nenhum tp com X próprio se perde. Se nenhum critério separa, DONE_WITH_CONCERNS com a medição.
 - **R-E06.3.3.2.1-3, guarda de contexto:** `MarcasDaPagina` expõe `contexto` (só leitura). `hastes_candidatas` e `retangulos_candidatos` levantam `ValueError` quando `marcas.contexto is not contexto`.
 - **R-E06.3.3.2.1-4, concordância de situação:**
-  - **Predição:** cada predição do benchmark passa a levar `variante` e `situacao`:
+  - **Predição:** cada predição do benchmark passa a levar `variante: str | None` e `situacoes_preditas: frozenset[str]` (normalizadas e vazias quando não há), porque uma variante pode declarar várias situações. A regra: a predição é concordante se a situação normalizada da ficha está no conjunto. As fontes são estas:
     - a variante vem do `template` da observação ou de `provenance.variant_id` (pacotes no `atual`);
     - a situação vem da `situation` do legado ou das situações da variante no inventário;
     - fica `None` quando não há.
@@ -69,7 +72,7 @@ O benchmark de símbolos ganha a concordância entre a situação predita e a si
   1. tp/fp/fn por classe do `modelo` sem piora em nenhuma folha em relação a `tmp/e06-3-3-1/simbolos/simbolos-ficha.json`;
   2. triagem em render, pelo orquestrador, dos 10 tp de PARA_RAIOS_BT: a variante predita é a do desenho (envolvente e X). As 3 v004 indevidas da E06.3.3.1 somem;
   3. amostra de 5 tp de haste com envolvente desenhada: saem v002/v003 ou v006/v007;
-  4. a concordância de situação da soma das três classes não piora (taxa, R-4). Se a de antes já for 100%, vale só não piorar. A taxa e as contagens vão ao handoff;
+  4. a concordância de situação da soma de ATERRAMENTO, PARA_RAIOS_MT e PARA_RAIOS_BT (taxa, R-4) fica **estritamente maior** que a de antes, como pede o roadmap. Em dois casos isso não se aplica: a de antes já é 100%, ou nenhuma referência anotada tem envolvente ou X no desenho. Nesses casos, o orquestrador registra uma ruling, os critérios 2 e 3 sustentam o aceite e a ruling vai a "Decisões para o usuário". A taxa e as contagens vão ao handoff;
   5. leitura errada de fato = 0, o diff igual ao congelado, gasto ≤ 200.000.
 - **R-E06.3.3.2.1-7, situação no runner (para a E07):** `model_symbols._observacao` não preenche `situacao`, então no runner a situação é derivável da variante, mas fica pendente. Onde mora o mapa variante → situação (no adaptador ou no consumidor) é decisão da E07, e vai ao handoff.
 
@@ -83,7 +86,7 @@ O benchmark de símbolos ganha a concordância entre a situação predita e a si
 | `tests/unit/test_model_symbols.py`, `tests/unit/test_model_symbols_componentes_ataque.py`, `tests/integration/test_haste_costuras_etapa_testador.py`, `tests/integration/test_model_symbols_haste_ataque.py`, `tests/unit/test_habilitacao_bt_ataque.py`, `tests/integration/test_model_symbols_bt_runner_ataque.py:25` | versão 1.2.0 → 1.3.0 (o desenvolvedor confirma as linhas com `grep -rn '"1.2.0"' tests`) | 1 |
 | `scripts/simbolos_ficha_metricas.py`, `scripts/simbolos_ficha_relatorio.py`, `scripts/benchmark_simbolos_ficha.py` | variante e situação na predição; concordância | 2 |
 | `tests/unit/test_situacao_concordancia.py` (novo) | concordância e normalização | 2 |
-| `tests/unit/test_benchmark_simbolos_modelo.py:48`, `tests/unit/test_benchmark_simbolos_modelo_ataque.py:388` | as chaves `variante` e `situacao` nas predições | 2 |
+| `tests/unit/test_benchmark_simbolos_modelo.py:48`, `tests/unit/test_benchmark_simbolos_modelo_ataque.py:388` | as chaves `variante` e `situacoes_preditas` nas predições | 2 |
 | `src/zeny_project_handler/adapters/analysis/drawing_model/grammar_stem.py`, `drawing_model/grammar_rect_diagonal.py` | guarda de contexto | 3 |
 | `tests/unit/test_grammar_marcas_x_contexto.py` (novo) | X perto do símbolo e guarda | 3 |
 | `drawing_model/grammar_rect_diagonal.py`, `tests/fixtures/symbol_grammars/rect_diagonal.py`, `tests/unit/test_grammar_rect_diagonal.py`, `tests/unit/test_grammar_rect_diagonal_ataque.py` | itens herdados do BT | 4 |
@@ -95,7 +98,7 @@ Ondas:
 - Testador de etapa (D8: uma vez por etapa; as Tasks 1, 3 e 4 mexem no mesmo módulo compartilhado).
 - Task 5 (medição).
 
-Soma: 3h00 (40 + 40 + 40 + 35 + 25). O relógio conta desde 0529544. Vale a regra de estouro de 4h30.
+Soma: 3h00 (40 + 40 + 40 + 35 + 25). O relógio conta desde 0529544. Os Step 0 e o testador de etapa ficam fora da soma, que está no limite do orçamento: o orquestrador acompanha o relógio por tarefa e vale a regra de estouro de 4h30.
 
 ## Tasks
 
@@ -113,7 +116,9 @@ Soma: 3h00 (40 + 40 + 40 + 35 + 25). O relógio conta desde 0529544. Vale a regr
   - se fecha por reta explícita ou não, e a distância entre o primeiro e o último ponto;
   - se divide o caminho com o retângulo ou com a haste.
 
-  Fixe `_TOLERANCIA_FECHAMENTO` a partir disso, com folga, e registre no relatório. Se a elipse não for subcaminho de retas, pare e reporte NEEDS_CONTEXT com a medição.
+  Fixe `_TOLERANCIA_FECHAMENTO` a partir disso, com folga, e registre no relatório. Pare e reporte NEEDS_CONTEXT com a medição em dois casos:
+  - a elipse não é subcaminho de retas;
+  - o tipo medido não é `traco`, por exemplo `traco_e_preenchimento`. O orquestrador decide então se esse tipo entra de forma explícita.
 - [ ] **Step 1: Escrever os testes** com páginas puras (`tests/fixtures/symbol_grammars/paginas.py`), no formato medido no Step 0:
   - elipse como subcaminho fechado de dezenas de retas, com um traço encostado → um contorno;
   - elipse no mesmo caminho do retângulo do BT → a envolvente casa;
@@ -140,13 +145,13 @@ Soma: 3h00 (40 + 40 + 40 + 35 + 25). O relógio conta desde 0529544. Vale a regr
 **Files:**
 - Modify: `scripts/simbolos_ficha_metricas.py`, `scripts/simbolos_ficha_relatorio.py`, `scripts/benchmark_simbolos_ficha.py`
 - Create: `tests/unit/test_situacao_concordancia.py`
-- Modify: `tests/unit/test_benchmark_simbolos_modelo.py:48` (o conjunto de chaves da predição ganha `variante` e `situacao`) e `tests/unit/test_benchmark_simbolos_modelo_ataque.py:388` (o dicionário esperado do `atual` ganha as duas chaves com os valores certos; o resto fica igual)
+- Modify: `tests/unit/test_benchmark_simbolos_modelo.py:48` (o conjunto de chaves da predição ganha `variante` e `situacoes_preditas`) e `tests/unit/test_benchmark_simbolos_modelo_ataque.py:388` (o dicionário esperado do `atual` ganha as duas chaves com os valores certos; o resto fica igual)
 
 **Interfaces:**
 - Produces:
   - `normalizar_situacao(texto: str | None) -> str | None`;
   - `situacoes_da_variante(variante_id: str) -> frozenset[str] | None`, com `None` para "não declarada";
-  - as predições com `variante` e `situacao`;
+  - as predições com `variante` e `situacoes_preditas`;
   - a chave `concordancia_situacao` por bloco de critério, somada pelos agregadores (R-4);
   - uma linha no `.md`.
 
@@ -185,7 +190,7 @@ Soma: 3h00 (40 + 40 + 40 + 35 + 25). O relógio conta desde 0529544. Vale a regr
 - [ ] **Step 3: Implementar** (R-2, R-3).
 - [ ] **Step 4: Rodar** os testes das três gramáticas e de `grammar_marcas`, ruff, format, mypy e complexidade; e o benchmark e o diff (`task3-*`).
 
-  **Portão:** as 3 v004 indevidas somem, nenhum tp com X próprio se perde e o gasto fica ≤ 200.000. Senão, DONE_WITH_CONCERNS com a medição. Dourados que mudarem: DONE_WITH_CONCERNS com os valores.
+  **Portão:** os 3 casos de X de vizinho perdem a marca de X (não saem v003 nem v004), nenhum tp com X próprio se perde e o gasto fica ≤ 200.000. Senão, DONE_WITH_CONCERNS com a medição. Dourados que mudarem: DONE_WITH_CONCERNS com os valores.
 - [ ] **Step 5: Commit** (`feat: x de retirada perto do simbolo e marcas do mesmo contexto`).
 
 ### Task 4: Itens herdados do retângulo com diagonal
