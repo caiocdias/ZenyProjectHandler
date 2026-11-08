@@ -37,7 +37,7 @@ ESPESSURA: Final = 0.2
 
 # Gasto de orçamento da chamada de `estai_candidatos` (sem montar o contexto) para a página de
 # três estais de `test_gasto_de_tres_estais_fica_no_registrado` (verde com círculo e dois pretos).
-GASTO_DE_TRES_ESTAIS: Final = 258
+GASTO_DE_TRES_ESTAIS: Final = 261
 
 GRAMATICAS_ESTAI: Final[dict[str, dict[str, Any]]] = {
     "existente": {
@@ -138,7 +138,7 @@ def x_sobre(
 
 
 def pagina_estai(
-    formas: Sequence[Caminho], *, textos: Sequence[TextoModelo] = ()
+    formas: Sequence[Caminho], *, textos: Sequence[TextoModelo] = (), altura: float = 300.0
 ) -> PaginaGramatica:
     """A página sintética com as `formas` desenhadas, sem primitivas (como a leitura do modelo)."""
-    return pagina_gramatica(formas, textos=textos, primitivas=())
+    return pagina_gramatica(formas, textos=textos, primitivas=(), altura=altura)

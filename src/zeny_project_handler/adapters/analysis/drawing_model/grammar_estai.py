@@ -742,6 +742,8 @@ def estai_candidatos(
     # perda só cresce, então a disputa termina.
     while True:
         antes = list(perdas)
+        # Cada rodada percorre todas as leituras, lidas de novo ou não: o orçamento a vê.
+        contexto.orcamento.gastar(len(lidos))
         if not _disputar(lidos, perdas):
             break
         for i, (segmentos, sem_circulo) in enumerate(perdas):
@@ -759,8 +761,8 @@ def casa_estai(
 ) -> list[tuple[Caixa, int, tuple[int, ...]]]:
     """(caixa, caminho da haste, demais caminhos) dos candidatos que são desta variante.
 
-    Com `removal_mark`, o grupo é o do X, com ou sem círculo: X vence a envolvente. Cada candidato
-    examinado gasta 1.
+    Com `removal_mark`, o grupo é o do X, com ou sem círculo: X vence a envolvente. Só filtra a
+    classificação pronta: não gasta do orçamento, que `estai_candidatos` já pagou por candidato.
     """
     if any(candidato.contexto is not contexto for candidato in candidatos):
         raise ValueError("Candidato de estai de outro contexto de gramáticas.")
@@ -769,7 +771,6 @@ def casa_estai(
     limite = float(gramatica["max_span"])
     achados: list[tuple[Caixa, int, tuple[int, ...]]] = []
     for candidato in candidatos:
-        contexto.orcamento.gastar()
         caixa = candidato.caixa
         if (
             candidato.removal_mark == quer_x

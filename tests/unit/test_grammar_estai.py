@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from itertools import pairwise
 from typing import Any
 
 import pytest
@@ -28,6 +29,7 @@ from tests.fixtures.symbol_grammars.estai import (
 )
 from tests.fixtures.symbol_grammars.paginas import poligono, texto
 
+from zeny_project_handler.adapters.analysis.drawing_model import grammar_estai
 from zeny_project_handler.adapters.analysis.drawing_model.grammar_estai import (
     casa_estai,
     estai_candidatos,
@@ -404,3 +406,39 @@ def test_x_vale_sobre_garfo_com_circulo_de_qualquer_cor(cor: Any) -> None:
         *x_sobre(centro_do_garfo()),
     ]
     assert _grupos(caminhos) == {"existente": 0, "instalar": 0, "retirar": 1}
+
+
+def test_disputa_de_marcas_em_cascata_paga_cada_rodada(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Cada garfo que perde um X passa ao seguinte e o toma do vizinho: uma rodada por garfo.
+
+    Cada rodada percorre todas as leituras; o orçamento tem de ver esse percurso, e não só a
+    releitura do perdedor.
+    """
+    caminhos: list[Caminho] = []
+    for i in range(300):
+        base = (150.0, 10.0 + i * 8.0)
+        caminhos += [*garfo(base=base), *x_sobre(centro_do_garfo(base=base), meio=9.0)]
+    contexto = contexto_gramaticas(pagina_estai(caminhos, altura=2600.0))
+    marcas = MarcasDaPagina(contexto)
+    original = grammar_estai._disputar
+    gastos: list[int] = []
+    leituras: list[int] = []
+
+    def medir(lidos: Any, perdas: Any) -> bool:
+        gastos.append(contexto.orcamento.gasto)
+        leituras.append(len(lidos))
+        return original(lidos, perdas)
+
+    monkeypatch.setattr(grammar_estai, "_disputar", medir)
+    estai_candidatos(contexto, marcas=marcas)
+    assert len(gastos) > 100
+    assert all(depois - antes >= leituras[0] for antes, depois in pairwise(gastos))
+
+
+def test_casa_estai_nao_gasta_do_orcamento() -> None:
+    contexto = contexto_gramaticas(pagina_estai(estai_com_circulo()))
+    candidatos = estai_candidatos(contexto, marcas=MarcasDaPagina(contexto))
+    antes = contexto.orcamento.gasto
+    for gramatica in GRAMATICAS_ESTAI.values():
+        casa_estai(contexto, gramatica, candidatos=candidatos)
+    assert contexto.orcamento.gasto == antes
