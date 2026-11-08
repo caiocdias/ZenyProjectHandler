@@ -2171,7 +2171,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
-**Riscos e mitigação:** os da E06.3; a folga de gasto (a 016 já gasta 192.308 de 200.000).
+**Riscos e mitigação:** os da E06.3; a folga de gasto (a 016 gasta 189.097 de 200.000 desde a E06.3.3.2.1).
 
 **Evidências e handoff:** —
 
