@@ -2727,7 +2727,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Dependências:** E07.2.
 
-**Escopo (critérios repartidos da E07):** vãos e cabos sobre a posição nova do poste; pendência em associação ambígua de vão.
+**Escopo (critérios repartidos da E07):** vãos e cabos sobre a posição nova do poste; pendência em associação ambígua de vão; o destino das derivações sem rótulo P, deixadas de fora na E07.2.1.
 
 **Critérios de aceite (a detalhar no plano):**
 
