@@ -20,6 +20,7 @@ from typing import Any, Final
 
 import pymupdf
 import pytest
+from tests.fixtures.symbol_grammars.paginas import estilo, pagina_gramatica, poligono, texto
 from tests.fixtures.symbol_grammars.rect_diagonal import CASOS_RECT_DIAGONAL, pagina_desenhada
 from tests.fixtures.symbol_grammars.triangulo import (
     BRANCO,
@@ -64,9 +65,17 @@ from zeny_project_handler.adapters.analysis.drawing_model.grammar_triangulo impo
     casa_triangulos,
     triangulos_candidatos,
 )
-from zeny_project_handler.adapters.analysis.drawing_model.model import Caixa, Cor, Ponto
+from zeny_project_handler.adapters.analysis.drawing_model.model import (
+    Caixa,
+    Caminho,
+    Cor,
+    ItemCaminho,
+    Ponto,
+    TextoModelo,
+)
 from zeny_project_handler.adapters.analysis.drawing_model.symbol_grammars import (
     PaginaGramatica,
+    TetoGramaticasExcedido,
     contexto_gramaticas,
 )
 from zeny_project_handler.adapters.analysis.drawing_model.symbol_matcher import (
@@ -1098,3 +1107,134 @@ def test_metade_de_outra_cor_emitida_duas_vezes_continua_outline() -> None:
         p.draw_line(a, ponta_da_haste(), color=PRETO, width=0.14)
 
     assert _desenhada(desenhar) == variantes_do_grupo(_BASE_CONTORNO)
+
+
+# Onda final da revisão (rulings do orquestrador), páginas puras e relativas à escala -------------
+
+_FOLGA_POR_FATIA: Final = 4
+_FATIAS_LARGAS: Final = 1_000
+# Corda (pt) de cada fatia com 4 vezes `_FATIAS_LARGAS`: abaixo de 5 pt a tolerância de colinear
+# fica no mínimo absoluto (`_FECHAMENTO`), e a corda cresce com o número de fatias.
+_CORDA_MAXIMA: Final = 4.9
+_RAZAO_LINEAR: Final = 6
+
+
+class _ContaDistancias:
+    """`math` do módulo da gramática com `dist` contado: o trabalho de fato, não o relógio."""
+
+    def __init__(self) -> None:
+        self.chamadas = 0
+
+    def __getattr__(self, nome: str) -> Any:
+        return getattr(math, nome)
+
+    def dist(self, p: Sequence[float], q: Sequence[float]) -> float:
+        self.chamadas += 1
+        return math.dist(p, q)
+
+
+def _roda_de_fatias_largas(n: int) -> PaginaGramatica:
+    """Um preenchimento ciano de `n` fatias triangulares largas em leque fechado (roda).
+
+    Cada fatia vai do centro a dois pontos vizinhos de um círculo; a corda (mais larga que o
+    fechamento) cresce com `n`, e o raio com o quadrado de `n`: coordenadas grandes. A envoltória
+    tem os `n` pontos do círculo, todos quase colineares com os vizinhos, e `_sem_colineares`
+    os tira um a um recomeçando do início.
+    """
+    corda = _CORDA_MAXIMA * n / (4 * _FATIAS_LARGAS)
+    raio = corda * n / (2 * math.pi)
+    centro = (raio + 10.0, raio + 10.0)
+    pontos = [
+        (
+            centro[0] + raio * math.cos(2 * math.pi * k / n),
+            centro[1] + raio * math.sin(2 * math.pi * k / n),
+        )
+        for k in range(n)
+    ]
+    subcaminhos = tuple(
+        (
+            ItemCaminho("l", (centro, pontos[k])),
+            ItemCaminho("l", (pontos[k], pontos[(k + 1) % n])),
+            ItemCaminho("l", (pontos[(k + 1) % n], centro)),
+        )
+        for k in range(n)
+    )
+    caminho = Caminho(subcaminhos, estilo(None, CIANO), "preenchimento", 0)
+    lado = 2 * raio + 20.0
+    return pagina_gramatica([caminho], largura=lado, altura=lado)
+
+
+def _hachura_larga(monkeypatch: pytest.MonkeyPatch, n: int) -> tuple[int, int] | None:
+    """(distâncias calculadas, gasto da gramática) da roda de `n` fatias, com o limite nos
+    índices mais `_FOLGA_POR_FATIA` por fatia; None se o teto parou a leitura."""
+    pagina = _roda_de_fatias_largas(n)
+    indices = contexto_gramaticas(pagina).orcamento.gasto
+    contexto = contexto_gramaticas(pagina, limite=indices + _FOLGA_POR_FATIA * n)
+    contador = _ContaDistancias()
+    with monkeypatch.context() as remendo:
+        remendo.setattr(grammar_triangulo, "math", contador)
+        try:
+            triangulos_candidatos(contexto)
+        except TetoGramaticasExcedido:
+            return None
+    return contador.chamadas, contexto.orcamento.gasto - indices
+
+
+def test_hachura_de_fatias_largas_estoura_o_teto_ou_cresce_linear(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Revisão I-1: a envoltória e `_sem_colineares` de um preenchimento de milhares de fatias
+    largas trabalham sem gastar do orçamento. Com 4 vezes as fatias, ou o teto (índices mais uma
+    folga pequena por fatia) para a leitura, ou o trabalho e o gasto crescem no máximo
+    `_RAZAO_LINEAR` vezes."""
+    pequeno = _hachura_larga(monkeypatch, _FATIAS_LARGAS)
+    grande = _hachura_larga(monkeypatch, 4 * _FATIAS_LARGAS)
+
+    if grande is None:
+        return
+    assert pequeno is not None, "o teto parou a roda pequena e deixou passar a grande"
+    (trabalho_pequeno, gasto_pequeno), (trabalho_grande, gasto_grande) = pequeno, grande
+    assert trabalho_pequeno > 0
+    assert trabalho_grande <= _RAZAO_LINEAR * trabalho_pequeno, (
+        f"{_FATIAS_LARGAS} fatias: {trabalho_pequeno} distâncias e gasto {gasto_pequeno}; "
+        f"{4 * _FATIAS_LARGAS}: {trabalho_grande} distâncias e gasto {gasto_grande}"
+    )
+    assert gasto_grande <= _RAZAO_LINEAR * max(gasto_pequeno, 1)
+
+
+def _palavra_longe(origem: str) -> TextoModelo:
+    """Uma palavra longe do desenho: dá à página o perfil da `origem` nos dois lados do teste."""
+    return texto("LIVRE", (5.0, 5.0, 30.0, 12.0), origem)  # type: ignore[arg-type]
+
+
+def _digito_no_centro() -> TextoModelo:
+    """Um dígito de glifo no centro do triângulo de lado `LADO` (o Δ de revisão)."""
+    meio = LADO / 8
+    caixa = (CENTRO[0] - meio, CENTRO[1] - meio, CENTRO[0] + meio, CENTRO[1] + 2 * meio)
+    return texto("1", caixa, "glifo")
+
+
+def test_triangulo_de_traco_com_digito_de_glifo_dentro_nao_casa() -> None:
+    """Revisão I-2: o triângulo equilátero de traço com um número dentro é o Δ de revisão."""
+    pagina = pagina_gramatica(
+        [poligono(vertices())], textos=(_palavra_longe("glifo"), _digito_no_centro())
+    )
+    assert _variantes(pagina) == set()
+
+
+def test_controle_triangulo_de_traco_sem_o_digito_casa_o_contorno() -> None:
+    """Controle do anterior: o mesmo triângulo na mesma página de glifo, sem o dígito."""
+    pagina = pagina_gramatica([poligono(vertices())], textos=(_palavra_longe("glifo"),))
+    assert _variantes(pagina) == variantes_do_grupo(_BASE_CONTORNO)
+
+
+def test_triangulo_branco_so_de_preenchimento_nao_casa() -> None:
+    """Revisão I-2: o triângulo branco sem traço visível não aparece na folha."""
+    pagina = pagina_gramatica([poligono(vertices(), preenchimento=BRANCO, cor=None)])
+    assert _variantes(pagina) == set()
+
+
+def test_controle_triangulo_branco_com_traco_preto_casa_o_contorno() -> None:
+    """Controle do anterior: o mesmo branco com traço preto é o contorno."""
+    pagina = pagina_gramatica([poligono(vertices(), preenchimento=BRANCO, cor=PRETO)])
+    assert _variantes(pagina) == variantes_do_grupo(_BASE_CONTORNO)

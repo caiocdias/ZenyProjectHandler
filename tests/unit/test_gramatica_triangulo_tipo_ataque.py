@@ -222,3 +222,105 @@ def test_motor_com_split_triangle_e_moldura_observa_so_a_moldura(tmp_path: Path)
         )
     variantes = {dict(o.atributos).get("variante_inventario") for o in resultado.observacoes}
     assert variantes == {_CASO_MOLDURA.variant_id}
+
+
+# Onda final da revisão (Minor 1): envolvente com marcador de retirada -----------------------------
+
+_ANOTACOES = frozenset({"$comment", "description", "title"})
+
+
+def _avalia(no: Any, valor: Any) -> bool:
+    """Subconjunto estrito de JSON Schema para o ramo `split_triangle`: palavra desconhecida
+    falha o teste em vez de aceitar em silêncio (sem biblioteca no ambiente)."""
+    if no is True or no is False:
+        return bool(no)
+    assert isinstance(no, dict)
+    for chave, regra in no.items():
+        if chave in _ANOTACOES:
+            continue
+        if chave == "type":
+            tipos = {"object": dict, "boolean": bool, "string": str}
+            if regra == "number":
+                if not _numero_json(valor):
+                    return False
+            elif not isinstance(valor, tipos[regra]):
+                return False
+        elif chave == "const":
+            if type(valor) is not type(regra) or valor != regra:
+                return False
+        elif chave == "enum":
+            if not any(type(valor) is type(item) and valor == item for item in regra):
+                return False
+        elif chave == "required":
+            if not isinstance(valor, dict) or not set(regra) <= set(valor):
+                return False
+        elif chave == "properties":
+            if isinstance(valor, dict) and not all(
+                _avalia(sub, valor[campo]) for campo, sub in regra.items() if campo in valor
+            ):
+                return False
+        elif chave == "additionalProperties":
+            assert regra is False, regra
+            if set(valor) - set(no.get("properties", {})):
+                return False
+        elif chave == "exclusiveMinimum":
+            if not valor > regra:
+                return False
+        elif chave == "maximum":
+            if not valor <= regra:
+                return False
+        elif chave == "not":
+            if _avalia(regra, valor):
+                return False
+        elif chave == "allOf":
+            if not all(_avalia(sub, valor) for sub in regra):
+                return False
+        elif chave == "anyOf":
+            if not any(_avalia(sub, valor) for sub in regra):
+                return False
+        elif chave == "oneOf":
+            if sum(_avalia(sub, valor) for sub in regra) != 1:
+                return False
+        elif chave == "if":
+            ramo = no.get("then", True) if _avalia(regra, valor) else no.get("else", True)
+            if not _avalia(ramo, valor):
+                return False
+        elif chave in ("then", "else"):
+            continue
+        else:
+            raise AssertionError(f"palavra de JSON Schema não suportada pelo teste: {chave}")
+    return True
+
+
+_VALIDAS = [
+    ("half_cyan", "none", False),
+    ("half_cyan", "none", True),
+    ("half_cyan", "ellipse", False),
+    ("outline", "none", False),
+    ("outline", "none", True),
+    ("outline", "ellipse", False),
+]
+
+
+@pytest.mark.parametrize("fill", ["half_cyan", "outline"])
+def test_envolvente_com_marcador_de_retirada_recusa_no_validador(tmp_path: Path, fill: str) -> None:
+    """Revisão Minor 1: elipse com X não é grupo da R-1; `carregar_pacotes` recusa."""
+    gramatica = _gramatica(fill=fill, enclosure="ellipse", removal_mark=True)
+    with pytest.raises(ValueError):
+        _carrega(tmp_path, _pacote_com(gramatica))
+
+
+@pytest.mark.parametrize("fill", ["half_cyan", "outline"])
+def test_envolvente_com_marcador_de_retirada_recusa_no_schema(fill: str) -> None:
+    """Revisão Minor 1: o ramo `split_triangle` do schema recusa a mesma combinação."""
+    gramatica = _gramatica(fill=fill, enclosure="ellipse", removal_mark=True)
+    assert _avalia(_ramo(), gramatica) is False
+
+
+@pytest.mark.parametrize(("fill", "enclosure", "removal_mark"), _VALIDAS)
+def test_controle_schema_aceita_as_seis_combinacoes_da_r1(
+    fill: str, enclosure: str, removal_mark: bool
+) -> None:
+    """Controle do avaliador: as seis combinações válidas passam no ramo do schema."""
+    gramatica = _gramatica(fill=fill, enclosure=enclosure, removal_mark=removal_mark)
+    assert _avalia(_ramo(), gramatica) is True
