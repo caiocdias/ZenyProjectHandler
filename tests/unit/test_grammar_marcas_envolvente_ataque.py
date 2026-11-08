@@ -86,7 +86,9 @@ def _subcaminho(vertices: Sequence[Ponto], folga: float = 0.0) -> tuple[ItemCami
 
 
 def _caminho(*subcaminhos: tuple[ItemCaminho, ...], preenchimento: Cor | None = None) -> Caminho:
-    tipo = "traco" if preenchimento is None else "traco_e_preenchimento"
+    tipo: Literal["traco", "traco_e_preenchimento"] = (
+        "traco" if preenchimento is None else "traco_e_preenchimento"
+    )
     return Caminho(tuple(subcaminhos), estilo(PRETO, preenchimento), tipo, 0)
 
 
