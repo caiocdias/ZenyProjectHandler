@@ -27,6 +27,10 @@ from zeny_project_handler.adapters.analysis.drawing_model.grammar_stem import (
     casa_hastes,
     hastes_candidatas,
 )
+from zeny_project_handler.adapters.analysis.drawing_model.grammar_triangulo import (
+    casa_triangulos,
+    triangulos_candidatos,
+)
 from zeny_project_handler.adapters.analysis.drawing_model.model import Caixa
 from zeny_project_handler.adapters.analysis.drawing_model.symbol_grammars import (
     LIMITE_CONSULTAS_PAGINA,
@@ -40,6 +44,7 @@ from zeny_project_handler.adapters.analysis.drawing_model.symbol_grammars import
 _DISCO_TERMINAL: Final = "terminal_disc"
 _HASTE_COM_BARRAS: Final = "stem_bars"
 _RETANGULO_DIAGONAL: Final = "rect_diagonal"
+_TRIANGULO_DIVIDIDO: Final = "split_triangle"
 _MOLDURAS: Final = frozenset(
     {
         "label_in_frame",
@@ -59,8 +64,9 @@ class CasamentoGramatica:
 
     `componentes` são as posições dos demais caminhos do símbolo, sem `caminho`, em ordem
     crescente; só as gramáticas do modelo os preenchem: a haste com barras (barras, envolvente
-    e braços do X) e o retângulo com diagonal (diagonal com ganchos, haste de ligação,
-    envolvente e braços do X).
+    e braços do X), o retângulo com diagonal (diagonal com ganchos, haste de ligação,
+    envolvente e braços do X) e o triângulo dividido (os outros caminhos do triângulo,
+    preenchimentos, haste de ligação, envolvente e braços do X).
     """
 
     pacote: Mapping[str, Any]
@@ -127,6 +133,13 @@ def _casar_no_contexto(
         if _tem_tipo(variantes, _RETANGULO_DIAGONAL)
         else ()
     )
+    # Os triângulos são classificados uma vez por página (R-E06.3.3.2.2-6): as variantes só
+    # filtram a classificação pronta.
+    triangulos = (
+        triangulos_candidatos(contexto, marcas=marcas)
+        if _tem_tipo(variantes, _TRIANGULO_DIVIDIDO)
+        else ()
+    )
     casamentos: list[CasamentoGramatica] = []
     vistos: set[tuple[str, Caixa]] = set()
     for pacote, variante in variantes:
@@ -141,6 +154,8 @@ def _casar_no_contexto(
             achados = casa_hastes(contexto, gramatica, candidatas=hastes)
         elif tipo == _RETANGULO_DIAGONAL:
             achados = casa_retangulos_diagonal(contexto, gramatica, candidatos=retangulos)
+        elif tipo == _TRIANGULO_DIVIDIDO:
+            achados = casa_triangulos(contexto, gramatica, candidatos=triangulos)
         elif tipo in _MOLDURAS:
             achados = _achados_em_molduras(contexto, gramatica)
         else:
