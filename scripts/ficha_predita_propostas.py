@@ -165,8 +165,13 @@ def _anexar_estruturas(
 
 
 def _estrutura_v2(proposta: PropostaElemento) -> str | None:
-    """Token da estrutura (com qualificador); sem ele, o código observado."""
-    return _texto(_atributos(proposta).get("token_estrutura")) or proposta.codigo_observado
+    """Token da estrutura (com qualificador); sem ele, o código observado.
+
+    Só ``str`` não vazia é token: qualquer outro tipo é atributo hostil e conta como ausente.
+    """
+    token = _atributos(proposta).get("token_estrutura")
+    texto = token.strip() if isinstance(token, str) else ""
+    return texto or proposta.codigo_observado
 
 
 def _codigo_cabo_v2(codigo: str | None) -> str | None:
