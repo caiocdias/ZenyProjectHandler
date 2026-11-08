@@ -234,7 +234,7 @@ def test_fonte_anterior_nao_muda(catalogo_inicial: CatalogoTecnico) -> None:
 
     assert ficha["gerador"]["versao_extracao"] == "projeto-promovido-v1" == VERSAO_EXTRACAO
     assert ficha["postes"] == []
-    assert VERSOES_EXTRACAO == (VERSAO_EXTRACAO, VERSAO_EXTRACAO_PROPOSTAS)
+    assert VERSOES_EXTRACAO == (VERSAO_EXTRACAO, VERSAO_EXTRACAO_PROPOSTAS, "propostas-v2")
 
 
 @pytest.mark.parametrize(

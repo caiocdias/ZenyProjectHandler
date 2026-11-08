@@ -723,7 +723,7 @@ def test_markdown_versao_de_extracao_vem_do_resumo(rodada: tuple[Path, list[str]
         ["--processos", "0"],
         ["--versao-extracao", ""],
         ["--versao-extracao", "Propostas-V1"],
-        ["--versao-extracao", "propostas-v2"],
+        ["--versao-extracao", "propostas-v9"],
     ],
 )
 def test_cli_argumento_invalido_sai_2_sem_gravar_nada(

@@ -1,4 +1,9 @@
-"""Ficha predita do benchmark por poste a partir das propostas da interpretação (``propostas-v1``).
+"""Ficha predita do benchmark por poste a partir das propostas da interpretação.
+
+Fontes: ``propostas-v1`` (padrão) e ``propostas-v2``. A v2 difere só em quatro regras: estruturas
+pelo ``token_estrutura`` (queda para ``codigo_observado``), código de cabo sem espaço depois de
+hífen, estai sem relação ``INSTALADO_EM`` no poste de ``suporte_proposta_id`` e vão composto dos
+cabos da mesma situação no mesmo par de postes.
 
 Lê ``variante["semantic"]`` (``PropostaElemento`` e ``PropostaRelacao`` depois da promoção
 automática), não o projeto promovido. Uma proposta é presente em ``PROPOSTA``, ``CONFIRMADA`` ou
@@ -12,12 +17,18 @@ entra com o valor e o nome em ``pendentes`` do poste ou do vão, em ordem alfab�
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Iterable, Mapping
 from decimal import Decimal, InvalidOperation
 from typing import Any, Final
 from uuid import UUID
 
-from scripts.benchmark_ficha_poste import VERSAO_EXTRACAO_PROPOSTAS, _bbox, _gerador
+from scripts.benchmark_ficha_poste import (
+    VERSAO_EXTRACAO_PROPOSTAS,
+    VERSAO_EXTRACAO_PROPOSTAS_V2,
+    _bbox,
+    _gerador,
+)
 from scripts.ficha_poste import _erro_classe
 from zeny_project_handler.domain.analysis import PropostaElemento, PropostaRelacao
 from zeny_project_handler.domain.enums import (
@@ -154,6 +165,76 @@ def _anexar_estruturas(
     return sem_poste
 
 
+def _estrutura_v2(proposta: PropostaElemento) -> str | None:
+    """Token da estrutura (com qualificador); sem ele, o código observado.
+
+    Só texto ou número (não ``bool``) vira token; lista, dict, tupla, objeto e ``bool`` são
+    atributo hostil e contam como ausente, em vez de virar o ``repr``.
+    """
+    token = _atributos(proposta).get("token_estrutura")
+    textual = isinstance(token, str | int | float) and not isinstance(token, bool)
+    return (_texto(token) if textual else None) or proposta.codigo_observado
+
+
+def _codigo_cabo_v2(codigo: str | None) -> str | None:
+    """Remove espaços depois de hífen e colapsa os demais (``N- (1N2)`` vira ``N-(1N2)``)."""
+    if codigo is None:
+        return None
+    normalizado = re.sub(r"\s+", " ", re.sub(r"-\s+", "-", codigo)).strip()
+    return normalizado or None
+
+
+def _anexar_estruturas_v2(
+    elementos: Mapping[UUID, PropostaElemento],
+    postes: Mapping[UUID, dict[str, Any]],
+    ligacoes: Ligacoes,
+    pendencias: dict[UUID, set[str]],
+) -> int:
+    sem_poste = 0
+    for proposta in elementos.values():
+        estrutura = _estrutura_v2(proposta)
+        if proposta.categoria not in _ESTRUTURAS or not estrutura:
+            continue
+        destinos = ligacoes.get(proposta.id)
+        if not destinos:
+            sem_poste += 1
+            continue
+        postes[destinos[0]]["estruturas"].append(estrutura)
+        if _pendente(proposta):
+            pendencias[destinos[0]].add("estruturas")
+    for poste in postes.values():
+        poste["estruturas"].sort()
+    return sem_poste
+
+
+def _com_estai_pelo_suporte(
+    elementos: Mapping[UUID, PropostaElemento],
+    postes: Mapping[UUID, Any],
+    relacoes: Iterable[PropostaRelacao],
+    ligacoes: Ligacoes,
+) -> Ligacoes:
+    """Acrescenta o poste de ``suporte_proposta_id`` ao estai sem relação ``INSTALADO_EM``."""
+    com_relacao = {
+        relacao.origem_referencia_id
+        for relacao in relacoes
+        if relacao.estado_revisao in _ESTADOS_PRESENTES and relacao.tipo_relacao == "INSTALADO_EM"
+    }
+    por_texto = {str(poste_id): poste_id for poste_id in postes}
+    ampliadas = dict(ligacoes)
+    for proposta in elementos.values():
+        atributos = _atributos(proposta)
+        suporte = atributos.get("suporte_proposta_id")
+        if (
+            proposta.categoria is CategoriaElemento.EQUIPAMENTO
+            and atributos.get("simbolo_classe") == "ESTAI"
+            and proposta.id not in com_relacao
+            and suporte is not None
+            and str(suporte) in por_texto
+        ):
+            ampliadas[proposta.id] = [por_texto[str(suporte)]]
+    return ampliadas
+
+
 def _anexar_simbolos(
     elementos: Mapping[UUID, PropostaElemento],
     postes: Mapping[UUID, dict[str, Any]],
@@ -253,10 +334,97 @@ def _vaos(
     return vaos, sem_vao
 
 
+def _posicao_rotulos(extracao: object) -> dict[str, tuple[float, float]]:
+    """Canto superior esquerdo (y, x) da caixa de cada evidência da extração, por id."""
+    posicoes: dict[str, tuple[float, float]] = {}
+    for evidencia in getattr(extracao, "evidencias", ()):
+        geometria = getattr(evidencia, "geometria", None)
+        if geometria is None or not geometria.pontos:
+            continue
+        caixa = _bbox(geometria)
+        posicoes[str(evidencia.id)] = (caixa[1], caixa[0])
+    return posicoes
+
+
+def _vaos_v2(
+    elementos: Mapping[UUID, PropostaElemento],
+    ligacoes: Ligacoes,
+    posicoes: Mapping[str, tuple[float, float]],
+) -> tuple[list[dict[str, Any]], int]:
+    """Vãos da v2: cabos da mesma situação e do mesmo par de postes viram um vão composto.
+
+    O ``cabo`` é a união dos códigos distintos, de cima para baixo pelo rótulo do cabo (menor y,
+    depois menor x, depois o código); cabo sem rótulo conhecido vem depois, por código. O
+    comprimento vem do primeiro cabo dessa ordem com comprimento anotado, senão do primeiro com
+    comprimento.
+    """
+    grupos: dict[tuple[object, frozenset[UUID]], list[tuple[PropostaElemento, list[UUID]]]] = {}
+    sem_vao = 0
+    for proposta in elementos.values():
+        if proposta.categoria is not CategoriaElemento.CABO:
+            continue
+        distintos = list(dict.fromkeys(ligacoes.get(proposta.id, ())))
+        if len(distintos) != 2:
+            sem_vao += 1
+            continue
+        chave = (proposta.situacao_projeto, frozenset(distintos))
+        grupos.setdefault(chave, []).append((proposta, distintos))
+
+    def ordem(
+        item: tuple[PropostaElemento, list[UUID]],
+    ) -> tuple[int, float, float, str, float, str]:
+        cabo = item[0]
+        codigo = _codigo_cabo_v2(cabo.codigo_observado) or ""
+        anotado = _decimal_finito(_atributos(cabo).get("comprimento_m"))
+        comprimento = math.inf if anotado is None else float(anotado)
+        posicao = posicoes.get(str(_atributos(cabo).get("evidencia_rotulo_id")))
+        if posicao is None:
+            return (1, 0.0, 0.0, codigo, comprimento, str(cabo.id))
+        return (0, posicao[0], posicao[1], codigo, comprimento, str(cabo.id))
+
+    vaos: list[dict[str, Any]] = []
+    for membros in grupos.values():
+        ordenados = sorted(membros, key=ordem)
+        if len(ordenados) > 1:  # ``de``/``para`` do composto não dependem dos ids das relações
+            ordenados = [(cabo, sorted(ids, key=str)) for cabo, ids in ordenados]
+        candidatos = [_vao(cabo, ids, elementos) for cabo, ids in ordenados]
+        codigos = dict.fromkeys(
+            codigo
+            for cabo, _ in ordenados
+            if (codigo := _codigo_cabo_v2(cabo.codigo_observado)) is not None
+        )
+        escolhido = next(
+            (
+                vao
+                for vao in candidatos
+                if vao["atributos_extras"]["origem_comprimento"]
+                == OrigemComprimentoVao.ANOTACAO_DESENHO.value
+            ),
+            next((vao for vao in candidatos if vao["comprimento_m"] is not None), candidatos[0]),
+        )
+        vaos.append(
+            {
+                **candidatos[0],
+                "comprimento_m": escolhido["comprimento_m"],
+                "cabo": " / ".join(codigos) or None,
+                "pendentes": sorted({p for vao in candidatos for p in vao["pendentes"]}),
+                "atributos_extras": escolhido["atributos_extras"],
+            }
+        )
+    return vaos, sem_vao
+
+
 def ficha_predita_propostas(
-    variante: Mapping[str, Any], pdf_sha256: str, *, native_only: bool
+    variante: Mapping[str, Any],
+    pdf_sha256: str,
+    *,
+    native_only: bool,
+    versao: str = VERSAO_EXTRACAO_PROPOSTAS,
 ) -> dict[str, Any]:
     """Ficha ``predicao`` das propostas presentes de uma variante de ``run_variant``."""
+    if versao not in (VERSAO_EXTRACAO_PROPOSTAS, VERSAO_EXTRACAO_PROPOSTAS_V2):
+        raise ValueError(f"versao desconhecida: {versao}")
+    v2 = versao == VERSAO_EXTRACAO_PROPOSTAS_V2
     semantica = variante["semantic"]
     elementos = _elementos_presentes(semantica.elementos)
     paginas = {
@@ -285,13 +453,21 @@ def ficha_predita_propostas(
         for poste_id in postes
     }
     relacoes = tuple(semantica.relacoes)
-    estruturas_sem_poste = _anexar_estruturas(
+    anexar_estruturas = _anexar_estruturas_v2 if v2 else _anexar_estruturas
+    estruturas_sem_poste = anexar_estruturas(
         elementos, postes, _ligacoes(relacoes, "INSTALADA_EM", postes), pendencias
     )
-    contagens = _anexar_simbolos(
-        elementos, postes, _ligacoes(relacoes, "INSTALADO_EM", postes), pendencias
-    )
-    vaos, cabos_sem_vao = _vaos(elementos, _ligacoes(relacoes, "CONECTA", postes))
+    instalados = _ligacoes(relacoes, "INSTALADO_EM", postes)
+    if v2:
+        instalados = _com_estai_pelo_suporte(elementos, postes, relacoes, instalados)
+    contagens = _anexar_simbolos(elementos, postes, instalados, pendencias)
+    conectados = _ligacoes(relacoes, "CONECTA", postes)
+    if v2:
+        vaos, cabos_sem_vao = _vaos_v2(
+            elementos, conectados, _posicao_rotulos(variante.get("extraction"))
+        )
+    else:
+        vaos, cabos_sem_vao = _vaos(elementos, conectados)
     for poste_id, poste in postes.items():
         poste["pendentes"] = sorted(pendencias[poste_id])
     # Estas chaves só aparecem quando ocorrem, para a raiz da ficha sem ocorrência seguir enxuta.
@@ -312,9 +488,7 @@ def ficha_predita_propostas(
         "tipo": "predicao",
         "pdf_sha256": pdf_sha256,
         "escopo_anotacao": {"tipo": "completo"},
-        "gerador": _gerador(
-            variante, native_only=native_only, versao_extracao=VERSAO_EXTRACAO_PROPOSTAS
-        ),
+        "gerador": _gerador(variante, native_only=native_only, versao_extracao=versao),
         "postes": list(postes.values()),
         "vaos": vaos,
         "atributos_extras": contagens,

@@ -1,0 +1,817 @@
+{
+  "elementos": [
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
+          "556e74ac-b18f-5626-8a20-ca5d088262d8"
+        ],
+        [
+          "identificador_operacional",
+          "P6"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "P-10M-150DAN-CIRCULAR",
+      "confianca": "0.90",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "2657fbea-ae9a-573a-97e9-e6790cf8f944",
+        "556e74ac-b18f-5626-8a20-ca5d088262d8"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.403",
+            "y": "0.10"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "0de7f194-adc5-5bec-8e52-e281af678898",
+      "justificativa": "A regra poste-codigo-catalogo reconheceu exatamente o código P-10M-150DAN-CIRCULAR em texto ou OCR. O identificador operacional P6 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "277c8b81-4609-5581-9aeb-7d2d9787326f"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
+          "c94a0d8e-5ba7-5d7e-8a6a-ea5e2632e10b"
+        ],
+        [
+          "identificador_operacional",
+          "P11"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "P-9M-300DAN-CIRCULAR",
+      "confianca": "0.90",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "436db078-1951-52bd-bf17-73267b6c4ee4",
+        "c94a0d8e-5ba7-5d7e-8a6a-ea5e2632e10b"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.315",
+            "y": "0.50"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "438191ac-f8cf-5345-813f-cf77f0df8ea3",
+      "justificativa": "A regra poste-codigo-catalogo reconheceu exatamente o código P-9M-300DAN-CIRCULAR em texto ou OCR. O identificador operacional P11 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "13b700c3-eb45-56a5-9858-99d069d97c0d"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
+          "fbe8dee9-f983-5ea8-81be-e2fc3ce97290"
+        ],
+        [
+          "identificador_operacional",
+          "P8"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "P-9M-300DAN-CIRCULAR",
+      "confianca": "0.90",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "93d78130-ea40-5c73-a921-e5078fd1788b",
+        "fbe8dee9-f983-5ea8-81be-e2fc3ce97290"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.80",
+            "y": "0.10"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "50085a52-5922-5bd0-84ba-cfa54049842d",
+      "justificativa": "A regra poste-codigo-catalogo reconheceu exatamente o código P-9M-300DAN-CIRCULAR em texto ou OCR. O identificador operacional P8 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "13b700c3-eb45-56a5-9858-99d069d97c0d"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "coordenada_leste",
+          465750
+        ],
+        [
+          "coordenada_norte",
+          7772490
+        ],
+        [
+          "coordenada_origem",
+          "texto_ou_ocr"
+        ],
+        [
+          "evidencia_identificador_id",
+          "b27a70a6-1a76-555a-95f2-a4c5fc055aac"
+        ],
+        [
+          "identificador_operacional",
+          "P10"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "P-10M-300DAN-CIRCULAR",
+      "confianca": "0.90",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "046e4bcc-31bb-5897-9cfc-32fe30fcd1f2",
+        "09e1e08d-2188-5664-a71f-2340152875f7",
+        "0a89e247-d8c9-5e39-aa79-34739683de86",
+        "b27a70a6-1a76-555a-95f2-a4c5fc055aac"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.20",
+            "y": "0.30"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "5de354c0-0e9e-5e1a-aa38-92add6c65bf1",
+      "justificativa": "A regra poste-codigo-catalogo reconheceu exatamente o código P-10M-300DAN-CIRCULAR em texto ou OCR. O identificador operacional P10 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "ae96cf56-860a-5397-a4e2-169007a0167a"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
+          "273b231f-99ca-56c9-a8d0-784e452e3011"
+        ],
+        [
+          "evidencia_ocorrencia_id",
+          "a6b34c2f-504c-54b2-b790-2fa8c60aee29"
+        ],
+        [
+          "identidade_ocorrencia",
+          "a6b34c2f-504c-54b2-b790-2fa8c60aee29:0:2"
+        ],
+        [
+          "identificador_operacional",
+          "P13"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "estrutura-mt-codigo-catalogo"
+        ],
+        [
+          "token_estrutura",
+          "U1"
+        ]
+      ],
+      "categoria": "ESTRUTURA_MT",
+      "codigo_observado": "U1",
+      "confianca": "0.92",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "273b231f-99ca-56c9-a8d0-784e452e3011",
+        "a6b34c2f-504c-54b2-b790-2fa8c60aee29"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.21",
+            "y": "0.85"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "651481db-ba27-5ae8-b69a-553d73831cee",
+      "justificativa": "A regra estrutura-mt-codigo-catalogo reconheceu exatamente o código U1 em texto ou OCR. O token U1 identifica uma ocorrência física de estrutura. O identificador operacional P13 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "0c68cf91-55d6-5aa1-b4dc-bd51be88206c"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "associacao_pendente",
+          "tracado"
+        ],
+        [
+          "evidencia_rotulo_id",
+          "794e2d6f-61ce-5425-9de7-43d5a89dd3b0"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "cabo-codigo-catalogo"
+        ]
+      ],
+      "categoria": "CABO",
+      "codigo_observado": "B-4 CA",
+      "confianca": "0.88",
+      "estado_revisao": "CONFLITANTE",
+      "evidencia_ids": [
+        "794e2d6f-61ce-5425-9de7-43d5a89dd3b0"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.60",
+            "y": "0.555"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "6fd0e296-a092-5156-8fe6-7751b82421d9",
+      "justificativa": "A regra cabo-codigo-catalogo reconheceu exatamente o código B-4 CA em texto ou OCR. Traçado não resolvido sem ambiguidade; o rótulo permanece disponível para revisão humana.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "c6f979ad-7798-5318-9188-4c2a048fc4f3"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
+          "273b231f-99ca-56c9-a8d0-784e452e3011"
+        ],
+        [
+          "identificador_operacional",
+          "P13"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "P-10M-300DAN-CIRCULAR",
+      "confianca": "0.90",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "273b231f-99ca-56c9-a8d0-784e452e3011",
+        "72bfac45-24d7-5953-bec4-510ec7f6fa39"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.26",
+            "y": "0.85"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "84727977-1cf7-5ac7-b8c5-ca3cd43125ce",
+      "justificativa": "A regra poste-codigo-catalogo reconheceu exatamente o código P-10M-300DAN-CIRCULAR em texto ou OCR. O identificador operacional P13 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "ae96cf56-860a-5397-a4e2-169007a0167a"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
+          "a97bffc6-bf72-50c3-965d-8d6b7aaa64d9"
+        ],
+        [
+          "identificador_operacional",
+          "P14"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "P-9M-150DAN-CIRCULAR",
+      "confianca": "0.90",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "8116a770-605a-5c23-b164-e9015f4af2df",
+        "a97bffc6-bf72-50c3-965d-8d6b7aaa64d9"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.50",
+            "y": "0.85"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "9ea58fd0-959e-581b-aa03-496fb6a77fa9",
+      "justificativa": "A regra poste-codigo-catalogo reconheceu exatamente o código P-9M-150DAN-CIRCULAR em texto ou OCR. O identificador operacional P14 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "655f1af2-1ae9-575f-ac49-1769860db50e"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
+          "3e9b0e84-a934-5c27-930f-32ca579d9d94"
+        ],
+        [
+          "evidencia_ocorrencia_id",
+          "b3f795e1-488c-5c11-8ba5-79391db5fc84"
+        ],
+        [
+          "identidade_ocorrencia",
+          "b3f795e1-488c-5c11-8ba5-79391db5fc84:0:4"
+        ],
+        [
+          "identificador_operacional",
+          "P16"
+        ],
+        [
+          "qualificador_estrutura",
+          "3"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "estrutura-mt-codigo-catalogo"
+        ],
+        [
+          "token_estrutura",
+          "N(3)"
+        ]
+      ],
+      "categoria": "ESTRUTURA_MT",
+      "codigo_observado": "N",
+      "confianca": "0.92",
+      "estado_revisao": "PROPOSTA",
+      "evidencia_ids": [
+        "3e9b0e84-a934-5c27-930f-32ca579d9d94",
+        "b3f795e1-488c-5c11-8ba5-79391db5fc84"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.10",
+            "y": "0.96"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "a3d32d2e-276c-5e61-9338-7f2132486144",
+      "justificativa": "A regra estrutura-mt-codigo-catalogo reconheceu exatamente o código N em texto ou OCR. O token N(3) identifica uma ocorrência física de estrutura com qualificador observado 3. O identificador operacional P16 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "ce304cb9-1266-591f-832e-61ce7ec25a27"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
+          "556e74ac-b18f-5626-8a20-ca5d088262d8"
+        ],
+        [
+          "evidencia_ocorrencia_id",
+          "555503c1-391a-5776-9c70-c14d2f1e6484"
+        ],
+        [
+          "identidade_ocorrencia",
+          "555503c1-391a-5776-9c70-c14d2f1e6484:0:2"
+        ],
+        [
+          "identificador_operacional",
+          "P6"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "estrutura-mt-codigo-catalogo"
+        ],
+        [
+          "token_estrutura",
+          "U1"
+        ]
+      ],
+      "categoria": "ESTRUTURA_MT",
+      "codigo_observado": "U1",
+      "confianca": "0.92",
+      "estado_revisao": "CONFLITANTE",
+      "evidencia_ids": [
+        "555503c1-391a-5776-9c70-c14d2f1e6484",
+        "556e74ac-b18f-5626-8a20-ca5d088262d8"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.35",
+            "y": "0.10"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "b5615bd6-3fbb-56c9-9a51-15c4915bd5ee",
+      "justificativa": "A regra estrutura-mt-codigo-catalogo reconheceu exatamente o código U1 em texto ou OCR. O token U1 identifica uma ocorrência física de estrutura. O identificador operacional P6 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "0c68cf91-55d6-5aa1-b4dc-bd51be88206c"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
+          "6bf3f11d-63f3-5a2e-a0f9-75df4933dd19"
+        ],
+        [
+          "identificador_operacional",
+          "P5"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "P-9M-150DAN-CIRCULAR",
+      "confianca": "0.90",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "01b053b2-5593-5005-a6fd-ea9c540782cb",
+        "36a7ff3e-d088-5f97-9e11-e5c6608e0ff0",
+        "6bf3f11d-63f3-5a2e-a0f9-75df4933dd19"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.10",
+            "y": "0.10"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "ceb24319-b6c3-5c54-9d03-688cbcdf4954",
+      "justificativa": "A regra poste-codigo-catalogo reconheceu exatamente o código P-9M-150DAN-CIRCULAR em texto ou OCR. O identificador operacional P5 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "655f1af2-1ae9-575f-ac49-1769860db50e"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
+          "588a039f-3b36-5f42-886d-a1c9eaaeeb0b"
+        ],
+        [
+          "identificador_operacional",
+          "P12"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "P-10M-300DAN-CIRCULAR",
+      "confianca": "0.90",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "42201799-a436-5698-ab41-75fc09dc743f",
+        "588a039f-3b36-5f42-886d-a1c9eaaeeb0b",
+        "9c72992f-117d-568a-bd9d-8fe7b3b0987b"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.60",
+            "y": "0.58"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "d4e3cc44-7a41-5e42-b94a-ce5c17044d51",
+      "justificativa": "A regra poste-codigo-catalogo reconheceu exatamente o código P-10M-300DAN-CIRCULAR em texto ou OCR. O identificador operacional P12 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "ae96cf56-860a-5397-a4e2-169007a0167a"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
+          "3e9b0e84-a934-5c27-930f-32ca579d9d94"
+        ],
+        [
+          "evidencia_ocorrencia_id",
+          "ad76d8b0-0719-5fcf-8b42-19284044ce1a"
+        ],
+        [
+          "identidade_ocorrencia",
+          "ad76d8b0-0719-5fcf-8b42-19284044ce1a:0:4"
+        ],
+        [
+          "identificador_operacional",
+          "P16"
+        ],
+        [
+          "qualificador_estrutura",
+          "2"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "estrutura-mt-codigo-catalogo"
+        ],
+        [
+          "token_estrutura",
+          "N(2)"
+        ]
+      ],
+      "categoria": "ESTRUTURA_MT",
+      "codigo_observado": "N",
+      "confianca": "0.92",
+      "estado_revisao": "PROPOSTA",
+      "evidencia_ids": [
+        "3e9b0e84-a934-5c27-930f-32ca579d9d94",
+        "ad76d8b0-0719-5fcf-8b42-19284044ce1a"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.10",
+            "y": "0.96"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "d989099e-b219-5d47-aebe-25a17eb19bd4",
+      "justificativa": "A regra estrutura-mt-codigo-catalogo reconheceu exatamente o código N em texto ou OCR. O token N(2) identifica uma ocorrência física de estrutura com qualificador observado 2. O identificador operacional P16 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "ce304cb9-1266-591f-832e-61ce7ec25a27"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
+          "273b231f-99ca-56c9-a8d0-784e452e3011"
+        ],
+        [
+          "identificador_operacional",
+          "P13"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "P-10M-150DAN-CIRCULAR",
+      "confianca": "0.90",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "273b231f-99ca-56c9-a8d0-784e452e3011",
+        "a990dbee-30ed-5ad0-bb9d-cca9f8ca8ed9"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.18",
+            "y": "0.85"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "dafd47df-0fbc-5f51-8152-d326734bb197",
+      "justificativa": "A regra poste-codigo-catalogo reconheceu exatamente o código P-10M-150DAN-CIRCULAR em texto ou OCR. O identificador operacional P13 confirmou o ponto de projeto.",
+      "situacao_projeto": "REMOVER",
+      "tipo_catalogo_sugerido_id": "277c8b81-4609-5581-9aeb-7d2d9787326f"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
+          "9d9bde19-34c7-5dbd-ae2f-c21f2ba66ad0"
+        ],
+        [
+          "identificador_operacional",
+          "P9"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "P-10M-150DAN-CIRCULAR",
+      "confianca": "0.90",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "4d6ce4dd-14de-54ef-8a5b-3e412fbe271a",
+        "9d9bde19-34c7-5dbd-ae2f-c21f2ba66ad0"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.60",
+            "y": "0.30"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "e3412e99-e4c8-5eff-93d4-2f83d9cef330",
+      "justificativa": "A regra poste-codigo-catalogo reconheceu exatamente o código P-10M-150DAN-CIRCULAR em texto ou OCR. O identificador operacional P9 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "277c8b81-4609-5581-9aeb-7d2d9787326f"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
+          "556e74ac-b18f-5626-8a20-ca5d088262d8"
+        ],
+        [
+          "identificador_operacional",
+          "P6"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "P-9M-300DAN-CIRCULAR",
+      "confianca": "0.90",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "2ebdec01-4569-5506-b081-706f5bb27ae0",
+        "556e74ac-b18f-5626-8a20-ca5d088262d8"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.30",
+            "y": "0.10"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "e3970573-53f1-5c07-9b28-6a9c2cb110a4",
+      "justificativa": "A regra poste-codigo-catalogo reconheceu exatamente o código P-9M-300DAN-CIRCULAR em texto ou OCR. O identificador operacional P6 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "13b700c3-eb45-56a5-9858-99d069d97c0d"
+    }
+  ],
+  "id": "436a179a-8225-58f5-a8c5-d7b992413974",
+  "metodo": "regras-explicitas-cemig",
+  "parametros": [
+    [
+      "categorias_habilitadas",
+      "POSTE,ESTRUTURA_MT,ESTRUTURA_BT,CABO,EQUIPAMENTO"
+    ],
+    [
+      "confianca_minima",
+      "0.50"
+    ],
+    [
+      "execucao_extracao_id",
+      "ddf78c40-8453-5bcd-9985-60395cc4568d"
+    ],
+    [
+      "gerar_relacoes",
+      true
+    ],
+    [
+      "maximo_propostas",
+      10000
+    ],
+    [
+      "reconciliacao_metodos_versao",
+      "documentary-coordinate-review-1"
+    ],
+    [
+      "registro_regras_assinatura",
+      "d808f066a74115a13211ac423eab82409801bab287be722034facd2317a3a656"
+    ],
+    [
+      "registro_regras_versao",
+      "1.6.0"
+    ]
+  ],
+  "relacoes": [
+    {
+      "confianca": "0.78",
+      "destino_referencia_id": "84727977-1cf7-5ac7-b8c5-ca3cd43125ce",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "273b231f-99ca-56c9-a8d0-784e452e3011",
+        "72bfac45-24d7-5953-bec4-510ec7f6fa39",
+        "a6b34c2f-504c-54b2-b790-2fa8c60aee29"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "id": "b3ddfb91-a5fe-5dd9-a823-4842b0341318",
+      "justificativa": "A regra estrutura-mt-instalada-em-poste associou propostas por centros_proximos.",
+      "origem_referencia_id": "651481db-ba27-5ae8-b69a-553d73831cee",
+      "tipo_relacao": "INSTALADA_EM"
+    }
+  ],
+  "versao_metodo": "25.0"
+}

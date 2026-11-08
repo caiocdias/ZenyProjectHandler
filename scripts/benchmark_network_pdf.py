@@ -181,6 +181,22 @@ class CategoryRecorder:
         return result
 
 
+def _settings_benchmark(directory: Path) -> Any:
+    """Configurações do servidor com o runner de símbolos ligado (perfil ``vector-only``)."""
+    from zeny_project_handler_server.config import ServerSettings
+
+    dados = directory / "dados-simbolos"
+    dados.mkdir(parents=True, exist_ok=True)
+    return ServerSettings(
+        password="senha ficticia do benchmark de simbolos",
+        market_sqlserver_connection_string="fixture-market-connection",
+        data_directory=dados,
+        symbol_composition=True,
+        symbol_profile="vector-only",
+        symbol_model_path=None,
+    )
+
+
 def run_variant(
     source: Path,
     directory: Path,
@@ -188,6 +204,7 @@ def run_variant(
     ocr: MotorOcrPort | None,
     telemetry: bool = False,
     complementary: bool = False,
+    simbolos_modelo: bool = False,
 ) -> dict[str, Any]:
     """Use uma base nova por variante, sem cache nem consulta de conformidade/SQL."""
     started = perf_counter()
@@ -211,6 +228,14 @@ def run_variant(
         criado_em=datetime.now(UTC),
         documentos=(inspection.documento,),
     )
+    source_reference = ReferenciaFontePdf(
+        documento_id=inspection.documento.id,
+        projeto_id=project.id,
+        caminho_canonico=source,
+        sha256=inspection.documento.sha256,
+        tamanho_bytes=inspection.tamanho_bytes,
+        modificado_em_ns=inspection.modificado_em_ns,
+    )
     engine = create_sqlite_engine(directory / "benchmark.sqlite3")
     try:
         upgrade_database(engine)
@@ -221,16 +246,7 @@ def run_variant(
         with work() as unit:
             unit.catalogos.salvar(catalog)
             unit.projetos.salvar(project)
-            unit.fontes_pdf.salvar(
-                ReferenciaFontePdf(
-                    documento_id=inspection.documento.id,
-                    projeto_id=project.id,
-                    caminho_canonico=source,
-                    sha256=inspection.documento.sha256,
-                    tamanho_bytes=inspection.tamanho_bytes,
-                    modificado_em_ns=inspection.modificado_em_ns,
-                )
-            )
+            unit.fontes_pdf.salvar(source_reference)
             unit.commit()
         configuration = ConfiguracaoAnaliseDocumento(habilitar_ocr_condicional=ocr is not None)
         from zeny_project_handler.adapters.analysis.rapid_evidence import RapidEvidenceExtractor
@@ -248,6 +264,16 @@ def run_variant(
             execucao_id=uuid5(identity, "ocr" if ocr is not None else "native"),
         )
         extraction_seconds = perf_counter() - extraction_started
+        symbol_options: dict[str, Any] = {}
+        if simbolos_modelo:
+            # Importado aqui: o caminho sem a flag não carrega o servidor.
+            from zeny_project_handler_server.symbol_execution import SymbolCompositionRunner
+
+            runner = SymbolCompositionRunner(_settings_benchmark(directory))
+            symbol_options = {
+                "simbolos": runner.run(project.documentos[0], source_reference),
+                "symbol_configuration_signature": runner.signature,
+            }
         recorders = tuple(
             CategoryRecorder(item)
             for item in (
@@ -263,6 +289,7 @@ def run_variant(
         semantic = ExecutarPipelineInterpretacao(interpreter, registry, work).executar(
             project.id,
             extraction.execucao.id,
+            **symbol_options,
         )
         interpretation_seconds = perf_counter() - interpretation_started
         projection_started = perf_counter()
@@ -353,6 +380,11 @@ def run_variant(
             "analyzer": {"version": analyzer.versao, "signature": analyzer.assinatura_capacidade},
             "interpreter_version": interpreter.versao,
             "registry_signature": registry.assinatura(),
+            **(
+                {"symbol_configuration_signature": symbol_options["symbol_configuration_signature"]}
+                if simbolos_modelo
+                else {}
+            ),
             "seconds": {
                 "extraction_persistence": extraction_seconds,
                 "interpretation_promotion_persistence": interpretation_seconds,

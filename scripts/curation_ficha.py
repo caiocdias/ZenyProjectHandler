@@ -44,12 +44,12 @@ denominadores (taxas recalculadas das somas). Recusa PDF sem referência, salvo 
 referência cujo SHA-256 difere do registrado em ``congelamento.json``. Sem ``--native-only``,
 confere o OCR português antes do primeiro PDF. Falha do analisador num PDF fica registrada como
 ``falha`` (não é zero) e o comando termina com código 1 depois de gravar o resumo.
-``--versao-extracao`` escolhe a fonte da ficha predita (``projeto-promovido-v1``, o padrão, ou
-``propostas-v1``) e fica em ``opcoes.versao_extracao``. ``--processos N`` mede os PDFs em até N
-processos (no máximo 61, o limite do Windows, e nunca mais que os PDFs com referência); o resumo
-JSON é igual ao serial, e o número de processos aparece só no ``.md``. A chave ``pendencia`` separa,
-nos 4 campos do poste, os acertos afirmados dos acertos de campo que a predição declara pendente;
-vãos e símbolos ficam sem essa separação.
+``--versao-extracao`` escolhe a fonte da ficha predita (``projeto-promovido-v1``, o padrão,
+``propostas-v1`` ou ``propostas-v2``) e fica em ``opcoes.versao_extracao``. ``--processos N``
+mede os PDFs em até N processos (no máximo 61, o limite do Windows, e nunca mais que os PDFs com
+referência); o resumo JSON é igual ao serial, e o número de processos aparece só no ``.md``. A
+chave ``pendencia`` separa, nos 4 campos do poste, os acertos afirmados dos acertos de campo que a
+predição declara pendente; vãos e símbolos ficam sem essa separação.
 
 ``amostra`` sorteia postes das referências (rodízio entre PDFs, semente fixa) e grava
 ``fichas/amostra-humana/amostra-vNNN/`` (``amostra.json``, ``amostra.md`` e um recorte ``NN.png``
@@ -79,7 +79,11 @@ from typing import Any
 
 import pymupdf
 
-from scripts.benchmark_ficha_poste import VERSAO_EXTRACAO, VERSOES_EXTRACAO
+from scripts.benchmark_ficha_poste import (
+    VERSAO_EXTRACAO,
+    VERSAO_EXTRACAO_PROPOSTAS,
+    VERSOES_EXTRACAO,
+)
 from scripts.benchmark_ficha_poste import executar as executar_benchmark
 from scripts.curation_reference import contida_na_uniao, tiles_nao_cobertos
 from scripts.curation_render import carregar_indice
@@ -638,9 +642,12 @@ def _medir_pdf(
     native_only: bool,
     runtime_directory: Path,
     versao_extracao: str = VERSAO_EXTRACAO,
+    simbolos_modelo: bool = False,
     executor: Callable[..., Registro] | None = None,
 ) -> Registro:
     pdf = caminho_pdf_fonte(rodada_dir, pdf_id)
+    # Repassada só quando ligada, para não mudar a assinatura dos executores existentes.
+    extras: dict[str, Any] = {"simbolos_modelo": True} if simbolos_modelo else {}
     # Resolvido na chamada (e não no def) para os testes poderem trocar ``executar_benchmark``.
     executar = executor if executor is not None else executar_benchmark
     try:
@@ -651,6 +658,7 @@ def _medir_pdf(
             native_only=native_only,
             runtime_directory=runtime_directory,
             versao_extracao=versao_extracao,
+            **extras,
         )
     except Exception as erro:
         diretorios = (rodada_dir.resolve(), runtime_directory.resolve())
@@ -855,6 +863,7 @@ def baseline(
     parcial: bool = False,
     versao_extracao: str = VERSAO_EXTRACAO,
     processos: int = 1,
+    simbolos_modelo: bool = False,
     _executor: Callable[..., Registro] | None = None,
 ) -> Registro:
     """Mede o analisador atual contra as referências e grava a próxima ``baseline-vNNN``.
@@ -863,6 +872,8 @@ def baseline(
     """
     if versao_extracao not in VERSOES_EXTRACAO:
         raise ValueError(f"versao_extracao desconhecida: {versao_extracao}")
+    if simbolos_modelo and versao_extracao == VERSAO_EXTRACAO:
+        raise ValueError(f"{VERSAO_EXTRACAO} não usa símbolos: use {VERSAO_EXTRACAO_PROPOSTAS}")
     if processos < 1:
         raise ValueError("processos deve ser pelo menos 1")
     selecionados = _pdfs_do_baseline(rodada_dir, pdf_ids)
@@ -886,6 +897,7 @@ def baseline(
             runtime_directory=runtime_directory,
             versao_extracao=versao_extracao,
             executor=_executor,
+            **({"simbolos_modelo": True} if simbolos_modelo else {}),
         )
         resumo: Registro = {
             "schema_version": ESQUEMA_BASELINE,
@@ -894,6 +906,7 @@ def baseline(
                 "native_only": native_only,
                 "pdfs": selecionados,
                 "versao_extracao": versao_extracao,
+                **({"simbolos_modelo": True} if simbolos_modelo else {}),
             },
             "parcial": parcial,
             "versoes": {
@@ -1285,6 +1298,7 @@ def _parser() -> argparse.ArgumentParser:
     comando.add_argument("--parcial", action="store_true")
     comando.add_argument("--versao-extracao", choices=VERSOES_EXTRACAO, default=VERSAO_EXTRACAO)
     comando.add_argument("--processos", type=_inteiro_positivo, default=1)
+    comando.add_argument("--simbolos-modelo", action="store_true")
     comando = sub.add_parser(
         "amostra", help="sorteia postes das referências para conferência humana"
     )
@@ -1354,6 +1368,7 @@ def _executar(args: argparse.Namespace) -> int:
     if args.comando in ("amostra", "responder", "taxa"):
         return _executar_humana(args)
     if args.comando == "baseline":
+        extras: dict[str, Any] = {"simbolos_modelo": True} if args.simbolos_modelo else {}
         return _imprimir_baseline(
             baseline(
                 args.rodada,
@@ -1363,6 +1378,7 @@ def _executar(args: argparse.Namespace) -> int:
                 parcial=args.parcial,
                 versao_extracao=args.versao_extracao,
                 processos=args.processos,
+                **extras,
             )
         )
     if args.comando == "consolidar":
