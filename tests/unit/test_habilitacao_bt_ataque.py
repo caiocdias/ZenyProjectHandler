@@ -173,7 +173,7 @@ def test_bt_nao_vira_haste_nem_outra_classe_com_pacotes_reais(situacao: str) -> 
 def test_bt_com_rotate_de_pagina_segue_na_variante_certa(rotacao: int) -> None:
     def desenhar(pagina: pymupdf.Page) -> None:
         desenhar_positivo(pagina, _IDS[2])
-        pagina.set_rotation(rotacao)
+        pagina.set_rotation(rotacao)  # type: ignore[no-untyped-call]
 
     documento, pagina = _pagina_com(desenhar)
     with documento:

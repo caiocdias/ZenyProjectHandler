@@ -93,7 +93,9 @@ def _e07_do_pacote(tmp_path: Path, pacotes: Path) -> Path:
     return caminho
 
 
-def test_matriz_dos_pacotes_reais_marca_as_doze_so_do_modelo_fora_do_dominio_no_motor(tmp_path: Path) -> None:
+def test_matriz_dos_pacotes_reais_marca_as_doze_so_do_modelo_fora_do_dominio_no_motor(
+    tmp_path: Path,
+) -> None:
     pacotes = ROOT / "src/zeny_project_handler/adapters/analysis/symbol_packages"
     base = ROOT / "docs/data/matriz-simbologia-e16.csv"
     linhas, _ = build(
@@ -112,8 +114,7 @@ def test_matriz_dos_pacotes_reais_marca_as_doze_so_do_modelo_fora_do_dominio_no_
     outras = [
         linha
         for linha in linhas
-        if linha["package_status"] == "enabled"
-        and linha["id"] not in {*_IDS_HASTE, *_IDS_BT}
+        if linha["package_status"] == "enabled" and linha["id"] not in {*_IDS_HASTE, *_IDS_BT}
     ]
     assert outras
     assert all(linha["declarative-vector-packages"] == "id_exato_sintetico" for linha in outras)
