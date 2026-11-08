@@ -18,6 +18,11 @@ from zeny_project_handler.adapters.analysis.drawing_model.grammar_disc import (
     pontas_terminais,
 )
 from zeny_project_handler.adapters.analysis.drawing_model.grammar_frames import casa_moldura
+from zeny_project_handler.adapters.analysis.drawing_model.grammar_marcas import MarcasDaPagina
+from zeny_project_handler.adapters.analysis.drawing_model.grammar_rect_diagonal import (
+    casa_retangulos_diagonal,
+    retangulos_candidatos,
+)
 from zeny_project_handler.adapters.analysis.drawing_model.grammar_stem import (
     casa_hastes,
     hastes_candidatas,
@@ -34,6 +39,7 @@ from zeny_project_handler.adapters.analysis.drawing_model.symbol_grammars import
 
 _DISCO_TERMINAL: Final = "terminal_disc"
 _HASTE_COM_BARRAS: Final = "stem_bars"
+_RETANGULO_DIAGONAL: Final = "rect_diagonal"
 _MOLDURAS: Final = frozenset(
     {
         "label_in_frame",
@@ -52,7 +58,9 @@ class CasamentoGramatica:
     """`caminho` é a posição em `modelo.caminhos`; o índice cru sai de `indices_crus`.
 
     `componentes` são as posições dos demais caminhos do símbolo, sem `caminho`, em ordem
-    crescente; só a haste com barras os preenche (barras, envolvente e braços do X).
+    crescente; só as gramáticas do modelo os preenchem: a haste com barras (barras, envolvente
+    e braços do X) e o retângulo com diagonal (diagonal com ganchos, haste de ligação,
+    envolvente e braços do X).
     """
 
     pacote: Mapping[str, Any]
@@ -105,8 +113,20 @@ def _casar_no_contexto(
     discos = discos_candidatos(contexto) if _tem_tipo(variantes, _DISCO_TERMINAL) else ()
     # Sem disco, ninguém consulta as pontas: a página não paga por elas.
     pontas = pontas_terminais(contexto) if discos else None
-    # As hastes da página valem para as 8 variantes: calculadas uma vez, como os discos.
-    hastes = hastes_candidatas(contexto) if _tem_tipo(variantes, _HASTE_COM_BARRAS) else ()
+    # As hastes e os retângulos da página valem para todas as variantes do tipo: calculados uma
+    # vez, como os discos. As marcas são preguiçosas e compartilhadas: os contornos só são pagos
+    # se alguma gramática os pede, uma vez por página.
+    marcas = MarcasDaPagina(contexto)
+    hastes = (
+        hastes_candidatas(contexto, marcas=marcas)
+        if _tem_tipo(variantes, _HASTE_COM_BARRAS)
+        else ()
+    )
+    retangulos = (
+        retangulos_candidatos(contexto, marcas=marcas)
+        if _tem_tipo(variantes, _RETANGULO_DIAGONAL)
+        else ()
+    )
     casamentos: list[CasamentoGramatica] = []
     vistos: set[tuple[str, Caixa]] = set()
     for pacote, variante in variantes:
@@ -119,6 +139,8 @@ def _casar_no_contexto(
             )
         elif tipo == _HASTE_COM_BARRAS:
             achados = casa_hastes(contexto, gramatica, candidatas=hastes)
+        elif tipo == _RETANGULO_DIAGONAL:
+            achados = casa_retangulos_diagonal(contexto, gramatica, candidatos=retangulos)
         elif tipo in _MOLDURAS:
             achados = _achados_em_molduras(contexto, gramatica)
         else:
