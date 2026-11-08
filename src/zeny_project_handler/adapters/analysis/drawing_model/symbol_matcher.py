@@ -18,6 +18,10 @@ from zeny_project_handler.adapters.analysis.drawing_model.grammar_disc import (
     pontas_terminais,
 )
 from zeny_project_handler.adapters.analysis.drawing_model.grammar_frames import casa_moldura
+from zeny_project_handler.adapters.analysis.drawing_model.grammar_stem import (
+    casa_hastes,
+    hastes_candidatas,
+)
 from zeny_project_handler.adapters.analysis.drawing_model.model import Caixa
 from zeny_project_handler.adapters.analysis.drawing_model.symbol_grammars import (
     LIMITE_CONSULTAS_PAGINA,
@@ -29,15 +33,26 @@ from zeny_project_handler.adapters.analysis.drawing_model.symbol_grammars import
 )
 
 _DISCO_TERMINAL: Final = "terminal_disc"
+_HASTE_COM_BARRAS: Final = "stem_bars"
+_MOLDURAS: Final = frozenset(
+    {
+        "label_in_frame",
+        "triangle_in_frame",
+        "framed_diagonals",
+        "nested_rectangles_bar",
+        "diamond_three_dots",
+    }
+)
 
-_Achado = tuple[Caixa, int]
+_Achado = tuple[Caixa, int, tuple[int, ...]]
 
 
 @dataclass(frozen=True, slots=True)
 class CasamentoGramatica:
     """`caminho` é a posição em `modelo.caminhos`; o índice cru sai de `indices_crus`.
 
-    `componentes` são as posições dos demais caminhos do símbolo (vazio nas gramáticas atuais).
+    `componentes` são as posições dos demais caminhos do símbolo, sem `caminho`, em ordem
+    crescente; só a haste com barras os preenche (barras, envolvente e braços do X).
     """
 
     pacote: Mapping[str, Any]
@@ -58,7 +73,7 @@ def _achados_em_molduras(
     """Cada moldura visitada gasta 1, porque `casa_moldura` recusa muitas sem consultar a grade."""
     contexto.orcamento.gastar(len(contexto.molduras))
     return [
-        (moldura.caixa, moldura.caminho)
+        (moldura.caixa, moldura.caminho, ())
         for moldura in contexto.molduras
         if casa_moldura(contexto, gramatica, moldura)
     ]
@@ -72,35 +87,47 @@ def _achados_em_discos(
 ) -> list[_Achado]:
     contexto.orcamento.gastar(len(discos))
     return [
-        (disco.caixa, disco.caminho)
+        (disco.caixa, disco.caminho, ())
         for disco in discos
         if casa_disco(contexto, gramatica, disco, pontas)
     ]
+
+
+def _tem_tipo(variantes: Sequence[tuple[Mapping[str, Any], Mapping[str, Any]]], tipo: str) -> bool:
+    return any(_gramatica(variante)["kind"] == tipo for _, variante in variantes)
 
 
 def _casar_no_contexto(
     contexto: ContextoGramatica,
     variantes: Sequence[tuple[Mapping[str, Any], Mapping[str, Any]]],
 ) -> tuple[CasamentoGramatica, ...]:
-    tem_disco = any(_gramatica(variante)["kind"] == _DISCO_TERMINAL for _, variante in variantes)
-    discos = discos_candidatos(contexto) if tem_disco else ()
+    """Despacho explícito por `kind`; tipo desconhecido é `ValueError`, nunca uma não detecção."""
+    discos = discos_candidatos(contexto) if _tem_tipo(variantes, _DISCO_TERMINAL) else ()
     # Sem disco, ninguém consulta as pontas: a página não paga por elas.
     pontas = pontas_terminais(contexto) if discos else None
+    # As hastes da página valem para as 8 variantes: calculadas uma vez, como os discos.
+    hastes = hastes_candidatas(contexto) if _tem_tipo(variantes, _HASTE_COM_BARRAS) else ()
     casamentos: list[CasamentoGramatica] = []
     vistos: set[tuple[str, Caixa]] = set()
     for pacote, variante in variantes:
         gramatica = _gramatica(variante)
-        if gramatica["kind"] != _DISCO_TERMINAL:
+        tipo = gramatica["kind"]
+        achados: list[_Achado]
+        if tipo == _DISCO_TERMINAL:
+            achados = (
+                [] if pontas is None else _achados_em_discos(contexto, gramatica, discos, pontas)
+            )
+        elif tipo == _HASTE_COM_BARRAS:
+            achados = casa_hastes(contexto, gramatica, candidatas=hastes)
+        elif tipo in _MOLDURAS:
             achados = _achados_em_molduras(contexto, gramatica)
-        elif pontas is None:
-            achados = []
         else:
-            achados = _achados_em_discos(contexto, gramatica, discos, pontas)
-        for caixa, caminho in achados:
+            raise ValueError(f"Gramática desconhecida: {tipo!r}.")
+        for caixa, caminho, componentes in achados:
             chave = (str(variante["id"]), _caixa_arredondada(caixa))
             if chave not in vistos:
                 vistos.add(chave)
-                casamentos.append(CasamentoGramatica(pacote, variante, caixa, caminho))
+                casamentos.append(CasamentoGramatica(pacote, variante, caixa, caminho, componentes))
     return tuple(casamentos)
 
 

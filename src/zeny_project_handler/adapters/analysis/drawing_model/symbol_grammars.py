@@ -132,6 +132,11 @@ class GradeEspacial(Generic[T]):
             for celula in celulas:
                 self._celulas.setdefault(celula, []).append(indice)
 
+    @property
+    def itens(self) -> Sequence[T]:
+        """Os itens indexados, em ordem de inserção; percorrê-los não gasta do orçamento."""
+        return tuple(self._itens)
+
     def _recortar(self, caixa: Caixa) -> Caixa | None:
         x0, y0 = max(caixa[0], self._limites[0]), max(caixa[1], self._limites[1])
         x1, y1 = min(caixa[2], self._limites[2]), min(caixa[3], self._limites[3])

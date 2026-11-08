@@ -10,6 +10,7 @@ from typing import Any
 import pymupdf
 import pytest
 from tests.fixtures.declarative_symbols.corpus import draw_symbol
+from tests.fixtures.symbol_grammars.stem_bars import desenhar_positivo
 from tests.unit.test_gramatica_so_modelo import (
     _BASE,
     _CASO_MOLDURA,
@@ -148,21 +149,22 @@ def test_modelo_so_com_haste_anuncia_a_classe_e_uma_variante(tmp_path: Path) -> 
     assert ("enabled_variants", 1) in perfil.parametros
 
 
-def test_modelo_ainda_nao_executa_stem_bars_e_falha_alto(tmp_path: Path) -> None:
-    """Caracterização: a gramática chega na E06.3.2.2; até lá habilitar uma é erro explícito."""
-    pacotes = _carrega(tmp_path, _pacote_com(_gramatica()))
+def test_modelo_executa_stem_bars(tmp_path: Path) -> None:
+    """Com uma variante `stem_bars` habilitada, o modelo observa o positivo dela uma vez."""
+    pacotes = _carrega(tmp_path, _pacote_com(_gramatica(), com_moldura=False))
     with pymupdf.open() as documento:  # type: ignore[no-untyped-call]
         pagina = documento.new_page(width=300, height=300)
-        draw_symbol(pagina, _CASO_MOLDURA)
-        with pytest.raises(ValueError, match="stem_bars"):
-            observar_pacotes_modelo(
-                pagina,
-                documento_id="d",
-                documento_sha256="0" * 64,
-                pagina_numero=1,
-                pacotes=pacotes,
-                tabela=carregar_tabela_glifos(),
-            )
+        desenhar_positivo(pagina, "cemig-eo-r3-s19-v001")
+        resultado = observar_pacotes_modelo(
+            pagina,
+            documento_id="d",
+            documento_sha256="0" * 64,
+            pagina_numero=1,
+            pacotes=pacotes,
+            tabela=carregar_tabela_glifos(),
+        )
+    classes = [o.alternativas[0].classe for o in resultado.observacoes]
+    assert classes == [_CLASSE_HASTE]
 
 
 def test_enabled_e_variantes_do_motor_preservam_ordem(tmp_path: Path) -> None:
