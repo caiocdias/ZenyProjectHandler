@@ -8,6 +8,7 @@ nem não detecção, e a imagem compacta sem casamento é dado, não observaçã
 
 from __future__ import annotations
 
+import json
 import math
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
@@ -238,15 +239,22 @@ def _pontos_originais(caixa: pymupdf.Rect) -> tuple[PontoOriginalSimbolo, ...]:
     )
 
 
-def _atributos(pacote: Mapping[str, Any], variante: Mapping[str, Any]) -> tuple[Any, ...]:
-    """Os mesmos de `_known_observation`: a reconciliação compara os dois métodos."""
+def _atributos(
+    pacote: Mapping[str, Any], variante: Mapping[str, Any], referencias: Sequence[str] = ()
+) -> tuple[Any, ...]:
+    """Os mesmos de `_known_observation`: a reconciliação compara os dois métodos.
+
+    Com mais de uma em `referencias`, `referencias_possiveis` é a lista JSON ordenada delas, a
+    forma do método E05; senão, é o id da variante, como no motor.
+    """
     referencia = variante["source_ref"]
+    possiveis = json.dumps(sorted(referencias)) if len(referencias) > 1 else variante["id"]
     return tuple(
         sorted(
             {
                 "familia_inventario": pacote["family_id"],
                 "variante_inventario": variante["id"],
-                "referencias_possiveis": variante["id"],
+                "referencias_possiveis": possiveis,
                 "papel": variante["role"],
                 "destino": variante["destination"],
                 "contexto": "unknown",
@@ -289,11 +297,13 @@ def _observacao(
     assinatura: str,
     pagina: PaginaGramatica,
     casamento: CasamentoGramatica,
+    referencias: Sequence[str] = (),
 ) -> ObservacaoSimbolo:
     """A caixa do casamento é visual, e a do motor é crua (R-E06.2.1-7).
 
     Há uma primitiva por caminho do símbolo: o âncora e os componentes (R-E06.3.2-3), cada um com a
     caixa do próprio caminho. Sem componentes, a primitiva leva a caixa do casamento, como o motor.
+    `referencias` são os ids do grupo de forma comum do casamento (`_formas_comuns`).
     """
     variante = casamento.variante
     caixa_crua = pymupdf.Rect(casamento.caixa) * page.derotation_matrix
@@ -313,8 +323,44 @@ def _observacao(
             for posicao, caixa in zip(posicoes, caixas, strict=True)
         ),
         template=variante["id"],
-        atributos=_atributos(casamento.pacote, variante),
+        atributos=_atributos(casamento.pacote, variante, referencias),
     )
+
+
+def _chave_de_forma(casamento: CasamentoGramatica) -> tuple[Any, ...]:
+    """A página é a da chamada; a gramática vai em JSON canônico, mais estrito que `==`."""
+    variante = casamento.variante
+    return (
+        casamento.caminho,
+        _caixa_arredondada(casamento.caixa),
+        json.dumps(variante["recognition"]["grammar"], sort_keys=True),
+        variante["class_code"],
+        casamento.pacote["family_id"],
+        variante["role"],
+        variante["destination"],
+    )
+
+
+def _formas_comuns(
+    casamentos: Iterable[CasamentoGramatica],
+) -> list[tuple[CasamentoGramatica, tuple[str, ...]]]:
+    """Grupos de forma comum (R-E06.3.3.2.2-2), na ordem do primeiro casamento de cada um.
+
+    O grupo junta o mesmo âncora, a mesma caixa arredondada, a mesma gramática e os mesmos
+    `class_code`, `family_id`, `role` e `destination`: nunca esconde ambiguidade de classe. Cada
+    grupo dá o representante, que é o de menor id, e os ids distintos do grupo em ordem: o mesmo
+    id duas vezes, de caixas que só o arredondamento iguala, continua grupo de um.
+    """
+    grupos: dict[tuple[Any, ...], list[CasamentoGramatica]] = {}
+    for casamento in casamentos:
+        grupos.setdefault(_chave_de_forma(casamento), []).append(casamento)
+    return [
+        (
+            min(grupo, key=lambda casamento: str(casamento.variante["id"])),
+            tuple(sorted({str(casamento.variante["id"]) for casamento in grupo})),
+        )
+        for grupo in grupos.values()
+    ]
 
 
 def _resultado(
@@ -381,9 +427,10 @@ def observar_pacotes_modelo(
     assinatura = metodo.assinatura()
     # A matriz de derrotação passa por float32: caixas distintas podem colapsar na mesma caixa
     # crua e no mesmo id. Fica a primeira na ordem do núcleo (o domínio recusa id repetido).
+    # Variantes de mesma forma e mesmo uso no mesmo desenho são uma observação só.
     por_id: dict[str, ObservacaoSimbolo] = {}
-    for casamento in casamentos:
-        observacao = _observacao(page, fonte, assinatura, pagina, casamento)
+    for casamento, referencias in _formas_comuns(casamentos):
+        observacao = _observacao(page, fonte, assinatura, pagina, casamento, referencias)
         por_id.setdefault(observacao.id, observacao)
     observacoes = tuple(por_id.values())
     estado = EstadoMetodoSimbolos.CONCLUIDO if observacoes else EstadoMetodoSimbolos.NAO_DETECCAO
