@@ -63,6 +63,8 @@ deles é 0 por construção.
 
 Com `--versao-extracao propostas-v1`, a ficha predita sai das propostas da interpretação (as
 pendentes entram com o campo em `pendentes`); o padrão é `projeto-promovido-v1`.
+`--simbolos-modelo` liga o runner de símbolos (perfil `vector-only`) antes da interpretação e só
+vale com `propostas-v1`; o gerador da ficha registra o perfil e a assinatura do runner.
 
 Os exemplos vistos são desenvolvimento/diagnóstico, inclusive os que já tenham
 sido chamados de reserva em relatórios históricos. As reservas sintéticas

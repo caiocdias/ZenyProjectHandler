@@ -4,7 +4,7 @@ Uso::
 
     python -m scripts.benchmark_ficha_poste PDF --referencia REF --saida DIR \
         [--native-only] [--runtime-directory DIR] \
-        [--versao-extracao projeto-promovido-v1|propostas-v1]
+        [--versao-extracao projeto-promovido-v1|propostas-v1] [--simbolos-modelo]
 
 Roda o analisador no PDF, monta a ficha predita, avalia contra a referência e grava
 ``ficha-predita.json`` e ``avaliacao.json`` em ``DIR``.
@@ -45,6 +45,7 @@ from zeny_project_handler.ports.analysis import MotorOcrPort
 VERSAO_EXTRACAO: Final = "projeto-promovido-v1"
 VERSAO_EXTRACAO_PROPOSTAS: Final = "propostas-v1"
 VERSOES_EXTRACAO: Final = (VERSAO_EXTRACAO, VERSAO_EXTRACAO_PROPOSTAS)
+PERFIL_SIMBOLOS: Final = "vector-only"
 
 
 def _json(valor: Any) -> Any:
@@ -74,7 +75,7 @@ def _atributos_de_origem(variante: Mapping[str, Any]) -> dict[UUID, dict[str, An
 def _gerador(
     variante: Mapping[str, Any], *, native_only: bool, versao_extracao: str = VERSAO_EXTRACAO
 ) -> dict[str, Any]:
-    return {
+    gerador: dict[str, Any] = {
         "versao_extracao": versao_extracao,
         "analisador_versao": _json(variante["analyzer"]["version"]),
         "analisador_assinatura": _json(variante["analyzer"]["signature"]),
@@ -82,6 +83,12 @@ def _gerador(
         "registro_assinatura": _json(variante["registry_signature"]),
         "native_only": native_only,
     }
+    if "symbol_configuration_signature" in variante:
+        gerador["simbolos_modelo"] = {
+            "perfil": PERFIL_SIMBOLOS,
+            "assinatura": _json(variante["symbol_configuration_signature"]),
+        }
+    return gerador
 
 
 def _poste(
@@ -244,10 +251,13 @@ def executar(
     native_only: bool,
     runtime_directory: Path,
     versao_extracao: str = VERSAO_EXTRACAO,
+    simbolos_modelo: bool = False,
 ) -> dict[str, Any]:
     """Roda o analisador, avalia contra a referência e grava ficha e avaliação em ``saida``."""
     if versao_extracao not in VERSOES_EXTRACAO:
         raise ValueError(f"versao_extracao desconhecida: {versao_extracao}")
+    if simbolos_modelo and versao_extracao == VERSAO_EXTRACAO:
+        raise ValueError(f"{VERSAO_EXTRACAO} não usa símbolos: use {VERSAO_EXTRACAO_PROPOSTAS}")
     pdf = pdf.resolve(strict=True)
     ficha_referencia = carregar_ficha(referencia)
     antes = _impressao(pdf)
@@ -256,7 +266,9 @@ def executar(
     ocr = _preparar_ocr(runtime_directory, native_only=native_only)
     saida.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(prefix="ficha-poste-", dir=saida) as temporario:
-        variante = run_variant(pdf, Path(temporario), ocr=ocr)
+        # A flag só é repassada quando ligada: a chamada padrão segue idêntica à anterior.
+        opcoes_variante = {"simbolos_modelo": True} if simbolos_modelo else {}
+        variante = run_variant(pdf, Path(temporario), ocr=ocr, **opcoes_variante)
     if versao_extracao == VERSAO_EXTRACAO_PROPOSTAS:
         # Importado aqui porque o módulo das propostas importa este (sem ciclo no topo).
         from scripts.ficha_predita_propostas import ficha_predita_propostas
@@ -283,13 +295,16 @@ def main(argumentos: list[str] | None = None) -> int:
     parser.add_argument("--runtime-directory", type=Path, default=Path("tmp/benchmark-runtime"))
     parser.add_argument("--native-only", action="store_true")
     parser.add_argument("--versao-extracao", choices=VERSOES_EXTRACAO, default=VERSAO_EXTRACAO)
+    parser.add_argument("--simbolos-modelo", action="store_true")
     opcoes = parser.parse_args(argumentos)
-    # A versão só é repassada quando difere do padrão: a chamada padrão segue idêntica à anterior.
-    extras = (
+    # Versão e flag só são repassadas quando diferem do padrão: a chamada padrão segue idêntica.
+    extras: dict[str, Any] = (
         {}
         if opcoes.versao_extracao == VERSAO_EXTRACAO
         else {"versao_extracao": opcoes.versao_extracao}
     )
+    if opcoes.simbolos_modelo:
+        extras["simbolos_modelo"] = True
     executar(
         opcoes.pdf,
         opcoes.referencia,
