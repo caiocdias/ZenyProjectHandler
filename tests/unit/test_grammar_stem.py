@@ -40,6 +40,7 @@ from zeny_project_handler.adapters.analysis.drawing_model.symbol_matcher import 
 from zeny_project_handler.adapters.analysis.pymupdf_drawing_model import pagina_para_gramaticas
 
 _VARIANTES: Final = [variante for variante, _ in CASOS_HASTE]
+_AZUL: Final = (0.0, 0.0, 1.0)
 _EPSILON: Final = 1e-3  # PyMuPDF devolve coordenadas em float32
 
 
@@ -277,3 +278,92 @@ def test_cada_semente_paga_do_orcamento() -> None:
 
     with pytest.raises(TetoGramaticasExcedido):
         casa_hastes(contexto, dict(CASOS_HASTE)[_VARIANTES[0]])
+
+
+def test_quatro_barras_decrescentes_nao_sao_forma_do_inventario() -> None:
+    """Fail-closed: nem aterramento (3 decrescentes) nem para-raios (4 alternadas)."""
+    pagina = pagina_desenhada(lambda p: desenhar_haste(p, (8.0, 6.0, 4.5, 3.0)))
+
+    assert _variantes(pagina) == []
+
+
+def test_quarta_barra_maior_que_a_terceira_nao_impede_o_aterramento() -> None:
+    pagina = pagina_desenhada(lambda p: desenhar_haste(p, (8.0, 5.5, 3.0, 6.0)))
+
+    assert _variantes(pagina) == ["cemig-eo-r3-s19-v001"]
+
+
+def test_x_com_vermelhos_quase_iguais_e_marca_de_retirada() -> None:
+    """A cor não decide nada: 1,0 e 0,996 de vermelho são a mesma cor canônica."""
+
+    def desenhar(p: pymupdf.Page) -> None:
+        desenho = desenhar_haste(p, DECRESCENTES)
+        mx, my = desenho.ponta[0], desenho.ponta[1] - LACUNA
+        p.draw_line((mx - 7.2, my - 7.2), (mx + 7.2, my + 7.2), color=(1.0, 0.0, 0.0))
+        p.draw_line((mx - 7.2, my + 7.2), (mx + 7.2, my - 7.2), color=(0.996, 0.0, 0.0))
+
+    assert _variantes(pagina_desenhada(desenhar)) == ["cemig-eo-r3-s19-v004"]
+
+
+def _haste_com_diagonais(diagonais: int) -> PaginaGramatica:
+    """Uma haste válida e `diagonais` traços paralelos a 45° que não se cruzam, na janela do X.
+
+    Azuis, fora das cores do legado: não são sementes nem barras, só candidatos a braço.
+    """
+    cx, cy = 150.0, 150.0
+    caminhos = [linha((cx, cy + 5.0), (cx, cy - 5.0))]
+    for i, comprimento in enumerate(DECRESCENTES):
+        y, meio = cy - 5.0 - i * LACUNA, comprimento / 2
+        caminhos.append(linha((cx - meio, y), (cx + meio, y)))
+    for i in range(diagonais):
+        d = -6.0 + 12.0 * i / max(diagonais - 1, 1)
+        caminhos.append(linha((cx - 5.0 + d, cy - 12.0), (cx + 5.0 + d, cy - 2.0), cor=_AZUL))
+    return pagina_gramatica(caminhos)
+
+
+def _gasto_das_hastes(pagina: PaginaGramatica, limite: int | None = None) -> int:
+    contexto = (
+        contexto_gramaticas(pagina)
+        if limite is None
+        else contexto_gramaticas(pagina, limite=limite)
+    )
+    antes = contexto.orcamento.gasto
+    casa_hastes(contexto, dict(CASOS_HASTE)[_VARIANTES[0]])
+    return contexto.orcamento.gasto - antes
+
+
+def test_pares_de_bracos_do_x_pagam_do_orcamento() -> None:
+    sem = _gasto_das_hastes(_haste_com_diagonais(0))
+    com = _gasto_das_hastes(_haste_com_diagonais(80))
+
+    assert com - sem >= 80 * 79 // 2
+    pagina = _haste_com_diagonais(80)
+    so_indices = contexto_gramaticas(pagina).orcamento.gasto
+    with pytest.raises(TetoGramaticasExcedido):
+        _gasto_das_hastes(pagina, limite=so_indices + 80 * 79 // 4)
+
+
+def test_deduplicacao_paga_as_comparacoes() -> None:
+    """Muitas leituras da mesma haste: cada comparação com uma leitura escolhida gasta 1."""
+    from zeny_project_handler.adapters.analysis.drawing_model.grammar_stem import (
+        Haste,
+        _deduplicar,
+    )
+    from zeny_project_handler.adapters.analysis.drawing_model.symbol_grammars import (
+        OrcamentoConsultas,
+        Segmento,
+    )
+
+    def leitura(i: int) -> Haste:
+        haste = Segmento((0.0, 0.0), (0.0, 10.0), 0)
+        barras = tuple(
+            Segmento((-1.0, 10.0 + j + i), (1.0, 10.0 + j + i), 10 + i) for j in (0, 1, 2)
+        )
+        return Haste(haste, barras, (0.0, 10.0), (0.0, 0.0), 2.0, (-1.0, 10.0, 1.0, 12.0))
+
+    orcamento = OrcamentoConsultas(10**9)
+    escolhidas = _deduplicar([leitura(i) for i in range(50)], orcamento)
+    assert len(escolhidas) == 1
+    assert orcamento.gasto >= 50
+    with pytest.raises(TetoGramaticasExcedido):
+        _deduplicar([leitura(i) for i in range(50)], OrcamentoConsultas(10))

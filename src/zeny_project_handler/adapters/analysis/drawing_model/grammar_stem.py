@@ -29,6 +29,7 @@ from zeny_project_handler.adapters.analysis.drawing_model.symbol_grammars import
     _MARGEM_PAGINA,
     ContextoGramatica,
     GradeEspacial,
+    OrcamentoConsultas,
     Segmento,
     _caixa_de_pontos,
 )
@@ -56,6 +57,7 @@ _ANGULO_BRACO_X: Final = (math.radians(25), math.radians(65))
 _MEIO_DO_BRACO: Final = (0.3, 0.7)
 _RAZAO_BRACOS: Final = 1.3
 _ABERTURA_X: Final = math.radians(45)
+_TOLERANCIA_COR: Final = 0.02
 
 
 @dataclass(frozen=True, slots=True)
@@ -192,19 +194,27 @@ def _janela(reta: _Reta, perfil: Perfil) -> Caixa:
     )
 
 
-def _afunila_ou_alterna(barras: Sequence[_Reta], razao: float) -> bool:
-    """Barras decrescentes (3 ou 4) ou exatamente 4 alternadas (longa, curta, longa, curta)."""
+def _decrescentes(barras: Sequence[_Reta], razao: float) -> bool:
+    return all(maior.comprimento > menor.comprimento * razao for maior, menor in pairwise(barras))
+
+
+def _alternadas(barras: Sequence[_Reta], razao: float) -> bool:
     comp = [b.comprimento for b in barras]
-    if len(comp) not in (3, 4):
-        return False
-    if all(maior > menor * razao for maior, menor in pairwise(comp)):
-        return True
     return (
         len(comp) == 4
         and comp[0] > comp[1] * razao
         and comp[2] > comp[1] * razao
         and comp[2] > comp[3] * razao
     )
+
+
+def _afunila_ou_alterna(barras: Sequence[_Reta], razao: float) -> bool:
+    """As formas do inventário: 3 decrescentes ou 4 alternadas (longa, curta, longa, curta).
+
+    Quatro decrescentes não é nenhuma delas e é recusada (fail-closed)."""
+    if len(barras) == 3:
+        return _decrescentes(barras, razao)
+    return _alternadas(barras, razao)
 
 
 def _assinatura(
@@ -230,17 +240,16 @@ def _assinatura(
 
 
 def _recortar(barras: list[_Reta], perfil: Perfil) -> list[_Reta]:
-    """Fica com as barras do símbolo: 4 alternadas, senão as 4 ou 3 decrescentes do começo."""
+    """Fica com as barras do símbolo: as 4 alternadas do começo, senão as 3 decrescentes.
+
+    Quatro decrescentes ficam inteiras, para a assinatura recusá-las: as 3 primeiras não são
+    um aterramento com um traço a mais."""
     razao = perfil.razao_afunilamento
-    if (
-        len(barras) >= 4
-        and _afunila_ou_alterna(barras[:4], razao)
-        and barras[2].comprimento > barras[1].comprimento
-    ):
-        return barras[:4]
-    for n in (4, 3):
-        if len(barras) >= n and _afunila_ou_alterna(barras[:n], razao):
-            return barras[:n]
+    quatro = barras[:4]
+    if len(quatro) == 4 and (_alternadas(quatro, razao) or _decrescentes(quatro, razao)):
+        return quatro
+    if len(barras) >= 3 and _decrescentes(barras[:3], razao):
+        return barras[:3]
     return barras
 
 
@@ -352,7 +361,7 @@ def hastes_candidatas(contexto: ContextoGramatica) -> tuple[Haste, ...]:
             barras = _recortar(_selecionar_barras(haste, lado, eixo, normal), perfil)
             if _assinatura(haste, barras, eixo, normal, perfil):
                 achados.append(_montar(haste, barras))
-    escolhidas = _deduplicar(achados)
+    escolhidas = _deduplicar(achados, contexto.orcamento)
     if not escolhidas:
         return ()
     contornos = _contornos(contexto)
@@ -387,17 +396,26 @@ def _montar(haste: _Reta, barras: Sequence[_Reta]) -> Haste:
     )
 
 
-def _deduplicar(achados: list[Haste]) -> tuple[Haste, ...]:
-    """Uma leitura por haste e por tipo (3 ou 4 barras), como `_deduplicate_matches`."""
+def _deduplicar(achados: list[Haste], orcamento: OrcamentoConsultas) -> tuple[Haste, ...]:
+    """Uma leitura por haste e por tipo (3 ou 4 barras), como `_deduplicate_matches`.
+
+    Só se comparam leituras que dividem um traço (índice por membro): cada leitura gasta 1, e
+    cada comparação com uma escolhida, mais 1.
+    """
     escolhidos: list[Haste] = []
+    por_membro: dict[Segmento, list[int]] = {}
     for achado in sorted(achados, key=lambda h: (-len(h.barras), h.ponta, h.base)):
         membros = {achado.haste, *achado.barras}
+        vizinhos = sorted({i for membro in membros for i in por_membro.get(membro, ())})
+        orcamento.gastar(1 + len(vizinhos))
         if any(
             (e.haste == achado.haste or len({e.haste, *e.barras} & membros) >= 2)
             and (len(e.barras) >= 4) == (len(achado.barras) >= 4)
-            for e in escolhidos
+            for e in (escolhidos[i] for i in vizinhos)
         ):
             continue
+        for membro in membros:
+            por_membro.setdefault(membro, []).append(len(escolhidos))
         escolhidos.append(achado)
     return tuple(escolhidos)
 
@@ -533,8 +551,18 @@ def _formam_x(primeiro: Segmento, segundo: Segmento, contexto: ContextoGramatica
         all(_MEIO_DO_BRACO[0] <= t <= _MEIO_DO_BRACO[1] for t in cruz)
         and max(c1, c2) <= min(c1, c2) * _RAZAO_BRACOS
         and _diferenca_angular(_angulo(primeiro), _angulo(segundo)) >= _ABERTURA_X
-        and caminhos[primeiro.caminho].estilo.cor == caminhos[segundo.caminho].estilo.cor
+        and _mesma_cor(caminhos[primeiro.caminho].estilo.cor, caminhos[segundo.caminho].estilo.cor)
     )
+
+
+def _mesma_cor(a: Cor | None, b: Cor | None) -> bool:
+    """Mesma cor canônica do legado; fora delas, canais a no máximo `_TOLERANCIA_COR`."""
+    canonica_a, canonica_b = _cor_canonica(a, None), _cor_canonica(b, None)
+    if canonica_a is not None or canonica_b is not None:
+        return canonica_a == canonica_b
+    if a is None or b is None:
+        return a is b
+    return all(abs(x - y) <= _TOLERANCIA_COR for x, y in zip(a, b, strict=True))
 
 
 def _tem_x(
@@ -559,6 +587,8 @@ def _tem_x(
         and longa * _BRACO_X[0] <= math.dist(s.a, s.b) <= longa * _BRACO_X[1]
         and _ANGULO_BRACO_X[0] <= _diferenca_angular(_angulo(s), eixo) <= _ANGULO_BRACO_X[1]
     ]
+    # Cada par examinado é uma consulta: muitas diagonais longas na janela pagam o produto.
+    contexto.orcamento.gastar(len(bracos) * (len(bracos) - 1) // 2)
     for i, primeiro in enumerate(bracos):
         for segundo in bracos[i + 1 :]:
             if _formam_x(primeiro, segundo, contexto):
