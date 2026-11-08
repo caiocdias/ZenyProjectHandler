@@ -126,7 +126,7 @@ Soma das tarefas: 3h00 (45 + 25 + 30 + 35 + 20 + 25), mais o laboratório (caixa
 
 - [ ] **Step 1: Escrever os testes**, com pacotes sintéticos em `tmp_path`:
   - `test_variante_so_do_modelo_fica_fora_do_dominio_no_motor` (R-5): variante E04 habilitada com `stem_bars` → `declarative-vector-packages` = `fora_do_dominio`, status `nao_avaliavel`; variante E07 habilitada `label_in_frame` continua `id_exato_sintetico`;
-  - no diff, numa página sintética com uma moldura positiva e uma haste positiva (fixture da Task 1): a haste não aparece em `ambos` nem em `so_*`, a moldura continua em `ambos`, e o `gasto.gramaticas` é maior que o da mesma página sem a variante `stem_bars`.
+  - no diff, numa página sintética com uma moldura positiva e uma haste positiva (fixture da Task 1): a haste não aparece em `ambos` nem em `so_*`, a moldura continua em `ambos`, e o `gasto.gramaticas` é maior que o da mesma página sem a variante `stem_bars`. `recursos()` é `@cache` por processo e lê os pacotes reais: o teste faz monkeypatch de `diff.recursos` com um `Recursos` montado dos pacotes em `tmp_path` e chama `recursos.cache_clear()` antes e depois (fixture), para não depender da ordem sob xdist.
 - [ ] **Step 2: Rodar** e ver falhar.
 - [ ] **Step 3: Implementar** R-5 na matriz e o diff como em Produces.
 - [ ] **Step 4: Rodar** os dois arquivos de teste, `tests/unit/test_diff_simbolos_nucleo_motor_ataque.py`, `tests/unit/test_curation_coverage_e16*.py`, ruff, format e mypy.
@@ -203,3 +203,10 @@ Sem código: o orquestrador roda, na branch da etapa com as Tasks 1–5 integrad
 
 - Suíte inteira por onda; testador de etapa (a Task 5 é de risco normal) sobre `MERGE_BASE..HEAD`; `osv-scanner` nos 7 locks; `check_test_integrity --base <MERGE_BASE>`; revisão final; `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO` (conferir a data do `relatorio-testes.txt`).
 - Handoff com: tabela do benchmark, leituras erradas, gasto, diff contra o congelado; "Decisões para o usuário" com R-5, R-6 (entrevista no fim do lote) e R-7 (escopo da fusão); os blocos "Para a E06.3.3" (tipo só do modelo, pictograma e componentes para as molduras de para-raios BT e transformador), "Para a E07" (fusão com o legado provada só em fixture sintética) e "Para a E09".
+
+## Revisão de arquitetura
+
+- **Veredito:** aprovado com notas, na rodada 1 (`revisor-arquitetura`, opus). Rodada 0: bloqueado, 4 Importantes (testes quebrados fora dos Files, dependência oculta da Task 2, gasto não medido, caminho da H-A fora da File Structure) e 7 Menores, todos corrigidos. Este plano parte de um rascunho revisado nas rodadas 0 e 1 da E06.3.2, antes da divisão.
+- **Modelo:** opus.
+- **Notas Menores da rodada 1:** N-1 aplicada (o teste do diff injeta `Recursos` e limpa o `@cache`); N-2 (Task 1 no teto de 45 min com a remoção do oráculo): se o laboratório entregar pouco teste reaproveitável, os negativos de glifo `E` e `≡` vão para a Task 5, com ruling.
+- **Decisão de arquitetura para o usuário (entrevista no fim do lote):** R-6.
