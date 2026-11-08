@@ -3,7 +3,8 @@
 A diagonal vem primeiro (laboratório da E06.3.3.1, H-2): cada `Segmento` de comprimento
 plausível é uma semente que consulta o índice dos quadriláteros fechados da página. O
 quadrilátero precisa ter a proporção do corpo do para-raios (lado maior/menor entre 2 e 4,5, como
-o legado), e a diagonal tem de cruzá-lo pelos lados longos, perto do centro, e passar além dele.
+o legado), e a diagonal, da cor canônica do retângulo, tem de cruzá-lo pelos lados longos, perto
+do centro, e passar além dele.
 Um retângulo com duas diagonais assim (TORRE_AT, moldura riscada) ou com texto no miolo (moldura
 de rótulo) não casa, nem um quadrilátero maior que o corpo de BT (célula de tabela). Ganchos
 nas pontas e a haste de ligação, que sai do corpo ou da borda da envolvente, são opcionais e
@@ -23,6 +24,7 @@ from typing import Any, Final
 from zeny_project_handler.adapters.analysis.drawing_model.grammar_marcas import (
     Contorno,
     MarcasDaPagina,
+    _mesma_cor,
     angulo,
     envolvente,
     marcas_do_contexto,
@@ -358,14 +360,18 @@ def retangulos_candidatos(
     maior_comprimento = max(q.maior for q in quadrilateros) * _COMPRIMENTO_DIAGONAL[1]
     achados: dict[int, dict[tuple[float, ...], Segmento]] = {}
     por_id = {id(q): q for q in quadrilateros}
+    caminhos = modelo.caminhos
     for semente in contexto.grade_segmentos.itens:
         comprimento = math.dist(semente.a, semente.b)
         if not menor_comprimento <= comprimento <= maior_comprimento:
             continue
         x0, x1 = sorted((semente.a[0], semente.b[0]))
         y0, y1 = sorted((semente.a[1], semente.b[1]))
+        cor = caminhos[semente.caminho].estilo.cor
         for quad in grade.consultar((x0, y0, x1, y1)):
-            if _cruza(quad, semente, perfil):
+            # A diagonal tem a cor canônica do retângulo, como no legado (R-E06.3.3.2.1-5): nas
+            # 16 folhas, os 23 candidatos têm a mesma; um traço de outra cor não é a diagonal.
+            if _cruza(quad, semente, perfil) and _mesma_cor(cor, caminhos[quad.caminho].estilo.cor):
                 achados.setdefault(id(quad), {}).setdefault(_chave(semente), semente)
     resultado: list[RetanguloDiagonal] = []
     for chave_quad, diagonais in achados.items():
