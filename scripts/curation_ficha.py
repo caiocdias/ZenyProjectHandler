@@ -44,12 +44,12 @@ denominadores (taxas recalculadas das somas). Recusa PDF sem referência, salvo 
 referência cujo SHA-256 difere do registrado em ``congelamento.json``. Sem ``--native-only``,
 confere o OCR português antes do primeiro PDF. Falha do analisador num PDF fica registrada como
 ``falha`` (não é zero) e o comando termina com código 1 depois de gravar o resumo.
-``--versao-extracao`` escolhe a fonte da ficha predita (``projeto-promovido-v1``, o padrão, ou
-``propostas-v1``) e fica em ``opcoes.versao_extracao``. ``--processos N`` mede os PDFs em até N
-processos (no máximo 61, o limite do Windows, e nunca mais que os PDFs com referência); o resumo
-JSON é igual ao serial, e o número de processos aparece só no ``.md``. A chave ``pendencia`` separa,
-nos 4 campos do poste, os acertos afirmados dos acertos de campo que a predição declara pendente;
-vãos e símbolos ficam sem essa separação.
+``--versao-extracao`` escolhe a fonte da ficha predita (``projeto-promovido-v1``, o padrão,
+``propostas-v1`` ou ``propostas-v2``) e fica em ``opcoes.versao_extracao``. ``--processos N``
+mede os PDFs em até N processos (no máximo 61, o limite do Windows, e nunca mais que os PDFs com
+referência); o resumo JSON é igual ao serial, e o número de processos aparece só no ``.md``. A
+chave ``pendencia`` separa, nos 4 campos do poste, os acertos afirmados dos acertos de campo que a
+predição declara pendente; vãos e símbolos ficam sem essa separação.
 
 ``amostra`` sorteia postes das referências (rodízio entre PDFs, semente fixa) e grava
 ``fichas/amostra-humana/amostra-vNNN/`` (``amostra.json``, ``amostra.md`` e um recorte ``NN.png``

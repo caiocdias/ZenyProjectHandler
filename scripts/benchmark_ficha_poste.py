@@ -4,7 +4,7 @@ Uso::
 
     python -m scripts.benchmark_ficha_poste PDF --referencia REF --saida DIR \
         [--native-only] [--runtime-directory DIR] \
-        [--versao-extracao projeto-promovido-v1|propostas-v1] [--simbolos-modelo]
+        [--versao-extracao projeto-promovido-v1|propostas-v1|propostas-v2] [--simbolos-modelo]
 
 Roda o analisador no PDF, monta a ficha predita, avalia contra a referência e grava
 ``ficha-predita.json`` e ``avaliacao.json`` em ``DIR``.
@@ -15,6 +15,8 @@ Fontes da ficha predita (``--versao-extracao``):
   ``Equipamento``, ``Cabo`` e ``detectar_vaos``); propostas pendentes não entram.
 - ``propostas-v1``: as propostas da interpretação (``scripts.ficha_predita_propostas``);
   propostas pendentes entram, com o campo em ``pendentes``.
+- ``propostas-v2``: como a v1, com estruturas pelo ``token_estrutura``, código de cabo sem espaço
+  depois de hífen e estai ligado ao poste de ``suporte_proposta_id``.
 
 A referência precisa ser do mesmo PDF (``pdf_sha256``); do contrário o comando é
 recusado antes de rodar o analisador. Os arquivos gravados não têm caminho absoluto nem o nome
@@ -44,7 +46,12 @@ from zeny_project_handler.ports.analysis import MotorOcrPort
 
 VERSAO_EXTRACAO: Final = "projeto-promovido-v1"
 VERSAO_EXTRACAO_PROPOSTAS: Final = "propostas-v1"
-VERSOES_EXTRACAO: Final = (VERSAO_EXTRACAO, VERSAO_EXTRACAO_PROPOSTAS)
+VERSAO_EXTRACAO_PROPOSTAS_V2: Final = "propostas-v2"
+VERSOES_EXTRACAO: Final = (
+    VERSAO_EXTRACAO,
+    VERSAO_EXTRACAO_PROPOSTAS,
+    VERSAO_EXTRACAO_PROPOSTAS_V2,
+)
 PERFIL_SIMBOLOS: Final = "vector-only"
 
 
@@ -269,11 +276,13 @@ def executar(
         # A flag só é repassada quando ligada: a chamada padrão segue idêntica à anterior.
         opcoes_variante = {"simbolos_modelo": True} if simbolos_modelo else {}
         variante = run_variant(pdf, Path(temporario), ocr=ocr, **opcoes_variante)
-    if versao_extracao == VERSAO_EXTRACAO_PROPOSTAS:
+    if versao_extracao in (VERSAO_EXTRACAO_PROPOSTAS, VERSAO_EXTRACAO_PROPOSTAS_V2):
         # Importado aqui porque o módulo das propostas importa este (sem ciclo no topo).
         from scripts.ficha_predita_propostas import ficha_predita_propostas
 
-        predita = ficha_predita_propostas(variante, antes[2], native_only=native_only)
+        predita = ficha_predita_propostas(
+            variante, antes[2], native_only=native_only, versao=versao_extracao
+        )
     else:
         predita = ficha_predita(variante, antes[2], native_only=native_only)
     erros = validar_ficha(predita)

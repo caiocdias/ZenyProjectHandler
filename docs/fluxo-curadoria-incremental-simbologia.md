@@ -804,11 +804,11 @@ versão livre, sem sobrescrever: `pdfs/ID/ficha/baseline-vNNN/` (ficha predita e
 Recusa PDF sem referência (salvo `--parcial`) e referência cujo SHA-256 difere do congelado. Sem
 `--native-only`, confere o OCR português antes do primeiro PDF. Falha do analisador num PDF fica
 registrada como falha, não como zero, e o comando termina com erro.
-`--versao-extracao {projeto-promovido-v1,propostas-v1}` escolhe a fonte da ficha predita (padrão
-`projeto-promovido-v1`) e `--processos N` mede os PDFs em N processos, com o mesmo resumo da
+`--versao-extracao {projeto-promovido-v1,propostas-v1,propostas-v2}` escolhe a fonte da ficha
+predita (padrão `projeto-promovido-v1`) e `--processos N` mede os PDFs em N processos, com o mesmo resumo da
 execução serial. `--simbolos-modelo` liga o runner de símbolos (perfil `vector-only`) antes da
-interpretação, como o servidor com a opção ligada; só vale com `propostas-v1`, e o resumo registra
-a opção e a assinatura do runner:
+interpretação, como o servidor com a opção ligada; só vale com `propostas-v1` e `propostas-v2`, e o resumo
+registra a opção e a assinatura do runner:
 
 ```bash
 .venv/Scripts/python.exe -m scripts.curation_ficha baseline --rodada RODADA
