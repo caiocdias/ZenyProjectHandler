@@ -338,7 +338,10 @@ def _posicao_rotulos(extracao: object) -> dict[str, tuple[float, float]]:
     """Canto superior esquerdo (y, x) da caixa de cada evidência da extração, por id."""
     posicoes: dict[str, tuple[float, float]] = {}
     for evidencia in getattr(extracao, "evidencias", ()):
-        caixa = _bbox(evidencia.geometria)
+        geometria = getattr(evidencia, "geometria", None)
+        if geometria is None or not geometria.pontos:
+            continue
+        caixa = _bbox(geometria)
         posicoes[str(evidencia.id)] = (caixa[1], caixa[0])
     return posicoes
 
@@ -367,17 +370,23 @@ def _vaos_v2(
         chave = (proposta.situacao_projeto, frozenset(distintos))
         grupos.setdefault(chave, []).append((proposta, distintos))
 
-    def ordem(item: tuple[PropostaElemento, list[UUID]]) -> tuple[int, float, float, str]:
+    def ordem(
+        item: tuple[PropostaElemento, list[UUID]],
+    ) -> tuple[int, float, float, str, float, str]:
         cabo = item[0]
         codigo = _codigo_cabo_v2(cabo.codigo_observado) or ""
+        anotado = _decimal_finito(_atributos(cabo).get("comprimento_m"))
+        comprimento = math.inf if anotado is None else float(anotado)
         posicao = posicoes.get(str(_atributos(cabo).get("evidencia_rotulo_id")))
         if posicao is None:
-            return (1, 0.0, 0.0, codigo)
-        return (0, posicao[0], posicao[1], codigo)
+            return (1, 0.0, 0.0, codigo, comprimento, str(cabo.id))
+        return (0, posicao[0], posicao[1], codigo, comprimento, str(cabo.id))
 
     vaos: list[dict[str, Any]] = []
     for membros in grupos.values():
         ordenados = sorted(membros, key=ordem)
+        if len(ordenados) > 1:  # ``de``/``para`` do composto não dependem dos ids das relações
+            ordenados = [(cabo, sorted(ids, key=str)) for cabo, ids in ordenados]
         candidatos = [_vao(cabo, ids, elementos) for cabo, ids in ordenados]
         codigos = dict.fromkeys(
             codigo
