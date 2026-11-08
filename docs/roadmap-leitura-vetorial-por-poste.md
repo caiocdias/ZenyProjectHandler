@@ -349,7 +349,7 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E06.3.3.1 | Para-raios BT | #concluida | E06.3.2.2 | gramática do retângulo com diagonal, com laboratório, PARA_RAIOS_BT acima do atual (que não casa nenhuma) |
 | E06.3.3.2.1 | Marcas: envolvente e X | #concluida | E06.3.3.1 | envolvente por subcaminho, X perto do símbolo e concordância de situação medida |
 | E06.3.3.2.2 | Transformador | #concluida | E06.3.3.2.1 | gramática do triângulo em círculo, com laboratório, TRANSFORMADOR acima do atual |
-| E07 | Ficha do poste | #pendente | E06.3.3.2.2, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
+| E07 | Ficha do poste | #em-andamento | E06.3.3.2.2, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
 | E08 | Conferência UTM | #pendente | E07 | transformação página → UTM, checagem de posição e vão, pendências |
 | E09 | Troca do analisador e remoção do legado | #pendente | E08, E16 | analisador novo como padrão; detectores e, se provado, OCR removidos |
 
@@ -2517,7 +2517,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
   - Retomada: a E07 depende da E06.3 e da E15. A E15 está pronta para integrar no fim do lote.
 ---
 
-## E07 — Ficha do poste — #pendente
+## E07 — Ficha do poste — #em-andamento
 
 **Objetivo:** associar texto, símbolos e vãos ao poste certo e expressar a ficha nas propostas e relações atuais.
 
