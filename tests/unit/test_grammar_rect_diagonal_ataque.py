@@ -368,22 +368,24 @@ def test_caracterizacao_diagonal_de_cor_diferente_do_retangulo_ainda_casa() -> N
     assert _variantes(pagina_desenhada(desenhar)) == [_V001]
 
 
-def test_caracterizacao_diagonal_tracada_duas_vezes_com_deslocamento_nao_casa() -> None:
-    """Dois tracos quase coincidentes contam como duas diagonais (TORRE_AT) e recusam o desenho.
+_LEDGER: Final = "ledger E06.3.3.1 Task 3, para a E06.3.3.2"
 
-    Possivel falso negativo com entidades duplicadas de CAD; documentado, nao aprovado.
-    """
+
+@pytest.mark.xfail(strict=True, reason=f"diagonal quase duplicada recusa o simbolo ({_LEDGER})")
+def test_diagonal_tracada_duas_vezes_com_deslocamento_ainda_reconhece_o_simbolo() -> None:
+    """Dois tracos quase coincidentes (entidade duplicada de CAD) sao um simbolo so."""
     a, b = _diagonal_padrao()
 
     def desenhar(pagina: pymupdf.Page) -> None:
         desenhar_retangulo(pagina)
         pagina.draw_line((a[0] + 0.3, a[1]), (b[0] + 0.3, b[1]), color=PRETO, width=0.5)
 
-    assert _variantes(pagina_desenhada(desenhar)) == []
+    assert _variantes(pagina_desenhada(desenhar)) == [_V001]
 
 
-def test_caracterizacao_contorno_duplicado_com_deslocamento_gera_dois_casamentos() -> None:
-    """Dois retangulos quase coincidentes viram dois casamentos da mesma variante (um simbolo)."""
+@pytest.mark.xfail(strict=True, reason=f"contorno quase duplicado gera dois casamentos ({_LEDGER})")
+def test_contorno_duplicado_com_deslocamento_gera_um_casamento_so() -> None:
+    """Dois retangulos quase coincidentes sao um simbolo so."""
     cx, cy = CENTRO
 
     def desenhar(pagina: pymupdf.Page) -> None:
@@ -391,7 +393,26 @@ def test_caracterizacao_contorno_duplicado_com_deslocamento_gera_dois_casamentos
         contorno = pymupdf.Rect(cx - 1.8, cy - 4.3, cx + 1.8, cy + 4.3)  # type: ignore[no-untyped-call]
         pagina.draw_rect(contorno, color=PRETO, width=0.5)
 
-    assert _variantes(pagina_desenhada(desenhar)) == [_V001, _V001]
+    assert _variantes(pagina_desenhada(desenhar)) == [_V001]
+
+
+@pytest.mark.xfail(strict=True, reason=f"ponto cego do X curto ({_LEDGER})")
+def test_x_proprio_de_bracos_curtos_nao_e_segunda_diagonal() -> None:
+    """Bracos de 1,2 vezes o lado maior cruzam o retangulo como diagonais, mas sao o X da v004."""
+    cx, cy = CENTRO
+    meio = 1.2 * CORPO[0] / 2 / math.sqrt(2)
+
+    def desenhar(pagina: pymupdf.Page) -> None:
+        desenhar_retangulo(pagina)
+        for sinal in (1, -1):
+            pagina.draw_line(
+                (cx - meio, cy - sinal * meio),
+                (cx + meio, cy + sinal * meio),
+                color=(1.0, 0.0, 0.0),
+                width=0.5,
+            )
+
+    assert _variantes(pagina_desenhada(desenhar)) == [_V004]
 
 
 # --- desconhecidos, orcamento, pureza e convivencia com a haste ------------------------------
@@ -431,21 +452,26 @@ def test_pagina_com_retangulo_paga_pelas_consultas() -> None:
     assert contexto.orcamento.gasto > antes
 
 
-def test_gasto_cresce_com_o_numero_de_sementes_na_pagina_com_retangulo() -> None:
-    """Cada segmento de comprimento plausivel e uma semente: o gasto tem de acompanhar."""
+def test_gasto_de_retangulos_candidatos_cresce_com_as_sementes_nas_celulas_do_retangulo() -> None:
+    """Sementes (tracos de comprimento plausivel) junto ao retangulo pagam consultas a grade.
+
+    Mede so o gasto da chamada: orcamento antes e depois de `retangulos_candidatos`.
+    """
+    cx, cy = CENTRO
 
     def gasto_com(n: int) -> int:
         def desenhar(pagina: pymupdf.Page) -> None:
             desenhar_retangulo(pagina)
             for i in range(n):
-                x = 10 + 0.5 * i
-                pagina.draw_line((x, 10), (x + 3, 20), color=PRETO, width=0.5)
+                x = cx + 2.5 + 0.01 * i
+                pagina.draw_line((x, cy - 2.5), (x, cy + 2.5), color=PRETO, width=0.5)
 
         contexto = contexto_gramaticas(pagina_desenhada(desenhar))
+        antes = contexto.orcamento.gasto
         retangulos_candidatos(contexto)
-        return contexto.orcamento.gasto
+        return contexto.orcamento.gasto - antes
 
-    assert gasto_com(200) > gasto_com(0)
+    assert gasto_com(100) > gasto_com(0)
 
 
 def test_modulo_da_gramatica_nao_importa_pymupdf() -> None:
