@@ -30,7 +30,9 @@ from tests.fixtures.declarative_symbols.corpus import (
     draw_terminal_disc,
     negative_kinds,
 )
+from tests.fixtures.symbol_grammars.stem_bars import CASOS_HASTE
 
+from zeny_project_handler.adapters.analysis.declarative_symbols import GRAMATICAS_SO_MODELO
 from zeny_project_handler.domain.enums import EstadoMetodoSimbolos
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -77,6 +79,7 @@ _FAMILY_COUNTS = {
 
 _ENABLED_IDS = tuple(case.variant_id for case in ENABLED_CASES)
 _CASE_BY_ID = {case.variant_id: case for case in ENABLED_CASES}
+_HASTE_IDS = tuple(variant_id for variant_id, _ in CASOS_HASTE)
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -164,11 +167,33 @@ def test_enabled_status_is_distinct_from_registered_coverage() -> None:
     pending = {v["id"] for v in all_variants if v["recognition"]["status"] == "pending"}
     assert enabled
     assert pending
-    assert enabled == set(_ENABLED_IDS), "new enabled grammar needs its own positive/negative case"
+    assert enabled == set(_ENABLED_IDS) | set(_HASTE_IDS), (
+        "new enabled grammar needs its own positive/negative case"
+    )
+    assert len(enabled) == 30
+    assert len(pending) == 393
+    by_id = {v["id"]: v for v in all_variants}
+    so_modelo = {
+        i for i in enabled if by_id[i]["recognition"]["grammar"]["kind"] in GRAMATICAS_SO_MODELO
+    }
+    assert so_modelo == set(_HASTE_IDS), (
+        "only the model-only stem_bars variants skip the legacy cases"
+    )
     assert enabled.isdisjoint(pending)
     assert len(enabled | pending) == 423
     assert all(v["recognition"].get("grammar") for v in all_variants if v["id"] in enabled)
     assert all(not v["recognition"].get("grammar") for v in all_variants if v["id"] in pending)
+
+
+def test_gramatica_real_das_hastes_igual_a_casos_haste() -> None:
+    variants = {v["id"]: v for package in _packages() for v in package["variants"]}
+    assert len(CASOS_HASTE) == 8
+    for variant_id, gramatica in CASOS_HASTE:
+        recognition = variants[variant_id]["recognition"]
+        assert recognition["status"] == "enabled", variant_id
+        assert recognition["grammar"] == gramatica, variant_id
+        assert recognition["negative_examples"], variant_id
+        assert "reason" not in recognition, variant_id
 
 
 def test_package_json_files_are_importable_resources() -> None:
@@ -382,7 +407,7 @@ def test_pending_only_families_are_out_of_domain_even_when_a_frame_matches(
         for package in _packages()
         if all(v["recognition"]["status"] == "pending" for v in package["variants"])
     ]
-    assert len(pending_only) == 21
+    assert len(pending_only) == 19
     for package in pending_only:
         assert perfil_pacotes((package,)).classes_suportadas == ()
         result = _observe(path, (package,))
