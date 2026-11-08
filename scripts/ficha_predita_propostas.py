@@ -1,8 +1,9 @@
 """Ficha predita do benchmark por poste a partir das propostas da interpretação.
 
-Fontes: ``propostas-v1`` (padrão) e ``propostas-v2``. A v2 difere só em três regras: estruturas
+Fontes: ``propostas-v1`` (padrão) e ``propostas-v2``. A v2 difere só em quatro regras: estruturas
 pelo ``token_estrutura`` (queda para ``codigo_observado``), código de cabo sem espaço depois de
-hífen e estai sem relação ``INSTALADO_EM`` no poste de ``suporte_proposta_id``.
+hífen, estai sem relação ``INSTALADO_EM`` no poste de ``suporte_proposta_id`` e vão composto dos
+cabos da mesma situação no mesmo par de postes.
 
 Lê ``variante["semantic"]`` (``PropostaElemento`` e ``PropostaRelacao`` depois da promoção
 automática), não o projeto promovido. Uma proposta é presente em ``PROPOSTA``, ``CONFIRMADA`` ou
@@ -333,6 +334,77 @@ def _vaos(
     return vaos, sem_vao
 
 
+def _posicao_rotulos(extracao: object) -> dict[str, tuple[float, float]]:
+    """Canto superior esquerdo (y, x) da caixa de cada evidência da extração, por id."""
+    posicoes: dict[str, tuple[float, float]] = {}
+    for evidencia in getattr(extracao, "evidencias", ()):
+        caixa = _bbox(evidencia.geometria)
+        posicoes[str(evidencia.id)] = (caixa[1], caixa[0])
+    return posicoes
+
+
+def _vaos_v2(
+    elementos: Mapping[UUID, PropostaElemento],
+    ligacoes: Ligacoes,
+    posicoes: Mapping[str, tuple[float, float]],
+) -> tuple[list[dict[str, Any]], int]:
+    """Vãos da v2: cabos da mesma situação e do mesmo par de postes viram um vão composto.
+
+    O ``cabo`` é a união dos códigos distintos, de cima para baixo pelo rótulo do cabo (menor y,
+    depois menor x, depois o código); cabo sem rótulo conhecido vem depois, por código. O
+    comprimento vem do primeiro cabo dessa ordem com comprimento anotado, senão do primeiro com
+    comprimento.
+    """
+    grupos: dict[tuple[object, frozenset[UUID]], list[tuple[PropostaElemento, list[UUID]]]] = {}
+    sem_vao = 0
+    for proposta in elementos.values():
+        if proposta.categoria is not CategoriaElemento.CABO:
+            continue
+        distintos = list(dict.fromkeys(ligacoes.get(proposta.id, ())))
+        if len(distintos) != 2:
+            sem_vao += 1
+            continue
+        chave = (proposta.situacao_projeto, frozenset(distintos))
+        grupos.setdefault(chave, []).append((proposta, distintos))
+
+    def ordem(item: tuple[PropostaElemento, list[UUID]]) -> tuple[int, float, float, str]:
+        cabo = item[0]
+        codigo = _codigo_cabo_v2(cabo.codigo_observado) or ""
+        posicao = posicoes.get(str(_atributos(cabo).get("evidencia_rotulo_id")))
+        if posicao is None:
+            return (1, 0.0, 0.0, codigo)
+        return (0, posicao[0], posicao[1], codigo)
+
+    vaos: list[dict[str, Any]] = []
+    for membros in grupos.values():
+        ordenados = sorted(membros, key=ordem)
+        candidatos = [_vao(cabo, ids, elementos) for cabo, ids in ordenados]
+        codigos = dict.fromkeys(
+            codigo
+            for cabo, _ in ordenados
+            if (codigo := _codigo_cabo_v2(cabo.codigo_observado)) is not None
+        )
+        escolhido = next(
+            (
+                vao
+                for vao in candidatos
+                if vao["atributos_extras"]["origem_comprimento"]
+                == OrigemComprimentoVao.ANOTACAO_DESENHO.value
+            ),
+            next((vao for vao in candidatos if vao["comprimento_m"] is not None), candidatos[0]),
+        )
+        vaos.append(
+            {
+                **candidatos[0],
+                "comprimento_m": escolhido["comprimento_m"],
+                "cabo": " / ".join(codigos) or None,
+                "pendentes": sorted({p for vao in candidatos for p in vao["pendentes"]}),
+                "atributos_extras": escolhido["atributos_extras"],
+            }
+        )
+    return vaos, sem_vao
+
+
 def ficha_predita_propostas(
     variante: Mapping[str, Any],
     pdf_sha256: str,
@@ -380,10 +452,13 @@ def ficha_predita_propostas(
     if v2:
         instalados = _com_estai_pelo_suporte(elementos, postes, relacoes, instalados)
     contagens = _anexar_simbolos(elementos, postes, instalados, pendencias)
-    vaos, cabos_sem_vao = _vaos(elementos, _ligacoes(relacoes, "CONECTA", postes))
+    conectados = _ligacoes(relacoes, "CONECTA", postes)
     if v2:
-        for vao in vaos:
-            vao["cabo"] = _codigo_cabo_v2(vao["cabo"])
+        vaos, cabos_sem_vao = _vaos_v2(
+            elementos, conectados, _posicao_rotulos(variante.get("extraction"))
+        )
+    else:
+        vaos, cabos_sem_vao = _vaos(elementos, conectados)
     for poste_id, poste in postes.items():
         poste["pendentes"] = sorted(pendencias[poste_id])
     # Estas chaves só aparecem quando ocorrem, para a raiz da ficha sem ocorrência seguir enxuta.
