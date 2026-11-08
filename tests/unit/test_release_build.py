@@ -5,6 +5,7 @@ import json
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -162,14 +163,15 @@ def test_build_recusa_arvore_suja_antes_de_gastar_build(
     assert "BUILD DE RELEASE: REPROVADO" in capsys.readouterr().out
 
 
-def test_build_reprova_se_o_head_muda_durante_o_build(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    shas = iter(["a" * 40, "b" * 40])
+def _prepara_build(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, commits: object
+) -> tuple[Path, Path]:
+    """Isola build_release em tmp_path; devolve (output_root, sentinela do destino)."""
     version = "0.6.0"
     monkeypatch.setattr(build_release, "ROOT", tmp_path)
     monkeypatch.setattr(build_release, "_validate_version", lambda _version: None)
-    monkeypatch.setattr(build_release, "_commit_de_origem", lambda root=tmp_path: next(shas))
+    monkeypatch.setattr(build_release, "_garantir_pacote_do_checkout", lambda: None)
+    monkeypatch.setattr(build_release, "_commit_de_origem", commits)
     monkeypatch.setattr(build_release, "_fatos_do_produto", lambda root=tmp_path: FATOS)
     monkeypatch.setattr(build_release, "_reset_directory", lambda path: None)
     monkeypatch.setattr(build_release, "_run", lambda *command: None)
@@ -188,11 +190,108 @@ def test_build_reprova_se_o_head_muda_durante_o_build(
     sentinela = saida / version / "sentinela.txt"
     sentinela.parent.mkdir(parents=True)
     sentinela.write_text("fica", encoding="utf-8")
+    return saida, sentinela
+
+
+def _executa_build(saida: Path) -> None:
+    build_release.build_release("0.6.0", output_root=saida, image_repository="zeny")
+
+
+def test_build_reprova_se_o_head_muda_durante_o_build(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    shas = iter(["a" * 40, "b" * 40])
+    saida, sentinela = _prepara_build(tmp_path, monkeypatch, lambda root=tmp_path: next(shas))
 
     with pytest.raises(ReleaseBuildError, match="mudou durante o build"):
-        build_release.build_release(version, output_root=saida, image_repository="zeny")
+        _executa_build(saida)
 
     assert sentinela.read_text(encoding="utf-8") == "fica"
+
+
+def test_build_reprova_se_a_arvore_suja_na_segunda_conferencia(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chamadas: list[int] = []
+
+    def commit(root: Path = tmp_path) -> str:
+        chamadas.append(1)
+        if len(chamadas) > 1:
+            raise ReleaseBuildError("árvore suja")
+        return "a" * 40
+
+    saida, sentinela = _prepara_build(tmp_path, monkeypatch, commit)
+
+    with pytest.raises(ReleaseBuildError, match="árvore suja"):
+        _executa_build(saida)
+
+    assert sentinela.read_text(encoding="utf-8") == "fica"
+
+
+def test_troca_do_destino_restaura_o_anterior_se_o_move_falha(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    saida, sentinela = _prepara_build(tmp_path, monkeypatch, lambda root=tmp_path: "a" * 40)
+
+    def move_falha(origem: str, destino: str) -> None:
+        raise OSError("disco cheio")
+
+    monkeypatch.setattr(shutil, "move", move_falha)
+
+    with pytest.raises(ReleaseBuildError):
+        _executa_build(saida)
+
+    assert sentinela.read_text(encoding="utf-8") == "fica"
+    assert not (saida / "0.6.0.anterior").exists()
+
+
+def test_troca_do_destino_com_sucesso_nao_deixa_anterior(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    saida, sentinela = _prepara_build(tmp_path, monkeypatch, lambda root=tmp_path: "a" * 40)
+    (saida / "0.6.0.anterior").mkdir()
+
+    _executa_build(saida)
+
+    assert not (saida / "0.6.0.anterior").exists()
+    assert not sentinela.exists()
+    assert (saida / "0.6.0" / "release-manifest.json").is_file()
+
+
+def test_build_recusa_pacote_fora_do_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def nao_deve_rodar(*args: object, **kwargs: object) -> None:
+        pytest.fail("o build não pode começar com o pacote fora do checkout")
+
+    monkeypatch.setattr(build_release, "ROOT", tmp_path)
+    monkeypatch.setattr(build_release, "_validate_version", lambda _version: None)
+    monkeypatch.setattr(build_release, "_reset_directory", nao_deve_rodar)
+    monkeypatch.setattr(sys, "argv", ["build_release.py", "--version", "0.6.0"])
+
+    with pytest.raises(ReleaseBuildError, match="fora do checkout"):
+        _executa_build(tmp_path / "saida")
+    assert build_release.main() == 1
+    assert "fora do checkout" in capsys.readouterr().out
+
+
+def test_notas_nao_trazem_afirmacoes_sem_prova(tmp_path: Path) -> None:
+    notes = _notas(tmp_path)
+    assert "a leitura de símbolos é a mesma" not in notes
+    assert "o método novo não é executado" in notes
+    assert "sem vulnerabilidade corrigível conhecida" not in notes
+    assert "não têm vulnerabilidade conhecida na varredura desta release" in notes
+
+
+def test_titulo_das_mudancas_usa_a_versao_anterior(tmp_path: Path) -> None:
+    assert f"O que mudou desde a {build_release.VERSAO_ANTERIOR}" in _notas(tmp_path)
+
+
+def test_versao_anterior_difere_da_versao_do_produto() -> None:
+    declarada = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"][
+        "version"
+    ]
+    assert declarada != build_release.VERSAO_ANTERIOR
 
 
 def test_pyinstaller_build_environment_excludes_external_dll_and_qt_paths() -> None:
