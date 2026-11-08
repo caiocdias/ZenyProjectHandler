@@ -17,6 +17,10 @@ from zeny_project_handler.adapters.analysis.drawing_model.grammar_disc import (
     discos_candidatos,
     pontas_terminais,
 )
+from zeny_project_handler.adapters.analysis.drawing_model.grammar_estai import (
+    casa_estai,
+    estai_candidatos,
+)
 from zeny_project_handler.adapters.analysis.drawing_model.grammar_frames import casa_moldura
 from zeny_project_handler.adapters.analysis.drawing_model.grammar_marcas import MarcasDaPagina
 from zeny_project_handler.adapters.analysis.drawing_model.grammar_rect_diagonal import (
@@ -45,6 +49,7 @@ _DISCO_TERMINAL: Final = "terminal_disc"
 _HASTE_COM_BARRAS: Final = "stem_bars"
 _RETANGULO_DIAGONAL: Final = "rect_diagonal"
 _TRIANGULO_DIVIDIDO: Final = "split_triangle"
+_HASTE_COM_GARFO: Final = "forked_stem"
 _MOLDURAS: Final = frozenset(
     {
         "label_in_frame",
@@ -140,6 +145,10 @@ def _casar_no_contexto(
         if _tem_tipo(variantes, _TRIANGULO_DIVIDIDO)
         else ()
     )
+    # Os estais também: cada candidato é classificado uma vez (R-E06.3.4-5).
+    estais = (
+        estai_candidatos(contexto, marcas=marcas) if _tem_tipo(variantes, _HASTE_COM_GARFO) else ()
+    )
     casamentos: list[CasamentoGramatica] = []
     vistos: set[tuple[str, Caixa]] = set()
     for pacote, variante in variantes:
@@ -156,6 +165,8 @@ def _casar_no_contexto(
             achados = casa_retangulos_diagonal(contexto, gramatica, candidatos=retangulos)
         elif tipo == _TRIANGULO_DIVIDIDO:
             achados = casa_triangulos(contexto, gramatica, candidatos=triangulos)
+        elif tipo == _HASTE_COM_GARFO:
+            achados = casa_estai(contexto, gramatica, candidatos=estais)
         elif tipo in _MOLDURAS:
             achados = _achados_em_molduras(contexto, gramatica)
         else:
