@@ -187,6 +187,7 @@ def _bloco_criterio(
     fn = Counter(ref["classe"] for i, ref in enumerate(referencias) if i not in casadas_referencia)
     fp: Counter[str] = Counter()
     fora_das_regioes = perto_de_poste_pendente = 0
+    fora_do_fp = set(casadas_predicao)
     for j, predicao in enumerate(predicoes):
         if j in casadas_predicao:
             continue
@@ -194,8 +195,10 @@ def _bloco_criterio(
         pagina = predicao["pagina"]
         if regioes is not None and not _no_pagina(centro, pagina, regioes, 0.0):
             fora_das_regioes += 1
+            fora_do_fp.add(j)
         elif _no_pagina(centro, pagina, pendentes, RAIO_POSTE_PENDENTE):
             perto_de_poste_pendente += 1
+            fora_do_fp.add(j)
         else:
             fp[predicao["classe"]] += 1
     por_classe = _por_classe(tp, fp, fn)
@@ -206,7 +209,7 @@ def _bloco_criterio(
         "fora_das_regioes": fora_das_regioes,
         "perto_de_poste_pendente": perto_de_poste_pendente,
         "leituras_erradas": _bloco_leituras_erradas(
-            leituras_erradas(referencias, predicoes, casadas_predicao, TOLERANCIA_CENTRO)
+            leituras_erradas(referencias, predicoes, fora_do_fp, TOLERANCIA_CENTRO)
         ),
     }
 
