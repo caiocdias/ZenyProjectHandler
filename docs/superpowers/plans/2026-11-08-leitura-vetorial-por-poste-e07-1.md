@@ -55,7 +55,7 @@ Ondas: {1, 2} em paralelo (arquivos disjuntos), depois {3}, depois {4}. As Tasks
 
 **Interfaces:** Produces: `tests/fixtures/golden_padrao_e07.json`, que as E07.2 e E07.3 usam para provar D18. Consumes: `ExecutarPipelineInterpretacao`, `InterpretadorRegrasExplicitas`, `carregar_registro_regras_inicial`, a fixture e helpers de `tests/integration/test_interpretation_pipeline.py` como modelo.
 
-- [ ] **Step 1: Caso sintético determinístico.** Em `test_golden_padrao_e07.py`, monte um projeto próprio e uma execução de extração com ids `uuid5` de constantes e relógio fixo (`interpretation_context` usa `uuid4`, via `complete_project`, e não serve; siga `_runner` de `test_interpretation_pipeline.py` e a forma das evidências de `_request` de `test_rule_based_interpreter.py`). O caso traz, no mínimo: dois postes com P distintos (`P1`, `P2`), com coordenada e nomenclatura, ligados por cabo com traçado e comprimento (dois `CONECTA`); duas leituras de poste com o mesmo identificador `P3` (duplicata que hoje sobrevive); uma estrutura equidistante de dois postes (empate que devolve nenhum); um cabo sem traçado único (`associacao_pendente`); estrutura MT com qualificador; estrutura BT; equipamento. Execute `executar(project.id, extraction_id)` sem `simbolos` nem `symbol_configuration_signature`.
+- [ ] **Step 1: Caso sintético determinístico.** Em `test_golden_padrao_e07.py`, monte um projeto próprio e uma execução de extração com ids `uuid5` de constantes e relógio fixo (`interpretation_context` usa `uuid4`, via `complete_project`, e não serve; siga `_runner` de `test_interpretation_pipeline.py` e a forma das evidências de `_request` de `test_rule_based_interpreter.py`). O caso traz, no mínimo: dois postes com P distintos (`P1`, `P2`), com coordenada e nomenclatura, ligados por cabo com traçado e comprimento (dois `CONECTA`); duas leituras de poste com o mesmo identificador `P3`, a até 0,10 uma da outra e com código ou catálogo diferentes o bastante para não serem fundidas pela deduplicação (duplicata que hoje sobrevive); uma estrutura com rótulo `P3` equidistante, com diferença de até 0,004, das duas leituras de `P3` (empate que devolve nenhum); um cabo sem traçado único (`associacao_pendente`); estrutura MT com qualificador; estrutura BT; equipamento. Execute `executar(project.id, extraction_id)` sem `simbolos` nem `symbol_configuration_signature`.
 
 - [ ] **Step 2: Serialização.** Função `_serializar(resultado) -> dict`: `execucao.id`, `execucao.metodo`, `execucao.versao_metodo`, `execucao.parametros` e, ordenados por id, **todos os campos** de cada `PropostaElemento` e `PropostaRelacao` do resultado, inclusive `situacao_projeto`, `tipo_catalogo_sugerido_id`, `confianca`, `justificativa` e `evidencia_ids`. A geometria sai como tipo, `pagina_id` e a lista ordenada de pontos, sem reduzir polilinha a caixa. Valores não JSON viram `str`. O dicionário passa por `json.loads(json.dumps(...))` antes de comparar, porque tupla não é igual a lista.
 
@@ -78,7 +78,7 @@ def test_golden_e_da_opcao_desligada(...) -> None:
 
 Rode: `.venv/Scripts/python.exe -m pytest tests/integration/test_golden_padrao_e07.py` → FAIL (arquivo ausente).
 
-- [ ] **Step 4: Gere o golden uma vez**, no estado atual de `src/`, gravando `_serializar(...)` em `tests/fixtures/golden_padrao_e07.json` com `json.dumps(..., ensure_ascii=False, indent=2, sort_keys=True)`. Confira a mão que o arquivo traz as 5 categorias, dois `CONECTA` e as duas leituras de `P3`.
+- [ ] **Step 4: Gere o golden uma vez**, no estado atual de `src/`, gravando `_serializar(...)` em `tests/fixtures/golden_padrao_e07.json` com `json.dumps(..., ensure_ascii=False, indent=2, sort_keys=True)`. Confira a mão que o arquivo traz as 5 categorias, dois `CONECTA`, as duas leituras de `P3`, a estrutura do empate sem `INSTALADA_EM` e o cabo com `associacao_pendente` sem relação.
 
 - [ ] **Step 5: Rode duas vezes** o mesmo comando, em processos diferentes → PASS as duas (determinismo).
 
@@ -101,6 +101,7 @@ Rode: `.venv/Scripts/python.exe -m pytest tests/integration/test_golden_padrao_e
   - `executar(..., simbolos_modelo: bool = False)` em `benchmark_ficha_poste.py`, e `baseline(..., simbolos_modelo: bool = False)` em `curation_ficha.py`, com a flag de CLI `--simbolos-modelo`.
   - `run_variant` devolve `"symbol_configuration_signature"` na variante só quando ligada. `_gerador(variante, ...)` deriva dela, sem parâmetro novo: com a chave na variante, acrescenta `"simbolos_modelo": {"perfil": "vector-only", "assinatura": <valor>}`; sem a chave, o `gerador` não muda. Assim, as duas fontes registram o runner pela mesma chamada que já fazem.
   - O `opcoes` do resumo do baseline ganha `"simbolos_modelo": true` só com a flag, e a flag é repassada a `baseline` e `executar` só quando ligada (como a versão já é em `main`), para não mudar os fakes de assinatura estrita dos testes.
+  - O repasse condicional vale também para `run_variant`: só recebe `simbolos_modelo` quando ligada, para não quebrar o espião de assinatura estrita em `tests/unit/test_benchmark_ficha_poste_adversarial.py:955`.
   - `baseline` e `executar` recusam `simbolos_modelo=True` com `versao_extracao` `projeto-promovido-v1`, com `ValueError` e mensagem dizendo que essa fonte não usa símbolos; a combinação não tem medida útil.
 
 - [ ] **Step 1: Testes falhando** em `tests/unit/test_benchmark_ficha_runner_e07.py`:
@@ -129,7 +130,7 @@ Rode: `.venv/Scripts/python.exe -m pytest tests/integration/test_golden_padrao_e
 **Estimativa:** 35 min · **Depende de:** 2 (mesmo arquivo) · **Risco:** alto
 
 **Files:**
-- Modify: `scripts/ficha_predita_propostas.py`, `scripts/benchmark_ficha_poste.py` (só `VERSOES_EXTRACAO`, a constante `VERSAO_EXTRACAO_PROPOSTAS_V2 = "propostas-v2"` e a seleção da fonte em `executar`), `docs/fluxo-curadoria-incremental-simbologia.md` e `examples/README.md` (listam as fontes)
+- Modify: `scripts/ficha_predita_propostas.py`, `scripts/benchmark_ficha_poste.py` (`VERSOES_EXTRACAO`, a constante `VERSAO_EXTRACAO_PROPOSTAS_V2 = "propostas-v2"`, a seleção da fonte em `executar` e o docstring), `scripts/curation_ficha.py` (só o docstring), `docs/fluxo-curadoria-incremental-simbologia.md` e `examples/README.md` (listam as fontes)
 - Test: `tests/unit/test_ficha_predita_propostas_v2.py`
 
 **Interfaces:**
@@ -149,7 +150,7 @@ Regras da v2 (só nela):
 
 - [ ] **Step 2: Rode e veja falhar.** `.venv/Scripts/python.exe -m pytest tests/unit/test_ficha_predita_propostas_v2.py` → FAIL.
 
-- [ ] **Step 3: Implemente** com funções privadas `_estrutura_v2` e `_codigo_cabo_v2`, sem alterar as funções da v1. Atualize as listas de fontes nos dois documentos.
+- [ ] **Step 3: Implemente** com funções privadas `_estrutura_v2` e `_codigo_cabo_v2`, sem alterar as funções da v1. Como `_anexar_estruturas` e `_vao` leem `codigo_observado` direto, na v2 pós-processe a lista gerada pela v1 (estruturas e `cabo` de cada vão), para a Task 4 só trocar a montagem dos vãos. Atualize as listas de fontes nos dois documentos e os docstrings dos três scripts. O helper de propostas sintéticas do arquivo de teste sempre fornece `variante["extraction"]`, ainda que vazio, para a Task 4 não quebrar os testes da 3.
 
 - [ ] **Step 4: Rode e veja passar.** Mesmo comando → PASS.
 
@@ -167,7 +168,7 @@ Regras da v2 (só nela):
 
 **Interfaces:** Consumes: `ficha_predita_propostas(..., versao=...)` da Task 3; `variante["extraction"].evidencias`, que `run_variant` já devolve.
 
-Regra da v2 (só nela): cabos da mesma `situacao_projeto` ligados ao mesmo par de postes da ficha (chave sem ordem) viram um vão só. `cabo` é a união, por `" / "`, dos códigos distintos e não vazios, normalizados como na Task 3, ordenados pela caixa da evidência de `evidencia_rotulo_id` do cabo: menor y, depois menor x, depois o próprio código. Cabo sem essa evidência vem depois dos que têm, por código. `comprimento_m` e origem são do primeiro cabo dessa ordem com comprimento; `pendentes` é a união. Cabo com menos de 2 postes distintos fica como na v1 (`cabos_sem_vao`). Situações diferentes no mesmo par continuam em vãos separados.
+Regra da v2 (só nela): cabos da mesma `situacao_projeto` ligados ao mesmo par de postes da ficha (chave sem ordem) viram um vão só. `cabo` é a união, por `" / "`, dos códigos distintos e não vazios, normalizados como na Task 3, ordenados pela caixa da evidência de `evidencia_rotulo_id` do cabo: menor y, depois menor x, depois o próprio código. Cabo sem essa evidência vem depois dos que têm, por código. `comprimento_m` e origem vêm do primeiro cabo dessa ordem com comprimento de origem `ANOTACAO_DESENHO`; se nenhum tiver, do primeiro com comprimento; `pendentes` é a união. Cabo com menos de 2 postes distintos fica como na v1 (`cabos_sem_vao`). Situações diferentes no mesmo par continuam em vãos separados.
 
 - [ ] **Step 1: Testes falhando:**
   - `test_v2_une_cabos_do_mesmo_par_em_vao_composto_de_cima_para_baixo`: dois cabos com a **mesma polilinha** e rótulos em y diferentes → 1 vão, `"A / B"`, com A de y menor, seja qual for a ordem dos ids.
@@ -176,6 +177,7 @@ Regra da v2 (só nela): cabos da mesma `situacao_projeto` ligados ao mesmo par d
   - `test_v2_cabo_com_extremo_unico_nao_vira_vao`.
   - `test_v2_situacoes_diferentes_no_mesmo_par_nao_se_fundem`.
   - `test_v2_par_sem_ordem_funde_a_b_e_b_a`.
+  - `test_v2_prefere_comprimento_anotado_no_vao_composto`.
 
 - [ ] **Step 2: Rode e veja falhar.** Mesmo comando da Task 3 → FAIL.
 
@@ -196,4 +198,12 @@ Com as tarefas integradas, a partir do worktree da trilha A, **em série** (o ba
 3. `propostas-v1` com runner: `... --versao-extracao propostas-v1 --simbolos-modelo --processos N`.
 4. `propostas-v2` com runner: `... --versao-extracao propostas-v2 --simbolos-modelo --processos N`.
 
-`N` segue o "Orçamento de máquina". A rodada grava em `tmp/` do checkout principal. O handoff mapeia cada `baseline-vNNN` para fonte, runner e commit, separa o ganho de formato do ganho de leitura, diz quantos compostos da referência a ordem de `_vaos_v2` acerta, se há dois vãos da referência no mesmo par e registra que os 5 compostos de estrutura (`U3-U3(1)`) continuam errados na v2, por virem do tokenizador.
+`N` segue o "Orçamento de máquina". A rodada grava em `tmp/` do checkout principal. O handoff mapeia cada `baseline-vNNN` para fonte, runner e commit, separa o ganho de formato do ganho de leitura, diz quantos compostos da referência a ordem de `_vaos_v2` acerta, se há dois vãos da referência no mesmo par, quantos pares foram separados por situação e registra que os 5 compostos de estrutura (`U3-U3(1)`) continuam errados na v2, por virem do tokenizador.
+
+## Revisão de arquitetura
+
+- Veredito: aprovado com notas.
+- Rodadas: 1.
+- Modelo: opus.
+- Notas Menores (aplicadas neste plano): empate do golden com rótulo P3; repasse da flag também a `run_variant`; docstrings da fonte nova; pós-processamento da v1 na Task 3; comprimento anotado no vão composto; contagem de pares separados por situação; régua da E07.3 no roadmap.
+- Divergência registrada para a E07.2: é provável que passe de ~3h e seja dividida no plano dela.

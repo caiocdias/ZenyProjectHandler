@@ -2663,7 +2663,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Critérios de aceite (a detalhar no plano):**
 
-- [ ] O benchmark por poste sobre as 16 folhas supera o baseline das propostas da E15 em todas as métricas, com relatório em `tmp/`, medido com o mesmo gerador (`propostas-v2` com runner, baseline de controle da E07.1); o handoff traz também o número contra a v004, separando o ganho de formato. Medida sem a E06.3.4 ou a E06.3.5 integradas, a métrica de ESTAI ou de EQUIPAMENTO_INTERRUPCAO só não pode piorar, e o handoff registra essa exceção (D19).
+- [ ] O benchmark por poste sobre as 16 folhas supera a baseline de controle da E07.1 (`propostas-v2` com runner) em todas as métricas, com relatório em `tmp/`; o handoff traz também o número contra a v004, a baseline das propostas da E15, separando o ganho de formato. Medida sem a E06.3.4 ou a E06.3.5 integradas, a métrica de ESTAI ou de EQUIPAMENTO_INTERRUPCAO só não pode piorar, e o handoff registra essa exceção (D19).
 - [ ] Com `ZENY_SERVER_SYMBOL_COMPOSITION=false`, o golden da E07.1 não muda, e um teste pela composição do servidor confirma isso (D18).
 - [ ] Promoção, regiões, vãos e conformidade continuam funcionando sobre as propostas novas (testes de integração existentes passam).
 - [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
