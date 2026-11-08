@@ -349,8 +349,10 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E06.3.3.1 | Para-raios BT | #concluida | E06.3.2.2 | gramática do retângulo com diagonal, com laboratório, PARA_RAIOS_BT acima do atual (que não casa nenhuma) |
 | E06.3.3.2.1 | Marcas: envolvente e X | #concluida | E06.3.3.1 | envolvente por subcaminho, X perto do símbolo e concordância de situação medida |
 | E06.3.3.2.2 | Transformador | #concluida | E06.3.3.2.1 | gramática do triângulo em círculo, com laboratório, TRANSFORMADOR acima do atual |
-| E07 | Ficha do poste | #em-andamento | E06.3.3.2.2, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
-| E08 | Conferência UTM | #pendente | E07 | transformação página → UTM, checagem de posição e vão, pendências |
+| E07.1 | Medição da ficha com o runner e golden do padrão | #em-andamento | E06.3.3.2.2, E15 | benchmark com o runner ligado, `propostas-v2`, baselines de controle e golden da análise padrão |
+| E07.2 | Posição do poste e associação de símbolos | #pendente | E07.1 | poste na posição do desenho, um por identificador, símbolos no poste certo ou pendentes (opção ligada) |
+| E07.3 | Vãos na polilinha e ficha completa | #pendente | E07.2 | vãos ligados à polilinha entre dois postes, benchmark acima do baseline |
+| E08 | Conferência UTM | #pendente | E07.3 | transformação página → UTM, checagem de posição e vão, pendências |
 | E09 | Troca do analisador e remoção do legado | #pendente | E08, E16 | analisador novo como padrão; detectores e, se provado, OCR removidos |
 
 Trilha B — medição (branch `roadmap/leitura-vetorial-por-poste-b`)
@@ -368,7 +370,7 @@ Trilha C — aprendizado, e a E17 enquanto a trilha espera a E07 (D10) (branch `
 |---|---|---|---|---|
 | E11 | Spike de treino na GPU AMD | #concluida | E01 | decisão registrada sobre onde e como treinar |
 | E17 | Fechamento do cliente com servidor lento | #concluida | E14 | fechar a janela nunca destrói `QThread` viva, sem o monkeypatch de 60 s no `conftest` |
-| E10 | Fábrica de rótulos contínua | #pendente | E07 | fluxo mensal com pré-marcação, leitura dupla, amostra humana e dataset por hash |
+| E10 | Fábrica de rótulos contínua | #pendente | E07.3 | fluxo mensal com pré-marcação, leitura dupla, amostra humana e dataset por hash |
 | E12 | Detector visual local | #pendente | E11, E09, E10 | detector ONNX em CPU para o resíduo, ganho medido por poste |
 | E18 | Versão 0.6.0 e candidata de segurança | #pendente | E17 | versão 0.6.0 no produto, build medido e candidata completa em `dist/release/0.6.0/` |
 | E19 | Release final 0.6.0 | #pendente | E18 | release gerada da `main` integrada, com integridade conferida |
@@ -2517,7 +2519,9 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
   - Retomada: a E07 depende da E06.3 e da E15. A E15 está pronta para integrar no fim do lote.
 ---
 
-## E07 — Ficha do poste — #em-andamento
+## E07 — Ficha do poste (dividida em E07.1–E07.3)
+
+**Divisão (R-E07-1, 2026-11-08):** o levantamento do plano mostrou três trabalhos independentes, que passam de ~3h juntos: medir com o runner e separar o formato do gerador (E07.1), corrigir a posição do poste e associar os símbolos (E07.2) e ligar vãos à polilinha (E07.3). Os critérios abaixo foram repartidos entre as subetapas, e quem dependia da E07 passa a depender da E07.3. Diagnóstico da baseline v004 que motivou a divisão: dos 64 postes FN, 19 têm o identificador certo com o poste na caixa do texto, 30 são derivações sem rótulo P; dos 41 FP, 21 são duplicatas do mesmo P; e 15/89 símbolos ficam dentro do raio de associação com o poste na posição do texto.
 
 **Objetivo:** associar texto, símbolos e vãos ao poste certo e expressar a ficha nas propostas e relações atuais.
 
@@ -2568,13 +2572,122 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
+## E07.1 — Medição da ficha com o runner e golden do padrão — #em-andamento
+
+**Objetivo:** dar à E07 a régua: medir a ficha com o runner ligado, separar o que é formato do gerador do que é leitura e fixar a saída da análise padrão antes de mexer nela.
+
+**Dependências:** E06.3.3.2.2, E15. O relógio começa no commit `#em-andamento` da E07 (2f1b873).
+
+**Escopo:**
+- Golden da análise padrão: propostas, relações e versões do interpretador com `simbolos=None` num caso sintético, gravados antes de qualquer mudança (D18).
+- Flag no benchmark para medir com o runner ligado (perfil `vector-only`).
+- Fonte `propostas-v2` da ficha predita: estruturas com o qualificador, cabo composto por vão, ESTAI pelo `suporte_proposta_id`, normalização de espaço em código de cabo. `propostas-v1` continua reproduzindo a v004.
+- Baselines de controle em `tmp/`, com denominadores, para `propostas-v1` e `propostas-v2`, com e sem o runner.
+
+**Fora de escopo:** qualquer mudança em `src/`.
+
+**Critérios de aceite:**
+
+- [ ] Golden da opção desligada em `tests/`, com id, categoria, estado, evidências, atributos, relações, `versao_metodo == "25.0"` e parâmetros sem a chave de semântica de símbolos.
+- [ ] Com `--simbolos-modelo`, o `gerador` da ficha registra o uso do runner e o perfil; sem a flag, o `gerador` e o resumo não mudam.
+- [ ] `propostas-v2` tem fixtures positivas e negativas de estrutura com qualificador, cabo composto, ESTAI por suporte e código de cabo com espaço.
+- [ ] A baseline de controle `propostas-v1` sem runner reproduz a v004 (`total` e `por_pdf`), ou a diferença fica explicada no handoff.
+- [ ] Baselines `propostas-v2` com e sem runner em `tmp/`, com totais no handoff.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:**
+
+- `cmd.exe //c IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:** o levantamento técnico está em `.superpowers/levantamento-e07.md` do worktree da trilha A. A próxima baseline da rodada sai como v006 (a v005 existe).
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:**
+
+- Mudar só o gerador ganha métrica sem melhorar leitura → as baselines de controle usam o mesmo gerador, e o handoff diz quanto ganho é de formato.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
+## E07.2 — Posição do poste e associação de símbolos — #pendente
+
+**Objetivo:** com a opção ligada, o poste sai na posição do desenho, um por identificador, e cada símbolo entra no poste certo ou fica pendente.
+
+**Dependências:** E07.1.
+
+**Escopo (critérios repartidos da E07):**
+- Posição do poste no desenho, com laboratório, e uma proposta por identificador por folha.
+- Associação símbolo → poste por proximidade, com ambiguidade virando pendência; ESTAI incluído.
+- Versão do interpretador incrementada só no caminho com a opção da D17 ligada.
+
+**Critérios de aceite (a detalhar no plano):**
+
+- [ ] Fixture sintética com dois postes próximos e rótulos entre eles: associa corretamente ou marca pendência, nunca ao vizinho errado com confiança.
+- [ ] Com `ZENY_SERVER_SYMBOL_COMPOSITION=false`, o golden da E07.1 não muda (D18).
+- [ ] Benchmark com o runner acima da baseline de controle da E07.1 em postes (precisão e recall) e símbolos, sem regressão em leitura de identificador.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não. **Bloqueios:** Nenhum bloqueio conhecido.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
+## E07.3 — Vãos na polilinha e ficha completa — #pendente
+
+**Objetivo:** vãos ligados à polilinha da rede entre dois postes e a ficha completa acima do baseline.
+
+**Dependências:** E07.2.
+
+**Escopo (critérios repartidos da E07):** vãos e cabos sobre a posição nova do poste; pendência em associação ambígua de vão.
+
+**Critérios de aceite (a detalhar no plano):**
+
+- [ ] O benchmark por poste sobre as 16 folhas supera o baseline das propostas da E15 em todas as métricas, com relatório em `tmp/`. Medida sem a E06.3.4 ou a E06.3.5 integradas, a métrica de ESTAI ou de EQUIPAMENTO_INTERRUPCAO só não pode piorar, e o handoff registra essa exceção (D19).
+- [ ] Com `ZENY_SERVER_SYMBOL_COMPOSITION=false`, o golden da E07.1 não muda (D18).
+- [ ] Promoção, regiões, vãos e conformidade continuam funcionando sobre as propostas novas (testes de integração existentes passam).
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** sim. Na janela de release 0.6.0, ela acontece depois da release e não para a execução (D18); o handoff deixa o pedido de revisão registrado.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
 ## E08 — Conferência UTM — #pendente
 
 **Objetivo:** ajustar a transformação página → UTM com as coordenadas lidas e a escala, e conferir posição de poste e comprimento de vão (decisão 4 do design).
 
 **Por que agora:** é o que torna a ficha confiável e evita o antiobjetivo de errar com segurança.
 
-**Dependências:** E07.
+**Dependências:** E07.3.
 
 **Escopo:**
 - Ajuste com rejeição de outliers.
