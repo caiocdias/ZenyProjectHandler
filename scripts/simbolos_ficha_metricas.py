@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import unicodedata
 from collections import Counter, defaultdict
 from collections.abc import Collection, Iterable, Mapping, Sequence
@@ -41,12 +42,12 @@ BALDES_SITUACAO: Final = (
 
 
 def normalizar_situacao(texto: str | None) -> str | None:
-    """Minúsculas, sem acento, ``_`` como espaço e só o prefixo antes de parêntese."""
+    """Minúsculas, sem acento, ``_`` como espaço, só o prefixo antes de ``(`` ou ``;``."""
     if texto is None:
         return None
     decomposto = unicodedata.normalize("NFD", str(texto))
     sem_acento = "".join(c for c in decomposto if not unicodedata.combining(c))
-    prefixo = sem_acento.lower().replace("_", " ").split("(", 1)[0]
+    prefixo = re.split(r"[(;]", sem_acento.lower().replace("_", " "), maxsplit=1)[0]
     return " ".join(prefixo.split()) or None
 
 
