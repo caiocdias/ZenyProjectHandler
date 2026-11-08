@@ -191,9 +191,9 @@ def _cabos_e_limite_de_extremidade(
     traçado ser orientado do menor para o maior número; o achado a 0,102 não, e o traçado fica.
     """
     return (
-        # Um extremo só: o outro fica a mais de 0,10 de qualquer poste.
+        # Um extremo só: o outro, em (0.16, 0.62), fica a 0,112 ou mais de qualquer poste.
         *_poste_rotulado("um-extremo", postes[0], "P17", "0.05", "0.64", "+"),
-        *_tracado("um-extremo", (("0.05", "0.64"), ("0.15", "0.64")), cabo, ("0.10", "0.63")),
+        *_tracado("um-extremo", (("0.05", "0.64"), ("0.16", "0.62")), cabo, ("0.10", "0.63")),
         # Polilinha de três pontos, com vértice intermediário fora da reta dos extremos.
         *_poste_rotulado("vertice-a", postes[1], "P18", "0.05", "0.70", "+"),
         *_poste_rotulado("vertice-b", postes[2], "P19", "0.25", "0.70", "-"),
