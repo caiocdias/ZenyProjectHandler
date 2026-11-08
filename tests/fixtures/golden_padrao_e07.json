@@ -1,0 +1,675 @@
+{
+  "elementos": [
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
+          "ef529d19-d6ec-5b7f-9835-31e705d63961"
+        ],
+        [
+          "evidencia_ocorrencia_id",
+          "de6abcff-6b62-53e4-8b5f-f2081808d42a"
+        ],
+        [
+          "identidade_ocorrencia",
+          "de6abcff-6b62-53e4-8b5f-f2081808d42a:0:2"
+        ],
+        [
+          "identificador_operacional",
+          "P3"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "estrutura-mt-codigo-catalogo"
+        ],
+        [
+          "token_estrutura",
+          "U1"
+        ]
+      ],
+      "categoria": "ESTRUTURA_MT",
+      "codigo_observado": "U1",
+      "confianca": "0.92",
+      "estado_revisao": "CONFLITANTE",
+      "evidencia_ids": [
+        "de6abcff-6b62-53e4-8b5f-f2081808d42a",
+        "ef529d19-d6ec-5b7f-9835-31e705d63961"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.24",
+            "y": "0.70"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "3b5693cb-d3a5-5b94-b7c3-4c5baaca9a6f",
+      "justificativa": "A regra estrutura-mt-codigo-catalogo reconheceu exatamente o código U1 em texto ou OCR. O token U1 identifica uma ocorrência física de estrutura. O identificador operacional P3 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "0c68cf91-55d6-5aa1-b4dc-bd51be88206c"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "coordenada_leste",
+          465702
+        ],
+        [
+          "coordenada_norte",
+          7772468
+        ],
+        [
+          "coordenada_origem",
+          "texto_ou_ocr"
+        ],
+        [
+          "evidencia_identificador_id",
+          "999a2e06-274c-5475-8750-ae25026bd092"
+        ],
+        [
+          "identificador_operacional",
+          "P1"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "P-10M-300DAN-CIRCULAR",
+      "confianca": "0.90",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "0bbcf9f6-cfb7-5f3b-88b9-aece439c301b",
+        "4acb2649-3b19-5a5c-b238-c18d3cdcb236",
+        "999a2e06-274c-5475-8750-ae25026bd092",
+        "cab2d749-e638-575f-bf12-94309a5972a4"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.10",
+            "y": "0.30"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "3d9a35a6-4652-5ff1-9c16-318e35228803",
+      "justificativa": "A regra poste-codigo-catalogo reconheceu exatamente o código P-10M-300DAN-CIRCULAR em texto ou OCR. O identificador operacional P1 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "ae96cf56-860a-5397-a4e2-169007a0167a"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "coordenada_leste",
+          465750
+        ],
+        [
+          "coordenada_norte",
+          7772490
+        ],
+        [
+          "coordenada_origem",
+          "texto_ou_ocr"
+        ],
+        [
+          "evidencia_identificador_id",
+          "ea3165f2-8b00-5018-909e-f34eda1c7d3f"
+        ],
+        [
+          "identificador_operacional",
+          "P2"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "P-10M-600DAN-CIRCULAR",
+      "confianca": "0.90",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "4833fa79-f418-53cb-8bcb-ac776e1506dd",
+        "a7598348-30b1-5aad-9dea-8cd0e6547894",
+        "e33398d8-5c04-54ac-9b7c-8876e821b755",
+        "ea3165f2-8b00-5018-909e-f34eda1c7d3f"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.60",
+            "y": "0.30"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "7adc625f-ddac-59c0-9acc-d27a24fb0bdb",
+      "justificativa": "A regra poste-codigo-catalogo reconheceu exatamente o código P-10M-600DAN-CIRCULAR em texto ou OCR. O identificador operacional P2 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "7ffc4404-45cf-5f38-9cf9-74559676f4d3"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "associacao_pendente",
+          "tracado"
+        ],
+        [
+          "evidencia_rotulo_id",
+          "a2c60155-5ad9-5a07-b9cc-adbba9460171"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "cabo-codigo-catalogo"
+        ]
+      ],
+      "categoria": "CABO",
+      "codigo_observado": "B-4 CA",
+      "confianca": "0.88",
+      "estado_revisao": "CONFLITANTE",
+      "evidencia_ids": [
+        "a2c60155-5ad9-5a07-b9cc-adbba9460171"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.82",
+            "y": "0.505"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "8c55b74b-46df-5dd2-97d5-00c73c838fe9",
+      "justificativa": "A regra cabo-codigo-catalogo reconheceu exatamente o código B-4 CA em texto ou OCR. Traçado não resolvido sem ambiguidade; o rótulo permanece disponível para revisão humana.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "c6f979ad-7798-5318-9188-4c2a048fc4f3"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
+          "ef529d19-d6ec-5b7f-9835-31e705d63961"
+        ],
+        [
+          "identificador_operacional",
+          "P3"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "P-9M-300DAN-CIRCULAR",
+      "confianca": "0.90",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "8b1b78c8-b9c0-5d3d-ac1e-71bbb0cc50d9",
+        "ef529d19-d6ec-5b7f-9835-31e705d63961"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.28",
+            "y": "0.70"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "8d5effe7-2b0e-505b-8a2e-99e8ded4f3ac",
+      "justificativa": "A regra poste-codigo-catalogo reconheceu exatamente o código P-9M-300DAN-CIRCULAR em texto ou OCR. O identificador operacional P3 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "13b700c3-eb45-56a5-9858-99d069d97c0d"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "comprimento_m",
+          "42.5"
+        ],
+        [
+          "comprimento_origem",
+          "anotacao_desenho"
+        ],
+        [
+          "evidencia_comprimento_id",
+          "85060b2f-d858-5ed5-b566-4a115887f7ee"
+        ],
+        [
+          "evidencia_geometria_id",
+          "1be9c2fd-e950-5aa4-b6a2-a8eb24a40d2e"
+        ],
+        [
+          "evidencia_identificador_id",
+          "c2f85efe-4299-5f70-a0bc-243482ba1349"
+        ],
+        [
+          "evidencia_rotulo_id",
+          "0087f671-a124-5e6d-9e53-c12d24458824"
+        ],
+        [
+          "geometria_cabo_origem",
+          "vetor_associado_geometricamente"
+        ],
+        [
+          "identificador_operacional",
+          "V1-2"
+        ],
+        [
+          "ponto_operacional_destino",
+          "P2"
+        ],
+        [
+          "ponto_operacional_origem",
+          "P1"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "cabo-codigo-catalogo"
+        ]
+      ],
+      "categoria": "CABO",
+      "codigo_observado": "A-4 CA",
+      "confianca": "0.88",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "0087f671-a124-5e6d-9e53-c12d24458824",
+        "1be9c2fd-e950-5aa4-b6a2-a8eb24a40d2e",
+        "85060b2f-d858-5ed5-b566-4a115887f7ee",
+        "c2f85efe-4299-5f70-a0bc-243482ba1349"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.10",
+            "y": "0.30"
+          },
+          {
+            "x": "0.60",
+            "y": "0.30"
+          }
+        ],
+        "tipo": "POLILINHA"
+      },
+      "id": "8eda09ed-171a-5a56-bf07-b71ab1877d26",
+      "justificativa": "A regra cabo-codigo-catalogo reconheceu exatamente o código A-4 CA em texto ou OCR. O rótulo do cabo foi associado ao traçado por geometria e orientação sem empate. O identificador V1-2 fixou as extremidades em P1 e P2.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "1a991b5c-d604-502f-93eb-b189c057e590"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
+          "999a2e06-274c-5475-8750-ae25026bd092"
+        ],
+        [
+          "evidencia_ocorrencia_id",
+          "caccb785-b2e3-534f-9b27-6120923fb4a3"
+        ],
+        [
+          "identidade_ocorrencia",
+          "caccb785-b2e3-534f-9b27-6120923fb4a3:0:4"
+        ],
+        [
+          "identificador_operacional",
+          "P1"
+        ],
+        [
+          "qualificador_estrutura",
+          "2"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "estrutura-mt-codigo-catalogo"
+        ],
+        [
+          "token_estrutura",
+          "N(2)"
+        ]
+      ],
+      "categoria": "ESTRUTURA_MT",
+      "codigo_observado": "N",
+      "confianca": "0.92",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "999a2e06-274c-5475-8750-ae25026bd092",
+        "caccb785-b2e3-534f-9b27-6120923fb4a3"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.11",
+            "y": "0.29"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "98a1db50-f6bf-534a-85b0-1e9e1f41d006",
+      "justificativa": "A regra estrutura-mt-codigo-catalogo reconheceu exatamente o código N em texto ou OCR. O token N(2) identifica uma ocorrência física de estrutura com qualificador observado 2. O identificador operacional P1 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "ce304cb9-1266-591f-832e-61ce7ec25a27"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
+          "ea3165f2-8b00-5018-909e-f34eda1c7d3f"
+        ],
+        [
+          "evidencia_ocorrencia_id",
+          "7ffe06cd-f363-5160-93fa-17aeab76920f"
+        ],
+        [
+          "identidade_ocorrencia",
+          "7ffe06cd-f363-5160-93fa-17aeab76920f:0:3"
+        ],
+        [
+          "identificador_operacional",
+          "P2"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "estrutura-bt-codigo-catalogo"
+        ],
+        [
+          "token_estrutura",
+          "S1N"
+        ]
+      ],
+      "categoria": "ESTRUTURA_BT",
+      "codigo_observado": "S1N",
+      "confianca": "0.92",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "7ffe06cd-f363-5160-93fa-17aeab76920f",
+        "ea3165f2-8b00-5018-909e-f34eda1c7d3f"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.61",
+            "y": "0.31"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "c059bf80-e26e-5075-a859-9f6cbaefeea0",
+      "justificativa": "A regra estrutura-bt-codigo-catalogo reconheceu exatamente o código S1N em texto ou OCR. O token S1N identifica uma ocorrência física de estrutura. O identificador operacional P2 confirmou o ponto de projeto.",
+      "situacao_projeto": "REMOVER",
+      "tipo_catalogo_sugerido_id": "8e40ad62-edc5-5b0d-8375-0273d42382ae"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
+          "ef529d19-d6ec-5b7f-9835-31e705d63961"
+        ],
+        [
+          "identificador_operacional",
+          "P3"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "P-9M-150DAN-CIRCULAR",
+      "confianca": "0.90",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "959dbfd1-f3a0-5a3b-82b9-f762f665e3ef",
+        "ef529d19-d6ec-5b7f-9835-31e705d63961"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.20",
+            "y": "0.70"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "f2727581-c64c-5df9-8608-db5059586f22",
+      "justificativa": "A regra poste-codigo-catalogo reconheceu exatamente o código P-9M-150DAN-CIRCULAR em texto ou OCR. O identificador operacional P3 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "655f1af2-1ae9-575f-ac49-1769860db50e"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
+          "a93f4ed1-7560-57d4-b89f-016d7592e153"
+        ],
+        [
+          "evidencia_rotulo_id",
+          "86941776-65a8-5e3c-812a-167b37d5a6ae"
+        ],
+        [
+          "identificador_operacional",
+          "P4"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "equipamento-codigo-catalogo"
+        ]
+      ],
+      "categoria": "EQUIPAMENTO",
+      "codigo_observado": "-1-5",
+      "confianca": "0.84",
+      "estado_revisao": "PROPOSTA",
+      "evidencia_ids": [
+        "86941776-65a8-5e3c-812a-167b37d5a6ae",
+        "a187722d-039f-5999-a685-be6276d60f4b",
+        "a93f4ed1-7560-57d4-b89f-016d7592e153"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.85",
+            "y": "0.28"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "fa0ba5aa-fc66-568f-b61f-b03eb972bb91",
+      "justificativa": "A regra equipamento-codigo-catalogo reconheceu exatamente o código -1-5 em texto ou OCR. O identificador operacional P4 confirmou o ponto de projeto.",
+      "situacao_projeto": "EXISTENTE",
+      "tipo_catalogo_sugerido_id": "ccdf5749-818a-5208-a7e1-54682fbed094"
+    }
+  ],
+  "id": "436a179a-8225-58f5-a8c5-d7b992413974",
+  "metodo": "regras-explicitas-cemig",
+  "parametros": [
+    [
+      "categorias_habilitadas",
+      "POSTE,ESTRUTURA_MT,ESTRUTURA_BT,CABO,EQUIPAMENTO"
+    ],
+    [
+      "confianca_minima",
+      "0.50"
+    ],
+    [
+      "execucao_extracao_id",
+      "ddf78c40-8453-5bcd-9985-60395cc4568d"
+    ],
+    [
+      "gerar_relacoes",
+      true
+    ],
+    [
+      "maximo_propostas",
+      10000
+    ],
+    [
+      "reconciliacao_metodos_versao",
+      "documentary-coordinate-review-1"
+    ],
+    [
+      "registro_regras_assinatura",
+      "d808f066a74115a13211ac423eab82409801bab287be722034facd2317a3a656"
+    ],
+    [
+      "registro_regras_versao",
+      "1.6.0"
+    ]
+  ],
+  "relacoes": [
+    {
+      "confianca": "0.80",
+      "destino_referencia_id": "7adc625f-ddac-59c0-9acc-d27a24fb0bdb",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "0087f671-a124-5e6d-9e53-c12d24458824",
+        "1be9c2fd-e950-5aa4-b6a2-a8eb24a40d2e",
+        "4833fa79-f418-53cb-8bcb-ac776e1506dd",
+        "85060b2f-d858-5ed5-b566-4a115887f7ee",
+        "a7598348-30b1-5aad-9dea-8cd0e6547894",
+        "c2f85efe-4299-5f70-a0bc-243482ba1349",
+        "e33398d8-5c04-54ac-9b7c-8876e821b755",
+        "ea3165f2-8b00-5018-909e-f34eda1c7d3f"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "id": "0fac9c4a-9dca-5fff-8230-24dda65785b3",
+      "justificativa": "A regra cabo-conectado-a-poste associou propostas por extremidades_proximas.",
+      "origem_referencia_id": "8eda09ed-171a-5a56-bf07-b71ab1877d26",
+      "tipo_relacao": "CONECTA"
+    },
+    {
+      "confianca": "0.74",
+      "destino_referencia_id": "98a1db50-f6bf-534a-85b0-1e9e1f41d006",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "0087f671-a124-5e6d-9e53-c12d24458824",
+        "1be9c2fd-e950-5aa4-b6a2-a8eb24a40d2e",
+        "85060b2f-d858-5ed5-b566-4a115887f7ee",
+        "999a2e06-274c-5475-8750-ae25026bd092",
+        "c2f85efe-4299-5f70-a0bc-243482ba1349",
+        "caccb785-b2e3-534f-9b27-6120923fb4a3"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "id": "296bb7c6-0b90-55b6-ab7c-a1ac3a866c0d",
+      "justificativa": "A regra cabo-suportado-por-estrutura-mt associou propostas por compatibilidade_e_proximidade.",
+      "origem_referencia_id": "8eda09ed-171a-5a56-bf07-b71ab1877d26",
+      "tipo_relacao": "SUPORTADO_POR"
+    },
+    {
+      "confianca": "0.80",
+      "destino_referencia_id": "3d9a35a6-4652-5ff1-9c16-318e35228803",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "0087f671-a124-5e6d-9e53-c12d24458824",
+        "0bbcf9f6-cfb7-5f3b-88b9-aece439c301b",
+        "1be9c2fd-e950-5aa4-b6a2-a8eb24a40d2e",
+        "4acb2649-3b19-5a5c-b238-c18d3cdcb236",
+        "85060b2f-d858-5ed5-b566-4a115887f7ee",
+        "999a2e06-274c-5475-8750-ae25026bd092",
+        "c2f85efe-4299-5f70-a0bc-243482ba1349",
+        "cab2d749-e638-575f-bf12-94309a5972a4"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "id": "432885ba-fee4-5fbd-a017-87ef1571a0fc",
+      "justificativa": "A regra cabo-conectado-a-poste associou propostas por extremidades_proximas.",
+      "origem_referencia_id": "8eda09ed-171a-5a56-bf07-b71ab1877d26",
+      "tipo_relacao": "CONECTA"
+    },
+    {
+      "confianca": "0.78",
+      "destino_referencia_id": "7adc625f-ddac-59c0-9acc-d27a24fb0bdb",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "4833fa79-f418-53cb-8bcb-ac776e1506dd",
+        "7ffe06cd-f363-5160-93fa-17aeab76920f",
+        "a7598348-30b1-5aad-9dea-8cd0e6547894",
+        "e33398d8-5c04-54ac-9b7c-8876e821b755",
+        "ea3165f2-8b00-5018-909e-f34eda1c7d3f"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "id": "43be8fa5-e8f0-54f9-9ea6-a6fa70e9ba10",
+      "justificativa": "A regra estrutura-bt-instalada-em-poste associou propostas por centros_proximos.",
+      "origem_referencia_id": "c059bf80-e26e-5075-a859-9f6cbaefeea0",
+      "tipo_relacao": "INSTALADA_EM"
+    },
+    {
+      "confianca": "0.78",
+      "destino_referencia_id": "3d9a35a6-4652-5ff1-9c16-318e35228803",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "0bbcf9f6-cfb7-5f3b-88b9-aece439c301b",
+        "4acb2649-3b19-5a5c-b238-c18d3cdcb236",
+        "999a2e06-274c-5475-8750-ae25026bd092",
+        "cab2d749-e638-575f-bf12-94309a5972a4",
+        "caccb785-b2e3-534f-9b27-6120923fb4a3"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "id": "dfd47c05-80e6-56aa-800a-25d113b339b7",
+      "justificativa": "A regra estrutura-mt-instalada-em-poste associou propostas por centros_proximos.",
+      "origem_referencia_id": "98a1db50-f6bf-534a-85b0-1e9e1f41d006",
+      "tipo_relacao": "INSTALADA_EM"
+    }
+  ],
+  "versao_metodo": "25.0"
+}
