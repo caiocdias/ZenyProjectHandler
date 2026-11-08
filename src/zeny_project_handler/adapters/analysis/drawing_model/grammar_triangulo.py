@@ -38,6 +38,13 @@ Rulings da rodada de correção 2:
 
 Ruling da rodada de correção 3: a ponta de seta vazada (linha que termina no meio de um lado e
 segue para fora) não casa, se a linha tem `_SETA_LINHA_MINIMA_LADOS` lados ou mais.
+
+Rulings da onda final:
+- o preenchimento de muitos subcaminhos gasta 1 por subcaminho e sai pela caixa antes da
+  envoltória; `_sem_colineares` é de uma passada só;
+- o triângulo com uma palavra dentro (o Δ de revisão com o número, de glifo ou não) não casa;
+- o triângulo branco só de preenchimento, sem traço visível, não é contorno; o meio ciano segue
+  lido pelas metades, que são preenchimentos, com o contorno no traço.
 """
 
 from __future__ import annotations
@@ -328,35 +335,50 @@ def _envoltoria(pontos: Sequence[Ponto]) -> list[Ponto]:
     return baixo[:-1] + cima[:-1]
 
 
+def _altura(p: Ponto, a: Ponto, b: Ponto) -> float:
+    """A distância de `p` à reta de `a` a `b`; 0 se os dois coincidem."""
+    base = math.dist(a, b)
+    if base <= 0:
+        return 0.0
+    return abs((b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])) / base
+
+
 def _sem_colineares(contorno: list[Ponto], tolerancia: float) -> list[Ponto]:
-    """Tira os vértices que ficam sobre a reta dos vizinhos (fatias de hachura) ou repetidos."""
-    mudou = True
-    while mudou and len(contorno) > 3:
-        mudou = False
-        for i, p in enumerate(contorno):
-            a, b = contorno[i - 1], contorno[(i + 1) % len(contorno)]
-            base = math.dist(a, b)
-            altura = (
-                abs((b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])) / base
-                if base > 0
-                else 0.0
-            )
-            if altura <= tolerancia:
-                del contorno[i]
-                mudou = True
-                break
-    return contorno
+    """Tira os vértices que ficam sobre a reta dos vizinhos (fatias de hachura) ou repetidos.
+
+    Uma passada só, linear: cada vértice é medido contra o último mantido e o próximo; no fim, o
+    primeiro é medido de novo contra o último mantido, que pode não ser o original.
+    """
+    if len(contorno) <= 3:
+        return contorno
+    mantidos: list[Ponto] = []
+    for i, p in enumerate(contorno):
+        anterior = mantidos[-1] if mantidos else contorno[-1]
+        if _altura(p, anterior, contorno[(i + 1) % len(contorno)]) > tolerancia:
+            mantidos.append(p)
+    if len(mantidos) > 3 and _altura(mantidos[0], mantidos[-1], mantidos[1]) <= tolerancia:
+        mantidos.pop(0)
+    return mantidos
 
 
-def _triangulo_preenchido(caminho: Caminho) -> _Triangulo | None:
+def _triangulo_preenchido(caminho: Caminho, orcamento: OrcamentoConsultas) -> _Triangulo | None:
     """O triângulo de um preenchimento: um subcaminho de retas ou vários triângulos de hachura
-    que, juntos, cobrem a envoltória (a área soma a dela) e ela é um triângulo."""
+    que, juntos, cobrem a envoltória (a área soma a dela) e ela é um triângulo.
+
+    Com vários subcaminhos, o preenchimento cuja caixa passa do tamanho de pictograma sai antes
+    da envoltória, depois de uma leitura linear; o que chega à envoltória gasta 1 por
+    subcaminho, e `_sem_colineares` é linear.
+    """
     partes = [_vertices(s, implicito=True) for s in caminho.subcaminhos]
     if not partes or any(parte is None for parte in partes):
         return None
     triangulos = [parte for parte in partes if parte is not None]
     if len(triangulos) == 1:
         return triangulos[0]
+    caixa = _caixa_de_pontos(p for t in triangulos for p in t)
+    if caixa is None or max(caixa[2] - caixa[0], caixa[3] - caixa[1]) > _LADO_MAXIMO * 1.2:
+        return None
+    orcamento.gastar(len(triangulos))
     envoltoria = _envoltoria([p for t in triangulos for p in t])
     if len(envoltoria) < 3:
         return None
@@ -371,14 +393,14 @@ def _triangulo_preenchido(caminho: Caminho) -> _Triangulo | None:
 
 
 def _triangulos_da_pagina(
-    modelo: PaginaModelo, excluidos: frozenset[int], perfil: Perfil
+    modelo: PaginaModelo, excluidos: frozenset[int], perfil: Perfil, orcamento: OrcamentoConsultas
 ) -> _Lidos:
     lidos = _Lidos([], [], [], [], [])
     for posicao, caminho in enumerate(modelo.caminhos):
         if posicao in excluidos:
             continue
         if _preenche(caminho):
-            vertices = _triangulo_preenchido(caminho)
+            vertices = _triangulo_preenchido(caminho, orcamento)
             if vertices is not None and _de_tamanho(vertices, perfil):
                 cor = caminho.estilo.preenchimento
                 destino = (
@@ -659,7 +681,12 @@ def _contornos(
     )
     candidatos: list[tuple[_Triangulo, int | tuple[int, ...]]] = [
         *lidos.contornos,
-        *((v, p) for v, p in lidos.brancos if _traco_de_pictograma(modelo.caminhos[p])),
+        # O branco só de preenchimento não aparece na folha: só o de traço visível é contorno.
+        *(
+            (v, p)
+            for v, p in lidos.brancos
+            if _traca(modelo.caminhos[p]) and _traco_de_pictograma(modelo.caminhos[p])
+        ),
     ]
     tocados = _que_se_tocam(contexto, candidatos, perfil)
     anexos: dict[int, set[int]] = {}
@@ -795,7 +822,7 @@ class _Recusas:
     """O que tira um triângulo já lido do transformador: o contorno tracejado ou roxo dele, os
     três vértices na borda de uma moldura retangular (a PLATAFORMA, `triangle_in_frame`) e a
     linha de `_SETA_LINHA_MINIMA_LADOS` lados ou mais que termina no meio de um lado (a ponta de
-    seta vazada). Paga as grades."""
+    seta vazada) e a palavra dentro dele (o Δ de revisão). Paga as grades."""
 
     __slots__ = ("_contexto", "_molduras", "_recusados")
 
@@ -826,6 +853,19 @@ class _Recusas:
                 for moldura in self._molduras.consultar(caixa)
             )
             or self._seta(forma, tolerancia)
+            or self._tem_texto(forma, tolerancia)
+        )
+
+    def _tem_texto(self, forma: _Forma, tolerancia: float) -> bool:
+        """Uma palavra do modelo (nativa, SHX ou de glifo) com o centro dentro do triângulo: o Δ
+        de revisão com o número, e não o pictograma do transformador."""
+        return any(
+            _dentro(
+                ((p.caixa[0] + p.caixa[2]) / 2, (p.caixa[1] + p.caixa[3]) / 2),
+                forma.vertices,
+                tolerancia,
+            )
+            for p in self._contexto.grade_palavras.consultar(forma.caixa)
         )
 
     def _seta(self, forma: _Forma, tolerancia: float) -> bool:
@@ -867,7 +907,7 @@ def triangulos_candidatos(
     pagina = contexto.pagina
     perfil = _PERFIS[marcas.origem]
     excluidos = frozenset(pagina.glifos_lidos) | frozenset(pagina.translucidos)
-    lidos = _triangulos_da_pagina(pagina.modelo, excluidos, perfil)
+    lidos = _triangulos_da_pagina(pagina.modelo, excluidos, perfil, contexto.orcamento)
     if not lidos.cianos and not lidos.brancos and not lidos.contornos:
         return ()
     recusas = _Recusas(contexto, lidos.recusados)

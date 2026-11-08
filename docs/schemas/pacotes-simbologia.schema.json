@@ -144,6 +144,11 @@
             "enclosure": {"enum": ["none", "ellipse"]},
             "removal_mark": {"type": "boolean"},
             "max_span": {"type": "number", "exclusiveMinimum": 0, "maximum": 72}
+          },
+          "not": {
+            "$comment": "Envolvente com X não é grupo da R-E06.3.3.2.2-1: o X tem enclosure none.",
+            "required": ["enclosure", "removal_mark"],
+            "properties": {"enclosure": {"const": "ellipse"}, "removal_mark": {"const": true}}
           }
         }
       ]

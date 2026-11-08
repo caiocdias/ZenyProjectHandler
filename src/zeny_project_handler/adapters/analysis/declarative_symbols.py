@@ -217,6 +217,8 @@ def _split_triangle_grammar_ok(grammar: Package) -> bool:
         and isinstance(grammar["enclosure"], str)
         and grammar["enclosure"] in {"none", "ellipse"}
         and type(grammar["removal_mark"]) is bool
+        # An enclosure with a removal mark is no R-E06.3.3.2.2-1 group: the X has no enclosure.
+        and not (grammar["enclosure"] == "ellipse" and grammar["removal_mark"])
     )
 
 
