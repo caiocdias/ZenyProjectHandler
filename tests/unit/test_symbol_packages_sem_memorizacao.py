@@ -147,6 +147,7 @@ _GRAMATICAS_NOVAS = (
     _RAIZ / "tests" / "unit" / "test_grammar_marcas_envolvente_ataque.py",
     _RAIZ / "tests" / "unit" / "test_grammar_marcas_x_contexto.py",
     _RAIZ / "tests" / "unit" / "test_grammar_marcas_x_contexto_ataque.py",
+    _RAIZ / "tests" / "unit" / "test_grammar_marcas_costuras_etapa.py",
     _RAIZ / "tests" / "unit" / "test_grammar_rect_diagonal.py",
     _RAIZ / "tests" / "unit" / "test_grammar_rect_diagonal_ataque.py",
     _RAIZ / "tests" / "unit" / "test_grammar_rect_diagonal_herdados_ataque.py",
