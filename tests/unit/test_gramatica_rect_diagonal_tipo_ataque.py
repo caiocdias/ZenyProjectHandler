@@ -246,7 +246,7 @@ def test_pacotes_reais_tem_rect_diagonal_e_o_motor_segue_com_22() -> None:
     reais = carregar_pacotes()
     tipos = {v["recognition"]["grammar"]["kind"] for _, v in _enabled(reais)}
     assert "rect_diagonal" in tipos
-    assert len(_enabled(reais)) == 49
+    assert len(_enabled(reais)) == 52
     assert len(variantes_do_motor(reais)) == 22
     assert (
         frozenset({"stem_bars", "rect_diagonal", "split_triangle", "forked_stem"})
@@ -256,6 +256,7 @@ def test_pacotes_reais_tem_rect_diagonal_e_o_motor_segue_com_22() -> None:
     motor = perfil_pacotes(reais)
     assert set(modelo.classes_suportadas) - set(motor.classes_suportadas) == {
         "ATERRAMENTO",
+        "ESTAI",
         "PARA_RAIOS_BT",
         "PARA_RAIOS_MT",
         "TRANSFORMADOR",

@@ -29,6 +29,7 @@ from tests.fixtures.symbol_grammars.estai import (
 )
 from tests.fixtures.symbol_grammars.paginas import poligono, texto
 
+from zeny_project_handler.adapters.analysis.declarative_symbols import carregar_pacotes
 from zeny_project_handler.adapters.analysis.drawing_model import grammar_estai
 from zeny_project_handler.adapters.analysis.drawing_model.grammar_estai import (
     casa_estai,
@@ -442,3 +443,19 @@ def test_casa_estai_nao_gasta_do_orcamento() -> None:
     for gramatica in GRAMATICAS_ESTAI.values():
         casa_estai(contexto, gramatica, candidatos=candidatos)
     assert contexto.orcamento.gasto == antes
+
+
+def test_variantes_habilitadas_do_pacote_usam_exatamente_as_gramaticas_da_fixture() -> None:
+    """Task 3: as 3 variantes de f02-14 habilitadas levam `GRAMATICAS_ESTAI`, nem mais nem menos."""
+    habilitadas = {
+        variante["id"]: variante["recognition"]["grammar"]
+        for pacote in carregar_pacotes()
+        for variante in pacote["variants"]
+        if variante["recognition"]["status"] == "enabled"
+        and variante["recognition"]["grammar"]["kind"] == "forked_stem"
+    }
+    assert habilitadas == {
+        "cemig-eo-r3-s14-v001": GRAMATICAS_ESTAI["existente"],
+        "cemig-eo-r3-s14-v002": GRAMATICAS_ESTAI["instalar"],
+        "cemig-eo-r3-s14-v003": GRAMATICAS_ESTAI["retirar"],
+    }

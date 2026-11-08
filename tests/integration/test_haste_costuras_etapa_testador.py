@@ -24,6 +24,7 @@ from zeny_project_handler_server.symbol_execution import SymbolCompositionRunner
 _IDS_HASTE = [identidade for identidade, _ in CASOS_HASTE]
 _IDS_BT = [identidade for identidade, _ in CASOS_RECT_DIAGONAL]
 _IDS_TRAFO = [identidade for identidade, _ in CASOS_TRIANGULO]
+_IDS_ESTAI = ["cemig-eo-r3-s14-v001", "cemig-eo-r3-s14-v002", "cemig-eo-r3-s14-v003"]
 _CLASSE = {"s19": "ATERRAMENTO", "s21": "PARA_RAIOS_MT"}
 # Quatro situações de cada família numa só página, longe umas das outras.
 _CENTROS = [(80.0 + 120.0 * (i % 4), 80.0 + 160.0 * (i // 4)) for i in range(8)]
@@ -75,7 +76,7 @@ def test_runner_com_pacotes_reais_observa_e_reconcilia_as_oito_situacoes(tmp_pat
 def test_perfil_do_modelo_no_runner_esta_na_versao_1_4_0(tmp_path: Path) -> None:
     runner = SymbolCompositionRunner(_settings(tmp_path / "dados"))
     novo = next(p for p in runner._profiles if p.metodo_id == _METODO_NOVO)
-    assert novo.versao == "1.4.0"
+    assert novo.versao == "1.5.0"
     assert novo.assinatura() != replace(novo, versao="1.3.0").assinatura()
 
 
@@ -109,7 +110,7 @@ def test_matriz_dos_pacotes_reais_marca_as_so_do_modelo_fora_do_dominio_no_motor
         base,
     )
     por_id: dict[str, Any] = {linha["id"]: linha for linha in linhas}
-    for identidade in [*_IDS_HASTE, *_IDS_BT, *_IDS_TRAFO]:
+    for identidade in [*_IDS_HASTE, *_IDS_BT, *_IDS_TRAFO, *_IDS_ESTAI]:
         assert por_id[identidade]["package_status"] == "enabled", identidade
         assert por_id[identidade]["declarative-vector-packages"] == "fora_do_dominio", identidade
     # Contraprova: uma variante habilitada de outra gramática continua exata.
@@ -117,7 +118,7 @@ def test_matriz_dos_pacotes_reais_marca_as_so_do_modelo_fora_do_dominio_no_motor
         linha
         for linha in linhas
         if linha["package_status"] == "enabled"
-        and linha["id"] not in {*_IDS_HASTE, *_IDS_BT, *_IDS_TRAFO}
+        and linha["id"] not in {*_IDS_HASTE, *_IDS_BT, *_IDS_TRAFO, *_IDS_ESTAI}
     ]
     assert outras
     assert all(linha["declarative-vector-packages"] == "id_exato_sintetico" for linha in outras)

@@ -17,8 +17,13 @@
       },
       "visual_note": "Traço bifurcado; cinza/preto",
       "recognition": {
-        "status": "pending",
-        "reason": "Forma E01: Traço bifurcado; cinza/preto. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado.",
+        "status": "enabled",
+        "grammar": {
+          "kind": "forked_stem",
+          "enclosure": "none",
+          "removal_mark": false,
+          "max_span": 40
+        },
         "negative_examples": [
           "Exemplar de legenda/tabela não é ocorrência operacional",
           "Glifos, molduras e líderes de anotação",
@@ -40,8 +45,13 @@
       },
       "visual_note": "Traço bifurcado; verde com círculo ou caixa no rótulo",
       "recognition": {
-        "status": "pending",
-        "reason": "Forma E01: Traço bifurcado; verde com círculo ou caixa no rótulo. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado.",
+        "status": "enabled",
+        "grammar": {
+          "kind": "forked_stem",
+          "enclosure": "ellipse",
+          "removal_mark": false,
+          "max_span": 40
+        },
         "negative_examples": [
           "Exemplar de legenda/tabela não é ocorrência operacional",
           "Glifos, molduras e líderes de anotação",
@@ -63,8 +73,13 @@
       },
       "visual_note": "Traço bifurcado; vermelho com X ou texto tachado",
       "recognition": {
-        "status": "pending",
-        "reason": "Forma E01: Traço bifurcado; vermelho com X ou texto tachado. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado.",
+        "status": "enabled",
+        "grammar": {
+          "kind": "forked_stem",
+          "enclosure": "none",
+          "removal_mark": true,
+          "max_span": 40
+        },
         "negative_examples": [
           "Exemplar de legenda/tabela não é ocorrência operacional",
           "Glifos, molduras e líderes de anotação",

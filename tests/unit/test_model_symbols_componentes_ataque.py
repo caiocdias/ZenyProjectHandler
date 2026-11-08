@@ -136,5 +136,5 @@ def test_caixa_de_um_componente_nao_vaza_para_o_outro() -> None:
 def test_assinatura_do_perfil_depende_da_versao_1_4_0() -> None:
     perfil = perfil_pacotes_modelo((), carregar_tabela_glifos())
 
-    assert perfil.versao == "1.4.0"
+    assert perfil.versao == "1.5.0"
     assert replace(perfil, versao="1.3.0").assinatura() != perfil.assinatura()

@@ -84,6 +84,7 @@ _CASE_BY_ID = {case.variant_id: case for case in ENABLED_CASES}
 _HASTE_IDS = tuple(variant_id for variant_id, _ in CASOS_HASTE)
 _BT_IDS = tuple(variant_id for variant_id, _ in CASOS_RECT_DIAGONAL)
 _TRAFO_IDS = tuple(variant_id for variant_id, _ in CASOS_TRIANGULO)
+_ESTAI_IDS = ("cemig-eo-r3-s14-v001", "cemig-eo-r3-s14-v002", "cemig-eo-r3-s14-v003")
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -171,18 +172,18 @@ def test_enabled_status_is_distinct_from_registered_coverage() -> None:
     pending = {v["id"] for v in all_variants if v["recognition"]["status"] == "pending"}
     assert enabled
     assert pending
-    assert enabled == set(_ENABLED_IDS) | set(_HASTE_IDS) | set(_BT_IDS) | set(_TRAFO_IDS), (
-        "new enabled grammar needs its own positive/negative case"
-    )
-    assert len(enabled) == 49
-    assert len(pending) == 374
+    assert enabled == set(_ENABLED_IDS) | set(_HASTE_IDS) | set(_BT_IDS) | set(_TRAFO_IDS) | set(
+        _ESTAI_IDS
+    ), "new enabled grammar needs its own positive/negative case"
+    assert len(enabled) == 52
+    assert len(pending) == 371
     by_id = {v["id"]: v for v in all_variants}
     so_modelo = {
         i for i in enabled if by_id[i]["recognition"]["grammar"]["kind"] in GRAMATICAS_SO_MODELO
     }
-    assert so_modelo == set(_HASTE_IDS) | set(_BT_IDS) | set(_TRAFO_IDS), (
-        "only the model-only stem_bars, rect_diagonal and split_triangle variants skip the "
-        "legacy cases"
+    assert so_modelo == set(_HASTE_IDS) | set(_BT_IDS) | set(_TRAFO_IDS) | set(_ESTAI_IDS), (
+        "only the model-only stem_bars, rect_diagonal, split_triangle and forked_stem variants "
+        "skip the legacy cases"
     )
     assert enabled.isdisjoint(pending)
     assert len(enabled | pending) == 423
@@ -434,7 +435,7 @@ def test_pending_only_families_are_out_of_domain_even_when_a_frame_matches(
         for package in _packages()
         if all(v["recognition"]["status"] == "pending" for v in package["variants"])
     ]
-    assert len(pending_only) == 18
+    assert len(pending_only) == 17
     for package in pending_only:
         assert perfil_pacotes((package,)).classes_suportadas == ()
         result = _observe(path, (package,))
