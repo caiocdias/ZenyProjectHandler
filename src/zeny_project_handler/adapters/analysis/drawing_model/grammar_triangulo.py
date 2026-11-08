@@ -26,6 +26,15 @@ Rulings da rodada de correção da Task 3:
 - a gravata (dois triângulos que se tocam pelo vértice, num caminho ou em dois) não casa;
 - o triângulo cheio de cor, inteiro ou em duas metades (ciano inteiro), não casa;
 - a metade ciano sobre o fundo branco do triângulo inteiro é `half_cyan`.
+
+Rulings da rodada de correção 2:
+- no wipeout (fundo branco inteiro, metade ciano e metade branca, mesmo repetida), os brancos
+  fecham o mesmo triângulo e o desenho é `half_cyan`; só é ambíguo o ciano cujos pares fecham
+  triângulos diferentes;
+- o triângulo de traço com os três vértices na borda de uma moldura retangular (a PLATAFORMA,
+  `triangle_in_frame`) não casa;
+- o tracejado e o roxo do contorno recusam o triângulo em todos os grupos, também no meio ciano;
+- o mesmo preenchimento emitido duas vezes conta uma vez em `_cheio`.
 """
 
 from __future__ import annotations
@@ -90,6 +99,8 @@ _PREENCHIMENTO_MAXIMO: Final = 1.5
 # dois pontos dentro da tolerância caiam em células vizinhas.
 _CELULA_VERTICE: Final = max(_VERTICE_MINIMO, _LADO_MAXIMO * _VERTICE_RELATIVO)
 _CELULA_CENTRO: Final = _LADO_MAXIMO * _COBERTURA_RELATIVA
+# Duplicatas do mesmo preenchimento: vértices iguais nesta casa decimal (pt).
+_CASAS_DUPLICATA: Final = 2
 # Traço contínuo: `dashes` vazio ou o padrão vazio do PyMuPDF.
 _TRACOS_CONTINUOS: Final = frozenset({"", "[]", "[]0"})
 # Haste de ligação: sai de um vértice, para fora, alinhada à mediana dele.
@@ -263,13 +274,14 @@ def _traca(caminho: Caminho) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class _Lidos:
-    """Triângulos da página por papel: preenchimentos ciano, brancos, opacos de outra cor e
-    contornos (traço ou polilinha fechada)."""
+    """Triângulos da página por papel: preenchimentos ciano, brancos, opacos de outra cor,
+    contornos (traço ou polilinha fechada) e contornos recusados (tracejados ou roxos)."""
 
     cianos: list[tuple[_Triangulo, int]]
     brancos: list[tuple[_Triangulo, int]]
     opacos: list[tuple[_Triangulo, int]]
     contornos: list[tuple[_Triangulo, int | tuple[int, ...]]]
+    recusados: list[_Triangulo]
 
 
 def _area(vertices: Sequence[Ponto]) -> float:
@@ -351,7 +363,7 @@ def _triangulo_preenchido(caminho: Caminho) -> _Triangulo | None:
 def _triangulos_da_pagina(
     modelo: PaginaModelo, excluidos: frozenset[int], perfil: Perfil
 ) -> _Lidos:
-    lidos = _Lidos([], [], [], [])
+    lidos = _Lidos([], [], [], [], [])
     for posicao, caminho in enumerate(modelo.caminhos):
         if posicao in excluidos:
             continue
@@ -364,30 +376,32 @@ def _triangulos_da_pagina(
                 )
                 destino.append((vertices, posicao))
         # O traço de um preenchimento de hachura contorna as fatias, não o pictograma.
-        if (
-            _traca(caminho)
-            and (caminho.tipo == "traco" or len(caminho.subcaminhos) == 1)
-            and _traco_de_pictograma(caminho)
-        ):
+        if _traca(caminho) and (caminho.tipo == "traco" or len(caminho.subcaminhos) == 1):
+            destino_traco = lidos.contornos if _traco_de_pictograma(caminho) else None
             for subcaminho in caminho.subcaminhos:
                 vertices = _vertices(subcaminho, implicito=False)
-                if vertices is not None and _quase_equilatero(vertices, perfil) is not None:
-                    lidos.contornos.append((vertices, posicao))
+                if vertices is None or _quase_equilatero(vertices, perfil) is None:
+                    continue
+                if destino_traco is None:
+                    lidos.recusados.append(vertices)
+                else:
+                    destino_traco.append((vertices, posicao))
     for primitiva in modelo.primitivas:
         if not isinstance(primitiva, Polilinha) or not primitiva.fechada or not primitiva.origens:
             continue
-        if any(
-            origem in excluidos or not _traco_de_pictograma(modelo.caminhos[origem])
-            for origem in primitiva.origens
-        ):
+        if any(origem in excluidos for origem in primitiva.origens):
             continue
         pontos = list(primitiva.pontos)
         if len(pontos) == 4 and math.dist(pontos[0], pontos[-1]) <= _FECHAMENTO:
             pontos = pontos[:3]
         if len(pontos) == 3:
             vertices = (pontos[0], pontos[1], pontos[2])
-            if _quase_equilatero(vertices, perfil) is not None:
+            if _quase_equilatero(vertices, perfil) is None:
+                continue
+            if all(_traco_de_pictograma(modelo.caminhos[o]) for o in primitiva.origens):
                 lidos.contornos.append((vertices, tuple(primitiva.origens)))
+            else:
+                lidos.recusados.append(vertices)
     return lidos
 
 
@@ -502,12 +516,16 @@ def _meios_cianos(contexto: ContextoGramatica, lidos: _Lidos, perfil: Perfil) ->
             lido = _meio_ciano(vertices, branco, perfil)
             if lido is not None:
                 pares.append((lido, outro))
-        # Um ciano com dois brancos que fecham triângulos diferentes é ambíguo: recusa.
-        if len(pares) != 1:
+        if not pares:
             continue
-        (uniao, eixo), outro = pares[0]
+        (uniao, eixo), _ = pares[0]
         lado = sum(_lados(uniao)) / 3
-        achados.append(_MeioCiano(_Forma(uniao, tuple(sorted({posicao, outro})), lado), eixo))
+        # Um ciano com brancos que fecham triângulos diferentes é ambíguo: recusa. Brancos que
+        # fecham o mesmo (o fundo inteiro, a metade e as cópias dela, no wipeout) são um só.
+        if not all(_mesmo_triangulo(u, uniao, lado * _COBERTURA_RELATIVA) for (u, _), _ in pares):
+            continue
+        origens = tuple(sorted({posicao, *(outro for _, outro in pares)}))
+        achados.append(_MeioCiano(_Forma(uniao, origens, lado), eixo))
     return achados
 
 
@@ -591,8 +609,16 @@ def _cheio(vertices: _Triangulo, dentro: Sequence[tuple[_Triangulo, int, bool]])
     """Preenchimentos de cor (ciano ou outra, não branca) cobrem o triângulo: é um triângulo
     cheio, como o ciano inteiro em uma ou em duas metades, e não um pictograma de contorno."""
     area = _area(vertices)
-    coberta = sum(min(_area(v), area) for v, _, de_cor in dentro if de_cor)
+    # O mesmo preenchimento emitido duas vezes cobre a área uma vez só.
+    unicos = {_chave_do_triangulo(v): v for v, _, de_cor in dentro if de_cor}
+    coberta = sum(min(_area(v), area) for v in unicos.values())
     return area > 0 and coberta >= _COBERTURA_CHEIA * area
+
+
+def _chave_do_triangulo(vertices: _Triangulo) -> tuple[tuple[float, float], ...]:
+    return tuple(
+        sorted((round(x, _CASAS_DUPLICATA), round(y, _CASAS_DUPLICATA)) for x, y in vertices)
+    )
 
 
 def _contornos(
@@ -755,6 +781,54 @@ def _classificar(
     )
 
 
+class _Recusas:
+    """O que tira um triângulo já lido do transformador: o contorno tracejado ou roxo dele e os
+    três vértices na borda de uma moldura retangular (a PLATAFORMA, `triangle_in_frame`). Paga
+    as grades.
+
+    A ponta de seta vazada (linha longa que termina no meio de um lado) não é recusada: a regra
+    tirava um TRANSFORMADOR anotado da rodada, ligado pela haste de outro ao meio de um lado.
+    """
+
+    __slots__ = ("_molduras", "_recusados")
+
+    def __init__(self, contexto: ContextoGramatica, recusados: Sequence[_Triangulo]) -> None:
+        limites = _limites(contexto.pagina.modelo)
+        self._recusados = GradeEspacial(
+            ((_caixa_de_pontos(v) or (0.0, 0.0, 0.0, 0.0), v) for v in recusados),
+            limites,
+            contexto.orcamento,
+        )
+        self._molduras = GradeEspacial(
+            ((m.caixa, m.caixa) for m in contexto.molduras if m.forma == "retangulo"),
+            limites,
+            contexto.orcamento,
+        )
+
+    def aceita(self, forma: _Forma) -> bool:
+        tolerancia = max(_VERTICE_MINIMO, forma.lado * _VERTICE_RELATIVO)
+        caixa = forma.caixa
+        return not (
+            any(
+                _mesmo_triangulo(forma.vertices, v, forma.lado * _COBERTURA_RELATIVA)
+                for v in self._recusados.consultar(caixa)
+            )
+            or any(
+                all(_na_borda(p, moldura, tolerancia) for p in forma.vertices)
+                for moldura in self._molduras.consultar(caixa)
+            )
+        )
+
+
+def _na_borda(ponto: Ponto, caixa: Caixa, tolerancia: float) -> bool:
+    """O ponto sobre um lado da caixa retangular, com a tolerância."""
+    x, y = ponto
+    x0, y0, x1, y1 = caixa
+    if not (x0 - tolerancia <= x <= x1 + tolerancia and y0 - tolerancia <= y <= y1 + tolerancia):
+        return False
+    return min(abs(x - x0), abs(x - x1), abs(y - y0), abs(y - y1)) <= tolerancia
+
+
 def triangulos_candidatos(
     contexto: ContextoGramatica, *, marcas: MarcasDaPagina | None = None
 ) -> tuple[Triangulo, ...]:
@@ -771,8 +845,10 @@ def triangulos_candidatos(
     lidos = _triangulos_da_pagina(pagina.modelo, excluidos, perfil)
     if not lidos.cianos and not lidos.brancos and not lidos.contornos:
         return ()
-    meios = _meios_cianos(contexto, lidos, perfil)
+    recusas = _Recusas(contexto, lidos.recusados)
+    meios = [m for m in _meios_cianos(contexto, lidos, perfil) if recusas.aceita(m.forma)]
     formas, anexos = _contornos(contexto, lidos, meios, perfil)
+    formas = [forma for forma in formas if recusas.aceita(forma)]
     resultado = [
         _classificar(contexto, marcas, meio.forma, "half_cyan", meio.eixo, anexos.get(i, ()))
         for i, meio in enumerate(meios)
