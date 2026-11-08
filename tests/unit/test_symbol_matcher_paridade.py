@@ -30,6 +30,7 @@ from zeny_project_handler.adapters.analysis.drawing_model import (
     grammar_disc,
     grammar_frames,
     grammar_marcas,
+    grammar_rect_diagonal,
     grammar_stem,
     symbol_grammars,
     symbol_matcher,
@@ -941,6 +942,7 @@ def test_modulos_do_nucleo_nao_importam_pymupdf() -> None:
         grammar_frames,
         grammar_disc,
         grammar_marcas,
+        grammar_rect_diagonal,
         grammar_stem,
         symbol_matcher,
     )

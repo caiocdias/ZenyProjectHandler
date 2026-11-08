@@ -190,7 +190,7 @@ def test_x_paga_cada_par_de_bracos_examinado() -> None:
 
     _x(contexto)
 
-    assert contexto.orcamento.gasto - antes >= 3
+    assert contexto.orcamento.gasto - antes == 6
 
 
 @pytest.mark.parametrize(
@@ -291,7 +291,7 @@ def test_marcas_pagam_os_contornos_uma_vez() -> None:
     contornos = marcas.contornos
     pago = contexto.orcamento.gasto - antes
 
-    assert pago >= 2
+    assert pago == 5
     assert marcas.contornos is contornos
     assert contexto.orcamento.gasto - antes == pago
     assert len(list(contornos.consultar((0.0, 0.0, 300.0, 300.0)))) == 3
