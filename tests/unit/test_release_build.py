@@ -285,3 +285,157 @@ def test_sha256_index_covers_every_distributed_file_except_itself(tmp_path: Path
     assert "client/artifact.zip" in entries
     assert "release-manifest.json" in entries
     assert "SHA256SUMS.txt" not in entries
+
+
+def test_commit_de_origem_devolve_sha_completo_de_repositorio_limpo(tmp_path: Path) -> None:
+    repo = _repositorio(tmp_path / "repo")
+    commit = _commit_de_origem(repo)
+    assert len(commit) == 40
+    assert commit == _git(repo, "rev-parse", "HEAD")
+
+
+def test_commit_de_origem_recusa_arquivo_rastreado_modificado(tmp_path: Path) -> None:
+    repo = _repositorio(tmp_path / "repo")
+    (repo / "a.txt").write_text("alterado", encoding="utf-8")
+    with pytest.raises(ReleaseBuildError, match="árvore suja"):
+        _commit_de_origem(repo)
+
+
+def test_commit_de_origem_recusa_mudanca_so_no_indice(tmp_path: Path) -> None:
+    repo = _repositorio(tmp_path / "repo")
+    (repo / "b.txt").write_text("b", encoding="utf-8")
+    _git(repo, "add", "b.txt")
+    with pytest.raises(ReleaseBuildError, match="árvore suja"):
+        _commit_de_origem(repo)
+
+
+def test_commit_de_origem_em_repositorio_sem_commits_da_erro_acionavel(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    with pytest.raises(ReleaseBuildError, match="não foi possível obter o commit"):
+        _commit_de_origem(repo)
+
+
+def test_commit_de_origem_falha_do_git_no_status_vira_erro_acionavel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    real = subprocess.run
+
+    def status_falha(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if command[1] == "status":
+            return subprocess.CompletedProcess(command, 128, "", "fatal: índice corrompido")
+        return real(command, **kwargs)  # type: ignore[no-any-return, call-overload]
+
+    repo = _repositorio(tmp_path / "repo")
+    monkeypatch.setattr(subprocess, "run", status_falha)
+    with pytest.raises(ReleaseBuildError, match="não foi possível obter o commit"):
+        _commit_de_origem(repo)
+
+
+def test_commit_de_origem_executa_os_dois_comandos_git_no_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    chamadas: list[tuple[list[str], object]] = []
+    real = subprocess.run
+
+    def espiao(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        chamadas.append((command, kwargs.get("cwd")))
+        return real(command, **kwargs)  # type: ignore[no-any-return, call-overload]
+
+    repo = _repositorio(tmp_path / "repo")
+    monkeypatch.setattr(subprocess, "run", espiao)
+    _commit_de_origem(repo)
+    assert len(chamadas) == 2
+    assert all(Path(str(cwd)) == repo for _comando, cwd in chamadas)
+
+
+@pytest.mark.parametrize(
+    "conteudo",
+    [
+        "{ nao e json",
+        "[]",
+        "{}",
+        '{"registry": {}, "rules": []}',
+        '{"registry": {"version": 1}, "rules": "x"}',
+        '{"registry": {"version": "v"}, "rules": [1, 2]}',
+        '{"registry": {"version": "v"}, "rules": [{}]}',
+    ],
+    ids=[
+        "json-quebrado",
+        "lista",
+        "vazio",
+        "registro-vazio",
+        "regras-texto",
+        "regras-inteiros",
+        "regra-vazia",
+    ],
+)
+def test_fatos_com_seed_invalido_viram_release_build_error(tmp_path: Path, conteudo: str) -> None:
+    copia = tmp_path / SEED
+    copia.parent.mkdir(parents=True)
+    copia.write_text(conteudo, encoding="utf-8")
+    with pytest.raises(ReleaseBuildError):
+        _fatos_do_produto(tmp_path)
+
+
+def test_fatos_sem_arquivo_de_seed_viram_release_build_error(tmp_path: Path) -> None:
+    with pytest.raises(ReleaseBuildError):
+        _fatos_do_produto(tmp_path)
+
+
+def test_fatos_contam_so_ativas_quando_varias_estao_desabilitadas(tmp_path: Path) -> None:
+    payload = json.loads((ROOT / SEED).read_text(encoding="utf-8"))
+    total = len(payload["rules"])
+    for regra in payload["rules"][:5]:
+        regra["enabled"] = False
+    copia = tmp_path / SEED
+    copia.parent.mkdir(parents=True)
+    copia.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    assert _fatos_do_produto(tmp_path).regras_habilitadas == total - 5
+
+
+def test_build_com_seed_invalido_reprova_antes_de_gastar_build(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def nao_deve_rodar(*args: object, **kwargs: object) -> None:
+        pytest.fail("o build não pode começar com o seed inválido")
+
+    copia = tmp_path / SEED
+    copia.parent.mkdir(parents=True)
+    copia.write_text("{ nao e json", encoding="utf-8")
+    monkeypatch.setattr(build_release, "ROOT", tmp_path)
+    monkeypatch.setattr(build_release, "_commit_de_origem", lambda root=tmp_path: COMMIT)
+    monkeypatch.setattr(
+        build_release,
+        "_fatos_do_produto",
+        lambda root=tmp_path: _fatos_do_produto(root),
+    )
+    monkeypatch.setattr(build_release, "_reset_directory", nao_deve_rodar)
+    monkeypatch.setattr(build_release, "_run", nao_deve_rodar)
+    monkeypatch.setattr(sys, "argv", ["build_release.py", "--version", "0.6.0"])
+
+    assert build_release.main() == 1
+    assert "BUILD DE RELEASE: REPROVADO" in capsys.readouterr().out
+
+
+def test_build_com_git_ausente_reprova_sem_traceback(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def sem_git(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise FileNotFoundError("git")
+
+    def nao_deve_rodar(*args: object, **kwargs: object) -> None:
+        pytest.fail("o build não pode começar sem git")
+
+    monkeypatch.setattr(subprocess, "run", sem_git)
+    monkeypatch.setattr(build_release, "_reset_directory", nao_deve_rodar)
+    monkeypatch.setattr(build_release, "_run", nao_deve_rodar)
+    monkeypatch.setattr(sys, "argv", ["build_release.py", "--version", "0.6.0"])
+
+    assert build_release.main() == 1
+    assert "não foi possível obter o commit" in capsys.readouterr().out
+
+
+def test_notas_trazem_a_origem_na_lista_de_fatos(tmp_path: Path) -> None:
+    assert f"- Origem: commit `{COMMIT}`." in _notas(tmp_path)
