@@ -463,6 +463,31 @@ def test_x_curto_de_cor_diferente_da_do_retangulo_nao_e_lido_como_diagonal() -> 
     assert _variantes(pagina_desenhada(desenhar)) == [_V004]
 
 
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason="ponto cego do X curto da mesma cor do retangulo (ledger E06.3.3.2.1, Minor da Task 4)",
+)
+def test_x_curto_da_mesma_cor_do_retangulo_nao_e_lido_como_diagonal() -> None:
+    """Sentinela do ponto cego que a regra da cor nao fecha: bracos pretos de 1,2 vezes o lado
+    maior sobre o retangulo preto passam por diagonais pela geometria e pela cor; com tres
+    diagonais o retangulo e recusado, e nao sai o X da v004."""
+    cx, cy = CENTRO
+    meio = 1.2 * CORPO[0] / 2 / math.sqrt(2)
+
+    def desenhar(pagina: pymupdf.Page) -> None:
+        desenhar_retangulo(pagina)
+        for sinal in (1, -1):
+            pagina.draw_line(
+                (cx - meio, cy - sinal * meio),
+                (cx + meio, cy + sinal * meio),
+                color=PRETO,
+                width=0.5,
+            )
+
+    assert _variantes(pagina_desenhada(desenhar)) == [_V004]
+
+
 # --- desconhecidos, orcamento, pureza e convivencia com a haste ------------------------------
 
 
