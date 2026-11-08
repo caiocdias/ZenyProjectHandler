@@ -25,6 +25,7 @@ from zeny_project_handler.adapters.analysis.drawing_model.grammar_marcas import 
     cor_canonica,
     diferenca_angular,
     envolvente,
+    marcas_do_contexto,
     tem_x,
     um_traco,
 )
@@ -287,10 +288,10 @@ def hastes_candidatas(
     """Todas as hastes com barras da página, já lidas (envolvente, pictograma e X).
 
     `marcas` são as da página, compartilhadas com outras gramáticas; sem elas, são criadas
-    aqui. Gasta 1 por semente, as consultas às grades e, se há haste, os contornos das marcas,
-    que só são pagos uma vez por página.
+    aqui; marcas de outro contexto levantam `ValueError`. Gasta 1 por semente, as consultas às
+    grades e, se há haste, os contornos das marcas, que só são pagos uma vez por página.
     """
-    marcas = MarcasDaPagina(contexto) if marcas is None else marcas
+    marcas = marcas_do_contexto(contexto, marcas)
     perfil = perfil_da_pagina(contexto.pagina.modelo)
     estilos = _Estilos(contexto.pagina.modelo)
     sementes = [

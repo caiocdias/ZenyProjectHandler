@@ -22,6 +22,7 @@ from zeny_project_handler.adapters.analysis.drawing_model.grammar_marcas import 
     MarcasDaPagina,
     angulo,
     envolvente,
+    marcas_do_contexto,
     tem_x,
 )
 from zeny_project_handler.adapters.analysis.drawing_model.model import (
@@ -289,11 +290,11 @@ def retangulos_candidatos(
     """Todos os retângulos com diagonal da página, já lidos (envolvente e X).
 
     `marcas` são as da página, compartilhadas com outras gramáticas; sem elas, são criadas
-    aqui. Gasta 1 por quadrilátero indexado, as consultas às grades (quadriláteros, segmentos e
-    palavras) e, se há achado, os contornos das marcas, pagos uma vez por página. Sem
-    quadrilátero na página, não gasta nada.
+    aqui; marcas de outro contexto levantam `ValueError`. Gasta 1 por quadrilátero indexado, as
+    consultas às grades (quadriláteros, segmentos e palavras) e, se há achado, os contornos das
+    marcas, pagos uma vez por página. Sem quadrilátero na página, não gasta nada.
     """
-    marcas = MarcasDaPagina(contexto) if marcas is None else marcas
+    marcas = marcas_do_contexto(contexto, marcas)
     modelo = contexto.pagina.modelo
     perfil = _PERFIS[marcas.origem]
     quadrilateros = _quadrilateros(modelo, perfil)

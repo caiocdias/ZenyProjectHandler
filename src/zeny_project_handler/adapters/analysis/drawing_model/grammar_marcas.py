@@ -52,6 +52,10 @@ _ANGULO_BRACO_X: Final = (math.radians(25), math.radians(65))
 _MEIO_DO_BRACO: Final = (0.3, 0.7)
 _RAZAO_BRACOS: Final = 1.3
 _ABERTURA_X: Final = math.radians(45)
+# O cruzamento fica perto do símbolo (R-E06.3.3.2.1-2): a até esta vez a escala do centro do
+# pictograma. Nas 16 folhas, os X próprios cruzam a até 0,38 vez a escala do centro, e os X de
+# vizinho que marcavam o símbolo, a 1,82 vez ou mais.
+_CRUZAMENTO_X: Final = 1.0
 _TOLERANCIA_COR: Final = 0.02
 
 
@@ -113,6 +117,11 @@ class MarcasDaPagina:
         self._contornos: GradeEspacial[Contorno] | None = None
 
     @property
+    def contexto(self) -> ContextoGramatica:
+        """O contexto de página destas marcas; as gramáticas recusam marcas de outro."""
+        return self._contexto
+
+    @property
     def origem(self) -> str:
         """A origem predominante dos textos da página; não gasta do orçamento."""
         if self._origem is None:
@@ -125,6 +134,20 @@ class MarcasDaPagina:
         if self._contornos is None:
             self._contornos = _contornos(self._contexto)
         return self._contornos
+
+
+def marcas_do_contexto(
+    contexto: ContextoGramatica, marcas: MarcasDaPagina | None
+) -> MarcasDaPagina:
+    """As `marcas` dadas, se são do `contexto` (R-E06.3.3.2.1-3); sem elas, marcas novas dele.
+
+    Marcas de outro contexto pagariam o orçamento e leriam os contornos de outra página.
+    """
+    if marcas is None:
+        return MarcasDaPagina(contexto)
+    if marcas.contexto is not contexto:
+        raise ValueError("As marcas da página são de outro contexto de gramáticas.")
+    return marcas
 
 
 def _dentro_da_elipse(caixa: Caixa, ponto: Ponto, tolerancia: float) -> bool:
@@ -304,14 +327,25 @@ def _mesma_cor(a: Cor | None, b: Cor | None) -> bool:
     return all(abs(x - y) <= _TOLERANCIA_COR for x, y in zip(a, b, strict=True))
 
 
-def _formam_x(primeiro: Segmento, segundo: Segmento, contexto: ContextoGramatica) -> bool:
+def _formam_x(
+    primeiro: Segmento,
+    segundo: Segmento,
+    contexto: ContextoGramatica,
+    centro: Ponto,
+    alcance: float,
+) -> bool:
     cruz = _intersecao(primeiro, segundo)
     if cruz is None:
         return False
+    ponto = (
+        primeiro.a[0] + (primeiro.b[0] - primeiro.a[0]) * cruz[0],
+        primeiro.a[1] + (primeiro.b[1] - primeiro.a[1]) * cruz[0],
+    )
     c1, c2 = math.dist(primeiro.a, primeiro.b), math.dist(segundo.a, segundo.b)
     caminhos = contexto.pagina.modelo.caminhos
     return (
-        all(_MEIO_DO_BRACO[0] <= t <= _MEIO_DO_BRACO[1] for t in cruz)
+        math.dist(ponto, centro) <= alcance
+        and all(_MEIO_DO_BRACO[0] <= t <= _MEIO_DO_BRACO[1] for t in cruz)
         and max(c1, c2) <= min(c1, c2) * _RAZAO_BRACOS
         and diferenca_angular(angulo(primeiro), angulo(segundo)) >= _ABERTURA_X
         and _mesma_cor(caminhos[primeiro.caminho].estilo.cor, caminhos[segundo.caminho].estilo.cor)
@@ -328,7 +362,9 @@ def tem_x(
     """Dois braços soltos de mesma cor e comprimento parecido que se cruzam perto dos meios.
 
     Os braços ficam em torno do `pictograma`, com comprimento relativo à `escala` e inclinados
-    em relação ao `eixo` (ângulo de reta, em radianos); os segmentos `proprios` não contam.
+    em relação ao `eixo` (ângulo de reta, em radianos); os segmentos `proprios` não contam. O
+    cruzamento fica a até `_CRUZAMENTO_X` vezes a `escala` do centro do pictograma: o X de um
+    símbolo vizinho, que cruza longe dele, não é a marca de retirada deste.
     """
     margem = escala * _MARGEM_X
     janela = (
@@ -347,8 +383,10 @@ def tem_x(
     ]
     # Cada par examinado é uma consulta: muitas diagonais longas na janela pagam o produto.
     contexto.orcamento.gastar(len(bracos) * (len(bracos) - 1) // 2)
+    centro = ((pictograma[0] + pictograma[2]) / 2, (pictograma[1] + pictograma[3]) / 2)
+    alcance = escala * _CRUZAMENTO_X
     for i, primeiro in enumerate(bracos):
         for segundo in bracos[i + 1 :]:
-            if _formam_x(primeiro, segundo, contexto):
+            if _formam_x(primeiro, segundo, contexto, centro, alcance):
                 return primeiro, segundo
     return None
