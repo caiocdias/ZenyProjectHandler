@@ -270,8 +270,9 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E06.2.2.1 | Método versionado no runner | #concluida | E06.2.1 | método de pacotes sobre o modelo no runner opt-in, resíduo raster marcado, agrupamento sem laço quadrático fora de teto |
 | E06.2.2.2 | Medição do método nas 16 folhas | #concluida | E06.2.2.1 | benchmark ao lado do atual e diff por variante, com cada "só no núcleo" classificado |
 | E06.3.1 | Pacotes das classes da ficha | #concluida | E06.2.2.2 | 58 variantes do inventário de ESTAI, TRANSFORMADOR, ATERRAMENTO e PARA_RAIOS_MT/BT nos pacotes, como `pending`; auditor e matriz aceitam outro `owner_stage` |
-| E06.3.2 | Aterramento, para-raios MT e H2 | #em-andamento | E06.3.1 | gramática de haste com barras, com laboratório, acima do atual nas duas classes; confirmação da H2 (raster como resíduo) |
-| E06.3.3 | Para-raios BT e transformador | #pendente | E06.3.2 | gramáticas de moldura das duas classes, com laboratório, acima do atual |
+| E06.3.2.1 | Base da haste, leituras erradas e H2 | #em-andamento | E06.3.1 | tipo de gramática só do modelo, métrica de leitura errada afirmada, resíduos raster por folha e veredito da H2 |
+| E06.3.2.2 | Gramática de haste com barras | #pendente | E06.3.2.1 | gramática de haste com barras, com laboratório, ATERRAMENTO e PARA_RAIOS_MT acima do atual |
+| E06.3.3 | Para-raios BT e transformador | #pendente | E06.3.2.2 | gramáticas de moldura das duas classes, com laboratório, acima do atual |
 | E06.3.4 | Estai | #pendente | E06.3.3 | gramática de estai, com laboratório, acima do atual |
 | E06.3.5 | Equipamento de interrupção | #pendente | E06.3.4 | gramática de interrupção, acima do atual (que não emite a classe) |
 | E07 | Ficha do poste | #pendente | E06.3.5, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
@@ -1607,7 +1608,17 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
-## E06.3.2 — Aterramento, para-raios MT e H2 — #em-andamento
+## E06.3.2 — Aterramento, para-raios MT e H2 (dividida em E06.3.2.1 e E06.3.2.2)
+
+**Divisão (2026-11-07, orquestrador):**
+- **Por que dividir:** o plano, depois de duas rodadas da revisão de arquitetura, soma cerca de 4h em tarefas, mais o laboratório, acima do teto de ~3h do "Orçamento". A divisão da E06.3 já pedia a H2 medida cedo, porque ela pode mudar a abordagem.
+- **Subetapas,** cada uma uma etapa completa, em série:
+  - E06.3.2.1, base: o tipo de gramática só do modelo (`stem_bars` validado e ignorado pelo motor antigo), a métrica de leitura errada afirmada no benchmark e a medição da H2, com o veredito;
+  - E06.3.2.2, gramática: laboratório, gramática de haste com barras, observação com componentes, habilitação das variantes e benchmark nas 16 folhas.
+- **Como os critérios se repartem:** a E06.3.2.1 leva a H2 e as fixtures do que ela constrói; a E06.3.2.2 leva as fixtures das duas classes e o "acima do atual". Auditor e `.bat` valem nas duas.
+- **Dependência:** a E06.3.3 passa a depender da E06.3.2.2. O relógio da E06.3.2.1 começa no commit `#em-andamento` da E06.3.2 (e609bda).
+
+O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Objetivo:** reconhecer ATERRAMENTO e PARA_RAIOS_MT sobre o modelo de desenho, acima do analisador atual, e confirmar ou refutar a hipótese H2.
 
@@ -1652,11 +1663,76 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
+## E06.3.2.1 — Base da haste, leituras erradas e H2 — #em-andamento
+
+**Objetivo:** preparar o tipo de gramática que só o método sobre o modelo executa, medir a leitura errada afirmada no benchmark e confirmar ou refutar a H2.
+
+**Dependências:** E06.3.1.
+
+**Escopo:**
+- **Tipo `stem_bars` só do modelo:** validado nos pacotes e no schema, ignorado pelo motor antigo (`variantes_do_motor`), anunciado pelo perfil do método sobre o modelo; `CasamentoGramatica.componentes`.
+- **Leitura errada afirmada** calculada pelo benchmark de símbolos, por classe.
+- **H2:** `residuos_raster` folha a folha, sem contar página `FORA_DOMINIO` nem com imagens que falharam, cruzado com as referências da ficha, com recortes para triagem; contagem por folha em `tmp/`.
+
+**Fora de escopo:** a gramática e a habilitação (E06.3.2.2).
+
+**Critérios de aceite:**
+
+- [ ] Fixtures sintéticas positivas e negativas do tipo só do modelo e das duas medições.
+- [ ] H2 confirmada ou refutada, com a contagem por folha em `tmp/`.
+- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:** o plano é `docs/superpowers/plans/2026-11-07-leitura-vetorial-por-poste-e06-3-2-1.md`, recortado do plano da E06.3.2 já revisado.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** os da E06.3.
+
+**Evidências e handoff:** —
+
+---
+
+## E06.3.2.2 — Gramática de haste com barras — #pendente
+
+**Objetivo:** reconhecer ATERRAMENTO e PARA_RAIOS_MT sobre o modelo de desenho, acima do analisador atual.
+
+**Dependências:** E06.3.2.1.
+
+**Escopo:** laboratório H-A/H-B/H-C; gramática de haste com barras (caixa do pictograma, haste como componente); observação com uma primitiva por caminho e versão 1.1.0 do método; habilitação das variantes de f02-19 e f02-21 (MT); guarda contra memorização estendida; benchmark nas 16 folhas, comparação com os JSON congelados da E06.2.2.2 e taxa de fusão com o legado no runner.
+
+**Fora de escopo:** as outras classes (E06.3.3 a E06.3.5).
+
+**Critérios de aceite:**
+
+- [ ] Fixtures sintéticas positivas e negativas das duas classes.
+- [ ] Nas 16 folhas, precisão e recall de ATERRAMENTO e PARA_RAIOS_MT em `tmp/`, maiores que os do atual com as mesmas referências, e leitura errada afirmada = 0.
+- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:** parte do rascunho `docs/superpowers/plans/2026-11-07-leitura-vetorial-por-poste-e06-3-2-2.md` (decisões R-E06.3.2-1 a 9, já com os achados das rodadas 0 e 1 da revisão de arquitetura da E06.3.2); leia o handoff da E06.3.2.1, sobretudo o veredito da H2.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** os da E06.3.
+
+**Evidências e handoff:** —
+
+---
+
 ## E06.3.3 — Para-raios BT e transformador — #pendente
 
 **Objetivo:** reconhecer PARA_RAIOS_BT e TRANSFORMADOR sobre o modelo de desenho, acima do analisador atual.
 
-**Dependências:** E06.3.2.
+**Dependências:** E06.3.2.2.
 
 **Escopo:** gramáticas de moldura (para-raios BT: retângulo com diagonal; transformador: triângulo ou meio preenchido em círculo), habilitação das variantes de f02-21 (BT), f02-18, f02-24 e f02-25, laboratório e guarda.
 
