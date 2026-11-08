@@ -273,7 +273,7 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E06.3.2.1 | Base da haste, leituras erradas e H2 | #concluida | E06.3.1 | tipo de gramática só do modelo, métrica de leitura errada afirmada, resíduos raster por folha e veredito da H2 |
 | E06.3.2.2 | Gramática de haste com barras | #concluida | E06.3.2.1 | gramática de haste com barras, com laboratório, ATERRAMENTO e PARA_RAIOS_MT acima do atual |
 | E06.3.3.1 | Para-raios BT | #concluida | E06.3.2.2 | gramática do retângulo com diagonal, com laboratório, PARA_RAIOS_BT acima do atual (que não casa nenhuma) |
-| E06.3.3.2 | Transformador | #pendente | E06.3.3.1 | gramática do triângulo em círculo, com laboratório, TRANSFORMADOR acima do atual |
+| E06.3.3.2 | Transformador | #em-andamento | E06.3.3.1 | gramática do triângulo em círculo, com laboratório, TRANSFORMADOR acima do atual |
 | E06.3.4 | Estai | #pendente | E06.3.3.2 | gramática de estai, com laboratório, acima do atual |
 | E06.3.5 | Equipamento de interrupção | #pendente | E06.3.4 | gramática de interrupção, acima do atual (que não emite a classe) |
 | E07 | Ficha do poste | #pendente | E06.3.5, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
@@ -1941,7 +1941,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
   - o aceite degenerado na precisão;
   - a fusão com o legado sem prova;
   - o compartilhamento de contornos.
-- Relógio: de 80cfff2 (02:34 de 2026-11-08, `#em-andamento` da E06.3.3) até o commit `#concluida` (~05:35), cerca de 3h. A divisão da E06.3.3 entra nesse tempo.
+- Relógio: de 80cfff2 (02:34 de 2026-11-08, `#em-andamento` da E06.3.3) até o commit `#concluida` (0fb4523, 05:32), 2h58. A divisão da E06.3.3 entra nesse tempo.
 - Revisão final (`revisor-seguranca`, opus, 4ad9148..edfc9c5): aprovada com ressalvas, sem Crítico e sem correção de código. O Importante era o registro deste handoff. Os Menores ficaram para a E06.3.3.2, abaixo.
 - **Laboratório** (`tmp/laboratorio/e06-3-3-1/` do checkout principal), PARA_RAIOS_BT:
   - H-1, moldura primeiro: 9/1/1 e gasto de 197 mil;
@@ -1999,7 +1999,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
-## E06.3.3.2 — Transformador — #pendente
+## E06.3.3.2 — Transformador — #em-andamento
 
 **Objetivo:** reconhecer TRANSFORMADOR (triângulo ou meio preenchido em círculo) sobre o modelo de desenho, acima do analisador atual (14 tp, 2 fp, 0 fn).
 
