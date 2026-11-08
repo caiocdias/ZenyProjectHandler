@@ -139,6 +139,39 @@ def _no_pagina(
     )
 
 
+def leituras_erradas(
+    referencias: Sequence[Mapping[str, Any]],
+    predicoes: Sequence[Mapping[str, Any]],
+    casadas: Collection[int],
+    tolerancia: float,
+) -> list[dict[str, Any]]:
+    """Predições não casadas cujo centro cai na referência de outra classe (R-E06.3.2-4)."""
+    itens: list[dict[str, Any]] = []
+    for j, predicao in enumerate(predicoes):
+        if j in casadas:
+            continue
+        centro = _centro(predicao["bbox"])
+        for i, referencia in enumerate(referencias):
+            if (
+                referencia["pagina"] == predicao["pagina"]
+                and referencia["classe"] != predicao["classe"]
+                and _na_caixa(centro, referencia["bbox"], tolerancia)
+            ):
+                itens.append(
+                    {
+                        "classe_predita": predicao["classe"],
+                        "classe_referencia": referencia["classe"],
+                        "referencia_id": i,
+                    }
+                )
+    return itens
+
+
+def _bloco_leituras_erradas(itens: list[dict[str, Any]]) -> Registro:
+    por_classe = Counter(item["classe_predita"] for item in itens)
+    return {"total": len(itens), "por_classe": dict(sorted(por_classe.items())), "itens": itens}
+
+
 def _bloco_criterio(
     referencias: Sequence[Registro],
     predicoes: Sequence[Item],
@@ -172,6 +205,9 @@ def _bloco_criterio(
         "fora_do_escopo": dict(sorted(fora_do_escopo.items())),
         "fora_das_regioes": fora_das_regioes,
         "perto_de_poste_pendente": perto_de_poste_pendente,
+        "leituras_erradas": _bloco_leituras_erradas(
+            leituras_erradas(referencias, predicoes, casadas_predicao, TOLERANCIA_CENTRO)
+        ),
     }
 
 
@@ -235,6 +271,9 @@ def _somar_criterio(blocos: Sequence[Mapping[str, Any]]) -> Registro:
         "fora_do_escopo": _somar_contadores(b["fora_do_escopo"] for b in blocos),
         "fora_das_regioes": sum(b["fora_das_regioes"] for b in blocos),
         "perto_de_poste_pendente": sum(b["perto_de_poste_pendente"] for b in blocos),
+        "leituras_erradas": _bloco_leituras_erradas(
+            [item for b in blocos for item in b["leituras_erradas"]["itens"]]
+        ),
     }
 
 

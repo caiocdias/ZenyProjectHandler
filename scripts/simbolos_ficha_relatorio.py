@@ -41,7 +41,8 @@ def _linhas_metodo(titulo: str, bloco: Mapping[str, Any]) -> list[str]:
         "",
         f"Folhas medidas: {bloco['folhas_medidas']}; com falha: {bloco['folhas_com_falha']}; "
         f"predições: {bloco['predicoes']}; contexto não desenho: {bloco['contexto_nao_desenho']}; "
-        f"duplicatas: {bloco['duplicatas'] or 'nenhuma'}.",
+        f"duplicatas: {bloco['duplicatas'] or 'nenhuma'}; "
+        f"leituras erradas (centro): {bloco['centro']['leituras_erradas']['total']}.",
         "",
     ]
     for criterio in CRITERIOS:
