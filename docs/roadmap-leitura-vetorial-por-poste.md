@@ -273,8 +273,9 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E06.3.2.1 | Base da haste, leituras erradas e H2 | #concluida | E06.3.1 | tipo de gramática só do modelo, métrica de leitura errada afirmada, resíduos raster por folha e veredito da H2 |
 | E06.3.2.2 | Gramática de haste com barras | #concluida | E06.3.2.1 | gramática de haste com barras, com laboratório, ATERRAMENTO e PARA_RAIOS_MT acima do atual |
 | E06.3.3.1 | Para-raios BT | #concluida | E06.3.2.2 | gramática do retângulo com diagonal, com laboratório, PARA_RAIOS_BT acima do atual (que não casa nenhuma) |
-| E06.3.3.2 | Transformador | #em-andamento | E06.3.3.1 | gramática do triângulo em círculo, com laboratório, TRANSFORMADOR acima do atual |
-| E06.3.4 | Estai | #pendente | E06.3.3.2 | gramática de estai, com laboratório, acima do atual |
+| E06.3.3.2.1 | Marcas: envolvente e X | #em-andamento | E06.3.3.1 | envolvente por subcaminho, X perto do símbolo e concordância de situação medida |
+| E06.3.3.2.2 | Transformador | #pendente | E06.3.3.2.1 | gramática do triângulo em círculo, com laboratório, TRANSFORMADOR acima do atual |
+| E06.3.4 | Estai | #pendente | E06.3.3.2.2 | gramática de estai, com laboratório, acima do atual |
 | E06.3.5 | Equipamento de interrupção | #pendente | E06.3.4 | gramática de interrupção, acima do atual (que não emite a classe) |
 | E07 | Ficha do poste | #pendente | E06.3.5, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
 | E08 | Conferência UTM | #pendente | E07 | transformação página → UTM, checagem de posição e vão, pendências |
@@ -1999,7 +2000,17 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
-## E06.3.3.2 — Transformador — #em-andamento
+## E06.3.3.2 — Transformador (dividida em E06.3.3.2.1 e E06.3.3.2.2)
+
+**Divisão (2026-11-08, orquestrador):**
+- **Por que dividir:** o conserto de `grammar_marcas` pedido no handoff da E06.3.3.1 (envolvente, X perto do símbolo, guarda de contexto e os Menores do BT), mais a medição da situação e a gramática do transformador com laboratório, passa do teto de ~3h. O conserto não depende do transformador e muda a situação das duas gramáticas já entregues.
+- **Subetapas,** em série:
+  - **E06.3.3.2.1, marcas: envolvente e X.** A envolvente é lida do subcaminho fechado, e o X precisa estar perto do símbolo. Entram a guarda de contexto das marcas e os Menores do BT, e a concordância de situação com a ficha passa a ser medida no benchmark;
+  - **E06.3.3.2.2, transformador:** a gramática do triângulo em círculo.
+- **Achado para a E06.3.3.2.2** (conferido em 1200 dpi na 005): o transformador real é um triângulo girado, partido em metade branca e metade ciano (dois preenchimentos), dentro de um círculo. As variantes "Rede", "Dedicado" e "IP" de f02-18 têm a mesma forma, e o inventário avisa que "a forma isolada não resolve atributos não discriminados na linha". O plano da E06.3.3.2.2 decide como habilitar sem afirmar o uso.
+- **Dependência:** a E06.3.4 passa a depender da E06.3.3.2.2. O relógio da E06.3.3.2.1 começa no commit `#em-andamento` da E06.3.3.2 (0529544).
+
+O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Objetivo:** reconhecer TRANSFORMADOR (triângulo ou meio preenchido em círculo) sobre o modelo de desenho, acima do analisador atual (14 tp, 2 fp, 0 fn).
 
@@ -2026,6 +2037,78 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Riscos e mitigação:** os da E06.3.
 
+**Evidências e handoff:** nas subetapas.
+
+---
+
+## E06.3.3.2.1 — Marcas: envolvente e X — #em-andamento
+
+**Objetivo:** fazer a situação (variante) das gramáticas sobre o modelo sair certa nas folhas reais. A envolvente passa a ser vista, e o X passa a ser o do próprio símbolo. A concordância com a ficha passa a ser medida.
+
+**Dependências:** E06.3.3.1.
+
+**Escopo:**
+- envolvente lida do subcaminho fechado do caminho, e não só de polilinha fechada;
+- X de retirada com o cruzamento perto do pictograma;
+- `MarcasDaPagina` guarda o contexto e recusa outro;
+- Menores do BT:
+  - todos os caminhos do retângulo nos componentes;
+  - a diagonal com a cor do retângulo, se não perder tp;
+  - negativo de célula de tabela;
+  - `raises=AssertionError` nos xfail;
+- concordância de situação no benchmark, entre a variante predita e a situação anotada na ficha;
+- versão do método sobre o modelo.
+
+**Fora de escopo:** a gramática do transformador (E06.3.3.2.2).
+
+**Critérios de aceite:**
+
+- [ ] Fixtures sintéticas positivas e negativas da envolvente por subcaminho e do X perto do símbolo.
+- [ ] Nas 16 folhas, tp/fp/fn por classe do `modelo` sem piora em nenhuma folha em relação à E06.3.3.1. A concordância de situação de ATERRAMENTO, PARA_RAIOS_MT e PARA_RAIOS_BT com a ficha tem de ser maior que a de antes, e a leitura errada afirmada de fato tem de ser 0.
+- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:** leia o handoff da E06.3.3.1 ("Para a E06.3.3.2").
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** a envolvente nova pode mudar a caixa e o gasto da haste e do BT. Por isso o plano mede tp/fp/fn, gasto e diff contra a E06.3.3.1.
+
+**Evidências e handoff:** —
+
+---
+
+## E06.3.3.2.2 — Transformador — #pendente
+
+**Objetivo:** reconhecer TRANSFORMADOR (triângulo partido ou de contorno, em círculo ou não) sobre o modelo de desenho, acima do analisador atual (14 tp, 2 fp, 0 fn).
+
+**Dependências:** E06.3.3.2.1.
+
+**Escopo:** tipo de gramática, laboratório, gramática e habilitação de f02-18 (variantes a decidir no plano, pelo achado da divisão); guarda, teto e pureza; medição nas 16 folhas.
+
+**Fora de escopo:** enrolamentos e triângulo roxo com S.
+
+**Critérios de aceite:**
+
+- [ ] Fixtures sintéticas positivas e negativas de TRANSFORMADOR.
+- [ ] Nas 16 folhas, precisão e recall de TRANSFORMADOR em `tmp/`, maiores que os do atual, e leitura errada afirmada de fato = 0.
+- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:** o `atual` já tem recall de 100%, então o ganho possível é de precisão. Rede, Dedicado e IP não se distinguem pela forma (ver a divisão).
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** os da E06.3; a folga de gasto (a 016 já gasta 192.308 de 200.000).
+
 **Evidências e handoff:** —
 
 ---
@@ -2034,7 +2117,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Objetivo:** reconhecer ESTAI sobre o modelo de desenho, acima do analisador atual.
 
-**Dependências:** E06.3.3.2.
+**Dependências:** E06.3.3.2.2.
 
 **Escopo:** gramática de estai (traço bifurcado, com ou sem envolvente, e o X de retirada), habilitação das variantes de f02-14 e f02-15, laboratório e guarda.
 
