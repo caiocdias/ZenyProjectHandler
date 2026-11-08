@@ -162,6 +162,15 @@ def _markdown(saida: Path) -> str:
     return (saida / "diff-nucleo-motor.md").read_text(encoding="utf-8")
 
 
+def _sem_tempo(valor: Any) -> Any:
+    """O relatório sem as chaves ``tempo_s`` (duração medida, não determinística)."""
+    if isinstance(valor, dict):
+        return {chave: _sem_tempo(item) for chave, item in valor.items() if chave != "tempo_s"}
+    if isinstance(valor, list):
+        return [_sem_tempo(item) for item in valor]
+    return valor
+
+
 # --- comparação na página ------------------------------------------------------------------
 
 
@@ -578,10 +587,9 @@ def test_relatorio_sem_nome_de_pdf(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     saida = tmp_path / "saida"
 
     _rodar(rodada, saida)
-    textos = [
-        (saida / "diff-nucleo-motor.json").read_text(encoding="utf-8"),
-        _markdown(saida),
-    ]
+    # Sem os tempos medidos: um float como 0.00028649999876506627 contém "9876" por acaso.
+    gravado = json.loads((saida / "diff-nucleo-motor.json").read_text(encoding="utf-8"))
+    textos = [json.dumps(_sem_tempo(gravado), ensure_ascii=False), _markdown(saida)]
 
     for texto in textos:
         for proibido in ("Secreto", "4711", "sumido", "9876", str(rodada), rodada.as_posix()):

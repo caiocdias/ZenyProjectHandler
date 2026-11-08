@@ -698,7 +698,9 @@ def test_excecao_fora_das_capturadas_falha_a_folha_com_erro_saneado(
     assert relatorio["por_pdf"][ID_B]["situacao"] == "ok"
     (item,) = (item for _, _, item in _itens(relatorio, "so_nucleo"))
     assert item["id"] == "item-0001"
-    for texto in _textos(saida):
+    # Sem os tempos medidos: um float como 0.004711900022812188 contém "4711" por acaso.
+    textos = [json.dumps(_sem_tempo(relatorio), ensure_ascii=False), _markdown(saida)]
+    for texto in textos:
         for proibido in ("Secreto", "4711", "sub dir", str(tmp_path), tmp_path.as_posix()):
             assert proibido not in texto
         assert str(tmp_path).replace("\\", "\\\\") not in texto
