@@ -12,6 +12,7 @@ import pymupdf
 import pytest
 import scripts.diff_simbolos_nucleo_motor as diff
 from scripts.coverage_matrix_e16 import ROOT, _package_digest, build
+from tests.fixtures.symbol_grammars.rect_diagonal import CASOS_RECT_DIAGONAL
 from tests.fixtures.symbol_grammars.stem_bars import CASOS_HASTE, desenhar_positivo
 from tests.integration.test_model_symbols_runner import _METODO_NOVO, _fonte, _settings
 from tests.unit.test_diff_simbolos_nucleo_motor import _pagina, _recursos, _rodada, _rodar
@@ -20,6 +21,7 @@ from zeny_project_handler.adapters.analysis import declarative_symbols
 from zeny_project_handler_server.symbol_execution import SymbolCompositionRunner
 
 _IDS_HASTE = [identidade for identidade, _ in CASOS_HASTE]
+_IDS_BT = [identidade for identidade, _ in CASOS_RECT_DIAGONAL]
 _CLASSE = {"s19": "ATERRAMENTO", "s21": "PARA_RAIOS_MT"}
 # Quatro situações de cada família numa só página, longe umas das outras.
 _CENTROS = [(80.0 + 120.0 * (i % 4), 80.0 + 160.0 * (i // 4)) for i in range(8)]
@@ -91,7 +93,7 @@ def _e07_do_pacote(tmp_path: Path, pacotes: Path) -> Path:
     return caminho
 
 
-def test_matriz_dos_pacotes_reais_marca_as_oito_fora_do_dominio_no_motor(tmp_path: Path) -> None:
+def test_matriz_dos_pacotes_reais_marca_as_doze_so_do_modelo_fora_do_dominio_no_motor(tmp_path: Path) -> None:
     pacotes = ROOT / "src/zeny_project_handler/adapters/analysis/symbol_packages"
     base = ROOT / "docs/data/matriz-simbologia-e16.csv"
     linhas, _ = build(
@@ -103,14 +105,15 @@ def test_matriz_dos_pacotes_reais_marca_as_oito_fora_do_dominio_no_motor(tmp_pat
         base,
     )
     por_id: dict[str, Any] = {linha["id"]: linha for linha in linhas}
-    for identidade in _IDS_HASTE:
+    for identidade in [*_IDS_HASTE, *_IDS_BT]:
         assert por_id[identidade]["package_status"] == "enabled", identidade
         assert por_id[identidade]["declarative-vector-packages"] == "fora_do_dominio", identidade
     # Contraprova: uma variante habilitada de outra gramática continua exata.
     outras = [
         linha
         for linha in linhas
-        if linha["package_status"] == "enabled" and linha["id"] not in _IDS_HASTE
+        if linha["package_status"] == "enabled"
+        and linha["id"] not in {*_IDS_HASTE, *_IDS_BT}
     ]
     assert outras
     assert all(linha["declarative-vector-packages"] == "id_exato_sintetico" for linha in outras)
