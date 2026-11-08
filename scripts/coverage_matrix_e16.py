@@ -16,6 +16,8 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
+from zeny_project_handler.adapters.analysis.declarative_symbols import GRAMATICAS_SO_MODELO
+
 ROOT = Path(__file__).resolve().parents[1]
 Record = dict[str, Any]
 STATUS = (
@@ -129,11 +131,12 @@ def _method_states(row: Record, package: Record | None) -> dict[str, str]:
     elif owner == "E10":
         state["document-local-legend"] = "contexto_informativo_sem_id"
     if package is not None:
-        state["declarative-vector-packages"] = (
-            "id_exato_sintetico"
-            if package["recognition"]["status"] == "enabled"
-            else "pendente_sem_inferencia"
-        )
+        recognition = package["recognition"]
+        if recognition["status"] != "enabled":
+            state["declarative-vector-packages"] = "pendente_sem_inferencia"
+        elif recognition.get("grammar", {}).get("kind") not in GRAMATICAS_SO_MODELO:
+            state["declarative-vector-packages"] = "id_exato_sintetico"
+        # Tipo só do modelo (R-E06.3.2-5): o motor antigo não o executa, fica fora do domínio.
     if status == "informativo":
         state["document-local-legend"] = "informativo_nao_ativo"
     if row["class_code"] in {

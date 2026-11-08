@@ -4,9 +4,10 @@
 from __future__ import annotations
 
 import builtins
+import copy
 import hashlib
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
 from typing import Any, Final
 
@@ -14,9 +15,15 @@ import pymupdf
 import pytest
 import scripts.diff_simbolos_nucleo_motor as diff
 from scripts.curation_round import RodadaError
+from tests.fixtures.declarative_symbols.corpus import ENABLED_CASES, draw_symbol
+from tests.fixtures.symbol_grammars.stem_bars import CASOS_HASTE, desenhar_positivo
 
 from zeny_project_handler.adapters.analysis import declarative_symbols, pymupdf_drawing_model
+from zeny_project_handler.adapters.analysis.drawing_model.glyph_table import (
+    carregar_tabela_glifos,
+)
 from zeny_project_handler.adapters.analysis.drawing_model.glyph_text import LeituraGlifos
+from zeny_project_handler.adapters.analysis.model_symbols import perfil_pacotes_modelo
 
 Dados = dict[str, Any]
 Desenho = Callable[[pymupdf.Page], None]
@@ -582,3 +589,86 @@ def test_relatorio_sem_nome_de_pdf(tmp_path: Path, monkeypatch: pytest.MonkeyPat
         assert str(tmp_path) not in texto
         assert str(tmp_path).replace("\\", "\\\\") not in texto
         assert tmp_path.as_posix() not in texto
+
+
+# --- tipo só do modelo (R-E06.3.2-5) ---------------------------------------------------------
+
+_CASO_MOLDURA = next(caso for caso in ENABLED_CASES if caso.variant_id == "cemig-eo-r3-s30-v001")
+_HASTE_ID, _HASTE_GRAMATICA = CASOS_HASTE[0]
+
+
+def _pacotes_com_haste(
+    diretorio: Path, *, com_haste: bool
+) -> tuple[declarative_symbols.Package, ...]:
+    """A família real da moldura, com a variante `stem_bars` sintética quando `com_haste`."""
+    real = next(
+        pacote
+        for pacote in declarative_symbols.carregar_pacotes()
+        if any(v["id"] == _CASO_MOLDURA.variant_id for v in pacote["variants"])
+    )
+    moldura = next(v for v in real["variants"] if v["id"] == _CASO_MOLDURA.variant_id)
+    variantes = [copy.deepcopy(moldura)]
+    if com_haste:
+        haste = copy.deepcopy(moldura)
+        haste["id"] = _HASTE_ID
+        haste["class_code"] = "ATERRAMENTO"
+        haste["recognition"] = {
+            "status": "enabled",
+            "grammar": copy.deepcopy(_HASTE_GRAMATICA),
+            "negative_examples": ["haste com barras fora do padrão"],
+        }
+        variantes.append(haste)
+    diretorio.mkdir(parents=True, exist_ok=True)
+    pacote = {**copy.deepcopy(real), "variants": variantes}
+    (diretorio / f"{pacote['family_id']}.json").write_text(json.dumps(pacote), encoding="utf-8")
+    return declarative_symbols.carregar_pacotes(packages_dir=diretorio)
+
+
+def _recursos(pacotes: tuple[declarative_symbols.Package, ...]) -> diff.Recursos:
+    tabela = carregar_tabela_glifos()
+    variantes = declarative_symbols._enabled(pacotes)
+    return diff.Recursos(
+        pacotes=pacotes,
+        variantes=variantes,
+        gramaticas={str(v["id"]): str(v["recognition"]["grammar"]["kind"]) for _, v in variantes},
+        tabela=tabela,
+        perfil_nucleo=perfil_pacotes_modelo(pacotes, tabela),
+    )
+
+
+@pytest.fixture
+def com_recursos(monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[[diff.Recursos], None]]:
+    diff.recursos.cache_clear()
+
+    def injetar(meios: diff.Recursos) -> None:
+        monkeypatch.setattr(diff, "recursos", lambda: meios)
+
+    yield injetar
+    monkeypatch.undo()
+    diff.recursos.cache_clear()
+
+
+def _moldura_e_haste(pagina: pymupdf.Page) -> None:
+    draw_symbol(pagina, _CASO_MOLDURA)
+    desenhar_positivo(pagina, _HASTE_ID, centro=(240.0, 240.0))
+
+
+def test_variante_so_do_modelo_fica_fora_da_comparacao_e_dentro_do_gasto(
+    tmp_path: Path, com_recursos: Callable[[diff.Recursos], None]
+) -> None:
+    com = _recursos(_pacotes_com_haste(tmp_path / "com", com_haste=True))
+    sem = _recursos(_pacotes_com_haste(tmp_path / "sem", com_haste=False))
+
+    com_recursos(com)
+    pagina_com = _pagina(_rodar(_uma_folha(tmp_path / "a", _moldura_e_haste), tmp_path / "saida-a"))
+    com_recursos(sem)
+    pagina_sem = _pagina(_rodar(_uma_folha(tmp_path / "b", _moldura_e_haste), tmp_path / "saida-b"))
+
+    assert pagina_com["situacao"] == "comparada"
+    assert set(pagina_com["variantes"]) == {_CASO_MOLDURA.variant_id}
+    moldura = _categorias(pagina_com, _CASO_MOLDURA.variant_id)
+    assert len(moldura["ambos"]) == 1
+    for categoria in ("so_motor", "so_nucleo", "indice_diverge", "geometria_diverge"):
+        assert moldura[categoria] == []
+    assert pagina_com["gasto"]["gramaticas"] > pagina_sem["gasto"]["gramaticas"]
+    assert pagina_com["variantes"] == pagina_sem["variantes"]
