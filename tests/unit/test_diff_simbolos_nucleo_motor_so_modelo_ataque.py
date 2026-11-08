@@ -145,14 +145,12 @@ def test_so_haste_habilitada_sem_nenhuma_variante_do_motor(
     assert pagina["gasto"]["gramaticas"] > 0
 
 
-def test_cache_de_recursos_reflete_os_pacotes_reais_depois_de_um_teste_com_injecao(
-    tmp_path: Path, injetar: Injetar
+def test_cache_de_recursos_real_volta_aos_pacotes_reais_depois_de_uma_injecao(
+    tmp_path: Path, injetar: Injetar, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Depois de usar a fixture de injeção, `recursos()` real volta a ler os pacotes reais."""
+    """Injeta recursos sintéticos, desfaz a injeção e `recursos()` volta a ler os pacotes reais."""
     _medir(tmp_path, injetar, _so_haste, True)
-
-
-def test_cache_de_recursos_real_sem_haste_sintetica() -> None:
+    monkeypatch.undo()
     diff.recursos.cache_clear()
     try:
         assert diff.recursos().pacotes == declarative_symbols.carregar_pacotes()

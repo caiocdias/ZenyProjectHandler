@@ -20,6 +20,7 @@ _GRAMATICA: Final = CASOS_HASTE[0][1]
 _PASSO: Final = 40.0
 _COLUNAS: Final = 50
 _RAZAO_MAXIMA: Final = 15
+_FOLGA: Final = 100
 
 
 def _haste_isolada(cx: float, cy: float) -> list[Caminho]:
@@ -55,8 +56,10 @@ def test_pagina_hostil_estoura_o_orcamento() -> None:
     ]
     pagina = pagina_gramatica(caminhos, largura=700.0, altura=200.0)
 
+    so_indices = contexto_gramaticas(pagina).orcamento.gasto
+    contexto = contexto_gramaticas(pagina, limite=so_indices + _FOLGA)
+
     with pytest.raises(TetoGramaticasExcedido):
-        contexto = contexto_gramaticas(pagina, limite=5_000)
         casa_hastes(contexto, _GRAMATICA)
 
 
