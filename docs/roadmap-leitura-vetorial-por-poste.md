@@ -274,7 +274,7 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E06.3.2.2 | Gramática de haste com barras | #concluida | E06.3.2.1 | gramática de haste com barras, com laboratório, ATERRAMENTO e PARA_RAIOS_MT acima do atual |
 | E06.3.3.1 | Para-raios BT | #concluida | E06.3.2.2 | gramática do retângulo com diagonal, com laboratório, PARA_RAIOS_BT acima do atual (que não casa nenhuma) |
 | E06.3.3.2.1 | Marcas: envolvente e X | #concluida | E06.3.3.1 | envolvente por subcaminho, X perto do símbolo e concordância de situação medida |
-| E06.3.3.2.2 | Transformador | #em-andamento | E06.3.3.2.1 | gramática do triângulo em círculo, com laboratório, TRANSFORMADOR acima do atual |
+| E06.3.3.2.2 | Transformador | #concluida | E06.3.3.2.1 | gramática do triângulo em círculo, com laboratório, TRANSFORMADOR acima do atual |
 | E06.3.4 | Estai | #pendente | E06.3.3.2.2 | gramática de estai, com laboratório, acima do atual |
 | E06.3.5 | Equipamento de interrupção | #pendente | E06.3.4 | gramática de interrupção, acima do atual (que não emite a classe) |
 | E07 | Ficha do poste | #pendente | E06.3.5, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
@@ -2146,7 +2146,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
-## E06.3.3.2.2 — Transformador — #em-andamento
+## E06.3.3.2.2 — Transformador — #concluida
 
 **Objetivo:** reconhecer TRANSFORMADOR (triângulo partido ou de contorno, em círculo ou não) sobre o modelo de desenho, acima do analisador atual (14 tp, 2 fp, 0 fn).
 
@@ -2158,10 +2158,10 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Critérios de aceite:**
 
-- [ ] Fixtures sintéticas positivas e negativas de TRANSFORMADOR.
-- [ ] Nas 16 folhas, precisão e recall de TRANSFORMADOR em `tmp/`, maiores que os do atual, e leitura errada afirmada de fato = 0.
-- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
-- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+- [x] Fixtures sintéticas positivas e negativas de TRANSFORMADOR.
+- [x] Nas 16 folhas, precisão e recall de TRANSFORMADOR em `tmp/`, maiores que os do atual, e leitura errada afirmada de fato = 0. **Aceito pela R-4,** que reinterpreta o critério (ver "Decisões para o usuário"). Lido ao pé da letra, ele é inalcançável: o `atual` já tem recall de 100%, e os 2 FP dele são transformadores reais.
+- [x] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
 **Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
 
@@ -2173,7 +2173,104 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Riscos e mitigação:** os da E06.3; a folga de gasto (a 016 gasta 189.097 de 200.000 desde a E06.3.3.2.1).
 
-**Evidências e handoff:** —
+**Evidências e handoff (2026-11-08, orquestrador):**
+
+- **Plano:** `docs/superpowers/plans/2026-11-08-leitura-vetorial-por-poste-e06-3-3-2-2.md`.
+  - A revisão de arquitetura (opus) aprovou com notas na rodada 1.
+  - A rodada 0 bloqueou por 2 Importantes: a chave do agrupamento estava sem classe, família, papel e destino, e o gasto era cobrado por variante, com teto sem limite.
+- **Commits:** `264d4cb..16ba085`, mais o fechamento.
+- **Relógio:** de 264d4cb (09:13) ao fechamento, cerca de 5h10 (14:22). A estimativa era de 3h05, mais o laboratório.
+  - Passou de 4h30 durante a onda final de correção. Ruling: **continuar**, porque a medição e todos os critérios já estavam verificados.
+  - O que custou mais foi a Task 3: 3 rodadas de correção para 9 defeitos achados por testador e revisora.
+- **Revisão final** (opus): **aprovada**. Ela veio com reservas: 3 Importantes (hachura fora do orçamento, gramática mais solta que o E05 e este handoff) e um Menor (ellipse com X). A onda final resolveu tudo, e a re-revisão com escopo confirmou, aceitando as rulings de gasto e de versão.
+- **Critérios** (HEAD 16ba085; saídas em `tmp/e06-3-3-2-2/final2*`, iguais por folha às de `final` em 6e9b3fc):
+  - **TRANSFORMADOR (centro):** o `modelo` dá 14/2/0 e o `atual`, 14/2/0. Os 2 FP (012 e 014) são transformadores reais que a ficha não anota, triados em render.
+  - **"Acima do atual":** a concordância de situação de TRANSFORMADOR é 1/1 no `modelo`, contra 0 no `atual`, que não informa situação.
+  - **Sem regressão:**
+    - as demais classes e o `atual` ficam iguais por folha;
+    - as leituras erradas ficam em 20, nenhuma nova;
+    - a concordância das três classes da E06.3.3.2.1 fica em 14/14;
+    - o diff é igual ao congelado (29);
+    - o gasto máximo é 194.909, na 016 (era 190.578 antes da onda final, que passou a cobrar a hachura);
+    - o auditor sai com `errors []`, 49 habilitadas e 374 pendentes.
+  - **Gate:** `.\IniciarTestes.bat` APROVADO no 16ba085, com 11117 passed, 5 xfailed e cobertura de 89,54%.
+  - **Segurança e integridade:**
+    - `osv-scanner` nos 7 locks: `No issues found`;
+    - `check_test_integrity --base 264d4cb`: 39 apontamentos, todos justificados (versão 1.4.0, contagens, renomes, teste de chave mais estrito e busca dos flakes sem `tempo_s`).
+- **Laboratório** (`tmp/laboratorio/e06-3-3-2-2/`):
+  - H-1 (contorno primeiro): 14/1/0, gasto 191.645;
+  - **H-2 (preenchimento primeiro), escolhida:** 14/2/0, gasto 190.284;
+  - H-3 (envolvente primeiro): 14/2/0, gasto 195.031.
+
+  O FP a menos da H-1 é o transformador real da 012, que ela não lê. Entre H-2 e H-3, decidiu o gasto.
+- **Triagem em render:** um tp por grupo, em 5 dos 6 grupos (ct_env não teve amostra nas folhas lidas).
+  - Todos saem no grupo do desenho.
+  - Isso inclui o círculo com X das folhas 002 e 007.
+- **Ciclo:**
+  - Onda A: Tasks 1 (tipo `split_triangle`) e 2 (formas comuns numa observação).
+  - Laboratório.
+  - Task 3, a gramática, em 3 rodadas:
+    - defeitos do testador: tracejado, roxo, gravata, todo ciano, branco com meio ciano e N² sem orçamento;
+    - Importantes da revisão: wipeout, PLATAFORMA e seta;
+    - a seta só em linha com 2 lados ou mais.
+  - Onda B: Tasks 4 (habilitação, 1.4.0) e 5 (teto, guarda e pureza).
+  - Testador de etapa:
+    - resolveu os 2 flakes de `test_diff_simbolos_nucleo_motor*`;
+    - completou a guarda;
+    - fixou a ocorrência fundida;
+    - testou as costuras.
+- **Entregas:**
+  - **Tipo `split_triangle`:** só do modelo, com `fill: half_cyan|outline`, `enclosure: none|ellipse`, `removal_mark` e `max_span`.
+  - **Gramática `drawing_model/grammar_triangulo.py`:** candidatos calculados uma vez por página, classificação uma vez por candidato, e recusas. Todo o trabalho paga orçamento.
+  - **Agrupamento em `model_symbols`:** variantes de mesma forma viram uma observação, com o menor id como representante e `referencias_possiveis` em lista JSON.
+  - **Habilitação:** f02-18 v001–v015.
+  - **Versão:** `declarative-drawing-model` 1.4.0.
+- **Decisões para o usuário** (tomadas pela opção recomendada):
+  - **R-4, critério reinterpretado.** O roadmap pedia "precisão e recall maiores que os do atual".
+    - O `atual` tem 14/2/0, com recall de 100%, e os 2 FP dele são transformadores reais sem anotação.
+    - Valeu: tp 14, fn 0, FP de fato 0, leitura errada de fato 0, demais classes intactas e concordância de situação maior que a do atual, no padrão "≥" do ADR 0016.
+    - **Para ser franco:** tp/fp/fn ficaram **idênticos** aos do `atual`. O "acima" se apoia numa única situação concordante (1/1 contra 0) e na variante (grupo e situação), que o E05 não informa.
+  - **R-2, uso não discriminado.** Rede, Dedicado e IP têm o mesmo desenho e saem numa observação só.
+    - `variante_inventario` e `template` levam o **menor id** (sempre o "Rede") e **não identificam a variante**.
+    - Quem consome lê `referencias_possiveis` (lista). A reconciliação dá `ambiguous_reference_id`/`review`.
+    - Não há contrato novo; a revisão de arquitetura confirmou que é decisão de plano.
+  - **X vence a envolvente.** O desenho com círculo e X (002 e 007 na ficha) sai no grupo X, com situação "Proposto Retirar/Abandonar", como no E05. Poderia ser substituição.
+  - **Metade de outra cor é `outline`**, como no E05 (`_toca_ciano`). O transformador vermelho-escuro da 012 sai como contorno com X. A situação é a mesma; muda só "chave deslocada".
+  - **Recusas da gramática:**
+    - tracejado;
+    - roxo (v016–v018 estão fora de escopo);
+    - gravata;
+    - preenchimento colorido não branco em 90% ou mais do triângulo;
+    - triângulo inscrito em moldura retangular (PLATAFORMA);
+    - seta vazada em linha com 2 lados ou mais. Uma linha curta derrubaria um tp real da 012;
+    - texto ou glifo dentro do triângulo (o Δ de revisão), recusa que entrou na onda final;
+    - triângulo só preenchido, sem traço visível. Também entrou na onda final, e o traço é checado pelo tipo, não pela cor: um traço branco ainda passa;
+    - gramática com envolvente e X ao mesmo tempo, recusada no validador e no schema.
+  - **Fusão com o E05 no runner** (R-5):
+    - sem X, funde numa ocorrência, mas marcada `ambiguous_class_or_id`, porque o subtipo do E05 (triangulo / triangulo_meio_ciano) difere do subtipo vazio do modelo. A lista fundida se alarga para os 6 ou 9 ids do E05, e o estreitamento do modelo se perde;
+    - com X, não funde, porque a caixa do E05 inclui o X. O limiar fica entre 0,6 e 0,7 do X nominal.
+  - **Consumidores de `status == "enabled"`:** passam a contar 49 habilitadas, contra 22 que o motor antigo executa.
+  - **Referências para a curadoria:** os transformadores reais sem anotação na 012 (0,723; 0,74), com X vermelho, e na 014 (0,555; 0,474), com círculo e meio ciano.
+  - **Teto de gasto:** 194.909 de 200.000 (folga de 2,5%). A E06.3.4 e a E06.3.5 somam no mesmo teto.
+  - **`_LADO_MAXIMO` absoluto em 26,4 pt** (`grammar_triangulo.py`), na mesma linha do BT. Uma folha plotada em escala maior perde todos os transformadores sem aviso.
+  - **Gramática mais solta que o E05.**
+    - A haste é opcional (R-3), e o contorno base aceita um triângulo de traço isolado.
+    - A onda final passou a recusar texto dentro do triângulo e triângulo sem traço visível (ver abaixo), mas outro triângulo equilátero de traço (marca de levantamento, por exemplo) ainda pode ser lido como TRANSFORMADOR. É um risco fora das 16 folhas, que a E09 mede.
+    - Toda ocorrência vai a `review`.
+- **Para a E07:**
+  - ler `referencias_possiveis`, e não `variante_inventario`, quando a lista tem mais de um id;
+  - o `ambiguous_class_or_id` espúrio da fusão com o E05 vem da diferença de subtipo; o teste que o fixa tem a nota "Para a E07";
+  - a ocorrência com X sai duplicada (E05 e modelo).
+- **Para a E06.3.4 (estai):**
+  - a mesma estratégia de grupos, se houver formas comuns;
+  - o teto de gasto;
+  - `_mesma_cor` continua privado em `grammar_marcas`;
+  - os Menores parqueados no ledger:
+    - grade de molduras duplicada em `_Recusas`;
+    - moldura sem limite de tamanho;
+    - hachura abaixo de ~0,14 pt descartada;
+    - assimetria em `_que_se_tocam`;
+    - `test_gramatica_triangulo_tipo_ataque.py` fora da guarda.
 
 ---
 
