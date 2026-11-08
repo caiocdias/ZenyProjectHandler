@@ -354,24 +354,67 @@ def test_retangulo_com_texto_em_glifo_no_miolo_nao_casa() -> None:
     assert _variantes(pagina_gramatica(caminhos, textos)) == []
 
 
-# --- caracterizacao (verde): comportamento atual, sem aprovar ---------------------------------
+# --- cor da diagonal (R-E06.3.3.2.1-5): a cor canonica do retangulo -------------------------
+
+_AZUL: Final = (0.0, 0.0, 1.0)
+_VERMELHO: Final = (1.0, 0.0, 0.0)
+_VERDE: Final = (0.0, 0.5, 0.0)
 
 
-def test_caracterizacao_diagonal_de_cor_diferente_do_retangulo_ainda_casa() -> None:
-    """A H-2 nao exige a mesma cor da diagonal; o legado exige. Se passar a exigir, atualize."""
+def _retangulo_e_diagonal(cor_retangulo: Any, cor_diagonal: Any) -> PaginaGramatica:
     a, b = _diagonal_padrao()
+    cx, cy = CENTRO
 
     def desenhar(pagina: pymupdf.Page) -> None:
-        _retangulo_liso(pagina)
-        pagina.draw_line(a, b, color=(0.0, 0.0, 1.0), width=0.5)
+        pagina.draw_rect(
+            pymupdf.Rect(cx - _MEIO_L, cy - _MEIO_H, cx + _MEIO_L, cy + _MEIO_H),  # type: ignore[no-untyped-call]
+            color=cor_retangulo,
+            width=0.5,
+        )
+        pagina.draw_line(a, b, color=cor_diagonal, width=0.5)
 
-    assert _variantes(pagina_desenhada(desenhar)) == [_V001]
+    return pagina_desenhada(desenhar)
+
+
+@pytest.mark.parametrize(
+    ("cor_retangulo", "cor_diagonal"),
+    [(PRETO, _AZUL), (PRETO, _VERMELHO), (_VERDE, PRETO), (_VERMELHO, _VERDE)],
+    ids=["preto-azul", "preto-vermelho", "verde-preto", "vermelho-verde"],
+)
+def test_diagonal_de_cor_canonica_diferente_da_do_retangulo_nao_casa(
+    cor_retangulo: Any, cor_diagonal: Any
+) -> None:
+    """Nas 16 folhas, os 23 BT candidatos tem a mesma cor canonica na diagonal e no retangulo
+    (ruling da Task 4): diagonal de outra cor canonica nao e a do para-raios."""
+    assert _variantes(_retangulo_e_diagonal(cor_retangulo, cor_diagonal)) == []
+
+
+@pytest.mark.parametrize(
+    ("cor_retangulo", "cor_diagonal"),
+    [
+        (PRETO, PRETO),
+        (_VERDE, _VERDE),
+        (_VERMELHO, _VERMELHO),
+        (PRETO, (0.1, 0.1, 0.1)),
+        (_VERDE, (0.1, 0.6, 0.1)),
+    ],
+    ids=["preto", "verde", "vermelho", "preto-e-cinza-escuro", "verde-e-verde-claro"],
+)
+def test_diagonal_da_mesma_cor_canonica_do_retangulo_casa(
+    cor_retangulo: Any, cor_diagonal: Any
+) -> None:
+    """Controle positivo: a cor canonica e a mesma, ainda que o RGB cru mude."""
+    assert _variantes(_retangulo_e_diagonal(cor_retangulo, cor_diagonal)) == [_V001]
 
 
 _LEDGER: Final = "ledger E06.3.3.1 Task 3, para a E06.3.3.2"
 
 
-@pytest.mark.xfail(strict=True, reason=f"diagonal quase duplicada recusa o simbolo ({_LEDGER})")
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason=f"diagonal quase duplicada recusa o simbolo ({_LEDGER})",
+)
 def test_diagonal_tracada_duas_vezes_com_deslocamento_ainda_reconhece_o_simbolo() -> None:
     """Dois tracos quase coincidentes (entidade duplicada de CAD) sao um simbolo so."""
     a, b = _diagonal_padrao()
@@ -383,7 +426,11 @@ def test_diagonal_tracada_duas_vezes_com_deslocamento_ainda_reconhece_o_simbolo(
     assert _variantes(pagina_desenhada(desenhar)) == [_V001]
 
 
-@pytest.mark.xfail(strict=True, reason=f"contorno quase duplicado gera dois casamentos ({_LEDGER})")
+@pytest.mark.xfail(
+    strict=True,
+    raises=AssertionError,
+    reason=f"contorno quase duplicado gera dois casamentos ({_LEDGER})",
+)
 def test_contorno_duplicado_com_deslocamento_gera_um_casamento_so() -> None:
     """Dois retangulos quase coincidentes sao um simbolo so."""
     cx, cy = CENTRO
@@ -396,7 +443,7 @@ def test_contorno_duplicado_com_deslocamento_gera_um_casamento_so() -> None:
     assert _variantes(pagina_desenhada(desenhar)) == [_V001]
 
 
-@pytest.mark.xfail(strict=True, reason=f"ponto cego do X curto ({_LEDGER})")
+@pytest.mark.xfail(strict=True, raises=AssertionError, reason=f"ponto cego do X curto ({_LEDGER})")
 def test_x_proprio_de_bracos_curtos_nao_e_segunda_diagonal() -> None:
     """Bracos de 1,2 vezes o lado maior cruzam o retangulo como diagonais, mas sao o X da v004."""
     cx, cy = CENTRO
