@@ -409,10 +409,10 @@ smoke opcional, somente leitura, sobre todos os exemplos disponíveis:
 Para montar cliente e kit servidor oficiais com versão igual aos manifestos do produto:
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\build_release.py --version 0.5.0
+.\.venv\Scripts\python.exe scripts\build_release.py --version 0.6.0
 ```
 
-O comando recompõe `dist/release/0.5.0/`, gera os dois SBOMs, notas, manifesto e hashes e executa a
+O comando recompõe `dist/release/0.6.0/`, gera os dois SBOMs, notas, manifesto e hashes e executa a
 inspeção estática dos artefatos.
 
 O smoke real do SQL Server é opt-in e pertence à homologação, não ao gate normal. O smoke disponível
