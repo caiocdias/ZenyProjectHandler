@@ -101,6 +101,7 @@ def _label_in_frame_grammar_ok(grammar: Package) -> bool:
     return (
         {"kind", "frame", "label", "max_span"} <= set(grammar)
         and set(grammar) <= _LABEL_IN_FRAME_FIELDS
+        and isinstance(grammar["frame"], str)
         and grammar["frame"] in {"rectangle", "ellipse"}
         and isinstance(grammar["label"], str)
         and bool(re.fullmatch(r"[A-Z0-9]{1,4}", grammar["label"]))
@@ -114,6 +115,7 @@ def _triangle_in_frame_grammar_ok(grammar: Package) -> bool:
     return (
         set(grammar) == {"kind", "frame", "fill", "max_span"}
         and grammar["frame"] == "rectangle"
+        and isinstance(grammar["fill"], str)
         and grammar["fill"] in {"empty", "solid"}
     )
 
@@ -188,6 +190,7 @@ def _stem_bars_grammar_ok(grammar: Package) -> bool:
         and type(grammar["bars"]) is int
         and isinstance(grammar["taper"], str)
         and (grammar["bars"], grammar["taper"]) in _STEM_BARS_PARES
+        and isinstance(grammar["enclosure"], str)
         and grammar["enclosure"] in {"none", "ellipse"}
         and type(grammar["removal_mark"]) is bool
     )
@@ -242,7 +245,11 @@ def _negative_examples_ok(negatives: Any) -> bool:
 
 
 def _validate_grammar(grammar: Any, path: Path, variant_id: str) -> None:
-    if not isinstance(grammar, dict) or grammar.get("kind") not in _GRAMMARS:
+    if (
+        not isinstance(grammar, dict)
+        or not isinstance(grammar.get("kind"), str)
+        or grammar["kind"] not in _GRAMMARS
+    ):
         raise ValueError(f"{path}: unsupported grammar for {variant_id}")
     valid = _GRAMMAR_FIELD_VALIDATORS[grammar["kind"]](grammar)
     span = grammar.get("max_span")
