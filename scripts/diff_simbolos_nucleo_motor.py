@@ -26,6 +26,10 @@ variante sensível à orientação em página girada leva ``orientacao: true`` (
 triângulo em 90, 180 e 270 graus; a barra e o disco terminal (faixas) só em 90 e 270. Cada
 ``so_nucleo`` recebe um ``id`` opaco (``item-0001``...) na ordem da
 rodada, da página e da variante; ele muda entre execuções (R-E06.2.2.2-9).
+
+Variante de gramática só do modelo (``GRAMATICAS_SO_MODELO``, como ``stem_bars``) o motor antigo
+não executa: o núcleo e o gasto recebem todas as habilitadas, mas a comparação considera só as
+de ``variantes_do_motor``. As do modelo ficam fora de ``ambos`` e de ``so_*``, e o gasto as inclui.
 """
 
 from __future__ import annotations
@@ -61,6 +65,7 @@ from zeny_project_handler.adapters.analysis.declarative_symbols import (
     _enabled,
     carregar_pacotes,
     perfil_pacotes,
+    variantes_do_motor,
 )
 from zeny_project_handler.adapters.analysis.declarative_symbols import (
     observar_pacotes as observar_pacotes,
@@ -467,7 +472,10 @@ def medir_pagina(page: pymupdf.Page, pagina_numero: int, folha: Folha) -> Regist
     ]
     variantes: Registro = {}
     if not falhas and motor is not None and nucleo is not None:
-        comparacao = comparar_observacoes(observadas(motor), observadas(nucleo))
+        ids_motor = {str(variante["id"]) for _, variante in variantes_do_motor(meios.pacotes)}
+        comparacao = comparar_observacoes(
+            observadas(motor), [o for o in observadas(nucleo) if o.variante in ids_motor]
+        )
         variantes = _variantes_em_registro(
             comparacao, pagina_numero, page, pagina, meios.gramaticas
         )

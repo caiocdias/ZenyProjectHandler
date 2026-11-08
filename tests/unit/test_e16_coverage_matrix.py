@@ -189,7 +189,13 @@ def _stage_inputs(
     packaged: dict[str, str],
 ) -> tuple[Path, Path, Path]:
     """Write a synthetic inventory, its packages and an E07 report signed by them."""
-    class_by_owner = {"E05": "TRANSFORMADOR", "E06": "ESTAI_MT", "E07": "POSTE", "E10": "POSTE"}
+    class_by_owner = {
+        "E04": "ATERRAMENTO",
+        "E05": "TRANSFORMADOR",
+        "E06": "ESTAI_MT",
+        "E07": "POSTE",
+        "E10": "POSTE",
+    }
     inventory = _write_json(
         tmp_path / "inventory.json",
         {
@@ -361,3 +367,41 @@ def test_outro_estagio_sem_pacote_continua_aceito(tmp_path: Path) -> None:
         "ainda_nao_suportado",
         "informativo",
     ]
+
+
+def test_variante_so_do_modelo_fica_fora_do_dominio_no_motor(tmp_path: Path) -> None:
+    inventory, packages, _ = _stage_inputs(
+        tmp_path, {"haste": "E04", "moldura": "E07"}, {"haste": "pending", "moldura": "pending"}
+    )
+    _write_json(
+        packages / "family-f02-03.json",
+        {
+            "variants": [
+                {
+                    "id": "haste",
+                    "recognition": {"status": "enabled", "grammar": {"kind": "stem_bars"}},
+                },
+                {
+                    "id": "moldura",
+                    "recognition": {"status": "enabled", "grammar": {"kind": "label_in_frame"}},
+                },
+            ]
+        },
+    )
+    e07 = _write_json(
+        tmp_path / "e07.json",
+        {
+            "complete_inference": True,
+            "package_sha256": _package_digest(packages),
+            "by_family": {},
+            "decisions": [],
+        },
+    )
+
+    rows, _ = build(inventory, packages, None, None, e07, None)
+    por_id = {row["id"]: row for row in rows}
+
+    assert por_id["haste"]["package_status"] == "enabled"
+    assert por_id["haste"]["status"] == "nao_avaliavel"
+    assert por_id["haste"]["declarative-vector-packages"] == "fora_do_dominio"
+    assert por_id["moldura"]["declarative-vector-packages"] == "id_exato_sintetico"

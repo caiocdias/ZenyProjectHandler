@@ -8,6 +8,7 @@ nem não detecção, e a imagem compacta sem casamento é dado, não observaçã
 
 from __future__ import annotations
 
+import json
 import math
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
@@ -39,7 +40,7 @@ from .declarative_symbols import (
 )
 from .drawing_model.glyph_table import TabelaGlifos
 from .drawing_model.grammar_disc import _caixa_arredondada
-from .drawing_model.model import VERSAO_MODELO_DESENHO, Caixa, ImagemModelo, Ponto
+from .drawing_model.model import VERSAO_MODELO_DESENHO, Caixa, Caminho, ImagemModelo, Ponto
 from .drawing_model.symbol_grammars import (
     _GLIFOS_LIMITADOS,
     LIMITE_CONSULTAS_PAGINA,
@@ -53,7 +54,7 @@ from .drawing_model.symbol_matcher import CasamentoGramatica, casar_variantes
 from .pymupdf_drawing_model import pagina_para_gramaticas
 
 _METODO_ID: Final = "declarative-drawing-model"
-_VERSAO: Final = "1.0.0"
+_VERSAO: Final = "1.4.0"
 _DOMINIO: Final = "PDF vetorial lido pelo modelo de desenho; contexto não inferido"
 _FONTES: Final = (
     "pymupdf:get_drawings:extended",
@@ -89,16 +90,23 @@ class ResiduoRaster:
 def perfil_pacotes_modelo(
     pacotes: tuple[Package, ...], tabela: TabelaGlifos, *, limite: int = LIMITE_CONSULTAS_PAGINA
 ) -> PerfilMetodoSimbolos:
-    """Mesmas classes, família e referência do motor; a identidade inclui modelo, tabela e teto."""
+    """Família do motor, com todas as habilitadas; a identidade inclui modelo, tabela e teto."""
     motor = perfil_pacotes(pacotes)
+    habilitadas = _enabled(pacotes)
     return replace(
         motor,
+        classes_suportadas=tuple(sorted({variante["class_code"] for _, variante in habilitadas})),
         metodo_id=_METODO_ID,
         versao=_VERSAO,
         dominio_aplicacao=_DOMINIO,
         fontes_compartilhadas=_FONTES,
         parametros=(
-            *motor.parametros,
+            *(
+                ("enabled_variants", len(habilitadas))
+                if nome == "enabled_variants"
+                else (nome, valor)
+                for nome, valor in motor.parametros
+            ),
             ("modelo_desenho", VERSAO_MODELO_DESENHO),
             ("tabela_glifos_versao", tabela.versao),
             ("tabela_glifos_sha256", tabela.sha256),
@@ -231,15 +239,22 @@ def _pontos_originais(caixa: pymupdf.Rect) -> tuple[PontoOriginalSimbolo, ...]:
     )
 
 
-def _atributos(pacote: Mapping[str, Any], variante: Mapping[str, Any]) -> tuple[Any, ...]:
-    """Os mesmos de `_known_observation`: a reconciliação compara os dois métodos."""
+def _atributos(
+    pacote: Mapping[str, Any], variante: Mapping[str, Any], referencias: Sequence[str] = ()
+) -> tuple[Any, ...]:
+    """Os mesmos de `_known_observation`: a reconciliação compara os dois métodos.
+
+    Com mais de uma em `referencias`, `referencias_possiveis` é a lista JSON ordenada delas, a
+    forma do método E05; senão, é o id da variante, como no motor.
+    """
     referencia = variante["source_ref"]
+    possiveis = json.dumps(sorted(referencias)) if len(referencias) > 1 else variante["id"]
     return tuple(
         sorted(
             {
                 "familia_inventario": pacote["family_id"],
                 "variante_inventario": variante["id"],
-                "referencias_possiveis": variante["id"],
+                "referencias_possiveis": possiveis,
                 "papel": variante["role"],
                 "destino": variante["destination"],
                 "contexto": "unknown",
@@ -251,36 +266,101 @@ def _atributos(pacote: Mapping[str, Any], variante: Mapping[str, Any]) -> tuple[
     )
 
 
+def _caixa_do_caminho(caminho: Caminho) -> Caixa:
+    """Caixa dos pontos do caminho no espaço visual (a de uma Bézier inclui os controles)."""
+    pontos = [
+        ponto for subcaminho in caminho.subcaminhos for item in subcaminho for ponto in item.pontos
+    ]
+    xs, ys = [x for x, _ in pontos], [y for _, y in pontos]
+    return (min(xs), min(ys), max(xs), max(ys))
+
+
+def _primitiva(
+    page: Any, pagina: PaginaGramatica, posicao: int, caixa: Caixa
+) -> PrimitivaObservadaSimbolo:
+    """O caminho `posicao` com o índice cru e a camada dele; a `caixa` visual é derrotada.
+
+    `Estilo.camada` é "" sem OCG e o motor grava None: "" duplicaria a ocorrência na reconciliação.
+    """
+    caminho = pagina.modelo.caminhos[posicao]
+    caixa_crua = pymupdf.Rect(caixa) * page.derotation_matrix
+    return PrimitivaObservadaSimbolo(
+        indice=str(pagina.indices_crus[posicao]),
+        camada=caminho.estilo.camada or None,
+        pontos_originais=_pontos_originais(caixa_crua),
+    )
+
+
 def _observacao(
     page: Any,
     fonte: FonteObservacaoSimbolo,
     assinatura: str,
     pagina: PaginaGramatica,
     casamento: CasamentoGramatica,
+    referencias: Sequence[str] = (),
 ) -> ObservacaoSimbolo:
     """A caixa do casamento é visual, e a do motor é crua (R-E06.2.1-7).
 
-    `Estilo.camada` é "" sem OCG e o motor grava None: "" duplicaria a ocorrência na reconciliação.
+    Há uma primitiva por caminho do símbolo: o âncora e os componentes (R-E06.3.2-3), cada um com a
+    caixa do próprio caminho. Sem componentes, a primitiva leva a caixa do casamento, como o motor.
+    `referencias` são os ids do grupo de forma comum do casamento (`_formas_comuns`).
     """
     variante = casamento.variante
     caixa_crua = pymupdf.Rect(casamento.caixa) * page.derotation_matrix
-    camada = pagina.modelo.caminhos[casamento.caminho].estilo.camada
+    if casamento.componentes:
+        posicoes = (casamento.caminho, *casamento.componentes)
+        caixas = [_caixa_do_caminho(pagina.modelo.caminhos[posicao]) for posicao in posicoes]
+    else:
+        posicoes, caixas = (casamento.caminho,), [casamento.caixa]
     return ObservacaoSimbolo(
         fonte=fonte,
         metodo_assinatura=assinatura,
         geometria=_geometry(page, caixa_crua),
         alternativas=(AlternativaClasseSimbolo(classe=variante["class_code"]),),
         score_bruto=None,
-        primitivas=(
-            PrimitivaObservadaSimbolo(
-                indice=str(pagina.indices_crus[casamento.caminho]),
-                camada=camada or None,
-                pontos_originais=_pontos_originais(caixa_crua),
-            ),
+        primitivas=tuple(
+            _primitiva(page, pagina, posicao, caixa)
+            for posicao, caixa in zip(posicoes, caixas, strict=True)
         ),
         template=variante["id"],
-        atributos=_atributos(casamento.pacote, variante),
+        atributos=_atributos(casamento.pacote, variante, referencias),
     )
+
+
+def _chave_de_forma(casamento: CasamentoGramatica) -> tuple[Any, ...]:
+    """A página é a da chamada; a gramática vai em JSON canônico, mais estrito que `==`."""
+    variante = casamento.variante
+    return (
+        casamento.caminho,
+        _caixa_arredondada(casamento.caixa),
+        json.dumps(variante["recognition"]["grammar"], sort_keys=True),
+        variante["class_code"],
+        casamento.pacote["family_id"],
+        variante["role"],
+        variante["destination"],
+    )
+
+
+def _formas_comuns(
+    casamentos: Iterable[CasamentoGramatica],
+) -> list[tuple[CasamentoGramatica, tuple[str, ...]]]:
+    """Grupos de forma comum (R-E06.3.3.2.2-2), na ordem do primeiro casamento de cada um.
+
+    O grupo junta o mesmo âncora, a mesma caixa arredondada, a mesma gramática e os mesmos
+    `class_code`, `family_id`, `role` e `destination`: nunca esconde ambiguidade de classe. Cada
+    grupo dá o representante, que é o de menor id, e os ids distintos do grupo em ordem: o mesmo
+    id duas vezes, de caixas que só o arredondamento iguala, continua grupo de um.
+    """
+    grupos: dict[tuple[Any, ...], list[CasamentoGramatica]] = {}
+    for casamento in casamentos:
+        grupos.setdefault(_chave_de_forma(casamento), []).append(casamento)
+    return [
+        (
+            min(grupo, key=lambda casamento: str(casamento.variante["id"])),
+            tuple(sorted({str(casamento.variante["id"]) for casamento in grupo})),
+        )
+        for grupo in grupos.values()
+    ]
 
 
 def _resultado(
@@ -347,9 +427,10 @@ def observar_pacotes_modelo(
     assinatura = metodo.assinatura()
     # A matriz de derrotação passa por float32: caixas distintas podem colapsar na mesma caixa
     # crua e no mesmo id. Fica a primeira na ordem do núcleo (o domínio recusa id repetido).
+    # Variantes de mesma forma e mesmo uso no mesmo desenho são uma observação só.
     por_id: dict[str, ObservacaoSimbolo] = {}
-    for casamento in casamentos:
-        observacao = _observacao(page, fonte, assinatura, pagina, casamento)
+    for casamento, referencias in _formas_comuns(casamentos):
+        observacao = _observacao(page, fonte, assinatura, pagina, casamento, referencias)
         por_id.setdefault(observacao.id, observacao)
     observacoes = tuple(por_id.values())
     estado = EstadoMetodoSimbolos.CONCLUIDO if observacoes else EstadoMetodoSimbolos.NAO_DETECCAO

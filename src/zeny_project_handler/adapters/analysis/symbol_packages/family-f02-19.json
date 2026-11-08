@@ -316,8 +316,15 @@
       },
       "visual_note": "Três barras transversais decrescentes ligadas a uma haste; símbolo base",
       "recognition": {
-        "status": "pending",
-        "reason": "Forma E01: Três barras transversais decrescentes ligadas a uma haste; símbolo base. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado.",
+        "status": "enabled",
+        "grammar": {
+          "kind": "stem_bars",
+          "bars": 3,
+          "taper": "decreasing",
+          "enclosure": "none",
+          "removal_mark": false,
+          "max_span": 72
+        },
         "negative_examples": [
           "Exemplar de legenda/tabela não é ocorrência operacional",
           "Glifos, molduras e líderes de anotação",
@@ -339,8 +346,15 @@
       },
       "visual_note": "Três barras transversais decrescentes ligadas a uma haste; círculo/oval envolvente",
       "recognition": {
-        "status": "pending",
-        "reason": "Forma E01: Três barras transversais decrescentes ligadas a uma haste; círculo/oval envolvente. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado.",
+        "status": "enabled",
+        "grammar": {
+          "kind": "stem_bars",
+          "bars": 3,
+          "taper": "decreasing",
+          "enclosure": "ellipse",
+          "removal_mark": false,
+          "max_span": 72
+        },
         "negative_examples": [
           "Exemplar de legenda/tabela não é ocorrência operacional",
           "Glifos, molduras e líderes de anotação",
@@ -362,8 +376,15 @@
       },
       "visual_note": "Três barras transversais decrescentes ligadas a uma haste; círculo/oval e X vermelho",
       "recognition": {
-        "status": "pending",
-        "reason": "Forma E01: Três barras transversais decrescentes ligadas a uma haste; círculo/oval e X vermelho. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado.",
+        "status": "enabled",
+        "grammar": {
+          "kind": "stem_bars",
+          "bars": 3,
+          "taper": "decreasing",
+          "enclosure": "ellipse",
+          "removal_mark": true,
+          "max_span": 72
+        },
         "negative_examples": [
           "Exemplar de legenda/tabela não é ocorrência operacional",
           "Glifos, molduras e líderes de anotação",
@@ -385,8 +406,15 @@
       },
       "visual_note": "Três barras transversais decrescentes ligadas a uma haste; X vermelho sem envolvente",
       "recognition": {
-        "status": "pending",
-        "reason": "Forma E01: Três barras transversais decrescentes ligadas a uma haste; X vermelho sem envolvente. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado.",
+        "status": "enabled",
+        "grammar": {
+          "kind": "stem_bars",
+          "bars": 3,
+          "taper": "decreasing",
+          "enclosure": "none",
+          "removal_mark": true,
+          "max_span": 72
+        },
         "negative_examples": [
           "Exemplar de legenda/tabela não é ocorrência operacional",
           "Glifos, molduras e líderes de anotação",

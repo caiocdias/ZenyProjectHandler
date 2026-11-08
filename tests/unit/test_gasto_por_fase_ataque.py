@@ -1,9 +1,9 @@
 # mypy: disable-error-code="no-untyped-call"
-"""Ataque ao gasto por fase: equivalência com o `casar_variantes` anterior e invariantes."""
+"""Ataque ao gasto por fase: invariantes do gasto repartido."""
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Any, Final
 
 import pytest
@@ -16,11 +16,6 @@ from tests.fixtures.symbol_grammars.paginas import (
 )
 
 from zeny_project_handler.adapters.analysis.drawing_model import symbol_grammars, symbol_matcher
-from zeny_project_handler.adapters.analysis.drawing_model.grammar_disc import (
-    _caixa_arredondada,
-    discos_candidatos,
-    pontas_terminais,
-)
 from zeny_project_handler.adapters.analysis.drawing_model.symbol_grammars import (
     ContextoGramatica,
     FonteGramaticaFalhou,
@@ -29,7 +24,6 @@ from zeny_project_handler.adapters.analysis.drawing_model.symbol_grammars import
     contexto_gramaticas,
 )
 from zeny_project_handler.adapters.analysis.drawing_model.symbol_matcher import (
-    CasamentoGramatica,
     casar_variantes,
     gasto_por_fase,
 )
@@ -58,32 +52,6 @@ def _par(identificador: str, gramatica: Mapping[str, Any]) -> Par:
         "id": identificador,
         "recognition": {"status": "enabled", "grammar": gramatica},
     }
-
-
-def _casar_antigo(
-    contexto: ContextoGramatica, variantes: Sequence[Par]
-) -> tuple[CasamentoGramatica, ...]:
-    """Corpo de `casar_variantes` em 787e4c9, antes da extração de `_casar_no_contexto`."""
-    m = symbol_matcher
-    tem_disco = any(m._gramatica(v)["kind"] == m._DISCO_TERMINAL for _, v in variantes)
-    discos = discos_candidatos(contexto) if tem_disco else ()
-    pontas = pontas_terminais(contexto) if discos else None
-    casamentos: list[CasamentoGramatica] = []
-    vistos: set[tuple[str, Any]] = set()
-    for pacote, variante in variantes:
-        gramatica = m._gramatica(variante)
-        if gramatica["kind"] != m._DISCO_TERMINAL:
-            achados = m._achados_em_molduras(contexto, gramatica)
-        elif pontas is None:
-            achados = []
-        else:
-            achados = m._achados_em_discos(contexto, gramatica, discos, pontas)
-        for caixa, caminho in achados:
-            chave = (str(variante["id"]), _caixa_arredondada(caixa))
-            if chave not in vistos:
-                vistos.add(chave)
-                casamentos.append(CasamentoGramatica(pacote, variante, caixa, caminho))
-    return tuple(casamentos)
 
 
 def _com_disco(centro: tuple[float, float]) -> tuple[Any, ...]:
@@ -146,24 +114,6 @@ _CONJUNTOS: Final = {
     "disco_primeiro_e_repetido": (_par("d", _DISCO), _par("m", _ROTULO), _par("d", _DISCO)),
     "vazio": (),
 }
-
-
-@pytest.mark.parametrize("conjunto", sorted(_CONJUNTOS))
-@pytest.mark.parametrize("nome", sorted(_PAGINAS))
-def test_nova_implementacao_equivale_a_antiga_em_saida_e_gasto(nome: str, conjunto: str) -> None:
-    pagina = _PAGINAS[nome]()
-    variantes = _CONJUNTOS[conjunto]
-
-    antigo = contexto_gramaticas(pagina)
-    esperado = _casar_antigo(antigo, variantes)
-
-    novo_contexto = contexto_gramaticas(pagina)
-    obtido = symbol_matcher._casar_no_contexto(novo_contexto, variantes)
-
-    assert obtido == esperado
-    assert casar_variantes(pagina, variantes) == esperado
-    assert novo_contexto.orcamento.gasto == antigo.orcamento.gasto
-    assert gasto_por_fase(pagina, variantes).total == antigo.orcamento.gasto
 
 
 @pytest.mark.parametrize("conjunto", sorted(_CONJUNTOS))

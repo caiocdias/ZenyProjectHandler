@@ -342,6 +342,8 @@ _ATUAL_PREDICOES: Final[list[dict[str, Any]]] = [
         "bbox": [0.6833333333333333, 0.18333333333333332, 0.7433333333333333, 0.21666666666666667],
         "metodo": "legacy-vector-symbols",
         "contexto": "operational",
+        "variante": None,
+        "situacoes_preditas": frozenset(),
     },
     {
         "pagina": 1,
@@ -349,6 +351,8 @@ _ATUAL_PREDICOES: Final[list[dict[str, Any]]] = [
         "bbox": [0.33666666666666667, 0.38333333333333336, 0.5633333333333334, 0.49666666666666665],
         "metodo": "declarative-vector-packages",
         "contexto": "operational",
+        "variante": "cemig-eo-r3-s06-v001",
+        "situacoes_preditas": frozenset({"existente", "abandonado"}),
     },
 ]
 _ATUAL_ASSINATURA: Final[dict[str, Any]] = {

@@ -25,8 +25,15 @@ def _linhas_criterio(criterio: str, bloco: Mapping[str, Any]) -> list[str]:
         f"| {_pct(i['recall'])} |"
         for classe, i in itens
     ]
+    geral = bloco["concordancia_situacao"]["geral"]
     return [
         *linhas,
+        "",
+        f"Concordância de situação (TP com situação na ficha): {_pct(geral['taxa'])} "
+        f"({geral['concordantes']} concordantes, {geral['discordantes']} discordantes; "
+        f"sem situação na ficha: {geral['sem_situacao_ficha']}; "
+        f"não declarada: {geral['situacao_nao_declarada']}; "
+        f"sem situação predita: {geral['sem_situacao_predita']}).",
         "",
         f"Fora do escopo: {bloco['fora_do_escopo'] or 'nenhuma'}; "
         f"fora das regiões: {bloco['fora_das_regioes']}; "
@@ -41,7 +48,8 @@ def _linhas_metodo(titulo: str, bloco: Mapping[str, Any]) -> list[str]:
         "",
         f"Folhas medidas: {bloco['folhas_medidas']}; com falha: {bloco['folhas_com_falha']}; "
         f"predições: {bloco['predicoes']}; contexto não desenho: {bloco['contexto_nao_desenho']}; "
-        f"duplicatas: {bloco['duplicatas'] or 'nenhuma'}.",
+        f"duplicatas: {bloco['duplicatas'] or 'nenhuma'}; "
+        f"leituras erradas (centro): {bloco['centro']['leituras_erradas']['total']}.",
         "",
     ]
     for criterio in CRITERIOS:

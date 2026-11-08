@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import math
+import re
+import unicodedata
 from collections import Counter, defaultdict
 from collections.abc import Collection, Iterable, Mapping, Sequence
+from functools import cache
 from itertools import combinations
+from pathlib import Path
 from typing import Any, Final, Literal
 
 from scripts.simbolos_corpus import Registro
@@ -20,6 +25,46 @@ CRITERIOS: Final[tuple[Criterio, ...]] = ("centro", "iou")
 Caixa = Sequence[float]
 Item = Mapping[str, Any]
 _TFF: Final = ("tp", "fp", "fn")
+INVENTARIO: Final = (
+    Path(__file__).resolve().parents[1] / "docs" / "data" / "inventario-simbologia-v1.json"
+)
+_NAO_DECLARADA: Final = "n/a"
+BALDES_SITUACAO: Final = (
+    "concordantes",
+    "discordantes",
+    "sem_situacao_ficha",
+    "situacao_nao_declarada",
+    "sem_situacao_predita",
+)
+
+
+# --- situação (R-E06.3.3.2.1-4) ---------------------------------------------------------
+
+
+def normalizar_situacao(texto: str | None) -> str | None:
+    """Minúsculas, sem acento, ``_`` como espaço, só o prefixo antes de ``(`` ou ``;``."""
+    if texto is None:
+        return None
+    decomposto = unicodedata.normalize("NFD", str(texto))
+    sem_acento = "".join(c for c in decomposto if not unicodedata.combining(c))
+    prefixo = re.split(r"[(;]", sem_acento.lower().replace("_", " "), maxsplit=1)[0]
+    return " ".join(prefixo.split()) or None
+
+
+@cache
+def _situacoes_do_inventario() -> dict[str, frozenset[str] | None]:
+    inventario = json.loads(INVENTARIO.read_text(encoding="utf-8"))
+    resultado: dict[str, frozenset[str] | None] = {}
+    for variante in inventario["variants"]:
+        normalizadas = {normalizar_situacao(texto) for texto in variante.get("situation") or []}
+        declaradas = frozenset(t for t in normalizadas if t is not None and t != _NAO_DECLARADA)
+        resultado[str(variante["id"])] = declaradas or None
+    return resultado
+
+
+def situacoes_da_variante(variante_id: str) -> frozenset[str] | None:
+    """Situações normalizadas da variante; ``None`` se vazia, "N/A" ou desconhecida."""
+    return _situacoes_do_inventario().get(variante_id)
 
 
 # --- geometria e casamento --------------------------------------------------------------
@@ -82,7 +127,14 @@ def casar(
 
 def _simbolos_validos(ficha: Mapping[str, Any]) -> list[Registro]:
     return [
-        {"pagina": poste["pagina"], "classe": simbolo["classe"], "bbox": simbolo["bbox"]}
+        {
+            "pagina": poste["pagina"],
+            "classe": simbolo["classe"],
+            "bbox": simbolo["bbox"],
+            "situacao": normalizar_situacao(
+                (simbolo.get("atributos_extras") or {}).get("situacao")
+            ),
+        }
         for poste in ficha["postes"]
         if "simbolos" not in poste["pendentes"]
         for simbolo in poste["simbolos"]
@@ -139,6 +191,74 @@ def _no_pagina(
     )
 
 
+def leituras_erradas(
+    referencias: Sequence[Mapping[str, Any]],
+    predicoes: Sequence[Mapping[str, Any]],
+    casadas: Collection[int],
+    tolerancia: float,
+) -> list[dict[str, Any]]:
+    """Predições não casadas cujo centro cai na referência de outra classe (R-E06.3.2-4)."""
+    itens: list[dict[str, Any]] = []
+    for j, predicao in enumerate(predicoes):
+        if j in casadas:
+            continue
+        centro = _centro(predicao["bbox"])
+        for i, referencia in enumerate(referencias):
+            if (
+                referencia["pagina"] == predicao["pagina"]
+                and referencia["classe"] != predicao["classe"]
+                and _na_caixa(centro, referencia["bbox"], tolerancia)
+            ):
+                itens.append(
+                    {
+                        "classe_predita": predicao["classe"],
+                        "classe_referencia": referencia["classe"],
+                        "referencia_id": i,
+                    }
+                )
+    return itens
+
+
+def _bloco_leituras_erradas(itens: list[dict[str, Any]]) -> Registro:
+    por_classe = Counter(item["classe_predita"] for item in itens)
+    return {"total": len(itens), "por_classe": dict(sorted(por_classe.items())), "itens": itens}
+
+
+def _balde_situacao(referencia: Mapping[str, Any], predicao: Mapping[str, Any]) -> str:
+    situacao = referencia.get("situacao")
+    if situacao is None:
+        return "sem_situacao_ficha"
+    variante = predicao.get("variante")
+    if variante is not None and situacoes_da_variante(variante) is None:
+        return "situacao_nao_declarada"
+    preditas = predicao.get("situacoes_preditas") or frozenset()
+    if not preditas:
+        return "sem_situacao_predita"
+    return "concordantes" if situacao in preditas else "discordantes"
+
+
+def _concordancia_por_classe(contagens: Mapping[str, Counter[str]]) -> Registro:
+    por_classe: Registro = {
+        classe: {balde: contagem[balde] for balde in BALDES_SITUACAO}
+        for classe, contagem in sorted(contagens.items())
+    }
+    geral: Registro = {b: sum(item[b] for item in por_classe.values()) for b in BALDES_SITUACAO}
+    for item in (*por_classe.values(), geral):
+        item["taxa"] = _taxa(item["concordantes"], item["concordantes"] + item["discordantes"])
+    return {"por_classe": por_classe, "geral": geral}
+
+
+def _concordancia_situacao(
+    referencias: Sequence[Mapping[str, Any]],
+    predicoes: Sequence[Item],
+    pares: Sequence[tuple[int, int]],
+) -> Registro:
+    contagens: dict[str, Counter[str]] = defaultdict(Counter)
+    for i, j in pares:
+        contagens[referencias[i]["classe"]][_balde_situacao(referencias[i], predicoes[j])] += 1
+    return _concordancia_por_classe(contagens)
+
+
 def _bloco_criterio(
     referencias: Sequence[Registro],
     predicoes: Sequence[Item],
@@ -154,6 +274,7 @@ def _bloco_criterio(
     fn = Counter(ref["classe"] for i, ref in enumerate(referencias) if i not in casadas_referencia)
     fp: Counter[str] = Counter()
     fora_das_regioes = perto_de_poste_pendente = 0
+    fora_do_fp = set(casadas_predicao)
     for j, predicao in enumerate(predicoes):
         if j in casadas_predicao:
             continue
@@ -161,17 +282,23 @@ def _bloco_criterio(
         pagina = predicao["pagina"]
         if regioes is not None and not _no_pagina(centro, pagina, regioes, 0.0):
             fora_das_regioes += 1
+            fora_do_fp.add(j)
         elif _no_pagina(centro, pagina, pendentes, RAIO_POSTE_PENDENTE):
             perto_de_poste_pendente += 1
+            fora_do_fp.add(j)
         else:
             fp[predicao["classe"]] += 1
     por_classe = _por_classe(tp, fp, fn)
     return {
         "por_classe": por_classe,
         "geral": _geral(por_classe),
+        "concordancia_situacao": _concordancia_situacao(referencias, predicoes, pares),
         "fora_do_escopo": dict(sorted(fora_do_escopo.items())),
         "fora_das_regioes": fora_das_regioes,
         "perto_de_poste_pendente": perto_de_poste_pendente,
+        "leituras_erradas": _bloco_leituras_erradas(
+            leituras_erradas(referencias, predicoes, fora_do_fp, TOLERANCIA_CENTRO)
+        ),
     }
 
 
@@ -222,6 +349,14 @@ def _somar_contadores(blocos: Iterable[Mapping[str, int]]) -> dict[str, int]:
     return dict(sorted(soma.items()))
 
 
+def _somar_concordancia(blocos: Sequence[Mapping[str, Any]]) -> Registro:
+    contagens: dict[str, Counter[str]] = defaultdict(Counter)
+    for bloco in blocos:
+        for classe, item in bloco["por_classe"].items():
+            contagens[classe].update({b: item[b] for b in BALDES_SITUACAO})
+    return _concordancia_por_classe(contagens)
+
+
 def _somar_criterio(blocos: Sequence[Mapping[str, Any]]) -> Registro:
     contagens: dict[str, Counter[str]] = {chave: Counter() for chave in _TFF}
     for bloco in blocos:
@@ -232,9 +367,13 @@ def _somar_criterio(blocos: Sequence[Mapping[str, Any]]) -> Registro:
     return {
         "por_classe": por_classe,
         "geral": _geral(por_classe),
+        "concordancia_situacao": _somar_concordancia([b["concordancia_situacao"] for b in blocos]),
         "fora_do_escopo": _somar_contadores(b["fora_do_escopo"] for b in blocos),
         "fora_das_regioes": sum(b["fora_das_regioes"] for b in blocos),
         "perto_de_poste_pendente": sum(b["perto_de_poste_pendente"] for b in blocos),
+        "leituras_erradas": _bloco_leituras_erradas(
+            [item for b in blocos for item in b["leituras_erradas"]["itens"]]
+        ),
     }
 
 

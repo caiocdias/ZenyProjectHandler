@@ -3,8 +3,11 @@
 
 from __future__ import annotations
 
+import ast
 import copy
+import importlib.util
 import json
+import math
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
@@ -13,6 +16,12 @@ from uuid import uuid4
 
 import pymupdf
 import pytest
+from tests.fixtures.symbol_grammars.stem_bars import (
+    CASOS_HASTE,
+    DECRESCENTES,
+    DesenhoHaste,
+    desenhar_positivo,
+)
 
 from zeny_project_handler.adapters.analysis import (
     declarative_symbols,
@@ -202,26 +211,69 @@ def test_falha_de_fonte_aborta_e_nao_entra_no_cache(
     assert _journal(runner, "failed")["error"]
 
 
-_MODULOS_DO_DIGEST = [
-    "model_symbols",
-    "pymupdf_drawing_model",
-    "pymupdf_annotations",
-    "pymupdf_page_extractors",
-    "pymupdf_support",
-    "pymupdf_glyphs",
-    "symbol_grammars",
-    "grammar_frames",
-    "grammar_disc",
-    "symbol_matcher",
-    "groups",
-    "geometry",
-    "glyph_text",
-    "glyph_signature",
-    "glyph_table",
-]
+_RAIZ_DO_FECHO = "zeny_project_handler.adapters.analysis"
 
 
-@pytest.mark.parametrize("modulo", _MODULOS_DO_DIGEST)
+def _fecho_de_imports() -> set[str]:
+    """Módulos de `adapters.analysis` que `model_symbols` importa, direta ou transitivamente."""
+    vistos: set[str] = set()
+    fila = [f"{_RAIZ_DO_FECHO}.model_symbols"]
+    while fila:
+        nome = fila.pop()
+        if nome in vistos:
+            continue
+        vistos.add(nome)
+        spec = importlib.util.find_spec(nome)
+        if spec is None or spec.origin is None or not spec.origin.endswith(".py"):
+            continue
+        pacote = nome if spec.submodule_search_locations else nome.rsplit(".", 1)[0]
+        for no in ast.walk(ast.parse(Path(spec.origin).read_text(encoding="utf-8"))):
+            fila.extend(_alvos_de_import(no, pacote))
+    return {nome for nome in vistos if nome.startswith(f"{_RAIZ_DO_FECHO}.")}
+
+
+def _alvos_de_import(no: ast.AST, pacote: str) -> list[str]:
+    if isinstance(no, ast.Import):
+        candidatos = [alias.name for alias in no.names]
+    elif isinstance(no, ast.ImportFrom):
+        base = no.module or ""
+        if no.level:
+            partes = pacote.split(".")[: len(pacote.split(".")) - (no.level - 1)]
+            base = ".".join([*partes, *([no.module] if no.module else [])])
+        candidatos = [base, *(f"{base}.{alias.name}" for alias in no.names)]
+    else:
+        return []
+    return [
+        nome for nome in candidatos if nome.startswith(f"{_RAIZ_DO_FECHO}.") and _e_modulo(nome)
+    ]
+
+
+def _e_modulo(nome: str) -> bool:
+    """`from m import Nome` também gera o candidato `m.Nome`, que só às vezes é um submódulo."""
+    try:
+        return importlib.util.find_spec(nome) is not None
+    except ModuleNotFoundError:
+        return False
+
+
+def test_digest_cobre_o_fecho_de_imports(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    digeridos: set[str] = set()
+    digest_original = symbol_execution._module_digest
+
+    def registrar(alvo: Any) -> str:
+        digeridos.add(alvo.__name__)
+        return digest_original(alvo)
+
+    monkeypatch.setattr(symbol_execution, "_module_digest", registrar)
+
+    SymbolCompositionRunner(_settings(tmp_path / "dados"))
+
+    fecho = _fecho_de_imports()
+    assert len(fecho) > 15
+    assert fecho - digeridos == set()
+
+
+@pytest.mark.parametrize("modulo", sorted(nome.rsplit(".", 1)[-1] for nome in _fecho_de_imports()))
 def test_cada_modulo_do_digest_invalida_a_assinatura(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, modulo: str
 ) -> None:
@@ -717,3 +769,81 @@ def test_caracterizacao_pagina_que_bate_no_teto_volta_a_exclusivo(
 
     assert simbolo.exclusive
     assert len(simbolo.methods) == 1
+
+
+# --- fusão da haste com o legado (R-E06.3.2-3, Review Focus 5) --------------------------------
+
+_PACOTES_REAIS = Path(declarative_symbols.__file__).parent / "symbol_packages"
+
+
+def _pacotes_com_haste(destino: Path) -> tuple[declarative_symbols.Package, ...]:
+    """Cópia dos pacotes reais com as 8 variantes de haste habilitadas (a Task 4 faz no real)."""
+    destino.mkdir()
+    gramaticas = dict(CASOS_HASTE)
+    for caminho in _PACOTES_REAIS.glob("*.json"):
+        pacote = json.loads(caminho.read_text(encoding="utf-8"))
+        for variante in pacote["variants"]:
+            if variante["id"] in gramaticas:
+                variante["recognition"] = {
+                    "status": "enabled",
+                    "grammar": gramaticas[variante["id"]],
+                    "negative_examples": variante["recognition"]["negative_examples"],
+                }
+        (destino / caminho.name).write_text(json.dumps(pacote), encoding="utf-8")
+    return declarative_symbols.carregar_pacotes(packages_dir=destino)
+
+
+def _pdf_de_haste(caminho: Path, variante: str, rotacao: int, linha_longa: float) -> DesenhoHaste:
+    with pymupdf.open() as documento:
+        pagina = documento.new_page(width=300, height=300)
+        desenho = desenhar_positivo(pagina, variante, linha_longa=linha_longa)
+        pagina.set_rotation(rotacao)
+        documento.save(caminho)
+    return desenho
+
+
+def _caixa_do_pictograma(desenho: DesenhoHaste, maior_barra: float) -> tuple[float, ...]:
+    """Barras e o trecho da haste até a maior barra, no espaço cru da página."""
+    (ax, ay), (bx, by) = desenho.ponta, desenho.base
+    vao = math.dist((ax, ay), (bx, by))
+    fim = (ax + (bx - ax) / vao * maior_barra, ay + (by - ay) / vao * maior_barra)
+    pontos = [desenho.ponta, fim, *(p for barra in desenho.barras for p in barra)]
+    xs, ys = [p[0] for p in pontos], [p[1] for p in pontos]
+    return (min(xs), min(ys), max(xs), max(ys))
+
+
+@pytest.mark.parametrize(
+    ("variante", "rotacao", "linha_longa"),
+    [
+        ("cemig-eo-r3-s19-v001", 0, 0.0),
+        ("cemig-eo-r3-s19-v001", 0, 60.0),
+        ("cemig-eo-r3-s19-v004", 0, 0.0),
+        ("cemig-eo-r3-s19-v001", 90, 0.0),
+    ],
+    ids=["haste-curta", "haste-na-linha-longa", "x-sem-envolvente", "rotate-90"],
+)
+def test_haste_funde_com_o_legado(
+    tmp_path: Path, variante: str, rotacao: int, linha_longa: float
+) -> None:
+    desenho = _pdf_de_haste(tmp_path / "h.pdf", variante, rotacao, linha_longa)
+    documento, fonte = _fonte(tmp_path / "h.pdf")
+    pacotes = _pacotes_com_haste(tmp_path / "pacotes")
+    runner = SymbolCompositionRunner(_settings(tmp_path / "dados"), packages=pacotes)
+    novo = next(p for p in runner._profiles if p.metodo_id == _METODO_NOVO).assinatura()
+
+    composto = runner.run(documento, fonte)
+
+    com_o_novo = [
+        o
+        for o in composto.occurrences
+        if any(obs.metodo_assinatura == novo for obs in o.observations)
+    ]
+    assert len(com_o_novo) == 1
+    (ocorrencia,) = com_o_novo
+    assert len({obs.metodo_assinatura for obs in ocorrencia.observations}) >= 2
+    assert {alt.classe for alt in ocorrencia.alternatives} == {"ATERRAMENTO"}
+    esperado = _caixa_do_pictograma(desenho, max(DECRESCENTES))
+    xs = [float(x) for x, _ in ocorrencia.geometry.pontos_originais]
+    ys = [float(y) for _, y in ocorrencia.geometry.pontos_originais]
+    assert (min(xs), min(ys), max(xs), max(ys)) == pytest.approx(esperado, abs=0.5)
+    assert ocorrencia.support_geometry is not None

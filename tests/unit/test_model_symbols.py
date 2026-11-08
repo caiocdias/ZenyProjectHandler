@@ -42,12 +42,15 @@ from zeny_project_handler.adapters.analysis.drawing_model.symbol_matcher import 
 )
 from zeny_project_handler.adapters.analysis.model_symbols import (
     ResiduoRaster,
+    _observacao,
     observar_pacotes_modelo,
     perfil_pacotes_modelo,
     residuos_raster,
 )
+from zeny_project_handler.adapters.analysis.pymupdf_drawing_model import pagina_para_gramaticas
 from zeny_project_handler.domain.enums import EstadoMetodoSimbolos
 from zeny_project_handler.domain.symbols import (
+    FonteObservacaoSimbolo,
     ObservacaoSimbolo,
     PerfilMetodoSimbolos,
     ResultadoMetodoSimbolos,
@@ -585,9 +588,11 @@ def test_perfil_declara_o_metodo(
     motor = perfil_pacotes(pacotes)
 
     assert perfil.metodo_id == "declarative-drawing-model"
-    assert perfil.versao == "1.0.0"
+    assert perfil.versao == "1.4.0"
     assert perfil.familia == motor.familia
-    assert perfil.classes_suportadas == motor.classes_suportadas
+    assert perfil.classes_suportadas == tuple(
+        sorted({variante["class_code"] for _, variante in _enabled(pacotes)})
+    )
     assert perfil.camadas_suportadas == motor.camadas_suportadas
     assert perfil.perfil_referencia == motor.perfil_referencia
     assert (
@@ -610,7 +615,7 @@ def test_perfil_declara_o_metodo(
         "tabela_glifos_versao": tabela.versao,
         "tabela_glifos_sha256": tabela.sha256,
         "limite_consultas": LIMITE_CONSULTAS_PAGINA,
-        "enabled_variants": dict(motor.parametros)["enabled_variants"],
+        "enabled_variants": len(_enabled(pacotes)),
     }
 
 
@@ -1165,3 +1170,70 @@ def test_casamentos_que_colapsam_na_mesma_caixa_crua_viram_uma_observacao(
 
     assert resultado.observacoes == (unico,)
     assert _unica_cobertura(resultado).estado is EstadoMetodoSimbolos.CONCLUIDO
+
+
+# --- componentes do casamento (R-E06.3.2-3) -------------------------------------------------
+
+_TRECHOS: Final = tuple(
+    ((20.0 + 10 * i, 30.0 + 7 * i), (40.0 + 10 * i, 60.0 + 5 * i)) for i in range(12)
+)
+_FONTE_COMPONENTES: Final = FonteObservacaoSimbolo(
+    documento_id="componentes", documento_sha256=_SHA, pagina_numero=1, camada="base"
+)
+
+
+def _observar_trechos(
+    posicoes: tuple[int, tuple[int, ...]], *, rotacao: int
+) -> tuple[ObservacaoSimbolo, PaginaGramatica]:
+    """Doze traços soltos em página `/Rotate`; o 5 numa camada opcional, o resto sem camada."""
+    caminho, componentes = posicoes
+    with pymupdf.open() as documento:
+        oc = documento.add_ocg("REDE")
+        pagina = documento.new_page(width=300, height=200)
+        for i, (a, b) in enumerate(_TRECHOS):
+            pagina.draw_line(a, b, color=_PRETO, width=0.5, oc=oc if i == 5 else 0)
+        pagina.set_rotation(rotacao)
+        lida = pagina_para_gramaticas(pagina, 0)
+        assert len(lida.modelo.caminhos) == len(_TRECHOS)
+        casamento = CasamentoGramatica(
+            {"family_id": "autoral"},
+            {"id": "v", "class_code": "ATERRAMENTO", **_VARIANTE_MINIMA},
+            (0.0, 0.0, 10.0, 10.0),
+            caminho,
+            componentes,
+        )
+        return _observacao(pagina, _FONTE_COMPONENTES, _SHA, lida, casamento), lida
+
+
+_VARIANTE_MINIMA: Final = {
+    "role": "operational",
+    "destination": "network_context",
+    "source_ref": {"source_id": "F02", "locator": "autoral"},
+    "recognition": {"grammar": {"kind": "stem_bars"}},
+}
+
+
+def test_observacao_tem_uma_primitiva_por_caminho() -> None:
+    observacao, lida = _observar_trechos((2, (5, 9)), rotacao=90)
+
+    assert [p.indice for p in observacao.primitivas] == [
+        str(lida.indices_crus[i]) for i in (2, 5, 9)
+    ]
+    assert [p.camada for p in observacao.primitivas] == [None, "REDE", None]
+    for primitiva, posicao in zip(observacao.primitivas, (2, 5, 9), strict=True):
+        (a, b) = _TRECHOS[posicao]  # coordenadas cruas: a página foi desenhada antes do /Rotate
+        xs = [float(x) for x, _ in primitiva.pontos_originais]
+        ys = [float(y) for _, y in primitiva.pontos_originais]
+        esperado = (min(a[0], b[0]), min(a[1], b[1]), max(a[0], b[0]), max(a[1], b[1]))
+        assert (min(xs), min(ys), max(xs), max(ys)) == pytest.approx(esperado, abs=_TOLERANCIA)
+
+
+def test_sem_componentes_continua_com_uma_primitiva() -> None:
+    observacao, lida = _observar_trechos((3, ()), rotacao=0)
+
+    (primitiva,) = observacao.primitivas
+    assert primitiva.indice == str(lida.indices_crus[3])
+
+
+def test_versao_1_4_0(pacotes: Pacotes, tabela: TabelaGlifos) -> None:
+    assert perfil_pacotes_modelo(pacotes, tabela).versao == "1.4.0"

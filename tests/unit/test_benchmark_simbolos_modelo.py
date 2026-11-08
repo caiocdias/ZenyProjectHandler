@@ -45,7 +45,15 @@ def test_modelo_e_pacotes_preveem_o_mesmo_rotulo(tmp_path: Path) -> None:
     for resultado, nome in ((pacotes, "pacotes"), (modelo, "modelo")):
         assert resultado["predicoes"], nome
         for predicao in resultado["predicoes"]:
-            assert set(predicao) == {"pagina", "classe", "bbox", "metodo", "contexto"}
+            assert set(predicao) == {
+                "pagina",
+                "classe",
+                "bbox",
+                "metodo",
+                "contexto",
+                "variante",
+                "situacoes_preditas",
+            }
     ct_pacotes = [p for p in pacotes["predicoes"] if p["classe"] == "CAMARA"]
     ct_modelo = [p for p in modelo["predicoes"] if p["classe"] == "CAMARA"]
     assert len(ct_pacotes) == 1

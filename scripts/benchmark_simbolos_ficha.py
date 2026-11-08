@@ -79,6 +79,8 @@ from scripts.simbolos_ficha_metricas import (
     avaliar_predicoes,
     casar,
     classes_da_ficha,
+    normalizar_situacao,
+    situacoes_da_variante,
 )
 from scripts.simbolos_ficha_relatorio import _markdown
 from zeny_project_handler.adapters.analysis import (
@@ -127,6 +129,8 @@ class Predicao(TypedDict):
     bbox: list[float]
     metodo: str
     contexto: str
+    variante: str | None
+    situacoes_preditas: frozenset[str]
 
 
 class ResultadoMetodo(TypedDict):
@@ -147,13 +151,25 @@ def _falha_do_manifesto(manifesto: Mapping[str, Any]) -> str | None:
     return None
 
 
+def _variante_e_situacoes(item: Mapping[str, Any]) -> tuple[str | None, frozenset[str]]:
+    """Variante dos pacotes (``provenance.variant_id``) e suas situações; senão a do legado."""
+    variante = (item.get("provenance") or {}).get("variant_id")
+    if variante is not None:
+        return str(variante), situacoes_da_variante(str(variante)) or frozenset()
+    situacao = normalizar_situacao(item.get("situation"))
+    return None, frozenset() if situacao is None else frozenset({situacao})
+
+
 def _predicao_do_runner(item: Mapping[str, Any]) -> Predicao:
+    variante, situacoes = _variante_e_situacoes(item)
     return {
         "pagina": int(item["page"]),
         "classe": str(item["class_id"]),
         "bbox": [float(valor) for valor in item["bbox"]],
         "metodo": str(item["method_id"]),
         "contexto": str(item["context"]),
+        "variante": variante,
+        "situacoes_preditas": situacoes,
     }
 
 

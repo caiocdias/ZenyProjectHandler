@@ -102,6 +102,54 @@
             "max_span": {"type": "number", "exclusiveMinimum": 0.5, "maximum": 8},
             "terminal_line": {"const": true}
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "bars", "taper", "enclosure", "removal_mark", "max_span"],
+          "$comment": "Haste com barras; só o método sobre o modelo de desenho a executa.",
+          "properties": {
+            "kind": {"const": "stem_bars"},
+            "bars": {"enum": [3, 4]},
+            "taper": {"enum": ["decreasing", "alternating"]},
+            "enclosure": {"enum": ["none", "ellipse"]},
+            "removal_mark": {"type": "boolean"},
+            "max_span": {"type": "number", "exclusiveMinimum": 0, "maximum": 72}
+          },
+          "oneOf": [
+            {"properties": {"bars": {"const": 3}, "taper": {"const": "decreasing"}}},
+            {"properties": {"bars": {"const": 4}, "taper": {"const": "alternating"}}}
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "enclosure", "removal_mark", "max_span"],
+          "$comment": "Retângulo atravessado por diagonal; só o método sobre o modelo de desenho a executa.",
+          "properties": {
+            "kind": {"const": "rect_diagonal"},
+            "enclosure": {"enum": ["none", "ellipse"]},
+            "removal_mark": {"type": "boolean"},
+            "max_span": {"type": "number", "exclusiveMinimum": 0, "maximum": 72}
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "fill", "enclosure", "removal_mark", "max_span"],
+          "$comment": "Triângulo dividido (meio ciano ou contorno); só o método sobre o modelo de desenho o executa.",
+          "properties": {
+            "kind": {"const": "split_triangle"},
+            "fill": {"enum": ["half_cyan", "outline"]},
+            "enclosure": {"enum": ["none", "ellipse"]},
+            "removal_mark": {"type": "boolean"},
+            "max_span": {"type": "number", "exclusiveMinimum": 0, "maximum": 72}
+          },
+          "not": {
+            "$comment": "Envolvente com X não é grupo da R-E06.3.3.2.2-1: o X tem enclosure none.",
+            "required": ["enclosure", "removal_mark"],
+            "properties": {"enclosure": {"const": "ellipse"}, "removal_mark": {"const": true}}
+          }
         }
       ]
     },

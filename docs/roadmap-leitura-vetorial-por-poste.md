@@ -79,7 +79,7 @@ A análise entrega, para cada poste da folha, a ficha correta: identificador, es
 | # | Hipótese ou decisão | Impacto se errada / sem decisão | Etapa afetada |
 |---|---|---|---|
 | H1 | Nas famílias sem texto nativo, cada forma pequena preenchida é um glifo de fonte fixa. Resultado da E05: se sustenta. Há 0 grupos compostos e 0 fragmentos; o resíduo misto é de cerca de 1,1% dos glifos. 88% (Electric Office) e 96% (Ghostscript) dos candidatos caem em trecho. Maiúscula e minúscula de mesmo desenho só se separam pela escala, e o leitor falha fechado quando ela não decide | a leitura por assinatura precisa segmentar glifos compostos ou tolerar variação de curva | E05 |
-| H2 | Os símbolos da rede são vetoriais em todas as famílias | símbolos rasterizados vão direto para o resíduo do detector (E12) | E06 |
+| H2 | Os símbolos da rede são vetoriais em todas as famílias. Resultado da E06.3.2.1: refutada no sentido estrito. Nas 16 folhas há 1 símbolo da rede em raster (folha 004, iText: disco laranja com "~" no fim de um ramal, classe fora da ficha), e `residuos_raster` o marca. Para as classes da ficha ela se sustenta: nenhuma das 179 referências é raster | símbolos rasterizados vão direto para o resíduo do detector (E12) | E06, E12 |
 | H3 | As imagens das folhas Print To PDF e iText são só ladrilhos da ortofoto. Resultado da E04: os ladrilhos são só ortofoto e nenhum símbolo é raster, mas as folhas iText trazem tabelas (CHI, servidão, APP) como imagem e a folha Ghostscript traz um rótulo de poste em imagem de anotação | se carregarem símbolos ou texto, o OCR não pode sair em E09 — há texto em raster: a E09 precisa tratá-lo ou declará-lo fora da ficha | E04, E09 |
 | H4 | O usuário reserva folhas novas, ainda não vistas, para o conjunto de avaliação antes de E09. Em 2026-11-04 o usuário disse que consegue as folhas em breve | sem elas, a E16 fica bloqueada e a E09 não tem prova cega | E16, E09 |
 | H5 | PyTorch com ROCm treina na RX 9070 XT desta máquina (Windows nativo ou WSL2). Resultado da E11: não se sustenta no Windows nativo com o release oficial ROCm 7.2.1 (torch 2.9.1). O BatchNorm de treino falha no MIOpen para a gfx1201. O WSL2 não foi ensaiado. O treino vai para a CPU, com 7,5 a 10,5 h na carga de referência (ADR 0017) | o treino cai para CPU ou para GPU alugada (D1) | E11 |
@@ -270,9 +270,12 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E06.2.2.1 | Método versionado no runner | #concluida | E06.2.1 | método de pacotes sobre o modelo no runner opt-in, resíduo raster marcado, agrupamento sem laço quadrático fora de teto |
 | E06.2.2.2 | Medição do método nas 16 folhas | #concluida | E06.2.2.1 | benchmark ao lado do atual e diff por variante, com cada "só no núcleo" classificado |
 | E06.3.1 | Pacotes das classes da ficha | #concluida | E06.2.2.2 | 58 variantes do inventário de ESTAI, TRANSFORMADOR, ATERRAMENTO e PARA_RAIOS_MT/BT nos pacotes, como `pending`; auditor e matriz aceitam outro `owner_stage` |
-| E06.3.2 | Aterramento, para-raios MT e H2 | #pendente | E06.3.1 | gramática de haste com barras, com laboratório, acima do atual nas duas classes; confirmação da H2 (raster como resíduo) |
-| E06.3.3 | Para-raios BT e transformador | #pendente | E06.3.2 | gramáticas de moldura das duas classes, com laboratório, acima do atual |
-| E06.3.4 | Estai | #pendente | E06.3.3 | gramática de estai, com laboratório, acima do atual |
+| E06.3.2.1 | Base da haste, leituras erradas e H2 | #concluida | E06.3.1 | tipo de gramática só do modelo, métrica de leitura errada afirmada, resíduos raster por folha e veredito da H2 |
+| E06.3.2.2 | Gramática de haste com barras | #concluida | E06.3.2.1 | gramática de haste com barras, com laboratório, ATERRAMENTO e PARA_RAIOS_MT acima do atual |
+| E06.3.3.1 | Para-raios BT | #concluida | E06.3.2.2 | gramática do retângulo com diagonal, com laboratório, PARA_RAIOS_BT acima do atual (que não casa nenhuma) |
+| E06.3.3.2.1 | Marcas: envolvente e X | #concluida | E06.3.3.1 | envolvente por subcaminho, X perto do símbolo e concordância de situação medida |
+| E06.3.3.2.2 | Transformador | #concluida | E06.3.3.2.1 | gramática do triângulo em círculo, com laboratório, TRANSFORMADOR acima do atual |
+| E06.3.4 | Estai | #pendente | E06.3.3.2.2 | gramática de estai, com laboratório, acima do atual |
 | E06.3.5 | Equipamento de interrupção | #pendente | E06.3.4 | gramática de interrupção, acima do atual (que não emite a classe) |
 | E07 | Ficha do poste | #pendente | E06.3.5, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
 | E08 | Conferência UTM | #pendente | E07 | transformação página → UTM, checagem de posição e vão, pendências |
@@ -1607,7 +1610,17 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
-## E06.3.2 — Aterramento, para-raios MT e H2 — #pendente
+## E06.3.2 — Aterramento, para-raios MT e H2 (dividida em E06.3.2.1 e E06.3.2.2)
+
+**Divisão (2026-11-07, orquestrador):**
+- **Por que dividir:** o plano, depois de duas rodadas da revisão de arquitetura, soma cerca de 4h em tarefas, mais o laboratório, acima do teto de ~3h do "Orçamento". A divisão da E06.3 já pedia a H2 medida cedo, porque ela pode mudar a abordagem.
+- **Subetapas,** cada uma uma etapa completa, em série:
+  - E06.3.2.1, base: o tipo de gramática só do modelo (`stem_bars` validado e ignorado pelo motor antigo), a métrica de leitura errada afirmada no benchmark e a medição da H2, com o veredito;
+  - E06.3.2.2, gramática: laboratório, gramática de haste com barras, observação com componentes, habilitação das variantes e benchmark nas 16 folhas.
+- **Como os critérios se repartem:** a E06.3.2.1 leva a H2 e as fixtures do que ela constrói; a E06.3.2.2 leva as fixtures das duas classes e o "acima do atual". Auditor e `.bat` valem nas duas.
+- **Dependência:** a E06.3.3 passa a depender da E06.3.2.2. O relógio da E06.3.2.1 começa no commit `#em-andamento` da E06.3.2 (e609bda).
+
+O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Objetivo:** reconhecer ATERRAMENTO e PARA_RAIOS_MT sobre o modelo de desenho, acima do analisador atual, e confirmar ou refutar a hipótese H2.
 
@@ -1652,11 +1665,213 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
-## E06.3.3 — Para-raios BT e transformador — #pendente
+## E06.3.2.1 — Base da haste, leituras erradas e H2 — #concluida
+
+**Objetivo:** preparar o tipo de gramática que só o método sobre o modelo executa, medir a leitura errada afirmada no benchmark e confirmar ou refutar a H2.
+
+**Dependências:** E06.3.1.
+
+**Escopo:**
+- **Tipo `stem_bars` só do modelo:** validado nos pacotes e no schema, ignorado pelo motor antigo (`variantes_do_motor`), anunciado pelo perfil do método sobre o modelo; `CasamentoGramatica.componentes`.
+- **Leitura errada afirmada** calculada pelo benchmark de símbolos, por classe.
+- **H2:** `residuos_raster` folha a folha, sem contar página `FORA_DOMINIO` nem com imagens que falharam, cruzado com as referências da ficha, com recortes para triagem; contagem por folha em `tmp/`.
+
+**Fora de escopo:** a gramática e a habilitação (E06.3.2.2).
+
+**Critérios de aceite:**
+
+- [x] Fixtures sintéticas positivas e negativas do tipo só do modelo e das duas medições.
+- [x] H2 confirmada ou refutada, com a contagem por folha em `tmp/`.
+- [x] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:** o plano é `docs/superpowers/plans/2026-11-07-leitura-vetorial-por-poste-e06-3-2-1.md`, recortado do plano da E06.3.2 já revisado.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** os da E06.3.
+
+**Evidências e handoff:**
+
+- Plano: `docs/superpowers/plans/2026-11-07-leitura-vetorial-por-poste-e06-3-2-1.md`. Revisão de arquitetura (opus): bloqueou nas rodadas 0 e 1, sobre o plano da E06.3.2 inteiro (C1: o perfil do modelo herdava as classes do motor; C2: a caixa da haste não era o pictograma do legado), e aprovou com notas na rodada 2, sobre o plano recortado.
+- Relógio: de e609bda (21:14 de 2026-11-07, `#em-andamento` da E06.3.2) até o commit `#concluida` (a98d95e, 22:58), 1h44. A divisão da E06.3.2 entra nesse tempo.
+- Revisão final (`revisor-seguranca`, opus, 2d9d303..14544d5): aprovada com ressalvas, sem Crítico e sem correção de código. Os dois Importantes eram de registro e estão fechados neste handoff. Os Menores ficaram com ruling no ledger, e nenhum bloqueia.
+- Critérios verificados:
+  1. Fixtures sintéticas: `tests/unit/test_gramatica_so_modelo*.py`, `test_residuos_raster_folhas*.py` e `test_leituras_erradas*.py`, com positivos e negativos de cada peça.
+  2. H2 (em 14544d5, `tmp/e06-3-2-1/h2/residuos-raster.json` do checkout principal, com recortes):
+     - 16 folhas medidas, nenhuma `fora_dominio`;
+     - 115 resíduos, com 100 hashes distintos. Por folha: 001: 62, 002: 5, 003: 11, 004: 7, 005: 0, 006: 22, 007: 0, 008: 1, 009: 2, 010: 0, 011: 0, 012: 1, 013: 2, 014: 2, 015: 0 e 016: 0;
+     - 3 resíduos estão sobre referência, todos ESTAI (001 e 006). Os três são ortofoto com o estai vetorial desenhado por cima;
+     - as 92 referências sob alguma imagem têm desenho vetorial na caixa, e as outras 87 não estão sob imagem;
+     - triagem visual dos 100 hashes: ortofoto, assinaturas, QR codes, logos, fotos, blocos de texto, um ícone de imagem quebrada (008 e 009) e o rótulo de poste em anotação (012, já descrito na H3);
+     - **1 símbolo da rede em raster:** disco laranja com "~" no fim do ramal ABN-16, folha 004 (iText). A classe está fora da ficha (provavelmente geração);
+     - **Veredito:** H2 refutada no sentido estrito (critério R-E06.3.2-7) e sustentada para as classes da ficha. A linha H2 de "Hipóteses" foi atualizada.
+  3. `scripts.audit_symbol_packages` em 14544d5 → `errors []`, 22 `enabled` e 401 `pending`. Nenhum pacote mudou.
+  4. `.bat` em 14544d5 → `RESULTADO FINAL: APROVADO`: 9413 passed, 2 xfailed, cobertura 89,29%, mypy limpo em 567 arquivos.
+  - `osv-scanner` nos 7 locks → `No issues found`; nenhum lock mudou. `check_test_integrity --base 2d9d303` → exit 1, com 1 apontamento justificado (a asserção do perfil do modelo, trocada como o plano manda).
+- Benchmark de símbolos em 14544d5, `atual` e `modelo` (`tmp/e06-3-2-1/simbolos/`):
+  - igual à linha de base congelada `tmp/e06-2-2-2/simbolos/simbolos-ficha.json`: `atual` 131/58/48 e `modelo` 2/18/177 (tp/fp/fn, `centro`), sem divergência em nenhuma folha;
+  - **linha de base de leituras erradas** (`centro`): `atual` 19 (ATERRAMENTO 13, PARA_RAIOS_MT 4, PONTO_CONEXAO 2) e `modelo` 2 (PONTO_CONEXAO 2);
+  - a unidade é o par (predição, referência de outra classe), e não a predição: uma predição sobre duas referências conta 2. `referencia_id` é o índice local da folha e só identifica a referência dentro do bloco por folha.
+- Ciclo: Onda 1 com as Tasks 1, 2 e 3 em paralelo e testador nas três (risco alto). Cada uma teve uma rodada de correção, vinda de um vermelho do testador: `TypeError` com campo de tipo errado; recorte de página girada em branco; predição fora do FP contada como leitura errada. A Task 4 foi a medição. Testador de etapa não foi despachado: nenhuma tarefa de risco normal produziu código.
+- Entregas:
+  - tipo `stem_bars` só do modelo: `GRAMATICAS_SO_MODELO`, `variantes_do_motor`, ramo no schema `pacotes-simbologia.schema.json`, perfil do método sobre o modelo com todas as habilitadas e `CasamentoGramatica.componentes`;
+  - `scripts/residuos_raster_folhas.py` (esquema `residuos-raster-v1`);
+  - chave `leituras_erradas` no benchmark de símbolos e uma linha no `.md`.
+- Decisões para o usuário (tomadas pela opção recomendada):
+  - **Divisão da E06.3.2** em E06.3.2.1 e E06.3.2.2: com os achados da revisão de arquitetura, as tarefas passaram de 4h.
+  - **R-E06.3.2-1, tipo de gramática só do modelo:** o motor antigo ignora `stem_bars`. Quando a E06.3.2.2 habilitar as hastes, a tabela de suporte da revisão (`symbol_support.py`), a matriz da curadoria (`coverage_matrix_e16.py`, que vai marcar `fora_do_dominio` no motor antigo), `scripts/symbol_benchmark_runner.py` e `scripts/curation_backlog.py` vão contar como habilitadas variantes que o motor antigo não executa. Prós: o motor antigo sai na E09, e portar a gramática para ele seria trabalho jogado fora. Custo se errada: leitura enganosa nessas tabelas até a E09.
+  - **Leitura errada afirmada** conta só a predição que o benchmark já conta como FP. Fora das regiões e perto de poste pendente não conta.
+  - **H2 refutada no sentido estrito.** O raster fica como resíduo para a E12, e as gramáticas vetoriais seguem.
+- **Pendente, intermitente:** `tests/unit/test_curation_round.py::test_transicoes_concorrentes_no_mesmo_pdf_nao_perdem_eventos` falhou uma vez sob `-n 20`, com nenhum arquivo dele tocado. Passou 6/6 isolado, na 2ª suíte e no `.bat`. Não investigado. Uma perda real de eventos na rodada de curadoria seria defeito de dados.
+- **Para a E06.3.2.2:**
+  - parta do rascunho do plano. A nota no topo carrega N3, N4, M-a, M-c e M4 da revisão de arquitetura. Ao abrir, tire dele a H2 (já medida aqui) e a CLI `leituras-erradas`: o critério lê a chave `leituras_erradas` do bloco `centro`, com 0 exigido em ATERRAMENTO e PARA_RAIOS_MT contra a linha de base acima;
+  - `tests/unit/test_gramatica_so_modelo_ataque.py::test_modelo_ainda_nao_executa_stem_bars_e_falha_alto` fica vermelho de propósito quando o casador ganhar `stem_bars`. Reescreva-o na tarefa da gramática;
+  - `scripts/diff_simbolos_nucleo_motor.py` ainda usa `_enabled` (troca prevista na tarefa de habilitação);
+  - a docstring de `leituras_erradas` ainda diz "não casadas" para o parâmetro `casadas`, que hoje significa "fora do FP" (corrigir se tocar o arquivo);
+  - `residuos_raster_folhas` deixa PNG órfãos quando uma folha falha no meio e soma `referencias_sob_imagem` de página com imagens que falharam. Nenhuma das duas coisas afetou esta medição.
+- **Para a E12:** o disco laranja com "~" da folha 004 é o primeiro símbolo da rede raster confirmado (resíduo `2a7dd179c5da`).
+- **Para a E09:** `GRAMATICAS_SO_MODELO` e a validação dos pacotes moram em `declarative_symbols.py`, que ela remove. `review_status` e `role` têm `in {...}` sem guarda de tipo: o pior caso é `TypeError` em vez de `ValueError`.
+
+---
+
+## E06.3.2.2 — Gramática de haste com barras — #concluida
+
+**Objetivo:** reconhecer ATERRAMENTO e PARA_RAIOS_MT sobre o modelo de desenho, acima do analisador atual.
+
+**Dependências:** E06.3.2.1.
+
+**Escopo:** laboratório H-A/H-B/H-C; gramática de haste com barras (caixa do pictograma, haste como componente); observação com uma primitiva por caminho e versão 1.1.0 do método; habilitação das variantes de f02-19 e f02-21 (MT); guarda contra memorização estendida; benchmark nas 16 folhas, comparação com os JSON congelados da E06.2.2.2 e taxa de fusão com o legado no runner.
+
+**Fora de escopo:** as outras classes (E06.3.3 a E06.3.5).
+
+**Critérios de aceite:**
+
+- [x] Fixtures sintéticas positivas e negativas das duas classes.
+- [x] Nas 16 folhas, precisão e recall de ATERRAMENTO e PARA_RAIOS_MT em `tmp/`, maiores que os do atual com as mesmas referências, e leitura errada afirmada = 0. **Cumprido pelo critério aplicado, não pelo literal** (ver handoff e "Decisões para o usuário"): o literal é inatingível para qualquer leitura correta, por erros da ficha congelada.
+- [x] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:** parte do rascunho `docs/superpowers/plans/2026-11-07-leitura-vetorial-por-poste-e06-3-2-2.md` (decisões R-E06.3.2-1 a 9, já com os achados das rodadas 0 e 1 da revisão de arquitetura da E06.3.2); leia o handoff da E06.3.2.1, sobretudo o veredito da H2.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** os da E06.3.
+
+**Evidências e handoff:**
+
+- Plano: `docs/superpowers/plans/2026-11-07-leitura-vetorial-por-poste-e06-3-2-2.md`. Revisão de arquitetura (opus): bloqueou na rodada 0 (4 Importantes: testes quebrados fora dos Files, dependência oculta, gasto não medido e caminho da H-A) e aprovou com notas na rodada 1.
+- Relógio: de 2b6cc09 (22:58 de 2026-11-07) até o commit `#concluida` (4ad9148, 02:34 de 2026-11-08), 3h36.
+- Revisão final (`revisor-seguranca`, opus, a98d95e..a44f68e): aprovada com ressalvas, sem Crítico. A onda única corrigiu M-1 e M-2 (99652b4, só testes), e a re-revisão aprovou. I-1 a I-3 eram de registro e estão neste handoff.
+- **Laboratório**, em `tmp/laboratorio/e06-3-2-2/` do checkout principal:
+  - H-A: grupo como unidade. Deu 6/20/37 e 0/0/13, porque os grupos quebram o símbolo.
+  - H-B: segmento como semente. Deu 41/20/2 e 10/4/3, com gasto de 611 mil.
+  - **H-C, escolhida:** H-B com limiares pela origem do texto da página, que serve de proxy da escala do símbolo. A alternativa `PerfilFamilia` do documento foi descartada porque o método roda por página.
+- Critérios verificados:
+  1. Fixtures: `test_grammar_stem*.py` (positivos das 8 variantes × 3 rotações, negativos, pictograma, componentes, teto), `test_model_symbols_componentes_ataque.py`, `test_model_symbols_haste_ataque.py`, `test_habilitacao_hastes_ataque.py` e `test_haste_costuras_etapa_testador.py`.
+  2. Benchmark nas 16 folhas em d62c47c (`tmp/e06-3-2-2/simbolos/`), 0 falhas, critério `centro`. Números brutos:
+
+     | classe | método | tp/fp/fn | precisão | recall | leituras erradas (pares) |
+     |---|---|---|---|---|---|
+     | ATERRAMENTO | `atual` | 41/32/2 | 56,2% | 95,3% | 13 |
+     | ATERRAMENTO | `modelo` | 41/7/2 | **85,4%** | 95,3% | 13 |
+     | PARA_RAIOS_MT | `atual` | 10/4/3 | 71,4% | 76,9% | 4 |
+     | PARA_RAIOS_MT | `modelo` | 10/4/3 | 71,4% | 76,9% | 4 |
+
+     - O `atual` é igual ao congelado, e as outras classes do `modelo` são iguais ao congelado em todas as folhas.
+     - **Critério aplicado** (uma definição só, ruling no ledger):
+       - recall sem as 5 referências com rótulo trocado: ≥ atual. Fica 41/41 e 10/10 nos dois métodos;
+       - precisão bruta: > atual em ATERRAMENTO, e igual em PARA_RAIOS_MT;
+       - leituras erradas de fato: 0.
+     - Os 5 FN, nos dois métodos, são referências com rótulo trocado na ficha:
+       - 006 `P8-para-raios`, 010 `b-P1-circulo-norte` e 012 `P8-pr-2` são PARA_RAIOS_MT sobre desenho que não tem 4 barras alternadas;
+       - 006 `P8-aterramento-1` e 010 `b-P1-aterramento-oval-sul` são ATERRAMENTO sobre 4 barras alternadas.
+     - Os 2 FP de PARA_RAIOS_MT que não vêm de troca são para-raios reais (variante com envolvente e X) sem referência correta: 002 está anotado como EQUIPAMENTO_INTERRUPCAO de forma desconhecida, e 007 não está anotado.
+     - As 17 leituras erradas (pares) são:
+       - 5 as trocas;
+       - 8 o terra real na ponta de estai;
+       - 2 a haste real na borda da caixa de uma chave;
+       - 2 o aterramento real sem anotação da 011.
+       - Nenhuma é leitura errada de fato. A triagem está em `tmp/laboratorio/e06-3-2-2/h-c/triagem/` e `tmp/e06-3-2-2/task1-triagem-final/`.
+     - Diff núcleo × motor nas 16 páginas, idêntico ao congelado da E06.2.2.2 variante a variante, com o índice cru: `ambos` 29 e `so_*` 0. Gasto máximo de 187.659 consultas (folha 016), sem `teto_consultas`.
+  3. `scripts.audit_symbol_packages` → `errors []`, 30 `enabled` e 393 `pending`.
+  4. `.bat` em a44f68e → `RESULTADO FINAL: APROVADO`: 9670 passed, 2 xfailed, cobertura 89,37%, mypy limpo em 579 arquivos. Em 99652b4, só testes mudaram, e a suíte deu 9669 passed.
+  - `osv-scanner` nos 7 locks → `No issues found`; nenhum lock mudou. `check_test_integrity --base a98d95e` → 24 apontamentos, todos justificados nas revisões: o oráculo e a caracterização removidos, a versão 1.0.0 → 1.1.0, as contagens 401/22 → 393/30 e as inversões mandadas pelo plano.
+- Ciclo:
+  - Laboratório com 3 hipóteses.
+  - Onda A: Task 1, gramática. Uma rodada de correção: pares do X e deduplicação passaram a pagar o orçamento, a cor do X passou a ser comparada pela forma canônica e 4 barras decrescentes passaram a ser recusadas.
+  - Onda B: Tasks 2 (matriz e diff), 3 (observação, versão 1.1.0 e digest) e 4 (habilitação), integradas nessa ordem.
+  - Onda C: Task 5 (teto, guarda e pureza). Duas rodadas: a guarda de fonte passou a ler literais por AST e a pegar float normalizado.
+  - Testador nas tarefas de risco alto e testador de etapa.
+- Entregas:
+  - `drawing_model/grammar_stem.py`, a gramática `stem_bars`: caixa do pictograma, componentes, perfil por sinal da página e teto pago;
+  - despacho explícito por `kind` em `symbol_matcher.py`;
+  - `declarative-drawing-model` 1.1.0, com uma primitiva por caminho;
+  - digest do runner pelo fecho de imports;
+  - 8 variantes habilitadas (f02-19 v001–v004, f02-21 v005–v008);
+  - matriz e diff tratando o tipo só do modelo;
+  - guarda contra memorização nos fontes, por AST e tokenize.
+- **Decisões para o usuário** (tomadas pela opção recomendada; a única de arquitetura é a R-6, em entrevista no fim do lote):
+  - **R-4 aplicado com desvio (critério 2):** os números brutos estão acima, e o literal "maiores" é inatingível para qualquer leitura correta. O `atual` já casa todas as referências válidas, e os erros da ficha penalizam os dois métodos igualmente. Em PARA_RAIOS_MT, o método novo **empata** com o atual. Custo se errada: a E06.3.3 começa sobre uma base que você pode considerar não aceita; reabrir custa uma rodada de curadoria das referências.
+  - **Referências a corrigir pela curadoria** (a ficha congelada não é editada aqui):
+    - as 5 trocas;
+    - 002 `P1-s04`;
+    - o para-raios sem anotação da 007;
+    - o terra sem anotação da 011;
+    - os 8 terras de ponta de estai (001 ×2, 006 ×4, 008, 012);
+    - as 2 hastes na borda de uma chave (002 e 006).
+  - **R-5 e consumidores de `status == "enabled"`:** a tabela de suporte da revisão e a exportação XLSX passam a mostrar 30 habilitadas (as 8 hastes), mas o job padrão não as executa. `symbol_benchmark_runner` informa 30 com o motor executando 22. Na matriz da curadoria, o motor antigo fica `fora_do_dominio` para as hastes.
+  - **R-6, decisão de arquitetura:** com a H-C, a gramática reimplementa a consulta do legado. As 8 situações viram "Suportado" com dois métodos no runner opt-in, o que **não** é corroboração independente, e saem do filtro "Exclusivos". A alternativa, exclusividade por família de método, exige gravar a família em `simbolo_observacoes`, o que é uma migração.
+  - **R-7, escopo:** a taxa de fusão com o legado nas 16 folhas não foi medida. A fusão está provada com os pacotes reais nas 8 situações, em página sintética.
+  - **Limiares escolhidos depois do laboratório:**
+    - envolvente poligonal: 8 vértices e desvio de 0,2;
+    - braço do X como traço solto;
+    - tolerância de cor de 0,02 fora da paleta do legado.
+- **Para a E06.3.3:**
+  - padrão de tipo só do modelo (`GRAMATICAS_SO_MODELO`), pictograma como caixa e componentes como primitivas;
+  - **folga de orçamento de só 6%:** a folha 016 gasta 187.659 de 200.000, e as molduras novas gastam do mesmo teto;
+  - o perfil por sinal de página (texto em glifo × nativo) é um proxy de escala. Nenhuma folha é SHX;
+  - menores adiados:
+    - `Haste` expõe `_Contorno`;
+    - `grammar_stem.py` importa privados de `symbol_grammars`;
+    - perfil glifo testado só a 0°;
+    - `_caixa_do_caminho` sem guarda para caminho vazio.
+- **Para a E07:** a fusão com o legado só foi provada em fixture sintética. Uma ocorrência que não funda vira símbolo duplicado para quem lê o runner (D12).
+- **Para a E16 e a E09** (risco de recall fora das 16 folhas quando o legado sair): a gramática não portou estas normalizações do legado:
+  - item de caminho múltiplo como haste (`_um_traco`);
+  - fusão de fragmentos;
+  - cinza tratado como preto (a paleta exclui cinza e azul);
+  - haste mínima relativa fora das páginas em glifo (6/1/1,5 pt absolutos);
+  - o legado não tinha teto de haste, e a gramática tem `_HASTE_MAXIMA` de 24 pt.
+
+  Hoje o legado cobre essas lacunas no runner pela fusão. Também ficam para a E09 `GRAMATICAS_SO_MODELO` e a validação dos pacotes em `declarative_symbols.py`.
+
+---
+
+## E06.3.3 — Para-raios BT e transformador (dividida em E06.3.3.1 e E06.3.3.2)
+
+**Divisão (2026-11-08, orquestrador):**
+- **Por que dividir:** são duas gramáticas novas, cada uma com laboratório. A E06.3.2.2, com uma gramática só, levou 3h36, então as duas juntas passam do teto de ~3h do "Orçamento".
+- **Subetapas,** em série:
+  - E06.3.3.1, PARA_RAIOS_BT: retângulo atravessado por diagonal (f02-21 v001–v004). O `atual` não casa nenhuma das 10 referências;
+  - E06.3.3.2, TRANSFORMADOR: triângulo ou meio preenchido em círculo.
+- **Escopo do transformador ajustado** (ruling, vai a "Decisões para o usuário"): ficam `pending` as variantes de enrolamento (f02-18 v019–v023, f02-24 e f02-25, todas E05, com evidência própria do detector de transformadores na matriz da curadoria) e o triângulo roxo com S (f02-18 v016–v018), porque nenhuma é "triângulo ou meio preenchido em círculo".
+- **Critérios:** cada subetapa leva as fixtures e o "acima do atual" da sua classe. Auditor e `.bat` valem nas duas.
+- **Dependência:** a E06.3.4 passa a depender da E06.3.3.2. O relógio da E06.3.3.1 começa no commit `#em-andamento` da E06.3.3 (80cfff2).
+
+O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Objetivo:** reconhecer PARA_RAIOS_BT e TRANSFORMADOR sobre o modelo de desenho, acima do analisador atual.
 
-**Dependências:** E06.3.2.
+**Dependências:** E06.3.2.2.
 
 **Escopo:** gramáticas de moldura (para-raios BT: retângulo com diagonal; transformador: triângulo ou meio preenchido em círculo), habilitação das variantes de f02-21 (BT), f02-18, f02-24 e f02-25, laboratório e guarda.
 
@@ -1679,7 +1894,383 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Riscos e mitigação:** os da E06.3.
 
-**Evidências e handoff:** —
+**Evidências e handoff:** nas subetapas.
+
+---
+
+## E06.3.3.1 — Para-raios BT — #concluida
+
+**Objetivo:** reconhecer PARA_RAIOS_BT sobre o modelo de desenho, acima do analisador atual, que não casa nenhuma das 10 referências.
+
+**Dependências:** E06.3.2.2.
+
+**Escopo:**
+- tipo de gramática só do modelo para o retângulo atravessado por diagonal, com envolvente e X como na haste;
+- laboratório;
+- gramática;
+- habilitação de f02-21 v001–v004;
+- guarda, teto e pureza;
+- medição nas 16 folhas.
+
+**Fora de escopo:** TRANSFORMADOR (E06.3.3.2).
+
+**Critérios de aceite:**
+
+- [x] Fixtures sintéticas positivas e negativas de PARA_RAIOS_BT.
+- [x] Nas 16 folhas, precisão e recall de PARA_RAIOS_BT em `tmp/`, maiores que os do atual (0 tp, 10 fn), e leitura errada afirmada de fato = 0, com triagem.
+- [x] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:**
+- Leia o handoff da E06.3.2.2: tipo só do modelo, pictograma, componentes, folga de orçamento de só 6% e o perfil por sinal de página.
+- O desenho real é uma elipse com um retângulo girado dentro e uma diagonal com ganchos nas pontas, que passa além do retângulo, ligada ao poste por uma haste.
+- A 006 `P8-para-raios` (rotulada PARA_RAIOS_MT) tem esse desenho.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** os da E06.3; o teto de 200.000 consultas por folha (a 016 já gasta 187.659).
+
+**Evidências e handoff:**
+
+- Plano: `docs/superpowers/plans/2026-11-08-leitura-vetorial-por-poste-e06-3-3-1.md`. A revisão de arquitetura (opus) bloqueou nas rodadas 0 e 1 e aprovou com notas na rodada 2. Os bloqueios foram:
+  - testes fora dos Files;
+  - o contrato de `grammar_marcas`;
+  - o aceite degenerado na precisão;
+  - a fusão com o legado sem prova;
+  - o compartilhamento de contornos.
+- Relógio: de 80cfff2 (02:34 de 2026-11-08, `#em-andamento` da E06.3.3) até o commit `#concluida` (0fb4523, 05:32), 2h58. A divisão da E06.3.3 entra nesse tempo.
+- Revisão final (`revisor-seguranca`, opus, 4ad9148..edfc9c5): aprovada com ressalvas, sem Crítico e sem correção de código. O Importante era o registro deste handoff. Os Menores ficaram para a E06.3.3.2, abaixo.
+- **Laboratório** (`tmp/laboratorio/e06-3-3-1/` do checkout principal), PARA_RAIOS_BT:
+  - H-1, moldura primeiro: 9/1/1 e gasto de 197 mil;
+  - **H-2, diagonal primeiro, escolhida:** 10/2/0 e gasto de 192 mil;
+  - H-3, envolvente primeiro: 10/1/0, mas com folga de gasto de 305 e sem ler o BT real da 006.
+- Critérios verificados:
+  1. Fixtures: `test_grammar_rect_diagonal*.py`, `test_gramatica_rect_diagonal_tipo*.py`, `test_grammar_marcas*.py`, `test_habilitacao_bt_ataque.py`, `test_model_symbols_bt_runner*.py` e `test_bt_costuras_etapa_testador.py`.
+  2. Benchmark nas 16 folhas em 1aa4e49 (`tmp/e06-3-3-1/simbolos/`), 0 falhas, critério `centro`:
+     - **PARA_RAIOS_BT:** `atual` 0/0/10, `modelo` **10/2/0** (precisão 83,3%, recall 100%; o piso de precisão do plano é 50%);
+     - as demais classes do `modelo` são iguais às da E06.3.2.2 em todas as folhas, e o `atual` é igual ao congelado;
+     - os 2 FP, triados em render, são leituras certas. O da 006 `P8-para-raios` é um BT real que a ficha rotula PARA_RAIOS_MT: é a única leitura errada de BT pela métrica bruta, e é troca de rótulo. O da 014 é um BT real sem poste anotado. Leitura errada de fato: 0;
+     - o diff núcleo × motor é igual ao congelado (`ambos` 29, `so_*` 0). Gasto máximo: 192.308 (016).
+  3. `scripts.audit_symbol_packages` → `errors []`, 34 `enabled` e 389 `pending`.
+  4. `.bat` em edfc9c5 → `RESULTADO FINAL: APROVADO`: 10113 passed, 5 xfailed (3 estritos novos), cobertura 89,45%, mypy limpo em 593 arquivos.
+  - `osv-scanner` nos 7 locks → `No issues found`. `check_test_integrity --base 4ad9148` → 31 apontamentos, todos justificados: contagens, versão 1.2.0, a asserção de `GRAMATICAS_SO_MODELO`, renomeações e asserts frouxos trocados por exatos.
+- Ciclo:
+  - Onda A, Tasks 1 (tipo) e 2 (extração das marcas). A invariância da haste foi conferida nas 16 folhas antes do laboratório: 84 pares sem divergência.
+  - Laboratório.
+  - Task 3, a gramática. Uma rodada de testes.
+  - Onda B, Tasks 4 (habilitação e 1.2.0) e 5 (teto, guarda e pureza). Uma rodada na Task 5.
+  - Testador nas tarefas de risco alto e testador de etapa.
+- Entregas:
+  - `drawing_model/grammar_marcas.py`: envolvente, X, cor canônica, origem da página e `MarcasDaPagina` (contornos pagos uma vez por página);
+  - `drawing_model/grammar_rect_diagonal.py`, a gramática `rect_diagonal`;
+  - f02-21 v001–v004 habilitadas;
+  - `declarative-drawing-model` 1.2.0.
+- Decisões para o usuário (tomadas pela opção recomendada):
+  - **Piso de precisão de 50% para PARA_RAIOS_BT:** a precisão do `atual` é n/d (0 predições), e o piso é decisão do plano.
+  - **R-6, fusão com o legado:** o BT **não** funde no runner opt-in. A caixa do legado inclui a haste; a distância de centro é 0,0167 contra uma tolerância de 0,003–0,004; IoU de 0,47 e 0,36. São duas ocorrências por BT até a E09 (o teste falha de propósito se o par passar a fundir).
+  - **Situação (variante) errada até a E06.3.3.2:**
+    - a elipse real é um subcaminho fechado de 72 retas, que `reconstruir_polilinhas` parte em polilinhas abertas, e `grammar_marcas` não a vê;
+    - por isso, no corpus, 100% dos BT com envolvente saem como v001/v004, sem v002/v003, e as hastes com envolvente provavelmente também;
+    - além disso, o X de um vizinho foi atribuído a 3 BT, porque `tem_x` não exige o cruzamento perto do símbolo.
+    - A métrica por classe não muda; a situação no runner opt-in sai errada.
+  - **Consumidores de `status == "enabled"`:** tabela de suporte, XLSX e `symbol_benchmark_runner` passam a contar 34 habilitadas, contra 22 que o motor antigo executa.
+  - **Referências para a curadoria:** além das listadas na E06.3.2.2, o BT real da 014 sem anotação. A 006 `P8-para-raios` (PARA_RAIOS_MT na ficha) é um PARA_RAIOS_BT pelo inventário.
+- **Para a E06.3.3.2** (primeira tarefa: consertar `grammar_marcas` para as três gramáticas):
+  - envolvente: ler a elipse a partir do subcaminho fechado (ou antes de a polilinha ser partida). As variantes de transformador com círculo envolvente dependem disso;
+  - X de vizinho: exigir que o cruzamento do X fique perto do pictograma;
+  - R-3 do BT: a haste de ligação que sai da envolvente não é buscada (`grammar_rect_diagonal.py:201-229`, `_haste_de_ligacao`);
+  - os 3 `xfail(strict=True)` de `test_grammar_rect_diagonal_ataque.py`:
+    - X curto: o braço com 1,5 × o lado maior ou menos vira segunda diagonal;
+    - contorno quase duplicado gera dois casamentos;
+    - diagonal quase duplicada recusa o símbolo.
+
+    Ponha `raises=AssertionError` neles;
+  - `MarcasDaPagina` de outro contexto escapa do teto da página: guardar o contexto e recusar o outro;
+  - Menores da revisão final:
+    - não há negativo de "célula de tabela" (sem lado maior máximo);
+    - um retângulo montado de vários caminhos só leva `origens[0]`;
+    - a diagonal não exige a cor do retângulo;
+  - a nota da E06.3.3 sobre `grammar_frames.py` está desatualizada: o compartilhado agora é `grammar_marcas.py`;
+  - **folga de gasto:** a 016 gasta 192.308 de 200.000, com 3,8% de folga. O transformador soma no mesmo teto.
+- **Para a E07:** cada PARA_RAIOS_BT sai em duas ocorrências no runner opt-in (legado e modelo), e a situação dos BT com envolvente sai errada até a E06.3.3.2.
+
+---
+
+## E06.3.3.2 — Transformador (dividida em E06.3.3.2.1 e E06.3.3.2.2)
+
+**Divisão (2026-11-08, orquestrador):**
+- **Por que dividir:** o conserto de `grammar_marcas` pedido no handoff da E06.3.3.1 (envolvente, X perto do símbolo, guarda de contexto e os Menores do BT), mais a medição da situação e a gramática do transformador com laboratório, passa do teto de ~3h. O conserto não depende do transformador e muda a situação das duas gramáticas já entregues.
+- **Subetapas,** em série:
+  - **E06.3.3.2.1, marcas: envolvente e X.** A envolvente é lida do subcaminho fechado, e o X precisa estar perto do símbolo. Entram a guarda de contexto das marcas e os Menores do BT, e a concordância de situação com a ficha passa a ser medida no benchmark;
+  - **E06.3.3.2.2, transformador:** a gramática do triângulo em círculo.
+- **Achado para a E06.3.3.2.2** (conferido em 1200 dpi na 005): o transformador real é um triângulo girado, partido em metade branca e metade ciano (dois preenchimentos), dentro de um círculo. As variantes "Rede", "Dedicado" e "IP" de f02-18 têm a mesma forma, e o inventário avisa que "a forma isolada não resolve atributos não discriminados na linha". O plano da E06.3.3.2.2 decide como habilitar sem afirmar o uso.
+- **Dependência:** a E06.3.4 passa a depender da E06.3.3.2.2. O relógio da E06.3.3.2.1 começa no commit `#em-andamento` da E06.3.3.2 (0529544).
+
+O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
+
+**Objetivo:** reconhecer TRANSFORMADOR (triângulo ou meio preenchido em círculo) sobre o modelo de desenho, acima do analisador atual (14 tp, 2 fp, 0 fn).
+
+**Dependências:** E06.3.3.1.
+
+**Escopo:** tipo de gramática, laboratório, gramática e habilitação de f02-18 v001–v015; guarda, teto e pureza; medição nas 16 folhas.
+
+**Fora de escopo:** enrolamentos e triângulo roxo com S (ver a divisão da E06.3.3).
+
+**Critérios de aceite:**
+
+- [ ] Fixtures sintéticas positivas e negativas de TRANSFORMADOR.
+- [ ] Nas 16 folhas, precisão e recall de TRANSFORMADOR em `tmp/`, maiores que os do atual, e leitura errada afirmada de fato = 0.
+- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:** o `atual` (detector de transformadores, E05) já tem recall de 100%, então o ganho possível é de precisão. A primeira tarefa conserta `grammar_marcas` (ver o handoff da E06.3.3.1, "Para a E06.3.3.2"): sem isso, as variantes com círculo envolvente não são reconhecidas. A gramática nova usa `grammar_marcas.py`, e não `grammar_frames.py`.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** os da E06.3.
+
+**Evidências e handoff:** nas subetapas.
+
+---
+
+## E06.3.3.2.1 — Marcas: envolvente e X — #concluida
+
+**Objetivo:** fazer a situação (variante) das gramáticas sobre o modelo sair certa nas folhas reais. A envolvente passa a ser vista, e o X passa a ser o do próprio símbolo. A concordância com a ficha passa a ser medida.
+
+**Dependências:** E06.3.3.1.
+
+**Escopo:**
+- envolvente lida do subcaminho fechado do caminho, e não só de polilinha fechada;
+- X de retirada com o cruzamento perto do pictograma;
+- `MarcasDaPagina` guarda o contexto e recusa outro;
+- Menores do BT:
+  - todos os caminhos do retângulo nos componentes;
+  - a diagonal com a cor do retângulo, se não perder tp;
+  - negativo de célula de tabela;
+  - `raises=AssertionError` nos xfail;
+- concordância de situação no benchmark, entre a variante predita e a situação anotada na ficha;
+- versão do método sobre o modelo.
+
+**Fora de escopo:** a gramática do transformador (E06.3.3.2.2).
+
+**Critérios de aceite:**
+
+- [x] Fixtures sintéticas positivas e negativas da envolvente por subcaminho e do X perto do símbolo.
+- [x] Nas 16 folhas, tp/fp/fn por classe do `modelo` sem piora em nenhuma folha em relação à E06.3.3.1. A concordância de situação de ATERRAMENTO, PARA_RAIOS_MT e PARA_RAIOS_BT com a ficha tem de ser maior que a de antes, e a leitura errada afirmada de fato tem de ser 0.
+- [x] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:** leia o handoff da E06.3.3.1 ("Para a E06.3.3.2").
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** a envolvente nova pode mudar a caixa e o gasto da haste e do BT. Por isso o plano mede tp/fp/fn, gasto e diff contra a E06.3.3.1.
+
+**Evidências e handoff (2026-11-08, orquestrador):**
+
+- **Plano:** `docs/superpowers/plans/2026-11-08-leitura-vetorial-por-poste-e06-3-3-2-1.md`.
+  - A revisão de arquitetura (opus) aprovou com notas na rodada 2. A rodada 0 bloqueou por 6 Importantes: testes do benchmark, regra do X sem prova, fechamento, tipo, aceite e haste. A rodada 1 bloqueou porque o aceite tinha sido afrouxado para "não piora".
+- **Commits:** `0fb4523..1ad2701`, 25 commits. O plano e a revisão estão em `68f1180..119ff0c`.
+  - O último, a onda final de correção (`1ad2701`), pôs a elipse inclinada na guarda de fonte e acrescentou os testes de borda de `_ANISOTROPIA_MINIMA`.
+  - Depois dele, a suíte deu 10494 passed e 5 xfailed.
+- **Relógio:** 0529544 (05:32) até o fechamento, cerca de 3h40 contra a estimativa de 3h00. Os dois Step 0 de medição e a rodada da elipse inclinada ficaram fora da soma.
+- **Revisão final** (opus): **aprovada**. Ela veio com reservas: o único Importante era este handoff, e havia dois Menores (guarda de fonte e borda da anisotropia), resolvidos na onda final e confirmados na re-revisão com escopo.
+- **Critérios de aceite**, no HEAD 0cab39d, com saídas em `tmp/e06-3-3-2-1/final*`:
+  - [x] Fixtures sintéticas positivas e negativas para a envolvente por subcaminho, a elipse inclinada, o X perto do símbolo e a guarda de contexto, todas sob a guarda de fonte.
+  - [x] Sem piora de tp/fp/fn por folha nem por classe em relação a `tmp/e06-3-3-1`. Do `modelo` pelo critério centro: ATERRAMENTO 41/7/2, PARA_RAIOS_MT 10/4/3, PARA_RAIOS_BT 10/2/0.
+  - [x] A **concordância de situação** do `modelo` (centro) foi de **2/14 (14,3%) a 14/14 (100%)**. Por classe: ATERRAMENTO 1/11 → 11/11, MT 1/2 → 2/2, BT 0/1 → 1/1. Ficam fora da conta 49 TP sem situação anotada na ficha. O `atual` fica em 0/11, com 33 sem situação predita.
+  - [x] Leitura errada afirmada de fato = 0: são 20 itens, os mesmos da E06.3.3.1, nenhum novo.
+  - [x] `audit_symbol_packages` deu `errors []` e 34 habilitadas.
+  - [x] `.\IniciarTestes.bat` deu APROVADO: 10480 passed, 5 xfailed, cobertura de 89,47% e complexidade E/F aprovada.
+  - Também conferidos:
+    - diff núcleo × motor igual ao congelado (29 em ambos);
+    - gasto máximo de 189.097 na 016, contra 192.308 na E06.3.3.1;
+    - `osv-scanner` nos 7 locks: `No issues found`;
+    - `check_test_integrity --base 0fb4523`: 17 apontamentos, todos justificados (versão 1.3.0, renomes, chaves da predição, dourado de gasto, inversão da cor, xfail que virou teste).
+- **Triagem em render** (orquestrador):
+  - os 10 tp de PARA_RAIOS_BT saem com a variante do desenho;
+  - na amostra de 9 hastes com envolvente, as 9 saem v002/v006;
+  - o BT sai com 7 v001, 15 v002 e 1 v004; o ATERRAMENTO passou de 20 para 35 v002 e o MT de 10 para 16 v006.
+- **Ciclo:**
+  - onda A com as Tasks 2 e 1; depois a Task 3; depois a Task 4, com uma rodada para a cor;
+  - testador em cada tarefa e testador de etapa, que achou o D-1: a haste da borda de uma envolvente girada;
+  - rodada de correção da Task 1 para a **elipse inclinada**, vista na triagem: 002 e 015 saíam v001.
+- **Entregas:**
+  - `grammar_marcas.py`:
+    - contornos elípticos vindos de subcaminhos fechados de traço, com filtro estrutural antes de pagar gasto, `_TOLERANCIA_FECHAMENTO = 0,05` pt (o oval fecha em 0,0 e o arco aberto mais próximo está a 0,24 pt) e `Contorno.origem`/`subcaminho`;
+    - critério elíptico invariante à rotação, pelos momentos do contorno, e "dentro" e "borda" calculados pela elipse girada;
+    - X com cruzamento a até `_CRUZAMENTO_X = 1,0`×escala do centro: o X próprio fica a no máximo 0,379 e o de vizinho a pelo menos 1,82;
+    - `MarcasDaPagina.contexto` e `marcas_do_contexto`;
+  - `grammar_rect_diagonal.py`: `origens` nos componentes, cor canônica da diagonal, lado maior máximo, haste a partir da borda da envolvente;
+  - concordância de situação no benchmark (`concordancia_situacao`);
+  - `declarative-drawing-model` 1.3.0.
+- **Decisões para o usuário** (tomadas pela opção recomendada):
+  - **BT da 016 em (0,622; 0,276) lido como v004:**
+    - o X é do próprio BT: os braços têm 1,61 e 1,59×escala, com pontos médios no centro, e se cruzam a 0,034×escala;
+    - o portão literal da Task 3, "os 3 casos perdem o X", partia da leitura da E06.3.3.1, que o tomava por X de vizinho. Foi dado por cumprido na intenção: 001 e 013 foram resolvidos;
+    - esse BT não está na ficha.
+  - **Lado maior máximo do BT absoluto em 17,16 pt** (2 × 8,58, o maior corpo medido nas 16 folhas). O BT não tem escala externa. Uma folha plotada em escala maior perderia todos os BT sem aviso.
+  - **Limiares novos fora do R-1:** a rodada da elipse inclinada criou `_ANISOTROPIA_MINIMA = 0,02` e `_RUIDO_INCLINACAO = 1e-9`, que só decidem quando a inclinação vale 0. Os limiares de aceitação elíptica não mudaram.
+  - **Teto de gasto de 200.000 por folha como requisito não funcional:** a folga é de 5,5% na 016, e o transformador soma no mesmo teto.
+  - **Concordância:** o texto livre da ficha fora do vocabulário ("âncora existente", "instalar (verde)") conta como discordante, sem mapa semântico. A normalização corta em "(" ou ";".
+- **Para a E06.3.3.2.2:**
+  - **Envolvente do transformador:** é um círculo, o caso quase isotrópico; use o mesmo `grammar_marcas`. Os testes de borda de `_ANISOTROPIA_MINIMA` já existem (razões 1,005 e 1,05 a 30°).
+  - Rede, Dedicado e IP não se distinguem pela forma (ver a divisão da E06.3.3.2).
+  - **Formas de envolvente ainda não lidas:**
+    - elipse de Béziers girada, que continua tratada como alinhada aos eixos;
+    - oval "explodido", com uma reta por caminho (016 em 0,556; 0,22, que não está na ficha);
+    - arco aberto a até 0,5 pt, que vira contorno pela polilinha, já na base. Mudar isso mexe em `VERSAO_MODELO_DESENHO`.
+  - **Menores:**
+    - tornar `_mesma_cor` pública;
+    - a cor da diagonal compara só o traço da âncora: um retângulo só preenchido nunca casa;
+    - escolher o par de X mais perto do centro, e não o primeiro;
+    - com envolvente grande e excêntrica, o X próprio pode cair além de 1×escala;
+    - em 7 dos 13 v002, um toco de 0,5 a 1,5 pt fica fora dos componentes;
+    - `casa_hastes`/`casa_retangulos_diagonal(candidatos=)` não guardam o contexto;
+    - `variant_id` desconhecido cai em `situacao_nao_declarada`, que hoje dá 0.
+- **Para a E07:**
+  - **R-7:** `model_symbols._observacao` não preenche `situacao`. No runner opt-in, a situação só é derivável da variante. Falta decidir onde fica o mapa variante → situação, no adaptador ou no consumidor.
+  - Cada PARA_RAIOS_BT continua saindo em duas ocorrências (legado e modelo).
+
+---
+
+## E06.3.3.2.2 — Transformador — #concluida
+
+**Objetivo:** reconhecer TRANSFORMADOR (triângulo partido ou de contorno, em círculo ou não) sobre o modelo de desenho, acima do analisador atual (14 tp, 2 fp, 0 fn).
+
+**Dependências:** E06.3.3.2.1.
+
+**Escopo:** tipo de gramática, laboratório, gramática e habilitação de f02-18 (variantes a decidir no plano, pelo achado da divisão); guarda, teto e pureza; medição nas 16 folhas.
+
+**Fora de escopo:** enrolamentos e triângulo roxo com S.
+
+**Critérios de aceite:**
+
+- [x] Fixtures sintéticas positivas e negativas de TRANSFORMADOR.
+- [x] Nas 16 folhas, precisão e recall de TRANSFORMADOR em `tmp/`, maiores que os do atual, e leitura errada afirmada de fato = 0. **Aceito pela R-4,** que reinterpreta o critério (ver "Decisões para o usuário"). Lido ao pé da letra, ele é inalcançável: o `atual` já tem recall de 100%, e os 2 FP dele são transformadores reais.
+- [x] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:** o `atual` já tem recall de 100%, então o ganho possível é de precisão. Rede, Dedicado e IP não se distinguem pela forma (ver a divisão).
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** os da E06.3; a folga de gasto (a 016 gasta 189.097 de 200.000 desde a E06.3.3.2.1).
+
+**Evidências e handoff (2026-11-08, orquestrador):**
+
+- **Plano:** `docs/superpowers/plans/2026-11-08-leitura-vetorial-por-poste-e06-3-3-2-2.md`.
+  - A revisão de arquitetura (opus) aprovou com notas na rodada 1.
+  - A rodada 0 bloqueou por 2 Importantes: a chave do agrupamento estava sem classe, família, papel e destino, e o gasto era cobrado por variante, com teto sem limite.
+- **Commits:** `264d4cb..16ba085`, mais o fechamento.
+- **Relógio:** de 264d4cb (09:13) ao fechamento, cerca de 5h10 (14:22). A estimativa era de 3h05, mais o laboratório.
+  - Passou de 4h30 durante a onda final de correção. Ruling: **continuar**, porque a medição e todos os critérios já estavam verificados.
+  - O que custou mais foi a Task 3: 3 rodadas de correção para 9 defeitos achados por testador e revisora.
+- **Revisão final** (opus): **aprovada**. Ela veio com reservas: 3 Importantes (hachura fora do orçamento, gramática mais solta que o E05 e este handoff) e um Menor (ellipse com X). A onda final resolveu tudo, e a re-revisão com escopo confirmou, aceitando as rulings de gasto e de versão.
+- **Critérios** (HEAD 16ba085; saídas em `tmp/e06-3-3-2-2/final2*`, iguais por folha às de `final` em 6e9b3fc):
+  - **TRANSFORMADOR (centro):** o `modelo` dá 14/2/0 e o `atual`, 14/2/0. Os 2 FP (012 e 014) são transformadores reais que a ficha não anota, triados em render.
+  - **"Acima do atual":** a concordância de situação de TRANSFORMADOR é 1/1 no `modelo`, contra 0 no `atual`, que não informa situação.
+  - **Sem regressão:**
+    - as demais classes e o `atual` ficam iguais por folha;
+    - as leituras erradas ficam em 20, nenhuma nova;
+    - a concordância das três classes da E06.3.3.2.1 fica em 14/14;
+    - o diff é igual ao congelado (29);
+    - o gasto máximo é 194.909, na 016 (era 190.578 antes da onda final, que passou a cobrar a hachura);
+    - o auditor sai com `errors []`, 49 habilitadas e 374 pendentes.
+  - **Gate:** `.\IniciarTestes.bat` APROVADO no 16ba085, com 11117 passed, 5 xfailed e cobertura de 89,54%.
+  - **Segurança e integridade:**
+    - `osv-scanner` nos 7 locks: `No issues found`;
+    - `check_test_integrity --base 264d4cb`: 39 apontamentos, todos justificados (versão 1.4.0, contagens, renomes, teste de chave mais estrito e busca dos flakes sem `tempo_s`).
+- **Laboratório** (`tmp/laboratorio/e06-3-3-2-2/`):
+  - H-1 (contorno primeiro): 14/1/0, gasto 191.645;
+  - **H-2 (preenchimento primeiro), escolhida:** 14/2/0, gasto 190.284;
+  - H-3 (envolvente primeiro): 14/2/0, gasto 195.031.
+
+  O FP a menos da H-1 é o transformador real da 012, que ela não lê. Entre H-2 e H-3, decidiu o gasto.
+- **Triagem em render:** um tp por grupo, em 5 dos 6 grupos (ct_env não teve amostra nas folhas lidas).
+  - Todos saem no grupo do desenho.
+  - Isso inclui o círculo com X das folhas 002 e 007.
+- **Ciclo:**
+  - Onda A: Tasks 1 (tipo `split_triangle`) e 2 (formas comuns numa observação).
+  - Laboratório.
+  - Task 3, a gramática, em 3 rodadas:
+    - defeitos do testador: tracejado, roxo, gravata, todo ciano, branco com meio ciano e N² sem orçamento;
+    - Importantes da revisão: wipeout, PLATAFORMA e seta;
+    - a seta só em linha com 2 lados ou mais.
+  - Onda B: Tasks 4 (habilitação, 1.4.0) e 5 (teto, guarda e pureza).
+  - Testador de etapa:
+    - resolveu os 2 flakes de `test_diff_simbolos_nucleo_motor*`;
+    - completou a guarda;
+    - fixou a ocorrência fundida;
+    - testou as costuras.
+- **Entregas:**
+  - **Tipo `split_triangle`:** só do modelo, com `fill: half_cyan|outline`, `enclosure: none|ellipse`, `removal_mark` e `max_span`.
+  - **Gramática `drawing_model/grammar_triangulo.py`:** candidatos calculados uma vez por página, classificação uma vez por candidato, e recusas. Todo o trabalho paga orçamento.
+  - **Agrupamento em `model_symbols`:** variantes de mesma forma viram uma observação, com o menor id como representante e `referencias_possiveis` em lista JSON.
+  - **Habilitação:** f02-18 v001–v015.
+  - **Versão:** `declarative-drawing-model` 1.4.0.
+- **Decisões para o usuário** (tomadas pela opção recomendada):
+  - **R-4, critério reinterpretado.** O roadmap pedia "precisão e recall maiores que os do atual".
+    - O `atual` tem 14/2/0, com recall de 100%, e os 2 FP dele são transformadores reais sem anotação.
+    - Valeu: tp 14, fn 0, FP de fato 0, leitura errada de fato 0, demais classes intactas e concordância de situação maior que a do atual, no padrão "≥" do ADR 0016.
+    - **Para ser franco:** tp/fp/fn ficaram **idênticos** aos do `atual`. O "acima" se apoia numa única situação concordante (1/1 contra 0) e na variante (grupo e situação), que o E05 não informa.
+  - **R-2, uso não discriminado.** Rede, Dedicado e IP têm o mesmo desenho e saem numa observação só.
+    - `variante_inventario` e `template` levam o **menor id** (sempre o "Rede") e **não identificam a variante**.
+    - Quem consome lê `referencias_possiveis` (lista). A reconciliação dá `ambiguous_reference_id`/`review`.
+    - Não há contrato novo; a revisão de arquitetura confirmou que é decisão de plano.
+  - **X vence a envolvente.** O desenho com círculo e X (002 e 007 na ficha) sai no grupo X, com situação "Proposto Retirar/Abandonar", como no E05. Poderia ser substituição.
+  - **Metade de outra cor é `outline`**, como no E05 (`_toca_ciano`). O transformador vermelho-escuro da 012 sai como contorno com X. A situação é a mesma; muda só "chave deslocada".
+  - **Recusas da gramática:**
+    - tracejado;
+    - roxo (v016–v018 estão fora de escopo);
+    - gravata;
+    - preenchimento colorido não branco em 90% ou mais do triângulo;
+    - triângulo inscrito em moldura retangular (PLATAFORMA);
+    - seta vazada em linha com 2 lados ou mais. Uma linha curta derrubaria um tp real da 012;
+    - texto ou glifo dentro do triângulo (o Δ de revisão), recusa que entrou na onda final;
+    - triângulo só preenchido, sem traço visível. Também entrou na onda final, e o traço é checado pelo tipo, não pela cor: um traço branco ainda passa;
+    - gramática com envolvente e X ao mesmo tempo, recusada no validador e no schema.
+  - **Fusão com o E05 no runner** (R-5):
+    - sem X, funde numa ocorrência, mas marcada `ambiguous_class_or_id`, porque o subtipo do E05 (triangulo / triangulo_meio_ciano) difere do subtipo vazio do modelo. A lista fundida se alarga para os 6 ou 9 ids do E05, e o estreitamento do modelo se perde;
+    - com X, não funde, porque a caixa do E05 inclui o X. O limiar fica entre 0,6 e 0,7 do X nominal.
+  - **Consumidores de `status == "enabled"`:** passam a contar 49 habilitadas, contra 22 que o motor antigo executa.
+  - **Referências para a curadoria:** os transformadores reais sem anotação na 012 (0,723; 0,74), com X vermelho, e na 014 (0,555; 0,474), com círculo e meio ciano.
+  - **Teto de gasto:** 194.909 de 200.000 (folga de 2,5%). A E06.3.4 e a E06.3.5 somam no mesmo teto.
+  - **`_LADO_MAXIMO` absoluto em 26,4 pt** (`grammar_triangulo.py`), na mesma linha do BT. Uma folha plotada em escala maior perde todos os transformadores sem aviso.
+  - **Gramática mais solta que o E05.**
+    - A haste é opcional (R-3), e o contorno base aceita um triângulo de traço isolado.
+    - A onda final passou a recusar texto dentro do triângulo e triângulo sem traço visível (ver abaixo), mas outro triângulo equilátero de traço (marca de levantamento, por exemplo) ainda pode ser lido como TRANSFORMADOR. É um risco fora das 16 folhas, que a E09 mede.
+    - Toda ocorrência vai a `review`.
+- **Para a E07:**
+  - ler `referencias_possiveis`, e não `variante_inventario`, quando a lista tem mais de um id;
+  - o `ambiguous_class_or_id` espúrio da fusão com o E05 vem da diferença de subtipo; o teste que o fixa tem a nota "Para a E07";
+  - a ocorrência com X sai duplicada (E05 e modelo).
+- **Para a E06.3.4 (estai):**
+  - a mesma estratégia de grupos, se houver formas comuns;
+  - o teto de gasto;
+  - `_mesma_cor` continua privado em `grammar_marcas`;
+  - os Menores parqueados no ledger:
+    - grade de molduras duplicada em `_Recusas`;
+    - moldura sem limite de tamanho;
+    - hachura abaixo de ~0,14 pt descartada;
+    - assimetria em `_que_se_tocam`;
+    - `test_gramatica_triangulo_tipo_ataque.py` fora da guarda.
 
 ---
 
@@ -1687,7 +2278,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Objetivo:** reconhecer ESTAI sobre o modelo de desenho, acima do analisador atual.
 
-**Dependências:** E06.3.3.
+**Dependências:** E06.3.3.2.2.
 
 **Escopo:** gramática de estai (traço bifurcado, com ou sem envolvente, e o X de retirada), habilitação das variantes de f02-14 e f02-15, laboratório e guarda.
 
