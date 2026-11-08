@@ -272,8 +272,9 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E06.3.1 | Pacotes das classes da ficha | #concluida | E06.2.2.2 | 58 variantes do inventário de ESTAI, TRANSFORMADOR, ATERRAMENTO e PARA_RAIOS_MT/BT nos pacotes, como `pending`; auditor e matriz aceitam outro `owner_stage` |
 | E06.3.2.1 | Base da haste, leituras erradas e H2 | #concluida | E06.3.1 | tipo de gramática só do modelo, métrica de leitura errada afirmada, resíduos raster por folha e veredito da H2 |
 | E06.3.2.2 | Gramática de haste com barras | #concluida | E06.3.2.1 | gramática de haste com barras, com laboratório, ATERRAMENTO e PARA_RAIOS_MT acima do atual |
-| E06.3.3 | Para-raios BT e transformador | #em-andamento | E06.3.2.2 | gramáticas de moldura das duas classes, com laboratório, acima do atual |
-| E06.3.4 | Estai | #pendente | E06.3.3 | gramática de estai, com laboratório, acima do atual |
+| E06.3.3.1 | Para-raios BT | #em-andamento | E06.3.2.2 | gramática do retângulo com diagonal, com laboratório, PARA_RAIOS_BT acima do atual (que não casa nenhuma) |
+| E06.3.3.2 | Transformador | #pendente | E06.3.3.1 | gramática do triângulo em círculo, com laboratório, TRANSFORMADOR acima do atual |
+| E06.3.4 | Estai | #pendente | E06.3.3.2 | gramática de estai, com laboratório, acima do atual |
 | E06.3.5 | Equipamento de interrupção | #pendente | E06.3.4 | gramática de interrupção, acima do atual (que não emite a classe) |
 | E07 | Ficha do poste | #pendente | E06.3.5, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
 | E08 | Conferência UTM | #pendente | E07 | transformação página → UTM, checagem de posição e vão, pendências |
@@ -1854,7 +1855,18 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
-## E06.3.3 — Para-raios BT e transformador — #em-andamento
+## E06.3.3 — Para-raios BT e transformador (dividida em E06.3.3.1 e E06.3.3.2)
+
+**Divisão (2026-11-08, orquestrador):**
+- **Por que dividir:** são duas gramáticas novas, cada uma com laboratório. A E06.3.2.2, com uma gramática só, levou 3h36, então as duas juntas passam do teto de ~3h do "Orçamento".
+- **Subetapas,** em série:
+  - E06.3.3.1, PARA_RAIOS_BT: retângulo atravessado por diagonal (f02-21 v001–v004). O `atual` não casa nenhuma das 10 referências;
+  - E06.3.3.2, TRANSFORMADOR: triângulo ou meio preenchido em círculo.
+- **Escopo do transformador ajustado** (ruling, vai a "Decisões para o usuário"): ficam `pending` as variantes de enrolamento (f02-18 v019–v023, f02-24 e f02-25, todas E05, com evidência própria do detector de transformadores na matriz da curadoria) e o triângulo roxo com S (f02-18 v016–v018), porque nenhuma é "triângulo ou meio preenchido em círculo".
+- **Critérios:** cada subetapa leva as fixtures e o "acima do atual" da sua classe. Auditor e `.bat` valem nas duas.
+- **Dependência:** a E06.3.4 passa a depender da E06.3.3.2. O relógio da E06.3.3.1 começa no commit `#em-andamento` da E06.3.3 (80cfff2).
+
+O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Objetivo:** reconhecer PARA_RAIOS_BT e TRANSFORMADOR sobre o modelo de desenho, acima do analisador atual.
 
@@ -1881,6 +1893,77 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Riscos e mitigação:** os da E06.3.
 
+**Evidências e handoff:** nas subetapas.
+
+---
+
+## E06.3.3.1 — Para-raios BT — #em-andamento
+
+**Objetivo:** reconhecer PARA_RAIOS_BT sobre o modelo de desenho, acima do analisador atual, que não casa nenhuma das 10 referências.
+
+**Dependências:** E06.3.2.2.
+
+**Escopo:**
+- tipo de gramática só do modelo para o retângulo atravessado por diagonal, com envolvente e X como na haste;
+- laboratório;
+- gramática;
+- habilitação de f02-21 v001–v004;
+- guarda, teto e pureza;
+- medição nas 16 folhas.
+
+**Fora de escopo:** TRANSFORMADOR (E06.3.3.2).
+
+**Critérios de aceite:**
+
+- [ ] Fixtures sintéticas positivas e negativas de PARA_RAIOS_BT.
+- [ ] Nas 16 folhas, precisão e recall de PARA_RAIOS_BT em `tmp/`, maiores que os do atual (0 tp, 10 fn), e leitura errada afirmada de fato = 0, com triagem.
+- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:**
+- Leia o handoff da E06.3.2.2: tipo só do modelo, pictograma, componentes, folga de orçamento de só 6% e o perfil por sinal de página.
+- O desenho real é uma elipse com um retângulo girado dentro e uma diagonal com ganchos nas pontas, que passa além do retângulo, ligada ao poste por uma haste.
+- A 006 `P8-para-raios` (rotulada PARA_RAIOS_MT) tem esse desenho.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** os da E06.3; o teto de 200.000 consultas por folha (a 016 já gasta 187.659).
+
+**Evidências e handoff:** —
+
+---
+
+## E06.3.3.2 — Transformador — #pendente
+
+**Objetivo:** reconhecer TRANSFORMADOR (triângulo ou meio preenchido em círculo) sobre o modelo de desenho, acima do analisador atual (14 tp, 2 fp, 0 fn).
+
+**Dependências:** E06.3.3.1.
+
+**Escopo:** tipo de gramática, laboratório, gramática e habilitação de f02-18 v001–v015; guarda, teto e pureza; medição nas 16 folhas.
+
+**Fora de escopo:** enrolamentos e triângulo roxo com S (ver a divisão da E06.3.3).
+
+**Critérios de aceite:**
+
+- [ ] Fixtures sintéticas positivas e negativas de TRANSFORMADOR.
+- [ ] Nas 16 folhas, precisão e recall de TRANSFORMADOR em `tmp/`, maiores que os do atual, e leitura errada afirmada de fato = 0.
+- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:** o `atual` (detector de transformadores, E05) já tem recall de 100%: o ganho possível é de precisão.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:** os da E06.3.
+
 **Evidências e handoff:** —
 
 ---
@@ -1889,7 +1972,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Objetivo:** reconhecer ESTAI sobre o modelo de desenho, acima do analisador atual.
 
-**Dependências:** E06.3.3.
+**Dependências:** E06.3.3.2.
 
 **Escopo:** gramática de estai (traço bifurcado, com ou sem envolvente, e o X de retirada), habilitação das variantes de f02-14 e f02-15, laboratório e guarda.
 
