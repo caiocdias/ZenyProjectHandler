@@ -588,7 +588,7 @@ def test_perfil_declara_o_metodo(
     motor = perfil_pacotes(pacotes)
 
     assert perfil.metodo_id == "declarative-drawing-model"
-    assert perfil.versao == "1.1.0"
+    assert perfil.versao == "1.2.0"
     assert perfil.familia == motor.familia
     assert perfil.classes_suportadas == tuple(
         sorted({variante["class_code"] for _, variante in _enabled(pacotes)})
@@ -1235,5 +1235,5 @@ def test_sem_componentes_continua_com_uma_primitiva() -> None:
     assert primitiva.indice == str(lida.indices_crus[3])
 
 
-def test_versao_1_1_0(pacotes: Pacotes, tabela: TabelaGlifos) -> None:
-    assert perfil_pacotes_modelo(pacotes, tabela).versao == "1.1.0"
+def test_versao_1_2_0(pacotes: Pacotes, tabela: TabelaGlifos) -> None:
+    assert perfil_pacotes_modelo(pacotes, tabela).versao == "1.2.0"

@@ -144,5 +144,5 @@ def test_assinatura_do_runner_muda_com_a_versao_do_metodo(tmp_path: Path) -> Non
     runner = SymbolCompositionRunner(_settings(tmp_path / "dados"))
     perfil = next(p for p in runner._profiles if p.metodo_id == _METODO_NOVO)
 
-    assert perfil.versao == "1.1.0"
-    assert replace(perfil, versao="1.0.0").assinatura() != perfil.assinatura()
+    assert perfil.versao == "1.2.0"
+    assert replace(perfil, versao="1.1.0").assinatura() != perfil.assinatura()

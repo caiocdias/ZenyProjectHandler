@@ -118,13 +118,13 @@ def test_motor_so_com_variante_do_modelo_nao_observa_e_nao_falha(tmp_path: Path)
 def test_variantes_do_motor_com_pacotes_reais_sao_as_enabled_sem_as_so_do_modelo() -> None:
     reais = carregar_pacotes()
     habilitadas = _enabled(reais)
-    assert len(habilitadas) == 30
+    assert len(habilitadas) == 34
     so_modelo = [
         (p, v)
         for p, v in habilitadas
         if v["recognition"]["grammar"]["kind"] in GRAMATICAS_SO_MODELO
     ]
-    assert len(so_modelo) == 8
+    assert len(so_modelo) == 12
     assert variantes_do_motor(reais) == tuple(par for par in habilitadas if par not in so_modelo)
     assert len(variantes_do_motor(reais)) == 22
     motor = perfil_pacotes(reais)
@@ -137,10 +137,11 @@ def test_perfil_do_modelo_com_pacotes_reais_anuncia_tambem_as_hastes() -> None:
     modelo = perfil_pacotes_modelo(reais, carregar_tabela_glifos())
     assert set(modelo.classes_suportadas) - set(motor.classes_suportadas) == {
         "ATERRAMENTO",
+        "PARA_RAIOS_BT",
         "PARA_RAIOS_MT",
     }
     assert set(motor.classes_suportadas) <= set(modelo.classes_suportadas)
-    assert dict(modelo.parametros)["enabled_variants"] == 30
+    assert dict(modelo.parametros)["enabled_variants"] == 34
 
 
 def test_perfil_do_modelo_com_pacotes_reais_herda_todos_os_parametros_do_motor() -> None:
@@ -150,7 +151,7 @@ def test_perfil_do_modelo_com_pacotes_reais_herda_todos_os_parametros_do_motor()
     assert {k: modelo[k] for k in motor if k != "enabled_variants"} == {
         k: v for k, v in motor.items() if k != "enabled_variants"
     }
-    assert (motor["enabled_variants"], modelo["enabled_variants"]) == (22, 30)
+    assert (motor["enabled_variants"], modelo["enabled_variants"]) == (22, 34)
     assert set(modelo) - set(motor) == {
         "modelo_desenho",
         "tabela_glifos_versao",

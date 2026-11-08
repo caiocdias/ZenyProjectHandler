@@ -12,6 +12,7 @@ import pymupdf
 import pytest
 from scripts.audit_symbol_packages import audit
 from tests.fixtures.declarative_symbols.corpus import build_enabled_corpus
+from tests.fixtures.symbol_grammars.rect_diagonal import CASOS_RECT_DIAGONAL
 from tests.fixtures.symbol_grammars.stem_bars import (
     ALTERNADAS,
     CASOS_HASTE,
@@ -108,7 +109,7 @@ def test_as_quatro_situacoes_de_cada_familia_sao_distintas(familia: str) -> None
     chaves = [
         (v["recognition"]["grammar"]["enclosure"], v["recognition"]["grammar"]["removal_mark"])
         for v in pacote["variants"]
-        if v["recognition"]["status"] == "enabled"
+        if v["recognition"].get("grammar", {}).get("kind") == "stem_bars"
     ]
     assert sorted(chaves) == [
         ("ellipse", False),
@@ -123,7 +124,7 @@ def test_variantes_nao_habilitadas_das_duas_familias_seguem_pending_com_razao() 
         pacote = next(p for p in carregar_pacotes() if p["family_id"] == familia)
         for v in pacote["variants"]:
             reconhecimento = v["recognition"]
-            if v["id"] in _ESPERADO:
+            if v["id"] in _ESPERADO or v["id"] in {i for i, _ in CASOS_RECT_DIAGONAL}:
                 continue
             assert reconhecimento["status"] == "pending", v["id"]
             assert reconhecimento["reason"], v["id"]
@@ -212,7 +213,7 @@ def test_exportacao_xlsx_de_suporte_leva_as_hastes_nas_enabled_e_fora_das_pendin
         assert variante in str(habilitadas).split("; ")
         assert variante not in str(pendentes).split("; ")
     total = sum(len(str(linha[1]).split("; ")) for linha in planilha.rows if linha[1])
-    assert total == 30
+    assert total == 34
 
 
 def test_auditor_acusa_haste_habilitada_sem_gramatica(tmp_path: Path) -> None:
@@ -229,5 +230,5 @@ def test_auditor_acusa_haste_habilitada_sem_gramatica(tmp_path: Path) -> None:
 def test_auditor_real_relata_as_oito_hastes_no_estagio_e04() -> None:
     relato = audit()
     assert relato["errors"] == []
-    assert (relato["enabled"], relato["pending"]) == (30, 393)
+    assert (relato["enabled"], relato["pending"]) == (34, 389)
     assert relato["by_owner_stage"]["E04"]["enabled"] >= 8

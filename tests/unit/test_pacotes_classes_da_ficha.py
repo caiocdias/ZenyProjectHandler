@@ -21,6 +21,7 @@ import pymupdf
 import pytest
 from scripts.audit_symbol_packages import audit
 from tests.fixtures.declarative_symbols.corpus import build_enabled_corpus
+from tests.fixtures.symbol_grammars.rect_diagonal import CASOS_RECT_DIAGONAL
 from tests.fixtures.symbol_grammars.stem_bars import CASOS_HASTE
 from tests.unit.test_symbol_packages_sem_memorizacao import verificar_pacote
 
@@ -192,7 +193,7 @@ def _razao_esperada(nota_visual: str) -> str:
 
 
 _IDS_NOVAS = [v["id"] for v in _variantes_novas_do_inventario()]
-_GRAMATICA_DAS_HASTES = dict(CASOS_HASTE)
+_GRAMATICA_HABILITADAS = {**dict(CASOS_HASTE), **dict(CASOS_RECT_DIAGONAL)}
 
 
 def test_inventario_tem_58_variantes_de_e04_a_e06_nas_sete_familias() -> None:
@@ -215,10 +216,10 @@ def test_variante_nova_empacotada_espelha_o_inventario_e_fica_pending(variant_id
     assert item["source_ref"] == referencia["source_refs"][0]
     informativa = referencia["function"] in {"convention", "non_asset"}
     assert item["role"] == ("informative" if informativa else "operational")
-    if variant_id in _GRAMATICA_DAS_HASTES:
+    if variant_id in _GRAMATICA_HABILITADAS:
         assert item["recognition"] == {
             "status": "enabled",
-            "grammar": _GRAMATICA_DAS_HASTES[variant_id],
+            "grammar": _GRAMATICA_HABILITADAS[variant_id],
             "negative_examples": referencia["confusable_negatives"],
         }
     else:
@@ -349,21 +350,22 @@ def _copiar(tmp_path: Path) -> Path:
     return destino
 
 
-def test_auditor_real_fecha_sem_erro_com_393_pending_e_30_enabled() -> None:
+def test_auditor_real_fecha_sem_erro_com_389_pending_e_34_enabled() -> None:
     relato = audit()
     assert relato["errors"] == []
     assert (relato["expected_variants"], relato["expected_families"]) == (423, 31)
     assert (relato["package_variants"], relato["package_families"]) == (423, 31)
-    assert (relato["pending"], relato["enabled"]) == (393, 30)
+    assert (relato["pending"], relato["enabled"]) == (389, 34)
     assert relato["complete_recognition"] is False
     por_estagio = relato["by_owner_stage"]
     assert set(por_estagio) == {"E04", "E05", "E06", "E07"}
     for estagio in _ESTAGIOS_NOVOS:
         item = por_estagio[estagio]
-        habilitadas = 8 if estagio == "E04" else 0  # as hastes de f02-19 e f02-21
+        habilitadas = 12 if estagio == "E04" else 0  # hastes de f02-19 e f02-21 e PARA_RAIOS_BT
         assert item["packaged"] == item["expected"] == item["pending"] + habilitadas
         assert item["enabled"] == habilitadas
-        assert item["pending"] > 0
+        # E04 fica inteira habilitada (12 de 12); E05 e E06 seguem só pending.
+        assert (item["pending"] == 0) == (estagio == "E04")
     assert sum(por_estagio[e]["expected"] for e in _ESTAGIOS_NOVOS) == 58
 
 
@@ -464,5 +466,5 @@ def test_tabela_de_suporte_mostra_as_quatro_familias_novas_so_pendentes() -> Non
         for razao in item.pending_reasons:
             assert razao.startswith("Forma E01: ")
             assert razao.endswith("positivo/negativo ainda não validado.")
-    assert sum(len(i.pending_reference_ids) for i in suporte.values()) == 393
-    assert sum(len(i.enabled_reference_ids) for i in suporte.values()) == 30
+    assert sum(len(i.pending_reference_ids) for i in suporte.values()) == 389
+    assert sum(len(i.enabled_reference_ids) for i in suporte.values()) == 34
