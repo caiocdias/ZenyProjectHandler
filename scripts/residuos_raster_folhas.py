@@ -141,9 +141,8 @@ def _normalizada(caixa: Caixa, pagina: PaginaGramatica) -> list[float]:
 
 
 def _gravar_recorte(page: pymupdf.Page, caixa: Caixa, destino: Path, dpi: int) -> None:
-    """Recorte pela caixa crua, derrotada como em `model_symbols._observacao`."""
-    crua = pymupdf.Rect(caixa) * page.derotation_matrix
-    page.get_pixmap(clip=crua, dpi=dpi).save(destino)
+    """Recorte pela caixa visual: o `clip` de `get_pixmap` é na página exibida."""
+    page.get_pixmap(clip=pymupdf.Rect(caixa), dpi=dpi).save(destino)
 
 
 def _falha_de_fonte(pagina: PaginaGramatica) -> str | None:
