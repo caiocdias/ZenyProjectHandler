@@ -272,7 +272,7 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E06.3.1 | Pacotes das classes da ficha | #concluida | E06.2.2.2 | 58 variantes do inventário de ESTAI, TRANSFORMADOR, ATERRAMENTO e PARA_RAIOS_MT/BT nos pacotes, como `pending`; auditor e matriz aceitam outro `owner_stage` |
 | E06.3.2.1 | Base da haste, leituras erradas e H2 | #concluida | E06.3.1 | tipo de gramática só do modelo, métrica de leitura errada afirmada, resíduos raster por folha e veredito da H2 |
 | E06.3.2.2 | Gramática de haste com barras | #concluida | E06.3.2.1 | gramática de haste com barras, com laboratório, ATERRAMENTO e PARA_RAIOS_MT acima do atual |
-| E06.3.3 | Para-raios BT e transformador | #pendente | E06.3.2.2 | gramáticas de moldura das duas classes, com laboratório, acima do atual |
+| E06.3.3 | Para-raios BT e transformador | #em-andamento | E06.3.2.2 | gramáticas de moldura das duas classes, com laboratório, acima do atual |
 | E06.3.4 | Estai | #pendente | E06.3.3 | gramática de estai, com laboratório, acima do atual |
 | E06.3.5 | Equipamento de interrupção | #pendente | E06.3.4 | gramática de interrupção, acima do atual (que não emite a classe) |
 | E07 | Ficha do poste | #pendente | E06.3.5, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
@@ -1767,7 +1767,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 **Evidências e handoff:**
 
 - Plano: `docs/superpowers/plans/2026-11-07-leitura-vetorial-por-poste-e06-3-2-2.md`. Revisão de arquitetura (opus): bloqueou na rodada 0 (4 Importantes: testes quebrados fora dos Files, dependência oculta, gasto não medido e caminho da H-A) e aprovou com notas na rodada 1.
-- Relógio: de 2b6cc09 (22:58 de 2026-11-07) até o commit `#concluida` (~02:40 de 2026-11-08), cerca de 3h42.
+- Relógio: de 2b6cc09 (22:58 de 2026-11-07) até o commit `#concluida` (4ad9148, 02:34 de 2026-11-08), 3h36.
 - Revisão final (`revisor-seguranca`, opus, a98d95e..a44f68e): aprovada com ressalvas, sem Crítico. A onda única corrigiu M-1 e M-2 (99652b4, só testes), e a re-revisão aprovou. I-1 a I-3 eram de registro e estão neste handoff.
 - **Laboratório**, em `tmp/laboratorio/e06-3-2-2/` do checkout principal:
   - H-A: grupo como unidade. Deu 6/20/37 e 0/0/13, porque os grupos quebram o símbolo.
@@ -1854,7 +1854,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
-## E06.3.3 — Para-raios BT e transformador — #pendente
+## E06.3.3 — Para-raios BT e transformador — #em-andamento
 
 **Objetivo:** reconhecer PARA_RAIOS_BT e TRANSFORMADOR sobre o modelo de desenho, acima do analisador atual.
 
