@@ -2628,14 +2628,16 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Escopo (critérios repartidos da E07):**
 - Posição do poste no desenho, com laboratório, e uma proposta por identificador por folha.
-- Associação símbolo → poste por proximidade, com ambiguidade virando pendência; ESTAI incluído.
+- Associação texto → poste (proximidade, linhas de chamada e convenções de layout) e o destino das derivações sem rótulo P, que o laboratório decide.
+- Associação símbolo → poste por proximidade, com ambiguidade virando pendência; ESTAI incluído; situação do TRANSFORMADOR pelo `referencias_possiveis` (D14).
 - Versão do interpretador incrementada só no caminho com a opção da D17 ligada.
 
 **Critérios de aceite (a detalhar no plano):**
 
 - [ ] Fixture sintética com dois postes próximos e rótulos entre eles: associa corretamente ou marca pendência, nunca ao vizinho errado com confiança.
 - [ ] Com `ZENY_SERVER_SYMBOL_COMPOSITION=false`, o golden da E07.1 não muda (D18).
-- [ ] Benchmark com o runner acima da baseline de controle da E07.1 em postes (precisão e recall) e símbolos, sem regressão em leitura de identificador.
+- [ ] Benchmark com o runner acima da baseline de controle da E07.1 (mesmo gerador, `propostas-v2` com runner) em postes (precisão e recall) e símbolos, sem regressão em leitura de identificador.
+- [ ] Golden e teste pela composição com a opção desligada verdes, e promoção e regiões continuam funcionando sobre as propostas novas com a opção ligada.
 - [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
 **Revisão humana:** não. **Bloqueios:** Nenhum bloqueio conhecido.
@@ -2661,8 +2663,8 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Critérios de aceite (a detalhar no plano):**
 
-- [ ] O benchmark por poste sobre as 16 folhas supera o baseline das propostas da E15 em todas as métricas, com relatório em `tmp/`. Medida sem a E06.3.4 ou a E06.3.5 integradas, a métrica de ESTAI ou de EQUIPAMENTO_INTERRUPCAO só não pode piorar, e o handoff registra essa exceção (D19).
-- [ ] Com `ZENY_SERVER_SYMBOL_COMPOSITION=false`, o golden da E07.1 não muda (D18).
+- [ ] O benchmark por poste sobre as 16 folhas supera o baseline das propostas da E15 em todas as métricas, com relatório em `tmp/`, medido com o mesmo gerador (`propostas-v2` com runner, baseline de controle da E07.1); o handoff traz também o número contra a v004, separando o ganho de formato. Medida sem a E06.3.4 ou a E06.3.5 integradas, a métrica de ESTAI ou de EQUIPAMENTO_INTERRUPCAO só não pode piorar, e o handoff registra essa exceção (D19).
+- [ ] Com `ZENY_SERVER_SYMBOL_COMPOSITION=false`, o golden da E07.1 não muda, e um teste pela composição do servidor confirma isso (D18).
 - [ ] Promoção, regiões, vãos e conformidade continuam funcionando sobre as propostas novas (testes de integração existentes passam).
 - [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
