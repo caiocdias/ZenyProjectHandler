@@ -387,3 +387,20 @@ def test_haste_por_origem_do_texto_da_pagina_estai() -> None:
 def test_gasto_de_tres_estais_fica_no_registrado() -> None:
     caminhos = [*estai_com_circulo(), *garfo(base=(60.0, 60.0)), *garfo(200.0, base=(200.0, 200.0))]
     assert _gasto_de(caminhos) == GASTO_DE_TRES_ESTAIS
+
+
+@pytest.mark.parametrize("cor", [PRETO, VERMELHO], ids=["preto", "vermelho"])
+def test_garfo_preto_ou_vermelho_com_circulo_da_mesma_cor_e_recusado(cor: Any) -> None:
+    """R-E06.3.4-2: só o garfo verde com círculo verde é "instalar"."""
+    caminhos = [*garfo(cor=cor), circulo(centro_do_garfo(), DENTE * 0.8, cor)]
+    assert _grupos(caminhos) == NENHUM
+
+
+@pytest.mark.parametrize("cor", [PRETO, VERMELHO], ids=["preto", "vermelho"])
+def test_x_vale_sobre_garfo_com_circulo_de_qualquer_cor(cor: Any) -> None:
+    caminhos = [
+        *garfo(cor=cor),
+        circulo(centro_do_garfo(), DENTE * 0.8, cor),
+        *x_sobre(centro_do_garfo()),
+    ]
+    assert _grupos(caminhos) == {"existente": 0, "instalar": 0, "retirar": 1}

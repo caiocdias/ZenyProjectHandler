@@ -8,11 +8,17 @@ vêm de `grammar_marcas`; quem tem X é o grupo de retirada, com ou sem círculo
 verde ou vermelho sem marca não se afirma existente: sai sem casamento (R-E06.3.4-2). A caixa
 (R-E06.3.4-3, alternativa de melhor IoU no laboratório) une o pictograma (a envolvente da cor do
 garfo ou, sem ela, o próprio garfo) e a haste inteira; o X fica de fora.
+
+Só o garfo verde com círculo da mesma cor é "instalar" (R-E06.3.4-2): preto ou vermelho com círculo
+é recusado. Cada X e cada envolvente é de um garfo só, o mais próximo. Seta fechada, cota com duas
+extensões, chevrons em linha, linha de chamada saindo de texto e haste com garfo nas duas pontas
+não são estai.
 """
 
 from __future__ import annotations
 
 import math
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Final
@@ -61,10 +67,27 @@ _RAZAO_DENTES: Final = 1.15
 _ANGULO_DENTE: Final = (math.radians(15), math.radians(40))
 _DIFERENCA_DENTES: Final = math.radians(10)
 _TOLERANCIA_VERTICE: Final = 0.1
-_CELULA_VERTICE: Final = 0.25
+_CELULA_VERTICE: Final = _TOLERANCIA_VERTICE
 _MESMO_GARFO: Final = 0.5
 _MESMO_TRACO: Final = 0.35
 _BRANCO: Final = 0.9
+_VERDE: Final = "#008000"
+_SEM_MARCA: Final = "sem_marca"
+# Contorno com mais trechos que isto, ou fechado, é envolvente ou moldura, não condutor.
+_TRECHOS_DE_CONTORNO: Final = 6
+_FECHAMENTO: Final = 0.5
+# Cota: extensão perpendicular, mais longa que a abertura do garfo, com o meio perto da ponta.
+_EXTENSAO_DE_COTA: Final = 1.5
+_PERPENDICULAR: Final = 0.3
+_MEIO_DA_EXTENSAO: Final = 4.0
+# Seta fechada: a tampa liga as pontas dos dentes, com esta folga e relativa à abertura.
+_TAMPA: Final = (0.5, 0.08)
+_PREENCHE_TRIANGULO: Final = 0.7
+# Chevrons: outro vértice sobre o eixo, à frente, até este múltiplo da haste.
+_ALCANCE_CHEVRON: Final = 2.5
+_DESVIO_DO_EIXO: Final = 0.5
+_ALCANCE_TEXTO: Final = 0.5
+_MESMA_DIRECAO: Final = math.cos(math.radians(15))
 
 
 @dataclass(frozen=True, slots=True)
@@ -122,15 +145,15 @@ class _Pontas:
 
     def em(self, ponto: Ponto) -> list[_Raio]:
         cx, cy = self._chave(ponto)
-        achados = [
+        vistos = [
             raio
             for dx in (-1, 0, 1)
             for dy in (-1, 0, 1)
             for raio in self._celulas.get((cx + dx, cy + dy), ())
-            if math.dist(raio.perto, ponto) <= _TOLERANCIA_VERTICE
         ]
-        self._orcamento.gastar(len(achados))
-        return achados
+        # Cada raio examinado paga, perto ou não: o trabalho é o das células percorridas.
+        self._orcamento.gastar(len(vistos))
+        return [raio for raio in vistos if math.dist(raio.perto, ponto) <= _TOLERANCIA_VERTICE]
 
 
 def _traco_continuo(caminho: Caminho) -> bool:
@@ -218,6 +241,21 @@ def _mesmo_traco(a: Segmento, b: Segmento) -> bool:
     )
 
 
+def _contorno(caminho: Caminho) -> bool:
+    """Envolvente ou moldura (fechada, ou de muitos trechos), ou caminho de vários subcaminhos.
+
+    Um condutor em polilinha aberta, de poucos trechos, não é contorno: pode ser a continuação.
+    """
+    if len(caminho.subcaminhos) != 1:
+        return True
+    itens = caminho.subcaminhos[0]
+    if len(itens) == 1:
+        return False
+    return len(itens) > _TRECHOS_DE_CONTORNO or (
+        math.dist(itens[0].pontos[0], itens[-1].pontos[-1]) <= _FECHAMENTO
+    )
+
+
 def _continua_em(
     contexto: ContextoGramatica, garfo: _Garfo, ponto: Ponto, adiante: tuple[float, float]
 ) -> bool:
@@ -232,7 +270,7 @@ def _continua_em(
     for s in contexto.grade_segmentos.consultar(_em_torno(ponto, _TOLERANCIA_VERTICE)):
         if (
             s in proprios
-            or not um_traco(modelo, s.caminho)
+            or _contorno(modelo.caminhos[s.caminho])
             or any(_mesmo_traco(s, proprio) for proprio in proprios)
             or not _mesmo_estilo(modelo, s.caminho, garfo.haste.caminho)
         ):
@@ -277,6 +315,23 @@ def _tem_texto_dentro(contexto: ContextoGramatica, garfo: _Garfo) -> bool:
     )
 
 
+def _aneis(caminho: Caminho) -> list[list[Ponto]]:
+    """Os pontos de cada subcaminho, na ordem; curvas entram pelos pontos de controle."""
+    return [[ponto for item in sub for ponto in item.pontos] for sub in caminho.subcaminhos]
+
+
+def _dentro_do_caminho(ponto: Ponto, aneis: Sequence[Sequence[Ponto]]) -> bool:
+    """Regra par-ímpar sobre todos os anéis: a área pintada do preenchimento, não a caixa."""
+    dentro = False
+    for anel in aneis:
+        for (x1, y1), (x2, y2) in zip(anel, (*anel[1:], anel[0]), strict=True):
+            if (y1 > ponto[1]) != (y2 > ponto[1]) and (
+                ponto[0] < (x2 - x1) * (ponto[1] - y1) / (y2 - y1) + x1
+            ):
+                dentro = not dentro
+    return dentro
+
+
 def _coberto_por_wipeout(contexto: ContextoGramatica, garfo: _Garfo) -> bool:
     """Preenchimento branco opaco desenhado depois, por cima do garfo inteiro: não aparece."""
     modelo = contexto.pagina.modelo
@@ -294,8 +349,110 @@ def _coberto_por_wipeout(contexto: ContextoGramatica, garfo: _Garfo) -> bool:
             and posicao not in contexto.pagina.translucidos
             and all(caixa[0] <= x <= caixa[2] and caixa[1] <= y <= caixa[3] for x, y in pontos)
         ):
+            aneis = _aneis(desenho)
+            # Cada aresta examinada paga: a máscara de muitos vértices não sai de graça.
+            contexto.orcamento.gastar(sum(len(anel) for anel in aneis) * len(pontos))
+            if all(_dentro_do_caminho(ponto, aneis) for ponto in pontos):
+                return True
+    return False
+
+
+def _cota_com_extensoes(contexto: ContextoGramatica, garfo: _Garfo) -> bool:
+    """Uma linha de extensão perpendicular em cada ponta do eixo é cota, não estai."""
+    modelo = contexto.pagina.modelo
+    direcao = _unitario(garfo.base, garfo.vertice)
+    if direcao is None:
+        return False
+    abertura = math.dist(*garfo.pontas)
+    proprios = (garfo.haste, *garfo.dentes)
+    camada = modelo.caminhos[garfo.haste.caminho].estilo.camada
+
+    def tem_extensao(ponta: Ponto) -> bool:
+        for s in contexto.grade_segmentos.consultar(_em_torno(ponta, _MEIO_DA_EXTENSAO)):
+            unitario = _unitario(s.a, s.b)
+            meio = ((s.a[0] + s.b[0]) / 2, (s.a[1] + s.b[1]) / 2)
+            if (
+                s not in proprios
+                and unitario is not None
+                and modelo.caminhos[s.caminho].estilo.camada == camada
+                and math.dist(s.a, s.b) >= abertura * _EXTENSAO_DE_COTA
+                and abs(direcao[0] * unitario[0] + direcao[1] * unitario[1]) < _PERPENDICULAR
+                and math.dist(meio, ponta) <= _MEIO_DA_EXTENSAO
+            ):
+                return True
+        return False
+
+    return tem_extensao(garfo.base) and tem_extensao(garfo.vertice)
+
+
+def _seta_fechada(contexto: ContextoGramatica, garfo: _Garfo) -> bool:
+    """Uma tampa entre as pontas dos dentes, ou o triângulo preenchido, fecha a seta."""
+    modelo = contexto.pagina.modelo
+    primeira, segunda = garfo.pontas
+    folga = max(_TAMPA[0], math.dist(primeira, segunda) * _TAMPA[1])
+    proprios = (garfo.haste, *garfo.dentes)
+    for s in contexto.grade_segmentos.consultar(_em_torno(primeira, folga)):
+        if s not in proprios and (
+            (math.dist(s.a, primeira) <= folga and math.dist(s.b, segunda) <= folga)
+            or (math.dist(s.b, primeira) <= folga and math.dist(s.a, segunda) <= folga)
+        ):
+            return True
+    triangulo = _caixa_de((garfo.vertice, *garfo.pontas))
+    for posicao in contexto.grade_caminhos.consultar(triangulo):
+        caixa = contexto.caixas_caminhos[posicao]
+        if (
+            modelo.caminhos[posicao].estilo.preenchimento is not None
+            and all(
+                triangulo[i] - folga <= caixa[i] and caixa[i + 2] <= triangulo[i + 2] + folga
+                for i in (0, 1)
+            )
+            and all(
+                caixa[i + 2] - caixa[i] >= _PREENCHE_TRIANGULO * (triangulo[i + 2] - triangulo[i])
+                for i in (0, 1)
+            )
+        ):
             return True
     return False
+
+
+def _chevron_a_frente(contexto: ContextoGramatica, pontas: _Pontas, garfo: _Garfo) -> bool:
+    """Outro vértice de dois traços sobre o eixo, à frente: chevrons em linha, não estai."""
+    modelo = contexto.pagina.modelo
+    extensao = _unitario(garfo.base, garfo.vertice)
+    if extensao is None:
+        return False
+    vertice = garfo.vertice
+    alcance = math.dist(garfo.base, vertice) * _ALCANCE_CHEVRON
+    fim = (vertice[0] + extensao[0] * alcance, vertice[1] + extensao[1] * alcance)
+    proprios = (garfo.haste, *garfo.dentes)
+    for s in contexto.grade_segmentos.consultar(_caixa_de((vertice, fim))):
+        if s in proprios or not _mesmo_estilo(modelo, s.caminho, garfo.haste.caminho):
+            continue
+        for ponto in (s.a, s.b):
+            dx, dy = ponto[0] - vertice[0], ponto[1] - vertice[1]
+            ao_longo = dx * extensao[0] + dy * extensao[1]
+            desvio = abs(dx * extensao[1] - dy * extensao[0])
+            if not (_DESVIO_DO_EIXO < ao_longo <= alcance and desvio <= _DESVIO_DO_EIXO):
+                continue
+            direcoes = {
+                (round(r.longe[0], 1), round(r.longe[1], 1))
+                for r in pontas.em(ponto)
+                if r.traco.segmento not in proprios
+                and _mesmo_estilo(modelo, r.traco.segmento.caminho, garfo.haste.caminho)
+            }
+            if len(direcoes) >= 2:
+                return True
+    return False
+
+
+def _nasce_em_texto(contexto: ContextoGramatica, garfo: _Garfo) -> bool:
+    """A haste que nasce dentro da caixa de um texto é linha de chamada, não estai."""
+    x, y = garfo.base
+    return any(
+        palavra.caixa[0] - _ALCANCE_TEXTO <= x <= palavra.caixa[2] + _ALCANCE_TEXTO
+        and palavra.caixa[1] - _ALCANCE_TEXTO <= y <= palavra.caixa[3] + _ALCANCE_TEXTO
+        for palavra in contexto.grade_palavras.consultar(_em_torno(garfo.base, _ALCANCE_TEXTO))
+    )
 
 
 def _garfo_em(
@@ -336,6 +493,10 @@ def _garfo_em(
             for ponta, d in zip(garfo.pontas, direcoes, strict=True)
         )
         or _tem_texto_dentro(contexto, garfo)
+        or _nasce_em_texto(contexto, garfo)
+        or _seta_fechada(contexto, garfo)
+        or _cota_com_extensoes(contexto, garfo)
+        or _chevron_a_frente(contexto, pontas, garfo)
         or _coberto_por_wipeout(contexto, garfo)
     ):
         return None
@@ -357,7 +518,9 @@ def _garfos(contexto: ContextoGramatica, perfil: tuple[float, float]) -> list[_G
             garfo = _garfo_em(contexto, pontas, haste, vertice, base)
             if garfo is not None:
                 achados.append(garfo)
-    return achados
+    # Um traço com garfo nas duas pontas é cota de setas, não dois estais sobre a mesma haste.
+    hastes = Counter(garfo.haste for garfo in achados)
+    return [garfo for garfo in achados if hastes[garfo.haste] == 1]
 
 
 def _centro(pontos: Sequence[Ponto]) -> Ponto:
@@ -399,51 +562,119 @@ class _ContornosPorCor:
         return self._grades[chave]
 
 
+@dataclass(frozen=True, slots=True)
+class _Marca:
+    """Um X ou uma envolvente que um garfo reivindica: os caminhos dela e o centro."""
+
+    caminhos: frozenset[int]
+    centro: Ponto
+    segmentos: frozenset[Segmento]
+
+
+@dataclass(frozen=True, slots=True)
+class _Leitura:
+    garfo: _Garfo
+    candidato: CandidatoEstai
+    prioridade: tuple[int, int, int]
+    x: _Marca | None
+    circulo: _Marca | None
+
+
 def _classificar(
-    contexto: ContextoGramatica, contornos: _ContornosPorCor, garfo: _Garfo
-) -> tuple[CandidatoEstai, tuple[int, int]] | None:
-    """O candidato do garfo (a envolvente da cor dele e o X) e a prioridade na deduplicação."""
+    contexto: ContextoGramatica,
+    contornos: _ContornosPorCor,
+    garfo: _Garfo,
+    perdidos: frozenset[Segmento],
+    sem_circulo: bool,
+) -> _Leitura:
+    """A leitura do garfo: a envolvente da cor dele, o X e a prioridade na deduplicação.
+
+    Os braços de X em `perdidos` são de um garfo mais próximo e não contam; `sem_circulo` tira a
+    envolvente que outro garfo mais próximo ficou. Só o garfo verde com círculo verde é "instalar";
+    preto ou vermelho com círculo e garfo colorido sem marca ficam como `sem_marca` (R-E06.3.4-2).
+    """
     proprios = (garfo.haste, *garfo.dentes)
     caminhos = frozenset(s.caminho for s in proprios)
     exigidos = (garfo.vertice, *garfo.pontas)
-    achada = envolvente(
-        contornos.da_cor(garfo.cor), exigidos, garfo.escala, _centro(exigidos), caminhos
+    achada = (
+        None
+        if sem_circulo
+        else envolvente(
+            contornos.da_cor(garfo.cor), exigidos, garfo.escala, _centro(exigidos), caminhos
+        )
     )
     pictograma = _caixa_de(exigidos) if achada is None else achada.caixa
-    x = tem_x(contexto, pictograma, garfo.escala, angulo(garfo.haste), frozenset(proprios))
-    if x is None and achada is None and not _preto_ou_cinza(garfo.cor):
-        return None
+    x = tem_x(
+        contexto,
+        pictograma,
+        garfo.escala,
+        angulo(garfo.haste),
+        frozenset(proprios) | perdidos,
+    )
+    verde = cor_canonica(garfo.cor, None) == _VERDE
     ancora = garfo.haste.caminho
     outros = {d.caminho for d in garfo.dentes}
-    if achada is not None:
+    if achada is not None and (verde or x is not None):
         outros.update(achada.caminhos)
     if x is not None:
         outros.update(braco.caminho for braco in x)
     cantos = ((pictograma[0], pictograma[1]), (pictograma[2], pictograma[3]))
     caixa = _caixa_de((*cantos, garfo.haste.a, garfo.haste.b))
+    ha_circulo = achada is not None
+    if x is None and (
+        (not ha_circulo and not _preto_ou_cinza(garfo.cor)) or (ha_circulo and not verde)
+    ):
+        enclosure = _SEM_MARCA
+    else:
+        enclosure = "ellipse" if ha_circulo else "none"
     candidato = CandidatoEstai(
         contexto,
         caixa,
         ancora,
         tuple(sorted(outros - {ancora})),
-        "none" if achada is None else "ellipse",
+        enclosure,
         x is not None,
     )
-    return candidato, (int(x is not None), int(achada is not None))
+    marca_x = None
+    if x is not None:
+        pontos = [p for braco in x for p in (braco.a, braco.b)]
+        marca_x = _Marca(frozenset(b.caminho for b in x), _centro(pontos), frozenset(x))
+    circulo = None
+    if achada is not None and enclosure == "ellipse":
+        c = achada.caixa
+        circulo = _Marca(
+            frozenset(achada.caminhos), ((c[0] + c[2]) / 2, (c[1] + c[3]) / 2), frozenset()
+        )
+    prioridade = (int(x is not None), int(enclosure == "ellipse"), int(enclosure != _SEM_MARCA))
+    return _Leitura(garfo, candidato, prioridade, marca_x, circulo)
+
+
+def _mesmo_desenho(a: _Garfo, b: _Garfo) -> bool:
+    """Mesmo vértice e mesma direção da haste: o desenho sobreposto em duas cores."""
+    ua, ub = _unitario(a.base, a.vertice), _unitario(b.base, b.vertice)
+    return (
+        math.dist(a.vertice, b.vertice) <= _MESMO_GARFO
+        and ua is not None
+        and ub is not None
+        and ua[0] * ub[0] + ua[1] * ub[1] >= _MESMA_DIRECAO
+    )
 
 
 def _deduplicar(
-    lidos: Sequence[tuple[_Garfo, CandidatoEstai, tuple[int, int]]],
-    orcamento: OrcamentoConsultas,
+    lidos: Sequence[_Leitura], orcamento: OrcamentoConsultas
 ) -> tuple[CandidatoEstai, ...]:
-    """Um garfo por vértice: o desenho sobreposto em duas cores é um estai só.
+    """Um garfo por vértice e direção: o desenho sobreposto em duas cores é um estai só.
 
     Fica o da marca mais forte, o X antes da envolvente, e o mais antigo na ordem do caminho.
     """
-    escolhidos: list[tuple[_Garfo, CandidatoEstai]] = []
+    escolhidos: list[_Garfo] = []
+    candidatos: list[CandidatoEstai] = []
     por_celula: dict[tuple[int, int], list[int]] = {}
-    ordem = sorted(lidos, key=lambda item: (-item[2][0], -item[2][1], item[1].caminho_ancora))
-    for garfo, candidato, _ in ordem:
+    ordem = sorted(
+        lidos, key=lambda item: ([-n for n in item.prioridade], item.candidato.caminho_ancora)
+    )
+    for leitura in ordem:
+        garfo = leitura.garfo
         cx = math.floor(garfo.vertice[0] / _MESMO_GARFO)
         cy = math.floor(garfo.vertice[1] / _MESMO_GARFO)
         vizinhos = [
@@ -453,13 +684,44 @@ def _deduplicar(
             for i in por_celula.get((cx + dx, cy + dy), ())
         ]
         orcamento.gastar(1 + len(vizinhos))
-        if any(
-            math.dist(escolhidos[i][0].vertice, garfo.vertice) <= _MESMO_GARFO for i in vizinhos
-        ):
+        if any(_mesmo_desenho(escolhidos[i], garfo) for i in vizinhos):
             continue
         por_celula.setdefault((cx, cy), []).append(len(escolhidos))
-        escolhidos.append((garfo, candidato))
-    return tuple(candidato for _, candidato in escolhidos)
+        escolhidos.append(garfo)
+        candidatos.append(leitura.candidato)
+    return tuple(candidatos)
+
+
+def _centro_do_garfo(garfo: _Garfo) -> Ponto:
+    return _centro((garfo.vertice, *garfo.pontas))
+
+
+def _disputar(lidos: Sequence[_Leitura], perdas: list[tuple[frozenset[Segmento], bool]]) -> bool:
+    """Cada X e cada envolvente é do garfo mais próximo; devolve se algum garfo perdeu marca.
+
+    O desempate é o caminho da haste, o mais antigo. O que cada perdedor perdeu fica em `perdas`
+    (braços de X, e se perdeu a envolvente) para ser lido de novo sem a marca.
+    """
+    pretensoes: dict[tuple[bool, frozenset[int]], list[tuple[float, int, int]]] = {}
+    for i, leitura in enumerate(lidos):
+        for marca, eh_x in ((leitura.x, True), (leitura.circulo, False)):
+            if marca is not None:
+                distancia = math.dist(marca.centro, _centro_do_garfo(leitura.garfo))
+                pretensoes.setdefault((eh_x, marca.caminhos), []).append(
+                    (distancia, leitura.candidato.caminho_ancora, i)
+                )
+    mudou = False
+    for (eh_x, _), pretendentes in pretensoes.items():
+        pretendentes.sort()
+        for _, _, i in pretendentes[1:]:
+            segmentos, sem_circulo = perdas[i]
+            marca_x = lidos[i].x
+            if eh_x and marca_x is not None:
+                perdas[i] = (segmentos | marca_x.segmentos, sem_circulo)
+            else:
+                perdas[i] = (segmentos, True)
+            mudou = True
+    return mudou
 
 
 def estai_candidatos(
@@ -471,12 +733,21 @@ def estai_candidatos(
     if not garfos:
         return ()
     contornos = _ContornosPorCor(contexto, marcas.contornos)
-    lidos: list[tuple[_Garfo, CandidatoEstai, tuple[int, int]]] = []
+    perdas: list[tuple[frozenset[Segmento], bool]] = [(frozenset(), False)] * len(garfos)
+    lidos: list[_Leitura] = []
     for garfo in garfos:
         contexto.orcamento.gastar()
-        classificado = _classificar(contexto, contornos, garfo)
-        if classificado is not None:
-            lidos.append((garfo, *classificado))
+        lidos.append(_classificar(contexto, contornos, garfo, frozenset(), False))
+    # Cada rodada tira as marcas de quem perdeu a disputa; só esses garfos são lidos de novo, e a
+    # perda só cresce, então a disputa termina.
+    while True:
+        antes = list(perdas)
+        if not _disputar(lidos, perdas):
+            break
+        for i, (segmentos, sem_circulo) in enumerate(perdas):
+            if perdas[i] != antes[i]:
+                contexto.orcamento.gastar()
+                lidos[i] = _classificar(contexto, contornos, garfos[i], segmentos, sem_circulo)
     return _deduplicar(lidos, contexto.orcamento)
 
 
