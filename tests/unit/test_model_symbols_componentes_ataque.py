@@ -133,7 +133,7 @@ def test_caixa_de_um_componente_nao_vaza_para_o_outro() -> None:
         assert caixas[0] != caixas[1]
 
 
-def test_assinatura_do_perfil_depende_da_versao_1_2_0() -> None:
+def test_assinatura_do_perfil_depende_da_versao_1_3_0() -> None:
     perfil = perfil_pacotes_modelo((), carregar_tabela_glifos())
 
     assert perfil.versao == "1.3.0"

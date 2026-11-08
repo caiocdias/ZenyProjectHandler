@@ -17,7 +17,7 @@ pytestmark = pytest.mark.integration
 _IDS = [identidade for identidade, _ in CASOS_RECT_DIAGONAL]
 
 
-def test_runner_carrega_o_perfil_do_modelo_na_1_2_0_e_os_legados_em_outras_assinaturas(
+def test_runner_carrega_o_perfil_do_modelo_na_1_3_0_e_os_legados_em_outras_assinaturas(
     tmp_path: Path,
 ) -> None:
     runner = SymbolCompositionRunner(_settings(tmp_path / "dados"))

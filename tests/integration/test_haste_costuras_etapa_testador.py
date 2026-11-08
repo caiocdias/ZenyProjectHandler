@@ -70,7 +70,7 @@ def test_runner_com_pacotes_reais_observa_e_reconcilia_as_oito_situacoes(tmp_pat
     assert all(len({obs.metodo_assinatura for obs in o.observations}) >= 2 for o in com_o_novo)
 
 
-def test_perfil_do_modelo_no_runner_esta_na_versao_1_2_0(tmp_path: Path) -> None:
+def test_perfil_do_modelo_no_runner_esta_na_versao_1_3_0(tmp_path: Path) -> None:
     runner = SymbolCompositionRunner(_settings(tmp_path / "dados"))
     novo = next(p for p in runner._profiles if p.metodo_id == _METODO_NOVO)
     assert novo.versao == "1.3.0"
