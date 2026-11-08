@@ -38,7 +38,8 @@
   - o sinal da página (`origem_predominante`);
   - a cor canônica;
   - os contornos e a envolvente (Bézier e poligonal elíptica);
-  - o X de retirada (braços como traço solto, cores comparadas entre si, pares pagos).
+  - o X de retirada (braços como traço solto, cores comparadas entre si, pares pagos);
+  - `MarcasDaPagina(contexto)`, preguiçoso, que calcula e paga os contornos uma vez por contexto; as gramáticas pedem os contornos **só** por ele (a função de contornos fica privada); `hastes_candidatas(contexto, *, marcas=None)` aceita as marcas recebidas.
 
   As interfaces generalizam os parâmetros de hoje, sem semântica nova:
   - `envolvente(contornos, exigidos: Sequence[Ponto], escala: float, ancora: Ponto, proprios: frozenset[int]) -> Contorno | None`. Todos os `exigidos` dentro da elipse, diâmetro em `_ENVOLVENTE × escala` e os caminhos `proprios` excluídos;
@@ -138,7 +139,7 @@ Soma: 3h05 (25 + 35 + 45 + 40 + 20 + 20), mais o laboratório (caixa de 60 min).
 - Modify: `src/zeny_project_handler/adapters/analysis/drawing_model/grammar_stem.py`, `src/zeny_project_handler_server/symbol_execution.py`
 
 **Interfaces:**
-- Produces, em `grammar_marcas.py` (nomes públicos): `origem_predominante(modelo) -> str`, `cor_canonica(cor, preenchimento) -> str | None`, `Contorno` (caixa e caminho), `contornos(contexto) -> GradeEspacial[Contorno]`, `envolvente(contornos, exigidos: Sequence[Ponto], escala: float, ancora: Ponto, proprios: frozenset[int]) -> Contorno | None` e `tem_x(contexto, pictograma: Caixa, escala: float, eixo: float, proprios: frozenset[Segmento]) -> tuple[Segmento, Segmento] | None` (R-2: generalização dos parâmetros de hoje, sem cor); e `MarcasDaPagina(contexto)`, preguiçoso, com a `origem` predominante e a propriedade `contornos`, calculada e paga uma vez, só quando alguém a pede. `hastes_candidatas(contexto, *, marcas: MarcasDaPagina | None = None)` usa as marcas recebidas ou cria as suas; com `None`, o comportamento e o gasto são os de hoje. Os limiares da envolvente, do X e `_TOLERANCIA_COR` mudam de módulo sem mudar de valor. `Perfil` e a tabela por origem da haste ficam em `grammar_stem.py`, com `perfil_da_pagina` usando `origem_predominante` de `grammar_marcas`. `grammar_stem.py` reexporta de forma explícita (`X as X`) o que `tests/unit/test_grammar_stem*.py` importa dele (por exemplo `origem_predominante`), por causa do mypy strict.
+- Produces, em `grammar_marcas.py` (nomes públicos): `origem_predominante(modelo) -> str`, `cor_canonica(cor, preenchimento) -> str | None`, `Contorno` (caixa e caminho), `envolvente(contornos, exigidos: Sequence[Ponto], escala: float, ancora: Ponto, proprios: frozenset[int]) -> Contorno | None` e `tem_x(contexto, pictograma: Caixa, escala: float, eixo: float, proprios: frozenset[Segmento]) -> tuple[Segmento, Segmento] | None` (R-2: generalização dos parâmetros de hoje, sem cor); e `MarcasDaPagina(contexto)`, preguiçoso, com a `origem` predominante e a propriedade `contornos` (`GradeEspacial[Contorno]`), calculada e paga uma vez, só quando alguém a pede. A função que monta os contornos fica privada: as gramáticas os pedem só pelas marcas (vale também para o laboratório). `hastes_candidatas(contexto, *, marcas: MarcasDaPagina | None = None)` usa as marcas recebidas ou cria as suas; com `None`, o comportamento e o gasto são os de hoje. Os limiares da envolvente, do X e `_TOLERANCIA_COR` mudam de módulo sem mudar de valor. `Perfil` e a tabela por origem da haste ficam em `grammar_stem.py`, com `perfil_da_pagina` usando `origem_predominante` de `grammar_marcas`. `grammar_stem.py` reexporta de forma explícita (`X as X`) o que `tests/unit/test_grammar_stem*.py` importa dele (por exemplo `origem_predominante`), por causa do mypy strict.
 
 - [ ] **Step 1: Escrever** `test_grammar_marcas.py` com os casos isolados (envolvente Bézier e poligonal, nas bordas de 8 vértices e desvio 0,2; X com braço solto e com braço em contorno; cor canônica e tolerância; origem predominante; `MarcasDaPagina` paga os contornos uma vez e não os paga se ninguém pedir), movendo para cá, sem enfraquecer, os casos equivalentes que hoje testam esses helpers por dentro da haste, se houver.
 - [ ] **Step 2: Rodar** e ver falhar (módulo ausente).
@@ -155,7 +156,13 @@ Soma: 3h05 (25 + 35 + 45 + 40 + 20 + 20), mais o laboratório (caixa de 60 min).
 - Modify: `src/zeny_project_handler/adapters/analysis/drawing_model/symbol_matcher.py`, `src/zeny_project_handler_server/symbol_execution.py` (digest)
 
 **Interfaces:**
-- Produces: `grammar_rect_diagonal.casa_retangulos_diagonal(contexto, gramatica, *, candidatos=None) -> list[tuple[Caixa, int, tuple[int, ...]]]`; despacho de `rect_diagonal` em `_casar_no_contexto`, com os candidatos calculados uma vez por página (como `hastes_candidatas`); `_casar_no_contexto` cria uma `MarcasDaPagina` (Task 2) e a passa às duas gramáticas (`hastes_candidatas(contexto, marcas=...)`), sem mudar o gasto de uma página só com haste (R-4); a docstring de `CasamentoGramatica.componentes` (`symbol_matcher.py:54-55`, "só a haste com barras os preenche") passa a citar as duas gramáticas; a fixture exporta `CASOS_RECT_DIAGONAL: tuple[tuple[str, dict[str, Any]], ...]` (as 4 variantes de f02-21 v001–v004 e a gramática de cada uma), as funções de desenho e `desenhar_bt_classico(page, situacao)`. Esta última desenha o positivo no estilo do legado: haste alinhada ao corpo retangular de proporção 2–4,5, diagonal de 0,55 a 1,15 × a haste, centrada no corpo e passando além dele. O teste de fusão da Task 4 usa essa função.
+- Produces: `grammar_rect_diagonal.casa_retangulos_diagonal(contexto, gramatica, *, candidatos=None) -> list[tuple[Caixa, int, tuple[int, ...]]]`; despacho de `rect_diagonal` em `_casar_no_contexto`, com os candidatos calculados uma vez por página (como `hastes_candidatas`); `_casar_no_contexto` cria uma `MarcasDaPagina` (Task 2) e a passa às duas gramáticas (`hastes_candidatas(contexto, marcas=...)`), sem mudar o gasto de uma página só com haste (R-4); a docstring de `CasamentoGramatica.componentes` (`symbol_matcher.py:54-55`, "só a haste com barras os preenche") passa a citar as duas gramáticas; a fixture exporta `CASOS_RECT_DIAGONAL: tuple[tuple[str, dict[str, Any]], ...]` (as 4 variantes de f02-21 v001–v004 e a gramática de cada uma), as funções de desenho e `desenhar_bt_classico(page, situacao)`. Esta última desenha o positivo no estilo do legado: haste alinhada ao corpo retangular de proporção 2–4,5, diagonal de 0,55 a 1,15 × a haste, centrada no corpo e passando além dele. O teste de fusão da Task 4 usa essa função. Ela tem de satisfazer `_bt_arrester_matches` (`pymupdf_symbols.py:845-885`):
+  - mesma cor e camada;
+  - haste ≥ 6 pt;
+  - corpo a 0,35–1,4 × a haste da ponta, com desvio lateral ≤ 0,1 × a haste;
+  - diagonal centrada no corpo a ≤ 0,2 × a haste e a 0,4–1,2 rad da haste.
+
+  Com o corpo de proporção 2–4,5, isso pede uma diagonal mais íngreme que a de canto a canto, que cruza os lados longos e passa além deles. Se o legado não observar o desenho, corrige-se a fixture: não é resultado da R-6.
 
 - [ ] **Step 1: Fixture e testes**, partindo do patch vencedor: positivos (retângulo girado 0°, 30°, 90° com diagonal além do retângulo, com e sem ganchos; com elipse; com X; com os dois; ligado por haste a uma linha longa; página `/Rotate` 90; página com texto em glifo e símbolo pequeno) e negativos (TORRE_AT com duas diagonais; moldura de rótulo com texto; retângulo com diagonal que não passa além; diagonal sem retângulo; losango; retângulo com proporção fora da faixa escolhida no laboratório; **X falso**: diagonal com ganchos mais haste de ligação, em elipse sem X, não pode virar v003). `test_positivo_casa_so_a_variante_certa` (4 variantes × rotações), `test_caixa_e_o_pictograma`, `test_negativo_nao_casa`, `test_componentes`, `test_bt_classico_casa_a_gramatica_nova` (se a faixa do laboratório recusar o desenho clássico, o teste fixa a recusa e o relatório o diz, para a R-6).
 - [ ] **Step 2: Rodar** e ver falhar sem o patch.
@@ -217,3 +224,16 @@ Soma: 3h05 (25 + 35 + 45 + 40 + 20 + 20), mais o laboratório (caixa de 60 min).
 
 - Suíte inteira por onda; testador de etapa (a Task 5 é de risco normal); `osv-scanner` nos 7 locks; `check_test_integrity --base <base da etapa>`; revisão final; `.\IniciarTestes.bat`.
 - Handoff com a tabela, a triagem, o gasto, as decisões que mudam o visível (consumidores de `enabled` com 34; referências suspeitas para a curadoria) e o bloco "Para a E06.3.3.2".
+
+## Revisão de arquitetura
+
+- **Veredito:** aprovado com notas, na rodada 2 (`revisor-arquitetura`, opus).
+  - Rodada 0: bloqueado por 5 Importantes: testes fora dos Files nas Tasks 1 e 4, o contrato de `grammar_marcas`, o aceite degenerado na precisão e a fusão com o legado.
+  - Rodada 1: bloqueado por 2 Importantes novos: o compartilhamento de contornos fora dos Files e o teste de fusão sem prova.
+  - Rodada 2: aprovado com notas.
+- **Modelo:** opus.
+- **Notas Menores da rodada 2, aplicadas antes da execução:**
+  - M-a: `desenhar_bt_classico` precisa satisfazer o legado, inclusive a diagonal íngreme; se não satisfizer, corrige-se a fixture;
+  - M-b: `MarcasDaPagina` e a assinatura nova de `hastes_candidatas` estão na R-2;
+  - M-c: os contornos só são pedidos pelas marcas, e a função fica privada.
+- **Para o usuário (no fechamento):** o piso de precisão de 50% (R-4) e o resultado da R-6. Nenhuma decisão de arquitetura.
