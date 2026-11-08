@@ -140,7 +140,7 @@ def test_build_recusa_arvore_suja_antes_de_gastar_build(monkeypatch, capsys) -> 
 
 
 def test_build_reprova_se_o_head_muda_durante_o_build(tmp_path, monkeypatch, capsys) -> None:
-    ...  # _commit_de_origem devolve "a"*40 e depois "b"*40; passos de build substituídos por no-op; afirme ReleaseBuildError com "mudou durante o build" e que o destino não foi substituído
+    ...  # _commit_de_origem devolve "a"*40 e depois "b"*40; monkeypatch.setattr(build_release, "ROOT", tmp_path), _validate_version e passos de build substituídos por no-op, monkeypatch.setenv em SOURCE_DATE_EPOCH e PYTHONHASHSEED para restaurá-las; target pré-criado com um arquivo sentinela; afirme ReleaseBuildError com "mudou durante o build" e que o sentinela sobrevive
 ```
 
 Os repositórios dos testes configuram `user.name`/`user.email` locais.
@@ -148,9 +148,9 @@ Os repositórios dos testes configuram `user.name`/`user.email` locais.
 - [ ] **Step 2: Rode e veja falhar.** `.venv/Scripts/python.exe -m pytest tests/unit/test_release_build.py` → FAIL.
 
 - [ ] **Step 3: Implemente em `scripts/build_release.py`.**
-  - `_fatos_do_produto` importa `PyMuPdfDocumentAnalyzer` (`zeny_project_handler.adapters.analysis.pymupdf_analyzer`), `InterpretadorRegrasExplicitas` (`zeny_project_handler.adapters.interpretation.rule_based`), `VERSAO_METODO_CONFORMIDADE` (`zeny_project_handler.application.compliance_analysis`) e usa `carregar_registro_conformidade_json` (`zeny_project_handler.adapters.compliance.json_registry`) sobre `root / "src/zeny_project_handler/adapters/compliance/data/regras_conformidade_v1.json"`: a versão do registro e a contagem de `regras` com `ativa` verdadeiro, o mesmo leitor do runtime. Escreva-os só depois de confirmar no objeto o nome do atributo da versão do registro.
+  - `_fatos_do_produto` importa `PyMuPdfDocumentAnalyzer` (`zeny_project_handler.adapters.analysis.pymupdf_analyzer`), `InterpretadorRegrasExplicitas` (`zeny_project_handler.adapters.interpretation.rule_based`), `VERSAO_METODO_CONFORMIDADE` (`zeny_project_handler.application.compliance_analysis`) e usa `carregar_registro_conformidade_json` (`zeny_project_handler.adapters.compliance.json_registry`) sobre `root / "src/zeny_project_handler/adapters/compliance/data/regras_conformidade_v1.json"`: `versao` do registro e a contagem de `regras` com `ativa` verdadeiro, o mesmo leitor do runtime. `DomainValidationError` do seed vira `ReleaseBuildError`.
   - `.versao` dessas classes é a do caminho padrão: é o que as notas declaram.
-  - `build_release` chama `_commit_de_origem()` e `_fatos_do_produto()` logo depois de `_validate_version`, antes de `_reset_directory`, para falhar antes de gastar build. Imediatamente antes de mover `staging` para `target`, chama `_commit_de_origem()` de novo; se mudou, levanta `ReleaseBuildError` com `mudou durante o build`.
+  - `build_release` chama `_commit_de_origem()` e `_fatos_do_produto()` logo depois de `_validate_version`, antes de `_reset_directory`, para falhar antes de gastar build. Antes de `if target.exists()`, ou seja, antes de apagar o destino, chama `_commit_de_origem()` de novo; se mudou, levanta `ReleaseBuildError` com `mudou durante o build`.
   - O corpo das notas mantém: as linhas de cliente/servidor/API/volume, o parágrafo da distribuição (cliente só a usuários finais etc.), o de upgrade e rollback, o de API/GMAX e o limite de homologação. Sai o parágrafo "Esta release inclui…" e o "O registro distribuído…", que dão lugar a (com as quebras de linha que o ruff exigir):
 
 ```markdown
@@ -220,8 +220,16 @@ confiança declarado para o resultado.
 
 1. Antes do primeiro build: `docker version` responde com o servidor, a branch da trilha atualizada com a `main` (`git merge main`, resolvendo como no fechamento) e a árvore limpa.
 2. Primeiro build, medido com `date`: `.venv/Scripts/python.exe scripts/build_release.py --version 0.6.0 --output-root C:/Users/Caio/Desktop/repos/ZenyProjectHandler/dist/release`; depois `sha256sum -c SHA256SUMS.txt` na pasta. Candidata registrada em `dist/release/ESTADO-0.6.0.md`.
-3. Pendência da E05 (handoff, linha 895 do roadmap): na imagem gerada, sonda `docker run --rm --entrypoint python zeny-project-handler-server:0.6.0 -c "from zeny_project_handler.adapters.analysis.drawing_model.glyph_table import carregar_tabela_glifos as c; t = c(); print(t.versao, t.sha256)"` → versão e hash impressos. A tabela prova a carga em Python 3.13, que é a parte que o gate de artefatos não exercita. Em seguida, tenta os testes `test_glyph_*` e `test_tabela_glifos_real_ataque.py` num container `python:3.13.7-slim-bookworm` com o lock de desenvolvimento, com caixa de 15 min; se não couber ou o lock não instalar, ruling e item em "Decisões para o usuário".
+3. Pendência da E05 (handoff, linha 895 do roadmap): na imagem gerada, sonda `docker run --rm --entrypoint python zeny-project-handler-server:0.6.0 -c "from zeny_project_handler.adapters.analysis.drawing_model.glyph_table import carregar_tabela_glifos as c; t = c(); print(t.versao, t.sha256)"` → versão e hash impressos. A tabela prova a carga em Python 3.13, que é a parte que o gate de artefatos não exercita. Em seguida, tenta os testes `test_glyph_*` e `test_tabela_glifos_real_ataque.py` num container `python:3.13.7-slim-bookworm` com o lock de desenvolvimento, com caixa de 15 min; se não couber ou for erro de ambiente (lock que não instala, plugin que exige biblioteca ausente), ruling e item em "Decisões para o usuário". Sonda sem imprimir hash ou teste de glifo vermelho em 3.13 é defeito da etapa: entra no ciclo de correção e pede novo build.
 4. Revisão final. Correção que mude código, `Dockerfile` ou script exige novo build, sobre o commit que entra.
-5. Antes do build final, `git merge main` de novo se ela andou (por exemplo, com uma subetapa da E07). Se a `main` andar entre o último build e o fechamento, a ruling padrão é manter a candidata, válida para o commit citado nas notas ("Candidata" no protocolo), e a E19 cobre o restante; só refazer o build se o tempo folgar.
+5. Antes de um novo build desta etapa, `git merge main` de novo se ela andou (por exemplo, com uma subetapa da E07). Nenhum commit ou edição no worktree da trilha C enquanto o build roda; registros vão para `dist/release/ESTADO-0.6.0.md`. Se a `main` andar entre o último build e o fechamento, a ruling padrão é manter a candidata, válida para o commit citado nas notas ("Candidata" no protocolo), e a E19 cobre o restante; só refazer o build se o tempo folgar.
 6. `cmd.exe //c IniciarTestes.bat`, depois da revisão final, no HEAD que entra.
 7. T_build (build + conferência + gate) no handoff; recálculo dos marcos.
+
+## Revisão de arquitetura
+
+- Veredito: aprovado com notas.
+- Rodadas: 1.
+- Modelo: opus.
+- Notas Menores (aplicadas neste plano): isolamento de `ROOT` no teste de HEAD; reconferência antes do `rmtree`; nada de commit durante o build; falha real da sonda de glifos é defeito da etapa; seed inválido vira `ReleaseBuildError`.
+- Não verificado pelo revisor: disjunção com a E07 (aplicada pelo orquestrador ao escrever a "File Structure" da E07), a execução do build e a completude de "O que mudou desde a 0.5.0".
