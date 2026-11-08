@@ -273,7 +273,7 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E06.3.2.1 | Base da haste, leituras erradas e H2 | #concluida | E06.3.1 | tipo de gramática só do modelo, métrica de leitura errada afirmada, resíduos raster por folha e veredito da H2 |
 | E06.3.2.2 | Gramática de haste com barras | #concluida | E06.3.2.1 | gramática de haste com barras, com laboratório, ATERRAMENTO e PARA_RAIOS_MT acima do atual |
 | E06.3.3.1 | Para-raios BT | #concluida | E06.3.2.2 | gramática do retângulo com diagonal, com laboratório, PARA_RAIOS_BT acima do atual (que não casa nenhuma) |
-| E06.3.3.2.1 | Marcas: envolvente e X | #em-andamento | E06.3.3.1 | envolvente por subcaminho, X perto do símbolo e concordância de situação medida |
+| E06.3.3.2.1 | Marcas: envolvente e X | #concluida | E06.3.3.1 | envolvente por subcaminho, X perto do símbolo e concordância de situação medida |
 | E06.3.3.2.2 | Transformador | #pendente | E06.3.3.2.1 | gramática do triângulo em círculo, com laboratório, TRANSFORMADOR acima do atual |
 | E06.3.4 | Estai | #pendente | E06.3.3.2.2 | gramática de estai, com laboratório, acima do atual |
 | E06.3.5 | Equipamento de interrupção | #pendente | E06.3.4 | gramática de interrupção, acima do atual (que não emite a classe) |
@@ -2041,7 +2041,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
-## E06.3.3.2.1 — Marcas: envolvente e X — #em-andamento
+## E06.3.3.2.1 — Marcas: envolvente e X — #concluida
 
 **Objetivo:** fazer a situação (variante) das gramáticas sobre o modelo sair certa nas folhas reais. A envolvente passa a ser vista, e o X passa a ser o do próprio símbolo. A concordância com a ficha passa a ser medida.
 
@@ -2063,10 +2063,10 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Critérios de aceite:**
 
-- [ ] Fixtures sintéticas positivas e negativas da envolvente por subcaminho e do X perto do símbolo.
-- [ ] Nas 16 folhas, tp/fp/fn por classe do `modelo` sem piora em nenhuma folha em relação à E06.3.3.1. A concordância de situação de ATERRAMENTO, PARA_RAIOS_MT e PARA_RAIOS_BT com a ficha tem de ser maior que a de antes, e a leitura errada afirmada de fato tem de ser 0.
-- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
-- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+- [x] Fixtures sintéticas positivas e negativas da envolvente por subcaminho e do X perto do símbolo.
+- [x] Nas 16 folhas, tp/fp/fn por classe do `modelo` sem piora em nenhuma folha em relação à E06.3.3.1. A concordância de situação de ATERRAMENTO, PARA_RAIOS_MT e PARA_RAIOS_BT com a ficha tem de ser maior que a de antes, e a leitura errada afirmada de fato tem de ser 0.
+- [x] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
 **Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
 
@@ -2078,7 +2078,71 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Riscos e mitigação:** a envolvente nova pode mudar a caixa e o gasto da haste e do BT. Por isso o plano mede tp/fp/fn, gasto e diff contra a E06.3.3.1.
 
-**Evidências e handoff:** —
+**Evidências e handoff (2026-11-08, orquestrador):**
+
+- **Plano:** `docs/superpowers/plans/2026-11-08-leitura-vetorial-por-poste-e06-3-3-2-1.md`.
+  - A revisão de arquitetura (opus) aprovou com notas na rodada 2. A rodada 0 bloqueou por 6 Importantes: testes do benchmark, regra do X sem prova, fechamento, tipo, aceite e haste. A rodada 1 bloqueou porque o aceite tinha sido afrouxado para "não piora".
+- **Commits:** `0fb4523..1ad2701`, 25 commits. O plano e a revisão estão em `68f1180..119ff0c`.
+  - O último, a onda final de correção (`1ad2701`), pôs a elipse inclinada na guarda de fonte e acrescentou os testes de borda de `_ANISOTROPIA_MINIMA`.
+  - Depois dele, a suíte deu 10494 passed e 5 xfailed.
+- **Relógio:** 0529544 (05:32) até o fechamento, cerca de 3h40 contra a estimativa de 3h00. Os dois Step 0 de medição e a rodada da elipse inclinada ficaram fora da soma.
+- **Revisão final** (opus): **aprovada**. Ela veio com reservas: o único Importante era este handoff, e havia dois Menores (guarda de fonte e borda da anisotropia), resolvidos na onda final e confirmados na re-revisão com escopo.
+- **Critérios de aceite**, no HEAD 0cab39d, com saídas em `tmp/e06-3-3-2-1/final*`:
+  - [x] Fixtures sintéticas positivas e negativas para a envolvente por subcaminho, a elipse inclinada, o X perto do símbolo e a guarda de contexto, todas sob a guarda de fonte.
+  - [x] Sem piora de tp/fp/fn por folha nem por classe em relação a `tmp/e06-3-3-1`. Do `modelo` pelo critério centro: ATERRAMENTO 41/7/2, PARA_RAIOS_MT 10/4/3, PARA_RAIOS_BT 10/2/0.
+  - [x] A **concordância de situação** do `modelo` (centro) foi de **2/14 (14,3%) a 14/14 (100%)**. Por classe: ATERRAMENTO 1/11 → 11/11, MT 1/2 → 2/2, BT 0/1 → 1/1. Ficam fora da conta 49 TP sem situação anotada na ficha. O `atual` fica em 0/11, com 33 sem situação predita.
+  - [x] Leitura errada afirmada de fato = 0: são 20 itens, os mesmos da E06.3.3.1, nenhum novo.
+  - [x] `audit_symbol_packages` deu `errors []` e 34 habilitadas.
+  - [x] `.\IniciarTestes.bat` deu APROVADO: 10480 passed, 5 xfailed, cobertura de 89,47% e complexidade E/F aprovada.
+  - Também conferidos:
+    - diff núcleo × motor igual ao congelado (29 em ambos);
+    - gasto máximo de 189.097 na 016, contra 192.308 na E06.3.3.1;
+    - `osv-scanner` nos 7 locks: `No issues found`;
+    - `check_test_integrity --base 0fb4523`: 17 apontamentos, todos justificados (versão 1.3.0, renomes, chaves da predição, dourado de gasto, inversão da cor, xfail que virou teste).
+- **Triagem em render** (orquestrador):
+  - os 10 tp de PARA_RAIOS_BT saem com a variante do desenho;
+  - na amostra de 9 hastes com envolvente, as 9 saem v002/v006;
+  - o BT sai com 7 v001, 15 v002 e 1 v004; o ATERRAMENTO passou de 20 para 35 v002 e o MT de 10 para 16 v006.
+- **Ciclo:**
+  - onda A com as Tasks 2 e 1; depois a Task 3; depois a Task 4, com uma rodada para a cor;
+  - testador em cada tarefa e testador de etapa, que achou o D-1: a haste da borda de uma envolvente girada;
+  - rodada de correção da Task 1 para a **elipse inclinada**, vista na triagem: 002 e 015 saíam v001.
+- **Entregas:**
+  - `grammar_marcas.py`:
+    - contornos elípticos vindos de subcaminhos fechados de traço, com filtro estrutural antes de pagar gasto, `_TOLERANCIA_FECHAMENTO = 0,05` pt (o oval fecha em 0,0 e o arco aberto mais próximo está a 0,24 pt) e `Contorno.origem`/`subcaminho`;
+    - critério elíptico invariante à rotação, pelos momentos do contorno, e "dentro" e "borda" calculados pela elipse girada;
+    - X com cruzamento a até `_CRUZAMENTO_X = 1,0`×escala do centro: o X próprio fica a no máximo 0,379 e o de vizinho a pelo menos 1,82;
+    - `MarcasDaPagina.contexto` e `marcas_do_contexto`;
+  - `grammar_rect_diagonal.py`: `origens` nos componentes, cor canônica da diagonal, lado maior máximo, haste a partir da borda da envolvente;
+  - concordância de situação no benchmark (`concordancia_situacao`);
+  - `declarative-drawing-model` 1.3.0.
+- **Decisões para o usuário** (tomadas pela opção recomendada):
+  - **BT da 016 em (0,622; 0,276) lido como v004:**
+    - o X é do próprio BT: os braços têm 1,61 e 1,59×escala, com pontos médios no centro, e se cruzam a 0,034×escala;
+    - o portão literal da Task 3, "os 3 casos perdem o X", partia da leitura da E06.3.3.1, que o tomava por X de vizinho. Foi dado por cumprido na intenção: 001 e 013 foram resolvidos;
+    - esse BT não está na ficha.
+  - **Lado maior máximo do BT absoluto em 17,16 pt** (2 × 8,58, o maior corpo medido nas 16 folhas). O BT não tem escala externa. Uma folha plotada em escala maior perderia todos os BT sem aviso.
+  - **Limiares novos fora do R-1:** a rodada da elipse inclinada criou `_ANISOTROPIA_MINIMA = 0,02` e `_RUIDO_INCLINACAO = 1e-9`, que só decidem quando a inclinação vale 0. Os limiares de aceitação elíptica não mudaram.
+  - **Teto de gasto de 200.000 por folha como requisito não funcional:** a folga é de 5,5% na 016, e o transformador soma no mesmo teto.
+  - **Concordância:** o texto livre da ficha fora do vocabulário ("âncora existente", "instalar (verde)") conta como discordante, sem mapa semântico. A normalização corta em "(" ou ";".
+- **Para a E06.3.3.2.2:**
+  - **Envolvente do transformador:** é um círculo, o caso quase isotrópico; use o mesmo `grammar_marcas`. Os testes de borda de `_ANISOTROPIA_MINIMA` já existem (razões 1,005 e 1,05 a 30°).
+  - Rede, Dedicado e IP não se distinguem pela forma (ver a divisão da E06.3.3.2).
+  - **Formas de envolvente ainda não lidas:**
+    - elipse de Béziers girada, que continua tratada como alinhada aos eixos;
+    - oval "explodido", com uma reta por caminho (016 em 0,556; 0,22, que não está na ficha);
+    - arco aberto a até 0,5 pt, que vira contorno pela polilinha, já na base. Mudar isso mexe em `VERSAO_MODELO_DESENHO`.
+  - **Menores:**
+    - tornar `_mesma_cor` pública;
+    - a cor da diagonal compara só o traço da âncora: um retângulo só preenchido nunca casa;
+    - escolher o par de X mais perto do centro, e não o primeiro;
+    - com envolvente grande e excêntrica, o X próprio pode cair além de 1×escala;
+    - em 7 dos 13 v002, um toco de 0,5 a 1,5 pt fica fora dos componentes;
+    - `casa_hastes`/`casa_retangulos_diagonal(candidatos=)` não guardam o contexto;
+    - `variant_id` desconhecido cai em `situacao_nao_declarada`, que hoje dá 0.
+- **Para a E07:**
+  - **R-7:** `model_symbols._observacao` não preenche `situacao`. No runner opt-in, a situação só é derivável da variante. Falta decidir onde fica o mapa variante → situação, no adaptador ou no consumidor.
+  - Cada PARA_RAIOS_BT continua saindo em duas ocorrências (legado e modelo).
 
 ---
 
