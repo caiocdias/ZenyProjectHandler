@@ -41,10 +41,10 @@ def _pagina_com_hastes(quantidade: int) -> PaginaGramatica:
     )
 
 
-def _gasto_total(quantidade: int) -> int:
+def _gasto_e_casamentos(quantidade: int) -> tuple[int, int]:
     contexto = contexto_gramaticas(_pagina_com_hastes(quantidade), limite=10**9)
-    casa_hastes(contexto, _GRAMATICA)
-    return contexto.orcamento.gasto
+    casamentos = casa_hastes(contexto, _GRAMATICA)
+    return contexto.orcamento.gasto, len(casamentos)
 
 
 def test_pagina_hostil_estoura_o_orcamento() -> None:
@@ -62,7 +62,11 @@ def test_pagina_hostil_estoura_o_orcamento() -> None:
 
 def test_gasto_cresce_linear_com_hastes() -> None:
     """Contagem de trabalho (não tempo de parede): 10x mais hastes isoladas, no máximo 15x."""
-    pequeno, grande = _gasto_total(10), _gasto_total(100)
+    (pequeno, casadas_pequeno), (grande, casadas_grande) = (
+        _gasto_e_casamentos(10),
+        _gasto_e_casamentos(100),
+    )
 
+    assert (casadas_pequeno, casadas_grande) == (10, 100)
     assert pequeno > 0
     assert grande / pequeno <= _RAZAO_MAXIMA

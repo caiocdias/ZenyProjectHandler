@@ -132,18 +132,15 @@ _GRAMATICAS_NOVAS = (
 
 
 _EPSILON_MAXIMO = 1e-6
-_CASAS_DECIMAIS_FONTE = 3
 _COORDENADA_GRANDE = 1e5
 
 
 def _numero_parece_coordenada(valor: float) -> bool:
-    """Epsilon (|x| < 1e-6) passa; coordenada tem muitas casas ou é grande e fracionária."""
+    """Epsilon (|x| < 1e-6) passa; coordenada excede as casas da guarda JSON ou é grande."""
     modulo = abs(valor)
     if modulo < _EPSILON_MAXIMO:
         return False
-    expoente = Decimal(repr(modulo)).as_tuple().exponent
-    casas = -expoente if isinstance(expoente, int) else 0
-    if modulo >= 1 and casas > _CASAS_DECIMAIS_FONTE:
+    if _casas_decimais_excessivas(modulo):
         return True
     return modulo >= _COORDENADA_GRANDE and modulo != int(modulo)
 
@@ -173,6 +170,7 @@ def test_gramaticas_novas_passam_na_guarda(arquivo: Path) -> None:
     [
         pytest.param("x = 612345.678\n", id="coordenada-grande"),
         pytest.param("x = 12.34567\n", id="muitas-casas"),
+        pytest.param("x = 0.123456\n", id="normalizada-com-6-casas"),
         pytest.param('x = "origem: folha.pdf"\n', id="string-pdf"),
         pytest.param('def f():\n    """Veja folha.pdf."""\n', id="docstring-pdf"),
     ],
@@ -184,5 +182,5 @@ def test_guarda_de_fonte_reprova(fonte: str, tmp_path: Path) -> None:
 
 
 def test_guarda_de_fonte_aceita_epsilon_e_constantes_curtas() -> None:
-    fonte = "a = 1e-9\nb = 1e-12\nc = 1.25\nd = 0.123456\n"
+    fonte = "a = 1e-9\nb = 1e-12\nc = 1.25\nd = 0.1234\n"
     assert _violacoes_de_fonte(fonte, "s.py") == []
