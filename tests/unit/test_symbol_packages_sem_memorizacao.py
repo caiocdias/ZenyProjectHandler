@@ -127,6 +127,13 @@ _GRAMATICAS_NOVAS = (
     / "analysis"
     / "drawing_model"
     / "grammar_stem.py",
+    _RAIZ
+    / "src"
+    / "zeny_project_handler"
+    / "adapters"
+    / "analysis"
+    / "drawing_model"
+    / "grammar_marcas.py",
     _RAIZ / "tests" / "fixtures" / "symbol_grammars" / "stem_bars.py",
 )
 

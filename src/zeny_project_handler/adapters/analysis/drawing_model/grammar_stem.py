@@ -6,40 +6,44 @@ tolerâncias vêm de um perfil escolhido por um sinal da própria página, a ori
 textos do modelo (R-E06.3.2-10): nas páginas de texto em glifo o símbolo é pequeno (haste de 4 a
 6 pt), abaixo dos mínimos absolutos do legado, e as tolerâncias passam a ser relativas à haste.
 A alternativa descartada é o `PerfilFamilia` do documento (ADR 0016): o método roda por página e a
-família é do documento. A caixa do casamento é o pictograma (R-E06.3.2-3).
+família é do documento. A caixa do casamento é o pictograma (R-E06.3.2-3). A envolvente, o X,
+a cor canônica e o sinal da página vêm das marcas compartilhadas (`grammar_marcas`).
 """
 
 from __future__ import annotations
 
 import math
-from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from itertools import pairwise
 from typing import Any, Final
 
+from zeny_project_handler.adapters.analysis.drawing_model.grammar_marcas import (
+    Contorno,
+    MarcasDaPagina,
+    angulo,
+    cor_canonica,
+    diferenca_angular,
+    envolvente,
+    tem_x,
+    um_traco,
+)
+from zeny_project_handler.adapters.analysis.drawing_model.grammar_marcas import (
+    origem_predominante as origem_predominante,
+)
 from zeny_project_handler.adapters.analysis.drawing_model.model import (
     Caixa,
-    Cor,
     PaginaModelo,
-    Polilinha,
     Ponto,
 )
 from zeny_project_handler.adapters.analysis.drawing_model.symbol_grammars import (
-    _MARGEM_PAGINA,
     ContextoGramatica,
     GradeEspacial,
     OrcamentoConsultas,
     Segmento,
-    _caixa_de_pontos,
 )
 
 _HASTE_MAXIMA: Final = 24.0
-_ENVOLVENTE: Final = (0.95, 3.06)
-# Envolvente achatada numa polilinha fechada: vértices bastantes e todos perto da elipse da caixa.
-_VERTICES_MINIMOS_ELIPSE: Final = 8
-_DESVIO_RAIO_ELIPSE: Final = 0.2
-_ORIGENS: Final = ("glifo", "shx", "nativo")
 
 # Barras: posição ao longo da haste, desvio do centro da primeira e lacunas, relativos a ela.
 _ALCANCE_BARRAS: Final = (0.35, 1.35)
@@ -49,15 +53,6 @@ _LATERAL_RELATIVA_BARRA: Final = 0.2
 _DESVIO_PRIMEIRA_BARRA: Final = 0.15
 _PRIMEIRA_E_A_MAIOR: Final = 0.9
 _MESMA_POSICAO: Final = 0.01
-
-# X de retirada: braços de comprimento relativo à maior barra, cruzando perto dos meios.
-_MARGEM_X: Final = 0.5
-_BRACO_X: Final = (0.8, 3.0)
-_ANGULO_BRACO_X: Final = (math.radians(25), math.radians(65))
-_MEIO_DO_BRACO: Final = (0.3, 0.7)
-_RAZAO_BRACOS: Final = 1.3
-_ABERTURA_X: Final = math.radians(45)
-_TOLERANCIA_COR: Final = 0.02
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,14 +81,6 @@ _PERFIS: Final[Mapping[str, Perfil]] = {
 }
 
 
-def origem_predominante(modelo: PaginaModelo) -> str:
-    """Origem de texto mais frequente da página; sem texto, "nativo". Empate: a maior no nome."""
-    contagem: Counter[str] = Counter(texto.origem for texto in modelo.textos)
-    if not contagem:
-        return "nativo"
-    return max(_ORIGENS, key=lambda origem: (contagem[origem], origem))
-
-
 def perfil_da_pagina(modelo: PaginaModelo) -> Perfil:
     return _PERFIS[origem_predominante(modelo)]
 
@@ -109,14 +96,6 @@ class _Reta:
 
 
 @dataclass(frozen=True, slots=True)
-class _Contorno:
-    """Envolvente candidata: elipse do índice de molduras ou polilinha fechada elíptica."""
-
-    caixa: Caixa
-    caminhos: tuple[int, ...]
-
-
-@dataclass(frozen=True, slots=True)
 class Haste:
     """Haste e barras já validadas e a leitura delas, feita uma vez por página: envolvente,
     pictograma (a caixa do casamento) e braços do X."""
@@ -127,24 +106,9 @@ class Haste:
     base: Ponto
     maior_barra: float
     caixa_barras: Caixa
-    envolvente: _Contorno | None = None
+    envolvente: Contorno | None = None
     pictograma: Caixa | None = None
     x: tuple[Segmento, Segmento] | None = None
-
-
-def _cor_canonica(cor: Cor | None, preenchimento: Cor | None) -> str | None:
-    """As cores do legado (`_canonical_symbol_color`): preto, vermelho e verde; o resto sai."""
-    for bruto in (cor, preenchimento):
-        if bruto is None:
-            continue
-        r, g, b = (round(canal * 255) for canal in bruto)
-        if max(r, g, b) <= 40:
-            return "#000000"
-        if r >= 96 and r >= g * 2 and r >= b * 2:
-            return "#FF0000"
-        if g >= 64 and g >= r * 2 and g >= b * 2:
-            return "#008000"
-    return None
 
 
 def _reta(segmento: Segmento, cor: str, camada: str) -> _Reta | None:
@@ -160,15 +124,6 @@ def _reta(segmento: Segmento, cor: str, camada: str) -> _Reta | None:
         cor,
         camada,
     )
-
-
-def _diferenca_angular(a: float, b: float) -> float:
-    d = abs(a - b) % math.pi
-    return min(d, math.pi - d)
-
-
-def _angulo(segmento: Segmento) -> float:
-    return math.atan2(segmento.b[1] - segmento.a[1], segmento.b[0] - segmento.a[0]) % math.pi
 
 
 def _posicao(origem: Ponto, alvo: Ponto, eixo: Ponto, normal: Ponto) -> tuple[float, float]:
@@ -267,7 +222,7 @@ def _barras_do_lado(
     for cand in candidatos:
         if cand.segmento == haste.segmento or (cand.cor, cand.camada) != (haste.cor, haste.camada):
             continue
-        if abs(_diferenca_angular(haste.angulo, cand.angulo) - math.pi / 2) > perfil.angulo:
+        if abs(diferenca_angular(haste.angulo, cand.angulo) - math.pi / 2) > perfil.angulo:
             continue
         desloc, lateral = _posicao(haste.centro, cand.centro, eixo, normal)
         limite_lateral = max(
@@ -304,13 +259,6 @@ def _selecionar_barras(
     return escolhidas
 
 
-def _um_traco(modelo: PaginaModelo, caminho: int) -> bool:
-    """Caminho de um subcaminho com um item só: a haste, as barras e os braços do X são traços
-    soltos, e o lado de um contorno (moldura, caixa do poste) não conta como nenhum deles."""
-    subcaminhos = modelo.caminhos[caminho].subcaminhos
-    return len(subcaminhos) == 1 and len(subcaminhos[0]) == 1
-
-
 class _Estilos:
     """Cor canônica e camada de cada caminho, lidas uma vez por página."""
 
@@ -326,18 +274,23 @@ class _Estilos:
     def _estilo(self, caminho: int) -> tuple[str, str] | None:
         if caminho not in self._cache:
             desenho = self._modelo.caminhos[caminho]
-            cor = _cor_canonica(desenho.estilo.cor, desenho.estilo.preenchimento)
-            unico = _um_traco(self._modelo, caminho)
+            cor = cor_canonica(desenho.estilo.cor, desenho.estilo.preenchimento)
+            unico = um_traco(self._modelo, caminho)
             estilo = None if cor is None or not unico else (cor, desenho.estilo.camada)
             self._cache[caminho] = estilo
         return self._cache[caminho]
 
 
-def hastes_candidatas(contexto: ContextoGramatica) -> tuple[Haste, ...]:
+def hastes_candidatas(
+    contexto: ContextoGramatica, *, marcas: MarcasDaPagina | None = None
+) -> tuple[Haste, ...]:
     """Todas as hastes com barras da página, já lidas (envolvente, pictograma e X).
 
-    Gasta 1 por semente, as consultas às grades e, se há haste, o índice das envolventes.
+    `marcas` são as da página, compartilhadas com outras gramáticas; sem elas, são criadas
+    aqui. Gasta 1 por semente, as consultas às grades e, se há haste, os contornos das marcas,
+    que só são pagos uma vez por página.
     """
+    marcas = MarcasDaPagina(contexto) if marcas is None else marcas
     perfil = perfil_da_pagina(contexto.pagina.modelo)
     estilos = _Estilos(contexto.pagina.modelo)
     sementes = [
@@ -364,15 +317,19 @@ def hastes_candidatas(contexto: ContextoGramatica) -> tuple[Haste, ...]:
     escolhidas = _deduplicar(achados, contexto.orcamento)
     if not escolhidas:
         return ()
-    contornos = _contornos(contexto)
+    contornos = marcas.contornos
     return tuple(_ler(contexto, contornos, haste) for haste in escolhidas)
 
 
-def _ler(contexto: ContextoGramatica, contornos: GradeEspacial[_Contorno], haste: Haste) -> Haste:
-    envolvente = _envolvente(contornos, haste)
-    pictograma = _pictograma(haste, None if envolvente is None else envolvente.caixa)
-    x = _tem_x(contexto, haste, pictograma)
-    return replace(haste, envolvente=envolvente, pictograma=pictograma, x=x)
+def _ler(contexto: ContextoGramatica, contornos: GradeEspacial[Contorno], haste: Haste) -> Haste:
+    """A menor elipse que contém a ponta e as barras, o pictograma e o X em torno dele."""
+    exigidos = (haste.ponta, *(p for b in haste.barras for p in (b.a, b.b)))
+    caminhos = frozenset({haste.haste.caminho, *(b.caminho for b in haste.barras)})
+    achada = envolvente(contornos, exigidos, haste.maior_barra, haste.ponta, caminhos)
+    pictograma = _pictograma(haste, None if achada is None else achada.caixa)
+    proprios = frozenset({haste.haste, *haste.barras})
+    x = tem_x(contexto, pictograma, haste.maior_barra, angulo(haste.haste), proprios)
+    return replace(haste, envolvente=achada, pictograma=pictograma, x=x)
 
 
 def _montar(haste: _Reta, barras: Sequence[_Reta]) -> Haste:
@@ -420,90 +377,6 @@ def _deduplicar(achados: list[Haste], orcamento: OrcamentoConsultas) -> tuple[Ha
     return tuple(escolhidos)
 
 
-def _dentro_da_elipse(caixa: Caixa, ponto: Ponto, tolerancia: float) -> bool:
-    a = (caixa[2] - caixa[0]) / 2 + tolerancia
-    b = (caixa[3] - caixa[1]) / 2 + tolerancia
-    if a <= 0 or b <= 0:
-        return False
-    cx, cy = (caixa[0] + caixa[2]) / 2, (caixa[1] + caixa[3]) / 2
-    return ((ponto[0] - cx) / a) ** 2 + ((ponto[1] - cy) / b) ** 2 <= 1.0
-
-
-def _elipse_poligonal(polilinha: Polilinha) -> Caixa | None:
-    """Caixa da polilinha fechada cujos vértices estão todos perto da elipse inscrita nela."""
-    if (
-        not polilinha.fechada
-        or not polilinha.origens
-        or len(polilinha.pontos) < _VERTICES_MINIMOS_ELIPSE
-    ):
-        return None
-    caixa = _caixa_de_pontos(polilinha.pontos)
-    if caixa is None:
-        return None
-    a, b = (caixa[2] - caixa[0]) / 2, (caixa[3] - caixa[1]) / 2
-    if a <= 0 or b <= 0:
-        return None
-    cx, cy = (caixa[0] + caixa[2]) / 2, (caixa[1] + caixa[3]) / 2
-    elipticos = all(
-        abs(math.hypot((x - cx) / a, (y - cy) / b) - 1.0) <= _DESVIO_RAIO_ELIPSE
-        for x, y in polilinha.pontos
-    )
-    return caixa if elipticos else None
-
-
-def _contornos(contexto: ContextoGramatica) -> GradeEspacial[_Contorno]:
-    """Índice das envolventes da página: as elipses das molduras (Béziers e círculos) e as
-    polilinhas fechadas elípticas; cada polilinha fechada examinada gasta 1."""
-    modelo = contexto.pagina.modelo
-    contornos = [
-        _Contorno(moldura.caixa, (moldura.caminho,))
-        for moldura in contexto.molduras
-        if moldura.forma == "elipse"
-    ]
-    fechadas = [p for p in modelo.primitivas if isinstance(p, Polilinha) and p.fechada]
-    contexto.orcamento.gastar(len(fechadas))
-    for polilinha in fechadas:
-        caixa = _elipse_poligonal(polilinha)
-        if caixa is not None:
-            contornos.append(_Contorno(caixa, tuple(sorted(set(polilinha.origens)))))
-    limites = (
-        -_MARGEM_PAGINA,
-        -_MARGEM_PAGINA,
-        modelo.largura + _MARGEM_PAGINA,
-        modelo.altura + _MARGEM_PAGINA,
-    )
-    return GradeEspacial(((c.caixa, c) for c in contornos), limites, contexto.orcamento)
-
-
-def _envolvente(contornos: GradeEspacial[_Contorno], haste: Haste) -> _Contorno | None:
-    """A menor elipse que contém a ponta e as barras, como `_enclosing_outline` do legado."""
-    minimo, maximo = _ENVOLVENTE
-    longa = haste.maior_barra
-    proprios = {haste.haste.caminho, *(b.caminho for b in haste.barras)}
-    tolerancia = max(0.01, longa * 0.02)
-    exigidos = (haste.ponta, *(p for b in haste.barras for p in (b.a, b.b)))
-    alcance = longa * maximo
-    janela = (
-        haste.ponta[0] - alcance,
-        haste.ponta[1] - alcance,
-        haste.ponta[0] + alcance,
-        haste.ponta[1] + alcance,
-    )
-    opcoes: list[tuple[float, tuple[int, ...], _Contorno]] = []
-    for contorno in contornos.consultar(janela):
-        caixa = contorno.caixa
-        diametro = max(caixa[2] - caixa[0], caixa[3] - caixa[1])
-        if (
-            proprios.isdisjoint(contorno.caminhos)
-            and minimo * longa <= diametro <= maximo * longa
-            and all(_dentro_da_elipse(caixa, p, tolerancia) for p in exigidos)
-        ):
-            opcoes.append((diametro, contorno.caminhos, contorno))
-    if not opcoes:
-        return None
-    return min(opcoes, key=lambda opcao: (opcao[0], opcao[1]))[2]
-
-
 def _pictograma(haste: Haste, envolvente: Caixa | None) -> Caixa:
     """`_symbol_footprint`: envolvente e barras, ou barras e o trecho da haste até a maior barra."""
     barras = haste.caixa_barras
@@ -526,74 +399,6 @@ def _pictograma(haste: Haste, envolvente: Caixa | None) -> Caixa:
         max(barras[2], haste.ponta[0], inicio[0]),
         max(barras[3], haste.ponta[1], inicio[1]),
     )
-
-
-def _intersecao(a: Segmento, b: Segmento) -> tuple[float, float] | None:
-    """Parâmetros (ta, tb) em (0, 1) do cruzamento próprio dos dois segmentos."""
-    dax, day = a.b[0] - a.a[0], a.b[1] - a.a[1]
-    dbx, dby = b.b[0] - b.a[0], b.b[1] - b.a[1]
-    det = dax * dby - day * dbx
-    if abs(det) < 1e-12:
-        return None
-    ex, ey = b.a[0] - a.a[0], b.a[1] - a.a[1]
-    ta = (ex * dby - ey * dbx) / det
-    tb = (ex * day - ey * dax) / det
-    return (ta, tb) if 0.0 < ta < 1.0 and 0.0 < tb < 1.0 else None
-
-
-def _formam_x(primeiro: Segmento, segundo: Segmento, contexto: ContextoGramatica) -> bool:
-    cruz = _intersecao(primeiro, segundo)
-    if cruz is None:
-        return False
-    c1, c2 = math.dist(primeiro.a, primeiro.b), math.dist(segundo.a, segundo.b)
-    caminhos = contexto.pagina.modelo.caminhos
-    return (
-        all(_MEIO_DO_BRACO[0] <= t <= _MEIO_DO_BRACO[1] for t in cruz)
-        and max(c1, c2) <= min(c1, c2) * _RAZAO_BRACOS
-        and _diferenca_angular(_angulo(primeiro), _angulo(segundo)) >= _ABERTURA_X
-        and _mesma_cor(caminhos[primeiro.caminho].estilo.cor, caminhos[segundo.caminho].estilo.cor)
-    )
-
-
-def _mesma_cor(a: Cor | None, b: Cor | None) -> bool:
-    """Mesma cor canônica do legado; fora delas, canais a no máximo `_TOLERANCIA_COR`."""
-    canonica_a, canonica_b = _cor_canonica(a, None), _cor_canonica(b, None)
-    if canonica_a is not None or canonica_b is not None:
-        return canonica_a == canonica_b
-    if a is None or b is None:
-        return a is b
-    return all(abs(x - y) <= _TOLERANCIA_COR for x, y in zip(a, b, strict=True))
-
-
-def _tem_x(
-    contexto: ContextoGramatica, haste: Haste, pictograma: Caixa
-) -> tuple[Segmento, Segmento] | None:
-    """Dois braços soltos de mesma cor e comprimento parecido que se cruzam perto dos meios."""
-    longa = haste.maior_barra
-    margem = longa * _MARGEM_X
-    janela = (
-        pictograma[0] - margem,
-        pictograma[1] - margem,
-        pictograma[2] + margem,
-        pictograma[3] + margem,
-    )
-    eixo = _angulo(haste.haste)
-    proprios = {haste.haste, *haste.barras}
-    bracos = [
-        s
-        for s in contexto.grade_segmentos.consultar(janela)
-        if s not in proprios
-        and _um_traco(contexto.pagina.modelo, s.caminho)
-        and longa * _BRACO_X[0] <= math.dist(s.a, s.b) <= longa * _BRACO_X[1]
-        and _ANGULO_BRACO_X[0] <= _diferenca_angular(_angulo(s), eixo) <= _ANGULO_BRACO_X[1]
-    ]
-    # Cada par examinado é uma consulta: muitas diagonais longas na janela pagam o produto.
-    contexto.orcamento.gastar(len(bracos) * (len(bracos) - 1) // 2)
-    for i, primeiro in enumerate(bracos):
-        for segundo in bracos[i + 1 :]:
-            if _formam_x(primeiro, segundo, contexto):
-                return primeiro, segundo
-    return None
 
 
 def casa_hastes(
