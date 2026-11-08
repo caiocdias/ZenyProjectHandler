@@ -946,3 +946,155 @@ def test_este_arquivo_passa_na_guarda_de_fonte() -> None:
     assert _violacoes_de_fonte(fonte, _ARQUIVO.name) == []
     assert _violacoes_de_comentarios(fonte, _ARQUIVO.name) == []
     assert _violacoes_de_bytes_e_inteiros(fonte, _ARQUIVO.name) == []
+
+
+# Lacunas da revisão da Task 3 (rulings do orquestrador) -----------------------------------------
+
+
+def _wipeout(pagina: pymupdf.Page, *, branca_duplicada: bool = False) -> None:
+    """Fundo branco inteiro de traço preto, com as duas metades sem traço por cima: a ciano e a
+    branca (duas vezes, com `branca_duplicada`)."""
+    a, b, c = vertices()
+    m = _meio(b, c)
+    _poligono(pagina, [a, b, c], PRETO, BRANCO)
+    _poligono(pagina, [m, a, b], None, CIANO)
+    for _ in range(2 if branca_duplicada else 1):
+        _poligono(pagina, [m, a, c], None, BRANCO)
+
+
+@pytest.mark.parametrize("branca_duplicada", [False, True], ids=["branca_uma_vez", "branca_duas"])
+def test_wipeout_com_as_duas_metades_e_meio_ciano(branca_duplicada: bool) -> None:
+    """Revisão I-1: o fundo branco inteiro e a metade branca formam, os dois, o mesmo triângulo
+    com a metade ciano; o desenho é um meio ciano só, e não um ciano ambíguo recusado."""
+    assert _desenhada(lambda p: _wipeout(p, branca_duplicada=branca_duplicada)) == (
+        variantes_do_grupo(_BASE_MEIO_CIANO)
+    )
+
+
+def _triangulo_inscrito(lado: float) -> list[Ponto]:
+    """Base no lado de baixo de um quadrado de lado `lado` e ápice no meio do lado de cima."""
+    x0, y0 = CENTRO[0] - lado / 2, CENTRO[1] - lado / 2
+    return [(CENTRO[0], y0), (x0, y0 + lado), (x0 + lado, y0 + lado)]
+
+
+def test_triangulo_vazado_inscrito_num_quadrado_nao_casa() -> None:
+    """Revisão I-2: a PLATAFORMA (`triangle_in_frame`, `fill: empty`) não é transformador."""
+
+    def desenhar(p: pymupdf.Page) -> None:
+        x0, y0 = CENTRO[0] - LADO / 2, CENTRO[1] - LADO / 2
+        _poligono(
+            p, [(x0, y0), (x0 + LADO, y0), (x0 + LADO, y0 + LADO), (x0, y0 + LADO)], PRETO, None
+        )
+        _poligono(p, _triangulo_inscrito(LADO), PRETO, None)
+
+    assert _desenhada(desenhar) == set()
+
+
+def test_controle_triangulo_inscrito_sem_o_quadrado_casa_o_contorno() -> None:
+    """Controle do anterior: o mesmo triângulo, sem o quadrado, passa na forma e casa."""
+    assert _desenhada(lambda p: _poligono(p, _triangulo_inscrito(LADO), PRETO, None)) == (
+        variantes_do_grupo(_BASE_CONTORNO)
+    )
+
+
+def _seta_vazada_pela_base(pagina: pymupdf.Page) -> None:
+    """Ponta de seta de traço, sem preenchimento, com a base apoiada no fim de uma linha longa."""
+    a, b, c = vertices(lado=LADO / 2)
+    m = _meio(b, c)
+    pagina.draw_line((m[0], m[1] + 10 * LADO), m, color=PRETO, width=0.14)
+    _poligono(pagina, [a, b, c], PRETO, None)
+
+
+def _seta_vazada_pelo_lado(pagina: pymupdf.Page) -> None:
+    """A mesma ponta vazada, com um lado apoiado no fim de uma linha longa perpendicular a ele."""
+    a, b, _ = vertices(lado=LADO / 2)
+    m = _meio(a, b)
+    centro = _caixa_dos(vertices(lado=LADO / 2))
+    cx, cy = (centro[0] + centro[2]) / 2, (centro[1] + centro[3]) / 2
+    dx, dy = m[0] - cx, m[1] - cy
+    norma = math.hypot(dx, dy)
+    longe = (m[0] + dx / norma * 10 * LADO, m[1] + dy / norma * 10 * LADO)
+    pagina.draw_line(longe, m, color=PRETO, width=0.14)
+    _poligono(pagina, vertices(lado=LADO / 2), PRETO, None)
+
+
+@pytest.mark.parametrize(
+    "desenhar",
+    [
+        pytest.param(_seta_vazada_pela_base, id="pela_base"),
+        pytest.param(_seta_vazada_pelo_lado, id="pelo_lado"),
+    ],
+)
+def test_ponta_de_seta_vazada_no_fim_de_linha_nao_casa(
+    desenhar: Callable[[pymupdf.Page], object],
+) -> None:
+    """Revisão I-2: a seta vazada encosta a base ou um lado na linha, e não um vértice."""
+    assert _desenhada(desenhar) == set()
+
+
+def test_controle_trafo_com_haste_do_vertice_para_a_linha_casa_o_contorno() -> None:
+    """Controle da seta: a haste sai de um vértice para a linha (estilo `desenhar_trafo_e05`)."""
+
+    def desenhar(p: pymupdf.Page) -> None:
+        desenhar_trafo_e05(p, _BASE_CONTORNO)
+        fora = ponta_da_haste()
+        p.draw_line((fora[0] - 10 * LADO, fora[1]), (fora[0] + 10 * LADO, fora[1]), color=PRETO)
+
+    assert _desenhada(desenhar) == variantes_do_grupo(_BASE_CONTORNO)
+
+
+def _pictograma_de_contorno(
+    pagina: pymupdf.Page, grupo: Grupo, cor: Cor, dashes: str | None
+) -> None:
+    """O pictograma do grupo com o contorno de `cor` e `dashes`; no `half_cyan`, as metades só de
+    preenchimento (ciano e branca), sem traço, para o contorno ser o único traço do triângulo."""
+    fill, enclosure, removal = grupo
+    a, b, c = vertices()
+    if fill == "half_cyan":
+        m = _meio(b, c)
+        _poligono(pagina, [m, a, b], None, CIANO)
+        _poligono(pagina, [m, a, c], None, BRANCO)
+    _poligono(pagina, [a, b, c], cor, None, dashes=dashes)
+    pagina.draw_line(a, ponta_da_haste(), color=PRETO, width=0.14)
+    if enclosure == "ellipse":
+        pagina.draw_circle(CENTRO, raio_envolvente(), color=VERDE, width=0.14)
+    if removal:
+        for p0, p1 in bracos_x():
+            pagina.draw_line(p0, p1, color=VERMELHO, width=0.5)
+
+
+@pytest.mark.parametrize(
+    ("cor", "dashes"),
+    [pytest.param(PRETO, "[1 1] 0", id="tracejado"), pytest.param(ROXO, None, id="roxo")],
+)
+@pytest.mark.parametrize("grupo", GRUPOS, ids=_id_grupo)
+def test_contorno_tracejado_ou_roxo_nao_casa_em_nenhum_grupo(
+    grupo: Grupo, cor: Cor, dashes: str | None
+) -> None:
+    """Revisão Minor 1: o tracejado e o roxo recusados também com as metades ciano e branca,
+    que hoje formam o meio ciano sem passar pelo contorno."""
+    assert _desenhada(lambda p: _pictograma_de_contorno(p, grupo, cor, dashes)) == set()
+
+
+@pytest.mark.parametrize("grupo", GRUPOS, ids=_id_grupo)
+def test_controle_contorno_preto_continuo_casa_o_grupo(grupo: Grupo) -> None:
+    """Controle do anterior: o mesmo desenho de contorno preto contínuo casa o seu grupo."""
+    assert _desenhada(lambda p: _pictograma_de_contorno(p, grupo, PRETO, None)) == (
+        variantes_do_grupo(grupo)
+    )
+
+
+def test_metade_de_outra_cor_emitida_duas_vezes_continua_outline() -> None:
+    """Revisão Minor 2: o mesmo preenchimento vermelho duas vezes não soma área em `_cheio`; o
+    desenho segue a ruling da metade de outra cor, `outline`."""
+
+    def desenhar(p: pymupdf.Page) -> None:
+        a, b, c = vertices()
+        m = _meio(b, c)
+        _poligono(p, [a, b, c], PRETO, None)
+        _poligono(p, [m, a, b], None, VERMELHO)
+        _poligono(p, [m, a, b], None, VERMELHO)
+        _poligono(p, [m, a, c], None, BRANCO)
+        p.draw_line(a, ponta_da_haste(), color=PRETO, width=0.14)
+
+    assert _desenhada(desenhar) == variantes_do_grupo(_BASE_CONTORNO)
