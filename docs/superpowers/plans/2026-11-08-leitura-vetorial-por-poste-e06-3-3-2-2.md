@@ -37,7 +37,7 @@
   - testes sem dependência de ordem, cwd, porta ou arquivo fixo.
 - mypy strict, ruff e format. Complexidade abaixo de 31.
 - Não tocar `scripts/benchmark_ficha_poste.py` nem `tests/conftest.py`.
-- **Gasto máximo por folha: alvo de 200.000.** A 016 está em 189.097. Se passar, a tarefa otimiza ou reporta DONE_WITH_CONCERNS. O alvo só sobe por ruling, com o valor registrado no handoff (R-6).
+- **Gasto máximo por folha: alvo de 200.000.** A 016 está em 189.097. Se passar, a tarefa otimiza ou reporta DONE_WITH_CONCERNS. O alvo só sobe por ruling, com o valor registrado no handoff (R-6), **até 220.000**; acima disso, a etapa estaciona e pergunta ao usuário.
 - Worktree da etapa com `.venv`.
   - Em onda, use `PYTHONPATH=<worktree da tarefa>/src` com o `.venv` da etapa.
   - A suíte inteira usa `-n` = 20 ÷ suítes ativas.
@@ -141,7 +141,7 @@
   - **cada candidato é classificado uma vez**: `fill`, envolvente e X são lidos e pagos por candidato, e não por variante;
     - `casa_triangulos` só filtra a classificação pronta pela gramática da variante, sem gasto novo;
     - as 15 variantes custam o mesmo que as 6 formas;
-    - a Task 5 prova isso, comparando o gasto de uma página com 15 variantes habilitadas e com 6 (uma por grupo);
+    - a Task 3 prova isso (`test_classificacao_uma_vez_por_candidato`), comparando o gasto de uma página com 15 variantes habilitadas e com 6 (uma por grupo);
   - a envolvente e o X só são pedidos para candidatos que passam no triângulo.
   - **Teto:** se o gasto da 016 passar de 200.000, a ruling pode subir o alvo de medição com o valor, **até 220.000**, e o caso vai a "Decisões para o usuário" (folga do teto). Acima de 220.000, a etapa estaciona e a pergunta vai ao usuário, porque o teto é requisito não funcional pendente de decisão desde a E06.3.3.2.1. `LIMITE_CONSULTAS_PAGINA` (2.000.000) não muda.
 
@@ -181,7 +181,11 @@
 - **Cada hipótese** é um `desenvolvedor` com `isolation: "worktree"`, sem commit e sem a suíte inteira. Ele:
   - implementa `grammar_triangulo.py` e o despacho (R-1, R-3, R-6) com as marcas de `grammar_marcas.py`, que ele não altera.
     - Se precisar, descreve a mudança em `conclusoes.md`.
-    - Se a hipótese vencedora depender dela, o orquestrador abre uma Task 2b antes da Task 3, que muda `grammar_marcas.py` com prova de invariância das três classes já entregues, e registra a ruling.
+    - Se a hipótese vencedora depender dela, o orquestrador abre uma Task 2b antes da Task 3 e registra a ruling. Campos pré-declarados da Task 2b:
+      - Estimativa: até 45 min. Depende de: laboratório. Risco: alto.
+      - Arquivos: `drawing_model/grammar_marcas.py` e os testes dele (`tests/unit/test_grammar_marcas*.py`).
+      - Prova: tp/fp/fn por folha das três classes iguais a `tmp/e06-3-3-2-1/final`, concordância de 14/14 e diff igual ao congelado.
+      - A mudança de saída fica coberta pela 1.4.0 da Task 4, na mesma etapa (ADR 0006). A soma é recalculada.
     - Se a hipótese não depender dela, a mudança vai ao handoff;
   - habilita as 15 variantes no JSON só no worktree, com as gramáticas da tabela de R-1;
   - escreve testes focados com os positivos e negativos do Review Focus 1 e 2;
@@ -214,6 +218,18 @@
   O desempate é o menor número de FP brutos e, depois, o menor gasto. Se nenhuma hipótese cumprir tudo, escolhe-se a de maior tp com 0 leitura errada de fato, e aplica-se R-4 ou R-6 com ruling.
 - **Parada:** 60 min por hipótese, ou 14/≤2/0 com 0 leitura errada de fato e os FP triados.
 - **Entrega:** em `tmp/laboratorio/e06-3-3-2-2/<hipotese>/`, os arquivos `patch.diff`, `metricas.json` e `conclusoes.md`, com os recortes dos FP em PNG.
+
+## Revisão de arquitetura
+
+- **Veredito:** aprovado com notas, na rodada 1 (`revisor-arquitetura`, opus).
+  - Rodada 0: bloqueado por 2 Importantes. O primeiro era a chave do agrupamento sem classe, família, papel e destino. O segundo era o gasto cobrado por variante e o teto sem limite. Havia ainda 9 Menores.
+  - Rodada 1: aprovado com notas.
+- **Modelo:** opus.
+- **Notas Menores da rodada 1, aplicadas antes da execução:**
+  - a R-6 aponta a Task 3 como a que prova o gasto;
+  - a Task 2b condicional tem os campos pré-declarados;
+  - o teto de 220.000 está nas Global Constraints.
+- **Sem decisão de arquitetura para o usuário:** a R-2 é decisão do plano, e a R-4 é ruling de critério, que vai a "Decisões para o usuário".
 
 ## Tasks
 
