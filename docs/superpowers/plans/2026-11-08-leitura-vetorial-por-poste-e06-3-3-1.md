@@ -4,7 +4,7 @@
 
 **Goal:** reconhecer PARA_RAIOS_BT (retângulo atravessado por diagonal) sobre o modelo de desenho, onde o analisador atual não casa nenhuma das 10 referências, sem leitura errada de fato e sem mexer nas classes já reconhecidas.
 
-**Architecture:** mesmo desenho da haste da E06.3.2.2: um tipo de gramática só do modelo (`rect_diagonal`), executado só pelo método `declarative-drawing-model` no runner opt-in. A envolvente, o X de retirada, a cor canônica e o perfil por sinal da página saem de `grammar_stem.py` para um módulo comum (`grammar_marcas.py`), usado pelas duas gramáticas, sem mudar a saída da haste. A gramática nova vive em `grammar_rect_diagonal.py`; a caixa é o pictograma (envolvente quando há, senão o retângulo com a diagonal), e os demais caminhos entram como componentes.
+**Architecture:** mesmo desenho da haste da E06.3.2.2: um tipo de gramática só do modelo (`rect_diagonal`), executado só pelo método `declarative-drawing-model` no runner opt-in. A envolvente, o X de retirada, a cor canônica, o sinal da página (origem predominante do texto) e as marcas da página calculadas uma vez saem de `grammar_stem.py` para um módulo comum (`grammar_marcas.py`), usado pelas duas gramáticas, sem mudar a saída da haste; cada gramática mantém a própria tabela de perfil por origem. A gramática nova vive em `grammar_rect_diagonal.py`; a caixa é o pictograma (envolvente quando há, senão o retângulo com a diagonal), e os demais caminhos entram como componentes.
 
 **Tech Stack:** Python 3.11–3.13, PyMuPDF (só adaptadores, scripts e fixtures), JSON + JSON Schema, pytest (xdist), mypy strict.
 
@@ -59,9 +59,14 @@
   - leitura errada afirmada **de fato** = 0, com triagem visual das leituras erradas e dos FP de PARA_RAIOS_BT, como na E06.3.2.2;
   - as demais classes do `modelo` iguais, por folha, às de `tmp/e06-3-2-2/simbolos/simbolos-ficha.json`;
   - diff núcleo × motor igual ao congelado da E06.2.2.2.
-  - Gasto máximo por folha: alvo ≤ 200.000 (a 016 já gasta 187.659). Antes de subir o alvo, a Task 3 calcula contornos e sinal da página uma vez por contexto, compartilhados pelas duas gramáticas, sem mudar o gasto da haste se ela calcular primeiro. Se ainda passar, a ruling sobe o alvo de medição com o valor no handoff e registra que isso corrói a folga de 10× da R-E06.2.2.2-4. `LIMITE_CONSULTAS_PAGINA` (2.000.000) não muda.
-- **R-E06.3.3.1-6, fusão com o legado:** para PARA_RAIOS_BT, a caixa do legado é a união de haste, corpo e diagonal (`pymupdf_symbols.py:894`, fora de `_PICTOGRAM_CLASSES`), e `_same_occurrence` exige centro e tamanho próximos. Com a caixa do pictograma, a fusão provavelmente não acontece. Não se mexe no legado: isso quebraria "`atual` igual ao congelado" e pediria versão nova dele pelo ADR 0006. A Task 4 mede em teste de runner e registra o resultado. Se não fundir, a ruling aceita duas ocorrências no runner opt-in até a E09, com o handoff "Para a E07".
+  - Gasto máximo por folha: alvo ≤ 200.000 (a 016 já gasta 187.659). Os contornos e o sinal da página são calculados uma vez por contexto e compartilhados pelas duas gramáticas: `MarcasDaPagina` (Task 2) é preguiçoso, e numa página só com haste o gasto não muda, porque os contornos só são pagos quando alguém os pede. Se ainda passar, a ruling sobe o alvo de medição com o valor no handoff e registra que isso corrói a folga de 10× da R-E06.2.2.2-4. `LIMITE_CONSULTAS_PAGINA` (2.000.000) não muda.
 - **R-E06.3.3.1-5, referências suspeitas:** a 006 `P8-para-raios` (rotulada PARA_RAIOS_MT) é um retângulo com diagonal; uma predição de PARA_RAIOS_BT ali é leitura certa pelo inventário, e a triagem a classifica como troca de rótulo. O handoff a soma à lista da curadoria.
+- **R-E06.3.3.1-6, fusão com o legado:** para PARA_RAIOS_BT, a caixa do legado é a união de haste, corpo e diagonal (`pymupdf_symbols.py:894`, fora de `_PICTOGRAM_CLASSES`). `_same_occurrence` exige centro e tamanho próximos, então com a caixa do pictograma a fusão provavelmente não acontece. Não se mexe no legado: isso quebraria "`atual` igual ao congelado" e pediria versão nova dele pelo ADR 0006.
+
+  A Task 4 mede em teste de runner, com um desenho que satisfaça as duas regras (a do legado e a da gramática nova), e registra um de três resultados:
+  - funde;
+  - não funde: duas ocorrências aceitas no runner opt-in até a E09, com o handoff "Para a E07";
+  - nenhum desenho satisfaz as duas regras: "o legado e o modelo não se sobrepõem", também registrado.
 
 ## File Structure
 
@@ -72,7 +77,7 @@
 | `tests/unit/test_gramatica_so_modelo.py:169`, `tests/unit/test_habilitacao_hastes_ataque.py:102` | só a asserção de `GRAMATICAS_SO_MODELO` (passa a conter `stem_bars` e `rect_diagonal`) | 1 |
 | `src/zeny_project_handler/adapters/analysis/drawing_model/grammar_marcas.py` (novo), `drawing_model/grammar_stem.py` | marcas compartilhadas | 2 |
 | `src/zeny_project_handler_server/symbol_execution.py` | `grammar_marcas` (2) e `grammar_rect_diagonal` (3) no digest | 2, 3 |
-| `tests/unit/test_grammar_marcas.py` (novo) | envolvente, X, perfil e cor, isolados | 2 |
+| `tests/unit/test_grammar_marcas.py` (novo) | envolvente, X, origem predominante, cor e marcas da página preguiçosas, isolados | 2 |
 | `src/zeny_project_handler/adapters/analysis/drawing_model/grammar_rect_diagonal.py` (novo), `drawing_model/symbol_matcher.py` | gramática e despacho | 3 |
 | `src/zeny_project_handler/adapters/analysis/model_symbols.py` | `_VERSAO = "1.2.0"` | 4 |
 | `tests/fixtures/symbol_grammars/rect_diagonal.py` (novo), `tests/unit/test_grammar_rect_diagonal.py` (novo) | fixture, gramática | 3 |
@@ -85,7 +90,7 @@
 
 Ondas: Onda A, Tasks 1 e 2 (arquivos disjuntos); laboratório sobre a Onda A integrada; Task 3; Onda B, Tasks 4 e 5; Task 6 (medição, orquestrador).
 
-Soma: 3h00 (25 + 35 + 45 + 35 + 20 + 20), mais o laboratório (caixa de 60 min). O relógio começa em 80cfff2; vale a regra de estouro de 4h30 do protocolo (a E06.3.2.2 levou 3h36 com o mesmo formato).
+Soma: 3h05 (25 + 35 + 45 + 40 + 20 + 20), mais o laboratório (caixa de 60 min). O relógio começa em 80cfff2; vale a regra de estouro de 4h30 do protocolo (a E06.3.2.2 levou 3h36 com o mesmo formato).
 
 ## Laboratório (depois da Onda A)
 
@@ -96,7 +101,7 @@ Soma: 3h00 (25 + 35 + 45 + 35 + 20 + 20), mais o laboratório (caixa de 60 min).
   - **H-1, moldura primeiro:** candidatos de `contexto.molduras` (retângulo) mais quadrilátero fechado girado das polilinhas; a diagonal é um segmento que cruza o retângulo de ponta a ponta e passa além dele.
   - **H-2, diagonal primeiro:** cada segmento de comprimento plausível que atravessa um quadrilátero fechado (consulta à grade) é semente; o quadrilátero precisa ter a proporção do para-raios (lado maior/menor entre 2 e 4,5, como o legado; a faixa final é a do laboratório).
   - **H-3, envolvente primeiro:** a elipse de `grammar_marcas` é semente para v002/v003; dentro dela, quadrilátero e diagonal. Para v001/v004 (sem envolvente), cai em H-2.
-  - Todas usam o perfil por sinal da página de `grammar_marcas`.
+  - Todas usam o sinal da página (`origem_predominante`) e as `MarcasDaPagina` de `grammar_marcas`, com a própria tabela de perfil por origem dentro de `grammar_rect_diagonal.py`.
 - **Comandos** (no worktree da hipótese, `.venv` da etapa e `PYTHONPATH=<worktree>/src`, `--processos 6`; `<rodada E03>` = `<checkout principal>/tmp/curadoria-simbologia/20261103-2300-fichas`): `python -m scripts.benchmark_simbolos_ficha --rodada <rodada E03> --saida <checkout principal>/tmp/laboratorio/e06-3-3-1/<hipotese>/iter-<k> --metodo modelo --processos 6`; no fim, `python -m scripts.diff_simbolos_nucleo_motor ... --saida .../diff-<k> --processos 6` para o gasto.
 - **Métrica:** `total.modelo.centro.por_classe.PARA_RAIOS_BT` (tp/fp/fn); `leituras_erradas.por_classe.PARA_RAIOS_BT`; as outras classes iguais às de `tmp/e06-3-2-2/simbolos/simbolos-ficha.json`; gasto máximo e `gasto_motivo`; tempo máximo por folha.
 - **Vitória:** maior F1 de PARA_RAIOS_BT, com quatro condições: leitura errada de fato = 0 (triagem rápida das leituras erradas e dos FP da hipótese), precisão ≥ 50%, outras classes intactas e gasto ≤ 200.000. Se nenhuma hipótese ficar no gasto, escolhe-se pela qualidade e aplica-se R-4. Desempate: menor gasto.
@@ -111,6 +116,7 @@ Soma: 3h00 (25 + 35 + 45 + 35 + 20 + 20), mais o laboratório (caixa de 60 min).
 
 **Files:**
 - Modify: `src/zeny_project_handler/adapters/analysis/declarative_symbols.py`, `docs/schemas/pacotes-simbologia.schema.json`
+- Modify (só a asserção de `GRAMATICAS_SO_MODELO`): `tests/unit/test_gramatica_so_modelo.py:169`, `tests/unit/test_habilitacao_hastes_ataque.py:102`
 - Create: `tests/unit/test_gramatica_rect_diagonal_tipo.py`
 
 **Interfaces:**
@@ -120,7 +126,7 @@ Soma: 3h00 (25 + 35 + 45 + 35 + 20 + 20), mais o laboratório (caixa de 60 min).
 - [ ] **Step 1: Escrever os testes** com pacotes em `tmp_path` (`carregar_pacotes(packages_dir=tmp_path)`): `test_rect_diagonal_valido_carrega` (as 4 combinações), `test_rect_diagonal_invalido_recusa` (campo a mais ou a menos, `enclosure` desconhecido ou lista, `removal_mark` não booleano, `max_span` 0, 73, NaN ou booleano), `test_schema_tem_o_ramo_rect_diagonal` (estrutural, sem biblioteca, como o da `stem_bars`), `test_motor_ignora_rect_diagonal` (o motor não a observa nem a anuncia) e `test_perfil_do_modelo_anuncia_rect_diagonal`.
 - [ ] **Step 2: Rodar** e ver falhar.
 - [ ] **Step 3: Implementar.**
-- [ ] **Step 4: Rodar** o arquivo, `tests/unit/test_gramatica_so_modelo*.py`, `tests/unit/test_declarative_symbol_packages.py`, o auditor (`errors []`), ruff, format e mypy.
+- [ ] **Step 4: Rodar** o arquivo, `tests/unit/test_gramatica_so_modelo*.py`, `tests/unit/test_habilitacao_hastes_ataque.py`, `tests/unit/test_declarative_symbol_packages.py`, o auditor (`errors []`), ruff, format e mypy.
 - [ ] **Step 5: Commit** (`feat: tipo de gramatica rect_diagonal so do modelo`).
 
 ### Task 2: Marcas compartilhadas
@@ -132,9 +138,9 @@ Soma: 3h00 (25 + 35 + 45 + 35 + 20 + 20), mais o laboratório (caixa de 60 min).
 - Modify: `src/zeny_project_handler/adapters/analysis/drawing_model/grammar_stem.py`, `src/zeny_project_handler_server/symbol_execution.py`
 
 **Interfaces:**
-- Produces, em `grammar_marcas.py` (nomes públicos): `origem_predominante(modelo) -> str`, `cor_canonica(cor, preenchimento) -> str | None`, `Contorno` (caixa e caminho), `contornos(contexto) -> GradeEspacial[Contorno]`, `envolvente(contornos, exigidos: Sequence[Ponto], escala: float, ancora: Ponto, proprios: frozenset[int]) -> Contorno | None` e `tem_x(contexto, pictograma: Caixa, escala: float, eixo: float, proprios: frozenset[Segmento]) -> tuple[Segmento, Segmento] | None` (R-2: generalização dos parâmetros de hoje, sem cor). Os limiares da envolvente, do X e `_TOLERANCIA_COR` mudam de módulo sem mudar de valor. `Perfil` e a tabela por origem da haste ficam em `grammar_stem.py`, com `perfil_da_pagina` usando `origem_predominante` de `grammar_marcas`. `grammar_stem.py` reexporta de forma explícita (`X as X`) o que `tests/unit/test_grammar_stem*.py` importa dele (por exemplo `origem_predominante`), por causa do mypy strict.
+- Produces, em `grammar_marcas.py` (nomes públicos): `origem_predominante(modelo) -> str`, `cor_canonica(cor, preenchimento) -> str | None`, `Contorno` (caixa e caminho), `contornos(contexto) -> GradeEspacial[Contorno]`, `envolvente(contornos, exigidos: Sequence[Ponto], escala: float, ancora: Ponto, proprios: frozenset[int]) -> Contorno | None` e `tem_x(contexto, pictograma: Caixa, escala: float, eixo: float, proprios: frozenset[Segmento]) -> tuple[Segmento, Segmento] | None` (R-2: generalização dos parâmetros de hoje, sem cor); e `MarcasDaPagina(contexto)`, preguiçoso, com a `origem` predominante e a propriedade `contornos`, calculada e paga uma vez, só quando alguém a pede. `hastes_candidatas(contexto, *, marcas: MarcasDaPagina | None = None)` usa as marcas recebidas ou cria as suas; com `None`, o comportamento e o gasto são os de hoje. Os limiares da envolvente, do X e `_TOLERANCIA_COR` mudam de módulo sem mudar de valor. `Perfil` e a tabela por origem da haste ficam em `grammar_stem.py`, com `perfil_da_pagina` usando `origem_predominante` de `grammar_marcas`. `grammar_stem.py` reexporta de forma explícita (`X as X`) o que `tests/unit/test_grammar_stem*.py` importa dele (por exemplo `origem_predominante`), por causa do mypy strict.
 
-- [ ] **Step 1: Escrever** `test_grammar_marcas.py` com os casos isolados (envolvente Bézier e poligonal, nas bordas de 8 vértices e desvio 0,2; X com braço solto e com braço em contorno; cor canônica e tolerância; perfil glifo × nativo), movendo para cá, sem enfraquecer, os casos equivalentes que hoje testam esses helpers por dentro da haste, se houver.
+- [ ] **Step 1: Escrever** `test_grammar_marcas.py` com os casos isolados (envolvente Bézier e poligonal, nas bordas de 8 vértices e desvio 0,2; X com braço solto e com braço em contorno; cor canônica e tolerância; origem predominante; `MarcasDaPagina` paga os contornos uma vez e não os paga se ninguém pedir), movendo para cá, sem enfraquecer, os casos equivalentes que hoje testam esses helpers por dentro da haste, se houver.
 - [ ] **Step 2: Rodar** e ver falhar (módulo ausente).
 - [ ] **Step 3: Extrair** para `grammar_marcas.py` e fazer `grammar_stem.py` importar dele; `Haste` deixa de expor tipo privado; `grammar_marcas` entra no digest do runner.
 - [ ] **Step 4: Rodar** `tests/unit/test_grammar_stem*.py`, `tests/unit/test_grammar_marcas.py`, `tests/integration/test_model_symbols_runner.py` (fecho do digest), `tests/unit/test_symbol_matcher*.py`, ruff, format, mypy e `scripts/complexity_gate.py src`. Nenhum teste da haste muda.
@@ -149,9 +155,9 @@ Soma: 3h00 (25 + 35 + 45 + 35 + 20 + 20), mais o laboratório (caixa de 60 min).
 - Modify: `src/zeny_project_handler/adapters/analysis/drawing_model/symbol_matcher.py`, `src/zeny_project_handler_server/symbol_execution.py` (digest)
 
 **Interfaces:**
-- Produces: `grammar_rect_diagonal.casa_retangulos_diagonal(contexto, gramatica, *, candidatos=None) -> list[tuple[Caixa, int, tuple[int, ...]]]`; despacho de `rect_diagonal` em `_casar_no_contexto`, com os candidatos calculados uma vez por página (como `hastes_candidatas`) e os contornos e o sinal da página calculados uma vez por contexto e compartilhados com a haste, sem mudar o gasto dela (R-4); a docstring de `CasamentoGramatica.componentes` (`symbol_matcher.py:54-55`, "só a haste com barras os preenche") passa a citar as duas gramáticas; a fixture exporta `CASOS_RECT_DIAGONAL: tuple[tuple[str, dict[str, Any]], ...]` (as 4 variantes de f02-21 v001–v004 e a gramática de cada uma) e as funções de desenho.
+- Produces: `grammar_rect_diagonal.casa_retangulos_diagonal(contexto, gramatica, *, candidatos=None) -> list[tuple[Caixa, int, tuple[int, ...]]]`; despacho de `rect_diagonal` em `_casar_no_contexto`, com os candidatos calculados uma vez por página (como `hastes_candidatas`); `_casar_no_contexto` cria uma `MarcasDaPagina` (Task 2) e a passa às duas gramáticas (`hastes_candidatas(contexto, marcas=...)`), sem mudar o gasto de uma página só com haste (R-4); a docstring de `CasamentoGramatica.componentes` (`symbol_matcher.py:54-55`, "só a haste com barras os preenche") passa a citar as duas gramáticas; a fixture exporta `CASOS_RECT_DIAGONAL: tuple[tuple[str, dict[str, Any]], ...]` (as 4 variantes de f02-21 v001–v004 e a gramática de cada uma), as funções de desenho e `desenhar_bt_classico(page, situacao)`. Esta última desenha o positivo no estilo do legado: haste alinhada ao corpo retangular de proporção 2–4,5, diagonal de 0,55 a 1,15 × a haste, centrada no corpo e passando além dele. O teste de fusão da Task 4 usa essa função.
 
-- [ ] **Step 1: Fixture e testes**, partindo do patch vencedor: positivos (retângulo girado 0°, 30°, 90° com diagonal além do retângulo, com e sem ganchos; com elipse; com X; com os dois; ligado por haste a uma linha longa; página `/Rotate` 90; página com texto em glifo e símbolo pequeno) e negativos (TORRE_AT com duas diagonais; moldura de rótulo com texto; retângulo com diagonal que não passa além; diagonal sem retângulo; losango; retângulo com proporção fora da faixa escolhida no laboratório; **X falso**: diagonal com ganchos mais haste de ligação, em elipse sem X, não pode virar v003). `test_positivo_casa_so_a_variante_certa` (4 variantes × rotações), `test_caixa_e_o_pictograma`, `test_negativo_nao_casa`, `test_componentes`.
+- [ ] **Step 1: Fixture e testes**, partindo do patch vencedor: positivos (retângulo girado 0°, 30°, 90° com diagonal além do retângulo, com e sem ganchos; com elipse; com X; com os dois; ligado por haste a uma linha longa; página `/Rotate` 90; página com texto em glifo e símbolo pequeno) e negativos (TORRE_AT com duas diagonais; moldura de rótulo com texto; retângulo com diagonal que não passa além; diagonal sem retângulo; losango; retângulo com proporção fora da faixa escolhida no laboratório; **X falso**: diagonal com ganchos mais haste de ligação, em elipse sem X, não pode virar v003). `test_positivo_casa_so_a_variante_certa` (4 variantes × rotações), `test_caixa_e_o_pictograma`, `test_negativo_nao_casa`, `test_componentes`, `test_bt_classico_casa_a_gramatica_nova` (se a faixa do laboratório recusar o desenho clássico, o teste fixa a recusa e o relatório o diz, para a R-6).
 - [ ] **Step 2: Rodar** e ver falhar sem o patch.
 - [ ] **Step 3: Implementar** a partir do patch.
 - [ ] **Step 4: Rodar** os testes novos, `tests/unit/test_grammar_*`, `tests/unit/test_symbol_matcher*.py`, `tests/unit/test_model_symbols*.py`, `tests/integration/test_model_symbols_runner.py`, ruff, format, mypy e complexidade; e o benchmark (com as 4 habilitadas só no worktree, JSON restaurado no fim), colando a métrica de PARA_RAIOS_BT, as leituras erradas e o gasto máximo do diff.
@@ -159,7 +165,7 @@ Soma: 3h00 (25 + 35 + 45 + 35 + 20 + 20), mais o laboratório (caixa de 60 min).
 
 ### Task 4: Habilitação de PARA_RAIOS_BT
 
-**Estimativa:** 35 min · **Depende de:** Task 3 · **Risco:** alto · **Laboratório:** não
+**Estimativa:** 40 min · **Depende de:** Task 3 · **Risco:** alto · **Laboratório:** não
 
 **Files:**
 - Modify: `src/zeny_project_handler/adapters/analysis/symbol_packages/family-f02-21.json` (v001–v004), `src/zeny_project_handler/adapters/analysis/model_symbols.py` (só `_VERSAO = "1.2.0"`)
@@ -175,9 +181,12 @@ Soma: 3h00 (25 + 35 + 45 + 35 + 20 + 20), mais o laboratório (caixa de 60 min).
   - `test_variantes_nao_habilitadas_das_duas_familias_seguem_pending_com_razao` deixa de exigir `pending` em f02-21 v001–v004.
 
   A versão passa de 1.1.0 a 1.2.0 nos três arquivos de ataque listados. Em `test_model_symbols_bt_runner.py`:
-  - roda o positivo sintético no estilo clássico (haste alinhada ao corpo, que o legado reconhece), nas 4 situações, com os pacotes reais, no runner opt-in;
-  - se fundir, afirma uma ocorrência só;
-  - se não fundir, fixa as duas ocorrências e a ruling de R-6. Diga qual dos dois casos aconteceu no relatório, com os números de `_same_occurrence`.
+  - roda `desenhar_bt_classico` (fixture da Task 3), nas 4 situações, com os pacotes reais, no runner opt-in;
+  - primeiro afirma que as duas assinaturas observaram PARA_RAIOS_BT na página: o legado e `declarative-drawing-model`;
+  - só então julga: uma ocorrência com os dois métodos (funde) ou duas ocorrências (não funde, ruling de R-6);
+  - se a gramática nova recusar o desenho clássico (Task 3), o teste fixa "o legado e o modelo não se sobrepõem" e não alega fusão.
+
+  Diga qual caso aconteceu no relatório, com os números de `_same_occurrence`.
 - [ ] **Step 2: Rodar** e ver falhar.
 - [ ] **Step 3: Habilitar** as 4 com a gramática de `CASOS_RECT_DIAGONAL` e `negative_examples` = `confusable_negatives` do inventário, sem `reason`.
 - [ ] **Step 4: Rodar** os alterados, o auditor (`errors []`, 34), `tests/unit/test_symbol_packages_sem_memorizacao.py`, `tests/unit/test_model_symbols.py`, `tests/unit/test_grammar_frames_ataque.py`, ruff, format e mypy.
