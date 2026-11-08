@@ -167,11 +167,12 @@ def _anexar_estruturas(
 def _estrutura_v2(proposta: PropostaElemento) -> str | None:
     """Token da estrutura (com qualificador); sem ele, o código observado.
 
-    Só ``str`` não vazia é token: qualquer outro tipo é atributo hostil e conta como ausente.
+    Só texto ou número (não ``bool``) vira token; lista, dict, tupla, objeto e ``bool`` são
+    atributo hostil e contam como ausente, em vez de virar o ``repr``.
     """
     token = _atributos(proposta).get("token_estrutura")
-    texto = token.strip() if isinstance(token, str) else ""
-    return texto or proposta.codigo_observado
+    textual = isinstance(token, str | int | float) and not isinstance(token, bool)
+    return (_texto(token) if textual else None) or proposta.codigo_observado
 
 
 def _codigo_cabo_v2(codigo: str | None) -> str | None:
