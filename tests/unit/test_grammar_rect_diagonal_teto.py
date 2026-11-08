@@ -9,6 +9,8 @@ from tests.fixtures.symbol_grammars.paginas import linha, pagina_gramatica, reta
 from tests.fixtures.symbol_grammars.rect_diagonal import CASOS_RECT_DIAGONAL
 
 from zeny_project_handler.adapters.analysis.drawing_model.grammar_rect_diagonal import (
+    Perfil,
+    _quadrilateros,
     casa_retangulos_diagonal,
 )
 from zeny_project_handler.adapters.analysis.drawing_model.model import Caminho
@@ -21,7 +23,7 @@ from zeny_project_handler.adapters.analysis.drawing_model.symbol_grammars import
 _GRAMATICA: Final = CASOS_RECT_DIAGONAL[0][1]
 _PASSO: Final = 40.0
 _COLUNAS: Final = 50
-_RAZAO_MAXIMA: Final = 15
+_RAZAO_MAXIMA: Final = 12
 _FOLGA: Final = 100
 _QUANTIDADE_HOSTIL: Final = 2_000
 
@@ -71,17 +73,25 @@ def _pagina_hostil() -> PaginaGramatica:
 
 
 def test_pagina_hostil_estoura_o_orcamento() -> None:
-    """Quadriláteros e diagonais empilhados: o teto vem do orçamento, não de um laço sem limite."""
+    """Quadriláteros e diagonais empilhados: o teto vem das consultas das sementes.
+
+    O limite deixa passar os índices e a grade dos quadriláteros (1 por item indexado); o
+    estouro só pode vir das consultas das sementes à grade, nunca do laço sem limite.
+    """
     pagina = _pagina_hostil()
     so_indices = contexto_gramaticas(pagina).orcamento.gasto
-    contexto = contexto_gramaticas(pagina, limite=so_indices + _FOLGA)
+    custo_da_grade = so_indices + len(_quadrilateros(pagina.modelo, Perfil()))
+    contexto = contexto_gramaticas(pagina, limite=custo_da_grade + _FOLGA)
 
     with pytest.raises(TetoGramaticasExcedido):
         casa_retangulos_diagonal(contexto, _GRAMATICA)
 
+    assert contexto.orcamento.gasto > custo_da_grade
+    assert len(_quadrilateros(pagina.modelo, Perfil())) == _QUANTIDADE_HOSTIL
+
 
 def test_gasto_cresce_linear_com_os_simbolos() -> None:
-    """Contagem de trabalho (não tempo de parede): 10x mais símbolos isolados, no máximo 15x."""
+    """Contagem de trabalho (não tempo de parede): 10x mais símbolos isolados, no máximo 12x."""
     (pequeno, casadas_pequeno), (grande, casadas_grande) = (
         _gasto_e_casamentos(10),
         _gasto_e_casamentos(100),
