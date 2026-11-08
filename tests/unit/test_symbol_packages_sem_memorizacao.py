@@ -167,6 +167,8 @@ _GRAMATICAS_NOVAS = (
     _RAIZ / "tests" / "unit" / "test_model_symbols_formas_comuns.py",
     _RAIZ / "tests" / "unit" / "test_model_symbols_formas_comuns_ataque.py",
     _RAIZ / "tests" / "unit" / "test_grammar_triangulo_teto.py",
+    _RAIZ / "tests" / "integration" / "test_model_symbols_trafo_runner.py",
+    _RAIZ / "tests" / "integration" / "test_model_symbols_trafo_ataque.py",
 )
 
 

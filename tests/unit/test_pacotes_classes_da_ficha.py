@@ -370,7 +370,8 @@ def test_auditor_real_fecha_sem_erro_com_374_pending_e_49_enabled() -> None:
         habilitadas = {"E04": 12, "E05": 15}.get(estagio, 0)
         assert item["packaged"] == item["expected"] == item["pending"] + habilitadas
         assert item["enabled"] == habilitadas
-        # E04 fica inteira habilitada (12 de 12); E05 e E06 seguem só pending.
+        # E04 fica inteira habilitada (12 de 12); E05 tem as 15 de TRANSFORMADOR habilitadas e
+        # 14 pending; E06 segue só pending. Só E04 fica sem pending.
         assert (item["pending"] == 0) == (estagio == "E04")
     assert sum(por_estagio[e]["expected"] for e in _ESTAGIOS_NOVOS) == 58
 

@@ -27,6 +27,7 @@ from pathlib import Path
 
 import pymupdf
 import pytest
+from tests.fixtures.symbol_grammars.pdf_temporario import salvar_pagina
 from tests.fixtures.symbol_grammars.triangulo import (
     GRUPOS,
     Grupo,
@@ -36,6 +37,7 @@ from tests.fixtures.symbol_grammars.triangulo import (
 )
 from tests.integration.test_model_symbols_runner import _METODO_NOVO, _fonte, _settings
 
+from zeny_project_handler.adapters.analysis.pymupdf_transformers import perfil_transformadores
 from zeny_project_handler.application.symbol_reconciliation import (
     SymbolReconciliation,
     _bounds,
@@ -60,10 +62,7 @@ Desenho = Callable[[pymupdf.Page, Grupo], object]
 def _rodar(
     tmp_path: Path, desenhar: Desenho, grupo: Grupo
 ) -> tuple[SymbolReconciliation, str, set[str]]:
-    caminho = tmp_path / "trafo.pdf"
-    with pymupdf.open() as documento:
-        desenhar(documento.new_page(width=300, height=300), grupo)
-        documento.save(caminho)
+    caminho = salvar_pagina(tmp_path, lambda pagina: desenhar(pagina, grupo))
     documento_projeto, fonte = _fonte(caminho)
     runner = SymbolCompositionRunner(_settings(tmp_path / "dados"))
     novo = next(p for p in runner._profiles if p.metodo_id == _METODO_NOVO).assinatura()
@@ -109,9 +108,12 @@ _OCORRENCIAS_MEDIDAS: dict[Grupo, int] = {
 @pytest.mark.parametrize("grupo", GRUPOS, ids=_id_grupo)
 def test_fusao_com_o_e05(tmp_path: Path, grupo: Grupo) -> None:
     composto, novo, legados = _rodar(tmp_path, desenhar_trafo_e05, grupo)
+    # Só o perfil do E05 (`pymupdf-transformers`), não qualquer assinatura legada.
+    assinatura_e05 = perfil_transformadores().assinatura()
+    assert assinatura_e05 in legados
     de_trafo = _de_trafo(composto)
     do_modelo = [o for o in de_trafo if o.metodo_assinatura == novo]
-    do_e05 = [o for o in de_trafo if o.metodo_assinatura in legados]
+    do_e05 = [o for o in de_trafo if o.metodo_assinatura == assinatura_e05]
 
     # Primeiro: as duas assinaturas observaram TRANSFORMADOR na página.
     assert len(do_modelo) == 1, do_modelo
@@ -133,3 +135,39 @@ def test_fusao_com_o_e05(tmp_path: Path, grupo: Grupo) -> None:
     # A razão medida: com X o centro da caixa do E05 sai do limite; sem X as caixas coincidem.
     assert (deslocamento > escala * Decimal("0.10")) == grupo[2]
     assert (a == b) == (not grupo[2])
+
+
+_SEM_X = [grupo for grupo in GRUPOS if not grupo[2]]
+_SUBTIPO_E05 = {"outline": "triangulo", "half_cyan": "triangulo_meio_ciano"}
+
+
+@pytest.mark.parametrize("grupo", _SEM_X, ids=_id_grupo)
+def test_fusao_sem_x_leva_ambiguidade_de_classe_so_pelo_subtipo(
+    tmp_path: Path, grupo: Grupo
+) -> None:
+    """Caracterização, não recomendação: vai a "Para a E07".
+
+    A ocorrência fundida sai em `review` com `ambiguous_class_or_id`, mas a classe é a mesma nas
+    duas assinaturas; só o subtipo difere (modelo `None`; E05 `'triangulo'` no contorno e
+    `'triangulo_meio_ciano'` no meio ciano). Quando a E07 alinhar o subtipo, este teste fica
+    vermelho de propósito e deve ser revisto.
+    """
+    composto, novo, _ = _rodar(tmp_path, desenhar_trafo_e05, grupo)
+    assinatura_e05 = perfil_transformadores().assinatura()
+    de_trafo = _de_trafo(composto)
+    (ocorrencia,) = [
+        occ for occ in composto.occurrences if any(o in de_trafo for o in occ.observations)
+    ]
+    por_assinatura = {o.metodo_assinatura: o for o in ocorrencia.observations}
+    assert set(por_assinatura) == {novo, assinatura_e05}
+
+    identidades = {
+        lado: {(str(a.classe), a.subtipo) for a in por_assinatura[assinatura].alternativas}
+        for lado, assinatura in (("modelo", novo), ("e05", assinatura_e05))
+    }
+    assert identidades == {
+        "modelo": {(_CLASSE, None)},
+        "e05": {(_CLASSE, _SUBTIPO_E05[grupo[0]])},
+    }
+    assert ocorrencia.decision == "review"
+    assert ocorrencia.reasons == ("ambiguous_class_or_id", "ambiguous_reference_id")

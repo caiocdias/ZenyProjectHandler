@@ -82,6 +82,9 @@ def test_grupo_reconcilia_em_review_com_referencia_ambigua_e_template_do_menor_i
     (ocorrencia,) = [o for o in composto.occurrences if modelo in o.observations]
     assert ocorrencia.decision == "review"
     assert "ambiguous_reference_id" in ocorrencia.reasons
+    # Superconjunto de propósito: o E05 também observa `desenhar_grupo` e se funde nos 4 grupos
+    # sem X; no base sem marcador ele não estreita (6 ids no meio ciano, 9 no contorno), e a
+    # ocorrência leva a união. A lista exata do modelo é afirmada em test_uma_observacao_por_forma.
     assert set(ocorrencia.reference_ids) >= variantes_do_grupo(grupo)
 
 
