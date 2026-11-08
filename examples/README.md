@@ -63,7 +63,8 @@ deles é 0 por construção.
 
 Com `--versao-extracao propostas-v1`, a ficha predita sai das propostas da interpretação (as
 pendentes entram com o campo em `pendentes`); `propostas-v2` acrescenta o token de estrutura com
-qualificador, o código de cabo sem espaço após hífen e o estai ligado ao poste do suporte; o padrão
+qualificador, o código de cabo sem espaço após hífen, o estai ligado ao poste do suporte e, em um
+vão só, os cabos do mesmo par de postes; o padrão
 é `projeto-promovido-v1`.
 `--simbolos-modelo` liga o runner de símbolos (perfil `vector-only`) antes da interpretação e só
 vale com `propostas-v1` e `propostas-v2`; o gerador da ficha registra o perfil e a assinatura do runner.

@@ -35,7 +35,7 @@ def _ficha(
     versao: str = VERSAO_EXTRACAO_PROPOSTAS_V2,
     rotulos: dict[UUID, tuple[float, float]] | None = None,
 ) -> dict[str, Any]:
-    """``rotulos`` mapeia o id da evidÃªncia de rÃ³tulo para o canto (x, y) da caixa dela."""
+    """``rotulos`` mapeia o id da evidência de rótulo para o canto (x, y) da caixa dela."""
     variante = cena.variante()
     evidencias = tuple(
         SimpleNamespace(

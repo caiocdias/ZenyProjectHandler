@@ -16,7 +16,8 @@ Fontes da ficha predita (``--versao-extracao``):
 - ``propostas-v1``: as propostas da interpretação (``scripts.ficha_predita_propostas``);
   propostas pendentes entram, com o campo em ``pendentes``.
 - ``propostas-v2``: como a v1, com estruturas pelo ``token_estrutura``, código de cabo sem espaço
-  depois de hífen e estai ligado ao poste de ``suporte_proposta_id``.
+  depois de hífen, estai ligado ao poste de ``suporte_proposta_id`` e os cabos do mesmo par de
+  postes unidos em um vão só.
 
 A referência precisa ser do mesmo PDF (``pdf_sha256``); do contrário o comando é
 recusado antes de rodar o analisador. Os arquivos gravados não têm caminho absoluto nem o nome
