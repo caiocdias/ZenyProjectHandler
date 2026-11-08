@@ -23,6 +23,7 @@ from scripts.audit_symbol_packages import audit
 from tests.fixtures.declarative_symbols.corpus import build_enabled_corpus
 from tests.fixtures.symbol_grammars.rect_diagonal import CASOS_RECT_DIAGONAL
 from tests.fixtures.symbol_grammars.stem_bars import CASOS_HASTE
+from tests.fixtures.symbol_grammars.triangulo import CASOS_TRIANGULO
 from tests.unit.test_symbol_packages_sem_memorizacao import verificar_pacote
 
 from zeny_project_handler.adapters.analysis.declarative_symbols import (
@@ -193,7 +194,11 @@ def _razao_esperada(nota_visual: str) -> str:
 
 
 _IDS_NOVAS = [v["id"] for v in _variantes_novas_do_inventario()]
-_GRAMATICA_HABILITADAS = {**dict(CASOS_HASTE), **dict(CASOS_RECT_DIAGONAL)}
+_GRAMATICA_HABILITADAS = {
+    **dict(CASOS_HASTE),
+    **dict(CASOS_RECT_DIAGONAL),
+    **dict(CASOS_TRIANGULO),
+}
 
 
 def test_inventario_tem_58_variantes_de_e04_a_e06_nas_sete_familias() -> None:
@@ -350,18 +355,19 @@ def _copiar(tmp_path: Path) -> Path:
     return destino
 
 
-def test_auditor_real_fecha_sem_erro_com_389_pending_e_34_enabled() -> None:
+def test_auditor_real_fecha_sem_erro_com_374_pending_e_49_enabled() -> None:
     relato = audit()
     assert relato["errors"] == []
     assert (relato["expected_variants"], relato["expected_families"]) == (423, 31)
     assert (relato["package_variants"], relato["package_families"]) == (423, 31)
-    assert (relato["pending"], relato["enabled"]) == (389, 34)
+    assert (relato["pending"], relato["enabled"]) == (374, 49)
     assert relato["complete_recognition"] is False
     por_estagio = relato["by_owner_stage"]
     assert set(por_estagio) == {"E04", "E05", "E06", "E07"}
     for estagio in _ESTAGIOS_NOVOS:
         item = por_estagio[estagio]
-        habilitadas = 12 if estagio == "E04" else 0  # hastes de f02-19 e f02-21 e PARA_RAIOS_BT
+        # E04: hastes de f02-19 e f02-21 e PARA_RAIOS_BT; E05: TRANSFORMADOR de f02-18.
+        habilitadas = {"E04": 12, "E05": 15}.get(estagio, 0)
         assert item["packaged"] == item["expected"] == item["pending"] + habilitadas
         assert item["enabled"] == habilitadas
         # E04 fica inteira habilitada (12 de 12); E05 e E06 seguem só pending.
@@ -466,5 +472,5 @@ def test_tabela_de_suporte_mostra_as_quatro_familias_novas_so_pendentes() -> Non
         for razao in item.pending_reasons:
             assert razao.startswith("Forma E01: ")
             assert razao.endswith("positivo/negativo ainda não validado.")
-    assert sum(len(i.pending_reference_ids) for i in suporte.values()) == 389
-    assert sum(len(i.enabled_reference_ids) for i in suporte.values()) == 34
+    assert sum(len(i.pending_reference_ids) for i in suporte.values()) == 374
+    assert sum(len(i.enabled_reference_ids) for i in suporte.values()) == 49

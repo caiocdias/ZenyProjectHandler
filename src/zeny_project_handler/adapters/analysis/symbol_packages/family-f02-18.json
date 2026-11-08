@@ -109,8 +109,14 @@
       },
       "visual_note": "Triângulo; metade ciano; Rede; base",
       "recognition": {
-        "status": "pending",
-        "reason": "Forma E01: Triângulo; metade ciano; Rede; base. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado.",
+        "status": "enabled",
+        "grammar": {
+          "kind": "split_triangle",
+          "fill": "half_cyan",
+          "enclosure": "none",
+          "removal_mark": false,
+          "max_span": 72
+        },
         "negative_examples": [
           "Exemplar de legenda/tabela não é ocorrência operacional",
           "Glifos, molduras e líderes de anotação",
@@ -132,8 +138,14 @@
       },
       "visual_note": "Triângulo; metade ciano; Rede; X vermelho",
       "recognition": {
-        "status": "pending",
-        "reason": "Forma E01: Triângulo; metade ciano; Rede; X vermelho. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado.",
+        "status": "enabled",
+        "grammar": {
+          "kind": "split_triangle",
+          "fill": "half_cyan",
+          "enclosure": "none",
+          "removal_mark": true,
+          "max_span": 72
+        },
         "negative_examples": [
           "Exemplar de legenda/tabela não é ocorrência operacional",
           "Glifos, molduras e líderes de anotação",
@@ -155,8 +167,14 @@
       },
       "visual_note": "Triângulo; metade ciano; Rede; círculo envolvente",
       "recognition": {
-        "status": "pending",
-        "reason": "Forma E01: Triângulo; metade ciano; Rede; círculo envolvente. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado.",
+        "status": "enabled",
+        "grammar": {
+          "kind": "split_triangle",
+          "fill": "half_cyan",
+          "enclosure": "ellipse",
+          "removal_mark": false,
+          "max_span": 72
+        },
         "negative_examples": [
           "Exemplar de legenda/tabela não é ocorrência operacional",
           "Glifos, molduras e líderes de anotação",
@@ -178,8 +196,14 @@
       },
       "visual_note": "Triângulo; metade ciano; Dedicado; base",
       "recognition": {
-        "status": "pending",
-        "reason": "Forma E01: Triângulo; metade ciano; Dedicado; base. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado.",
+        "status": "enabled",
+        "grammar": {
+          "kind": "split_triangle",
+          "fill": "half_cyan",
+          "enclosure": "none",
+          "removal_mark": false,
+          "max_span": 72
+        },
         "negative_examples": [
           "Exemplar de legenda/tabela não é ocorrência operacional",
           "Glifos, molduras e líderes de anotação",
@@ -201,8 +225,14 @@
       },
       "visual_note": "Triângulo; metade ciano; Dedicado; X vermelho",
       "recognition": {
-        "status": "pending",
-        "reason": "Forma E01: Triângulo; metade ciano; Dedicado; X vermelho. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado.",
+        "status": "enabled",
+        "grammar": {
+          "kind": "split_triangle",
+          "fill": "half_cyan",
+          "enclosure": "none",
+          "removal_mark": true,
+          "max_span": 72
+        },
         "negative_examples": [
           "Exemplar de legenda/tabela não é ocorrência operacional",
           "Glifos, molduras e líderes de anotação",
@@ -224,8 +254,14 @@
       },
       "visual_note": "Triângulo; metade ciano; Dedicado; círculo envolvente",
       "recognition": {
-        "status": "pending",
-        "reason": "Forma E01: Triângulo; metade ciano; Dedicado; círculo envolvente. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado.",
+        "status": "enabled",
+        "grammar": {
+          "kind": "split_triangle",
+          "fill": "half_cyan",
+          "enclosure": "ellipse",
+          "removal_mark": false,
+          "max_span": 72
+        },
         "negative_examples": [
           "Exemplar de legenda/tabela não é ocorrência operacional",
           "Glifos, molduras e líderes de anotação",
@@ -247,8 +283,14 @@
       },
       "visual_note": "Triângulo; contorno; Rede; base",
       "recognition": {
-        "status": "pending",
-        "reason": "Forma E01: Triângulo; contorno; Rede; base. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado.",
+        "status": "enabled",
+        "grammar": {
+          "kind": "split_triangle",
+          "fill": "outline",
+          "enclosure": "none",
+          "removal_mark": false,
+          "max_span": 72
+        },
         "negative_examples": [
           "Exemplar de legenda/tabela não é ocorrência operacional",
           "Glifos, molduras e líderes de anotação",
@@ -270,8 +312,14 @@
       },
       "visual_note": "Triângulo; contorno; Rede; X vermelho",
       "recognition": {
-        "status": "pending",
-        "reason": "Forma E01: Triângulo; contorno; Rede; X vermelho. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado.",
+        "status": "enabled",
+        "grammar": {
+          "kind": "split_triangle",
+          "fill": "outline",
+          "enclosure": "none",
+          "removal_mark": true,
+          "max_span": 72
+        },
         "negative_examples": [
           "Exemplar de legenda/tabela não é ocorrência operacional",
           "Glifos, molduras e líderes de anotação",
@@ -293,8 +341,14 @@
       },
       "visual_note": "Triângulo; contorno; Rede; círculo envolvente",
       "recognition": {
-        "status": "pending",
-        "reason": "Forma E01: Triângulo; contorno; Rede; círculo envolvente. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado.",
+        "status": "enabled",
+        "grammar": {
+          "kind": "split_triangle",
+          "fill": "outline",
+          "enclosure": "ellipse",
+          "removal_mark": false,
+          "max_span": 72
+        },
         "negative_examples": [
           "Exemplar de legenda/tabela não é ocorrência operacional",
           "Glifos, molduras e líderes de anotação",
@@ -316,8 +370,14 @@
       },
       "visual_note": "Triângulo; contorno; Dedicado; base",
       "recognition": {
-        "status": "pending",
-        "reason": "Forma E01: Triângulo; contorno; Dedicado; base. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado.",
+        "status": "enabled",
+        "grammar": {
+          "kind": "split_triangle",
+          "fill": "outline",
+          "enclosure": "none",
+          "removal_mark": false,
+          "max_span": 72
+        },
         "negative_examples": [
           "Exemplar de legenda/tabela não é ocorrência operacional",
           "Glifos, molduras e líderes de anotação",
@@ -339,8 +399,14 @@
       },
       "visual_note": "Triângulo; contorno; Dedicado; X vermelho",
       "recognition": {
-        "status": "pending",
-        "reason": "Forma E01: Triângulo; contorno; Dedicado; X vermelho. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado.",
+        "status": "enabled",
+        "grammar": {
+          "kind": "split_triangle",
+          "fill": "outline",
+          "enclosure": "none",
+          "removal_mark": true,
+          "max_span": 72
+        },
         "negative_examples": [
           "Exemplar de legenda/tabela não é ocorrência operacional",
           "Glifos, molduras e líderes de anotação",
@@ -362,8 +428,14 @@
       },
       "visual_note": "Triângulo; contorno; Dedicado; círculo envolvente",
       "recognition": {
-        "status": "pending",
-        "reason": "Forma E01: Triângulo; contorno; Dedicado; círculo envolvente. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado.",
+        "status": "enabled",
+        "grammar": {
+          "kind": "split_triangle",
+          "fill": "outline",
+          "enclosure": "ellipse",
+          "removal_mark": false,
+          "max_span": 72
+        },
         "negative_examples": [
           "Exemplar de legenda/tabela não é ocorrência operacional",
           "Glifos, molduras e líderes de anotação",
@@ -385,8 +457,14 @@
       },
       "visual_note": "Triângulo; contorno; IP; base",
       "recognition": {
-        "status": "pending",
-        "reason": "Forma E01: Triângulo; contorno; IP; base. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado.",
+        "status": "enabled",
+        "grammar": {
+          "kind": "split_triangle",
+          "fill": "outline",
+          "enclosure": "none",
+          "removal_mark": false,
+          "max_span": 72
+        },
         "negative_examples": [
           "Exemplar de legenda/tabela não é ocorrência operacional",
           "Glifos, molduras e líderes de anotação",
@@ -408,8 +486,14 @@
       },
       "visual_note": "Triângulo; contorno; IP; X vermelho",
       "recognition": {
-        "status": "pending",
-        "reason": "Forma E01: Triângulo; contorno; IP; X vermelho. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado.",
+        "status": "enabled",
+        "grammar": {
+          "kind": "split_triangle",
+          "fill": "outline",
+          "enclosure": "none",
+          "removal_mark": true,
+          "max_span": 72
+        },
         "negative_examples": [
           "Exemplar de legenda/tabela não é ocorrência operacional",
           "Glifos, molduras e líderes de anotação",
@@ -431,8 +515,14 @@
       },
       "visual_note": "Triângulo; contorno; IP; círculo envolvente",
       "recognition": {
-        "status": "pending",
-        "reason": "Forma E01: Triângulo; contorno; IP; círculo envolvente. Gramática sobre o modelo de desenho ainda não implementada para esta forma; positivo/negativo ainda não validado.",
+        "status": "enabled",
+        "grammar": {
+          "kind": "split_triangle",
+          "fill": "outline",
+          "enclosure": "ellipse",
+          "removal_mark": false,
+          "max_span": 72
+        },
         "negative_examples": [
           "Exemplar de legenda/tabela não é ocorrência operacional",
           "Glifos, molduras e líderes de anotação",

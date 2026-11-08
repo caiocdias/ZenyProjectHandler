@@ -14,6 +14,7 @@ import scripts.diff_simbolos_nucleo_motor as diff
 from scripts.coverage_matrix_e16 import ROOT, _package_digest, build
 from tests.fixtures.symbol_grammars.rect_diagonal import CASOS_RECT_DIAGONAL
 from tests.fixtures.symbol_grammars.stem_bars import CASOS_HASTE, desenhar_positivo
+from tests.fixtures.symbol_grammars.triangulo import CASOS_TRIANGULO
 from tests.integration.test_model_symbols_runner import _METODO_NOVO, _fonte, _settings
 from tests.unit.test_diff_simbolos_nucleo_motor import _pagina, _recursos, _rodada, _rodar
 
@@ -22,6 +23,7 @@ from zeny_project_handler_server.symbol_execution import SymbolCompositionRunner
 
 _IDS_HASTE = [identidade for identidade, _ in CASOS_HASTE]
 _IDS_BT = [identidade for identidade, _ in CASOS_RECT_DIAGONAL]
+_IDS_TRAFO = [identidade for identidade, _ in CASOS_TRIANGULO]
 _CLASSE = {"s19": "ATERRAMENTO", "s21": "PARA_RAIOS_MT"}
 # Quatro situações de cada família numa só página, longe umas das outras.
 _CENTROS = [(80.0 + 120.0 * (i % 4), 80.0 + 160.0 * (i // 4)) for i in range(8)]
@@ -70,11 +72,11 @@ def test_runner_com_pacotes_reais_observa_e_reconcilia_as_oito_situacoes(tmp_pat
     assert all(len({obs.metodo_assinatura for obs in o.observations}) >= 2 for o in com_o_novo)
 
 
-def test_perfil_do_modelo_no_runner_esta_na_versao_1_3_0(tmp_path: Path) -> None:
+def test_perfil_do_modelo_no_runner_esta_na_versao_1_4_0(tmp_path: Path) -> None:
     runner = SymbolCompositionRunner(_settings(tmp_path / "dados"))
     novo = next(p for p in runner._profiles if p.metodo_id == _METODO_NOVO)
-    assert novo.versao == "1.3.0"
-    assert novo.assinatura() != replace(novo, versao="1.1.0").assinatura()
+    assert novo.versao == "1.4.0"
+    assert novo.assinatura() != replace(novo, versao="1.3.0").assinatura()
 
 
 def _e07_do_pacote(tmp_path: Path, pacotes: Path) -> Path:
@@ -107,14 +109,15 @@ def test_matriz_dos_pacotes_reais_marca_as_doze_so_do_modelo_fora_do_dominio_no_
         base,
     )
     por_id: dict[str, Any] = {linha["id"]: linha for linha in linhas}
-    for identidade in [*_IDS_HASTE, *_IDS_BT]:
+    for identidade in [*_IDS_HASTE, *_IDS_BT, *_IDS_TRAFO]:
         assert por_id[identidade]["package_status"] == "enabled", identidade
         assert por_id[identidade]["declarative-vector-packages"] == "fora_do_dominio", identidade
     # Contraprova: uma variante habilitada de outra gramática continua exata.
     outras = [
         linha
         for linha in linhas
-        if linha["package_status"] == "enabled" and linha["id"] not in {*_IDS_HASTE, *_IDS_BT}
+        if linha["package_status"] == "enabled"
+        and linha["id"] not in {*_IDS_HASTE, *_IDS_BT, *_IDS_TRAFO}
     ]
     assert outras
     assert all(linha["declarative-vector-packages"] == "id_exato_sintetico" for linha in outras)

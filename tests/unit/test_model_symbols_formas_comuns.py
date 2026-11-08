@@ -19,6 +19,7 @@ from typing import Any, Final
 import pymupdf
 import pytest
 from tests.fixtures.symbol_grammars.rect_diagonal import desenhar_retangulo
+from tests.fixtures.symbol_grammars.triangulo import GRUPO_DA_VARIANTE
 from tests.unit.test_symbol_packages_sem_memorizacao import _violacoes_de_fonte
 
 from zeny_project_handler.adapters.analysis.declarative_symbols import _enabled, carregar_pacotes
@@ -313,18 +314,28 @@ def _chave_de_forma(pacote: Pacote, variante: Pacote) -> tuple[Any, ...]:
     )
 
 
-def test_nenhuma_habilitada_real_compartilha_a_chave() -> None:
-    """Hoje o agrupamento não muda nada nos pacotes reais: a versão do método fica (Task 4)."""
+def test_habilitadas_reais_so_compartilham_a_chave_dentro_do_grupo_da_r1() -> None:
+    """Com TRANSFORMADOR habilitado (Task 4), os únicos pares com a mesma chave nos pacotes reais
+    são as variantes de um mesmo grupo de forma da R-E06.3.3.2.2-1, todas de TRANSFORMADOR: nenhum
+    par atravessa classe, família, papel ou destino, e as demais habilitadas seguem sozinhas."""
     habilitadas = _enabled(carregar_pacotes())
 
-    pares = [
+    pares = {
         (primeira[1]["id"], segunda[1]["id"])
         for primeira, segunda in itertools.combinations(habilitadas, 2)
         if _chave_de_forma(*primeira) == _chave_de_forma(*segunda)
-    ]
+    }
+    do_mesmo_grupo = {
+        (primeira, segunda)
+        for primeira, segunda in itertools.combinations(sorted(GRUPO_DA_VARIANTE), 2)
+        if GRUPO_DA_VARIANTE[primeira] == GRUPO_DA_VARIANTE[segunda]
+    }
+    por_id = {variante["id"]: variante for _, variante in habilitadas}
 
     assert habilitadas
-    assert pares == []
+    assert {tuple(sorted(par)) for par in pares} == do_mesmo_grupo
+    assert len(do_mesmo_grupo) == 3 * 1 + 3 * 3  # três grupos de dois e três de três
+    assert {por_id[i]["class_code"] for par in pares for i in par} == {"TRANSFORMADOR"}
 
 
 def test_este_arquivo_passa_na_guarda_de_fonte() -> None:

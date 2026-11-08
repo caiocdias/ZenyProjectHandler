@@ -180,12 +180,12 @@ def test_bt_com_rotate_de_pagina_segue_na_variante_certa(rotacao: int) -> None:
         assert _modelo(pagina) == [(_CLASSE, _IDS[2])]
 
 
-def test_versao_1_3_0_no_perfil_do_modelo_e_muda_a_assinatura() -> None:
+def test_versao_1_4_0_no_perfil_do_modelo_e_muda_a_assinatura() -> None:
     perfil = perfil_pacotes_modelo(carregar_pacotes(), carregar_tabela_glifos())
-    assert perfil.versao == "1.3.0"
+    assert perfil.versao == "1.4.0"
     assert perfil.metodo_id == "declarative-drawing-model"
-    assert dict(perfil.parametros)["enabled_variants"] == 34
-    anterior = replace(perfil, versao="1.1.0")
+    assert dict(perfil.parametros)["enabled_variants"] == 49
+    anterior = replace(perfil, versao="1.3.0")
     assert perfil.assinatura() != anterior.assinatura()
 
 
