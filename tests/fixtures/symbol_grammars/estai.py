@@ -35,8 +35,8 @@ DENTE: Final = 12.0
 ABERTURA: Final = 26.0
 ESPESSURA: Final = 0.2
 
-# Gasto de orçamento da chamada de `estai_candidatos` (sem a montagem do contexto) para a página de três estais de
-# `test_gasto_de_tres_estais_fica_no_registrado` (verde com círculo e dois pretos).
+# Gasto de orçamento da chamada de `estai_candidatos` (sem montar o contexto) para a página de
+# três estais de `test_gasto_de_tres_estais_fica_no_registrado` (verde com círculo e dois pretos).
 GASTO_DE_TRES_ESTAIS: Final = 181
 
 GRAMATICAS_ESTAI: Final[dict[str, dict[str, Any]]] = {
