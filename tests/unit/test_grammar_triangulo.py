@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, Final
@@ -17,6 +18,7 @@ from tests.fixtures.symbol_grammars.triangulo import (
     GRUPOS,
     LADO,
     NEGATIVOS,
+    PRETO,
     VERMELHO_ESCURO,
     Grupo,
     bracos_x,
@@ -272,6 +274,37 @@ def test_delta_de_glifo_nao_casa() -> None:
 
 def test_pagina_sem_desenho_nao_casa() -> None:
     assert _desenhada(lambda p: None) == set()
+
+
+def _seta_vazada_em_linha(lados_da_linha: float) -> Callable[[pymupdf.Page], object]:
+    """Contorno de lado `LADO / 2` com uma linha de `lados_da_linha` lados que termina no meio da
+    base e segue para fora."""
+
+    def desenhar(p: pymupdf.Page) -> None:
+        lado = LADO / 2
+        a, b, c = vertices(lado=lado)
+        meio = ((b[0] + c[0]) / 2, (b[1] + c[1]) / 2)
+        dx, dy = meio[0] - a[0], meio[1] - a[1]
+        norma = math.hypot(dx, dy)
+        longe = (
+            meio[0] + dx / norma * lados_da_linha * lado,
+            meio[1] + dy / norma * lados_da_linha * lado,
+        )
+        p.draw_line(longe, meio, color=PRETO, width=0.14)
+        p.draw_polyline([a, b, c, a], color=PRETO, width=0.14, closePath=True)
+
+    return desenhar
+
+
+@pytest.mark.parametrize(
+    ("lados_da_linha", "casa"), [(1.5, True), (2.5, False)], ids=["1_5_lado", "2_5_lados"]
+)
+def test_seta_vazada_so_com_linha_de_dois_lados_ou_mais(lados_da_linha: float, casa: bool) -> None:
+    """Ruling da rodada 3: a linha curta (como a haste de um vizinho, de cerca de 1 lado) não faz
+    seta; a de 2 lados ou mais, sim."""
+    esperadas = variantes_do_grupo(_BASE_CONTORNO) if casa else set()
+
+    assert _desenhada(_seta_vazada_em_linha(lados_da_linha)) == esperadas
 
 
 def test_pictograma_maior_que_max_span_nao_casa() -> None:

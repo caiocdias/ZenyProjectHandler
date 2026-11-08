@@ -35,6 +35,9 @@ Rulings da rodada de correção 2:
   `triangle_in_frame`) não casa;
 - o tracejado e o roxo do contorno recusam o triângulo em todos os grupos, também no meio ciano;
 - o mesmo preenchimento emitido duas vezes conta uma vez em `_cheio`.
+
+Ruling da rodada de correção 3: a ponta de seta vazada (linha que termina no meio de um lado e
+segue para fora) não casa, se a linha tem `_SETA_LINHA_MINIMA_LADOS` lados ou mais.
 """
 
 from __future__ import annotations
@@ -101,6 +104,13 @@ _CELULA_VERTICE: Final = max(_VERTICE_MINIMO, _LADO_MAXIMO * _VERTICE_RELATIVO)
 _CELULA_CENTRO: Final = _LADO_MAXIMO * _COBERTURA_RELATIVA
 # Duplicatas do mesmo preenchimento: vértices iguais nesta casa decimal (pt).
 _CASAS_DUPLICATA: Final = 2
+# Ponta de seta vazada: uma linha longa termina no meio de um lado, entre estas frações dele, e
+# segue para fora; a haste do transformador sai de um vértice.
+_LADO_DA_SETA: Final = (0.15, 0.85)
+# A linha da seta tem ao menos estes lados do triângulo (ruling da rodada 3). Na rodada de fichas,
+# um transformador anotado tem no meio de um lado a haste de um vizinho, de cerca de 1 lado
+# (1,08): com o limiar de 1 lado ele saía, com 2 ele fica.
+_SETA_LINHA_MINIMA_LADOS: Final = 2.0
 # Traço contínuo: `dashes` vazio ou o padrão vazio do PyMuPDF.
 _TRACOS_CONTINUOS: Final = frozenset({"", "[]", "[]0"})
 # Haste de ligação: sai de um vértice, para fora, alinhada à mediana dele.
@@ -782,18 +792,16 @@ def _classificar(
 
 
 class _Recusas:
-    """O que tira um triângulo já lido do transformador: o contorno tracejado ou roxo dele e os
-    três vértices na borda de uma moldura retangular (a PLATAFORMA, `triangle_in_frame`). Paga
-    as grades.
+    """O que tira um triângulo já lido do transformador: o contorno tracejado ou roxo dele, os
+    três vértices na borda de uma moldura retangular (a PLATAFORMA, `triangle_in_frame`) e a
+    linha de `_SETA_LINHA_MINIMA_LADOS` lados ou mais que termina no meio de um lado (a ponta de
+    seta vazada). Paga as grades."""
 
-    A ponta de seta vazada (linha longa que termina no meio de um lado) não é recusada: a regra
-    tirava um TRANSFORMADOR anotado da rodada, ligado pela haste de outro ao meio de um lado.
-    """
-
-    __slots__ = ("_molduras", "_recusados")
+    __slots__ = ("_contexto", "_molduras", "_recusados")
 
     def __init__(self, contexto: ContextoGramatica, recusados: Sequence[_Triangulo]) -> None:
         limites = _limites(contexto.pagina.modelo)
+        self._contexto = contexto
         self._recusados = GradeEspacial(
             ((_caixa_de_pontos(v) or (0.0, 0.0, 0.0, 0.0), v) for v in recusados),
             limites,
@@ -817,7 +825,24 @@ class _Recusas:
                 all(_na_borda(p, moldura, tolerancia) for p in forma.vertices)
                 for moldura in self._molduras.consultar(caixa)
             )
+            or self._seta(forma, tolerancia)
         )
+
+    def _seta(self, forma: _Forma, tolerancia: float) -> bool:
+        vertices = forma.vertices
+        arestas = [(vertices[i], vertices[(i + 1) % 3]) for i in range(3)]
+        minima = forma.lado * _SETA_LINHA_MINIMA_LADOS
+        for s in self._contexto.grade_segmentos.consultar(forma.caixa):
+            if s.caminho in forma.origens or math.dist(s.a, s.b) < minima:
+                continue
+            for perto, longe in ((s.a, s.b), (s.b, s.a)):
+                if _dentro(longe, vertices, tolerancia):
+                    continue
+                for p, q in arestas:
+                    t = _no_segmento(perto, p, q, tolerancia)
+                    if t is not None and _LADO_DA_SETA[0] <= t <= _LADO_DA_SETA[1]:
+                        return True
+        return False
 
 
 def _na_borda(ponto: Ponto, caixa: Caixa, tolerancia: float) -> bool:
