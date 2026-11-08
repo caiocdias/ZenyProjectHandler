@@ -141,8 +141,16 @@ _GRAMATICAS_NOVAS = (
     / "analysis"
     / "drawing_model"
     / "grammar_rect_diagonal.py",
+    _RAIZ
+    / "src"
+    / "zeny_project_handler"
+    / "adapters"
+    / "analysis"
+    / "drawing_model"
+    / "grammar_triangulo.py",
     _RAIZ / "tests" / "fixtures" / "symbol_grammars" / "stem_bars.py",
     _RAIZ / "tests" / "fixtures" / "symbol_grammars" / "rect_diagonal.py",
+    _RAIZ / "tests" / "fixtures" / "symbol_grammars" / "triangulo.py",
     _RAIZ / "tests" / "unit" / "test_grammar_marcas_envolvente.py",
     _RAIZ / "tests" / "unit" / "test_grammar_marcas_envolvente_ataque.py",
     _RAIZ / "tests" / "unit" / "test_grammar_marcas_x_contexto.py",
@@ -153,6 +161,12 @@ _GRAMATICAS_NOVAS = (
     _RAIZ / "tests" / "unit" / "test_grammar_rect_diagonal.py",
     _RAIZ / "tests" / "unit" / "test_grammar_rect_diagonal_ataque.py",
     _RAIZ / "tests" / "unit" / "test_grammar_rect_diagonal_herdados_ataque.py",
+    _RAIZ / "tests" / "unit" / "test_grammar_triangulo.py",
+    _RAIZ / "tests" / "unit" / "test_grammar_triangulo_ataque.py",
+    _RAIZ / "tests" / "unit" / "test_gramatica_triangulo_tipo.py",
+    _RAIZ / "tests" / "unit" / "test_model_symbols_formas_comuns.py",
+    _RAIZ / "tests" / "unit" / "test_model_symbols_formas_comuns_ataque.py",
+    _RAIZ / "tests" / "unit" / "test_grammar_triangulo_teto.py",
 )
 
 
