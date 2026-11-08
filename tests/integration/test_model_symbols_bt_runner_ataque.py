@@ -22,7 +22,7 @@ def test_runner_carrega_o_perfil_do_modelo_na_1_2_0_e_os_legados_em_outras_assin
 ) -> None:
     runner = SymbolCompositionRunner(_settings(tmp_path / "dados"))
     modelo = next(p for p in runner._profiles if p.metodo_id == _METODO_NOVO)
-    assert modelo.versao == "1.2.0"
+    assert modelo.versao == "1.3.0"
     assert dict(modelo.parametros)["enabled_variants"] == 34
     assert "PARA_RAIOS_BT" in modelo.classes_suportadas
     assert modelo.assinatura() not in {

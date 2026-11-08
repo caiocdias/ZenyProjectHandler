@@ -73,7 +73,7 @@ def test_runner_com_pacotes_reais_observa_e_reconcilia_as_oito_situacoes(tmp_pat
 def test_perfil_do_modelo_no_runner_esta_na_versao_1_2_0(tmp_path: Path) -> None:
     runner = SymbolCompositionRunner(_settings(tmp_path / "dados"))
     novo = next(p for p in runner._profiles if p.metodo_id == _METODO_NOVO)
-    assert novo.versao == "1.2.0"
+    assert novo.versao == "1.3.0"
     assert novo.assinatura() != replace(novo, versao="1.1.0").assinatura()
 
 

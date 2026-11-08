@@ -11,11 +11,13 @@ import math
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Final
+from typing import Final, Literal
 
 from zeny_project_handler.adapters.analysis.drawing_model.model import (
     Caixa,
+    Caminho,
     Cor,
+    ItemCaminho,
     PaginaModelo,
     Polilinha,
     Ponto,
@@ -35,6 +37,13 @@ _ORIGENS: Final = ("glifo", "shx", "nativo")
 _ENVOLVENTE: Final = (0.95, 3.06)
 _VERTICES_MINIMOS_ELIPSE: Final = 8
 _DESVIO_RAIO_ELIPSE: Final = 0.2
+# Envolvente desenhada como subcaminho de retas (R-E06.3.3.2.1-1): nas folhas medidas o oval
+# fecha por reta explícita, a distância 0 entre o primeiro e o último ponto, e o arco aberto
+# mais próximo fica a 0,24 pt; 0,05 pt dá folga ao arredondamento sem fechar arco nenhum.
+_TOLERANCIA_FECHAMENTO: Final = 0.05
+# A mesma elipse lida da polilinha: os vértices da polilinha são os nós de
+# `reconstruir_polilinhas`, que funde pontos a até 0,5 pt.
+_TOLERANCIA_MESMA_ELIPSE: Final = 0.5
 
 # X de retirada: braços de comprimento relativo à escala, cruzando perto dos meios.
 _MARGEM_X: Final = 0.5
@@ -84,10 +93,13 @@ def um_traco(modelo: PaginaModelo, caminho: int) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class Contorno:
-    """Envolvente candidata: elipse do índice de molduras ou polilinha fechada elíptica."""
+    """Envolvente candidata: elipse do índice de molduras, polilinha fechada elíptica ou
+    subcaminho fechado elíptico de um caminho de traço (`subcaminho` é o índice dele)."""
 
     caixa: Caixa
     caminhos: tuple[int, ...]
+    origem: Literal["moldura", "polilinha", "subcaminho"]
+    subcaminho: int | None = None
 
 
 class MarcasDaPagina:
@@ -124,15 +136,11 @@ def _dentro_da_elipse(caixa: Caixa, ponto: Ponto, tolerancia: float) -> bool:
     return ((ponto[0] - cx) / a) ** 2 + ((ponto[1] - cy) / b) ** 2 <= 1.0
 
 
-def _elipse_poligonal(polilinha: Polilinha) -> Caixa | None:
-    """Caixa da polilinha fechada cujos vértices estão todos perto da elipse inscrita nela."""
-    if (
-        not polilinha.fechada
-        or not polilinha.origens
-        or len(polilinha.pontos) < _VERTICES_MINIMOS_ELIPSE
-    ):
+def _elipse_de_vertices(vertices: Sequence[Ponto]) -> Caixa | None:
+    """Caixa dos vértices, se são bastantes e estão todos perto da elipse inscrita nela."""
+    if len(vertices) < _VERTICES_MINIMOS_ELIPSE:
         return None
-    caixa = _caixa_de_pontos(polilinha.pontos)
+    caixa = _caixa_de_pontos(vertices)
     if caixa is None:
         return None
     a, b = (caixa[2] - caixa[0]) / 2, (caixa[3] - caixa[1]) / 2
@@ -141,17 +149,67 @@ def _elipse_poligonal(polilinha: Polilinha) -> Caixa | None:
     cx, cy = (caixa[0] + caixa[2]) / 2, (caixa[1] + caixa[3]) / 2
     elipticos = all(
         abs(math.hypot((x - cx) / a, (y - cy) / b) - 1.0) <= _DESVIO_RAIO_ELIPSE
-        for x, y in polilinha.pontos
+        for x, y in vertices
     )
     return caixa if elipticos else None
 
 
+def _elipse_poligonal(polilinha: Polilinha) -> Caixa | None:
+    """Caixa da polilinha fechada cujos vértices estão todos perto da elipse inscrita nela."""
+    if not polilinha.fechada or not polilinha.origens:
+        return None
+    return _elipse_de_vertices(polilinha.pontos)
+
+
+def _fecha_com_retas(subcaminho: Sequence[ItemCaminho]) -> bool:
+    """Filtro estrutural barato: retas bastantes e o fim de volta ao começo."""
+    retas = sum(1 for item in subcaminho if item.tipo == "l")
+    return (
+        retas >= _VERTICES_MINIMOS_ELIPSE
+        and math.dist(subcaminho[0].pontos[0], subcaminho[-1].pontos[-1]) <= _TOLERANCIA_FECHAMENTO
+    )
+
+
+def _contornos_de_subcaminhos(
+    caminhos: Sequence[Caminho], contexto: ContextoGramatica
+) -> list[Contorno]:
+    """Subcaminhos elípticos dos caminhos de traço; cada um que passa no filtro gasta 1."""
+    achados: list[Contorno] = []
+    for posicao, caminho in enumerate(caminhos):
+        if caminho.tipo != "traco":
+            continue
+        for indice, subcaminho in enumerate(caminho.subcaminhos):
+            if not _fecha_com_retas(subcaminho):
+                continue
+            contexto.orcamento.gastar()
+            caixa = _elipse_de_vertices([item.pontos[0] for item in subcaminho])
+            if caixa is not None:
+                achados.append(Contorno(caixa, (posicao,), "subcaminho", indice))
+    return achados
+
+
+def _mesma_elipse(contorno: Contorno, do_subcaminho: Contorno) -> bool:
+    return all(
+        abs(p - q) <= _TOLERANCIA_MESMA_ELIPSE
+        for p, q in zip(contorno.caixa, do_subcaminho.caixa, strict=True)
+    )
+
+
 def _contornos(contexto: ContextoGramatica) -> GradeEspacial[Contorno]:
-    """Índice das envolventes da página: as elipses das molduras (Béziers e círculos) e as
-    polilinhas fechadas elípticas; cada polilinha fechada examinada gasta 1."""
+    """Índice das envolventes da página: as elipses das molduras (Béziers e círculos), as
+    polilinhas fechadas elípticas e os subcaminhos fechados elípticos dos caminhos de traço.
+
+    Cada polilinha fechada examinada gasta 1, e cada subcaminho que passa no filtro estrutural
+    também. A mesma elipse vinda da moldura ou da polilinha e do subcaminho (mesmo caminho, mesma
+    caixa) entra uma vez só, pelo subcaminho.
+    """
     modelo = contexto.pagina.modelo
+    dos_subcaminhos = _contornos_de_subcaminhos(modelo.caminhos, contexto)
+    por_caminho: dict[int, list[Contorno]] = {}
+    for do_subcaminho in dos_subcaminhos:
+        por_caminho.setdefault(do_subcaminho.caminhos[0], []).append(do_subcaminho)
     contornos = [
-        Contorno(moldura.caixa, (moldura.caminho,))
+        Contorno(moldura.caixa, (moldura.caminho,), "moldura")
         for moldura in contexto.molduras
         if moldura.forma == "elipse"
     ]
@@ -160,7 +218,17 @@ def _contornos(contexto: ContextoGramatica) -> GradeEspacial[Contorno]:
     for polilinha in fechadas:
         caixa = _elipse_poligonal(polilinha)
         if caixa is not None:
-            contornos.append(Contorno(caixa, tuple(sorted(set(polilinha.origens)))))
+            contornos.append(Contorno(caixa, tuple(sorted(set(polilinha.origens))), "polilinha"))
+    contornos = [
+        contorno
+        for contorno in contornos
+        if not any(
+            _mesma_elipse(contorno, do_subcaminho)
+            for caminho in contorno.caminhos
+            for do_subcaminho in por_caminho.get(caminho, ())
+        )
+    ]
+    contornos.extend(dos_subcaminhos)
     limites = (
         -_MARGEM_PAGINA,
         -_MARGEM_PAGINA,
@@ -180,7 +248,9 @@ def envolvente(
     """A menor elipse que contém todos os `exigidos`, como `_enclosing_outline` do legado.
 
     O diâmetro fica entre `_ENVOLVENTE` vezes a `escala`, a busca é numa janela em torno da
-    `ancora`, e um contorno com caminho em `proprios` não conta.
+    `ancora`, e um contorno com caminho em `proprios` não conta, salvo o de subcaminho: com
+    `_VERTICES_MINIMOS_ELIPSE` retas ou mais, ele nunca é o retângulo nem um traço da haste,
+    ainda que divida o caminho com eles.
     """
     minimo, maximo = _ENVOLVENTE
     tolerancia = max(0.01, escala * 0.02)
@@ -196,7 +266,7 @@ def envolvente(
         caixa = contorno.caixa
         diametro = max(caixa[2] - caixa[0], caixa[3] - caixa[1])
         if (
-            proprios.isdisjoint(contorno.caminhos)
+            (contorno.origem == "subcaminho" or proprios.isdisjoint(contorno.caminhos))
             and minimo * escala <= diametro <= maximo * escala
             and all(_dentro_da_elipse(caixa, p, tolerancia) for p in exigidos)
         ):
