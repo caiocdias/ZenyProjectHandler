@@ -31,17 +31,23 @@ from zeny_project_handler.adapters.analysis import (
 )
 from zeny_project_handler.adapters.analysis import pymupdf_drawing_model as _pymupdf_drawing_model
 from zeny_project_handler.adapters.analysis.drawing_model import (
+    cache,
+    family,
     geometry,
     glyph_signature,
     glyph_text,
     grammar_disc,
     grammar_frames,
+    grammar_stem,
     groups,
     symbol_grammars,
     symbol_matcher,
 )
 from zeny_project_handler.adapters.analysis.drawing_model import (
     glyph_table as glyph_table_module,
+)
+from zeny_project_handler.adapters.analysis.drawing_model import (
+    model as drawing_model_module,
 )
 from zeny_project_handler.adapters.analysis.drawing_model.glyph_table import (
     TabelaGlifos,
@@ -178,7 +184,11 @@ class SymbolCompositionRunner:
                     symbol_grammars,
                     grammar_frames,
                     grammar_disc,
+                    grammar_stem,
                     symbol_matcher,
+                    drawing_model_module,
+                    cache,
+                    family,
                     groups,
                     geometry,
                     glyph_text,
