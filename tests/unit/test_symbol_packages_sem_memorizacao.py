@@ -143,6 +143,10 @@ _GRAMATICAS_NOVAS = (
     / "grammar_rect_diagonal.py",
     _RAIZ / "tests" / "fixtures" / "symbol_grammars" / "stem_bars.py",
     _RAIZ / "tests" / "fixtures" / "symbol_grammars" / "rect_diagonal.py",
+    _RAIZ / "tests" / "unit" / "test_grammar_marcas_envolvente.py",
+    _RAIZ / "tests" / "unit" / "test_grammar_marcas_envolvente_ataque.py",
+    _RAIZ / "tests" / "unit" / "test_grammar_marcas_x_contexto.py",
+    _RAIZ / "tests" / "unit" / "test_grammar_marcas_x_contexto_ataque.py",
 )
 
 
