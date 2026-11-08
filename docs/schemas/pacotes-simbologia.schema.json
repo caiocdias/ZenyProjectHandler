@@ -150,6 +150,23 @@
             "required": ["enclosure", "removal_mark"],
             "properties": {"enclosure": {"const": "ellipse"}, "removal_mark": {"const": true}}
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "enclosure", "removal_mark", "max_span"],
+          "$comment": "Haste com garfo (estai); só o método sobre o modelo de desenho a executa.",
+          "properties": {
+            "kind": {"const": "forked_stem"},
+            "enclosure": {"enum": ["none", "ellipse"]},
+            "removal_mark": {"type": "boolean"},
+            "max_span": {"type": "number", "exclusiveMinimum": 0, "maximum": 72}
+          },
+          "not": {
+            "$comment": "O X vence a envolvente: envolvente com X não é grupo da R-E06.3.4-1.",
+            "required": ["enclosure", "removal_mark"],
+            "properties": {"enclosure": {"const": "ellipse"}, "removal_mark": {"const": true}}
+          }
         }
       ]
     },
