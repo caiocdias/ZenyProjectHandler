@@ -270,7 +270,7 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E06.2.2.1 | Método versionado no runner | #concluida | E06.2.1 | método de pacotes sobre o modelo no runner opt-in, resíduo raster marcado, agrupamento sem laço quadrático fora de teto |
 | E06.2.2.2 | Medição do método nas 16 folhas | #concluida | E06.2.2.1 | benchmark ao lado do atual e diff por variante, com cada "só no núcleo" classificado |
 | E06.3.1 | Pacotes das classes da ficha | #concluida | E06.2.2.2 | 58 variantes do inventário de ESTAI, TRANSFORMADOR, ATERRAMENTO e PARA_RAIOS_MT/BT nos pacotes, como `pending`; auditor e matriz aceitam outro `owner_stage` |
-| E06.3.2 | Aterramento, para-raios MT e H2 | #pendente | E06.3.1 | gramática de haste com barras, com laboratório, acima do atual nas duas classes; confirmação da H2 (raster como resíduo) |
+| E06.3.2 | Aterramento, para-raios MT e H2 | #em-andamento | E06.3.1 | gramática de haste com barras, com laboratório, acima do atual nas duas classes; confirmação da H2 (raster como resíduo) |
 | E06.3.3 | Para-raios BT e transformador | #pendente | E06.3.2 | gramáticas de moldura das duas classes, com laboratório, acima do atual |
 | E06.3.4 | Estai | #pendente | E06.3.3 | gramática de estai, com laboratório, acima do atual |
 | E06.3.5 | Equipamento de interrupção | #pendente | E06.3.4 | gramática de interrupção, acima do atual (que não emite a classe) |
@@ -1607,7 +1607,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
-## E06.3.2 — Aterramento, para-raios MT e H2 — #pendente
+## E06.3.2 — Aterramento, para-raios MT e H2 — #em-andamento
 
 **Objetivo:** reconhecer ATERRAMENTO e PARA_RAIOS_MT sobre o modelo de desenho, acima do analisador atual, e confirmar ou refutar a hipótese H2.
 
