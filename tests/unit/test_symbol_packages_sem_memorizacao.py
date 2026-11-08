@@ -6,6 +6,7 @@ reprova qualquer valor que pareça coordenada de folha, hash de PDF ou nome de f
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 from decimal import Decimal
@@ -130,21 +131,58 @@ _GRAMATICAS_NOVAS = (
 )
 
 
-@pytest.mark.parametrize(
-    "arquivo",
-    [
-        pytest.param(
-            _GRAMATICAS_NOVAS[0],
-            id="grammar_stem.py",
-            marks=pytest.mark.xfail(
-                strict=True,
-                reason="epsilons numéricos 1e-9 e 1e-12 em grammar_stem.py casam a regex de "
-                "coordenada da guarda (falso positivo); decisão do orquestrador",
-            ),
-        ),
-        pytest.param(_GRAMATICAS_NOVAS[1], id="stem_bars.py"),
-    ],
-)
+_EPSILON_MAXIMO = 1e-6
+_CASAS_DECIMAIS_FONTE = 3
+_COORDENADA_GRANDE = 1e5
+
+
+def _numero_parece_coordenada(valor: float) -> bool:
+    """Epsilon (|x| < 1e-6) passa; coordenada tem muitas casas ou é grande e fracionária."""
+    modulo = abs(valor)
+    if modulo < _EPSILON_MAXIMO:
+        return False
+    expoente = Decimal(repr(modulo)).as_tuple().exponent
+    casas = -expoente if isinstance(expoente, int) else 0
+    if modulo >= 1 and casas > _CASAS_DECIMAIS_FONTE:
+        return True
+    return modulo >= _COORDENADA_GRANDE and modulo != int(modulo)
+
+
+def _violacoes_de_fonte(fonte: str, nome: str) -> list[str]:
+    """Fonte Python: strings (docstrings inclusive) pela guarda textual; números por valor."""
+    violacoes: list[str] = []
+    for no in ast.walk(ast.parse(fonte)):
+        if not isinstance(no, ast.Constant):
+            continue
+        local = f"{nome}:{no.lineno}"
+        if isinstance(no.value, str):
+            violacoes.extend(_violacoes_de_texto(no.value, local))
+        elif isinstance(no.value, float) and _numero_parece_coordenada(no.value):
+            violacoes.append(f"{local}: número que parece coordenada ({no.value!r})")
+    return violacoes
+
+
+@pytest.mark.parametrize("arquivo", _GRAMATICAS_NOVAS, ids=lambda a: a.name)
 def test_gramaticas_novas_passam_na_guarda(arquivo: Path) -> None:
     texto = arquivo.read_text(encoding="utf-8")
-    assert _violacoes_de_texto(texto, arquivo.name) == []
+    assert _violacoes_de_fonte(texto, arquivo.name) == []
+
+
+@pytest.mark.parametrize(
+    "fonte",
+    [
+        pytest.param("x = 612345.678\n", id="coordenada-grande"),
+        pytest.param("x = 12.34567\n", id="muitas-casas"),
+        pytest.param('x = "origem: folha.pdf"\n', id="string-pdf"),
+        pytest.param('def f():\n    """Veja folha.pdf."""\n', id="docstring-pdf"),
+    ],
+)
+def test_guarda_de_fonte_reprova(fonte: str, tmp_path: Path) -> None:
+    arquivo = tmp_path / "sintetico.py"
+    arquivo.write_text(fonte, encoding="utf-8")
+    assert len(_violacoes_de_fonte(arquivo.read_text(encoding="utf-8"), arquivo.name)) == 1
+
+
+def test_guarda_de_fonte_aceita_epsilon_e_constantes_curtas() -> None:
+    fonte = "a = 1e-9\nb = 1e-12\nc = 1.25\nd = 0.123456\n"
+    assert _violacoes_de_fonte(fonte, "s.py") == []
