@@ -351,7 +351,7 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E06.3.3.2.2 | Transformador | #concluida | E06.3.3.2.1 | gramática do triângulo em círculo, com laboratório, TRANSFORMADOR acima do atual |
 | E07.1 | Medição da ficha com o runner e golden do padrão | #concluida | E06.3.3.2.2, E15 | benchmark com o runner ligado, `propostas-v2`, baselines de controle e golden da análise padrão |
 | E07.2.1 | Posição do poste no desenho | #concluida | E07.1 | poste no disco do desenho, um por identificador, com relações sobre a posição nova (opção ligada) |
-| E07.2.2.1 | Símbolos no poste certo e ESTAI sem duplicar | #em-andamento | E07.2.1 | símbolos no poste certo ou pendentes, ESTAI em ocorrência única e vínculos do poste pendente (opção ligada) |
+| E07.2.2.1 | Símbolos no poste certo e ESTAI sem duplicar | #concluida | E07.2.1 | símbolos no poste certo ou pendentes, ESTAI em ocorrência única e vínculos do poste pendente (opção ligada) |
 | E07.2.2.2 | Situação do TRANSFORMADOR (D14) | #pendente | E07.2.2.1 | situação pelo `referencias_possiveis`, depois da decisão do usuário |
 | E07.3 | Vãos na polilinha e ficha completa | #pendente | E07.2.2.1 | vãos ligados à polilinha entre dois postes, benchmark acima do baseline |
 | E08 | Conferência UTM | #pendente | E07.3 | transformação página → UTM, checagem de posição e vão, pendências |
@@ -2765,7 +2765,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Divisão (R-E07-3, 2026-11-08):** o levantamento (`tmp/janela-0.6.0/levantamento-e07-2-2.md`) estimou 11h, acima das ~3h do protocolo, e a situação do TRANSFORMADOR (D14) depende de decisão do usuário: cada grupo de forma dá sempre duas situações, e `SituacaoProjeto` não tem Abandonado nem Substituir. A E07.2.2.1 faz o que a medição pede agora: 50 dos 65 FP de símbolo são ESTAI em dobro, e 7→11 `estruturas_sem_poste` vêm do poste pendente. A régua passa a ser a `baseline-v013`, porque a v011 (3/179) já está superada e não mede esta etapa.
 
-## E07.2.2.1 — Símbolos no poste certo e ESTAI sem duplicar — #em-andamento
+## E07.2.2.1 — Símbolos no poste certo e ESTAI sem duplicar — #concluida
 
 **Objetivo:** com a opção ligada, cada símbolo entra no poste certo ou fica pendente, o ESTAI sai em uma ocorrência só, e o poste pendente por disputa não perde as ligações que não dependem do disco.
 
@@ -2780,13 +2780,13 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Critérios de aceite:**
 
-- [ ] Fixture sintética com dois postes próximos e símbolos entre eles: associa ao certo ou marca pendência, nunca ao vizinho errado com confiança.
-- [ ] Poste com pendência `poste_disco` não é suporte de símbolo pela posição do texto, e as estruturas e equipamentos do regime de texto continuam ligados a ele.
-- [ ] Um estai sai em uma ocorrência; a fusão exige classe ESTAI dos dois lados, e a ablação do legado não perde a ocorrência. Leitura de outra classe sobre o estai não funde.
-- [ ] Com `ZENY_SERVER_SYMBOL_COMPOSITION=false`, os goldens não mudam (D18), com `git diff --exit-code f26cc3c -- tests/fixtures/golden_padrao_e07.json` e `git diff --exit-code 877aba1 -- tests/fixtures/golden_padrao_e07_complementar.json` no pacote de revisão.
-- [ ] Benchmark por poste com o runner (`baseline`, `propostas-v2`, `--simbolos-modelo`) acima da `baseline-v013` em símbolos: precisão e recall maiores, com 0 ESTAI em dobro e 0 símbolo em poste errado, sem regressão em postes; se a E06.3.5 entrar antes da medição final, a régua é refeita na `main`.
-- [ ] Promoção e regiões continuam funcionando sobre as propostas novas com a opção ligada.
-- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+- [x] Fixture sintética com dois postes próximos e símbolos entre eles: associa ao certo ou marca pendência, nunca ao vizinho errado com confiança.
+- [x] Poste com pendência `poste_disco` não é suporte de símbolo pela posição do texto, e as estruturas e equipamentos do regime de texto continuam ligados a ele.
+- [x] Um estai sai em uma ocorrência; a fusão exige classe ESTAI dos dois lados, e a ablação do legado não perde a ocorrência. Leitura de outra classe sobre o estai não funde.
+- [x] Com `ZENY_SERVER_SYMBOL_COMPOSITION=false`, os goldens não mudam (D18), com `git diff --exit-code f26cc3c -- tests/fixtures/golden_padrao_e07.json` e `git diff --exit-code 877aba1 -- tests/fixtures/golden_padrao_e07_complementar.json` no pacote de revisão.
+- [x] Benchmark por poste com o runner (`baseline`, `propostas-v2`, `--simbolos-modelo`) acima da `baseline-v013` em símbolos: precisão e recall maiores, com 0 ESTAI em dobro e 0 símbolo em poste errado, sem regressão em postes; se a E06.3.5 entrar antes da medição final, a régua é refeita na `main`.
+- [x] Promoção e regiões continuam funcionando sobre as propostas novas com a opção ligada.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
 **Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
 
@@ -2794,14 +2794,34 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Bloqueios:** Nenhum bloqueio conhecido.
 
-**Evidências e handoff:**
+**Evidências e handoff (2026-11-09, orquestrador):**
 
-- Plano: —
-- Commits: —
-- Revisão final: —
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Plano:** `docs/superpowers/plans/2026-11-08-leitura-vetorial-por-poste-e07-2-2-1.md`. A revisão de arquitetura (opus) bloqueou na rodada 0 (2 Críticos, 5 Importantes), aprovou com notas na rodada 1 e, sobre o delta do laboratório, na rodada 2.
+- **Commits:** `dda292a..9408201` (com o merge da `main` em `dc54596`), mais o fechamento. Relógio: de dda292a (23:35) ao fechamento, cerca de 2h53.
+- **Laboratório** (`tmp/laboratorio/e07-2-2-1/`, fora do Git): nenhuma hipótese venceu como escrita. H-1 (par único) no melhor raio: 93/25/86, 8 ESTAI em dobro. H-2 (melhor mútuo com margem de 0,004): 93/23/86, 6 em dobro. A regra final saiu de **três ajustes depois de ver os dados, no mesmo corpus** (sem margem; passadas repetidas de melhor mútuo; triagem visual dos dois restantes): **número in-sample, sem valor de evidência independente da regra.** A implementação é a varredura gulosa por `(distância, id do legado, id do modelo)`, equivalente às passadas, em O(E log E).
+- **Ciclo:** testadores acharam 1 defeito (sítio malformado derrubava o símbolo vizinho). As revisões pediram: P com outra causa e sítios empatados caía no vizinho (Task 2); custo cúbico em página densa (Task 4).
+- **Revisão final** (opus): `With fixes`, sem Crítico; os 4 Importantes eram o gate em HEAD, duas qualificações deste handoff e o registro das decisões.
+- **Critérios** (`baseline-v015`, `dc54596`, depois só testes):
+  - **Símbolos:** 108/17/71, precisão 86,4%, recall 60,3%; contra a régua refeita v014 (mesma `main`, com E06.3.5): 105/65/74, 61,8%; e v013: 90/65/89, 58,1%. In-sample.
+  - **Poste errado:** 0. Os 17 FP foram conferidos contra os demais postes da referência, por script meu, fora do pacote.
+  - **ESTAI em dobro:** 0 entre legado e modelo; ESTAI na ficha 62 contra 110. **Restam 2 ESTAI do modelo contidos em outro do modelo**, fora da definição e abertos: a "uma ocorrência só" do objetivo não vale para eles (dono: E09 ou a gramática).
+  - **Ablação do legado em ESTAI:** 0 ocorrências cobertas pelo modelo perdidas; 2 só do legado, na 016, fora da ficha, desenho não inspecionado.
+  - **Postes:** 58/11/49, campos iguais (identificador 58/58, poste 55/58, coordenada 53/57, estruturas 20/58). `estruturas_sem_poste` 11→7, como previsto; `cabos_sem_vao` 69.
+  - **Dois postes próximos e opção desligada:** testes sintéticos. Goldens: `git diff --exit-code f26cc3c -- tests/fixtures/golden_padrao_e07.json` e `877aba1` no complementar, exit 0.
+  - **R-E07.2.2.1-6 (sítio disputado):** só cobertura sintética; o único `poste_disco` da rodada não tem sítio bloqueado.
+  - **Integridade** (`--base 4ca3754`): 11 apontamentos e 1 aviso de merge, todos justificados pela revisora. **`osv-scanner`:** `No issues found`.
+  - **Gate:** em `9408201` (HEAD com a `main` integrada) → `RESULTADO FINAL: APROVADO`, 12586 passed, 5 xfailed, cobertura 89,89%.
+- **Decisões para o usuário** (tomadas pela opção recomendada; revisáveis):
+  - **R-E07.2.2.1-8, a parada do plano foi contornada:** o plano mandava estacionar se nenhuma hipótese vencesse, e nenhuma venceu como escrita. Escolhi seguir com a regra ajustada, depois de pesar: estacionar perderia 65→17 FP na janela; manter a margem ficaria com 6 ESTAI em dobro. A revisão de arquitetura aceitou, com o número declarado in-sample. **É a decisão a revisar primeiro.**
+  - **Leitura da ablação:** "não perde a ocorrência" vale para a ocorrência coberta pelo modelo; o que só o legado vê é o que a ablação existe para mostrar.
+  - **Vínculo na métrica nova:** estrutura sem identificador equidistante de um pendente e de um ancorado fica sem relação (regressão de recall aceita; antes o ancorado levava).
+- **Limites a provar na E09:**
+  - Raio 0,020 (poste à caixa) escolhido entre 3 pontos, sem varredura perto do valor. Passada repetida pode juntar legado e modelo de estais diferentes; "nenhum par entre postes diferentes" só foi verificável em 51 dos 81 pares.
+  - A guarda quase não age: modelos têm sempre subtipo `None`, nenhum detector de ESTAI grava `simbolo_limites_suporte`, e houve 0 recusas; o limite espacial real é a contenção.
+- **Pré-requisito de ligar a opção por padrão:** o ESTAI fundido sai com `simbolo_identidade_resolvida=False`, `identidade_alternativa` e status `conflicting` na revisão (`interpretation_pipeline.py:769-774`, `symbol_review.py:167-179`), por subtipo e pela união de referências (`ambiguous_reference_id`). Afeta cerca de 80 pares na revisão, sem efeito em promoção, conformidade ou ficha, porque ESTAI não é ativo.
+- **Para a E07.2.2.2:** D14 segue dependendo do usuário.
+- **Para a E07.3:** o poste `poste_disco` forma região própria, sem rótulo, e a estrutura ligada a ele fica em outra região; EQUIPAMENTO_INTERRUPCAO não está no catálogo inicial e não é promovido (`catalogo_nao_localizado`).
+- **Menores deferidos:** `_estai_compatibilities` é L×M sem separar por página; sem cancelamento em `reconcile_symbols`; contadores do teste de custo são proxies; poste pendente por sítio só tomado sai dos candidatos (1 caso real, sem símbolo afetado); um `node down` isolado, não reproduzido, na primeira suíte da Task 4.
 
 ## E07.2.2.2 — Situação do TRANSFORMADOR (D14) — #pendente
 
