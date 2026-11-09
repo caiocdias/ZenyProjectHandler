@@ -1235,5 +1235,5 @@ def test_sem_componentes_continua_com_uma_primitiva() -> None:
     assert primitiva.indice == str(lida.indices_crus[3])
 
 
-def test_versao_1_4_0(pacotes: Pacotes, tabela: TabelaGlifos) -> None:
+def test_versao_1_5_0(pacotes: Pacotes, tabela: TabelaGlifos) -> None:
     assert perfil_pacotes_modelo(pacotes, tabela).versao == "1.5.0"

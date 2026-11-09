@@ -179,6 +179,8 @@ _GRAMATICAS_NOVAS = (
     _RAIZ / "tests" / "unit" / "test_grammar_estai_ataque.py",
     _RAIZ / "tests" / "unit" / "test_grammar_estai_teto.py",
     _RAIZ / "tests" / "unit" / "test_gramatica_estai_tipo.py",
+    _RAIZ / "tests" / "unit" / "test_gramatica_estai_tipo_ataque.py",
+    _RAIZ / "tests" / "unit" / "test_grammar_estai_dedup_vizinhos_testador.py",
     _RAIZ / "tests" / "integration" / "test_model_symbols_trafo_runner.py",
     _RAIZ / "tests" / "integration" / "test_model_symbols_trafo_ataque.py",
     _RAIZ / "tests" / "integration" / "test_trafo_costuras_etapa_testador.py",

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 from pathlib import Path
 from typing import Any
 
@@ -60,7 +61,7 @@ _CASOS: list[Any] = [
     pytest.param(_gramatica(enclosure="ellipse", removal_mark=True), id="elipse-com-x"),
     pytest.param(_gramatica(max_span=72), id="span-72"),
     pytest.param(_gramatica(max_span=72.0), id="span-72.0"),
-    pytest.param(_gramatica(max_span=72.0000001), id="span-acima"),
+    pytest.param(_gramatica(max_span=math.nextafter(72.0, math.inf)), id="span-acima"),
     pytest.param(_gramatica(max_span=96), id="span-96"),
     pytest.param(_gramatica(max_span=1e-300), id="span-minusculo"),
     pytest.param(_gramatica(max_span=0), id="span-zero"),
