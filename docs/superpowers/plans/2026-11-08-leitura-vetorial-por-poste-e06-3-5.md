@@ -18,7 +18,7 @@
 - Sem dependência nova. Fixtures sintéticas autorais; nenhuma coordenada, hash ou nome de folha real; a guarda de fonte (`_GRAMATICAS_NOVAS`) cobre os arquivos novos. Nada lê `examples/avaliacao-cega/`.
 - `terminal_disc` e PONTO_CONEXAO não mudam: mesma saída por folha (`tmp/e06-3-4/final`).
 - Não tocar nos arquivos da E07.2.1, aberta em paralelo: `src/zeny_project_handler/adapters/interpretation/`, `composition.py`, `scripts/benchmark_network_pdf.py`, `tests/server/test_ficha_poste_composicao*`, `tests/unit/test_interpretador_*`, `tests/unit/test_ancoragem_poste*`, `tests/integration/test_ficha_poste_cadeia.py`, `tests/integration/test_golden_padrao_e07*`, `tests/fixtures/golden_padrao_e07*`, nem `tests/conftest.py`.
-- Gasto máximo por folha: alvo de 300.000 (D15; a 016 está em 206.853). Todo laço paga orçamento.
+- Gasto máximo por folha: alvo de 300.000 (D15; a 016 está em 206.853). Todo laço da gramática nova paga orçamento; o laço interno de `de_curva` em `discos_candidatos` é exceção preexistente, para não mudar o custo de `terminal_disc`.
 - Testador e desenvolvedor não commitam arquivos sob `.superpowers/`.
 
 ## Review Focus
@@ -34,9 +34,9 @@
 - **R-E06.3.5-1, tipo `disc_mark`:** campos exatos `{"kind": "disc_mark", "fill": "red", "content": "fuse_curve" | "double_box", "min_span": número em (0, 72], "max_span": número em (0, 72]}`, com `min_span < max_span`. Entra no validador, no schema `docs/schemas/pacotes-simbologia.schema.json`, em `_GRAMMARS`, em `_GRAMMAR_FIELD_VALIDATORS` e em `GRAMATICAS_SO_MODELO`.
 - **R-E06.3.5-2, variantes habilitadas:** v017 (`fuse_curve`, 18 referências) e v019 (`double_box`, 1 referência). v018 e v020 (aberta, em verde) ficam `pending`, sem folha com a forma: nenhuma habilitação só por fixture. v001, v002, v040, v038 e v039 ficam `pending`: v002 nasce dentro de v017, e as demais não aparecem nas referências. Ruling em "Decisões para o usuário", junto com a correção do Escopo do roadmap, que falava em chevrons e curva sinuosa. Anel verde com cruz e X vermelho (folha 002) fica fora: classe indefinida na ficha.
   - **Estado de operação:** retirar o `reason` ("mecanismo e estado de contato exigem topologia local") e habilitar v017 e v019 afirma `operating_state: "Fechado"` pelo vermelho. A cor distingue v017 de v018 (aberta) na F02, e a posição operada não é situação de obra (`situation_note` do inventário trata de obra), por isso o vermelho basta aqui. Alternativas descartadas: manter `pending` (recall 0) e fundir aberta e fechada numa só (afirmaria menos, sem ganho). Ruling em "Decisões para o usuário". Com a opção ligada, EQUIPAMENTO_INTERRUPCAO é candidato a ativo (`interpretation_pipeline.py:605-617,1064`): vai ao "Para a E07.2.2".
-- **R-E06.3.5-3, teto do disco:** `discos_candidatos` ganha o parâmetro `vao_maximo`, com default igual ao `_VAO_MAXIMO_DISCO` de hoje, que atravessa `_aspecto_redondo`, `_caixas_de_faixa`, `_disco_de_curva`, `_disco_da_pilha` e `_discos_de_faixas`. Só a nova gramática o aumenta, fixado em 72 (o limite do schema), porque os candidatos são calculados uma vez por página, antes das variantes, e `max_span` da variante filtra depois. `terminal_disc` chama sem o parâmetro e não muda. Todos os discos reais levantados são de curva, então a nova gramática pode usar só o caminho `_disco_de_curva`, se o laboratório confirmar, para não pagar `_pilhas_de_faixas` de novo. O laço de `de_curva` em `discos_candidatos`, que hoje não paga orçamento, passa a pagar.
+- **R-E06.3.5-3, teto do disco:** `discos_candidatos` ganha o parâmetro `vao_maximo`, com default igual ao `_VAO_MAXIMO_DISCO` de hoje, que atravessa `_aspecto_redondo`, `_caixas_de_faixa`, `_disco_de_curva`, `_disco_da_pilha` e `_discos_de_faixas`. Só a nova gramática o aumenta, fixado em 72 (o limite do schema), porque os candidatos são calculados uma vez por página, antes das variantes, e `max_span` da variante filtra depois. `terminal_disc` chama sem o parâmetro e não muda. Todos os discos reais levantados são de curva, então a nova gramática pode usar só o caminho `_disco_de_curva`, se o laboratório confirmar, para não pagar `_pilhas_de_faixas` de novo. Se ela ficar só com esse caminho, a Task 3 decide se tira o `vao_maximo` do ramo de faixas ou o mantém sem consumidor, e registra. A nova gramática paga, em `disc_mark_candidatos`, `orcamento.gastar(len(caminhos))` uma vez por página; o laço interno de `de_curva` de `discos_candidatos` não muda, para que `terminal_disc` fique igual inclusive em custo (exceção preexistente).
 - **R-E06.3.5-4, caixa:** o disco. O conteúdo (curva S, dois pontos terminais ou caixa dupla) só confirma a variante e entra em `componentes`.
-- **R-E06.3.5-6, reconciliação no runner:** `_same_occurrence` não olha classe (`symbol_reconciliation.py:207-245`). Sobre o disco de 7,2 pt da 006, o legado lê ATERRAMENTO. O teste da Task 4 usa uma observação de outra classe sobre o disco e **fixa o resultado observado** (funde, com `symbol_class=None`, ou não funde), com asserção sem disjunção. O desfecho vai ao "Para a E07.2.2".
+- **R-E06.3.5-6, reconciliação no runner:** `_same_occurrence` não olha classe (`symbol_reconciliation.py:207-245`). Sobre o disco de 7,2 pt da 006, o legado lê ATERRAMENTO. O teste da Task 4 usa uma observação de outra classe sobre o disco, com as primitivas que o legado emitiria (registradas no teste), e **fixa o resultado observado** em `reconcile_symbols` (funde ou não funde; se fundir, o efeito no pipeline, `symbol_class=None`, é registrado à parte), com asserção sem disjunção. O desfecho vai ao "Para a E07.2.2".
 - **R-E06.3.5-5, critério "acima do atual":** o atual tem 0/0/20, por centro (IoU registrado). **Vitória:** precisão e recall da classe maiores que 0, com tp ≥ 18 e FP brutos ≤ 3, triados em render. Leituras erradas: 0 **novas**; as 2 de hoje (002 e 006) continuam e vão ao handoff. Demais classes iguais por folha a `tmp/e06-3-4/final`, núcleo × motor 29/29, gasto ≤ 300.000, auditor sem erro.
 
 ## File Structure
@@ -56,7 +56,7 @@
 
 **Ondas:** Tasks 1 e 2 em paralelo (arquivos disjuntos); laboratório sobre as duas; Task 3; depois {4, 5}; testador de etapa; medição do orquestrador. Etapa em paralelo: E07.2.1 (e a E07.2.2, ao abrir, com verificação no plano dela). Soma: 25 + 20 + 45 + 40 + 20 = 2h30, mais o laboratório (60 min), que corre sem dividir porque as tarefas ficam em cerca de 3h. Vale a regra de estouro de 4h30 do protocolo; o relógio começa em 1e8d608.
 
-## Laboratório (depois da Task 1)
+## Laboratório (depois das Tasks 1 e 2)
 
 - **Base:** a branch da etapa com as Tasks 1 e 2 integradas. Worktree destacado por hipótese; cada `desenvolvedor` implementa e mede, sem commitar e sem a suíte inteira, com o `.venv` da etapa e `PYTHONPATH=<worktree>/src`.
 - **Hipóteses** (duas, por haver outra etapa aberta):
@@ -90,7 +90,7 @@
 
 **Interfaces:** Produces: `discos_candidatos(contexto, *, vao_maximo: float = _VAO_MAXIMO_DISCO)` (R-E06.3.5-3).
 
-- [ ] **Step 1: Testes falhando:** com o default, a saída é idêntica à atual (`terminal_disc`, com as fixtures de PONTO_CONEXAO); com `vao_maximo=72`, disco de 14,4 pt passa; `_caixas_de_faixa` respeita o parâmetro; o laço de `de_curva` paga orçamento. → FAIL.
+- [ ] **Step 1: Testes falhando:** com o default, a saída e o gasto são idênticos aos atuais (`terminal_disc`, com as fixtures de PONTO_CONEXAO); com `vao_maximo=72`, disco de 14,4 pt passa; `_caixas_de_faixa` respeita o parâmetro. → FAIL.
 - [ ] **Step 2:** implemente conforme R-E06.3.5-3, sem mudar a chamada de `terminal_disc`.
 - [ ] **Step 3:** testes e `scripts.diff_simbolos_nucleo_motor` → PASS; demais classes iguais.
 - [ ] **Step 4: Commit**; suíte inteira uma vez antes do relatório.
