@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from decimal import Decimal
 from itertools import permutations
+from typing import Any
 
 import pytest
 from tests.unit.test_symbol_reconciliation import _observation
@@ -24,7 +25,6 @@ from tests.unit.test_symbol_reconciliation_estai import (
 from zeny_project_handler.application import symbol_reconciliation
 from zeny_project_handler.domain.symbols import AlternativaClasseSimbolo, ObservacaoSimbolo
 
-_OUTRO_OUTRO_LEGADO = replace(_OUTRO_LEGADO, metodo_id="pymupdf-extra")
 _MODELO_B = replace(_MODELO, parametros=(("variant", 2),))
 
 
@@ -221,7 +221,7 @@ def test_estai_funde_e_outra_classe_vizinha_continua_propria() -> None:
     [{"documento_id": "outro"}, {"camada": "anotacao"}, {"documento_sha256": "b" * 64}],
     ids=["documento", "camada", "sha"],
 )
-def test_fonte_diferente_nao_funde(mudanca: dict[str, str]) -> None:
+def test_fonte_diferente_nao_funde(mudanca: dict[str, Any]) -> None:
     modelo = _modelo()
     legado = replace(_legado(), fonte=replace(modelo.fonte, **mudanca))
 
