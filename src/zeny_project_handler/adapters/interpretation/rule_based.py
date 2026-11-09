@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import replace
+from uuid import UUID
 
 from zeny_project_handler.application.analysis_regions import classificar_pontos_de_entrega
 from zeny_project_handler.application.document_zones import (
@@ -18,6 +19,7 @@ from zeny_project_handler.domain.analysis import (
     DiagnosticoAnalise,
     EvidenciaDocumento,
     PropostaElemento,
+    PropostaRelacao,
 )
 from zeny_project_handler.domain.enums import CategoriaElemento
 from zeny_project_handler.domain.interpretation import RegistroRegrasInterpretacao
@@ -89,6 +91,12 @@ class InterpretadorRegrasExplicitas:
             tuple(proposals),
             project_request.evidencias,
         )
+        _raise_if_cancelled(cancellation)
+        identified_proposals = self._refinar_propostas_identificadas(
+            identified_proposals,
+            project_request,
+            diagnostics,
+        )
         if len(identified_proposals) > solicitacao.configuracao.maximo_propostas:
             raise ValueError("Quantidade de propostas excedeu o limite configurado")
         proposals_with_paths = associar_tracados_de_cabos(
@@ -111,12 +119,7 @@ class InterpretadorRegrasExplicitas:
             attach_revision_conflicts(elements, solicitacao.evidencias)
         )
         relations = (
-            generate_relations(
-                solicitacao.execucao_id,
-                elements,
-                self.registro,
-                solicitacao.catalogo,
-            )
+            self._gerar_relacoes(solicitacao.execucao_id, elements, solicitacao)
             if solicitacao.configuracao.gerar_relacoes
             else ()
         )
@@ -125,6 +128,29 @@ class InterpretadorRegrasExplicitas:
             elementos=tuple(sorted(elements, key=lambda item: str(item.id))),
             relacoes=tuple(sorted(relations, key=lambda item: str(item.id))),
             diagnosticos=tuple(diagnostics),
+        )
+
+    def _refinar_propostas_identificadas(
+        self,
+        propostas: tuple[PropostaElemento, ...],
+        solicitacao: SolicitacaoInterpretacao,
+        diagnosticos: list[DiagnosticoAnalise],
+    ) -> tuple[PropostaElemento, ...]:
+        """Gancho sem efeito: variantes refinam as propostas antes do limite e dos cabos."""
+        del solicitacao, diagnosticos
+        return propostas
+
+    def _gerar_relacoes(
+        self,
+        execucao_id: UUID,
+        elementos: tuple[PropostaElemento, ...],
+        solicitacao: SolicitacaoInterpretacao,
+    ) -> tuple[PropostaRelacao, ...]:
+        return generate_relations(
+            execucao_id,
+            elementos,
+            self.registro,
+            solicitacao.catalogo,
         )
 
 
