@@ -1201,15 +1201,18 @@ def _symbol_support(
 
 
 def _is_disc_pending(pole: PropostaElemento) -> bool:
-    return dict(pole.atributos_sugeridos).get("associacao_pendente") == "poste_disco"
+    return bool(_disputed_sites(dict(pole.atributos_sugeridos).get("poste_disco_sitios")))
 
 
 def _pole_distance(geometry: GeometriaDocumento, pole: PropostaElemento) -> float | None:
-    """Pole with a disputed disc counts by its disputed sites, never by the text position."""
-    if not _is_disc_pending(pole):
-        return _point_to_symbol_distance(_geometry_center(pole.geometria), geometry)
-    sites = _disputed_sites(dict(pole.atributos_sugeridos).get("poste_disco_sitios"))
-    return min((_point_to_symbol_distance(site, geometry) for site in sites), default=None)
+    """Pole with disputed sites counts by them, whatever the recorded cause of its pending."""
+    attributes = dict(pole.atributos_sugeridos)
+    sites = _disputed_sites(attributes.get("poste_disco_sitios"))
+    if sites:
+        return min(_point_to_symbol_distance(site, geometry) for site in sites)
+    if attributes.get("associacao_pendente") == "poste_disco":
+        return None
+    return _point_to_symbol_distance(_geometry_center(pole.geometria), geometry)
 
 
 def _disputed_sites(raw: object) -> tuple[tuple[float, float], ...]:

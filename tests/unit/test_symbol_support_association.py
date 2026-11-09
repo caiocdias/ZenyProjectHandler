@@ -42,7 +42,8 @@ from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormaliz
 _PAGE_SIZE = 2000.0
 _PAGE_ID = uuid5(NAMESPACE_URL, "fixture:associacao-suporte:pagina")
 _EXECUTION_ID = uuid5(NAMESPACE_URL, "fixture:associacao-suporte:execucao")
-# Poste do qual sai a haste e um vizinho a ~0,001 da caixa do pictograma além do primeiro.
+# Poste do qual sai a haste e um vizinho: pela caixa do pictograma, ~0,0013 além do primeiro
+# (dentro da margem de 0,004); pela caixa da haste, ~0,0165 além dele (fora da margem).
 _FIRST_POLE = (100.0, 100.0)
 _NEIGHBOUR_POLE = (125.0, 165.0)
 

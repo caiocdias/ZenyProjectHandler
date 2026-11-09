@@ -196,3 +196,21 @@ def test_sitio_nao_numerico_nao_desordena_os_candidatos_validos() -> None:
 
     assert suporte == perto
     assert _ids(candidatos) == [perto.id, longe.id]
+
+
+def test_outra_causa_com_sitios_empatados_nao_deixa_o_simbolo_migrar_para_o_vizinho() -> None:
+    disputado = _poste("a", "P1", 0.30, 0.30, extras=(("associacao_pendente", "outra_causa"),))
+    vizinho = _poste("b", "P3", 0.342, 0.316)
+    ancorados = ancorar_postes_no_desenho(
+        (disputado, vizinho),
+        (
+            _disco("d1", 0.26, 0.30),
+            _disco("d2", 0.342, 0.30),
+            _disco("do-vizinho", 0.342, 0.315),
+        ),
+    )
+
+    suporte, candidatos = _symbol_support(_simbolo(0.341, 0.299, 0.343, 0.301), "base", ancorados)
+
+    assert suporte is None
+    assert _ids(candidatos) == [disputado.id, vizinho.id]
