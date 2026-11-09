@@ -250,11 +250,16 @@ def _without_choice_dependent_rivals(
     for legacy, model in compatibilities:
         models_of.setdefault(legacy, []).append(model)
         legacies_of.setdefault(model, []).append(legacy)
+    refused = {
+        contended
+        for rivals_of in (models_of, legacies_of)
+        for contended, rivals in rivals_of.items()
+        if _choice_changes_outcome(contended, rivals, groups)
+    }
     return {
         (legacy, model): distance
         for (legacy, model), distance in compatibilities.items()
-        if not _choice_changes_outcome(legacy, models_of[legacy], groups)
-        and not _choice_changes_outcome(model, legacies_of[model], groups)
+        if legacy not in refused and model not in refused
     }
 
 
@@ -276,36 +281,24 @@ def _best_mutual_pairs(
     compatibilities: dict[tuple[int, int], Decimal],
     groups: list[list[ObservacaoSimbolo]],
 ) -> tuple[tuple[int, int], ...]:
-    """Repeat the nearest-mutual round over what is left until no new pair appears."""
+    """Pair the nearest edges first; an exact tie goes to the lowest id.
+
+    Each side ranks its edges by the same global order, so this sweep yields the same pairs
+    as repeating the best-mutual round over what is left, without one pass per pair.
+    """
+    lowest = {
+        index: _lowest_id(groups[index])
+        for index in {index for pair in compatibilities for index in pair}
+    }
     pairs: list[tuple[int, int]] = []
-    remaining = dict(compatibilities)
-    while found := _mutual_round(remaining, groups):
-        pairs.extend(found)
-        legacies, models = {pair[0] for pair in found}, {pair[1] for pair in found}
-        remaining = {
-            key: distance
-            for key, distance in remaining.items()
-            if key[0] not in legacies and key[1] not in models
-        }
+    taken: set[int] = set()
+    for legacy, model in sorted(
+        compatibilities, key=lambda pair: (compatibilities[pair], lowest[pair[0]], lowest[pair[1]])
+    ):
+        if legacy not in taken and model not in taken:
+            taken.update((legacy, model))
+            pairs.append((legacy, model))
     return tuple(sorted(pairs))
-
-
-def _mutual_round(
-    compatibilities: dict[tuple[int, int], Decimal],
-    groups: list[list[ObservacaoSimbolo]],
-) -> tuple[tuple[int, int], ...]:
-    """Keep the pairs that are each other's nearest; an exact tie goes to the lowest id."""
-    by_legacy: dict[int, list[tuple[Decimal, str, int]]] = {}
-    by_model: dict[int, list[tuple[Decimal, str, int]]] = {}
-    for (legacy, model), distance in compatibilities.items():
-        by_legacy.setdefault(legacy, []).append((distance, _lowest_id(groups[model]), model))
-        by_model.setdefault(model, []).append((distance, _lowest_id(groups[legacy]), legacy))
-    best_of_model = {key: min(items)[2] for key, items in by_model.items()}
-    return tuple(
-        (legacy, nearest)
-        for legacy, items in sorted(by_legacy.items())
-        if best_of_model[nearest := min(items)[2]] == legacy
-    )
 
 
 def _lowest_id(group: list[ObservacaoSimbolo]) -> str:
