@@ -75,6 +75,22 @@
 - **Parada:** 60 min por hipótese. Se nenhuma vencer, a etapa estaciona (D20).
 - **Entrega:** em `<checkout principal>/tmp/laboratorio/e07-2-1/<hipotese>/`: `patch.diff`, `metricas.json`, `conclusoes.md`.
 
+## Resultado do laboratório (2026-11-08)
+
+Laboratório em `tmp/laboratorio/e07-2-1/` do checkout principal, com base em 527bdd4. Controle: `baseline-v011` (postes 43/39/64).
+
+| hipótese | postes tp/fp/fn | precisão / recall | vãos tp/fp/fn | símbolos tp/fp/fn | mesmo P em mais de uma região |
+|---|---|---|---|---|---|
+| **H-A, escolhida** | 59/10/48 | 85,5% / 55,1% | 28/3/55 | 33/62/146 | 2 (v011: 1) |
+| H-B | 56/13/51 | 81,2% / 52,3% | 26/5/57 | 32/57/147 | 1 |
+
+- As duas cumprem a R-E07.2.1-6: acertos absolutos de identificador, poste, coordenada e estruturas sem queda, taxa sem queda na coorte dos 43 casados na v011, vãos tp sem queda, `estruturas_sem_poste` e `cabos_sem_vao` sem aumentar, leitura errada afirmada 0, nenhum disco com dois P afirmados.
+- **H-A escolhida** por mais postes e menos FP de poste. Custa um "mesmo P em mais de uma região" a mais (015 P1, uma estrutura isolada), que vai ao handoff e à E07.3. O empate previsto no plano não ocorreu.
+- **Sinal das pilhas de leitura:** `situacao_projeto` (REMOVER contra INSTALAR) decide as 8 pilhas medidas, sem precisar de marca de risco.
+- **Desvios da R-E07.2.1-3, adotados como rulings:** origem da atribuição é o centro do rótulo P (`evidencia_identificador_id`), não a nomenclatura, porque a nomenclatura trocava o disco de um P não lido vizinho (5 casos); par de discos a 0,013; raio de atribuição 0,14; roxo só a até 0,04 do rótulo. Leitura distante do mesmo rótulo P fica como proposta sem pendência, porque fundir subia `estruturas_sem_poste` de 7 para 18. Limiares calibrados nas 16 folhas: a E09 mede o sobreajuste.
+- **Filtro de glifo** removeu 0 de 262 candidatos, porque o FP do levantamento veio do modelo de desenho e não aparece como `c,c,c,c` nas evidências VETOR. Fica como salvaguarda do Review Focus 2.
+- **Candidatos sobre VETOR:** 90/107 a até 0,005 (levantamento: 87).
+
 ## Tasks
 
 ### Task 1: Ampliar o golden complementar
