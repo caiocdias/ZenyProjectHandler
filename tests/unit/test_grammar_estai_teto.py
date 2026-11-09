@@ -8,12 +8,15 @@ from typing import Any, Final
 import pytest
 from tests.fixtures.symbol_grammars.estai import (
     GRAMATICAS_ESTAI,
+    centro_do_garfo,
     estai_com_circulo,
     garfo,
+    pagina_estai,
     x_sobre,
 )
 from tests.fixtures.symbol_grammars.paginas import pagina_gramatica
 
+from zeny_project_handler.adapters.analysis.drawing_model import grammar_estai
 from zeny_project_handler.adapters.analysis.drawing_model.grammar_estai import estai_candidatos
 from zeny_project_handler.adapters.analysis.drawing_model.grammar_marcas import MarcasDaPagina
 from zeny_project_handler.adapters.analysis.drawing_model.model import Caminho
@@ -29,6 +32,7 @@ _COLUNAS: Final = 5
 _RAZAO_MAXIMA: Final = 12
 _FOLGA_POR_GARFO: Final = 8
 _EMPILHADOS: Final = 1_500
+_ENCADEADOS: Final = 300
 
 
 def _pagina(caminhos: list[Caminho], quantidade: int) -> PaginaGramatica:
@@ -103,20 +107,100 @@ def test_gasto_cresce_linear_com_os_desenhos() -> None:
     assert grande / pequeno <= _RAZAO_MAXIMA
 
 
-def test_pagina_hostil_estoura_o_orcamento() -> None:
-    """Milhares de garfos quase coincidentes: o teto é o gasto dos índices mais uma folga linear.
+def _limite_linear(pagina: PaginaGramatica, garfos: int) -> int:
+    """Gasto dos índices da página mais o dobro do gasto linear medido por garfo isolado."""
+    por_garfo = _gasto_dos_candidatos(100)[0] / 100
+    return contexto_gramaticas(pagina).orcamento.gasto + int(2 * por_garfo * garfos)
 
-    O limite deixa passar a leitura linear (`_FOLGA_POR_GARFO` por garfo); o estouro só vem de a
-    gramática pagar os laços sobre as mesmas células, nunca de um laço sem orçamento.
+
+def test_pagina_sa_cabe_no_limite_linear() -> None:
+    """Controle negativo: com o mesmo limite do teste hostil, garfos isolados não estouram."""
+    caminhos: list[Caminho] = []
+    for i in range(_EMPILHADOS):
+        caminhos.extend(garfo(base=_base(i)))
+    pagina = _pagina(caminhos, _EMPILHADOS)
+    contexto = contexto_gramaticas(pagina, limite=_limite_linear(pagina, _EMPILHADOS))
+
+    assert len(estai_candidatos(contexto, marcas=MarcasDaPagina(contexto))) == _EMPILHADOS
+
+
+def _cascata(quantidade: int) -> PaginaGramatica:
+    """Cada garfo que perde um X passa ao seguinte e o toma do vizinho: uma rodada por garfo."""
+    caminhos: list[Caminho] = []
+    for i in range(quantidade):
+        base = (150.0, 10.0 + i * 8.0)
+        caminhos += [*garfo(base=base), *x_sobre(centro_do_garfo(base=base), meio=9.0)]
+    return pagina_estai(caminhos, altura=quantidade * 8.0 + 20.0)
+
+
+def test_cascata_de_disputas_estoura_o_orcamento() -> None:
+    """As rodadas da disputa percorrem todas as leituras: o custo é quadrático e o teto o vê."""
+    pagina = _cascata(_ENCADEADOS)
+    limite = _limite_linear(pagina, _ENCADEADOS)
+    contexto = contexto_gramaticas(pagina, limite=limite)
+
+    with pytest.raises(TetoGramaticasExcedido):
+        estai_candidatos(contexto, marcas=MarcasDaPagina(contexto))
+
+
+def test_pagina_hostil_estoura_o_orcamento() -> None:
+    """Garfos quase coincidentes custam muito mais que o linear (o gasto cresce com o cubo).
+
+    O limite é o gasto dos índices mais o dobro do gasto linear medido; só o gasto da
+    gramática, pago laço a laço, pode ultrapassá-lo.
     """
     caminhos: list[Caminho] = []
     for i in range(_EMPILHADOS):
         caminhos.extend(garfo(base=(100.0 + (i % 40) * 0.001, 100.0 + (i // 40) * 0.001)))
     pagina = pagina_gramatica(caminhos, primitivas=())
-    limite = contexto_gramaticas(pagina).orcamento.gasto + _FOLGA_POR_GARFO * _EMPILHADOS
+    limite = _limite_linear(pagina, _EMPILHADOS)
     contexto = contexto_gramaticas(pagina, limite=limite)
 
     with pytest.raises(TetoGramaticasExcedido):
         estai_candidatos(contexto, marcas=MarcasDaPagina(contexto))
 
     assert contexto.orcamento.gasto >= limite
+
+
+def test_cada_laco_de_estai_candidatos_paga(monkeypatch: pytest.MonkeyPatch) -> None:
+    """O que `estai_candidatos` gasta fora das etapas é 1 por garfo lido (ou relido) e uma
+    varredura das leituras por rodada da disputa; a vizinhança da deduplicação paga 1 + vizinhos."""
+    contexto = contexto_gramaticas(_cascata(10))
+    marcas = MarcasDaPagina(contexto)
+    dentro = {"etapas": 0, "dedup": 0}
+    chamadas = {"_classificar": 0, "disputar": 0, "lidos": 0}
+
+    def medir(nome: str, chave: str) -> None:
+        original = getattr(grammar_estai, nome)
+
+        def com_medida(*args: Any, **kwargs: Any) -> Any:
+            antes = contexto.orcamento.gasto
+            try:
+                return original(*args, **kwargs)
+            finally:
+                dentro[chave] += contexto.orcamento.gasto - antes
+                if nome in chamadas:
+                    chamadas[nome] += 1
+
+        monkeypatch.setattr(grammar_estai, nome, com_medida)
+
+    for nome in ("_classificar", "_garfos"):
+        medir(nome, "etapas")
+    original_disputar = grammar_estai._disputar
+
+    def disputar(lidos: Any, perdas: Any) -> bool:
+        chamadas["disputar"] += 1
+        chamadas["lidos"] = len(lidos)
+        return bool(original_disputar(lidos, perdas))
+
+    monkeypatch.setattr(grammar_estai, "_disputar", disputar)
+    medir("_deduplicar", "dedup")
+    antes = contexto.orcamento.gasto
+
+    estai_candidatos(contexto, marcas=marcas)
+
+    total = contexto.orcamento.gasto - antes
+    proprio = total - dentro["etapas"] - dentro["dedup"]
+    assert chamadas["_classificar"] > chamadas["lidos"]  # houve ao menos uma releitura
+    assert proprio == chamadas["_classificar"] + chamadas["disputar"] * chamadas["lidos"]
+    assert dentro["dedup"] >= chamadas["lidos"]
