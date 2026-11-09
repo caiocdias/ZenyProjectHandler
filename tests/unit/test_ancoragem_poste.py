@@ -382,6 +382,27 @@ def test_desempate_pela_nomenclatura_nao_toma_o_sitio_disputado_por_outro_p() ->
         assert _atributos(item)["associacao_pendente"] == "poste_disco"
 
 
+def test_poste_com_o_proximo_tomado_e_o_seguinte_bloqueado_fica_pendente() -> None:
+    # P0 toma T; o sítio seguinte de P2 está bloqueado pela ambiguidade de P1; S3 é de outro poste.
+    ambiguo = _poste("a", "P1", 0.50, 0.30)
+    dono = _poste("b", "P0", 0.60, 0.30)
+    vizinho = _poste("c", "P2", 0.585, 0.30)
+    discos = (
+        _disco("s1", 0.48, 0.30),
+        _disco("s2", 0.523, 0.30),
+        _disco("t", 0.601, 0.30),
+        _disco("s3", 0.70, 0.30),
+    )
+
+    resultado = {
+        item.id: item for item in ancorar_postes_no_desenho((ambiguo, dono, vizinho), discos)
+    }
+
+    assert _centro(resultado[dono.id]) == pytest.approx((0.601, 0.30), abs=1e-6)
+    _assert_nao_ancorado(vizinho, resultado[vizinho.id])
+    assert _atributos(resultado[vizinho.id])["associacao_pendente"] == "poste_disco"
+
+
 def test_pilha_de_leituras_com_situacao_decide_pela_que_nao_e_retirada() -> None:
     nova = _poste("nova", "P1", 0.30, 0.30)
     retirada = _poste("velha", "P1", 0.30, 0.306, codigo="10-150", situacao=SituacaoProjeto.REMOVER)
@@ -561,6 +582,21 @@ def test_pagina_hostil_com_postes_acima_do_teto_nao_ancora_nem_pende() -> None:
     )
 
     assert ancorar_postes_no_desenho(postes, (_disco("d1", 0.31, 0.40),)) == postes
+
+
+def test_pagina_hostil_com_leituras_acima_do_teto_nao_ancora_nem_pende() -> None:
+    leituras = tuple(_poste(f"p{indice}", "P1", 0.30, 0.30) for indice in range(1_001))
+
+    assert ancorar_postes_no_desenho(leituras, (_disco("d1", 0.31, 0.30),)) == leituras
+
+
+def test_teto_de_leituras_ainda_ancora_no_limite() -> None:
+    leituras = tuple(_poste(f"p{indice}", "P1", 0.30, 0.30) for indice in range(1_000))
+
+    resultado = ancorar_postes_no_desenho(leituras, (_disco("d1", 0.31, 0.30),))
+
+    assert len(resultado) == 1
+    assert _atributos(resultado[0])["poste_ancorado_disco"] is True
 
 
 def test_teto_vale_por_pagina() -> None:

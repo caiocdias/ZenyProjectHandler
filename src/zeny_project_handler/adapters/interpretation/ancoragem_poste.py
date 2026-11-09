@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import math
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Final, TypeAlias
@@ -37,6 +37,7 @@ _ROTULO_POSTE: Final = re.compile(r"^(?:P\d{1,4}|\d{1,2}\s*-\s*\d{2,4})$", re.IG
 # Tetos contra página hostil: acima deles a página não é ancorada (folhas reais têm dezenas).
 _MAXIMO_DISCOS_POR_PAGINA: Final = 2_000
 _MAXIMO_ROTULOS_POR_PAGINA: Final = 2_000
+_MAXIMO_LEITURAS_POR_PAGINA: Final = 1_000
 _MAXIMO_GRUPOS_POR_PAGINA: Final = 500
 _CELULA_ROTULOS: Final = 0.05
 
@@ -127,12 +128,7 @@ def ancorar_postes_no_desenho(
     propostas: tuple[PropostaElemento, ...],
     evidencias: tuple[EvidenciaDocumento, ...],
 ) -> tuple[PropostaElemento, ...]:
-    postes = tuple(
-        proposta
-        for proposta in propostas
-        if proposta.categoria is CategoriaElemento.POSTE
-        and isinstance(dict(proposta.atributos_sugeridos).get("identificador_operacional"), str)
-    )
+    postes = _postes_ancoraveis(propostas)
     if not postes:
         return propostas
     paginas = frozenset(proposta.geometria.pagina_id for proposta in postes)
@@ -150,6 +146,24 @@ def ancorar_postes_no_desenho(
         novo
         for proposta in propostas
         if (novo := substituicoes.get(proposta.id, proposta)) is not None
+    )
+
+
+def _postes_ancoraveis(
+    propostas: tuple[PropostaElemento, ...],
+) -> tuple[PropostaElemento, ...]:
+    """Postes identificados, fora de página acima do teto de leituras (agrupar é quadrático)."""
+    identificados = tuple(
+        proposta
+        for proposta in propostas
+        if proposta.categoria is CategoriaElemento.POSTE
+        and isinstance(dict(proposta.atributos_sugeridos).get("identificador_operacional"), str)
+    )
+    por_pagina = Counter(proposta.geometria.pagina_id for proposta in identificados)
+    return tuple(
+        proposta
+        for proposta in identificados
+        if por_pagina[proposta.geometria.pagina_id] <= _MAXIMO_LEITURAS_POR_PAGINA
     )
 
 
@@ -207,6 +221,8 @@ def _disco_de_poste(evidencia: EvidenciaDocumento) -> _Disco | None:
     if not _DIAMETRO_PT[0] <= (largura + altura) / 2 <= _DIAMETRO_PT[1]:
         return None
     x0, y0, x1, y1 = _caixa(evidencia.geometria)
+    if x1 <= x0 or y1 <= y0:
+        return None
     return _Disco(
         evidencia.id, (x0 + x1) / 2, (y0 + y1) / 2, x1 - x0, y1 - y0, _cor_proxima(cor, _ROXO)
     )
@@ -230,7 +246,7 @@ def _pontos_pdf(conteudo: str | None) -> list[tuple[float, float]]:
     try:
         comandos = json.loads(conteudo or "")
         return [(float(valor[0]), float(valor[1])) for comando in comandos for valor in comando[1:]]
-    except (TypeError, ValueError, IndexError):
+    except (TypeError, ValueError, LookupError, OverflowError, RecursionError):
         return []
 
 
@@ -387,8 +403,15 @@ def _atribuir(grupos: tuple[_GrupoLeitura, ...], sitios: list[_Sitio]) -> _Atrib
     atribuidos: dict[int, _Sitio] = {}
     pendentes: set[int] = set()
     usados: set[int] = set()
+    bloqueados: set[int] = set()
     for distancia, grupo_indice, sitio_indice in candidaturas.pares:
-        if grupo_indice in atribuidos or grupo_indice in pendentes or sitio_indice in usados:
+        if grupo_indice in atribuidos or grupo_indice in pendentes:
+            continue
+        if sitio_indice in bloqueados:
+            # O sítio melhor que restava está em disputa: migrar seria cair no vizinho errado.
+            pendentes.add(grupo_indice)
+            continue
+        if sitio_indice in usados:
             continue
         resolvidos = atribuidos.keys() | pendentes
         rivais = _empatados(
@@ -411,7 +434,8 @@ def _atribuir(grupos: tuple[_GrupoLeitura, ...], sitios: list[_Sitio]) -> _Atrib
                 )
         if rivais or alternativas:
             pendentes.update((grupo_indice, *rivais))
-            usados.update((sitio_indice, escolhido, *alternativas))
+            bloqueados.update((sitio_indice, escolhido, *alternativas))
+            usados.update(bloqueados)
             continue
         atribuidos[grupo_indice] = sitios[escolhido]
         usados.add(escolhido)
