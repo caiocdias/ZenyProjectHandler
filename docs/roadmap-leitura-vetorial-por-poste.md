@@ -350,8 +350,9 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E06.3.3.2.1 | Marcas: envolvente e X | #concluida | E06.3.3.1 | envolvente por subcaminho, X perto do símbolo e concordância de situação medida |
 | E06.3.3.2.2 | Transformador | #concluida | E06.3.3.2.1 | gramática do triângulo em círculo, com laboratório, TRANSFORMADOR acima do atual |
 | E07.1 | Medição da ficha com o runner e golden do padrão | #concluida | E06.3.3.2.2, E15 | benchmark com o runner ligado, `propostas-v2`, baselines de controle e golden da análise padrão |
-| E07.2 | Posição do poste e associação de símbolos | #pendente | E07.1 | poste na posição do desenho, um por identificador, símbolos no poste certo ou pendentes (opção ligada) |
-| E07.3 | Vãos na polilinha e ficha completa | #pendente | E07.2 | vãos ligados à polilinha entre dois postes, benchmark acima do baseline |
+| E07.2.1 | Posição do poste no desenho | #concluida | E07.1 | poste no disco do desenho, um por identificador, com relações sobre a posição nova (opção ligada) |
+| E07.2.2 | Símbolos no poste certo | #pendente | E07.2.1 | símbolos no poste certo ou pendentes, ESTAI sem duplicar e situação pelo `referencias_possiveis` (opção ligada) |
+| E07.3 | Vãos na polilinha e ficha completa | #pendente | E07.2.2 | vãos ligados à polilinha entre dois postes, benchmark acima do baseline |
 | E08 | Conferência UTM | #pendente | E07.3 | transformação página → UTM, checagem de posição e vão, pendências |
 | E09 | Troca do analisador e remoção do legado | #pendente | E08, E16 | analisador novo como padrão; detectores e, se provado, OCR removidos |
 
@@ -2669,24 +2670,82 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
-## E07.2 — Posição do poste e associação de símbolos — #pendente
+## E07.2 — Posição do poste e associação de símbolos (dividida em E07.2.1 e E07.2.2)
 
-**Objetivo:** com a opção ligada, o poste sai na posição do desenho, um por identificador, e cada símbolo entra no poste certo ou fica pendente.
+**Divisão (R-E07-2, 2026-11-08):** o levantamento mostrou que o poste é um disco preenchido do desenho e que as relações `INSTALADA_EM` e `CONECTA` nascem no interpretador sobre a posição do texto. Reposicionar o poste é uma etapa própria (E07.2.1), porque muda tudo que vem depois dele e pede laboratório; a associação de símbolos (E07.2.2) parte da posição nova. Dentro da E07.2.1, as derivações sem P são um ramo do laboratório.
 
-**Dependências:** E07.1.
+## E07.2.1 — Posição do poste no desenho — #concluida
+
+**Objetivo:** com a opção ligada, o poste sai sobre o disco do desenho, com uma proposta por identificador por folha, e as relações de estrutura e de cabo usam a posição nova.
+
+**Dependências:** E07.1. O relógio começa no commit `#em-andamento` da E07.2.1.
+
+**Escopo:**
+- Subclasse do interpretador só com a opção ligada (versão 26.0, D18), escolhida na composição e no benchmark com `--simbolos-modelo`.
+- Âncora do poste no disco do desenho, a partir das evidências VETOR, com laboratório de 2 hipóteses e o destino das derivações sem P.
+- Poste ancorado ao disco, uma proposta por identificador por folha; ambiguidade vira pendência (`associacao_pendente`).
+- Ampliação do golden complementar antes de tocar `src/`.
+
+**Fora de escopo:** associação de símbolos e ESTAI (E07.2.2); conferência UTM (E08).
+
+**Critérios de aceite:**
+
+- [x] Golden `tests/fixtures/golden_padrao_e07*.json` iguais (`git diff --exit-code f26cc3c -- tests/fixtures/golden_padrao_e07*.json` no pacote de revisão), depois de ampliar o complementar nos casos que o handoff da E07.1 lista.
+- [x] Com `ZENY_SERVER_SYMBOL_COMPOSITION=false`, o servidor usa o interpretador 25.0; com a opção ligada, 26.0. Teste pela composição do servidor.
+- [x] Fixture sintética com dois postes próximos e rótulos entre eles: associa corretamente ou marca pendência, nunca ao vizinho errado com confiança.
+- [x] Benchmark por poste com o runner, `propostas-v2` (baseline de controle v011), com postes (tp) maior e precisão e recall maiores que os da v011, sem regressão em identificador, poste e coordenada.
+- [x] Promoção e regiões continuam funcionando sobre as propostas novas com a opção ligada (testes existentes).
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não.
+
+**Notas para o plano:** levantamento em `tmp/janela-0.6.0/levantamento-e07-2.md`, fora do Git. O poste tem par de discos de raio 0,5–1,7 pt; os discos verdes (0; 0,5; 0) podem ser fragmento de contorno de glifo, pendente de filtro.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Evidências e handoff (2026-11-08, orquestrador):**
+
+- **Plano:** `docs/superpowers/plans/2026-11-08-leitura-vetorial-por-poste-e07-2-1.md`. A revisão de arquitetura (opus) bloqueou nas rodadas 0 (1 Crítico, 8 Importantes) e 1 (2 Importantes) e aprovou com notas na rodada 2.
+- **Commits:** `300ef67..fb11c08` (com o merge da `main`), mais o fechamento. Relógio: de 300ef67 (18:56) ao fechamento, cerca de 4h33 (a revisão final passou das 4h30 só no fechamento; sem ruling de parada, porque só restavam gate e handoff).
+- **Laboratório** (`tmp/laboratorio/e07-2-1/`, fora do Git): H-A venceu (`baseline-v019` da cópia: postes 58/11/49). Desvios adotados da R-3: origem no rótulo P, par a 0,013, raio 0,14, roxo até 0,04, leitura distante sem pendência.
+- **Revisão final** (opus): `With fixes`, sem Crítico, 3 Importantes e 4 Menores. I-1 (P com o sítio mais próximo tomado migrava ao vizinho) e I-2 (desempate pela nomenclatura decidia sem pendência) foram corrigidos em `770840e`; a re-revisão aprovou.
+- **Critérios:**
+  - **Goldens:** `git diff --exit-code f26cc3c -- tests/fixtures/golden_padrao_e07.json` sai 0. O complementar foi ampliado na Task 1, como o critério manda, então a base dele passa a ser `877aba1`: `git diff --exit-code 877aba1 -- tests/fixtures/golden_padrao_e07_complementar.json` sai 0.
+  - **Opção:** `tests/server/test_ficha_poste_composicao.py` e `..._ataque.py` (25.0 desligada, 26.0 ligada).
+  - **Dois postes próximos:** fixture sintética em `tests/unit/test_ancoragem_poste.py`, associa ao certo ou fica pendente.
+  - **Benchmark** (`baseline-v013`, `propostas-v2`, `fb11c08`, já com ESTAI da E06.3.4) contra o controle v011: postes **58/11/49** (54,2% de recall, 84,1% de precisão) contra 43/39/64 (40,2%, 52,4%). Identificador 58/58, poste 55/58, coordenada 53/57, estruturas 20/58. Vãos 27/3/56 contra 19/83 de recall. Coorte dos 43 casados na v011, medida na cópia do laboratório em `770840e`, sem queda: identificador 43→43, poste 42→42, coordenada 40→40, estruturas 11→12 (não recalculada na v013; os totais de poste são iguais aos da cópia, e o merge só trouxe símbolos).
+  - **Promoção e regiões:** testes de integração da Task 5 com o `InterpretadorFichaPoste`.
+  - **Gate:** em `fb11c08` (HEAD com a `main` integrada) → `RESULTADO FINAL: APROVADO`, 11902 passed, 5 xfailed, cobertura 89,79%. Suíte em `22ae279`: 11561 passed, 5 xfailed. `osv-scanner` nos locks: `No issues found`.
+- **Ressalvas:**
+  - A taxa de `poste` caiu de 97,7% para 94,8% porque o denominador cresceu; na coorte de antes não há queda.
+  - "Leitura errada afirmada = 0" é vácuo: todo poste casado tem `CONFLITANTE`, então vale só como não-queda.
+  - "Mesmo P em mais de uma região" = 2 (015 P1 entre elas).
+- **Decisões para o usuário** (tomadas pela opção recomendada):
+  - **`estruturas_sem_poste` 7→11 e `cabos_sem_vao` 68→69, só de 008 P2:** aceitos. O P com sítio disputado fica pendente, como pede o antiobjetivo, e o custo é o corte dos vínculos, que a E07.2.2 trata.
+  - **P com sítio único tomado:** fica sem disco e sem pendência (não há outro sítio em disputa).
+  - **Sem sítio de disco ou acima do teto:** o poste sai idêntico ao padrão, sem atributo de auditoria.
+- **Limites a provar na E09:** raio 0,14 de um único ponto (008 P2), par 0,013, roxo 0,04, raios normalizados.
+- **Para a E07.2.2:** não cortar os vínculos de um poste pendente por disputa de sítio; associar símbolo→poste sobre o disco.
+- **Para a E07.3:** derivações sem P seguem fora; a régua segue a v011, e a baseline nova desta etapa é a v013.
+
+## E07.2.2 — Símbolos no poste certo — #pendente
+
+**Objetivo:** com a opção ligada, cada símbolo entra no poste certo ou fica pendente, o ESTAI sem duplicar, e a situação vem de `referencias_possiveis`.
+
+**Dependências:** E07.2.1. Depende também da E06.3.4 quando precisar do ESTAI do modelo.
 
 **Escopo (critérios repartidos da E07):**
-- Posição do poste no desenho, com laboratório, e uma proposta por identificador por folha.
-- Associação texto → poste (proximidade, linhas de chamada e convenções de layout) e o destino das derivações sem rótulo P, que o laboratório decide.
-- Associação símbolo → poste por proximidade, com ambiguidade virando pendência; ESTAI incluído; situação do TRANSFORMADOR pelo `referencias_possiveis` (D14).
-- Versão do interpretador incrementada só no caminho com a opção da D17 ligada.
+- Associação texto → poste (proximidade, linhas de chamada e convenções de layout) e símbolo → poste sobre o disco, com ambiguidade virando pendência.
+- ESTAI incluído, sem duplicar legado e modelo (não fundem, R-E06.3.4-6); situação do TRANSFORMADOR pelo `referencias_possiveis` (D14).
 
 **Critérios de aceite (a detalhar no plano):**
 
-- [ ] Fixture sintética com dois postes próximos e rótulos entre eles: associa corretamente ou marca pendência, nunca ao vizinho errado com confiança.
-- [ ] Com `ZENY_SERVER_SYMBOL_COMPOSITION=false`, os goldens `tests/fixtures/golden_padrao_e07.json` e `golden_padrao_e07_complementar.json` não mudam (D18), com `git diff --exit-code f26cc3c -- tests/fixtures/golden_padrao_e07*.json` no pacote de revisão, e a primeira tarefa amplia o complementar nos casos que o handoff da E07.1 lista antes de tocar `src/`.
-- [ ] Benchmark com o runner acima da baseline de controle da E07.1 (mesmo gerador, `propostas-v2` com runner) em postes (precisão e recall) e símbolos, sem regressão em leitura de identificador.
-- [ ] Golden e teste pela composição com a opção desligada verdes, e promoção e regiões continuam funcionando sobre as propostas novas com a opção ligada.
+- [ ] Fixture sintética com dois postes próximos e símbolos entre eles: associa ao certo ou marca pendência, nunca ao vizinho errado com confiança.
+- [ ] Com `ZENY_SERVER_SYMBOL_COMPOSITION=false`, os goldens não mudam (D18), com `git diff --exit-code f26cc3c -- tests/fixtures/golden_padrao_e07.json` e `git diff --exit-code 877aba1 -- tests/fixtures/golden_padrao_e07_complementar.json` no pacote de revisão.
+- [ ] Benchmark com o runner acima da baseline de controle da E07.2.1 em símbolos (precisão e recall), sem regressão em postes.
+- [ ] Promoção e regiões continuam funcionando sobre as propostas novas com a opção ligada.
 - [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
 **Revisão humana:** não. **Bloqueios:** Nenhum bloqueio conhecido.
@@ -2708,12 +2767,12 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Dependências:** E07.2.
 
-**Escopo (critérios repartidos da E07):** vãos e cabos sobre a posição nova do poste; pendência em associação ambígua de vão.
+**Escopo (critérios repartidos da E07):** vãos e cabos sobre a posição nova do poste; pendência em associação ambígua de vão; o destino das derivações sem rótulo P, deixadas de fora na E07.2.1.
 
 **Critérios de aceite (a detalhar no plano):**
 
 - [ ] O benchmark por poste sobre as 16 folhas supera a baseline de controle da E07.1 (`propostas-v2` com runner) em todas as métricas, com relatório em `tmp/`; o handoff traz também o número contra a v004, a baseline das propostas da E15, separando o ganho de formato. Medida sem a E06.3.4 ou a E06.3.5 integradas, a métrica de ESTAI ou de EQUIPAMENTO_INTERRUPCAO só não pode piorar, e o handoff registra essa exceção (D19).
-- [ ] Com `ZENY_SERVER_SYMBOL_COMPOSITION=false`, os goldens da E07.1 não mudam, com `git diff --exit-code` como na E07.2, e um teste pela composição do servidor confirma isso (D18).
+- [ ] Com `ZENY_SERVER_SYMBOL_COMPOSITION=false`, os goldens não mudam, com `git diff --exit-code` contra `f26cc3c` (principal) e `877aba1` (complementar), e um teste pela composição do servidor confirma isso (D18).
 - [ ] Promoção, regiões, vãos e conformidade continuam funcionando sobre as propostas novas (testes de integração existentes passam).
 - [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 

@@ -47,6 +47,314 @@
       "atributos_sugeridos": [
         [
           "evidencia_identificador_id",
+          "673e3dfb-3260-502d-be60-8f5d99e53cca"
+        ],
+        [
+          "identificador_operacional",
+          "P18"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "P-9M-300DAN-CIRCULAR",
+      "confianca": "0.90",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "673e3dfb-3260-502d-be60-8f5d99e53cca",
+        "7d44cf4a-c988-5329-bd8e-0e2204ec15ba"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.05",
+            "y": "0.70"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "177f23e9-8798-53b4-b88c-acc448df4ee1",
+      "justificativa": "A regra poste-codigo-catalogo reconheceu exatamente o código P-9M-300DAN-CIRCULAR em texto ou OCR. O identificador operacional P18 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "13b700c3-eb45-56a5-9858-99d069d97c0d"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
+          "9b4fe85a-7174-5e80-97af-96439bc55baa"
+        ],
+        [
+          "identificador_operacional",
+          "P22"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "P-10M-300DAN-CIRCULAR",
+      "confianca": "0.90",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "9b4fe85a-7174-5e80-97af-96439bc55baa",
+        "e2c9ad75-1f28-5133-9227-89db56ebdb4a"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.652",
+            "y": "0.76"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "198e296f-b025-52df-98b3-08f7b7ba5f64",
+      "justificativa": "A regra poste-codigo-catalogo reconheceu exatamente o código P-10M-300DAN-CIRCULAR em texto ou OCR. O identificador operacional P22 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "ae96cf56-860a-5397-a4e2-169007a0167a"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "altura_m",
+          "10"
+        ],
+        [
+          "associacao_origem",
+          "legenda_conjunta_poste_estrutura"
+        ],
+        [
+          "candidatos_catalogo",
+          "P-10M-300DAN-CIRCULAR,P-10M-300DAN-DUPLO_T,P-10M-300DAN-MADEIRA"
+        ],
+        [
+          "catalogo_inferido",
+          false
+        ],
+        [
+          "classificacao_pendente",
+          true
+        ],
+        [
+          "contexto_ponto_id",
+          "ebbe603a-6d88-548d-aada-ed1e704fb90d"
+        ],
+        [
+          "evidencia_rotulo_id",
+          "ebbe603a-6d88-548d-aada-ed1e704fb90d"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ],
+        [
+          "resistencia_dan",
+          300
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "10-300",
+      "confianca": "0.80",
+      "estado_revisao": "CONFLITANTE",
+      "evidencia_ids": [
+        "ebbe603a-6d88-548d-aada-ed1e704fb90d"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.830",
+            "y": "0.45"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "28fe8212-523b-50b6-9cda-e3cb7fc4a216",
+      "justificativa": "A nomenclatura de poste altura-resistência foi reconhecida em texto nativo ou OCR; o formato não estava explícito; os candidatos de catálogo foram preservados para classificação humana, sem escolher material ou formato. Contexto próprio sem identificador P; a legenda conjunta de poste/estrutura foi preservada sem renumerar o ponto.",
+      "situacao_projeto": "EXISTENTE",
+      "tipo_catalogo_sugerido_id": null
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "associacao_pendente",
+          "contextos_locais_em_empate"
+        ],
+        [
+          "evidencia_ocorrencia_id",
+          "26d47448-a985-5a09-9743-fa7ab5c398d5"
+        ],
+        [
+          "identidade_ocorrencia",
+          "26d47448-a985-5a09-9743-fa7ab5c398d5:0:3"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "estrutura-bt-codigo-catalogo"
+        ],
+        [
+          "token_estrutura",
+          "S3R"
+        ]
+      ],
+      "categoria": "ESTRUTURA_BT",
+      "codigo_observado": "S3R",
+      "confianca": "0.84",
+      "estado_revisao": "CONFLITANTE",
+      "evidencia_ids": [
+        "26d47448-a985-5a09-9743-fa7ab5c398d5"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.450",
+            "y": "0.40"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "30020fc2-2ced-5f97-95c7-496ce8d7df4e",
+      "justificativa": "A regra estrutura-bt-codigo-catalogo reconheceu exatamente o código S3R em texto ou OCR. O token S3R identifica uma ocorrência física de estrutura.",
+      "situacao_projeto": "EXISTENTE",
+      "tipo_catalogo_sugerido_id": "fd4b8060-0b10-5d50-bc34-4c7b66ddb371"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_geometria_id",
+          "dbe5d46f-586e-5eb8-83d1-5c3676e45482"
+        ],
+        [
+          "evidencia_rotulo_id",
+          "3866f247-a83b-5dd2-9a4a-52d0cbf91d88"
+        ],
+        [
+          "geometria_cabo_origem",
+          "vetor_associado_geometricamente"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "cabo-codigo-catalogo"
+        ]
+      ],
+      "categoria": "CABO",
+      "codigo_observado": "B-4 CA",
+      "confianca": "0.88",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "3866f247-a83b-5dd2-9a4a-52d0cbf91d88",
+        "dbe5d46f-586e-5eb8-83d1-5c3676e45482"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.05",
+            "y": "0.70"
+          },
+          {
+            "x": "0.15",
+            "y": "0.73"
+          },
+          {
+            "x": "0.25",
+            "y": "0.70"
+          }
+        ],
+        "tipo": "POLILINHA"
+      },
+      "id": "40a46ccc-71f4-5287-b424-ab300dc0610c",
+      "justificativa": "A regra cabo-codigo-catalogo reconheceu exatamente o código B-4 CA em texto ou OCR. O rótulo do cabo foi associado ao traçado por geometria e orientação sem empate.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "c6f979ad-7798-5318-9188-4c2a048fc4f3"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "associacao_origem",
+          "legenda_conjunta_poste_estrutura"
+        ],
+        [
+          "contexto_ponto_id",
+          "dbed8d99-e228-550b-b36e-a4e946de55b5"
+        ],
+        [
+          "evidencia_ocorrencia_id",
+          "25fc90b7-6e95-5acf-8f8f-11a62df488f2"
+        ],
+        [
+          "identidade_ocorrencia",
+          "25fc90b7-6e95-5acf-8f8f-11a62df488f2:0:3"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "estrutura-bt-codigo-catalogo"
+        ],
+        [
+          "token_estrutura",
+          "S3R"
+        ]
+      ],
+      "categoria": "ESTRUTURA_BT",
+      "codigo_observado": "S3R",
+      "confianca": "0.84",
+      "estado_revisao": "CONFLITANTE",
+      "evidencia_ids": [
+        "25fc90b7-6e95-5acf-8f8f-11a62df488f2",
+        "dbed8d99-e228-550b-b36e-a4e946de55b5"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.880",
+            "y": "0.60"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "42cbf3be-cddd-5678-a8bb-257ffc63e7e1",
+      "justificativa": "A regra estrutura-bt-codigo-catalogo reconheceu exatamente o código S3R em texto ou OCR. O token S3R identifica uma ocorrência física de estrutura. Contexto próprio sem identificador P; a legenda conjunta de poste/estrutura foi preservada sem renumerar o ponto.",
+      "situacao_projeto": "EXISTENTE",
+      "tipo_catalogo_sugerido_id": "fd4b8060-0b10-5d50-bc34-4c7b66ddb371"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
           "c94a0d8e-5ba7-5d7e-8a6a-ea5e2632e10b"
         ],
         [
@@ -85,6 +393,162 @@
       "justificativa": "A regra poste-codigo-catalogo reconheceu exatamente o código P-9M-300DAN-CIRCULAR em texto ou OCR. O identificador operacional P11 confirmou o ponto de projeto.",
       "situacao_projeto": "INSTALAR",
       "tipo_catalogo_sugerido_id": "13b700c3-eb45-56a5-9858-99d069d97c0d"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_geometria_id",
+          "c297f283-f13c-5409-bf35-163bc58f810f"
+        ],
+        [
+          "evidencia_rotulo_id",
+          "a33b5abf-a841-5106-b799-c9e35d8da701"
+        ],
+        [
+          "geometria_cabo_origem",
+          "vetor_associado_geometricamente"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "cabo-codigo-catalogo"
+        ]
+      ],
+      "categoria": "CABO",
+      "codigo_observado": "B-4 CA",
+      "confianca": "0.88",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "a33b5abf-a841-5106-b799-c9e35d8da701",
+        "c297f283-f13c-5409-bf35-163bc58f810f"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.05",
+            "y": "0.64"
+          },
+          {
+            "x": "0.16",
+            "y": "0.62"
+          }
+        ],
+        "tipo": "POLILINHA"
+      },
+      "id": "438e25ee-86b4-52aa-a969-efd465e16bfe",
+      "justificativa": "A regra cabo-codigo-catalogo reconheceu exatamente o código B-4 CA em texto ou OCR. O rótulo do cabo foi associado ao traçado por geometria e orientação sem empate.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "c6f979ad-7798-5318-9188-4c2a048fc4f3"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
+          "c5f59ffa-85d3-58f7-857f-6809c3015652"
+        ],
+        [
+          "identificador_operacional",
+          "P19"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "P-10M-150DAN-CIRCULAR",
+      "confianca": "0.90",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "58330fea-fa16-5610-9cd8-5e1099417e0a",
+        "c5f59ffa-85d3-58f7-857f-6809c3015652"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.25",
+            "y": "0.70"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "462d7e72-3b9d-541f-9281-a565b335c737",
+      "justificativa": "A regra poste-codigo-catalogo reconheceu exatamente o código P-10M-150DAN-CIRCULAR em texto ou OCR. O identificador operacional P19 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "277c8b81-4609-5581-9aeb-7d2d9787326f"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "altura_m",
+          "10"
+        ],
+        [
+          "associacao_origem",
+          "legenda_conjunta_poste_estrutura"
+        ],
+        [
+          "candidatos_catalogo",
+          "P-10M-300DAN-CIRCULAR,P-10M-300DAN-DUPLO_T,P-10M-300DAN-MADEIRA"
+        ],
+        [
+          "catalogo_inferido",
+          false
+        ],
+        [
+          "classificacao_pendente",
+          true
+        ],
+        [
+          "contexto_ponto_id",
+          "28042c2a-8364-5542-b2cd-ee8cc9582f41"
+        ],
+        [
+          "evidencia_rotulo_id",
+          "28042c2a-8364-5542-b2cd-ee8cc9582f41"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ],
+        [
+          "resistencia_dan",
+          300
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "10-300",
+      "confianca": "0.80",
+      "estado_revisao": "CONFLITANTE",
+      "evidencia_ids": [
+        "28042c2a-8364-5542-b2cd-ee8cc9582f41"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.473",
+            "y": "0.40"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "4db7d252-7117-5bf9-af77-89e9a42ec0f4",
+      "justificativa": "A nomenclatura de poste altura-resistência foi reconhecida em texto nativo ou OCR; o formato não estava explícito; os candidatos de catálogo foram preservados para classificação humana, sem escolher material ou formato. Contexto próprio sem identificador P; a legenda conjunta de poste/estrutura foi preservada sem renumerar o ponto.",
+      "situacao_projeto": "EXISTENTE",
+      "tipo_catalogo_sugerido_id": null
     },
     {
       "atributos_sugeridos": [
@@ -286,6 +750,219 @@
     {
       "atributos_sugeridos": [
         [
+          "associacao_origem",
+          "legenda_conjunta_poste_estrutura"
+        ],
+        [
+          "contexto_ponto_id",
+          "7a61b38b-9a9b-5627-896b-44ebf6e6ab09"
+        ],
+        [
+          "evidencia_ocorrencia_id",
+          "7a61b38b-9a9b-5627-896b-44ebf6e6ab09"
+        ],
+        [
+          "identidade_ocorrencia",
+          "7a61b38b-9a9b-5627-896b-44ebf6e6ab09:0:2"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "estrutura-mt-codigo-catalogo"
+        ],
+        [
+          "token_estrutura",
+          "N2"
+        ]
+      ],
+      "categoria": "ESTRUTURA_MT",
+      "codigo_observado": "N2",
+      "confianca": "0.84",
+      "estado_revisao": "CONFLITANTE",
+      "evidencia_ids": [
+        "7a61b38b-9a9b-5627-896b-44ebf6e6ab09"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.476",
+            "y": "0.52"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "7184c8b5-dbaf-5843-a542-6fa36ffd6edb",
+      "justificativa": "A regra estrutura-mt-codigo-catalogo reconheceu exatamente o código N2 em texto ou OCR. O token N2 identifica uma ocorrência física de estrutura. Contexto próprio sem identificador P; a legenda conjunta de poste/estrutura foi preservada sem renumerar o ponto.",
+      "situacao_projeto": "EXISTENTE",
+      "tipo_catalogo_sugerido_id": "05bc1f12-a975-59f3-9059-b0caeda04f1e"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_geometria_id",
+          "84b4e68b-d4ca-52e8-bb4b-1ca909dd0e78"
+        ],
+        [
+          "evidencia_rotulo_id",
+          "bff911eb-d8c0-5da3-876f-20e9475009cb"
+        ],
+        [
+          "geometria_cabo_origem",
+          "vetor_associado_geometricamente"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "cabo-codigo-catalogo"
+        ]
+      ],
+      "categoria": "CABO",
+      "codigo_observado": "B-4 CA",
+      "confianca": "0.88",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "84b4e68b-d4ca-52e8-bb4b-1ca909dd0e78",
+        "bff911eb-d8c0-5da3-876f-20e9475009cb"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.35",
+            "y": "0.76"
+          },
+          {
+            "x": "0.55",
+            "y": "0.76"
+          }
+        ],
+        "tipo": "POLILINHA"
+      },
+      "id": "79e0bdfa-fc49-5f5d-beec-c5b26360843d",
+      "justificativa": "A regra cabo-codigo-catalogo reconheceu exatamente o código B-4 CA em texto ou OCR. O rótulo do cabo foi associado ao traçado por geometria e orientação sem empate.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "c6f979ad-7798-5318-9188-4c2a048fc4f3"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "associacao_origem",
+          "legenda_conjunta_poste_estrutura"
+        ],
+        [
+          "contexto_ponto_id",
+          "4e9e339a-c882-5261-845a-6e2298d5b1e8"
+        ],
+        [
+          "evidencia_ocorrencia_id",
+          "4e9e339a-c882-5261-845a-6e2298d5b1e8"
+        ],
+        [
+          "identidade_ocorrencia",
+          "4e9e339a-c882-5261-845a-6e2298d5b1e8:0:2"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "estrutura-mt-codigo-catalogo"
+        ],
+        [
+          "token_estrutura",
+          "N2"
+        ]
+      ],
+      "categoria": "ESTRUTURA_MT",
+      "codigo_observado": "N2",
+      "confianca": "0.84",
+      "estado_revisao": "CONFLITANTE",
+      "evidencia_ids": [
+        "4e9e339a-c882-5261-845a-6e2298d5b1e8"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.430",
+            "y": "0.52"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "7af9c3a5-3631-5171-a1bd-fe72db7decda",
+      "justificativa": "A regra estrutura-mt-codigo-catalogo reconheceu exatamente o código N2 em texto ou OCR. O token N2 identifica uma ocorrência física de estrutura. Contexto próprio sem identificador P; a legenda conjunta de poste/estrutura foi preservada sem renumerar o ponto.",
+      "situacao_projeto": "EXISTENTE",
+      "tipo_catalogo_sugerido_id": "05bc1f12-a975-59f3-9059-b0caeda04f1e"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "associacao_origem",
+          "legenda_conjunta_poste_estrutura"
+        ],
+        [
+          "contexto_ponto_id",
+          "28042c2a-8364-5542-b2cd-ee8cc9582f41"
+        ],
+        [
+          "evidencia_ocorrencia_id",
+          "28042c2a-8364-5542-b2cd-ee8cc9582f41"
+        ],
+        [
+          "identidade_ocorrencia",
+          "28042c2a-8364-5542-b2cd-ee8cc9582f41:0:2"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "estrutura-mt-codigo-catalogo"
+        ],
+        [
+          "token_estrutura",
+          "N2"
+        ]
+      ],
+      "categoria": "ESTRUTURA_MT",
+      "codigo_observado": "N2",
+      "confianca": "0.84",
+      "estado_revisao": "CONFLITANTE",
+      "evidencia_ids": [
+        "28042c2a-8364-5542-b2cd-ee8cc9582f41"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.473",
+            "y": "0.40"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "80cb6d35-29d5-54ba-a66a-4a9066e950d7",
+      "justificativa": "A regra estrutura-mt-codigo-catalogo reconheceu exatamente o código N2 em texto ou OCR. O token N2 identifica uma ocorrência física de estrutura. Contexto próprio sem identificador P; a legenda conjunta de poste/estrutura foi preservada sem renumerar o ponto.",
+      "situacao_projeto": "EXISTENTE",
+      "tipo_catalogo_sugerido_id": "05bc1f12-a975-59f3-9059-b0caeda04f1e"
+    },
+    {
+      "atributos_sugeridos": [
+        [
           "evidencia_identificador_id",
           "273b231f-99ca-56c9-a8d0-784e452e3011"
         ],
@@ -325,6 +1002,70 @@
       "justificativa": "A regra poste-codigo-catalogo reconheceu exatamente o código P-10M-300DAN-CIRCULAR em texto ou OCR. O identificador operacional P13 confirmou o ponto de projeto.",
       "situacao_projeto": "INSTALAR",
       "tipo_catalogo_sugerido_id": "ae96cf56-860a-5397-a4e2-169007a0167a"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "altura_m",
+          "11"
+        ],
+        [
+          "candidatos_catalogo",
+          "P-11M-300DAN-CIRCULAR"
+        ],
+        [
+          "catalogo_inferido",
+          false
+        ],
+        [
+          "classificacao_pendente",
+          false
+        ],
+        [
+          "evidencia_identificador_id",
+          "5d2fd4d9-134c-5f0d-aca9-2598f0a99baa"
+        ],
+        [
+          "evidencia_rotulo_id",
+          "33913c91-4a92-5e16-a719-1a9f25fd32e9"
+        ],
+        [
+          "identificador_operacional",
+          "P24"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ],
+        [
+          "resistencia_dan",
+          300
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "11-300",
+      "confianca": "0.86",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "33913c91-4a92-5e16-a719-1a9f25fd32e9",
+        "5d2fd4d9-134c-5f0d-aca9-2598f0a99baa",
+        "bb74a363-62bc-560a-ad88-feeff0530866"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.45",
+            "y": "0.22"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "893ea89e-631d-5bf6-8f2f-ec493d172941",
+      "justificativa": "A nomenclatura de poste altura-resistência foi reconhecida em texto nativo ou OCR; o formato também foi identificado. O identificador operacional P24 confirmou o ponto de projeto.",
+      "situacao_projeto": "EXISTENTE",
+      "tipo_catalogo_sugerido_id": "d8956bc2-54e4-5eb5-8b65-86f7c0569a8c"
     },
     {
       "atributos_sugeridos": [
@@ -431,6 +1172,333 @@
     {
       "atributos_sugeridos": [
         [
+          "altura_m",
+          "10"
+        ],
+        [
+          "associacao_origem",
+          "legenda_conjunta_poste_estrutura"
+        ],
+        [
+          "candidatos_catalogo",
+          "P-10M-300DAN-CIRCULAR,P-10M-300DAN-DUPLO_T,P-10M-300DAN-MADEIRA"
+        ],
+        [
+          "catalogo_inferido",
+          false
+        ],
+        [
+          "classificacao_pendente",
+          true
+        ],
+        [
+          "contexto_ponto_id",
+          "dbed8d99-e228-550b-b36e-a4e946de55b5"
+        ],
+        [
+          "evidencia_rotulo_id",
+          "dbed8d99-e228-550b-b36e-a4e946de55b5"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ],
+        [
+          "resistencia_dan",
+          300
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "10-300",
+      "confianca": "0.80",
+      "estado_revisao": "CONFLITANTE",
+      "evidencia_ids": [
+        "dbed8d99-e228-550b-b36e-a4e946de55b5"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.830",
+            "y": "0.60"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "a52b0f7c-608d-5b59-b4d8-243ed9cdb659",
+      "justificativa": "A nomenclatura de poste altura-resistência foi reconhecida em texto nativo ou OCR; o formato não estava explícito; os candidatos de catálogo foram preservados para classificação humana, sem escolher material ou formato. Contexto próprio sem identificador P; a legenda conjunta de poste/estrutura foi preservada sem renumerar o ponto.",
+      "situacao_projeto": "EXISTENTE",
+      "tipo_catalogo_sugerido_id": null
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
+          "22c40ca2-f345-52bb-be74-26cd89401349"
+        ],
+        [
+          "identificador_operacional",
+          "P23"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "P-10M-150DAN-CIRCULAR",
+      "confianca": "0.90",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "0a02b856-7051-521a-a640-2e7514d6d0be",
+        "22c40ca2-f345-52bb-be74-26cd89401349"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.35",
+            "y": "0.76"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "a5375420-15ba-583e-a1e8-6b744fd8aa8b",
+      "justificativa": "A regra poste-codigo-catalogo reconheceu exatamente o código P-10M-150DAN-CIRCULAR em texto ou OCR. O identificador operacional P23 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "277c8b81-4609-5581-9aeb-7d2d9787326f"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_geometria_id",
+          "e81b7a6c-caec-5d92-8b67-38a9cf72ca67"
+        ],
+        [
+          "evidencia_rotulo_id",
+          "3291888b-e5f3-52f8-b2c9-69a4ca8b24fa"
+        ],
+        [
+          "geometria_cabo_origem",
+          "vetor_associado_geometricamente"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "cabo-codigo-catalogo"
+        ]
+      ],
+      "categoria": "CABO",
+      "codigo_observado": "B-4 CA",
+      "confianca": "0.88",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "3291888b-e5f3-52f8-b2c9-69a4ca8b24fa",
+        "e81b7a6c-caec-5d92-8b67-38a9cf72ca67"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.55",
+            "y": "0.68"
+          },
+          {
+            "x": "0.35",
+            "y": "0.68"
+          }
+        ],
+        "tipo": "POLILINHA"
+      },
+      "id": "a61a3f20-f7f2-5954-82ac-2886dd9b7c6f",
+      "justificativa": "A regra cabo-codigo-catalogo reconheceu exatamente o código B-4 CA em texto ou OCR. O rótulo do cabo foi associado ao traçado por geometria e orientação sem empate.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "c6f979ad-7798-5318-9188-4c2a048fc4f3"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "associacao_origem",
+          "legenda_conjunta_poste_estrutura"
+        ],
+        [
+          "contexto_ponto_id",
+          "ebbe603a-6d88-548d-aada-ed1e704fb90d"
+        ],
+        [
+          "evidencia_ocorrencia_id",
+          "ebbe603a-6d88-548d-aada-ed1e704fb90d"
+        ],
+        [
+          "identidade_ocorrencia",
+          "ebbe603a-6d88-548d-aada-ed1e704fb90d:0:2"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "estrutura-mt-codigo-catalogo"
+        ],
+        [
+          "token_estrutura",
+          "N2"
+        ]
+      ],
+      "categoria": "ESTRUTURA_MT",
+      "codigo_observado": "N2",
+      "confianca": "0.84",
+      "estado_revisao": "CONFLITANTE",
+      "evidencia_ids": [
+        "ebbe603a-6d88-548d-aada-ed1e704fb90d"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.830",
+            "y": "0.45"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "a8439143-c5a2-5196-a7d8-98bb2f4850a5",
+      "justificativa": "A regra estrutura-mt-codigo-catalogo reconheceu exatamente o código N2 em texto ou OCR. O token N2 identifica uma ocorrência física de estrutura. Contexto próprio sem identificador P; a legenda conjunta de poste/estrutura foi preservada sem renumerar o ponto.",
+      "situacao_projeto": "EXISTENTE",
+      "tipo_catalogo_sugerido_id": "05bc1f12-a975-59f3-9059-b0caeda04f1e"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
+          "4b623853-2971-5f9d-8223-edca04c0d225"
+        ],
+        [
+          "evidencia_ocorrencia_id",
+          "9848cf74-3c7a-5411-b24e-2035b8e8dc45"
+        ],
+        [
+          "identidade_ocorrencia",
+          "9848cf74-3c7a-5411-b24e-2035b8e8dc45:0:3"
+        ],
+        [
+          "identificador_operacional",
+          "P25"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "estrutura-bt-codigo-catalogo"
+        ],
+        [
+          "token_estrutura",
+          "S3R"
+        ]
+      ],
+      "categoria": "ESTRUTURA_BT",
+      "codigo_observado": "S3R",
+      "confianca": "0.84",
+      "estado_revisao": "PROPOSTA",
+      "evidencia_ids": [
+        "4b623853-2971-5f9d-8223-edca04c0d225",
+        "9848cf74-3c7a-5411-b24e-2035b8e8dc45"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.880",
+            "y": "0.45"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "b10d698d-c7b4-52cd-bf0f-19a3f1a525a2",
+      "justificativa": "A regra estrutura-bt-codigo-catalogo reconheceu exatamente o código S3R em texto ou OCR. O token S3R identifica uma ocorrência física de estrutura. O identificador operacional P25 confirmou o ponto de projeto.",
+      "situacao_projeto": "EXISTENTE",
+      "tipo_catalogo_sugerido_id": "fd4b8060-0b10-5d50-bc34-4c7b66ddb371"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "altura_m",
+          "10"
+        ],
+        [
+          "associacao_origem",
+          "legenda_conjunta_poste_estrutura"
+        ],
+        [
+          "candidatos_catalogo",
+          "P-10M-300DAN-CIRCULAR,P-10M-300DAN-DUPLO_T,P-10M-300DAN-MADEIRA"
+        ],
+        [
+          "catalogo_inferido",
+          false
+        ],
+        [
+          "classificacao_pendente",
+          true
+        ],
+        [
+          "contexto_ponto_id",
+          "ce08e4d3-0df4-5bef-84e7-93df9fcc32c6"
+        ],
+        [
+          "evidencia_rotulo_id",
+          "ce08e4d3-0df4-5bef-84e7-93df9fcc32c6"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ],
+        [
+          "resistencia_dan",
+          300
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "10-300",
+      "confianca": "0.80",
+      "estado_revisao": "CONFLITANTE",
+      "evidencia_ids": [
+        "ce08e4d3-0df4-5bef-84e7-93df9fcc32c6"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.430",
+            "y": "0.40"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "b1f61aae-2144-5642-b86e-99e4a7f13f52",
+      "justificativa": "A nomenclatura de poste altura-resistência foi reconhecida em texto nativo ou OCR; o formato não estava explícito; os candidatos de catálogo foram preservados para classificação humana, sem escolher material ou formato. Contexto próprio sem identificador P; a legenda conjunta de poste/estrutura foi preservada sem renumerar o ponto.",
+      "situacao_projeto": "EXISTENTE",
+      "tipo_catalogo_sugerido_id": null
+    },
+    {
+      "atributos_sugeridos": [
+        [
           "evidencia_identificador_id",
           "556e74ac-b18f-5626-8a20-ca5d088262d8"
         ],
@@ -486,6 +1554,158 @@
     {
       "atributos_sugeridos": [
         [
+          "associacao_origem",
+          "legenda_conjunta_poste_estrutura"
+        ],
+        [
+          "contexto_ponto_id",
+          "4e9e339a-c882-5261-845a-6e2298d5b1e8"
+        ],
+        [
+          "evidencia_ocorrencia_id",
+          "d257cf42-59f4-5b3b-8abf-c720cce4379d"
+        ],
+        [
+          "identidade_ocorrencia",
+          "d257cf42-59f4-5b3b-8abf-c720cce4379d:0:3"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "estrutura-bt-codigo-catalogo"
+        ],
+        [
+          "token_estrutura",
+          "S3R"
+        ]
+      ],
+      "categoria": "ESTRUTURA_BT",
+      "codigo_observado": "S3R",
+      "confianca": "0.84",
+      "estado_revisao": "CONFLITANTE",
+      "evidencia_ids": [
+        "4e9e339a-c882-5261-845a-6e2298d5b1e8",
+        "d257cf42-59f4-5b3b-8abf-c720cce4379d"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.450",
+            "y": "0.52"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "bb9452c1-74c2-5c9a-88f0-238c3b750dfd",
+      "justificativa": "A regra estrutura-bt-codigo-catalogo reconheceu exatamente o código S3R em texto ou OCR. O token S3R identifica uma ocorrência física de estrutura. Contexto próprio sem identificador P; a legenda conjunta de poste/estrutura foi preservada sem renumerar o ponto.",
+      "situacao_projeto": "EXISTENTE",
+      "tipo_catalogo_sugerido_id": "fd4b8060-0b10-5d50-bc34-4c7b66ddb371"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
+          "2ba25c7e-2b47-55be-b9c1-66c01a9c3b16"
+        ],
+        [
+          "identificador_operacional",
+          "P17"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "P-9M-150DAN-CIRCULAR",
+      "confianca": "0.90",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "2ba25c7e-2b47-55be-b9c1-66c01a9c3b16",
+        "425796d6-8b33-5a62-a997-ec412204bc0e"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.05",
+            "y": "0.64"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "bfe161d9-7417-58e9-883b-bae219004877",
+      "justificativa": "A regra poste-codigo-catalogo reconheceu exatamente o código P-9M-150DAN-CIRCULAR em texto ou OCR. O identificador operacional P17 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "655f1af2-1ae9-575f-ac49-1769860db50e"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "associacao_origem",
+          "legenda_conjunta_poste_estrutura"
+        ],
+        [
+          "contexto_ponto_id",
+          "dbed8d99-e228-550b-b36e-a4e946de55b5"
+        ],
+        [
+          "evidencia_ocorrencia_id",
+          "dbed8d99-e228-550b-b36e-a4e946de55b5"
+        ],
+        [
+          "identidade_ocorrencia",
+          "dbed8d99-e228-550b-b36e-a4e946de55b5:0:2"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "estrutura-mt-codigo-catalogo"
+        ],
+        [
+          "token_estrutura",
+          "N2"
+        ]
+      ],
+      "categoria": "ESTRUTURA_MT",
+      "codigo_observado": "N2",
+      "confianca": "0.84",
+      "estado_revisao": "CONFLITANTE",
+      "evidencia_ids": [
+        "dbed8d99-e228-550b-b36e-a4e946de55b5"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.830",
+            "y": "0.60"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "cbe61e14-8b75-50f0-80eb-c5476f56da97",
+      "justificativa": "A regra estrutura-mt-codigo-catalogo reconheceu exatamente o código N2 em texto ou OCR. O token N2 identifica uma ocorrência física de estrutura. Contexto próprio sem identificador P; a legenda conjunta de poste/estrutura foi preservada sem renumerar o ponto.",
+      "situacao_projeto": "EXISTENTE",
+      "tipo_catalogo_sugerido_id": "05bc1f12-a975-59f3-9059-b0caeda04f1e"
+    },
+    {
+      "atributos_sugeridos": [
+        [
           "evidencia_identificador_id",
           "6bf3f11d-63f3-5a2e-a0f9-75df4933dd19"
         ],
@@ -531,6 +1751,49 @@
       "atributos_sugeridos": [
         [
           "evidencia_identificador_id",
+          "6d1861fc-932e-555a-943d-59b4003bd35e"
+        ],
+        [
+          "identificador_operacional",
+          "P20"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "P-9M-300DAN-CIRCULAR",
+      "confianca": "0.90",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "1418ceb1-7730-5f2e-8e0a-2a91de85eba1",
+        "6d1861fc-932e-555a-943d-59b4003bd35e"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.648",
+            "y": "0.68"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "d44ab629-ecc7-597b-be7a-8a8654b14d7c",
+      "justificativa": "A regra poste-codigo-catalogo reconheceu exatamente o código P-9M-300DAN-CIRCULAR em texto ou OCR. O identificador operacional P20 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "13b700c3-eb45-56a5-9858-99d069d97c0d"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
           "588a039f-3b36-5f42-886d-a1c9eaaeeb0b"
         ],
         [
@@ -570,6 +1833,49 @@
       "justificativa": "A regra poste-codigo-catalogo reconheceu exatamente o código P-10M-300DAN-CIRCULAR em texto ou OCR. O identificador operacional P12 confirmou o ponto de projeto.",
       "situacao_projeto": "INSTALAR",
       "tipo_catalogo_sugerido_id": "ae96cf56-860a-5397-a4e2-169007a0167a"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "evidencia_identificador_id",
+          "7e990cf1-ec7d-5093-b06a-49d167f6c385"
+        ],
+        [
+          "identificador_operacional",
+          "P21"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "P-9M-150DAN-CIRCULAR",
+      "confianca": "0.90",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "7e990cf1-ec7d-5093-b06a-49d167f6c385",
+        "e7be6cb2-9dc3-5279-bded-14a4bb555ab1"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.35",
+            "y": "0.68"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "d74b7f0f-9a6f-54c6-9a91-6506f315d4c1",
+      "justificativa": "A regra poste-codigo-catalogo reconheceu exatamente o código P-9M-150DAN-CIRCULAR em texto ou OCR. O identificador operacional P21 confirmou o ponto de projeto.",
+      "situacao_projeto": "INSTALAR",
+      "tipo_catalogo_sugerido_id": "655f1af2-1ae9-575f-ac49-1769860db50e"
     },
     {
       "atributos_sugeridos": [
@@ -676,6 +1982,122 @@
     {
       "atributos_sugeridos": [
         [
+          "associacao_origem",
+          "legenda_conjunta_poste_estrutura"
+        ],
+        [
+          "contexto_ponto_id",
+          "ce08e4d3-0df4-5bef-84e7-93df9fcc32c6"
+        ],
+        [
+          "evidencia_ocorrencia_id",
+          "ce08e4d3-0df4-5bef-84e7-93df9fcc32c6"
+        ],
+        [
+          "identidade_ocorrencia",
+          "ce08e4d3-0df4-5bef-84e7-93df9fcc32c6:0:2"
+        ],
+        [
+          "registro_regras",
+          "1.6.0"
+        ],
+        [
+          "regra_id",
+          "estrutura-mt-codigo-catalogo"
+        ],
+        [
+          "token_estrutura",
+          "N2"
+        ]
+      ],
+      "categoria": "ESTRUTURA_MT",
+      "codigo_observado": "N2",
+      "confianca": "0.84",
+      "estado_revisao": "CONFLITANTE",
+      "evidencia_ids": [
+        "ce08e4d3-0df4-5bef-84e7-93df9fcc32c6"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.430",
+            "y": "0.40"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "db10de68-6ba2-5a4a-b8b3-7096842fe112",
+      "justificativa": "A regra estrutura-mt-codigo-catalogo reconheceu exatamente o código N2 em texto ou OCR. O token N2 identifica uma ocorrência física de estrutura. Contexto próprio sem identificador P; a legenda conjunta de poste/estrutura foi preservada sem renumerar o ponto.",
+      "situacao_projeto": "EXISTENTE",
+      "tipo_catalogo_sugerido_id": "05bc1f12-a975-59f3-9059-b0caeda04f1e"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "altura_m",
+          "10"
+        ],
+        [
+          "associacao_origem",
+          "legenda_conjunta_poste_estrutura"
+        ],
+        [
+          "candidatos_catalogo",
+          "P-10M-300DAN-CIRCULAR,P-10M-300DAN-DUPLO_T,P-10M-300DAN-MADEIRA"
+        ],
+        [
+          "catalogo_inferido",
+          false
+        ],
+        [
+          "classificacao_pendente",
+          true
+        ],
+        [
+          "contexto_ponto_id",
+          "4e9e339a-c882-5261-845a-6e2298d5b1e8"
+        ],
+        [
+          "evidencia_rotulo_id",
+          "4e9e339a-c882-5261-845a-6e2298d5b1e8"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ],
+        [
+          "resistencia_dan",
+          300
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "10-300",
+      "confianca": "0.80",
+      "estado_revisao": "CONFLITANTE",
+      "evidencia_ids": [
+        "4e9e339a-c882-5261-845a-6e2298d5b1e8"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.430",
+            "y": "0.52"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "e2e4ce30-b08d-5eb2-b31b-7ec56f47d0a9",
+      "justificativa": "A nomenclatura de poste altura-resistência foi reconhecida em texto nativo ou OCR; o formato não estava explícito; os candidatos de catálogo foram preservados para classificação humana, sem escolher material ou formato. Contexto próprio sem identificador P; a legenda conjunta de poste/estrutura foi preservada sem renumerar o ponto.",
+      "situacao_projeto": "EXISTENTE",
+      "tipo_catalogo_sugerido_id": null
+    },
+    {
+      "atributos_sugeridos": [
+        [
           "evidencia_identificador_id",
           "9d9bde19-34c7-5dbd-ae2f-c21f2ba66ad0"
         ],
@@ -758,6 +2180,68 @@
       "justificativa": "A regra poste-codigo-catalogo reconheceu exatamente o código P-9M-300DAN-CIRCULAR em texto ou OCR. O identificador operacional P6 confirmou o ponto de projeto.",
       "situacao_projeto": "INSTALAR",
       "tipo_catalogo_sugerido_id": "13b700c3-eb45-56a5-9858-99d069d97c0d"
+    },
+    {
+      "atributos_sugeridos": [
+        [
+          "altura_m",
+          "10"
+        ],
+        [
+          "associacao_origem",
+          "legenda_conjunta_poste_estrutura"
+        ],
+        [
+          "candidatos_catalogo",
+          "P-10M-300DAN-CIRCULAR,P-10M-300DAN-DUPLO_T,P-10M-300DAN-MADEIRA"
+        ],
+        [
+          "catalogo_inferido",
+          false
+        ],
+        [
+          "classificacao_pendente",
+          true
+        ],
+        [
+          "contexto_ponto_id",
+          "7a61b38b-9a9b-5627-896b-44ebf6e6ab09"
+        ],
+        [
+          "evidencia_rotulo_id",
+          "7a61b38b-9a9b-5627-896b-44ebf6e6ab09"
+        ],
+        [
+          "regra_id",
+          "poste-codigo-catalogo"
+        ],
+        [
+          "resistencia_dan",
+          300
+        ]
+      ],
+      "categoria": "POSTE",
+      "codigo_observado": "10-300",
+      "confianca": "0.80",
+      "estado_revisao": "CONFLITANTE",
+      "evidencia_ids": [
+        "7a61b38b-9a9b-5627-896b-44ebf6e6ab09"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "geometria": {
+        "pagina_id": "dc56618a-34a6-5f06-b317-e744c083bca4",
+        "pontos": [
+          {
+            "x": "0.476",
+            "y": "0.52"
+          }
+        ],
+        "tipo": "PONTO"
+      },
+      "id": "e7f68acd-1ac2-500b-a1b4-9e845850ab67",
+      "justificativa": "A nomenclatura de poste altura-resistência foi reconhecida em texto nativo ou OCR; o formato não estava explícito; os candidatos de catálogo foram preservados para classificação humana, sem escolher material ou formato. Contexto próprio sem identificador P; a legenda conjunta de poste/estrutura foi preservada sem renumerar o ponto.",
+      "situacao_projeto": "EXISTENTE",
+      "tipo_catalogo_sugerido_id": null
     }
   ],
   "id": "436a179a-8225-58f5-a8c5-d7b992413974",
@@ -799,6 +2283,192 @@
   "relacoes": [
     {
       "confianca": "0.78",
+      "destino_referencia_id": "e7f68acd-1ac2-500b-a1b4-9e845850ab67",
+      "estado_revisao": "PROPOSTA",
+      "evidencia_ids": [
+        "7a61b38b-9a9b-5627-896b-44ebf6e6ab09"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "id": "0037ca0e-82f2-5912-8158-ee96123f10ab",
+      "justificativa": "A regra estrutura-mt-instalada-em-poste associou propostas por centros_proximos.",
+      "origem_referencia_id": "7184c8b5-dbaf-5843-a542-6fa36ffd6edb",
+      "tipo_relacao": "INSTALADA_EM"
+    },
+    {
+      "confianca": "0.80",
+      "destino_referencia_id": "d44ab629-ecc7-597b-be7a-8a8654b14d7c",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "1418ceb1-7730-5f2e-8e0a-2a91de85eba1",
+        "3291888b-e5f3-52f8-b2c9-69a4ca8b24fa",
+        "6d1861fc-932e-555a-943d-59b4003bd35e",
+        "e81b7a6c-caec-5d92-8b67-38a9cf72ca67"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "id": "0d6d5db0-7620-57ad-ae32-425c09fac566",
+      "justificativa": "A regra cabo-conectado-a-poste associou propostas por extremidades_proximas.",
+      "origem_referencia_id": "a61a3f20-f7f2-5954-82ac-2886dd9b7c6f",
+      "tipo_relacao": "CONECTA"
+    },
+    {
+      "confianca": "0.78",
+      "destino_referencia_id": "a52b0f7c-608d-5b59-b4d8-243ed9cdb659",
+      "estado_revisao": "PROPOSTA",
+      "evidencia_ids": [
+        "dbed8d99-e228-550b-b36e-a4e946de55b5"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "id": "13dea331-e656-5906-bcd6-d09862c52fb5",
+      "justificativa": "A regra estrutura-mt-instalada-em-poste associou propostas por centros_proximos.",
+      "origem_referencia_id": "cbe61e14-8b75-50f0-80eb-c5476f56da97",
+      "tipo_relacao": "INSTALADA_EM"
+    },
+    {
+      "confianca": "0.80",
+      "destino_referencia_id": "d74b7f0f-9a6f-54c6-9a91-6506f315d4c1",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "3291888b-e5f3-52f8-b2c9-69a4ca8b24fa",
+        "7e990cf1-ec7d-5093-b06a-49d167f6c385",
+        "e7be6cb2-9dc3-5279-bded-14a4bb555ab1",
+        "e81b7a6c-caec-5d92-8b67-38a9cf72ca67"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "id": "1403458d-b0a9-5d05-9aaf-68dd88f00834",
+      "justificativa": "A regra cabo-conectado-a-poste associou propostas por extremidades_proximas.",
+      "origem_referencia_id": "a61a3f20-f7f2-5954-82ac-2886dd9b7c6f",
+      "tipo_relacao": "CONECTA"
+    },
+    {
+      "confianca": "0.78",
+      "destino_referencia_id": "e2e4ce30-b08d-5eb2-b31b-7ec56f47d0a9",
+      "estado_revisao": "PROPOSTA",
+      "evidencia_ids": [
+        "4e9e339a-c882-5261-845a-6e2298d5b1e8",
+        "d257cf42-59f4-5b3b-8abf-c720cce4379d"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "id": "145eab7c-863a-5beb-acd6-f54fc9aae78b",
+      "justificativa": "A regra estrutura-bt-instalada-em-poste associou propostas por centros_proximos.",
+      "origem_referencia_id": "bb9452c1-74c2-5c9a-88f0-238c3b750dfd",
+      "tipo_relacao": "INSTALADA_EM"
+    },
+    {
+      "confianca": "0.78",
+      "destino_referencia_id": "a52b0f7c-608d-5b59-b4d8-243ed9cdb659",
+      "estado_revisao": "PROPOSTA",
+      "evidencia_ids": [
+        "25fc90b7-6e95-5acf-8f8f-11a62df488f2",
+        "dbed8d99-e228-550b-b36e-a4e946de55b5"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "id": "1adb31a1-5adb-5f1e-8655-ad36f262baf3",
+      "justificativa": "A regra estrutura-bt-instalada-em-poste associou propostas por centros_proximos.",
+      "origem_referencia_id": "42cbf3be-cddd-5678-a8bb-257ffc63e7e1",
+      "tipo_relacao": "INSTALADA_EM"
+    },
+    {
+      "confianca": "0.80",
+      "destino_referencia_id": "177f23e9-8798-53b4-b88c-acc448df4ee1",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "3866f247-a83b-5dd2-9a4a-52d0cbf91d88",
+        "673e3dfb-3260-502d-be60-8f5d99e53cca",
+        "7d44cf4a-c988-5329-bd8e-0e2204ec15ba",
+        "dbe5d46f-586e-5eb8-83d1-5c3676e45482"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "id": "5ff2d960-ad14-5620-bb52-9316bebfd69f",
+      "justificativa": "A regra cabo-conectado-a-poste associou propostas por extremidades_proximas.",
+      "origem_referencia_id": "40a46ccc-71f4-5287-b424-ab300dc0610c",
+      "tipo_relacao": "CONECTA"
+    },
+    {
+      "confianca": "0.78",
+      "destino_referencia_id": "4db7d252-7117-5bf9-af77-89e9a42ec0f4",
+      "estado_revisao": "PROPOSTA",
+      "evidencia_ids": [
+        "28042c2a-8364-5542-b2cd-ee8cc9582f41"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "id": "66280e96-2ef3-52ce-8d7c-9fedb859230e",
+      "justificativa": "A regra estrutura-mt-instalada-em-poste associou propostas por centros_proximos.",
+      "origem_referencia_id": "80cb6d35-29d5-54ba-a66a-4a9066e950d7",
+      "tipo_relacao": "INSTALADA_EM"
+    },
+    {
+      "confianca": "0.80",
+      "destino_referencia_id": "bfe161d9-7417-58e9-883b-bae219004877",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "2ba25c7e-2b47-55be-b9c1-66c01a9c3b16",
+        "425796d6-8b33-5a62-a997-ec412204bc0e",
+        "a33b5abf-a841-5106-b799-c9e35d8da701",
+        "c297f283-f13c-5409-bf35-163bc58f810f"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "id": "72166238-5ca9-513c-a663-089cc39ac91b",
+      "justificativa": "A regra cabo-conectado-a-poste associou propostas por extremidades_proximas.",
+      "origem_referencia_id": "438e25ee-86b4-52aa-a969-efd465e16bfe",
+      "tipo_relacao": "CONECTA"
+    },
+    {
+      "confianca": "0.78",
+      "destino_referencia_id": "b1f61aae-2144-5642-b86e-99e4a7f13f52",
+      "estado_revisao": "PROPOSTA",
+      "evidencia_ids": [
+        "ce08e4d3-0df4-5bef-84e7-93df9fcc32c6"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "id": "82f5125a-8d87-575e-9c85-e954634f24a8",
+      "justificativa": "A regra estrutura-mt-instalada-em-poste associou propostas por centros_proximos.",
+      "origem_referencia_id": "db10de68-6ba2-5a4a-b8b3-7096842fe112",
+      "tipo_relacao": "INSTALADA_EM"
+    },
+    {
+      "confianca": "0.78",
+      "destino_referencia_id": "e2e4ce30-b08d-5eb2-b31b-7ec56f47d0a9",
+      "estado_revisao": "PROPOSTA",
+      "evidencia_ids": [
+        "4e9e339a-c882-5261-845a-6e2298d5b1e8"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "id": "8a94e4b6-6136-540e-8d8d-558e06d35f4b",
+      "justificativa": "A regra estrutura-mt-instalada-em-poste associou propostas por centros_proximos.",
+      "origem_referencia_id": "7af9c3a5-3631-5171-a1bd-fe72db7decda",
+      "tipo_relacao": "INSTALADA_EM"
+    },
+    {
+      "confianca": "0.78",
+      "destino_referencia_id": "28fe8212-523b-50b6-9cda-e3cb7fc4a216",
+      "estado_revisao": "PROPOSTA",
+      "evidencia_ids": [
+        "ebbe603a-6d88-548d-aada-ed1e704fb90d"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "id": "9b5e7c33-43d4-54d2-9df7-0317e86785f7",
+      "justificativa": "A regra estrutura-mt-instalada-em-poste associou propostas por centros_proximos.",
+      "origem_referencia_id": "a8439143-c5a2-5196-a7d8-98bb2f4850a5",
+      "tipo_relacao": "INSTALADA_EM"
+    },
+    {
+      "confianca": "0.80",
+      "destino_referencia_id": "462d7e72-3b9d-541f-9281-a565b335c737",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "3866f247-a83b-5dd2-9a4a-52d0cbf91d88",
+        "58330fea-fa16-5610-9cd8-5e1099417e0a",
+        "c5f59ffa-85d3-58f7-857f-6809c3015652",
+        "dbe5d46f-586e-5eb8-83d1-5c3676e45482"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "id": "a185a06b-3ce1-5da3-975d-1ea6955e0344",
+      "justificativa": "A regra cabo-conectado-a-poste associou propostas por extremidades_proximas.",
+      "origem_referencia_id": "40a46ccc-71f4-5287-b424-ab300dc0610c",
+      "tipo_relacao": "CONECTA"
+    },
+    {
+      "confianca": "0.78",
       "destino_referencia_id": "84727977-1cf7-5ac7-b8c5-ca3cd43125ce",
       "estado_revisao": "CONFIRMADA",
       "evidencia_ids": [
@@ -811,6 +2481,22 @@
       "justificativa": "A regra estrutura-mt-instalada-em-poste associou propostas por centros_proximos.",
       "origem_referencia_id": "651481db-ba27-5ae8-b69a-553d73831cee",
       "tipo_relacao": "INSTALADA_EM"
+    },
+    {
+      "confianca": "0.80",
+      "destino_referencia_id": "a5375420-15ba-583e-a1e8-6b744fd8aa8b",
+      "estado_revisao": "CONFIRMADA",
+      "evidencia_ids": [
+        "0a02b856-7051-521a-a640-2e7514d6d0be",
+        "22c40ca2-f345-52bb-be74-26cd89401349",
+        "84b4e68b-d4ca-52e8-bb4b-1ca909dd0e78",
+        "bff911eb-d8c0-5da3-876f-20e9475009cb"
+      ],
+      "execucao_id": "436a179a-8225-58f5-a8c5-d7b992413974",
+      "id": "c93eac85-55d7-54e2-8d0d-59b42f570a69",
+      "justificativa": "A regra cabo-conectado-a-poste associou propostas por extremidades_proximas.",
+      "origem_referencia_id": "79e0bdfa-fc49-5f5d-beec-c5b26360843d",
+      "tipo_relacao": "CONECTA"
     }
   ],
   "versao_metodo": "25.0"

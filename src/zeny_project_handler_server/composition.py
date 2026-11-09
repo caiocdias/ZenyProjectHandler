@@ -22,6 +22,7 @@ from zeny_project_handler.adapters.interpretation import (
     InterpretadorRegrasExplicitas,
     carregar_registro_regras_inicial,
 )
+from zeny_project_handler.adapters.interpretation.ficha_poste import InterpretadorFichaPoste
 from zeny_project_handler.adapters.market.sql_server import (
     ClassificadorMercadoSqlServer,
     VerificadorAcoesConcluidasSqlServer,
@@ -487,7 +488,11 @@ def _compose_analysis_workflow(
             unit_of_work,
         ),
         interpretador=ExecutarPipelineInterpretacao(
-            InterpretadorRegrasExplicitas(registry),
+            (
+                InterpretadorFichaPoste(registry)
+                if settings.symbol_composition
+                else InterpretadorRegrasExplicitas(registry)
+            ),
             registry,
             unit_of_work,
         ),

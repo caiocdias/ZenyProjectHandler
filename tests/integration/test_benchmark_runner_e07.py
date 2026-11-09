@@ -57,3 +57,15 @@ def test_run_variant_sem_flag_nao_traz_a_assinatura(tmp_path: Path) -> None:
     variante = run_variant(_pdf(tmp_path / "ct.pdf"), diretorio, ocr=None)
 
     assert "symbol_configuration_signature" not in variante
+
+
+def test_run_variant_escolhe_o_interpretador_pela_flag(tmp_path: Path) -> None:
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    pdf = _pdf(tmp_path / "ct.pdf")
+
+    com = run_variant(pdf, tmp_path / "a", ocr=None, simbolos_modelo=True)
+    sem = run_variant(pdf, tmp_path / "b", ocr=None)
+
+    assert com["semantic"].execucao.versao_metodo == "26.0"
+    assert sem["semantic"].execucao.versao_metodo == "25.0"
