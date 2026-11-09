@@ -1,5 +1,5 @@
 # mypy: disable-error-code="no-untyped-call"
-"""E06.3.4, Task 3 (testador): ataques à habilitação das 3 variantes de estai e à versão 1.5.0."""
+"""E06.3.4, Task 3 (testador): ataques à habilitação das 3 variantes de estai e à versão 1.6.0."""
 
 from __future__ import annotations
 
@@ -62,15 +62,15 @@ def test_estai_habilitado_sem_reason_e_as_outras_14_pendentes() -> None:
     assert all(v["recognition"]["grammar"]["max_span"] == 40 for v in habilitadas)
 
 
-def test_contagens_52_habilitadas_e_371_pendentes() -> None:
+def test_contagens_54_habilitadas_e_369_pendentes() -> None:
     estados = [v["recognition"]["status"] for v in _variantes()]
-    assert estados.count("enabled") == 52
-    assert estados.count("pending") == 371
+    assert estados.count("enabled") == 54
+    assert estados.count("pending") == 369
     assert len(estados) == 423
 
 
-def test_versao_do_metodo_do_modelo_e_1_5_0() -> None:
-    assert model_symbols._VERSAO == "1.5.0"
+def test_versao_do_metodo_do_modelo_e_1_6_0() -> None:
+    assert model_symbols._VERSAO == "1.6.0"
 
 
 def test_padrao_nao_liga_a_composicao_de_simbolos(monkeypatch: pytest.MonkeyPatch) -> None:

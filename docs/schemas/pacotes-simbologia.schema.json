@@ -167,6 +167,19 @@
             "required": ["enclosure", "removal_mark"],
             "properties": {"enclosure": {"const": "ellipse"}, "removal_mark": {"const": true}}
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "fill", "content", "min_span", "max_span"],
+          "$comment": "Disco vermelho com marca interna (curva fusível ou caixa dupla); só o método sobre o modelo de desenho o executa. min_span < max_span é checado pelo validador.",
+          "properties": {
+            "kind": {"const": "disc_mark"},
+            "fill": {"enum": ["red"]},
+            "content": {"enum": ["fuse_curve", "double_box"]},
+            "min_span": {"type": "number", "exclusiveMinimum": 0, "maximum": 72},
+            "max_span": {"type": "number", "exclusiveMinimum": 0, "maximum": 72}
+          }
         }
       ]
     },

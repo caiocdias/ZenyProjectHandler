@@ -106,14 +106,14 @@ def _altura(caixa: Caixa) -> float:
     return caixa[3] - caixa[1]
 
 
-def _aspecto_redondo(caixa: Caixa) -> bool:
+def _aspecto_redondo(caixa: Caixa, vao_maximo: float) -> bool:
     largura, altura = _largura(caixa), _altura(caixa)
     # Pela metade: a de um lado subnormal arredonda a 0, e quem vem depois divide por ela.
     if largura / 2 <= 0 or altura / 2 <= 0:
         return False
     return (
         _ASPECTO_MINIMO <= largura / altura <= _ASPECTO_MAXIMO
-        and max(largura, altura) <= _VAO_MAXIMO_DISCO
+        and max(largura, altura) <= vao_maximo
     )
 
 
@@ -130,7 +130,9 @@ def _pontas_na_elipse(curvas: Sequence[ItemCaminho], caixa: Caixa) -> bool:
     )
 
 
-def _disco_de_curva(caminho: Caminho, posicao: int, caixa: Caixa | None) -> Disco | None:
+def _disco_de_curva(
+    caminho: Caminho, posicao: int, caixa: Caixa | None, vao_maximo: float
+) -> Disco | None:
     """Um caminho preenchido de 4 curvas, fechado no máximo por uma linha curta."""
     preenchimento = caminho.estilo.preenchimento
     if preenchimento is None or caixa is None:
@@ -140,7 +142,7 @@ def _disco_de_curva(caminho: Caminho, posicao: int, caixa: Caixa | None) -> Disc
     linhas = [item for item in itens if item.tipo == "l"]
     if len(curvas) != _CURVAS_DO_DISCO or len(linhas) > _LINHAS_DE_FECHO_MAXIMAS:
         return None
-    if not _aspecto_redondo(caixa) or not _pontas_na_elipse(curvas, caixa):
+    if not _aspecto_redondo(caixa, vao_maximo) or not _pontas_na_elipse(curvas, caixa):
         return None
     limite = min(_largura(caixa), _altura(caixa)) * _FRACAO_LINHA_DE_FECHO
     if any(math.dist(linha.pontos[0], linha.pontos[1]) > limite for linha in linhas):
@@ -161,7 +163,7 @@ def _caixa_do_retangulo(subcaminho: Sequence[ItemCaminho]) -> Caixa | None:
     return _caixa_de_pontos(ponto for lado in lados for ponto in lado)
 
 
-def _caixas_de_faixa(caminho: Caminho, caixa: Caixa | None) -> list[Caixa]:
+def _caixas_de_faixa(caminho: Caminho, caixa: Caixa | None, vao_maximo: float) -> list[Caixa]:
     """Faixas finas de um caminho só de `l`: uma por retângulo (o `re` e o `qu` do motor), ou
     uma pela caixa de um polígono ou faixa teselada em triângulos."""
     itens = [item for subcaminho in caminho.subcaminhos for item in subcaminho]
@@ -178,7 +180,7 @@ def _caixas_de_faixa(caminho: Caminho, caixa: Caixa | None) -> list[Caixa]:
         for faixa in caixas
         if faixa is not None
         and 0 < _altura(faixa) <= _ALTURA_MAXIMA_FAIXA
-        and 0 < _largura(faixa) <= _VAO_MAXIMO_DISCO
+        and 0 < _largura(faixa) <= vao_maximo
     ]
 
 
@@ -197,7 +199,7 @@ def _perfil_de_disco(pilha: Sequence[_Faixa], uniao: Caixa) -> bool:
     return True
 
 
-def _disco_da_pilha(pilha: Sequence[_Faixa], preenchimento: Cor) -> Disco | None:
+def _disco_da_pilha(pilha: Sequence[_Faixa], preenchimento: Cor, vao_maximo: float) -> Disco | None:
     if len(pilha) < _FAIXAS_MINIMAS:
         return None
     uniao: Caixa = (
@@ -206,7 +208,7 @@ def _disco_da_pilha(pilha: Sequence[_Faixa], preenchimento: Cor) -> Disco | None
         max(faixa[2] for faixa, _ in pilha),
         max(faixa[3] for faixa, _ in pilha),
     )
-    if not _aspecto_redondo(uniao) or not _perfil_de_disco(pilha, uniao):
+    if not _aspecto_redondo(uniao, vao_maximo) or not _perfil_de_disco(pilha, uniao):
         return None
     membros = frozenset(posicao for _, posicao in pilha)
     return Disco(uniao, min(membros), membros, preenchimento)
@@ -245,7 +247,7 @@ def _pilhas_de_faixas(
     yield from abertas
 
 
-def _discos_de_faixas(contexto: ContextoGramatica) -> list[Disco]:
+def _discos_de_faixas(contexto: ContextoGramatica, vao_maximo: float) -> list[Disco]:
     faixas_por_cor: dict[Cor, list[_Faixa]] = {}
     for posicao, caminho in enumerate(contexto.pagina.modelo.caminhos):
         cor = caminho.estilo.preenchimento
@@ -256,12 +258,12 @@ def _discos_de_faixas(contexto: ContextoGramatica) -> list[Disco]:
             round(cor[1], _CASAS_DE_ARREDONDAMENTO),
             round(cor[2], _CASAS_DE_ARREDONDAMENTO),
         )
-        faixas = _caixas_de_faixa(caminho, contexto.caixas_caminhos.get(posicao))
+        faixas = _caixas_de_faixa(caminho, contexto.caixas_caminhos.get(posicao), vao_maximo)
         faixas_por_cor.setdefault(chave, []).extend((faixa, posicao) for faixa in faixas)
     discos: list[Disco] = []
     for cor, faixas_da_cor in faixas_por_cor.items():
         for pilha in _pilhas_de_faixas(faixas_da_cor, contexto.orcamento):
-            disco = _disco_da_pilha(pilha, cor)
+            disco = _disco_da_pilha(pilha, cor, vao_maximo)
             if disco is not None:
                 discos.append(disco)
     return discos
@@ -276,15 +278,17 @@ def _caixa_arredondada(caixa: Caixa) -> Caixa:
     )
 
 
-def discos_candidatos(contexto: ContextoGramatica) -> tuple[Disco, ...]:
-    """Discos de curva e discos em faixas, um por caixa arredondada."""
+def discos_candidatos(
+    contexto: ContextoGramatica, *, vao_maximo: float = _VAO_MAXIMO_DISCO
+) -> tuple[Disco, ...]:
+    """Discos de curva e discos em faixas, um por caixa arredondada, de vão até `vao_maximo`."""
     caixas = contexto.caixas_caminhos
     de_curva = (
-        _disco_de_curva(caminho, posicao, caixas.get(posicao))
+        _disco_de_curva(caminho, posicao, caixas.get(posicao), vao_maximo)
         for posicao, caminho in enumerate(contexto.pagina.modelo.caminhos)
     )
     achados: dict[Caixa, Disco] = {}
-    for disco in chain(filter(None, de_curva), _discos_de_faixas(contexto)):
+    for disco in chain(filter(None, de_curva), _discos_de_faixas(contexto, vao_maximo)):
         achados.setdefault(_caixa_arredondada(disco.caixa), disco)
     return tuple(achados.values())
 
