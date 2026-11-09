@@ -361,7 +361,7 @@ Trilha B — medição (branch `roadmap/leitura-vetorial-por-poste-b`)
 |---|---|---|---|---|
 | E15 | Ficha predita a partir das propostas | #concluida | E14 | nova `versao_extracao` e baseline real informativo nas 16 folhas |
 | E06.3.4 | Estai (na trilha B desde a D19) | #concluida | E06.3.3.2.2 | gramática de estai, com laboratório, acima do atual |
-| E06.3.5 | Equipamento de interrupção (na trilha B desde a D19) | #pendente | E06.3.4 | gramática de interrupção, acima do atual (que não emite a classe) |
+| E06.3.5 | Equipamento de interrupção (na trilha B desde a D19) | #em-andamento | E06.3.4 | gramática de interrupção, acima do atual (que não emite a classe) |
 | E16 | Conjunto de avaliação cego | #bloqueada | E03 | fichas de referência congeladas das folhas novas, antes de qualquer predição |
 
 Trilha C — aprendizado, e a E17 enquanto a trilha espera a E07 (D10) (branch `roadmap/leitura-vetorial-por-poste-c`)
@@ -2409,7 +2409,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
-## E06.3.5 — Equipamento de interrupção — #pendente
+## E06.3.5 — Equipamento de interrupção — #em-andamento
 
 **Objetivo:** reconhecer EQUIPAMENTO_INTERRUPCAO sobre o modelo de desenho.
 
