@@ -375,7 +375,7 @@ Trilha C — aprendizado, e a E17 enquanto a trilha espera a E07 (D10) (branch `
 | E10 | Fábrica de rótulos contínua | #pendente | E07.3 | fluxo mensal com pré-marcação, leitura dupla, amostra humana e dataset por hash |
 | E12 | Detector visual local | #pendente | E11, E09, E10 | detector ONNX em CPU para o resíduo, ganho medido por poste |
 | E18 | Versão 0.6.0 e candidata de segurança | #concluida | E17 | versão 0.6.0 no produto, build medido e candidata completa em `dist/release/0.6.0/` |
-| E19 | Release final 0.6.0 | #pendente | E18 | release gerada da `main` integrada, com integridade conferida |
+| E19 | Release final 0.6.0 | #concluida | E18 | release gerada da `main` integrada, com integridade conferida |
 
 Na "Janela de release 0.6.0" (protocolo), a ordem de abertura é a dela, e não a das janelas abaixo.
 
@@ -3294,7 +3294,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
-## E19 — Release final 0.6.0 — #pendente
+## E19 — Release final 0.6.0 — #concluida
 
 **Objetivo:** gerar a release final da `main` já integrada e conferir que os arquivos entregues em `dist/release/0.6.0/` estão íntegros, antes do corte de 09:00.
 
@@ -3308,10 +3308,10 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Critérios de aceite:**
 
-- [ ] O gate terminou com `RESULTADO FINAL: APROVADO` numa branch com a mesma árvore da `main` usada no build (`git rev-parse main^{tree}` igual).
-- [ ] `BUILD DE RELEASE: APROVADO` e `sha256sum -c SHA256SUMS.txt` limpo em `dist/release/0.6.0/`.
-- [ ] As notas em `dist/release/0.6.0/RELEASE_NOTES.md` citam o commit da `main` usada.
-- [ ] O handoff lista as etapas que entraram e as que ficaram de fora.
+- [x] O gate terminou com `RESULTADO FINAL: APROVADO` numa branch com a mesma árvore da `main` usada no build (`git rev-parse main^{tree}` igual).
+- [x] `BUILD DE RELEASE: APROVADO` e `sha256sum -c SHA256SUMS.txt` limpo em `dist/release/0.6.0/`.
+- [x] As notas em `dist/release/0.6.0/RELEASE_NOTES.md` citam o commit da `main` usada.
+- [x] O handoff lista as etapas que entraram e as que ficaram de fora.
 
 **Validação obrigatória:**
 
@@ -3330,14 +3330,23 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 - Build final acima do tempo previsto → o marco de início usa o T_build medido na E18, e a candidata continua valendo.
 
-**Evidências e handoff:**
+**Evidências e handoff (2026-11-09, orquestrador):**
 
-- Plano: não se aplica (operação).
-- Commits: —
-- Revisão final: não se aplica (sem código novo).
-- Critérios verificados: —
-- Decisões para o usuário: —
-- Notas para a próxima etapa: —
+- **Plano:** não se aplica (operação).
+- **Commit de origem:** `1f14f6e0053958a1ec7e3e2f2a0e698ca6837f18` (`main`), citado em `RELEASE_NOTES.md`. Este handoff vem depois do build, sem gate novo, porque só muda o roadmap.
+- **Revisão final:** não se aplica (sem código novo).
+- **Critérios:**
+  - **Gate** na trilha C, com a mesma árvore da `main` (`b40a000`): `RESULTADO FINAL: APROVADO`, 12586 passed, 5 xfailed, cobertura 89,89%.
+  - **Build** em `dist/release-e19/`, de 07:22:41 a 07:24:09: `BUILD DE RELEASE: APROVADO`.
+  - **`sha256sum -c`:** 11 de 11 OK na pasta separada e de novo na oficial, depois da troca.
+  - **Troca na mesma unidade:** a candidata de `0ba0567` foi para `dist/release/0.6.0-candidata`, e a final para `dist/release/0.6.0`.
+- **Etapas que entraram:** E18, E07.1, E06.3.4, E07.2.1, E06.3.5, E07.2.2.1.
+- **Etapas que ficaram de fora:**
+  - **E07.3.1, estacionada** na branch `roadmap/leitura-vetorial-por-poste` (a divisão da E07.3 e o handoff estão lá, ainda não na `main`). O computador desligou por volta de 03:20, e a sessão voltou às 07:16, depois dos marcos de 06:30 e 07:15.
+  - E07.2.2.2 (depende de decisão do usuário sobre D14), E07.3.2, E08 e as demais fora da janela.
+- **Decisões para o usuário** (tomadas pela opção recomendada; a sessão ficou sem o usuário):
+  - Estacionar a E07.3.1 e gerar a release já, em vez de usar o tempo restante para terminar a etapa: a release era a entrega, e a etapa é aditiva, só com a opção ligada.
+- **Notas para a próxima etapa:** retomar a E07.3.1 a partir do handoff dela. Revisão humana da E07 pendente (D18).
 
 ---
 
