@@ -349,8 +349,10 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E06.3.3.1 | Para-raios BT | #concluida | E06.3.2.2 | gramática do retângulo com diagonal, com laboratório, PARA_RAIOS_BT acima do atual (que não casa nenhuma) |
 | E06.3.3.2.1 | Marcas: envolvente e X | #concluida | E06.3.3.1 | envolvente por subcaminho, X perto do símbolo e concordância de situação medida |
 | E06.3.3.2.2 | Transformador | #concluida | E06.3.3.2.1 | gramática do triângulo em círculo, com laboratório, TRANSFORMADOR acima do atual |
-| E07 | Ficha do poste | #pendente | E06.3.3.2.2, E15 | associação texto/símbolo/vão → poste, benchmark acima do baseline |
-| E08 | Conferência UTM | #pendente | E07 | transformação página → UTM, checagem de posição e vão, pendências |
+| E07.1 | Medição da ficha com o runner e golden do padrão | #concluida | E06.3.3.2.2, E15 | benchmark com o runner ligado, `propostas-v2`, baselines de controle e golden da análise padrão |
+| E07.2 | Posição do poste e associação de símbolos | #pendente | E07.1 | poste na posição do desenho, um por identificador, símbolos no poste certo ou pendentes (opção ligada) |
+| E07.3 | Vãos na polilinha e ficha completa | #pendente | E07.2 | vãos ligados à polilinha entre dois postes, benchmark acima do baseline |
+| E08 | Conferência UTM | #pendente | E07.3 | transformação página → UTM, checagem de posição e vão, pendências |
 | E09 | Troca do analisador e remoção do legado | #pendente | E08, E16 | analisador novo como padrão; detectores e, se provado, OCR removidos |
 
 Trilha B — medição (branch `roadmap/leitura-vetorial-por-poste-b`)
@@ -368,7 +370,7 @@ Trilha C — aprendizado, e a E17 enquanto a trilha espera a E07 (D10) (branch `
 |---|---|---|---|---|
 | E11 | Spike de treino na GPU AMD | #concluida | E01 | decisão registrada sobre onde e como treinar |
 | E17 | Fechamento do cliente com servidor lento | #concluida | E14 | fechar a janela nunca destrói `QThread` viva, sem o monkeypatch de 60 s no `conftest` |
-| E10 | Fábrica de rótulos contínua | #pendente | E07 | fluxo mensal com pré-marcação, leitura dupla, amostra humana e dataset por hash |
+| E10 | Fábrica de rótulos contínua | #pendente | E07.3 | fluxo mensal com pré-marcação, leitura dupla, amostra humana e dataset por hash |
 | E12 | Detector visual local | #pendente | E11, E09, E10 | detector ONNX em CPU para o resíduo, ganho medido por poste |
 | E18 | Versão 0.6.0 e candidata de segurança | #concluida | E17 | versão 0.6.0 no produto, build medido e candidata completa em `dist/release/0.6.0/` |
 | E19 | Release final 0.6.0 | #pendente | E18 | release gerada da `main` integrada, com integridade conferida |
@@ -2517,7 +2519,9 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
   - Retomada: a E07 depende da E06.3 e da E15. A E15 está pronta para integrar no fim do lote.
 ---
 
-## E07 — Ficha do poste — #pendente
+## E07 — Ficha do poste (dividida em E07.1–E07.3)
+
+**Divisão (R-E07-1, 2026-11-08):** o levantamento do plano mostrou três trabalhos independentes, que passam de ~3h juntos: medir com o runner e separar o formato do gerador (E07.1), corrigir a posição do poste e associar os símbolos (E07.2) e ligar vãos à polilinha (E07.3). Os critérios abaixo foram repartidos entre as subetapas, e quem dependia da E07 passa a depender da E07.3. Diagnóstico da baseline v004 que motivou a divisão: dos 64 postes FN, 19 têm o identificador certo com o poste na caixa do texto, 30 são derivações sem rótulo P; dos 41 FP, 21 são duplicatas do mesmo P; e 15/89 símbolos ficam dentro do raio de associação com o poste na posição do texto.
 
 **Objetivo:** associar texto, símbolos e vãos ao poste certo e expressar a ficha nas propostas e relações atuais.
 
@@ -2568,13 +2572,149 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
+## E07.1 — Medição da ficha com o runner e golden do padrão — #concluida
+
+**Objetivo:** dar à E07 a régua: medir a ficha com o runner ligado, separar o que é formato do gerador do que é leitura e fixar a saída da análise padrão antes de mexer nela.
+
+**Dependências:** E06.3.3.2.2, E15. O relógio começa no commit `#em-andamento` da E07 (2f1b873).
+
+**Escopo:**
+- Golden da análise padrão: propostas, relações e versões do interpretador com `simbolos=None` num caso sintético, gravados antes de qualquer mudança (D18).
+- Flag no benchmark para medir com o runner ligado (perfil `vector-only`).
+- Fonte `propostas-v2` da ficha predita: estruturas com o qualificador, cabo composto por vão, ESTAI pelo `suporte_proposta_id`, normalização de espaço em código de cabo. `propostas-v1` continua reproduzindo a v004.
+- Baselines de controle em `tmp/`, com denominadores, para `propostas-v1` e `propostas-v2`, com e sem o runner.
+
+**Fora de escopo:** qualquer mudança em `src/`.
+
+**Critérios de aceite:**
+
+- [x] Golden da opção desligada em `tests/`, com id, categoria, estado, evidências, atributos, relações, `versao_metodo == "25.0"` e parâmetros sem a chave de semântica de símbolos.
+- [x] Com `--simbolos-modelo`, o `gerador` da ficha registra o uso do runner e o perfil; sem a flag, o `gerador` e o resumo não mudam.
+- [x] `propostas-v2` tem fixtures positivas e negativas de estrutura com qualificador, cabo composto, ESTAI por suporte e código de cabo com espaço.
+- [x] A baseline de controle `propostas-v1` sem runner reproduz a v004 (`total` e `por_pdf`), ou a diferença fica explicada no handoff.
+- [x] Baselines `propostas-v2` com e sem runner em `tmp/`, com totais no handoff.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Validação obrigatória:**
+
+- `cmd.exe //c IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não
+
+**Notas para o plano:** o levantamento técnico está em `.superpowers/levantamento-e07.md` do worktree da trilha A. A próxima baseline da rodada sai como v006 (a v005 existe).
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Riscos e mitigação:**
+
+- Mudar só o gerador ganha métrica sem melhorar leitura → as baselines de controle usam o mesmo gerador, e o handoff diz quanto ganho é de formato.
+
+**Evidências e handoff (2026-11-08, orquestrador):**
+
+- **Plano:** `docs/superpowers/plans/2026-11-08-leitura-vetorial-por-poste-e07-1.md`. A revisão de arquitetura (opus) bloqueou na rodada 0 (5 Importantes: ordem do vão composto, `gerador` na rota real, golden raso e a 4ª baseline) e aprovou com notas na rodada 1.
+- **Commits:** `0eaabeb..1058454` (e o merge da `main` antes do fechamento). Relógio: de 2f1b873 (15:40) ao fechamento, cerca de 3h15.
+- **Ciclo:** Tasks 1 e 2 em onda; Task 3 com 1 rodada de correção (token de tipo hostil); Task 4 com 1 rodada (determinismo do vão composto e rótulo sem geometria). Todas `Risco: alto`, com testador e revisão aprovada.
+- **Revisão final** (opus): `With fixes`, sem Crítico. Importantes de operação e documentação: gate no HEAD, trava dos goldens, pontos cegos e handoff. Menores corrigidos em 1058454 (documentação do vão composto e docstring com acentos corrompidos); re-revisão aprovada.
+- **Baselines** (rodada `20261103-2300-fichas`, `--native-only`, em `tmp/`):
+
+  | versão | fonte | runner | commit | postes tp/fp/fn | vãos tp/fp/fn | cabo | comprimento | estruturas | símbolos tp/fp/fn |
+  |---|---|---|---|---|---|---|---|---|---|
+  | v004 (E15) | propostas-v1 | não | — | 43/41/64 | 19/37/64 | 0/19 | 13/19 | 0/43 | 0/0/179 |
+  | v006 | propostas-v1 | não | 250ff60 | 43/41/64 | 19/37/64 | 0/19 | 13/19 | 0/43 | 0/0/179 |
+  | v007 | propostas-v2 | não | 250ff60 | 43/41/64 | 19/15/64 | 3/19 | 13/19 | 11/43 | 0/0/179 |
+  | v008 | propostas-v1 | sim | 250ff60 | 43/39/64 | 19/37/64 | 0/19 | 13/19 | 0/43 | 3/8/176 |
+  | v009 | propostas-v2 | sim | 250ff60 | 43/39/64 | 19/15/64 | 3/19 | 13/19 | 11/43 | 3/13/176 |
+  | v010 | propostas-v2 | não | f26cc3c | igual à v007 |
+  | v011 | propostas-v2 | sim | f26cc3c | igual à v009 (**régua da E07.2 e da E07.3**) |
+
+  Ganho de formato (v006 → v007): FP de vãos 37 → 15, estruturas 0 → 11/43, cabo 0 → 3/19. Sobre os símbolos, o ESTAI por suporte soma 5 FP e 0 TP na v009/v011, 4 deles na folha 001, com o poste ainda na posição do texto.
+- **Critérios verificados** (HEAD no fechamento):
+  - Golden e complementar em `tests/fixtures/golden_padrao_e07*.json`, com ids `uuid5` e relógio fixo; `--simbolos-modelo` no `gerador`; fontes e fixtures nos testes novos.
+  - `v006 == v004`: `total` e `por_pdf` iguais, conferido por script.
+  - Gate: em `e79903f` (HEAD com a `main` integrada) → `RESULTADO FINAL: APROVADO`, 11348 passed, 5 xfailed, cobertura 89,57%, 3m34.
+  - Integridade (`--base 1701886`): `SEM_SOUL` nos commits de documentos do orquestrador (corrigido a partir daqui) e `ASSERCAO_REMOVIDA` da tupla `VERSOES_EXTRACAO` (substituída pela tupla com a fonte nova), ambos justificados pela revisora.
+  - `osv-scanner` nos 7 locks: `No issues found`.
+- **Medidas do plano:** 83 vãos na referência, 55 compostos (`fase / neutro`), 0 vãos no mesmo par. Nos 8 vãos compostos casados com a referência, os 8 têm o mesmo conjunto de cabos, mas a ordem só bate em 3: a regra por posição do rótulo é insuficiente, porque a ordem da ficha depende de quem leu. Pares separados por situação: 0. Os 5 compostos de estrutura (`U3-U3(1)`) seguem errados na v2, por virem do tokenizador.
+- **Decisões para o usuário** (tomadas pela opção recomendada):
+  - **Golden complementar** escrito pelo testador, depois de achar por mutação em `src/` vários vazamentos que o golden principal não pegava.
+  - **Comparação de cabo composto:** a ordem da ficha não tem regra, e `U3-U3(1)` depende do tokenizador. Um avaliador que compare cabos como conjunto mudaria a régua da E02; fica para a E07.3 decidir.
+- **Notas para a próxima etapa:**
+  - **E07.2 e E07.3:** prova da D18 são os dois goldens: `tests/fixtures/golden_padrao_e07.json` e `golden_padrao_e07_complementar.json`. Cada pacote de revisão anexa `git diff --exit-code f26cc3c -- tests/fixtures/golden_padrao_e07*.json`, e qualquer regeneração precisa de justificativa de mudança aprovada. O golden não cobre polilinha com vértice, extremo perto de `_MAXIMUM_PATH_ENDPOINT_DISTANCE`, cabo com um extremo só, a fusão por confiança e o contexto local: o complementar precisa crescer nesses casos antes de tocar `src/`.
+  - Minors adiados: `_anexar_estruturas_v2` duplica o laço da v1; token `nan`/`inf` vira texto; `pendentes` é a união dos cabos do vão composto, inclusive `comprimento_m` de um cabo cujo comprimento não foi o escolhido.
+  - Um levantamento da E07.2 está em `tmp/janela-0.6.0/levantamento-e07-2.md`, fora do Git.
+
+---
+
+## E07.2 — Posição do poste e associação de símbolos — #pendente
+
+**Objetivo:** com a opção ligada, o poste sai na posição do desenho, um por identificador, e cada símbolo entra no poste certo ou fica pendente.
+
+**Dependências:** E07.1.
+
+**Escopo (critérios repartidos da E07):**
+- Posição do poste no desenho, com laboratório, e uma proposta por identificador por folha.
+- Associação texto → poste (proximidade, linhas de chamada e convenções de layout) e o destino das derivações sem rótulo P, que o laboratório decide.
+- Associação símbolo → poste por proximidade, com ambiguidade virando pendência; ESTAI incluído; situação do TRANSFORMADOR pelo `referencias_possiveis` (D14).
+- Versão do interpretador incrementada só no caminho com a opção da D17 ligada.
+
+**Critérios de aceite (a detalhar no plano):**
+
+- [ ] Fixture sintética com dois postes próximos e rótulos entre eles: associa corretamente ou marca pendência, nunca ao vizinho errado com confiança.
+- [ ] Com `ZENY_SERVER_SYMBOL_COMPOSITION=false`, os goldens `tests/fixtures/golden_padrao_e07.json` e `golden_padrao_e07_complementar.json` não mudam (D18), com `git diff --exit-code f26cc3c -- tests/fixtures/golden_padrao_e07*.json` no pacote de revisão, e a primeira tarefa amplia o complementar nos casos que o handoff da E07.1 lista antes de tocar `src/`.
+- [ ] Benchmark com o runner acima da baseline de controle da E07.1 (mesmo gerador, `propostas-v2` com runner) em postes (precisão e recall) e símbolos, sem regressão em leitura de identificador.
+- [ ] Golden e teste pela composição com a opção desligada verdes, e promoção e regiões continuam funcionando sobre as propostas novas com a opção ligada.
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não. **Bloqueios:** Nenhum bloqueio conhecido.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
+## E07.3 — Vãos na polilinha e ficha completa — #pendente
+
+**Objetivo:** vãos ligados à polilinha da rede entre dois postes e a ficha completa acima do baseline.
+
+**Dependências:** E07.2.
+
+**Escopo (critérios repartidos da E07):** vãos e cabos sobre a posição nova do poste; pendência em associação ambígua de vão.
+
+**Critérios de aceite (a detalhar no plano):**
+
+- [ ] O benchmark por poste sobre as 16 folhas supera a baseline de controle da E07.1 (`propostas-v2` com runner) em todas as métricas, com relatório em `tmp/`; o handoff traz também o número contra a v004, a baseline das propostas da E15, separando o ganho de formato. Medida sem a E06.3.4 ou a E06.3.5 integradas, a métrica de ESTAI ou de EQUIPAMENTO_INTERRUPCAO só não pode piorar, e o handoff registra essa exceção (D19).
+- [ ] Com `ZENY_SERVER_SYMBOL_COMPOSITION=false`, os goldens da E07.1 não mudam, com `git diff --exit-code` como na E07.2, e um teste pela composição do servidor confirma isso (D18).
+- [ ] Promoção, regiões, vãos e conformidade continuam funcionando sobre as propostas novas (testes de integração existentes passam).
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** sim. Na janela de release 0.6.0, ela acontece depois da release e não para a execução (D18); o handoff deixa o pedido de revisão registrado.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+---
+
 ## E08 — Conferência UTM — #pendente
 
 **Objetivo:** ajustar a transformação página → UTM com as coordenadas lidas e a escala, e conferir posição de poste e comprimento de vão (decisão 4 do design).
 
 **Por que agora:** é o que torna a ficha confiável e evita o antiobjetivo de errar com segurança.
 
-**Dependências:** E07.
+**Dependências:** E07.3.
 
 **Escopo:**
 - Ajuste com rejeição de outliers.
