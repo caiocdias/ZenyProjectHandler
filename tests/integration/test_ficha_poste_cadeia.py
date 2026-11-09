@@ -339,7 +339,7 @@ def test_ambiguidade_de_disco_fica_pendente_sem_relacao_errada(
     ids = {item.id for item in postes}
 
     assert len(postes) == 2
-    # P1 tem a estrutura U1 (ela herda o identificador P1 e também sai CONFLITANTE, sem relação),
+    # P1 tem a estrutura U1 (ela herda o identificador P1 e também sai CONFLITANTE),
     # e por isso o poste sai CONFLITANTE; P2, sem estrutura, fica PROPOSTA. Nenhum é CONFIRMADA,
     # porque `associacao_pendente` barra a promoção automática.
     estados = {
@@ -356,6 +356,22 @@ def test_ambiguidade_de_disco_fica_pendente_sem_relacao_errada(
         assert _centro(poste) == pytest.approx(
             posicoes[str(atributos["identificador_operacional"])], abs=1e-6
         )
+    # R-E07.2.2.1-4: a disputa do disco não importa no regime de texto. A estrutura U1 (herdou P1,
+    # a 0,02 dele) liga ao P1 pendente; P2 não recebe nenhuma relação, e nada liga ao poste errado.
+    (estrutura,) = _elementos(resultado, CategoriaElemento.ESTRUTURA_MT)
+    ids_por_nome = {
+        str(_atributos(poste)["identificador_operacional"]): poste.id for poste in postes
+    }
+    assert [
+        (item.tipo_relacao, item.origem_referencia_id, item.destino_referencia_id)
+        for item in resultado.relacoes
+    ] == [("INSTALADA_EM", estrutura.id, ids_por_nome["P1"])]
     assert not any(
-        {item.origem_referencia_id, item.destino_referencia_id} & ids for item in resultado.relacoes
+        ids_por_nome["P2"] in {item.origem_referencia_id, item.destino_referencia_id}
+        for item in resultado.relacoes
+    )
+    assert not any(
+        {item.origem_referencia_id, item.destino_referencia_id} & ids
+        and item.tipo_relacao == "CONECTA"
+        for item in resultado.relacoes
     )
