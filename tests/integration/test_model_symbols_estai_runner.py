@@ -7,11 +7,10 @@ modelo, sem duplicata do mesmo desenho, com a variante do inventário esperada.
 `test_variantes_pendentes_nao_geram_observacao_do_metodo` prova o caso com a habilitação
 desligada: sem as três variantes de f02-14 habilitadas, o método não emite nenhum ESTAI.
 
-`test_estai_do_legado_e_do_modelo_nao_fundem` (R-E06.3.4-6) fixa o desfecho medido no laboratório,
-sem disjunção: o legado (`pymupdf_guys.observar_estais`) emite só o eixo da haste, em polilinha,
-e o modelo emite a caixa do pictograma unida à haste; a caixa do eixo tem área zero e extremos
-longe da caixa do modelo, então `_same_occurrence` recusa e cada estai vira duas ocorrências
-no runner. Fica aceito até a E07.2 ("Para a E07").
+`test_estai_do_legado_e_do_modelo_fundem_em_uma_ocorrencia` (R-E07.2.2.1-3) fixa o desfecho novo:
+o legado (`pymupdf_guys.observar_estais`) emite só o eixo da haste, em polilinha, e o modelo emite
+a caixa do pictograma unida à haste; o centro da caixa do legado cai dentro da caixa do modelo, e
+cada estai sai como uma única ocorrência, com as duas observações e a geometria do modelo.
 """
 
 from __future__ import annotations
@@ -28,10 +27,7 @@ from tests.integration.test_model_symbols_runner import _METODO_NOVO, _fonte, _s
 
 from zeny_project_handler.adapters.analysis import declarative_symbols
 from zeny_project_handler.adapters.analysis.pymupdf_guys import perfil_estais
-from zeny_project_handler.application.symbol_reconciliation import (
-    SymbolReconciliation,
-    _same_occurrence,
-)
+from zeny_project_handler.application.symbol_reconciliation import SymbolReconciliation
 from zeny_project_handler.domain.symbols import ObservacaoSimbolo
 from zeny_project_handler_server.symbol_execution import SymbolCompositionRunner
 
@@ -143,7 +139,9 @@ def test_variantes_pendentes_nao_geram_observacao_do_metodo(tmp_path: Path, form
 
 @pytest.mark.parametrize("graus", [0.0, 45.0], ids=["horizontal", "diagonal-45"])
 @pytest.mark.parametrize("forma", ["preto", "verde_com_circulo"])
-def test_estai_do_legado_e_do_modelo_nao_fundem(tmp_path: Path, forma: str, graus: float) -> None:
+def test_estai_do_legado_e_do_modelo_fundem_em_uma_ocorrencia(
+    tmp_path: Path, forma: str, graus: float
+) -> None:
     composto, novo, legado = _rodar(tmp_path, forma, graus=graus)
     de_estai = _de_estai(composto)
     do_modelo = [o for o in de_estai if o.metodo_assinatura == novo]
@@ -153,9 +151,13 @@ def test_estai_do_legado_e_do_modelo_nao_fundem(tmp_path: Path, forma: str, grau
     assert len(do_modelo) == 1, do_modelo
     assert len(do_legado) == 1, do_legado
 
-    # Só então o julgamento, fixado pelo resultado medido: não funde, duas ocorrências.
-    assert _same_occurrence(do_modelo[0], do_legado[0]) is False
+    # Só então o julgamento: uma ocorrência, com as duas observações e a geometria do modelo.
     ocorrencias = [
         occ for occ in composto.occurrences if any(o in de_estai for o in occ.observations)
     ]
-    assert sorted(len(occ.observations) for occ in ocorrencias) == [1, 1]
+    assert len(ocorrencias) == 1, ocorrencias
+    ocorrencia = ocorrencias[0]
+    assert len(ocorrencia.observations) == 2, ocorrencia.observations
+    assert do_modelo[0] in ocorrencia.observations
+    assert do_legado[0] in ocorrencia.observations
+    assert ocorrencia.geometry == do_modelo[0].geometria

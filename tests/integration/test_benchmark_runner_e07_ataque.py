@@ -68,7 +68,7 @@ def test_com_flag_a_versao_26_chega_ao_resultado_do_benchmark(tmp_path: Path) ->
     com = _rodar(tmp_path, "com", simbolos_modelo=True)
     sem = _rodar(tmp_path, "sem")
 
-    assert com["interpreter_version"] == "26.0"
+    assert com["interpreter_version"] == "27.0"
     assert sem["interpreter_version"] == "25.0"
 
 
@@ -106,7 +106,7 @@ def test_com_flag_a_versao_26_entra_na_identidade_e_muda_o_id(tmp_path: Path) ->
     execucao = com["semantic"].execucao
     parametros = dict(execucao.parametros)
 
-    assert execucao.versao_metodo == "26.0"
+    assert execucao.versao_metodo == "27.0"
     assert parametros["configuracao_simbolos_assinatura"] == com["symbol_configuration_signature"]
     assert all(chave in parametros for chave in _CHAVES_DE_SIMBOLO)
     assert execucao.id != sem["semantic"].execucao.id
@@ -118,4 +118,4 @@ def test_com_flag_o_id_e_estavel_entre_execucoes_independentes(tmp_path: Path) -
     segunda = _rodar(tmp_path, "dois", simbolos_modelo=True)["semantic"].execucao
 
     assert primeira.id == segunda.id
-    assert primeira.versao_metodo == segunda.versao_metodo == "26.0"
+    assert primeira.versao_metodo == segunda.versao_metodo == "27.0"

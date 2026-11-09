@@ -28,6 +28,11 @@ from zeny_project_handler.domain.values import PontoNormalizado
 # the legacy vector detector apart from the pictogram box, in original coordinates.
 _SUPPORT_BOUNDS_KEY = "simbolo_limites_suporte"
 
+# A legacy ESTAI and a model ESTAI are one occurrence when the legacy center falls in
+# the model box: explicit best-mutual pairing, with an exact tie going to the lowest id.
+_MODEL_METHOD_ID = "declarative-drawing-model"
+_ESTAI_CLASS = "ESTAI"
+
 Decision = Literal["review", "eligible"]
 MatrixState = Literal[
     "support",
@@ -175,12 +180,147 @@ def _compose(
         else:
             groups.append([observation])
     occurrences = tuple(
-        sorted((_occurrence(group, calibration) for group in groups), key=lambda o: o.id)
+        sorted(
+            (
+                _occurrence(group, calibration, model_observation=model)
+                for group, model in _with_estai_pairs(groups, results)
+            ),
+            key=lambda o: o.id,
+        )
     )
     matrix = tuple(
         _matrix_row(occurrence, result) for occurrence in occurrences for result in results
     )
     return occurrences, matrix
+
+
+def _estai_compatibilities(
+    groups: list[list[ObservacaoSimbolo]], results: tuple[ResultadoMetodoSimbolos, ...]
+) -> dict[tuple[int, int], Decimal]:
+    """Map compatible (legacy group, model group) indices to their center distance."""
+    model_signatures = {
+        result.perfil.assinatura()
+        for result in results
+        if result.perfil.metodo_id == _MODEL_METHOD_ID
+    }
+    estai = [index for index, group in enumerate(groups) if all(map(_is_only_estai, group))]
+    models = [i for i in estai if all(o.metodo_assinatura in model_signatures for o in groups[i])]
+    legacies = [
+        i for i in estai if not any(o.metodo_assinatura in model_signatures for o in groups[i])
+    ]
+    compatibilities: dict[tuple[int, int], Decimal] = {}
+    for legacy in legacies:
+        for model in models:
+            distance = _estai_pair_distance(groups[legacy], groups[model])
+            if distance is not None:
+                compatibilities[(legacy, model)] = distance
+    return compatibilities
+
+
+def _is_only_estai(observation: ObservacaoSimbolo) -> bool:
+    return {alternative.classe for alternative in observation.alternativas} == {_ESTAI_CLASS}
+
+
+def _estai_pair_distance(
+    legacy: list[ObservacaoSimbolo], model: list[ObservacaoSimbolo]
+) -> Decimal | None:
+    """Return the farthest member distance, or ``None`` when the pair is not compatible."""
+    distances: list[Decimal] = []
+    for legacy_member in legacy:
+        for model_member in model:
+            if _source_key(legacy_member) != _source_key(model_member):
+                return None
+            legacy_box, model_box = _bounds(legacy_member), _bounds(model_member)
+            x, y = (legacy_box[0] + legacy_box[2]) / 2, (legacy_box[1] + legacy_box[3]) / 2
+            if not (model_box[0] <= x <= model_box[2] and model_box[1] <= y <= model_box[3]):
+                return None
+            dx = x - (model_box[0] + model_box[2]) / 2
+            dy = y - (model_box[1] + model_box[3]) / 2
+            distances.append((dx * dx + dy * dy).sqrt())
+    return max(distances)
+
+
+def _without_choice_dependent_rivals(
+    compatibilities: dict[tuple[int, int], Decimal],
+    groups: list[list[ObservacaoSimbolo]],
+) -> dict[tuple[int, int], Decimal]:
+    """Drop the pairs whose outcome would depend on which rival the pairing happens to pick."""
+    models_of: dict[int, list[int]] = {}
+    legacies_of: dict[int, list[int]] = {}
+    for legacy, model in compatibilities:
+        models_of.setdefault(legacy, []).append(model)
+        legacies_of.setdefault(model, []).append(legacy)
+    refused = {
+        contended
+        for rivals_of in (models_of, legacies_of)
+        for contended, rivals in rivals_of.items()
+        if _choice_changes_outcome(contended, rivals, groups)
+    }
+    return {
+        (legacy, model): distance
+        for (legacy, model), distance in compatibilities.items()
+        if legacy not in refused and model not in refused
+    }
+
+
+def _choice_changes_outcome(
+    contended: int, rivals: list[int], groups: list[list[ObservacaoSimbolo]]
+) -> bool:
+    """Rivals that read differently, or a support stem in the dispute, make the choice matter."""
+    if len(rivals) < 2:
+        return False
+    subtypes = {
+        frozenset(alternative.subtipo for obs in groups[rival] for alternative in obs.alternativas)
+        for rival in rivals
+    }
+    disputed = (obs for index in (contended, *rivals) for obs in groups[index])
+    return len(subtypes) > 1 or any(_SUPPORT_BOUNDS_KEY in _attributes(obs) for obs in disputed)
+
+
+def _best_mutual_pairs(
+    compatibilities: dict[tuple[int, int], Decimal],
+    groups: list[list[ObservacaoSimbolo]],
+) -> tuple[tuple[int, int], ...]:
+    """Pair the nearest edges first; an exact tie goes to the lowest id.
+
+    Each side ranks its edges by the same global order, so this sweep yields the same pairs
+    as repeating the best-mutual round over what is left, without one pass per pair.
+    """
+    lowest = {
+        index: _lowest_id(groups[index])
+        for index in {index for pair in compatibilities for index in pair}
+    }
+    pairs: list[tuple[int, int]] = []
+    taken: set[int] = set()
+    for legacy, model in sorted(
+        compatibilities, key=lambda pair: (compatibilities[pair], lowest[pair[0]], lowest[pair[1]])
+    ):
+        if legacy not in taken and model not in taken:
+            taken.update((legacy, model))
+            pairs.append((legacy, model))
+    return tuple(sorted(pairs))
+
+
+def _lowest_id(group: list[ObservacaoSimbolo]) -> str:
+    return min(observation.id for observation in group)
+
+
+def _with_estai_pairs(
+    groups: list[list[ObservacaoSimbolo]], results: tuple[ResultadoMetodoSimbolos, ...]
+) -> list[tuple[list[ObservacaoSimbolo], ObservacaoSimbolo | None]]:
+    """Merge the paired ESTAI groups, naming the model observation that gives the geometry."""
+    pairs = _best_mutual_pairs(
+        _without_choice_dependent_rivals(_estai_compatibilities(groups, results), groups), groups
+    )
+    consumed = {index for pair in pairs for index in pair}
+    composed: list[tuple[list[ObservacaoSimbolo], ObservacaoSimbolo | None]] = [
+        (group, None) for index, group in enumerate(groups) if index not in consumed
+    ]
+    for legacy, model in pairs:
+        composed.append(
+            ([*groups[legacy], *groups[model]], min(groups[model], key=lambda obs: obs.id))
+        )
+    return composed
 
 
 def _source_key(observation: ObservacaoSimbolo) -> tuple[str, str, int, str, str]:
@@ -293,7 +433,10 @@ def _reference_ids(observations: tuple[ObservacaoSimbolo, ...]) -> tuple[tuple[s
 
 
 def _occurrence(
-    observations: list[ObservacaoSimbolo], calibration: CalibrationPolicy
+    observations: list[ObservacaoSimbolo],
+    calibration: CalibrationPolicy,
+    *,
+    model_observation: ObservacaoSimbolo | None = None,
 ) -> SymbolOccurrence:
     ordered = tuple(sorted(observations, key=lambda observation: observation.id))
     occurrence_id = sha256("|".join(obs.id for obs in ordered).encode()).hexdigest()
@@ -303,7 +446,10 @@ def _occurrence(
             key=lambda alt: (alt.classe or "", alt.subtipo or "", str(alt.score_bruto)),
         )
     )
-    identities = {(alt.classe, alt.subtipo) for alt in alternatives}
+    # Legacy ESTAI carries a subtype the model does not read: not a conflict in a pair.
+    identities = {
+        (alt.classe, None if model_observation is not None else alt.subtipo) for alt in alternatives
+    }
     reference_ids, invalid_references = _reference_ids(ordered)
     support = tuple(sorted({obs.metodo_assinatura for obs in ordered}))
     raw_scores = tuple((obs.metodo_assinatura, obs.score_bruto) for obs in ordered)
@@ -317,7 +463,7 @@ def _occurrence(
             obs.id,
         ),
     )
-    selected = by_quality[0]
+    selected = model_observation if model_observation is not None else by_quality[0]
     support_geometry = next(
         (geometry for obs in by_quality if (geometry := _support_geometry(obs)) is not None),
         None,

@@ -472,6 +472,62 @@ def test_nomenclatura_junto_de_sitio_livre_nao_resolve_o_empate() -> None:
     assert _atributos(resultado[vizinho.id])["associacao_pendente"] == "poste_disco"
 
 
+def _sitios_gravados(proposta: PropostaElemento) -> set[str]:
+    return set(str(_atributos(proposta)["poste_disco_sitios"]).split(";"))
+
+
+def test_postes_que_disputam_um_sitio_gravam_esse_sitio() -> None:
+    primeiro = _poste("a", "P1", 0.30, 0.30)
+    segundo = _poste("b", "P2", 0.34, 0.30)
+
+    resultado = ancorar_postes_no_desenho((primeiro, segundo), (_disco("d1", 0.32, 0.30),))
+
+    assert [_sitios_gravados(item) for item in resultado] == [{"0.32,0.3"}, {"0.32,0.3"}]
+
+
+def test_p_empatado_entre_dois_sitios_grava_os_dois() -> None:
+    poste = _poste("a", "P1", 0.30, 0.30)
+    discos = (_disco("d1", 0.26, 0.30), _disco("d2", 0.342, 0.30))
+
+    resultado = ancorar_postes_no_desenho((poste,), discos)
+
+    assert _sitios_gravados(resultado[0]) == {"0.26,0.3", "0.342,0.3"}
+
+
+def test_p_barrado_por_sitio_bloqueado_grava_so_esse_sitio() -> None:
+    ambiguo, discos = _p1_ambiguo_bloqueando_s1_e_s2()
+    vizinho = _poste("b", "P2", 0.55, 0.30)
+
+    resultado = {item.id: item for item in ancorar_postes_no_desenho((ambiguo, vizinho), discos)}
+
+    assert _atributos(resultado[vizinho.id])["associacao_pendente"] == "poste_disco"
+    assert _sitios_gravados(resultado[vizinho.id]) == {"0.523,0.3"}
+
+
+def test_p_pendente_por_sitio_tomado_nao_registra_sitio() -> None:
+    primeiro = _poste("a", "P1", 0.335, 0.30)
+    segundo = _poste("b", "P2", 0.365, 0.30)
+    discos = (_disco("d1", 0.30, 0.30), _disco("d2", 0.345, 0.30))
+
+    resultado = {item.id: item for item in ancorar_postes_no_desenho((primeiro, segundo), discos)}
+
+    assert _atributos(resultado[segundo.id])["associacao_pendente"] == "poste_disco"
+    assert "poste_disco_sitios" not in _atributos(resultado[segundo.id])
+
+
+def test_poste_que_nao_e_disputado_nao_registra_sitio() -> None:
+    ancorado = _poste("a", "P1", 0.30, 0.30)
+    sem_disco = _poste("b", "P2", 0.80, 0.80)
+
+    resultado = {
+        item.id: item
+        for item in ancorar_postes_no_desenho((ancorado, sem_disco), (_disco("d1", 0.33, 0.30),))
+    }
+
+    assert "poste_disco_sitios" not in _atributos(resultado[ancorado.id])
+    assert "poste_disco_sitios" not in _atributos(resultado[sem_disco.id])
+
+
 def test_pilha_instalar_e_remover_de_mesmo_codigo_preserva_a_outra_leitura() -> None:
     nova = _poste("nova", "P1", 0.30, 0.30)
     retirada = _poste("velha", "P1", 0.30, 0.306, situacao=SituacaoProjeto.REMOVER)

@@ -1,0 +1,148 @@
+# E07.2.2.1 — Símbolos no poste certo e ESTAI sem duplicar: plano de implementação
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** com a opção ligada, cada símbolo entra no poste certo ou fica pendente, o ESTAI sai em uma ocorrência só, e o poste pendente por disputa não perde as ligações que não dependem do disco.
+
+**Architecture:** três mudanças disjuntas, só com a opção ligada: a ancoragem expõe os sítios em disputa e `_symbol_support` (`application/interpretation_pipeline.py`) os respeita (associação); `_compose` em `application/symbol_reconciliation.py` emparelha ESTAI por contenção (fusão); `_com_poste_no_texto` em `adapters/interpretation/ficha_poste.py` mantém o regime de texto (vínculos). Laboratório decide o emparelhamento e o raio.
+
+**Tech Stack:** Python 3.11, pytest, baseline `scripts.curation_ficha`.
+
+**Spec:** `docs/roadmap-leitura-vetorial-por-poste.md`, seção "E07.2.2.1". Levantamento: `<checkout principal>/tmp/janela-0.6.0/levantamento-e07-2-2.md` (fora do Git). Base: `dda292a`.
+
+## Global Constraints
+
+- Arquitetura hexagonal; `application/` não importa adaptadores.
+- Nenhuma migração, API ou DTO. O método sobre o modelo liga só no runner opt-in (D12). Com `ZENY_SERVER_SYMBOL_COMPOSITION=false`, a saída não muda: `git diff --exit-code f26cc3c -- tests/fixtures/golden_padrao_e07.json` e `git diff --exit-code 877aba1 -- tests/fixtures/golden_padrao_e07_complementar.json` saem 0.
+- Ao mudar comportamento de saída, incremente a versão: `InterpretadorFichaPoste.versao` de `26.0` para `27.0` (Task 1); `SYMBOL_SEMANTICS_VERSION` para `e07-2-2-symbol-support-3` (Task 2). A fusão não precisa de versão própria: entra na identidade pelo digest de `symbol_reconciliation.py` (`symbol_execution.py:207`) via `symbol_configuration_signature`.
+- Sem dependência nova. Fixtures sintéticas autorais; nenhuma coordenada, hash ou nome de folha real. Nada lê `examples/avaliacao-cega/`.
+- Não tocar nos arquivos da E06.3.5, aberta em paralelo: `drawing_model/grammar_disc*.py`, `grammar_disc_mark.py`, `drawing_model/symbol_matcher.py`, `declarative_symbols.py`, `model_symbols.py`, `symbol_packages/family-f02-20.json`, `src/zeny_project_handler_server/symbol_execution.py`, `docs/schemas/pacotes-simbologia.schema.json`, `tests/fixtures/symbol_grammars/disc_mark.py`, `tests/unit/test_grammar_disc*`, `tests/unit/test_gramatica_disc_mark*`.
+- **Exceção à regra de arquivos disjuntos (D19), R-E07.2.2.1-7:** `tests/integration/test_model_symbols_estai_runner.py` também é listado na E06.3.5 (contagens e versão). Alternativas: mover o teste de fusão para arquivo novo (deixaria o teste velho vermelho na E06.3.5 até o merge) ou serializar as etapas (custo de horas). Decisão: a Task 3 limita-se à função das linhas 144-161, à docstring das linhas 10-14 e ao import das linhas 31-34 (que fica sem uso); a E06.3.5 mexe em contagens, em outras linhas; conflito, se houver, é resolvido no merge da etapa que fechar por último.
+- Testador e desenvolvedor não commitam arquivos sob `.superpowers/`.
+
+## Review Focus
+
+1. Símbolo entre dois postes quase equidistantes: pendente (`nearby` e margem de 0,004), nunca o vizinho, também com o raio novo (Task 2).
+2. Símbolo colado a um disco disputado: sem suporte (`(None, candidatos)`), e não migra para o vizinho que sobra dentro do raio (Task 2, R-E07.2.2.1-6).
+3. Dois estais reais no mesmo poste: o emparelhamento segue 1 para 1 sem depender da ordem; dois legados não fundem o mesmo modelo; sobra sem par não some (Task 4).
+4. Leitura de outra classe sobre o estai, ou dois modelos sobrepostos, não funde; `support_geometry` da haste é preservada e a geometria é a do modelo (Task 4).
+5. Só legado (caso da ablação): a fusão nova não dispara e a ocorrência fica igual (Task 4). Com a opção desligada, `reconcile_symbols` nem é chamado; goldens iguais.
+
+## Decisões do plano
+
+- **R-E07.2.2.1-1, régua:** controle `baseline-v013` (símbolos tp 90, fp 65, fn 89; postes 58/11/49). A E06.3.5 muda `package_signature` e o runner: se ela entrar antes da medição final, o controle é refeito na `main` antes de medir.
+- **R-E07.2.2.1-2, fusão do ESTAI (no reconciliador):**
+  - **Par compatível:** um lado é o método do modelo (`perfil.metodo_id` igual à constante do id do método sobre o modelo, em `symbol_reconciliation.py`, com teste de paridade contra o perfil real) e o outro não é; `classe == "ESTAI"` nas duas observações, com alternativa única de classe; o centro da caixa do legado dentro da caixa do modelo; mesma fonte (`_source_key`).
+  - **Emparelhamento em `_compose`, explícito**, para não depender da ordem por id: o compatível é a relação, e o emparelhamento decide. **Saída do laboratório (H-2 ajustada, ver "Resultado do laboratório"):** passadas repetidas de melhor mútuo pela distância entre centros, sem margem, até não haver par novo; distância exatamente igual se decide pelo menor id de observação. Para a **permutação** dentro do conjunto fundido, qual legado casa com qual modelo não altera classe nem geometria (vêm do modelo; o legado só traz proveniência), e o melhor mútuo mantém 1 para 1; dois modelos nunca se fundem. A decisão de **fundir** não é neutra: o reconciliador não conhece poste, e a passada repetida pode juntar um legado e um modelo de estais diferentes, o que muda a contagem e faz a ablação esconder uma perda real. **Guarda:** se o legado ou o modelo tem mais de um compatível e os rivais divergem em subtipo ou algum traz `simbolo_limites_suporte`, o par não funde, como `_compose` já faz com ambiguidade. `_same_occurrence` não muda para as demais classes. Como `_compose` roda na ablação, ela herda a regra.
+  - **ESTAI em dobro** na medição, sobre a ficha final como no levantamento: ESTAI do legado com o centro numa caixa do modelo no mesmo poste. A meta é 0, com até 3 casos recusados pela guarda, declarados no handoff. Distância exatamente igual não é empate aqui: decide-se pelo menor id.
+  - **Classe e subtipo:** o legado traz subtipo (`_MT`/`_AT`) e o modelo traz `None`. Em grupo fundido por este caminho, `identities` em `_occurrence` considera só a classe, e a ocorrência não recebe `ambiguous_class_or_id` por causa do subtipo; o subtipo do legado é preservado na ocorrência. As demais classes seguem como hoje.
+  - **Geometria:** em grupo fundido por este caminho, `selected` é a observação do modelo (`by_quality` por número de primitivas não vale aqui); `support_geometry` segue a primeira não nula.
+- **R-E07.2.2.1-3, teste que fixa "não fundem":** `tests/integration/test_model_symbols_estai_runner.py::test_estai_do_legado_e_do_modelo_nao_fundem` (`Soul: testador`, 4201c3d) fixa o desfecho anterior. Na Task 3, o testador o refaz antes do desenvolvedor, afirmando o desfecho em `composto.occurrences`, sem importar o privado `_same_occurrence` (o teste atual o importa).
+- **R-E07.2.2.1-4, vínculos do poste pendente:** só as regras `CENTROS_PROXIMOS` usam o poste na posição do texto, onde a disputa do disco não importa, e as três têm destino POSTE. O pendente sai de `_sem_ancora` já na posição do texto e sem `poste_texto_centro`, por isso `_com_poste_no_texto` retira `associacao_pendente` quando o valor é `poste_disco` **antes** do teste do centro. O cabo segue cortado no poste pendente (E07.3). Efeito esperado: `estruturas_sem_poste` de 11 para 7 e `cabos_sem_vao` em 69; a pilha não fundida (leituras empilhadas que empatam na margem) pode ficar sem vínculo, e não com o vínculo errado: ela entra no teste e na medição.
+- **R-E07.2.2.1-5, raio:** saída do laboratório: distância do centro do poste à caixa do símbolo, 0,020 (único valor com tp ≥ 92 e 0 em poste errado; 0,025 centro a centro é o de hoje). `simbolos` só chega com `symbol_runner` (`mvp_workflow.py:470-485`), criado só com a opção (`server/composition.py:472`), e por isso o raio novo vale só com ela ligada, sem parâmetro novo. A margem de 0,004 fica.
+- **R-E07.2.2.1-6, sítio disputado:** `_sem_ancora` passa a gravar, no caminho ligado, `poste_disco_sitios` = `"x,y;x,y"` só com os sítios em `bloqueados` do P pendente (o `_atribuir` expõe o par grupo→sítios); sítio apenas **tomado** por outro P não entra, para não tirar o suporte do vencedor. Em `_symbol_support`, o poste com pendência `poste_disco` deixa de ser candidato pela posição do texto; entra em `candidates` pela distância até um sítio dele, na mesma métrica do raio vencedor do laboratório. Se o mais próximo dentro do raio é pendente ou está empatado com pendente, a função devolve `(None, nearby)`, sem cair no vizinho, e os candidatos vão a `simbolo_suportes_candidatos`. Poste pendente sem sítio registrado sai da lista.
+
+## File Structure
+
+| Arquivo | Responsabilidade | Task |
+|---|---|---|
+| `src/zeny_project_handler/adapters/interpretation/ficha_poste.py`, `tests/unit/test_interpretador_ficha_poste_regime.py` (novo), testes de versão (`tests/unit/test_interpretador_ficha_poste.py`, `tests/server/test_ficha_poste_composicao*`, `tests/integration/test_benchmark_runner_e07*`) | vínculos no regime de texto, versão 27.0 | 1 |
+| `src/zeny_project_handler/application/interpretation_pipeline.py`, `src/zeny_project_handler/adapters/interpretation/ancoragem_poste.py`, `tests/unit/test_symbol_support_poste_pendente.py` (novo), `tests/unit/test_ancoragem_poste.py`, `tests/unit/test_symbol_support_association.py` e, se quebrar, `tests/integration/test_e13_semantic_pipeline.py` (a troca de métrica afeta; a docstring da linha 181 diz "pelo centro da caixa"; arquivo de testador segue o caminho da R-3) | sítios em disputa, associação, raio, versão | 2 |
+| `tests/integration/test_model_symbols_estai_runner.py` (só a função e a docstring citadas) | teste da fusão, testador | 3 |
+| `src/zeny_project_handler/application/symbol_reconciliation.py`, `tests/unit/test_symbol_reconciliation_estai.py` (novo) | emparelhamento do ESTAI | 4 |
+| `tests/integration/test_ficha_poste_cadeia_simbolos.py` (novo), `tests/fixtures/symbol_grammars/dois_postes.py` (novo) | cadeia, dois postes, promoção e regiões | 5 |
+
+**Ondas:** laboratório e Task 1 em paralelo; depois Task 2 em um worktree e, em outro, Task 3 seguida da Task 4 (assim o vermelho da Task 3 não atinge a suíte da Task 2); depois Task 5; testador de etapa; medição do orquestrador. Soma: 30 + 45 + 15 + 45 + 40 = 2h55, mais o laboratório (60 min). Vale a regra de estouro de 4h30; o relógio começa em dda292a.
+
+## Laboratório (depois da revisão do plano, em paralelo à Task 1)
+
+- **Base:** a branch da etapa em worktree destacado por hipótese; cada `desenvolvedor` implementa e mede, sem commitar e sem a suíte inteira, com o `.venv` da etapa e `PYTHONPATH=<worktree>/src`, em cópia da rodada (`<checkout principal>/tmp/laboratorio/e07-2-2-1/<hipotese>/rodada/`, como na E07.2.1).
+- **Hipóteses** (o eixo do raio é cruzado nas duas, com 3 valores):
+  - **H-1:** emparelhamento único nos dois sentidos.
+  - **H-2:** melhor mútuo por menor distância entre centros, com margem de 0,004; empate não funde.
+- **Raios a cruzar:** centro a centro 0,025 e 0,030; distância do centro do poste à caixa do símbolo, 0,020.
+- **Comando:** `python -m scripts.curation_ficha baseline --rodada <copia> --native-only --versao-extracao propostas-v2 --simbolos-modelo --processos 6`, comparando `fichas/baseline-vNNN-resumo.json` e `pdfs/*/ficha/baseline-vNNN/avaliacao.json` com a v013. `scripts.benchmark_simbolos_ficha` só guarda a detecção: não passa por `reconcile_symbols`.
+- **Vitória:** símbolos tp ≥ 92, fn ≤ 87, fp ≤ 20 (precisão ≥ 82%), 0 símbolo em poste errado, ESTAI em dobro na ficha final = 0 (até 3 recusados pela guarda, declarados); postes tp ≥ 58 e precisão ≥ 58/69, campos sem regressão; ablação do legado em ESTAI sem perder ocorrência coberta pelo modelo (o que só o legado detecta é contado à parte e levado à E09).
+- **Parada:** 60 min por hipótese. Se nenhuma vencer, a etapa estaciona (D20), depois de cruzar a fusão com os raios.
+- **Entrega:** em `<checkout principal>/tmp/laboratorio/e07-2-2-1/<hipotese>/`: `patch.diff`, `metricas.json`, `conclusoes.md`, com o raio e os ESTAI por empate declarados.
+
+## Resultado do laboratório
+
+Nenhuma hipótese venceu como escrita: H-1 (único nos dois sentidos) deu no melhor raio 93/25/86 com 8 ESTAI em dobro; H-2 (margem de 0,004) deu 93/23/86 com 6. A regra final saiu de três ajustes da H-2 **depois de ver os dados, no mesmo corpus das 16 folhas**: sem margem (v023), e passadas repetidas de melhor mútuo (v026), motivados por uma triagem visual: os dois legados que sobraram repetiam um estai já coberto, com o modelo vizinho sem par. O critério de vitória não mudou.
+
+**v026, caixa 0,020:** símbolos 93/17/86, precisão 84,6%, 0 em poste errado; ESTAI em dobro na ficha final = 0; 81 pares, nenhum entre dois modelos; "nenhum entre postes diferentes" só foi verificável em 51 dos 81 pares (30 têm um lado ou os dois sem poste na ficha), e os 2 pares da passada extra foram triados à mão; postes 58/11/49, campos iguais à v013. A R-E07.2.2.1-6 só tem cobertura sintética: o único `poste_disco` da rodada não tem sítio bloqueado. Ablação do legado em ESTAI: 0 ocorrências cobertas pelo modelo perdidas e 2 só do legado, na 016, fora da ficha.
+
+**Leitura do critério de ablação:** "não perde a ocorrência" vale para a ocorrência coberta pelo modelo. O que só o legado detecta é justamente o que uma ablação existe para mostrar, e nenhuma fusão o resolve. Fica declarado no handoff, com as 2 da 016 levadas à E09 (o desenho não foi inspecionado).
+
+- **R-E07.2.2.1-8, ajuste in-sample:** a seção do laboratório mandava estacionar se nenhuma hipótese vencesse, e nenhuma venceu como escrita. Decisão: seguir com a regra ajustada e declarar o número como **in-sample**, sem valor de evidência independente da regra. Alternativas: estacionar (perde 65→17 FP de ESTAI na janela) ou manter a margem de 0,004 (6 ESTAI em dobro, sem cumprir o critério). Os ajustes tiraram um limiar em vez de criar outro e só decidem quais ESTAI fundem: tp e fn ficam em 93/86 desde a H-2 com margem, e só o fp cai. A opção segue desligada (D17) e a E09 faz a prova cega (ADR 0016). O raio 0,020 foi escolha entre 3 pontos no mesmo corpus, sem varredura perto do valor: vai à E09 como limite.
+
+## Tasks
+
+### Task 1: Vínculos do poste pendente no regime de texto
+
+**Estimativa:** 30 min · **Depende de:** nenhuma · **Risco:** alto
+
+**Files:** os da linha "1" da File Structure.
+
+**Interfaces:** Consumes: `InterpretadorFichaPoste._gerar_relacoes` e `_com_poste_no_texto`. Produces: `versao = "27.0"`.
+
+- [ ] **Step 1: Testes falhando,** com a fixture montada pela saída real de `ancorar_postes_no_desenho`: poste pendente por disputa com estrutura perto do texto → a relação `CENTROS_PROXIMOS` nasce; o mesmo poste, em regra que não é de texto, não recebe relação; `associacao_pendente` com outro valor continua sem relação no regime de texto; o poste original nas propostas segue com a pendência e a geometria; leituras empilhadas do P pendente empatando → sem relação, nunca relação errada. → FAIL.
+- [ ] **Step 2:** implemente conforme R-E07.2.2.1-4, sem tocar `relation_rules.py`, e suba a versão; ajuste só as asserções de versão.
+- [ ] **Step 3:** testes da área e goldens → PASS.
+- [ ] **Step 4: Commit**; suíte inteira uma vez antes do relatório.
+
+### Task 2: Associação símbolo → poste
+
+**Estimativa:** 45 min · **Depende de:** laboratório · **Risco:** alto · **Laboratório:** sim
+
+**Files:** os da linha "2" da File Structure.
+
+**Interfaces:** Consumes: o `patch.diff` da hipótese vencedora, sem a parte de fusão. Produces: `SYMBOL_SEMANTICS_VERSION = "e07-2-2-symbol-support-3"` e o atributo `poste_disco_sitios`.
+
+- [ ] **Step 1: Testes falhando:** itens 1 e 2 do Review Focus; `_sem_ancora` grava os sítios só para P pendente por disputa; raio no limite (igual, logo acima); poste pendente sem sítio não é candidato; P pendente por sítio tomado não registra sítio e não tira o suporte do vencedor. → FAIL.
+- [ ] **Step 2:** implemente conforme R-E07.2.2.1-5 e R-E07.2.2.1-6.
+- [ ] **Step 3:** testes da área e goldens → PASS.
+- [ ] **Step 4: Commit**; suíte inteira uma vez antes do relatório.
+
+### Task 3: Teste da fusão (testador)
+
+**Estimativa:** 15 min · **Depende de:** laboratório · **Risco:** alto · **Soul:** testador
+
+**Files:** o da linha "3" da File Structure.
+
+- [ ] **Step 1:** refaça a função e a docstring citadas em R-E07.2.2.1-7 para o novo desfecho (R-E07.2.2.1-3), afirmando em `composto.occurrences`, com commit próprio. O teste fica vermelho até a Task 4, no mesmo worktree.
+
+### Task 4: Fusão do ESTAI
+
+**Estimativa:** 45 min · **Depende de:** Task 3 · **Risco:** alto · **Laboratório:** sim
+
+**Files:** os da linha "4" da File Structure.
+
+**Interfaces:** Consumes: o `patch.diff` da vencedora, sem a parte de associação. Produces: o emparelhamento em `_compose`.
+
+- [ ] **Step 1: Testes falhando:** itens 3, 4 e 5 do Review Focus; ablação sem o legado não perde a ocorrência; ATERRAMENTO e PARA_RAIOS_MT com a mesma contenção não fundem; ordem das observações não altera o resultado; dois legados para um modelo não fundem os dois; guarda: rivais com subtipo divergente ou com `simbolo_limites_suporte` não fundem (2 testes sintéticos); a constante do método do modelo bate com o perfil real; `support_geometry` preservada, com atributo sintético (nenhum detector de ESTAI grava `simbolo_limites_suporte`). → FAIL.
+- [ ] **Step 2:** implemente conforme R-E07.2.2.1-2, sem afrouxar o caminho das demais classes.
+- [ ] **Step 3:** testes da área, `tests/unit/test_symbol_reconciliation*`, o teste da Task 3 e goldens → PASS.
+- [ ] **Step 4: Commit**; suíte inteira uma vez antes do relatório.
+
+### Task 5: Cadeia, dois postes, promoção e regiões
+
+**Estimativa:** 40 min · **Depende de:** Tasks 1, 2, 4 · **Risco:** normal
+
+**Files:** os da linha "5" da File Structure.
+
+- [ ] **Step 1: Testes:** fixture sintética com dois postes próximos e símbolos entre eles (critério 1), com o `InterpretadorFichaPoste` e `reconcile_symbols`; a promoção e as regiões sobre as propostas com a opção ligada, incluindo o efeito de poste pendente com estrutura ligada em `analysis_regions.py`; estai em uma ocorrência; ablação.
+- [ ] **Step 2:** o que falhar é defeito: relate, sem mudar código de produção fora do combinado.
+- [ ] **Step 3: Commit**; suíte inteira uma vez antes do relatório.
+
+## Operação do orquestrador (fora das tarefas)
+
+- Medição final: `baseline` na rodada principal no HEAD integrado, comparada à v013 (R-E07.2.2.1-1), mais os dois `git diff --exit-code` dos goldens.
+- Handoff: número novo da baseline, ESTAI em dobro = 0 (e os recusados pela guarda à parte), número declarado como in-sample, 51/81 pares verificáveis por poste, `estruturas_sem_poste`, `cabos_sem_vao`, raio e limites para a E09.
+
+## Revisão de arquitetura
+
+- Veredito: aprovado com notas.
+- Rodadas: 2 (a segunda sobre o delta do laboratório).
+- Modelo: opus.
+- Notas Menores (aplicadas): sítio só de `bloqueados` (N-1); "ESTAI em dobro" medido na ficha final, com teto de 3 por empate (N-2); import incluído na exceção (N-3); H-2 por melhor mútuo (N-4); métrica do sítio igual à do raio vencedor (N-5).

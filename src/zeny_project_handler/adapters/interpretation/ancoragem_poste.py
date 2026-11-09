@@ -92,6 +92,7 @@ class _Candidaturas:
 class _Atribuicao:
     sitios: dict[int, _Sitio]
     pendentes: frozenset[int]
+    sitios_em_disputa: dict[int, tuple[_Sitio, ...]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -399,12 +400,14 @@ def _atribuir(grupos: tuple[_GrupoLeitura, ...], sitios: list[_Sitio]) -> _Atrib
     pendentes: set[int] = set()
     tomados: set[int] = set()
     bloqueados: set[int] = set()
+    em_disputa: dict[int, set[int]] = defaultdict(set)
     for distancia, grupo_indice, sitio_indice in candidaturas.pares:
         if grupo_indice in atribuidos or grupo_indice in pendentes:
             continue
         if sitio_indice in bloqueados:
             # O sítio melhor que restava está em disputa: migrar seria cair no vizinho errado.
             pendentes.add(grupo_indice)
+            em_disputa[grupo_indice].add(sitio_indice)
             continue
         if sitio_indice in tomados:
             # Com outro sítio ao alcance, seguir adiante seria migrar; sem ele, só fica sem disco.
@@ -421,10 +424,20 @@ def _atribuir(grupos: tuple[_GrupoLeitura, ...], sitios: list[_Sitio]) -> _Atrib
         if rivais or alternativas:
             pendentes.update((grupo_indice, *rivais))
             bloqueados.update((sitio_indice, *alternativas))
+            em_disputa[grupo_indice].update((sitio_indice, *alternativas))
+            for rival in rivais:
+                em_disputa[rival].add(sitio_indice)
             continue
         atribuidos[grupo_indice] = sitios[sitio_indice]
         tomados.add(sitio_indice)
-    return _Atribuicao(atribuidos, frozenset(pendentes))
+    return _Atribuicao(
+        atribuidos,
+        frozenset(pendentes),
+        {
+            grupo: tuple(sitios[indice] for indice in sorted(indices))
+            for grupo, indices in em_disputa.items()
+        },
+    )
 
 
 def _candidaturas(grupos: tuple[_GrupoLeitura, ...], sitios: list[_Sitio]) -> _Candidaturas:
@@ -469,7 +482,11 @@ def _aplicar(
         if sitio is None:
             pendente = grupo.indice in atribuicao.pendentes
             for proposta in grupo.propostas:
-                substituicoes[proposta.id] = _sem_ancora(proposta, pendente=pendente)
+                substituicoes[proposta.id] = _sem_ancora(
+                    proposta,
+                    pendente=pendente,
+                    sitios=atribuicao.sitios_em_disputa.get(grupo.indice, ()),
+                )
             continue
         pilha = _pilha_no_sitio(grupo.propostas, sitio)
         ids_da_pilha = {item.id for item in pilha.leituras}
@@ -502,11 +519,20 @@ def _identificadores_em_mais_de_um_sitio(
     }
 
 
-def _sem_ancora(proposta: PropostaElemento, *, pendente: bool) -> PropostaElemento:
+def _sem_ancora(
+    proposta: PropostaElemento,
+    *,
+    pendente: bool,
+    sitios: tuple[_Sitio, ...] = (),
+) -> PropostaElemento:
     atributos = dict(proposta.atributos_sugeridos)
     atributos["poste_ancorado_disco"] = False
     if pendente and not atributos.get("associacao_pendente"):
         atributos["associacao_pendente"] = "poste_disco"
+    if sitios:
+        atributos["poste_disco_sitios"] = ";".join(
+            f"{sitio.x:.6g},{sitio.y:.6g}" for sitio in sitios
+        )
     return replace(proposta, atributos_sugeridos=tuple(atributos.items()))
 
 

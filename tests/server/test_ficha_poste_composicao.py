@@ -58,4 +58,4 @@ def test_com_symbol_composition_usa_a_subclasse_da_ficha_do_poste(
     recebidos = _interpretadores_compostos(tmp_path, monkeypatch, symbol_composition=True)
 
     assert [type(item) for item in recebidos] == [InterpretadorFichaPoste]
-    assert recebidos[0].versao == "26.0"
+    assert recebidos[0].versao == "27.0"

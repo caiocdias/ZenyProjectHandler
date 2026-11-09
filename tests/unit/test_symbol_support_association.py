@@ -42,7 +42,8 @@ from zeny_project_handler.domain.values import GeometriaDocumento, PontoNormaliz
 _PAGE_SIZE = 2000.0
 _PAGE_ID = uuid5(NAMESPACE_URL, "fixture:associacao-suporte:pagina")
 _EXECUTION_ID = uuid5(NAMESPACE_URL, "fixture:associacao-suporte:execucao")
-# Poste do qual sai a haste e um vizinho a ~0,003 do centro do pictograma além do primeiro.
+# Poste do qual sai a haste e um vizinho: pela caixa do pictograma, ~0,0013 além do primeiro
+# (dentro da margem de 0,004); pela caixa da haste, ~0,0165 além dele (fora da margem).
 _FIRST_POLE = (100.0, 100.0)
 _NEIGHBOUR_POLE = (125.0, 165.0)
 
@@ -141,7 +142,7 @@ def test_grounding_stem_from_pole_keeps_symbol_on_that_pole(
     symbols = _single_occurrence(result)
 
     proposal, support = _symbol_proposal(symbols, catalogo_inicial)
-    first, _ = _poles()
+    first, neighbour = _poles()
     attributes = dict(proposal.atributos_sugeridos)
     assert support is not None
     assert support.id == first.id
@@ -149,7 +150,8 @@ def test_grounding_stem_from_pole_keeps_symbol_on_that_pole(
     assert attributes["simbolo_associacao_resolvida"] is True
     assert attributes["associacao_pendente"] is False
     candidates = json.loads(str(attributes["simbolo_suportes_candidatos"]))
-    assert [item["proposta_id"] for item in candidates] == [str(first.id)]
+    # O vizinho entra no raio pela caixa da haste, mas fica além da margem de ambiguidade.
+    assert [item["proposta_id"] for item in candidates] == [str(first.id), str(neighbour.id)]
 
     # Conformidade: suporte não confirmado cai no poste mais próximo pela haste.
     first_pole, _ = _confirmed_poles(catalogo_inicial)
@@ -178,7 +180,7 @@ def test_symbol_without_stem_reaching_a_pole_stays_without_support(
 def test_observation_without_support_geometry_keeps_pictogram_association(
     catalogo_inicial: CatalogoTecnico,
 ) -> None:
-    """Outros métodos não informam haste: a medida continua pelo centro da caixa."""
+    """Outros métodos não informam haste: a medida continua pela caixa do pictograma."""
     result = _observed(_FIRST_POLE)
     observation = result.observacoes[0]
     stripped = replace(
