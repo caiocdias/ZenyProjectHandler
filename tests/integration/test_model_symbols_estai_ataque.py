@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any
 
@@ -96,11 +97,10 @@ def _rodar(tmp_path: Path, desenhar: Any) -> list[Any]:
 def test_dois_estais_distantes_geram_duas_observacoes(tmp_path: Path) -> None:
     def desenho(pagina: pymupdf.Page) -> None:
         _desenhar(pagina, _PRETO, False, False)
-        for ini, fim in (((_BASE[0], _BASE[1] + 100), (_BASE[0] + 16, _BASE[1] + 100)),):
-            pagina.draw_line(ini, fim, color=_CINZA, width=_ESPESSURA)
-        v = (_BASE[0] + 16, _BASE[1] + 100)
-        pagina.draw_line(v, (v[0] + _DENTE * 0.9, v[1] - 5.3), color=_CINZA, width=_ESPESSURA)
-        pagina.draw_line(v, (v[0] + _DENTE * 0.9, v[1] + 5.3), color=_CINZA, width=_ESPESSURA)
+        ini, fim = (_BASE[0], _BASE[1] + 100), (_BASE[0] + 16, _BASE[1] + 100)
+        pagina.draw_line(ini, fim, color=_CINZA, width=_ESPESSURA)
+        pagina.draw_line(fim, (fim[0] + _DENTE * 0.9, fim[1] - 5.3), color=_CINZA, width=_ESPESSURA)
+        pagina.draw_line(fim, (fim[0] + _DENTE * 0.9, fim[1] + 5.3), color=_CINZA, width=_ESPESSURA)
 
     assert len(_rodar(tmp_path, desenho)) == 2
 
@@ -112,12 +112,28 @@ def test_haste_sem_garfo_nao_gera_estai(tmp_path: Path) -> None:
     assert _rodar(tmp_path, desenho) == []
 
 
-def test_estai_acima_do_max_span_40_nao_e_reconhecido(tmp_path: Path) -> None:
-    def desenho(pagina: pymupdf.Page) -> None:
-        _desenhar(pagina, _PRETO, False, False)
-        # amplia drasticamente: haste de 80 + garfo
-        pagina.draw_line((10.0, 250.0), (110.0, 250.0), color=_PRETO, width=_ESPESSURA)
-        pagina.draw_line((110.0, 250.0), (150.0, 230.0), color=_PRETO, width=_ESPESSURA)
-        pagina.draw_line((110.0, 250.0), (150.0, 270.0), color=_PRETO, width=_ESPESSURA)
+def _estai_nativo(haste: float, dente: float, origem: tuple[float, float]) -> Any:
+    """Estai horizontal com dentes a +-20 graus (dentro da faixa de 15 a 40) em página `nativo`."""
 
-    assert len(_rodar(tmp_path, desenho)) == 1  # so o pequeno
+    def desenho(pagina: pymupdf.Page) -> None:
+        pagina.insert_text((20.0, 280.0), "ESTAI NATIVO DA PAGINA", fontsize=9)
+        vertice = (origem[0] + haste, origem[1])
+        pagina.draw_line(origem, vertice, color=_PRETO, width=_ESPESSURA)
+        for sinal in (1, -1):
+            ponta = (
+                vertice[0] + dente * math.cos(math.radians(20)),
+                vertice[1] + sinal * dente * math.sin(math.radians(20)),
+            )
+            pagina.draw_line(vertice, ponta, color=_PRETO, width=_ESPESSURA)
+
+    return desenho
+
+
+def test_estai_acima_do_max_span_40_nao_e_reconhecido(tmp_path: Path) -> None:
+    # haste 24 + dente 22 a 20 graus: envergadura 24 + 22*cos(20) = 44,7 pt, acima de 40
+    assert _rodar(tmp_path, _estai_nativo(24.0, 22.0, (100.0, 150.0))) == []
+
+
+def test_estai_abaixo_do_max_span_40_e_reconhecido(tmp_path: Path) -> None:
+    # haste 20 + dente 18 a 20 graus: envergadura 20 + 18*cos(20) = 36,9 pt, dentro de 40
+    assert len(_rodar(tmp_path, _estai_nativo(20.0, 18.0, (100.0, 150.0)))) == 1

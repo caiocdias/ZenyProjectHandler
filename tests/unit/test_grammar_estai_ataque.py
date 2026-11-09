@@ -259,7 +259,7 @@ def test_haste_nao_e_ancora_de_dois_garfos() -> None:
         fino(BASE, polar(BASE, 180 - 26, DENTE)),
     ]
     ancoras = [candidato.caminho_ancora for candidato in _candidatos(caminhos)]
-    assert len(ancoras) == len(set(ancoras)), ancoras
+    assert ancoras == []  # a forma some por inteiro: nenhuma das duas leituras fica
 
 
 def test_x_do_garfo_vizinho_nao_marca_o_garfo_ao_lado() -> None:

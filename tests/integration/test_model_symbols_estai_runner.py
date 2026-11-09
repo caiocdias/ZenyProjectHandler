@@ -65,15 +65,22 @@ def _polar(origem: tuple[float, float], graus: float, comprimento: float) -> tup
 
 
 def _desenhar(
-    pagina: pymupdf.Page, cor: tuple[float, float, float], circulo: bool, x: bool
+    pagina: pymupdf.Page,
+    cor: tuple[float, float, float],
+    circulo: bool,
+    x: bool,
+    graus: float = 0.0,
 ) -> None:
-    vertice = (_BASE[0] + _HASTE, _BASE[1])
+    vertice = _polar(_BASE, graus, _HASTE)
     pagina.draw_line(_BASE, vertice, color=cor, width=_ESPESSURA)
     for sinal in (1, -1):
         pagina.draw_line(
-            vertice, _polar(vertice, sinal * _ABERTURA, _DENTE), color=cor, width=_ESPESSURA
+            vertice,
+            _polar(vertice, graus + sinal * _ABERTURA, _DENTE),
+            color=cor,
+            width=_ESPESSURA,
         )
-    centro = _polar(vertice, 0.0, _DENTE * 0.75)
+    centro = _polar(vertice, graus, _DENTE * 0.75)
     if circulo:
         pagina.draw_circle(centro, _DENTE * 0.8, color=cor, width=_ESPESSURA)
     if x:
@@ -87,10 +94,10 @@ def _desenhar(
 
 
 def _rodar(
-    tmp_path: Path, forma: str, pacotes: tuple[Any, ...] | None = None
+    tmp_path: Path, forma: str, pacotes: tuple[Any, ...] | None = None, graus: float = 0.0
 ) -> tuple[SymbolReconciliation, str, str]:
     cor, circulo, x, _ = _FORMAS[forma]
-    caminho = salvar_pagina(tmp_path, lambda pagina: _desenhar(pagina, cor, circulo, x))
+    caminho = salvar_pagina(tmp_path, lambda pagina: _desenhar(pagina, cor, circulo, x, graus))
     documento_projeto, fonte = _fonte(caminho)
     runner = SymbolCompositionRunner(_settings(tmp_path / "dados"), packages=pacotes)
     novo = next(p for p in runner._profiles if p.metodo_id == _METODO_NOVO).assinatura()
@@ -134,9 +141,10 @@ def test_variantes_pendentes_nao_geram_observacao_do_metodo(tmp_path: Path, form
     assert [o for o in _de_estai(composto) if o.metodo_assinatura == novo] == []
 
 
+@pytest.mark.parametrize("graus", [0.0, 45.0], ids=["horizontal", "diagonal-45"])
 @pytest.mark.parametrize("forma", ["preto", "verde_com_circulo"])
-def test_estai_do_legado_e_do_modelo_nao_fundem(tmp_path: Path, forma: str) -> None:
-    composto, novo, legado = _rodar(tmp_path, forma)
+def test_estai_do_legado_e_do_modelo_nao_fundem(tmp_path: Path, forma: str, graus: float) -> None:
+    composto, novo, legado = _rodar(tmp_path, forma, graus=graus)
     de_estai = _de_estai(composto)
     do_modelo = [o for o in de_estai if o.metodo_assinatura == novo]
     do_legado = [o for o in de_estai if o.metodo_assinatura == legado]
