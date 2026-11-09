@@ -14,6 +14,7 @@ from zeny_project_handler.adapters.interpretation.ancoragem_poste import (
     ancorar_postes_no_desenho,
 )
 from zeny_project_handler.adapters.interpretation.ficha_poste import InterpretadorFichaPoste
+from zeny_project_handler.domain.analysis import EvidenciaDocumento, PropostaElemento
 from zeny_project_handler.domain.catalog import CatalogoTecnico
 from zeny_project_handler.domain.enums import CategoriaElemento
 from zeny_project_handler.ports.interpretation import SolicitacaoInterpretacao
@@ -57,13 +58,21 @@ def test_versoes_do_padrao_e_da_subclasse() -> None:
     assert InterpretadorFichaPoste.nome == InterpretadorRegrasExplicitas.nome
 
 
-def test_ancoragem_identidade_devolve_as_propostas() -> None:
+def test_ancoragem_sem_propostas_devolve_vazio() -> None:
     assert ancorar_postes_no_desenho((), ()) == ()
 
 
 def test_subclasse_com_ancoragem_identidade_nao_muda_a_saida(
-    catalogo_inicial: CatalogoTecnico,
+    catalogo_inicial: CatalogoTecnico, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    def identidade(
+        propostas: tuple[PropostaElemento, ...],
+        evidencias: tuple[EvidenciaDocumento, ...],
+    ) -> tuple[PropostaElemento, ...]:
+        del evidencias
+        return propostas
+
+    monkeypatch.setattr(modulo_ficha_poste, "ancorar_postes_no_desenho", identidade)
     solicitacao = _solicitacao(catalogo_inicial)
     registro = solicitacao.registro
 
