@@ -14,10 +14,8 @@ from scripts import benchmark_network_pdf
 from scripts.benchmark_network_pdf import run_variant
 
 from zeny_project_handler.adapters.interpretation import carregar_registro_regras_inicial
-from zeny_project_handler.application.interpretation_pipeline import (
-    ConfiguracaoInterpretacao,
-    _execution_id,
-)
+from zeny_project_handler.application.interpretation_pipeline import _execution_id
+from zeny_project_handler.ports.interpretation import ConfiguracaoInterpretacao
 
 pytestmark = pytest.mark.integration
 

@@ -437,7 +437,7 @@ def test_ancoragem_que_muda_proposta_chega_aos_cabos_sem_mudar_o_padrao(
     assert all(_MARCA not in item.atributos_sugeridos for item in padrao_depois.elementos)
 
 
-def test_subclasse_nao_sobrescreve_o_gerar_relacoes_do_base_nesta_etapa(
+def test_subclasse_sobrescreve_o_gerar_relacoes_e_sem_poste_ancorado_iguala_o_base(
     catalogo_inicial: CatalogoTecnico,
 ) -> None:
     solicitacao = _request(catalogo_inicial)
@@ -446,5 +446,9 @@ def test_subclasse_nao_sobrescreve_o_gerar_relacoes_do_base_nesta_etapa(
     padrao = InterpretadorRegrasExplicitas(registro).interpretar(solicitacao)
     ficha = InterpretadorFichaPoste(registro).interpretar(solicitacao)
 
+    assert "_gerar_relacoes" in vars(InterpretadorFichaPoste)
     assert padrao.relacoes
+    assert all(
+        "poste_ancorado_disco" not in dict(item.atributos_sugeridos) for item in ficha.elementos
+    )
     assert ficha == padrao
