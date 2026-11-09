@@ -67,5 +67,5 @@ def test_run_variant_escolhe_o_interpretador_pela_flag(tmp_path: Path) -> None:
     com = run_variant(pdf, tmp_path / "a", ocr=None, simbolos_modelo=True)
     sem = run_variant(pdf, tmp_path / "b", ocr=None)
 
-    assert com["semantic"].execucao.versao_metodo == "26.0"
+    assert com["semantic"].execucao.versao_metodo == "27.0"
     assert sem["semantic"].execucao.versao_metodo == "25.0"

@@ -1,4 +1,4 @@
-"""Interpretador 26.0: o poste sai no disco do desenho (opção de símbolos ligada)."""
+"""Interpretador 27.0: o poste sai no disco do desenho (opção de símbolos ligada)."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ _REGIME_DE_TEXTO: Final = "CENTROS_PROXIMOS"
 
 
 class InterpretadorFichaPoste(InterpretadorRegrasExplicitas):
-    versao = "26.0"
+    versao = "27.0"
 
     def _refinar_propostas_identificadas(
         self,
@@ -66,8 +66,16 @@ class InterpretadorFichaPoste(InterpretadorRegrasExplicitas):
 
 
 def _com_poste_no_texto(elemento: PropostaElemento) -> PropostaElemento:
-    centro = dict(elemento.atributos_sugeridos).get("poste_texto_centro")
-    if elemento.categoria is not CategoriaElemento.POSTE or not isinstance(centro, str):
+    if elemento.categoria is not CategoriaElemento.POSTE:
+        return elemento
+    atributos = dict(elemento.atributos_sugeridos)
+    # A disputa do disco não importa no texto; o pendente já está na posição do texto.
+    # Isto vem antes do teste do centro: o pendente não tem `poste_texto_centro`.
+    if atributos.get("associacao_pendente") == "poste_disco":
+        del atributos["associacao_pendente"]
+        elemento = replace(elemento, atributos_sugeridos=tuple(atributos.items()))
+    centro = atributos.get("poste_texto_centro")
+    if not isinstance(centro, str):
         return elemento
     x, y = (Decimal(parte) for parte in centro.split(","))
     return replace(

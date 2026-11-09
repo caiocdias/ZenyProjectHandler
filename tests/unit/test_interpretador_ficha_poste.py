@@ -54,7 +54,7 @@ def _solicitacao(catalogo: CatalogoTecnico) -> SolicitacaoInterpretacao:
 
 def test_versoes_do_padrao_e_da_subclasse() -> None:
     assert InterpretadorRegrasExplicitas.versao == "25.0"
-    assert InterpretadorFichaPoste.versao == "26.0"
+    assert InterpretadorFichaPoste.versao == "27.0"
     assert InterpretadorFichaPoste.nome == InterpretadorRegrasExplicitas.nome
 
 

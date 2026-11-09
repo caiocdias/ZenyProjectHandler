@@ -78,7 +78,7 @@ def test_opcao_ligada_usa_a_subclasse_em_qualquer_perfil(
     )
 
     assert [type(item) for item, _ in recebidos] == [InterpretadorFichaPoste]
-    assert recebidos[0][0].versao == "26.0"
+    assert recebidos[0][0].versao == "27.0"
 
 
 def test_subclasse_e_padrao_compartilham_nome_e_registro(
@@ -110,7 +110,7 @@ def test_subclasse_e_padrao_compartilham_nome_e_registro(
         pytest.param(
             {"ZENY_SERVER_SYMBOL_COMPOSITION": "TRUE"},
             InterpretadorFichaPoste,
-            "26.0",
+            "27.0",
             id="true-maiusculo",
         ),
     ],
