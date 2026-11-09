@@ -62,7 +62,7 @@ def test_estai_habilitado_sem_reason_e_as_outras_14_pendentes() -> None:
     assert all(v["recognition"]["grammar"]["max_span"] == 40 for v in habilitadas)
 
 
-def test_contagens_52_habilitadas_e_371_pendentes() -> None:
+def test_contagens_54_habilitadas_e_369_pendentes() -> None:
     estados = [v["recognition"]["status"] for v in _variantes()]
     assert estados.count("enabled") == 54
     assert estados.count("pending") == 369

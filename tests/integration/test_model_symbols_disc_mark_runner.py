@@ -165,8 +165,14 @@ def _resultado_do_modelo(tmp_path: Path) -> ResultadoMetodoSimbolos:
     return modelo
 
 
-def test_disco_do_legado_de_outra_classe_funde_com_o_do_modelo(tmp_path: Path) -> None:
+def test_legado_sintetico_de_uma_primitiva_e_caixa_do_disco_funde_com_o_do_modelo(
+    tmp_path: Path,
+) -> None:
     """Desfecho observado (R-E06.3.5-6): FUNDE, em uma ocorrência de duas observações.
+
+    O desfecho depende do formato do legado: este legado sintético tem 1 primitiva e a caixa do
+    disco, o melhor caso para a fusão. Com envelope maior ele não funde; só a folha 006 real
+    confirma o que o legado emite de verdade.
 
     `_same_occurrence` não olha a classe: o disco do legado (ATERRAMENTO) e o do modelo
     (EQUIPAMENTO_INTERRUPCAO) têm a mesma primitiva e a mesma caixa. A ocorrência fundida vai a

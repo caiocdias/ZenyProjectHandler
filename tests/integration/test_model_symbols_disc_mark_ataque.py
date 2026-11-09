@@ -299,16 +299,17 @@ def test_legado_montado_do_get_drawings_tambem_funde_com_o_disco_do_modelo(tmp_p
     assert ocorrencia.reasons == ("ambiguous_class_or_id",)
 
 
-@pytest.mark.parametrize("desenhos_a_mais", [1, 2, 4], ids=lambda n: f"{n}-desenhos-a-mais")
-def test_legado_com_varios_desenhos_e_envelope_maior_nao_funde_com_o_disco(
-    tmp_path: Path, desenhos_a_mais: int
+@pytest.mark.parametrize("fator_do_envelope", [1, 3], ids=["envelope-igual", "envelope-3x"])
+@pytest.mark.parametrize("desenhos_a_mais", [0, 1, 4], ids=lambda n: f"{n}-desenhos-a-mais")
+def test_o_envelope_do_legado_decide_a_fusao_nunca_as_primitivas(
+    tmp_path: Path, desenhos_a_mais: int, fator_do_envelope: int
 ) -> None:
-    """Contraste da R-6: um aterramento legado de verdade tem haste, barras e envelope.
+    """Contraste da R-6: o formato do legado decide o desfecho; só a folha 006 real o confirma.
 
-    O teste do desenvolvedor usa legado de 1 primitiva e caixa igual à do disco, o melhor caso
-    para a fusão. Com o legado cobrindo o disco mais `desenhos_a_mais` desenhos e um envelope 3x
-    maior, `_same_occurrence` devolve False: o desfecho FUNDE depende do formato do legado e
-    deve ser lido assim no "Para a E07.2.2".
+    O corte de primitivas de `_same_occurrence` usa `min(tamanhos)` e o modelo tem 1 primitiva,
+    então primitivas a mais no legado nunca impedem a fusão. Quem decide é o envelope: com a caixa
+    do disco funde, com envelope 3x maior (diferença de largura e altura acima de 20% da escala e
+    IoU baixo) não funde, para qualquer número de primitivas.
     """
     modelo = _resultado_do_modelo(tmp_path)
     (observacao,) = modelo.observacoes
@@ -321,20 +322,23 @@ def test_legado_com_varios_desenhos_e_envelope_maior_nao_funde_com_o_disco(
         )
         for n in range(desenhos_a_mais)
     )
-    # Envelope 3x maior em torno do mesmo centro.
     normalizados = base.geometria.pontos_normalizados
     xs = [p.x for p in normalizados]
     ys = [p.y for p in normalizados]
     cx, cy = (min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2
-    maior = tuple(type(p)(cx + (p.x - cx) * 3, cy + (p.y - cy) * 3) for p in normalizados)
-    envelope = replace(base.geometria, pontos_normalizados=maior)
+    ampliado = tuple(
+        type(p)(cx + (p.x - cx) * fator_do_envelope, cy + (p.y - cy) * fator_do_envelope)
+        for p in normalizados
+    )
+    envelope = replace(base.geometria, pontos_normalizados=ampliado)
     real = replace(base, geometria=envelope, primitivas=(ancora, *extras))
 
-    assert _same_occurrence(observacao, real) is False
+    funde = fator_do_envelope == 1
+    assert _same_occurrence(observacao, real) is funde
     ocorrencias = reconcile_symbols(
         (modelo, replace(legado, observacoes=(real,))), CalibrationPolicy()
     )
-    assert len(ocorrencias.occurrences) == 2
+    assert len(ocorrencias.occurrences) == (1 if funde else 2)
 
 
 # --- R-E06.3.5-6 pelo pipeline real -------------------------------------------------------------

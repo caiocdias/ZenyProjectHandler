@@ -359,7 +359,7 @@ def _copiar(tmp_path: Path) -> Path:
     return destino
 
 
-def test_auditor_real_fecha_sem_erro_com_371_pending_e_52_enabled() -> None:
+def test_auditor_real_fecha_sem_erro_com_369_pending_e_54_enabled() -> None:
     relato = audit()
     assert relato["errors"] == []
     assert (relato["expected_variants"], relato["expected_families"]) == (423, 31)
