@@ -24,7 +24,7 @@
 
 1. Símbolo entre dois postes quase equidistantes: pendente (`nearby` e margem de 0,004), nunca o vizinho, também com o raio novo (Task 2).
 2. Símbolo colado a um disco disputado: sem suporte (`(None, candidatos)`), e não migra para o vizinho que sobra dentro do raio (Task 2, R-E07.2.2.1-6).
-3. Dois estais reais no mesmo poste: o legado de um, contido no modelo do outro, não funde errado; empate não funde; sobra sem par não some (Task 4).
+3. Dois estais reais no mesmo poste: o emparelhamento segue 1 para 1 sem depender da ordem; dois legados não fundem o mesmo modelo; sobra sem par não some (Task 4).
 4. Leitura de outra classe sobre o estai, ou dois modelos sobrepostos, não funde; `support_geometry` da haste é preservada e a geometria é a do modelo (Task 4).
 5. Só legado (caso da ablação): a fusão nova não dispara e a ocorrência fica igual (Task 4). Com a opção desligada, `reconcile_symbols` nem é chamado; goldens iguais.
 
@@ -33,13 +33,13 @@
 - **R-E07.2.2.1-1, régua:** controle `baseline-v013` (símbolos tp 90, fp 65, fn 89; postes 58/11/49). A E06.3.5 muda `package_signature` e o runner: se ela entrar antes da medição final, o controle é refeito na `main` antes de medir.
 - **R-E07.2.2.1-2, fusão do ESTAI (no reconciliador):**
   - **Par compatível:** um lado é o método do modelo (`perfil.metodo_id` igual à constante do id do método sobre o modelo, em `symbol_reconciliation.py`, com teste de paridade contra o perfil real) e o outro não é; `classe == "ESTAI"` nas duas observações, com alternativa única de classe; o centro da caixa do legado dentro da caixa do modelo; mesma fonte (`_source_key`).
-  - **Emparelhamento em `_compose`, explícito**, para não depender da ordem por id: o compatível é a relação, e o emparelhamento decide. O laboratório escolhe entre H-1 (único nos dois sentidos) e H-2 (menor distância entre centros, com margem de 0,004; empate não funde). `_same_occurrence` não muda para as demais classes. Como `_compose` roda na ablação, ela herda a regra.
+  - **Emparelhamento em `_compose`, explícito**, para não depender da ordem por id: o compatível é a relação, e o emparelhamento decide. **Saída do laboratório (H-2 ajustada, ver "Resultado do laboratório"):** passadas repetidas de melhor mútuo pela distância entre centros, sem margem, até não haver par novo; distância exatamente igual se decide pelo menor id de observação. Dentro de um leque de estais no mesmo poste, qual legado casa com qual modelo não altera classe, poste, contagem nem geometria, e o melhor mútuo mantém 1 para 1; dois modelos nunca se fundem. `_same_occurrence` não muda para as demais classes. Como `_compose` roda na ablação, ela herda a regra.
   - **ESTAI em dobro** na medição, sobre a ficha final como no levantamento: ESTAI do legado com o centro numa caixa do modelo no mesmo poste. A meta é 0, com até 3 casos por empate, declarados no handoff (empate não funde, por decisão).
   - **Classe e subtipo:** o legado traz subtipo (`_MT`/`_AT`) e o modelo traz `None`. Em grupo fundido por este caminho, `identities` em `_occurrence` considera só a classe, e a ocorrência não recebe `ambiguous_class_or_id` por causa do subtipo; o subtipo do legado é preservado na ocorrência. As demais classes seguem como hoje.
   - **Geometria:** em grupo fundido por este caminho, `selected` é a observação do modelo (`by_quality` por número de primitivas não vale aqui); `support_geometry` segue a primeira não nula.
 - **R-E07.2.2.1-3, teste que fixa "não fundem":** `tests/integration/test_model_symbols_estai_runner.py::test_estai_do_legado_e_do_modelo_nao_fundem` (`Soul: testador`, 4201c3d) fixa o desfecho anterior. Na Task 3, o testador o refaz antes do desenvolvedor, afirmando o desfecho em `composto.occurrences`, sem importar o privado `_same_occurrence` (o teste atual o importa).
 - **R-E07.2.2.1-4, vínculos do poste pendente:** só as regras `CENTROS_PROXIMOS` usam o poste na posição do texto, onde a disputa do disco não importa, e as três têm destino POSTE. O pendente sai de `_sem_ancora` já na posição do texto e sem `poste_texto_centro`, por isso `_com_poste_no_texto` retira `associacao_pendente` quando o valor é `poste_disco` **antes** do teste do centro. O cabo segue cortado no poste pendente (E07.3). Efeito esperado: `estruturas_sem_poste` de 11 para 7 e `cabos_sem_vao` em 69; a pilha não fundida (leituras empilhadas que empatam na margem) pode ficar sem vínculo, e não com o vínculo errado: ela entra no teste e na medição.
-- **R-E07.2.2.1-5, raio:** o raio de `_symbol_support` sai do laboratório (0,025 hoje). `simbolos` só chega com `symbol_runner` (`mvp_workflow.py:470-485`), criado só com a opção (`server/composition.py:472`), e por isso o raio novo vale só com ela ligada, sem parâmetro novo. A margem de 0,004 fica.
+- **R-E07.2.2.1-5, raio:** saída do laboratório: distância do centro do poste à caixa do símbolo, 0,020 (único valor com tp ≥ 92 e 0 em poste errado; 0,025 centro a centro é o de hoje). `simbolos` só chega com `symbol_runner` (`mvp_workflow.py:470-485`), criado só com a opção (`server/composition.py:472`), e por isso o raio novo vale só com ela ligada, sem parâmetro novo. A margem de 0,004 fica.
 - **R-E07.2.2.1-6, sítio disputado:** `_sem_ancora` passa a gravar, no caminho ligado, `poste_disco_sitios` = `"x,y;x,y"` só com os sítios em `bloqueados` do P pendente (o `_atribuir` expõe o par grupo→sítios); sítio apenas **tomado** por outro P não entra, para não tirar o suporte do vencedor. Em `_symbol_support`, o poste com pendência `poste_disco` deixa de ser candidato pela posição do texto; entra em `candidates` pela distância até um sítio dele, na mesma métrica do raio vencedor do laboratório. Se o mais próximo dentro do raio é pendente ou está empatado com pendente, a função devolve `(None, nearby)`, sem cair no vizinho, e os candidatos vão a `simbolo_suportes_candidatos`. Poste pendente sem sítio registrado sai da lista.
 
 ## File Structure
@@ -65,6 +65,14 @@
 - **Vitória:** símbolos tp ≥ 92, fn ≤ 87, fp ≤ 20 (precisão ≥ 82%), 0 símbolo em poste errado, ESTAI em dobro na ficha final = 0 (até 3 por empate declarados); postes tp ≥ 58 e precisão ≥ 58/69, campos sem regressão; ablação do legado em ESTAI sem ocorrência perdida.
 - **Parada:** 60 min por hipótese. Se nenhuma vencer, a etapa estaciona (D20), depois de cruzar a fusão com os raios.
 - **Entrega:** em `<checkout principal>/tmp/laboratorio/e07-2-2-1/<hipotese>/`: `patch.diff`, `metricas.json`, `conclusoes.md`, com o raio e os ESTAI por empate declarados.
+
+## Resultado do laboratório
+
+Nenhuma hipótese venceu como escrita: H-1 (único nos dois sentidos) deu no melhor raio 93/25/86 com 8 ESTAI em dobro; H-2 (margem de 0,004) deu 93/23/86 com 6. A regra final saiu de três ajustes da H-2 **depois de ver os dados, no mesmo corpus das 16 folhas**: sem margem (v023), e passadas repetidas de melhor mútuo (v026), motivados por uma triagem visual: os dois legados que sobraram repetiam um estai já coberto, com o modelo vizinho sem par. O critério de vitória não mudou.
+
+**v026, caixa 0,020:** símbolos 93/17/86, precisão 84,6%, 0 em poste errado; ESTAI em dobro na ficha final = 0; 81 pares, nenhum entre postes diferentes e nenhum entre dois modelos; postes 58/11/49, campos iguais à v013. Ablação do legado em ESTAI: 0 ocorrências cobertas pelo modelo perdidas e 2 só do legado, na 016, fora da ficha.
+
+**Leitura do critério de ablação:** "não perde a ocorrência" vale para a ocorrência coberta pelo modelo. O que só o legado detecta é justamente o que uma ablação existe para mostrar, e nenhuma fusão o resolve. Fica declarado no handoff, junto com o risco de sobreajuste, a ser medido na E09.
 
 ## Tasks
 
