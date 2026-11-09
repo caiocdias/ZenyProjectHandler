@@ -21,6 +21,7 @@ import pymupdf
 import pytest
 from scripts.audit_symbol_packages import audit
 from tests.fixtures.declarative_symbols.corpus import build_enabled_corpus
+from tests.fixtures.symbol_grammars.estai import GRAMATICAS_ESTAI
 from tests.fixtures.symbol_grammars.rect_diagonal import CASOS_RECT_DIAGONAL
 from tests.fixtures.symbol_grammars.stem_bars import CASOS_HASTE
 from tests.fixtures.symbol_grammars.triangulo import CASOS_TRIANGULO
@@ -49,6 +50,8 @@ _NOVAS_POR_FAMILIA = {
     "family-f02-21": 8,
 }
 _ESTAGIOS_NOVOS = {"E04", "E05", "E06"}
+# E06.3.4: as três variantes de ESTAI de f02-14 (existente, instalar, retirar).
+_VARIANTES_ESTAI = ("cemig-eo-r3-s14-v001", "cemig-eo-r3-s14-v002", "cemig-eo-r3-s14-v003")
 _CABECALHO = {"schema_version": 1, "profile_id": "profile-cemig-eo-r3", "source_id": "F02"}
 
 # Variantes que ja existiam antes da Task 3 (a40739c), na ordem original do arquivo.
@@ -198,6 +201,7 @@ _GRAMATICA_HABILITADAS = {
     **dict(CASOS_HASTE),
     **dict(CASOS_RECT_DIAGONAL),
     **dict(CASOS_TRIANGULO),
+    **dict(zip(_VARIANTES_ESTAI, GRAMATICAS_ESTAI.values(), strict=True)),
 }
 
 
@@ -355,23 +359,24 @@ def _copiar(tmp_path: Path) -> Path:
     return destino
 
 
-def test_auditor_real_fecha_sem_erro_com_374_pending_e_49_enabled() -> None:
+def test_auditor_real_fecha_sem_erro_com_371_pending_e_52_enabled() -> None:
     relato = audit()
     assert relato["errors"] == []
     assert (relato["expected_variants"], relato["expected_families"]) == (423, 31)
     assert (relato["package_variants"], relato["package_families"]) == (423, 31)
-    assert (relato["pending"], relato["enabled"]) == (374, 49)
+    assert (relato["pending"], relato["enabled"]) == (371, 52)
     assert relato["complete_recognition"] is False
     por_estagio = relato["by_owner_stage"]
     assert set(por_estagio) == {"E04", "E05", "E06", "E07"}
     for estagio in _ESTAGIOS_NOVOS:
         item = por_estagio[estagio]
-        # E04: hastes de f02-19 e f02-21 e PARA_RAIOS_BT; E05: TRANSFORMADOR de f02-18.
-        habilitadas = {"E04": 12, "E05": 15}.get(estagio, 0)
+        # E04: hastes de f02-19 e f02-21 e PARA_RAIOS_BT; E05: TRANSFORMADOR de f02-18;
+        # E06: ESTAI de f02-14 (E06.3.4).
+        habilitadas = {"E04": 12, "E05": 15, "E06": 3}[estagio]
         assert item["packaged"] == item["expected"] == item["pending"] + habilitadas
         assert item["enabled"] == habilitadas
         # E04 fica inteira habilitada (12 de 12); E05 tem as 15 de TRANSFORMADOR habilitadas e
-        # 14 pending; E06 segue só pending. Só E04 fica sem pending.
+        # 14 pending; E06 tem as 3 de ESTAI habilitadas e o resto pending. Só E04 fica sem pending.
         assert (item["pending"] == 0) == (estagio == "E04")
     assert sum(por_estagio[e]["expected"] for e in _ESTAGIOS_NOVOS) == 58
 
@@ -460,18 +465,22 @@ def test_guarda_contra_memorizacao_alcanca_e_aprova_os_arquivos_novos_e_alterado
         assert verificar_pacote(dados) == [], nome
 
 
-def test_tabela_de_suporte_mostra_as_quatro_familias_novas_so_pendentes() -> None:
+def test_tabela_de_suporte_mostra_as_quatro_familias_novas_so_pendentes_menos_o_estai() -> None:
     suporte = {item.family_id: item for item in installed_symbol_support()}
     assert len(suporte) == 31
     pacotes = _pacotes_reais()
     for familia in _FAMILIAS_NOVAS:
         item = suporte[familia]
-        assert item.enabled_reference_ids == ()
-        assert list(item.pending_reference_ids) == [v["id"] for v in pacotes[familia]["variants"]]
-        assert len(item.pending_reference_ids) == _NOVAS_POR_FAMILIA[familia]
+        # f02-14 tem as 3 variantes de ESTAI habilitadas (E06.3.4); as demais, só pendentes.
+        habilitadas = _VARIANTES_ESTAI if familia == "family-f02-14" else ()
+        assert item.enabled_reference_ids == habilitadas
+        assert list(item.pending_reference_ids) == [
+            v["id"] for v in pacotes[familia]["variants"] if v["id"] not in habilitadas
+        ]
+        assert len(item.pending_reference_ids) == _NOVAS_POR_FAMILIA[familia] - len(habilitadas)
         assert item.pending_reasons
         for razao in item.pending_reasons:
             assert razao.startswith("Forma E01: ")
             assert razao.endswith("positivo/negativo ainda não validado.")
-    assert sum(len(i.pending_reference_ids) for i in suporte.values()) == 374
-    assert sum(len(i.enabled_reference_ids) for i in suporte.values()) == 49
+    assert sum(len(i.pending_reference_ids) for i in suporte.values()) == 371
+    assert sum(len(i.enabled_reference_ids) for i in suporte.values()) == 52

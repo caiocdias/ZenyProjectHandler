@@ -360,7 +360,7 @@ Trilha B — medição (branch `roadmap/leitura-vetorial-por-poste-b`)
 | ID | Etapa | Estado | Dependências | Entrega principal |
 |---|---|---|---|---|
 | E15 | Ficha predita a partir das propostas | #concluida | E14 | nova `versao_extracao` e baseline real informativo nas 16 folhas |
-| E06.3.4 | Estai (na trilha B desde a D19) | #pendente | E06.3.3.2.2 | gramática de estai, com laboratório, acima do atual |
+| E06.3.4 | Estai (na trilha B desde a D19) | #concluida | E06.3.3.2.2 | gramática de estai, com laboratório, acima do atual |
 | E06.3.5 | Equipamento de interrupção (na trilha B desde a D19) | #pendente | E06.3.4 | gramática de interrupção, acima do atual (que não emite a classe) |
 | E16 | Conjunto de avaliação cego | #bloqueada | E03 | fichas de referência congeladas das folhas novas, antes de qualquer predição |
 
@@ -2354,7 +2354,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
-## E06.3.4 — Estai — #pendente
+## E06.3.4 — Estai — #concluida
 
 **Objetivo:** reconhecer ESTAI sobre o modelo de desenho, acima do analisador atual.
 
@@ -2366,10 +2366,10 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Critérios de aceite:**
 
-- [ ] Fixtures sintéticas positivas e negativas de ESTAI.
-- [ ] Nas 16 folhas, precisão e recall de ESTAI em `tmp/`, maiores que os do atual.
-- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
-- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+- [x] Fixtures sintéticas positivas e negativas de ESTAI.
+- [x] Nas 16 folhas, precisão e recall de ESTAI em `tmp/`, maiores que os do atual.
+- [x] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
 **Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
 
@@ -2381,7 +2381,31 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Riscos e mitigação:** os da E06.3.
 
-**Evidências e handoff:** —
+**Evidências e handoff (2026-11-08, orquestrador):**
+
+- **Plano:** `docs/superpowers/plans/2026-11-08-leitura-vetorial-por-poste-e06-3-4.md`. A revisão de arquitetura (opus) bloqueou nas rodadas 0 e 1 (agrupamento entre famílias, mapa marca/variante, fusão com o legado, gasto) e aprovou com notas na rodada 2.
+- **Commits:** `b2ec3df..f9e0268` (com o merge da `main`), mais o fechamento. Relógio: de b2ec3df (17:15) ao fechamento, cerca de 5h08 (passou de 4h30 na revisão final; ruling: continuar, porque só restava a onda de testes e o gate).
+- **Laboratório** (`tmp/laboratorio/e06-3-4/`):
+  - **H-1, escolhida:** garfo como semente, ESTAI centro 74/2/2, IoU 72/4/4, gasto máximo 199.962;
+  - H-2 (com ancoragem no disco do poste): mesmas métricas e gasto de 245.087. A âncora não ganhou nada, e a H-1 custa menos.
+- **Ciclo:** Task 2 (gramática) levou duas rodadas: 11 defeitos do testador (setas, cotas, chevrons, linha de chamada, marcas e deduplicação, orçamento) e 2 Importantes da revisão (disputa de marcas sem orçamento e `casa_estai` gastando). Task 4 (teto) corrigiu um teste de teto vácuo.
+- **Revisão final** (opus): `With fixes`, sem defeito de produção; pediu o gate no HEAD, o teste real de `max_span` e o registro da fusão e das decisões. A onda de testes (4201c3d) corrigiu o que era de teste, e a re-revisão confirmou.
+- **Critérios** (medição em `tmp/e06-3-4/final`, commit 495ec85; a gramática não mudou depois):
+  - **ESTAI (centro):** modelo 74/2/2 (97,4% e 97,4%); atual 64/2/12 (97,0% e 84,2%). Precisão e recall maiores, **critério literal atendido** (R-E06.3.4-4). IoU: 72/4/4 contra 63/3/13.
+  - **Demais classes:** ATERRAMENTO 41/7/2, PARA_RAIOS_BT 10/2/0, PARA_RAIOS_MT 10/4/3, TRANSFORMADOR 14/2/0, PONTO_CONEXAO 2/18/0, iguais às do `final2`.
+  - **Núcleo × motor:** 29/29, sem divergência. **Gasto máximo:** 206.853 na 016 (alvo 300.000, D15).
+  - **Auditor:** `errors []`, 52 habilitadas, 371 pendentes. **Integridade** (`--base d2f4092`): 38 apontamentos (contagens, versão 1.5.0 e renomes), todos justificados pela revisora. **`osv-scanner`:** `No issues found`.
+  - **Gate:** em `f9e0268` (HEAD com a `main` integrada) → `RESULTADO FINAL: APROVADO`, 11688 passed, 5 xfailed, cobertura 89,67%.
+- **Triagem dos 2 FP:** 008, estai real não anotado; 010, garfo encoberto pela faixa de título. Ambos são desenhos reais.
+- **Decisões para o usuário** (tomadas pela opção recomendada):
+  - **R-2, escopo reduzido:** a spec fala em f02-14 e f02-15, e só s14 v001, v002 e v003 foram habilitadas; s15 v001 ficou `pending` porque `_chave_de_forma` inclui a família. O âncora AT sai como s14 v001, do pacote MT (a classe está certa, a família é afirmada sem prova).
+  - **R-3, caixa:** pictograma mais haste inteira (IoU 72 contra 10 só do pictograma).
+  - **R-4, critério:** atendido de forma literal. Os 2 FP e os 2 FN foram triados.
+  - **Ruling do círculo:** o grupo `ellipse` é só de garfo verde com círculo da mesma cor; garfo preto ou vermelho com círculo é recusado (o campo passa a significar "verde").
+  - **Tabela de suporte e exportação:** com a opção desligada, passam a contar as 3 variantes habilitadas, e `package_signature` muda, como nas habilitações anteriores (`symbol_support.py`).
+- **Para a E07.2.2:**
+  - **ESTAI não funde com o legado (R-E06.3.4-6):** cada estai vira duas ocorrências no runner (legado em polilinha e modelo em caixa). Não há ativo em dobro, porque ESTAI não é candidato a ativo (`interpretation_pipeline.py:605`) e a revisão não o cria. Mas a ablação (`symbol_reconciliation.py:133-142`) passa a mostrar cada lado como exclusivo, o que contamina a prova de remoção do legado na E09; e `_same_occurrence` não olha classe, então a fusão com leitura errada do legado não foi medida em folha real. A E07.2.2 trata a duplicata.
+- **Para a E06.3.5:** gasto restante até o alvo: cerca de 93.000. Ao reaproveitar o padrão, mutar os pagamentos de orçamento. Em aberto (`Menor`): polilinha aberta com mais de 6 trechos não conta como continuação (M-2); segmento que serve aos dois lados em haste de até 8 pt (M-3); estai colinear à frente derruba o primeiro (M-4); `tem_x` não exige X vermelho.
 
 ---
 

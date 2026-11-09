@@ -50,10 +50,12 @@ _GRAMMARS = {
     "stem_bars",
     "rect_diagonal",
     "split_triangle",
+    "forked_stem",
 }
+GRAMMAR_FORKED_STEM: Final = "forked_stem"
 # Tipos que só o método sobre o modelo de desenho executa; o motor antigo os ignora.
 GRAMATICAS_SO_MODELO: Final[frozenset[str]] = frozenset(
-    {"stem_bars", "rect_diagonal", "split_triangle"}
+    {"stem_bars", "rect_diagonal", "split_triangle", GRAMMAR_FORKED_STEM}
 )
 _INFORMATIVE_DESTINATIONS = {"informative_only", "document_convention"}
 
@@ -222,6 +224,17 @@ def _split_triangle_grammar_ok(grammar: Package) -> bool:
     )
 
 
+def _forked_stem_grammar_ok(grammar: Package) -> bool:
+    return (
+        set(grammar) == {"kind", "enclosure", "removal_mark", "max_span"}
+        and isinstance(grammar["enclosure"], str)
+        and grammar["enclosure"] in {"none", "ellipse"}
+        and type(grammar["removal_mark"]) is bool
+        # The X wins over the enclosure: an enclosed forked stem with an X is no group.
+        and not (grammar["enclosure"] == "ellipse" and grammar["removal_mark"])
+    )
+
+
 # Field validation per grammar kind; keys mirror ``_GRAMMARS``.
 _GRAMMAR_FIELD_VALIDATORS: dict[str, Callable[[Package], bool]] = {
     "label_in_frame": _label_in_frame_grammar_ok,
@@ -233,6 +246,7 @@ _GRAMMAR_FIELD_VALIDATORS: dict[str, Callable[[Package], bool]] = {
     "stem_bars": _stem_bars_grammar_ok,
     "rect_diagonal": _rect_diagonal_grammar_ok,
     "split_triangle": _split_triangle_grammar_ok,
+    GRAMMAR_FORKED_STEM: _forked_stem_grammar_ok,
 }
 
 
