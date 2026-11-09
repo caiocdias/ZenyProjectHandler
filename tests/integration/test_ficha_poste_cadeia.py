@@ -339,11 +339,23 @@ def test_ambiguidade_de_disco_fica_pendente_sem_relacao_errada(
     ids = {item.id for item in postes}
 
     assert len(postes) == 2
+    # P1 tem a estrutura U1 (ela herda o identificador P1 e também sai CONFLITANTE, sem relação),
+    # e por isso o poste sai CONFLITANTE; P2, sem estrutura, fica PROPOSTA. Nenhum é CONFIRMADA,
+    # porque `associacao_pendente` barra a promoção automática.
+    estados = {
+        _atributos(poste)["identificador_operacional"]: poste.estado_revisao for poste in postes
+    }
+    assert estados == {"P1": EstadoRevisao.CONFLITANTE, "P2": EstadoRevisao.PROPOSTA}
+    posicoes = {"P1": (0.30, 0.30), "P2": (0.34, 0.30)}
     for poste in postes:
         atributos = _atributos(poste)
         assert atributos["associacao_pendente"] == "poste_disco"
         assert atributos["poste_ancorado_disco"] is False
-        assert poste.estado_revisao is not EstadoRevisao.CONFIRMADA
+        # fica na posição do texto, sem o disco disputado e sem o centro do texto reservado
+        assert "poste_texto_centro" not in atributos
+        assert _centro(poste) == pytest.approx(
+            posicoes[str(atributos["identificador_operacional"])], abs=1e-6
+        )
     assert not any(
         {item.origem_referencia_id, item.destino_referencia_id} & ids for item in resultado.relacoes
     )
