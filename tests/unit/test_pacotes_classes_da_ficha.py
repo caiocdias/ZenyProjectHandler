@@ -364,7 +364,7 @@ def test_auditor_real_fecha_sem_erro_com_371_pending_e_52_enabled() -> None:
     assert relato["errors"] == []
     assert (relato["expected_variants"], relato["expected_families"]) == (423, 31)
     assert (relato["package_variants"], relato["package_families"]) == (423, 31)
-    assert (relato["pending"], relato["enabled"]) == (371, 52)
+    assert (relato["pending"], relato["enabled"]) == (369, 54)
     assert relato["complete_recognition"] is False
     por_estagio = relato["by_owner_stage"]
     assert set(por_estagio) == {"E04", "E05", "E06", "E07"}
@@ -482,5 +482,5 @@ def test_tabela_de_suporte_mostra_as_quatro_familias_novas_so_pendentes_menos_o_
         for razao in item.pending_reasons:
             assert razao.startswith("Forma E01: ")
             assert razao.endswith("positivo/negativo ainda não validado.")
-    assert sum(len(i.pending_reference_ids) for i in suporte.values()) == 371
-    assert sum(len(i.enabled_reference_ids) for i in suporte.values()) == 52
+    assert sum(len(i.pending_reference_ids) for i in suporte.values()) == 369
+    assert sum(len(i.enabled_reference_ids) for i in suporte.values()) == 54

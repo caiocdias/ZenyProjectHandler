@@ -353,8 +353,14 @@
       },
       "visual_note": "curva fusível em círculo vermelho",
       "recognition": {
-        "status": "pending",
-        "reason": "Forma E01: curva fusível em círculo vermelho. Mecanismo e estado de contato exigem topologia local; primitives próximas podem representar equipamentos distintos.",
+        "status": "enabled",
+        "grammar": {
+          "kind": "disc_mark",
+          "fill": "red",
+          "content": "fuse_curve",
+          "min_span": 4.5,
+          "max_span": 15
+        },
         "negative_examples": [
           "Exemplar de legenda/tabela não é ocorrência operacional",
           "Glifos, molduras e líderes de anotação"
@@ -395,8 +401,14 @@
       },
       "visual_note": "caixa dupla em círculo vermelho",
       "recognition": {
-        "status": "pending",
-        "reason": "Forma E01: caixa dupla em círculo vermelho. Mecanismo e estado de contato exigem topologia local; primitives próximas podem representar equipamentos distintos.",
+        "status": "enabled",
+        "grammar": {
+          "kind": "disc_mark",
+          "fill": "red",
+          "content": "double_box",
+          "min_span": 4.5,
+          "max_span": 15
+        },
         "negative_examples": [
           "Exemplar de legenda/tabela não é ocorrência operacional",
           "Glifos, molduras e líderes de anotação"
