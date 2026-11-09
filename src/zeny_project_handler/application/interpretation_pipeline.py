@@ -1208,11 +1208,26 @@ def _pole_distance(geometry: GeometriaDocumento, pole: PropostaElemento) -> floa
     """Pole with a disputed disc counts by its disputed sites, never by the text position."""
     if not _is_disc_pending(pole):
         return _point_to_symbol_distance(_geometry_center(pole.geometria), geometry)
-    raw = dict(pole.atributos_sugeridos).get("poste_disco_sitios")
-    if not isinstance(raw, str) or not raw:
+    sites = _disputed_sites(dict(pole.atributos_sugeridos).get("poste_disco_sitios"))
+    return min((_point_to_symbol_distance(site, geometry) for site in sites), default=None)
+
+
+def _disputed_sites(raw: object) -> tuple[tuple[float, float], ...]:
+    """Sites recorded for a disputed disc; a malformed one is left out."""
+    if not isinstance(raw, str):
+        return ()
+    return tuple(site for text in raw.split(";") if (site := _parse_site(text)) is not None)
+
+
+def _parse_site(text: str) -> tuple[float, float] | None:
+    parts = text.split(",")
+    if len(parts) != 2:
         return None
-    sites = (tuple(map(float, site.split(","))) for site in raw.split(";"))
-    return min(_point_to_symbol_distance((x, y), geometry) for x, y in sites)
+    try:
+        x, y = float(parts[0]), float(parts[1])
+    except ValueError:
+        return None
+    return (x, y) if math.isfinite(x) and math.isfinite(y) else None
 
 
 def _point_to_symbol_distance(point: tuple[float, float], geometry: GeometriaDocumento) -> float:

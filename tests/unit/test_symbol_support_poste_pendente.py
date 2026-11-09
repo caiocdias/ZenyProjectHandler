@@ -32,6 +32,10 @@ def _em_ponto(chave: str, x: str, y: str) -> PropostaElemento:
     )
 
 
+def _pendencia_com_sitios(sitios: str) -> tuple[tuple[str, str], ...]:
+    return (("associacao_pendente", "poste_disco"), ("poste_disco_sitios", sitios))
+
+
 def _ids(candidatos: _Candidatos) -> list[object]:
     return [item.id for _, item in candidatos]
 
@@ -179,3 +183,16 @@ def test_outra_pendencia_segue_candidata_pela_posicao_do_texto() -> None:
 
     assert suporte == poste
     assert _ids(candidatos) == [poste.id]
+
+
+def test_sitio_nao_numerico_nao_desordena_os_candidatos_validos() -> None:
+    longe = _em_ponto("a", "0.30", "0.311")
+    com_nan = _poste("b", "P2", 0.5, 0.5, extras=_pendencia_com_sitios("nan,nan"))
+    perto = _em_ponto("c", "0.30", "0.30")
+
+    suporte, candidatos = _symbol_support(
+        _simbolo(0.299, 0.299, 0.301, 0.301), "base", (longe, com_nan, perto)
+    )
+
+    assert suporte == perto
+    assert _ids(candidatos) == [perto.id, longe.id]
