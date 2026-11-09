@@ -167,7 +167,7 @@ def test_enabled_continua_com_todas(tmp_path: Path) -> None:
     pacotes = _carrega(tmp_path, _pacote_com(_gramatica()))
 
     assert (
-        frozenset({"stem_bars", "rect_diagonal", "split_triangle", "forked_stem"})
+        frozenset({"stem_bars", "rect_diagonal", "split_triangle", "forked_stem", "disc_mark"})
         == GRAMATICAS_SO_MODELO
     )
     assert len(_enabled(pacotes)) == 2

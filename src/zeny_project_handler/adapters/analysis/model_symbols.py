@@ -54,7 +54,7 @@ from .drawing_model.symbol_matcher import CasamentoGramatica, casar_variantes
 from .pymupdf_drawing_model import pagina_para_gramaticas
 
 _METODO_ID: Final = "declarative-drawing-model"
-_VERSAO: Final = "1.5.0"
+_VERSAO: Final = "1.6.0"
 _DOMINIO: Final = "PDF vetorial lido pelo modelo de desenho; contexto não inferido"
 _FONTES: Final = (
     "pymupdf:get_drawings:extended",

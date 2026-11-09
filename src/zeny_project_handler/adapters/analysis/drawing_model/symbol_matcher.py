@@ -17,6 +17,10 @@ from zeny_project_handler.adapters.analysis.drawing_model.grammar_disc import (
     discos_candidatos,
     pontas_terminais,
 )
+from zeny_project_handler.adapters.analysis.drawing_model.grammar_disc_mark import (
+    casa_disc_mark,
+    disc_mark_candidatos,
+)
 from zeny_project_handler.adapters.analysis.drawing_model.grammar_estai import (
     casa_estai,
     estai_candidatos,
@@ -50,6 +54,7 @@ _HASTE_COM_BARRAS: Final = "stem_bars"
 _RETANGULO_DIAGONAL: Final = "rect_diagonal"
 _TRIANGULO_DIVIDIDO: Final = "split_triangle"
 _HASTE_COM_GARFO: Final = "forked_stem"
+_DISCO_COM_MARCA: Final = "disc_mark"
 _MOLDURAS: Final = frozenset(
     {
         "label_in_frame",
@@ -70,8 +75,9 @@ class CasamentoGramatica:
     `componentes` são as posições dos demais caminhos do símbolo, sem `caminho`, em ordem
     crescente; só as gramáticas do modelo os preenchem: a haste com barras (barras, envolvente
     e braços do X), o retângulo com diagonal (diagonal com ganchos, haste de ligação,
-    envolvente e braços do X) e o triângulo dividido (os outros caminhos do triângulo,
-    preenchimentos, haste de ligação, envolvente e braços do X).
+    envolvente e braços do X), o triângulo dividido (os outros caminhos do triângulo,
+    preenchimentos, haste de ligação, envolvente e braços do X) e o disco com marca (as
+    polilinhas e os pontos, ou o retângulo, a reta e os pontos).
     """
 
     pacote: Mapping[str, Any]
@@ -149,6 +155,10 @@ def _casar_no_contexto(
     estais = (
         estai_candidatos(contexto, marcas=marcas) if _tem_tipo(variantes, _HASTE_COM_GARFO) else ()
     )
+    # Os discos com marca também, com o teto de vão próprio (R-E06.3.5-3).
+    discos_com_marca = (
+        disc_mark_candidatos(contexto) if _tem_tipo(variantes, _DISCO_COM_MARCA) else ()
+    )
     casamentos: list[CasamentoGramatica] = []
     vistos: set[tuple[str, Caixa]] = set()
     for pacote, variante in variantes:
@@ -167,6 +177,8 @@ def _casar_no_contexto(
             achados = casa_triangulos(contexto, gramatica, candidatos=triangulos)
         elif tipo == _HASTE_COM_GARFO:
             achados = casa_estai(contexto, gramatica, candidatos=estais)
+        elif tipo == _DISCO_COM_MARCA:
+            achados = casa_disc_mark(contexto, gramatica, candidatos=discos_com_marca)
         elif tipo in _MOLDURAS:
             achados = _achados_em_molduras(contexto, gramatica)
         else:

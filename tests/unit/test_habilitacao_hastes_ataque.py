@@ -100,7 +100,13 @@ def test_so_as_oito_hastes_tem_gramatica_stem_bars_e_a_fixture_cobre_as_mesmas()
     }
     assert com_haste == set(_ESPERADO)
     assert {i for i, _ in CASOS_HASTE} == set(_ESPERADO)
-    assert {"stem_bars", "rect_diagonal", "split_triangle", "forked_stem"} == GRAMATICAS_SO_MODELO
+    assert {
+        "stem_bars",
+        "rect_diagonal",
+        "split_triangle",
+        "forked_stem",
+        "disc_mark",
+    } == GRAMATICAS_SO_MODELO
 
 
 @pytest.mark.parametrize("familia", ["family-f02-19", "family-f02-21"])
@@ -213,7 +219,7 @@ def test_exportacao_xlsx_de_suporte_leva_as_hastes_nas_enabled_e_fora_das_pendin
         assert variante in str(habilitadas).split("; ")
         assert variante not in str(pendentes).split("; ")
     total = sum(len(str(linha[1]).split("; ")) for linha in planilha.rows if linha[1])
-    assert total == 52
+    assert total == 54
 
 
 def test_auditor_acusa_haste_habilitada_sem_gramatica(tmp_path: Path) -> None:
@@ -230,5 +236,5 @@ def test_auditor_acusa_haste_habilitada_sem_gramatica(tmp_path: Path) -> None:
 def test_auditor_real_relata_as_oito_hastes_no_estagio_e04() -> None:
     relato = audit()
     assert relato["errors"] == []
-    assert (relato["enabled"], relato["pending"]) == (52, 371)
+    assert (relato["enabled"], relato["pending"]) == (54, 369)
     assert relato["by_owner_stage"]["E04"]["enabled"] >= 8

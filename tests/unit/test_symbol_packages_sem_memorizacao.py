@@ -155,6 +155,24 @@ _GRAMATICAS_NOVAS = (
     / "analysis"
     / "drawing_model"
     / "grammar_estai.py",
+    _RAIZ
+    / "src"
+    / "zeny_project_handler"
+    / "adapters"
+    / "analysis"
+    / "drawing_model"
+    / "grammar_disc_mark.py",
+    _RAIZ / "tests" / "fixtures" / "symbol_grammars" / "disc_mark.py",
+    _RAIZ / "tests" / "unit" / "test_grammar_disc_mark.py",
+    _RAIZ / "tests" / "unit" / "test_grammar_disc_mark_ataque.py",
+    _RAIZ / "tests" / "unit" / "test_grammar_disc_mark_teto.py",
+    _RAIZ / "tests" / "unit" / "test_grammar_disc_teto_ataque.py",
+    _RAIZ / "tests" / "unit" / "test_grammar_disc_vao_maximo.py",
+    _RAIZ / "tests" / "unit" / "test_gramatica_disc_mark_tipo.py",
+    _RAIZ / "tests" / "unit" / "test_gramatica_disc_mark_tipo_ataque.py",
+    _RAIZ / "tests" / "integration" / "test_model_symbols_disc_mark_runner.py",
+    _RAIZ / "tests" / "integration" / "test_model_symbols_disc_mark_ataque.py",
+    _RAIZ / "tests" / "integration" / "test_disc_mark_costuras_etapa_testador.py",
     _RAIZ / "tests" / "fixtures" / "symbol_grammars" / "stem_bars.py",
     _RAIZ / "tests" / "fixtures" / "symbol_grammars" / "rect_diagonal.py",
     _RAIZ / "tests" / "fixtures" / "symbol_grammars" / "triangulo.py",
