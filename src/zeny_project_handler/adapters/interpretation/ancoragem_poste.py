@@ -71,8 +71,6 @@ class _GrupoLeitura:
     identificador: str
     x: float
     y: float
-    leitura_x: float
-    leitura_y: float
     propostas: tuple[PropostaElemento, ...]
 
 
@@ -335,8 +333,6 @@ def _grupos_de_leitura(
                     identificador=identificador,
                     x=sum(xs) / len(xs),
                     y=sum(ys) / len(ys),
-                    leitura_x=sum(center(item.geometria)[0] for item in membros) / len(membros),
-                    leitura_y=sum(center(item.geometria)[1] for item in membros) / len(membros),
                     propostas=tuple(membros),
                 )
             )
@@ -399,7 +395,6 @@ def _origem_da_atribuicao(
 def _atribuir(grupos: tuple[_GrupoLeitura, ...], sitios: list[_Sitio]) -> _Atribuicao:
     """P vai ao sítio mais próximo, com exclusão mútua; empate real (0,004) fica pendente."""
     candidaturas = _candidaturas(grupos, sitios)
-    por_indice = {grupo.indice: grupo for grupo in grupos}
     atribuidos: dict[int, _Sitio] = {}
     pendentes: set[int] = set()
     tomados: set[int] = set()
@@ -412,6 +407,9 @@ def _atribuir(grupos: tuple[_GrupoLeitura, ...], sitios: list[_Sitio]) -> _Atrib
             pendentes.add(grupo_indice)
             continue
         if sitio_indice in tomados:
+            # Com outro sítio ao alcance, seguir adiante seria migrar; sem ele, só fica sem disco.
+            if len(candidaturas.por_grupo[grupo_indice]) > 1:
+                pendentes.add(grupo_indice)
             continue
         resolvidos = atribuidos.keys() | pendentes
         rivais = _empatados(
@@ -420,24 +418,12 @@ def _atribuir(grupos: tuple[_GrupoLeitura, ...], sitios: list[_Sitio]) -> _Atrib
         alternativas = _empatados(
             candidaturas.por_grupo[grupo_indice], sitio_indice, distancia, tomados
         )
-        escolhido = sitio_indice
-        if alternativas and not rivais:
-            grupo = por_indice[grupo_indice]
-            desempate = _desempate_pela_nomenclatura(grupo, [sitio_indice, *alternativas], sitios)
-            if desempate is not None:
-                escolhido, alternativas = desempate, []
-                rivais = _empatados(
-                    candidaturas.por_sitio[escolhido],
-                    grupo_indice,
-                    math.dist((grupo.x, grupo.y), (sitios[escolhido].x, sitios[escolhido].y)),
-                    resolvidos,
-                )
-        if rivais or alternativas or escolhido in bloqueados:
+        if rivais or alternativas:
             pendentes.update((grupo_indice, *rivais))
-            bloqueados.update((sitio_indice, escolhido, *alternativas))
+            bloqueados.update((sitio_indice, *alternativas))
             continue
-        atribuidos[grupo_indice] = sitios[escolhido]
-        tomados.add(escolhido)
+        atribuidos[grupo_indice] = sitios[sitio_indice]
+        tomados.add(sitio_indice)
     return _Atribuicao(atribuidos, frozenset(pendentes))
 
 
@@ -470,21 +456,6 @@ def _empatados(
         for outra, outro in entradas
         if outro != proprio and outro not in excluidos and outra - distancia <= _MARGEM_AMBIGUIDADE
     ]
-
-
-def _desempate_pela_nomenclatura(
-    grupo: _GrupoLeitura,
-    candidatos: list[int],
-    sitios: list[_Sitio],
-) -> int | None:
-    """Rótulo P entre dois sítios: a nomenclatura decide, se apontar um deles com folga."""
-    distancias = sorted(
-        (math.dist((grupo.leitura_x, grupo.leitura_y), (sitios[i].x, sitios[i].y)), i)
-        for i in candidatos
-    )
-    if distancias[1][0] - distancias[0][0] > _MARGEM_AMBIGUIDADE:
-        return distancias[0][1]
-    return None
 
 
 def _aplicar(

@@ -357,18 +357,18 @@ def test_pendencia_preexistente_nao_e_sobrescrita() -> None:
     assert _atributos(resultado[0])["associacao_pendente"] == "outra_causa"
 
 
-def test_empate_de_sitios_no_rotulo_p_e_decidido_pela_nomenclatura() -> None:
+def test_empate_de_sitios_no_rotulo_p_fica_pendente_com_a_nomenclatura_junto_de_um() -> None:
     rotulo = _rotulo("rot-p", "P1", 0.30, 0.30)
     poste = _poste("a", "P1", 0.33, 0.30, extras=_ligado_ao(rotulo))
     discos = (_disco("d1", 0.27, 0.30), _disco("d2", 0.331, 0.30))
 
     resultado = ancorar_postes_no_desenho((poste,), (rotulo, *discos))
 
-    assert _centro(resultado[0]) == pytest.approx((0.331, 0.30), abs=1e-6)
-    assert "associacao_pendente" not in _atributos(resultado[0])
+    _assert_nao_ancorado(poste, resultado[0])
+    assert _atributos(resultado[0])["associacao_pendente"] == "poste_disco"
 
 
-def test_desempate_pela_nomenclatura_nao_toma_o_sitio_disputado_por_outro_p() -> None:
+def test_empate_no_rotulo_deixa_pendente_o_outro_p_do_sitio_disputado() -> None:
     rotulo_1 = _rotulo("r1", "P1", 0.30, 0.30)
     rotulo_2 = _rotulo("r2", "P2", 0.362, 0.30)
     primeiro = _poste("a", "P1", 0.33, 0.30, extras=_ligado_ao(rotulo_1))
@@ -380,6 +380,19 @@ def test_desempate_pela_nomenclatura_nao_toma_o_sitio_disputado_por_outro_p() ->
     for original, item in zip((primeiro, segundo), resultado, strict=True):
         _assert_nao_ancorado(original, item)
         assert _atributos(item)["associacao_pendente"] == "poste_disco"
+
+
+def test_poste_com_o_sitio_mais_proximo_tomado_nao_migra_e_fica_pendente() -> None:
+    primeiro = _poste("a", "P1", 0.335, 0.30)
+    segundo = _poste("b", "P2", 0.365, 0.30)
+    discos = (_disco("d1", 0.30, 0.30), _disco("d2", 0.345, 0.30))
+
+    resultado = {item.id: item for item in ancorar_postes_no_desenho((primeiro, segundo), discos)}
+
+    assert _centro(resultado[primeiro.id]) == pytest.approx((0.345, 0.30), abs=1e-6)
+    assert "associacao_pendente" not in _atributos(resultado[primeiro.id])
+    _assert_nao_ancorado(segundo, resultado[segundo.id])
+    assert _atributos(resultado[segundo.id])["associacao_pendente"] == "poste_disco"
 
 
 def test_poste_com_o_proximo_tomado_e_o_seguinte_bloqueado_fica_pendente() -> None:
@@ -427,7 +440,7 @@ def test_sitio_bloqueado_dentro_da_margem_mantem_a_ambiguidade_do_proprio_p() ->
     assert _atributos(resultado[vizinho.id])["associacao_pendente"] == "poste_disco"
 
 
-def test_desempate_nao_ancora_em_sitio_bloqueado() -> None:
+def test_nomenclatura_junto_de_sitio_bloqueado_nao_ancora() -> None:
     ambiguo, discos = _p1_ambiguo_bloqueando_s1_e_s2()
     rotulo = _rotulo("r2", "P2", 0.553, 0.30)
     vizinho = _poste("b", "P2", 0.523, 0.33, extras=_ligado_ao(rotulo))
@@ -443,7 +456,7 @@ def test_desempate_nao_ancora_em_sitio_bloqueado() -> None:
     assert _atributos(resultado[vizinho.id])["associacao_pendente"] == "poste_disco"
 
 
-def test_desempate_ancora_no_sitio_livre_apontado_pela_nomenclatura() -> None:
+def test_nomenclatura_junto_de_sitio_livre_nao_resolve_o_empate() -> None:
     ambiguo, discos = _p1_ambiguo_bloqueando_s1_e_s2()
     rotulo = _rotulo("r2", "P2", 0.553, 0.30)
     vizinho = _poste("b", "P2", 0.582, 0.33, extras=_ligado_ao(rotulo))
@@ -455,8 +468,8 @@ def test_desempate_ancora_no_sitio_livre_apontado_pela_nomenclatura() -> None:
         )
     }
 
-    assert _centro(resultado[vizinho.id]) == pytest.approx((0.582, 0.30), abs=1e-6)
-    assert "associacao_pendente" not in _atributos(resultado[vizinho.id])
+    _assert_nao_ancorado(vizinho, resultado[vizinho.id])
+    assert _atributos(resultado[vizinho.id])["associacao_pendente"] == "poste_disco"
 
 
 def test_pilha_instalar_e_remover_de_mesmo_codigo_preserva_a_outra_leitura() -> None:
