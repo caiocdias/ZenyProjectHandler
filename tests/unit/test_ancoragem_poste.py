@@ -403,6 +403,73 @@ def test_poste_com_o_proximo_tomado_e_o_seguinte_bloqueado_fica_pendente() -> No
     assert _atributos(resultado[vizinho.id])["associacao_pendente"] == "poste_disco"
 
 
+def _p1_ambiguo_bloqueando_s1_e_s2() -> tuple[PropostaElemento, tuple[EvidenciaDocumento, ...]]:
+    return (
+        _poste("a", "P1", 0.50, 0.30),
+        (_disco("s1", 0.48, 0.30), _disco("s2", 0.523, 0.30)),
+    )
+
+
+def test_sitio_bloqueado_dentro_da_margem_mantem_a_ambiguidade_do_proprio_p() -> None:
+    ambiguo, discos = _p1_ambiguo_bloqueando_s1_e_s2()
+    vizinho = _poste("b", "P2", 0.553, 0.30)
+
+    resultado = {
+        item.id: item
+        for item in ancorar_postes_no_desenho(
+            (ambiguo, vizinho), (*discos, _disco("snovo", 0.582, 0.30))
+        )
+    }
+
+    _assert_nao_ancorado(ambiguo, resultado[ambiguo.id])
+    assert _atributos(resultado[ambiguo.id])["associacao_pendente"] == "poste_disco"
+    _assert_nao_ancorado(vizinho, resultado[vizinho.id])
+    assert _atributos(resultado[vizinho.id])["associacao_pendente"] == "poste_disco"
+
+
+def test_desempate_nao_ancora_em_sitio_bloqueado() -> None:
+    ambiguo, discos = _p1_ambiguo_bloqueando_s1_e_s2()
+    rotulo = _rotulo("r2", "P2", 0.553, 0.30)
+    vizinho = _poste("b", "P2", 0.523, 0.33, extras=_ligado_ao(rotulo))
+
+    resultado = {
+        item.id: item
+        for item in ancorar_postes_no_desenho(
+            (ambiguo, vizinho), (rotulo, *discos, _disco("snovo", 0.582, 0.30))
+        )
+    }
+
+    _assert_nao_ancorado(vizinho, resultado[vizinho.id])
+    assert _atributos(resultado[vizinho.id])["associacao_pendente"] == "poste_disco"
+
+
+def test_desempate_ancora_no_sitio_livre_apontado_pela_nomenclatura() -> None:
+    ambiguo, discos = _p1_ambiguo_bloqueando_s1_e_s2()
+    rotulo = _rotulo("r2", "P2", 0.553, 0.30)
+    vizinho = _poste("b", "P2", 0.582, 0.33, extras=_ligado_ao(rotulo))
+
+    resultado = {
+        item.id: item
+        for item in ancorar_postes_no_desenho(
+            (ambiguo, vizinho), (rotulo, *discos, _disco("snovo", 0.582, 0.30))
+        )
+    }
+
+    assert _centro(resultado[vizinho.id]) == pytest.approx((0.582, 0.30), abs=1e-6)
+    assert "associacao_pendente" not in _atributos(resultado[vizinho.id])
+
+
+def test_pilha_instalar_e_remover_de_mesmo_codigo_preserva_a_outra_leitura() -> None:
+    nova = _poste("nova", "P1", 0.30, 0.30)
+    retirada = _poste("velha", "P1", 0.30, 0.306, situacao=SituacaoProjeto.REMOVER)
+
+    resultado = ancorar_postes_no_desenho((nova, retirada), (_disco("d1", 0.33, 0.30),))
+
+    assert [item.id for item in resultado] == [nova.id]
+    assert resultado[0].estado_revisao is EstadoRevisao.PROPOSTA
+    assert _atributos(resultado[0])["poste_codigo_alternativo"] == "11-300"
+
+
 def test_pilha_de_leituras_com_situacao_decide_pela_que_nao_e_retirada() -> None:
     nova = _poste("nova", "P1", 0.30, 0.30)
     retirada = _poste("velha", "P1", 0.30, 0.306, codigo="10-150", situacao=SituacaoProjeto.REMOVER)

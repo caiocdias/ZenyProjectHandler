@@ -402,7 +402,7 @@ def _atribuir(grupos: tuple[_GrupoLeitura, ...], sitios: list[_Sitio]) -> _Atrib
     por_indice = {grupo.indice: grupo for grupo in grupos}
     atribuidos: dict[int, _Sitio] = {}
     pendentes: set[int] = set()
-    usados: set[int] = set()
+    tomados: set[int] = set()
     bloqueados: set[int] = set()
     for distancia, grupo_indice, sitio_indice in candidaturas.pares:
         if grupo_indice in atribuidos or grupo_indice in pendentes:
@@ -411,14 +411,14 @@ def _atribuir(grupos: tuple[_GrupoLeitura, ...], sitios: list[_Sitio]) -> _Atrib
             # O sítio melhor que restava está em disputa: migrar seria cair no vizinho errado.
             pendentes.add(grupo_indice)
             continue
-        if sitio_indice in usados:
+        if sitio_indice in tomados:
             continue
         resolvidos = atribuidos.keys() | pendentes
         rivais = _empatados(
             candidaturas.por_sitio[sitio_indice], grupo_indice, distancia, resolvidos
         )
         alternativas = _empatados(
-            candidaturas.por_grupo[grupo_indice], sitio_indice, distancia, usados
+            candidaturas.por_grupo[grupo_indice], sitio_indice, distancia, tomados
         )
         escolhido = sitio_indice
         if alternativas and not rivais:
@@ -432,13 +432,12 @@ def _atribuir(grupos: tuple[_GrupoLeitura, ...], sitios: list[_Sitio]) -> _Atrib
                     math.dist((grupo.x, grupo.y), (sitios[escolhido].x, sitios[escolhido].y)),
                     resolvidos,
                 )
-        if rivais or alternativas:
+        if rivais or alternativas or escolhido in bloqueados:
             pendentes.update((grupo_indice, *rivais))
             bloqueados.update((sitio_indice, escolhido, *alternativas))
-            usados.update(bloqueados)
             continue
         atribuidos[grupo_indice] = sitios[escolhido]
-        usados.add(escolhido)
+        tomados.add(escolhido)
     return _Atribuicao(atribuidos, frozenset(pendentes))
 
 
@@ -576,7 +575,9 @@ def _fundir_pilha(pilha: _Pilha) -> PropostaElemento:
     alternativos = {
         item.codigo_observado
         for item in pilha.leituras
-        if item.codigo_observado and item.codigo_observado != sobrevivente.codigo_observado
+        if item.codigo_observado
+        and (item.codigo_observado, item.situacao_projeto)
+        != (sobrevivente.codigo_observado, sobrevivente.situacao_projeto)
     }
     if alternativos:
         atributos["poste_codigo_alternativo"] = ",".join(sorted(alternativos))
