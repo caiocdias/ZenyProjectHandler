@@ -362,7 +362,7 @@ Trilha B — medição (branch `roadmap/leitura-vetorial-por-poste-b`)
 |---|---|---|---|---|
 | E15 | Ficha predita a partir das propostas | #concluida | E14 | nova `versao_extracao` e baseline real informativo nas 16 folhas |
 | E06.3.4 | Estai (na trilha B desde a D19) | #concluida | E06.3.3.2.2 | gramática de estai, com laboratório, acima do atual |
-| E06.3.5 | Equipamento de interrupção (na trilha B desde a D19) | #em-andamento | E06.3.4 | gramática de interrupção, acima do atual (que não emite a classe) |
+| E06.3.5 | Equipamento de interrupção (na trilha B desde a D19) | #concluida | E06.3.4 | gramática de interrupção, acima do atual (que não emite a classe) |
 | E16 | Conjunto de avaliação cego | #bloqueada | E03 | fichas de referência congeladas das folhas novas, antes de qualquer predição |
 
 Trilha C — aprendizado, e a E17 enquanto a trilha espera a E07 (D10) (branch `roadmap/leitura-vetorial-por-poste-c`)
@@ -2410,22 +2410,22 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 ---
 
-## E06.3.5 — Equipamento de interrupção — #em-andamento
+## E06.3.5 — Equipamento de interrupção — #concluida
 
 **Objetivo:** reconhecer EQUIPAMENTO_INTERRUPCAO sobre o modelo de desenho.
 
 **Dependências:** E06.3.4.
 
-**Escopo:** gramática de interrupção (chevrons e curva sinuosa, f02-20), habilitação das variantes, laboratório e guarda.
+**Escopo:** gramática de interrupção (disco vermelho com marca, v017 e v019 da f02-20; corrigido pela R-E06.3.5-2, porque os chevrons e a curva sinuosa fora de disco não aparecem nas referências), habilitação das variantes, laboratório e guarda.
 
 **Fora de escopo:** associação ao poste (E07); remover detectores antigos (E09).
 
 **Critérios de aceite:**
 
-- [ ] Fixtures sintéticas positivas e negativas de EQUIPAMENTO_INTERRUPCAO.
-- [ ] Nas 16 folhas, precisão e recall de EQUIPAMENTO_INTERRUPCAO em `tmp/`, maiores que os do atual (que não emite a classe: 0 tp, 20 fn).
-- [ ] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
-- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+- [x] Fixtures sintéticas positivas e negativas de EQUIPAMENTO_INTERRUPCAO.
+- [x] Nas 16 folhas, precisão e recall de EQUIPAMENTO_INTERRUPCAO em `tmp/`, maiores que os do atual (que não emite a classe: 0 tp, 20 fn).
+- [x] `.venv/Scripts/python.exe -m scripts.audit_symbol_packages` → 0 erros.
+- [x] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
 **Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
 
@@ -2437,7 +2437,37 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Riscos e mitigação:** os da E06.3.
 
-**Evidências e handoff:** —
+**Evidências e handoff (2026-11-09, orquestrador):**
+
+- **Plano:** `docs/superpowers/plans/2026-11-08-leitura-vetorial-por-poste-e06-3-5.md`. A revisão de arquitetura (opus) bloqueou nas rodadas 0 e 1 e aprovou com notas na rodada 2.
+- **Commits:** `1e8d608..aa2cb6a` (com o merge da `main`), mais o fechamento. Relógio: de 1e8d608 (22:23) ao fechamento, cerca de 3h05.
+- **Laboratório** (`tmp/laboratorio/e06-3-5/`, fora do Git):
+  - **H-1, escolhida:** disco como semente, EQUIPAMENTO_INTERRUPCAO 18/0/2, gasto máximo 216.444.
+  - H-2 (curva como semente): mesmas métricas e gasto de 219.469.
+- **Ciclo:** o testador não achou defeito nas Tasks 1, 2, 3, 4 nem na etapa; a revisão da Task 4 pediu correção de teste na R-6, feita em e89c352. Task 3 usa `_disco_de_curva` direto, porque as 16 folhas não têm disco de faixas de 5 pt ou mais.
+- **Revisão final** (opus): `With fixes`, sem Crítico; os 2 Importantes eram de fechamento (este handoff e a R-6 não confirmada na 006), mais o gate.
+- **Critérios** (medição em `tmp/e06-3-5/final`, commit 709469b; depois só testes):
+  - **EQUIPAMENTO_INTERRUPCAO (centro):** modelo 18/0/2 contra 0/0/20 do atual; precisão e recall maiores. FN: 002 (anel verde com X vermelho, fora de forma) e 007 (texto "A-4" pintado sobre o disco, recusado por `_palavra_sobre_o_disco`).
+  - **R-E06.3.5-5, FP brutos ≤ 3:** atendido sem folga. As 3 emissões fora das regiões anotadas (003 ×1, 004 ×2) são discos reais sem referência, vistas em recorte; a precisão de 100% vale só para as regiões anotadas.
+  - **Demais classes:** iguais por folha a `tmp/e06-3-4/final`.
+  - **Núcleo × motor:** 29/29, sem divergência. **Gasto máximo:** 216.444 na 016 (alvo 300.000, D15).
+  - **Auditor:** `errors []`, 54 habilitadas, 369 pendentes. **Integridade** (`--base 3c0c878`): 37 apontamentos (contagens, versão 1.6.0 e renomes), todos justificados pela revisora. **`osv-scanner`:** `No issues found`.
+  - **Na ficha (`baseline-v014`, `aa2cb6a`):** símbolos 105/179 (v013: 90/179), +15, que é o máximo previsto para EI em poste casado; postes 58/11/49, iguais.
+  - **Gate:** em `aa2cb6a` (HEAD com a `main` integrada) → `RESULTADO FINAL: APROVADO`, 12406 passed, 5 xfailed, cobertura 89,86%.
+- **Leituras erradas:** 20 = 20; nenhuma nova. As 2 preexistentes sobre esta classe (002 PARA_RAIOS_MT e 006 ATERRAMENTO) ficam, e não somem por a classe certa ser emitida.
+- **Decisões para o usuário** (tomadas pela opção recomendada):
+  - **Escopo corrigido (R-2):** só v017 e v019 foram habilitadas. v018 e v020 ficam `pending` (nenhuma folha com a forma); v001, v002, v038 a v040 também (v002 nasce dentro de v017; as demais não aparecem nas referências).
+  - **Estado afirmado pelo vermelho:** habilitar v017 e v019 afirma `operating_state: "Fechado"`. O inventário traz "Não inferir estado por cor isolada" (`inventario-simbologia-v1.json:8036`), e `:8040` restringe isso à situação de obra, o que sustenta a leitura do plano. Não há disco verde nas referências, então o par vermelho/verde não foi observado em folha; nada em `src/` emite o campo hoje, e a E07.2.2 não deve publicá-lo sem verificar.
+  - **Tabela de suporte e exportação:** com a opção desligada, passam a contar as 2 variantes habilitadas, e `package_signature` muda, como nas habilitações anteriores.
+  - **`max_span` 15:** os vãos reais são 5,0 / 7,1 / 10,1 / 14,2 (aparência de série de √2); um disco de 20 pt daria FN silencioso. Não alarguei sem medir.
+- **Limites:**
+  - v019 tem um único exemplar real (14,2 pt, 008 P1), e os limiares do `double_box` foram calibrados nele; o segundo disco da 003 tem polígono e 2 pontos, foi recusado pela palavra "N-(1N5)", e o desenho não esclarece.
+  - Discos de 5 pt ficam perto da paleta do poste da E07.2.1; as variantes habilitadas não têm positivo autoral na matriz (`owner_stage: "E07"`, `coverage_matrix_e16.py:242-250`).
+  - `vao_maximo` de `discos_candidatos` ficou sem chamador em produção (R-3): limpeza em tarefa própria. Menores deferidos no ledger: teste tautológico do pipeline, limite de teste sem folga, `_deduplicar` que monta a lista antes de pagar.
+  - Dois `node down` isolados em suítes paralelas desta noite, sem reprodução; nenhum na rodada final.
+- **Para a E07.2.2:**
+  - **R-6:** sobre o mesmo disco, legado lendo outra classe e modelo lendo EI **fundem** em teste sintético, com `decision="review"`, `ambiguous_class_or_id` e `symbol_class=None` no pipeline. O desfecho depende do envelope do legado (largura ou altura a mais de 20% da escala não funde; as primitivas não decidem), e só a folha real confirma: a 006 não foi inspecionada. A `baseline-v014` subiu os +15 previstos, sem sinal de EI perdido em poste casado, mas isso é inferência pelo total.
+  - EI é candidato a ativo (`interpretation_pipeline.py:605-617,1064`), e `operating_state` só existe no inventário: ler por `variante_inventario`.
 
 ---
 
