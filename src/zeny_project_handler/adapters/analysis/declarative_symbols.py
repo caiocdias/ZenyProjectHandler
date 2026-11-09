@@ -51,11 +51,13 @@ _GRAMMARS = {
     "rect_diagonal",
     "split_triangle",
     "forked_stem",
+    "disc_mark",
 }
 GRAMMAR_FORKED_STEM: Final = "forked_stem"
+GRAMMAR_DISC_MARK: Final = "disc_mark"
 # Tipos que só o método sobre o modelo de desenho executa; o motor antigo os ignora.
 GRAMATICAS_SO_MODELO: Final[frozenset[str]] = frozenset(
-    {"stem_bars", "rect_diagonal", "split_triangle", GRAMMAR_FORKED_STEM}
+    {"stem_bars", "rect_diagonal", "split_triangle", GRAMMAR_FORKED_STEM, GRAMMAR_DISC_MARK}
 )
 _INFORMATIVE_DESTINATIONS = {"informative_only", "document_convention"}
 
@@ -235,6 +237,21 @@ def _forked_stem_grammar_ok(grammar: Package) -> bool:
     )
 
 
+def _disc_mark_grammar_ok(grammar: Package) -> bool:
+    if set(grammar) != {"kind", "fill", "content", "min_span", "max_span"}:
+        return False
+    low, high = grammar["min_span"], grammar["max_span"]
+    return (
+        isinstance(grammar["fill"], str)
+        and grammar["fill"] == "red"
+        and isinstance(grammar["content"], str)
+        and grammar["content"] in {"fuse_curve", "double_box"}
+        and _is_number(low)
+        and _is_number(high)
+        and 0 < float(low) < float(high) <= 72
+    )
+
+
 # Field validation per grammar kind; keys mirror ``_GRAMMARS``.
 _GRAMMAR_FIELD_VALIDATORS: dict[str, Callable[[Package], bool]] = {
     "label_in_frame": _label_in_frame_grammar_ok,
@@ -247,6 +264,7 @@ _GRAMMAR_FIELD_VALIDATORS: dict[str, Callable[[Package], bool]] = {
     "rect_diagonal": _rect_diagonal_grammar_ok,
     "split_triangle": _split_triangle_grammar_ok,
     GRAMMAR_FORKED_STEM: _forked_stem_grammar_ok,
+    GRAMMAR_DISC_MARK: _disc_mark_grammar_ok,
 }
 
 

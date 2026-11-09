@@ -249,7 +249,7 @@ def test_pacotes_reais_tem_rect_diagonal_e_o_motor_segue_com_22() -> None:
     assert len(_enabled(reais)) == 52
     assert len(variantes_do_motor(reais)) == 22
     assert (
-        frozenset({"stem_bars", "rect_diagonal", "split_triangle", "forked_stem"})
+        frozenset({"stem_bars", "rect_diagonal", "split_triangle", "forked_stem", "disc_mark"})
         == GRAMATICAS_SO_MODELO
     )
     modelo = perfil_pacotes_modelo(reais, carregar_tabela_glifos())

@@ -100,7 +100,13 @@ def test_so_as_oito_hastes_tem_gramatica_stem_bars_e_a_fixture_cobre_as_mesmas()
     }
     assert com_haste == set(_ESPERADO)
     assert {i for i, _ in CASOS_HASTE} == set(_ESPERADO)
-    assert {"stem_bars", "rect_diagonal", "split_triangle", "forked_stem"} == GRAMATICAS_SO_MODELO
+    assert {
+        "stem_bars",
+        "rect_diagonal",
+        "split_triangle",
+        "forked_stem",
+        "disc_mark",
+    } == GRAMATICAS_SO_MODELO
 
 
 @pytest.mark.parametrize("familia", ["family-f02-19", "family-f02-21"])
