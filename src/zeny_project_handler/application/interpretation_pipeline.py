@@ -73,7 +73,9 @@ class ContextoInterpretacao:
     evidencias: tuple[EvidenciaDocumento, ...]
 
 
-SYMBOL_SEMANTICS_VERSION = "e16-symbol-support-anchor-2"
+SYMBOL_SEMANTICS_VERSION = "e07-2-2-symbol-support-3"
+_SYMBOL_SUPPORT_RADIUS = 0.020
+_SYMBOL_SUPPORT_MARGIN = 0.004
 
 
 class ExecutarPipelineInterpretacao:
@@ -1175,25 +1177,50 @@ def _symbol_support(
 ) -> tuple[PropostaElemento | None, tuple[tuple[float, PropostaElemento], ...]]:
     if layer != "base":
         return None, ()
-    center = _geometry_center(geometry)
     candidates = sorted(
         (
-            (_distance(center, _geometry_center(item.geometria)), item)
+            (distance, item)
             for item in proposals
             if item.categoria is CategoriaElemento.POSTE
             and item.geometria.pagina_id == geometry.pagina_id
             and item.estado_revisao is not EstadoRevisao.REJEITADA
             and dict(item.atributos_sugeridos).get("simbolo_camada", "base") == layer
             and dict(item.atributos_sugeridos).get("camada", "base") == layer
+            and (distance := _pole_distance(geometry, item)) is not None
         ),
         key=lambda item: (item[0], str(item[1].id)),
     )
-    nearby = tuple(item for item in candidates if item[0] <= 0.025)
+    nearby = tuple(item for item in candidates if item[0] <= _SYMBOL_SUPPORT_RADIUS)
     if not nearby:
         return None, ()
-    if len(nearby) > 1 and nearby[1][0] - nearby[0][0] <= 0.004:
+    if _is_disc_pending(nearby[0][1]) or (
+        len(nearby) > 1 and nearby[1][0] - nearby[0][0] <= _SYMBOL_SUPPORT_MARGIN
+    ):
         return None, nearby
     return nearby[0][1], nearby
+
+
+def _is_disc_pending(pole: PropostaElemento) -> bool:
+    return dict(pole.atributos_sugeridos).get("associacao_pendente") == "poste_disco"
+
+
+def _pole_distance(geometry: GeometriaDocumento, pole: PropostaElemento) -> float | None:
+    """Pole with a disputed disc counts by its disputed sites, never by the text position."""
+    if not _is_disc_pending(pole):
+        return _point_to_symbol_distance(_geometry_center(pole.geometria), geometry)
+    raw = dict(pole.atributos_sugeridos).get("poste_disco_sitios")
+    if not isinstance(raw, str) or not raw:
+        return None
+    sites = (tuple(map(float, site.split(","))) for site in raw.split(";"))
+    return min(_point_to_symbol_distance((x, y), geometry) for x, y in sites)
+
+
+def _point_to_symbol_distance(point: tuple[float, float], geometry: GeometriaDocumento) -> float:
+    """Distance from a pole point to the symbol box (zero inside it)."""
+    xs = [float(item.x) for item in geometry.pontos]
+    ys = [float(item.y) for item in geometry.pontos]
+    closest = (min(max(point[0], min(xs)), max(xs)), min(max(point[1], min(ys)), max(ys)))
+    return _distance(point, closest)
 
 
 def _observed_situation_source(observation: ObservacaoSimbolo) -> str | None:
