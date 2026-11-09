@@ -351,8 +351,9 @@ Trilha A — analisador (branch `roadmap/leitura-vetorial-por-poste`)
 | E06.3.3.2.2 | Transformador | #concluida | E06.3.3.2.1 | gramática do triângulo em círculo, com laboratório, TRANSFORMADOR acima do atual |
 | E07.1 | Medição da ficha com o runner e golden do padrão | #concluida | E06.3.3.2.2, E15 | benchmark com o runner ligado, `propostas-v2`, baselines de controle e golden da análise padrão |
 | E07.2.1 | Posição do poste no desenho | #concluida | E07.1 | poste no disco do desenho, um por identificador, com relações sobre a posição nova (opção ligada) |
-| E07.2.2 | Símbolos no poste certo | #pendente | E07.2.1 | símbolos no poste certo ou pendentes, ESTAI sem duplicar e situação pelo `referencias_possiveis` (opção ligada) |
-| E07.3 | Vãos na polilinha e ficha completa | #pendente | E07.2.2 | vãos ligados à polilinha entre dois postes, benchmark acima do baseline |
+| E07.2.2.1 | Símbolos no poste certo e ESTAI sem duplicar | #em-andamento | E07.2.1 | símbolos no poste certo ou pendentes, ESTAI em ocorrência única e vínculos do poste pendente (opção ligada) |
+| E07.2.2.2 | Situação do TRANSFORMADOR (D14) | #pendente | E07.2.2.1 | situação pelo `referencias_possiveis`, depois da decisão do usuário |
+| E07.3 | Vãos na polilinha e ficha completa | #pendente | E07.2.2.1 | vãos ligados à polilinha entre dois postes, benchmark acima do baseline |
 | E08 | Conferência UTM | #pendente | E07.3 | transformação página → UTM, checagem de posição e vão, pendências |
 | E09 | Troca do analisador e remoção do legado | #pendente | E08, E16 | analisador novo como padrão; detectores e, se provado, OCR removidos |
 
@@ -2730,25 +2731,65 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 - **Para a E07.2.2:** não cortar os vínculos de um poste pendente por disputa de sítio; associar símbolo→poste sobre o disco.
 - **Para a E07.3:** derivações sem P seguem fora; a régua segue a v011, e a baseline nova desta etapa é a v013.
 
-## E07.2.2 — Símbolos no poste certo — #pendente
+## E07.2.2 — Símbolos no poste certo (dividida em E07.2.2.1 e E07.2.2.2)
 
-**Objetivo:** com a opção ligada, cada símbolo entra no poste certo ou fica pendente, o ESTAI sem duplicar, e a situação vem de `referencias_possiveis`.
+**Divisão (R-E07-3, 2026-11-08):** o levantamento (`tmp/janela-0.6.0/levantamento-e07-2-2.md`) estimou 11h, acima das ~3h do protocolo, e a situação do TRANSFORMADOR (D14) depende de decisão do usuário: cada grupo de forma dá sempre duas situações, e `SituacaoProjeto` não tem Abandonado nem Substituir. A E07.2.2.1 faz o que a medição pede agora: 50 dos 65 FP de símbolo são ESTAI em dobro, e 7→11 `estruturas_sem_poste` vêm do poste pendente. A régua passa a ser a `baseline-v013`, porque a v011 (3/179) já está superada e não mede esta etapa.
 
-**Dependências:** E07.2.1. Depende também da E06.3.4 quando precisar do ESTAI do modelo.
+## E07.2.2.1 — Símbolos no poste certo e ESTAI sem duplicar — #em-andamento
 
-**Escopo (critérios repartidos da E07):**
-- Associação texto → poste (proximidade, linhas de chamada e convenções de layout) e símbolo → poste sobre o disco, com ambiguidade virando pendência.
-- ESTAI incluído, sem duplicar legado e modelo (não fundem, R-E06.3.4-6); situação do TRANSFORMADOR pelo `referencias_possiveis` (D14).
+**Objetivo:** com a opção ligada, cada símbolo entra no poste certo ou fica pendente, o ESTAI sai em uma ocorrência só, e o poste pendente por disputa não perde as ligações que não dependem do disco.
 
-**Critérios de aceite (a detalhar no plano):**
+**Dependências:** E07.2.1. O relógio começa no commit `#em-andamento` da E07.2.2.1.
+
+**Escopo:**
+- Associação símbolo → poste sobre o disco, com poste pendente fora dos candidatos e ambiguidade virando pendência, com laboratório do raio.
+- ESTAI de legado e modelo fundidos no reconciliador, só entre ESTAI e sem contaminar a ablação (R-E06.3.4-6).
+- Vínculos do regime de texto (estrutura e equipamento) preservados no poste pendente por disputa.
+
+**Fora de escopo:** situação do TRANSFORMADOR (E07.2.2.2); os 61 FN de poste sem par e as derivações sem P (E07.3); PONTO_CONEXAO e CONECTOR como ativo; caixa dos símbolos.
+
+**Critérios de aceite:**
 
 - [ ] Fixture sintética com dois postes próximos e símbolos entre eles: associa ao certo ou marca pendência, nunca ao vizinho errado com confiança.
+- [ ] Poste com pendência `poste_disco` não é suporte de símbolo pela posição do texto, e as estruturas e equipamentos do regime de texto continuam ligados a ele.
+- [ ] Um estai sai em uma ocorrência; a fusão exige classe ESTAI dos dois lados, e a ablação do legado não perde a ocorrência. Leitura de outra classe sobre o estai não funde.
 - [ ] Com `ZENY_SERVER_SYMBOL_COMPOSITION=false`, os goldens não mudam (D18), com `git diff --exit-code f26cc3c -- tests/fixtures/golden_padrao_e07.json` e `git diff --exit-code 877aba1 -- tests/fixtures/golden_padrao_e07_complementar.json` no pacote de revisão.
-- [ ] Benchmark com o runner acima da baseline de controle da E07.2.1 em símbolos (precisão e recall), sem regressão em postes.
+- [ ] Benchmark por poste com o runner (`baseline`, `propostas-v2`, `--simbolos-modelo`) acima da `baseline-v013` em símbolos: precisão e recall maiores, com 0 ESTAI em dobro e 0 símbolo em poste errado, sem regressão em postes; se a E06.3.5 entrar antes da medição final, a régua é refeita na `main`.
 - [ ] Promoção e regiões continuam funcionando sobre as propostas novas com a opção ligada.
 - [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
 
-**Revisão humana:** não. **Bloqueios:** Nenhum bloqueio conhecido.
+**Validação obrigatória:** `cmd.exe //c ".\IniciarTestes.bat"` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não.
+
+**Bloqueios:** Nenhum bloqueio conhecido.
+
+**Evidências e handoff:**
+
+- Plano: —
+- Commits: —
+- Revisão final: —
+- Critérios verificados: —
+- Decisões para o usuário: —
+- Notas para a próxima etapa: —
+
+## E07.2.2.2 — Situação do TRANSFORMADOR (D14) — #pendente
+
+**Objetivo:** com a opção ligada, a situação do TRANSFORMADOR vem de `referencias_possiveis`.
+
+**Dependências:** E07.2.2.1 e decisão do usuário: colapsar pares (Existente/Abandonado → EXISTENTE; Retirar/Abandonar → REMOVER; Instalar/Substituir → INSTALAR) ou só expor o conjunto como atributo, mantendo `situacao_pendente`. Quase não dá para medir: só 1 de 14 referências traz situação.
+
+**Escopo:** mapa variante → situações em `src/`, com teste de paridade contra o inventário e sem tocar pacote nem `package_signature` (`docs/` não entra na imagem); `_symbol_situation`.
+
+**Fora de escopo:** promoção pela situação.
+
+**Critérios de aceite (a detalhar no plano):**
+
+- [ ] Fixture com ids reais de grupo, situações derivadas, e grupo misto ou desconhecido virando pendência.
+- [ ] Com `ZENY_SERVER_SYMBOL_COMPOSITION=false`, os goldens não mudam (D18).
+- [ ] `.\IniciarTestes.bat` → `RESULTADO FINAL: APROVADO`.
+
+**Revisão humana:** não. **Bloqueios:** decisão do usuário sobre D14.
 
 **Evidências e handoff:**
 
@@ -2765,7 +2806,7 @@ O objetivo, o escopo e os critérios abaixo valem para o conjunto das subetapas.
 
 **Objetivo:** vãos ligados à polilinha da rede entre dois postes e a ficha completa acima do baseline.
 
-**Dependências:** E07.2.
+**Dependências:** E07.2.2.1.
 
 **Escopo (critérios repartidos da E07):** vãos e cabos sobre a posição nova do poste; pendência em associação ambígua de vão; o destino das derivações sem rótulo P, deixadas de fora na E07.2.1.
 
