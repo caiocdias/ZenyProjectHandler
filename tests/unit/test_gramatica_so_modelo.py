@@ -166,7 +166,10 @@ def test_perfil_do_modelo_conta_a_variante_so_do_modelo(tmp_path: Path) -> None:
 def test_enabled_continua_com_todas(tmp_path: Path) -> None:
     pacotes = _carrega(tmp_path, _pacote_com(_gramatica()))
 
-    assert frozenset({"stem_bars", "rect_diagonal", "split_triangle"}) == GRAMATICAS_SO_MODELO
+    assert (
+        frozenset({"stem_bars", "rect_diagonal", "split_triangle", "forked_stem"})
+        == GRAMATICAS_SO_MODELO
+    )
     assert len(_enabled(pacotes)) == 2
     assert len(variantes_do_motor(pacotes)) == 1
 

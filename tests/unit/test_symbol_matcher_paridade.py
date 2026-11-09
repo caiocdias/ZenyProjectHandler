@@ -28,6 +28,7 @@ from zeny_project_handler.adapters.analysis.declarative_symbols import (
 )
 from zeny_project_handler.adapters.analysis.drawing_model import (
     grammar_disc,
+    grammar_estai,
     grammar_frames,
     grammar_marcas,
     grammar_rect_diagonal,
@@ -940,6 +941,7 @@ def test_detector_de_import_proibido(fonte: str) -> None:
 def test_modulos_do_nucleo_nao_importam_pymupdf() -> None:
     modulos = (
         symbol_grammars,
+        grammar_estai,
         grammar_frames,
         grammar_disc,
         grammar_marcas,
